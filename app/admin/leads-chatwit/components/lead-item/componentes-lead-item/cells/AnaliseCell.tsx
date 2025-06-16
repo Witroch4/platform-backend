@@ -27,6 +27,22 @@ export function AnaliseCell({
   onContextMenuAction,
   onAnaliseClick
 }: AnaliseCellProps) {
+  // Só mostrar a célula se tiver manuscrito E espelho processados
+  const temManuscrito = lead.provaManuscrita && 
+    (typeof lead.provaManuscrita === 'string' ? lead.provaManuscrita.length > 0 : 
+     Array.isArray(lead.provaManuscrita) ? lead.provaManuscrita.length > 0 : 
+     typeof lead.provaManuscrita === 'object' && lead.provaManuscrita !== null);
+
+  const temEspelho = lead.textoDOEspelho && 
+    (typeof lead.textoDOEspelho === 'string' ? lead.textoDOEspelho.length > 0 : 
+     Array.isArray(lead.textoDOEspelho) ? lead.textoDOEspelho.length > 0 : 
+     typeof lead.textoDOEspelho === 'object' && lead.textoDOEspelho !== null);
+
+  // Se não tiver manuscrito E espelho, não mostrar a célula
+  if (!temManuscrito || !temEspelho) {
+    return <TableCell className="w-[120px] p-2 align-middle"></TableCell>;
+  }
+
   return (
     <TableCell className="w-[120px] p-2 align-middle">
       <LeadContextMenu

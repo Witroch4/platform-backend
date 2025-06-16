@@ -280,6 +280,8 @@ export function LeadDialogs({
         selectionMode={true}
         mode="manuscrito"
         onSend={onEnviarManuscrito}
+        onCancelarManuscrito={onCancelarManuscrito}
+        aguardandoManuscrito={localManuscritoState.aguardandoManuscrito}
       />
 
       {/* Seletor de Espelho de Correção */}
@@ -380,27 +382,27 @@ export function LeadDialogs({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Confirmar exclusão completa de arquivos</DialogTitle>
-            <DialogDescription asChild>
-              <div className="space-y-2">
-                <p>Tem certeza que deseja excluir <strong>TODOS os arquivos</strong> do lead "{displayName}"?</p>
-                <div className="text-sm bg-muted/50 p-3 rounded-md border-l-4 border-destructive/20">
-                  <p className="font-medium text-foreground mb-2">Esta ação irá excluir:</p>
-                  <ul className="text-muted-foreground space-y-1 list-disc list-inside">
-                    <li>{lead.arquivos.length} arquivo(s) individual(is)</li>
-                    {lead.pdfUnificado && <li>PDF unificado</li>}
-                    {(lead.provaManuscrita || lead.manuscritoProcessado) && <li>Manuscrito digitado</li>}
-                    {((lead.espelhoCorrecao && lead.espelhoCorrecao !== '[]') || lead.textoDOEspelho) && <li>Espelho de correção individual</li>}
-                    {(localAnaliseState.analiseUrl || localAnaliseState.analisePreliminar || localAnaliseState.aguardandoAnalise) && <li>Análise da prova</li>}
-                  </ul>
-                  <p className="text-destructive font-medium mt-2">
-                    ⚠️ Esta ação não pode ser desfeita!
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Nota: Espelhos da biblioteca não serão afetados.
-                  </p>
+            <DialogDescription>
+              Tem certeza que deseja excluir <strong>TODOS os arquivos</strong> do lead "{displayName}"?
+            </DialogDescription>
+            <div className="space-y-2 mt-4">
+              <div className="text-sm bg-muted/50 p-3 rounded-md border-l-4 border-destructive/20">
+                <div className="font-medium text-foreground mb-2">Esta ação irá excluir:</div>
+                <ul className="text-muted-foreground space-y-1 list-disc list-inside">
+                  <li>{lead.arquivos.length} arquivo(s) individual(is)</li>
+                  {lead.pdfUnificado && <li>PDF unificado</li>}
+                  {(lead.provaManuscrita || lead.manuscritoProcessado) && <li>Manuscrito digitado</li>}
+                  {((lead.espelhoCorrecao && lead.espelhoCorrecao !== '[]') || lead.textoDOEspelho) && <li>Espelho de correção individual</li>}
+                  {(localAnaliseState.analiseUrl || localAnaliseState.analisePreliminar || localAnaliseState.aguardandoAnalise) && <li>Análise da prova</li>}
+                </ul>
+                <div className="text-destructive font-medium mt-2">
+                  ⚠️ Esta ação não pode ser desfeita!
+                </div>
+                <div className="text-sm text-muted-foreground mt-1">
+                  Nota: Espelhos da biblioteca não serão afetados.
                 </div>
               </div>
-            </DialogDescription>
+            </div>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmDeleteAllFiles(false)}>

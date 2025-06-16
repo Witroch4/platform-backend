@@ -15,13 +15,11 @@ import { toast } from "sonner";
 import { LeadItem } from "./lead-item/lead-item";
 import { RefreshCw, FileUp, Edit3, Zap, Play } from "lucide-react";
 import { DialogDetalheLead } from "./dialog-detalhe-lead";
-import { BatchProgressDialog } from "./batch-progress-dialog";
-import { ManuscritoDialog } from "./manuscrito-dialog";
-import { EspelhoDialog } from "./espelho-dialog";
-import { ImageGalleryDialog } from "./image-gallery-dialog";
+// BatchProgressDialog removido - agora usando apenas o novo sistema
+// Imports do sistema antigo removidos - agora usando apenas o novo BatchProcessorTrigger
 import { SSEConnectionManager } from "./sse-connection-manager";
-import { useBatchProcessor } from "./lead-item/componentes-lead-item/hooks/useBatchProcessor";
-import { LeadChatwit } from "../types";
+import { LeadChatwit, ExtendedLead } from "../types";
+import { BatchProcessorTrigger } from "./batch-processor/BatchProcessorTrigger";
 
 interface LeadsListProps {
   searchQuery: string;
@@ -46,54 +44,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [currentLead, setCurrentLead] = useState<LeadChatwit | null>(null);
   
-  // Estados para processamento em lote
-  const [showBatchProgress, setShowBatchProgress] = useState(false);
-  const [showBatchManuscritoDialog, setShowBatchManuscritoDialog] = useState(false);
-  const [showBatchEspelhoDialog, setShowBatchEspelhoDialog] = useState(false);
-  const [showBatchImageSelector, setShowBatchImageSelector] = useState(false);
-  const [currentBatchLead, setCurrentBatchLead] = useState<LeadChatwit | null>(null);
-  const [batchDialogMode, setBatchDialogMode] = useState<'manuscrito' | 'espelho' | null>(null);
-  const [batchCurrentIndex, setBatchCurrentIndex] = useState(0);
-  const [batchLeadsList, setBatchLeadsList] = useState<LeadChatwit[]>([]);
-  const [batchDialogResolve, setBatchDialogResolve] = useState<((success: boolean) => void) | null>(null);
-
-  // Callback para quando um manuscrito é necessário no processamento em lote
-  const handleBatchManuscritoNeeded = async (lead: LeadChatwit, index: number, total: number): Promise<boolean> => {
-    return new Promise((resolve) => {
-      setCurrentBatchLead(lead);
-      setBatchCurrentIndex(index);
-      setBatchLeadsList(Array(total).fill(null).map((_, i) => i === index - 1 ? lead : {} as LeadChatwit));
-      setBatchDialogMode('manuscrito');
-      setBatchDialogResolve(() => resolve);
-      setShowBatchImageSelector(true);
-    });
-  };
-
-  // Callback para quando um espelho é necessário no processamento em lote
-  const handleBatchEspelhoNeeded = async (lead: LeadChatwit, index: number, total: number): Promise<boolean> => {
-    return new Promise((resolve) => {
-      setCurrentBatchLead(lead);
-      setBatchCurrentIndex(index);
-      setBatchLeadsList(Array(total).fill(null).map((_, i) => i === index - 1 ? lead : {} as LeadChatwit));
-      setBatchDialogMode('espelho');
-      setBatchDialogResolve(() => resolve);
-      setShowBatchImageSelector(true);
-    });
-  };
-
-  // Callback para atualizar um lead após processamento
-  const handleLeadUpdated = (leadId: string) => {
-    console.log(`[BatchProcessor] handleLeadUpdated chamado para lead: ${leadId}`);
-    // Recarregar a lista de leads para mostrar as mudanças
-    fetchLeads();
-  };
-
-  // Inicializar o hook de processamento em lote
-  const batchProcessor = useBatchProcessor({
-    onManuscritoDialogNeeded: handleBatchManuscritoNeeded,
-    onEspelhoDialogNeeded: handleBatchEspelhoNeeded,
-    onLeadUpdated: handleLeadUpdated,
-  });
+  // Sistema antigo de batch processor removido - agora usando apenas o novo sistema
 
   useEffect(() => {
     fetchLeads();
@@ -402,10 +353,10 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
           url: lead.pdfUnificado,
           nome: "PDF Unificado"
         }] : [],
-        arquivos_imagens: imagensConvertidas.map((url: string, index: number) => ({
-          id: `${lead.id}-img-${index}`,
+        arquivos_imagens_manuscrito: imagensConvertidas.map((url: string, index: number) => ({
+          id: `${lead.id}-manuscrito-${index}`,
           url: url,
-          nome: `Página ${index + 1}`
+          nome: `Manuscrito ${index + 1}`
         })),
         recursos: lead.datasRecurso ? JSON.parse(lead.datasRecurso).map((data: string, index: number) => ({
           id: `${lead.id}-recurso-${index}`,
@@ -445,192 +396,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
     }
   };
 
-  // Função para iniciar o processamento em lote
-  const handleStartBatchProcessing = async () => {
-    if (selectedLeads.length === 0) {
-      toast("Aviso", { description: "Selecione pelo menos um lead para processar.",
-        });
-      return;
-    }
-
-    const leadsToProcess = leads.filter(lead => selectedLeads.includes(lead.id));
-    
-    setShowBatchProgress(true);
-    await batchProcessor.processarLeadsEmLote(leadsToProcess);
-  };
-
-  // Função para lidar com imagens selecionadas no seletor batch
-  const handleBatchImageSelection = async (selectedImages: string[]) => {
-    setShowBatchImageSelector(false);
-    
-    if (!currentBatchLead || !batchDialogResolve) return;
-
-    if (selectedImages.length === 0) {
-      // Usuário cancelou, resolve com false
-      batchDialogResolve(false);
-      setBatchDialogResolve(null);
-      return;
-    }
-
-    if (batchDialogMode === 'manuscrito') {
-      // Enviar imagens para processamento de manuscrito
-      try {
-        await handleEnviarManuscritoParaLead(currentBatchLead, selectedImages);
-        setShowBatchManuscritoDialog(true);
-      } catch (error: any) {
-        toast.error("Erro", {
-          description: error.message || "Erro ao enviar manuscrito",
-        });
-        batchDialogResolve(false);
-        setBatchDialogResolve(null);
-      }
-    } else if (batchDialogMode === 'espelho') {
-      // Enviar imagens para processamento de espelho
-      try {
-        await handleEnviarEspelhoParaLead(currentBatchLead, selectedImages);
-        setShowBatchEspelhoDialog(true);
-      } catch (error: any) {
-        toast.error("Erro", {
-          description: error.message || "Erro ao enviar espelho",
-        });
-        batchDialogResolve(false);
-        setBatchDialogResolve(null);
-      }
-    }
-  };
-
-  // Função auxiliar para enviar manuscrito para um lead específico
-  const handleEnviarManuscritoParaLead = async (lead: LeadChatwit, selectedImages: string[]) => {
-    const payload = {
-      leadID: lead.id,
-      nome: lead.nomeReal || lead.name || "Lead sem nome",
-      telefone: lead.phoneNumber,
-      manuscrito: true,
-      arquivos: lead.arquivos?.map((a: { id: string; dataUrl: string; fileType: string }) => ({
-        id: a.id,
-        url: a.dataUrl,
-        tipo: a.fileType,
-        nome: a.fileType
-      })) || [],
-      arquivos_pdf: lead.pdfUnificado ? [{
-        id: lead.id,
-        url: lead.pdfUnificado,
-        nome: "PDF Unificado"
-      }] : [],
-      arquivos_imagens: selectedImages.map((url: string, index: number) => ({
-        id: `${lead.id}-img-${index}`,
-        url: url,
-        nome: `Página ${index + 1}`
-      })),
-      metadata: {
-        leadUrl: lead.leadUrl,
-        sourceId: lead.sourceId,
-        concluido: lead.concluido,
-        fezRecurso: lead.fezRecurso
-      }
-    };
-
-    const response = await fetch("/api/admin/leads-chatwit/enviar-manuscrito", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      const data = await response.json();
-      throw new Error(data.error || "Erro ao enviar manuscrito");
-    }
-  };
-
-  // Função auxiliar para enviar espelho para um lead específico
-  const handleEnviarEspelhoParaLead = async (lead: LeadChatwit, selectedImages: string[]) => {
-    const payload = {
-      leadID: lead.id,
-      nome: lead.nomeReal || lead.name || "Lead sem nome",
-      telefone: lead.phoneNumber,
-      espelho: true,
-      arquivos: lead.arquivos?.map((a: { id: string; dataUrl: string; fileType: string }) => ({
-        id: a.id,
-        url: a.dataUrl,
-        tipo: a.fileType,
-        nome: a.fileType
-      })) || [],
-      arquivos_pdf: lead.pdfUnificado ? [{
-        id: lead.id,
-        url: lead.pdfUnificado,
-        nome: "PDF Unificado"
-      }] : [],
-      arquivos_imagens_espelho: selectedImages.map((url: string, index: number) => ({
-        id: `${lead.id}-espelho-${index}`,
-        url: url,
-        nome: `Espelho ${index + 1}`
-      })),
-      metadata: {
-        leadUrl: lead.leadUrl,
-        sourceId: lead.sourceId,
-        concluido: lead.concluido,
-        fezRecurso: lead.fezRecurso
-      }
-    };
-
-    const response = await fetch("/api/admin/leads-chatwit/enviar-manuscrito", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      const data = await response.json();
-      throw new Error(data.error || "Erro ao enviar espelho");
-    }
-  };
-
-  // Função para prosseguir no diálogo batch após salvar
-  const handleBatchNext = () => {
-    if (batchDialogResolve) {
-      batchDialogResolve(true);
-      setBatchDialogResolve(null);
-    }
-    setShowBatchManuscritoDialog(false);
-    setShowBatchEspelhoDialog(false);
-    setCurrentBatchLead(null);
-    setBatchDialogMode(null);
-  };
-
-  // Função para pular um lead no processamento batch
-  const handleBatchSkip = () => {
-    if (batchDialogResolve) {
-      batchDialogResolve(false);
-      setBatchDialogResolve(null);
-    }
-    setShowBatchManuscritoDialog(false);
-    setShowBatchEspelhoDialog(false);
-    setCurrentBatchLead(null);
-    setBatchDialogMode(null);
-  };
-
-  // Obter imagens convertidas de um lead
-  const getConvertedImagesFromLead = (lead: LeadChatwit): string[] => {
-    let imagensConvertidas: string[] = [];
-    
-    if (lead.imagensConvertidas) {
-      try {
-        imagensConvertidas = JSON.parse(lead.imagensConvertidas);
-      } catch (error) {
-        console.error("Erro ao processar URLs de imagens convertidas:", error);
-      }
-    }
-
-    // Se não houver imagens no campo imagensConvertidas, buscar dos arquivos
-    if (!imagensConvertidas || imagensConvertidas.length === 0) {
-      imagensConvertidas = lead.arquivos
-        .filter((a: { pdfConvertido?: string | null | undefined }) => a.pdfConvertido)
-        .map((a: { pdfConvertido?: string | null | undefined }) => a.pdfConvertido as string)
-        .filter((url: string | null) => url && url.length > 0);
-    }
-
-    return imagensConvertidas;
-  };
+  // Funções do sistema antigo removidas - agora usando apenas o novo BatchProcessorTrigger
 
   return (
     <div className="space-y-4">
@@ -644,42 +410,31 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
         <div className="flex items-center justify-between bg-muted p-2 rounded-md">
           <div className="flex items-center gap-3">
             <span className="font-medium">{selectedLeads.length} leads selecionados</span>
-            {batchProcessor.state.isProcessing && (
-              <div className="flex items-center gap-2 text-sm text-blue-600">
-                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                Processando em lote...
-              </div>
-            )}
           </div>
           <div className="flex gap-2">
             <Button 
               variant="outline" 
               size="sm"
               onClick={() => setSelectedLeads([])}
-              disabled={batchProcessor.state.isProcessing}
             >
               Limpar seleção
             </Button>
+            <BatchProcessorTrigger 
+              selectedLeads={leads
+                .filter(lead => selectedLeads.includes(lead.id))
+                .map(lead => ({
+                  ...lead,
+                  nome: lead.nomeReal || lead.name || 'Lead sem nome',
+                  manuscrito: lead.provaManuscrita as string || undefined
+                } as ExtendedLead))
+              }
+              onUpdate={fetchLeads}
+            />
             <Button 
-              variant="secondary" 
-              size="sm" 
-              onClick={handleStartBatchProcessing}
-              disabled={batchProcessor.state.isProcessing}
-              className="flex items-center gap-2"
-            >
-              {batchProcessor.state.isProcessing ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
-              ) : (
-                <Zap className="h-4 w-4" />
-              )}
-              {batchProcessor.state.isProcessing ? "Processando..." : "Processamento em Lote"}
-            </Button>
-            <Button 
-              variant="default" 
+              variant="outline" 
               size="sm" 
               onClick={() => toast("Não implementado", { description: "Esta funcionalidade será adicionada em breve.",
                 })}
-              disabled={batchProcessor.state.isProcessing}
             >
               <FileUp className="h-4 w-4 mr-2" />
               Exportar
@@ -779,136 +534,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
         />
       )}
 
-      {/* Diálogos de Processamento em Lote */}
-      <BatchProgressDialog
-        isOpen={showBatchProgress}
-        onClose={() => setShowBatchProgress(false)}
-        state={batchProcessor.state}
-        onCancel={batchProcessor.cancelarProcessamento}
-        onContinue={() => {
-          setShowBatchProgress(false);
-          handleStartBatchProcessing();
-        }}
-      />
-
-      {/* Seletor de Imagens para Processamento Batch */}
-      {currentBatchLead && (
-        <ImageGalleryDialog
-          isOpen={showBatchImageSelector}
-          onClose={() => {
-            setShowBatchImageSelector(false);
-            if (batchDialogResolve) {
-              batchDialogResolve(false);
-              setBatchDialogResolve(null);
-            }
-          }}
-          images={getConvertedImagesFromLead(currentBatchLead)}
-          leadId={currentBatchLead.id}
-          title={`Selecionar Imagens - ${batchDialogMode === 'manuscrito' ? 'Manuscrito' : 'Espelho'}`}
-          description={`Selecione as imagens para processar o ${batchDialogMode} do lead "${currentBatchLead.nomeReal || currentBatchLead.name}"`}
-          selectionMode={true}
-          onSend={handleBatchImageSelection}
-        />
-      )}
-
-      {/* Diálogo de Manuscrito em Lote */}
-      {currentBatchLead && (
-        <ManuscritoDialog
-          isOpen={showBatchManuscritoDialog}
-          onClose={() => {
-            setShowBatchManuscritoDialog(false);
-            if (batchDialogResolve) {
-              batchDialogResolve(false);
-              setBatchDialogResolve(null);
-            }
-          }}
-          leadId={currentBatchLead.id}
-          textoManuscrito={currentBatchLead.provaManuscrita || ""}
-          aguardandoManuscrito={currentBatchLead.aguardandoManuscrito || false}
-          onSave={async (texto: string) => {
-            // Salvar manuscrito usando a API existente
-            const response = await fetch('/api/admin/leads-chatwit/manuscrito', {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                leadId: currentBatchLead.id,
-                textoManuscrito: texto,
-              }),
-            });
-
-            if (!response.ok) {
-              const data = await response.json();
-              throw new Error(data.error || 'Erro ao salvar manuscrito');
-            }
-
-            handleLeadUpdated(currentBatchLead.id);
-          }}
-          batchMode={true}
-          batchInfo={{
-            current: batchCurrentIndex,
-            total: batchLeadsList.length,
-            leadName: currentBatchLead.nomeReal || currentBatchLead.name || "Lead sem nome",
-          }}
-          onBatchNext={handleBatchNext}
-          onBatchSkip={handleBatchSkip}
-        />
-      )}
-
-      {/* Diálogo de Espelho em Lote */}
-      {currentBatchLead && (
-        <EspelhoDialog
-          isOpen={showBatchEspelhoDialog}
-          onClose={() => {
-            setShowBatchEspelhoDialog(false);
-            if (batchDialogResolve) {
-              batchDialogResolve(false);
-              setBatchDialogResolve(null);
-            }
-          }}
-          leadId={currentBatchLead.id}
-          leadData={currentBatchLead}
-          textoEspelho={currentBatchLead.textoDOEspelho || null}
-          imagensEspelho={(() => {
-            try {
-              const espelhoCorrecao = currentBatchLead.espelhoCorrecao;
-              if (espelhoCorrecao && espelhoCorrecao !== '[]') {
-                return JSON.parse(espelhoCorrecao);
-              }
-            } catch (error) {
-              console.error('Erro ao parsear espelhoCorrecao:', error);
-            }
-            return [];
-          })()}
-          aguardandoEspelho={currentBatchLead.aguardandoEspelho || false}
-          onSave={async (texto: any, imagens: string[]) => {
-            // Salvar espelho usando a API existente
-            const response = await fetch('/api/admin/leads-chatwit/associar-espelho', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                leadId: currentBatchLead.id,
-                texto: texto,
-                imagens: imagens,
-              }),
-            });
-
-            if (!response.ok) {
-              const data = await response.json();
-              throw new Error(data.error || 'Erro ao salvar espelho');
-            }
-
-            handleLeadUpdated(currentBatchLead.id);
-          }}
-          batchMode={true}
-          batchInfo={{
-            current: batchCurrentIndex,
-            total: batchLeadsList.length,
-            leadName: currentBatchLead.nomeReal || currentBatchLead.name || "Lead sem nome",
-          }}
-          onBatchNext={handleBatchNext}
-          onBatchSkip={handleBatchSkip}
-        />
-      )}
+      {/* Diálogos do sistema antigo removidos - agora usando apenas o novo BatchProcessorTrigger */}
     </div>
   );
 }

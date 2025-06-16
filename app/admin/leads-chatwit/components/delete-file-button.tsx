@@ -97,8 +97,8 @@ export function DeleteFileButton({ onDelete, fileType, fileName, onSuccess }: De
                     ? 'conjunto de imagens convertidas' 
                     : `arquivo ${fileName || ''}`
               }?
-              <p className="text-red-500 font-semibold mt-2">Esta ação não pode ser desfeita.</p>
             </DialogDescription>
+            <div className="text-red-500 font-semibold mt-2">Esta ação não pode ser desfeita.</div>
           </DialogHeader>
           <DialogFooter>
             <Button 

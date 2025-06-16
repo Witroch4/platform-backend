@@ -26,6 +26,9 @@ interface ImageGalleryDialogProps {
   mode?: 'manuscrito' | 'espelho' | 'ambos';
   onSendManuscrito?: (selectedImages: string[]) => Promise<void>;
   onSendEspelho?: (selectedImages: string[]) => Promise<void>;
+  onCancelarManuscrito?: () => Promise<void>;
+  aguardandoManuscrito?: boolean;
+  batchMode?: boolean;
 }
 
 export function ImageGalleryDialog({
@@ -39,7 +42,10 @@ export function ImageGalleryDialog({
   selectionMode = false,
   mode = 'ambos',
   onSendManuscrito,
-  onSendEspelho
+  onSendEspelho,
+  onCancelarManuscrito,
+  aguardandoManuscrito,
+  batchMode = false
 }: ImageGalleryDialogProps) {
   
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -52,6 +58,7 @@ export function ImageGalleryDialog({
   const [showDebug, setShowDebug] = useState(false);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [isSending, setIsSending] = useState(false);
+  const [isCancelingManuscrito, setIsCancelingManuscrito] = useState(false);
   
   // Função para fazer download de todas as imagens como ZIP
   const handleDownloadAllImages = async () => {
@@ -140,7 +147,7 @@ export function ImageGalleryDialog({
           return { count: selectedImages.length, type: 'manuscrito' };
         };
 
-        toast.promise(manuscritoPromise, {
+        await toast.promise(manuscritoPromise, {
           loading: '📝 Enviando manuscrito para processamento...',
           success: (data) => {
             return `🎉 ${data.count} imagem(ns) do manuscrito enviada(s) com sucesso!`;
@@ -158,7 +165,7 @@ export function ImageGalleryDialog({
           return { count: selectedImages.length, type: 'espelho' };
         };
 
-        toast.promise(espelhoPromise, {
+        await toast.promise(espelhoPromise, {
           loading: '📋 Enviando espelho para processamento...',
           success: (data) => {
             return `🎉 ${data.count} imagem(ns) do espelho enviada(s) com sucesso!`;
@@ -171,13 +178,32 @@ export function ImageGalleryDialog({
         toast("Sucesso", { description: "Imagens enviadas com sucesso!" });
       }
       
-      // Fechar o diálogo após envio bem-sucedido
-      onClose();
+      // Fechar o diálogo APENAS se não estiver em modo batch
+      if (!batchMode) {
+        onClose();
+      }
     } catch (error: any) {
       console.error("Erro ao enviar imagens:", error);
       toast.error("Erro", { description: error.message || "Não foi possível enviar as imagens. Tente novamente." });
     } finally {
       setIsSending(false);
+    }
+  };
+
+  // Função para cancelar processamento do manuscrito
+  const handleCancelarManuscrito = async () => {
+    if (!onCancelarManuscrito) return;
+    
+    setIsCancelingManuscrito(true);
+    try {
+      await onCancelarManuscrito();
+      toast("Sucesso", { description: "Processamento do manuscrito cancelado com sucesso!" });
+      onClose();
+    } catch (error: any) {
+      console.error("Erro ao cancelar manuscrito:", error);
+      toast.error("Erro", { description: error.message || "Não foi possível cancelar o processamento." });
+    } finally {
+      setIsCancelingManuscrito(false);
     }
   };
   
@@ -296,12 +322,12 @@ export function ImageGalleryDialog({
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription>
               {description}
-              {mode === 'ambos' && (
-                <div className="mt-2 text-sm text-muted-foreground">
-                  💡 Selecione as imagens na ordem correta: primeiro as do manuscrito, depois as do espelho.
-                </div>
-              )}
             </DialogDescription>
+            {mode === 'ambos' && (
+              <div className="mt-2 text-sm text-muted-foreground">
+                💡 Selecione as imagens na ordem correta: primeiro as do manuscrito, depois as do espelho.
+              </div>
+            )}
           </DialogHeader>
           
           <div className="py-4">
@@ -448,6 +474,19 @@ export function ImageGalleryDialog({
                    mode === 'manuscrito' ? 'Enviar para Digitação' :
                    mode === 'espelho' ? 'Enviar Espelho' : 
                    'Enviar Imagens'}
+                </Button>
+              )}
+              {mode === 'manuscrito' && aguardandoManuscrito && onCancelarManuscrito && (
+                <Button
+                  variant="destructive"
+                  onClick={handleCancelarManuscrito}
+                  disabled={isCancelingManuscrito}
+                >
+                  {isCancelingManuscrito ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    "Cancelar Processamento"
+                  )}
                 </Button>
               )}
               <Button variant="outline" onClick={onClose}>

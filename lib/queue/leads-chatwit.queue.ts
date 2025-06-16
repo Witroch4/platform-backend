@@ -8,7 +8,11 @@ export interface ILeadJobData {
   payload: WebhookPayload;        // o payload bruto recebido do Chatwit
 }
 
-export const leadsQueue = new Queue<ILeadJobData>(
+export interface IFinalAnalysisJobData {
+  leadId: string;        // ID do lead para análise final
+}
+
+export const leadsQueue = new Queue<ILeadJobData | IFinalAnalysisJobData>(
   LEADS_QUEUE_NAME,
   { 
     connection,
@@ -34,4 +38,15 @@ export async function addLeadJob(data: ILeadJobData) {
     }
   );
   console.log(`[BullMQ] Job enfileirado para lead ${sourceId}`);
+}
+
+export async function addFinalAnalysisJob(data: IFinalAnalysisJobData) {
+  await leadsQueue.add(
+    'process-final-analysis',
+    data,
+    {
+      // Opções padrão serão aplicadas
+    }
+  );
+  console.log(`[BullMQ] Job de análise final enfileirado para lead ${data.leadId}`);
 }

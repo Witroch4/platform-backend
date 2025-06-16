@@ -1,4 +1,4 @@
 export { useLeadState } from './useLeadState';
 export { useDialogState } from './useDialogState';
 export { useLeadHandlers } from './useLeadHandlers';
-export { useBatchProcessor } from './useBatchProcessor'; 
+// useBatchProcessor removido - agora usando o novo sistema de batch processor 

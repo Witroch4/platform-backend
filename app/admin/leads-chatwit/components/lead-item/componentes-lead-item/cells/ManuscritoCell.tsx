@@ -41,7 +41,7 @@ export function ManuscritoCell({
           variant="outline"
           size="sm"
           onClick={onDigitarClick}
-          disabled={isDigitando || localManuscritoState.aguardandoManuscrito}
+          disabled={isDigitando}
           className="whitespace-nowrap w-full"
           key={`manuscrito-btn-${refreshKey}`}
         >

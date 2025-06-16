@@ -28,6 +28,7 @@ export type ContextAction =
   | 'reenviarManuscrito'
   | 'excluirManuscrito'
   | 'editarManuscrito'
+  | 'cancelarManuscrito'
   | 'selecionarEspelho'
   | 'verEspelho'
   | 'excluirEspelho'
@@ -98,23 +99,36 @@ export function LeadContextMenu({ contextType, onAction, children, data }: LeadC
         {/* Opções para manuscrito */}
         {contextType === 'manuscrito' && (
           <>
-            {data.manuscritoProcessado && (
-              <ContextMenuItem onClick={() => onAction('editarManuscrito', data)}>
-                Editar Manuscrito
-              </ContextMenuItem>
-            )}
-            <ContextMenuItem onClick={() => onAction('reenviarManuscrito', data)}>
-              Reenviar Manuscrito
-            </ContextMenuItem>
-            {data.manuscritoProcessado && (
+            {data.aguardandoManuscrito ? (
               <>
-                <ContextMenuSeparator />
                 <ContextMenuItem 
-                  onClick={() => onAction('excluirManuscrito', data)}
-                  className="text-red-500 focus:text-red-500 focus:bg-red-50"
+                  onClick={() => onAction('cancelarManuscrito', data)}
+                  className="text-orange-500 focus:text-orange-500 focus:bg-orange-50"
                 >
-                  Excluir Manuscrito
+                  Cancelar Processamento
                 </ContextMenuItem>
+              </>
+            ) : (
+              <>
+                {data.manuscritoProcessado && (
+                  <ContextMenuItem onClick={() => onAction('editarManuscrito', data)}>
+                    Editar Manuscrito
+                  </ContextMenuItem>
+                )}
+                <ContextMenuItem onClick={() => onAction('reenviarManuscrito', data)}>
+                  Reenviar Manuscrito
+                </ContextMenuItem>
+                {data.manuscritoProcessado && (
+                  <>
+                    <ContextMenuSeparator />
+                    <ContextMenuItem 
+                      onClick={() => onAction('excluirManuscrito', data)}
+                      className="text-red-500 focus:text-red-500 focus:bg-red-50"
+                    >
+                      Excluir Manuscrito
+                    </ContextMenuItem>
+                  </>
+                )}
               </>
             )}
           </>

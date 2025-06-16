@@ -48,4 +48,10 @@ export interface LeadChatwit {
     createdAt: string;
   }>;
   [key: string]: any;
+}
+
+// Tipo estendido para uso no processamento em lote
+export interface ExtendedLead extends LeadChatwit {
+  nome: string;  // Alias para name/nomeReal
+  manuscrito?: string;  // Texto do manuscrito
 } 

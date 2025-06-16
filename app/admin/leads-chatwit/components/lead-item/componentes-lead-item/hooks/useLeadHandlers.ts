@@ -302,8 +302,8 @@ export function useLeadHandlers({
         arquivos_pdf: lead.pdfUnificado ? [{
           id: lead.id, url: lead.pdfUnificado, nome: "PDF Unificado"
         }] : [],
-        arquivos_imagens: selectedImages.map((url: string, index: number) => ({
-          id: `<span class="math-inline">\{lead\.id\}\-img\-</span>{index}`, url: url, nome: `Página ${index + 1}`
+        arquivos_imagens_manuscrito: selectedImages.map((url: string, index: number) => ({
+          id: `${lead.id}-manuscrito-${index}`, url: url, nome: `Manuscrito ${index + 1}`
         })),
         metadata: {
           leadUrl: lead.leadUrl, sourceId: lead.sourceId, concluido: lead.concluido, fezRecurso: lead.fezRecurso
@@ -688,6 +688,9 @@ export function useLeadHandlers({
           setManuscritoToDelete(data.id);
           setConfirmDeleteManuscrito(true);
         }
+        break;
+      case 'cancelarManuscrito':
+        handleCancelarManuscrito();
         break;
       case 'selecionarEspelho':
         setShowEspelhoSeletor(true);
