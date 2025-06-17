@@ -10,7 +10,6 @@ export const configRoutes: ConfigRoutes = {
     "/auth/change-password",
     "/auth/reset-password",
     "/auth/verify-email",
-    "/example/web-site-builder/campaign-hot-page",
     "/auth/users",
     "/denied", // Adicionado para evitar que o middleware processe esta rota
   ],
@@ -26,7 +25,6 @@ export const configRoutes: ConfigRoutes = {
     // Rotas dinâmicas para contas do Instagram
     "/:accountid/dashboard",
     "/:accountid/dashboard/*",
-    // "/example/web-site-builder/campaign-hot-page",
   ],
   adminRoutes: [
     "/admin",
