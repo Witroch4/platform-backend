@@ -38,10 +38,10 @@ export const changeSettings = async (settings: z.infer<typeof UserSettingsSchema
 	}
 
 	//TODO: Add e-mail verification to enable two factor authentication
-	const { password, newPassword } = validData.data;
-	if (password && newPassword && userData?.password) {
-		const validPassword = bcryptjs.compare(password, userData.password);
-		if (!validPassword) {
+const { password, newPassword } = validData.data;
+if (password && newPassword && userData?.password) {
+const validPassword = await bcryptjs.compare(password, userData.password);
+if (!validPassword) {
 			return {
 				error: "Senha atual incorreta",
 			};
