@@ -128,14 +128,43 @@ async function processEspelho(job: Job<IEspelhoJobData>) {
     }
 
     // Atualizar o lead com o conteúdo do espelho
+    // Extrair informações do cabeçalho do espelho
+    const descMatch = conteudoUnificado.match(/Descri\u00e7\u00e3o do Exame:\s*(.+)/i);
+    const inscricaoMatch = conteudoUnificado.match(/Inscri\u00e7\u00e3o:\s*([^\n]+)/i);
+    const nomeMatch = conteudoUnificado.match(/Nome do Examinando:\s*(.+)/i);
+    const seccionalMatch = conteudoUnificado.match(/Seccional:\s*(.+)/i);
+    const areaMatch = conteudoUnificado.match(/\u00c1rea Jur\u00eddica:\s*(.+)/i);
+    const notaMatch = conteudoUnificado.match(/Nota Final:\s*([0-9.,]+)/i);
+    const situacaoMatch = conteudoUnificado.match(/Situa\u00e7\u00e3o:\s*(.+)/i);
+
+    let exames: string[] = [];
+    if (Array.isArray(leadExistente.examesParticipados)) {
+      exames = leadExistente.examesParticipados as unknown as string[];
+    }
+    if (descMatch) {
+      const exameDesc = descMatch[1].trim();
+      if (!exames.includes(exameDesc)) {
+        exames.push(exameDesc);
+      }
+    }
+
+    const updateData: any = {
+      textoDOEspelho: conteudoUnificado,
+      espelhoProcessado: true,
+      aguardandoEspelho: false,
+      updatedAt: new Date(),
+    };
+    if (exames.length > 0) updateData.examesParticipados = exames;
+    if (seccionalMatch) updateData.seccional = seccionalMatch[1].trim();
+    if (areaMatch) updateData.areaJuridica = areaMatch[1].trim();
+    if (notaMatch) updateData.notaFinal = parseFloat(notaMatch[1].replace(',', '.'));
+    if (situacaoMatch) updateData.situacao = situacaoMatch[1].trim();
+    if (inscricaoMatch) updateData.inscricao = inscricaoMatch[1].trim();
+    if (nomeMatch && !leadExistente.nomeReal) updateData.nomeReal = nomeMatch[1].trim();
+
     const leadAtualizado = await prisma.leadChatwit.update({
       where: { id: leadID },
-      data: {
-        textoDOEspelho: conteudoUnificado,
-        espelhoProcessado: true,
-        aguardandoEspelho: false,
-        updatedAt: new Date()
-      },
+      data: updateData,
     });
 
     console.log(`[BullMQ] Lead atualizado com sucesso: ${leadAtualizado.id}`);

@@ -32,6 +32,12 @@ export interface LeadChatwit {
   analisePreliminar?: any;
   analiseValidada?: boolean;
   consultoriaFase2?: boolean;
+  seccional?: string;
+  areaJuridica?: string;
+  notaFinal?: number;
+  situacao?: string;
+  inscricao?: string;
+  examesParticipados?: any;
   createdAt: string | Date;
   updatedAt: string | Date;
   usuario: {

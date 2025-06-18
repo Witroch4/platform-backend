@@ -371,13 +371,49 @@ export function DialogDetalheLead({
                 <div className="text-sm font-medium text-muted-foreground mb-1">
                   Link para o Chat
                 </div>
-                {lead?.leadUrl && (
-                  <Button variant="outline" size="sm" onClick={openChatwitChat} className="mt-1">
-                    <MessageSquare className="h-4 w-4 mr-2" />
-                    Abrir Chat no Chatwit
-                  </Button>
-                )}
-              </div>
+              {lead?.leadUrl && (
+                <Button variant="outline" size="sm" onClick={openChatwitChat} className="mt-1">
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  Abrir Chat no Chatwit
+                </Button>
+              )}
+            </div>
+
+            {/* Informações do Exame */}
+            <div>
+              <div className="text-sm font-medium text-muted-foreground mb-1">Exames Participados</div>
+              {lead?.examesParticipados && Array.isArray(lead.examesParticipados) ? (
+                <div className="flex flex-wrap gap-2">
+                  {lead.examesParticipados.map((ex: string, idx: number) => (
+                    <Badge key={idx} variant="secondary">
+                      {ex}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">Nenhum exame registrado</div>
+              )}
+            </div>
+            <div>
+              <div className="text-sm font-medium text-muted-foreground mb-1">Seccional</div>
+              <div>{lead?.seccional || "Não informado"}</div>
+            </div>
+            <div>
+              <div className="text-sm font-medium text-muted-foreground mb-1">Área Jurídica</div>
+              <div>{lead?.areaJuridica || "Não informado"}</div>
+            </div>
+            <div>
+              <div className="text-sm font-medium text-muted-foreground mb-1">Nota Final</div>
+              <div>{lead?.notaFinal !== undefined && lead.notaFinal !== null ? lead.notaFinal : "Não informada"}</div>
+            </div>
+            <div>
+              <div className="text-sm font-medium text-muted-foreground mb-1">Situação</div>
+              <div>{lead?.situacao || "Não informada"}</div>
+            </div>
+            <div>
+              <div className="text-sm font-medium text-muted-foreground mb-1">Inscrição</div>
+              <div>{lead?.inscricao || "Não informada"}</div>
+            </div>
 
               {/* Switches de status */}
               <div className="pt-2 border-t">

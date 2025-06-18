@@ -384,6 +384,12 @@ model LeadChatwit {
   analiseValidada   Boolean       @default(false) // Indica se a análise foi validada pelo usuário
   consultoriaFase2  Boolean       @default(false) // Indica se o lead está em modo consultoria fase 2
   customAccessToken String?       // Token de acesso personalizado para o Chatwoot
+  seccional         String?       // Seccional do exame (ex.: "OAB / MG")
+  areaJuridica      String?       // Área jurídica do exame
+  notaFinal         Float?        // Nota final obtida no exame
+  situacao          String?       // Situação final do exame (ex.: "APROVADO")
+  inscricao         String?       // Número de inscrição do exame
+  examesParticipados Json?        // Lista de exames que o lead participou
   espelhoBibliotecaId String?     // ID do espelho da biblioteca associado ao lead
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
