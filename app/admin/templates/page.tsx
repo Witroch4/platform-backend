@@ -217,11 +217,10 @@ function TemplatesDisponiveis() {
             Tente sincronizar com a API ou criar um novo template
           </p>
           <Button
-            className="mt-4"
+            className="mt-4 border-border hover:bg-accent"
             variant="outline"
             onClick={() => fetchTemplates(true)}
             disabled={isSyncing}
-            className="border-border hover:bg-accent"
           >
             {isSyncing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
             Sincronizar com Meta
