@@ -56,10 +56,10 @@ const AgendamentoForm: React.FC<AgendamentoFormProps> = ({
   }, [tipoPostagem]);
 
   return (
-    <div className="flex flex-col h-full">
-      <DrawerHeader>
-        <DrawerTitle>Agendar nova postagem</DrawerTitle>
-        <DrawerDescription>
+    <div className="flex flex-col h-full bg-background">
+      <DrawerHeader className="border-b border-border">
+        <DrawerTitle className="text-foreground">Agendar nova postagem</DrawerTitle>
+        <DrawerDescription className="text-muted-foreground">
           Configure as informações do seu agendamento.
         </DrawerDescription>
       </DrawerHeader>

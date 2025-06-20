@@ -48,7 +48,7 @@ export default function DashboardLayoutClient({ children }: DashboardLayoutClien
 
   return (
     <SidebarProvider defaultOpen={true}>
-      <div className="flex h-full min-h-screen">
+      <div className="flex h-screen w-full min-h-screen bg-background">
         {/* Renderiza o esqueleto ou a sidebar condicional */}
         {showSkeleton ? (
           <SidebarSkeleton />
@@ -57,7 +57,7 @@ export default function DashboardLayoutClient({ children }: DashboardLayoutClien
         )}
 
         {/* Conteúdo principal - as classes CSS no globals.css ajustam automaticamente a margem */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col min-h-screen w-full bg-background">
           {/* Renderiza o esqueleto do navbar ou o navbar real */}
           {showSkeleton ? (
             <NavbarSkeleton />
@@ -65,7 +65,7 @@ export default function DashboardLayoutClient({ children }: DashboardLayoutClien
             <Navbar />
           )}
 
-          <div className="flex-1 p-4 md:p-8">
+          <div className="flex-1 w-full bg-background pt-4">
             {children}
           </div>
         </div>

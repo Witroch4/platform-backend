@@ -49,12 +49,13 @@ export default function NovaAutomacaoDialog() {
         className={cn(
           "sm:max-w-[800px]",
           "max-h-[80vh] overflow-y-auto",
-          "mx-auto"
+          "mx-auto",
+          "bg-background border-border"
         )}
       >
         <DialogHeader>
-          <DialogTitle>Modelos prontos</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-foreground">Modelos prontos</DialogTitle>
+          <DialogDescription className="text-muted-foreground">
             Recomendados &mdash; Principais modelos para impulsionar o seu Instagram
           </DialogDescription>
         </DialogHeader>
@@ -64,16 +65,16 @@ export default function NovaAutomacaoDialog() {
             {/* Exemplo de Card habilitado */}
             <div
               onClick={handleCardAutomacaoEuQuero}
-              className="border border-gray-300 rounded-lg p-3 cursor-pointer hover:border-blue-400"
+              className="border border-border rounded-lg p-3 cursor-pointer hover:border-primary bg-card transition-colors"
             >
-              <h3 className="font-bold text-sm md:text-base mb-1">
+              <h3 className="font-bold text-sm md:text-base mb-1 text-card-foreground">
                 Automação Eu Quero - Enviar links automaticamente por DM
               </h3>
               <p className="text-xs md:text-sm text-muted-foreground">
                 Envie um link sempre que alguém comentar em uma publicação ou reel
               </p>
               <div className="text-xs md:text-sm flex items-center justify-between mt-3">
-                <span className="font-semibold">Automação Rápida</span>
+                <span className="font-semibold text-card-foreground">Automação Rápida</span>
                 <span className="px-2 py-1 text-xs bg-pink-500 text-white rounded-full">
                   POPULAR
                 </span>
@@ -96,7 +97,7 @@ export default function NovaAutomacaoDialog() {
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>
+          <Button variant="outline" onClick={() => setOpen(false)} className="border-border hover:bg-accent">
             Fechar
           </Button>
         </DialogFooter>
@@ -118,14 +119,14 @@ function CardEmDesenvolvimento({
   rodape: string
 }) {
   return (
-    <div className="relative border border-gray-300 rounded-lg p-3 opacity-50 cursor-not-allowed">
+    <div className="relative border border-border rounded-lg p-3 opacity-50 cursor-not-allowed bg-card">
       <div className="absolute top-2 -right-10 transform rotate-45 bg-red-600 text-white text-xs font-bold px-6 py-1">
         Em Desenvolvimento
       </div>
-      <h3 className="font-bold text-sm md:text-base mb-1">{titulo}</h3>
+      <h3 className="font-bold text-sm md:text-base mb-1 text-card-foreground">{titulo}</h3>
       <p className="text-xs md:text-sm text-muted-foreground">{descricao}</p>
       <div className="text-xs md:text-sm flex items-center justify-between mt-3">
-        <span>{rodape}</span>
+        <span className="text-card-foreground">{rodape}</span>
       </div>
     </div>
   )

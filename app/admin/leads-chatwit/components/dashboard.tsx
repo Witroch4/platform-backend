@@ -119,18 +119,18 @@ export function LeadsDashboard({ isOpen, refreshCounter, period }: DashboardProp
   const { percentual, crescimento } = calculaCrescimento();
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-background">
       {/* Gráfico de Área - Leads por Mês */}
-      <Card>
+      <Card className="border-border bg-card">
         <CardHeader>
-          <CardTitle>Leads por Mês</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-card-foreground">Leads por Mês</CardTitle>
+          <CardDescription className="text-muted-foreground">
             Comparativo entre leads totais e concluídos
           </CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <Skeleton className="w-full h-[250px]" />
+            <Skeleton className="w-full h-[250px] bg-muted" />
           ) : (
             <ChartContainer config={areaChartConfig}>
               <AreaChart
@@ -141,16 +141,22 @@ export function LeadsDashboard({ isOpen, refreshCounter, period }: DashboardProp
                   right: 12,
                 }}
               >
-                <CartesianGrid vertical={false} />
+                <CartesianGrid vertical={false} className="stroke-border" />
                 <XAxis
                   dataKey="month"
                   tickLine={false}
                   axisLine={false}
                   tickMargin={8}
                   tickFormatter={(value) => value.slice(0, 3)}
+                  className="text-muted-foreground"
                 />
                 <Tooltip
                   labelFormatter={(value) => value.slice(0, 3)}
+                  contentStyle={{
+                    backgroundColor: 'hsl(var(--popover))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '8px'
+                  }}
                 />
                 <Area
                   dataKey="leadsConcluidos"
@@ -175,7 +181,7 @@ export function LeadsDashboard({ isOpen, refreshCounter, period }: DashboardProp
         <CardFooter>
           <div className="flex w-full items-start gap-2 text-sm">
             <div className="grid gap-2">
-              <div className="flex items-center gap-2 font-medium leading-none">
+              <div className="flex items-center gap-2 font-medium leading-none text-card-foreground">
                 {crescimento ? (
                   <>Crescendo {percentual}% este mês <TrendingUp className="h-4 w-4 text-green-500" /></>
                 ) : (
@@ -191,31 +197,44 @@ export function LeadsDashboard({ isOpen, refreshCounter, period }: DashboardProp
       </Card>
 
       {/* Gráfico de Pizza - Leads por Canal */}
-      <Card className="flex flex-col">
+      <Card className="flex flex-col border-border bg-card">
         <CardHeader className="items-center pb-0">
-          <CardTitle>Leads por Canal</CardTitle>
-          <CardDescription>Distribuição de leads por fonte</CardDescription>
+          <CardTitle className="text-card-foreground">Leads por Canal</CardTitle>
+          <CardDescription className="text-muted-foreground">Distribuição de leads por fonte</CardDescription>
         </CardHeader>
         <CardContent className="flex-1 pb-0">
           {isLoading ? (
-            <Skeleton className="w-full h-[250px]" />
+            <Skeleton className="w-full h-[250px] bg-muted" />
           ) : (
             <ChartContainer
               config={{
-                leads: { label: "Leads" },
-                ...chartData.leadsPorCanal.reduce((config: any, item: any) => {
-                  config[item.channel] = {
-                    label: item.channel,
-                    color: `hsl(var(--chart-${(Object.keys(config).length % 5) + 1}))`
-                  };
-                  return config;
-                }, {})
+                leads: {
+                  label: "Leads",
+                },
+                whatsapp: {
+                  label: "WhatsApp",
+                  color: "hsl(var(--chart-1))",
+                },
+                instagram: {
+                  label: "Instagram",
+                  color: "hsl(var(--chart-2))",
+                },
+                outros: {
+                  label: "Outros",
+                  color: "hsl(var(--chart-3))",
+                },
               }}
               className="mx-auto aspect-square max-h-[250px]"
             >
               <PieChart>
                 <Tooltip
-                  labelFormatter={(value) => value.slice(0, 3)}
+                  cursor={false}
+                  content={<ChartTooltipContent hideLabel />}
+                  contentStyle={{
+                    backgroundColor: 'hsl(var(--popover))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '8px'
+                  }}
                 />
                 <Pie
                   data={chartData.leadsPorCanal}
@@ -233,6 +252,7 @@ export function LeadsDashboard({ isOpen, refreshCounter, period }: DashboardProp
                             y={viewBox.cy}
                             textAnchor="middle"
                             dominantBaseline="middle"
+                            className="fill-foreground"
                           >
                             <tspan
                               x={viewBox.cx}
@@ -244,9 +264,9 @@ export function LeadsDashboard({ isOpen, refreshCounter, period }: DashboardProp
                             <tspan
                               x={viewBox.cx}
                               y={(viewBox.cy || 0) + 24}
-                              className="fill-muted-foreground"
+                              className="fill-muted-foreground text-sm"
                             >
-                              Leads
+                              Total de Leads
                             </tspan>
                           </text>
                         )
@@ -259,12 +279,11 @@ export function LeadsDashboard({ isOpen, refreshCounter, period }: DashboardProp
           )}
         </CardContent>
         <CardFooter className="flex-col gap-2 text-sm">
-          <div className="flex items-center gap-2 leading-none text-muted-foreground">
-            {isLoading ? (
-              <Skeleton className="w-40 h-4" />
-            ) : (
-              `Distribuição dos ${totalLeadsCanais} leads por canal`
-            )}
+          <div className="flex items-center gap-2 font-medium leading-none text-card-foreground">
+            Total de leads por canal
+          </div>
+          <div className="leading-none text-muted-foreground">
+            Distribuição de onde vêm os leads
           </div>
         </CardFooter>
       </Card>

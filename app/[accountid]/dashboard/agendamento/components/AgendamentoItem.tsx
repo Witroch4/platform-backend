@@ -80,37 +80,37 @@ const AgendamentoItem: React.FC<AgendamentoItemProps> = ({ agendamento, onExclui
   };
 
   return (
-    <li className="p-4 border rounded-md shadow-sm">
+    <li className="p-4 border border-border rounded-md shadow-sm bg-card">
       <div className="flex justify-between items-start">
         <div>
           <div className="flex items-center gap-2">
-            <p className="text-lg font-medium">
+            <p className="text-lg font-medium text-card-foreground">
               {getTitulo()}
             </p>
             {agendamento.isGrupo && (
-              <Badge variant="outline" className="bg-blue-50">
+              <Badge variant="outline" className="bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-border">
                 Grupo
               </Badge>
             )}
             {agendamento.Diario && (
-              <Badge variant="outline" className="bg-green-50">
+              <Badge variant="outline" className="bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 border-border">
                 Diário
               </Badge>
             )}
             {agendamento.Randomizar && (
-              <Badge variant="outline" className="bg-purple-50">
+              <Badge variant="outline" className="bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 border-border">
                 Aleatório
               </Badge>
             )}
           </div>
-          <p className="text-gray-600">
+          <p className="text-muted-foreground">
             {format(new Date(agendamento.Data), "PPP", { locale: ptBR })} às{" "}
             {format(new Date(agendamento.Data), "HH:mm")}
           </p>
-          <p className="text-gray-600 mt-1">{agendamento.Descricao}</p>
+          <p className="text-muted-foreground mt-1">{agendamento.Descricao}</p>
 
           {agendamento.isGrupo && (
-            <p className="text-sm text-gray-500 mt-2">
+            <p className="text-sm text-muted-foreground mt-2">
               Este grupo contém {agendamento.totalNoGrupo} postagens que serão publicadas {agendamento.Diario ? "diariamente" : ""}
               {agendamento.Diario && agendamento.Randomizar ? ", " : ""}
               {agendamento.Randomizar ? "aleatoriamente" : ""}.
@@ -119,7 +119,7 @@ const AgendamentoItem: React.FC<AgendamentoItemProps> = ({ agendamento, onExclui
         </div>
 
         <div className="flex space-x-2">
-          <Button variant="outline" size="sm" onClick={() => setIsEditOpen(true)}>
+          <Button variant="outline" size="sm" onClick={() => setIsEditOpen(true)} className="border-border hover:bg-accent">
             Editar
           </Button>
           <Button

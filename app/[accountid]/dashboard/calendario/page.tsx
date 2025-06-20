@@ -91,95 +91,100 @@ export default function CalendarioPage() {
   };
 
   return (
-    <main className="p-4 sm:p-10 space-y-4">
-      <h1 className="text-2xl font-bold">Calendário de Agendamentos</h1>
+    <div className="min-h-screen bg-background">
+      <main className="p-4 sm:p-10 space-y-4">
+        <h1 className="text-2xl font-bold text-foreground">Calendário de Agendamentos</h1>
 
-      {/* Exibe loading enquanto busca */}
-      {loading && (
-        <div className="flex justify-center items-center">
-          <DotLottieReact
-            src="/animations/loading.lottie"
-            autoplay
-            loop
-            style={{ width: 150, height: 150 }}
-            aria-label="Carregando agendamentos"
-          />
-        </div>
-      )}
-
-      {error && <p className="text-red-500">{error}</p>}
-
-      {/* Se não estiver loading, renderiza o componente de calendário */}
-      {!loading && (
-        <Calendar
-          mode="single"
-          selected={selectedDay || undefined}
-          onSelect={handleDaySelect}
-          locale={ptBR}
-          /*
-            Utilizando os modificadores para marcar (ex.: sublinhar) os dias
-            que possuem algum agendamento.
-            Essa funcionalidade depende da implementação
-            do seu componente Calendar (baseado em react-day-picker, por exemplo).
-          */
-          modifiers={{
-            hasAppointments: (date: Date) =>
-              appointmentDays.has(format(date, "yyyy-MM-dd")),
-          }}
-          modifiersClassNames={{
-            hasAppointments: "underline",
-          }}
-        />
-      )}
-
-      {/* Diálogo que exibe os agendamentos do dia selecionado */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              Agendamentos para{" "}
-              {selectedDay ? format(selectedDay, "dd/MM/yyyy") : ""}
-            </DialogTitle>
-            <DialogDescription>
-              {appointmentsForSelectedDay.length > 0
-                ? "Clique em editar ou excluir para gerenciar o agendamento."
-                : "Nenhum agendamento para este dia."}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 my-4">
-            {appointmentsForSelectedDay.map((ag) => (
-              <div
-                key={ag.id}
-                className="flex items-center justify-between p-3 border rounded"
-              >
-                <div>
-                  <p className="font-semibold">
-                    {format(new Date(ag.Data), "HH:mm:ss")}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {ag.Descricao}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={() => handleEditarAgendamento(ag.id)}>
-                    Editar
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => handleDelete(ag.id)}
-                  >
-                    Excluir
-                  </Button>
-                </div>
-              </div>
-            ))}
+        {/* Exibe loading enquanto busca */}
+        {loading && (
+          <div className="flex justify-center items-center">
+            <DotLottieReact
+              src="/animations/loading.lottie"
+              autoplay
+              loop
+              style={{ width: 150, height: 150 }}
+              aria-label="Carregando agendamentos"
+            />
           </div>
-          <DialogFooter>
-            <Button onClick={() => setDialogOpen(false)}>Concluir</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </main>
+        )}
+
+        {error && <p className="text-destructive">{error}</p>}
+
+        {/* Se não estiver loading, renderiza o componente de calendário */}
+        {!loading && (
+          <div className="bg-card border border-border rounded-lg p-6">
+            <Calendar
+              mode="single"
+              selected={selectedDay || undefined}
+              onSelect={handleDaySelect}
+              locale={ptBR}
+              className="bg-card text-card-foreground"
+              /*
+                Utilizando os modificadores para marcar (ex.: sublinhar) os dias
+                que possuem algum agendamento.
+                Essa funcionalidade depende da implementação
+                do seu componente Calendar (baseado em react-day-picker, por exemplo).
+              */
+              modifiers={{
+                hasAppointments: (date: Date) =>
+                  appointmentDays.has(format(date, "yyyy-MM-dd")),
+              }}
+              modifiersClassNames={{
+                hasAppointments: "underline font-semibold text-primary",
+              }}
+            />
+          </div>
+        )}
+
+        {/* Diálogo que exibe os agendamentos do dia selecionado */}
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent className="max-w-md bg-background border-border">
+            <DialogHeader>
+              <DialogTitle className="text-foreground">
+                Agendamentos para{" "}
+                {selectedDay ? format(selectedDay, "dd/MM/yyyy") : ""}
+              </DialogTitle>
+              <DialogDescription className="text-muted-foreground">
+                {appointmentsForSelectedDay.length > 0
+                  ? "Clique em editar ou excluir para gerenciar o agendamento."
+                  : "Nenhum agendamento para este dia."}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 my-4">
+              {appointmentsForSelectedDay.map((ag) => (
+                <div
+                  key={ag.id}
+                  className="flex items-center justify-between p-3 border border-border rounded bg-card"
+                >
+                  <div>
+                    <p className="font-semibold text-card-foreground">
+                      {format(new Date(ag.Data), "HH:mm:ss")}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {ag.Descricao}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => handleEditarAgendamento(ag.id)}>
+                      Editar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => handleDelete(ag.id)}
+                    >
+                      Excluir
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setDialogOpen(false)}>Concluir</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </main>
+    </div>
   );
 }

@@ -67,30 +67,30 @@ export function UsuarioItem({
 
   return (
     <>
-      <TableRow>
-        <TableCell>
+      <TableRow className="border-border hover:bg-muted/50">
+        <TableCell className="text-card-foreground">
           {usuario.name}
         </TableCell>
-        <TableCell>
+        <TableCell className="text-card-foreground">
           {usuario.accountName}
         </TableCell>
         <TableCell>
-          <Badge variant="outline">{usuario.channel}</Badge>
+          <Badge variant="outline" className="border-border text-card-foreground">{usuario.channel}</Badge>
         </TableCell>
         <TableCell>
-          <Badge>{usuario.leadsCount}</Badge>
+          <Badge className="bg-primary text-primary-foreground">{usuario.leadsCount}</Badge>
         </TableCell>
         <TableCell>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-8 w-8 p-0">
+              <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-accent">
                 <span className="sr-only">Abrir menu</span>
                 <MoreVertical className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Ações</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => onViewLeads(usuario.id)}>
+            <DropdownMenuContent align="end" className="bg-popover border-border">
+              <DropdownMenuLabel className="text-popover-foreground">Ações</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => onViewLeads(usuario.id)} className="text-popover-foreground hover:bg-accent">
                 <Users className="mr-2 h-4 w-4" />
                 Ver Leads
               </DropdownMenuItem>
@@ -99,6 +99,7 @@ export function UsuarioItem({
                 <DropdownMenuItem 
                   onClick={() => onUnificarArquivos(usuario.id)}
                   disabled={isLoading}
+                  className="text-popover-foreground hover:bg-accent"
                 >
                   {isLoading ? (
                     <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
@@ -109,8 +110,11 @@ export function UsuarioItem({
                 </DropdownMenuItem>
               )}
               
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setConfirmDelete(true)} className="text-destructive">
+              <DropdownMenuSeparator className="bg-border" />
+              <DropdownMenuItem 
+                onClick={() => setConfirmDelete(true)} 
+                className="text-destructive hover:bg-destructive/10"
+              >
                 <Trash className="mr-2 h-4 w-4" />
                 Excluir
               </DropdownMenuItem>
@@ -121,18 +125,26 @@ export function UsuarioItem({
 
       {/* Dialog de confirmação de exclusão */}
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <DialogContent>
+        <DialogContent className="bg-background border-border">
           <DialogHeader>
-            <DialogTitle>Confirmar exclusão</DialogTitle>
-            <DialogDescription>
-              Tem certeza que deseja excluir o usuário "{usuario.name}"? Todos os leads associados a este usuário também serão excluídos. Esta ação não pode ser desfeita.
+            <DialogTitle className="text-foreground">Confirmar Exclusão</DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              Tem certeza que deseja excluir o usuário "{usuario.name}"? 
+              Esta ação não pode ser desfeita e todos os leads associados também serão removidos.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmDelete(false)}>
+            <Button 
+              variant="outline" 
+              onClick={() => setConfirmDelete(false)}
+              className="border-border hover:bg-accent"
+            >
               Cancelar
             </Button>
-            <Button variant="destructive" onClick={handleDelete}>
+            <Button 
+              variant="destructive" 
+              onClick={handleDelete}
+            >
               Excluir
             </Button>
           </DialogFooter>

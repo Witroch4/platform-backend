@@ -147,55 +147,55 @@ const AutoNotifications = () => {
   };
 
   return (
-    <Card>
+    <Card className="border-border bg-card">
       <CardHeader>
-        <CardTitle className="flex items-center">
+        <CardTitle className="flex items-center text-card-foreground">
           <Bell className="h-5 w-5 mr-2" />
           Notificações Automáticas
         </CardTitle>
-        <CardDescription>
+        <CardDescription className="text-muted-foreground">
           Envie notificações automáticas para todos os usuários do sistema
         </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          <div className="flex items-center justify-between p-3 bg-muted/30 rounded-md">
+          <div className="flex items-center justify-between p-3 bg-muted/30 rounded-md border border-border">
             <div>
-              <h3 className="font-medium">Boas-vindas ao ChatWit Social</h3>
+              <h3 className="font-medium text-card-foreground">Boas-vindas ao ChatWit Social</h3>
               <p className="text-sm text-muted-foreground">
                 Envia uma mensagem de boas-vindas para todos os usuários
               </p>
             </div>
-            <Badge variant="outline">Todos os usuários</Badge>
+            <Badge variant="outline" className="border-border">Todos os usuários</Badge>
           </div>
 
-          <div className="flex items-center justify-between p-3 bg-muted/30 rounded-md">
+          <div className="flex items-center justify-between p-3 bg-muted/30 rounded-md border border-border">
             <div>
-              <h3 className="font-medium">Tokens expirando em 10 dias</h3>
+              <h3 className="font-medium text-card-foreground">Tokens expirando em 10 dias</h3>
               <p className="text-sm text-muted-foreground">
                 Notifica usuários com tokens do Instagram expirando em menos de 10 dias
               </p>
             </div>
-            <Badge variant="outline" className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-500">
+            <Badge variant="outline" className="border-border bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-400/30">
               Aviso prévio
             </Badge>
           </div>
 
-          <div className="flex items-center justify-between p-3 bg-muted/30 rounded-md">
+          <div className="flex items-center justify-between p-3 bg-muted/30 rounded-md border border-border">
             <div>
-              <h3 className="font-medium">Tokens expirando em 3 dias</h3>
+              <h3 className="font-medium text-card-foreground">Tokens expirando em 3 dias</h3>
               <p className="text-sm text-muted-foreground">
                 Alerta urgente para usuários com tokens do Instagram expirando em menos de 3 dias
               </p>
             </div>
-            <Badge variant="outline" className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-500">
+            <Badge variant="outline" className="border-border bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 dark:border-red-400/30">
               Urgente
             </Badge>
           </div>
 
           {loading && (
             <div className="mt-4">
-              <div className="h-2 bg-muted rounded-full overflow-hidden">
+              <div className="h-2 bg-muted rounded-full overflow-hidden border border-border">
                 <div className="h-full bg-primary animate-pulse"></div>
               </div>
               <p className="text-sm text-muted-foreground mt-2 text-center">
@@ -206,14 +206,14 @@ const AutoNotifications = () => {
 
           {results.length > 0 && (
             <div className="mt-4 space-y-2">
-              <h3 className="font-medium text-sm">Resultados:</h3>
+              <h3 className="font-medium text-sm text-card-foreground">Resultados:</h3>
               {results.map((result, index) => (
                 <div
                   key={index}
-                  className={`p-2 rounded-md text-sm flex items-center ${
+                  className={`p-2 rounded-md text-sm flex items-center border border-border ${
                     result.success
-                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-500'
-                      : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-500'
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 dark:border-green-400/30'
+                      : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 dark:border-red-400/30'
                   }`}
                 >
                   {result.success ? (

@@ -177,17 +177,18 @@ export default function MenuAcoesAutomacao({
       {/* DropdownMenu CONTROLADO */}
       <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="icon" className="p-1">
+          <Button variant="outline" size="icon" className="p-1 border-border hover:bg-accent">
             <ChevronDown className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
 
-        <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuContent align="end" className="w-44 bg-popover border-border">
           <DropdownMenuItem
             onSelect={(e) => {
               e.preventDefault()
               handleOpenRename()
             }}
+            className="hover:bg-accent text-popover-foreground"
           >
             <Edit className="mr-2 h-4 w-4" />
             Renomear
@@ -197,6 +198,7 @@ export default function MenuAcoesAutomacao({
               e.preventDefault()
               handleOpenDuplicate()
             }}
+            className="hover:bg-accent text-popover-foreground"
           >
             <Copy className="mr-2 h-4 w-4" />
             Duplicar
@@ -206,13 +208,14 @@ export default function MenuAcoesAutomacao({
               e.preventDefault()
               handleOpenMove()
             }}
+            className="hover:bg-accent text-popover-foreground"
           >
             <FolderPlus className="mr-2 h-4 w-4" />
             Mover para
           </DropdownMenuItem>
-          <DropdownMenuSeparator />
+          <DropdownMenuSeparator className="bg-border" />
           <DropdownMenuItem
-            className="text-red-600"
+            className="text-destructive hover:bg-accent"
             onSelect={(e) => {
               e.preventDefault()
               handleOpenDelete()
@@ -228,26 +231,26 @@ export default function MenuAcoesAutomacao({
 
       {/* RENOMEAR */}
       <Dialog open={openRename} onOpenChange={setOpenRename}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[425px] bg-background border-border">
           <DialogHeader>
-            <DialogTitle>Renomear automação</DialogTitle>
-            <DialogDescription>Informe um novo nome.</DialogDescription>
+            <DialogTitle className="text-foreground">Renomear automação</DialogTitle>
+            <DialogDescription className="text-muted-foreground">Informe um novo nome.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="nomeAutomacao" className="text-right">
+              <Label htmlFor="nomeAutomacao" className="text-right text-foreground">
                 Novo Nome
               </Label>
               <Input
                 id="nomeAutomacao"
-                className="col-span-3"
+                className="col-span-3 border-border bg-background text-foreground placeholder:text-muted-foreground focus:ring-ring"
                 value={renameValue}
                 onChange={(e) => setRenameValue(e.target.value)}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpenRename(false)}>
+            <Button variant="outline" onClick={() => setOpenRename(false)} className="border-border hover:bg-accent">
               Cancelar
             </Button>
             <Button onClick={handleRename}>Renomear</Button>
@@ -257,13 +260,13 @@ export default function MenuAcoesAutomacao({
 
       {/* DUPLICAR */}
       <Dialog open={openDuplicate} onOpenChange={setOpenDuplicate}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[425px] bg-background border-border">
           <DialogHeader>
-            <DialogTitle>Duplicar automação</DialogTitle>
-            <DialogDescription>Tem certeza?</DialogDescription>
+            <DialogTitle className="text-foreground">Duplicar automação</DialogTitle>
+            <DialogDescription className="text-muted-foreground">Tem certeza?</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpenDuplicate(false)}>
+            <Button variant="outline" onClick={() => setOpenDuplicate(false)} className="border-border hover:bg-accent">
               Cancelar
             </Button>
             <Button onClick={handleDuplicate}>Duplicar</Button>
@@ -273,26 +276,26 @@ export default function MenuAcoesAutomacao({
 
       {/* MOVER PARA */}
       <Dialog open={openMove} onOpenChange={setOpenMove}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[425px] bg-background border-border">
           <DialogHeader>
-            <DialogTitle>Mover automação</DialogTitle>
-            <DialogDescription>Selecione a pasta de destino ou mova para a raiz.</DialogDescription>
+            <DialogTitle className="text-foreground">Mover automação</DialogTitle>
+            <DialogDescription className="text-muted-foreground">Selecione a pasta de destino ou mova para a raiz.</DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <Label>Pasta:</Label>
+            <Label className="text-foreground">Pasta:</Label>
             <Select onValueChange={(val) => setSelectedFolderId(val)}>
-              <SelectTrigger className="mt-2 w-full">
+              <SelectTrigger className="mt-2 w-full border-border bg-background text-foreground">
                 <SelectValue placeholder="Selecione uma pasta ou Raiz" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-popover border-border">
                 {/* Opção para mover para a Raiz */}
-                <SelectItem key="root" value="root">
+                <SelectItem key="root" value="root" className="text-popover-foreground hover:bg-accent">
                   Raiz
                 </SelectItem>
-                {pastas.length > 0 && <DropdownMenuSeparator />}
+                {pastas.length > 0 && <DropdownMenuSeparator className="bg-border" />}
                 {/* Lista de pastas existentes */}
                 {pastas.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
+                  <SelectItem key={p.id} value={p.id} className="text-popover-foreground hover:bg-accent">
                     {p.name}
                   </SelectItem>
                 ))}
@@ -300,7 +303,7 @@ export default function MenuAcoesAutomacao({
             </Select>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpenMove(false)}>
+            <Button variant="outline" onClick={() => setOpenMove(false)} className="border-border hover:bg-accent">
               Cancelar
             </Button>
             <Button onClick={handleMove} disabled={!selectedFolderId}>
@@ -312,15 +315,15 @@ export default function MenuAcoesAutomacao({
 
       {/* APAGAR */}
       <Dialog open={openDelete} onOpenChange={setOpenDelete}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[425px] bg-background border-border">
           <DialogHeader>
-            <DialogTitle>Apagar automação</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-foreground">Apagar automação</DialogTitle>
+            <DialogDescription className="text-muted-foreground">
               Isso não poderá ser desfeito.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpenDelete(false)}>
+            <Button variant="outline" onClick={() => setOpenDelete(false)} className="border-border hover:bg-accent">
               Cancelar
             </Button>
             <Button variant="destructive" onClick={handleDelete}>

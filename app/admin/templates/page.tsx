@@ -36,12 +36,12 @@ interface Template {
 
 export default function TemplatesPage() {
   return (
-    <main className="w-full">
-      <div className="px-4 py-8 bg-background">
+    <main className="w-full min-h-screen bg-background">
+      <div className="px-4 py-8">
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2">
             <MessageSquare className="h-6 w-6 text-muted-foreground" />
-            <h1 className="text-3xl font-bold">Templates do WhatsApp</h1>
+            <h1 className="text-3xl font-bold text-foreground">Templates do WhatsApp</h1>
           </div>
           <Link href="/admin/templates/criar">
             <Button>
@@ -116,10 +116,10 @@ function TemplatesDisponiveis() {
 
   function getCategoryColor(cat: string) {
     switch (cat.toUpperCase()) {
-      case 'UTILITY': return 'bg-blue-100 text-blue-800';
-      case 'MARKETING': return 'bg-amber-100 text-amber-800';
-      case 'AUTHENTICATION': return 'bg-green-100 text-green-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'UTILITY': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400';
+      case 'MARKETING': return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400';
+      case 'AUTHENTICATION': return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
+      default: return 'bg-muted text-muted-foreground';
     }
   }
 
@@ -127,7 +127,7 @@ function TemplatesDisponiveis() {
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
         <div>
-          <h2 className="text-2xl font-bold">Templates Disponíveis</h2>
+          <h2 className="text-2xl font-bold text-foreground">Templates Disponíveis</h2>
           <p className="text-muted-foreground">
             Templates aprovados disponíveis para envio via API
           </p>
@@ -137,60 +137,61 @@ function TemplatesDisponiveis() {
             variant="outline" 
             onClick={() => fetchTemplates(true)} 
             disabled={isSyncing}
-            className="flex items-center gap-1"
+            className="flex items-center gap-1 border-border hover:bg-accent"
           >
             {isSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             {isSyncing ? "Sincronizando..." : "Sincronizar com Meta"}
           </Button>
 
           <div className="flex flex-col">
-            <Label htmlFor="category-select">Categoria</Label>
+            <Label htmlFor="category-select" className="text-foreground">Categoria</Label>
             <Select
               value={categoryFilter}
               onValueChange={setCategoryFilter}
             >
-              <SelectTrigger id="category-select" className="w-[160px]">
+              <SelectTrigger id="category-select" className="w-[160px] border-border bg-background text-foreground">
                 <SelectValue placeholder="Todas" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas</SelectItem>
-                <SelectItem value="UTILITY">Utilidade</SelectItem>
-                <SelectItem value="MARKETING">Marketing</SelectItem>
-                <SelectItem value="AUTHENTICATION">Autenticação</SelectItem>
+              <SelectContent className="bg-popover border-border">
+                <SelectItem value="all" className="text-popover-foreground hover:bg-accent">Todas</SelectItem>
+                <SelectItem value="UTILITY" className="text-popover-foreground hover:bg-accent">Utilidade</SelectItem>
+                <SelectItem value="MARKETING" className="text-popover-foreground hover:bg-accent">Marketing</SelectItem>
+                <SelectItem value="AUTHENTICATION" className="text-popover-foreground hover:bg-accent">Autenticação</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="flex flex-col">
-            <Label htmlFor="language-select">Idioma</Label>
+            <Label htmlFor="language-select" className="text-foreground">Idioma</Label>
             <Select
               value={languageFilter}
               onValueChange={setLanguageFilter}
             >
-              <SelectTrigger id="language-select" className="w-[160px]">
+              <SelectTrigger id="language-select" className="w-[160px] border-border bg-background text-foreground">
                 <SelectValue placeholder="Todos" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="pt_BR">Português (BR)</SelectItem>
-                <SelectItem value="en_US">Inglês (US)</SelectItem>
-                <SelectItem value="es_ES">Espanhol</SelectItem>
+              <SelectContent className="bg-popover border-border">
+                <SelectItem value="all" className="text-popover-foreground hover:bg-accent">Todos</SelectItem>
+                <SelectItem value="pt_BR" className="text-popover-foreground hover:bg-accent">Português (BR)</SelectItem>
+                <SelectItem value="en_US" className="text-popover-foreground hover:bg-accent">Inglês (US)</SelectItem>
+                <SelectItem value="es_ES" className="text-popover-foreground hover:bg-accent">Espanhol</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="flex flex-col gap-1 items-center">
             <Badge variant="outline" className={cn(
+              "border-border",
               dataSource === "api" 
-                ? "bg-blue-50 text-blue-700" 
-                : "bg-green-50 text-green-700"
+                ? "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" 
+                : "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400"
             )}>
               {dataSource === "api" ? "Via API" : "Banco de Dados"}
             </Badge>
             {isRealData ? (
-              <Badge variant="outline" className="bg-green-50 text-green-700 text-xs">
+              <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs border-border">
                 Dados reais
               </Badge>
             ) : (
-              <Badge variant="outline" className="bg-yellow-50 text-yellow-700 text-xs">
+              <Badge variant="outline" className="bg-yellow-50 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 text-xs border-border">
                 Simulado
               </Badge>
             )}
@@ -203,14 +204,15 @@ function TemplatesDisponiveis() {
           <Loader2 className="animate-spin text-muted-foreground" />
         </div>
       ) : error ? (
-        <Alert variant="destructive">
-          <AlertCircle /> <AlertTitle>Erro</AlertTitle>
+        <Alert variant="destructive" className="border-border">
+          <AlertCircle className="h-4 w-4" /> 
+          <AlertTitle>Erro</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : templates.length === 0 ? (
-        <div className="text-center py-12 bg-muted/20 rounded-lg">
+        <div className="text-center py-12 bg-muted/20 rounded-lg border border-border">
           <MessageSquareOff className="mx-auto text-muted-foreground" />
-          <h3 className="mt-4 font-medium">Nenhum template encontrado</h3>
+          <h3 className="mt-4 font-medium text-foreground">Nenhum template encontrado</h3>
           <p className="text-sm text-muted-foreground mt-2">
             Tente sincronizar com a API ou criar um novo template
           </p>
@@ -219,38 +221,39 @@ function TemplatesDisponiveis() {
             variant="outline"
             onClick={() => fetchTemplates(true)}
             disabled={isSyncing}
+            className="border-border hover:bg-accent"
           >
             {isSyncing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
             Sincronizar com Meta
           </Button>
         </div>
       ) : (
-        <div className="border rounded-lg overflow-hidden">
-          <div className="grid grid-cols-12 bg-muted p-3 text-sm font-medium">
-            <div className="col-span-3">Nome</div>
-            <div className="col-span-3">Categoria</div>
-            <div className="col-span-2">Idioma</div>
-            <div className="col-span-3">ID</div>
-            <div className="col-span-1">Ações</div>
+        <div className="border border-border rounded-lg overflow-hidden bg-card">
+          <div className="grid grid-cols-12 bg-muted p-3 text-sm font-medium border-b border-border">
+            <div className="col-span-3 text-card-foreground">Nome</div>
+            <div className="col-span-3 text-card-foreground">Categoria</div>
+            <div className="col-span-2 text-card-foreground">Idioma</div>
+            <div className="col-span-3 text-card-foreground">ID</div>
+            <div className="col-span-1 text-card-foreground">Ações</div>
           </div>
           {templates.map((t, i) => (
             <div
               key={t.id}
               className={`grid grid-cols-12 p-3 items-center ${
-                i < templates.length - 1 ? 'border-b' : ''
+                i < templates.length - 1 ? 'border-b border-border' : ''
               } hover:bg-muted/50`}
             >
               <div className="col-span-3 truncate font-medium">
-                <Link href={`/admin/templates/${t.id}`} className="hover:underline">
+                <Link href={`/admin/templates/${t.id}`} className="hover:underline text-card-foreground">
                   {t.name}
                 </Link>
               </div>
               <div className="col-span-3">
-                <Badge className={cn('font-normal', getCategoryColor(t.category))}>
+                <Badge className={cn('font-normal border-border', getCategoryColor(t.category))}>
                   {t.category}
                 </Badge>
               </div>
-              <div className="col-span-2 text-sm">{t.language}</div>
+              <div className="col-span-2 text-sm text-card-foreground">{t.language}</div>
               <div className="col-span-3 text-xs font-mono truncate text-muted-foreground">
                 {t.id}
               </div>
@@ -262,6 +265,7 @@ function TemplatesDisponiveis() {
                     navigator.clipboard.writeText(t.id);
                     toast.success('ID copiado!');
                   }}
+                  className="hover:bg-accent"
                 >
                   <Copy className="h-4 w-4" />
                 </Button>

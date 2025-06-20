@@ -294,25 +294,26 @@ export default function AtendimentoPage() {
   };
 
   return (
-    <div className="container mx-auto py-10">
-      <h1 className="text-3xl font-bold mb-6">Sistema de Atendimento WhatsApp</h1>
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto py-10">
+        <h1 className="text-3xl font-bold mb-6 text-foreground">Sistema de Atendimento WhatsApp</h1>
 
-      <Tabs defaultValue="config">
-        <TabsList className="mb-6">
-          <TabsTrigger value="config">Configurações</TabsTrigger>
-          <TabsTrigger value="whatsapp-api">API WhatsApp</TabsTrigger>
-          <TabsTrigger value="upload">Upload de Contatos</TabsTrigger>
-          <TabsTrigger value="disparo">Disparo de Mensagens</TabsTrigger>
-          <TabsTrigger value="webhook">Testar Webhook</TabsTrigger>
-          {resultado && <TabsTrigger value="resultado">Resultados</TabsTrigger>}
-        </TabsList>
+              <Tabs defaultValue="config">
+          <TabsList className="mb-6 bg-muted border-border">
+            <TabsTrigger value="config" className="data-[state=active]:bg-background data-[state=active]:text-foreground">Configurações</TabsTrigger>
+            <TabsTrigger value="whatsapp-api" className="data-[state=active]:bg-background data-[state=active]:text-foreground">API WhatsApp</TabsTrigger>
+            <TabsTrigger value="upload" className="data-[state=active]:bg-background data-[state=active]:text-foreground">Upload de Contatos</TabsTrigger>
+            <TabsTrigger value="disparo" className="data-[state=active]:bg-background data-[state=active]:text-foreground">Disparo de Mensagens</TabsTrigger>
+            <TabsTrigger value="webhook" className="data-[state=active]:bg-background data-[state=active]:text-foreground">Testar Webhook</TabsTrigger>
+            {resultado && <TabsTrigger value="resultado" className="data-[state=active]:bg-background data-[state=active]:text-foreground">Resultados</TabsTrigger>}
+          </TabsList>
 
         {/* Aba de Configurações */}
         <TabsContent value="config">
-          <Card>
+          <Card className="border-border bg-card">
             <CardHeader>
-              <CardTitle>Configurações do Sistema</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-card-foreground">Configurações do Sistema</CardTitle>
+              <CardDescription className="text-muted-foreground">
                 Configure os valores e datas que serão utilizados nas mensagens.
               </CardDescription>
             </CardHeader>
@@ -492,16 +493,16 @@ export default function AtendimentoPage() {
 
         {/* Nova aba de configurações da API do WhatsApp */}
         <TabsContent value="whatsapp-api">
-          <Card>
+          <Card className="border-border bg-card">
             <CardHeader>
-              <CardTitle>Configurações da API do WhatsApp</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-card-foreground">Configurações da API do WhatsApp</CardTitle>
+              <CardDescription className="text-muted-foreground">
                 Configure as credenciais para acesso à API do WhatsApp Business. Estas configurações serão utilizadas para envio de mensagens e obtenção de templates.
                 {isEnvConfig && (
-                  <Alert variant="default" className="mt-4 bg-yellow-50 border border-yellow-200">
-                    <AlertCircle className="h-4 w-4 text-yellow-600" />
-                    <AlertTitle className="text-yellow-800">Usando configurações padrão</AlertTitle>
-                    <AlertDescription className="text-yellow-700">
+                  <Alert variant="default" className="mt-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
+                    <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+                    <AlertTitle className="text-yellow-800 dark:text-yellow-200">Usando configurações padrão</AlertTitle>
+                    <AlertDescription className="text-yellow-700 dark:text-yellow-300">
                       As configurações atuais estão utilizando os valores definidos no ambiente. Para personalizar, preencha os campos abaixo e salve.
                     </AlertDescription>
                   </Alert>
@@ -923,6 +924,7 @@ export default function AtendimentoPage() {
           </TabsContent>
         )}
       </Tabs>
+      </div>
     </div>
   );
 } 

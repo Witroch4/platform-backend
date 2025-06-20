@@ -399,7 +399,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
   // Funções do sistema antigo removidas - agora usando apenas o novo BatchProcessorTrigger
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 bg-background">
       {/* Gerenciador de Conexões SSE */}
       <SSEConnectionManager 
         leads={leads}
@@ -407,15 +407,16 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
       />
       
       {selectedLeads.length > 0 && (
-        <div className="flex items-center justify-between bg-muted p-2 rounded-md">
+        <div className="flex items-center justify-between bg-muted p-2 rounded-md border border-border">
           <div className="flex items-center gap-3">
-            <span className="font-medium">{selectedLeads.length} leads selecionados</span>
+            <span className="font-medium text-foreground">{selectedLeads.length} leads selecionados</span>
           </div>
           <div className="flex gap-2">
             <Button 
               variant="outline" 
               size="sm"
               onClick={() => setSelectedLeads([])}
+              className="border-border hover:bg-accent"
             >
               Limpar seleção
             </Button>
@@ -435,6 +436,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
               size="sm" 
               onClick={() => toast("Não implementado", { description: "Esta funcionalidade será adicionada em breve.",
                 })}
+              className="border-border hover:bg-accent"
             >
               <FileUp className="h-4 w-4 mr-2" />
               Exportar
@@ -452,28 +454,29 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
           Nenhum lead encontrado.
         </div>
       ) : (
-        <div className="overflow-auto">
+        <div className="overflow-auto bg-card rounded-md border border-border">
           {/* Removemos a classe "table-fixed" para que as colunas se ajustem naturalmente */}
-          <Table className="w-full border">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[40px] align-middle">
+          <Table className="w-full border-border">
+            <TableHeader className="bg-muted/50">
+              <TableRow className="border-border hover:bg-muted/50">
+                <TableHead className="w-[40px] align-middle text-card-foreground">
                   <Checkbox
                     checked={leads.length > 0 && selectedLeads.length === leads.length}
                     onCheckedChange={handleToggleAllLeads}
                     aria-label="Selecionar todos os leads"
+                    className="border-border"
                   />
                 </TableHead>
-                <TableHead className="w-[250px] align-middle">Lead</TableHead>
-                <TableHead className="w-[100px] align-middle">Usuário</TableHead>
-                <TableHead className="w-[150px] align-middle">Arquivos</TableHead>
-                <TableHead className="w-[80px] align-middle">PDF</TableHead>
-                <TableHead className="w-[80px] align-middle">Imagens</TableHead>
-                <TableHead className="w-[100px] align-middle">Manuscrito</TableHead>
-                <TableHead className="w-[120px] align-middle">Espelho de Correção</TableHead>
-                <TableHead className="w-[120px] align-middle">Análise</TableHead>
-                <TableHead className="w-[80px] align-middle">Consultoria</TableHead>
-                <TableHead className="w-[60px] align-middle">Ações</TableHead>
+                <TableHead className="w-[250px] align-middle text-card-foreground">Lead</TableHead>
+                <TableHead className="w-[100px] align-middle text-card-foreground">Usuário</TableHead>
+                <TableHead className="w-[150px] align-middle text-card-foreground">Arquivos</TableHead>
+                <TableHead className="w-[80px] align-middle text-card-foreground">PDF</TableHead>
+                <TableHead className="w-[80px] align-middle text-card-foreground">Imagens</TableHead>
+                <TableHead className="w-[100px] align-middle text-card-foreground">Manuscrito</TableHead>
+                <TableHead className="w-[120px] align-middle text-card-foreground">Espelho de Correção</TableHead>
+                <TableHead className="w-[120px] align-middle text-card-foreground">Análise</TableHead>
+                <TableHead className="w-[80px] align-middle text-card-foreground">Consultoria</TableHead>
+                <TableHead className="w-[60px] align-middle text-card-foreground">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -499,7 +502,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
       )}
 
       {leads.length > 0 && (
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between bg-card p-4 rounded-md border border-border">
           <div className="text-sm text-muted-foreground">
             Exibindo {(pagination.page - 1) * pagination.limit + 1} a {Math.min(pagination.page * pagination.limit, pagination.total)} de {pagination.total} leads
           </div>
@@ -509,6 +512,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
               size="sm"
               disabled={pagination.page === 1 || isLoading}
               onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+              className="border-border hover:bg-accent"
             >
               Anterior
             </Button>
@@ -517,6 +521,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
               size="sm"
               disabled={pagination.page === pagination.totalPages || isLoading}
               onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+              className="border-border hover:bg-accent"
             >
               Próximo
             </Button>

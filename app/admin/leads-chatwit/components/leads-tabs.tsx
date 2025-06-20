@@ -17,14 +17,14 @@ export function LeadsTabs({ activeTab, onChange }: LeadsTabsProps) {
   ];
 
   return (
-    <div className="border-b">
+    <div className="border-b border-border bg-background">
       <div className="flex overflow-x-auto">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => onChange(tab.id)}
             className={`
-              px-4 py-2 text-sm font-medium 
+              px-4 py-2 text-sm font-medium transition-colors
               ${activeTab === tab.id ? 
                 "border-b-2 border-primary text-primary" : 
                 "text-muted-foreground hover:text-foreground hover:border-b-2 hover:border-muted"
@@ -36,7 +36,7 @@ export function LeadsTabs({ activeTab, onChange }: LeadsTabsProps) {
         ))}
         <Link 
           href="/admin/leads-chatwit/listagem"
-          className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:border-b-2 hover:border-muted"
+          className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:border-b-2 hover:border-muted transition-colors"
         >
           Listagem Completa
         </Link>

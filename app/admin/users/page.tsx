@@ -198,12 +198,7 @@ const UsersPage = () => {
 
   const copyToClipboard = (text: string, accountId: string) => {
     navigator.clipboard.writeText(text);
-    setCopiedTokens((prev) => {
-      const newSet = new Set(prev);
-      newSet.add(accountId);
-      return newSet;
-    });
-
+    setCopiedTokens((prev) => new Set(prev).add(accountId));
     setTimeout(() => {
       setCopiedTokens((prev) => {
         const newSet = new Set(prev);
@@ -211,192 +206,191 @@ const UsersPage = () => {
         return newSet;
       });
     }, 2000);
+    toast("Token copiado", { description: "Token copiado para a área de transferência."  });
   };
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("pt-BR") + " " + date.toLocaleTimeString("pt-BR");
+    return new Intl.DateTimeFormat("pt-BR", {
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(new Date(dateString));
   };
 
   const formatExpiresAt = (expiresAt: number | null | undefined) => {
-    if (!expiresAt) return "N/A";
+    if (!expiresAt) return "Nunca";
     const date = new Date(expiresAt * 1000);
-    return date.toLocaleDateString("pt-BR") + " " + date.toLocaleTimeString("pt-BR");
+    return new Intl.DateTimeFormat("pt-BR", {
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(date);
   };
 
-  // Função para clonar uma conta
   const handleCloneAccount = (account: Account, setClonedAccount: React.Dispatch<React.SetStateAction<Account | null>>, setIsCloneDialogOpen: React.Dispatch<React.SetStateAction<boolean>>) => {
-    // Importante: Adicionar um pequeno atraso para garantir que o menu de contexto seja fechado primeiro
-    setTimeout(() => {
-      setClonedAccount(account);
-      setIsCloneDialogOpen(true);
-    }, 100);
+    setClonedAccount(account);
+    setIsCloneDialogOpen(true);
   };
 
-  // Função para confirmar a clonagem
   const confirmClone = () => {
     setIsCloneDialogOpen(false);
-    toast("Conta clonada", { description: "Agora você pode colar esta conta em outro usuário."  });
+    toast("Conta clonada", { description: "Conta copiada. Agora clique com o botão direito em qualquer usuário para colar."  });
   };
 
-  // Função para iniciar o processo de colagem
   const handlePasteAccount = (userId: string, clonedAccount: Account | null, setTargetUserId: React.Dispatch<React.SetStateAction<string | null>>, setIsPasteDialogOpen: React.Dispatch<React.SetStateAction<boolean>>, toast: any) => {
     if (!clonedAccount) {
-      toast("Erro", { description: "Nenhuma conta foi clonada para colar."  });
+      toast("Erro", { description: "Nenhuma conta foi clonada. Clone uma conta primeiro."  });
       return;
     }
 
-    // Importante: Adicionar um pequeno atraso para garantir que o menu de contexto seja fechado primeiro
-    setTimeout(() => {
-      setTargetUserId(userId);
-      setIsPasteDialogOpen(true);
-    }, 100);
+    const targetUser = users.find(u => u.id === userId);
+    if (!targetUser) {
+      toast("Erro", { description: "Usuário não encontrado."  });
+      return;
+    }
+
+    setTargetUserId(userId);
+    setIsPasteDialogOpen(true);
   };
 
-  // Função para confirmar a colagem
   const confirmPaste = async () => {
     if (!clonedAccount || !targetUserId) return;
 
     try {
       setIsCloning(true);
-      setIsPasteDialogOpen(false); // Fechar o diálogo antes de fazer a requisição
 
-      toast("Processando", { description: "Clonando conta do usuário..." });
+      const payload = {
+        provider: clonedAccount.provider,
+        providerAccountId: clonedAccount.providerAccountId,
+        type: clonedAccount.type,
+        access_token: clonedAccount.access_token,
+        refresh_token: clonedAccount.refresh_token,
+        expires_at: clonedAccount.expires_at,
+        token_type: clonedAccount.token_type,
+        scope: clonedAccount.scope,
+        id_token: clonedAccount.id_token,
+        session_state: clonedAccount.session_state,
+        igUserId: clonedAccount.igUserId,
+        igUsername: clonedAccount.igUsername,
+        isMain: clonedAccount.isMain,
+      };
 
-      const response = await fetch(`/api/admin/users/clone-account`, {
+      const response = await fetch(`/api/admin/users/${targetUserId}/accounts`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          sourceAccountId: clonedAccount.id,
-          targetUserId: targetUserId,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
-        throw new Error("Falha ao clonar conta");
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Falha ao colar conta");
       }
 
-      const data = await response.json();
+      await fetchUsers();
+      setIsPasteDialogOpen(false);
+      setClonedAccount(null);
+      setTargetUserId(null);
 
-      toast("Sucesso", {
-        description: (
-          <div className="space-y-1">
-            <p>Conta clonada com sucesso!</p>
-            <p className="text-xs">
-              Original: {clonedAccount.igUsername || clonedAccount.providerAccountId}
-            </p>
-            <p className="text-xs">
-              Nova: {data.account.providerAccountId}
-            </p>
-          </div>
-        ),
-        duration: 5000,
-      });
-
-      // Atualizar a lista de usuários
-      fetchUsers();
+      toast("Conta colada", { description: "Conta colada com sucesso no usuário de destino."  });
     } catch (error) {
-      console.error("Erro ao clonar conta:", error);
-      toast("Erro", { description: "Não foi possível clonar a conta."  });
+      console.error("Erro ao colar conta:", error);
+      toast("Erro", { description: (error as Error).message  });
     } finally {
       setIsCloning(false);
-      setTargetUserId(null);
     }
   };
 
-  // Função para validar o email de um usuário
   const handleValidateEmail = async (userId: string, userEmail: string) => {
     try {
-      const response = await fetch(`/api/admin/users/validate-email`, {
+      const response = await fetch(`/api/admin/users/${userId}/validate-email`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          userId,
-          email: userEmail
-        }),
       });
 
       if (!response.ok) {
         throw new Error("Falha ao validar email");
       }
 
-      toast("Sucesso", { description: "Email validado com sucesso."  });
+      // Atualizar o usuário na lista
+      setUsers((prevUsers) =>
+        prevUsers.map((user) =>
+          user.id === userId 
+            ? { ...user, emailVerified: new Date().toISOString() } 
+            : user
+        )
+      );
 
-      // Atualizar a lista de usuários
-      fetchUsers();
+      toast("Email validado", { description: `Email ${userEmail} foi marcado como verificado.`  });
     } catch (error) {
       console.error("Erro ao validar email:", error);
-      toast("Erro", { description: "Não foi possível validar o email do usuário."  });
+      toast("Erro", { description: "Não foi possível validar o email."  });
     }
   };
 
-  // Função para abrir o diálogo de redefinição de senha
   const handleSetPassword = (user: User) => {
     setPasswordUser(user);
     setNewPassword("");
     setIsPasswordDialogOpen(true);
   };
 
-  // Função para definir uma nova senha para o usuário
   const confirmSetPassword = async () => {
     if (!passwordUser || !newPassword.trim()) {
-      toast.error("Erro", { description: "Por favor, selecione um usuário." });
+      toast("Erro", { description: "Digite uma senha válida."  });
       return;
     }
 
     try {
       setIsSettingPassword(true);
 
-      const response = await fetch(`/api/admin/users/set-password`, {
+      const response = await fetch(`/api/admin/users/${passwordUser.id}/set-password`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          userId: passwordUser.id,
-          password: newPassword
+          password: newPassword.trim(),
         }),
       });
 
       if (!response.ok) {
-        throw new Error("Falha ao definir nova senha");
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Falha ao definir senha");
       }
-
-      toast("Sucesso", { description: "Senha definida com sucesso."  });
 
       setIsPasswordDialogOpen(false);
       setPasswordUser(null);
       setNewPassword("");
+
+      toast("Senha definida", { description: `Nova senha definida para ${passwordUser.email}.`  });
     } catch (error) {
-      console.error("Erro ao definir nova senha:", error);
-      toast("Erro", { description: "Não foi possível definir a nova senha."  });
+      console.error("Erro ao definir senha:", error);
+      toast("Erro", { description: (error as Error).message  });
     } finally {
       setIsSettingPassword(false);
     }
   };
 
-  // Função para formatar a data de validação do email
   const formatEmailVerified = (dateString: string | null) => {
-    if (!dateString) return "Não validado";
-    const date = new Date(dateString);
-    return date.toLocaleDateString("pt-BR") + " " + date.toLocaleTimeString("pt-BR");
+    if (!dateString) return "Não verificado";
+    return formatDate(dateString);
   };
 
   return (
-    <div>
+    <div className="min-h-screen bg-background">
       <NavbarAdmin />
-      <div className="container mx-auto py-10">
-        <div className="flex justify-between items-center mb-6">
+      <div className="container mx-auto py-10 px-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-bold">Gerenciamento de Usuários</h1>
-            <div className="flex items-center gap-2 mt-2">
-              <Button asChild variant="outline" size="sm">
+            <h1 className="text-3xl font-bold text-foreground">Gerenciamento de Usuários</h1>
+            <p className="text-muted-foreground mt-2">
+              Visualize e gerencie todos os usuários cadastrados no sistema.
+            </p>
+            <div className="mt-4">
+              <Button variant="outline" asChild className="border-border hover:bg-accent">
                 <Link href="/admin">
-                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  <ChevronLeft className="mr-2 h-4 w-4" />
                   Voltar ao Painel
                 </Link>
               </Button>
@@ -408,7 +402,7 @@ const UsersPage = () => {
               <Input
                 type="search"
                 placeholder="Buscar usuários..."
-                className="pl-8 w-[250px]"
+                className="pl-8 w-[250px] border-border bg-background text-foreground placeholder:text-muted-foreground focus:ring-ring"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -418,6 +412,7 @@ const UsersPage = () => {
               size="icon"
               onClick={fetchUsers}
               disabled={loading}
+              className="border-border hover:bg-accent"
             >
               {loading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -431,7 +426,7 @@ const UsersPage = () => {
         {loading ? (
           <div className="flex justify-center items-center h-64">
             <Loader2 className="h-8 w-8 animate-spin" />
-            <span className="ml-2">Carregando usuários...</span>
+            <span className="ml-2 text-foreground">Carregando usuários...</span>
           </div>
         ) : filteredUsers.length === 0 ? (
           <div className="text-center py-10">
@@ -442,15 +437,15 @@ const UsersPage = () => {
             {filteredUsers.map((user) => (
               <ContextMenu key={user.id}>
                 <ContextMenuTrigger>
-                  <Card>
+                  <Card className="border-border bg-card">
                     <CardHeader className="pb-2">
                       <div className="flex justify-between items-start">
                         <div>
-                          <CardTitle className="text-xl flex items-center gap-2">
+                          <CardTitle className="text-xl flex items-center gap-2 text-card-foreground">
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="p-0 h-6 w-6"
+                              className="p-0 h-6 w-6 hover:bg-accent"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 toggleUserExpand(user.id);
@@ -464,15 +459,15 @@ const UsersPage = () => {
                             </Button>
                             {user.name || "Sem nome"}
                             {user.emailVerified && (
-                              <Badge variant="secondary" className="ml-2 text-xs bg-green-100 text-green-800 dark:bg-green-800/20 dark:text-green-400">
+                              <Badge variant="secondary" className="ml-2 text-xs bg-green-100 text-green-800 dark:bg-green-800/20 dark:text-green-400 border-border">
                                 Verificado
                               </Badge>
                             )}
                           </CardTitle>
-                          <CardDescription>{user.email}</CardDescription>
+                          <CardDescription className="text-muted-foreground">{user.email}</CardDescription>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Badge variant={user.role === "ADMIN" ? "default" : "outline"}>
+                          <Badge variant={user.role === "ADMIN" ? "default" : "outline"} className="border-border">
                             {user.role}
                           </Badge>
                           <TooltipProvider>
@@ -482,11 +477,12 @@ const UsersPage = () => {
                                   variant="ghost"
                                   size="icon"
                                   onClick={() => handleEditUser(user)}
+                                  className="hover:bg-accent"
                                 >
                                   <UserCog className="h-4 w-4" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>
+                              <TooltipContent className="bg-popover border-border">
                                 <p>Editar usuário</p>
                               </TooltipContent>
                             </Tooltip>
@@ -500,35 +496,35 @@ const UsersPage = () => {
                           <div className="space-y-2">
                             <div className="flex justify-between text-sm">
                               <span className="text-muted-foreground">ID:</span>
-                              <span className="font-mono">{user.id}</span>
+                              <span className="font-mono text-card-foreground">{user.id}</span>
                             </div>
                             <div className="flex justify-between text-sm">
                               <span className="text-muted-foreground">Criado em:</span>
-                              <span>{formatDate(user.createdAt)}</span>
+                              <span className="text-card-foreground">{formatDate(user.createdAt)}</span>
                             </div>
                             <div className="flex justify-between text-sm">
                               <span className="text-muted-foreground">Email verificado:</span>
-                              <span>{formatEmailVerified(user.emailVerified)}</span>
+                              <span className="text-card-foreground">{formatEmailVerified(user.emailVerified)}</span>
                             </div>
                             <div className="flex justify-between text-sm">
                               <span className="text-muted-foreground">2FA:</span>
-                              <span>{user.isTwoFactorAuthEnabled ? "Ativado" : "Desativado"}</span>
+                              <span className="text-card-foreground">{user.isTwoFactorAuthEnabled ? "Ativado" : "Desativado"}</span>
                             </div>
                             {user.accounts && user.accounts.length > 0 && (
                               <div className="mt-4">
-                                <h4 className="text-sm font-medium mb-2">Contas vinculadas:</h4>
+                                <h4 className="text-sm font-medium mb-2 text-card-foreground">Contas vinculadas:</h4>
                                 <div className="space-y-3">
                                   {user.accounts.map((account) => (
                                     <ContextMenu key={account.id}>
                                       <ContextMenuTrigger>
-                                        <Card className="border-dashed">
+                                        <Card className="border-dashed border-border bg-card">
                                           <CardHeader className="py-2 px-4">
                                             <div className="flex justify-between items-center">
                                               <div className="flex items-center gap-2">
                                                 <Button
                                                   variant="ghost"
                                                   size="sm"
-                                                  className="p-0 h-6 w-6"
+                                                  className="p-0 h-6 w-6 hover:bg-accent"
                                                   onClick={(e) => {
                                                     e.stopPropagation();
                                                     toggleAccountExpand(account.id);
@@ -541,10 +537,10 @@ const UsersPage = () => {
                                                   )}
                                                 </Button>
                                                 <div>
-                                                  <div className="font-medium">
+                                                  <div className="font-medium text-card-foreground">
                                                     {account.provider.charAt(0).toUpperCase() + account.provider.slice(1)}
                                                     {account.isMain && (
-                                                      <Badge variant="secondary" className="ml-2">
+                                                      <Badge variant="secondary" className="ml-2 border-border">
                                                         Principal
                                                       </Badge>
                                                     )}
@@ -562,35 +558,35 @@ const UsersPage = () => {
                                                 <div className="space-y-2">
                                                   <div className="flex justify-between">
                                                     <span className="text-muted-foreground">ID:</span>
-                                                    <span className="font-mono">{account.id}</span>
+                                                    <span className="font-mono text-card-foreground">{account.id}</span>
                                                   </div>
                                                   <div className="flex justify-between">
                                                     <span className="text-muted-foreground">Provider ID:</span>
-                                                    <span className="font-mono">{account.providerAccountId}</span>
+                                                    <span className="font-mono text-card-foreground">{account.providerAccountId}</span>
                                                   </div>
                                                   {account.igUsername && (
                                                     <div className="flex justify-between">
                                                       <span className="text-muted-foreground">Username:</span>
-                                                      <span>@{account.igUsername}</span>
+                                                      <span className="text-card-foreground">@{account.igUsername}</span>
                                                     </div>
                                                   )}
                                                   {account.expires_at && (
                                                     <div className="flex justify-between">
                                                       <span className="text-muted-foreground">Expira em:</span>
-                                                      <span>{formatExpiresAt(account.expires_at)}</span>
+                                                      <span className="text-card-foreground">{formatExpiresAt(account.expires_at)}</span>
                                                     </div>
                                                   )}
                                                   {account.access_token && (
                                                     <div className="flex justify-between items-center">
                                                       <span className="text-muted-foreground">Token:</span>
                                                       <div className="flex items-center gap-1">
-                                                        <span className="font-mono truncate max-w-[150px]">
+                                                        <span className="font-mono truncate max-w-[150px] text-card-foreground">
                                                           {account.access_token.substring(0, 10)}...
                                                         </span>
                                                         <Button
                                                           variant="ghost"
                                                           size="icon"
-                                                          className="h-5 w-5"
+                                                          className="h-5 w-5 hover:bg-accent"
                                                           onClick={() => copyToClipboard(account.access_token!, account.id)}
                                                         >
                                                           {copiedTokens.has(account.id) ? (
@@ -604,7 +600,7 @@ const UsersPage = () => {
                                                   )}
                                                   <div className="flex justify-between">
                                                     <span className="text-muted-foreground">Criado em:</span>
-                                                    <span>{formatDate(account.createdAt)}</span>
+                                                    <span className="text-card-foreground">{formatDate(account.createdAt)}</span>
                                                   </div>
                                                 </div>
                                               </CardContent>
@@ -612,38 +608,39 @@ const UsersPage = () => {
                                           </Collapsible>
                                         </Card>
                                       </ContextMenuTrigger>
-                                      <ContextMenuContent className="w-64">
+                                      <ContextMenuContent className="w-64 bg-popover border-border">
                                         <ContextMenuItem
                                           onClick={() => handleCloneAccount(account, setClonedAccount, setIsCloneDialogOpen)}
+                                          className="text-popover-foreground hover:bg-accent"
                                         >
                                           <Copy className="mr-2 h-4 w-4" />
                                           Clonar conta
                                         </ContextMenuItem>
-                                        <ContextMenuItem onClick={() => copyToClipboard(account.access_token!, account.id)}>
+                                        <ContextMenuItem onClick={() => copyToClipboard(account.access_token!, account.id)} className="text-popover-foreground hover:bg-accent">
                                           <Copy className="mr-2 h-4 w-4" />
                                           Copiar token
                                         </ContextMenuItem>
-                                        <ContextMenuSeparator />
-                                        <ContextMenuItem>
+                                        <ContextMenuSeparator className="bg-border" />
+                                        <ContextMenuItem className="text-popover-foreground hover:bg-accent">
                                           <ExternalLink className="mr-2 h-4 w-4" />
                                           Abrir no Instagram
                                         </ContextMenuItem>
                                         <ContextMenuSub>
-                                          <ContextMenuSubTrigger>
+                                          <ContextMenuSubTrigger className="text-popover-foreground hover:bg-accent">
                                             <RefreshCw className="mr-2 h-4 w-4" />
                                             Renovar token
                                           </ContextMenuSubTrigger>
-                                          <ContextMenuSubContent className="w-48">
-                                            <ContextMenuItem>
+                                          <ContextMenuSubContent className="w-48 bg-popover border-border">
+                                            <ContextMenuItem className="text-popover-foreground hover:bg-accent">
                                               Renovar manualmente
                                             </ContextMenuItem>
-                                            <ContextMenuItem>
+                                            <ContextMenuItem className="text-popover-foreground hover:bg-accent">
                                               Solicitar reautenticação
                                             </ContextMenuItem>
                                           </ContextMenuSubContent>
                                         </ContextMenuSub>
-                                        <ContextMenuSeparator />
-                                        <ContextMenuItem className="text-red-600">
+                                        <ContextMenuSeparator className="bg-border" />
+                                        <ContextMenuItem className="text-red-600 hover:bg-accent">
                                           <X className="mr-2 h-4 w-4" />
                                           Desvincular conta
                                         </ContextMenuItem>
@@ -659,33 +656,44 @@ const UsersPage = () => {
                     </Collapsible>
                   </Card>
                 </ContextMenuTrigger>
-                <ContextMenuContent className="w-64">
-                  <ContextMenuItem onClick={() => handleEditUser(user)}>
+                <ContextMenuContent className="w-64 bg-popover border-border">
+                  <ContextMenuItem
+                    onClick={() => handleEditUser(user)}
+                    className="text-popover-foreground hover:bg-accent"
+                  >
                     <UserCog className="mr-2 h-4 w-4" />
                     Editar usuário
                   </ContextMenuItem>
+                  <ContextMenuItem
+                    onClick={() => handleSetPassword(user)}
+                    className="text-popover-foreground hover:bg-accent"
+                  >
+                    <KeyRound className="mr-2 h-4 w-4" />
+                    Definir senha
+                  </ContextMenuItem>
+                  <ContextMenuSeparator className="bg-border" />
                   {!user.emailVerified && (
-                    <ContextMenuItem onClick={() => handleValidateEmail(user.id, user.email)}>
+                    <ContextMenuItem
+                      onClick={() => handleValidateEmail(user.id, user.email)}
+                      className="text-popover-foreground hover:bg-accent"
+                    >
                       <CheckCircle className="mr-2 h-4 w-4" />
                       Validar email
                     </ContextMenuItem>
                   )}
-                  <ContextMenuItem onClick={() => handleSetPassword(user)}>
-                    <KeyRound className="mr-2 h-4 w-4" />
-                    Definir nova senha
-                  </ContextMenuItem>
                   {clonedAccount && (
                     <ContextMenuItem
                       onClick={() => handlePasteAccount(user.id, clonedAccount, setTargetUserId, setIsPasteDialogOpen, toast)}
+                      className="text-popover-foreground hover:bg-accent"
                     >
-                      <Copy className="mr-2 h-4 w-4" />
+                      <UserCheck className="mr-2 h-4 w-4" />
                       Colar conta clonada
                     </ContextMenuItem>
                   )}
-                  <ContextMenuSeparator />
-                  <ContextMenuItem className="text-red-600">
+                  <ContextMenuSeparator className="bg-border" />
+                  <ContextMenuItem className="text-red-600 hover:bg-accent">
                     <X className="mr-2 h-4 w-4" />
-                    Desativar usuário
+                    Remover usuário
                   </ContextMenuItem>
                 </ContextMenuContent>
               </ContextMenu>
@@ -693,214 +701,169 @@ const UsersPage = () => {
           </div>
         )}
 
-        {/* Diálogo de edição de usuário */}
-        <Dialog
-          open={isDialogOpen}
-          onOpenChange={(open) => {
-            if (!open) {
-              setEditingUser(null);
-              setIsDialogOpen(false);
-            }
-          }}
-        >
-          <DialogContent className="sm:max-w-[500px]">
+        {/* Dialog de edição de usuário */}
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogContent className="bg-background border-border">
             <DialogHeader>
-              <DialogTitle>Editar Usuário</DialogTitle>
-              <DialogDescription>
-                Faça alterações nos detalhes do usuário abaixo.
+              <DialogTitle className="text-foreground">Editar Usuário</DialogTitle>
+              <DialogDescription className="text-muted-foreground">
+                Faça alterações nas informações do usuário aqui.
               </DialogDescription>
             </DialogHeader>
             {editingUser && (
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Nome</Label>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="name" className="text-right text-foreground">
+                    Nome
+                  </Label>
                   <Input
                     id="name"
                     value={editingUser.name || ""}
                     onChange={(e) =>
                       setEditingUser({ ...editingUser, name: e.target.value })
                     }
+                    className="col-span-3 border-border bg-background text-foreground placeholder:text-muted-foreground focus:ring-ring"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="email" className="text-right text-foreground">
+                    Email
+                  </Label>
                   <Input
                     id="email"
                     value={editingUser.email}
                     onChange={(e) =>
                       setEditingUser({ ...editingUser, email: e.target.value })
                     }
+                    className="col-span-3 border-border bg-background text-foreground placeholder:text-muted-foreground focus:ring-ring"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="role">Função</Label>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="role" className="text-right text-foreground">
+                    Função
+                  </Label>
                   <Select
                     value={editingUser.role}
                     onValueChange={(value) =>
                       setEditingUser({ ...editingUser, role: value })
                     }
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione uma função" />
+                    <SelectTrigger className="col-span-3 border-border bg-background text-foreground">
+                      <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="DEFAULT">Usuário</SelectItem>
-                      <SelectItem value="ADMIN">Administrador</SelectItem>
+                    <SelectContent className="bg-popover border-border">
+                      <SelectItem value="USER" className="text-popover-foreground hover:bg-accent">Usuário</SelectItem>
+                      <SelectItem value="ADMIN" className="text-popover-foreground hover:bg-accent">Administrador</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
             )}
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-                Cancelar
-              </Button>
               <Button onClick={handleSaveUser}>Salvar alterações</Button>
+              <DialogClose asChild>
+                <Button variant="outline" className="border-border hover:bg-accent">Cancelar</Button>
+              </DialogClose>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Diálogo de confirmação de clonagem */}
-        <Dialog
-          open={isCloneDialogOpen}
-          onOpenChange={(open) => {
-            if (!open) {
-              setIsCloneDialogOpen(false);
-            }
-          }}
-        >
-          <DialogContent className="sm:max-w-[500px]">
+        {/* Dialog de confirmação de clonagem */}
+        <Dialog open={isCloneDialogOpen} onOpenChange={setIsCloneDialogOpen}>
+          <DialogContent className="bg-background border-border">
             <DialogHeader>
-              <DialogTitle>Clonar Conta</DialogTitle>
-              <DialogDescription>
-                Você está prestes a clonar a seguinte conta:
+              <DialogTitle className="text-foreground">Confirmar Clonagem</DialogTitle>
+              <DialogDescription className="text-muted-foreground">
+                Você está prestes a clonar a conta{" "}
+                {clonedAccount?.igUsername
+                  ? `@${clonedAccount.igUsername}`
+                  : clonedAccount?.providerAccountId}{" "}
+                do {clonedAccount?.provider}.
               </DialogDescription>
             </DialogHeader>
-            {clonedAccount && (
-              <div className="py-4">
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="font-medium">Provedor:</span>
-                    <span>{clonedAccount.provider}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-medium">Usuário:</span>
-                    <span>{clonedAccount.igUsername || clonedAccount.providerAccountId}</span>
-                  </div>
-                </div>
-                <p className="mt-4 text-sm text-muted-foreground">
-                  Esta conta será copiada para a área de transferência. Você poderá colá-la em outro usuário.
-                </p>
-              </div>
-            )}
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsCloneDialogOpen(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={confirmClone}>Confirmar</Button>
+              <Button onClick={confirmClone}>Confirmar Clonagem</Button>
+              <DialogClose asChild>
+                <Button variant="outline" className="border-border hover:bg-accent">Cancelar</Button>
+              </DialogClose>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Diálogo de confirmação de colagem */}
-        <Dialog
-          open={isPasteDialogOpen}
-          onOpenChange={(open) => {
-            if (!open) {
-              setIsPasteDialogOpen(false);
-            }
-          }}
-        >
-          <DialogContent className="sm:max-w-[500px]">
+        {/* Dialog de confirmação de colagem */}
+        <Dialog open={isPasteDialogOpen} onOpenChange={setIsPasteDialogOpen}>
+          <DialogContent className="bg-background border-border">
             <DialogHeader>
-              <DialogTitle>Colar Conta</DialogTitle>
-              <DialogDescription>
-                Você está prestes a colar a conta clonada para o seguinte usuário:
+              <DialogTitle className="text-foreground">Confirmar Colagem</DialogTitle>
+              <DialogDescription className="text-muted-foreground">
+                Você está prestes a colar a conta clonada{" "}
+                {clonedAccount?.igUsername
+                  ? `@${clonedAccount.igUsername}`
+                  : clonedAccount?.providerAccountId}{" "}
+                no usuário{" "}
+                {users.find((u) => u.id === targetUserId)?.email}.
               </DialogDescription>
             </DialogHeader>
-            {targetUserId && clonedAccount && (
-              <div className="py-4">
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="font-medium">Usuário de destino:</span>
-                    <span>{users.find(u => u.id === targetUserId)?.name || users.find(u => u.id === targetUserId)?.email}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-medium">Conta a ser colada:</span>
-                    <span>{clonedAccount.igUsername || clonedAccount.providerAccountId}</span>
-                  </div>
-                </div>
-                <p className="mt-4 text-sm text-amber-600">
-                  Atenção: Esta ação criará uma cópia da conta no usuário de destino. A conta original permanecerá intacta.
-                </p>
-              </div>
-            )}
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsPasteDialogOpen(false)} disabled={isCloning}>
-                Cancelar
-              </Button>
               <Button onClick={confirmPaste} disabled={isCloning}>
                 {isCloning ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Processando...
+                    Colando...
                   </>
                 ) : (
-                  "Confirmar"
+                  "Confirmar Colagem"
                 )}
               </Button>
+              <DialogClose asChild>
+                <Button variant="outline" disabled={isCloning} className="border-border hover:bg-accent">
+                  Cancelar
+                </Button>
+              </DialogClose>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Diálogo de definição de nova senha */}
-        <Dialog
-          open={isPasswordDialogOpen}
-          onOpenChange={(open) => {
-            if (!open) {
-              setIsPasswordDialogOpen(false);
-              setPasswordUser(null);
-              setNewPassword("");
-            }
-          }}
-        >
-          <DialogContent className="sm:max-w-[400px]">
+        {/* Dialog de redefinição de senha */}
+        <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
+          <DialogContent className="bg-background border-border">
             <DialogHeader>
-              <DialogTitle>Definir Nova Senha</DialogTitle>
-              <DialogDescription>
-                {passwordUser && (
-                  <>
-                    Definir nova senha para o usuário <strong>{passwordUser.name || passwordUser.email}</strong>.
-                  </>
-                )}
+              <DialogTitle className="text-foreground">Definir Nova Senha</DialogTitle>
+              <DialogDescription className="text-muted-foreground">
+                Defina uma nova senha para o usuário {passwordUser?.email}.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="new-password">Nova Senha</Label>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="newPassword" className="text-right text-foreground">
+                  Nova Senha
+                </Label>
                 <Input
-                  id="new-password"
+                  id="newPassword"
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
+                  className="col-span-3 border-border bg-background text-foreground placeholder:text-muted-foreground focus:ring-ring"
                   placeholder="Digite a nova senha"
                 />
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsPasswordDialogOpen(false)} disabled={isSettingPassword}>
-                Cancelar
-              </Button>
               <Button onClick={confirmSetPassword} disabled={isSettingPassword || !newPassword.trim()}>
                 {isSettingPassword ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Processando...
+                    Definindo...
                   </>
                 ) : (
-                  "Confirmar"
+                  "Definir Senha"
                 )}
               </Button>
+              <DialogClose asChild>
+                <Button variant="outline" disabled={isSettingPassword} className="border-border hover:bg-accent">
+                  Cancelar
+                </Button>
+              </DialogClose>
             </DialogFooter>
           </DialogContent>
         </Dialog>

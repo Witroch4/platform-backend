@@ -37,21 +37,21 @@ const LegendaInput: React.FC<LegendaInputProps> = ({ legenda, setLegenda }) => {
 
   return (
     <div>
-      <label className="block text-sm font-medium mb-1">Legenda da Postagem</label>
+      <label className="block text-sm font-medium mb-1 text-foreground">Legenda da Postagem</label>
       <div className="flex items-center mb-2">
         <Textarea
           ref={legendaRef}
           placeholder="Digite a legenda da sua postagem aqui."
           value={legenda}
           onChange={(e) => setLegenda(e.target.value)}
-          className="resize-none h-24 flex-1"
+          className="resize-none h-24 flex-1 border-border bg-background text-foreground placeholder:text-muted-foreground focus:ring-ring"
         />
         <Popover open={openEmojiSelector} onOpenChange={setOpenEmojiSelector}>
           <PopoverTrigger asChild>
             <Button
               variant="outline"
               size="icon"
-              className="ml-2 flex items-center justify-center"
+              className="ml-2 flex items-center justify-center border-border hover:bg-accent"
               aria-label="Adicionar Emoji"
             >
               <DotLottieReact
@@ -65,7 +65,7 @@ const LegendaInput: React.FC<LegendaInputProps> = ({ legenda, setLegenda }) => {
               />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-40 p-2" align="start">
+          <PopoverContent className="w-40 p-2 bg-popover border-border" align="start">
             <EmojiPicker onSelect={insertEmoji} />
           </PopoverContent>
         </Popover>

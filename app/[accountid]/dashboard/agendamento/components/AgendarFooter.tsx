@@ -12,12 +12,12 @@ interface AgendarFooterProps {
 
 const AgendarFooter: React.FC<AgendarFooterProps> = ({ onAgendar, uploading }) => {
   return (
-    <div className="p-4 flex justify-end space-x-2">
+    <div className="p-4 flex justify-end space-x-2 bg-background border-t border-border">
       <Button onClick={onAgendar} disabled={uploading}>
         {uploading ? "Enviando..." : "Agendar"}
       </Button>
       <DrawerClose asChild>
-        <Button variant="outline">Cancelar</Button>
+        <Button variant="outline" className="border-border hover:bg-accent">Cancelar</Button>
       </DrawerClose>
     </div>
   );

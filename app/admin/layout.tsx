@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import LoginBadge from '@/components/auth/login-badge';
+import NavbarAdmin from '@/components/admin/navbar-admin';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -102,7 +103,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -113,11 +114,11 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen bg-background">
       {/* Sidebar */}
-      <aside className="w-64 bg-background border-r">
+      <aside className="w-64 bg-background border-r border-border">
         <div className="p-6">
-          <h1 className="text-2xl font-bold">Admin</h1>
+          <h1 className="text-2xl font-bold text-foreground">Admin</h1>
         </div>
         <nav className="mt-6">
           <AdminNavLink href="/admin" icon={<LayoutDashboard className="h-5 w-5 mr-3" />} exact>
@@ -162,7 +163,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
                   Minha Conta
                 </div>
               </DropdownMenuTrigger>
-              <DropdownMenuContent side="right" className="w-64">
+              <DropdownMenuContent side="right" className="w-64 bg-popover border-border">
                 <LoginBadge user={session?.user} />
               </DropdownMenuContent>
             </DropdownMenu>
@@ -170,10 +171,16 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
         </nav>
       </aside>
 
-      {/* Main content */}
-      <main className="flex-1 overflow-y-auto">
-        {children}
-      </main>
+      {/* Main content com navbar */}
+      <div className="flex-1 flex flex-col min-h-screen bg-background">
+        {/* Navbar Admin */}
+        <NavbarAdmin />
+        
+        {/* Conteúdo principal com padding para não ser cortado pelo navbar */}
+        <main className="flex-1 overflow-y-auto bg-background pt-4">
+          {children}
+        </main>
+      </div>
     </div>
   );
 };

@@ -35,7 +35,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR" suppressHydrationWarning>
-      <body className={cn(inter.className, "min-h-screen")}>
+      <body className={cn(inter.className, "min-h-screen bg-background")}>
         <ErrorBoundary>
           <SessionProvider>
             <ThemeProvider
@@ -47,7 +47,9 @@ export default function RootLayout({
               <WelcomeNotificationHandler />
               {/* 👇 Envolvendo a árvore de componentes com TooltipProvider */}
               <TooltipProvider>
-                {children}
+                <div className="min-h-screen w-full bg-background">
+                  {children}
+                </div>
               </TooltipProvider>
             </ThemeProvider>
           </SessionProvider>

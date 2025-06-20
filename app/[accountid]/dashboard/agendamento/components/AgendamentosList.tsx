@@ -47,17 +47,19 @@ const AgendamentosList: React.FC<AgendamentosListProps> = ({ agendamentos, refet
   }, [agendamentos]);
 
   return (
-    <ul className="space-y-4">
-      {agendamentosAgrupados.map((agendamento) => (
-        <AgendamentoItem
-          key={agendamento.id}
-          agendamento={agendamento}
-          onExcluir={() => {}}
-          refetch={refetch}
-          accountid={accountid}
-        />
-      ))}
-    </ul>
+    <div className="bg-background">
+      <ul className="space-y-4">
+        {agendamentosAgrupados.map((agendamento) => (
+          <AgendamentoItem
+            key={agendamento.id}
+            agendamento={agendamento}
+            onExcluir={() => {}}
+            refetch={refetch}
+            accountid={accountid}
+          />
+        ))}
+      </ul>
+    </div>
   );
 };
 

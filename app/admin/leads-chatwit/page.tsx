@@ -92,11 +92,11 @@ export default function LeadsChatwitPage() {
   };
 
   return (
-    <div className="max-w-screen-2xl mx-auto px-4 py-6 space-y-6">
+    <div className="max-w-screen-2xl mx-auto px-4 py-6 space-y-6 bg-background">
       {/* Cabeçalho */}
       <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Gerenciamento de Leads do Chatwit</h1>
+          <h1 className="text-3xl font-bold text-foreground">Gerenciamento de Leads do Chatwit</h1>
           <p className="text-muted-foreground mt-1">
             Gerencie leads recebidos via webhook, unifique PDFs e converta documentos
           </p>
@@ -108,10 +108,10 @@ export default function LeadsChatwitPage() {
             value={filterPeriod}
             onValueChange={setFilterPeriod}
           >
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-[180px] border-border">
               <SelectValue placeholder="Filtrar por período" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="bg-popover border-border">
               <SelectItem value="hoje">Hoje</SelectItem>
               <SelectItem value="ultimos7">Últimos 7 dias</SelectItem>
               <SelectItem value="ultimos30">Últimos 30 dias</SelectItem>
@@ -126,6 +126,7 @@ export default function LeadsChatwitPage() {
                   variant="outline" 
                   onClick={handleRefresh}
                   disabled={isLoading}
+                  className="border-border hover:bg-accent"
                 >
                   {isLoading ? (
                     <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
@@ -135,7 +136,7 @@ export default function LeadsChatwitPage() {
                   Atualizar
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>
+              <TooltipContent className="bg-popover border-border">
                 <p>Atualizar dados dos leads</p>
               </TooltipContent>
             </Tooltip>
@@ -143,34 +144,34 @@ export default function LeadsChatwitPage() {
           
           <Sheet>
             <SheetTrigger asChild>
-              <Button variant="outline">
+              <Button variant="outline" className="border-border hover:bg-accent">
                 <Info className="h-4 w-4 mr-2" />
                 Ajuda
               </Button>
             </SheetTrigger>
-            <SheetContent>
+            <SheetContent className="bg-background border-border">
               <SheetHeader>
-                <SheetTitle>Sistema de Gerenciamento de Leads</SheetTitle>
-                <SheetDescription>
+                <SheetTitle className="text-foreground">Sistema de Gerenciamento de Leads</SheetTitle>
+                <SheetDescription className="text-muted-foreground">
                   Instruções para utilização do sistema de leads do Chatwit
                 </SheetDescription>
               </SheetHeader>
               <div className="mt-6 space-y-4">
                 <div>
-                  <h3 className="text-lg font-semibold">Cadastro de Leads</h3>
+                  <h3 className="text-lg font-semibold text-foreground">Cadastro de Leads</h3>
                   <p className="text-sm text-muted-foreground">
                     Os leads são automaticamente cadastrados através do webhook enviado pelo Chatwit.
                   </p>
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold">Unificação de PDFs</h3>
+                  <h3 className="text-lg font-semibold text-foreground">Unificação de PDFs</h3>
                   <p className="text-sm text-muted-foreground">
                     Clique em "Unificar" para juntar todos os arquivos PDF do lead em um único documento.
                     O arquivo será salvo no MinIO após a unificação.
                   </p>
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold">Conversão para Imagens</h3>
+                  <h3 className="text-lg font-semibold text-foreground">Conversão para Imagens</h3>
                   <p className="text-sm text-muted-foreground">
                     Após unificar, você pode converter o PDF em imagens clicando no botão "Converter em Imagens".
                     As imagens serão salvas no MinIO automaticamente.
@@ -184,64 +185,64 @@ export default function LeadsChatwitPage() {
       
       {/* Cards de Estatísticas */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
+        <Card className="border-border bg-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Total de Leads</CardTitle>
+            <CardTitle className="text-sm font-medium text-card-foreground">Total de Leads</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <div className="h-12 w-16 bg-muted animate-pulse rounded-md" />
             ) : (
               <>
-                <div className="text-2xl font-bold">{stats.totalLeads}</div>
+                <div className="text-2xl font-bold text-card-foreground">{stats.totalLeads}</div>
                 <p className="text-xs text-muted-foreground">Todos os leads cadastrados</p>
               </>
             )}
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="border-border bg-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Total de Usuários</CardTitle>
+            <CardTitle className="text-sm font-medium text-card-foreground">Total de Usuários</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <div className="h-12 w-16 bg-muted animate-pulse rounded-md" />
             ) : (
               <>
-                <div className="text-2xl font-bold">{stats.totalUsuarios}</div>
+                <div className="text-2xl font-bold text-card-foreground">{stats.totalUsuarios}</div>
                 <p className="text-xs text-muted-foreground">Usuários com leads cadastrados</p>
               </>
             )}
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="border-border bg-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Total de Arquivos</CardTitle>
+            <CardTitle className="text-sm font-medium text-card-foreground">Total de Arquivos</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <div className="h-12 w-16 bg-muted animate-pulse rounded-md" />
             ) : (
               <>
-                <div className="text-2xl font-bold">{stats.totalArquivos}</div>
+                <div className="text-2xl font-bold text-card-foreground">{stats.totalArquivos}</div>
                 <p className="text-xs text-muted-foreground">Arquivos anexados aos leads</p>
               </>
             )}
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="border-border bg-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Leads Pendentes</CardTitle>
+            <CardTitle className="text-sm font-medium text-card-foreground">Leads Pendentes</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <div className="h-12 w-16 bg-muted animate-pulse rounded-md" />
             ) : (
               <>
-                <div className="text-2xl font-bold">{stats.pendentes}</div>
+                <div className="text-2xl font-bold text-card-foreground">{stats.pendentes}</div>
                 <p className="text-xs text-muted-foreground">Aguardando processamento</p>
               </>
             )}
@@ -256,6 +257,7 @@ export default function LeadsChatwitPage() {
             variant={showDashboard ? "default" : "outline"} 
             size="sm"
             onClick={toggleDashboard}
+            className={showDashboard ? "" : "border-border hover:bg-accent"}
           >
             <BarChart className="h-4 w-4 mr-2" />
             {showDashboard ? "Ocultar Dashboard" : "Mostrar Dashboard"}
@@ -267,7 +269,7 @@ export default function LeadsChatwitPage() {
           <Input
             type="search"
             placeholder="Buscar leads..."
-            className="w-full md:w-[300px] pl-8"
+            className="w-full md:w-[300px] pl-8 border-border bg-background text-foreground placeholder:text-muted-foreground focus:ring-ring"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -275,7 +277,7 @@ export default function LeadsChatwitPage() {
             <Button
               variant="ghost"
               size="sm"
-              className="absolute right-0 top-0 h-full px-3"
+              className="absolute right-0 top-0 h-full px-3 hover:bg-accent"
               onClick={() => setSearchQuery("")}
             >
               <X className="h-4 w-4" />
@@ -303,7 +305,7 @@ export default function LeadsChatwitPage() {
       
       {/* Lista de Leads */}
       {activeTab === "leads" && (
-        <div className="border rounded-md">
+        <div className="border border-border rounded-md bg-card">
           <LeadsList 
             searchQuery={searchQuery}
             onRefresh={handleRefresh}
@@ -315,7 +317,7 @@ export default function LeadsChatwitPage() {
       
       {/* Lista de Usuários */}
       {activeTab === "usuarios" && (
-        <div className="border rounded-md">
+        <div className="border border-border rounded-md bg-card">
           <UsuariosList 
             searchQuery={searchQuery}
             onRefresh={handleRefresh}

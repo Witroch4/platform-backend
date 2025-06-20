@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import NavbarAdmin from "@/components/admin/navbar-admin";
 import Link from "next/link";
 
 export default function AdminPage() {
@@ -75,110 +74,106 @@ export default function AdminPage() {
 
   if (!isAdmin) {
     return (
-      <div>
-        <NavbarAdmin />
-        <div className="container mx-auto py-10">
-          <h1 className="text-2xl font-bold mb-4">Verificando permissões...</h1>
-        </div>
+      <div className="container mx-auto py-10">
+        <h1 className="text-2xl font-bold mb-4 text-foreground">Verificando permissões...</h1>
       </div>
     );
   }
 
   return (
-    <div>
-      <NavbarAdmin />
-      <div className="container mx-auto py-10">
-        <h1 className="text-3xl font-bold mb-6">Painel de Administração</h1>
-        <p className="text-muted-foreground mb-8">
-          Use este painel para testar funcionalidades administrativas do sistema.
-        </p>
+    <div className="container mx-auto py-10">
+      <h1 className="text-3xl font-bold mb-6 text-foreground">Painel de Administração</h1>
+      <p className="text-muted-foreground mb-8">
+        Use este painel para testar funcionalidades administrativas do sistema.
+      </p>
 
-        <div className="flex flex-wrap gap-4 mb-8">
-          <Button asChild variant="outline">
-            <Link href="/admin/users">Gerenciar Usuários</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/admin/notifications">Gerenciar Notificações</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/admin/leads-chatwit">Gerenciar Leads Chatwit</Link>
-          </Button>
-          <Button asChild variant="default">
-            <Link href="/admin/atendimento">Sistema de Atendimento WhatsApp</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/admin/disparo-oab">Disparo Template OAB</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/admin/templates">Documentação de Templates</Link>
-          </Button>
-        </div>
+      <div className="flex flex-wrap gap-4 mb-8">
+        <Button asChild variant="outline" className="border-border hover:bg-accent">
+          <Link href="/admin/users">Gerenciar Usuários</Link>
+        </Button>
+        <Button asChild variant="outline" className="border-border hover:bg-accent">
+          <Link href="/admin/notifications">Gerenciar Notificações</Link>
+        </Button>
+        <Button asChild variant="outline" className="border-border hover:bg-accent">
+          <Link href="/admin/leads-chatwit">Gerenciar Leads Chatwit</Link>
+        </Button>
+        <Button asChild variant="default">
+          <Link href="/admin/atendimento">Sistema de Atendimento WhatsApp</Link>
+        </Button>
+        <Button asChild variant="outline" className="border-border hover:bg-accent">
+          <Link href="/admin/disparo-oab">Disparo Template OAB</Link>
+        </Button>
+        <Button asChild variant="outline" className="border-border hover:bg-accent">
+          <Link href="/admin/templates">Documentação de Templates</Link>
+        </Button>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Enviar Notificação de Boas-vindas</CardTitle>
-              <CardDescription>
-                Envie manualmente uma notificação de boas-vindas para um usuário específico.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <label htmlFor="userId" className="text-sm font-medium">
-                    ID do Usuário
-                  </label>
-                  <Input
-                    id="userId"
-                    placeholder="Digite o ID do usuário"
-                    value={userId}
-                    onChange={(e) => setUserId(e.target.value)}
-                  />
-                </div>
-                <Button
-                  onClick={handleWelcomeNotification}
-                  disabled={loading.welcome}
-                  className="w-full"
-                >
-                  {loading.welcome ? "Enviando..." : "Enviar Notificação"}
-                </Button>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card className="border-border bg-card">
+          <CardHeader>
+            <CardTitle className="text-card-foreground">Enviar Notificação de Boas-vindas</CardTitle>
+            <CardDescription className="text-muted-foreground">
+              Envie manualmente uma notificação de boas-vindas para um usuário específico.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label htmlFor="userId" className="text-sm font-medium text-card-foreground">
+                  ID do Usuário
+                </label>
+                <Input
+                  id="userId"
+                  placeholder="Digite o ID do usuário"
+                  value={userId}
+                  onChange={(e) => setUserId(e.target.value)}
+                  className="border-border bg-background text-foreground placeholder:text-muted-foreground focus:ring-ring"
+                />
               </div>
-            </CardContent>
-          </Card>
+              <Button
+                onClick={handleWelcomeNotification}
+                disabled={loading.welcome}
+                className="w-full"
+              >
+                {loading.welcome ? "Enviando..." : "Enviar Notificação"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Verificar Tokens Expirando</CardTitle>
-              <CardDescription>
-                Inicie manualmente a verificação de tokens que estão prestes a expirar.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <label htmlFor="days" className="text-sm font-medium">
-                    Dias para Expiração
-                  </label>
-                  <Input
-                    id="days"
-                    type="number"
-                    placeholder="Número de dias"
-                    value={days}
-                    onChange={(e) => setDays(e.target.value)}
-                    min="1"
-                  />
-                </div>
-                <Button
-                  onClick={handleCheckExpiringTokens}
-                  disabled={loading.expiring}
-                  className="w-full"
-                >
-                  {loading.expiring ? "Verificando..." : "Verificar Tokens"}
-                </Button>
+        <Card className="border-border bg-card">
+          <CardHeader>
+            <CardTitle className="text-card-foreground">Verificar Tokens Expirando</CardTitle>
+            <CardDescription className="text-muted-foreground">
+              Inicie manualmente a verificação de tokens que estão prestes a expirar.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label htmlFor="days" className="text-sm font-medium text-card-foreground">
+                  Dias para Expiração
+                </label>
+                <Input
+                  id="days"
+                  type="number"
+                  placeholder="Número de dias"
+                  value={days}
+                  onChange={(e) => setDays(e.target.value)}
+                  min="1"
+                  className="border-border bg-background text-foreground placeholder:text-muted-foreground focus:ring-ring"
+                />
               </div>
-            </CardContent>
-          </Card>
-        </div>
+              <Button
+                onClick={handleCheckExpiringTokens}
+                disabled={loading.expiring}
+                className="w-full"
+              >
+                {loading.expiring ? "Verificando..." : "Verificar Tokens"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

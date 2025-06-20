@@ -141,7 +141,7 @@ const PostTypeSelector: React.FC<PostTypeSelectorProps> = ({
   return (
     <div className="space-y-6">
       <div>
-        <label className="block text-sm font-medium mb-3">Tipo de Postagem</label>
+        <label className="block text-sm font-medium mb-3 text-foreground">Tipo de Postagem</label>
         <div className="space-y-2">
           {postTypes.map((type) => (
             <div key={type} className="flex items-center">
@@ -149,8 +149,9 @@ const PostTypeSelector: React.FC<PostTypeSelectorProps> = ({
                 id={type.toLowerCase().replace(/\s+/g, '-')}
                 checked={tipoPostagem.includes(type)}
                 onCheckedChange={() => handleCheckChange(type)}
+                className="border-border"
               />
-              <label htmlFor={type.toLowerCase().replace(/\s+/g, '-')} className="ml-2 text-sm">
+              <label htmlFor={type.toLowerCase().replace(/\s+/g, '-')} className="ml-2 text-sm text-foreground">
                 {type}
               </label>
             </div>
@@ -158,7 +159,7 @@ const PostTypeSelector: React.FC<PostTypeSelectorProps> = ({
         </div>
       </div>
 
-      <div className="space-y-4 pt-2 border-t">
+      <div className="space-y-4 pt-2 border-t border-border">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Switch
@@ -166,7 +167,7 @@ const PostTypeSelector: React.FC<PostTypeSelectorProps> = ({
               checked={isPostagemDiaria}
               onCheckedChange={handlePostagemDiariaChange}
             />
-            <Label htmlFor="postagem-diaria">Postagem Diária</Label>
+            <Label htmlFor="postagem-diaria" className="text-foreground">Postagem Diária</Label>
           </div>
         </div>
 
@@ -177,7 +178,7 @@ const PostTypeSelector: React.FC<PostTypeSelectorProps> = ({
               checked={isPostagemSemanal}
               onCheckedChange={handlePostagemSemanalChange}
             />
-            <Label htmlFor="postagem-semanal">Postagem Semanal</Label>
+            <Label htmlFor="postagem-semanal" className="text-foreground">Postagem Semanal</Label>
           </div>
         </div>
 
@@ -188,14 +189,14 @@ const PostTypeSelector: React.FC<PostTypeSelectorProps> = ({
               checked={isPostagemAleatoria}
               onCheckedChange={handlePostagemAleatoriaChange}
             />
-            <Label htmlFor="postagem-aleatoria">Postagem Aleatória</Label>
+            <Label htmlFor="postagem-aleatoria" className="text-foreground">Postagem Aleatória</Label>
 
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                 </TooltipTrigger>
-                <TooltipContent className="max-w-md p-4 text-sm">
+                <TooltipContent className="max-w-md p-4 text-sm bg-popover border-border text-popover-foreground">
                   <div className="space-y-2">
                     <p>Ativar essa opção permite modificar como o sistema trata múltiplas mídias ao criar uma postagem.</p>
                     <p className="font-semibold mt-2">Existem dois cenários para a Postagem Aleatória:</p>
@@ -223,14 +224,15 @@ const PostTypeSelector: React.FC<PostTypeSelectorProps> = ({
         </div>
 
         {isPostagemAleatoria && (
-          <div className="ml-6 space-y-2 border-l-2 pl-4 border-muted">
+          <div className="ml-6 space-y-2 border-l-2 pl-4 border-border">
             <div className="flex items-center">
               <Checkbox
                 id="tratar-midias-como-unica"
                 checked={localTratarMidiasComoUnica}
                 onCheckedChange={(checked) => handleTratarMidiasComoUnicaChange(checked === true)}
+                className="border-border"
               />
-              <label htmlFor="tratar-midias-como-unica" className="ml-2 text-sm">
+              <label htmlFor="tratar-midias-como-unica" className="ml-2 text-sm text-foreground">
                 Tratar múltiplas mídias como uma única postagem
               </label>
             </div>
@@ -239,8 +241,9 @@ const PostTypeSelector: React.FC<PostTypeSelectorProps> = ({
                 id="tratar-midias-como-individuais"
                 checked={localTratarMidiasComoIndividuais}
                 onCheckedChange={(checked) => handleTratarMidiasComoIndividuaisChange(checked === true)}
+                className="border-border"
               />
-              <label htmlFor="tratar-midias-como-individuais" className="ml-2 text-sm">
+              <label htmlFor="tratar-midias-como-individuais" className="ml-2 text-sm text-foreground">
                 Tratar cada mídia como uma postagem individual
               </label>
             </div>

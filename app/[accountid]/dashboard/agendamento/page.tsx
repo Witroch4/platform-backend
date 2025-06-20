@@ -218,69 +218,71 @@ const AgendamentoDePostagens: React.FC = () => {
   }, [session, status]);
 
   return (
-    <main className="p-4 sm:p-10 space-y-4">
-      <h1 className="text-2xl font-bold">Agendamento de Postagens</h1>
+    <div className="min-h-screen bg-background">
+      <main className="p-4 sm:p-10 space-y-4">
+        <h1 className="text-2xl font-bold text-foreground">Agendamento de Postagens</h1>
 
-      <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <DrawerTrigger asChild>
-          <Button variant="outline">Novo Agendamento</Button>
-        </DrawerTrigger>
-        {/* Ajuste no overflow */}
-        <DrawerContent className="fixed bottom-0 left-0 right-0 h-3/4 bg-white rounded-t-xl shadow-lg overflow-visible">
-          <AgendamentoForm
-            dateTime={dateTime}
-            setDateTime={handleSetDateTime}
-            tipoPostagem={tipoPostagem}
-            setTipoPostagem={setTipoPostagem}
-            legenda={legenda}
-            setLegenda={setLegenda}
-            uploadedFiles={uploadedFiles}
-            setUploadedFiles={setUploadedFiles}
-            handleAgendar={handleAgendar}
-            uploading={uploading}
-            setDrawerOpen={setDrawerOpen}
-            tratarMidiasComoUnica={tratarMidiasComoUnica}
-            setTratarMidiasComoUnica={setTratarMidiasComoUnica}
-            tratarMidiasComoIndividuais={tratarMidiasComoIndividuais}
-            setTratarMidiasComoIndividuais={setTratarMidiasComoIndividuais}
-          />
-        </DrawerContent>
-      </Drawer>
+        <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
+          <DrawerTrigger asChild>
+            <Button variant="outline" className="border-border hover:bg-accent">Novo Agendamento</Button>
+          </DrawerTrigger>
+          {/* Ajuste no overflow */}
+          <DrawerContent className="fixed bottom-0 left-0 right-0 h-3/4 bg-background border-border rounded-t-xl shadow-lg overflow-visible">
+            <AgendamentoForm
+              dateTime={dateTime}
+              setDateTime={handleSetDateTime}
+              tipoPostagem={tipoPostagem}
+              setTipoPostagem={setTipoPostagem}
+              legenda={legenda}
+              setLegenda={setLegenda}
+              uploadedFiles={uploadedFiles}
+              setUploadedFiles={setUploadedFiles}
+              handleAgendar={handleAgendar}
+              uploading={uploading}
+              setDrawerOpen={setDrawerOpen}
+              tratarMidiasComoUnica={tratarMidiasComoUnica}
+              setTratarMidiasComoUnica={setTratarMidiasComoUnica}
+              tratarMidiasComoIndividuais={tratarMidiasComoIndividuais}
+              setTratarMidiasComoIndividuais={setTratarMidiasComoIndividuais}
+            />
+          </DrawerContent>
+        </Drawer>
 
-      {/* Listagem de Agendamentos */}
-      <section>
-        <h2 className="text-xl font-semibold mb-4">Seus Agendamentos</h2>
-        {status === "loading" && <p>Carregando sessão...</p>}
-        {!session && <p>Você precisa estar logado para ver os agendamentos.</p>}
+        {/* Listagem de Agendamentos */}
+        <section>
+          <h2 className="text-xl font-semibold mb-4 text-foreground">Seus Agendamentos</h2>
+          {status === "loading" && <p className="text-muted-foreground">Carregando sessão...</p>}
+          {!session && <p className="text-muted-foreground">Você precisa estar logado para ver os agendamentos.</p>}
 
-        {session && (
-          <>
-            {loading && (
-              <div className="flex justify-center items-center">
-                <DotLottieReact
-                  src="/animations/loading.lottie"
-                  autoplay
-                  loop={true}
-                  style={{ width: 150, height: 150 }}
-                  aria-label="Carregando agendamentos"
+          {session && (
+            <>
+              {loading && (
+                <div className="flex justify-center items-center">
+                  <DotLottieReact
+                    src="/animations/loading.lottie"
+                    autoplay
+                    loop={true}
+                    style={{ width: 150, height: 150 }}
+                    aria-label="Carregando agendamentos"
+                  />
+                </div>
+              )}
+              {error && <p className="text-destructive">{error}</p>}
+              {!loading && agendamentos.length === 0 && (
+                <p className="text-muted-foreground">Nenhum agendamento encontrado.</p>
+              )}
+              {!loading && agendamentos.length > 0 && (
+                <AgendamentosList
+                  agendamentos={agendamentos}
+                  refetch={refetch}
+                  accountid={accountid}
                 />
-              </div>
-            )}
-            {error && <p className="text-red-500">{error}</p>}
-            {!loading && agendamentos.length === 0 && (
-              <p>Nenhum agendamento encontrado.</p>
-            )}
-            {!loading && agendamentos.length > 0 && (
-              <AgendamentosList
-                agendamentos={agendamentos}
-                refetch={refetch}
-                accountid={accountid}
-              />
-            )}
-          </>
-        )}
-      </section>
-    </main>
+              )}
+            </>
+          )}
+        </section>
+      </main>
+    </div>
   );
 };
 

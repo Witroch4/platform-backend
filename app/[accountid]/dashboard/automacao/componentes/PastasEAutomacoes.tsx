@@ -102,13 +102,13 @@ export default function PastasEAutomacoes({
   // Renderização
   // -------------------------------------------------------------
   return (
-    <div>
+    <div className="min-h-full w-full bg-background">
       {/* Botão "Nova Pasta" + Diálogo */}
 
       {/* Se estamos dentro de uma pasta, exibe o botão "Voltar" */}
       {currentFolderId && (
         <div className="mb-4">
-          <Button variant="outline" onClick={handleGoBackToRoot}>
+          <Button variant="outline" onClick={handleGoBackToRoot} className="border-border hover:bg-accent">
             ← Voltar para raiz
           </Button>
         </div>
@@ -120,11 +120,11 @@ export default function PastasEAutomacoes({
           {pastas.map((pasta) => (
             <div
               key={pasta.id}
-              className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 transition-colors p-2 rounded"
+              className="flex items-center gap-2 cursor-pointer hover:bg-accent transition-colors p-2 rounded border border-border bg-card"
               onClick={() => handleEnterFolder(pasta.id)}
             >
               <FolderIcon />
-              <span>{pasta.name}</span>
+              <span className="text-card-foreground">{pasta.name}</span>
             </div>
           ))}
         </div>
@@ -132,21 +132,23 @@ export default function PastasEAutomacoes({
 
       {/* LISTAGEM DE AUTOMAÇÕES (filtradas) */}
       {automacoesFiltradas.length === 0 ? (
-        <div className="text-sm text-muted-foreground">
-          Nenhuma automação {currentFolderId ? "nesta pasta" : "na raiz"}.
+        <div className="flex items-center justify-center min-h-[200px]">
+          <div className="text-sm text-muted-foreground">
+            Nenhuma automação {currentFolderId ? "nesta pasta" : "na raiz"}.
+          </div>
         </div>
       ) : (
         <div className="space-y-2">
           {automacoesFiltradas.map((auto) => (
             <div
               key={auto.id}
-              className="flex items-center justify-between px-4 py-3 border rounded"
+              className="flex items-center justify-between px-4 py-3 border border-border rounded bg-card"
             >
               <div
-                className="flex flex-col cursor-pointer hover:bg-gray-100 transition-colors p-2 rounded"
+                className="flex flex-col cursor-pointer hover:bg-accent transition-colors p-2 rounded"
                 onClick={() => handleOpenAutomacao(auto.id)}
               >
-                <span className="font-semibold">
+                <span className="font-semibold text-card-foreground">
                   {auto.fraseBoasVindas || "Automação Sem Título"}
                 </span>
                 <div className="text-xs text-muted-foreground">ID: {auto.id}</div>
@@ -177,7 +179,7 @@ function FolderIcon() {
       stroke="currentColor"
       strokeWidth="1.5"
       viewBox="0 0 24 24"
-      className="text-gray-600"
+      className="text-muted-foreground"
     >
       <path
         strokeLinecap="round"
