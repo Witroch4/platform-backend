@@ -18,7 +18,10 @@ export async function POST(request: Request): Promise<Response> {
     
     // Obter o payload completo
     const payload = await request.json();
-    console.log("[Enviar Análise Validada] Dados recebidos:", JSON.stringify(payload, null, 2));
+    
+    // Criar versão limitada para log
+    const limitedPayload = limitAnalisePayloadForLog(payload);
+    console.log("[Enviar Análise Validada] Dados recebidos:", JSON.stringify(limitedPayload, null, 2));
     
     // Verificar se o leadID foi fornecido
     const leadId = payload.leadID;
@@ -93,8 +96,9 @@ export async function POST(request: Request): Promise<Response> {
       )
     };
     
-    // Logar o payload final que será enviado
-    console.log("[Enviar Análise Validada] Payload final para envio:", JSON.stringify(requestPayload, null, 2));
+    // Criar versão limitada do payload final para log
+    const limitedRequestPayload = limitAnalisePayloadForLog(requestPayload);
+    console.log("[Enviar Análise Validada] Payload final para envio:", JSON.stringify(limitedRequestPayload, null, 2));
     
     // Enviar para o sistema externo
     console.log("[Enviar Análise Validada] Enviando payload para processamento:", webhookUrl);
@@ -133,4 +137,51 @@ export async function POST(request: Request): Promise<Response> {
 }
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic'; 
+export const dynamic = 'force-dynamic';
+
+// Função para limitar o payload da análise no log
+function limitAnalisePayloadForLog(payload: any) {
+  if (typeof payload !== 'object' || payload === null) {
+    return payload;
+  }
+  
+  const limited: any = {
+    leadID: payload.leadID,
+    telefone: payload.telefone,
+    nome: payload.nome,
+    exameDescricao: payload.exameDescricao,
+    inscricao: payload.inscricao,
+    nomeExaminando: payload.nomeExaminando,
+    seccional: payload.seccional,
+    areaJuridica: payload.areaJuridica,
+    notaFinal: payload.notaFinal,
+    situacao: payload.situacao,
+    subtotalPeca: payload.subtotalPeca,
+    subtotalQuestoes: payload.subtotalQuestoes,
+    conclusao: payload.conclusao ? payload.conclusao.substring(0, 100) + "..." : payload.conclusao,
+    analisevalidada: payload.analisevalidada,
+    analisesimuladovalidado: payload.analisesimuladovalidado
+  };
+  
+  // Para pontosPeca, mostrar apenas a quantidade
+  if (payload.pontosPeca) {
+    limited.pontosPeca = `[${payload.pontosPeca.length} pontos]`;
+  }
+  
+  // Para pontosQuestoes, mostrar apenas a quantidade
+  if (payload.pontosQuestoes) {
+    limited.pontosQuestoes = `[${payload.pontosQuestoes.length} questões]`;
+  }
+  
+  // Para argumentacao, mostrar apenas a quantidade
+  if (payload.argumentacao) {
+    limited.argumentacao = `[${payload.argumentacao.length} argumentos]`;
+  }
+  
+  // Para analiseData, aplicar limitação recursiva
+  if (payload.analiseData) {
+    limited.analiseData = limitAnalisePayloadForLog(payload.analiseData);
+  }
+  
+  return limited;
+} 

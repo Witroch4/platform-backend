@@ -11,13 +11,23 @@ const prisma = new PrismaClient();
  */
 export async function POST(request: Request): Promise<Response> {
   try {
-    console.log("[Webhook] Recebendo payload...");
-    
-    // Log de debug para a requisição completa
-    console.log("[Webhook DEBUG] Headers:", JSON.stringify(Object.fromEntries(request.headers.entries()), null, 2));
-    
-    // Obter o payload completo
-    let webhookData = await request.json();
+          console.log("[Webhook] Recebendo payload...");
+      
+      // Log de debug para a requisição completa (apenas headers essenciais)
+      const essentialHeaders = {
+        'content-type': request.headers.get('content-type'),
+        'content-length': request.headers.get('content-length'),
+        'tokendeacesso': request.headers.get('tokendeacesso'),
+        'user-agent': request.headers.get('user-agent')
+      };
+            console.log("[Webhook DEBUG] Headers essenciais:", JSON.stringify(essentialHeaders, null, 2));
+      
+      // Obter o payload completo
+      let webhookData = await request.json();
+      
+      // PAYLOAD COMPLETO E CRU - SEM QUALQUER TRATAMENTO
+      console.log("[Webhook DEBUG] PAYLOAD COMPLETO E CRU:");
+      console.log(JSON.stringify(webhookData, null, 2));
     
     // Verificar se o payload está dentro de um array ou outro contêiner
     if (Array.isArray(webhookData) && webhookData.length > 0) {
@@ -37,8 +47,11 @@ export async function POST(request: Request): Promise<Response> {
       webhookData = webhookData.debug;
     }
     
-    // Log detalhado do payload recebido
-    console.log("[Webhook DEBUG] Payload normalizado:", JSON.stringify(webhookData, null, 2));
+          // Log detalhado do payload recebido
+      const limitedPayload = limitPayloadForLog(webhookData);
+      console.log("[Webhook DEBUG] Payload normalizado:", JSON.stringify(limitedPayload, null, 2));
+      
+
     
     // Verificar o formato do payload para identificar o tipo
     const isEspelho = webhookData.espelho === true;
@@ -323,6 +336,8 @@ export async function POST(request: Request): Promise<Response> {
       // Verificar se a URL foi fornecida
       const analiseUrl = webhookData.analiseUrl;
       
+      const argumentacaoUrl = webhookData.argumentacaoUrl;
+      
       if (!analiseUrl) {
         console.error("[Webhook] URL da análise validada não fornecida");
         return NextResponse.json({
@@ -332,20 +347,17 @@ export async function POST(request: Request): Promise<Response> {
       }
       
       console.log("[Webhook] URL da análise validada:", analiseUrl);
+      console.log("[Webhook] URL da argumentação:", argumentacaoUrl);
       
       try {
-        // Atualizar o lead com a URL da análise validada
-        const leadUpdate = await prisma.leadChatwit.update({
-          where: {
-            id: leadID
-          },
-          data: {
-            analiseUrl: analiseUrl,
-            analiseProcessada: true,
-            analiseValidada: true,
-            aguardandoAnalise: false,
-            updatedAt: new Date()
-          }
+        // Adicionar à fila de processamento do worker
+        await addAnaliseJob({
+          leadID: leadID,
+          analiseUrl: analiseUrl,
+          argumentacaoUrl: argumentacaoUrl,
+          nome: webhookData.nome,
+          telefone: webhookData.telefone,
+          analiseValidada: true
         });
         
         console.log("[Webhook] Análise validada processada para o lead:", leadID);
@@ -614,6 +626,7 @@ export async function POST(request: Request): Promise<Response> {
       
       // Verificar se a URL foi fornecida
       const analiseUrl = webhookData.analiseUrl;
+      const argumentacaoUrl = webhookData.argumentacaoUrl;
       
       if (!analiseUrl) {
         console.error("[Webhook] URL da análise de simulado validada não fornecida");
@@ -624,37 +637,24 @@ export async function POST(request: Request): Promise<Response> {
       }
       
       console.log("[Webhook] URL da análise de simulado validada:", analiseUrl);
+      console.log("[Webhook] URL da argumentação de simulado:", argumentacaoUrl);
       
       try {
-        // Atualizar o lead com a URL da análise de simulado validada
-        const leadUpdate = await prisma.leadChatwit.update({
-          where: {
-            id: leadID
-          },
-          data: {
-            analiseUrl: analiseUrl,
-            analiseProcessada: true,
-            analiseValidada: true,
-            aguardandoAnalise: false,
-            updatedAt: new Date()
-          }
-        });
-        
-        console.log("[Webhook] Análise de simulado validada processada para o lead:", leadID);
-        
-        // Enviar notificação SSE
-        sseManager.sendNotification(leadID, {
-          type: 'analise_simulado_validada',
-          message: 'Análise do seu simulado foi validada e está pronta!',
-          leadId: leadID,
-          status: 'analise_simulado_validada',
+        // Adicionar à fila de processamento do worker
+        await addAnaliseJob({
+          leadID: leadID,
           analiseUrl: analiseUrl,
-          timestamp: new Date().toISOString()
+          argumentacaoUrl: argumentacaoUrl,
+          nome: webhookData.nome,
+          telefone: webhookData.telefone,
+          analiseSimuladoValidada: true
         });
+        
+        console.log("[Webhook] Análise de simulado validada adicionada à fila para o lead:", leadID);
         
         return NextResponse.json({
           success: true,
-          message: "Análise de simulado validada processada com sucesso",
+          message: "Análise de simulado validada adicionada à fila de processamento",
         });
       } catch (error: any) {
         console.error("[Webhook] Erro ao atualizar lead com análise de simulado validada:", error);
@@ -703,6 +703,7 @@ export async function POST(request: Request): Promise<Response> {
       
       // Verificar se a URL foi fornecida
       const analiseUrl = webhookData.analiseUrl;
+      const argumentacaoUrl = webhookData.argumentacaoUrl;
       
       if (!analiseUrl) {
         console.error("[Webhook] URL da análise de simulado validada não fornecida");
@@ -713,37 +714,24 @@ export async function POST(request: Request): Promise<Response> {
       }
       
       console.log("[Webhook] URL da análise de simulado validada:", analiseUrl);
+      console.log("[Webhook] URL da argumentação de simulado (camelCase):", argumentacaoUrl);
       
       try {
-        // Atualizar o lead com a URL da análise de simulado validada
-        const leadUpdate = await prisma.leadChatwit.update({
-          where: {
-            id: leadID
-          },
-          data: {
-            analiseUrl: analiseUrl,
-            analiseProcessada: true,
-            analiseValidada: true,
-            aguardandoAnalise: false,
-            updatedAt: new Date()
-          }
-        });
-        
-        console.log("[Webhook] Análise de simulado validada (camelCase) processada para o lead:", leadID);
-        
-        // Enviar notificação SSE
-        sseManager.sendNotification(leadID, {
-          type: 'analise_simulado_validada',
-          message: 'Análise do seu simulado foi validada e está pronta!',
-          leadId: leadID,
-          status: 'analise_simulado_validada',
+        // Adicionar à fila de processamento do worker
+        await addAnaliseJob({
+          leadID: leadID,
           analiseUrl: analiseUrl,
-          timestamp: new Date().toISOString()
+          argumentacaoUrl: argumentacaoUrl,
+          nome: webhookData.nome,
+          telefone: webhookData.telefone,
+          analiseSimuladoValidada: true
         });
+        
+        console.log("[Webhook] Análise de simulado validada (camelCase) adicionada à fila para o lead:", leadID);
         
         return NextResponse.json({
           success: true,
-          message: "Análise de simulado validada processada com sucesso",
+          message: "Análise de simulado validada adicionada à fila de processamento",
         });
       } catch (error: any) {
         console.error("[Webhook] Erro ao atualizar lead com análise de simulado validada:", error);
@@ -1019,3 +1007,33 @@ export async function GET(request: Request): Promise<Response> {
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+// Função para limitar o payload do log
+function limitPayloadForLog(payload: any) {
+  if (typeof payload !== 'object' || payload === null) {
+    return payload;
+  }
+  
+  const limited: any = {};
+  const fields = ['exameDescricao', 'inscricao', 'nomeExaminando', 'seccional', 'areaJuridica', 'notaFinal', 'situacao'];
+  
+  for (const field of fields) {
+    if (payload[field] !== undefined) {
+      limited[field] = payload[field];
+    }
+  }
+  
+  // Incluir outros campos importantes mas não os arrays grandes
+  if (payload.leadID) limited.leadID = payload.leadID;
+  if (payload.telefone) limited.telefone = payload.telefone;
+  if (payload.nome) limited.nome = payload.nome;
+  if (payload.analise) limited.analise = payload.analise;
+  if (payload.analisepreliminar) limited.analisepreliminar = payload.analisepreliminar;
+  if (payload.manuscrito) limited.manuscrito = payload.manuscrito;
+  if (payload.espelho) limited.espelho = payload.espelho;
+  if (payload.analiseValidada) limited.analiseValidada = payload.analiseValidada;
+  if (payload.analiseUrl) limited.analiseUrl = payload.analiseUrl;
+  if (payload.argumentacaoUrl) limited.argumentacaoUrl = payload.argumentacaoUrl;
+  
+  return limited;
+}

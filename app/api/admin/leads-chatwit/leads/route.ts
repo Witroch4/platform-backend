@@ -145,7 +145,7 @@ export async function POST(request: Request): Promise<Response> {
 
     console.log("[API Leads] Atualizando lead:", id, {
       ...(pdfUnificado !== undefined && { pdfUnificado }),
-      ...(imagensConvertidas !== undefined && { imagensConvertidas }),
+      ...(imagensConvertidas !== undefined && { imagensConvertidas: typeof imagensConvertidas === 'string' ? "[" + JSON.parse(imagensConvertidas).length + " imagens]" : "[array de imagens]" }),
       ...(aguardandoAnalise !== undefined && { aguardandoAnalise }),
       ...(analiseProcessada !== undefined && { analiseProcessada }),
       ...(analiseUrl !== undefined && { analiseUrl }),

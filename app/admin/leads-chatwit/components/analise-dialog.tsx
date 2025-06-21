@@ -21,6 +21,7 @@ interface AnaliseDialogProps {
   leadId: string;
   sourceId: string;
   analiseUrl: string | null;
+  argumentacaoUrl?: string | null;
   anotacoes: string | null;
   aguardandoAnalise: boolean;
   onSaveAnotacoes: (anotacoes: string) => Promise<void>;
@@ -35,6 +36,7 @@ export function AnaliseDialog({
   leadId,
   sourceId,
   analiseUrl,
+  argumentacaoUrl,
   anotacoes,
   aguardandoAnalise,
   onSaveAnotacoes,
@@ -187,6 +189,12 @@ export function AnaliseDialog({
     }
   };
 
+  const abrirPdfArgumentacao = () => {
+    if (argumentacaoUrl) {
+      window.open(argumentacaoUrl, "_blank");
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="max-w-3xl">
@@ -236,15 +244,32 @@ export function AnaliseDialog({
                 )}
               </div>
             ) : analiseUrl ? (
-              <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-lg cursor-pointer hover:bg-accent/30 transition-colors" onClick={abrirPdfAnalise}>
-                <FileText className="h-16 w-16 text-red-500 mb-4" />
-                <p className="text-lg font-medium">
-                  {isAnaliseValidada ? "Análise Validada Disponível" : "Análise Disponível"}
-                </p>
-                <p className="text-sm text-primary mt-2 flex items-center">
-                  Clique para abrir o PDF
-                  <ExternalLink className="ml-1 h-3 w-3" />
-                </p>
+              <div className="space-y-4">
+                {/* Botão da Análise */}
+                <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-lg cursor-pointer hover:bg-accent/30 transition-colors" onClick={abrirPdfAnalise}>
+                  <FileText className="h-16 w-16 text-red-500 mb-4" />
+                  <p className="text-lg font-medium">
+                    {isAnaliseValidada ? "Análise Validada Disponível" : "Análise Disponível"}
+                  </p>
+                  <p className="text-sm text-primary mt-2 flex items-center">
+                    Clique para abrir o PDF
+                    <ExternalLink className="ml-1 h-3 w-3" />
+                  </p>
+                </div>
+                
+                {/* Botão da Argumentação (só mostra se tiver argumentacaoUrl) */}
+                {argumentacaoUrl && (
+                  <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-lg cursor-pointer hover:bg-accent/30 transition-colors" onClick={abrirPdfArgumentacao}>
+                    <FileText className="h-16 w-16 text-blue-500 mb-4" />
+                    <p className="text-lg font-medium">
+                      Argumentação Disponível
+                    </p>
+                    <p className="text-sm text-primary mt-2 flex items-center">
+                      Clique para abrir o PDF
+                      <ExternalLink className="ml-1 h-3 w-3" />
+                    </p>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-8">

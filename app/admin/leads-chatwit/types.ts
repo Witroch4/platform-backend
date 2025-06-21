@@ -27,6 +27,7 @@ export interface LeadChatwit {
   espelhoCorrecao?: string;
   textoDOEspelho?: any;
   analiseUrl?: string;
+  argumentacaoUrl?: string;
   analiseProcessada?: boolean;
   aguardandoAnalise?: boolean;
   analisePreliminar?: any;

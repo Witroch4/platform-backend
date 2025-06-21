@@ -102,7 +102,20 @@ export async function POST(req: Request) {
     }
 
     console.log("[Enviar Análise] Enviando para webhook:", webhookUrl);
-    console.log("[Enviar Análise] Payload:", JSON.stringify(payload, null, 2));
+    
+    // Log limitado do payload
+    const limitedPayloadLog = {
+      leadID: payload.leadID,
+      nome: payload.nome,
+      telefone: payload.telefone,
+      analise: payload.analise,
+      temArquivos: payload.arquivos?.length || 0,
+      temPDF: !!payload.arquivos_pdf?.length,
+      temManuscrito: !!payload.textoManuscrito,
+      temEspelho: !!payload.textoEspelho,
+      temImagensEspelho: !!payload.arquivos_imagens_espelho?.length
+    };
+    console.log("[Enviar Análise] Payload resumido:", JSON.stringify(limitedPayloadLog, null, 2));
 
     const response = await fetch(webhookUrl, {
       method: "POST",

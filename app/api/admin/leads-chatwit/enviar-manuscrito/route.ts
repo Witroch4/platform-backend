@@ -19,7 +19,21 @@ export async function POST(request: Request): Promise<Response> {
     
     // Obter o payload completo
     const payload = await request.json();
-    console.log("[Enviar Documento] Dados recebidos:", JSON.stringify(payload, null, 2));
+    
+    // Log limitado dos dados recebidos
+    const limitedLog = {
+      leadID: payload.leadID,
+      espelhoBibliotecaId: payload.espelhoBibliotecaId,
+      telefone: payload.telefone,
+      manuscrito: payload.manuscrito,
+      espelho: payload.espelho,
+      prova: payload.prova,
+      espelhoparabiblioteca: payload.espelhoparabiblioteca,
+      temArquivos: payload.arquivos?.length || 0,
+      temTextoDAprova: payload.textoDAprova?.length || 0
+    };
+    console.log("[Enviar Documento] Dados recebidos (resumo):", JSON.stringify(limitedLog, null, 2));
+    
     console.log("[Enviar Documento] leadID fornecido:", payload.leadID);
     console.log("[Enviar Documento] espelhoBibliotecaId fornecido:", payload.espelhoBibliotecaId);
     console.log("[Enviar Documento] telefone fornecido:", payload.telefone);

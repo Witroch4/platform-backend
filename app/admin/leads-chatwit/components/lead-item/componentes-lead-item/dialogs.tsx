@@ -360,6 +360,7 @@ export function LeadDialogs({
         leadId={lead.id}
         sourceId={lead.sourceId}
         analiseUrl={localAnaliseState.analiseUrl || null}
+        argumentacaoUrl={lead.argumentacaoUrl || null}
         anotacoes={lead.anotacoes || null}
         aguardandoAnalise={localAnaliseState.aguardandoAnalise}
         onSaveAnotacoes={onSaveAnotacoes}

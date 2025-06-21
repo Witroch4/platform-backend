@@ -65,7 +65,9 @@ class SseManager {
     const leadId = channel.replace('sse:', '');
     const leadConnections = this.connectionsByLead.get(leadId);
 
-    console.log(`[SSE Redis] 🔔 MENSAGEM RECEBIDA no canal ${channel}:`, message);
+    // Criar versão limitada da mensagem para log
+    const limitedMessage = limitSSEMessageForLog(message);
+    console.log(`[SSE Redis] 🔔 MENSAGEM RECEBIDA no canal ${channel}:`, limitedMessage);
 
     if (!leadConnections || leadConnections.size === 0) {
       console.warn(`[SSE Redis] ⚠️ Nenhuma conexão ativa para leadId ${leadId}. Mensagem descartada.`);
@@ -214,4 +216,25 @@ export const sseManager = globalForSse.sseManager || new SseManager();
 
 if (process.env.NODE_ENV !== 'production') {
   globalForSse.sseManager = sseManager;
+}
+
+// Função para limitar a mensagem SSE no log
+function limitSSEMessageForLog(message: string) {
+  try {
+    const parsed = JSON.parse(message);
+    if (parsed.data && parsed.data.leadData) {
+      // Limitar os dados do lead para mostrar apenas campos básicos
+      const { id, sourceId, name, nomeReal, phoneNumber } = parsed.data.leadData;
+      return JSON.stringify({
+        ...parsed,
+        data: {
+          ...parsed.data,
+          leadData: { id, sourceId, name, nomeReal, phoneNumber, "...": "[outros campos omitidos]" }
+        }
+      }, null, 2);
+    }
+    return message;
+  } catch {
+    return message.substring(0, 200) + (message.length > 200 ? '...' : '');
+  }
 } 

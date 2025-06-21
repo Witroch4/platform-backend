@@ -378,6 +378,7 @@ model LeadChatwit {
   espelhoProcessado Boolean       @default(false) // Indica se o espelho foi processado
   aguardandoEspelho Boolean       @default(false) // Indica se está aguardando processamento do espelho
   analiseUrl        String?       // URL do PDF de análise da prova
+  argumentacaoUrl   String?       // URL do PDF de argumentação
   analiseProcessada Boolean       @default(false) // Indica se a análise foi processada
   aguardandoAnalise Boolean       @default(false) // Indica se está aguardando análise
   analisePreliminar Json?         // Dados da pré-análise

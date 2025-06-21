@@ -66,6 +66,8 @@ export function BatchProcessorOrchestrator({ leads, onClose, onUpdate }: BatchPr
     showAutomatedDialog,
     currentProcessingLead,
     stats,
+    sseConnections,
+    leadsBeingProcessed,
   } = useLeadBatchProcessor(leads, onUpdate)
 
   console.log('[BatchProcessorOrchestrator] Estado do hook - isOpen:', isOpen, 'currentStep:', currentStep)
@@ -118,6 +120,9 @@ export function BatchProcessorOrchestrator({ leads, onClose, onUpdate }: BatchPr
           progress={progress}
           currentStep={currentStep}
           leadName={currentProcessingLead?.nome}
+          sseConnections={sseConnections}
+          leadsBeingProcessed={leadsBeingProcessed}
+          totalLeads={leads.length}
         />
       )
     }

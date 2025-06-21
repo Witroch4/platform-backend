@@ -219,8 +219,8 @@ export function DialogDetalheLead({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="flex items-center gap-2">
               {lead?.thumbnail && (
                 <div className="flex-shrink-0">
@@ -244,7 +244,8 @@ export function DialogDetalheLead({
             <DialogDescription>Informações detalhadas do lead</DialogDescription>
           </DialogHeader>
 
-          <div className="grid grid-cols-2 gap-6">
+          <div className="flex-1 overflow-y-auto pr-2">
+            <div className="grid grid-cols-2 gap-6">
             {/* COLUNA ESQUERDA */}
             <div className="space-y-4">
               <div>
@@ -379,41 +380,46 @@ export function DialogDetalheLead({
               )}
             </div>
 
-            {/* Informações do Exame */}
-            <div>
-              <div className="text-sm font-medium text-muted-foreground mb-1">Exames Participados</div>
-              {lead?.examesParticipados && Array.isArray(lead.examesParticipados) ? (
-                <div className="flex flex-wrap gap-2">
-                  {lead.examesParticipados.map((ex: string, idx: number) => (
-                    <Badge key={idx} variant="secondary">
-                      {ex}
-                    </Badge>
-                  ))}
+              {/* Informações Adicionais em 2 colunas */}
+              <div className="border-t pt-4">
+                <div className="text-sm font-medium text-muted-foreground mb-3">Informações Adicionais</div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-xs font-medium text-muted-foreground mb-1">Exames Participados</div>
+                    {lead?.examesParticipados && Array.isArray(lead.examesParticipados) ? (
+                      <div className="flex flex-wrap gap-1">
+                        {lead.examesParticipados.map((ex: string, idx: number) => (
+                          <Badge key={idx} variant="secondary" className="text-xs">
+                            {ex}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-muted-foreground">Nenhum exame</div>
+                    )}
+                  </div>
+                  <div>
+                    <div className="text-xs font-medium text-muted-foreground mb-1">Seccional</div>
+                    <div className="text-sm">{lead?.seccional || "Não informado"}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-medium text-muted-foreground mb-1">Área Jurídica</div>
+                    <div className="text-sm">{lead?.areaJuridica || "Não informado"}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-medium text-muted-foreground mb-1">Nota Final</div>
+                    <div className="text-sm">{lead?.notaFinal !== undefined && lead.notaFinal !== null ? lead.notaFinal : "Não informada"}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-medium text-muted-foreground mb-1">Situação</div>
+                    <div className="text-sm">{lead?.situacao || "Não informada"}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-medium text-muted-foreground mb-1">Inscrição</div>
+                    <div className="text-sm">{lead?.inscricao || "Não informada"}</div>
+                  </div>
                 </div>
-              ) : (
-                <div className="text-sm text-muted-foreground">Nenhum exame registrado</div>
-              )}
-            </div>
-            <div>
-              <div className="text-sm font-medium text-muted-foreground mb-1">Seccional</div>
-              <div>{lead?.seccional || "Não informado"}</div>
-            </div>
-            <div>
-              <div className="text-sm font-medium text-muted-foreground mb-1">Área Jurídica</div>
-              <div>{lead?.areaJuridica || "Não informado"}</div>
-            </div>
-            <div>
-              <div className="text-sm font-medium text-muted-foreground mb-1">Nota Final</div>
-              <div>{lead?.notaFinal !== undefined && lead.notaFinal !== null ? lead.notaFinal : "Não informada"}</div>
-            </div>
-            <div>
-              <div className="text-sm font-medium text-muted-foreground mb-1">Situação</div>
-              <div>{lead?.situacao || "Não informada"}</div>
-            </div>
-            <div>
-              <div className="text-sm font-medium text-muted-foreground mb-1">Inscrição</div>
-              <div>{lead?.inscricao || "Não informada"}</div>
-            </div>
+              </div>
 
               {/* Switches de status */}
               <div className="pt-2 border-t">
@@ -574,9 +580,10 @@ export function DialogDetalheLead({
                 )}
               </div>
             </div>
+            </div>
           </div>
 
-          <DialogFooter className="mt-6">
+          <DialogFooter className="flex-shrink-0 mt-4">
             <Button
               variant="outline"
               onClick={(e) => {

@@ -22,6 +22,7 @@ interface IEspelhoJobData {
 interface IAnaliseJobData {
   leadID: string;
   analiseUrl?: string;
+  argumentacaoUrl?: string;
   analisePreliminar?: any;
   nome?: string;
   telefone?: string;

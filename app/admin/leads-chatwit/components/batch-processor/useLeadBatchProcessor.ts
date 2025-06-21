@@ -1,6 +1,6 @@
 // app/admin/leads-chatwit/components/batch-processor/useLeadBatchProcessor.ts
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { toast } from 'sonner'
 import { ExtendedLead } from '../../types'
 
@@ -45,6 +45,16 @@ type ProcessingStats = {
   }
 }
 
+// Tipos para SSE
+type SSENotification = {
+  type: string
+  message: string
+  leadId: string
+  leadData?: any
+  timestamp: string
+  data?: any  // Para compatibilidade com diferentes estruturas de notificação
+}
+
 export const useLeadBatchProcessor = (leads: ExtendedLead[], onUpdate?: () => void) => {
   console.log('[useLeadBatchProcessor] Inicializando hook com leads:', leads.length)
   
@@ -78,8 +88,370 @@ export const useLeadBatchProcessor = (leads: ExtendedLead[], onUpdate?: () => vo
   const [showAutomatedDialog, setShowAutomatedDialog] = useState(false)
   const [showContinueButton, setShowContinueButton] = useState(false)
 
-  const currentLead = processingQueues.manuscriptProcessing[currentManualLeadIndex] || 
-                     processingQueues.mirrorProcessing[currentManualLeadIndex]
+  // Estados para SSE
+  const [sseConnections, setSseConnections] = useState<Map<string, EventSource>>(new Map())
+  const [leadsBeingProcessed, setLeadsBeingProcessed] = useState<Set<string>>(new Set())
+  const [connectionHealthCheck, setConnectionHealthCheck] = useState<NodeJS.Timeout | null>(null)
+  const [leadProcessingTimestamps, setLeadProcessingTimestamps] = useState<Map<string, number>>(new Map())
+
+  const currentLead = useMemo(() => {
+    console.log('[useLeadBatchProcessor] Calculando currentLead:', {
+      currentStep,
+      currentManualLeadIndex,
+      manuscriptQueueLength: processingQueues.manuscriptProcessing.length,
+      mirrorQueueLength: processingQueues.mirrorProcessing.length,
+      manuscriptQueue: processingQueues.manuscriptProcessing.map(l => l.nome),
+      mirrorQueue: processingQueues.mirrorProcessing.map(l => l.nome)
+    })
+    
+    if (currentStep === 'manuscript') {
+      const lead = processingQueues.manuscriptProcessing[currentManualLeadIndex] || null
+      console.log('[useLeadBatchProcessor] CurrentLead para manuscript:', lead?.nome || 'null')
+      return lead
+    } else if (currentStep === 'mirror') {
+      const lead = processingQueues.mirrorProcessing[currentManualLeadIndex] || null
+      console.log('[useLeadBatchProcessor] CurrentLead para mirror:', lead?.nome || 'null')
+      return lead
+    }
+    return null
+  }, [currentStep, processingQueues.manuscriptProcessing, processingQueues.mirrorProcessing, currentManualLeadIndex])
+
+  // Função para criar conexão SSE para um lead com reconexão automática
+  const createSSEConnection = (leadId: string, retryCount: number = 0) => {
+    if (sseConnections.has(leadId) && retryCount === 0) {
+      console.log(`[Batch SSE] Conexão já existe para ${leadId}`)
+      return
+    }
+
+    // Limpar conexão anterior se existir
+    if (sseConnections.has(leadId)) {
+      closeSSEConnection(leadId)
+    }
+
+    console.log(`[Batch SSE] Criando conexão SSE para lead ${leadId}${retryCount > 0 ? ` (tentativa ${retryCount + 1})` : ''}`)
+    
+    const eventSource = new EventSource(`/api/admin/leads-chatwit/notifications?leadId=${leadId}`)
+    
+    eventSource.onopen = () => {
+      console.log(`[Batch SSE] ✅ Conexão estabelecida para ${leadId}`)
+    }
+
+    eventSource.onmessage = (event) => {
+      try {
+        const notification: SSENotification = JSON.parse(event.data)
+        console.log(`[Batch SSE] 📨 Notificação recebida para ${leadId}:`, notification)
+        
+        if (notification.type === 'connected') {
+          console.log(`[Batch SSE] 🎉 Confirmação de conexão para ${leadId}`)
+          return
+        }
+
+        // Processar notificações de atualização do lead
+        if (notification.type === 'notification' && notification.data?.type === 'leadUpdate') {
+          handleSSELeadUpdate(leadId, notification.data)
+        }
+      } catch (error) {
+        console.error(`[Batch SSE] ❌ Erro ao processar notificação para ${leadId}:`, error)
+      }
+    }
+
+    eventSource.onerror = (error) => {
+      console.error(`[Batch SSE] ❌ Erro na conexão SSE para ${leadId}:`, error)
+      
+      // Fechar conexão atual
+      eventSource.close()
+      
+      // Remover da lista de conexões
+      setSseConnections(prev => {
+        const newMap = new Map(prev)
+        newMap.delete(leadId)
+        return newMap
+      })
+      
+      // Tentar reconectar após um delay, mas apenas se ainda estivermos processando este lead
+      if (retryCount < 3 && leadsBeingProcessed.has(leadId)) {
+        const delay = Math.min(1000 * Math.pow(2, retryCount), 10000) // Backoff exponencial, máximo 10s
+        console.log(`[Batch SSE] 🔄 Tentando reconectar para ${leadId} em ${delay}ms...`)
+        
+        setTimeout(() => {
+          // Verificar novamente se ainda estamos processando antes de reconectar
+          if (leadsBeingProcessed.has(leadId)) {
+            createSSEConnection(leadId, retryCount + 1)
+          } else {
+            console.log(`[Batch SSE] ⏹️ Lead ${leadId} não está mais sendo processado, cancelando reconexão`)
+          }
+        }, delay)
+      } else if (retryCount >= 3) {
+        console.warn(`[Batch SSE] ⚠️ Máximo de tentativas de reconexão atingido para ${leadId}`)
+        toast.warning(`Conexão perdida com o lead ${leadId}. Algumas atualizações podem não ser recebidas.`, {
+          duration: 5000
+        })
+      }
+    }
+
+    setSseConnections(prev => new Map(prev.set(leadId, eventSource)))
+  }
+
+  // Função para processar atualizações do lead via SSE
+  const handleSSELeadUpdate = (leadId: string, notificationData: any) => {
+    const leadData = notificationData.leadData
+    if (!leadData) return
+
+    console.log(`[Batch SSE] 🔄 Processando atualização para ${leadId}:`, {
+      manuscritoProcessado: leadData.manuscritoProcessado,
+      aguardandoManuscrito: leadData.aguardandoManuscrito,
+      espelhoProcessado: leadData.espelhoProcessado,
+      aguardandoEspelho: leadData.aguardandoEspelho,
+      analiseProcessada: leadData.analiseProcessada,
+      aguardandoAnalise: leadData.aguardandoAnalise
+    })
+
+    // Atualizar estatísticas baseado na notificação
+    if (leadData.manuscritoProcessado && !leadData.aguardandoManuscrito) {
+      console.log(`[Batch SSE] ✅ Manuscrito processado para ${leadData.name || leadId}`)
+      setStats(prev => ({
+        ...prev,
+        completedTasks: {
+          ...prev.completedTasks,
+          manuscriptsProcessed: prev.completedTasks.manuscriptsProcessed + 1
+        }
+      }))
+      
+      // Remover da lista de processamento e timestamps
+      setLeadsBeingProcessed(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(leadId)
+        return newSet
+      })
+      setLeadProcessingTimestamps(prev => {
+        const newMap = new Map(prev)
+        newMap.delete(leadId)
+        return newMap
+      })
+      
+      // Fechar conexão SSE após processamento concluído
+      setTimeout(() => {
+        closeSSEConnection(leadId)
+        console.log(`[Batch SSE] 🧹 Conexão fechada para ${leadId} após processamento de manuscrito`)
+      }, 2000) // Aguardar 2s para garantir que todas as atualizações foram processadas
+      
+      // Mostrar toast de sucesso
+      toast.success(`✅ Manuscrito de "${leadData.name || 'Lead'}" processado!`, {
+        description: "O texto foi extraído e está disponível para visualização.",
+        duration: 5000
+      })
+      
+      // Atualizar lista para refletir mudança no botão
+      if (onUpdate) {
+        setTimeout(() => onUpdate(), 300)
+      }
+    }
+
+    if (leadData.espelhoProcessado && !leadData.aguardandoEspelho) {
+      console.log(`[Batch SSE] ✅ Espelho processado para ${leadData.name || leadId}`)
+      setStats(prev => ({
+        ...prev,
+        completedTasks: {
+          ...prev.completedTasks,
+          mirrorsProcessed: prev.completedTasks.mirrorsProcessed + 1
+        }
+      }))
+      
+      // Remover da lista de processamento e timestamps
+      setLeadsBeingProcessed(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(leadId)
+        return newSet
+      })
+      setLeadProcessingTimestamps(prev => {
+        const newMap = new Map(prev)
+        newMap.delete(leadId)
+        return newMap
+      })
+      
+      // Fechar conexão SSE após processamento concluído
+      setTimeout(() => {
+        closeSSEConnection(leadId)
+        console.log(`[Batch SSE] 🧹 Conexão fechada para ${leadId} após processamento de espelho`)
+      }, 2000) // Aguardar 2s para garantir que todas as atualizações foram processadas
+      
+      // Mostrar toast de sucesso
+      toast.success(`✅ Espelho de "${leadData.name || 'Lead'}" processado!`, {
+        description: "A correção foi finalizada e está disponível para consulta.",
+        duration: 5000
+      })
+      
+      // Atualizar lista para refletir mudança no botão
+      if (onUpdate) {
+        setTimeout(() => onUpdate(), 300)
+      }
+    }
+
+    if (leadData.analiseProcessada && !leadData.aguardandoAnalise) {
+      console.log(`[Batch SSE] ✅ Análise processada para ${leadData.name || leadId}`)
+      setStats(prev => ({
+        ...prev,
+        completedTasks: {
+          ...prev.completedTasks,
+          analysisCompleted: prev.completedTasks.analysisCompleted + 1
+        }
+      }))
+      
+      // Remover da lista de processamento e timestamps
+      setLeadsBeingProcessed(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(leadId)
+        return newSet
+      })
+      setLeadProcessingTimestamps(prev => {
+        const newMap = new Map(prev)
+        newMap.delete(leadId)
+        return newMap
+      })
+      
+      // Fechar conexão SSE após processamento concluído
+      setTimeout(() => {
+        closeSSEConnection(leadId)
+        console.log(`[Batch SSE] 🧹 Conexão fechada para ${leadId} após processamento de análise`)
+      }, 2000) // Aguardar 2s para garantir que todas as atualizações foram processadas
+      
+      // Verificar se é análise preliminar ou final
+      const isAnalisePreliminar = leadData.analisePreliminar && !leadData.analiseUrl
+      const title = isAnalisePreliminar 
+        ? `📋 Pré-análise de "${leadData.name || 'Lead'}" processada!`
+        : `📊 Análise de "${leadData.name || 'Lead'}" processada!`
+      const description = isAnalisePreliminar
+        ? "A pré-análise foi concluída e está disponível para consulta."
+        : "A análise foi concluída e os resultados estão disponíveis."
+      
+      toast.success(title, { description, duration: 8000 })
+      
+      // Atualizar lista para refletir mudança no botão
+      if (onUpdate) {
+        setTimeout(() => onUpdate(), 300)
+      }
+    }
+
+    // Chamar callback de atualização se fornecido
+    if (onUpdate) {
+      onUpdate()
+    }
+  }
+
+  // Função para fechar conexão SSE
+  const closeSSEConnection = (leadId: string) => {
+    const connection = sseConnections.get(leadId)
+    if (connection) {
+      console.log(`[Batch SSE] 🔌 Fechando conexão SSE para ${leadId}`)
+      connection.close()
+      setSseConnections(prev => {
+        const newMap = new Map(prev)
+        newMap.delete(leadId)
+        return newMap
+      })
+    }
+  }
+
+  // Função para fechar todas as conexões SSE
+  const closeAllSSEConnections = () => {
+    console.log(`[Batch SSE] 🔌 Fechando todas as conexões SSE (${sseConnections.size})`)
+    sseConnections.forEach((connection, leadId) => {
+      connection.close()
+    })
+    setSseConnections(new Map())
+    setLeadsBeingProcessed(new Set())
+    setLeadProcessingTimestamps(new Map())
+    
+    // Limpar health check
+    if (connectionHealthCheck) {
+      clearInterval(connectionHealthCheck)
+      setConnectionHealthCheck(null)
+    }
+  }
+
+  // Função para monitorar saúde das conexões SSE
+  const startConnectionHealthCheck = () => {
+    if (connectionHealthCheck) {
+      clearInterval(connectionHealthCheck)
+    }
+    
+    const interval = setInterval(() => {
+      console.log(`[Batch SSE] 🔍 Verificando saúde das conexões (${sseConnections.size} ativas)`)
+      
+      // Verificar conexões que podem estar inativas
+      sseConnections.forEach((connection, leadId) => {
+        if (connection.readyState === EventSource.CLOSED) {
+          console.log(`[Batch SSE] 🔄 Reconectando conexão fechada para ${leadId}`)
+          closeSSEConnection(leadId)
+          
+          // Reconectar apenas se ainda estivermos processando
+          if (leadsBeingProcessed.has(leadId)) {
+            createSSEConnection(leadId)
+          }
+        } else if (connection.readyState === EventSource.CONNECTING) {
+          console.log(`[Batch SSE] ⏳ Conexão ainda conectando para ${leadId}`)
+        }
+      })
+      
+      // Limpar leads que não estão mais sendo processados ou que estão há muito tempo sem atividade
+      const leadsToRemove: string[] = []
+      const now = Date.now()
+      const TIMEOUT_MS = 10 * 60 * 1000 // 10 minutos
+      
+      sseConnections.forEach((connection, leadId) => {
+        if (!leadsBeingProcessed.has(leadId)) {
+          console.log(`[Batch SSE] 🧹 Limpando conexão inativa para ${leadId}`)
+          leadsToRemove.push(leadId)
+        } else {
+          // Verificar timeout
+          const timestamp = leadProcessingTimestamps.get(leadId)
+          if (timestamp && (now - timestamp) > TIMEOUT_MS) {
+            console.log(`[Batch SSE] ⏰ Lead ${leadId} em timeout (${Math.round((now - timestamp) / 1000)}s), removendo da lista`)
+            leadsToRemove.push(leadId)
+            
+            // Mostrar toast de timeout
+            toast.warning(`Lead ${leadId} removido da lista de processamento por timeout (10 minutos sem atividade)`, {
+              duration: 5000
+            })
+          }
+        }
+      })
+      
+      leadsToRemove.forEach(leadId => {
+        closeSSEConnection(leadId)
+        // Remover também da lista de processamento e timestamps
+        setLeadsBeingProcessed(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(leadId)
+          return newSet
+        })
+        setLeadProcessingTimestamps(prev => {
+          const newMap = new Map(prev)
+          newMap.delete(leadId)
+          return newMap
+        })
+      })
+      
+      // Parar health check se não há mais conexões
+      if (sseConnections.size === 0) {
+        console.log('[Batch SSE] 🛑 Nenhuma conexão ativa, parando health check')
+        if (connectionHealthCheck) {
+          clearInterval(connectionHealthCheck)
+          setConnectionHealthCheck(null)
+        }
+      }
+      
+    }, 30000) // Verificar a cada 30 segundos
+    
+    setConnectionHealthCheck(interval)
+  }
+
+  // Cleanup ao desmontar o componente
+  useEffect(() => {
+    return () => {
+      closeAllSSEConnections()
+    }
+  }, [])
 
   const start = () => {
     console.log('[useLeadBatchProcessor] Função start() chamada')
@@ -89,6 +461,12 @@ export const useLeadBatchProcessor = (leads: ExtendedLead[], onUpdate?: () => vo
       return
     }
     console.log('[useLeadBatchProcessor] Iniciando processo com', leads.length, 'leads')
+    
+    // NÃO criar conexões SSE imediatamente - apenas quando necessário
+    // As conexões serão criadas dinamicamente quando leads forem enviados para processamento
+    
+    // Iniciar monitoramento de saúde das conexões (apenas se houver conexões)
+    // startConnectionHealthCheck() - será iniciado quando primeira conexão for criada
     
     // Reset dos stats para começar do zero
     const resetStats = {
@@ -116,6 +494,10 @@ export const useLeadBatchProcessor = (leads: ExtendedLead[], onUpdate?: () => vo
 
   const close = () => {
     console.log('[useLeadBatchProcessor] Fechando processo')
+    
+    // Fechar todas as conexões SSE
+    closeAllSSEConnections()
+    
     setIsOpen(false)
     setShowAutomatedDialog(false)
     setShowContinueButton(false)
@@ -421,9 +803,17 @@ export const useLeadBatchProcessor = (leads: ExtendedLead[], onUpdate?: () => vo
   // Passo 3: Execução com Intervenção do Usuário
   const executeManualTasks = async (queues: ProcessingQueue) => {
     console.log('[useLeadBatchProcessor] Iniciando tarefas manuais...')
+    console.log('[useLeadBatchProcessor] Filas recebidas para tarefas manuais:', {
+      manuscriptProcessing: queues.manuscriptProcessing.map(l => l.nome),
+      mirrorProcessing: queues.mirrorProcessing.map(l => l.nome)
+    })
+    
+    // Atualizar o estado das filas ANTES de definir o step
+    setProcessingQueues(queues)
     
     // Primeiro processar manuscritos
     if (queues.manuscriptProcessing.length > 0) {
+      console.log('[useLeadBatchProcessor] Definindo step como manuscript para', queues.manuscriptProcessing.length, 'leads')
       setCurrentStep('manuscript')
       setProgress({ current: 0, total: queues.manuscriptProcessing.length })
       return // O usuário vai interagir
@@ -431,6 +821,7 @@ export const useLeadBatchProcessor = (leads: ExtendedLead[], onUpdate?: () => vo
     
     // Se não há manuscritos, processar espelhos
     if (queues.mirrorProcessing.length > 0) {
+      console.log('[useLeadBatchProcessor] Definindo step como mirror para', queues.mirrorProcessing.length, 'leads')
       setCurrentStep('mirror')
       setProgress({ current: 0, total: queues.mirrorProcessing.length })
       return // O usuário vai interagir
@@ -509,8 +900,27 @@ export const useLeadBatchProcessor = (leads: ExtendedLead[], onUpdate?: () => vo
       setCurrentProcessingLead(lead)
       setProgress({ current: i, total: validLeadsForAnalysis.length })
       
+      // Criar conexão SSE apenas quando necessário
+      createSSEConnection(lead.id)
+      
+      // Iniciar health check se for a primeira conexão
+      if (sseConnections.size === 0) {
+        startConnectionHealthCheck()
+      }
+      
+      // Adicionar lead à lista de processamento para monitoramento SSE
+      setLeadsBeingProcessed(prev => new Set(prev.add(lead.id)))
+      setLeadProcessingTimestamps(prev => new Map(prev.set(lead.id, Date.now())))
+      
       try {
         console.log(`[useLeadBatchProcessor] Enviando para análise: ${lead.nome}`)
+        
+        // Mostrar toast informativo sobre o processamento
+        toast.info(`🔄 Análise de "${lead.nome}" enviada para processamento`, {
+          description: "Aguardando resposta do sistema de análise...",
+          duration: 3000
+        })
+        
         const response = await fetch(`/api/admin/leads-chatwit/enviar-analise`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -519,24 +929,40 @@ export const useLeadBatchProcessor = (leads: ExtendedLead[], onUpdate?: () => vo
         
         if (response.ok) {
           console.log(`[useLeadBatchProcessor] ✅ Análise de ${lead.nome} enviada com sucesso!`)
-          setStats(prev => ({
-            ...prev,
-            completedTasks: {
-              ...prev.completedTasks,
-              analysisCompleted: prev.completedTasks.analysisCompleted + 1
-            }
-          }))
+          // Nota: As estatísticas serão atualizadas via SSE quando a análise for concluída
         } else {
           const errorData = await response.json()
+          
+          // Remover da lista de processamento em caso de erro
+          setLeadsBeingProcessed(prev => {
+            const newSet = new Set(prev)
+            newSet.delete(lead.id)
+            return newSet
+          })
+          
           throw new Error(errorData.error || `Erro ${response.status} ao enviar análise`)
         }
       } catch (error: any) {
         console.error(`[useLeadBatchProcessor] Erro na análise para ${lead.nome}:`, error)
+        
+        // Remover da lista de processamento em caso de erro
+        setLeadsBeingProcessed(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(lead.id)
+          return newSet
+        })
+        
         toast.error(`Falha na análise preliminar para ${lead.nome}: ${error.message}`)
       }
     }
 
     setShowAutomatedDialog(false)
+    
+    // Atualizar lista de leads imediatamente para mostrar estado "aguardando" nos botões
+    if (onUpdate) {
+      console.log('[useLeadBatchProcessor] Análises enviadas - atualizando lista para mostrar estado de aguardando...')
+      onUpdate()
+    }
     
     // Mostrar resultado da análise
     const totalAnalises = validLeadsForAnalysis.length
@@ -578,6 +1004,12 @@ export const useLeadBatchProcessor = (leads: ExtendedLead[], onUpdate?: () => vo
     })
     setCurrentStep('done')
     
+    // Atualizar lista de leads para refletir mudanças nos botões
+    if (onUpdate) {
+      console.log('[useLeadBatchProcessor] Atualizando lista de leads...')
+      onUpdate()
+    }
+    
     // Mostrar relatório final
     if (skippedLeads.length > 0) {
       toast.warning(
@@ -590,6 +1022,18 @@ export const useLeadBatchProcessor = (leads: ExtendedLead[], onUpdate?: () => vo
 
   const handleManuscriptSubmit = async (leadId: string, data: ManuscritoData) => {
     console.log('[useLeadBatchProcessor] Manuscrito submetido para lead:', leadId, data)
+    
+    // Criar conexão SSE apenas quando necessário
+    createSSEConnection(leadId)
+    
+    // Iniciar health check se for a primeira conexão
+    if (sseConnections.size === 0) {
+      startConnectionHealthCheck()
+    }
+    
+    // Adicionar lead à lista de processamento para monitoramento SSE
+    setLeadsBeingProcessed(prev => new Set(prev.add(leadId)))
+    setLeadProcessingTimestamps(prev => new Map(prev.set(leadId, Date.now())))
     
     // Enviar manuscrito para o sistema externo
     try {
@@ -640,8 +1084,28 @@ export const useLeadBatchProcessor = (leads: ExtendedLead[], onUpdate?: () => vo
       }
 
       console.log(`[useLeadBatchProcessor] Manuscrito de ${lead.nome} enviado com sucesso!`)
+      
+      // Mostrar toast informativo sobre o processamento
+      toast.info(`🔄 Manuscrito de "${lead.nome}" enviado para processamento`, {
+        description: "Aguardando resposta do sistema de digitação...",
+        duration: 3000
+      })
+      
+      // Atualizar lista imediatamente para mostrar estado "aguardando" no botão
+      if (onUpdate) {
+        setTimeout(() => onUpdate(), 500) // Small delay para garantir que o estado foi atualizado no servidor
+      }
+      
     } catch (error: any) {
       console.error(`[useLeadBatchProcessor] Erro ao enviar manuscrito:`, error)
+      
+      // Remover da lista de processamento em caso de erro
+      setLeadsBeingProcessed(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(leadId)
+        return newSet
+      })
+      
       throw error // Re-throw para ser tratado pelo ImageGalleryDialog
     }
 
@@ -712,6 +1176,12 @@ export const useLeadBatchProcessor = (leads: ExtendedLead[], onUpdate?: () => vo
         
         toast.success(message, { duration: 6000 })
         
+        // Atualizar lista de leads para refletir mudanças nos botões
+        if (onUpdate) {
+          console.log('[useLeadBatchProcessor] Processo concluído - atualizando lista de leads...')
+          onUpdate()
+        }
+        
         // Fechar modal - processo completo
         setIsOpen(false)
       }
@@ -720,6 +1190,18 @@ export const useLeadBatchProcessor = (leads: ExtendedLead[], onUpdate?: () => vo
 
   const handleMirrorSubmit = async (leadId: string, data: EspelhoData) => {
     console.log('[useLeadBatchProcessor] Espelho submetido para lead:', leadId, data)
+    
+    // Criar conexão SSE apenas quando necessário
+    createSSEConnection(leadId)
+    
+    // Iniciar health check se for a primeira conexão
+    if (sseConnections.size === 0) {
+      startConnectionHealthCheck()
+    }
+    
+    // Adicionar lead à lista de processamento para monitoramento SSE
+    setLeadsBeingProcessed(prev => new Set(prev.add(leadId)))
+    setLeadProcessingTimestamps(prev => new Map(prev.set(leadId, Date.now())))
     
     // Enviar espelho para o sistema externo
     try {
@@ -770,8 +1252,28 @@ export const useLeadBatchProcessor = (leads: ExtendedLead[], onUpdate?: () => vo
       }
 
       console.log(`[useLeadBatchProcessor] Espelho de ${lead.nome} enviado com sucesso!`)
+      
+      // Mostrar toast informativo sobre o processamento
+      toast.info(`🔄 Espelho de "${lead.nome}" enviado para processamento`, {
+        description: "Aguardando resposta do sistema de correção...",
+        duration: 3000
+      })
+      
+      // Atualizar lista imediatamente para mostrar estado "aguardando" no botão
+      if (onUpdate) {
+        setTimeout(() => onUpdate(), 500) // Small delay para garantir que o estado foi atualizado no servidor
+      }
+      
     } catch (error: any) {
       console.error(`[useLeadBatchProcessor] Erro ao enviar espelho:`, error)
+      
+      // Remover da lista de processamento em caso de erro
+      setLeadsBeingProcessed(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(leadId)
+        return newSet
+      })
+      
       throw error // Re-throw para ser tratado pelo ImageGalleryDialog
     }
 
@@ -813,21 +1315,27 @@ export const useLeadBatchProcessor = (leads: ExtendedLead[], onUpdate?: () => vo
       if (temAnalises) {
         message += `\n\n📊 Próximo passo: Análise preliminar automática (${processingQueues.preliminaryAnalysis.length} lead${processingQueues.preliminaryAnalysis.length > 1 ? 's' : ''})`
         message += '\n\n⏰ Continue o processo quando estiver pronto.'
-      } else {
-        message += '\n\n🎉 Processo concluído!'
-      }
-      
-      toast.info(message, { duration: 8000 })
-      
-      // Fechar o modal temporariamente para dar feedback
-      setIsOpen(false)
-      
-      // Se há análises pendentes, mostrar botão para continuar
-      if (temAnalises) {
+        
+        toast.info(message, { duration: 8000 })
+        
+        // Se há análises pendentes, mostrar botão para continuar
         setShowContinueButton(true)
         // Reset do índice para a análise
         setCurrentManualLeadIndex(0)
+      } else {
+        message += '\n\n🎉 Processo concluído!'
+        
+        toast.success(message, { duration: 6000 })
+        
+        // Atualizar lista de leads para refletir mudanças nos botões
+        if (onUpdate) {
+          console.log('[useLeadBatchProcessor] Espelhos concluídos - atualizando lista de leads...')
+          onUpdate()
+        }
       }
+      
+      // Fechar o modal temporariamente para dar feedback
+      setIsOpen(false)
     }
   }
 
@@ -837,7 +1345,9 @@ export const useLeadBatchProcessor = (leads: ExtendedLead[], onUpdate?: () => vo
     progress, 
     currentLead: currentLead?.nome,
     showAutomatedDialog,
-    currentProcessingLead: currentProcessingLead?.nome
+    currentProcessingLead: currentProcessingLead?.nome,
+    sseConnections: sseConnections.size,
+    leadsBeingProcessed: Array.from(leadsBeingProcessed)
   })
 
   return {
@@ -856,5 +1366,11 @@ export const useLeadBatchProcessor = (leads: ExtendedLead[], onUpdate?: () => vo
     showAutomatedDialog,
     showContinueButton,
     currentProcessingLead,
+    // Estados SSE
+    sseConnections: sseConnections.size,
+    leadsBeingProcessed: Array.from(leadsBeingProcessed),
+    createSSEConnection,
+    closeSSEConnection,
+    closeAllSSEConnections,
   }
 }

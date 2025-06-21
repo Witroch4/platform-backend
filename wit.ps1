@@ -2,6 +2,9 @@ function wit {
     Write-Host "=== WIT - Macro de Deploy ===" -ForegroundColor Cyan
     Write-Host ""
     
+    # Arquivo para salvar o último commit
+    $lastCommitFile = ".\wit-last-commit.txt"
+    
     # Executar git status
     Write-Host "Verificando status do git..." -ForegroundColor Yellow
     git status
@@ -13,13 +16,26 @@ function wit {
     Write-Host "Arquivos adicionados!" -ForegroundColor Green
     Write-Host ""
     
-    # Pedir mensagem de commit
+    # Ler o último commit usado ou usar valor padrão
     $defaultMessage = "melhorias nos lead e ESPELHO v2"
-    $commitMessage = Read-Host "Digite a mensagem do commit (pressione Enter para usar: '$defaultMessage')"
+    if (Test-Path $lastCommitFile) {
+        $lastCommit = Get-Content $lastCommitFile -Raw
+        if (![string]::IsNullOrWhiteSpace($lastCommit)) {
+            $defaultMessage = $lastCommit.Trim()
+        }
+    }
+    
+    # Pedir mensagem de commit
+    Write-Host "Último commit usado: " -NoNewline -ForegroundColor Gray
+    Write-Host "'$defaultMessage'" -ForegroundColor Cyan
+    $commitMessage = Read-Host "Digite a mensagem do commit (pressione Enter para usar o último)"
     
     if ([string]::IsNullOrWhiteSpace($commitMessage)) {
         $commitMessage = $defaultMessage
     }
+    
+    # Salvar o commit atual para próxima vez
+    $commitMessage | Out-File -FilePath $lastCommitFile -Encoding UTF8 -NoNewline
     
     # Executar git commit
     Write-Host "Fazendo commit..." -ForegroundColor Yellow
@@ -40,6 +56,11 @@ function wit {
         Write-Host "Iniciando build para produção..." -ForegroundColor Yellow
         docker compose build
         Write-Host "Build concluído!" -ForegroundColor Green
+        Write-Host ""
+        
+        Write-Host "Enviando imagem para o Docker Hub..." -ForegroundColor Yellow
+        docker compose push
+        Write-Host "Push para Docker Hub concluído!" -ForegroundColor Green
     } else {
         Write-Host "Build cancelado." -ForegroundColor Gray
     }

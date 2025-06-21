@@ -1,6 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Progress } from '@/components/ui/progress'
 import { Loader2 } from 'lucide-react'
+import { BatchSSEStatus } from './BatchSSEStatus'
 
 type AutomatedProgressDialogProps = {
   isOpen: boolean
@@ -8,6 +9,9 @@ type AutomatedProgressDialogProps = {
   currentStep: string
   currentTask?: string
   leadName?: string
+  sseConnections?: number
+  leadsBeingProcessed?: string[]
+  totalLeads?: number
 }
 
 export function AutomatedProgressDialog({ 
@@ -15,7 +19,10 @@ export function AutomatedProgressDialog({
   progress, 
   currentStep, 
   currentTask, 
-  leadName 
+  leadName,
+  sseConnections = 0,
+  leadsBeingProcessed = [],
+  totalLeads = 0
 }: AutomatedProgressDialogProps) {
   const percentage = progress.total > 0 ? (progress.current / progress.total) * 100 : 0
 
@@ -39,23 +46,35 @@ export function AutomatedProgressDialog({
     return `${currentTask || getStepTitle()}: Lead ${progress.current + 1} de ${progress.total}`
   }
 
+  const showSSEStatus = totalLeads > 0 && (currentStep === 'preliminary-analysis' || leadsBeingProcessed.length > 0)
+
   return (
     <Dialog open={isOpen}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>{getStepTitle()}</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col items-center justify-center gap-4 py-6">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <div className="w-full text-center">
-            <p className="text-sm text-muted-foreground mb-2">
-              {getProgressText()}
-            </p>
-            <Progress value={percentage} className="mt-2" />
-            <p className="text-xs text-muted-foreground mt-2">
-              Processamento automático em andamento...
-            </p>
+        <div className="flex flex-col gap-4 py-6">
+          <div className="flex flex-col items-center justify-center gap-4">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <div className="w-full text-center">
+              <p className="text-sm text-muted-foreground mb-2">
+                {getProgressText()}
+              </p>
+              <Progress value={percentage} className="mt-2" />
+              <p className="text-xs text-muted-foreground mt-2">
+                Processamento automático em andamento...
+              </p>
+            </div>
           </div>
+          
+          {showSSEStatus && (
+            <BatchSSEStatus 
+              sseConnections={sseConnections}
+              leadsBeingProcessed={leadsBeingProcessed}
+              totalLeads={totalLeads}
+            />
+          )}
         </div>
       </DialogContent>
     </Dialog>

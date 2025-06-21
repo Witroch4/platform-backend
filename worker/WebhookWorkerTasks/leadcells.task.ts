@@ -23,6 +23,7 @@ interface IEspelhoJobData {
 interface IAnaliseJobData {
   leadID: string;
   analiseUrl?: string;
+  argumentacaoUrl?: string;
   analisePreliminar?: any;
   nome?: string;
   telefone?: string;
@@ -37,7 +38,10 @@ type ILeadCellJobData = IManuscritoJobData | IEspelhoJobData | IAnaliseJobData;
 // Função principal que detecta o tipo de job e processa adequadamente
 export async function processLeadCellTask(job: Job<ILeadCellJobData>) {
   console.log(`[BullMQ] Processando job de lead cell: ${job.id}`);
-  console.log(`[BullMQ] Dados do job:`, JSON.stringify(job.data, null, 2));
+  
+  // Criar versão limitada dos dados para log
+  const limitedData = limitJobDataForLog(job.data);
+  console.log(`[BullMQ] Dados do job:`, JSON.stringify(limitedData, null, 2));
 
   const data = job.data;
 
@@ -193,7 +197,7 @@ async function processAnalise(job: Job<IAnaliseJobData>) {
   console.log(`[BullMQ] 📊 Processando análise para lead: ${job.data.leadID}`);
 
   try {
-    const { leadID, analiseUrl, analisePreliminar, nome, analiseSimulado, analiseValidada, analiseSimuladoValidada } = job.data;
+    const { leadID, analiseUrl, argumentacaoUrl, analisePreliminar, nome, analiseSimulado, analiseValidada, analiseSimuladoValidada } = job.data;
 
     console.log(`[BullMQ] Atualizando lead ${leadID} com a análise processada`);
 
@@ -217,6 +221,9 @@ async function processAnalise(job: Job<IAnaliseJobData>) {
     if (analiseUrl) {
       // Análise final com URL
       updateData.analiseUrl = analiseUrl;
+      if (argumentacaoUrl) {
+        updateData.argumentacaoUrl = argumentacaoUrl;
+      }
       updateData.analiseProcessada = true;
       updateData.analiseValidada = true;
       message = analiseSimulado 
@@ -264,7 +271,10 @@ async function processAnalise(job: Job<IAnaliseJobData>) {
 async function sendSSENotification(leadID: string, payload: any, type: string) {
   try {
     console.log(`[Worker ${type}] 📤 Preparando para enviar notificação para ${leadID}:`);
-    console.log(`[Worker ${type}] 📋 Payload da notificação:`, JSON.stringify(payload, null, 2));
+    
+    // Criar versão limitada do payload para log
+    const limitedPayload = limitNotificationPayloadForLog(payload);
+    console.log(`[Worker ${type}] 📋 Payload da notificação:`, JSON.stringify(limitedPayload, null, 2));
     
     const success = await sseManager.sendNotification(leadID, payload);
     
@@ -287,6 +297,89 @@ async function sendSSENotification(leadID: string, payload: any, type: string) {
       console.error(`[BullMQ] ❌ Erro ao enviar notificação de erro:`, errorNotification);
     }
   }
+}
+
+// Função para limitar os dados do job no log
+function limitJobDataForLog(jobData: any) {
+  if (typeof jobData !== 'object' || jobData === null) {
+    return jobData;
+  }
+  
+  const limited: any = {};
+  const allowedFields = ['leadID', 'nome', 'telefone', 'analiseUrl', 'argumentacaoUrl', 'manuscrito', 'espelho', 'analise', 'analiseSimulado', 'analiseValidada', 'analiseSimuladoValidada', 'espelhoparabiblioteca'];
+  
+  for (const field of allowedFields) {
+    if (jobData[field] !== undefined) {
+      limited[field] = jobData[field];
+    }
+  }
+  
+  // Para analisePreliminar, incluir apenas campos básicos
+  if (jobData.analisePreliminar) {
+    const { exameDescricao, inscricao, nomeExaminando, seccional, areaJuridica, notaFinal, situacao } = jobData.analisePreliminar;
+    limited.analisePreliminar = { exameDescricao, inscricao, nomeExaminando, seccional, areaJuridica, notaFinal, situacao };
+  }
+  
+  return limited;
+}
+
+// Função para limitar o payload da notificação no log
+function limitNotificationPayloadForLog(payload: any) {
+  if (typeof payload !== 'object' || payload === null) {
+    return payload;
+  }
+  
+  const limited: any = {
+    type: payload.type,
+    message: payload.message
+  };
+  
+  // Para leadData, incluir apenas campos básicos essenciais
+  if (payload.leadData) {
+    const { id, sourceId, name, nomeReal, phoneNumber } = payload.leadData;
+    
+    limited.leadData = { 
+      id, sourceId, name, nomeReal, phoneNumber,
+      // Apenas flags de estado, sem dados extensos
+      concluido: payload.leadData.concluido,
+      manuscritoProcessado: payload.leadData.manuscritoProcessado,
+      espelhoProcessado: payload.leadData.espelhoProcessado,
+      analiseProcessada: payload.leadData.analiseProcessada,
+      analiseValidada: payload.leadData.analiseValidada,
+      situacao: payload.leadData.situacao,
+      notaFinal: payload.leadData.notaFinal
+    };
+    
+    // Campos extensos são omitidos completamente ou resumidos
+    if (payload.leadData.provaManuscrita) {
+      limited.leadData.provaManuscrita = "[Omitido - manuscrito presente]";
+    }
+    if (payload.leadData.textoDOEspelho) {
+      limited.leadData.textoDOEspelho = "[Omitido - espelho presente]";
+    }
+    if (payload.leadData.imagensConvertidas) {
+      try {
+        const images = JSON.parse(payload.leadData.imagensConvertidas);
+        limited.leadData.imagensConvertidas = `[${images.length} imagens]`;
+      } catch {
+        limited.leadData.imagensConvertidas = "[Imagens presentes]";
+      }
+    }
+    if (payload.leadData.analisePreliminar) {
+      // Apenas campos básicos da análise preliminar
+      const { situacao, notaFinal, subtotalPeca, subtotalQuestoes } = payload.leadData.analisePreliminar;
+      limited.leadData.analisePreliminar = {
+        situacao, notaFinal, subtotalPeca, subtotalQuestoes,
+        conclusao: "[Omitida - presente]",
+        pontosPeca: payload.leadData.analisePreliminar.pontosPeca ? `[${payload.leadData.analisePreliminar.pontosPeca.length} pontos]` : undefined,
+        argumentacao: payload.leadData.analisePreliminar.argumentacao ? `[${payload.leadData.analisePreliminar.argumentacao.length} argumentos]` : undefined
+      };
+    }
+  }
+  
+  if (payload.timestamp) limited.timestamp = payload.timestamp;
+  
+  return limited;
 }
 
 // Manter compatibilidade com a função antiga
