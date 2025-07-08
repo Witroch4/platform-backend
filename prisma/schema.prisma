@@ -69,6 +69,9 @@ model User {
   // Relação com configurações do MTF Diamante
   mtfDiamanteConfigs     MtfDiamanteConfig[]
   
+  // Relação com disparos do MTF Diamante
+  disparosMtfDiamante    DisparoMtfDiamante[]
+  
   // Controle de seed executado para MTF Diamante
   mtfDiamanteSeedExecuted Boolean @default(false)
 }
@@ -717,5 +720,40 @@ model MtfDiamanteIntentMapping {
   @@index([configId])
   @@index([intentName])
   @@unique([configId, intentName])
+}
+
+// Modelo para controle de disparos em massa do MTF Diamante
+model DisparoMtfDiamante {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Informações do template e lead
+  templateId    String   // ID do template WhatsApp
+  templateName  String   // Nome do template
+  leadId        String   // ID do lead
+  leadNome      String?  // Nome do lead
+  leadTelefone  String?  // Telefone do lead
+  
+  // Status do disparo
+  status        String   @default("PENDING") // PENDING, SENT, FAILED, SCHEDULED
+  
+  // Controle de agendamento
+  scheduledAt   DateTime? // Quando deve ser enviado
+  sentAt        DateTime? // Quando foi enviado
+  
+  // Parâmetros e configuração
+  parameters    Json?    // Parâmetros específicos para o template
+  
+  // Controle de erro
+  errorMessage  String?  // Mensagem de erro se falhou
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([userId])
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([leadId])
 }
 

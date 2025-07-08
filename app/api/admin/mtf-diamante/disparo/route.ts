@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     const { templateId, selectedLeads, delayMinutes, parameters } = disparoSchema.parse(body);
 
     // Buscar informações do template
-    const template = await prisma.template.findUnique({
+    const template = await prisma.whatsAppTemplate.findUnique({
       where: { id: templateId },
       select: {
         id: true,
@@ -59,15 +59,14 @@ export async function POST(request: Request) {
     // Buscar leads selecionados
     const leads = await prisma.lead.findMany({
       where: {
-        id: { in: selectedLeads },
-        userId: session.user.id
+        igSenderId: { in: selectedLeads },
+        accountId: session.user.id
       },
       select: {
-        id: true,
-        nome: true,
-        telefone: true,
-        email: true,
-        statusContato: true
+        igSenderId: true,
+        name: true,
+        whatsapp: true,
+        email: true
       }
     });
 
@@ -79,9 +78,9 @@ export async function POST(request: Request) {
     const disparos = leads.map(lead => ({
       templateId: template.id,
       templateName: template.name,
-      leadId: lead.id,
-      leadNome: lead.nome,
-      leadTelefone: lead.telefone,
+      leadId: lead.igSenderId,
+      leadNome: lead.name,
+      leadTelefone: lead.whatsapp,
       status: 'PENDING',
       scheduledAt: new Date(Date.now() + delayMinutes * 60 * 1000),
       parameters: parameters || {},
@@ -100,7 +99,7 @@ export async function POST(request: Request) {
         leads.map(async (lead) => {
           try {
             const success = await sendTemplateMessage(
-              lead.telefone,
+              lead.whatsapp || '',
               template.name,
               parameters || {}
             );
@@ -108,7 +107,7 @@ export async function POST(request: Request) {
             // Atualizar status do disparo
             await prisma.disparoMtfDiamante.updateMany({
               where: {
-                leadId: lead.id,
+                leadId: lead.igSenderId,
                 templateId: template.id,
                 status: 'PENDING'
               },
@@ -119,14 +118,14 @@ export async function POST(request: Request) {
               }
             });
 
-            return { leadId: lead.id, success, leadNome: lead.nome };
+            return { leadId: lead.igSenderId, success, leadNome: lead.name };
           } catch (error) {
-            console.error(`Erro ao enviar para ${lead.nome}:`, error);
+            console.error(`Erro ao enviar para ${lead.name}:`, error);
             
             // Atualizar status de erro
             await prisma.disparoMtfDiamante.updateMany({
               where: {
-                leadId: lead.id,
+                leadId: lead.igSenderId,
                 templateId: template.id,
                 status: 'PENDING'
               },
@@ -136,7 +135,7 @@ export async function POST(request: Request) {
               }
             });
 
-            return { leadId: lead.id, success: false, leadNome: lead.nome, error: error instanceof Error ? error.message : 'Erro desconhecido' };
+            return { leadId: lead.igSenderId, success: false, leadNome: lead.name, error: error instanceof Error ? error.message : 'Erro desconhecido' };
           }
         })
       );
@@ -216,16 +215,6 @@ export async function GET(request: Request) {
     const [disparos, total] = await Promise.all([
       prisma.disparoMtfDiamante.findMany({
         where: whereClause,
-        include: {
-          lead: {
-            select: {
-              id: true,
-              nome: true,
-              telefone: true,
-              email: true
-            }
-          }
-        },
         orderBy: {
           createdAt: 'desc'
         },

@@ -112,6 +112,11 @@ export async function GET(request: Request) {
           }
         ];
 
+        // Garantir que configId existe neste ponto
+        if (!configId) {
+          throw new Error('ConfigId não encontrado ao criar mapeamentos padrão');
+        }
+
         await Promise.all(
           defaultMappings.map(mapping =>
             tx.mtfDiamanteIntentMapping.create({
