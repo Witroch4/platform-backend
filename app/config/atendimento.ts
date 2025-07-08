@@ -1,5 +1,5 @@
-// Configurações para o sistema de atendimento
-export const atendimentoConfig = {
+// Configurações para o sistema MTF Diamante (Método Fênix Diamante)
+export const mtfDiamanteConfig = {
   // Token da API do WhatsApp (da variável de ambiente)
   // ID do App: 431027922671988 - API ZAP WIT
   // User ID: 122105475986262788
@@ -18,24 +18,22 @@ export const atendimentoConfig = {
   // API App ID do WhatsApp
   whatsappAppId: "431027922671988",
   
-  // Configurações padrão
+  // Configurações padrão do MTF Diamante
   defaultConfig: {
-    // Valores padrão
-    valorLote1: "R$ 287,90",
-    valorLote2: "R$ 287,90",
+    // Valores de análise
     valorAnalise: "R$ 27,90",
-    
-    // Datas padrão (formato Brasil)
-    comecoLote1: "13/03/2025 as 15:00",
-    comecoLote2: "13/03/2025 as 15:00",
-    fim: "sábado as 5:00 da tarde",
     
     // Chave PIX
     chavePix: "atendimento@amandasousaprev.adv.br",
+    
+    // Lote padrão
+    defaultLote: {
+      numero: 1,
+      nome: "Primeiro Lote",
+      valor: "R$ 287,90",
+      isActive: true
+    }
   },
-  
-  // Templates mockados para desenvolvimento - removidos para usar apenas dados reais
-  mockTemplates: [],
   
   // ID do usuário administrador (substituir pelo real em produção)
   adminUserId: "admin-user-id",

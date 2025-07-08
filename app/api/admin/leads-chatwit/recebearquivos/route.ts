@@ -20,6 +20,16 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
+    // validação do token de acesso (obrigatório) - agora busca dentro do campo usuario
+    if (!payload?.usuario?.CHATWIT_ACCESS_TOKEN) {
+      return NextResponse.json(
+        { success: false, error: 'CHATWIT_ACCESS_TOKEN ausente no campo usuario' },
+        { status: 400 }
+      );
+    }
+
+    console.log(`[Webhook] Recebido lead para token: ${payload.usuario.CHATWIT_ACCESS_TOKEN}`);
+
     // empurra pra fila e responde na hora
     await addLeadJob({ payload });
 

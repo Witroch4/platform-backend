@@ -56,7 +56,6 @@ export default function RedeSocialPage() {
   // Função para enviar notificação de boas-vindas
   const sendWelcomeNotification = async () => {
     try {
-      console.log('Enviando notificação de boas-vindas...');
       const response = await fetch('/api/auth/welcome-notification', {
         method: 'POST',
         headers: {
@@ -65,10 +64,8 @@ export default function RedeSocialPage() {
       });
 
       const data = await response.json();
-      console.log('Resposta da API de notificação de boas-vindas:', data);
 
       if (data.success) {
-        console.log('Notificação de boas-vindas enviada com sucesso');
         toast("Bem-vindo!", {
           description: "Notificação de boas-vindas enviada com sucesso.",
         });
@@ -78,185 +75,58 @@ export default function RedeSocialPage() {
     }
   };
 
+  // useEffect principal simplificado
   useEffect(() => {
-    // Verificar se o usuário está autenticado
+    // Se a sessão ainda está carregando, não fazemos nada
+    if (session === undefined) {
+      return;
+    }
+
+    // Se usuário não está autenticado
+    if (!session?.user?.id) {
+      setIsLoading(false);
+      return;
+    }
+
+    // Se o usuário está autenticado e não foi verificado ainda
     if (session?.user && !sessionChecked) {
       setSessionChecked(true);
+      
       // Buscar contas conectadas
       fetchAccounts();
 
-      // Enviar notificação de boas-vindas
+      // Enviar notificação de boas-vindas apenas uma vez
       sendWelcomeNotification();
     }
   }, [session, sessionChecked]);
 
-  // Adicione esta função no início do componente, logo após as declarações de estado
-  const forceSessionRefresh = () => {
-    // Verificar se estamos no navegador
-    if (typeof window !== 'undefined') {
-      console.log("Forçando atualização da sessão...");
-
-      // Verificar se acabamos de fazer login (usando localStorage)
-      const justLoggedIn = sessionStorage.getItem('justLoggedIn');
-
-      if (!justLoggedIn) {
-        // Marcar que acabamos de fazer login
-        sessionStorage.setItem('justLoggedIn', 'true');
-
-        // Recarregar a página uma vez após o login
-        console.log("Detectado primeiro acesso após login, recarregando página...");
-        window.location.reload();
-      } else {
-        // Limpar o flag após o reload
-        console.log("Página já recarregada após login");
-        sessionStorage.removeItem('justLoggedIn');
-      }
-    }
-  };
-
-  // Modificar o useEffect para forçar a atualização da sessão
-  useEffect(() => {
-    // Se estamos no navegador e a página acabou de ser carregada após login
-    if (typeof window !== 'undefined') {
-      const isPostLogin = sessionStorage.getItem('postLogin');
-
-      if (isPostLogin) {
-        console.log("Detectado carregamento pós-login, forçando atualização da sessão...");
-        sessionStorage.removeItem('postLogin');
-
-        // Forçar atualização da sessão
-        update().then(() => {
-          console.log("Sessão atualizada com sucesso, recarregando dados...");
-          setTimeout(() => {
-            fetchAccounts();
-          }, 500);
-        });
-      }
-    }
-  }, []);
-
-  // Adicionar um botão de depuração para forçar a atualização da sessão
-  const handleForceSessionUpdate = async () => {
-    console.log("Forçando atualização manual da sessão...");
-    setIsLoading(true);
-    await update();
-    console.log("Sessão atualizada manualmente");
-    await checkApiDirectly();
-  };
-
-  // Adicionar esta função para verificar a API diretamente
-  const checkApiDirectly = async () => {
-    try {
-      console.log("Verificando API diretamente...");
-      const timestamp = new Date().getTime();
-      const response = await fetch(`/api/auth/instagram/accounts?t=${timestamp}`, {
-        method: 'GET',
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0'
-        },
-        credentials: 'include'
-      });
-
-      console.log("Status da resposta API direta:", response.status);
-
-      if (response.ok) {
-        const responseText = await response.text();
-        console.log("Resposta bruta da API:", responseText);
-
-        try {
-          const data = JSON.parse(responseText);
-          console.log("Dados parseados da API:", data);
-
-          if (data && data.accounts && Array.isArray(data.accounts)) {
-            console.log(`Encontradas ${data.accounts.length} contas`);
-            setConnectedAccounts(data.accounts);
-          } else {
-            console.error("Formato de resposta inesperado:", data);
-          }
-        } catch (parseError) {
-          console.error("Erro ao analisar JSON:", parseError);
-        }
-      }
-    } catch (error) {
-      console.error("Erro ao verificar API diretamente:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Modificar o useEffect principal para uma abordagem mais simples
-  useEffect(() => {
-    // Se a sessão ainda está carregando, não fazemos nada
-    if (session === undefined) {
-      console.log("Sessão ainda está carregando...");
-      return;
-    }
-
-    // Se o usuário está autenticado e não temos contas carregadas
-    if (session?.user?.id && connectedAccounts.length === 0) {
-      console.log("Sessão detectada com ID:", session.user.id);
-      console.log("Buscando contas para usuário autenticado");
-      fetchAccounts();
-    } else if (!session?.user?.id) {
-      // Usuário não está autenticado
-      setIsLoading(false);
-      console.log("Usuário não autenticado");
-    }
-  }, [session, connectedAccounts.length]);
-
-  // Adicionar um useEffect simplificado para detectar o redirecionamento após login
+  // useEffect para detectar redirecionamento após login
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      // Verificar se a URL contém parâmetros que indicam redirecionamento após login
       const urlParams = new URLSearchParams(window.location.search);
       const fromLogin = urlParams.get('fromLogin');
 
       if (fromLogin === 'true') {
-        console.log("Detectado redirecionamento após login");
-
         // Remover o parâmetro da URL
         window.history.replaceState({}, document.title, window.location.pathname);
 
         // Forçar atualização da sessão uma única vez
         update().then(() => {
-          console.log("Sessão atualizada após redirecionamento de login");
-          fetchAccounts();
+          // Resetar o flag para permitir nova verificação
+          setSessionChecked(false);
         });
       }
-    }
-  }, []);
-
-  // Adicionar um useEffect para forçar a atualização quando o botão de depuração for clicado
-  useEffect(() => {
-    // Verificar se estamos no navegador
-    if (typeof window !== 'undefined') {
-      // Adicionar um evento de tecla para forçar a atualização quando F5 for pressionado
-      const handleKeyDown = (event: KeyboardEvent) => {
-        if (event.key === 'F5' || (event.ctrlKey && event.key === 'r')) {
-          console.log("Tecla de atualização detectada, forçando atualização da sessão...");
-          update().then(() => {
-            checkApiDirectly();
-          });
-        }
-      };
-
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
     }
   }, []);
 
   // Modificar a função fetchAccounts para ser mais robusta
   const fetchAccounts = async () => {
     if (!session?.user?.id) {
-      console.log("Tentativa de buscar contas sem sessão de usuário");
       return;
     }
 
     try {
       setIsLoading(true);
-      console.log("Iniciando busca de contas para usuário:", session.user.id);
 
       // Usar a rota correta e adicionar timestamp para evitar cache
       const timestamp = new Date().getTime();
@@ -496,17 +366,7 @@ export default function RedeSocialPage() {
                 Painel de Administração
               </Button>
             )}
-            <Button
-              onClick={handleForceSessionUpdate}
-              variant="outline"
-              size="sm"
-              className="mt-2 mb-2"
-            >
-              Forçar atualização da sessão
-            </Button>
-            <pre className="mt-2 p-2 bg-gray-100 rounded text-xs overflow-auto max-h-40">
-              {JSON.stringify(connectedAccounts, null, 2)}
-            </pre>
+
           </div>
         )}
 

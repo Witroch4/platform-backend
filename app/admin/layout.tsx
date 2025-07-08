@@ -25,6 +25,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
   const pathname = usePathname();
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   useEffect(() => {
     const checkAdminAccess = async () => {
@@ -42,21 +43,31 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
           toast("Verificando permissões", { description: "Verificando permissões de administrador...",
            });
 
-          const response = await fetch('/api/admin/notifications');
-
-          if (response.status === 403) {
-            toast.error("Acesso negado", {
-              description: "Você não tem permissão para acessar esta área.",
-            });
-            router.push('/');
-            return;
-          }
-
-          if (response.ok) {
+          // Primeiro, verificar se é SUPERADMIN
+          const superAdminResponse = await fetch('/api/admin/notifications');
+          
+          if (superAdminResponse.ok) {
+            setIsSuperAdmin(true);
             setIsAdmin(true);
             toast.success("Acesso permitido", {
-              description: "Acesso de administrador verificado",
+              description: "Acesso de SUPERADMIN verificado",
             });
+          } else {
+            // Se não é SUPERADMIN, verificar se é ADMIN
+            const adminResponse = await fetch('/api/admin/leads-chatwit/stats');
+            
+            if (adminResponse.ok) {
+              setIsAdmin(true);
+              toast.success("Acesso permitido", {
+                description: "Acesso de ADMIN verificado",
+              });
+            } else {
+              toast.error("Acesso negado", {
+                description: "Você não tem permissão para acessar esta área.",
+              });
+              router.push('/');
+              return;
+            }
           }
         } catch (error) {
           console.error('Erro ao verificar acesso de administrador:', error);
@@ -88,7 +99,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
         pageTitle = "Gerenciamento de Leads Chatwit";
         icon = <MessageSquare className="h-5 w-5" />;
       } else if (pathname.includes('/admin/atendimento')) {
-        pageTitle = "Sistema de Atendimento WhatsApp";
+        pageTitle = "Sistema do MTF Diamante";
         icon = <Headphones className="h-5 w-5" />;
       }
 
@@ -127,17 +138,21 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
           <AdminNavLink href="/" icon={<LayoutDashboard className="h-5 w-5 mr-3" />} exact>
             Home
           </AdminNavLink>
-          <AdminNavLink href="/admin/notifications" icon={<Bell className="h-5 w-5 mr-3" />}>
-            Notificações
-          </AdminNavLink>
-          <AdminNavLink href="/admin/users" icon={<Users className="h-5 w-5 mr-3" />}>
-            Usuários
-          </AdminNavLink>
+          {isSuperAdmin && (
+            <>
+              <AdminNavLink href="/admin/notifications" icon={<Bell className="h-5 w-5 mr-3" />}>
+                Notificações
+              </AdminNavLink>
+              <AdminNavLink href="/admin/users" icon={<Users className="h-5 w-5 mr-3" />}>
+                Usuários
+              </AdminNavLink>
+            </>
+          )}
           <AdminNavLink href="/admin/leads-chatwit" icon={<MessageSquare className="h-5 w-5 mr-3" />}>
             Leads Chatwit
           </AdminNavLink>
           <AdminNavLink href="/admin/atendimento" icon={<Headphones className="h-5 w-5 mr-3" />}>
-            Atendimento WhatsApp
+            MTF Diamante
           </AdminNavLink>
           <AdminNavLink href="/admin/disparo-oab" icon={<Users className="h-5 w-5 mr-3" />}>
             Disparo OAB

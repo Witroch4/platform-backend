@@ -46,7 +46,7 @@ export default function DisparoOABPage() {
     const fetchTemplateInfo = async () => {
       try {
         setLoadingTemplate(true);
-        const response = await axios.get('/api/admin/atendimento/template-info?template=satisfacao_oab');
+        const response = await axios.get('/api/admin/mtf-diamante/template-info?template=satisfacao_oab');
         if (response.data.success) {
           setTemplateInfo(response.data.template);
         }
@@ -124,7 +124,7 @@ export default function DisparoOABPage() {
 
       setProgresso(30);
       
-      const response = await axios.post('/api/admin/atendimento/disparo', payload);
+      const response = await axios.post('/api/admin/mtf-diamante/disparo', payload);
       
       setProgresso(100);
       setResultado(response.data);

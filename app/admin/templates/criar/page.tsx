@@ -566,7 +566,7 @@ export default function CreateTemplatePage() {
         JSON.stringify(payloadToSend, null, 2));
       
       // Enviar para API
-      const response = await axios.post('/api/admin/atendimento/templates', payloadToSend);
+      const response = await axios.post('/api/admin/mtf-diamante/templates', payloadToSend);
       
       if (response.data.success) {
         setCreationSuccess(true);
@@ -578,7 +578,7 @@ export default function CreateTemplatePage() {
         // Após criar o template, atualizar a lista de templates no banco de dados
         try {
           // Fazer uma chamada para sincronizar o novo template com o banco de dados
-          await axios.get('/api/admin/atendimento/templates?refresh=true');
+          await axios.get('/api/admin/mtf-diamante/templates?refresh=true');
           console.log('Lista de templates atualizada após criação do novo template');
         } catch (syncError) {
           console.error('Erro ao atualizar lista de templates:', syncError);

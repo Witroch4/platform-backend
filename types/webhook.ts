@@ -13,6 +13,7 @@ export interface Usuario {
       name: string;
     };
     channel: string;
+    CHATWIT_ACCESS_TOKEN: string;
   }
   
   /**
@@ -31,10 +32,10 @@ export interface Usuario {
   }
   
   /**
-   * Payload completo do webhook Chatwit
-   */
-  export interface WebhookPayload {
-    usuario: Usuario;
-    origemLead: OrigemLead;
-  }
+ * Payload completo do webhook Chatwit
+ */
+export interface WebhookPayload {
+  usuario: Usuario;
+  origemLead: OrigemLead;
+}
   

@@ -1,8 +1,8 @@
-// app/api/admin/atendimento/templates/route.ts
+// app/api/admin/mtf-diamante/templates/route.ts
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 import { auth } from '@/auth';
-import { atendimentoConfig } from '@/app/config/atendimento';
+import { mtfDiamanteConfig } from '@/app/config/atendimento';
 import prisma from '@/lib/prisma';
 
 // Templates mockados para desenvolvimento (caso a API não retorne dados)
@@ -64,7 +64,7 @@ function getWhatsAppApiConfig() {
       process.env.WHATSAPP_BUSINESS_ID || '294585820394901',
     whatsappToken:
       process.env.WHATSAPP_TOKEN ||
-      atendimentoConfig.whatsappToken ||
+      mtfDiamanteConfig.whatsappToken ||
       'EAAGIBII4GXQBO2qgvJ2jdcUmgkdqBo5bUKEanJWmCLpcZAsq0Ovpm4JNlrNLeZAv3OYNrdCqqQBAHfEfPFD0FPnZAOQJURB9GKcbjXeDpa83XdAsa3i6fTr23lBFM2LwUZC23xXrZAnB8QjCCFZBxrxlBvzPj8LsejvUjz0C04Q8Jsl8nTGHUd4ZBRPc4NiHFnc',
   };
 }
@@ -238,7 +238,7 @@ async function getWhatsAppTemplatesFromAPI(userId: string) {
 }
 
 /**
- * GET /api/admin/atendimento/templates
+ * GET /api/admin/mtf-diamante/templates
  * Retorna os templates do WhatsApp do banco de dados, ou sincroniza com a API da Meta se solicitado.
  * Parâmetros:
  * - refresh: Se true, busca os templates da API da Meta e sincroniza com o banco
@@ -484,7 +484,7 @@ function getMediaUrl(component: any): string | null {
 }
 
 /**
- * POST /api/admin/atendimento/templates
+ * POST /api/admin/mtf-diamante/templates
  * Cria um novo template na API do WhatsApp.
  */
 export async function POST(request: Request) {
@@ -649,7 +649,7 @@ export async function POST(request: Request) {
 }
 
 /**
- * DELETE /api/admin/atendimento/templates
+ * DELETE /api/admin/mtf-diamante/templates
  * Exclui um template. Informe via body o "name" ou "hsm_id" do template.
  */
 export async function DELETE(request: Request) {

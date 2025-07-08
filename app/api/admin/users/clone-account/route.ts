@@ -12,7 +12,7 @@ export async function POST(req: Request) {
       return new NextResponse("Não autorizado", { status: 401 });
     }
 
-    // Verificar se o usuário é administrador
+    // Verificar se o usuário é SUPERADMIN
     const adminUser = await prisma.user.findUnique({
       where: {
         id: session.user.id
@@ -22,8 +22,8 @@ export async function POST(req: Request) {
       }
     });
 
-    if (adminUser?.role !== "ADMIN") {
-      return new NextResponse("Acesso negado", { status: 403 });
+    if (adminUser?.role !== "SUPERADMIN") {
+      return new NextResponse("Acesso negado. Apenas SUPERADMIN pode acessar.", { status: 403 });
     }
 
     // Obter dados do corpo da requisição

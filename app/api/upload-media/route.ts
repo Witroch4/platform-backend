@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import axios from 'axios';
 import { Readable } from 'stream';
 import { auth } from '@/auth';
-import { atendimentoConfig } from '@/app/config/atendimento';
+import { mtfDiamanteConfig } from '@/app/config/atendimento';
 import { v4 as uuidv4 } from 'uuid';
 import { uploadToMinIO } from '@/lib/minio';
 
@@ -21,7 +21,7 @@ async function uploadMediaToMetaApi(
 ): Promise<string> {
   try {
     // Configurações
-    const accessToken = process.env.WHATSAPP_TOKEN || atendimentoConfig.whatsappToken;
+    const accessToken = process.env.WHATSAPP_TOKEN || mtfDiamanteConfig.whatsappToken;
     const metaAppId = process.env.META_APP_ID;
     
     if (!accessToken) {

@@ -98,7 +98,7 @@ export default function AdminPage() {
           <Link href="/admin/leads-chatwit">Gerenciar Leads Chatwit</Link>
         </Button>
         <Button asChild variant="default">
-          <Link href="/admin/atendimento">Sistema de Atendimento WhatsApp</Link>
+          <Link href="/admin/atendimento">Sistema do MTF Diamante</Link>
         </Button>
         <Button asChild variant="outline" className="border-border hover:bg-accent">
           <Link href="/admin/disparo-oab">Disparo Template OAB</Link>

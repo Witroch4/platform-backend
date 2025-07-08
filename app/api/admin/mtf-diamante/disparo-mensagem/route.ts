@@ -1,4 +1,4 @@
-// app/api/admin/atendimento/disparo/route.ts
+// app/api/admin/mtf-diamante/disparo/route.ts
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 import { parse } from 'papaparse';

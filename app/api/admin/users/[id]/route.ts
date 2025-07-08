@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
-// PATCH: Atualizar um usuário específico (apenas para administradores)
+// PATCH: Atualizar um usuário específico (apenas para SUPERADMIN)
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -15,7 +15,7 @@ export async function PATCH(
       return new NextResponse("Não autorizado", { status: 401 });
     }
 
-    // Verificar se o usuário é administrador
+    // Verificar se o usuário é SUPERADMIN
     const adminUser = await prisma.user.findUnique({
       where: {
         id: session.user.id
@@ -25,8 +25,8 @@ export async function PATCH(
       }
     });
 
-    if (adminUser?.role !== "ADMIN") {
-      return new NextResponse("Acesso negado", { status: 403 });
+    if (adminUser?.role !== "SUPERADMIN") {
+      return new NextResponse("Acesso negado. Apenas SUPERADMIN pode acessar.", { status: 403 });
     }
 
     const userId = resolvedParams.id;
@@ -87,7 +87,7 @@ export async function PATCH(
   }
 }
 
-// GET: Obter detalhes de um usuário específico
+// GET: Obter detalhes de um usuário específico (apenas para SUPERADMIN)
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -100,7 +100,7 @@ export async function GET(
       return new NextResponse("Não autorizado", { status: 401 });
     }
 
-    // Verificar se o usuário é administrador
+    // Verificar se o usuário é SUPERADMIN
     const adminUser = await prisma.user.findUnique({
       where: {
         id: session.user.id
@@ -110,8 +110,8 @@ export async function GET(
       }
     });
 
-    if (adminUser?.role !== "ADMIN") {
-      return new NextResponse("Acesso negado", { status: 403 });
+    if (adminUser?.role !== "SUPERADMIN") {
+      return new NextResponse("Acesso negado. Apenas SUPERADMIN pode acessar.", { status: 403 });
     }
 
     const userId = resolvedParams.id;

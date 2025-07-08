@@ -33,24 +33,28 @@ const matchesRoute = (routeSet: Set<string>, pathName: string): boolean => {
  *  isProtectedRoute: boolean,
  *  isAuthRoute: boolean,
  *  isApiRoute: boolean,
- *  isAdminRoute: boolean
+ *  isAdminRoute: boolean,
+ *  isSuperAdminRoute: boolean
  * }} Objeto indicando o tipo da rota atual.
  */
 export const createRouteMatchers = (routes: ConfigRoutes, req: NextRequest) => {
-  const { publicRoutes, protectedRoutes, authRoutes, apiRoutes, adminRoutes } = routes;
+  const { publicRoutes, protectedRoutes, authRoutes, apiRoutes, adminRoutes, superAdminRoutes } = routes;
   const pathName = req.nextUrl.pathname;
 
-  const publicRouteSet = new Set(publicRoutes);
-  const protectedRouteSet = new Set(protectedRoutes);
-  const authRouteSet = new Set(authRoutes);
-  const apiRouteSet = new Set(apiRoutes);
-  const adminRouteSet = new Set(adminRoutes);
+  // Verificar se as rotas existem antes de criar os Sets
+  const publicRouteSet = new Set(publicRoutes || []);
+  const protectedRouteSet = new Set(protectedRoutes || []);
+  const authRouteSet = new Set(authRoutes || []);
+  const apiRouteSet = new Set(apiRoutes || []);
+  const adminRouteSet = new Set(adminRoutes || []);
+  const superAdminRouteSet = new Set(superAdminRoutes || []);
 
   return {
     isPublicRoute: matchesRoute(publicRouteSet, pathName),
     isProtectedRoute: matchesRoute(protectedRouteSet, pathName),
     isAuthRoute: matchesRoute(authRouteSet, pathName),
     isApiRoute: matchesRoute(apiRouteSet, pathName),
-    isAdminRoute: matchesRoute(adminRouteSet, pathName), // Adicionado
+    isAdminRoute: matchesRoute(adminRouteSet, pathName),
+    isSuperAdminRoute: matchesRoute(superAdminRouteSet, pathName),
   };
 };

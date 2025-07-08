@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { RefreshCw, Search, Info, ChevronDown, BarChart, X } from "lucide-react";
+import { RefreshCw, Search, Info, ChevronDown, BarChart, X, Shield } from "lucide-react";
 import { LeadsTabs } from "./components/leads-tabs";
 import { LeadsDashboard } from "./components/dashboard";
 import {
@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/select";
 import { LeadsList } from "./components/leads-list";
 import { UsuariosList } from "./components/usuarios-list";
+import { RegisterApiKeyDialog } from "@/components/admin/register-api-key-dialog";
 
 export default function LeadsChatwitPage() {
   const [isLoading, setIsLoading] = useState(true);
@@ -53,10 +54,41 @@ export default function LeadsChatwitPage() {
   const [filterPeriod, setFilterPeriod] = useState("ultimos7");
   const [refreshCounter, setRefreshCounter] = useState(0);
   const [activeTab, setActiveTab] = useState("leads");
+  const [userInfo, setUserInfo] = useState({
+    hasToken: false,
+    role: "ADMIN",
+    isLoading: true
+  });
 
   useEffect(() => {
     fetchStats();
+    fetchUserInfo();
   }, [filterPeriod, refreshCounter]);
+
+  // Verificar se usuário ADMIN está tentando acessar aba "usuarios"
+  useEffect(() => {
+    if (!userInfo.isLoading && userInfo.role !== "SUPERADMIN" && activeTab === "usuarios") {
+      setActiveTab("leads");
+    }
+  }, [userInfo.role, userInfo.isLoading, activeTab]);
+
+  const fetchUserInfo = async () => {
+    try {
+      const response = await fetch("/api/admin/leads-chatwit/register-token");
+      const data = await response.json();
+      
+      if (response.ok) {
+        setUserInfo({
+          hasToken: data.user.hasToken,
+          role: data.user.role,
+          isLoading: false
+        });
+      }
+    } catch (error) {
+      console.error("Erro ao buscar informações do usuário:", error);
+      setUserInfo(prev => ({ ...prev, isLoading: false }));
+    }
+  };
 
   const fetchStats = async () => {
     setIsLoading(true);
@@ -103,6 +135,36 @@ export default function LeadsChatwitPage() {
         </div>
         
         <div className="flex items-center gap-2">
+          {/* Botão de cadastro de API Key */}
+          {userInfo.role !== "SUPERADMIN" && !userInfo.isLoading && (
+            <RegisterApiKeyDialog 
+              userHasToken={userInfo.hasToken}
+              onTokenRegistered={() => {
+                fetchUserInfo();
+                handleRefresh();
+              }}
+            />
+          )}
+          
+          {/* Badge para SUPERADMIN */}
+          {userInfo.role === "SUPERADMIN" && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-2 px-3 py-2 bg-purple-100 dark:bg-purple-900/20 rounded-md">
+                    <Shield className="h-4 w-4 text-purple-600" />
+                    <span className="text-sm font-medium text-purple-700 dark:text-purple-400">
+                      SUPERADMIN
+                    </span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent className="bg-popover border-border">
+                  <p>Você tem acesso a todos os leads e usuários</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+
           <Select 
             defaultValue="ultimos7" 
             value={filterPeriod}
@@ -184,10 +246,12 @@ export default function LeadsChatwitPage() {
       </div>
       
       {/* Cards de Estatísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className={`grid grid-cols-1 gap-4 ${userInfo.role === "SUPERADMIN" ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-card-foreground">Total de Leads</CardTitle>
+            <CardTitle className="text-sm font-medium text-card-foreground">
+              {userInfo.role === "SUPERADMIN" ? "Total de Leads" : "Meus Leads"}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -195,31 +259,38 @@ export default function LeadsChatwitPage() {
             ) : (
               <>
                 <div className="text-2xl font-bold text-card-foreground">{stats.totalLeads}</div>
-                <p className="text-xs text-muted-foreground">Todos os leads cadastrados</p>
+                <p className="text-xs text-muted-foreground">
+                  {userInfo.role === "SUPERADMIN" ? "Todos os leads cadastrados" : "Leads do seu token"}
+                </p>
               </>
             )}
           </CardContent>
         </Card>
         
-        <Card className="border-border bg-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-card-foreground">Total de Usuários</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <div className="h-12 w-16 bg-muted animate-pulse rounded-md" />
-            ) : (
-              <>
-                <div className="text-2xl font-bold text-card-foreground">{stats.totalUsuarios}</div>
-                <p className="text-xs text-muted-foreground">Usuários com leads cadastrados</p>
-              </>
-            )}
-          </CardContent>
-        </Card>
+        {/* Card "Total de Usuários" - apenas para SUPERADMIN */}
+        {userInfo.role === "SUPERADMIN" && (
+          <Card className="border-border bg-card">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-card-foreground">Total de Usuários</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="h-12 w-16 bg-muted animate-pulse rounded-md" />
+              ) : (
+                <>
+                  <div className="text-2xl font-bold text-card-foreground">{stats.totalUsuarios}</div>
+                  <p className="text-xs text-muted-foreground">Usuários com leads cadastrados</p>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
         
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-card-foreground">Total de Arquivos</CardTitle>
+            <CardTitle className="text-sm font-medium text-card-foreground">
+              {userInfo.role === "SUPERADMIN" ? "Total de Arquivos" : "Meus Arquivos"}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -227,7 +298,9 @@ export default function LeadsChatwitPage() {
             ) : (
               <>
                 <div className="text-2xl font-bold text-card-foreground">{stats.totalArquivos}</div>
-                <p className="text-xs text-muted-foreground">Arquivos anexados aos leads</p>
+                <p className="text-xs text-muted-foreground">
+                  {userInfo.role === "SUPERADMIN" ? "Arquivos anexados aos leads" : "Arquivos dos seus leads"}
+                </p>
               </>
             )}
           </CardContent>
@@ -235,7 +308,9 @@ export default function LeadsChatwitPage() {
         
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-card-foreground">Leads Pendentes</CardTitle>
+            <CardTitle className="text-sm font-medium text-card-foreground">
+              {userInfo.role === "SUPERADMIN" ? "Leads Pendentes" : "Meus Leads Pendentes"}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -243,7 +318,9 @@ export default function LeadsChatwitPage() {
             ) : (
               <>
                 <div className="text-2xl font-bold text-card-foreground">{stats.pendentes}</div>
-                <p className="text-xs text-muted-foreground">Aguardando processamento</p>
+                <p className="text-xs text-muted-foreground">
+                  {userInfo.role === "SUPERADMIN" ? "Aguardando processamento" : "Seus leads pendentes"}
+                </p>
               </>
             )}
           </CardContent>
@@ -300,7 +377,15 @@ export default function LeadsChatwitPage() {
       {/* Tabs */}
       <LeadsTabs 
         activeTab={activeTab}
-        onChange={setActiveTab}
+        onChange={(tab) => {
+          // Se usuário ADMIN tentar acessar aba "usuarios", redirecionar para "leads"
+          if (tab === "usuarios" && userInfo.role !== "SUPERADMIN") {
+            setActiveTab("leads");
+          } else {
+            setActiveTab(tab);
+          }
+        }}
+        userRole={userInfo.role}
       />
       
       {/* Lista de Leads */}

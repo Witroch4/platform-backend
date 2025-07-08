@@ -28,6 +28,12 @@ export const configRoutes: ConfigRoutes = {
   ],
   adminRoutes: [
     "/admin",
-    "/admin/*", // Inclui todas as subrotas de /admin
+    "/admin/*", // Inclui todas as subrotas de /admin (exceto as específicas de SUPERADMIN)
+  ],
+  superAdminRoutes: [
+    "/admin/notifications",
+    "/admin/notifications/*",
+    "/admin/users",
+    "/admin/users/*",
   ],
 };

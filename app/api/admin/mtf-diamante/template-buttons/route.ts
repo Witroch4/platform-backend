@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 
 /**
  * Endpoint para analisar e listar os botões de um template
- * GET /api/admin/atendimento/template-buttons?name=TEMPLATE_NAME
+ * GET /api/admin/mtf-diamante/template-buttons?name=TEMPLATE_NAME
  */
 export async function GET(request: Request) {
   try {

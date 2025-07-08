@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
-// PATCH: Atualizar o status de leitura de uma notificação
+// PATCH: Atualizar o status de leitura de uma notificação (apenas para SUPERADMIN)
 export async function PATCH(req: Request) {
   try {
     const session = await auth();
@@ -11,15 +11,15 @@ export async function PATCH(req: Request) {
       return new NextResponse("Não autorizado", { status: 401 });
     }
 
-    // Verificar se o usuário é administrador
+    // Verificar se o usuário é SUPERADMIN
     const adminUser = await prisma.user.findUnique({
       where: {
         id: session.user.id
       }
     });
 
-    if (adminUser?.role !== "ADMIN") {
-      return new NextResponse("Acesso negado", { status: 403 });
+    if (adminUser?.role !== "SUPERADMIN") {
+      return new NextResponse("Acesso negado. Apenas SUPERADMIN pode acessar.", { status: 403 });
     }
 
     const body = await req.json();

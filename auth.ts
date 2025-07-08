@@ -38,16 +38,19 @@ export const {
     },
 
     async jwt({ token, user, trigger, session }) {
-     // console.log("Início do callback JWT:", { trigger });
-
       if (trigger === "update" && session) {
-        console.log("Atualizando token com base na sessão");
         token.isTwoFactorEnabled = session.user.isTwoFactorEnabled;
         token.instagramAccessToken = session.user.instagramAccessToken;
 
         if (session.user.providerAccountId) {
           token.providerAccountId = session.user.providerAccountId;
         }
+        
+        // Atualizar customAccessToken se fornecido na sessão
+        if (session.user.customAccessToken !== undefined) {
+          token.customAccessToken = session.user.customAccessToken;
+        }
+        
         return token;
       }
 
@@ -60,10 +63,11 @@ export const {
 
         const dbUser = await prisma.user.findUnique({
           where: { id: user.id },
-          select: { password: true }
+          select: { password: true, customAccessToken: true }
         });
         token.isOAuth = !dbUser?.password;
         token.isTwoFactorAuthEnabled = user.isTwoFactorAuthEnabled || false;
+        token.customAccessToken = dbUser?.customAccessToken || undefined;
 
         console.log("Requisição Prisma: Buscando status de autenticação de dois fatores");
         if (!user.id) {
@@ -116,6 +120,11 @@ export const {
         session.user.role = token.role as UserRole;
         session.user.instagramAccessToken = token.instagramAccessToken as string | undefined;
         session.user.providerAccountId = token.providerAccountId as string | undefined;
+        
+        // Buscar customAccessToken do banco sempre para manter atualizado
+        // NOTA: Esta consulta foi removida para evitar problemas no Edge Runtime (middleware)
+        // O customAccessToken será buscado diretamente nas páginas que precisam dele
+        session.user.customAccessToken = token.customAccessToken as string | undefined;
       }
       return session;
     },

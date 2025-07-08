@@ -8,7 +8,7 @@ import { SessionProvider } from "@/components/providers/session-provider";
 import ErrorBoundary from "@/components/providers/error-boundary";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
-import { WelcomeNotificationHandler } from "@/components/welcome-notification-handler";
+
 
 // 👇 import do TooltipProvider
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -44,7 +44,6 @@ export default function RootLayout({
               enableSystem
               disableTransitionOnChange
             >
-              <WelcomeNotificationHandler />
               {/* 👇 Envolvendo a árvore de componentes com TooltipProvider */}
               <TooltipProvider>
                 <div className="min-h-screen w-full bg-background">

@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 import { auth } from '@/auth';
-import { atendimentoConfig } from '@/app/config/atendimento';
+import { mtfDiamanteConfig } from '@/app/config/atendimento';
 import prisma from '@/lib/prisma';
 
 /**
  * Função para atualizar um template do WhatsApp
- * Método PUT /api/admin/atendimento/template-update
+ * Método PUT /api/admin/mtf-diamante/template-update
  */
 export async function PUT(req: Request) {
   try {

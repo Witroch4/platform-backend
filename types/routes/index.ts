@@ -5,5 +5,6 @@ export interface ConfigRoutes {
 	protectedRoutes: string[];
 	authRoutes: string[];
 	apiRoutes: string[];
-	adminRoutes: string[]; // Adicionado
+	adminRoutes: string[];
+	superAdminRoutes?: string[]; // Rotas apenas para SUPERADMIN (opcional)
   }

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
-// GET: Listar todos os usuários (apenas para administradores)
+// GET: Listar todos os usuários (apenas para SUPERADMIN)
 export async function GET() {
   try {
     const session = await auth();
@@ -11,15 +11,15 @@ export async function GET() {
       return new NextResponse("Não autorizado", { status: 401 });
     }
 
-    // Verificar se o usuário é administrador
+    // Verificar se o usuário é SUPERADMIN
     const user = await prisma.user.findUnique({
       where: {
         id: session.user.id
       }
     });
 
-    if (user?.role !== "ADMIN") {
-      return new NextResponse("Acesso negado", { status: 403 });
+    if (user?.role !== "SUPERADMIN") {
+      return new NextResponse("Acesso negado. Apenas SUPERADMIN pode acessar.", { status: 403 });
     }
 
     // Listar todos os usuários
@@ -43,7 +43,7 @@ export async function GET() {
   }
 }
 
-// POST: Enviar notificação para um ou mais usuários
+// POST: Enviar notificação para um ou mais usuários (apenas para SUPERADMIN)
 export async function POST(req: Request) {
   try {
     const session = await auth();
@@ -52,15 +52,15 @@ export async function POST(req: Request) {
       return new NextResponse("Não autorizado", { status: 401 });
     }
 
-    // Verificar se o usuário é administrador
+    // Verificar se o usuário é SUPERADMIN
     const user = await prisma.user.findUnique({
       where: {
         id: session.user.id
       }
     });
 
-    if (user?.role !== "ADMIN") {
-      return new NextResponse("Acesso negado", { status: 403 });
+    if (user?.role !== "SUPERADMIN") {
+      return new NextResponse("Acesso negado. Apenas SUPERADMIN pode acessar.", { status: 403 });
     }
 
     const body = await req.json();

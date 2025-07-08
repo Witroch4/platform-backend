@@ -1,8 +1,8 @@
-// app/api/admin/atendimento/template-info/route.ts
+// app/api/admin/mtf-diamante/template-info/route.ts
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 import { auth } from '@/auth';
-import { atendimentoConfig } from '@/app/config/atendimento';
+import { mtfDiamanteConfig } from '@/app/config/atendimento';
 import prisma from '@/lib/prisma';
 
 /**
@@ -20,7 +20,7 @@ function getWhatsAppApiConfig() {
       process.env.WHATSAPP_BUSINESS_ID || '294585820394901',
     whatsappToken:
       process.env.WHATSAPP_TOKEN ||
-      atendimentoConfig.whatsappToken ||
+      mtfDiamanteConfig.whatsappToken ||
       '',
   };
 }
@@ -104,7 +104,7 @@ async function getWhatsAppTemplateDetailsFromAPI(templateId: string) {
 }
 
 /**
- * Endpoint GET /api/admin/atendimento/template-info
+ * Endpoint GET /api/admin/mtf-diamante/template-info
  * Recebe o parâmetro de query "template" (ID do template) e retorna os detalhes.
  * Apenas usuários autenticados com role ADMIN têm acesso.
  */

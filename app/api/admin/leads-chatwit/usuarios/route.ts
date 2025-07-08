@@ -1,21 +1,61 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { auth } from "@/auth";
 
 const prisma = new PrismaClient();
 
 /**
- * GET - Lista todos os usuários do Chatwit
+ * GET - Lista usuários do Chatwit (filtrados por role e token de acesso)
  */
 export async function GET(request: Request): Promise<Response> {
   try {
+    const session = await auth();
+    
+    if (!session || !session.user) {
+      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    }
+
     const url = new URL(request.url);
     const searchTerm = url.searchParams.get("search");
     const page = parseInt(url.searchParams.get("page") || "1");
     const limit = parseInt(url.searchParams.get("limit") || "10");
     const skip = (page - 1) * limit;
 
-    // Construir a cláusula where baseada nos parâmetros
+    // Buscar informações do usuário atual
+    const currentUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { role: true, customAccessToken: true }
+    });
+
+    if (!currentUser) {
+      return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
+    }
+
+    // Construir a cláusula where baseada nos parâmetros e role
     const where: any = {};
+    
+    // Se não for SUPERADMIN, filtrar apenas usuários relacionados ao token do usuário atual
+    if (currentUser.role !== "SUPERADMIN") {
+      if (!currentUser.customAccessToken) {
+        // Se o usuário ADMIN não tem token configurado, não mostrar nenhum usuário
+        return NextResponse.json({
+          usuarios: [],
+          pagination: {
+            total: 0,
+            page,
+            limit,
+            totalPages: 0,
+          },
+        });
+      }
+
+      // Filtrar apenas usuários que têm leads com o mesmo token de acesso
+      where.leads = {
+        some: {
+          chatwitAccessToken: currentUser.customAccessToken
+        }
+      };
+    }
     
     if (searchTerm) {
       where.OR = [
@@ -71,10 +111,29 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 /**
- * DELETE - Remove um usuário e todos os seus leads
+ * DELETE - Remove um usuário e todos os seus leads (apenas para SUPERADMIN)
  */
 export async function DELETE(request: Request): Promise<Response> {
   try {
+    const session = await auth();
+    
+    if (!session || !session.user) {
+      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    }
+
+    // Buscar informações do usuário atual
+    const currentUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { role: true }
+    });
+
+    if (!currentUser || currentUser.role !== "SUPERADMIN") {
+      return NextResponse.json(
+        { error: "Acesso negado. Apenas SUPERADMIN pode remover usuários." },
+        { status: 403 }
+      );
+    }
+
     const url = new URL(request.url);
     const id = url.searchParams.get("id");
 

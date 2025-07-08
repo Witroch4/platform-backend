@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { auth } from "@/auth";
 
 const prisma = new PrismaClient();
 
@@ -8,6 +9,13 @@ const prisma = new PrismaClient();
  */
 export async function GET(request: Request): Promise<Response> {
   try {
+    // Verificar autenticação
+    const session = await auth();
+    
+    if (!session || !session.user) {
+      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    }
+
     const url = new URL(request.url);
     const leadId = url.searchParams.get("id");
     const usuarioId = url.searchParams.get("usuarioId");
@@ -46,6 +54,24 @@ export async function GET(request: Request): Promise<Response> {
 
     // Construir a cláusula where baseada nos parâmetros
     const where: any = {};
+    
+    // Filtrar por token do usuário se não for SUPERADMIN
+    if (session.user.role !== "SUPERADMIN") {
+      if (session.user.customAccessToken) {
+        where.chatwitAccessToken = session.user.customAccessToken;
+      } else {
+        // Se o usuário não tem token, não pode ver nenhum lead
+        return NextResponse.json({
+          leads: [],
+          pagination: {
+            total: 0,
+            page,
+            limit,
+            totalPages: 0,
+          },
+        });
+      }
+    }
     
     if (usuarioId) {
       where.usuarioId = usuarioId;

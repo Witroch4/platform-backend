@@ -74,7 +74,7 @@ export default function EditTemplateDetailsPage() {
         setIsLoading(true);
         setError(null);
         
-        const response = await axios.get(`/api/admin/atendimento/template-info?template=${templateId}`);
+        const response = await axios.get(`/api/admin/mtf-diamante/template-info?template=${templateId}`);
         
         if (!response.data.success) {
           setError(response.data.details || "Erro ao carregar informações do template");
@@ -260,7 +260,7 @@ export default function EditTemplateDetailsPage() {
       }
       
       // Enviar para a API
-      const response = await axios.put('/api/admin/atendimento/template-update', {
+      const response = await axios.put('/api/admin/mtf-diamante/template-update', {
         templateId: template.id,
         name: template.name,
         components: updatedComponents,

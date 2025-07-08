@@ -16,6 +16,7 @@ declare module "next-auth" {
       instagramAccessToken?: string;
       providerAccountId?: string; // Adicionado
       isNewUser?: boolean; // Indica se o usuário acabou de se registrar
+      customAccessToken?: string; // Token de acesso do Chatwit
       /**
        * Por padrão, TypeScript mescla novas propriedades de interface e sobrescreve as existentes.
        * Neste caso, as propriedades padrão do usuário na sessão serão sobrescritas,
@@ -35,6 +36,7 @@ declare module "next-auth" {
     // instagramExpiresAt?: number; // Removido
     providerAccountId?: string; // Adicionado
     isNewUser?: boolean; // Indica se o usuário acabou de se registrar
+    customAccessToken?: string; // Token de acesso do Chatwit
   }
 }
 
@@ -49,5 +51,6 @@ declare module "next-auth/jwt" {
     providerAccountId?: string; // Adicionado
     role?: UserRole; // Adicionado se você deseja incluir o papel do usuário no JWT
     isNewUser?: boolean; // Indica se o usuário acabou de se registrar
+    customAccessToken?: string; // Token de acesso do Chatwit
   }
 }

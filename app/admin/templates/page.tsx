@@ -80,7 +80,7 @@ function TemplatesDisponiveis() {
       }
       setError(null);
 
-      let url = '/api/admin/atendimento/templates';
+      let url = '/api/admin/mtf-diamante/templates';
       const params = new URLSearchParams();
       if (categoryFilter !== 'all') params.append('category', categoryFilter);
       if (languageFilter !== 'all') params.append('language', languageFilter);

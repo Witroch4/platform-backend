@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 
 /**
  * Endpoint para obter detalhes de um template específico
- * GET /api/admin/atendimento/template-details?name=TEMPLATE_NAME
+ * GET /api/admin/mtf-diamante/template-details?name=TEMPLATE_NAME
  */
 export async function GET(request: Request) {
   try {

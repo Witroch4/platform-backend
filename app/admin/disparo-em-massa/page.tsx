@@ -69,7 +69,7 @@ export default function DisparoEmMassaPage() {
     const fetchTemplates = async () => {
       try {
         setLoadingTemplates(true);
-        const response = await axios.get('/api/admin/atendimento/templates');
+        const response = await axios.get('/api/admin/mtf-diamante/templates');
         if (response.data.success) {
           // Ordenar por nome
           const sortedTemplates = response.data.templates.sort((a: Template, b: Template) => 
@@ -99,7 +99,7 @@ export default function DisparoEmMassaPage() {
     const fetchTemplateInfo = async () => {
       try {
         setLoadingTemplateInfo(true);
-        const response = await axios.get(`/api/admin/atendimento/template-info?template=${selectedTemplateId}`);
+        const response = await axios.get(`/api/admin/mtf-diamante/template-info?template=${selectedTemplateId}`);
         if (response.data.success) {
           setTemplateInfo(response.data.template);
           
@@ -200,7 +200,7 @@ export default function DisparoEmMassaPage() {
 
       setProgresso(30);
       
-      const response = await axios.post('/api/admin/atendimento/disparo', payload);
+      const response = await axios.post('/api/admin/mtf-diamante/disparo', payload);
       
       setProgresso(100);
       setResultado(response.data);

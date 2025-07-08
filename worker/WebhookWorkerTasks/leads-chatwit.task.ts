@@ -94,7 +94,8 @@ async function processAccumulatedJobs(sourceId: string) {
       where: { sourceId },
       update: {
         thumbnail: origemLead.thumbnail,
-        leadUrl: origemLead.leadUrl
+        leadUrl: origemLead.leadUrl,
+        chatwitAccessToken: firstJob.data.payload.usuario.CHATWIT_ACCESS_TOKEN
       },
       create: {
         usuarioId: usuarioDb.id,
@@ -102,7 +103,8 @@ async function processAccumulatedJobs(sourceId: string) {
         name: origemLead.name || 'Lead sem nome',
         phoneNumber: origemLead.phone_number,
         thumbnail: origemLead.thumbnail,
-        leadUrl: origemLead.leadUrl
+        leadUrl: origemLead.leadUrl,
+        chatwitAccessToken: firstJob.data.payload.usuario.CHATWIT_ACCESS_TOKEN
       }
     });
 

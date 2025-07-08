@@ -13,7 +13,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { LeadItem } from "./lead-item/lead-item";
-import { RefreshCw, FileUp, Edit3, Zap, Play } from "lucide-react";
+import { RefreshCw, FileUp, Edit3, Zap, Play, Trash2 } from "lucide-react";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogDescription, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogFooter 
+} from "@/components/ui/dialog";
 import { DialogDetalheLead } from "./dialog-detalhe-lead";
 // BatchProgressDialog removido - agora usando apenas o novo sistema
 // Imports do sistema antigo removidos - agora usando apenas o novo BatchProcessorTrigger
@@ -43,6 +51,10 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
   });
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [currentLead, setCurrentLead] = useState<LeadChatwit | null>(null);
+  
+  // Estados para excluir arquivos em lote
+  const [confirmBatchDeleteFiles, setConfirmBatchDeleteFiles] = useState(false);
+  const [isBatchDeletingFiles, setIsBatchDeletingFiles] = useState(false);
   
   // Sistema antigo de batch processor removido - agora usando apenas o novo sistema
 
@@ -396,6 +408,182 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
     }
   };
 
+  // Função para excluir arquivos em lote
+  const handleBatchDeleteAllFiles = async () => {
+    setIsBatchDeletingFiles(true);
+    setConfirmBatchDeleteFiles(false);
+    
+    try {
+      const selectedLeadsData = leads.filter(lead => selectedLeads.includes(lead.id));
+      
+      toast("Iniciando exclusão", { 
+        description: `Excluindo todos os arquivos de ${selectedLeadsData.length} leads selecionados. Esta operação pode demorar alguns minutos.` 
+      });
+      
+      // Processar cada lead selecionado
+      for (const lead of selectedLeadsData) {
+        try {
+          console.log(`[BatchDeleteFiles] Processando lead: ${lead.id}`);
+          
+          const deletePromises = [];
+          
+          // Excluir arquivos individuais
+          if (lead.arquivos && lead.arquivos.length > 0) {
+            deletePromises.push(
+              ...lead.arquivos.map(async (arquivo) => {
+                const response = await fetch(`/api/admin/leads-chatwit/arquivos?id=${arquivo.id}&type=arquivo`, {
+                  method: "DELETE"
+                });
+                if (!response.ok) {
+                  throw new Error(`Erro ao excluir arquivo ${arquivo.id}`);
+                }
+                return response.json();
+              })
+            );
+          }
+          
+          // Excluir PDF unificado
+          if (lead.pdfUnificado) {
+            deletePromises.push(
+              fetch(`/api/admin/leads-chatwit/arquivos?leadId=${lead.id}&type=pdf`, {
+                method: "DELETE"
+              }).then(response => {
+                if (!response.ok) {
+                  throw new Error(`Erro ao excluir PDF do lead ${lead.id}`);
+                }
+                return response.json();
+              })
+            );
+          }
+          
+          // Excluir imagens convertidas
+          if (lead.arquivos && lead.arquivos.some(a => a.pdfConvertido)) {
+            deletePromises.push(
+              fetch(`/api/admin/leads-chatwit/arquivos?leadId=${lead.id}&type=imagem`, {
+                method: "DELETE"
+              }).then(response => {
+                if (!response.ok) {
+                  throw new Error(`Erro ao excluir imagens do lead ${lead.id}`);
+                }
+                return response.json();
+              })
+            );
+          }
+          
+          // Excluir manuscrito
+          if (lead.provaManuscrita || lead.manuscritoProcessado) {
+            deletePromises.push(
+              fetch(`/api/admin/leads-chatwit/manuscrito?leadId=${lead.id}`, {
+                method: "DELETE"
+              }).then(response => {
+                if (!response.ok) {
+                  throw new Error(`Erro ao excluir manuscrito do lead ${lead.id}`);
+                }
+                return response.json();
+              })
+            );
+          }
+          
+          // Excluir análise
+          if (lead.analiseUrl || lead.analisePreliminar || lead.aguardandoAnalise) {
+            deletePromises.push(
+              fetch("/api/admin/leads-chatwit/leads", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  id: lead.id,
+                  analiseUrl: "",
+                  analiseProcessada: false,
+                  aguardandoAnalise: false,
+                  analisePreliminar: false,
+                  analiseValidada: false,
+                }),
+              }).then(response => {
+                if (!response.ok) {
+                  throw new Error(`Erro ao excluir análise do lead ${lead.id}`);
+                }
+                return response.json();
+              })
+            );
+          }
+          
+          // Excluir espelho individual (não da biblioteca)
+          const temEspelhoIndividual = (lead.espelhoCorrecao && lead.espelhoCorrecao !== '[]') || 
+                                        (lead.textoDOEspelho && lead.textoDOEspelho !== '') ||
+                                        lead.espelhoProcessado ||
+                                        lead.aguardandoEspelho;
+          
+          if (temEspelhoIndividual && !lead.espelhoBibliotecaId) {
+            deletePromises.push(
+              fetch(`/api/admin/leads-chatwit/deletar-espelho?leadId=${lead.id}`, {
+                method: "DELETE"
+              }).then(response => {
+                if (!response.ok) {
+                  throw new Error(`Erro ao excluir espelho do lead ${lead.id}`);
+                }
+                return response.json();
+              })
+            );
+          }
+          
+          // Aguardar todas as exclusões do lead atual
+          await Promise.all(deletePromises);
+          
+          // Atualizar o lead com dados limpos
+          const leadAtualizado = {
+            ...lead,
+            arquivos: [],
+            pdfUnificado: undefined,
+            imagensConvertidas: JSON.stringify([]),
+            provaManuscrita: undefined,
+            manuscritoProcessado: false,
+            aguardandoManuscrito: false,
+            ...(temEspelhoIndividual && !lead.espelhoBibliotecaId ? {
+              textoDOEspelho: undefined,
+              espelhoCorrecao: undefined,
+              espelhoProcessado: false,
+              aguardandoEspelho: false,
+            } : {}),
+            analiseUrl: undefined,
+            analiseProcessada: false,
+            aguardandoAnalise: false,
+            analisePreliminar: false,
+            analiseValidada: false,
+            _skipDialog: true,
+            _forceUpdate: true
+          };
+          
+          // Atualizar o lead individualmente
+          await handleSaveLead(leadAtualizado);
+          
+          console.log(`[BatchDeleteFiles] Lead ${lead.id} processado com sucesso`);
+          
+        } catch (error: any) {
+          console.error(`[BatchDeleteFiles] Erro ao processar lead ${lead.id}:`, error);
+          toast.error(`Erro no lead ${lead.nomeReal || lead.name}`, {
+            description: error.message || "Erro ao excluir arquivos do lead"
+          });
+        }
+      }
+      
+      // Limpar seleção e recarregar lista
+      setSelectedLeads([]);
+      fetchLeads();
+      
+      toast("Exclusão concluída", { 
+        description: `Todos os arquivos foram excluídos dos ${selectedLeadsData.length} leads selecionados!` 
+      });
+      
+    } catch (error: any) {
+      console.error("Erro na exclusão em lote:", error);
+      toast.error("Erro na exclusão", {
+        description: error.message || "Erro ao excluir arquivos em lote. Tente novamente."
+      });
+    } finally {
+      setIsBatchDeletingFiles(false);
+    }
+  };
+
   // Funções do sistema antigo removidas - agora usando apenas o novo BatchProcessorTrigger
 
   return (
@@ -419,6 +607,20 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
               className="border-border hover:bg-accent"
             >
               Limpar seleção
+            </Button>
+            <Button 
+              variant="destructive" 
+              size="sm"
+              onClick={() => setConfirmBatchDeleteFiles(true)}
+              disabled={isBatchDeletingFiles}
+              className="border-border hover:bg-destructive/80"
+            >
+              {isBatchDeletingFiles ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
+              Excluir Todos os Arquivos
             </Button>
             <BatchProcessorTrigger 
               selectedLeads={leads
@@ -538,6 +740,58 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
           isSaving={isSaving}
         />
       )}
+
+      {/* Diálogo de Confirmação para Exclusão em Lote */}
+      <Dialog open={confirmBatchDeleteFiles} onOpenChange={setConfirmBatchDeleteFiles}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar exclusão de arquivos em lote</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja excluir <strong>TODOS os arquivos</strong> de <strong>{selectedLeads.length} leads selecionados</strong>?
+            </DialogDescription>
+            <div className="space-y-2 mt-4">
+              <div className="text-sm bg-muted/50 p-3 rounded-md border-l-4 border-destructive/20">
+                <div className="font-medium text-foreground mb-2">Esta ação irá excluir de cada lead selecionado:</div>
+                <ul className="text-muted-foreground space-y-1 list-disc list-inside">
+                  <li>Todos os arquivos individuais</li>
+                  <li>PDFs unificados</li>
+                  <li>Imagens convertidas</li>
+                  <li>Manuscritos digitados</li>
+                  <li>Espelhos de correção individuais</li>
+                  <li>Análises das provas</li>
+                </ul>
+                <div className="text-destructive font-medium mt-2">
+                  ⚠️ Esta ação não pode ser desfeita!
+                </div>
+                <div className="text-sm text-muted-foreground mt-1">
+                  Nota: Espelhos da biblioteca não serão afetados.
+                </div>
+              </div>
+            </div>
+          </DialogHeader>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setConfirmBatchDeleteFiles(false)}
+              disabled={isBatchDeletingFiles}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleBatchDeleteAllFiles}
+              disabled={isBatchDeletingFiles}
+            >
+              {isBatchDeletingFiles ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
+              Excluir Todos os Arquivos
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Diálogos do sistema antigo removidos - agora usando apenas o novo BatchProcessorTrigger */}
     </div>

@@ -8,12 +8,15 @@ import Link from "next/link";
 interface LeadsTabsProps {
   activeTab: string;
   onChange: (tab: string) => void;
+  userRole?: string;
 }
 
-export function LeadsTabs({ activeTab, onChange }: LeadsTabsProps) {
+export function LeadsTabs({ activeTab, onChange, userRole }: LeadsTabsProps) {
+  // Definir abas baseadas na role do usuário
   const tabs = [
     { id: "leads", label: "Leads" },
-    { id: "usuarios", label: "Usuários" },
+    // Só mostrar aba "Usuários" para SUPERADMIN
+    ...(userRole === "SUPERADMIN" ? [{ id: "usuarios", label: "Usuários" }] : []),
   ];
 
   return (

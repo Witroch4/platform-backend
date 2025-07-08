@@ -97,12 +97,30 @@ export const login = async (credentials: z.infer<typeof CredentialsSchema>) => {
 			? `${baseRedirect}&fromLogin=true`
 			: `${baseRedirect}?fromLogin=true`;
 
-		const resp = await signIn("credentials", {
+		await signIn("credentials", {
 			email,
 			password,
 			redirectTo: loginRedirect,
 		});
+
+		// Retornar sucesso após o signIn
+		return {
+			success: "Login realizado com sucesso",
+		};
 	} catch (err) {
+		// Verificar se é um NEXT_REDIRECT (comportamento normal do NextAuth)
+		if (err instanceof Error && err.message === 'NEXT_REDIRECT') {
+			throw err; // Re-throw para permitir o redirecionamento
+		}
+
+		// Verificar se é um erro de digest de redirecionamento (NextAuth)
+		if (err && typeof err === 'object' && 'digest' in err) {
+			const errorWithDigest = err as { digest?: string };
+			if (errorWithDigest.digest && errorWithDigest.digest.includes('NEXT_REDIRECT')) {
+				throw err; // Re-throw para permitir o redirecionamento
+			}
+		}
+		
 		if (err instanceof AuthError) {
 			if (err instanceof CredentialsSignin) {
 				return {

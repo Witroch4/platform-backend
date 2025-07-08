@@ -687,7 +687,7 @@ export function AppSidebar() {
                         >
                           <span className="hover-span relative flex items-center">
                             <Headphones className="mr-2" />
-                            {state !== "collapsed" && <span>Atendimento WhatsApp</span>}
+                            {state !== "collapsed" && <span>MTF Diamante</span>}
                           </span>
                         </Link>
                       </SidebarMenuButton>

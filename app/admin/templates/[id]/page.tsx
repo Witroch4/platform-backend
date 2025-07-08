@@ -42,6 +42,8 @@ import {
   Clipboard,
   Phone,
   ExternalLink,
+  Users,
+  FileUp,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
@@ -49,6 +51,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { SendProgressDialog } from "../components/send-progress-dialog";
+import { LeadsSelectorDialog } from "../components/leads-selector-dialog";
 
 interface TemplateDetail {
   id: string;
@@ -109,6 +112,7 @@ export default function TemplateDetailsPage() {
   const [showSendProgress, setShowSendProgress] = useState(false);
   const [sendProgressComplete, setSendProgressComplete] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showLeadsSelector, setShowLeadsSelector] = useState(false);
 
   useEffect(() => {
     async function fetchTemplate() {
@@ -117,7 +121,7 @@ export default function TemplateDetailsPage() {
         setError(null);
 
         const res = await axios.get(
-          `/api/admin/atendimento/template-info?template=${templateId}`
+          `/api/admin/mtf-diamante/template-info?template=${templateId}`
         ).catch(error => {
           console.error("Erro na requisição:", error);
           throw new Error(
@@ -256,7 +260,7 @@ export default function TemplateDetailsPage() {
       let phone = testPhoneNumber.replace(/\D/g, "");
       if (!phone.startsWith("55")) phone = "55" + phone;
 
-      let api = "/api/admin/atendimento/disparo";
+      let api = "/api/admin/mtf-diamante/disparo";
       let payload: any = {
         templateName: template.name,
         contatos: [{ nome: "Teste", numero: phone }],
@@ -265,7 +269,7 @@ export default function TemplateDetailsPage() {
       };
 
       if (template.category === "AUTHENTICATION") {
-        api = "/api/admin/atendimento/test-template";
+        api = "/api/admin/mtf-diamante/test-template";
         payload = {
           to: phone,
           templateName: template.name,
@@ -292,7 +296,7 @@ export default function TemplateDetailsPage() {
     setShowDeleteDialog(false); // Fechar o diálogo
     
     try {
-      const res = await axios.delete("/api/admin/atendimento/templates", {
+      const res = await axios.delete("/api/admin/mtf-diamante/templates", {
         data: { name: template.name },
       });
       if (res.data.success) {
@@ -351,7 +355,7 @@ export default function TemplateDetailsPage() {
       console.log(`Enviando mensagem para ${contatos.length} contatos:`, payload);
       
       // Fazer requisição para API
-      const response = await axios.post("/api/admin/atendimento/disparo", payload);
+      const response = await axios.post("/api/admin/mtf-diamante/disparo", payload);
       
       if (response.data.success) {
         // Marcar envio como concluído para atualizar o diálogo de progresso
@@ -371,6 +375,17 @@ export default function TemplateDetailsPage() {
       // O diálogo será fechado pelo componente após a animação final
       setIsMassSending(false);
     }
+  };
+
+  const handleLeadsSelection = (selectedLeads: any[]) => {
+    // Converter leads do sistema para o formato de contatos
+    const contacts = selectedLeads.map(lead => ({
+      nome: lead.nomeReal || lead.name || "Lead sem nome",
+      numero: lead.phoneNumber || ""
+    })).filter(contact => contact.numero); // Filtrar apenas com número válido
+
+    setContactList(contacts);
+    toast.success(`${contacts.length} leads selecionados da base de dados!`);
   };
 
   if (isLoading) {
@@ -690,47 +705,81 @@ export default function TemplateDetailsPage() {
                 </TabsContent>
                 
                 <TabsContent value="massa" className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Upload de Lista de Contatos</Label>
-                    <div className="border-2 border-dashed rounded-md p-6 text-center">
-                      <Input 
-                        type="file" 
-                        accept=".csv" 
-                        disabled={isMassUploading}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            const reader = new FileReader();
-                            reader.onload = (event) => {
-                              const csvData = event.target?.result as string;
-                              try {
-                                const lines = csvData.split(/\r?\n/).filter(line => line.trim());
-                                const dataLines = lines[0].toLowerCase().includes('nome') && 
-                                  lines[0].toLowerCase().includes('numero') 
-                                    ? lines.slice(1) 
-                                    : lines;
-                                
-                                const contacts = dataLines.map(line => {
-                                  const [nome, numero] = line.split(',').map(item => item.trim());
-                                  return { nome, numero };
-                                }).filter(contact => contact.nome && contact.numero);
+                  <div className="space-y-4">
+                    {/* Opção principal: Selecionar leads do sistema */}
+                    <div className="space-y-2">
+                      <Label className="text-base font-semibold">Lista de Contatos</Label>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="border rounded-lg p-4 hover:bg-muted/50 transition-colors">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <Users className="h-5 w-5 text-primary" />
+                              <h3 className="font-medium">Selecionar da Base</h3>
+                            </div>
+                            <Badge variant="default" className="text-xs">Recomendado</Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground mb-3">
+                            Selecione leads diretamente da base de dados do sistema
+                          </p>
+                          <Button 
+                            variant="default" 
+                            size="sm" 
+                            onClick={() => setShowLeadsSelector(true)}
+                            className="w-full"
+                          >
+                            <Users className="h-4 w-4 mr-2" />
+                            Selecionar Leads
+                          </Button>
+                        </div>
+                        
+                        <div className="border rounded-lg p-4 hover:bg-muted/50 transition-colors">
+                          <div className="flex items-center gap-2 mb-3">
+                            <FileUp className="h-5 w-5 text-muted-foreground" />
+                            <h3 className="font-medium">Upload de Arquivo</h3>
+                          </div>
+                          <p className="text-sm text-muted-foreground mb-3">
+                            Faça upload de um arquivo CSV com contatos externos
+                          </p>
+                          <Input 
+                            type="file" 
+                            accept=".csv" 
+                            disabled={isMassUploading}
+                            className="h-8"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = (event) => {
+                                  const csvData = event.target?.result as string;
+                                  try {
+                                    const lines = csvData.split(/\r?\n/).filter(line => line.trim());
+                                    const dataLines = lines[0].toLowerCase().includes('nome') && 
+                                      lines[0].toLowerCase().includes('numero') 
+                                        ? lines.slice(1) 
+                                        : lines;
+                                    
+                                    const contacts = dataLines.map(line => {
+                                      const [nome, numero] = line.split(',').map(item => item.trim());
+                                      return { nome, numero };
+                                    }).filter(contact => contact.nome && contact.numero);
 
-                                setContactList(contacts);
-                                toast.success(`${contacts.length} contatos carregados com sucesso`);
-                              } catch (error) {
-                                console.error("Erro ao processar o arquivo CSV:", error);
-                                toast.error("Erro ao processar o arquivo. Verifique o formato.");
+                                    setContactList(contacts);
+                                    toast.success(`${contacts.length} contatos carregados com sucesso`);
+                                  } catch (error) {
+                                    console.error("Erro ao processar o arquivo CSV:", error);
+                                    toast.error("Erro ao processar o arquivo. Verifique o formato.");
+                                  }
+                                };
+                                reader.readAsText(file);
                               }
-                            };
-                            reader.readAsText(file);
-                          }
-                        }}
-                      />
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        Formato: "Nome,Numero" (uma entrada por linha)
-                      </p>
+                            }}
+                          />
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            Formato: "Nome,Numero" (uma entrada por linha)
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
 
                   {contactList.length > 0 && (
                     <div className="space-y-2">
@@ -862,6 +911,7 @@ export default function TemplateDetailsPage() {
                     )}
                     Enviar para {contactList.length} contatos
                   </Button>
+                  </div>
                 </TabsContent>
               </Tabs>
             </CardContent>
@@ -1030,6 +1080,15 @@ export default function TemplateDetailsPage() {
           setSendProgressComplete(false);
           setShowSendProgress(false);
         }}
+      />
+
+      {/* Diálogo de seleção de leads */}
+      <LeadsSelectorDialog
+        isOpen={showLeadsSelector}
+        onClose={() => setShowLeadsSelector(false)}
+        onConfirm={handleLeadsSelection}
+        title="Selecionar Leads para Campanha"
+        description={`Selecione os leads que receberão o template "${template?.name}"`}
       />
 
       {/* Diálogo de confirmação de exclusão */}

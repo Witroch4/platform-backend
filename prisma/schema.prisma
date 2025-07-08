@@ -11,6 +11,7 @@ generator client {
 enum UserRole {
   DEFAULT
   ADMIN
+  SUPERADMIN
 }
 
 enum SubscriptionStatus {
@@ -32,6 +33,7 @@ model User {
   password               String?
   isTwoFactorAuthEnabled Boolean         @default(false)
   twoFactorAuthVerified  DateTime?
+  customAccessToken      String?         @unique // Token de acesso do Chatwit
   accounts               Account[]
   createdAt              DateTime        @default(now())
   updatedAt              DateTime        @updatedAt
@@ -63,6 +65,12 @@ model User {
   
   // Relação com imagens geradas por IA
   generatedImages        GeneratedImage[]
+  
+  // Relação com configurações do MTF Diamante
+  mtfDiamanteConfigs     MtfDiamanteConfig[]
+  
+  // Controle de seed executado para MTF Diamante
+  mtfDiamanteSeedExecuted Boolean @default(false)
 }
 
 model Account {
@@ -385,6 +393,7 @@ model LeadChatwit {
   analiseValidada   Boolean       @default(false) // Indica se a análise foi validada pelo usuário
   consultoriaFase2  Boolean       @default(false) // Indica se o lead está em modo consultoria fase 2
   customAccessToken String?       // Token de acesso personalizado para o Chatwoot
+  chatwitAccessToken String?      // Token de acesso do Chatwit (para filtrar por usuário)
   seccional         String?       // Seccional do exame (ex.: "OAB / MG")
   areaJuridica      String?       // Área jurídica do exame
   notaFinal         Float?        // Nota final obtida no exame
@@ -408,6 +417,7 @@ model LeadChatwit {
   @@index([usuarioId])
   @@index([sourceId])
   @@index([espelhoBibliotecaId])
+  @@index([chatwitAccessToken])
 }
 
 model ArquivoLeadChatwit {
@@ -634,5 +644,78 @@ model EspelhoBiblioteca {
   @@index([criadoPorId])
   @@index([isAtivo])
   @@index([nome])
+}
+
+// Modelo para configuração do MTF Diamante
+model MtfDiamanteConfig {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Configurações gerais
+  valorAnalise  String   @default("R$ 27,90")
+  chavePix      String   @default("atendimento@amandasousaprev.adv.br")
+  
+  // Configurações específicas do sistema
+  isActive      Boolean  @default(true)
+  
+  // Relacionamentos
+  lotes         MtfDiamanteLote[]
+  intentMappings MtfDiamanteIntentMapping[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([userId])
+  @@index([isActive])
+}
+
+// Modelo para lotes do MTF Diamante
+model MtfDiamanteLote {
+  id            String   @id @default(cuid())
+  configId      String
+  config        MtfDiamanteConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  
+  // Informações do lote
+  numero        Int      // Número do lote (1, 2, 3...)
+  nome          String   // Nome do lote (ex: "Primeiro Lote", "Lote Premium")
+  valor         String   // Valor do lote (ex: "R$ 287,90")
+  
+  // Datas
+  dataInicio    DateTime
+  dataFim       DateTime
+  
+  // Status
+  isActive      Boolean  @default(true)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([configId])
+  @@index([numero])
+}
+
+// Modelo para mapeamento de intents do Dialogflow para templates
+model MtfDiamanteIntentMapping {
+  id            String   @id @default(cuid())
+  configId      String
+  config        MtfDiamanteConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  
+  // Mapeamento de Intent do Dialogflow para Template
+  intentName    String   // Nome da intenção do Dialogflow
+  templateName  String   // Nome do template do WhatsApp
+  
+  // Parâmetros opcionais
+  parameters    Json?    // Parâmetros específicos para o template
+  
+  // Status
+  isActive      Boolean  @default(true)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([configId])
+  @@index([intentName])
+  @@unique([configId, intentName])
 }
 
