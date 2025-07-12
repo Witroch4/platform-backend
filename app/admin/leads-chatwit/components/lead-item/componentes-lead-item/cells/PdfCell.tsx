@@ -24,7 +24,7 @@ export function PdfCell({
 }: PdfCellExtendedProps) {
   if (lead.pdfUnificado) {
     return (
-      <TableCell className="w-[80px] p-2 align-middle">
+      <TableCell className="min-w-[70px] max-w-[100px] p-2 align-middle">
         <LeadContextMenu
           contextType="pdf"
           onAction={onContextMenuAction}
@@ -60,13 +60,13 @@ export function PdfCell({
   }
 
   return (
-    <TableCell className="w-[80px] p-2 align-middle">
+    <TableCell className="min-w-[70px] max-w-[100px] p-2 align-middle">
       <Button
         variant="outline"
         size="sm"
         onClick={() => onUnificar(lead.id)}
         disabled={isUnifying}
-        className="w-full"
+        className="w-full text-xs px-2 py-1 h-auto min-h-8"
       >
         <FileUp className="h-4 w-4 mr-1" />
         Unificar

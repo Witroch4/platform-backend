@@ -1,6 +1,12 @@
 import { TableCell } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Eye, FileText, FileCheck, Loader2 } from "lucide-react";
+import { 
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Eye, FileText, FileCheck, Loader2, AlertCircle } from "lucide-react";
 import { CellProps } from "../types";
 import { LeadContextMenu, ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
 
@@ -27,24 +33,58 @@ export function AnaliseCell({
   onContextMenuAction,
   onAnaliseClick
 }: AnaliseCellProps) {
-  // Só mostrar a célula se tiver manuscrito E espelho processados
+  // Verificar se tem manuscrito
   const temManuscrito = lead.provaManuscrita && 
     (typeof lead.provaManuscrita === 'string' ? lead.provaManuscrita.length > 0 : 
      Array.isArray(lead.provaManuscrita) ? lead.provaManuscrita.length > 0 : 
      typeof lead.provaManuscrita === 'object' && lead.provaManuscrita !== null);
 
+  // Verificar se tem espelho processado
   const temEspelho = lead.textoDOEspelho && 
     (typeof lead.textoDOEspelho === 'string' ? lead.textoDOEspelho.length > 0 : 
      Array.isArray(lead.textoDOEspelho) ? lead.textoDOEspelho.length > 0 : 
      typeof lead.textoDOEspelho === 'object' && lead.textoDOEspelho !== null);
 
-  // Se não tiver manuscrito E espelho, não mostrar a célula
-  if (!temManuscrito || !temEspelho) {
-    return <TableCell className="w-[120px] p-2 align-middle"></TableCell>;
+  // Verificar se há espelho da biblioteca selecionado (para consultoria)
+  const temEspelhoBiblioteca = Boolean(lead.espelhoBibliotecaId);
+  
+  // Verificar se há uma especialidade selecionada
+  const temEspecialidade = lead.especialidade && lead.especialidade !== null;
+  
+  // Se já tem análise processada, pode visualizar independente das outras condições
+  const podeVisualizar = localAnaliseState.analiseUrl || 
+                         localAnaliseState.analiseValidada || 
+                         localAnaliseState.analisePreliminar;
+
+  // Determinar se pode enviar análise
+  const podeEnviarAnalise = consultoriaAtiva 
+    ? temManuscrito && (temEspelhoBiblioteca || temEspelho) && !isEnviandoAnalise
+    : temManuscrito && temEspelho && temEspecialidade && !isEnviandoAnalise;
+
+  // Determinar mensagem de aviso e se deve estar desabilitado
+  let mensagemAviso = "";
+  let isDisabled = false;
+  
+  if (!podeVisualizar && !podeEnviarAnalise) {
+    isDisabled = true;
+    
+    if (!temManuscrito) {
+      mensagemAviso = "Precisa\nProva/Manuscrito";
+    } else if (consultoriaAtiva) {
+      if (!temEspelhoBiblioteca && !temEspelho) {
+        mensagemAviso = "Precisa de Espelho (Biblioteca ou Processado)";
+      }
+    } else {
+      if (!temEspelho) {
+        mensagemAviso = "Precisa de Espelho Processado";
+      } else if (!temEspecialidade) {
+        mensagemAviso = "Precisa Selecionar Especialidade";
+      }
+    }
   }
 
   return (
-    <TableCell className="w-[120px] p-2 align-middle">
+    <TableCell className="min-w-[100px] max-w-[140px] p-1 align-middle">
       <LeadContextMenu
         contextType="analise"
         onAction={onContextMenuAction}
@@ -56,46 +96,88 @@ export function AnaliseCell({
           analiseValidada: localAnaliseState.analiseValidada
         }}
       >
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onAnaliseClick}
-          disabled={isEnviandoAnalise}
-          className="whitespace-nowrap w-full"
-          key={`analise-btn-${refreshKey}`}
-        >
-          {isEnviandoAnalise ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-              Processando...
-            </>
-          ) : localAnaliseState.analiseUrl ? (
-            <>
-              <Eye className="h-4 w-4 mr-1" />
-              Ver Análise
-            </>
-          ) : localAnaliseState.analiseValidada ? (
-            <>
-              <FileCheck className="h-4 w-4 mr-1" />
-              Análise Validada Espere
-            </>
-          ) : localAnaliseState.analisePreliminar ? (
-            <>
-              <FileText className="h-4 w-4 mr-1" />
-              Pré-Análise
-            </>
-          ) : localAnaliseState.aguardandoAnalise ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-1" />
-              Aguardando
-            </>
-          ) : (
-            <>
-              <FileText className="h-4 w-4 mr-1" />
-              {consultoriaAtiva ? "Analisar Simulado" : "Analisar Prova"}
-            </>
-          )}
-        </Button>
+        {mensagemAviso ? (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={true}
+                  className="w-full opacity-60 cursor-not-allowed text-xs px-2 py-1 h-auto min-h-8 whitespace-pre-line"
+                  key={`analise-btn-${refreshKey}`}
+                >
+                  <AlertCircle className="h-4 w-4 mr-1 text-orange-500" />
+                  {mensagemAviso}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs max-w-60">
+                <p>{mensagemAviso}</p>
+                {!temManuscrito && (
+                  <p className="text-muted-foreground mt-1">
+                    Faça upload da prova manuscrita primeiro.
+                  </p>
+                )}
+                {temManuscrito && consultoriaAtiva && !temEspelhoBiblioteca && !temEspelho && (
+                  <p className="text-muted-foreground mt-1">
+                    Selecione um espelho da biblioteca ou processe um espelho.
+                  </p>
+                )}
+                {temManuscrito && !consultoriaAtiva && !temEspelho && (
+                  <p className="text-muted-foreground mt-1">
+                    Processe um espelho de correção primeiro.
+                  </p>
+                )}
+                {temManuscrito && temEspelho && !consultoriaAtiva && !temEspecialidade && (
+                  <p className="text-muted-foreground mt-1">
+                    Selecione uma especialidade (gabarito padrão).
+                  </p>
+                )}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onAnaliseClick}
+            disabled={isDisabled}
+            className="w-full text-xs px-2 py-1 h-auto min-h-8 whitespace-pre-line"
+            key={`analise-btn-${refreshKey}`}
+          >
+            {isEnviandoAnalise ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                Processando...
+              </>
+            ) : localAnaliseState.analiseUrl ? (
+              <>
+                <Eye className="h-4 w-4 mr-1" />
+                Ver Análise
+              </>
+            ) : localAnaliseState.analiseValidada ? (
+              <>
+                <FileCheck className="h-4 w-4 mr-1" />
+                Análise Validada Espere
+              </>
+            ) : localAnaliseState.analisePreliminar ? (
+              <>
+                <FileText className="h-4 w-4 mr-1" />
+                Pré-Análise
+              </>
+            ) : localAnaliseState.aguardandoAnalise ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-1" />
+                Aguardando
+              </>
+            ) : (
+              <>
+                <FileText className="h-4 w-4 mr-1" />
+                {consultoriaAtiva ? "Analisar Simulado" : "Analisar Prova"}
+              </>
+            )}
+          </Button>
+        )}
       </LeadContextMenu>
     </TableCell>
   );

@@ -90,7 +90,7 @@ export async function PUT(request: Request) {
       textoDOEspelho, 
       espelhoCorrecao, 
       espelhoBibliotecaProcessado,
-      aguardandoEspelhoBiblioteca 
+      aguardandoEspelho 
     } = payload;
     
     if (!id) {
@@ -105,7 +105,7 @@ export async function PUT(request: Request) {
         ...(textoDOEspelho !== undefined && { textoDOEspelho }),
         ...(espelhoCorrecao !== undefined && { espelhoCorrecao }),
         ...(espelhoBibliotecaProcessado !== undefined && { espelhoBibliotecaProcessado }),
-        ...(aguardandoEspelhoBiblioteca !== undefined && { aguardandoEspelhoBiblioteca }),
+        ...(aguardandoEspelho !== undefined && { aguardandoEspelho }),
         updatedAt: new Date()
       }
     });

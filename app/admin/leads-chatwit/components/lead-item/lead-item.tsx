@@ -12,9 +12,10 @@ import {
   ImagesCell,
   ManuscritoCell,
   EspelhoCell,
+  EspelhoPadraoCell,
   AnaliseCell,
-  ConsultoriaCell,
-  RowActionsCell
+  RecursoCell,
+  ConsultoriaCell
 } from "./componentes-lead-item/cells";
 import { LeadDialogs } from "./componentes-lead-item/dialogs";
 import { BibliotecaEspelhosDrawer } from "../biblioteca-espelhos-drawer";
@@ -33,6 +34,8 @@ export function LeadItem({
   onRefresh,
   isUnifying,
   isConverting,
+  espelhosPadrao = [],
+  loadingEspelhosPadrao = false,
 }: LeadItemProps) {
   
   // Estados do lead
@@ -60,12 +63,27 @@ export function LeadItem({
     onConverter,
     onDigitarManuscrito,
     ...dialogState,
-    ...leadState
+    ...leadState,
+    forceServerRefresh: leadState.forceServerRefresh
   });
 
   // Handler para abrir biblioteca de espelhos
   const handleOpenBiblioteca = () => {
     setShowBibliotecaEspelhos(true);
+  };
+
+  // Handler para mudança de especialidade do lead
+  const handleEspelhoPadraoChange = (leadId: string, especialidade: string | null) => {
+    // Atualizar o lead localmente com flag especial para evitar efeitos colaterais
+    const updatedLead = {
+      ...lead,
+      especialidade: especialidade as any, // Cast para EspecialidadeJuridica
+      _especialidadeUpdate: true, // Flag para identificar que é apenas atualização de especialidade
+      _skipDialog: true, // Flag para não abrir diálogos automaticamente
+    };
+    
+    // Notificar o componente pai sobre a mudança
+    onEdit(updatedLead);
   };
 
   return (
@@ -160,6 +178,16 @@ export function LeadItem({
           onOpenEspelhoSeletor={() => dialogState.setShowEspelhoSeletor(true)}
         />
         
+        {/* Célula de Espelho Padrão */}
+        <EspelhoPadraoCell
+          lead={lead}
+          onEdit={onEdit}
+          usuarioId={lead.usuarioId}
+          onEspelhoPadraoChange={handleEspelhoPadraoChange}
+          espelhosPadrao={espelhosPadrao}
+          loadingEspelhosPadrao={loadingEspelhosPadrao}
+        />
+        
         {/* Célula de Análise */}
         <AnaliseCell
           lead={lead}
@@ -170,6 +198,17 @@ export function LeadItem({
           refreshKey={leadState.refreshKey}
           onContextMenuAction={handlers.handleContextMenuAction}
           onAnaliseClick={handlers.handleAnaliseClick}
+        />
+        
+        {/* Célula de Recurso */}
+        <RecursoCell
+          lead={lead}
+          onEdit={onEdit}
+          localAnaliseState={leadState.localAnaliseState}
+          isEnviandoRecurso={dialogState.isEnviandoRecurso || false}
+          refreshKey={leadState.refreshKey}
+          onContextMenuAction={handlers.handleContextMenuAction}
+          onRecursoClick={handlers.handleRecursoClick}
         />
         
         {/* Célula de Consultoria */}
@@ -191,15 +230,6 @@ export function LeadItem({
             />
           </TableCell>
         )}
-        
-        {/* Célula de Ações */}
-        <RowActionsCell
-          lead={lead}
-          onEdit={onEdit}
-          onDelete={onDelete}
-          onViewDetails={handlers.handleViewDetails}
-          onConfirmDelete={() => dialogState.setConfirmDelete(true)}
-        />
       </TableRow>
 
       {/* Todos os Diálogos */}

@@ -46,7 +46,7 @@ interface EspelhoBiblioteca {
   isAtivo: boolean;
   totalUsos: number;
   espelhoBibliotecaProcessado: boolean;
-  aguardandoEspelhoBiblioteca: boolean;
+  aguardandoEspelho: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -88,7 +88,7 @@ export function BibliotecaEspelhosDrawer({
 
   // Verificar periodicamente se o texto foi gerado para espelhos aguardando processamento
   useEffect(() => {
-    const espelhosAguardando = espelhos.filter(e => e.aguardandoEspelhoBiblioteca);
+    const espelhosAguardando = espelhos.filter(e => e.aguardandoEspelho);
     
     if (espelhosAguardando.length > 0) {
       const interval = setInterval(async () => {
@@ -102,7 +102,7 @@ export function BibliotecaEspelhosDrawer({
             const idsProcessados: string[] = [];
             espelhosAguardando.forEach(espelhoAnterior => {
               const espelhoAtual = espelhosAtualizados.find(e => e.id === espelhoAnterior.id);
-              if (espelhoAtual && espelhoAtual.textoDOEspelho && !espelhoAtual.aguardandoEspelhoBiblioteca) {
+              if (espelhoAtual && espelhoAtual.textoDOEspelho && !espelhoAtual.aguardandoEspelho) {
                 idsProcessados.push(espelhoAtual.id);
               }
             });
@@ -357,14 +357,14 @@ export function BibliotecaEspelhosDrawer({
         },
         body: JSON.stringify({
           id: espelhoId,
-          aguardandoEspelhoBiblioteca: true
+          aguardandoEspelho: true
         }),
       });
       
       // Atualizar estado local
       setEspelhos(prev => prev.map(esp => 
         esp.id === espelhoId 
-          ? { ...esp, aguardandoEspelhoBiblioteca: true }
+          ? { ...esp, aguardandoEspelho: true }
           : esp
       ));
       
@@ -407,7 +407,10 @@ export function BibliotecaEspelhosDrawer({
       setTempName("");
       fetchEspelhos();
       
-      toast("Nome atualizado", { description: "Nome do espelho atualizado com sucesso!"  });
+              toast.success("Nome atualizado", { 
+          description: "Nome alterado com sucesso",
+          duration: 2000
+        });
     } catch (error: any) {
       console.error("Erro ao atualizar nome:", error);
       toast("Erro", { description: "Não foi possível atualizar o nome."  });
@@ -448,7 +451,10 @@ export function BibliotecaEspelhosDrawer({
           throw new Error('Erro ao atualizar espelho da biblioteca');
         }
         
-        toast("Espelho atualizado", { description: "Espelho da biblioteca atualizado com sucesso!"  });
+        toast.success("Espelho atualizado", { 
+          description: "Biblioteca atualizada com sucesso",
+          duration: 2000
+        });
         
         fetchEspelhos();
       } else {
@@ -648,9 +654,9 @@ export function BibliotecaEspelhosDrawer({
                                     const imagens = JSON.parse(espelho.espelhoCorrecao || '[]');
                                     handleEnviarParaSistemaExterno(espelho.id, imagens, true);
                                   }}
-                                  disabled={espelho.aguardandoEspelhoBiblioteca || enviandoSistemaExterno}
+                                  disabled={espelho.aguardandoEspelho || enviandoSistemaExterno}
                                 >
-                                  {espelho.aguardandoEspelhoBiblioteca ? (
+                                  {espelho.aguardandoEspelho ? (
                                     <>
                                       <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                                       Processando...

@@ -18,6 +18,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
+import { LeadsWaitingIndicator } from "@/app/admin/leads-chatwit/components/leads-waiting-indicator";
 
 // Componente wrapper para o SidebarTrigger que verifica se está dentro de um SidebarProvider
 const SafeSidebarTrigger = () => {
@@ -75,6 +76,7 @@ export function AppHeader() {
           <SafeSidebarTrigger />
         </div>
         <div className="flex items-center gap-2">
+          <LeadsWaitingIndicator />
           <ThemeToggle />
           <Button variant="ghost" size="icon" className="relative">
             <Bell className="h-5 w-5" />
@@ -105,6 +107,7 @@ export function AppHeader() {
         </div>
 
         <div className="flex items-center gap-2">
+          <LeadsWaitingIndicator />
           <ThemeToggle />
 
           <Button variant="ghost" size="icon" className="relative">

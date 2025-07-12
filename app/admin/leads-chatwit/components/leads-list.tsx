@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { 
   Table, 
   TableBody, 
@@ -56,11 +56,66 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
   const [confirmBatchDeleteFiles, setConfirmBatchDeleteFiles] = useState(false);
   const [isBatchDeletingFiles, setIsBatchDeletingFiles] = useState(false);
   
+  // Cache global de espelhos padrão para evitar múltiplas chamadas
+  const [espelhosPadraoCache, setEspelhosPadraoCache] = useState<{[usuarioId: string]: any[]}>({});
+  const [loadingEspelhosPadrao, setLoadingEspelhosPadrao] = useState<Set<string>>(new Set());
+  
   // Sistema antigo de batch processor removido - agora usando apenas o novo sistema
+
+  // Função para buscar espelhos padrão de um usuário específico
+  const fetchEspelhosPadrao = async (usuarioId: string) => {
+    if (espelhosPadraoCache[usuarioId] || loadingEspelhosPadrao.has(usuarioId)) {
+      return; // Já tem cache ou está carregando
+    }
+    
+    try {
+      setLoadingEspelhosPadrao(prev => new Set(prev.add(usuarioId)));
+      
+      const response = await fetch(`/api/admin/leads-chatwit/espelhos-padrao?usuarioId=${usuarioId}`);
+      
+      if (!response.ok) {
+        throw new Error("Erro ao carregar espelhos padrão");
+      }
+      
+      const data = await response.json();
+      
+      setEspelhosPadraoCache(prev => ({
+        ...prev,
+        [usuarioId]: data.espelhosPadrao || []
+      }));
+    } catch (error) {
+      console.error("Erro ao carregar espelhos padrão:", error);
+    } finally {
+      setLoadingEspelhosPadrao(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(usuarioId);
+        return newSet;
+      });
+    }
+  };
+
+  // Função para obter espelhos padrão de um usuário do cache
+  const getEspelhosPadrao = (usuarioId: string) => {
+    return espelhosPadraoCache[usuarioId] || [];
+  };
 
   useEffect(() => {
     fetchLeads();
   }, [searchQuery, pagination.page, pagination.limit, refreshCounter]);
+  
+  // 🔧 OTIMIZADO: Carregar espelhos padrão apenas uma vez por usuário
+  const usuariosCarregados = useRef<Set<string>>(new Set());
+  
+  useEffect(() => {
+    const usuariosUnicos = Array.from(new Set(leads.map(lead => lead.usuarioId)));
+    usuariosUnicos.forEach(usuarioId => {
+      if (usuarioId && !usuariosCarregados.current.has(usuarioId)) {
+        usuariosCarregados.current.add(usuarioId);
+        fetchEspelhosPadrao(usuarioId);
+        console.log(`[Leads List] 🔄 Carregando espelhos padrão para usuário: ${usuarioId}`);
+      }
+    });
+  }, [leads.length]); // ✅ Usar leads.length em vez de leads completos
 
   // Listener para o evento de destacar lead
   useEffect(() => {
@@ -158,8 +213,10 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
       const data = await response.json();
 
       if (response.ok) {
-        toast("Sucesso", { description: "Arquivos unificados com sucesso!",
-          });
+                toast.success("PDF unificado", { 
+          description: "Arquivos unidos com sucesso",
+          duration: 2000
+        });
         fetchLeads(); // Recarrega a lista para mostrar o PDF unificado
       } else {
         throw new Error(data.error || "Erro ao unificar arquivos");
@@ -188,8 +245,10 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
       const data = await response.json();
 
       if (response.ok) {
-        toast("Sucesso", { description: "PDF convertido em imagens com sucesso!",
-          });
+                toast.success("Imagens convertidas", { 
+          description: "PDF convertido com sucesso",
+          duration: 2000
+        });
         fetchLeads(); // Recarrega a lista para mostrar as imagens
       } else {
         throw new Error(data.error || "Erro ao converter PDF em imagens");
@@ -211,8 +270,10 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
       });
 
       if (response.ok) {
-        toast("Sucesso", { description: "Lead excluído com sucesso!",
-          });
+              toast.success("Lead excluído", { 
+        description: "Removido com sucesso",
+        duration: 2000
+      });
         setLeads(leads.filter(lead => lead.id !== id));
         setPagination(prev => ({
           ...prev,
@@ -230,6 +291,35 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
     }
   };
 
+  // Função específica para atualizações via SSE (não invasiva)
+  const handleSSELeadUpdate = (leadData: any) => {
+    if (!leadData || !leadData.id) {
+      console.error("Dados inválidos recebidos via SSE:", leadData);
+      return;
+    }
+
+    // ✅ Atualização local não invasiva - apenas atualizar o estado do lead
+    setLeads(prevLeads => 
+      prevLeads.map(lead => 
+        lead.id === leadData.id ? { ...lead, ...leadData } : lead
+      )
+    );
+
+    // ✅ Atualizar o currentLead também se estiver aberto no diálogo
+    if (currentLead && currentLead.id === leadData.id) {
+      setCurrentLead((prev: any) => prev ? { ...prev, ...leadData } : null);
+    }
+
+    console.log(`[SSE] Lead ${leadData.id} atualizado localmente:`, {
+      manuscritoProcessado: leadData.manuscritoProcessado,
+      aguardandoManuscrito: leadData.aguardandoManuscrito,
+      espelhoProcessado: leadData.espelhoProcessado,
+      aguardandoEspelho: leadData.aguardandoEspelho,
+      analiseProcessada: leadData.analiseProcessada,
+      aguardandoAnalise: leadData.aguardandoAnalise
+    });
+  };
+
   const handleEditLead = (lead: any) => {
     if (!lead || !lead.id) {
       toast.error("Erro", {
@@ -238,8 +328,14 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
       return;
     }
     
-    // Se for uma edição interna (flag _internal = true) ou tiver _skipDialog, não abrimos o diálogo
-    if (lead._internal || lead._skipDialog) {
+    // 🚫 REMOVIDO: Se for uma atualização via SSE (_skipDialog), usar função não invasiva
+    if (lead._skipDialog) {
+      handleSSELeadUpdate(lead);
+      return;
+    }
+    
+    // Se for uma edição interna (flag _internal = true), usar o fluxo normal
+    if (lead._internal) {
       handleSaveLead(lead);
       return;
     }
@@ -252,9 +348,27 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
     // Verificar se a edição é interna (do diálogo) ou externa (de outra parte da aplicação)
     const isInternalEdit = leadData._internal;
     const forceUpdate = leadData._forceUpdate;
+    const isEspecialidadeUpdate = leadData._especialidadeUpdate;
     
     // Remover flags temporárias antes de enviar para a API
-    const { _internal, _forceUpdate, _refresh, ...dataToSend } = leadData;
+    const { _internal, _forceUpdate, _refresh, _skipDialog, _especialidadeUpdate, ...dataToSend } = leadData;
+    
+    // Se for apenas atualização de especialidade, só atualizar estado local
+    if (isEspecialidadeUpdate && !forceUpdate) {
+      // Atualizar apenas o lead atual no estado local (a API já foi chamada no EspelhoPadraoCell)
+      setLeads(prevLeads => 
+        prevLeads.map(lead => 
+          lead.id === leadData.id ? { ...lead, ...dataToSend } : lead
+        )
+      );
+      
+      // Atualizar o currentLead também para manter o dialog sincronizado
+      if (currentLead && currentLead.id === leadData.id) {
+        setCurrentLead((prev: LeadChatwit | null) => prev ? { ...prev, ...dataToSend } : null);
+      }
+      
+      return Promise.resolve();
+    }
     
     setIsSaving(true);
     try {
@@ -394,8 +508,10 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
       });
 
       if (response.ok) {
-        toast("Sucesso", { description: "Solicitação de digitação enviada com sucesso!",
-          });
+                toast.success("Manuscrito enviado", { 
+          description: "Processamento iniciado",
+          duration: 2000
+        });
       } else {
         const data = await response.json();
         throw new Error(data.error || "Erro ao enviar solicitação de digitação");
@@ -592,6 +708,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
       <SSEConnectionManager 
         leads={leads}
         onLeadUpdate={(lead) => handleEditLead({ ...lead, _skipDialog: true })}
+        onForceRefresh={fetchLeads}
       />
       
       {selectedLeads.length > 0 && (
@@ -656,12 +773,11 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
           Nenhum lead encontrado.
         </div>
       ) : (
-        <div className="overflow-auto bg-card rounded-md border border-border">
-          {/* Removemos a classe "table-fixed" para que as colunas se ajustem naturalmente */}
-          <Table className="w-full border-border">
+        <div className="overflow-x-auto bg-card rounded-md border border-border">
+          <Table className="min-w-full border-border table-fixed">
             <TableHeader className="bg-muted/50">
-              <TableRow className="border-border hover:bg-muted/50">
-                <TableHead className="w-[40px] align-middle text-card-foreground">
+              <TableRow className="border-border hover:bg-muted/50 h-12">
+                <TableHead className="min-w-[40px] w-[40px] align-middle text-card-foreground sticky left-0 bg-muted/50 z-20 px-1">
                   <Checkbox
                     checked={leads.length > 0 && selectedLeads.length === leads.length}
                     onCheckedChange={handleToggleAllLeads}
@@ -669,16 +785,17 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
                     className="border-border"
                   />
                 </TableHead>
-                <TableHead className="w-[250px] align-middle text-card-foreground">Lead</TableHead>
-                <TableHead className="w-[100px] align-middle text-card-foreground">Usuário</TableHead>
-                <TableHead className="w-[150px] align-middle text-card-foreground">Arquivos</TableHead>
-                <TableHead className="w-[80px] align-middle text-card-foreground">PDF</TableHead>
-                <TableHead className="w-[80px] align-middle text-card-foreground">Imagens</TableHead>
-                <TableHead className="w-[100px] align-middle text-card-foreground">Manuscrito</TableHead>
-                <TableHead className="w-[120px] align-middle text-card-foreground">Espelho de Correção</TableHead>
-                <TableHead className="w-[120px] align-middle text-card-foreground">Análise</TableHead>
-                <TableHead className="w-[80px] align-middle text-card-foreground">Consultoria</TableHead>
-                <TableHead className="w-[60px] align-middle text-card-foreground">Ações</TableHead>
+                <TableHead className="min-w-[200px] max-w-[280px] align-middle text-card-foreground sticky left-[40px] bg-muted/50 z-10 px-2 text-sm">Lead</TableHead>
+                <TableHead className="min-w-[80px] max-w-[120px] align-middle text-card-foreground px-2 text-sm">Usuário</TableHead>
+                <TableHead className="min-w-[100px] max-w-[150px] align-middle text-card-foreground px-2 text-sm">Arquivos</TableHead>
+                <TableHead className="min-w-[70px] max-w-[100px] align-middle text-card-foreground px-1 text-sm">PDF</TableHead>
+                <TableHead className="min-w-[70px] max-w-[100px] align-middle text-card-foreground px-1 text-sm">Imagens</TableHead>
+                <TableHead className="min-w-[90px] max-w-[130px] align-middle text-card-foreground px-1 text-sm">Manuscrito</TableHead>
+                <TableHead className="min-w-[110px] max-w-[150px] align-middle text-card-foreground px-1 text-sm">Espelho</TableHead>
+                <TableHead className="min-w-[120px] max-w-[160px] align-middle text-card-foreground px-1 text-sm">Padrão</TableHead>
+                <TableHead className="min-w-[100px] max-w-[140px] align-middle text-card-foreground px-1 text-sm">Análise</TableHead>
+                <TableHead className="min-w-[100px] max-w-[140px] align-middle text-card-foreground px-1 text-sm">Recurso</TableHead>
+                <TableHead className="min-w-[80px] max-w-[120px] align-middle text-card-foreground px-1 text-sm">Consultoria</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -696,6 +813,8 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
                   onRefresh={fetchLeads}
                   isUnifying={isUnifying}
                   isConverting={isConverting}
+                  espelhosPadrao={getEspelhosPadrao(lead.usuarioId)}
+                  loadingEspelhosPadrao={loadingEspelhosPadrao.has(lead.usuarioId)}
                 />
               ))}
             </TableBody>

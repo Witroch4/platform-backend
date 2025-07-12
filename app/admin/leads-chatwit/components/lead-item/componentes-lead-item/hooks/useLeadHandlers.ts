@@ -73,6 +73,7 @@ interface UseLeadHandlersProps {
   updateAnaliseState: (updates: any) => void;
   updateConsultoriaState: (value: boolean) => void;
   forceRefresh: () => void;
+  forceServerRefresh: () => void; // Nova função para refresh explícito do servidor
 }
 
 export function useLeadHandlers({
@@ -122,7 +123,8 @@ export function useLeadHandlers({
   updateManuscritoState,
   updateAnaliseState,
   updateConsultoriaState,
-  forceRefresh
+  forceRefresh,
+  forceServerRefresh
 }: UseLeadHandlersProps) {
 
   const handleEditLead = async (leadData: any) => {
@@ -218,13 +220,13 @@ export function useLeadHandlers({
   };
 
   const reloadAfterDelete = () => {
-    if (typeof forceRefresh === 'function') {
-      forceRefresh();
+    if (typeof forceServerRefresh === 'function') {
+      forceServerRefresh();
     }
     
     window.setTimeout(() => {
-      if (typeof forceRefresh === 'function') {
-        forceRefresh();
+      if (typeof forceServerRefresh === 'function') {
+        forceServerRefresh();
       }
       
       toast("Atualizado", { description: "Lista de arquivos atualizada com sucesso" });
@@ -1280,6 +1282,23 @@ export function useLeadHandlers({
     }
   };
 
+  const handleRecursoClick = async () => {
+    console.log(`[HandleRecursoClick] Atualizando lead ${lead.id} após recurso`);
+    
+    // Forçar atualização do servidor para obter dados atualizados
+    forceServerRefresh();
+    
+    // Atualizar estado local
+    const updatedLead = {
+      ...lead,
+      fezRecurso: true,
+      dataRecurso: new Date().toISOString(),
+      _internal: true
+    };
+    
+    await handleEditLead(updatedLead);
+  };
+
   const handleCancelarManuscrito = async () => {
     try {
       updateManuscritoState({ aguardandoManuscrito: false });
@@ -1409,6 +1428,7 @@ export function useLeadHandlers({
     handleOpenFileUpload,
     handleEspelhoFileUpload,
     handleAnaliseClick,
+    handleRecursoClick,
     handleContextMenuAction,
     handleConsultoriaToggle,
     handleValidarAnalise,

@@ -31,8 +31,7 @@ app/admin/leads-chatwit/components/lead-item/
       ├─ ManuscritoCell.tsx         # ← Botão manuscrito
       ├─ EspelhoCell.tsx            # ← Botão espelho
       ├─ AnaliseCell.tsx            # ← Botão análise
-      ├─ ConsultoriaCell.tsx        # ← Switch consultoria
-      └─ RowActionsCell.tsx         # ← Ações da linha
+      └─ ConsultoriaCell.tsx        # ← Switch consultoria
 ```
 
 ## 🏗️ Arquitetura

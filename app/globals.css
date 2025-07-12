@@ -144,12 +144,59 @@
     code {
       @apply bg-muted/60;
     }
+    
+    /* Melhorar legibilidade de texto em modo escuro */
+    h1, h2, h3, h4, h5, h6 {
+      @apply text-foreground;
+    }
+    
+    p {
+      @apply text-foreground/90;
+    }
   }
 }
 
 /* Adicionando uma classe helper para garantir que o markdown seja exibido corretamente */
 .markdown-body {
-  @apply prose prose-slate max-w-none break-words;
+  @apply prose prose-slate dark:prose-invert max-w-none break-words;
+}
+
+/* Melhorias específicas para diálogos em modo escuro */
+.dark .prose {
+  @apply text-foreground;
+}
+
+.dark .prose h1, 
+.dark .prose h2, 
+.dark .prose h3, 
+.dark .prose h4, 
+.dark .prose h5, 
+.dark .prose h6 {
+  @apply text-foreground;
+}
+
+.dark .prose p {
+  @apply text-foreground/90;
+}
+
+.dark .prose strong {
+  @apply text-foreground;
+}
+
+.dark .prose code {
+  @apply bg-muted/80 text-foreground;
+}
+
+.dark .prose blockquote {
+  @apply border-l-muted-foreground/30 text-muted-foreground;
+}
+
+.dark .prose table th {
+  @apply bg-muted/50 text-foreground;
+}
+
+.dark .prose table td {
+  @apply text-foreground/90;
 }
 
 /* Adicione estilos globais adicionais aqui, se necessário */

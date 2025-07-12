@@ -3,52 +3,48 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { LeadChatwit } from '../types';
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { RefreshCw } from "lucide-react";
 
 interface SSEConnectionManagerProps {
   leads: LeadChatwit[];
   onLeadUpdate: (lead: LeadChatwit) => void;
+  onForceRefresh?: () => void; // Nova prop para refresh manual
 }
 
-export function SSEConnectionManager({ leads, onLeadUpdate }: SSEConnectionManagerProps) {
+export function SSEConnectionManager({ leads, onLeadUpdate, onForceRefresh }: SSEConnectionManagerProps) {
   const connectionsRef = useRef<Map<string, EventSource>>(new Map());
   const reconnectTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const isMountedRef = useRef(true);
 
   // Função para criar conexão SSE individual
   const createSSEConnection = useCallback((leadId: string) => {
-    console.log(`[SSE Manager] 🔌 Criando conexão SSE para lead: ${leadId}`);
+    console.log(`[SSE Manager] 🔌 Conectando SSE: ${leadId}`);
     
     // Fechar conexão existente se houver
     const existingConnection = connectionsRef.current.get(leadId);
     if (existingConnection) {
-      console.log(`[SSE Manager] 🔄 Fechando conexão existente para: ${leadId}`);
       existingConnection.close();
       connectionsRef.current.delete(leadId);
     }
 
-    // Construir URL da conexão SSE
-    const sseUrl = `/api/admin/leads-chatwit/notifications?leadId=${leadId}`;
-    console.log(`[SSE Manager] 🌐 URL da conexão SSE: ${sseUrl}`);
-
-    const eventSource = new EventSource(sseUrl);
+    const eventSource = new EventSource(`/api/admin/leads-chatwit/notifications?leadId=${leadId}`);
     
     eventSource.onopen = () => {
-      console.log(`[SSE Manager] ✅ Conexão aberta para lead: ${leadId}`);
+      console.log(`[SSE Manager] ✅ Conectado: ${leadId}`);
     };
     
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        console.log(`[SSE Manager] 📨 Notificação recebida para lead ${leadId}:`, data);
         
         if (data.type === 'error') {
-          console.error(`[SSE Manager] ❌ Erro recebido via SSE:`, data.message);
+          console.error(`[SSE Manager] ❌ Erro SSE:`, data.message);
           return;
         }
         
         if (data.type === 'connected') {
-          console.log(`[SSE Manager] 🎉 Confirmação de conexão recebida para: ${leadId}`);
-          return;
+          return; // 🔇 Log silencioso para confirmações
         }
         
         // Tratar estrutura correta da notificação
@@ -56,73 +52,61 @@ export function SSEConnectionManager({ leads, onLeadUpdate }: SSEConnectionManag
         
         if (notificationData.type === 'leadUpdate' && notificationData.leadData) {
           console.log(`[SSE Manager] 🔄 Atualizando lead ${leadId} com dados:`, notificationData.leadData);
+          
+          // ✅ Atualização não invasiva - apenas chamar o callback para atualizar estado local
           onLeadUpdate(notificationData.leadData);
           
-          // 🎉 Feedback visual melhorado com toast de sucesso
+          // Disparar evento para atualizar o indicador no header
+          window.dispatchEvent(new CustomEvent('leads-waiting-update'));
+          
+          // 🎯 Toasts com botão de atualizar ao invés de refresh automático
           const leadName = notificationData.leadData.name || notificationData.leadData.nome || 'Lead';
+          const isManuscritoComplete = notificationData.leadData.manuscritoProcessado && !notificationData.leadData.aguardandoManuscrito;
+          const isEspelhoComplete = notificationData.leadData.espelhoProcessado && !notificationData.leadData.aguardandoEspelho;
+          const isAnaliseComplete = notificationData.leadData.analiseProcessada && !notificationData.leadData.aguardandoAnalise;
           
-          // 🔍 Debug detalhado para identificar o tipo de processamento
-          console.log(`[SSE Manager] 🔍 Debug toast - Lead: ${leadName}`, {
-            manuscritoProcessado: notificationData.leadData.manuscritoProcessado,
-            aguardandoManuscrito: notificationData.leadData.aguardandoManuscrito,
-            espelhoProcessado: notificationData.leadData.espelhoProcessado,
-            aguardandoEspelho: notificationData.leadData.aguardandoEspelho,
-            analiseProcessada: notificationData.leadData.analiseProcessada,
-            aguardandoAnalise: notificationData.leadData.aguardandoAnalise,
-            message: notificationData.message
-          });
-          
-          // 🎯 Determinar o tipo de processamento baseado na mensagem do worker
-          const isManuscritoUpdate = notificationData.message?.includes('manuscrito');
-          const isEspelhoUpdate = notificationData.message?.includes('espelho');
-          const isAnaliseUpdate = notificationData.message?.includes('análise') || notificationData.message?.includes('pré-análise');
-          
-          console.log(`[SSE Manager] 🔍 Tipo de update detectado:`, {
-            isManuscritoUpdate,
-            isEspelhoUpdate, 
-            isAnaliseUpdate,
-            originalMessage: notificationData.message
-          });
-          
-          // Verificar análise primeiro (baseado na mensagem)
-          if (isAnaliseUpdate && notificationData.leadData.analiseProcessada && !notificationData.leadData.aguardandoAnalise) {
-            // Verificar se é análise preliminar ou final
-            const isAnalisePreliminar = notificationData.leadData.analisePreliminar && !notificationData.leadData.analiseUrl;
-            const title = isAnalisePreliminar 
-              ? `📋 Pré-análise de "${leadName}" processada!`
-              : `📊 Análise de "${leadName}" processada!`;
-            const description = isAnalisePreliminar
-              ? "A pré-análise foi concluída e está disponível para consulta."
-              : "A análise foi concluída e os resultados estão disponíveis.";
-            
-            toast(title, {
-              description,
+          // 📢 Toast com botão de recarregar para atualizações importantes
+          if (isManuscritoComplete) {
+            toast.success(`Manuscrito processado`, {
+              description: `"${leadName}" está pronto para visualização`,
               duration: 8000,
+              action: onForceRefresh ? {
+                label: (
+                  <div className="flex items-center gap-1">
+                    <RefreshCw className="h-3 w-3" />
+                    Atualizar
+                  </div>
+                ),
+                onClick: onForceRefresh
+              } : undefined,
             });
-          } else if (isEspelhoUpdate && notificationData.leadData.espelhoProcessado && !notificationData.leadData.aguardandoEspelho) {
-            toast(`📋 Espelho de "${leadName}" processado!`, {
-              description: "A correção foi finalizada e está disponível para consulta.",
+          } else if (isEspelhoComplete) {
+            toast.success(`Espelho processado`, {
+              description: `"${leadName}" está pronto para consulta`,
               duration: 8000,
+              action: onForceRefresh ? {
+                label: (
+                  <div className="flex items-center gap-1">
+                    <RefreshCw className="h-3 w-3" />
+                    Atualizar
+                  </div>
+                ),
+                onClick: onForceRefresh
+              } : undefined,
             });
-          } else if (isManuscritoUpdate && notificationData.leadData.manuscritoProcessado && !notificationData.leadData.aguardandoManuscrito) {
-            toast(`🎉 Manuscrito de "${leadName}" processado!`, {
-              description: "O texto foi extraído e está disponível para visualização.",
-              duration: 20000,
-              action: {
-                label: 'Destacar Lead',
-                onClick: () => {
-                  console.log('🔥 Botão "Destacar Lead" clicado!');
-                  console.log('📍 Lead ID:', leadId);
-                  
-                  // Disparar evento para destacar o lead na lista
-                  const highlightEvent = new CustomEvent('highlightLead', {
-                    detail: { leadId: leadId }
-                  });
-                  
-                  console.log('📡 Disparando evento highlightLead:', highlightEvent.detail);
-                  window.dispatchEvent(highlightEvent);
-                }
-              },
+          } else if (isAnaliseComplete) {
+            toast.success(`Análise processada`, {
+              description: `"${leadName}" está pronta para visualização`,
+              duration: 8000,
+              action: onForceRefresh ? {
+                label: (
+                  <div className="flex items-center gap-1">
+                    <RefreshCw className="h-3 w-3" />
+                    Atualizar
+                  </div>
+                ),
+                onClick: onForceRefresh
+              } : undefined,
             });
           }
         }
@@ -153,7 +137,7 @@ export function SSEConnectionManager({ leads, onLeadUpdate }: SSEConnectionManag
     };
     
     connectionsRef.current.set(leadId, eventSource);
-  }, [onLeadUpdate]);
+  }, [onLeadUpdate, onForceRefresh]);
 
   // Função para forçar reconexão de um lead específico  
   const forceReconnectLead = useCallback((leadId: string, reason?: string) => {
@@ -181,43 +165,22 @@ export function SSEConnectionManager({ leads, onLeadUpdate }: SSEConnectionManag
   const updateConnections = useCallback(() => {
     if (!isMountedRef.current) return;
     
-    console.log(`[SSE Manager] 🔍 Verificando ${leads.length} leads total`);
-    
     const leadsNeedingSSE = leads.filter(lead => 
       lead.aguardandoManuscrito || lead.aguardandoEspelho || lead.aguardandoAnalise
     );
     
-    console.log(`[SSE Manager] 📊 Total de ${leadsNeedingSSE.length} leads precisando SSE:`, 
-      leadsNeedingSSE.map(l => ({ 
-        id: l.id, 
-        nome: l.nome || l.name,
-        aguardandoManuscrito: l.aguardandoManuscrito, 
-        aguardandoEspelho: l.aguardandoEspelho, 
-        aguardandoAnalise: l.aguardandoAnalise 
-      })));
+    // 🔇 Log resumido
+    if (leadsNeedingSSE.length > 0) {
+      console.log(`[SSE Manager] 📊 ${leadsNeedingSSE.length} leads precisando SSE`);
+    }
     
-    // Leads atualmente conectados
     const currentConnections = new Set(connectionsRef.current.keys());
-    console.log(`[SSE Manager] 📋 Conexões atuais:`, Array.from(currentConnections));
-    
-    // Leads que precisam de conexão
     const leadsNeeding = new Set(leadsNeedingSSE.map(lead => lead.id));
-    console.log(`[SSE Manager] 📋 Todos os leads (debug):`, 
-      leads.map(l => ({ 
-        id: l.id, 
-        nome: l.nome || l.name,
-        aguardandoManuscrito: l.aguardandoManuscrito, 
-        aguardandoEspelho: l.aguardandoEspelho, 
-        aguardandoAnalise: l.aguardandoAnalise,
-        manuscritoProcessado: l.manuscritoProcessado,
-        espelhoProcessado: l.espelhoProcessado,
-        analiseProcessada: l.analiseProcessada
-      })));
     
     // Remover conexões desnecessárias
     for (const leadId of currentConnections) {
       if (!leadsNeeding.has(leadId)) {
-        console.log(`[SSE Manager] ❌ Removendo conexão desnecessária para: ${leadId}`);
+        console.log(`[SSE Manager] ❌ Desconectando: ${leadId}`);
         const connection = connectionsRef.current.get(leadId);
         if (connection) {
           connection.close();
@@ -229,10 +192,7 @@ export function SSEConnectionManager({ leads, onLeadUpdate }: SSEConnectionManag
     // Criar novas conexões necessárias
     for (const leadId of leadsNeeding) {
       if (!currentConnections.has(leadId)) {
-        console.log(`[SSE Manager] 🆕 Criando nova conexão para: ${leadId}`);
         createSSEConnection(leadId);
-      } else {
-        console.log(`[SSE Manager] ✅ Conexão já existe para: ${leadId}`);
       }
     }
   }, [leads, createSSEConnection]);
@@ -257,6 +217,9 @@ export function SSEConnectionManager({ leads, onLeadUpdate }: SSEConnectionManag
   // Effect principal - atualizar conexões quando leads mudam
   useEffect(() => {
     updateConnections();
+    
+    // Disparar evento para atualizar o indicador no header
+    window.dispatchEvent(new CustomEvent('leads-waiting-update'));
   }, [updateConnections]);
 
   // Cleanup no unmount
@@ -267,25 +230,7 @@ export function SSEConnectionManager({ leads, onLeadUpdate }: SSEConnectionManag
     };
   }, [cleanupAllConnections]);
 
-  // Renderizar apenas se houver leads aguardando processamento
-  const leadsAguardando = leads.filter(lead => 
-    lead.aguardandoManuscrito || lead.aguardandoEspelho || lead.aguardandoAnalise
-  );
-
-  if (leadsAguardando.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="fixed bottom-4 right-4 z-50">
-      <div className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border rounded-lg p-3 shadow-lg">
-        <div className="flex items-center gap-2 text-sm">
-          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-          <span className="text-muted-foreground">
-            {leadsAguardando.length} lead{leadsAguardando.length !== 1 ? 's' : ''} aguardando processamento
-          </span>
-        </div>
-      </div>
-    </div>
-  );
+  // Componente invisível - apenas gerencia as conexões SSE
+  // A contagem de leads aguardando será exibida no header
+  return null;
 } 

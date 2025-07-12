@@ -4,7 +4,7 @@ import { SelectCellProps } from "../types";
 
 export function SelectCell({ isSelected, onSelect, leadId }: SelectCellProps) {
   return (
-    <TableCell className="w-[40px] p-2 align-middle">
+    <TableCell className="min-w-[40px] w-[40px] p-1 align-middle sticky left-0 bg-card z-20">
       <Checkbox 
         checked={isSelected} 
         onCheckedChange={(checked) => onSelect(leadId, checked as boolean)}

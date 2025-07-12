@@ -364,6 +364,20 @@ model UsuarioChatwit {
 
   // Relação com espelhos da biblioteca
   espelhosBiblioteca EspelhoBiblioteca[]
+
+  // Relação com espelhos padrão
+  espelhosPadrao EspelhoPadrao[]
+}
+
+// Enum para especialidades jurídicas
+enum EspecialidadeJuridica {
+  ADMINISTRATIVO
+  CIVIL
+  CONSTITUCIONAL
+  TRABALHO
+  EMPRESARIAL
+  PENAL
+  TRIBUTARIO
 }
 
 model LeadChatwit {
@@ -404,6 +418,7 @@ model LeadChatwit {
   inscricao         String?       // Número de inscrição do exame
   examesParticipados Json?        // Lista de exames que o lead participou
   espelhoBibliotecaId String?     // ID do espelho da biblioteca associado ao lead
+  especialidade     EspecialidadeJuridica? // Especialidade jurídica do lead para uso do espelho padrão
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
@@ -421,6 +436,7 @@ model LeadChatwit {
   @@index([sourceId])
   @@index([espelhoBibliotecaId])
   @@index([chatwitAccessToken])
+  @@index([especialidade])
 }
 
 model ArquivoLeadChatwit {
@@ -633,7 +649,7 @@ model EspelhoBiblioteca {
   isAtivo           Boolean       @default(true) // Se o espelho está ativo na biblioteca
   totalUsos         Int           @default(0) // Contador de quantas vezes foi usado
   espelhoBibliotecaProcessado Boolean @default(false) // Indica se o espelho da biblioteca foi processado
-  aguardandoEspelhoBiblioteca Boolean @default(false) // Indica se está aguardando processamento do espelho
+  aguardandoEspelho Boolean @default(false) // Indica se está aguardando processamento do espelho
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
@@ -647,6 +663,29 @@ model EspelhoBiblioteca {
   @@index([criadoPorId])
   @@index([isAtivo])
   @@index([nome])
+}
+
+// Modelo para Espelhos Padrão (templates globais por especialidade)
+model EspelhoPadrao {
+  id                String               @id @default(cuid())
+  especialidade     EspecialidadeJuridica @unique // Especialidade jurídica única
+  nome              String               // Nome do espelho padrão (ex: "Padrão de respostas definitivo (Direito Civil)")
+  descricao         String?              // Descrição opcional
+  textoMarkdown     String?              @db.Text // Texto do espelho em formato Markdown
+  espelhoCorrecao   String?              // Lista de URLs das imagens do espelho em formato JSON
+  isAtivo           Boolean              @default(true) // Se o espelho está ativo
+  totalUsos         Int                  @default(0) // Contador de quantas vezes foi usado
+  processado        Boolean              @default(false) // Indica se o espelho foi processado pelo sistema externo
+  aguardandoProcessamento Boolean        @default(false) // Indica se está aguardando processamento
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  // Relação com usuário que criou/atualizou por último
+  atualizadoPorId   String
+  atualizadoPor     UsuarioChatwit       @relation(fields: [atualizadoPorId], references: [id], onDelete: Cascade)
+
+  @@index([especialidade])
+  @@index([isAtivo])
 }
 
 // Modelo para configuração do MTF Diamante
@@ -755,5 +794,17 @@ model DisparoMtfDiamante {
   @@index([status])
   @@index([scheduledAt])
   @@index([leadId])
+}
+
+// Modelo para armazenar modelos de recurso
+model ModeloRecurso {
+  id           String   @id @default(cuid())
+  texto        String   @db.Text // Texto do modelo de recurso
+  isGlobal     Boolean  @default(false) // Se é um modelo global
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@index([isGlobal])
 }
 

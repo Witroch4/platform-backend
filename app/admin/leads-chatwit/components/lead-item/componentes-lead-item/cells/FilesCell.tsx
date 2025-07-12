@@ -35,7 +35,7 @@ export function FilesCell({
   };
 
   return (
-    <TableCell className="w-[150px] p-2 align-middle">
+    <TableCell className="min-w-[100px] max-w-[150px] p-2 align-middle">
       <div className="grid grid-cols-3 gap-2">
         {lead.arquivos.length > 0 ? (
           lead.arquivos.map((arquivo) => (

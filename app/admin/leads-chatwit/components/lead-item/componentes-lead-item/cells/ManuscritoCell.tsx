@@ -27,7 +27,7 @@ export function ManuscritoCell({
   onDigitarClick
 }: ManuscritoCellExtendedProps) {
   return (
-    <TableCell className="w-[100px] p-2 align-middle">
+    <TableCell className="min-w-[90px] max-w-[130px] p-2 align-middle">
       <LeadContextMenu
         contextType="manuscrito"
         onAction={onContextMenuAction}
@@ -42,7 +42,7 @@ export function ManuscritoCell({
           size="sm"
           onClick={onDigitarClick}
           disabled={isDigitando}
-          className="whitespace-nowrap w-full"
+          className="w-full text-xs px-2 py-1 h-auto min-h-8"
           key={`manuscrito-btn-${refreshKey}`}
         >
           {localManuscritoState.aguardandoManuscrito ? (

@@ -13,21 +13,8 @@ export async function POST(request: Request): Promise<Response> {
   try {
           console.log("[Webhook] Recebendo payload...");
       
-      // Log de debug para a requisição completa (apenas headers essenciais)
-      const essentialHeaders = {
-        'content-type': request.headers.get('content-type'),
-        'content-length': request.headers.get('content-length'),
-        'tokendeacesso': request.headers.get('tokendeacesso'),
-        'user-agent': request.headers.get('user-agent')
-      };
-            console.log("[Webhook DEBUG] Headers essenciais:", JSON.stringify(essentialHeaders, null, 2));
-      
       // Obter o payload completo
       let webhookData = await request.json();
-      
-      // PAYLOAD COMPLETO E CRU - SEM QUALQUER TRATAMENTO
-      console.log("[Webhook DEBUG] PAYLOAD COMPLETO E CRU:");
-      console.log(JSON.stringify(webhookData, null, 2));
     
     // Verificar se o payload está dentro de um array ou outro contêiner
     if (Array.isArray(webhookData) && webhookData.length > 0) {
@@ -47,9 +34,7 @@ export async function POST(request: Request): Promise<Response> {
       webhookData = webhookData.debug;
     }
     
-          // Log detalhado do payload recebido
-      const limitedPayload = limitPayloadForLog(webhookData);
-      console.log("[Webhook DEBUG] Payload normalizado:", JSON.stringify(limitedPayload, null, 2));
+
       
 
     
@@ -57,6 +42,7 @@ export async function POST(request: Request): Promise<Response> {
     const isEspelho = webhookData.espelho === true;
     const isEspelhoConsultoriaFase2 = webhookData.espelhoconsultoriafase2 === true;
     const isEspelhoParaBiblioteca = webhookData.espelhoparabiblioteca === true;
+    const isEspelhoPadrao = webhookData.espelhoPadrao === true;
     const isManuscrito = webhookData.manuscrito === true && webhookData.textoDAprova;
     const isAnalise = webhookData.analise === true;
     const isAnaliseSimulado = webhookData.analisesimulado === true;
@@ -66,7 +52,7 @@ export async function POST(request: Request): Promise<Response> {
     const isAnaliseSimuladoValidada = webhookData.analisesimuladovalidado === true;
     const isAnaliseSimuladoValidadaCamelCase = webhookData.analiseSimuladoValidada === true;
     
-    console.log("[Webhook] Tipo do payload - espelho:", isEspelho, "espelhoConsultoriaFase2:", isEspelhoConsultoriaFase2, "espelhoParaBiblioteca:", isEspelhoParaBiblioteca, "manuscrito:", isManuscrito, "analise:", isAnalise, "analiseSimulado:", isAnaliseSimulado, "analisePreliminar:", isAnalisePreliminar, "analiseSimuladoPreliminar:", isAnaliseSimuladoPreliminar, "analiseValidada:", isAnaliseValidada, "analiseSimuladoValidada:", isAnaliseSimuladoValidada, "analiseSimuladoValidadaCamelCase:", isAnaliseSimuladoValidadaCamelCase);
+    console.log("[Webhook] Tipo do payload - espelho:", isEspelho, "espelhoConsultoriaFase2:", isEspelhoConsultoriaFase2, "espelhoParaBiblioteca:", isEspelhoParaBiblioteca, "espelhoPadrao:", isEspelhoPadrao, "manuscrito:", isManuscrito, "analise:", isAnalise, "analiseSimulado:", isAnaliseSimulado, "analisePreliminar:", isAnalisePreliminar, "analiseSimuladoPreliminar:", isAnaliseSimuladoPreliminar, "analiseValidada:", isAnaliseValidada, "analiseSimuladoValidada:", isAnaliseSimuladoValidada, "analiseSimuladoValidadaCamelCase:", isAnaliseSimuladoValidadaCamelCase);
 
     // Processar webhook de pré-análise
     if (isAnalisePreliminar) {
@@ -127,6 +113,85 @@ export async function POST(request: Request): Promise<Response> {
         return NextResponse.json({
           success: false,
           message: `Erro ao processar pré-análise: ${error.message || 'Erro desconhecido'}`,
+        }, { status: 500 });
+      }
+    }
+
+    // Processar webhook de espelho padrão
+    if (isEspelhoPadrao) {
+      console.log("[Webhook] Identificado payload de espelho padrão");
+      
+      const especialidade = webhookData.especialidade;
+      const espelhoId = webhookData.espelhoId;
+      
+      if (!especialidade || !espelhoId) {
+        console.error("[Webhook] Especialidade ou espelhoId não fornecido para espelho padrão");
+        return NextResponse.json({
+          success: false,
+          message: "Especialidade e espelhoId são obrigatórios para espelhos padrão",
+        });
+      }
+      
+      // Processar a resposta do espelho padrão
+      let textoMarkdown = null;
+      
+      if (webhookData.espelhoPadraotexto && Array.isArray(webhookData.espelhoPadraotexto) && webhookData.espelhoPadraotexto.length > 0) {
+        const primeiroItem = webhookData.espelhoPadraotexto[0];
+        textoMarkdown = primeiroItem?.output || null;
+      }
+      
+      if (!textoMarkdown) {
+        console.error("[Webhook] Espelho padrão sem texto markdown");
+        return NextResponse.json({
+          success: false,
+          message: "Texto do espelho padrão não fornecido",
+        });
+      }
+      
+      // Limpar wrapper markdown se existir
+      if (textoMarkdown.startsWith('```markdown\n')) {
+        textoMarkdown = textoMarkdown.replace(/^```markdown\n/, '');
+      }
+      
+      // Remover ``` final se existir
+      if (textoMarkdown.endsWith('```')) {
+        textoMarkdown = textoMarkdown.replace(/```$/, '');
+      }
+      
+      // Remover espaços extras
+      textoMarkdown = textoMarkdown.trim();
+      
+      try {
+        // Atualizar o espelho padrão no banco
+        const espelhoAtualizado = await prisma.espelhoPadrao.update({
+          where: { id: espelhoId },
+          data: {
+            textoMarkdown: textoMarkdown,
+            processado: true,
+            aguardandoProcessamento: false,
+            totalUsos: {
+              increment: 1
+            },
+            updatedAt: new Date()
+          }
+        });
+        
+        console.log("[Webhook] ✅ Espelho padrão atualizado:", espelhoAtualizado.id);
+        
+        // Não enviar notificação SSE para espelhos padrão pois são globais
+        // A interface será atualizada via polling no drawer
+        
+        return NextResponse.json({
+          success: true,
+          message: "Espelho padrão processado com sucesso",
+          espelhoId: espelhoAtualizado.id,
+          especialidade: especialidade
+        });
+      } catch (error: any) {
+        console.error("[Webhook] Erro ao atualizar espelho padrão:", error);
+        return NextResponse.json({
+          success: false,
+          message: `Erro ao processar espelho padrão: ${error.message || 'Erro desconhecido'}`,
         }, { status: 500 });
       }
     }
@@ -193,7 +258,7 @@ export async function POST(request: Request): Promise<Response> {
             ...(urlsEspelho.length > 0 && { espelhoCorrecao: JSON.stringify(urlsEspelho) }),
             // Marcar como processado e remover estado de aguardando
             espelhoBibliotecaProcessado: true,
-            aguardandoEspelhoBiblioteca: false,
+            aguardandoEspelho: false,
             updatedAt: new Date()
           }
         });
@@ -969,10 +1034,11 @@ export async function POST(request: Request): Promise<Response> {
     }
     
     // Se não for identificado como espelho, manuscrito, pré-análise, pré-análise de simulado, análise ou análise de simulado
-    console.error("[Webhook] Payload não identificado como espelho, manuscrito, pré-análise, pré-análise de simulado, análise, análise de simulado, validação ou validação de simulado");
+    console.error("[Webhook] Payload não identificado como espelho, manuscrito, espelho padrão, pré-análise, pré-análise de simulado, análise, análise de simulado, validação ou validação de simulado");
     console.error("[Webhook] Valores das flags - espelho:", webhookData.espelho, 
       "espelhoConsultoriaFase2:", webhookData.espelhoconsultoriafase2, 
       "espelhoParaBiblioteca:", webhookData.espelhoparabiblioteca,
+      "espelhoPadrao:", webhookData.espelhoPadrao,
       "manuscrito:", webhookData.manuscrito, "análise:", webhookData.analise,
       "análiseSimulado:", webhookData.analisesimulado, "pré-análise:", webhookData.analisepreliminar, "préAnaliseSimulado:", webhookData.analisesimuladopreliminar,
       "analiseValidada:", webhookData.analiseValidada, "analiseSimuladoValidada:", webhookData.analisesimuladovalidado);
@@ -980,7 +1046,7 @@ export async function POST(request: Request): Promise<Response> {
     
     return NextResponse.json({
       success: false,
-      message: "Payload não identificado como manuscrito, espelho, espelho para biblioteca, pré-análise, pré-análise de simulado, análise, análise de simulado, validação ou validação de simulado",
+      message: "Payload não identificado como manuscrito, espelho, espelho padrão, espelho para biblioteca, pré-análise, pré-análise de simulado, análise, análise de simulado, validação ou validação de simulado",
       debug: webhookData // Incluir o payload para debug
     });
     
@@ -1008,32 +1074,4 @@ export async function GET(request: Request): Promise<Response> {
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// Função para limitar o payload do log
-function limitPayloadForLog(payload: any) {
-  if (typeof payload !== 'object' || payload === null) {
-    return payload;
-  }
-  
-  const limited: any = {};
-  const fields = ['exameDescricao', 'inscricao', 'nomeExaminando', 'seccional', 'areaJuridica', 'notaFinal', 'situacao'];
-  
-  for (const field of fields) {
-    if (payload[field] !== undefined) {
-      limited[field] = payload[field];
-    }
-  }
-  
-  // Incluir outros campos importantes mas não os arrays grandes
-  if (payload.leadID) limited.leadID = payload.leadID;
-  if (payload.telefone) limited.telefone = payload.telefone;
-  if (payload.nome) limited.nome = payload.nome;
-  if (payload.analise) limited.analise = payload.analise;
-  if (payload.analisepreliminar) limited.analisepreliminar = payload.analisepreliminar;
-  if (payload.manuscrito) limited.manuscrito = payload.manuscrito;
-  if (payload.espelho) limited.espelho = payload.espelho;
-  if (payload.analiseValidada) limited.analiseValidada = payload.analiseValidada;
-  if (payload.analiseUrl) limited.analiseUrl = payload.analiseUrl;
-  if (payload.argumentacaoUrl) limited.argumentacaoUrl = payload.argumentacaoUrl;
-  
-  return limited;
-}
+

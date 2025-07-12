@@ -941,7 +941,7 @@ async function handleOpenAIRequest(messages: Message[], model: string, sessionId
     requestOptions.top_p = 1.0;
     
     // Adicionar max_output_tokens
-    requestOptions.max_output_tokens = 48000;
+    requestOptions.max_output_tokens = 148000;
     
     // Usar a Responses API exclusivamente
     const API_URL = "https://api.openai.com/v1/responses";

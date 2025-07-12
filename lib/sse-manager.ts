@@ -65,30 +65,29 @@ class SseManager {
     const leadId = channel.replace('sse:', '');
     const leadConnections = this.connectionsByLead.get(leadId);
 
-    // Criar versão limitada da mensagem para log
-    const limitedMessage = limitSSEMessageForLog(message);
-    console.log(`[SSE Redis] 🔔 MENSAGEM RECEBIDA no canal ${channel}:`, limitedMessage);
-
     if (!leadConnections || leadConnections.size === 0) {
       console.warn(`[SSE Redis] ⚠️ Nenhuma conexão ativa para leadId ${leadId}. Mensagem descartada.`);
       return;
     }
 
-    console.log(`[SSE Redis] ➡️ Enviando mensagem para ${leadConnections.size} cliente(s) do lead ${leadId}`);
+    // 🔇 Log reduzido - apenas resumo
+    console.log(`[SSE Redis] 📬 Entregando mensagem para ${leadConnections.size} cliente(s) do lead ${leadId}`);
     
     let successCount = 0;
     leadConnections.forEach((conn) => {
       try {
         conn.controller.enqueue(`data: ${message}\n\n`);
         successCount++;
-        console.log(`[SSE Redis] ✅ Mensagem enviada para conexão ${conn.connectionId}`);
       } catch (e) {
-        console.warn(`[SSE Manager] ⚠️ Conexão ${conn.connectionId} fechada, removendo.`, e);
+        console.warn(`[SSE Manager] ⚠️ Conexão ${conn.connectionId} fechada, removendo.`);
         this.removeConnection(leadId, conn.connectionId);
       }
     });
     
-    console.log(`[SSE Redis] 📊 Resumo: ${successCount}/${leadConnections.size} mensagens entregues com sucesso`);
+    // 🔇 Log apenas se houver falhas
+    if (successCount !== leadConnections.size) {
+      console.log(`[SSE Redis] 📊 Resumo: ${successCount}/${leadConnections.size} mensagens entregues`);
+    }
   }
 
   public addConnection(leadId: string, controller: ReadableStreamDefaultController<string>): string {

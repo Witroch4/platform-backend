@@ -32,6 +32,9 @@ export function useDialogState() {
   const [isEnviandoPdf, setIsEnviandoPdf] = useState(false);
   const [isEnviandoAnaliseValidada, setIsEnviandoAnaliseValidada] = useState(false);
   
+  // Estados para recurso
+  const [isEnviandoRecurso, setIsEnviandoRecurso] = useState(false);
+  
   // Estados para processo
   const [showProcessDialog, setShowProcessDialog] = useState(false);
   const [processType, setProcessType] = useState<ProcessType>("unify");
@@ -86,6 +89,7 @@ export function useDialogState() {
     isEnviandoAnalise, setIsEnviandoAnalise,
     isEnviandoPdf, setIsEnviandoPdf,
     isEnviandoAnaliseValidada, setIsEnviandoAnaliseValidada,
+    isEnviandoRecurso, setIsEnviandoRecurso,
     showProcessDialog, setShowProcessDialog,
     processType, setProcessType,
     processStartTime, setProcessStartTime,

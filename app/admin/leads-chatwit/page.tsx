@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { RefreshCw, Search, Info, ChevronDown, BarChart, X, Shield } from "lucide-react";
+import { RefreshCw, Search, Info, ChevronDown, BarChart, X, Shield, BookOpen, FileText } from "lucide-react";
 import { LeadsTabs } from "./components/leads-tabs";
 import { LeadsDashboard } from "./components/dashboard";
 import {
@@ -39,6 +39,8 @@ import {
 import { LeadsList } from "./components/leads-list";
 import { UsuariosList } from "./components/usuarios-list";
 import { RegisterApiKeyDialog } from "@/components/admin/register-api-key-dialog";
+import { EspelhosPadraoDrawer } from "./components/espelhos-padrao-drawer";
+import { ModeloRecursoDrawer } from "./components/modelo-recurso-drawer";
 
 export default function LeadsChatwitPage() {
   const [isLoading, setIsLoading] = useState(true);
@@ -59,6 +61,8 @@ export default function LeadsChatwitPage() {
     role: "ADMIN",
     isLoading: true
   });
+  const [showEspelhosPadraoDrawer, setShowEspelhosPadraoDrawer] = useState(false);
+  const [showModeloRecursoDrawer, setShowModeloRecursoDrawer] = useState(false);
 
   useEffect(() => {
     fetchStats();
@@ -339,6 +343,26 @@ export default function LeadsChatwitPage() {
             <BarChart className="h-4 w-4 mr-2" />
             {showDashboard ? "Ocultar Dashboard" : "Mostrar Dashboard"}
           </Button>
+          
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => setShowEspelhosPadraoDrawer(true)}
+            className="border-border hover:bg-accent"
+          >
+            <BookOpen className="h-4 w-4 mr-2" />
+            Espelhos Padrão
+          </Button>
+          
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => setShowModeloRecursoDrawer(true)}
+            className="border-border hover:bg-accent"
+          >
+            <FileText className="h-4 w-4 mr-2" />
+            Modelo de Recurso
+          </Button>
         </div>
         
         <div className="relative">
@@ -413,6 +437,19 @@ export default function LeadsChatwitPage() {
           />
         </div>
       )}
+
+      {/* Drawer de Espelhos Padrão */}
+      <EspelhosPadraoDrawer
+        isOpen={showEspelhosPadraoDrawer}
+        onClose={() => setShowEspelhosPadraoDrawer(false)}
+        usuarioId="global" // Para espelhos padrão, usamos um ID global
+      />
+
+      {/* Drawer de Modelo de Recurso */}
+      <ModeloRecursoDrawer
+        isOpen={showModeloRecursoDrawer}
+        onClose={() => setShowModeloRecursoDrawer(false)}
+      />
     </div>
   );
 }

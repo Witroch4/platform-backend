@@ -86,7 +86,10 @@ export function AnaliseDialog({
     try {
       setIsSaving(true);
       await onSaveAnotacoes(textoAnotacoes);
-      toast("Sucesso", { description: "Mensagem salva com sucesso!"  });
+      toast.success("Mensagem salva", { 
+        description: "Anotações atualizadas",
+        duration: 2000
+      });
     } catch (error: any) {
       toast.error("Erro", { description: error.message || "Não foi possível salvar a mensagem." });
     } finally {

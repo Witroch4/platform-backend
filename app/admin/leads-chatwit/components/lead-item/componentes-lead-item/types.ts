@@ -12,6 +12,8 @@ export interface LeadItemProps {
   onRefresh?: () => void;
   isUnifying: boolean;
   isConverting: string | null;
+  espelhosPadrao?: any[];
+  loadingEspelhosPadrao?: boolean;
 }
 
 export interface CellProps {
@@ -43,10 +45,7 @@ export interface ManuscritoCellProps extends CellProps {
   onDigitarManuscrito: (lead: LeadChatwit) => void;
 }
 
-export interface RowActionsCellProps extends CellProps {
-  onDelete: (id: string) => void;
-  onViewDetails: () => void;
-}
+
 
 export type ProcessType = "unify" | "convert";
 

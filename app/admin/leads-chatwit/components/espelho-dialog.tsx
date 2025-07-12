@@ -10,8 +10,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Loader2, Image as ImageIcon, Send, ArrowRight, Eye } from "lucide-react";
+import { Loader2, Image as ImageIcon, Send, ArrowRight, Eye, Edit3, FileText } from "lucide-react";
 import { ImageGalleryDialog } from "./image-gallery-dialog";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { unified } from 'unified';
+import remarkParse from 'remark-parse';
+import remarkStringify from 'remark-stringify';
+import { StructuredEditor } from './StructuredEditor';
 
 import { Badge } from "@/components/ui/badge";
 import { LeadChatwit } from "../types";
@@ -60,20 +66,92 @@ export function EspelhoDialog({
   const [showGallery, setShowGallery] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingImages, setPendingImages] = useState<string[]>([]);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [ast, setAst] = useState<any>(null);
 
   // Atualiza o texto quando as props mudam
   useEffect(() => {
     if (isOpen) {
       setTexto(textoEspelho);
       setImagens(imagensEspelho);
+      
+      // Se está aguardando processamento, não alterar modo
+      if (aguardandoEspelho) {
+        return;
+      }
+      
+      // Definir modo inicial baseado na disponibilidade de texto
+      const hasText = textoEspelho && (
+        typeof textoEspelho === 'string' ? textoEspelho.trim().length > 0 :
+        Array.isArray(textoEspelho) ? textoEspelho.length > 0 :
+        typeof textoEspelho === 'object' && textoEspelho !== null
+      );
+      setIsEditMode(!hasText); // Edição se não há texto, visualização se há texto
+      
+      // Fazer parsing do markdown para AST quando há texto
+      if (hasText) {
+        const formattedText = formatEspelhoTexto();
+        if (formattedText && formattedText.trim().length > 0) {
+          try {
+            const processor = unified().use(remarkParse).use(remarkGfm);
+            const tree = processor.parse(formattedText);
+            setAst(tree);
+          } catch (error) {
+            console.error('Erro ao fazer parsing do markdown:', error);
+            setAst(null);
+          }
+        }
+      }
     }
-  }, [isOpen, textoEspelho, imagensEspelho]);
+      }, [isOpen, textoEspelho, imagensEspelho, aguardandoEspelho]);
+
+  // Efeito para fazer parsing do markdown quando entrar no modo de edição
+  useEffect(() => {
+    if (isEditMode && !ast) {
+      const formattedText = formatEspelhoTexto();
+      if (formattedText && formattedText.trim().length > 0) {
+        try {
+          const processor = unified().use(remarkParse).use(remarkGfm);
+          const tree = processor.parse(formattedText);
+          setAst(tree);
+        } catch (error) {
+          console.error('Erro ao fazer parsing do markdown:', error);
+          setAst(null);
+        }
+      }
+    }
+  }, [isEditMode, texto]);
+
+  // Função para verificar se há texto formatado
+  const hasFormattedText = () => {
+    const formatted = formatEspelhoTexto();
+    return formatted && formatted.trim().length > 0;
+  };
+
+
 
   const handleSave = async () => {
     try {
       setIsSaving(true);
-      await onSave(texto, imagens);
-      toast("Sucesso", { description: "Espelho de correção atualizado com sucesso!"  });
+      
+      let textoFinalParaSalvar = texto;
+      
+      // Se estava no modo de edição e o AST existe, converte-o de volta para string
+      if (isEditMode && ast) {
+        try {
+          const processor = unified().use(remarkGfm).use(remarkStringify);
+          textoFinalParaSalvar = processor.stringify(ast);
+        } catch (error) {
+          console.error('Erro ao converter AST para markdown:', error);
+          toast.error("Erro", { description: "Erro ao processar o conteúdo editado. Salvando versão original." });
+        }
+      }
+      
+      await onSave(textoFinalParaSalvar, imagens);
+      toast.success("Espelho salvo", { 
+        description: "Espelho atualizado com sucesso",
+        duration: 2000
+      });
       
       if (batchMode && onBatchNext) {
         onBatchNext();
@@ -131,6 +209,7 @@ export function EspelhoDialog({
       setImagens(imagensEspelho);
       setShowConfirmDialog(false);
       setPendingImages([]);
+      setAst(null);
     } else {
       console.log("[EspelhoDialog] Não pode fechar agora - operação em andamento");
     }
@@ -301,8 +380,8 @@ export function EspelhoDialog({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
+        <DialogContent className="max-w-4xl w-[95vw] min-w-[800px] flex flex-col">
+          <DialogHeader className="shrink-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Eye className="h-5 w-5" />
@@ -332,9 +411,9 @@ export function EspelhoDialog({
               )}
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4 space-y-4">
+          <div className="flex-1 px-1 py-4 space-y-4">
             {aguardandoEspelho ? (
-              <div className="flex flex-col items-center justify-center py-16">
+              <div className="flex flex-col items-center justify-center py-8 min-h-[300px]">
                 <Loader2 className="h-16 w-16 text-primary animate-spin mb-4" />
                 <p className="text-lg font-medium">Aguardando Processamento</p>
                 <p className="text-sm text-muted-foreground mt-2 mb-4">
@@ -360,76 +439,93 @@ export function EspelhoDialog({
               </div>
             ) : (
               <>
-                <h3 className="text-lg font-medium">Texto do Espelho</h3>
-                <Textarea
-                  value={formatEspelhoTexto()}
-                  onChange={(e) => {
-                    const inputValue = e.target.value;
-                    // Tenta preservar o formato original dos dados
-                    try {
-                      // Primeiro tenta considerar como JSON
-                      const parsed = JSON.parse(inputValue);
-                      setTexto(parsed);
-                    } catch {
-                      // Se não for JSON válido, mantém como texto simples
-                      setTexto(inputValue);
-                    }
-                  }}
-                  className="min-h-[300px] font-mono"
-                  placeholder="Texto do espelho de correção..."
-                  disabled={isGeneratingText}
-                />
+                <div className="flex justify-between items-center">
+                  <h3 className="text-base sm:text-lg font-medium">Texto do Espelho</h3>
+                </div>
+
+                {/* Área única de edição/visualização */}
+                <div className="border rounded-md bg-background p-3 h-[600px] overflow-y-auto">
+                  {isEditMode ? (
+                    ast ? (
+                      <div className="h-full text-base">
+                        <StructuredEditor ast={ast} onAstChange={setAst} />
+                      </div>
+                    ) : (
+                      <div className="p-4 text-center text-muted-foreground">
+                        <p>Carregando editor...</p>
+                      </div>
+                    )
+                  ) : (
+                    <div className="prose prose-base max-w-none dark:prose-invert h-full text-base [&_h3]:text-base [&_p]:text-base [&_ul]:text-base [&_li]:text-base">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {formatEspelhoTexto() || 'Nenhum texto disponível. Clique em "Editar" para adicionar conteúdo.'}
+                      </ReactMarkdown>
+                    </div>
+                  )}
+                </div>
+
                 {isGeneratingText && (
                   <div className="flex items-center justify-center p-4 bg-muted rounded-lg">
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    <span className="text-sm">Gerando texto automaticamente...</span>
+                    <span className="text-base">Gerando texto automaticamente...</span>
                   </div>
                 )}
                 
                 <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-medium">Imagens do Espelho</h3>
-                  <div className="flex gap-2">
-                    <Button variant="outline" onClick={handleOpenImageGallery}>
-                      <ImageIcon className="h-4 w-4 mr-2" />
-                      Gerenciar Imagens
+                  <h3 className="text-base sm:text-lg font-medium">Imagens do Espelho</h3>
+                  <div className="flex gap-1 sm:gap-2 flex-wrap">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={handleOpenImageGallery}
+                      className="text-xs sm:text-sm"
+                    >
+                      <ImageIcon className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                      <span className="hidden sm:inline">Gerenciar Imagens</span>
+                      <span className="sm:hidden">Imagens</span>
                     </Button>
                     {imagens.length > 0 && (
                       <Button
                         variant="outline"
+                        size="sm"
                         onClick={() => handleGenerateTextFromImages(imagens)}
                         disabled={isGeneratingText || !leadData}
+                        className="text-xs sm:text-sm"
                       >
                         {isGeneratingText ? (
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2 animate-spin" />
                         ) : (
-                          <Send className="h-4 w-4 mr-2" />
+                          <Send className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                         )}
-                        Gerar Texto
+                        <span className="hidden sm:inline">Gerar Texto</span>
+                        <span className="sm:hidden">Gerar</span>
                       </Button>
                     )}
                   </div>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  {imagens.length > 0 ? (
-                    imagens.map((url, index) => (
-                      <div key={index} className="border rounded-md overflow-hidden h-32">
-                        <img 
-                          src={url} 
-                          alt={`Espelho ${index + 1}`} 
-                          className="w-full h-full object-contain"
-                        />
+                <div className="max-h-[150px] sm:max-h-[200px] overflow-y-auto border rounded-md p-2 bg-muted/20">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
+                    {imagens.length > 0 ? (
+                      imagens.map((url, index) => (
+                        <div key={index} className="border rounded-md overflow-hidden h-24 sm:h-32">
+                          <img 
+                            src={url} 
+                            alt={`Espelho ${index + 1}`} 
+                            className="w-full h-full object-contain"
+                          />
+                        </div>
+                      ))
+                    ) : (
+                      <div className="col-span-full text-center py-8 text-muted-foreground">
+                        Nenhuma imagem selecionada
                       </div>
-                    ))
-                  ) : (
-                    <div className="col-span-full text-center py-8 text-muted-foreground">
-                      Nenhuma imagem selecionada
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </>
             )}
           </div>
-          <DialogFooter className="gap-2">
+          <DialogFooter className="shrink-0 gap-2 border-t pt-4 flex-col sm:flex-row">
             {batchMode ? (
               <>
                 <Button variant="outline" onClick={handleClose} disabled={isSaving || isGeneratingText || isCancelando}>
@@ -453,13 +549,48 @@ export function EspelhoDialog({
               </>
             ) : (
               <>
-                <Button variant="outline" onClick={handleClose} disabled={isSaving || isGeneratingText || isCancelando}>
-                  Fechar
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    if (isEditMode) {
+                      setIsEditMode(false);
+                      setTexto(textoEspelho);
+                      setAst(null);
+                    } else {
+                      handleClose();
+                    }
+                  }} 
+                  disabled={isSaving || isGeneratingText || isCancelando}
+                >
+                  {isEditMode ? "Cancelar" : "Fechar"}
                 </Button>
                 {!aguardandoEspelho && (
-                  <Button onClick={handleSave} disabled={isSaving || isGeneratingText}>
+                  <Button 
+                    onClick={() => {
+                      if (isEditMode) {
+                        handleSave();
+                      } else {
+                        setIsEditMode(true);
+                        // Fazer parsing do markdown quando entrar no modo de edição
+                        if (!ast) {
+                          const formattedText = formatEspelhoTexto();
+                          if (formattedText && formattedText.trim().length > 0) {
+                            try {
+                              const processor = unified().use(remarkParse).use(remarkGfm);
+                              const tree = processor.parse(formattedText);
+                              setAst(tree);
+                            } catch (error) {
+                              console.error('Erro ao fazer parsing do markdown:', error);
+                              setAst(null);
+                            }
+                          }
+                        }
+                      }
+                    }} 
+                    disabled={isSaving || isGeneratingText}
+                  >
                     {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Salvar Alterações
+                    {isEditMode ? "Salvar" : "Editar"}
                   </Button>
                 )}
               </>

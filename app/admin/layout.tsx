@@ -40,27 +40,18 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
       }
 
               try {
-          toast("Verificando permissões", { description: "Verificando permissões de administrador...",
-           });
-
           // Primeiro, verificar se é SUPERADMIN
           const superAdminResponse = await fetch('/api/admin/notifications');
           
           if (superAdminResponse.ok) {
             setIsSuperAdmin(true);
             setIsAdmin(true);
-            toast.success("Acesso permitido", {
-              description: "Acesso de SUPERADMIN verificado",
-            });
           } else {
             // Se não é SUPERADMIN, verificar se é ADMIN
             const adminResponse = await fetch('/api/admin/leads-chatwit/stats');
             
             if (adminResponse.ok) {
               setIsAdmin(true);
-              toast.success("Acesso permitido", {
-                description: "Acesso de ADMIN verificado",
-              });
             } else {
               toast.error("Acesso negado", {
                 description: "Você não tem permissão para acessar esta área.",
@@ -83,34 +74,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
     checkAdminAccess();
   }, [session, status, router, toast]);
 
-  // Exibir toast ao navegar entre páginas
-  useEffect(() => {
-    if (pathname && isAdmin) {
-      let pageTitle = "Painel de Administração";
-      let icon = <LayoutDashboard className="h-5 w-5" />;
-
-      if (pathname.includes('/admin/users')) {
-        pageTitle = "Gerenciamento de Usuários";
-        icon = <Users className="h-5 w-5" />;
-      } else if (pathname.includes('/admin/notifications')) {
-        pageTitle = "Sistema de Notificações";
-        icon = <Bell className="h-5 w-5" />;
-      } else if (pathname.includes('/admin/leads-chatwit')) {
-        pageTitle = "Gerenciamento de Leads Chatwit";
-        icon = <MessageSquare className="h-5 w-5" />;
-      } else if (pathname.includes('/admin/atendimento')) {
-        pageTitle = "Sistema do MTF Diamante";
-        icon = <Headphones className="h-5 w-5" />;
-      }
-
-      // Não exibir toast na primeira carga da página principal
-      if (!(pathname === '/admin' && loading)) {
-        toast("Área administrativa", {
-          description: `Área de ${pageTitle}`,
-        });
-      }
-    }
-  }, [pathname, isAdmin, loading, toast]);
+  // Removido toast de navegação entre páginas para reduzir poluição visual
 
   if (loading) {
     return (

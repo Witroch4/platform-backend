@@ -228,7 +228,21 @@ export async function POST(request: Request) {
     const purpose = (formData.get('purpose') as UploadPurpose) || 'vision';
     const sessionId = formData.get('sessionId') as string || null;
     
-    log.info(`Processando arquivo para purpose: ${purpose}, sessionId: ${sessionId}`);
+    // 🔧 NOVO: Controle inteligente de conversão baseado no tipo de sessão
+    let convertToImages: boolean;
+    const explicitConvertToImages = formData.get('convertToImages');
+    
+    if (explicitConvertToImages !== null) {
+      // Se foi explicitamente definido, usar o valor
+      convertToImages = explicitConvertToImages === 'true';
+    } else {
+      // 🔧 NOVO: Padrão específico apenas para espelhos padrão
+      const isEspelhoPadraoSession = sessionId?.startsWith('espelho-padrao-');
+      // Para espelhos padrão: false (PDF bruto), outros casos: true (imagens)
+      convertToImages = !isEspelhoPadraoSession; 
+    }
+    
+    log.info(`Processando arquivo para purpose: ${purpose}, sessionId: ${sessionId}, convertToImages: ${convertToImages} (padrão automático: ${explicitConvertToImages === null})`);
 
     if (!file) {
       log.error('Nenhum arquivo enviado');
@@ -251,8 +265,10 @@ export async function POST(request: Request) {
 
     const imageUrls: string[] = [];
     const savedImages: any[] = [];
+    let pdfUrl: string | null = null;
 
     if (isPdf) {
+      if (convertToImages) {
       // Converter PDF em imagens
       log.info('Iniciando conversão de PDF para imagens...');
       
@@ -301,6 +317,42 @@ export async function POST(request: Request) {
       } catch (conversionError) {
         log.error(`Erro na conversão do PDF: ${conversionError}`);
         throw new Error(`Falha ao converter PDF: ${conversionError}`);
+        }
+      } else {
+        // Enviar PDF bruto para MinIO
+        log.info('Fazendo upload do PDF bruto para MinIO...');
+        
+        try {
+          const uploadResult = await uploadToMinIO(buffer, fileName, mimeType, true);
+          pdfUrl = uploadResult.url;
+          log.info(`PDF bruto enviado para MinIO: ${pdfUrl}`);
+          
+          // Salvar PDF no banco se necessário
+          if (sessionId && !sessionId.startsWith('espelho-')) {
+            const savedFile = await db.generatedImage.create({
+              data: {
+                userId: session.user.id!,
+                sessionId: sessionId,
+                prompt: `PDF carregado: ${fileName}`,
+                model: 'pdf-upload',
+                imageUrl: pdfUrl,
+                thumbnailUrl: uploadResult.thumbnail_url,
+                mimeType: mimeType,
+                size: `${buffer.length}`,
+                quality: 'original',
+              }
+            });
+            
+            savedImages.push(savedFile);
+            log.info(`PDF salvo no banco: ${savedFile.id}`);
+          } else {
+            log.info(`PDF não salvo no banco (upload de espelho)`);
+          }
+          
+        } catch (uploadError) {
+          log.error(`Erro no upload do PDF: ${uploadError}`);
+          throw new Error(`Falha ao fazer upload do PDF: ${uploadError}`);
+        }
       }
       
     } else if (isImage) {
@@ -339,17 +391,40 @@ export async function POST(request: Request) {
       throw new Error('Tipo de arquivo não suportado. Apenas PDFs e imagens são aceitos para conversão.');
     }
 
-    return NextResponse.json({
+    // Resposta adaptada para suportar PDF bruto
+    const response = {
       success: true,
       file_type: isPdf ? 'pdf' : 'image',
-      images_count: imageUrls.length,
-      image_urls: imageUrls,
-      saved_images: savedImages,
+      convert_to_images: convertToImages,
       purpose: purpose,
-      message: isPdf 
-        ? `PDF convertido em ${imageUrls.length} imagem(ns) com sucesso`
-        : 'Imagem processada com sucesso'
+      saved_images: savedImages,
+    };
+
+    if (isPdf && convertToImages) {
+      // PDF convertido em imagens
+      return NextResponse.json({
+        ...response,
+        images_count: imageUrls.length,
+        image_urls: imageUrls,
+        message: `PDF convertido em ${imageUrls.length} imagem(ns) com sucesso`
+      });
+    } else if (isPdf && !convertToImages) {
+      // PDF bruto
+      return NextResponse.json({
+        ...response,
+        pdf_url: pdfUrl,
+        file_url: pdfUrl,
+        message: 'PDF processado com sucesso (sem conversão)'
+      });
+    } else {
+      // Imagem
+      return NextResponse.json({
+        ...response,
+        images_count: imageUrls.length,
+        image_urls: imageUrls,
+        message: 'Imagem processada com sucesso'
     });
+    }
 
   } catch (error: any) {
     log.error(`Erro ao processar arquivo: ${error.message}`);

@@ -74,11 +74,24 @@ export async function GET(request: Request): Promise<Response> {
       }
     });
 
+    // Contar leads aguardando processamento - filtrados ou todos
+    const aguardandoProcessamento = await prisma.leadChatwit.count({
+      where: {
+        ...leadFilter,
+        OR: [
+          { aguardandoManuscrito: true },
+          { aguardandoEspelho: true },
+          { aguardandoAnalise: true }
+        ]
+      }
+    });
+
     // Stats básicas
     const stats: any = {
       totalLeads,
       totalArquivos,
-      pendentes
+      pendentes,
+      aguardandoProcessamento
     };
 
     // Adicionar totalUsuarios apenas para SUPERADMIN

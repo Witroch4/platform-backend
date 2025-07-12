@@ -70,7 +70,13 @@ export function useLeadState(lead: LeadChatwit, onRefresh?: () => void) {
 
   const forceRefresh = () => {
     setRefreshKey(prev => prev + 1);
-    // Se há uma função de refresh externa, chamá-la para recarregar a lista do servidor
+    // Só chama onRefresh se explicitamente solicitado via flag
+    // Isso evita reloads desnecessários quando o estado muda via SSE
+  };
+
+  const forceServerRefresh = () => {
+    setRefreshKey(prev => prev + 1);
+    // Esta função força um refresh do servidor
     if (onRefresh) {
       onRefresh();
     }
@@ -93,7 +99,8 @@ export function useLeadState(lead: LeadChatwit, onRefresh?: () => void) {
         setHasEspelho(updates.hasEspelho);
       }
     }
-    forceRefresh();
+    // Apenas atualizar estado local, não forçar reload do servidor
+    setRefreshKey(prev => prev + 1);
   };
 
   const updateManuscritoState = (updates: any) => {
@@ -113,17 +120,20 @@ export function useLeadState(lead: LeadChatwit, onRefresh?: () => void) {
         setManuscritoProcessadoLocal(updates.manuscritoProcessado);
       }
     }
-    forceRefresh();
+    // Apenas atualizar estado local, não forçar reload do servidor
+    setRefreshKey(prev => prev + 1);
   };
 
   const updateAnaliseState = (updates: Partial<typeof localAnaliseState>) => {
     setLocalAnaliseState(prev => ({ ...prev, ...updates }));
-    forceRefresh();
+    // Apenas atualizar estado local, não forçar reload do servidor
+    setRefreshKey(prev => prev + 1);
   };
 
   const updateConsultoriaState = (value: boolean) => {
     setConsultoriaAtiva(value);
-    forceRefresh();
+    // Apenas atualizar estado local, não forçar reload do servidor
+    setRefreshKey(prev => prev + 1);
   };
 
   return {
@@ -135,6 +145,7 @@ export function useLeadState(lead: LeadChatwit, onRefresh?: () => void) {
     localEspelhoState,
     localAnaliseState,
     forceRefresh,
+    forceServerRefresh, // Nova função para refresh explícito do servidor
     updateEspelhoState,
     updateManuscritoState,
     updateAnaliseState,

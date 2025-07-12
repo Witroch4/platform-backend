@@ -15,7 +15,7 @@ export function ConsultoriaCell({
   onConsultoriaToggle 
 }: ConsultoriaCellProps) {
   return (
-    <TableCell className="w-[80px] p-2 align-middle">
+    <TableCell className="min-w-[80px] max-w-[120px] p-2 align-middle">
       <div className="flex items-center justify-center">
         <TooltipProvider>
           <Tooltip>

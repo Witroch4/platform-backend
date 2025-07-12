@@ -12,7 +12,7 @@ services:
       CHOKIDAR_USEPOLLING: "true"
       FAST_REFRESH: "true"
       NEXT_WEBPACK_USEPOLLING: "true"
-      NEXT_SCRIPT: dev:polling
+      NEXT_SCRIPT: dev:turbo
 
       # Redis
       REDIS_HOST: "redis"

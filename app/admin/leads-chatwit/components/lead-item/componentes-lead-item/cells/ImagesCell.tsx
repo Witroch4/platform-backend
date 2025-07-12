@@ -25,13 +25,13 @@ export function ImagesCell({
 }: ImagesCellExtendedProps) {
   // Só mostra se tem PDF unificado
   if (!lead.pdfUnificado) {
-    return <TableCell className="w-[80px] p-2 align-middle"></TableCell>;
+    return <TableCell className="min-w-[70px] max-w-[100px] p-2 align-middle"></TableCell>;
   }
 
   // Se já tem imagens convertidas
   if (lead.arquivos.some(a => a.pdfConvertido)) {
     return (
-      <TableCell className="w-[80px] p-2 align-middle">
+      <TableCell className="min-w-[70px] max-w-[100px] p-2 align-middle">
         <LeadContextMenu
           contextType="imagem"
           onAction={onContextMenuAction}
@@ -68,13 +68,13 @@ export function ImagesCell({
 
   // Botão para converter
   return (
-    <TableCell className="w-[80px] p-2 align-middle">
+    <TableCell className="min-w-[70px] max-w-[100px] p-2 align-middle">
       <Button
         variant="outline"
         size="sm"
         onClick={onConverter}
         disabled={isConverting === lead.id}
-        className="w-full"
+        className="w-full text-xs px-2 py-1 h-auto min-h-8"
       >
         <RefreshCw className={`h-4 w-4 mr-1 ${isConverting === lead.id ? "animate-spin" : ""}`} />
         Converter
