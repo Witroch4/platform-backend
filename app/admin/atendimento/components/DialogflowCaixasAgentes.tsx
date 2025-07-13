@@ -42,7 +42,17 @@ interface CaixaEntrada {
   updatedAt: string;
 }
 
-export function DialogflowCaixasAgentes() {
+interface DialogflowCaixasAgentesProps {
+  initialChatwitAccountId?: string;
+  initialChatwitAccessToken?: string;
+  onConfigChange?: (config: { chatwitAccountId: string; chatwitAccessToken: string }) => void;
+}
+
+export function DialogflowCaixasAgentes({
+  initialChatwitAccountId = '',
+  initialChatwitAccessToken = '',
+  onConfigChange
+}: DialogflowCaixasAgentesProps) {
   const [caixas, setCaixas] = useState<CaixaEntrada[]>([]);
   const [inboxes, setInboxes] = useState<Inbox[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,9 +61,10 @@ export function DialogflowCaixasAgentes() {
   // Estados para configuração do Chatwit
   const [showConfigDialog, setShowConfigDialog] = useState(false);
   const [configData, setConfigData] = useState({
-    chatwitAccountId: '',
-    chatwitAccessToken: '',
+    chatwitAccountId: initialChatwitAccountId,
+    chatwitAccessToken: initialChatwitAccessToken,
   });
+  const [configFetched, setConfigFetched] = useState(false);
   
   // Estados para caixas
   const [showCaixaDialog, setShowCaixaDialog] = useState(false);
@@ -81,6 +92,37 @@ export function DialogflowCaixasAgentes() {
     fetchConfig();
   }, []);
 
+  // Preencher configData com props ao abrir dialog
+  useEffect(() => {
+    if (showConfigDialog) {
+      setConfigData({
+        chatwitAccountId: initialChatwitAccountId,
+        chatwitAccessToken: initialChatwitAccessToken,
+      });
+    }
+  }, [showConfigDialog, initialChatwitAccountId, initialChatwitAccessToken]);
+
+  // Buscar config do backend só se não vier por props
+  useEffect(() => {
+    if (showConfigDialog && !configFetched && !initialChatwitAccountId && !initialChatwitAccessToken) {
+      axios.get('/api/admin/dialogflow/config')
+        .then(res => {
+          if (res.data?.config?.chatwitAccountId) {
+            setConfigData(prev => ({ ...prev, chatwitAccountId: res.data.config.chatwitAccountId }));
+          }
+          if (res.data?.config?.chatwitAccessToken) {
+            setConfigData(prev => ({ ...prev, chatwitAccessToken: res.data.config.chatwitAccessToken }));
+          }
+          setConfigFetched(true);
+        })
+        .catch(() => setConfigFetched(true));
+    }
+    if (!showConfigDialog) {
+      setConfigFetched(false);
+      setConfigData({ chatwitAccountId: initialChatwitAccountId, chatwitAccessToken: initialChatwitAccessToken });
+    }
+  }, [showConfigDialog, configFetched, initialChatwitAccountId, initialChatwitAccessToken]);
+
   const fetchCaixas = async () => {
     try {
       const response = await axios.get('/api/admin/dialogflow/caixas');
@@ -93,10 +135,20 @@ export function DialogflowCaixasAgentes() {
   };
 
   const fetchInboxes = async () => {
+    // Buscar config primeiro
     try {
+      const configRes = await axios.get('/api/admin/dialogflow/config');
+      const config = configRes.data?.config;
+      if (!config?.chatwitAccountId || !config?.chatwitAccessToken) {
+        toast.error('Configure o ID da Conta e o Token do Chatwit antes de buscar as caixas de entrada.');
+        setInboxes([]);
+        return;
+      }
       const response = await axios.get('/api/admin/dialogflow/inboxes');
       setInboxes(response.data.inboxes || []);
     } catch (error) {
+      toast.error('Erro ao buscar inboxes');
+      setInboxes([]);
       console.error('Erro ao buscar inboxes:', error);
     }
   };
@@ -129,6 +181,8 @@ export function DialogflowCaixasAgentes() {
 
       setShowConfigDialog(false);
       fetchInboxes(); // Recarregar inboxes com nova configuração
+      // Notificar o pai se existir
+      onConfigChange?.(configData);
     } catch (error: any) {
       console.error('Erro ao salvar configuração:', error);
       toast.error(error.response?.data?.error || 'Erro ao salvar configuração');
@@ -454,9 +508,11 @@ export function DialogflowCaixasAgentes() {
               />
               <p className="text-sm text-muted-foreground mt-1">
                 Encontre na URL: https://chatwit.witdev.com.br/app/accounts/[ID]
+                {!!configData.chatwitAccountId && (
+                  <span className="block text-green-600">✓ ID configurado: {configData.chatwitAccountId}</span>
+                )}
               </p>
             </div>
-
             <div>
               <Label htmlFor="chatwitAccessToken">Token de Acesso Chatwit</Label>
               <div className="relative">
@@ -479,6 +535,9 @@ export function DialogflowCaixasAgentes() {
               </div>
               <p className="text-sm text-muted-foreground mt-1">
                 Encontre em: Configurações → Integrações → API Access Token
+                {!!configData.chatwitAccessToken && (
+                  <span className="block text-green-600">✓ Token configurado</span>
+                )}
               </p>
             </div>
           </div>
@@ -487,7 +546,7 @@ export function DialogflowCaixasAgentes() {
             <Button variant="outline" onClick={() => setShowConfigDialog(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleSaveConfig} disabled={saving}>
+            <Button onClick={handleSaveConfig} disabled={saving || !configData.chatwitAccountId || !configData.chatwitAccessToken}>
               {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Salvar Configuração
             </Button>

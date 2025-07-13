@@ -350,7 +350,6 @@ model UsuarioChatwit {
   appUser           User          @relation(fields: [appUserId], references: [id], onDelete: Cascade)
   
   // Campos do sistema externo (Chatwit)
-  externalUserId    Int?          // ID do usuário no sistema externo
   name              String
   availableName     String?
   accountName       String

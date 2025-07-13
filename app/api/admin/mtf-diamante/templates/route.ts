@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import axios from 'axios';
 import { auth } from '@/auth';
 import { mtfDiamanteConfig } from '@/app/config/atendimento';
-import prisma from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
 
 // Templates mockados para desenvolvimento (caso a API não retorne dados)
 const mockTemplates = [
@@ -265,6 +265,20 @@ export async function GET(request: Request) {
     }
     const userId = session.user.id;
 
+    // Buscar o UsuarioChatwit do usuário logado
+    const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
+      where: { appUserId: userId },
+      select: { id: true }
+    });
+
+    if (!usuarioChatwit) {
+      return NextResponse.json({ 
+        error: 'Usuário Chatwit não encontrado. Configure seu token primeiro.' 
+      }, { status: 404 });
+    }
+
+    const usuarioChatwitId = usuarioChatwit.id;
+
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category');
     const language = searchParams.get('language');
@@ -322,7 +336,7 @@ export async function GET(request: Request) {
     console.log('Buscando templates do banco de dados...');
     
     // Construir a condição de filtro com base nos parâmetros
-    const filterCondition: any = { userId };
+    const filterCondition: any = { usuarioChatwitId };
     if (category && category !== 'all') {
       filterCondition.category = category;
     }
@@ -348,7 +362,9 @@ export async function GET(request: Request) {
     
     // Se não encontrou nenhum template e não temos filtros, verificamos se a tabela está vazia
     if (dbTemplates.length === 0 && !category && !language) {
-      const totalCount = await prisma.whatsAppTemplate.count();
+      const totalCount = await prisma.whatsAppTemplate.count({
+        where: { usuarioChatwitId }
+      });
       if (totalCount === 0) {
         console.log('Banco de dados vazio, buscando templates da API para a primeira carga...');
         // Se o banco estiver vazio, buscamos da API para a primeira carga

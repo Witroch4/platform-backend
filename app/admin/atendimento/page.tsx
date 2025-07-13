@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -14,37 +14,54 @@ import { MensagensInterativas } from './components/MensagensInterativas';
 import { ApiWhatsApp } from './components/ApiWhatsApp';
 
 export default function AtendimentoPage() {
+  const [dialogflowConfig, setDialogflowConfig] = useState({
+    chatwitAccountId: '',
+    chatwitAccessToken: '',
+    isLoading: true
+  });
+
+  useEffect(() => {
+    fetchDialogflowConfig();
+  }, []);
+
+  const fetchDialogflowConfig = async () => {
+    try {
+      const response = await fetch('/api/admin/dialogflow/config');
+      const data = await response.json();
+      
+      if (response.ok && data.config) {
+        setDialogflowConfig({
+          chatwitAccountId: data.config.chatwitAccountId || '',
+          chatwitAccessToken: data.config.chatwitAccessToken || '',
+          isLoading: false
+        });
+      } else {
+        setDialogflowConfig(prev => ({ ...prev, isLoading: false }));
+      }
+    } catch (error) {
+      console.error('Erro ao buscar configuração do Dialogflow:', error);
+      setDialogflowConfig(prev => ({ ...prev, isLoading: false }));
+    }
+  };
+
   return (
-    <div className="container mx-auto p-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">Atendimento WhatsApp</h1>
-        <p className="text-muted-foreground mt-2">
-          Gerencie integrações, lotes, templates e mensagens interativas do WhatsApp
-        </p>
+    <div className="container mx-auto py-6 space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold">Atendimento</h1>
+          <p className="text-muted-foreground">
+            Gerencie integrações, lotes, templates e configurações de atendimento
+          </p>
+        </div>
       </div>
 
-      <Tabs defaultValue="integracoes" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="integracoes" className="flex items-center gap-2">
-            <Bot className="w-4 h-4" />
-            Integrações
-          </TabsTrigger>
-          <TabsTrigger value="lotes" className="flex items-center gap-2">
-            <Package className="w-4 h-4" />
-            Lotes
-          </TabsTrigger>
-          <TabsTrigger value="templates" className="flex items-center gap-2">
-            <FileText className="w-4 h-4" />
-            Templates
-          </TabsTrigger>
-          <TabsTrigger value="mensagens" className="flex items-center gap-2">
-            <MessageSquare className="w-4 h-4" />
-            Mensagens
-          </TabsTrigger>
-          <TabsTrigger value="api" className="flex items-center gap-2">
-            <Zap className="w-4 h-4" />
-            API WhatsApp
-          </TabsTrigger>
+      <Tabs defaultValue="integracoes" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="integracoes">Integrações</TabsTrigger>
+          <TabsTrigger value="lotes">Lotes</TabsTrigger>
+          <TabsTrigger value="templates">Templates</TabsTrigger>
+          <TabsTrigger value="mensagens">Mensagens</TabsTrigger>
+          <TabsTrigger value="api">API WhatsApp</TabsTrigger>
         </TabsList>
 
         <TabsContent value="integracoes" className="mt-6">
@@ -60,7 +77,17 @@ export default function AtendimentoPage() {
             </CardHeader>
             <CardContent>
               <Suspense fallback={<DialogflowIntegrationsSkeleton />}>
-                <DialogflowCaixasAgentes />
+                <DialogflowCaixasAgentes 
+                  initialChatwitAccountId={dialogflowConfig.chatwitAccountId}
+                  initialChatwitAccessToken={dialogflowConfig.chatwitAccessToken}
+                  onConfigChange={({ chatwitAccountId, chatwitAccessToken }) => {
+                    setDialogflowConfig(prev => ({
+                      ...prev,
+                      chatwitAccountId,
+                      chatwitAccessToken
+                    }));
+                  }}
+                />
               </Suspense>
             </CardContent>
           </Card>

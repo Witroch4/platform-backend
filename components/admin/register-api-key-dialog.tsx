@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,23 +22,43 @@ interface RegisterApiKeyDialogProps {
   trigger?: React.ReactNode;
   userHasToken?: boolean;
   onTokenRegistered?: () => void;
+  initialToken?: string;
+  initialAccountId?: string;
 }
 
 export function RegisterApiKeyDialog({ 
   trigger, 
   userHasToken = false,
-  onTokenRegistered 
+  onTokenRegistered,
+  initialToken = "",
+  initialAccountId = ""
 }: RegisterApiKeyDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [token, setToken] = useState("");
+  const [token, setToken] = useState(initialToken);
+  const [accountId, setAccountId] = useState(initialAccountId);
   const [isLoading, setIsLoading] = useState(false);
   const [showToken, setShowToken] = useState(false);
+
+  // Preencher os campos ao abrir o dialog, usando props se existirem
+  useEffect(() => {
+    if (isOpen) {
+      // Apenas atualiza o estado interno do dialog com os valores
+      // que vieram da página principal. Sem chamadas de API!
+      setToken(initialToken || "");
+      setAccountId(initialAccountId || "");
+    }
+  }, [isOpen, initialToken, initialAccountId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!token.trim()) {
       toast.error("Token não pode estar vazio");
+      return;
+    }
+
+    if (!accountId.trim()) {
+      toast.error("ID da conta não pode estar vazio");
       return;
     }
 
@@ -50,7 +70,10 @@ export function RegisterApiKeyDialog({
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ chatwitAccessToken: token.trim() }),
+        body: JSON.stringify({ 
+          chatwitAccessToken: token.trim(),
+          chatwitAccountId: accountId.trim()
+        }),
       });
 
       const data = await response.json();
@@ -58,6 +81,7 @@ export function RegisterApiKeyDialog({
       if (response.ok) {
         toast.success(data.message);
         setToken("");
+        setAccountId("");
         setIsOpen(false);
         onTokenRegistered?.();
       } else {
@@ -90,7 +114,7 @@ export function RegisterApiKeyDialog({
             {userHasToken ? "Atualizar" : "Cadastrar"} Token de Acesso do Chatwit
           </DialogTitle>
           <DialogDescription>
-            Configure seu token de acesso para visualizar apenas seus leads do Chatwit
+            Configure seu token de acesso e ID da conta para visualizar apenas seus leads do Chatwit
           </DialogDescription>
         </DialogHeader>
 
@@ -113,15 +137,19 @@ export function RegisterApiKeyDialog({
                 </Badge>
                 <div>
                   <p className="text-sm">
-                    Acesse sua conta no Chatwit em:{" "}
+                    Acesse sua conta no Chatwit e observe o ID na URL:{" "}
                     <a 
-                      href="https://chatwit.witdev.com.br/app/accounts/3/profile/settings" 
+                      href="https://chatwit.witdev.com.br/app/accounts/3" 
                       target="_blank" 
                       rel="noopener noreferrer"
                       className="text-primary hover:underline"
                     >
-                      Configurações do Perfil
+                      https://chatwit.witdev.com.br/app/accounts/<strong>3</strong>
                     </a>
+                    <br />
+                    <span className="text-xs text-muted-foreground">
+                      O número após "/accounts/" é o ID da sua conta (exemplo: 3)
+                    </span>
                   </p>
                 </div>
               </div>
@@ -132,7 +160,7 @@ export function RegisterApiKeyDialog({
                 </Badge>
                 <div>
                   <p className="text-sm">
-                    Procure pela seção "Token de acesso" na página
+                    Acesse as configurações do perfil e procure pela seção "Token de acesso"
                   </p>
                 </div>
               </div>
@@ -154,7 +182,7 @@ export function RegisterApiKeyDialog({
                 </Badge>
                 <div>
                   <p className="text-sm">
-                    Cole o token no campo abaixo e clique em "Registrar"
+                    Cole o token e o ID da conta nos campos abaixo e clique em "Registrar"
                   </p>
                 </div>
               </div>
@@ -164,28 +192,34 @@ export function RegisterApiKeyDialog({
           {/* Formulário */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
+              <Label htmlFor="accountId">ID da Conta Chatwit</Label>
+              <Input
+                id="accountId"
+                type="text"
+                placeholder="Ex: 3"
+                value={accountId}
+                onChange={(e) => setAccountId(e.target.value)}
+                className="font-mono"
+              />
+              <p className="text-xs text-muted-foreground">
+                Encontre o ID na URL do Chatwit: https://chatwit.witdev.com.br/app/accounts/<strong>3</strong>
+              </p>
+              {!!accountId && (
+                <span className="text-green-600 text-xs block mt-1">✓ ID configurado: {accountId}</span>
+              )}
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="token">Token de Acesso do Chatwit</Label>
-              <div className="relative w-full">
+              <div className="flex items-center gap-2 mt-2">
                 <Input
                   id="token"
                   type={showToken ? "text" : "password"}
                   placeholder="Cole seu token aqui (ex: XzqGPinpcBhwkfyyjuyShBgD)"
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
-                  className="font-mono pr-10"
+                  className="font-mono pr-10 flex-1"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowToken((v) => !v)}
-                  tabIndex={-1}
-                  aria-label={showToken ? "Ocultar token" : "Exibir token"}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground"
-                  style={{ background: "none", border: "none" }}
-                >
-                  {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-              <div className="flex gap-2 mt-2">
                 <Button
                   type="button"
                   variant="outline"
@@ -199,6 +233,7 @@ export function RegisterApiKeyDialog({
                       toast.error("Não foi possível colar da área de transferência");
                     }
                   }}
+                  className="shrink-0"
                 >
                   <Copy className="h-4 w-4" />
                 </Button>
@@ -236,7 +271,7 @@ export function RegisterApiKeyDialog({
           <Button 
             type="submit" 
             onClick={handleSubmit}
-            disabled={isLoading || !token.trim()}
+            disabled={isLoading || !token.trim() || !accountId.trim()}
           >
             {isLoading ? "Registrando..." : userHasToken ? "Atualizar Token" : "Registrar Token"}
           </Button>

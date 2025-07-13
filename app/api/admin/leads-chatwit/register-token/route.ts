@@ -127,7 +127,8 @@ export async function GET(request: NextRequest) {
     const usuarioChatwit = await db.usuarioChatwit.findUnique({
       where: { appUserId: session.user.id },
       select: {
-        chatwitAccessToken: true
+        chatwitAccessToken: true,
+        chatwitAccountId: true
       }
     });
 
@@ -137,7 +138,9 @@ export async function GET(request: NextRequest) {
         name: user.name,
         email: user.email,
         hasToken: !!usuarioChatwit?.chatwitAccessToken,
-        role: user.role
+        role: user.role,
+        chatwitAccessToken: usuarioChatwit?.chatwitAccessToken || "",
+        chatwitAccountId: usuarioChatwit?.chatwitAccountId || ""
       }
     });
 

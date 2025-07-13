@@ -252,7 +252,7 @@ CREATE TABLE "Message" (
 CREATE TABLE "UsuarioChatwit" (
     "id" TEXT NOT NULL,
     "appUserId" TEXT NOT NULL,
-    "externalUserId" INTEGER,
+    "" INTEGER,
     "name" TEXT NOT NULL,
     "availableName" TEXT,
     "accountId" INTEGER NOT NULL,

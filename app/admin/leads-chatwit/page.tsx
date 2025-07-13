@@ -59,7 +59,9 @@ export default function LeadsChatwitPage() {
   const [userInfo, setUserInfo] = useState({
     hasToken: false,
     role: "ADMIN",
-    isLoading: true
+    isLoading: true,
+    chatwitAccessToken: "", // <--- Adicionar
+    chatwitAccountId: ""    // <--- Adicionar
   });
   const [showEspelhosPadraoDrawer, setShowEspelhosPadraoDrawer] = useState(false);
   const [showModeloRecursoDrawer, setShowModeloRecursoDrawer] = useState(false);
@@ -85,6 +87,9 @@ export default function LeadsChatwitPage() {
         setUserInfo({
           hasToken: data.user.hasToken,
           role: data.user.role,
+          // Assumindo que o backend agora retorna esses campos
+          chatwitAccessToken: data.user.chatwitAccessToken || "",
+          chatwitAccountId: data.user.chatwitAccountId || "",
           isLoading: false
         });
       }
@@ -143,6 +148,9 @@ export default function LeadsChatwitPage() {
           {userInfo.role !== "SUPERADMIN" && !userInfo.isLoading && (
             <RegisterApiKeyDialog 
               userHasToken={userInfo.hasToken}
+              // Passando os dados que já temos
+              initialToken={userInfo.chatwitAccessToken}
+              initialAccountId={userInfo.chatwitAccountId}
               onTokenRegistered={() => {
                 fetchUserInfo();
                 handleRefresh();
