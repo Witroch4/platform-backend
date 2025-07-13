@@ -1,6 +1,6 @@
 export const metadata = {
-  title: 'Autenticação - ChatWit Social',
-  description: 'Faça login ou cadastre-se no ChatWit Social',
+  title: 'Autenticação - Socialwise Chatwit',
+  description: 'Faça login ou cadastre-se no Socialwise Chatwit',
 }
 
 export default function AuthLayout({

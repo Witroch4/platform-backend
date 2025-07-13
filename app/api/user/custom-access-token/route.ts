@@ -12,19 +12,25 @@ export async function GET() {
 
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { customAccessToken: true, role: true }
+      select: { role: true }
     });
 
     if (!user) {
       return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
     }
 
+    // Buscar o usuário Chatwit
+    const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
+      where: { appUserId: session.user.id },
+      select: { chatwitAccessToken: true }
+    });
+
     return NextResponse.json({ 
-      customAccessToken: user.customAccessToken,
+      chatwitAccessToken: usuarioChatwit?.chatwitAccessToken,
       role: user.role 
     });
   } catch (error) {
-    console.error("Erro ao buscar customAccessToken:", error);
+    console.error("Erro ao buscar chatwitAccessToken:", error);
     return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 });
   }
 } 

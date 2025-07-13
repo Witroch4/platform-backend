@@ -1,6 +1,6 @@
 import { Job } from 'bullmq';
-import { prisma } from '@/lib/prisma';
-import { ILeadJobData } from '@/lib/queue/leads-chatwit.queue';
+import { prisma } from '../../lib/prisma';
+import { ILeadJobData } from '../../lib/queue/leads-chatwit.queue';
 
 // Cache para acumular jobs do mesmo lead
 const leadJobsCache: Record<string, {
@@ -61,7 +61,7 @@ async function processAccumulatedJobs(sourceId: string) {
     // 1) Find or create/update do usuário
     let usuarioDb = await prisma.usuarioChatwit.findFirst({
       where: {
-        userId: Number(usuario.account.id),
+        chatwitAccountId: usuario.account.id.toString(),
         accountName: usuario.account.name
       }
     });
@@ -71,20 +71,32 @@ async function processAccumulatedJobs(sourceId: string) {
         where: { id: usuarioDb.id },
         data: {
           channel: usuario.channel,
-          inboxId: usuario.inbox?.id ?? undefined,
-          inboxName: usuario.inbox?.name
+          chatwitAccountId: usuario.account.id.toString() // Atualizar chatwitAccountId
         }
       });
     } else {
+      // Buscar o usuário do app pelo externalUserId
+      const appUser = await prisma.user.findFirst({
+        where: {
+          accounts: {
+            some: {
+              providerAccountId: usuario.account.id.toString()
+            }
+          }
+        }
+      });
+
+      if (!appUser) {
+        throw new Error(`Usuário do app não encontrado para accountId: ${usuario.account.id}`);
+      }
+
       usuarioDb = await prisma.usuarioChatwit.create({
         data: {
-          userId: Number(usuario.account.id),
+          appUserId: appUser.id, // Usar appUserId em vez de userId
           name: usuario.account.name,
-          accountId: Number(usuario.account.id),
           accountName: usuario.account.name,
           channel: usuario.channel,
-          inboxId: usuario.inbox?.id ?? undefined,
-          inboxName: usuario.inbox?.name
+          chatwitAccountId: usuario.account.id.toString() // Salvar chatwitAccountId
         }
       });
     }
@@ -94,8 +106,8 @@ async function processAccumulatedJobs(sourceId: string) {
       where: { sourceId },
       update: {
         thumbnail: origemLead.thumbnail,
-        leadUrl: origemLead.leadUrl,
-        chatwitAccessToken: firstJob.data.payload.usuario.CHATWIT_ACCESS_TOKEN
+        leadUrl: origemLead.leadUrl
+        // Removido chatwitAccessToken pois não é mais necessário no LeadChatwit
       },
       create: {
         usuarioId: usuarioDb.id,
@@ -103,13 +115,13 @@ async function processAccumulatedJobs(sourceId: string) {
         name: origemLead.name || 'Lead sem nome',
         phoneNumber: origemLead.phone_number,
         thumbnail: origemLead.thumbnail,
-        leadUrl: origemLead.leadUrl,
-        chatwitAccessToken: firstJob.data.payload.usuario.CHATWIT_ACCESS_TOKEN
+        leadUrl: origemLead.leadUrl
+        // Removido chatwitAccessToken pois não é mais necessário no LeadChatwit
       }
     });
 
     // 3) Coleta todos os arquivos de todos os jobs
-    let todosArquivos = [];
+    let todosArquivos: any[] = [];
     
     for (const job of jobs) {
       const arquivos = job.data.payload.origemLead.arquivos || [];

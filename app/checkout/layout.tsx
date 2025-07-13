@@ -1,6 +1,6 @@
 export const metadata = {
-  title: 'Checkout - ChatWit Social',
-  description: 'Finalize sua assinatura do ChatWit Social',
+  title: 'Checkout - Socialwise Chatwit',
+  description: 'Finalize sua assinatura do Socialwise Chatwit',
 }
 
 export default function CheckoutLayout({

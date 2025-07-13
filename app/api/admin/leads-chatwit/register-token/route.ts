@@ -10,43 +10,70 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
 
-    const { customAccessToken } = await request.json();
+    const { chatwitAccessToken, chatwitAccountId } = await request.json();
 
-    if (!customAccessToken || typeof customAccessToken !== 'string') {
+    if (!chatwitAccessToken || typeof chatwitAccessToken !== 'string') {
       return NextResponse.json(
         { error: "Token de acesso é obrigatório" },
         { status: 400 }
       );
     }
 
+    if (!chatwitAccountId || typeof chatwitAccountId !== 'string') {
+      return NextResponse.json(
+        { error: "ID da conta Chatwit é obrigatório" },
+        { status: 400 }
+      );
+    }
+
     // Verificar se o token já está sendo usado por outro usuário
-    const existingUser = await db.user.findFirst({
+    const existingUsuario = await db.usuarioChatwit.findFirst({
       where: {
-        customAccessToken,
-        id: {
+        chatwitAccessToken,
+        appUserId: {
           not: session.user.id
         }
       }
     });
 
-    if (existingUser) {
+    if (existingUsuario) {
       return NextResponse.json(
         { error: "Este token já está sendo usado por outro usuário" },
         { status: 400 }
       );
     }
 
-    // Atualizar o usuário com o novo token
-    const updatedUser = await db.user.update({
-      where: {
-        id: session.user.id
-      },
-      data: {
-        customAccessToken: customAccessToken.trim()
-      }
+    // Buscar ou criar o usuário Chatwit
+    let usuarioChatwit = await db.usuarioChatwit.findUnique({
+      where: { appUserId: session.user.id }
     });
 
-    console.log(`[API] Token atualizado para usuário ${session.user.id}: ${customAccessToken}`);
+    if (!usuarioChatwit) {
+      // Criar novo usuário Chatwit se não existir
+      usuarioChatwit = await db.usuarioChatwit.create({
+        data: {
+          appUserId: session.user.id,
+          name: session.user.name || 'Usuário',
+          accountName: 'Conta Padrão',
+          channel: 'WhatsApp',
+          chatwitAccountId: chatwitAccountId.trim(),
+          chatwitAccessToken: chatwitAccessToken.trim()
+        }
+      });
+    } else {
+      // Atualizar o usuário Chatwit existente
+      usuarioChatwit = await db.usuarioChatwit.update({
+        where: {
+          id: usuarioChatwit.id
+        },
+        data: {
+          chatwitAccountId: chatwitAccountId.trim(),
+          chatwitAccessToken: chatwitAccessToken.trim()
+        }
+      });
+    }
+
+    console.log(`[API] Token atualizado para usuário ${session.user.id}: ${chatwitAccessToken}`);
 
     return NextResponse.json({
       success: true,
@@ -79,7 +106,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
 
-    // Buscar o usuário atual com o token
+    // Buscar o usuário atual
     const user = await db.user.findUnique({
       where: {
         id: session.user.id
@@ -88,7 +115,6 @@ export async function GET(request: NextRequest) {
         id: true,
         name: true,
         email: true,
-        customAccessToken: true,
         role: true
       }
     });
@@ -97,12 +123,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
     }
 
+    // Buscar o usuário Chatwit
+    const usuarioChatwit = await db.usuarioChatwit.findUnique({
+      where: { appUserId: session.user.id },
+      select: {
+        chatwitAccessToken: true
+      }
+    });
+
     return NextResponse.json({
       user: {
         id: user.id,
         name: user.name,
         email: user.email,
-        hasToken: !!user.customAccessToken,
+        hasToken: !!usuarioChatwit?.chatwitAccessToken,
         role: user.role
       }
     });

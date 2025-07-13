@@ -46,9 +46,9 @@ export const {
           token.providerAccountId = session.user.providerAccountId;
         }
         
-        // Atualizar customAccessToken se fornecido na sessão
-        if (session.user.customAccessToken !== undefined) {
-          token.customAccessToken = session.user.customAccessToken;
+        // Atualizar chatwitAccessToken se fornecido na sessão
+        if (session.user.chatwitAccessToken !== undefined) {
+          token.chatwitAccessToken = session.user.chatwitAccessToken;
         }
         
         return token;
@@ -63,11 +63,17 @@ export const {
 
         const dbUser = await prisma.user.findUnique({
           where: { id: user.id },
-          select: { password: true, customAccessToken: true }
+          select: { password: true }
         });
         token.isOAuth = !dbUser?.password;
         token.isTwoFactorAuthEnabled = user.isTwoFactorAuthEnabled || false;
-        token.customAccessToken = dbUser?.customAccessToken || undefined;
+        
+        // Buscar chatwitAccessToken do UsuarioChatwit
+        const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
+          where: { appUserId: user.id },
+          select: { chatwitAccessToken: true }
+        });
+        token.chatwitAccessToken = usuarioChatwit?.chatwitAccessToken || undefined;
 
         console.log("Requisição Prisma: Buscando status de autenticação de dois fatores");
         if (!user.id) {
@@ -121,10 +127,10 @@ export const {
         session.user.instagramAccessToken = token.instagramAccessToken as string | undefined;
         session.user.providerAccountId = token.providerAccountId as string | undefined;
         
-        // Buscar customAccessToken do banco sempre para manter atualizado
+        // Buscar chatwitAccessToken do banco sempre para manter atualizado
         // NOTA: Esta consulta foi removida para evitar problemas no Edge Runtime (middleware)
-        // O customAccessToken será buscado diretamente nas páginas que precisam dele
-        session.user.customAccessToken = token.customAccessToken as string | undefined;
+        // O chatwitAccessToken será buscado diretamente nas páginas que precisam dele
+        session.user.chatwitAccessToken = token.chatwitAccessToken as string | undefined;
       }
       return session;
     },

@@ -31,6 +31,14 @@ export function useLeadState(lead: LeadChatwit, onRefresh?: () => void) {
     analiseValidada: !!lead.analiseValidada
   });
 
+  // Estado para o recurso
+  const [localRecursoState, setLocalRecursoState] = useState({
+    recursoUrl: lead.recursoUrl,
+    aguardandoRecurso: !!lead.aguardandoRecurso,
+    recursoPreliminar: lead.recursoPreliminar,
+    recursoValidado: !!lead.recursoValidado
+  });
+
   // Efeitos para sincronizar com mudanças no lead
   useEffect(() => {
     const novoHasEspelho = hasEspelhoData(lead);
@@ -63,6 +71,15 @@ export function useLeadState(lead: LeadChatwit, onRefresh?: () => void) {
       analiseValidada: !!lead.analiseValidada
     });
   }, [lead.analiseUrl, lead.aguardandoAnalise, lead.analisePreliminar, lead.analiseValidada, refreshKey]);
+
+  useEffect(() => {
+    setLocalRecursoState({
+      recursoUrl: lead.recursoUrl,
+      aguardandoRecurso: !!lead.aguardandoRecurso,
+      recursoPreliminar: lead.recursoPreliminar,
+      recursoValidado: !!lead.recursoValidado
+    });
+  }, [lead.recursoUrl, lead.aguardandoRecurso, lead.recursoPreliminar, lead.recursoValidado, refreshKey]);
 
   useEffect(() => {
     setConsultoriaAtiva(!!lead.consultoriaFase2);
@@ -130,6 +147,12 @@ export function useLeadState(lead: LeadChatwit, onRefresh?: () => void) {
     setRefreshKey(prev => prev + 1);
   };
 
+  const updateRecursoState = (updates: Partial<typeof localRecursoState>) => {
+    setLocalRecursoState(prev => ({ ...prev, ...updates }));
+    // Apenas atualizar estado local, não forçar reload do servidor
+    setRefreshKey(prev => prev + 1);
+  };
+
   const updateConsultoriaState = (value: boolean) => {
     setConsultoriaAtiva(value);
     // Apenas atualizar estado local, não forçar reload do servidor
@@ -144,11 +167,13 @@ export function useLeadState(lead: LeadChatwit, onRefresh?: () => void) {
     localManuscritoState,
     localEspelhoState,
     localAnaliseState,
+    localRecursoState,
     forceRefresh,
     forceServerRefresh, // Nova função para refresh explícito do servidor
     updateEspelhoState,
     updateManuscritoState,
     updateAnaliseState,
+    updateRecursoState,
     updateConsultoriaState
   };
 } 

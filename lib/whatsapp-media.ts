@@ -37,7 +37,7 @@ export async function downloadMetaMediaAndUploadToMinio(
     const template = await db.whatsAppTemplate.findFirst({
       where: { 
         templateId: templateId,
-        userId: userId
+        usuarioChatwitId: userId
       }
     }) as unknown as WhatsAppTemplateWithMedia | null;
     
@@ -74,7 +74,7 @@ export async function downloadMetaMediaAndUploadToMinio(
     await db.$executeRaw`
       UPDATE "WhatsAppTemplate"
       SET "publicMediaUrl" = ${uploadResult.url}
-      WHERE "templateId" = ${templateId} AND "userId" = ${userId}
+      WHERE "templateId" = ${templateId} AND "usuarioChatwitId" = ${userId}
     `;
     
     console.log(`[Media] Upload concluído: ${uploadResult.url}`);
@@ -112,7 +112,7 @@ export async function getPublicMediaUrl(
     const template = await db.whatsAppTemplate.findFirst({
       where: { 
         templateId: templateId,
-        userId: userId
+        usuarioChatwitId: userId
       }
     }) as unknown as WhatsAppTemplateWithMedia | null;
     

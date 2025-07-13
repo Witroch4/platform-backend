@@ -24,19 +24,25 @@ export async function GET(request: Request): Promise<Response> {
     // Buscar informações do usuário atual
     const currentUser = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { role: true, customAccessToken: true }
+      select: { role: true }
     });
 
     if (!currentUser) {
       return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
     }
 
+    // Buscar o usuário Chatwit
+    const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
+      where: { appUserId: session.user.id },
+      select: { chatwitAccessToken: true }
+    });
+
     // Construir a cláusula where baseada nos parâmetros e role
     const where: any = {};
     
     // Se não for SUPERADMIN, filtrar apenas usuários relacionados ao token do usuário atual
     if (currentUser.role !== "SUPERADMIN") {
-      if (!currentUser.customAccessToken) {
+      if (!usuarioChatwit?.chatwitAccessToken) {
         // Se o usuário ADMIN não tem token configurado, não mostrar nenhum usuário
         return NextResponse.json({
           usuarios: [],
@@ -49,13 +55,10 @@ export async function GET(request: Request): Promise<Response> {
         });
       }
 
-      // Filtrar apenas usuários que têm leads com o mesmo token de acesso
-      where.leads = {
-        some: {
-          chatwitAccessToken: currentUser.customAccessToken
-        }
-      };
+      // Para usuários não-SUPERADMIN, filtrar apenas o próprio usuário do Chatwit
+      where.appUserId = session.user.id;
     }
+    // Se for SUPERADMIN, não adiciona filtro = mostra todos os usuários
     
     if (searchTerm) {
       where.OR = [
@@ -116,61 +119,33 @@ export async function GET(request: Request): Promise<Response> {
 export async function DELETE(request: Request): Promise<Response> {
   try {
     const session = await auth();
-    
     if (!session || !session.user) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
-
     // Buscar informações do usuário atual
     const currentUser = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: { role: true }
     });
-
     if (!currentUser || currentUser.role !== "SUPERADMIN") {
       return NextResponse.json(
         { error: "Acesso negado. Apenas SUPERADMIN pode remover usuários." },
         { status: 403 }
       );
     }
-
     const url = new URL(request.url);
     const id = url.searchParams.get("id");
-
     if (!id) {
       return NextResponse.json(
         { error: "ID do usuário é obrigatório" },
         { status: 400 }
       );
     }
-
-    // Buscar todos os leads do usuário
-    const leads = await prisma.leadChatwit.findMany({
-      where: { usuarioId: id },
-      select: { id: true },
-    });
-
-    // Remover os arquivos de todos os leads do usuário
-    if (leads.length > 0) {
-      const leadIds = leads.map(lead => lead.id);
-      await prisma.arquivoLeadChatwit.deleteMany({
-        where: { leadId: { in: leadIds } },
-      });
-    }
-
-    // Remover todos os leads do usuário
-    await prisma.leadChatwit.deleteMany({
-      where: { usuarioId: id },
-    });
-
-    // Remover o usuário
-    await prisma.usuarioChatwit.delete({
-      where: { id },
-    });
-
+    // Remover o usuário (leads e arquivos serão removidos em cascata)
+    await prisma.usuarioChatwit.delete({ where: { id } });
     return NextResponse.json({
       success: true,
-      message: "Usuário e todos os seus leads removidos com sucesso",
+      message: "Usuário e todos os seus dados removidos com sucesso",
     });
   } catch (error) {
     console.error("[API Usuarios] Erro ao remover usuário:", error);

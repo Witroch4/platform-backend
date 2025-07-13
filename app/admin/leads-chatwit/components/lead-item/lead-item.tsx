@@ -205,6 +205,7 @@ export function LeadItem({
           lead={lead}
           onEdit={onEdit}
           localAnaliseState={leadState.localAnaliseState}
+          localRecursoState={leadState.localRecursoState}
           isEnviandoRecurso={dialogState.isEnviandoRecurso || false}
           refreshKey={leadState.refreshKey}
           onContextMenuAction={handlers.handleContextMenuAction}

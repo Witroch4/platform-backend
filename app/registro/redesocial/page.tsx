@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Instagram, Facebook, MessageSquare, Send, AlertCircle, Plus, Trash2, RefreshCw, CheckCircle, Users, BarChart, Calendar, Zap, Home, LogOut } from "lucide-react";
+import { Instagram, Facebook, MessageSquare, Send, AlertCircle, Plus, Trash2, RefreshCw, CheckCircle, Users, BarChart, Calendar, Zap, Home, LogOut, Bot, FileText, Shield, Star, ArrowRight, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
@@ -235,18 +235,21 @@ export default function RedeSocialPage() {
   };
 
   return (
-    <>
+    <div className="min-h-screen bg-white dark:bg-gray-900">
       {/* Navbar */}
-      <header className="sticky top-0 left-0 right-0 h-16 border-b bg-background z-40">
-        <div className="flex items-center justify-between h-full px-4">
+      <header className="sticky top-0 left-0 right-0 h-16 border-b bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm z-40">
+        <div className="flex items-center justify-between h-full px-4 max-w-7xl mx-auto">
           <div className="flex items-center">
             <Link href="/" className="flex items-center">
-              <Button variant="ghost" size="icon" className="h-8 w-8 mr-2">
-                <Home className="h-5 w-5" />
-                <span className="sr-only">Início</span>
-              </Button>
-              <h1 className="text-xl font-semibold hidden md:block">
-                ChatWit Social
+              <Image
+                src="/01 WitdeT.png"
+                							alt="Socialwise Chatwit Logo"
+                width={40}
+                height={40}
+                className="mr-3"
+              />
+              <h1 className="text-xl font-bold bg-gradient-to-r from-primary via-blue-600 to-purple-600 text-transparent bg-clip-text hidden md:block">
+                							Socialwise Chatwit
               </h1>
             </Link>
           </div>
@@ -258,14 +261,14 @@ export default function RedeSocialPage() {
             {session?.user && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Avatar className="h-8 w-8 cursor-pointer">
+                  <Avatar className="h-8 w-8 cursor-pointer ring-2 ring-primary/20 hover:ring-primary/40 transition-all">
                     <AvatarImage src={session.user.image || ""} alt={session.user.name || "Usuário"} />
-                    <AvatarFallback>
+                    <AvatarFallback className="bg-primary/10 text-primary">
                       {session.user.name?.charAt(0) || "U"}
                     </AvatarFallback>
                   </Avatar>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
+                <DropdownMenuContent align="end" className="w-56">
                   <div className="flex items-center justify-start gap-2 p-2">
                     <div className="flex flex-col space-y-1 leading-none">
                       {session.user.name && <p className="font-medium">{session.user.name}</p>}
@@ -297,7 +300,7 @@ export default function RedeSocialPage() {
                   )}
                   <DropdownMenuItem
                     onClick={() => signOut({ callbackUrl: '/' })}
-                    className="flex items-center"
+                    className="flex items-center text-red-600 dark:text-red-400"
                   >
                     <LogOut className="mr-2 h-4 w-4" />
                     <span>Sair</span>
@@ -309,509 +312,500 @@ export default function RedeSocialPage() {
         </div>
       </header>
 
-      <div className="space-y-8 pb-10">
-        {/* Banner com logo */}
-        <div className="bg-gradient-to-r from-blue-600 to-cyan-500 rounded-xl p-8 text-white relative overflow-hidden">
-          <div className="absolute right-0 top-0 opacity-10">
-            <Image src="/ChatWit.svg" alt="ChatWit Logo" width={300} height={300} />
+      <div className="max-w-7xl mx-auto px-4 py-8 space-y-12">
+        {/* Hero Section */}
+        <section className="relative overflow-hidden bg-gradient-to-br from-primary/10 via-blue-50 to-purple-50 dark:from-primary/20 dark:via-blue-900/20 dark:to-purple-900/20 rounded-3xl p-8 md:p-12">
+          <div className="absolute right-0 top-0 opacity-10 dark:opacity-5">
+            <Image src="/social-connection.svg" alt="Social Connection" width={400} height={400} />
           </div>
-          <div className="flex items-center gap-4 mb-4">
-            <div className="bg-white rounded-full p-2">
-              <Image src="/W.svg" alt="W Logo" width={40} height={40} className="h-10 w-10" />
+          <div className="relative z-10">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="bg-white dark:bg-gray-800 rounded-2xl p-3 shadow-lg">
+                <Image src="/01 WitdeT.png" alt="W Logo" width={50} height={50} className="h-12 w-12" />
+              </div>
+              <div>
+                <h1 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white">
+                  <span className="bg-gradient-to-r from-primary via-blue-600 to-purple-600 text-transparent bg-clip-text">
+                    Conecte Suas Redes
+                  </span>
+                </h1>
+                <p className="text-xl text-gray-600 dark:text-gray-400 mt-2">
+                  Potencialize seu engajamento com automação inteligente
+                </p>
+              </div>
             </div>
-            <h1 className="text-3xl font-bold">ChatWit Social</h1>
+            
+            <p className="text-lg text-gray-600 dark:text-gray-400 max-w-3xl mb-8">
+              Conecte suas contas de redes sociais e transforme seguidores em clientes com nossa IA avançada. 
+              Sistema completo de automação para Instagram, WhatsApp e muito mais.
+            </p>
+            
+            <div className="flex flex-col sm:flex-row gap-4">
+              <Button
+                onClick={handleInstagramConnect}
+                disabled={isConnecting}
+                className="bg-gray-800 hover:bg-gray-700 text-white border-2 border-gray-600 hover:border-gray-500 font-medium rounded-lg px-8 py-4 text-center inline-flex items-center justify-center text-lg transition-all duration-200 shadow-sm"
+              >
+                <Instagram className="h-5 w-5 mr-2" />
+                {isConnecting ? "Conectando..." : "Conectar Instagram"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="bg-gray-800 hover:bg-gray-700 text-white border-2 border-gray-600 hover:border-gray-500 font-medium rounded-lg px-8 py-4 text-center text-lg transition-all duration-200 shadow-sm"
+              >
+                <RefreshCw className={`h-5 w-5 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                Atualizar Contas
+              </Button>
+            </div>
           </div>
-          <p className="text-xl max-w-2xl mb-6">
-            Conecte suas redes sociais e potencialize seu engajamento com automação inteligente
-          </p>
-          <div className="flex gap-4">
-            <Button
-              onClick={handleInstagramConnect}
-              className="bg-white text-blue-600 hover:bg-blue-50"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Conectar Conta
-            </Button>
-            <Button
-              variant="outline"
-              className="bg-transparent border-white text-white hover:bg-white/20"
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-              Atualizar
-            </Button>
-          </div>
-        </div>
+        </section>
 
-        {/* Depuração */}
+        {/* Contas Conectadas */}
+        {isLoading ? (
+          <div className="flex justify-center items-center p-12">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-lg text-gray-600 dark:text-gray-400">Carregando suas contas...</p>
+            </div>
+          </div>
+        ) : connectedAccounts.length > 0 ? (
+          <section>
+            <div className="flex justify-between items-center mb-8">
+              <div>
+                <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Suas Contas Conectadas</h2>
+                <p className="text-gray-600 dark:text-gray-400 mt-2">Gerencie todas suas redes sociais em um só lugar</p>
+              </div>
+              <Badge variant="secondary" className="px-4 py-2 text-lg bg-primary/10 text-primary">
+                {connectedAccounts.length} {connectedAccounts.length === 1 ? 'conta' : 'contas'}
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {connectedAccounts.map((account) => (
+                <Card 
+                  key={account.id}
+                  className="group cursor-pointer hover:shadow-xl transition-all duration-300 border-2 hover:border-primary/50 bg-white dark:bg-gray-800"
+                  onClick={() => navigateToDashboard(account.providerAccountId)}
+                >
+                  <CardHeader className="pb-4">
+                    <div className="flex items-center gap-4">
+                      <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white shadow-lg">
+                        <Instagram className="h-8 w-8" />
+                      </div>
+                      <div className="flex-1">
+                        <CardTitle className="text-xl text-gray-900 dark:text-white">Instagram</CardTitle>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">@{account.igUsername}</p>
+                        {account.isMain && (
+                          <Badge variant="secondary" className="bg-primary/10 text-primary mt-2">
+                            <Star className="h-3 w-3 mr-1" />
+                            Principal
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </CardHeader>
+                  
+                  <CardContent>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          Ativo
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        {account.isMain
+                          ? "Conta principal para autenticação e gestão"
+                          : "Conta conectada para automação"}
+                      </p>
+                    </div>
+                  </CardContent>
+                  
+                  <CardFooter className="flex justify-between pt-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigateToDashboard(account.providerAccountId);
+                      }}
+                      className="flex-1 mr-2"
+                    >
+                      <ArrowRight className="h-4 w-4 mr-2" />
+                      Gerenciar
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDisconnectAccount(account.id);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </CardFooter>
+                </Card>
+              ))}
+
+              {/* Card para adicionar nova conta */}
+              <Card 
+                className="group cursor-pointer border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-primary hover:shadow-xl transition-all duration-300 flex flex-col items-center justify-center py-12 bg-gray-50/50 dark:bg-gray-800/50"
+                onClick={handleInstagramConnect}
+              >
+                <div className="rounded-2xl bg-primary/10 p-6 mb-4 group-hover:bg-primary/20 transition-colors">
+                  <Plus className="h-10 w-10 text-primary" />
+                </div>
+                <h3 className="text-xl font-semibold mb-2 text-gray-900 dark:text-white">Adicionar Nova Conta</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 text-center max-w-[200px]">
+                  Conecte outra conta do Instagram para ampliar seu alcance
+                </p>
+              </Card>
+            </div>
+          </section>
+        ) : session?.user?.id ? (
+          <section className="text-center py-16">
+            <div className="max-w-md mx-auto">
+              <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-6 w-24 h-24 mx-auto mb-6 flex items-center justify-center">
+                <Instagram className="h-12 w-12 text-gray-400" />
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Nenhuma conta conectada</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-8">
+                Comece conectando sua primeira conta do Instagram para aproveitar todos os benefícios da automação.
+              </p>
+              <Button onClick={handleInstagramConnect} size="lg" className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600">
+                <Instagram className="h-5 w-5 mr-2" />
+                Conectar Instagram
+              </Button>
+            </div>
+          </section>
+        ) : null}
+
+        {/* Error Message */}
+        {connectionError && (
+          <div className="p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-2xl flex items-start">
+            <AlertCircle className="h-6 w-6 text-red-500 mr-3 flex-shrink-0 mt-0.5" />
+            <div>
+              <h4 className="font-medium text-red-800 dark:text-red-400">Erro de Conexão</h4>
+              <p className="text-sm text-red-700 dark:text-red-300 mt-1">{connectionError}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Plataformas Disponíveis */}
+        <section>
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900 dark:text-white">Plataformas Disponíveis</h2>
+            <p className="text-xl text-gray-600 dark:text-gray-400 max-w-3xl mx-auto">
+              Conecte-se com seus clientes em todas as plataformas com uma única solução inteligente
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+            {/* Instagram - Disponível */}
+            <Card 
+              className={`group cursor-pointer border-2 transition-all duration-300 ${
+                selectedPlatform === "instagram"
+                  ? "border-pink-500 bg-pink-50 dark:bg-pink-950/20 shadow-lg"
+                  : "border-gray-200 dark:border-gray-700 hover:border-pink-300 hover:shadow-md"
+              }`}
+              onClick={() => setSelectedPlatform("instagram")}
+            >
+              <CardContent className="p-6 text-center">
+                <div className="w-16 h-16 bg-gradient-to-r from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <Instagram className="h-8 w-8 text-white" />
+                </div>
+                <h3 className="font-bold text-lg mb-2 text-gray-900 dark:text-white">Instagram</h3>
+                <Badge className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800">
+                  Disponível ✅
+                </Badge>
+              </CardContent>
+            </Card>
+
+            {/* WhatsApp - Ativo */}
+            <Card className="group border-2 border-gray-200 dark:border-gray-700 hover:border-green-300 hover:shadow-md transition-all duration-300">
+              <CardContent className="p-6 text-center">
+                <div className="w-16 h-16 bg-green-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <MessageCircle className="h-8 w-8 text-white" />
+                </div>
+                <h3 className="font-bold text-lg mb-2 text-gray-900 dark:text-white">WhatsApp</h3>
+                <Badge className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800">
+                  Ativo ✅
+                </Badge>
+              </CardContent>
+            </Card>
+
+            {/* Facebook - Em breve */}
+            <Card className="group border-2 border-gray-200 dark:border-gray-700 opacity-70">
+              <CardContent className="p-6 text-center">
+                <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <Facebook className="h-8 w-8 text-white" />
+                </div>
+                <h3 className="font-bold text-lg mb-2 text-gray-900 dark:text-white">Facebook</h3>
+                <Badge variant="secondary" className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
+                  Em Desenvolvimento 🚧
+                </Badge>
+              </CardContent>
+            </Card>
+
+            {/* TikTok - Em breve */}
+            <Card className="group border-2 border-gray-200 dark:border-gray-700 opacity-70">
+              <CardContent className="p-6 text-center">
+                <div className="w-16 h-16 bg-black rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <Image src="/tiktok-icon.svg" alt="TikTok" width={32} height={32} className="invert" />
+                </div>
+                <h3 className="font-bold text-lg mb-2 text-gray-900 dark:text-white">TikTok</h3>
+                <Badge variant="secondary" className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
+                  Em Breve 🔄
+                </Badge>
+              </CardContent>
+            </Card>
+
+            {/* Telegram - Em breve */}
+            <Card className="group border-2 border-gray-200 dark:border-gray-700 opacity-70">
+              <CardContent className="p-6 text-center">
+                <div className="w-16 h-16 bg-blue-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <Send className="h-8 w-8 text-white" />
+                </div>
+                <h3 className="font-bold text-lg mb-2 text-gray-900 dark:text-white">Telegram</h3>
+                <Badge variant="secondary" className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
+                  Em Breve 🔄
+                </Badge>
+              </CardContent>
+            </Card>
+
+            {/* Messenger - Em breve */}
+            <Card className="group border-2 border-gray-200 dark:border-gray-700 opacity-70">
+              <CardContent className="p-6 text-center">
+                <div className="w-16 h-16 bg-blue-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <Image src="/messenger-icon.svg" alt="Messenger" width={32} height={32} />
+                </div>
+                <h3 className="font-bold text-lg mb-2 text-gray-900 dark:text-white">Messenger</h3>
+                <Badge variant="secondary" className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
+                  Em Breve 🔄
+                </Badge>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="text-center mt-8">
+            <Button
+              size="lg"
+              onClick={handleInstagramConnect}
+              disabled={selectedPlatform !== "instagram" || isConnecting}
+              className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-8 py-4 text-lg font-medium"
+            >
+              <Instagram className="mr-2 h-6 w-6" />
+              {isConnecting ? "Conectando..." : connectedAccounts.length > 0
+                ? "Adicionar Nova Conta do Instagram"
+                : "Conectar ao Instagram"}
+            </Button>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-4">
+              Ao conectar sua conta, você concorda com nossos{" "}
+              <Link href="/termos" className="text-primary hover:underline font-medium">
+                Termos de Serviço
+              </Link>{" "}
+              e{" "}
+              <Link href="/privacidade" className="text-primary hover:underline font-medium">
+                Política de Privacidade
+              </Link>
+              .
+            </p>
+          </div>
+        </section>
+
+        {/* Benefícios */}
+        <section className="py-16 bg-gray-50 dark:bg-gray-800 rounded-3xl">
+          <div className="text-center mb-12">
+            					<h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900 dark:text-white">Por que Socialwise Chatwit?</h2>
+            <p className="text-xl text-gray-600 dark:text-gray-400 max-w-3xl mx-auto">
+              Ferramentas poderosas para automatizar e otimizar sua presença nas redes sociais
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 px-8">
+            <div className="text-center">
+              <div className="w-16 h-16 rounded-2xl bg-blue-500 flex items-center justify-center mx-auto mb-4">
+                <Bot className="h-8 w-8 text-white" />
+              </div>
+              <h3 className="text-xl font-bold mb-3 text-gray-900 dark:text-white">IA Avançada</h3>
+              <p className="text-gray-600 dark:text-gray-400">
+                Chatbots inteligentes com GPT-4, Gemini e Claude para atendimento automatizado 24/7.
+              </p>
+            </div>
+
+            <div className="text-center">
+              <div className="w-16 h-16 rounded-2xl bg-green-500 flex items-center justify-center mx-auto mb-4">
+                <Users className="h-8 w-8 text-white" />
+              </div>
+              <h3 className="text-xl font-bold mb-3 text-gray-900 dark:text-white">Engajamento</h3>
+              <p className="text-gray-600 dark:text-gray-400">
+                Aumente o engajamento com respostas rápidas e personalizadas para cada seguidor.
+              </p>
+            </div>
+
+            <div className="text-center">
+              <div className="w-16 h-16 rounded-2xl bg-purple-500 flex items-center justify-center mx-auto mb-4">
+                <Calendar className="h-8 w-8 text-white" />
+              </div>
+              <h3 className="text-xl font-bold mb-3 text-gray-900 dark:text-white">Agendamento</h3>
+              <p className="text-gray-600 dark:text-gray-400">
+                Programe publicações para os melhores horários e maximize seu alcance.
+              </p>
+            </div>
+
+            <div className="text-center">
+              <div className="w-16 h-16 rounded-2xl bg-orange-500 flex items-center justify-center mx-auto mb-4">
+                <BarChart className="h-8 w-8 text-white" />
+              </div>
+              <h3 className="text-xl font-bold mb-3 text-gray-900 dark:text-white">Analytics</h3>
+              <p className="text-gray-600 dark:text-gray-400">
+                Métricas detalhadas e insights valiosos para otimizar sua estratégia de conteúdo.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* Estatísticas */}
+        <section className="py-16 px-8 bg-gradient-to-r from-primary via-blue-600 to-purple-600 rounded-3xl text-white">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">Resultados Comprovados</h2>
+            <p className="text-xl opacity-90 max-w-2xl mx-auto">
+              Veja o impacto que o Socialwise Chatwit pode ter na sua presença digital
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+            <div>
+              <p className="text-4xl md:text-5xl font-bold mb-2">2.500+</p>
+              <p className="text-sm opacity-90">Profissionais Ativos</p>
+            </div>
+            <div>
+              <p className="text-4xl md:text-5xl font-bold mb-2">85%</p>
+              <p className="text-sm opacity-90">Melhoria no Tempo de Resposta</p>
+            </div>
+            <div>
+              <p className="text-4xl md:text-5xl font-bold mb-2">3.2x</p>
+              <p className="text-sm opacity-90">Mais Engajamento</p>
+            </div>
+            <div>
+              <p className="text-4xl md:text-5xl font-bold mb-2">24/7</p>
+              <p className="text-sm opacity-90">Disponibilidade</p>
+            </div>
+          </div>
+        </section>
+
+        {/* Depoimentos */}
+        <section>
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900 dark:text-white">Casos de Sucesso</h2>
+            <p className="text-xl text-gray-600 dark:text-gray-400 max-w-3xl mx-auto">
+              Profissionais que transformaram seus negócios com Socialwise Chatwit
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            {[
+              {
+                name: "Maria Silva",
+                username: "@mariaempreendedora",
+                initial: "M",
+                color: "bg-blue-500",
+                testimonial: "O Socialwise Chatwit revolucionou minha presença no Instagram. Consigo responder a todos os comentários e mensagens em tempo recorde!"
+              },
+              {
+                name: "João Mendes", 
+                username: "@joaofotografia",
+                initial: "J",
+                color: "bg-green-500",
+                testimonial: "A automação de respostas me ajudou a converter mais seguidores em clientes. Meu engajamento aumentou 200% em apenas um mês!"
+              },
+              {
+                name: "Carolina Alves",
+                username: "@carolinafitness", 
+                initial: "C",
+                color: "bg-purple-500",
+                testimonial: "As análises detalhadas me ajudaram a entender melhor meu público. Agora sei exatamente que tipo de conteúdo gera mais engajamento."
+              }
+            ].map((testimonial, index) => (
+              <Card key={index} className="bg-gray-50 dark:bg-gray-800 border-2 hover:shadow-lg transition-all duration-300">
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className={`w-12 h-12 rounded-full ${testimonial.color} flex items-center justify-center text-white font-bold text-lg`}>
+                      {testimonial.initial}
+                    </div>
+                    <div>
+                      <p className="font-bold text-gray-900 dark:text-white">{testimonial.name}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">{testimonial.username}</p>
+                    </div>
+                  </div>
+                  <p className="italic text-gray-700 dark:text-gray-300">"{testimonial.testimonial}"</p>
+                  <div className="flex items-center mt-3">
+                    {[...Array(5)].map((_, i) => (
+                      <Star key={i} className="h-4 w-4 text-yellow-400 fill-current" />
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
+
+        {/* CTA Final */}
+        <section className="text-center py-16">
+          <div className="max-w-2xl mx-auto">
+            <div className="mb-8">
+              <Image src="/01 WitdeT.png" alt="ChatWit Logo" width={120} height={120} className="mx-auto mb-6" />
+            </div>
+            <h2 className="text-3xl md:text-4xl font-bold mb-6 text-gray-900 dark:text-white">
+              Transforme Sua Presença Digital Hoje
+            </h2>
+            <p className="text-xl text-gray-600 dark:text-gray-400 mb-8">
+              Conecte sua primeira conta agora e comece a aproveitar todos os benefícios da automação inteligente com IA
+            </p>
+            <Button 
+              size="lg" 
+              onClick={handleInstagramConnect}
+              className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-10 py-4 text-xl font-bold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
+            >
+              <Instagram className="mr-3 h-6 w-6" />
+              Começar Agora - Grátis
+              <ArrowRight className="ml-3 h-6 w-6" />
+            </Button>
+          </div>
+        </section>
+
+        {/* Debug Info */}
         {process.env.NODE_ENV === 'development' && (
-          <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-            <h3 className="font-medium mb-2">Informações de depuração:</h3>
-            <p>Sessão: {session ? "Autenticado" : "Não autenticado"}</p>
-            <p>ID do usuário: {session?.user?.id || "N/A"}</p>
-            <p>Contas carregadas: {connectedAccounts.length}</p>
-            <p>Estado de carregamento: {isLoading ? "Carregando..." : "Concluído"}</p>
-            <Link href="/admin" className="text-blue-600 hover:underline mt-2 inline-block">
-              Acessar Painel Admin
-            </Link>
+          <div className="p-6 bg-yellow-50 dark:bg-yellow-900/20 border-2 border-yellow-200 dark:border-yellow-800 rounded-2xl">
+            <h3 className="font-bold mb-4 text-yellow-800 dark:text-yellow-400">Informações de Depuração:</h3>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <p><strong>Sessão:</strong> {session ? "Autenticado" : "Não autenticado"}</p>
+                <p><strong>ID do usuário:</strong> {session?.user?.id || "N/A"}</p>
+              </div>
+              <div>
+                <p><strong>Contas carregadas:</strong> {connectedAccounts.length}</p>
+                <p><strong>Estado:</strong> {isLoading ? "Carregando..." : "Concluído"}</p>
+              </div>
+            </div>
             {session?.user?.role === "ADMIN" && (
               <Button
                 onClick={() => router.push('/admin')}
-                variant="default"
+                variant="outline"
                 size="sm"
-                className="mt-2 ml-2"
+                className="mt-4"
               >
                 <BarChart className="mr-2 h-4 w-4" />
                 Painel de Administração
               </Button>
             )}
-
           </div>
         )}
-
-        {/* Indicador de carregamento */}
-        {isLoading ? (
-          <div className="flex justify-center items-center p-8">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-            <p className="ml-3 text-primary">Carregando suas contas...</p>
-          </div>
-        ) : connectedAccounts.length === 0 && session?.user?.id ? (
-          <div className="text-center p-8">
-            <p className="mb-4">Nenhuma conta encontrada. Se você já conectou uma conta, tente recarregar.</p>
-            <Button onClick={handleRefresh}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Recarregar contas
-            </Button>
-          </div>
-        ) : null}
-
-        {/* Contas conectadas */}
-        {connectedAccounts.length > 0 && (
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold">Minhas Contas</h2>
-              <Badge variant="outline" className="px-3 py-1">
-                {connectedAccounts.length} {connectedAccounts.length === 1 ? 'conta' : 'contas'} conectada{connectedAccounts.length !== 1 ? 's' : ''}
-              </Badge>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {connectedAccounts.map((account) => (
-                <div
-                  key={account.id}
-                  className="cursor-pointer"
-                  onClick={() => navigateToDashboard(account.providerAccountId)}
-                >
-                  <Card className="h-full hover:border-primary hover:shadow-md transition-all">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center gap-2">
-                        <div className="h-12 w-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white">
-                          <Instagram className="h-6 w-6" />
-                        </div>
-                        <div>
-                          <CardTitle className="text-lg">Instagram</CardTitle>
-                          <div className="text-sm text-muted-foreground">
-                            {account.isMain && (
-                              <Badge variant="outline" className="bg-primary/10 text-primary">
-                                Principal
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="font-medium text-lg">@{account.igUsername}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {account.isMain
-                          ? "Conta principal usada para autenticação"
-                          : "Conta secundária conectada"}
-                      </p>
-                      <div className="flex gap-2 mt-3">
-                        <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                          <CheckCircle className="h-3 w-3 mr-1" /> Ativo
-                        </Badge>
-                      </div>
-                    </CardContent>
-                    <CardFooter className="flex justify-between">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigateToDashboard(account.providerAccountId);
-                        }}
-                      >
-                        Gerenciar
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-red-500 hover:text-red-600 hover:bg-red-100 dark:hover:bg-red-900/20"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDisconnectAccount(account.id);
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </CardFooter>
-                  </Card>
-                </div>
-              ))}
-
-              {/* Card para adicionar nova conta */}
-              <div onClick={handleInstagramConnect} className="cursor-pointer">
-                <Card className="h-full border-dashed hover:border-primary hover:shadow-md transition-all flex flex-col items-center justify-center py-8">
-                  <div className="rounded-full bg-primary/10 p-4 mb-4">
-                    <Plus className="h-8 w-8 text-primary" />
-                  </div>
-                  <h3 className="text-lg font-medium mb-1">Adicionar Nova Conta</h3>
-                  <p className="text-sm text-muted-foreground text-center max-w-[200px]">
-                    Conecte outra conta do Instagram
-                  </p>
-                </Card>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {connectionError && (
-          <div className="p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-md flex items-start">
-            <AlertCircle className="h-5 w-5 text-red-500 mr-2 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-red-700 dark:text-red-400">{connectionError}</p>
-          </div>
-        )}
-
-        {/* Seção de plataformas disponíveis */}
-        <Card className="border-2 border-primary/10">
-          <CardHeader>
-            <CardTitle>Plataformas Disponíveis</CardTitle>
-            <CardDescription>
-              Escolha a rede social que deseja conectar à sua conta ChatWit Social
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {/* Instagram - Disponível */}
-              <div
-                className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                  selectedPlatform === "instagram"
-                    ? "border-pink-500 bg-pink-50 dark:bg-pink-950/20"
-                    : "border-border hover:border-pink-300"
-                }`}
-                onClick={() => setSelectedPlatform("instagram")}
-              >
-                <div className="flex flex-col items-center text-center">
-                  <Instagram className="h-10 w-10 text-pink-500 mb-2" />
-                  <h3 className="font-medium">Instagram</h3>
-                  <p className="text-xs text-muted-foreground mt-1">Disponível</p>
-                </div>
-              </div>
-
-              {/* Facebook - Em breve */}
-              <div className="p-4 rounded-lg border-2 border-border opacity-70 cursor-not-allowed">
-                <div className="flex flex-col items-center text-center">
-                  <Facebook className="h-10 w-10 text-blue-500 mb-2" />
-                  <h3 className="font-medium">Facebook</h3>
-                  <span className="text-xs bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-full mt-1">Em breve</span>
-                </div>
-              </div>
-
-              {/* WhatsApp - Em breve */}
-              <div className="p-4 rounded-lg border-2 border-border opacity-70 cursor-not-allowed">
-                <div className="flex flex-col items-center text-center">
-                  <MessageSquare className="h-10 w-10 text-green-500 mb-2" />
-                  <h3 className="font-medium">WhatsApp</h3>
-                  <span className="text-xs bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-full mt-1">Em breve</span>
-                </div>
-              </div>
-
-              {/* TikTok - Em breve */}
-              <div className="p-4 rounded-lg border-2 border-border opacity-70 cursor-not-allowed">
-                <div className="flex flex-col items-center text-center">
-                  <div className="h-10 w-10 flex items-center justify-center mb-2">
-                    <Image src="/tiktok-icon.svg" alt="TikTok" width={32} height={32} />
-                  </div>
-                  <h3 className="font-medium">TikTok</h3>
-                  <span className="text-xs bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-full mt-1">Em breve</span>
-                </div>
-              </div>
-
-              {/* Telegram - Em breve */}
-              <div className="p-4 rounded-lg border-2 border-border opacity-70 cursor-not-allowed">
-                <div className="flex flex-col items-center text-center">
-                  <Send className="h-10 w-10 text-blue-400 mb-2" />
-                  <h3 className="font-medium">Telegram</h3>
-                  <span className="text-xs bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-full mt-1">Em breve</span>
-                </div>
-              </div>
-
-              {/* Messenger - Em breve */}
-              <div className="p-4 rounded-lg border-2 border-border opacity-70 cursor-not-allowed">
-                <div className="flex flex-col items-center text-center">
-                  <div className="h-10 w-10 flex items-center justify-center mb-2">
-                    <Image src="/messenger-icon.svg" alt="Messenger" width={32} height={32} />
-                  </div>
-                  <h3 className="font-medium">Messenger</h3>
-                  <span className="text-xs bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-full mt-1">Em breve</span>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-          <CardFooter className="flex flex-col items-start space-y-4">
-            <Button
-              size="lg"
-              className="w-full md:w-auto"
-              onClick={handleInstagramConnect}
-              disabled={selectedPlatform !== "instagram" || isConnecting}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              {isConnecting ? "Conectando..." : connectedAccounts.length > 0
-                ? "Adicionar nova conta do Instagram"
-                : "Conectar ao Instagram"}
-            </Button>
-            <p className="text-sm text-muted-foreground">
-              Ao conectar sua conta, você concorda com nossos{" "}
-              <Link href="/termos" className="text-primary hover:underline">
-                Termos de Serviço
-              </Link>{" "}
-              e{" "}
-              <Link href="/privacidade" className="text-primary hover:underline">
-                Política de Privacidade
-              </Link>
-              .
-            </p>
-          </CardFooter>
-        </Card>
-
-        {/* Seção de benefícios */}
-        <div className="mt-10">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold mb-2">Por que usar o ChatWit Social?</h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
-              Nossa plataforma oferece ferramentas poderosas para automatizar e otimizar sua presença nas redes sociais
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <Card>
-              <CardHeader className="pb-2">
-                <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-2">
-                  <Zap className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-                </div>
-                <CardTitle>Automação Inteligente</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  Automatize respostas a mensagens e comentários com chatbots inteligentes treinados para sua marca.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mb-2">
-                  <Users className="h-6 w-6 text-green-600 dark:text-green-400" />
-                </div>
-                <CardTitle>Engajamento Eficiente</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  Aumente o engajamento com seus seguidores através de respostas rápidas e personalizadas.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <div className="w-12 h-12 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mb-2">
-                  <Calendar className="h-6 w-6 text-purple-600 dark:text-purple-400" />
-                </div>
-                <CardTitle>Agendamento de Conteúdo</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  Programe suas publicações para serem postadas automaticamente nos melhores horários para seu público.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <div className="w-12 h-12 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center mb-2">
-                  <BarChart className="h-6 w-6 text-orange-600 dark:text-orange-400" />
-                </div>
-                <CardTitle>Análise de Desempenho</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  Acompanhe métricas detalhadas e obtenha insights valiosos para otimizar sua estratégia de conteúdo.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        {/* Seção de estatísticas */}
-        <div className="mt-16 py-10 px-8 bg-gradient-to-r from-blue-600 to-cyan-500 rounded-xl text-white">
-          <div className="text-center mb-10">
-            <h2 className="text-3xl font-bold mb-2">Impulsione seus resultados</h2>
-            <p className="max-w-2xl mx-auto opacity-90">
-              Veja o que o ChatWit Social pode fazer pela sua presença digital
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            <div className="text-center">
-              <p className="text-4xl font-bold mb-2">85%</p>
-              <p className="text-sm opacity-90">Aumento médio no tempo de resposta</p>
-            </div>
-
-            <div className="text-center">
-              <p className="text-4xl font-bold mb-2">3.2x</p>
-              <p className="text-sm opacity-90">Mais engajamento com seguidores</p>
-            </div>
-
-            <div className="text-center">
-              <p className="text-4xl font-bold mb-2">67%</p>
-              <p className="text-sm opacity-90">Redução no tempo de gerenciamento</p>
-            </div>
-
-            <div className="text-center">
-              <p className="text-4xl font-bold mb-2">24/7</p>
-              <p className="text-sm opacity-90">Disponibilidade para seus seguidores</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Seção de depoimentos */}
-        <div className="bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-950/30 dark:to-cyan-950/30 rounded-xl p-8 mt-10">
-          <div className="text-center mb-8">
-            <h2 className="text-2xl font-bold mb-2">O que nossos usuários dizem</h2>
-            <p className="text-muted-foreground">Depoimentos de quem já está usando o ChatWit Social</p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-6">
-            <Card className="bg-white dark:bg-background">
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                    <span className="font-bold text-blue-600">M</span>
-                  </div>
-                  <div>
-                    <p className="font-medium">Maria Silva</p>
-                    <p className="text-sm text-muted-foreground">@mariaempreendedora</p>
-                  </div>
-                </div>
-                <p className="italic">
-                  "O ChatWit Social revolucionou minha presença no Instagram. Consigo responder a todos os comentários e mensagens em tempo recorde!"
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white dark:bg-background">
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
-                    <span className="font-bold text-green-600">J</span>
-                  </div>
-                  <div>
-                    <p className="font-medium">João Mendes</p>
-                    <p className="text-sm text-muted-foreground">@joaofotografia</p>
-                  </div>
-                </div>
-                <p className="italic">
-                  "A automação de respostas me ajudou a converter mais seguidores em clientes. Meu engajamento aumentou 200% em apenas um mês!"
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white dark:bg-background">
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
-                    <span className="font-bold text-purple-600">C</span>
-                  </div>
-                  <div>
-                    <p className="font-medium">Carolina Alves</p>
-                    <p className="text-sm text-muted-foreground">@carolinafitness</p>
-                  </div>
-                </div>
-                <p className="italic">
-                  "As análises detalhadas me ajudaram a entender melhor meu público. Agora sei exatamente que tipo de conteúdo gera mais engajamento."
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        {/* Seção com a imagem WitdeT */}
-        <div className="mt-10 bg-white dark:bg-gray-900 rounded-xl overflow-hidden shadow-lg">
-          <div className="grid md:grid-cols-2 gap-0">
-            <div className="p-8 flex flex-col justify-center">
-              <h2 className="text-2xl font-bold mb-4">Tecnologia WitDev para sua marca</h2>
-              <p className="text-muted-foreground mb-6">
-                Nossa plataforma utiliza tecnologia avançada para garantir que sua presença nas redes sociais seja otimizada e eficiente.
-              </p>
-              <ul className="space-y-3">
-                <li className="flex items-start">
-                  <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-full mr-3 mt-0.5">
-                    <CheckCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div>
-                    <p className="font-medium">Inteligência Artificial Avançada</p>
-                    <p className="text-sm text-muted-foreground">Algoritmos treinados para entender o contexto das conversas e fornecer respostas precisas.</p>
-                  </div>
-                </li>
-                <li className="flex items-start">
-                  <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-full mr-3 mt-0.5">
-                    <CheckCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div>
-                    <p className="font-medium">Integração Perfeita</p>
-                    <p className="text-sm text-muted-foreground">Conecte-se com múltiplas plataformas e gerencie tudo em um único lugar.</p>
-                  </div>
-                </li>
-                <li className="flex items-start">
-                  <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-full mr-3 mt-0.5">
-                    <CheckCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div>
-                    <p className="font-medium">Segurança de Dados</p>
-                    <p className="text-sm text-muted-foreground">Proteção avançada para garantir que seus dados e os de seus seguidores estejam sempre seguros.</p>
-                  </div>
-                </li>
-              </ul>
-            </div>
-            <div className="flex items-center justify-center bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 p-8">
-              <Image
-                src="/01 WitdeT.png"
-                alt="WitDev Technology"
-                width={400}
-                height={400}
-                className="object-contain max-h-[400px]"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Seção final com CTA */}
-        <div className="text-center mt-10">
-          <div className="mb-6">
-            <Image src="/ChatWit.svg" alt="ChatWit Logo" width={150} height={150} className="mx-auto" />
-          </div>
-          <h2 className="text-3xl font-bold mb-4">Pronto para transformar sua presença nas redes sociais?</h2>
-          <p className="text-muted-foreground max-w-2xl mx-auto mb-6">
-            Conecte sua primeira conta agora e comece a aproveitar todos os benefícios da automação inteligente
-          </p>
-          <Button size="lg" onClick={handleInstagramConnect} className="bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600">
-            <Instagram className="mr-2 h-5 w-5" />
-            Conectar Instagram
-          </Button>
-        </div>
       </div>
-    </>
+    </div>
   );
 }

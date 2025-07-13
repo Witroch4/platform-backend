@@ -51,8 +51,10 @@ export async function POST(request: Request): Promise<Response> {
     const isAnaliseValidada = webhookData.analiseValidada === true;
     const isAnaliseSimuladoValidada = webhookData.analisesimuladovalidado === true;
     const isAnaliseSimuladoValidadaCamelCase = webhookData.analiseSimuladoValidada === true;
+    const isRecursoPreliminar = webhookData.RecursoFinalizado === true && webhookData.recursoPreliminar === true;
+    const isRecursoValidado = webhookData.RecursoFinalizado === true && webhookData.recursoValidado === true;
     
-    console.log("[Webhook] Tipo do payload - espelho:", isEspelho, "espelhoConsultoriaFase2:", isEspelhoConsultoriaFase2, "espelhoParaBiblioteca:", isEspelhoParaBiblioteca, "espelhoPadrao:", isEspelhoPadrao, "manuscrito:", isManuscrito, "analise:", isAnalise, "analiseSimulado:", isAnaliseSimulado, "analisePreliminar:", isAnalisePreliminar, "analiseSimuladoPreliminar:", isAnaliseSimuladoPreliminar, "analiseValidada:", isAnaliseValidada, "analiseSimuladoValidada:", isAnaliseSimuladoValidada, "analiseSimuladoValidadaCamelCase:", isAnaliseSimuladoValidadaCamelCase);
+    console.log("[Webhook] Tipo do payload - espelho:", isEspelho, "espelhoConsultoriaFase2:", isEspelhoConsultoriaFase2, "espelhoParaBiblioteca:", isEspelhoParaBiblioteca, "espelhoPadrao:", isEspelhoPadrao, "manuscrito:", isManuscrito, "analise:", isAnalise, "analiseSimulado:", isAnaliseSimulado, "analisePreliminar:", isAnalisePreliminar, "analiseSimuladoPreliminar:", isAnaliseSimuladoPreliminar, "analiseValidada:", isAnaliseValidada, "analiseSimuladoValidada:", isAnaliseSimuladoValidada, "analiseSimuladoValidadaCamelCase:", isAnaliseSimuladoValidadaCamelCase, "recursoPreliminar:", isRecursoPreliminar, "recursoValidado:", isRecursoValidado);
 
     // Processar webhook de pré-análise
     if (isAnalisePreliminar) {
@@ -113,6 +115,171 @@ export async function POST(request: Request): Promise<Response> {
         return NextResponse.json({
           success: false,
           message: `Erro ao processar pré-análise: ${error.message || 'Erro desconhecido'}`,
+        }, { status: 500 });
+      }
+    }
+
+    // Processar webhook de pré-recurso
+    if (isRecursoPreliminar) {
+      console.log("[Webhook] Identificado payload de pré-recurso");
+      
+      // Verificar se temos o leadID
+      let leadID = webhookData.leadID;
+      
+      // Buscar pelo telefone se não tiver o leadID
+      if (!leadID && webhookData.telefone) {
+        console.log("[Webhook] Buscando lead por telefone");
+        const lead = await prisma.leadChatwit.findFirst({
+          where: {
+            phoneNumber: webhookData.telefone
+          }
+        });
+        
+        if (lead) {
+          leadID = lead.id;
+          console.log("[Webhook] Lead encontrado pelo telefone:", leadID);
+        } else {
+          console.error("[Webhook] Lead não encontrado com o telefone fornecido");
+          return NextResponse.json({
+            success: false,
+            message: "Lead não encontrado com o telefone fornecido",
+          });
+        }
+      }
+      
+      if (!leadID) {
+        console.error("[Webhook] Não foi possível identificar o lead");
+        return NextResponse.json({
+          success: false,
+          message: "Não foi possível identificar o lead",
+        });
+      }
+      
+      try {
+        // Armazenar o pré-recurso no banco
+        const leadUpdate = await prisma.leadChatwit.update({
+          where: {
+            id: leadID
+          },
+          data: {
+            recursoPreliminar: webhookData.textoRecurso || JSON.stringify(webhookData),
+            recursoValidado: false,
+            aguardandoRecurso: false,
+            updatedAt: new Date()
+          }
+        });
+        
+        console.log("[Webhook] Pré-recurso armazenado para o lead:", leadID);
+        
+        // Enviar notificação SSE
+        sseManager.sendNotification(leadID, {
+          type: 'recurso_preliminar',
+          message: 'Pré-recurso foi gerado e está aguardando validação!',
+          leadId: leadID,
+          status: 'recurso_preliminar_recebido',
+          timestamp: new Date().toISOString()
+        });
+        
+        return NextResponse.json({
+          success: true,
+          message: "Pré-recurso processado com sucesso",
+        });
+      } catch (error: any) {
+        console.error("[Webhook] Erro ao atualizar lead com pré-recurso:", error);
+        return NextResponse.json({
+          success: false,
+          message: `Erro ao processar pré-recurso: ${error.message || 'Erro desconhecido'}`,
+        }, { status: 500 });
+      }
+    }
+
+    // Processar webhook de recurso validado
+    if (isRecursoValidado) {
+      console.log("[Webhook] Identificado payload de recurso validado");
+      
+      // Verificar se temos o leadID
+      let leadID = webhookData.leadID;
+      
+      // Buscar pelo telefone se não tiver o leadID
+      if (!leadID && webhookData.telefone) {
+        console.log("[Webhook] Buscando lead por telefone");
+        const lead = await prisma.leadChatwit.findFirst({
+          where: {
+            phoneNumber: webhookData.telefone
+          }
+        });
+        
+        if (lead) {
+          leadID = lead.id;
+          console.log("[Webhook] Lead encontrado pelo telefone:", leadID);
+        } else {
+          console.error("[Webhook] Lead não encontrado com o telefone fornecido");
+          return NextResponse.json({
+            success: false,
+            message: "Lead não encontrado com o telefone fornecido",
+          });
+        }
+      }
+      
+      if (!leadID) {
+        console.error("[Webhook] Não foi possível identificar o lead");
+        return NextResponse.json({
+          success: false,
+          message: "Não foi possível identificar o lead",
+        });
+      }
+      
+      // Verificar se as URLs foram fornecidas
+      const recursoUrl = webhookData.recursoUrl;
+      const recursoArgumentacaoUrl = webhookData.recursoArgumentacaoUrl;
+      
+      if (!recursoUrl) {
+        console.error("[Webhook] URL do recurso validado não fornecida");
+        return NextResponse.json({
+          success: false,
+          message: "URL do recurso validado não fornecida (campo 'recursoUrl')",
+        });
+      }
+      
+      console.log("[Webhook] URL do recurso validado:", recursoUrl);
+      console.log("[Webhook] URL da argumentação do recurso:", recursoArgumentacaoUrl);
+      
+      try {
+        // Atualizar o lead com as URLs do recurso validado
+        const leadUpdate = await prisma.leadChatwit.update({
+          where: {
+            id: leadID
+          },
+          data: {
+            recursoUrl: recursoUrl,
+            recursoArgumentacaoUrl: recursoArgumentacaoUrl,
+            recursoValidado: true,
+            aguardandoRecurso: false,
+            updatedAt: new Date()
+          }
+        });
+        
+        console.log("[Webhook] Recurso validado processado para o lead:", leadID);
+        
+        // Enviar notificação SSE
+        sseManager.sendNotification(leadID, {
+          type: 'recurso_validado',
+          message: 'Seu recurso foi validado e está pronto!',
+          leadId: leadID,
+          status: 'recurso_validado',
+          recursoUrl: recursoUrl,
+          timestamp: new Date().toISOString()
+        });
+        
+        return NextResponse.json({
+          success: true,
+          message: "Recurso validado processado com sucesso",
+        });
+      } catch (error: any) {
+        console.error("[Webhook] Erro ao atualizar lead com recurso validado:", error);
+        return NextResponse.json({
+          success: false,
+          message: `Erro ao processar recurso validado: ${error.message || 'Erro desconhecido'}`,
         }, { status: 500 });
       }
     }

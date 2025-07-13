@@ -161,7 +161,7 @@ const AutoNotifications = () => {
         <div className="space-y-4">
           <div className="flex items-center justify-between p-3 bg-muted/30 rounded-md border border-border">
             <div>
-              <h3 className="font-medium text-card-foreground">Boas-vindas ao ChatWit Social</h3>
+                              <h3 className="font-medium text-card-foreground">Boas-vindas ao Socialwise Chatwit</h3>
               <p className="text-sm text-muted-foreground">
                 Envia uma mensagem de boas-vindas para todos os usuários
               </p>

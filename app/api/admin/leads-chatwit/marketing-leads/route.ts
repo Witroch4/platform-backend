@@ -36,11 +36,33 @@ export async function GET(request: NextRequest) {
       ]
     };
 
-    // Filtrar por token do usuário se não for SUPERADMIN
-    if (session.user.role !== "SUPERADMIN") {
-      if (session.user.customAccessToken) {
+    // Buscar informações do usuário atual
+    const currentUser = await db.user.findUnique({
+      where: { id: session.user.id },
+      select: { role: true }
+    });
+
+    if (!currentUser) {
+      return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
+    }
+
+    // Buscar o usuário Chatwit
+    const usuarioChatwit = await db.usuarioChatwit.findUnique({
+      where: { appUserId: session.user.id },
+      select: { 
+        chatwitAccountId: true,
+        chatwitAccessToken: true 
+      }
+    });
+
+    // Controle de acesso baseado em role
+    if (currentUser.role !== "SUPERADMIN") {
+      if (usuarioChatwit?.chatwitAccessToken) {
+        // Para usuários não-SUPERADMIN, filtrar apenas leads do próprio usuário
         whereConditions.AND.push({
-          chatwitAccessToken: session.user.customAccessToken
+          usuario: {
+            appUserId: session.user.id
+          }
         });
       } else {
         // Se o usuário não tem token, não pode ver nenhum lead
@@ -56,6 +78,7 @@ export async function GET(request: NextRequest) {
         });
       }
     }
+    // Se for SUPERADMIN, não adiciona filtro = mostra todos os leads
 
     // Adicionar condições de busca se fornecidas
     if (search.trim()) {
@@ -101,7 +124,6 @@ export async function GET(request: NextRequest) {
             name: true,
             availableName: true,
             channel: true,
-            accountId: true,
             accountName: true
           }
         }

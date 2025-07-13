@@ -499,7 +499,7 @@ const AdminNotificationsPage = () => {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
-                    <h3 className="font-medium mb-2 text-card-foreground">Boas-vindas ao ChatWit Social</h3>
+                    <h3 className="font-medium mb-2 text-card-foreground">Boas-vindas ao Socialwise Chatwit</h3>
                     <p className="text-sm text-muted-foreground">
                       Envia uma mensagem de boas-vindas para todos os usuários do sistema, apresentando
                       a plataforma e suas principais funcionalidades.

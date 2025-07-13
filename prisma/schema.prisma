@@ -33,7 +33,6 @@ model User {
   password               String?
   isTwoFactorAuthEnabled Boolean         @default(false)
   twoFactorAuthVerified  DateTime?
-  customAccessToken      String?         @unique // Token de acesso do Chatwit
   accounts               Account[]
   createdAt              DateTime        @default(now())
   updatedAt              DateTime        @updatedAt
@@ -54,12 +53,6 @@ model User {
   // Novo modelo para Agendamentos
   agendamentos           Agendamento[]
   
-  // Relação com configurações do WhatsApp
-  whatsappConfigs        WhatsAppConfig[]
-  
-  // Relação com templates do WhatsApp
-  whatsappTemplates      WhatsAppTemplate[]
-
   // Relação com sessões de chat de IA
   chatSessions           ChatSession[]
   
@@ -74,6 +67,9 @@ model User {
   
   // Controle de seed executado para MTF Diamante
   mtfDiamanteSeedExecuted Boolean @default(false)
+  
+  // Relação 1-para-1 com UsuarioChatwit
+  usuarioChatwit         UsuarioChatwit?
 }
 
 model Account {
@@ -347,26 +343,49 @@ model Message {
 // Modelos para o sistema de Gestão de Leads (Chatwit)
 
 model UsuarioChatwit {
-  id            String        @id @default(cuid())
-  userId        Int           // ID do usuário no sistema externo
-  name          String
-  availableName String?
-  accountId     Int
-  accountName   String
-  channel       String        // Ex: "Whatsapp"
-  inboxId       Int?
-  inboxName     String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id                String        @id @default(cuid())
+  
+  // Relação 1-para-1 com User (chave principal)
+  appUserId         String        @unique // Garante que um User só tenha um UsuarioChatwit
+  appUser           User          @relation(fields: [appUserId], references: [id], onDelete: Cascade)
+  
+  // Campos do sistema externo (Chatwit)
+  externalUserId    Int?          // ID do usuário no sistema externo
+  name              String
+  availableName     String?
+  accountName       String
+  channel           String        // Ex: "Whatsapp"
+  
+  // CAMPOS MOVIDOS DO USER
+  chatwitAccessToken String?      @unique // Token de acesso do Chatwit
+  chatwitAccountId   String       // ID da conta no Chatwit (obrigatório)
+  
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
   // Relação com leads
-  leads         LeadChatwit[]
+  leads             LeadChatwit[]
 
   // Relação com espelhos da biblioteca
   espelhosBiblioteca EspelhoBiblioteca[]
 
   // Relação com espelhos padrão
   espelhosPadrao EspelhoPadrao[]
+
+  // NOVOS RELACIONAMENTOS MOVIDOS DO USER
+  // Relação com configurações do WhatsApp
+  whatsappConfigs        WhatsAppConfig[]
+  
+  // Relação com templates do WhatsApp
+  whatsappTemplates      WhatsAppTemplate[]
+  
+  // Relacionamentos com WhatsApp/Dialogflow
+  lotesOab               LoteOab[]
+  mensagensInterativas   MensagemInterativa[]
+  integracoesDialogflow  IntegracaoDialogflow[]
+  leadsOab               LeadOab[]
+  caixasEntrada          CaixaEntrada[]
+  agentesDialogflow      AgenteDialogflow[]
 }
 
 // Enum para especialidades jurídicas
@@ -409,8 +428,13 @@ model LeadChatwit {
   analisePreliminar Json?         // Dados da pré-análise
   analiseValidada   Boolean       @default(false) // Indica se a análise foi validada pelo usuário
   consultoriaFase2  Boolean       @default(false) // Indica se o lead está em modo consultoria fase 2
-  customAccessToken String?       // Token de acesso personalizado para o Chatwoot
-  chatwitAccessToken String?      // Token de acesso do Chatwit (para filtrar por usuário)
+  recursoPreliminar Json?         // Dados do pré-recurso
+  recursoValidado   Boolean       @default(false) // Indica se o recurso foi validado pelo usuário
+  recursoUrl        String?       // URL do PDF do recurso validado
+  recursoArgumentacaoUrl String?  // URL do PDF de argumentação do recurso
+  aguardandoRecurso Boolean       @default(false) // Indica se está aguardando processamento do recurso
+
+  // Relacionamentos com WhatsApp removidos - não há necessidade de relacionamento direto
   seccional         String?       // Seccional do exame (ex.: "OAB / MG")
   areaJuridica      String?       // Área jurídica do exame
   notaFinal         Float?        // Nota final obtida no exame
@@ -435,7 +459,6 @@ model LeadChatwit {
   @@index([usuarioId])
   @@index([sourceId])
   @@index([espelhoBibliotecaId])
-  @@index([chatwitAccessToken])
   @@index([especialidade])
 }
 
@@ -463,10 +486,12 @@ model WhatsAppConfig {
   isActive               Boolean   @default(true)
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
-  userId                 String
-  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // MUDANÇA: Relacionamento agora é com UsuarioChatwit
+  usuarioChatwitId       String
+  usuarioChatwit         UsuarioChatwit @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
+  @@index([usuarioChatwitId])
 }
 
 // Modelo para armazenar templates do WhatsApp
@@ -529,11 +554,11 @@ model WhatsAppTemplate {
   createdAt                  DateTime @default(now())
   updatedAt                  DateTime @updatedAt
 
-  // Relação com o usuário que gerencia o template
-  userId                     String
-  user                       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // MUDANÇA: Relacionamento agora é com UsuarioChatwit
+  usuarioChatwitId           String
+  usuarioChatwit             UsuarioChatwit @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
+  @@index([usuarioChatwitId])
   @@index([name])
 }
 
@@ -806,5 +831,141 @@ model ModeloRecurso {
   updatedAt    DateTime @updatedAt
   
   @@index([isGlobal])
+}
+
+// Tabelas para integração WhatsApp/Dialogflow
+model LoteOab {
+  id            String   @id @default(cuid())
+  nome          String
+  valor         Decimal  @db.Decimal(10, 2)
+  valorAnalise  Decimal  @db.Decimal(10, 2)
+  chavePix      String
+  dataInicio    DateTime
+  dataFim       DateTime
+  ativo         Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // MUDANÇA: Relacionamento agora é com UsuarioChatwit
+  usuarioChatwitId String
+  usuarioChatwit   UsuarioChatwit @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
+  leads            LeadOab[]
+
+  @@map("lote_oab")
+}
+
+// REMOVIDO: model TemplateWhatsappOab - consolidado em WhatsAppTemplate
+
+model MensagemInterativa {
+  id              String   @id @default(cuid())
+  tipo            String   // 'oab', 'atendimento', etc.
+  texto           String   @db.Text
+  headerTipo      String?  // 'text' ou 'image'
+  headerConteudo  String?  @db.Text
+  rodape          String?
+  ativo           Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // MUDANÇA: Relacionamento agora é com UsuarioChatwit
+  usuarioChatwitId String
+  usuarioChatwit   UsuarioChatwit @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
+  botoes           BotaoMensagem[]
+
+  @@map("mensagem_interativa")
+}
+
+model BotaoMensagem {
+  id              String   @id @default(cuid())
+  titulo          String
+  ordem           Int
+  createdAt       DateTime @default(now())
+  
+  // Relacionamentos
+  mensagemId      String
+  mensagem        MensagemInterativa @relation(fields: [mensagemId], references: [id], onDelete: Cascade)
+
+  @@map("botao_mensagem")
+}
+
+// Modelo para configurar caixas de entrada
+model CaixaEntrada {
+  id              String   @id @default(cuid())
+  nome            String
+  chatwitAccountId String   // ID da conta no Chatwit (padronizado)
+  inboxId         String   // ID da caixa de entrada no Chatwit
+  inboxName       String   // Nome da caixa de entrada
+  channelType     String   // Tipo do canal (whatsapp, telegram, etc.)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // MUDANÇA: Relacionamento agora é com UsuarioChatwit
+  usuarioChatwitId String
+  usuarioChatwit   UsuarioChatwit @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
+  agentes          AgenteDialogflow[]
+
+  @@map("caixa_entrada")
+  @@unique([usuarioChatwitId, inboxId]) // Uma caixa por usuário Chatwit
+}
+
+// Modelo para agentes Dialogflow
+model AgenteDialogflow {
+  id              String   @id @default(cuid())
+  nome            String
+  projectId       String   // ID do projeto Dialogflow
+  credentials     String   @db.Text // JSON das credenciais
+  region          String   @default("global")
+  hookId          String?  // ID do hook na API do Chatwit
+  ativo           Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // MUDANÇA: Relacionamento agora é com UsuarioChatwit
+  usuarioChatwitId String
+  usuarioChatwit   UsuarioChatwit @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
+  caixaId          String
+  caixa            CaixaEntrada @relation(fields: [caixaId], references: [id], onDelete: Cascade)
+
+  @@map("agente_dialogflow")
+  @@unique([caixaId, ativo]) // Apenas um agente ativo por caixa
+}
+
+// Manter o modelo antigo para compatibilidade (será removido depois)
+model IntegracaoDialogflow {
+  id              String   @id @default(cuid())
+  nome            String
+  chatwitAccountId String   // ID da conta no Chatwit (padronizado)
+  projectId       String   // ID do projeto Dialogflow
+  credentials     String   @db.Text // JSON das credenciais
+  region          String   @default("global")
+  inboxId         String?  // ID da caixa de entrada
+  inboxName       String?  // Nome da caixa de entrada
+  hookId          String?  // ID do hook na API do Chatwit
+  ativo           Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // MUDANÇA: Relacionamento agora é com UsuarioChatwit
+  usuarioChatwitId String
+  usuarioChatwit   UsuarioChatwit @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
+
+  @@map("integracao_dialogflow")
+}
+
+model LeadOab {
+  id          String   @id @default(cuid())
+  nome        String
+  telefone    String
+  payload     String?  @db.Text // JSON do payload do Chatwit
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // MUDANÇA: Relacionamento agora é com UsuarioChatwit
+  usuarioChatwitId String
+  usuarioChatwit   UsuarioChatwit @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
+  loteId           String
+  lote             LoteOab @relation(fields: [loteId], references: [id], onDelete: Cascade)
+
+  @@map("lead_oab")
 }
 

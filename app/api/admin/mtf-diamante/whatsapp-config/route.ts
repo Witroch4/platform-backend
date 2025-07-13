@@ -20,16 +20,24 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Sem permissão' }, { status: 403 });
     }
 
-    // Buscar configuração ativa do WhatsApp do usuário
-    const config = await prisma.whatsAppConfig.findFirst({
-      where: {
-        userId: session.user.id,
-        isActive: true
-      },
-      orderBy: {
-        updatedAt: 'desc'
-      }
+    // Buscar o usuário Chatwit
+    const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
+      where: { appUserId: session.user.id }
     });
+
+    let config = null;
+    if (usuarioChatwit) {
+      // Buscar configuração ativa do WhatsApp do usuário
+      config = await prisma.whatsAppConfig.findFirst({
+        where: {
+          usuarioChatwitId: usuarioChatwit.id,
+          isActive: true
+        },
+        orderBy: {
+          updatedAt: 'desc'
+        }
+      });
+    }
 
     // Se não houver configuração no banco, usar valores do .env
     if (!config) {
@@ -80,12 +88,21 @@ export async function POST(request: Request) {
     const body = await request.json();
     const validatedData = whatsappConfigSchema.parse(body);
 
+    // Buscar o usuário Chatwit
+    const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
+      where: { appUserId: session.user.id }
+    });
+
+    if (!usuarioChatwit) {
+      return NextResponse.json({ error: 'Usuário Chatwit não encontrado' }, { status: 404 });
+    }
+
     // Usar transação para garantir consistência
     const result = await prisma.$transaction(async (tx) => {
       // Desativar configurações anteriores
       await tx.whatsAppConfig.updateMany({
         where: {
-          userId: session.user.id,
+          usuarioChatwitId: usuarioChatwit.id,
           isActive: true
         },
         data: { isActive: false }
@@ -94,7 +111,7 @@ export async function POST(request: Request) {
       // Criar nova configuração
       const newConfig = await tx.whatsAppConfig.create({
         data: {
-          userId: session.user.id,
+          usuarioChatwitId: usuarioChatwit.id,
           fbGraphApiBase: validatedData.fbGraphApiBase,
           whatsappBusinessAccountId: validatedData.whatsappBusinessAccountId,
           whatsappToken: validatedData.whatsappToken,

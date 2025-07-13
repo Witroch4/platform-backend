@@ -1,6 +1,6 @@
 export const metadata = {
-  title: 'Assine Agora - ChatWit Social',
-  description: 'Assine o ChatWit Social e tenha acesso a todas as funcionalidades',
+  title: 'Assine Agora - Socialwise Chatwit',
+  description: 'Assine o Socialwise Chatwit e tenha acesso a todas as funcionalidades',
 }
 
 export default function AssineAgoraLayout({

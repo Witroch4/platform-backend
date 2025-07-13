@@ -38,8 +38,8 @@ export async function POST(req: Request) {
     }
 
     // Criar notificações para cada usuário
-    const title = "Bem-vindo ao ChatWit Social!";
-    const message = "Olá! Bem-vindo à plataforma ChatWit Social. Aqui você pode gerenciar suas redes sociais, automatizar interações e muito mais. Explore todas as funcionalidades disponíveis e aproveite ao máximo nossa plataforma!";
+    const title = "Bem-vindo ao Socialwise Chatwit!";
+    const message = "Olá! Bem-vindo à plataforma Socialwise Chatwit. Aqui você pode gerenciar suas redes sociais, automatizar interações e muito mais. Explore todas as funcionalidades disponíveis e aproveite ao máximo nossa plataforma!";
 
     const notifications = await Promise.all(
       users.map(async (user) => {

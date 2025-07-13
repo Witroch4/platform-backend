@@ -18,20 +18,26 @@ export async function GET(request: Request): Promise<Response> {
     // Buscar informações do usuário atual
     const currentUser = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { role: true, customAccessToken: true }
+      select: { role: true }
     });
 
     if (!currentUser) {
       return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
     }
 
+    // Buscar o usuário Chatwit
+    const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
+      where: { appUserId: session.user.id },
+      select: { chatwitAccessToken: true }
+    });
+
     // Definir filtros baseados na role
     let leadFilter: any = {};
     let arquivoFilter: any = {};
 
     if (currentUser.role !== "SUPERADMIN") {
-      // Para ADMIN, filtrar apenas leads com o mesmo token
-      if (!currentUser.customAccessToken) {
+      // Para ADMIN, filtrar apenas leads relacionados ao token do usuário
+      if (!usuarioChatwit?.chatwitAccessToken) {
         return NextResponse.json({
           stats: {
             totalLeads: 0,
@@ -45,47 +51,44 @@ export async function GET(request: Request): Promise<Response> {
         });
       }
 
+      // Para usuários não-SUPERADMIN, filtrar apenas dados do próprio usuário
       leadFilter = {
-        chatwitAccessToken: currentUser.customAccessToken
+        usuario: {
+          appUserId: session.user.id
+        }
       };
 
       arquivoFilter = {
         lead: {
-          chatwitAccessToken: currentUser.customAccessToken
+          usuario: {
+            appUserId: session.user.id
+          }
         }
       };
     }
+    // Se for SUPERADMIN, os filtros continuam vazios = mostra todos os dados
 
-    // Contar leads (filtrados ou todos)
-    const totalLeads = await prisma.leadChatwit.count({
-      where: leadFilter
-    });
-
-    // Contar arquivos (filtrados ou todos)
-    const totalArquivos = await prisma.arquivoLeadChatwit.count({
-      where: arquivoFilter
-    });
-    
-    // Contar leads pendentes (não concluídos) - filtrados ou todos
-    const pendentes = await prisma.leadChatwit.count({
-      where: {
-        ...leadFilter,
-        concluido: false
-      }
-    });
-
-    // Contar leads aguardando processamento - filtrados ou todos
-    const aguardandoProcessamento = await prisma.leadChatwit.count({
-      where: {
-        ...leadFilter,
-        OR: [
-          { aguardandoManuscrito: true },
-          { aguardandoEspelho: true },
-          { aguardandoAnalise: true }
-        ]
-      }
-    });
-
+    // Contar leads (filtrados ou todos) - agora em paralelo
+    const [
+      totalLeads,
+      totalArquivos,
+      pendentes,
+      aguardandoProcessamento
+    ] = await Promise.all([
+      prisma.leadChatwit.count({ where: leadFilter }),
+      prisma.arquivoLeadChatwit.count({ where: arquivoFilter }),
+      prisma.leadChatwit.count({ where: { ...leadFilter, concluido: false } }),
+      prisma.leadChatwit.count({
+        where: {
+          ...leadFilter,
+          OR: [
+            { aguardandoManuscrito: true },
+            { aguardandoEspelho: true },
+            { aguardandoAnalise: true }
+          ]
+        }
+      })
+    ]);
     // Stats básicas
     const stats: any = {
       totalLeads,
@@ -146,29 +149,15 @@ export async function GET(request: Request): Promise<Response> {
     );
 
     // Dados para gráfico de leads por canal (filtrados)
-    const leadsComUsuarios = await prisma.leadChatwit.findMany({
-      where: leadFilter,
-      include: {
-        usuario: {
-          select: {
-            channel: true
-          }
-        }
-      }
+    const leadsPorCanalDb = await prisma.usuarioChatwit.groupBy({
+      by: ['channel'],
+      where: currentUser.role !== "SUPERADMIN" ? { appUserId: session.user.id } : {},
+      _count: true,
     });
-
-    // Agrupamento manual por canal
-    const canalAgrupamento: Record<string, number> = {};
-    leadsComUsuarios.forEach(lead => {
-      const canal = lead.usuario?.channel || 'Desconhecido';
-      canalAgrupamento[canal] = (canalAgrupamento[canal] || 0) + 1;
-    });
-
-    // Converter para o formato esperado pelo gráfico
-    const leadsPorCanal = Object.entries(canalAgrupamento).map(([channel, leads]) => ({
-      channel,
-      leads
-    })).sort((a, b) => b.leads - a.leads); // Ordenar do maior para o menor
+    const leadsPorCanal = leadsPorCanalDb.map((item: any) => ({
+      channel: item.channel,
+      leads: item._count || 0,
+    })).sort((a: any, b: any) => b.leads - a.leads);
 
     // Retornar todos os dados (filtrados por role)
     return NextResponse.json({

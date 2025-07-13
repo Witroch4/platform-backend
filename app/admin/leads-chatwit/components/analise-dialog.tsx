@@ -74,7 +74,7 @@ export function AnaliseDialog({
       
       if (response.ok) {
         const data = await response.json();
-        setAccessToken(data.customAccessToken || '');
+        setAccessToken(data.chatwitAccessToken || '');
       }
     } catch (error) {
       console.error("Erro ao buscar token personalizado:", error);
@@ -109,7 +109,7 @@ export function AnaliseDialog({
         },
         body: JSON.stringify({
           leadId,
-          customAccessToken: accessToken
+          chatwitAccessToken: accessToken
         }),
       });
       

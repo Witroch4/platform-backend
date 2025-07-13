@@ -55,10 +55,29 @@ export async function GET(request: Request): Promise<Response> {
     // Construir a cláusula where baseada nos parâmetros
     const where: any = {};
     
-    // Filtrar por token do usuário se não for SUPERADMIN
-    if (session.user.role !== "SUPERADMIN") {
-      if (session.user.customAccessToken) {
-        where.chatwitAccessToken = session.user.customAccessToken;
+    // Buscar informações do usuário atual
+    const currentUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { role: true }
+    });
+
+    if (!currentUser) {
+      return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
+    }
+
+    // Buscar o usuário Chatwit
+    const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
+      where: { appUserId: session.user.id },
+      select: { chatwitAccessToken: true }
+    });
+
+    // Controle de acesso baseado em role
+    if (currentUser!.role !== "SUPERADMIN") {
+      if (usuarioChatwit?.chatwitAccessToken) {
+        // Para usuários não-SUPERADMIN, filtrar apenas leads do próprio usuário
+        where.usuario = {
+          appUserId: session.user.id
+        };
       } else {
         // Se o usuário não tem token, não pode ver nenhum lead
         return NextResponse.json({
@@ -72,6 +91,7 @@ export async function GET(request: Request): Promise<Response> {
         });
       }
     }
+    // Se for SUPERADMIN, o where continua vazio = mostra todos os leads
     
     if (usuarioId) {
       where.usuarioId = usuarioId;
@@ -132,6 +152,14 @@ export async function GET(request: Request): Promise<Response> {
  */
 export async function POST(request: Request): Promise<Response> {
   try {
+    const session = await auth();
+    if (!session || !session.user) {
+      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    }
+    const currentUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { role: true }
+    });
     const { 
       id, 
       nomeReal, 
@@ -210,9 +238,14 @@ export async function POST(request: Request): Promise<Response> {
     if (aguardandoEspelho !== undefined) updateData.aguardandoEspelho = aguardandoEspelho;
     if (espelhoProcessado !== undefined) updateData.espelhoProcessado = espelhoProcessado;
 
+    // Verificação de ownership
+    let whereClause: any = { id };
+    if (currentUser!.role !== "SUPERADMIN") {
+      whereClause.usuario = { appUserId: session.user.id };
+    }
     // Atualize o lead
     const lead = await prisma.leadChatwit.update({
-      where: { id },
+      where: whereClause,
       data: updateData,
     });
 
@@ -234,6 +267,14 @@ export async function POST(request: Request): Promise<Response> {
  */
 export async function DELETE(request: Request): Promise<Response> {
   try {
+    const session = await auth();
+    if (!session || !session.user) {
+      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    }
+    const currentUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { role: true }
+    });
     const url = new URL(request.url);
     const id = url.searchParams.get("id");
 
@@ -244,15 +285,19 @@ export async function DELETE(request: Request): Promise<Response> {
       );
     }
 
-    // Remova os arquivos do lead
-    await prisma.arquivoLeadChatwit.deleteMany({
-      where: { leadId: id },
-    });
+    // Verificação de ownership
+    let whereClause: any = { id };
+    if (currentUser!.role !== "SUPERADMIN") {
+      whereClause.usuario = { appUserId: session.user.id };
+    }
+    // Verifica se o lead existe e pertence ao usuário
+    const leadToDelete = await prisma.leadChatwit.findFirst({ where: whereClause });
+    if (!leadToDelete) {
+      return NextResponse.json({ error: "Lead não encontrado ou acesso negado" }, { status: 404 });
+    }
 
-    // Remova o lead
-    await prisma.leadChatwit.delete({
-      where: { id },
-    });
+    // Remova o lead (arquivos serão removidos em cascata)
+    await prisma.leadChatwit.delete({ where: { id: leadToDelete.id } });
 
     return NextResponse.json({
       success: true,

@@ -8,7 +8,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 NC='\033[0m' # No Color
 
-echo -e "${YELLOW}===== Iniciando Chatwit Social em produção =====${NC}"
+echo -e "${YELLOW}===== Iniciando Socialwise Chatwit em produção =====${NC}"
 
 # Verificar se o arquivo .env.production existe
 if [ ! -f ".env.production" ]; then
@@ -46,6 +46,6 @@ docker-compose up -d
 echo -e "${GREEN}Verificando status dos contêineres...${NC}"
 docker-compose ps
 
-echo -e "${GREEN}===== Chatwit Social em produção está no ar! =====${NC}"
+echo -e "${GREEN}===== Socialwise Chatwit em produção está no ar! =====${NC}"
 echo -e "Aplicação disponível em: ${YELLOW}${NEXT_PUBLIC_URL}${NC}"
 echo -e "Bull Board disponível em: ${YELLOW}${NEXT_PUBLIC_URL}:${BULL_BOARD_PORT}${NC}" 

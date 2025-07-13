@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Key, Copy, ExternalLink, CheckCircle, AlertCircle } from "lucide-react";
+import { Key, Copy, ExternalLink, CheckCircle, AlertCircle, Eye, EyeOff } from "lucide-react";
 
 interface RegisterApiKeyDialogProps {
   trigger?: React.ReactNode;
@@ -32,6 +32,7 @@ export function RegisterApiKeyDialog({
   const [isOpen, setIsOpen] = useState(false);
   const [token, setToken] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showToken, setShowToken] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,7 +50,7 @@ export function RegisterApiKeyDialog({
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ customAccessToken: token.trim() }),
+        body: JSON.stringify({ chatwitAccessToken: token.trim() }),
       });
 
       const data = await response.json();
@@ -164,15 +165,27 @@ export function RegisterApiKeyDialog({
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="token">Token de Acesso do Chatwit</Label>
-              <div className="flex gap-2">
+              <div className="relative w-full">
                 <Input
                   id="token"
-                  type="text"
+                  type={showToken ? "text" : "password"}
                   placeholder="Cole seu token aqui (ex: XzqGPinpcBhwkfyyjuyShBgD)"
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
-                  className="font-mono"
+                  className="font-mono pr-10"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowToken((v) => !v)}
+                  tabIndex={-1}
+                  aria-label={showToken ? "Ocultar token" : "Exibir token"}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground"
+                  style={{ background: "none", border: "none" }}
+                >
+                  {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <div className="flex gap-2 mt-2">
                 <Button
                   type="button"
                   variant="outline"

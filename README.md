@@ -1,6 +1,6 @@
-# ChatWit Social - Plataforma Completa de Atendimento com IA e Gestão de Redes Sociais 🚀
+# Socialwise Chatwit - Plataforma Completa de Atendimento com IA e Gestão de Redes Sociais 🚀
 
-**ChatWit Social** é uma plataforma avançada de atendimento ao cliente com inteligência artificial, especializada em automação de redes sociais e apoio jurídico para advogados. Desenvolvida para micro, pequenas e médias empresas, oferece soluções completas para gestão digital e atendimento automatizado.
+**Socialwise Chatwit** é uma plataforma avançada de atendimento ao cliente com inteligência artificial, especializada em automação de redes sociais e apoio jurídico para advogados. Desenvolvida para micro, pequenas e médias empresas, oferece soluções completas para gestão digital e atendimento automatizado.
 
 ![GitHub last commit](https://img.shields.io/github/last-commit/Witroch4/ChatWit-Social)
 ![GitHub forks](https://img.shields.io/github/forks/Witroch4/ChatWit-Social)
@@ -12,7 +12,7 @@
   <img src="assets/chatwit_automation.jpg" alt="Automação Inteligente" width="400"/>
 </div>
 
-## <img src="assets/wave.gif" alt="drawing" width="20"/> Transforme sua Presença Digital com ChatWit Social
+## <img src="assets/wave.gif" alt="drawing" width="20"/> Transforme sua Presença Digital com Socialwise Chatwit
 
 [![Instagram Badge](https://img.shields.io/badge/-WitDevOficial-purple?style=flat-square&logo=instagram&logoColor=white&link=https://www.instagram.com/witdevoficial/)](https://www.instagram.com/witdevoficial/)
 [Visite Nosso Site Oficial](https://witdev.com.br)
@@ -473,6 +473,6 @@ Este projeto está licenciado sob a **MIT License**. Veja o arquivo [LICENSE](LI
 
 <div align="center">
   <p><strong>Desenvolvido com ❤️ pela equipe WitDev</strong></p>
-  <p>© 2024 ChatWit Social. Todos os direitos reservados.</p>
+  <p>© 2024 Socialwise Chatwit. Todos os direitos reservados.</p>
 </div>
 

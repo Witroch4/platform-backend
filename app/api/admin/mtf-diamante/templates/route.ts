@@ -75,6 +75,16 @@ function getWhatsAppApiConfig() {
  */
 async function syncTemplateWithDatabase(template: any, userId: string) {
   try {
+    // Buscar o usuário Chatwit
+    const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
+      where: { appUserId: userId }
+    });
+
+    if (!usuarioChatwit) {
+      console.error(`Usuário Chatwit não encontrado para userId: ${userId}`);
+      return false;
+    }
+
     // Verifica se já existe um template com o mesmo templateId
     const existingTemplate = await prisma.whatsAppTemplate.findFirst({
       where: { templateId: template.id.toString() },
@@ -102,7 +112,7 @@ async function syncTemplateWithDatabase(template: any, userId: string) {
       lastEdited: new Date(),
       // Se houver histórico de edições, preservamos; caso contrário, deixamos nulo.
       editHistory: existingTemplate?.editHistory || undefined,
-      userId: userId,
+      usuarioChatwitId: usuarioChatwit.id,
     };
 
     if (existingTemplate) {
@@ -588,6 +598,16 @@ export async function POST(request: Request) {
     try {
       console.log('Salvando template no banco de dados com URL pública:', publicMediaUrl);
       
+      // Buscar o usuário Chatwit
+      const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
+        where: { appUserId: session.user.id }
+      });
+
+      if (!usuarioChatwit) {
+        console.log('❌ [Templates] Usuário Chatwit não encontrado');
+        return NextResponse.json({ error: 'Usuário Chatwit não encontrado' }, { status: 404 });
+      }
+
       // Primeiro criamos o template no banco de dados
       const createdTemplate = await prisma.whatsAppTemplate.create({
         data: {
@@ -598,7 +618,7 @@ export async function POST(request: Request) {
           status: templateResponse.status || 'PENDING',
           language: body.language,
           components: body.components,
-          userId: session.user.id,
+          usuarioChatwitId: usuarioChatwit.id,
           // Adicionar a URL pública da mídia, se disponível
           ...(publicMediaUrl ? { publicMediaUrl } : {})
         },

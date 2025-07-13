@@ -1,14 +1,14 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 
-interface CustomAccessTokenData {
-  customAccessToken?: string;
+interface chatwitAccessTokenData {
+  chatwitAccessToken?: string;
   role?: string;
 }
 
-export function useCustomAccessToken() {
+export function usechatwitAccessToken() {
   const { data: session } = useSession();
-  const [data, setData] = useState<CustomAccessTokenData | null>(null);
+  const [data, setData] = useState<chatwitAccessTokenData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -18,7 +18,7 @@ export function useCustomAccessToken() {
       return;
     }
 
-    const fetchCustomAccessToken = async () => {
+    const fetchchatwitAccessToken = async () => {
       try {
         setLoading(true);
         setError(null);
@@ -32,14 +32,14 @@ export function useCustomAccessToken() {
         const result = await response.json();
         setData(result);
       } catch (err) {
-        console.error("Erro ao buscar customAccessToken:", err);
+        console.error("Erro ao buscar chatwitAccessToken:", err);
         setError(err instanceof Error ? err.message : "Erro desconhecido");
       } finally {
         setLoading(false);
       }
     };
 
-    fetchCustomAccessToken();
+    fetchchatwitAccessToken();
   }, [session?.user?.id]);
 
   return { data, loading, error, refetch: () => {

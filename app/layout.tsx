@@ -16,7 +16,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "ChatWit Social - Gerenciamento de Redes Sociais",
+  title: "Socialwise Chatwit - Gerenciamento de Redes Sociais",
   description: "Plataforma para gerenciamento e automação de redes sociais",
   icons: {
     icon: [

@@ -12,7 +12,7 @@ async function main() {
   const dataAtual = new Date();
   
   console.log('Cadastrando usuário Amanda...');
-  await prisma.user.upsert({
+  const amanda = await prisma.user.upsert({
     where: { email: 'amandasousa22.adv@gmail.com' },
     update: {
       name: 'Amanda',
@@ -31,7 +31,7 @@ async function main() {
   });
 
   console.log('Cadastrando usuário Witalo...');
-  await prisma.user.upsert({
+  const witalo = await prisma.user.upsert({
     where: { email: 'witalo_rocha@hotmail.com' },
     update: {
       name: 'Witalo',
@@ -46,6 +46,52 @@ async function main() {
       role: UserRole.ADMIN,
       password: hashedPassword,
       createdAt: dataAtual,
+    },
+  });
+
+  console.log('Cadastrando UsuarioChatwit para Amanda...');
+  await prisma.usuarioChatwit.upsert({
+    where: { appUserId: amanda.id },
+    update: {
+      name: 'DraAmandaSousa',
+      accountName: 'DraAmandaSousa',
+      channel: 'Whatsapp',
+      inboxId: 4,
+      inboxName: 'WhatsApp - ANA',
+      chatwitAccountId: '3', // ID da conta no Chatwit
+    },
+    create: {
+      appUserId: amanda.id,
+      externalUserId: 3,
+      name: 'DraAmandaSousa',
+      accountName: 'DraAmandaSousa',
+      channel: 'Whatsapp',
+      inboxId: 4,
+      inboxName: 'WhatsApp - ANA',
+      chatwitAccountId: '3', // ID da conta no Chatwit
+    },
+  });
+
+  console.log('Cadastrando UsuarioChatwit para Witalo...');
+  await prisma.usuarioChatwit.upsert({
+    where: { appUserId: witalo.id },
+    update: {
+      name: 'WitDev MASTER',
+      accountName: 'WitDev MASTER',
+      channel: 'Api',
+      inboxId: 96,
+      inboxName: 'teste',
+      chatwitAccountId: '1', // ID da conta no Chatwit
+    },
+    create: {
+      appUserId: witalo.id,
+      externalUserId: 1,
+      name: 'WitDev MASTER',
+      accountName: 'WitDev MASTER',
+      channel: 'Api',
+      inboxId: 96,
+      inboxName: 'teste',
+      chatwitAccountId: '1', // ID da conta no Chatwit
     },
   });
 

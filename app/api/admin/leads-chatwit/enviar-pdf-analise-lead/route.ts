@@ -58,11 +58,21 @@ export async function POST(request: Request): Promise<Response> {
     }
     
     // Se não tiver accessToken na URL, verifica se existe no banco de dados
-    // Usamos any para contornar o erro de tipagem, já que estamos adicionando o campo customAccessToken
-    const leadAny = lead as any;
-    if (!accessToken && leadAny.customAccessToken) {
-      accessToken = leadAny.customAccessToken;
-      console.log('Usando token de acesso personalizado do banco de dados');
+    // Buscar o token do usuário Chatwit
+    if (!accessToken) {
+      const usuarioChatwit = await prisma.usuarioChatwit.findFirst({
+        where: { 
+          leads: {
+            some: { sourceId }
+          }
+        },
+        select: { chatwitAccessToken: true }
+      });
+      
+      if (usuarioChatwit?.chatwitAccessToken) {
+        accessToken = usuarioChatwit.chatwitAccessToken;
+        console.log('Usando token de acesso do usuário Chatwit');
+      }
     }
     
     // Se ainda não tiver, usa o token padrão do ambiente
@@ -115,10 +125,24 @@ export async function POST(request: Request): Promise<Response> {
       anotacoes: message
     };
     
-    // Se tiver um accessToken personalizado na URL que não é o do ambiente, salva no banco
+    // Se tiver um accessToken personalizado na URL que não é o do ambiente, salva no usuário Chatwit
     const urlAccessToken = url.searchParams.get('accessToken');
     if (urlAccessToken && urlAccessToken !== CHATWOOT_ACCESS_TOKEN) {
-      updateData.customAccessToken = urlAccessToken;
+      // Buscar o usuário Chatwit associado ao lead
+      const usuarioChatwit = await prisma.usuarioChatwit.findFirst({
+        where: { 
+          leads: {
+            some: { sourceId }
+          }
+        }
+      });
+      
+      if (usuarioChatwit) {
+        await prisma.usuarioChatwit.update({
+          where: { id: usuarioChatwit.id },
+          data: { chatwitAccessToken: urlAccessToken }
+        });
+      }
     }
     
     await prisma.leadChatwit.update({

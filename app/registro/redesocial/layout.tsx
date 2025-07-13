@@ -3,7 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Conectar Redes Sociais | ChatWit Social",
+  title: "Conectar Redes Sociais | Socialwise Chatwit",
   description: "Conecte suas contas de Instagram e outras redes sociais para automatizar interações e aumentar seu engajamento.",
 };
 
@@ -17,10 +17,10 @@ export default function RedeSocialLayout({
       <div className="flex justify-center mb-6">
         <Link href="/" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
           <div className="bg-gradient-to-r from-blue-600 to-cyan-500 rounded-full p-2">
-            <Image src="/W.svg" alt="ChatWit Social Logo" width={32} height={32} className="h-8 w-8" />
+            <Image src="/W.svg" alt="Socialwise Chatwit Logo" width={32} height={32} className="h-8 w-8" />
           </div>
           <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-cyan-500 bg-clip-text text-transparent">
-            ChatWit Social
+            Socialwise Chatwit
           </span>
         </Link>
       </div>

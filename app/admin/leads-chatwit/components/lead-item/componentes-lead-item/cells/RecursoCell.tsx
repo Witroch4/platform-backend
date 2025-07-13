@@ -19,6 +19,12 @@ interface RecursoCellProps extends CellProps {
     analisePreliminar?: any;
     analiseValidada: boolean;
   };
+  localRecursoState: {
+    recursoUrl?: string;
+    aguardandoRecurso: boolean;
+    recursoPreliminar?: any;
+    recursoValidado: boolean;
+  };
   isEnviandoRecurso: boolean;
   refreshKey: number;
   onContextMenuAction: (action: ContextAction, data?: any) => void;
@@ -28,6 +34,7 @@ interface RecursoCellProps extends CellProps {
 export function RecursoCell({ 
   lead,
   localAnaliseState,
+  localRecursoState,
   isEnviandoRecurso,
   refreshKey,
   onContextMenuAction,
@@ -44,8 +51,14 @@ export function RecursoCell({
   // Verificar se já fez recurso
   const jaFezRecurso = Boolean(lead.fezRecurso);
 
+  // Estados do recurso
+  const temRecursoPreliminar = Boolean(localRecursoState.recursoPreliminar);
+  const recursoValidado = localRecursoState.recursoValidado;
+  const aguardandoRecurso = localRecursoState.aguardandoRecurso;
+  const recursoUrl = localRecursoState.recursoUrl;
+
   // Determinar o estado do botão
-  const podeEnviarRecurso = analiseValidada && temAnalisePreliminar && !isEnviandoRecurso && !isProcessing;
+  const podeEnviarRecurso = analiseValidada && temAnalisePreliminar && !isEnviandoRecurso && !isProcessing && !jaFezRecurso && !temRecursoPreliminar && !aguardandoRecurso;
 
   const handleRecursoClick = async () => {
     if (!podeEnviarRecurso) return;
@@ -155,14 +168,47 @@ export function RecursoCell({
           temAnalisePreliminar: temAnalisePreliminar
         }}
       >
-        {jaFezRecurso ? (
-                        <Button
-                variant="outline"
-                size="sm"
-                disabled={true}
-                className="w-full bg-green-50 border-green-200 text-green-700 opacity-80 text-xs px-2 py-1 h-auto min-h-8"
-                key={`recurso-btn-${refreshKey}`}
-              >
+        {recursoUrl ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onRecursoClick}
+            className="w-full text-xs px-2 py-1 h-auto min-h-8"
+            key={`recurso-btn-${refreshKey}`}
+          >
+            <FileText className="h-4 w-4 mr-1" />
+            Ver Recurso
+          </Button>
+        ) : aguardandoRecurso ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={true}
+            className="w-full text-xs px-2 py-1 h-auto min-h-8"
+            key={`recurso-btn-${refreshKey}`}
+          >
+            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            Aguardando Recurso
+          </Button>
+        ) : temRecursoPreliminar ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onRecursoClick}
+            className="w-full text-xs px-2 py-1 h-auto min-h-8"
+            key={`recurso-btn-${refreshKey}`}
+          >
+            <FileText className="h-4 w-4 mr-1" />
+            Validar Recurso
+          </Button>
+        ) : jaFezRecurso ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={true}
+            className="w-full bg-green-50 border-green-200 text-green-700 opacity-80 text-xs px-2 py-1 h-auto min-h-8"
+            key={`recurso-btn-${refreshKey}`}
+          >
             <CheckCircle className="h-4 w-4 mr-1" />
             Recurso Feito
           </Button>

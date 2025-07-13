@@ -1,71 +1,113 @@
-import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-import { auth } from "@/auth";
+import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
 
-const prisma = new PrismaClient();
-
-// GET - Buscar modelo de recurso
-export async function GET(request: NextRequest) {
+/**
+ * GET - Buscar modelo de recurso
+ */
+export async function GET(request: Request): Promise<Response> {
   try {
-    const session = await auth();
+    console.log("[Modelo Recurso] Buscando modelo de recurso");
     
-    if (!session || !session.user) {
-      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    // Buscar modelo global ativo
+    const modelo = await prisma.modeloRecurso.findFirst({
+      where: { isGlobal: true },
+      orderBy: { updatedAt: 'desc' }
+    });
+    
+    if (!modelo) {
+      console.log("[Modelo Recurso] Nenhum modelo encontrado, retornando modelo padrão");
+      return NextResponse.json({
+        success: true,
+        modelo: "Modelo de recurso não configurado. Configure um modelo primeiro.",
+        isDefault: true
+      });
     }
-
-    // Buscar modelo de recurso global
-    const modeloRecurso = await prisma.modeloRecurso.findFirst({
-      where: {
-        isGlobal: true
-      }
+    
+    console.log("[Modelo Recurso] Modelo encontrado:", modelo.id);
+    return NextResponse.json({
+      success: true,
+      modelo: modelo.texto,
+      modeloId: modelo.id,
+      isDefault: false
     });
-
-    return NextResponse.json({ 
-      modelo: modeloRecurso?.texto || "" 
-    });
-  } catch (error) {
-    console.error("Erro ao buscar modelo de recurso:", error);
-    return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 });
+    
+  } catch (error: any) {
+    console.error("[Modelo Recurso] Erro ao buscar modelo:", error);
+    return NextResponse.json(
+      {
+        error: error.message || "Erro interno ao buscar modelo de recurso",
+      },
+      { status: 500 }
+    );
   }
 }
 
-// POST - Salvar modelo de recurso
-export async function POST(request: NextRequest) {
+/**
+ * POST - Salvar modelo de recurso
+ */
+export async function POST(request: Request): Promise<Response> {
   try {
-    const session = await auth();
+    console.log("[Modelo Recurso] Salvando modelo de recurso");
     
-    if (!session || !session.user) {
-      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    const { texto } = await request.json();
+    
+    if (!texto || texto.trim() === '') {
+      return NextResponse.json(
+        { error: "Texto do modelo é obrigatório" },
+        { status: 400 }
+      );
     }
-
-    const { modelo } = await request.json();
-
-    if (!modelo || typeof modelo !== 'string') {
-      return NextResponse.json({ error: "Modelo de recurso é obrigatório" }, { status: 400 });
+    
+    // Verificar se já existe um modelo global
+    const modeloExistente = await prisma.modeloRecurso.findFirst({
+      where: { isGlobal: true }
+    });
+    
+    if (modeloExistente) {
+      // Atualizar modelo existente
+      const modeloAtualizado = await prisma.modeloRecurso.update({
+        where: { id: modeloExistente.id },
+        data: { 
+          texto: texto.trim(),
+          updatedAt: new Date()
+        }
+      });
+      
+      console.log("[Modelo Recurso] Modelo atualizado:", modeloAtualizado.id);
+      return NextResponse.json({
+        success: true,
+        message: "Modelo de recurso atualizado com sucesso",
+        modeloId: modeloAtualizado.id
+      });
+    } else {
+      // Criar novo modelo
+      const novoModelo = await prisma.modeloRecurso.create({
+        data: {
+          texto: texto.trim(),
+          isGlobal: true,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }
+      });
+      
+      console.log("[Modelo Recurso] Novo modelo criado:", novoModelo.id);
+      return NextResponse.json({
+        success: true,
+        message: "Modelo de recurso criado com sucesso",
+        modeloId: novoModelo.id
+      });
     }
-
-    // Salvar ou atualizar modelo de recurso global
-    const modeloRecurso = await prisma.modeloRecurso.upsert({
-      where: {
-        id: "global_modelo_recurso"
+    
+  } catch (error: any) {
+    console.error("[Modelo Recurso] Erro ao salvar modelo:", error);
+    return NextResponse.json(
+      {
+        error: error.message || "Erro interno ao salvar modelo de recurso",
       },
-      update: {
-        texto: modelo,
-        updatedAt: new Date()
-      },
-      create: {
-        id: "global_modelo_recurso",
-        texto: modelo,
-        isGlobal: true
-      }
-    });
-
-    return NextResponse.json({ 
-      success: true,
-      modelo: modeloRecurso 
-    });
-  } catch (error) {
-    console.error("Erro ao salvar modelo de recurso:", error);
-    return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 });
+      { status: 500 }
+    );
   }
-} 
+}
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic'; 

@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/context-menu";
 import { ReactNode } from "react";
 
-export type ContextType = 'geral' | 'pdf' | 'imagem' | 'arquivo' | 'manuscrito' | 'espelho' | 'analise';
+export type ContextType = 'geral' | 'pdf' | 'imagem' | 'arquivo' | 'manuscrito' | 'espelho' | 'analise' | 'recurso';
 export type ContextAction = 
   | 'atualizarLista' 
   | 'abrirLead' 
@@ -36,7 +36,9 @@ export type ContextAction =
   | 'excluirAnalise'
   | 'verAnalise'
   | 'verAnaliseValidada'
-  | 'enviarEspelhoUpload';
+  | 'enviarEspelhoUpload'
+  | 'enviarRecurso'
+  | 'verRecurso';
 
 interface LeadContextMenuProps {
   contextType: ContextType;
@@ -205,6 +207,22 @@ export function LeadContextMenu({ contextType, onAction, children, data }: LeadC
                   Excluir Análise
                 </ContextMenuItem>
               </>
+            )}
+          </>
+        )}
+
+        {/* Opções para recurso */}
+        {contextType === 'recurso' && (
+          <>
+            {data.analiseValidada && data.temAnalisePreliminar && !data.fezRecurso && (
+              <ContextMenuItem onClick={() => onAction('enviarRecurso', data)}>
+                Enviar Recurso
+              </ContextMenuItem>
+            )}
+            {data.fezRecurso && (
+              <ContextMenuItem onClick={() => onAction('verRecurso', data)}>
+                Ver Recurso
+              </ContextMenuItem>
             )}
           </>
         )}

@@ -9,15 +9,22 @@ export async function getWhatsAppConfig(userId?: string) {
   
   // Se temos um userId, tentamos obter configuração personalizada do banco
   if (userId) {
-    config = await prisma.whatsAppConfig.findFirst({
-      where: {
-        userId,
-        isActive: true
-      },
-      orderBy: {
-        updatedAt: 'desc'
-      }
+    // Buscar o usuário Chatwit primeiro
+    const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
+      where: { appUserId: userId }
     });
+
+    if (usuarioChatwit) {
+      config = await prisma.whatsAppConfig.findFirst({
+        where: {
+          usuarioChatwitId: usuarioChatwit.id,
+          isActive: true
+        },
+        orderBy: {
+          updatedAt: 'desc'
+        }
+      });
+    }
   }
   
   // Se não encontrarmos configuração no banco, usamos valores do .env

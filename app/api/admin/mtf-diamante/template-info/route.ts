@@ -82,10 +82,20 @@ async function getWhatsAppTemplateDetailsFromAPI(templateId: string) {
           });
           console.log(`Template ${template.name} atualizado no banco de dados`);
         } else {
+          // Buscar o usuário Chatwit
+          const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
+            where: { appUserId: session.user.id }
+          });
+
+          if (!usuarioChatwit) {
+            console.log('❌ [TemplateInfo] Usuário Chatwit não encontrado');
+            return;
+          }
+
           await prisma.whatsAppTemplate.create({
             data: {
               templateId: template.id,
-              userId: session.user.id,
+              usuarioChatwitId: usuarioChatwit.id,
               ...data,
             },
           });
