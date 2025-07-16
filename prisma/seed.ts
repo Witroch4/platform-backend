@@ -56,18 +56,13 @@ async function main() {
       name: 'DraAmandaSousa',
       accountName: 'DraAmandaSousa',
       channel: 'Whatsapp',
-      inboxId: 4,
-      inboxName: 'WhatsApp - ANA',
       chatwitAccountId: '3', // ID da conta no Chatwit
     },
     create: {
       appUserId: amanda.id,
-      externalUserId: 3,
       name: 'DraAmandaSousa',
       accountName: 'DraAmandaSousa',
       channel: 'Whatsapp',
-      inboxId: 4,
-      inboxName: 'WhatsApp - ANA',
       chatwitAccountId: '3', // ID da conta no Chatwit
     },
   });
@@ -79,18 +74,13 @@ async function main() {
       name: 'WitDev MASTER',
       accountName: 'WitDev MASTER',
       channel: 'Api',
-      inboxId: 96,
-      inboxName: 'teste',
       chatwitAccountId: '1', // ID da conta no Chatwit
     },
     create: {
       appUserId: witalo.id,
-      externalUserId: 1,
       name: 'WitDev MASTER',
       accountName: 'WitDev MASTER',
       channel: 'Api',
-      inboxId: 96,
-      inboxName: 'teste',
       chatwitAccountId: '1', // ID da conta no Chatwit
     },
   });

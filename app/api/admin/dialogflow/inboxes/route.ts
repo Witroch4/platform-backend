@@ -29,10 +29,12 @@ export async function GET(request: NextRequest) {
 
     const accountId = usuarioChatwit.chatwitAccountId;
     const apiToken = usuarioChatwit.chatwitAccessToken;
+    const baseURL = process.env.CHATWIT_BASE_URL || 'https://chatwit.witdev.com.br';
+
 
     try {
       const response = await axios.get(
-        `https://chatwit.witdev.com.br/api/v1/accounts/${accountId}/inboxes`,
+        `${baseURL}/api/v1/accounts/${accountId}/inboxes`,
         {
           headers: {
             'api_access_token': apiToken,
@@ -43,11 +45,12 @@ export async function GET(request: NextRequest) {
 
       const inboxes = response.data.payload || [];
       
-      // Mapear para formato simplificado
+      // Mapear para formato simplificado, incluindo o account_id
       const simplifiedInboxes = inboxes.map((inbox: any) => ({
         id: inbox.id.toString(),
         name: inbox.name,
-        channel_type: inbox.channel_type
+        channel_type: inbox.channel_type,
+        account_id: accountId // Adicionando o account_id a cada objeto de inbox
       }));
 
       return NextResponse.json({ inboxes: simplifiedInboxes });
@@ -63,4 +66,4 @@ export async function GET(request: NextRequest) {
     console.error('Erro ao buscar caixas de entrada:', error);
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
   }
-} 
+}

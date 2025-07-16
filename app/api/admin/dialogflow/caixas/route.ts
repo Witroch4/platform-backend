@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db as prisma } from '@/lib/db';
 import { auth } from '@/auth';
+import axios from 'axios';
 
 // GET - Listar caixas configuradas
 export async function GET() {
@@ -112,6 +113,55 @@ export async function POST(request: NextRequest) {
     });
 
     console.log('✅ [CaixasEntrada] Caixa criada com sucesso:', caixa.id);
+
+    // --- NOVO: Buscar integração Dialogflow existente para esta inbox ---
+    const accessToken = usuarioChatwit.chatwitAccessToken;
+    const baseURL = process.env.CHATWIT_BASE_URL;
+    if (accessToken && baseURL) {
+      try {
+        console.log('🔍 [CaixasEntrada] Buscando integração Dialogflow existente para a inbox...');
+        const appsResponse = await axios.get(
+          `${baseURL}/api/v1/accounts/${accountId}/integrations/apps`,
+          {
+            headers: {
+              'api_access_token': accessToken,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+        const dialogflowApp = appsResponse.data.payload?.find((app: any) => app.id === 'dialogflow');
+        const hook = dialogflowApp?.hooks?.find((h: any) => h.inbox?.id === parseInt(inboxId));
+        if (hook) {
+          // Só pode existir um agente Dialogflow por caixa
+          const agenteExistente = await prisma.agenteDialogflow.findFirst({
+            where: { caixaId: caixa.id }
+          });
+          if (!agenteExistente) {
+            console.log('⚡ [CaixasEntrada] Integração Dialogflow encontrada! Criando agente automaticamente...');
+            await prisma.agenteDialogflow.create({
+              data: {
+                nome: 'Dialogflow',
+                projectId: hook.settings?.project_id || '',
+                credentials: JSON.stringify(hook.settings?.credentials || {}),
+                region: hook.settings?.region || 'global',
+                ativo: hook.status === true,
+                hookId: hook.id?.toString(),
+                caixaId: caixa.id,
+                usuarioChatwitId: usuarioChatwit.id
+              }
+            });
+          } else {
+            console.log('⚠️ [CaixasEntrada] Já existe agente Dialogflow para esta caixa.');
+          }
+        } else {
+          console.log('ℹ️ [CaixasEntrada] Nenhuma integração Dialogflow encontrada para esta inbox.');
+        }
+      } catch (e: any) {
+        console.error('❌ [CaixasEntrada] Erro ao buscar integração Dialogflow:', e.message);
+      }
+    } else {
+      console.log('⚠️ [CaixasEntrada] AccessToken ou baseURL não configurados, não foi possível buscar integração Dialogflow.');
+    }
 
     return NextResponse.json({ 
       message: 'Caixa configurada com sucesso',

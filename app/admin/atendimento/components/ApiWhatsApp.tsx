@@ -16,7 +16,13 @@ interface WhatsAppConfig {
   whatsappToken: string;
 }
 
-export function ApiWhatsApp() {
+interface ApiWhatsAppProps {
+  inboxId?: string;
+  onConfigSaved?: () => void;
+  title?: string;
+}
+
+export function ApiWhatsApp({ inboxId, onConfigSaved, title }: ApiWhatsAppProps) {
   const [config, setConfig] = useState<WhatsAppConfig>({
     fbGraphApiBase: 'https://graph.facebook.com/v22.0',
     whatsappBusinessAccountId: '',
@@ -34,7 +40,10 @@ export function ApiWhatsApp() {
     const fetchConfig = async () => {
       try {
         setLoading(true);
-        const response = await axios.get('/api/admin/whatsapp-config');
+        const url = inboxId 
+          ? `/api/admin/whatsapp-config?inboxId=${inboxId}`
+          : '/api/admin/whatsapp-config';
+        const response = await axios.get(url);
         if (response.data.success) {
           setConfig(response.data.config);
         }
@@ -53,7 +62,7 @@ export function ApiWhatsApp() {
     };
 
     fetchConfig();
-  }, []);
+  }, [inboxId]);
 
   const handleSave = async () => {
     if (!config.whatsappBusinessAccountId || !config.whatsappToken) {
@@ -65,10 +74,12 @@ export function ApiWhatsApp() {
 
     try {
       setSaving(true);
-      const response = await axios.post('/api/admin/whatsapp-config', config);
+      const dataToSend = inboxId ? { ...config, inboxId } : config;
+      const response = await axios.post('/api/admin/whatsapp-config', dataToSend);
       
       if (response.data.success) {
         toast.success('Configurações salvas com sucesso!');
+        onConfigSaved?.(); // Chama callback se fornecido
       } else {
         throw new Error(response.data.error || 'Erro ao salvar');
       }
@@ -140,9 +151,11 @@ export function ApiWhatsApp() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold">Configurações da API do WhatsApp</h3>
-      </div>
+      {title && (
+        <div className="flex justify-between items-center">
+          <h3 className="text-lg font-semibold">{title}</h3>
+        </div>
+      )}
 
       <Card>
         <CardHeader>

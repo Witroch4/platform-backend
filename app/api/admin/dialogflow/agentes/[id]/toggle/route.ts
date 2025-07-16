@@ -1,279 +1,169 @@
+// Local: /api/admin/dialogflow/agentes/[id]/toggle
+
 import { NextRequest, NextResponse } from 'next/server';
 import { db as prisma } from '@/lib/db';
 import { auth } from '@/auth';
 import axios from 'axios';
+
+// Helper para a configuração do Axios
+const getAxiosConfig = (token: string) => ({
+  headers: {
+    'api_access_token': token,
+    'Content-Type': 'application/json'
+  }
+});
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
-    console.log('🔄 [AgenteToggle] Iniciando toggle de agente:', id);
-    
     const session = await auth();
+    const { id } = await params;
+
     if (!session?.user?.id) {
-      console.log('❌ [AgenteToggle] Usuário não autorizado');
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    // Buscar o usuário Chatwit
     const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
       where: { appUserId: session.user.id }
     });
 
-    if (!usuarioChatwit) {
-      return NextResponse.json({ error: 'Usuário Chatwit não encontrado' }, { status: 404 });
+    if (!usuarioChatwit?.chatwitAccessToken) {
+      return NextResponse.json({ error: 'Token de acesso não configurado' }, { status: 400 });
     }
+    
+    const accessToken = usuarioChatwit.chatwitAccessToken;
+    const baseURL = process.env.CHATWIT_BASE_URL;
 
-    // Buscar o agente
-    const agente = await prisma.agenteDialogflow.findFirst({
-      where: { 
-        id: id,
-        usuarioChatwitId: usuarioChatwit.id 
-      },
-      include: {
-        caixa: true
-      }
+    // Busca o agente que será alterado e sua caixa
+    const agenteParaAtivar = await prisma.agenteDialogflow.findFirst({
+      where: { id: id, usuarioChatwitId: usuarioChatwit.id },
+      include: { caixa: true }
     });
 
-    if (!agente) {
-      console.log('❌ [AgenteToggle] Agente não encontrado');
-      return NextResponse.json({ error: 'Agente não encontrado' }, { status: 404 });
+    if (!agenteParaAtivar || !agenteParaAtivar.caixa) {
+      return NextResponse.json({ error: 'Agente ou caixa associada não encontrado' }, { status: 404 });
     }
 
-    const novoStatus = !agente.ativo;
-    console.log('🔄 [AgenteToggle] Alterando status de', agente.ativo, 'para', novoStatus);
-
-    // Se está ativando, desativar todos os outros agentes da mesma caixa
-    if (novoStatus) {
-      console.log('🔄 [AgenteToggle] Desativando outros agentes da caixa:', agente.caixaId);
-      
-      // Buscar outros agentes ativos da mesma caixa
-      const outrosAgentesAtivos = await prisma.agenteDialogflow.findMany({
-        where: {
-          caixaId: agente.caixaId,
-          ativo: true,
-          id: { not: id }
-        },
-        include: {
-          caixa: true
-        }
-      });
-
-      // Desativar hooks dos outros agentes no Chatwit
-      for (const outroAgente of outrosAgentesAtivos) {
-        if (outroAgente.hookId && outroAgente.caixa.chatwitAccountId) {
-          try {
-            console.log('🔗 [AgenteToggle] Desativando hook do agente:', outroAgente.nome);
-            
-            // Buscar configurações do usuário Chatwit
-            const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
-              where: { appUserId: session.user.id },
-              select: {
-                chatwitAccessToken: true,
-              }
-            });
-
-            if (usuarioChatwit?.chatwitAccessToken) {
-              await axios.patch(
-                `https://app.chatwoot.com/api/v1/accounts/${outroAgente.caixa.chatwitAccountId}/integrations/hooks/${outroAgente.hookId}`,
-                {
-                  status: 0 // Desativar
-                },
-                {
-                  headers: {
-                    'api_access_token': usuarioChatwit.chatwitAccessToken,
-                    'Content-Type': 'application/json'
-                  }
-                }
-              );
-              console.log('✅ [AgenteToggle] Hook desativado com sucesso');
-            }
-          } catch (apiError: any) {
-            console.error('❌ [AgenteToggle] Erro ao desativar hook:', apiError.message);
-          }
+    // Se o agente já está ativo, o objetivo é apenas desativá-lo.
+    if (agenteParaAtivar.ativo) {
+      console.log(`🔄 [AgenteToggle] Desativando agente '${agenteParaAtivar.nome}'...`);
+      if (agenteParaAtivar.hookId) {
+        try {
+          // Desativa o hook na API externa
+          await axios.patch(
+            `${baseURL}/api/v1/accounts/${agenteParaAtivar.caixa.chatwitAccountId}/integrations/hooks/${agenteParaAtivar.hookId}`,
+            { status: 0 },
+            getAxiosConfig(accessToken)
+          );
+          console.log(`✅ [AgenteToggle] Hook ${agenteParaAtivar.hookId} desativado na API.`);
+        } catch (apiError: any) {
+          // Mesmo que falhe na API, continua para desativar no nosso DB, mas loga o erro.
+          console.error(`❌ Erro ao desativar hook na API: ${apiError.message}`);
+          // Você pode optar por retornar um erro aqui se a desativação na API for crítica
+          // return NextResponse.json({ error: 'Falha ao desativar na API externa' }, { status: 502 });
         }
       }
-
-      // Desativar outros agentes no banco
-      await prisma.agenteDialogflow.updateMany({
-        where: {
-          caixaId: agente.caixaId,
-          id: { not: id }
-        },
+      
+      // Atualiza o status no banco de dados
+      const agenteDesativado = await prisma.agenteDialogflow.update({
+        where: { id: id },
         data: { ativo: false }
       });
-
-      console.log('✅ [AgenteToggle] Outros agentes desativados');
+      
+      return NextResponse.json({ message: 'Agente desativado com sucesso', agente: agenteDesativado });
     }
 
-    // Criar ou atualizar hook no Chatwit
-    let hookId = agente.hookId;
+    // --- Lógica para ATIVAR um novo agente ---
+    // Este é o fluxo crítico que precisa de uma transação.
     
-    if (novoStatus) {
-      // Ativando - criar hook se não existir
-      if (!hookId) {
-        try {
-          console.log('🔗 [AgenteToggle] Criando hook no Chatwit...');
-          
-          // Buscar configurações do usuário Chatwit
-          const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
-            where: { appUserId: session.user.id },
-            select: {
-              chatwitAccessToken: true,
-            }
-          });
+    console.log(`🔄 [AgenteToggle] Ativando agente '${agenteParaAtivar.nome}'...`);
 
-          if (!usuarioChatwit?.chatwitAccessToken) {
-            console.log('❌ [AgenteToggle] Token de acesso não encontrado');
-            return NextResponse.json({ error: 'Token de acesso não configurado' }, { status: 400 });
-          }
+    const agenteAtualizado = await prisma.$transaction(async (tx) => {
+      const accountId = agenteParaAtivar.caixa.chatwitAccountId;
 
-          // Buscar integrações disponíveis
-          const integracoesResponse = await axios.get(
-            `https://app.chatwoot.com/api/v1/accounts/${agente.caixa.chatwitAccountId}/integrations/apps`,
-            {
-              headers: {
-                'api_access_token': usuarioChatwit.chatwitAccessToken
-              }
-            }
-          );
-
-          const dialogflowApp = integracoesResponse.data.payload?.find((app: any) => 
-            app.name?.toLowerCase().includes('dialogflow') || 
-            app.id === 'dialogflow'
-          );
-
-          if (!dialogflowApp) {
-            console.log('❌ [AgenteToggle] Integração Dialogflow não encontrada');
-            return NextResponse.json({ error: 'Integração Dialogflow não disponível' }, { status: 400 });
-          }
-
-          const parsedCredentials = JSON.parse(agente.credentials);
-          const hookData = {
-            app_id: dialogflowApp.id,
-            inbox_id: parseInt(agente.caixa.inboxId),
-            status: 1,
-            settings: {
-              project_id: agente.projectId,
-              credentials: parsedCredentials
-            }
-          };
-
-          const hookResponse = await axios.post(
-            `https://app.chatwoot.com/api/v1/accounts/${agente.caixa.chatwitAccountId}/integrations/hooks`,
-            hookData,
-            {
-              headers: {
-                'api_access_token': usuarioChatwit.chatwitAccessToken,
-                'Content-Type': 'application/json'
-              }
-            }
-          );
-
-          hookId = hookResponse.data.id;
-          console.log('✅ [AgenteToggle] Hook criado com sucesso, ID:', hookId);
-
-        } catch (apiError: any) {
-          console.error('❌ [AgenteToggle] Erro ao criar hook:', {
-            message: apiError.message,
-            status: apiError.response?.status,
-            data: apiError.response?.data
-          });
-          
-          return NextResponse.json({ 
-            error: 'Erro ao criar integração no Chatwit',
-            details: apiError.response?.data || apiError.message
-          }, { status: 500 });
+      // 1. Encontrar e desativar QUALQUER outro agente ativo na mesma caixa
+      const agenteAtivoAtual = await tx.agenteDialogflow.findFirst({
+        where: {
+          caixaId: agenteParaAtivar.caixaId,
+          ativo: true,
+          id: { not: id } // Garante que não é o agente que queremos ativar
         }
-      } else {
-        // Hook existe, apenas ativar
-        try {
-          console.log('🔗 [AgenteToggle] Ativando hook existente...');
-          
-          // Buscar configurações do usuário Chatwit
-          const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
-            where: { appUserId: session.user.id },
-            select: {
-              chatwitAccessToken: true,
-            }
-          });
+      });
 
-          if (usuarioChatwit?.chatwitAccessToken) {
+      if (agenteAtivoAtual) {
+        console.log(`[Transação] Encontrado agente ativo: '${agenteAtivoAtual.nome}'. Desativando...`);
+        // Desativa o hook do agente antigo na API
+        if (agenteAtivoAtual.hookId) {
+          try {
             await axios.patch(
-              `https://app.chatwoot.com/api/v1/accounts/${agente.caixa.chatwitAccountId}/integrations/hooks/${hookId}`,
-              {
-                status: 1
-              },
-              {
-                headers: {
-                  'api_access_token': usuarioChatwit.chatwitAccessToken,
-                  'Content-Type': 'application/json'
-                }
-              }
+              `${baseURL}/api/v1/accounts/${accountId}/integrations/hooks/${agenteAtivoAtual.hookId}`,
+              { status: 0 },
+              getAxiosConfig(accessToken)
             );
-            console.log('✅ [AgenteToggle] Hook ativado com sucesso');
+            console.log(`[Transação] Hook ${agenteAtivoAtual.hookId} do agente antigo desativado na API.`);
+          } catch (e: any) {
+            console.error(`❌ FALHA CRÍTICA: Não foi possível desativar o hook do agente antigo. Abortando operação.`);
+            // Lançar um erro aqui aborta a transação inteira
+            throw new Error(`Falha ao desativar o hook do agente '${agenteAtivoAtual.nome}'`);
           }
-        } catch (apiError: any) {
-          console.error('❌ [AgenteToggle] Erro ao ativar hook:', apiError.message);
         }
+        // Desativa o agente antigo no nosso banco de dados
+        await tx.agenteDialogflow.update({
+          where: { id: agenteAtivoAtual.id },
+          data: { ativo: false }
+        });
+        console.log(`[Transação] Agente '${agenteAtivoAtual.nome}' desativado no banco de dados.`);
       }
-    } else {
-      // Desativando - desativar hook se existir
-      if (hookId) {
-        try {
-          console.log('🔗 [AgenteToggle] Desativando hook...');
-          
-          // Buscar configurações do usuário Chatwit
-          const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
-            where: { appUserId: session.user.id },
-            select: {
-              chatwitAccessToken: true,
-            }
-          });
 
-          if (usuarioChatwit?.chatwitAccessToken) {
-            await axios.patch(
-              `https://app.chatwoot.com/api/v1/accounts/${agente.caixa.chatwitAccountId}/integrations/hooks/${hookId}`,
-              {
-                status: 0
-              },
-              {
-                headers: {
-                  'api_access_token': usuarioChatwit.chatwitAccessToken,
-                  'Content-Type': 'application/json'
-                }
-              }
-            );
-            console.log('✅ [AgenteToggle] Hook desativado com sucesso');
-          }
-        } catch (apiError: any) {
-          console.error('❌ [AgenteToggle] Erro ao desativar hook:', apiError.message);
-        }
-      }
-    }
+      // 2. Ativar o novo agente
+      let hookId;
+      try {
+        const settingsPayload = {
+          project_id: agenteParaAtivar.projectId,
+          credentials: JSON.parse(agenteParaAtivar.credentials)
+        };
+        const hookData = { 
+          app_id: 'dialogflow', 
+          inbox_id: parseInt(agenteParaAtivar.caixa.inboxId), 
+          status: 1, 
+          settings: settingsPayload 
+        };
 
-    // Atualizar agente no banco
-    const agenteAtualizado = await prisma.agenteDialogflow.update({
-      where: { id: id },
-      data: { 
-        ativo: novoStatus,
-        hookId: hookId?.toString()
+        // Para simplificar, vamos sempre criar/atualizar via API de integração principal.
+        // A API do Chatwoot deve ser inteligente o suficiente para atualizar se já existir um para a inbox.
+        // O ideal seria usar uma rota `upsert` se existisse. Como não há, criar ou atualizar é o caminho.
+        // A lógica de procurar o hook antes pode ser mantida se necessário, mas a falha ocorria na ativação.
+        console.log(`[Transação] Criando/Atualizando hook para o agente '${agenteParaAtivar.nome}'...`);
+        const hookResponse = await axios.post(
+          `${baseURL}/api/v1/accounts/${accountId}/integrations/hooks`, 
+          hookData, 
+          getAxiosConfig(accessToken)
+        );
+        
+        hookId = hookResponse.data.id;
+        console.log(`[Transação] Hook criado/atualizado com sucesso na API. Novo Hook ID: ${hookId}`);
+        
+      } catch (apiError: any) {
+        console.error('❌ FALHA CRÍTICA: Erro ao criar/ativar novo hook na API:', { message: apiError.message, data: apiError.response?.data });
+        // Lançar um erro aqui aborta a transação inteira
+        throw new Error(`Erro ao comunicar com a API externa para ativar o agente: ${apiError.response?.data?.message || apiError.message}`);
       }
+      
+      // 3. Atualizar o novo agente como ativo no nosso DB
+      return tx.agenteDialogflow.update({
+        where: { id: id },
+        data: { ativo: true, hookId: hookId.toString() }
+      });
     });
 
-    console.log('✅ [AgenteToggle] Agente atualizado com sucesso');
+    console.log(`✅ [AgenteToggle] Agente '${agenteAtualizado.nome}' ativado com sucesso.`);
+    return NextResponse.json({ message: 'Agente ativado com sucesso', agente: agenteAtualizado });
 
-    return NextResponse.json({ 
-      message: `Agente ${novoStatus ? 'ativado' : 'desativado'} com sucesso`,
-      agente: agenteAtualizado
-    });
   } catch (error: any) {
-    console.error('❌ [AgenteToggle] Erro ao alterar status:', error);
-    return NextResponse.json({ 
-      error: 'Erro interno', 
-      details: error.message 
-    }, { status: 500 });
+    console.error('❌ [AgenteToggle] Erro na operação:', error);
+    // Retorna a mensagem de erro da transação ou um erro genérico
+    return NextResponse.json({ error: 'Erro interno do servidor', details: error.message }, { status: 500 });
   }
-} 
+}

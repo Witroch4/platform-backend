@@ -11,147 +11,131 @@ async function restoreAllChatwit() {
 
   try {
     // Ler o backup mais recente
-    const backupPath = join(process.cwd(), 'backups', 'backup_simple_2025-07-12_18-25-34.json');
+    const backupPath = join(process.cwd(), 'backups', 'backup_simple_2025-07-13_15-40-53.json');
     const backupData = JSON.parse(readFileSync(backupPath, 'utf-8'));
     
     const usuarios = backupData.data.usuariosChatwit;
     const leads = backupData.data.leadsChatwit;
     const arquivos = backupData.data.arquivosLeadChatwit;
 
-    let usuariosRestaurados = 0;
     let leadsRestaurados = 0;
     let arquivosRestaurados = 0;
 
-    for (const usuario of usuarios) {
+    // Buscar o usuário Amanda pelo email
+    const amandaUser = await prisma.user.findUnique({
+      where: { email: 'amandasousa22.adv@gmail.com' },
+      include: { usuarioChatwit: true }
+    });
+
+    if (!amandaUser || !amandaUser.usuarioChatwit) {
+      console.error('❌ Usuário Amanda ou UsuarioChatwit não encontrado!');
+      return;
+    }
+
+    console.log(`✅ Usuário Amanda encontrado: ${amandaUser.name} (${amandaUser.email})`);
+    console.log(`✅ UsuarioChatwit ID: ${amandaUser.usuarioChatwit.id}`);
+
+    // Encontrar o UsuarioChatwit da Amanda no backup
+    const amandaBackup = usuarios.find((u: any) => u.name === 'DraAmandaSousa');
+    
+    if (!amandaBackup) {
+      console.error('❌ UsuarioChatwit da Amanda não encontrado no backup!');
+      return;
+    }
+
+    console.log(`✅ UsuarioChatwit da Amanda no backup: ${amandaBackup.id}`);
+
+    // Restaurar leads da Amanda
+    const leadsDaAmanda = leads.filter((l: any) => l.usuarioId === amandaBackup.id);
+    console.log(`📊 Encontrados ${leadsDaAmanda.length} leads da Amanda no backup`);
+
+    for (const lead of leadsDaAmanda) {
       try {
-        // Buscar usuário do app relacionado
-        const appUser = await prisma.user.findFirst({ where: { email: usuario.email } });
-        let appUserId = appUser?.id;
-        // Se não achar pelo email, tenta pelo nome (ajuste se necessário)
-        if (!appUserId && usuario.name) {
-          const byName = await prisma.user.findFirst({ where: { name: usuario.name } });
-          appUserId = byName?.id;
-        }
-        // Se não achar, pula
-        if (!appUserId) {
-          console.warn(`⚠️ Usuário do app não encontrado para UsuarioChatwit ${usuario.id} (${usuario.name}), pulando...`);
-          continue;
-        }
-        // Cria UsuarioChatwit
-        await prisma.usuarioChatwit.create({
+        await prisma.leadChatwit.create({
           data: {
-            id: usuario.id,
-            appUserId,
-            externalUserId: usuario.externalUserId ?? null,
-            name: usuario.name,
-            availableName: usuario.availableName ?? null,
-            accountId: usuario.accountId,
-            accountName: usuario.accountName,
-            channel: usuario.channel,
-            inboxId: usuario.inboxId ?? null,
-            inboxName: usuario.inboxName ?? null,
-            createdAt: new Date(usuario.createdAt),
-            updatedAt: new Date(usuario.updatedAt)
+            id: lead.id,
+            sourceId: lead.sourceId,
+            name: lead.name,
+            nomeReal: lead.nomeReal,
+            phoneNumber: lead.phoneNumber,
+            email: lead.email,
+            thumbnail: lead.thumbnail,
+            concluido: lead.concluido,
+            anotacoes: lead.anotacoes,
+            pdfUnificado: lead.pdfUnificado,
+            imagensConvertidas: lead.imagensConvertidas,
+            leadUrl: lead.leadUrl,
+            fezRecurso: lead.fezRecurso,
+            datasRecurso: lead.datasRecurso,
+            provaManuscrita: lead.provaManuscrita,
+            manuscritoProcessado: lead.manuscritoProcessado,
+            aguardandoManuscrito: lead.aguardandoManuscrito,
+            espelhoCorrecao: lead.espelhoCorrecao,
+            textoDOEspelho: lead.textoDOEspelho,
+            espelhoProcessado: lead.espelhoProcessado,
+            aguardandoEspelho: lead.aguardandoEspelho,
+            analiseUrl: lead.analiseUrl,
+            argumentacaoUrl: lead.argumentacaoUrl,
+            analiseProcessada: lead.analiseProcessada,
+            aguardandoAnalise: lead.aguardandoAnalise,
+            analisePreliminar: lead.analisePreliminar,
+            analiseValidada: lead.analiseValidada,
+            consultoriaFase2: lead.consultoriaFase2,
+            recursoPreliminar: lead.recursoPreliminar,
+            recursoValidado: lead.recursoValidado,
+            recursoUrl: lead.recursoUrl,
+            recursoArgumentacaoUrl: lead.recursoArgumentacaoUrl,
+            aguardandoRecurso: lead.aguardandoRecurso,
+            seccional: lead.seccional,
+            areaJuridica: lead.areaJuridica,
+            notaFinal: lead.notaFinal,
+            situacao: lead.situacao,
+            inscricao: lead.inscricao,
+            examesParticipados: lead.examesParticipados,
+            espelhoBibliotecaId: lead.espelhoBibliotecaId,
+            especialidade: lead.especialidade,
+            createdAt: new Date(lead.createdAt),
+            updatedAt: new Date(lead.updatedAt),
+            usuarioId: amandaUser.usuarioChatwit.id // Usar o ID correto do banco atual
           }
         });
-        usuariosRestaurados++;
-        // Restaurar leads desse usuario
-        const leadsDoUsuario = leads.filter((l: any) => l.usuarioId === usuario.id);
-        for (const lead of leadsDoUsuario) {
+        leadsRestaurados++;
+        
+        // Restaurar arquivos desse lead
+        const arquivosDoLead = arquivos.filter((a: any) => a.leadId === lead.id);
+        for (const arquivo of arquivosDoLead) {
           try {
-            await prisma.leadChatwit.create({
+            await prisma.arquivoLeadChatwit.create({
               data: {
-                id: lead.id,
-                sourceId: lead.sourceId,
-                name: lead.name,
-                nomeReal: lead.nomeReal,
-                phoneNumber: lead.phoneNumber,
-                email: lead.email,
-                thumbnail: lead.thumbnail,
-                concluido: lead.concluido,
-                anotacoes: lead.anotacoes,
-                pdfUnificado: lead.pdfUnificado,
-                imagensConvertidas: lead.imagensConvertidas,
-                leadUrl: lead.leadUrl,
-                fezRecurso: lead.fezRecurso,
-                datasRecurso: lead.datasRecurso,
-                provaManuscrita: lead.provaManuscrita,
-                manuscritoProcessado: lead.manuscritoProcessado,
-                aguardandoManuscrito: lead.aguardandoManuscrito,
-                espelhoCorrecao: lead.espelhoCorrecao,
-                textoDOEspelho: lead.textoDOEspelho,
-                espelhoProcessado: lead.espelhoProcessado,
-                aguardandoEspelho: lead.aguardandoEspelho,
-                analiseUrl: lead.analiseUrl,
-                argumentacaoUrl: lead.argumentacaoUrl,
-                analiseProcessada: lead.analiseProcessada,
-                aguardandoAnalise: lead.aguardandoAnalise,
-                analisePreliminar: lead.analisePreliminar,
-                analiseValidada: lead.analiseValidada,
-                consultoriaFase2: lead.consultoriaFase2,
-                recursoPreliminar: lead.recursoPreliminar,
-                recursoValidado: lead.recursoValidado,
-                recursoUrl: lead.recursoUrl,
-                recursoArgumentacaoUrl: lead.recursoArgumentacaoUrl,
-                aguardandoRecurso: lead.aguardandoRecurso,
-                seccional: lead.seccional,
-                areaJuridica: lead.areaJuridica,
-                notaFinal: lead.notaFinal,
-                situacao: lead.situacao,
-                inscricao: lead.inscricao,
-                examesParticipados: lead.examesParticipados,
-                espelhoBibliotecaId: lead.espelhoBibliotecaId,
-                especialidade: lead.especialidade,
-                createdAt: new Date(lead.createdAt),
-                updatedAt: new Date(lead.updatedAt),
-                usuarioId: usuario.id
+                id: arquivo.id,
+                fileType: arquivo.fileType,
+                dataUrl: arquivo.dataUrl,
+                pdfConvertido: arquivo.pdfConvertido,
+                createdAt: new Date(arquivo.createdAt),
+                updatedAt: new Date(arquivo.updatedAt),
+                leadId: lead.id
               }
             });
-            leadsRestaurados++;
-            // Restaurar arquivos desse lead
-            const arquivosDoLead = arquivos.filter((a: any) => a.leadId === lead.id);
-            for (const arquivo of arquivosDoLead) {
-              try {
-                await prisma.arquivoLeadChatwit.create({
-                  data: {
-                    id: arquivo.id,
-                    fileType: arquivo.fileType,
-                    dataUrl: arquivo.dataUrl,
-                    pdfConvertido: arquivo.pdfConvertido,
-                    createdAt: new Date(arquivo.createdAt),
-                    updatedAt: new Date(arquivo.updatedAt),
-                    leadId: lead.id
-                  }
-                });
-                arquivosRestaurados++;
-              } catch (error: any) {
-                if (error.code === 'P2002') {
-                  console.log(`⚠️ Arquivo ${arquivo.id} já existe, pulando...`);
-                } else {
-                  console.error(`❌ Erro ao restaurar arquivo ${arquivo.id}:`, error.message);
-                }
-              }
-            }
+            arquivosRestaurados++;
           } catch (error: any) {
             if (error.code === 'P2002') {
-              console.log(`⚠️ Lead ${lead.id} já existe, pulando...`);
+              console.log(`⚠️ Arquivo ${arquivo.id} já existe, pulando...`);
             } else {
-              console.error(`❌ Erro ao restaurar lead ${lead.id}:`, error.message);
+              console.error(`❌ Erro ao restaurar arquivo ${arquivo.id}:`, error.message);
             }
           }
         }
       } catch (error: any) {
         if (error.code === 'P2002') {
-          console.log(`⚠️ UsuarioChatwit ${usuario.id} já existe, pulando...`);
+          console.log(`⚠️ Lead ${lead.id} já existe, pulando...`);
         } else {
-          console.error(`❌ Erro ao restaurar UsuarioChatwit ${usuario.id}:`, error.message);
+          console.error(`❌ Erro ao restaurar lead ${lead.id}:`, error.message);
         }
       }
     }
 
     // Estatísticas finais
     console.log('\n📊 Resumo da restauração:');
-    console.log(`  - UsuarioChatwit: ${usuariosRestaurados} restaurados`);
     console.log(`  - Leads: ${leadsRestaurados} restaurados`);
     console.log(`  - Arquivos: ${arquivosRestaurados} restaurados`);
 

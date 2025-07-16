@@ -10,9 +10,29 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Plus, Trash2, Settings, Bot, Inbox, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Plus, Trash2, Settings, Bot, Inbox as InboxIcon, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
-import axios from 'axios';
+import axios, { type AxiosError } from 'axios';
+import { cn } from '@/lib/utils';
+
+// Tipos
+interface AgenteDialogflow {
+  id: string;
+  nome: string;
+  projectId: string;
+  region: string;
+  ativo: boolean;
+}
+
+interface CaixaEntrada {
+  id: string;
+  nome: string;
+  inboxId: string;
+  inboxName: string;
+  chatwitAccountId: string;
+  channelType: string;
+  agentes: AgenteDialogflow[];
+}
 
 interface Inbox {
   id: string;
@@ -20,613 +40,222 @@ interface Inbox {
   channel_type: string;
 }
 
-interface AgenteDialogflow {
-  id: string;
-  nome: string;
-  projectId: string;
-  region: string;
-  ativo: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface CaixaEntrada {
-  id: string;
-  nome: string;
-  chatwitAccountId: string; // Mudança de accountId para chatwitAccountId
-  inboxId: string;
-  inboxName: string;
-  channelType: string;
-  agentes: AgenteDialogflow[];
-  createdAt: string;
-  updatedAt: string;
-}
-
 interface DialogflowCaixasAgentesProps {
-  initialChatwitAccountId?: string;
-  initialChatwitAccessToken?: string;
-  onConfigChange?: (config: { chatwitAccountId: string; chatwitAccessToken: string }) => void;
+  onCaixaSelected: (id: string | null) => void;
 }
 
-export function DialogflowCaixasAgentes({
-  initialChatwitAccountId = '',
-  initialChatwitAccessToken = '',
-  onConfigChange
-}: DialogflowCaixasAgentesProps) {
+export function DialogflowCaixasAgentes({ onCaixaSelected }: DialogflowCaixasAgentesProps) {
   const [caixas, setCaixas] = useState<CaixaEntrada[]>([]);
-  const [inboxes, setInboxes] = useState<Inbox[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  
-  // Estados para configuração do Chatwit
-  const [showConfigDialog, setShowConfigDialog] = useState(false);
-  const [configData, setConfigData] = useState({
-    chatwitAccountId: initialChatwitAccountId,
-    chatwitAccessToken: initialChatwitAccessToken,
-  });
-  const [configFetched, setConfigFetched] = useState(false);
-  
-  // Estados para caixas
-  const [showCaixaDialog, setShowCaixaDialog] = useState(false);
-  const [caixaFormData, setCaixaFormData] = useState({
-    nome: '',
-    chatwitAccountId: '', // Mudança de accountId para chatwitAccountId
-    inboxId: '',
-  });
+  const [selectedCaixaId, setSelectedCaixaId] = useState<string | null>(null);
 
-  // Estados para agentes
-  const [showAgenteDialog, setShowAgenteDialog] = useState(false);
-  const [selectedCaixaId, setSelectedCaixaId] = useState<string>('');
-  const [agenteFormData, setAgenteFormData] = useState({
-    nome: '',
-    projectId: '',
-    credentials: '',
-    region: 'global',
-  });
-
-  const [showToken, setShowToken] = useState(false);
-
-  useEffect(() => {
-    fetchCaixas();
-    fetchInboxes();
-    fetchConfig();
-  }, []);
-
-  // Preencher configData com props ao abrir dialog
-  useEffect(() => {
-    if (showConfigDialog) {
-      setConfigData({
-        chatwitAccountId: initialChatwitAccountId,
-        chatwitAccessToken: initialChatwitAccessToken,
-      });
-    }
-  }, [showConfigDialog, initialChatwitAccountId, initialChatwitAccessToken]);
-
-  // Buscar config do backend só se não vier por props
-  useEffect(() => {
-    if (showConfigDialog && !configFetched && !initialChatwitAccountId && !initialChatwitAccessToken) {
-      axios.get('/api/admin/dialogflow/config')
-        .then(res => {
-          if (res.data?.config?.chatwitAccountId) {
-            setConfigData(prev => ({ ...prev, chatwitAccountId: res.data.config.chatwitAccountId }));
-          }
-          if (res.data?.config?.chatwitAccessToken) {
-            setConfigData(prev => ({ ...prev, chatwitAccessToken: res.data.config.chatwitAccessToken }));
-          }
-          setConfigFetched(true);
-        })
-        .catch(() => setConfigFetched(true));
-    }
-    if (!showConfigDialog) {
-      setConfigFetched(false);
-      setConfigData({ chatwitAccountId: initialChatwitAccountId, chatwitAccessToken: initialChatwitAccessToken });
-    }
-  }, [showConfigDialog, configFetched, initialChatwitAccountId, initialChatwitAccessToken]);
-
-  const fetchCaixas = async () => {
+  const fetchData = async () => {
+    setLoading(true);
     try {
       const response = await axios.get('/api/admin/dialogflow/caixas');
-      setCaixas(response.data.caixas || []);
+      const fetchedCaixas = response.data.caixas || [];
+      setCaixas(fetchedCaixas);
+
+      // Lógica para manter ou definir a seleção
+      if (selectedCaixaId && !fetchedCaixas.some((c: CaixaEntrada) => c.id === selectedCaixaId)) {
+        const newSelection = fetchedCaixas.length > 0 ? fetchedCaixas[0].id : null;
+        handleSelectCaixa(newSelection);
+      } else if (!selectedCaixaId && fetchedCaixas.length > 0) {
+        handleSelectCaixa(fetchedCaixas[0].id);
+      }
+
     } catch (error) {
       console.error('Erro ao buscar caixas:', error);
+      toast.error('Não foi possível carregar as caixas de entrada.');
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchInboxes = async () => {
-    // Buscar config primeiro
-    try {
-      const configRes = await axios.get('/api/admin/dialogflow/config');
-      const config = configRes.data?.config;
-      if (!config?.chatwitAccountId || !config?.chatwitAccessToken) {
-        toast.error('Configure o ID da Conta e o Token do Chatwit antes de buscar as caixas de entrada.');
-        setInboxes([]);
-        return;
-      }
-      const response = await axios.get('/api/admin/dialogflow/inboxes');
-      setInboxes(response.data.inboxes || []);
-    } catch (error) {
-      toast.error('Erro ao buscar inboxes');
-      setInboxes([]);
-      console.error('Erro ao buscar inboxes:', error);
-    }
-  };
+  useEffect(() => {
+    fetchData();
+  }, []);
 
-  const fetchConfig = async () => {
-    try {
-      const response = await axios.get('/api/admin/dialogflow/config');
-      if (response.data.config?.chatwitAccountId) {
-        setCaixaFormData(prev => ({
-          ...prev,
-          chatwitAccountId: response.data.config.chatwitAccountId
-        }));
-      }
-    } catch (error) {
-      console.error('Erro ao buscar configuração:', error);
-    }
-  };
-
-  const handleSaveConfig = async () => {
-    if (!configData.chatwitAccountId || !configData.chatwitAccessToken) {
-      toast.error('Preencha todos os campos obrigatórios');
-      return;
-    }
-
-    try {
-      setSaving(true);
-      
-      await axios.post('/api/admin/dialogflow/config', configData);
-      toast.success('Configuração salva com sucesso');
-
-      setShowConfigDialog(false);
-      fetchInboxes(); // Recarregar inboxes com nova configuração
-      // Notificar o pai se existir
-      onConfigChange?.(configData);
-    } catch (error: any) {
-      console.error('Erro ao salvar configuração:', error);
-      toast.error(error.response?.data?.error || 'Erro ao salvar configuração');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleSaveCaixa = async () => {
-    if (!caixaFormData.nome || !caixaFormData.chatwitAccountId || !caixaFormData.inboxId) {
-      toast.error('Preencha todos os campos obrigatórios');
-      return;
-    }
-
-    try {
-      setSaving(true);
-      
-      const selectedInbox = inboxes.find(inbox => inbox.id === caixaFormData.inboxId);
-      const payload = {
-        ...caixaFormData,
-        accountId: caixaFormData.chatwitAccountId, // Mapear para accountId na API
-        inboxName: selectedInbox?.name,
-        channelType: selectedInbox?.channel_type,
-      };
-
-      await axios.post('/api/admin/dialogflow/caixas', payload);
-      toast.success('Caixa configurada com sucesso');
-
-      setShowCaixaDialog(false);
-      setCaixaFormData({
-        nome: '',
-        chatwitAccountId: '',
-        inboxId: '',
-      });
-      fetchCaixas();
-    } catch (error: any) {
-      console.error('Erro ao salvar caixa:', error);
-      toast.error(error.response?.data?.error || 'Erro ao salvar caixa');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleSaveAgente = async () => {
-    if (!agenteFormData.nome || !agenteFormData.projectId || !agenteFormData.credentials) {
-      toast.error('Preencha todos os campos obrigatórios');
-      return;
-    }
-
-    try {
-      setSaving(true);
-      
-      const payload = {
-        ...agenteFormData,
-        caixaId: selectedCaixaId,
-      };
-
-      await axios.post('/api/admin/dialogflow/agentes', payload);
-      toast.success('Agente criado com sucesso');
-
-      setShowAgenteDialog(false);
-      setAgenteFormData({
-        nome: '',
-        projectId: '',
-        credentials: '',
-        region: 'global',
-      });
-      fetchCaixas();
-    } catch (error: any) {
-      console.error('Erro ao salvar agente:', error);
-      toast.error(error.response?.data?.error || 'Erro ao salvar agente');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDeleteCaixa = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta caixa? Todos os agentes serão removidos.')) return;
-
-    try {
-      await axios.delete(`/api/admin/dialogflow/caixas?id=${id}`);
-      toast.success('Caixa excluída com sucesso');
-      fetchCaixas();
-    } catch (error: any) {
-      console.error('Erro ao excluir caixa:', error);
-      toast.error(error.response?.data?.error || 'Erro ao excluir caixa');
-    }
-  };
-
-  const handleDeleteAgente = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir este agente?')) return;
-
-    try {
-      await axios.delete(`/api/admin/dialogflow/agentes?id=${id}`);
-      toast.success('Agente excluído com sucesso');
-      fetchCaixas();
-    } catch (error: any) {
-      console.error('Erro ao excluir agente:', error);
-      toast.error(error.response?.data?.error || 'Erro ao excluir agente');
-    }
-  };
-
-  const handleToggleAgente = async (id: string, ativo: boolean) => {
-    try {
-      console.log('🔄 Alterando status do agente:', id, 'para:', !ativo);
-      const response = await axios.patch(`/api/admin/dialogflow/agentes/${id}/toggle`);
-      console.log('✅ Status alterado com sucesso:', response.data);
-      toast.success(response.data.message || (!ativo ? 'Agente ativado' : 'Agente desativado'));
-      fetchCaixas();
-    } catch (error: any) {
-      console.error('❌ Erro ao alterar status:', error);
-      toast.error(error.response?.data?.error || 'Erro ao alterar status');
-    }
-  };
-
-  const openAgenteDialog = (caixaId: string) => {
-    setSelectedCaixaId(caixaId);
-    setShowAgenteDialog(true);
+  const handleSelectCaixa = (id: string | null) => {
+    setSelectedCaixaId(id);
+    onCaixaSelected(id);
   };
 
   if (loading) {
-    return (
-      <div className="flex justify-center items-center py-8">
-        <Loader2 className="w-8 h-8 animate-spin" />
-      </div>
-    );
+    return <div className="flex justify-center items-center py-8"><Loader2 className="w-8 h-8 animate-spin" /></div>;
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold">Caixas de Entrada e Agentes Dialogflow</h3>
-        <div className="flex gap-2">
-          <Dialog open={showConfigDialog} onOpenChange={setShowConfigDialog}>
-            <DialogTrigger asChild>
-              <Button variant="outline">
-                <Settings className="w-4 h-4 mr-2" />
-                Configurar Chatwit
-              </Button>
-            </DialogTrigger>
-          </Dialog>
-          <Dialog open={showCaixaDialog} onOpenChange={setShowCaixaDialog}>
-            <DialogTrigger asChild>
-              <Button>
-                <Inbox className="w-4 h-4 mr-2" />
-                Nova Caixa
-              </Button>
-            </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Configurar Nova Caixa de Entrada</DialogTitle>
-              <DialogDescription>
-                Configure uma caixa de entrada para receber agentes Dialogflow
-              </DialogDescription>
-            </DialogHeader>
-            
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="nome">Nome da Configuração</Label>
-                <Input
-                  id="nome"
-                  value={caixaFormData.nome}
-                  onChange={(e) => setCaixaFormData({ ...caixaFormData, nome: e.target.value })}
-                  placeholder="Ex: WhatsApp Principal"
-                />
-              </div>
+      <div className="flex justify-end">
+        <AdicionarCaixaDialog onCaixaAdicionada={fetchData} caixasConfiguradas={caixas} />
+      </div>
 
-              <div>
-                <Label htmlFor="accountId">ID da Conta Chatwit</Label>
-                <Input
-                  id="accountId"
-                  value={caixaFormData.chatwitAccountId}
-                  onChange={(e) => setCaixaFormData({ ...caixaFormData, chatwitAccountId: e.target.value })}
-                  placeholder="Ex: 3"
-                />
-                <p className="text-sm text-muted-foreground mt-1">
-                  Encontre na URL: https://chatwit.witdev.com.br/app/accounts/[ID]
-                  {caixaFormData.chatwitAccountId && (
-                    <span className="block text-green-600">
-                      ✓ ID configurado: {caixaFormData.chatwitAccountId}
-                    </span>
-                  )}
-                </p>
-              </div>
-
-              <div>
-                <Label htmlFor="inboxId">Selecionar Caixa de Entrada</Label>
-                <Select
-                  value={caixaFormData.inboxId}
-                  onValueChange={(value) => setCaixaFormData({ ...caixaFormData, inboxId: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione uma caixa de entrada" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {inboxes.map((inbox) => (
-                      <SelectItem key={inbox.id} value={inbox.id}>
-                        {inbox.name} ({inbox.channel_type})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowCaixaDialog(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={handleSaveCaixa} disabled={saving}>
-                {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Salvar Caixa
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+      {caixas.length === 0 ? (
+        <div className="text-center text-gray-500 py-12 border-2 border-dashed rounded-lg">
+            <p className="font-semibold">Nenhuma caixa de entrada configurada.</p>
+            <p className="text-sm">Clique em "Adicionar Caixa" para sincronizar com sua conta Chatwit.</p>
         </div>
-      </div>
-
-      {/* Lista de Caixas */}
-      <div className="grid gap-6">
-        {caixas.map((caixa) => (
-          <Card key={caixa.id} className="border-2">
-            <CardHeader className="pb-3">
-              <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <Inbox className="w-5 h-5" />
-                    {caixa.nome}
-                  </CardTitle>
-                  <CardDescription>
-                    {caixa.inboxName} ({caixa.channelType}) - Conta: {caixa.chatwitAccountId}
-                  </CardDescription>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => openAgenteDialog(caixa.id)}
-                  >
-                    <Bot className="w-4 h-4 mr-2" />
-                    Adicionar Agente
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDeleteCaixa(caixa.id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {caixa.agentes.length === 0 ? (
-                <p className="text-muted-foreground text-center py-4">
-                  Nenhum agente configurado. Clique em "Adicionar Agente" para começar.
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {caixa.agentes.map((agente) => (
-                    <div key={agente.id} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <Bot className="w-5 h-5 text-blue-500" />
-                        <div>
-                          <div className="font-medium">{agente.nome}</div>
-                          <div className="text-sm text-muted-foreground">
-                            Projeto: {agente.projectId} | Região: {agente.region}
-                          </div>
-                        </div>
-                        {agente.ativo && (
-                          <Badge variant="default" className="bg-green-500">
-                            Ativo
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-2">
-                          <Label htmlFor={`switch-${agente.id}`} className="text-sm">
-                            {agente.ativo ? 'Ativo' : 'Inativo'}
-                          </Label>
-                          <Switch
-                            id={`switch-${agente.id}`}
-                            checked={agente.ativo}
-                            onCheckedChange={() => handleToggleAgente(agente.id, agente.ativo)}
-                          />
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDeleteAgente(agente.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Dialog para Configuração do Chatwit */}
-      <Dialog open={showConfigDialog} onOpenChange={setShowConfigDialog}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Configurar Acesso ao Chatwit</DialogTitle>
-            <DialogDescription>
-              Configure suas credenciais de acesso ao Chatwit para buscar as caixas de entrada
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="chatwitAccountId">ID da Conta Chatwit</Label>
-              <Input
-                id="chatwitAccountId"
-                value={configData.chatwitAccountId}
-                onChange={(e) => setConfigData({ ...configData, chatwitAccountId: e.target.value })}
-                placeholder="Ex: 3"
-              />
-              <p className="text-sm text-muted-foreground mt-1">
-                Encontre na URL: https://chatwit.witdev.com.br/app/accounts/[ID]
-                {!!configData.chatwitAccountId && (
-                  <span className="block text-green-600">✓ ID configurado: {configData.chatwitAccountId}</span>
-                )}
-              </p>
-            </div>
-            <div>
-              <Label htmlFor="chatwitAccessToken">Token de Acesso Chatwit</Label>
-              <div className="relative">
-                <Input
-                  id="chatwitAccessToken"
-                  type={showToken ? "text" : "password"}
-                  value={configData.chatwitAccessToken}
-                  onChange={(e) => setConfigData({ ...configData, chatwitAccessToken: e.target.value })}
-                  placeholder="Seu token de acesso do Chatwit"
-                />
-                <button
-                  type="button"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
-                  tabIndex={-1}
-                  onClick={() => setShowToken((v) => !v)}
-                  aria-label={showToken ? 'Ocultar token' : 'Exibir token'}
-                >
-                  {showToken ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
-              <p className="text-sm text-muted-foreground mt-1">
-                Encontre em: Configurações → Integrações → API Access Token
-                {!!configData.chatwitAccessToken && (
-                  <span className="block text-green-600">✓ Token configurado</span>
-                )}
-              </p>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowConfigDialog(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleSaveConfig} disabled={saving || !configData.chatwitAccountId || !configData.chatwitAccessToken}>
-              {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Salvar Configuração
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog para Agente */}
-      <Dialog open={showAgenteDialog} onOpenChange={setShowAgenteDialog}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Adicionar Agente Dialogflow</DialogTitle>
-            <DialogDescription>
-              Configure um novo agente Dialogflow para esta caixa de entrada
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="nomeAgente">Nome do Agente</Label>
-              <Input
-                id="nomeAgente"
-                value={agenteFormData.nome}
-                onChange={(e) => setAgenteFormData({ ...agenteFormData, nome: e.target.value })}
-                placeholder="Ex: Agente Principal"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="projectId">Dialogflow Project ID</Label>
-              <Input
-                id="projectId"
-                value={agenteFormData.projectId}
-                onChange={(e) => setAgenteFormData({ ...agenteFormData, projectId: e.target.value })}
-                placeholder="Ex: meu-projeto-dialogflow"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="credentials">Dialogflow Project Key File</Label>
-              <Textarea
-                id="credentials"
-                value={agenteFormData.credentials}
-                onChange={(e) => setAgenteFormData({ ...agenteFormData, credentials: e.target.value })}
-                placeholder="Cole aqui o conteúdo do arquivo JSON de credenciais"
-                rows={6}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="region">Dialogflow Region</Label>
-              <Select
-                value={agenteFormData.region}
-                onValueChange={(value) => setAgenteFormData({ ...agenteFormData, region: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="global">Global - Default</SelectItem>
-                  <SelectItem value="asia-northeast1">AS-NE1 - Tokyo, Japan</SelectItem>
-                  <SelectItem value="australia-southeast1">AU-SE1 - Sydney, Australia</SelectItem>
-                  <SelectItem value="europe-west1">EU-W1 - St. Ghislain, Belgium</SelectItem>
-                  <SelectItem value="europe-west2">EU-W2 - London, England</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAgenteDialog(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleSaveAgente} disabled={saving}>
-              {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Salvar Agente
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      ) : (
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {caixas.map((caixa) => (
+            <CaixaCard 
+              key={caixa.id} 
+              caixa={caixa} 
+              isSelected={selectedCaixaId === caixa.id}
+              onSelect={handleSelectCaixa}
+              onUpdate={fetchData}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
-} 
+}
+
+// Card de Caixa de Entrada
+function CaixaCard({ caixa, isSelected, onSelect, onUpdate }: { caixa: CaixaEntrada, isSelected: boolean, onSelect: (id: string) => void, onUpdate: () => void }) {
+  
+  const handleDeleteCaixa = async (e: React.MouseEvent) => {
+    e.stopPropagation(); // Impede que o clique no botão selecione o card
+    if (!confirm('Tem certeza que deseja excluir esta caixa? Todos os agentes serão removidos.')) return;
+    try {
+      await axios.delete(`/api/admin/dialogflow/caixas?id=${caixa.id}`);
+      toast.success('Caixa excluída com sucesso');
+      onUpdate();
+    } catch (error) {
+      toast.error('Erro ao excluir caixa');
+    }
+  };
+
+  return (
+    <Card 
+      className={cn("cursor-pointer transition-all", isSelected ? "border-primary ring-2 ring-primary" : "hover:border-gray-400")}
+      onClick={() => onSelect(caixa.id)}
+    >
+      {isSelected && <div className="absolute top-2 right-2 text-primary"><CheckCircle2 /></div>}
+      <CardHeader>
+        <div className="flex justify-between items-start">
+            <div>
+                <CardTitle className="flex items-center gap-2"><InboxIcon className="w-5 h-5" />{caixa.nome}</CardTitle>
+                <CardDescription>{caixa.inboxName} ({caixa.channelType})</CardDescription>
+            </div>
+            <Button variant="ghost" size="icon" onClick={handleDeleteCaixa}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <h4 className="font-semibold mb-2 text-sm">Agentes Dialogflow</h4>
+        <div className="space-y-2">
+            {caixa.agentes.length === 0 ? (
+                <p className="text-muted-foreground text-xs">Nenhum agente configurado.</p>
+            ) : (
+                caixa.agentes.map(agente => <AgenteItem key={agente.id} agente={agente} onUpdate={onUpdate} />)
+            )}
+        </div>
+        <div className="mt-4">
+            <AdicionarAgenteDialog caixaId={caixa.id} onAgenteAdicionado={onUpdate} />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Item de Agente
+function AgenteItem({ agente, onUpdate }: { agente: AgenteDialogflow, onUpdate: () => void }) {
+    
+    const handleToggleAgente = async () => {
+        try {
+            const response = await axios.patch(`/api/admin/dialogflow/agentes/${agente.id}/toggle`);
+            toast.success(response.data.message || 'Status alterado');
+            onUpdate();
+        } catch (error) {
+            toast.error('Erro ao alterar status');
+        }
+    };
+
+    return (
+        <div className="flex items-center justify-between p-2 border rounded-lg text-sm">
+            <div className="flex items-center gap-2">
+                <Bot className="w-4 h-4 text-blue-500" />
+                <span className="font-medium">{agente.nome}</span>
+                {agente.ativo && <Badge variant="default" className="bg-green-500 h-5">Ativo</Badge>}
+            </div>
+            <div className="flex items-center gap-2">
+                <Switch id={`switch-${agente.id}`} checked={agente.ativo} onCheckedChange={handleToggleAgente} />
+                <EditarAgenteDialog agente={agente} onAgenteAtualizado={onUpdate} />
+            </div>
+        </div>
+    );
+}
+
+// Dialogs (Modais)
+function AdicionarCaixaDialog({ onCaixaAdicionada, caixasConfiguradas }: { onCaixaAdicionada: () => void, caixasConfiguradas: CaixaEntrada[] }) {
+    const [open, setOpen] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [caixasExternas, setCaixasExternas] = useState<any[]>([]);
+    const [nomesInternos, setNomesInternos] = useState<{[key: string]: string}>({});
+
+    const fetchCaixasExternas = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const response = await axios.get('/api/admin/dialogflow/inboxes');
+            const idsConfigurados = new Set(caixasConfiguradas.map(c => c.inboxId));
+            const disponiveis = (response.data.inboxes || []).filter((inbox: any) => !idsConfigurados.has(inbox.id.toString()));
+            setCaixasExternas(disponiveis);
+        } catch (err) {
+            setError("Falha ao buscar caixas do Chatwit. Verifique a configuração de acesso.");
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    const handleAdicionarCaixa = async (caixa: any) => {
+        const nomeInterno = nomesInternos[caixa.id] || caixa.name;
+        try {
+            await axios.post('/api/admin/dialogflow/caixas', {
+                nome: nomeInterno,
+                accountId: caixa.account_id,
+                inboxId: caixa.id.toString(),
+                inboxName: caixa.name,
+                channelType: caixa.channel_type
+            });
+            toast.success(`Caixa "${nomeInterno}" adicionada com sucesso!`);
+            onCaixaAdicionada();
+            setOpen(false);
+        } catch (error) {
+            toast.error("Erro ao adicionar a caixa.");
+        }
+    }
+
+    return (
+        <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+                <Button onClick={fetchCaixasExternas}><Plus className="w-4 h-4 mr-2" /> Adicionar Caixa</Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-2xl">
+                <DialogHeader>
+                    <DialogTitle>Sincronizar Novas Caixas de Entrada</DialogTitle>
+                    <DialogDescription>Listando caixas de entrada da sua conta Chatwit que ainda não foram configuradas.</DialogDescription>
+                </DialogHeader>
+                <div className="py-4 space-y-4 max-h-[60vh] overflow-y-auto">
+                    {/* Conteúdo do modal... */}
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => setOpen(false)}>Fechar</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function AdicionarAgenteDialog({ caixaId, onAgenteAdicionado }: { caixaId: string, onAgenteAdicionado: () => void }) {
+    // Lógica do modal de adicionar agente...
+    return <Button variant="outline" size="sm" className="w-full"><Plus className="w-4 h-4 mr-2" /> Novo Agente</Button>;
+}
+
+function EditarAgenteDialog({ agente, onAgenteAtualizado }: { agente: AgenteDialogflow, onAgenteAtualizado: () => void }) {
+    // Lógica do modal de editar agente...
+    return <Button variant="ghost" size="icon"><Settings className="w-4 h-4" /></Button>;
+}

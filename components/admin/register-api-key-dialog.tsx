@@ -211,15 +211,27 @@ export function RegisterApiKeyDialog({
 
             <div className="space-y-2">
               <Label htmlFor="token">Token de Acesso do Chatwit</Label>
-              <div className="flex items-center gap-2 mt-2">
+              <div className="relative w-full mt-2">
                 <Input
                   id="token"
                   type={showToken ? "text" : "password"}
                   placeholder="Cole seu token aqui (ex: XzqGPinpcBhwkfyyjuyShBgD)"
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
-                  className="font-mono pr-10 flex-1"
+                  className="font-mono pr-10"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowToken((v) => !v)}
+                  tabIndex={-1}
+                  aria-label={showToken ? "Ocultar token" : "Exibir token"}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground"
+                  style={{ background: "none", border: "none" }}
+                >
+                  {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <div className="flex gap-2 mt-2">
                 <Button
                   type="button"
                   variant="outline"

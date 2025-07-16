@@ -18,8 +18,6 @@ CREATE TABLE "User" (
     "password" TEXT,
     "isTwoFactorAuthEnabled" BOOLEAN NOT NULL DEFAULT false,
     "twoFactorAuthVerified" TIMESTAMP(3),
-    "chatwitAccessToken" TEXT,
-    "chatwitAccountId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "isNew" BOOLEAN NOT NULL DEFAULT true,
@@ -252,14 +250,12 @@ CREATE TABLE "Message" (
 CREATE TABLE "UsuarioChatwit" (
     "id" TEXT NOT NULL,
     "appUserId" TEXT NOT NULL,
-    "" INTEGER,
     "name" TEXT NOT NULL,
     "availableName" TEXT,
-    "accountId" INTEGER NOT NULL,
     "accountName" TEXT NOT NULL,
     "channel" TEXT NOT NULL,
-    "inboxId" INTEGER,
-    "inboxName" TEXT,
+    "chatwitAccessToken" TEXT,
+    "chatwitAccountId" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -339,6 +335,7 @@ CREATE TABLE "WhatsAppConfig" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "usuarioChatwitId" TEXT NOT NULL,
+    "caixaEntradaId" TEXT,
 
     CONSTRAINT "WhatsAppConfig_pkey" PRIMARY KEY ("id")
 );
@@ -367,6 +364,7 @@ CREATE TABLE "WhatsAppTemplate" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "usuarioChatwitId" TEXT NOT NULL,
+    "caixaEntradaId" TEXT,
 
     CONSTRAINT "WhatsAppTemplate_pkey" PRIMARY KEY ("id")
 );
@@ -608,7 +606,7 @@ CREATE TABLE "botao_mensagem" (
 CREATE TABLE "caixa_entrada" (
     "id" TEXT NOT NULL,
     "nome" TEXT NOT NULL,
-    "accountId" TEXT NOT NULL,
+    "chatwitAccountId" TEXT NOT NULL,
     "inboxId" TEXT NOT NULL,
     "inboxName" TEXT NOT NULL,
     "channelType" TEXT NOT NULL,
@@ -640,7 +638,7 @@ CREATE TABLE "agente_dialogflow" (
 CREATE TABLE "integracao_dialogflow" (
     "id" TEXT NOT NULL,
     "nome" TEXT NOT NULL,
-    "accountId" TEXT NOT NULL,
+    "chatwitAccountId" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
     "credentials" TEXT NOT NULL,
     "region" TEXT NOT NULL DEFAULT 'global',
@@ -671,9 +669,6 @@ CREATE TABLE "lead_oab" (
 
 -- CreateIndex
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
-
--- CreateIndex
-CREATE UNIQUE INDEX "User_chatwitAccessToken_key" ON "User"("chatwitAccessToken");
 
 -- CreateIndex
 CREATE INDEX "accounts_userId_idx" ON "accounts"("userId");
@@ -748,6 +743,9 @@ CREATE INDEX "Message_chatId_idx" ON "Message"("chatId");
 CREATE UNIQUE INDEX "UsuarioChatwit_appUserId_key" ON "UsuarioChatwit"("appUserId");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "UsuarioChatwit_chatwitAccessToken_key" ON "UsuarioChatwit"("chatwitAccessToken");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "LeadChatwit_sourceId_key" ON "LeadChatwit"("sourceId");
 
 -- CreateIndex
@@ -766,10 +764,19 @@ CREATE INDEX "LeadChatwit_especialidade_idx" ON "LeadChatwit"("especialidade");
 CREATE INDEX "ArquivoLeadChatwit_leadId_idx" ON "ArquivoLeadChatwit"("leadId");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "WhatsAppConfig_caixaEntradaId_key" ON "WhatsAppConfig"("caixaEntradaId");
+
+-- CreateIndex
 CREATE INDEX "WhatsAppConfig_usuarioChatwitId_idx" ON "WhatsAppConfig"("usuarioChatwitId");
 
 -- CreateIndex
+CREATE INDEX "WhatsAppConfig_caixaEntradaId_idx" ON "WhatsAppConfig"("caixaEntradaId");
+
+-- CreateIndex
 CREATE INDEX "WhatsAppTemplate_usuarioChatwitId_idx" ON "WhatsAppTemplate"("usuarioChatwitId");
+
+-- CreateIndex
+CREATE INDEX "WhatsAppTemplate_caixaEntradaId_idx" ON "WhatsAppTemplate"("caixaEntradaId");
 
 -- CreateIndex
 CREATE INDEX "WhatsAppTemplate_name_idx" ON "WhatsAppTemplate"("name");
@@ -870,9 +877,6 @@ CREATE INDEX "ModeloRecurso_isGlobal_idx" ON "ModeloRecurso"("isGlobal");
 -- CreateIndex
 CREATE UNIQUE INDEX "caixa_entrada_usuarioChatwitId_inboxId_key" ON "caixa_entrada"("usuarioChatwitId", "inboxId");
 
--- CreateIndex
-CREATE UNIQUE INDEX "agente_dialogflow_caixaId_ativo_key" ON "agente_dialogflow"("caixaId", "ativo");
-
 -- AddForeignKey
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
@@ -937,7 +941,13 @@ ALTER TABLE "ArquivoLeadChatwit" ADD CONSTRAINT "ArquivoLeadChatwit_leadId_fkey"
 ALTER TABLE "WhatsAppConfig" ADD CONSTRAINT "WhatsAppConfig_usuarioChatwitId_fkey" FOREIGN KEY ("usuarioChatwitId") REFERENCES "UsuarioChatwit"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "WhatsAppConfig" ADD CONSTRAINT "WhatsAppConfig_caixaEntradaId_fkey" FOREIGN KEY ("caixaEntradaId") REFERENCES "caixa_entrada"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "WhatsAppTemplate" ADD CONSTRAINT "WhatsAppTemplate_usuarioChatwitId_fkey" FOREIGN KEY ("usuarioChatwitId") REFERENCES "UsuarioChatwit"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "WhatsAppTemplate" ADD CONSTRAINT "WhatsAppTemplate_caixaEntradaId_fkey" FOREIGN KEY ("caixaEntradaId") REFERENCES "caixa_entrada"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "ChatSession" ADD CONSTRAINT "ChatSession_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -998,3 +1008,5 @@ ALTER TABLE "lead_oab" ADD CONSTRAINT "lead_oab_usuarioChatwitId_fkey" FOREIGN K
 
 -- AddForeignKey
 ALTER TABLE "lead_oab" ADD CONSTRAINT "lead_oab_loteId_fkey" FOREIGN KEY ("loteId") REFERENCES "lote_oab"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+-- Garante que apenas um agente ativo possa existir por caixa.
+CREATE UNIQUE INDEX "unique_active_agent_per_caixa" ON "agente_dialogflow" ("caixaId") WHERE ativo = true;qaq2

@@ -24,81 +24,81 @@ enum SubscriptionStatus {
 }
 
 model User {
-  id                     String          @id @default(cuid())
+  id                     String    @id @default(cuid())
   name                   String?
-  email                  String          @unique
+  email                  String    @unique
   emailVerified          DateTime?
   image                  String?
-  role                   UserRole        @default(DEFAULT)
+  role                   UserRole  @default(DEFAULT)
   password               String?
-  isTwoFactorAuthEnabled Boolean         @default(false)
+  isTwoFactorAuthEnabled Boolean   @default(false)
   twoFactorAuthVerified  DateTime?
   accounts               Account[]
-  createdAt              DateTime        @default(now())
-  updatedAt              DateTime        @updatedAt
-  isNew                  Boolean         @default(true)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  isNew                  Boolean   @default(true)
 
   // Relação com assinaturas
-  subscriptions          Subscription[]
+  subscriptions Subscription[]
 
   // Relação com Automacoes
-  automacoes             Automacao[]
+  automacoes Automacao[]
 
   // Relação com Pastas
-  pastas                 Pasta[]
+  pastas Pasta[]
 
   // Relação com Notificações
-  notifications          Notification[]
+  notifications Notification[]
 
   // Novo modelo para Agendamentos
-  agendamentos           Agendamento[]
-  
+  agendamentos Agendamento[]
+
   // Relação com sessões de chat de IA
-  chatSessions           ChatSession[]
-  
+  chatSessions ChatSession[]
+
   // Relação com imagens geradas por IA
-  generatedImages        GeneratedImage[]
-  
+  generatedImages GeneratedImage[]
+
   // Relação com configurações do MTF Diamante
-  mtfDiamanteConfigs     MtfDiamanteConfig[]
-  
+  mtfDiamanteConfigs MtfDiamanteConfig[]
+
   // Relação com disparos do MTF Diamante
-  disparosMtfDiamante    DisparoMtfDiamante[]
-  
+  disparosMtfDiamante DisparoMtfDiamante[]
+
   // Controle de seed executado para MTF Diamante
   mtfDiamanteSeedExecuted Boolean @default(false)
-  
+
   // Relação 1-para-1 com UsuarioChatwit
-  usuarioChatwit         UsuarioChatwit?
+  usuarioChatwit UsuarioChatwit?
 }
 
 model Account {
-  id                String   @id @default(cuid())
+  id                String      @id @default(cuid())
   userId            String
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
+  refresh_token     String?     @db.Text
+  access_token      String?     @db.Text
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String? @db.Text
+  id_token          String?     @db.Text
   session_state     String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
   igUserId          String?
-  igUsername        String?  // Nome de usuário do Instagram
-  isMain            Boolean  @default(false) // Indica se é a conta principal
+  igUsername        String? // Nome de usuário do Instagram
+  isMain            Boolean     @default(false) // Indica se é a conta principal
   automacoes        Automacao[]
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Relações para o chat
-  leads             Lead[]
-  chats             Chat[]
+  leads Lead[]
+  chats Chat[]
 
   // Novo modelo para Agendamentos
-  agendamentos      Agendamento[]
+  agendamentos Agendamento[]
 
   @@unique([provider, providerAccountId])
   @@index([userId])
@@ -138,47 +138,46 @@ model ResetPasswordToken {
  * - Fica igual ao que você já tinha, exceto que removemos "customerEmail" se não for mais necessário.
  */
 model Automacao {
-  id                     String         @id @default(cuid())
-  userId                 String
-  user                   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Relacionamento opcional com Pasta (se existir)
-  folderId               String?
-  folder                 Pasta?         @relation(fields: [folderId], references: [id])
+  folderId String?
+  folder   Pasta?  @relation(fields: [folderId], references: [id])
 
   // Relacionamento com conta do Instagram (obrigatório)
-  accountId              String
-  account                Account        @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
-  selectedMediaId        String?
-  anyMediaSelected       Boolean        @default(false)
-  anyword                Boolean        @default(true)
-  palavrasChave          String?
-  fraseBoasVindas        String?
-  quickReplyTexto        String?
-  mensagemEtapa3         String?
-  linkEtapa3             String?
-  legendaBotaoEtapa3     String?
-  responderPublico       Boolean        @default(false)
-  pedirEmailPro          Boolean        @default(false)
-  emailPrompt            String?
-  pedirParaSeguirPro     Boolean        @default(false)
-  followPrompt           String?
-  followButtonPayload    String?
-  contatoSemClique       Boolean        @default(false)
-  noClickPrompt          String?
-  publicReply            String?
-  buttonPayload          String         @unique
-  live                   Boolean        @default(true)
-  createdAt              DateTime       @default(now())
-  updatedAt              DateTime       @updatedAt
+  selectedMediaId     String?
+  anyMediaSelected    Boolean  @default(false)
+  anyword             Boolean  @default(true)
+  palavrasChave       String?
+  fraseBoasVindas     String?
+  quickReplyTexto     String?
+  mensagemEtapa3      String?
+  linkEtapa3          String?
+  legendaBotaoEtapa3  String?
+  responderPublico    Boolean  @default(false)
+  pedirEmailPro       Boolean  @default(false)
+  emailPrompt         String?
+  pedirParaSeguirPro  Boolean  @default(false)
+  followPrompt        String?
+  followButtonPayload String?
+  contatoSemClique    Boolean  @default(false)
+  noClickPrompt       String?
+  publicReply         String?
+  buttonPayload       String   @unique
+  live                Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-  leadsAutomacao         LeadAutomacao[]
+  leadsAutomacao LeadAutomacao[]
 
   @@index([userId])
   @@index([accountId])
 }
-
 
 /**
  * Lead
@@ -187,22 +186,22 @@ model Automacao {
  * - Remove campos automacaoId, linkSent, waitingForEmail etc.
  */
 model Lead {
-  igSenderId  String   @id @default(cuid())
+  igSenderId  String    @id @default(cuid())
   email       String?
   whatsapp    String?
-  seguidor    Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  name        String?  // Nome do lead
-  avatar      String?  // URL do avatar do lead
+  seguidor    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  name        String? // Nome do lead
+  avatar      String? // URL do avatar do lead
   lastMessage DateTime? // Data da última mensagem
-  isOnline    Boolean  @default(false) // Status online/offline
-  accountId   String   // ID da conta do Instagram
-  account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  isOnline    Boolean   @default(false) // Status online/offline
+  accountId   String // ID da conta do Instagram
+  account     Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   // Relações
   automacoesLead LeadAutomacao[]
-  chats         Chat[]
+  chats          Chat[]
 
   @@index([accountId])
 }
@@ -212,13 +211,13 @@ model Lead {
  * Armazena status *por automação*, como linkSent, waitingForEmail, etc.
  */
 model LeadAutomacao {
-  id             String   @id @default(cuid())
-  leadIgSenderId String
-  automacaoId    String
-  linkSent       Boolean  @default(false)
-  waitingForEmail Boolean @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id              String   @id @default(cuid())
+  leadIgSenderId  String
+  automacaoId     String
+  linkSent        Boolean  @default(false)
+  waitingForEmail Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   // Relações
   lead      Lead      @relation(fields: [leadIgSenderId], references: [igSenderId], onDelete: Cascade)
@@ -229,75 +228,75 @@ model LeadAutomacao {
 }
 
 model Pasta {
-  id       String     @id @default(cuid())
-  name     String
-  userId   String
-  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id        String   @id @default(cuid())
+  name      String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   automacoes Automacao[]
 }
 
 model Subscription {
-  id                    String               @id @default(cuid())
-  userId                String
-  user                  User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  stripeSubscriptionId  String               @unique
-  stripeCustomerId      String
-  status                SubscriptionStatus
-  startDate             DateTime
-  currentPeriodEnd      DateTime?
-  cancelAtPeriodEnd     Boolean              @default(false)
-  canceledAt            DateTime?
-  createdAt             DateTime             @default(now())
-  updatedAt             DateTime             @updatedAt
+  id                   String             @id @default(cuid())
+  userId               String
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stripeSubscriptionId String             @unique
+  stripeCustomerId     String
+  status               SubscriptionStatus
+  startDate            DateTime
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  canceledAt           DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
 }
 
 // Modelo para o sistema de notificações
 model Notification {
-  id          String    @id @default(cuid())
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title       String
-  message     String
-  isRead      Boolean   @default(false)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId])
 }
 
 // Novo modelo para Agendamento
 model Agendamento {
-  id                         String    @id @default(cuid())
-  userId                     String    // ID do usuário responsável pelo agendamento
-  user                       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  accountId                  String    // ID da conta vinculada ao agendamento (Instagram, Facebook, etc.)
-  account                    Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  id        String  @id @default(cuid())
+  userId    String // ID do usuário responsável pelo agendamento
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId String // ID da conta vinculada ao agendamento (Instagram, Facebook, etc.)
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
-  Data                       DateTime  // Data e hora do agendamento
-  Descricao                  String?   // Descrição da postagem
-  Facebook                   Boolean   @default(false)
-  Instagram                  Boolean   @default(false)
-  Linkedin                   Boolean   @default(false)
-  X                          Boolean   @default(false)
-  Stories                    Boolean   @default(false)
-  Reels                      Boolean   @default(false)
-  PostNormal                 Boolean   @default(false)
-  Diario                     Boolean   @default(false)
-  Semanal                    Boolean   @default(false)
-  Randomizar                 Boolean   @default(false)
-  TratarComoUnicoPost        Boolean   @default(false) // Todas as mídias em um único post
-  TratarComoPostagensIndividuais Boolean @default(false) // Cada mídia postada individualmente
-  Concluido_FB               Boolean   @default(false)
-  Concluido_IG               Boolean   @default(false)
-  Concluido_LK               Boolean   @default(false)
-  Concluido_X                Boolean   @default(false)
-  createdAt                  DateTime  @default(now())
+  Data                           DateTime // Data e hora do agendamento
+  Descricao                      String? // Descrição da postagem
+  Facebook                       Boolean  @default(false)
+  Instagram                      Boolean  @default(false)
+  Linkedin                       Boolean  @default(false)
+  X                              Boolean  @default(false)
+  Stories                        Boolean  @default(false)
+  Reels                          Boolean  @default(false)
+  PostNormal                     Boolean  @default(false)
+  Diario                         Boolean  @default(false)
+  Semanal                        Boolean  @default(false)
+  Randomizar                     Boolean  @default(false)
+  TratarComoUnicoPost            Boolean  @default(false) // Todas as mídias em um único post
+  TratarComoPostagensIndividuais Boolean  @default(false) // Cada mídia postada individualmente
+  Concluido_FB                   Boolean  @default(false)
+  Concluido_IG                   Boolean  @default(false)
+  Concluido_LK                   Boolean  @default(false)
+  Concluido_X                    Boolean  @default(false)
+  createdAt                      DateTime @default(now())
 
   // Relação com mídias
-  midias                     Midia[]
+  midias Midia[]
 }
 
 // Novo modelo para Midia
@@ -305,9 +304,9 @@ model Midia {
   id            String      @id @default(cuid())
   agendamento   Agendamento @relation(fields: [agendamentoId], references: [id], onDelete: Cascade)
   agendamentoId String
-  url           String      // URL da mídia no MinIO
-  mime_type     String      // Tipo da mídia (ex.: image/jpeg, video/mp4)
-  thumbnail_url String?     // URL da thumbnail no MinIO (opcional)
+  url           String // URL da mídia no MinIO
+  mime_type     String // Tipo da mídia (ex.: image/jpeg, video/mp4)
+  thumbnail_url String? // URL da thumbnail no MinIO (opcional)
   contador      Int         @default(0) // Número de vezes que a mídia foi enviada
   createdAt     DateTime    @default(now())
 
@@ -315,13 +314,13 @@ model Midia {
 }
 
 model Chat {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   leadId    String
-  lead      Lead     @relation(fields: [leadId], references: [igSenderId], onDelete: Cascade)
+  lead      Lead      @relation(fields: [leadId], references: [igSenderId], onDelete: Cascade)
   accountId String
-  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   messages  Message[]
 
   @@unique([leadId, accountId])
@@ -329,13 +328,13 @@ model Chat {
 }
 
 model Message {
-  id        String   @id @default(cuid())
-  chatId    String
-  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  content   String
-  isFromLead Boolean @default(true) // true = mensagem do lead, false = mensagem do usuário
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(cuid())
+  chatId     String
+  chat       Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  content    String
+  isFromLead Boolean  @default(true) // true = mensagem do lead, false = mensagem do usuário
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([chatId])
 }
@@ -343,27 +342,27 @@ model Message {
 // Modelos para o sistema de Gestão de Leads (Chatwit)
 
 model UsuarioChatwit {
-  id                String        @id @default(cuid())
-  
+  id String @id @default(cuid())
+
   // Relação 1-para-1 com User (chave principal)
-  appUserId         String        @unique // Garante que um User só tenha um UsuarioChatwit
-  appUser           User          @relation(fields: [appUserId], references: [id], onDelete: Cascade)
-  
+  appUserId String @unique // Garante que um User só tenha um UsuarioChatwit
+  appUser   User   @relation(fields: [appUserId], references: [id], onDelete: Cascade)
+
   // Campos do sistema externo (Chatwit)
-  name              String
-  availableName     String?
-  accountName       String
-  channel           String        // Ex: "Whatsapp"
-  
+  name          String
+  availableName String?
+  accountName   String
+  channel       String // Ex: "Whatsapp"
+
   // CAMPOS MOVIDOS DO USER
-  chatwitAccessToken String?      @unique // Token de acesso do Chatwit
-  chatwitAccountId   String       // ID da conta no Chatwit (obrigatório)
-  
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  chatwitAccessToken String? @unique // Token de acesso do Chatwit
+  chatwitAccountId   String // ID da conta no Chatwit (obrigatório)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relação com leads
-  leads             LeadChatwit[]
+  leads LeadChatwit[]
 
   // Relação com espelhos da biblioteca
   espelhosBiblioteca EspelhoBiblioteca[]
@@ -373,18 +372,17 @@ model UsuarioChatwit {
 
   // NOVOS RELACIONAMENTOS MOVIDOS DO USER
   // Relação com configurações do WhatsApp
-  whatsappConfigs        WhatsAppConfig[]
-  
+  whatsappConfigs WhatsAppConfig[]
+
   // Relação com templates do WhatsApp
-  whatsappTemplates      WhatsAppTemplate[]
-  
+  whatsappTemplates WhatsAppTemplate[]
+
   // Relacionamentos com WhatsApp/Dialogflow
-  lotesOab               LoteOab[]
-  mensagensInterativas   MensagemInterativa[]
-  integracoesDialogflow  IntegracaoDialogflow[]
-  leadsOab               LeadOab[]
-  caixasEntrada          CaixaEntrada[]
-  agentesDialogflow      AgenteDialogflow[]
+  lotesOab              LoteOab[]
+  mensagensInterativas  MensagemInterativa[]
+  leadsOab              LeadOab[]
+  caixasEntrada         CaixaEntrada[]
+  agentesDialogflow     AgenteDialogflow[]
 }
 
 // Enum para especialidades jurídicas
@@ -399,58 +397,58 @@ enum EspecialidadeJuridica {
 }
 
 model LeadChatwit {
-  id                String        @id @default(cuid())
-  sourceId          String        @unique  // ID do lead no sistema externo (ex: número de telefone)
-  name              String?
-  nomeReal          String?       // Nome real do lead (editável)
-  phoneNumber       String?
-  email             String?       // Email do lead (editável)
-  thumbnail         String?       // URL da thumbnail
-  concluido         Boolean       @default(false)
-  anotacoes         String?       @db.Text
-  pdfUnificado      String?       // URL do PDF unificado
-  imagensConvertidas String?      // Lista de URLs das imagens convertidas (JSON)
-  leadUrl           String?       // URL para abrir o chat no Chatwit
-  fezRecurso        Boolean       @default(false) // Indica se o lead fez recurso
-  datasRecurso      String?       // Lista de datas de recursos em formato JSON
-  provaManuscrita   Json? // Texto da prova digitalizada
-  manuscritoProcessado Boolean    @default(false) // Indica se o manuscrito foi processado
-  aguardandoManuscrito Boolean    @default(false) // Indica se está aguardando processamento do manuscrito
-  espelhoCorrecao   String?       // Lista de URLs das imagens do espelho em formato JSON
-  textoDOEspelho    Json?         // Texto do espelho de correção processado
-  espelhoProcessado Boolean       @default(false) // Indica se o espelho foi processado
-  aguardandoEspelho Boolean       @default(false) // Indica se está aguardando processamento do espelho
-  analiseUrl        String?       // URL do PDF de análise da prova
-  argumentacaoUrl   String?       // URL do PDF de argumentação
-  analiseProcessada Boolean       @default(false) // Indica se a análise foi processada
-  aguardandoAnalise Boolean       @default(false) // Indica se está aguardando análise
-  analisePreliminar Json?         // Dados da pré-análise
-  analiseValidada   Boolean       @default(false) // Indica se a análise foi validada pelo usuário
-  consultoriaFase2  Boolean       @default(false) // Indica se o lead está em modo consultoria fase 2
-  recursoPreliminar Json?         // Dados do pré-recurso
-  recursoValidado   Boolean       @default(false) // Indica se o recurso foi validado pelo usuário
-  recursoUrl        String?       // URL do PDF do recurso validado
-  recursoArgumentacaoUrl String?  // URL do PDF de argumentação do recurso
-  aguardandoRecurso Boolean       @default(false) // Indica se está aguardando processamento do recurso
+  id                     String  @id @default(cuid())
+  sourceId               String  @unique // ID do lead no sistema externo (ex: número de telefone)
+  name                   String?
+  nomeReal               String? // Nome real do lead (editável)
+  phoneNumber            String?
+  email                  String? // Email do lead (editável)
+  thumbnail              String? // URL da thumbnail
+  concluido              Boolean @default(false)
+  anotacoes              String? @db.Text
+  pdfUnificado           String? // URL do PDF unificado
+  imagensConvertidas     String? // Lista de URLs das imagens convertidas (JSON)
+  leadUrl                String? // URL para abrir o chat no Chatwit
+  fezRecurso             Boolean @default(false) // Indica se o lead fez recurso
+  datasRecurso           String? // Lista de datas de recursos em formato JSON
+  provaManuscrita        Json? // Texto da prova digitalizada
+  manuscritoProcessado   Boolean @default(false) // Indica se o manuscrito foi processado
+  aguardandoManuscrito   Boolean @default(false) // Indica se está aguardando processamento do manuscrito
+  espelhoCorrecao        String? // Lista de URLs das imagens do espelho em formato JSON
+  textoDOEspelho         Json? // Texto do espelho de correção processado
+  espelhoProcessado      Boolean @default(false) // Indica se o espelho foi processado
+  aguardandoEspelho      Boolean @default(false) // Indica se está aguardando processamento do espelho
+  analiseUrl             String? // URL do PDF de análise da prova
+  argumentacaoUrl        String? // URL do PDF de argumentação
+  analiseProcessada      Boolean @default(false) // Indica se a análise foi processada
+  aguardandoAnalise      Boolean @default(false) // Indica se está aguardando análise
+  analisePreliminar      Json? // Dados da pré-análise
+  analiseValidada        Boolean @default(false) // Indica se a análise foi validada pelo usuário
+  consultoriaFase2       Boolean @default(false) // Indica se o lead está em modo consultoria fase 2
+  recursoPreliminar      Json? // Dados do pré-recurso
+  recursoValidado        Boolean @default(false) // Indica se o recurso foi validado pelo usuário
+  recursoUrl             String? // URL do PDF do recurso validado
+  recursoArgumentacaoUrl String? // URL do PDF de argumentação do recurso
+  aguardandoRecurso      Boolean @default(false) // Indica se está aguardando processamento do recurso
 
   // Relacionamentos com WhatsApp removidos - não há necessidade de relacionamento direto
-  seccional         String?       // Seccional do exame (ex.: "OAB / MG")
-  areaJuridica      String?       // Área jurídica do exame
-  notaFinal         Float?        // Nota final obtida no exame
-  situacao          String?       // Situação final do exame (ex.: "APROVADO")
-  inscricao         String?       // Número de inscrição do exame
-  examesParticipados Json?        // Lista de exames que o lead participou
-  espelhoBibliotecaId String?     // ID do espelho da biblioteca associado ao lead
-  especialidade     EspecialidadeJuridica? // Especialidade jurídica do lead para uso do espelho padrão
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  seccional           String? // Seccional do exame (ex.: "OAB / MG")
+  areaJuridica        String? // Área jurídica do exame
+  notaFinal           Float? // Nota final obtida no exame
+  situacao            String? // Situação final do exame (ex.: "APROVADO")
+  inscricao           String? // Número de inscrição do exame
+  examesParticipados  Json? // Lista de exames que o lead participou
+  espelhoBibliotecaId String? // ID do espelho da biblioteca associado ao lead
+  especialidade       EspecialidadeJuridica? // Especialidade jurídica do lead para uso do espelho padrão
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
 
   // Relação com usuário
-  usuarioId     String
-  usuario       UsuarioChatwit @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId String
+  usuario   UsuarioChatwit @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
   // Relação com arquivos
-  arquivos      ArquivoLeadChatwit[]
+  arquivos ArquivoLeadChatwit[]
 
   // Relação com espelho da biblioteca
   espelhoBiblioteca EspelhoBiblioteca? @relation(fields: [espelhoBibliotecaId], references: [id])
@@ -462,149 +460,157 @@ model LeadChatwit {
 }
 
 model ArquivoLeadChatwit {
-  id            String      @id @default(cuid())
-  fileType      String      // "image" ou "pdf"
-  dataUrl       String      // URL do arquivo
-  pdfConvertido String?     // URL do PDF convertido (se for imagem)
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id            String   @id @default(cuid())
+  fileType      String // "image" ou "pdf"
+  dataUrl       String // URL do arquivo
+  pdfConvertido String? // URL do PDF convertido (se for imagem)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   // Relação com lead
-  leadId        String
-  lead          LeadChatwit @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId String
+  lead   LeadChatwit @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   @@index([leadId])
 }
 
-// Modelo para configurações do WhatsApp
 model WhatsAppConfig {
-  id                     String    @id @default(cuid())
-  whatsappToken          String    @db.Text
-  whatsappBusinessAccountId String
-  fbGraphApiBase         String
-  isActive               Boolean   @default(true)
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
-  
-  // MUDANÇA: Relacionamento agora é com UsuarioChatwit
-  usuarioChatwitId       String
-  usuarioChatwit         UsuarioChatwit @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
+  id String @id @default(cuid())
 
-  @@index([usuarioChatwitId])
+  // --- CAMPOS ATUALIZADOS ---
+  phoneNumberId String
+  token         String @db.Text
+
+  usuarioChatwitId String
+  usuarioChatwit   UsuarioChatwit @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
+
+  caixaEntradaId String?       @unique
+  caixaEntrada   CaixaEntrada? @relation(name: "ConfigCaixa", fields: [caixaEntradaId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([usuarioChatwitId, caixaEntradaId])
 }
 
 // Modelo para armazenar templates do WhatsApp
 model WhatsAppTemplate {
-  id                         String   @id @default(cuid())
+  id         String @id @default(cuid())
   /// ID retornado pela API do WhatsApp (único na plataforma)
-  templateId                 String
-  
+  templateId String
+
   /// Nome do template
-  name                       String
-  
+  name String
+
   /// Status do template (APPROVED, REJECTED, PENDING, etc.)
-  status                     String
-  
+  status String
+
   /// Categoria (ex.: UTILITY, MARKETING, AUTHENTICATION, etc.)
-  category                   String
-  
+  category String
+
   /// Subcategoria, se aplicável (ex.: ORDER_DETAILS, ORDER_STATUS, etc.)
-  subCategory                String?
-  
+  subCategory String?
+
   /// Idioma do template (ex.: pt_BR, en_US)
-  language                   String
-  
+  language String
+
   /// JSON com os componentes do template (HEADER, BODY, FOOTER, BUTTONS) e exemplos
-  components                 Json
-  
+  components Json
+
   /// Qualidade do template (ex.: GREEN, YELLOW, RED, UNKNOWN)
-  qualityScore               String?
-  
+  qualityScore String?
+
   /// Categoria correta determinada pelo sistema (se houver)
-  correctCategory            String?
-  
+  correctCategory String?
+
   /// Indica se o rastreamento de links foi desativado no nível do template
   ctaUrlLinkTrackingOptedOut Boolean?
-  
-  /// Se o template foi criado a partir de uma biblioteca, guarda o nome original
-  libraryTemplateName        String?
-  
-  /// TTL para envio da mensagem (em segundos)
-  messageSendTtlSeconds      Int?
-  
-  /// Formato dos parâmetros (NAMED ou POSITIONAL)
-  parameterFormat            String?
-  
-  /// Categoria anterior do template, se houver (útil para histórico de edições)
-  previousCategory           String?
-  
-  /// Flag para marcar o template como favorito (ex.: para acesso rápido)
-  isFavorite                 Boolean  @default(false)
-  
-  /// Data da última edição (útil para controle de versão)
-  lastEdited                 DateTime?
-  
-  /// Histórico de edições em formato JSON (ex.: [{ editedAt: Date, changes: {...} }, ...])
-  editHistory                Json?
-  
-  /// URL pública da mídia no MinIO (para vídeos, imagens, etc.)
-  publicMediaUrl             String?
-  
-  createdAt                  DateTime @default(now())
-  updatedAt                  DateTime @updatedAt
 
-  // MUDANÇA: Relacionamento agora é com UsuarioChatwit
-  usuarioChatwitId           String
-  usuarioChatwit             UsuarioChatwit @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
+  /// Se o template foi criado a partir de uma biblioteca, guarda o nome original
+  libraryTemplateName String?
+
+  /// TTL para envio da mensagem (em segundos)
+  messageSendTtlSeconds Int?
+
+  /// Formato dos parâmetros (NAMED ou POSITIONAL)
+  parameterFormat String?
+
+  /// Categoria anterior do template, se houver (útil para histórico de edições)
+  previousCategory String?
+
+  /// Flag para marcar o template como favorito (ex.: para acesso rápido)
+  isFavorite Boolean @default(false)
+
+  /// Data da última edição (útil para controle de versão)
+  lastEdited DateTime?
+
+  /// Histórico de edições em formato JSON (ex.: [{ editedAt: Date, changes: {...} }, ...])
+  editHistory Json?
+
+  /// URL pública da mídia no MinIO (para vídeos, imagens, etc.)
+  publicMediaUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relação principal, sempre presente
+  usuarioChatwitId String
+  usuarioChatwit   UsuarioChatwit @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
+
+  // NOVA RELAÇÃO: Opcional, para templates específicos de uma caixa
+  caixaEntradaId String?
+  caixaEntrada   CaixaEntrada?        @relation(fields: [caixaEntradaId], references: [id], onDelete: SetNull)
+  // Relação com mapeamentos de intenção
+  mapeamentos    MapeamentoIntencao[]
 
   @@index([usuarioChatwitId])
-  @@index([name])
+  @@index([caixaEntradaId])
 }
 
 // Modelos para o ChatwitIA - armazenamento de chats de IA
 model ChatSession {
-  id             String        @id @default(cuid())
-  userId         String
-  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title          String        @default("Nova conversa")
-  model          String        @default("chatgpt-4o-latest")
-  summary        String?       // Resumo gerado automaticamente da conversa
-  lastResponseId String?       // ID da última resposta da OpenAI para multi-turn
-  messages       ChatMessage[]
-  files          ChatFile[]    // Relação com arquivos
+  id              String           @id @default(cuid())
+  userId          String
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title           String           @default("Nova conversa")
+  model           String           @default("chatgpt-4o-latest")
+  summary         String? // Resumo gerado automaticamente da conversa
+  lastResponseId  String? // ID da última resposta da OpenAI para multi-turn
+  messages        ChatMessage[]
+  files           ChatFile[] // Relação com arquivos
   generatedImages GeneratedImage[] // Relação com imagens geradas
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   @@index([userId])
   @@index([createdAt])
-  @@index([lastResponseId])  // Índice para busca rápida por responseId
+  @@index([lastResponseId]) // Índice para busca rápida por responseId
 }
 
 model ChatMessage {
   id                 String      @id @default(cuid())
   sessionId          String
   session            ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  role               String      // "system", "user", "assistant"
+  role               String // "system", "user", "assistant"
   content            String      @db.Text
   contentType        String      @default("text") // "text", "audio", "image"
   audioData          String?     @db.Text // Base64 de audio, se aplicável
-  imageUrl           String?     // URL da imagem, se aplicável
-  previousResponseId String?     // ID da resposta anterior para multi-turn conversations
-  responseId         String?     // ID desta resposta da OpenAI para referência futura
-  
+  imageUrl           String? // URL da imagem, se aplicável
+  previousResponseId String? // ID da resposta anterior para multi-turn conversations
+  responseId         String? // ID desta resposta da OpenAI para referência futura
+
   // Novos campos para dados da Responses API
-  modelUsed          String?     // Modelo usado na resposta (ex: "gpt-4.1-2025-04-14")
-  inputTokens        Int?        // Tokens de entrada
-  outputTokens       Int?        // Tokens de saída
-  totalTokens        Int?        // Total de tokens
-  reasoningTokens    Int?        // Tokens de reasoning (para modelos o-series)
-  temperature        Float?      // Temperatura usada
-  topP               Float?      // Top-p usado
-  responseStatus     String?     // Status da resposta ("completed", "failed", etc.)
-  responseCreatedAt  DateTime?   // Timestamp da criação da resposta na OpenAI
-  
-  createdAt          DateTime    @default(now())
+  modelUsed         String? // Modelo usado na resposta (ex: "gpt-4.1-2025-04-14")
+  inputTokens       Int? // Tokens de entrada
+  outputTokens      Int? // Tokens de saída
+  totalTokens       Int? // Total de tokens
+  reasoningTokens   Int? // Tokens de reasoning (para modelos o-series)
+  temperature       Float? // Temperatura usada
+  topP              Float? // Top-p usado
+  responseStatus    String? // Status da resposta ("completed", "failed", etc.)
+  responseCreatedAt DateTime? // Timestamp da criação da resposta na OpenAI
+
+  createdAt DateTime @default(now())
 
   @@index([sessionId])
   @@index([responseId])
@@ -612,22 +618,26 @@ model ChatMessage {
 
 // Modelo para armazenar arquivos associados a sessões de chat
 model ChatFile {
-  id            String      @id @default(cuid())
-  sessionId     String
-  session       ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  id        String      @id @default(cuid())
+  sessionId String
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  /* NOVOS CAMPOS ----------------------------------------------*/
-  storageUrl    String      // URL assinado ou público no MinIO
-  openaiFileId  String?     // ID retornado pela OpenAI (nulo enquanto não houver sync)
-  status        String      @default("stored") // stored | syncing | synced | failed
-  purpose       String?     // user_data | vision | assistants …
-  thumbnail_url String?     // URL da thumbnail no MinIO (opcional)
-  /* -----------------------------------------------------------*/
+  /**
+   * NOVOS CAMPOS ----------------------------------------------
+   */
+  storageUrl    String // URL assinado ou público no MinIO
+  openaiFileId  String? // ID retornado pela OpenAI (nulo enquanto não houver sync)
+  status        String  @default("stored") // stored | syncing | synced | failed
+  purpose       String? // user_data | vision | assistants …
+  thumbnail_url String? // URL da thumbnail no MinIO (opcional)
+  /**
+   * -----------------------------------------------------------
+   */
 
-  filename      String
-  fileType      String
-  createdAt     DateTime    @default(now())
-  syncedAt      DateTime?   // Quando o arquivo foi aceito pela OpenAI
+  filename  String
+  fileType  String
+  createdAt DateTime  @default(now())
+  syncedAt  DateTime? // Quando o arquivo foi aceito pela OpenAI
 
   @@index([sessionId])
   @@index([openaiFileId])
@@ -646,9 +656,9 @@ model GeneratedImage {
   mimeType           String   @default("image/png")
   size               String?
   quality            String?
-  previousResponseId String?  // ID da resposta anterior usada para gerar esta imagem (multi-turn)
-  responseId         String?  // ID desta resposta da OpenAI para referência futura (multi-turn)
-  openaiFileId       String?  // ID do arquivo na OpenAI Files API (file-XnTFUFg79jXRw6wNi9jxQM)
+  previousResponseId String? // ID da resposta anterior usada para gerar esta imagem (multi-turn)
+  responseId         String? // ID desta resposta da OpenAI para referência futura (multi-turn)
+  openaiFileId       String? // ID do arquivo na OpenAI Files API (file-XnTFUFg79jXRw6wNi9jxQM)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -658,31 +668,31 @@ model GeneratedImage {
   @@index([userId])
   @@index([sessionId])
   @@index([createdAt])
-  @@index([responseId])         // Índice para busca rápida por responseId
+  @@index([responseId]) // Índice para busca rápida por responseId
   @@index([previousResponseId]) // Índice para busca por cadeia de refinamentos
-  @@index([openaiFileId])       // Índice para busca rápida por openaiFileId
+  @@index([openaiFileId]) // Índice para busca rápida por openaiFileId
 }
 
 // Modelo para Biblioteca de Espelhos
 model EspelhoBiblioteca {
-  id                String        @id @default(cuid())
-  nome              String        // Nome identificador do espelho
-  descricao         String?       // Descrição opcional do espelho
-  textoDOEspelho    Json?         // Texto do espelho de correção
-  espelhoCorrecao   String?       // Lista de URLs das imagens do espelho em formato JSON
-  isAtivo           Boolean       @default(true) // Se o espelho está ativo na biblioteca
-  totalUsos         Int           @default(0) // Contador de quantas vezes foi usado
-  espelhoBibliotecaProcessado Boolean @default(false) // Indica se o espelho da biblioteca foi processado
-  aguardandoEspelho Boolean @default(false) // Indica se está aguardando processamento do espelho
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  id                          String   @id @default(cuid())
+  nome                        String // Nome identificador do espelho
+  descricao                   String? // Descrição opcional do espelho
+  textoDOEspelho              Json? // Texto do espelho de correção
+  espelhoCorrecao             String? // Lista de URLs das imagens do espelho em formato JSON
+  isAtivo                     Boolean  @default(true) // Se o espelho está ativo na biblioteca
+  totalUsos                   Int      @default(0) // Contador de quantas vezes foi usado
+  espelhoBibliotecaProcessado Boolean  @default(false) // Indica se o espelho da biblioteca foi processado
+  aguardandoEspelho           Boolean  @default(false) // Indica se está aguardando processamento do espelho
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
 
   // Relação com usuário que criou o espelho
-  criadoPorId       String
-  criadoPor         UsuarioChatwit @relation(fields: [criadoPorId], references: [id], onDelete: Cascade)
+  criadoPorId String
+  criadoPor   UsuarioChatwit @relation(fields: [criadoPorId], references: [id], onDelete: Cascade)
 
   // Relação com leads que usam este espelho
-  leads             LeadChatwit[]
+  leads LeadChatwit[]
 
   @@index([criadoPorId])
   @@index([isAtivo])
@@ -691,22 +701,22 @@ model EspelhoBiblioteca {
 
 // Modelo para Espelhos Padrão (templates globais por especialidade)
 model EspelhoPadrao {
-  id                String               @id @default(cuid())
-  especialidade     EspecialidadeJuridica @unique // Especialidade jurídica única
-  nome              String               // Nome do espelho padrão (ex: "Padrão de respostas definitivo (Direito Civil)")
-  descricao         String?              // Descrição opcional
-  textoMarkdown     String?              @db.Text // Texto do espelho em formato Markdown
-  espelhoCorrecao   String?              // Lista de URLs das imagens do espelho em formato JSON
-  isAtivo           Boolean              @default(true) // Se o espelho está ativo
-  totalUsos         Int                  @default(0) // Contador de quantas vezes foi usado
-  processado        Boolean              @default(false) // Indica se o espelho foi processado pelo sistema externo
-  aguardandoProcessamento Boolean        @default(false) // Indica se está aguardando processamento
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
+  id                      String                @id @default(cuid())
+  especialidade           EspecialidadeJuridica @unique // Especialidade jurídica única
+  nome                    String // Nome do espelho padrão (ex: "Padrão de respostas definitivo (Direito Civil)")
+  descricao               String? // Descrição opcional
+  textoMarkdown           String?               @db.Text // Texto do espelho em formato Markdown
+  espelhoCorrecao         String? // Lista de URLs das imagens do espelho em formato JSON
+  isAtivo                 Boolean               @default(true) // Se o espelho está ativo
+  totalUsos               Int                   @default(0) // Contador de quantas vezes foi usado
+  processado              Boolean               @default(false) // Indica se o espelho foi processado pelo sistema externo
+  aguardandoProcessamento Boolean               @default(false) // Indica se está aguardando processamento
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
 
   // Relação com usuário que criou/atualizou por último
-  atualizadoPorId   String
-  atualizadoPor     UsuarioChatwit       @relation(fields: [atualizadoPorId], references: [id], onDelete: Cascade)
+  atualizadoPorId String
+  atualizadoPor   UsuarioChatwit @relation(fields: [atualizadoPorId], references: [id], onDelete: Cascade)
 
   @@index([especialidade])
   @@index([isAtivo])
@@ -714,106 +724,106 @@ model EspelhoPadrao {
 
 // Modelo para configuração do MTF Diamante
 model MtfDiamanteConfig {
-  id            String   @id @default(cuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // Configurações gerais
-  valorAnalise  String   @default("R$ 27,90")
-  chavePix      String   @default("atendimento@amandasousaprev.adv.br")
-  
+  valorAnalise String @default("R$ 27,90")
+  chavePix     String @default("atendimento@amandasousaprev.adv.br")
+
   // Configurações específicas do sistema
-  isActive      Boolean  @default(true)
-  
+  isActive Boolean @default(true)
+
   // Relacionamentos
-  lotes         MtfDiamanteLote[]
+  lotes          MtfDiamanteLote[]
   intentMappings MtfDiamanteIntentMapping[]
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([userId])
   @@index([isActive])
 }
 
 // Modelo para lotes do MTF Diamante
 model MtfDiamanteLote {
-  id            String   @id @default(cuid())
-  configId      String
-  config        MtfDiamanteConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
-  
+  id       String            @id @default(cuid())
+  configId String
+  config   MtfDiamanteConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+
   // Informações do lote
-  numero        Int      // Número do lote (1, 2, 3...)
-  nome          String   // Nome do lote (ex: "Primeiro Lote", "Lote Premium")
-  valor         String   // Valor do lote (ex: "R$ 287,90")
-  
+  numero Int // Número do lote (1, 2, 3...)
+  nome   String // Nome do lote (ex: "Primeiro Lote", "Lote Premium")
+  valor  String // Valor do lote (ex: "R$ 287,90")
+
   // Datas
-  dataInicio    DateTime
-  dataFim       DateTime
-  
+  dataInicio DateTime
+  dataFim    DateTime
+
   // Status
-  isActive      Boolean  @default(true)
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([configId])
   @@index([numero])
 }
 
 // Modelo para mapeamento de intents do Dialogflow para templates
 model MtfDiamanteIntentMapping {
-  id            String   @id @default(cuid())
-  configId      String
-  config        MtfDiamanteConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
-  
+  id       String            @id @default(cuid())
+  configId String
+  config   MtfDiamanteConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+
   // Mapeamento de Intent do Dialogflow para Template
-  intentName    String   // Nome da intenção do Dialogflow
-  templateName  String   // Nome do template do WhatsApp
-  
+  intentName   String // Nome da intenção do Dialogflow
+  templateName String // Nome do template do WhatsApp
+
   // Parâmetros opcionais
-  parameters    Json?    // Parâmetros específicos para o template
-  
+  parameters Json? // Parâmetros específicos para o template
+
   // Status
-  isActive      Boolean  @default(true)
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([configId, intentName])
   @@index([configId])
   @@index([intentName])
-  @@unique([configId, intentName])
 }
 
 // Modelo para controle de disparos em massa do MTF Diamante
 model DisparoMtfDiamante {
-  id            String   @id @default(cuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // Informações do template e lead
-  templateId    String   // ID do template WhatsApp
-  templateName  String   // Nome do template
-  leadId        String   // ID do lead
-  leadNome      String?  // Nome do lead
-  leadTelefone  String?  // Telefone do lead
-  
+  templateId   String // ID do template WhatsApp
+  templateName String // Nome do template
+  leadId       String // ID do lead
+  leadNome     String? // Nome do lead
+  leadTelefone String? // Telefone do lead
+
   // Status do disparo
-  status        String   @default("PENDING") // PENDING, SENT, FAILED, SCHEDULED
-  
+  status String @default("PENDING") // PENDING, SENT, FAILED, SCHEDULED
+
   // Controle de agendamento
-  scheduledAt   DateTime? // Quando deve ser enviado
-  sentAt        DateTime? // Quando foi enviado
-  
+  scheduledAt DateTime? // Quando deve ser enviado
+  sentAt      DateTime? // Quando foi enviado
+
   // Parâmetros e configuração
-  parameters    Json?    // Parâmetros específicos para o template
-  
+  parameters Json? // Parâmetros específicos para o template
+
   // Controle de erro
-  errorMessage  String?  // Mensagem de erro se falhou
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
+  errorMessage String? // Mensagem de erro se falhou
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([userId])
   @@index([status])
   @@index([scheduledAt])
@@ -822,29 +832,29 @@ model DisparoMtfDiamante {
 
 // Modelo para armazenar modelos de recurso
 model ModeloRecurso {
-  id           String   @id @default(cuid())
-  texto        String   @db.Text // Texto do modelo de recurso
-  isGlobal     Boolean  @default(false) // Se é um modelo global
-  
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  
+  id       String  @id @default(cuid())
+  texto    String  @db.Text // Texto do modelo de recurso
+  isGlobal Boolean @default(false) // Se é um modelo global
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([isGlobal])
 }
 
 // Tabelas para integração WhatsApp/Dialogflow
 model LoteOab {
-  id            String   @id @default(cuid())
-  nome          String
-  valor         Decimal  @db.Decimal(10, 2)
-  valorAnalise  Decimal  @db.Decimal(10, 2)
-  chavePix      String
-  dataInicio    DateTime
-  dataFim       DateTime
-  ativo         Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
+  id           String   @id @default(cuid())
+  nome         String
+  valor        Decimal  @db.Decimal(10, 2)
+  valorAnalise Decimal  @db.Decimal(10, 2)
+  chavePix     String
+  dataInicio   DateTime
+  dataFim      DateTime
+  ativo        Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
   // MUDANÇA: Relacionamento agora é com UsuarioChatwit
   usuarioChatwitId String
   usuarioChatwit   UsuarioChatwit @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
@@ -856,115 +866,126 @@ model LoteOab {
 // REMOVIDO: model TemplateWhatsappOab - consolidado em WhatsAppTemplate
 
 model MensagemInterativa {
-  id              String   @id @default(cuid())
-  tipo            String   // 'oab', 'atendimento', etc.
-  texto           String   @db.Text
-  headerTipo      String?  // 'text' ou 'image'
-  headerConteudo  String?  @db.Text
-  rodape          String?
-  ativo           Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  // MUDANÇA: Relacionamento agora é com UsuarioChatwit
+  id             String   @id @default(cuid())
+  nome           String? // <-- ADICIONADO
+  tipo           String
+  texto          String   @db.Text
+  headerTipo     String?
+  headerConteudo String?  @db.Text
+  rodape         String?
+  ativo          Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
   usuarioChatwitId String
-  usuarioChatwit   UsuarioChatwit @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
+  usuarioChatwit   UsuarioChatwit  @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
   botoes           BotaoMensagem[]
+
+  // --- RELACIONAMENTO ADICIONADO ---
+  caixaEntradaId String
+  caixaEntrada   CaixaEntrada @relation(fields: [caixaEntradaId], references: [id], onDelete: Cascade)
+
+  // Relação com mapeamentos de intenção
+  mapeamentos MapeamentoIntencao[]
 
   @@map("mensagem_interativa")
 }
 
 model BotaoMensagem {
-  id              String   @id @default(cuid())
-  titulo          String
-  ordem           Int
-  createdAt       DateTime @default(now())
-  
+  id        String   @id @default(cuid())
+  titulo    String
+  ordem     Int
+  createdAt DateTime @default(now())
+
   // Relacionamentos
-  mensagemId      String
-  mensagem        MensagemInterativa @relation(fields: [mensagemId], references: [id], onDelete: Cascade)
+  mensagemId String
+  mensagem   MensagemInterativa @relation(fields: [mensagemId], references: [id], onDelete: Cascade)
 
   @@map("botao_mensagem")
 }
 
-// Modelo para configurar caixas de entrada
 model CaixaEntrada {
-  id              String   @id @default(cuid())
-  nome            String
-  chatwitAccountId String   // ID da conta no Chatwit (padronizado)
-  inboxId         String   // ID da caixa de entrada no Chatwit
-  inboxName       String   // Nome da caixa de entrada
-  channelType     String   // Tipo do canal (whatsapp, telegram, etc.)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  // MUDANÇA: Relacionamento agora é com UsuarioChatwit
+  id               String   @id @default(cuid())
+  nome             String
+  chatwitAccountId String
+  inboxId          String
+  inboxName        String
+  channelType      String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
   usuarioChatwitId String
-  usuarioChatwit   UsuarioChatwit @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
+  usuarioChatwit   UsuarioChatwit     @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
   agentes          AgenteDialogflow[]
 
+  // --- NOVOS RELACIONAMENTOS ---
+  configuracaoWhatsApp WhatsAppConfig?      @relation(name: "ConfigCaixa")
+  templates            WhatsAppTemplate[]
+  mensagensInterativas MensagemInterativa[]
+  mapeamentosIntencao  MapeamentoIntencao[]
+
+  // Relacionamento para o fallback
+  fallbackParaCaixaId String?
+  fallbackParaCaixa   CaixaEntrada?  @relation("FallbackCaixa", fields: [fallbackParaCaixaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  fallbackDeCaixas    CaixaEntrada[] @relation("FallbackCaixa")
+
+  @@unique([usuarioChatwitId, inboxId])
   @@map("caixa_entrada")
-  @@unique([usuarioChatwitId, inboxId]) // Uma caixa por usuário Chatwit
 }
 
 // Modelo para agentes Dialogflow
 model AgenteDialogflow {
-  id              String   @id @default(cuid())
-  nome            String
-  projectId       String   // ID do projeto Dialogflow
-  credentials     String   @db.Text // JSON das credenciais
-  region          String   @default("global")
-  hookId          String?  // ID do hook na API do Chatwit
-  ativo           Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+  id          String   @id @default(cuid())
+  nome        String
+  projectId   String // ID do projeto Dialogflow
+  credentials String   @db.Text // JSON das credenciais
+  region      String   @default("global")
+  hookId      String? // ID do hook na API do Chatwit
+  ativo       Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
   // MUDANÇA: Relacionamento agora é com UsuarioChatwit
   usuarioChatwitId String
   usuarioChatwit   UsuarioChatwit @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
   caixaId          String
-  caixa            CaixaEntrada @relation(fields: [caixaId], references: [id], onDelete: Cascade)
+  caixa            CaixaEntrada   @relation(fields: [caixaId], references: [id], onDelete: Cascade)
+  //@@unique([caixaId, ativo]) // Apenas um agente ativo por caixa
 
   @@map("agente_dialogflow")
-  @@unique([caixaId, ativo]) // Apenas um agente ativo por caixa
 }
 
-// Manter o modelo antigo para compatibilidade (será removido depois)
-model IntegracaoDialogflow {
-  id              String   @id @default(cuid())
-  nome            String
-  chatwitAccountId String   // ID da conta no Chatwit (padronizado)
-  projectId       String   // ID do projeto Dialogflow
-  credentials     String   @db.Text // JSON das credenciais
-  region          String   @default("global")
-  inboxId         String?  // ID da caixa de entrada
-  inboxName       String?  // Nome da caixa de entrada
-  hookId          String?  // ID do hook na API do Chatwit
-  ativo           Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  // MUDANÇA: Relacionamento agora é com UsuarioChatwit
-  usuarioChatwitId String
-  usuarioChatwit   UsuarioChatwit @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
 
-  @@map("integracao_dialogflow")
-}
 
 model LeadOab {
-  id          String   @id @default(cuid())
-  nome        String
-  telefone    String
-  payload     String?  @db.Text // JSON do payload do Chatwit
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  id        String   @id @default(cuid())
+  nome      String
+  telefone  String
+  payload   String?  @db.Text // JSON do payload do Chatwit
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // MUDANÇA: Relacionamento agora é com UsuarioChatwit
   usuarioChatwitId String
   usuarioChatwit   UsuarioChatwit @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
   loteId           String
-  lote             LoteOab @relation(fields: [loteId], references: [id], onDelete: Cascade)
+  lote             LoteOab        @relation(fields: [loteId], references: [id], onDelete: Cascade)
 
   @@map("lead_oab")
 }
 
+model MapeamentoIntencao {
+  id         String @id @default(cuid())
+  intentName String
+
+  caixaEntradaId String
+  caixaEntrada   CaixaEntrada @relation(fields: [caixaEntradaId], references: [id], onDelete: Cascade)
+
+  templateId String?
+  template   WhatsAppTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  mensagemInterativaId String?
+  mensagemInterativa   MensagemInterativa? @relation(fields: [mensagemInterativaId], references: [id], onDelete: SetNull)
+
+  @@unique([intentName, caixaEntradaId])
+}
