@@ -115,7 +115,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
           <AdminNavLink href="/admin/leads-chatwit" icon={<MessageSquare className="h-5 w-5 mr-3" />}>
             Leads Chatwit
           </AdminNavLink>
-          <AdminNavLink href="/admin/atendimento" icon={<Headphones className="h-5 w-5 mr-3" />}>
+          <AdminNavLink href="/admin/mtf-diamante" icon={<Headphones className="h-5 w-5 mr-3" />}>
             MTF Diamante
           </AdminNavLink>
           <AdminNavLink href="/admin/disparo-oab" icon={<Users className="h-5 w-5 mr-3" />}>

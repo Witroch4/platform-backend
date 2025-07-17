@@ -479,7 +479,10 @@ model WhatsAppConfig {
 
   // --- CAMPOS ATUALIZADOS ---
   phoneNumberId String
-  token         String @db.Text
+  whatsappToken String @db.Text
+  isActive      Boolean @default(true)
+  whatsappBusinessAccountId String
+  fbGraphApiBase String @default("https://graph.facebook.com/v22.0")
 
   usuarioChatwitId String
   usuarioChatwit   UsuarioChatwit @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)

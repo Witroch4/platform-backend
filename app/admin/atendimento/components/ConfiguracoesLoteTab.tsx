@@ -60,7 +60,7 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Configurações Globais do WhatsApp</CardTitle>
+        <CardTitle>Configuração Padrão Global do WhatsAppppp</CardTitle>
         <CardDescription>
           Estas configurações se aplicam a todas as caixas de entrada que não possuem uma configuração espec��fica.
         </CardDescription>

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 import { auth } from '@/auth';
-import { mtfDiamanteConfig } from '@/app/config/atendimento';
+import { mtfDiamanteConfig } from '@/app/config/mtf-diamante';
 import prisma from '@/lib/prisma';
 
 /**

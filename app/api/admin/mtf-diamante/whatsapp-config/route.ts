@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 
 const whatsappConfigSchema = z.object({
+  phoneNumberId: z.string().min(1, "ID do número de telefone é obrigatório"),
   fbGraphApiBase: z.string().url("URL da API deve ser válida"),
   whatsappBusinessAccountId: z.string().min(1, "ID da conta business é obrigatório"),
   whatsappToken: z.string().min(1, "Token de acesso é obrigatório")
@@ -112,6 +113,7 @@ export async function POST(request: Request) {
       const newConfig = await tx.whatsAppConfig.create({
         data: {
           usuarioChatwitId: usuarioChatwit.id,
+          phoneNumberId: validatedData.phoneNumberId || '',
           fbGraphApiBase: validatedData.fbGraphApiBase,
           whatsappBusinessAccountId: validatedData.whatsappBusinessAccountId,
           whatsappToken: validatedData.whatsappToken,

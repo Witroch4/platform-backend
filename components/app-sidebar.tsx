@@ -680,7 +680,7 @@ export function AppSidebar() {
                     <SidebarMenuItem>
                       <SidebarMenuButton asChild>
                         <Link
-                          href="/admin/atendimento"
+                          href="/admin/mtf-diamante"
                           className={`flex items-center hover-effect-9 ${
                             state === "collapsed" ? "justify-center" : "justify-start"
                           }`}

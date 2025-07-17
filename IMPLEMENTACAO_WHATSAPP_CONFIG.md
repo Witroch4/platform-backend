@@ -114,7 +114,7 @@ model CaixaEntrada {
 - Gerencia templates específicos por caixa
 - Interface para visualizar e gerenciar templates
 
-#### Página Principal: `app/admin/atendimento/page.tsx`
+#### Página Principal: `app/admin/mtf-diamante/page.tsx`
 - Estrutura com abas: "Configuração Padrão" e "Por Caixa de Entrada"
 - Interface intuitiva para gerenciar ambas as configurações
 

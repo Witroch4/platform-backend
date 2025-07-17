@@ -1009,4 +1009,4 @@ ALTER TABLE "lead_oab" ADD CONSTRAINT "lead_oab_usuarioChatwitId_fkey" FOREIGN K
 -- AddForeignKey
 ALTER TABLE "lead_oab" ADD CONSTRAINT "lead_oab_loteId_fkey" FOREIGN KEY ("loteId") REFERENCES "lote_oab"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 -- Garante que apenas um agente ativo possa existir por caixa.
-CREATE UNIQUE INDEX "unique_active_agent_per_caixa" ON "agente_dialogflow" ("caixaId") WHERE ativo = true;qaq2
+CREATE UNIQUE INDEX "unique_active_agent_per_caixa" ON "agente_dialogflow" ("caixaId") WHERE ativo = true;

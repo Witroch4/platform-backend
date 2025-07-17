@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import axios from 'axios';
 import { Readable } from 'stream';
 import { auth } from '@/auth';
-import { mtfDiamanteConfig } from '@/app/config/atendimento';
+import { mtfDiamanteConfig } from '@/app/config/mtf-diamante';
 import { v4 as uuidv4 } from 'uuid';
 import { uploadToMinIO } from '@/lib/minio';
 

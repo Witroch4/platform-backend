@@ -63,17 +63,19 @@ async function sendInteractiveMessage(
     headerTipo?: string | null;
     headerConteudo?: string | null;
     rodape?: string | null;
-    botoes: { id: string; titulo: string }[];
+    botoes: { id: string; titulo: string; ordem: number }[];
   }
 ) {
   const interactive: any = {
     type: 'button',
     body: { text: message.texto },
     action: {
-      buttons: message.botoes.map(btn => ({
-        type: 'reply',
-        reply: { id: btn.id, title: btn.titulo },
-      })),
+      buttons: message.botoes
+        .sort((a, b) => a.ordem - b.ordem)
+        .map(btn => ({
+          type: 'reply',
+          reply: { id: btn.id, title: btn.titulo },
+        })),
     },
   };
 
@@ -116,16 +118,28 @@ export async function POST(request: NextRequest) {
     }
 
     // 1. Encontrar a configuração do WhatsApp com base no phoneNumberId
-    let config = await db.configuracaoWhatsApp.findFirst({
-      where: { phoneNumberId },
-      include: { caixaEntrada: true },
+    let config = await db.whatsAppConfig.findFirst({
+      where: { 
+        phoneNumberId,
+        isActive: true 
+      },
+      include: { 
+        caixaEntrada: true,
+        usuarioChatwit: true 
+      },
     });
 
     // Fallback: se não achar config específica, busca a padrão (sem caixa associada)
     if (!config) {
-        config = await db.configuracaoWhatsApp.findFirst({
-            where: { caixaEntradaId: null },
-            include: { caixaEntrada: true }, // será null, mas mantém a estrutura
+        config = await db.whatsAppConfig.findFirst({
+            where: { 
+              caixaEntradaId: null,
+              isActive: true 
+            },
+            include: { 
+              caixaEntrada: true,
+              usuarioChatwit: true 
+            },
         });
     }
 
@@ -149,7 +163,14 @@ export async function POST(request: NextRequest) {
     // 3. Buscar o Mapeamento da Intenção na caixa atual
     let mapeamento = await db.mapeamentoIntencao.findUnique({
       where: { intentName_caixaEntradaId: { intentName, caixaEntradaId: caixaId } },
-      include: { template: true, mensagemInterativa: { include: { botoes: true } } },
+      include: { 
+        template: true, 
+        mensagemInterativa: { 
+          include: { 
+            botoes: true 
+          } 
+        } 
+      },
     });
 
     // 4. Lógica de Fallback para outra caixa, se configurado
@@ -157,7 +178,14 @@ export async function POST(request: NextRequest) {
       console.log(`Mapeamento não encontrado. Tentando fallback para a caixa: ${caixaDeOrigem.fallbackParaCaixaId}`);
       mapeamento = await db.mapeamentoIntencao.findUnique({
         where: { intentName_caixaEntradaId: { intentName, caixaEntradaId: caixaDeOrigem.fallbackParaCaixaId } },
-        include: { template: true, mensagemInterativa: { include: { botoes: true } } },
+        include: { 
+          template: true, 
+          mensagemInterativa: { 
+            include: { 
+              botoes: true 
+            } 
+          } 
+        },
       });
     }
 
@@ -166,14 +194,14 @@ export async function POST(request: NextRequest) {
       if (mapeamento.template) {
         console.log(`Enviando template: ${mapeamento.template.name}`);
         await sendWhatsAppTemplate(
-          { phoneNumberId, token: config.token },
+          { phoneNumberId, token: config.whatsappToken },
           waid,
           mapeamento.template
         );
       } else if (mapeamento.mensagemInterativa) {
         console.log(`Enviando mensagem interativa: ${mapeamento.mensagemInterativa.nome}`);
         await sendInteractiveMessage(
-          { phoneNumberId, token: config.token },
+          { phoneNumberId, token: config.whatsappToken },
           waid,
           mapeamento.mensagemInterativa
         );
