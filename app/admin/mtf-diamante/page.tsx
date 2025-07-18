@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 
 // Tipos
 interface WhatsAppConfig {
@@ -13,12 +14,16 @@ interface WhatsAppConfig {
 }
 
 import IntegracoesTab from './components/IntegracoesTab';
-import TemplatesTab from './components/TemplatesTab';
+import TemplatesTab from './components/TemplatesTab/index';
 import MensagensInterativasTab from './components/MensagensInterativasTab';
 import MapeamentoTab from './components/MapeamentoTab';
 import ConfiguracoesLoteTab from './components/ConfiguracoesLoteTab';
 
 const MtfDiamanteAtendimentoPage = () => {
+  const searchParams = useSearchParams();
+  const tabParam = searchParams?.get('tab');
+  
+  const [activeTab, setActiveTab] = useState<string>(tabParam || 'integracoes');
   const [selectedCaixaId, setSelectedCaixaId] = useState<string | null>(null);
   const [configPadrao, setConfigPadrao] = useState<WhatsAppConfig | null>(null);
   const [loadingConfig, setLoadingConfig] = useState(true);
@@ -39,7 +44,12 @@ const MtfDiamanteAtendimentoPage = () => {
 
   useEffect(() => {
     fetchConfig();
-  }, []);
+    
+    // Se vier um parâmetro de tab na URL, ativar essa tab
+    if (tabParam) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
 
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
@@ -47,11 +57,11 @@ const MtfDiamanteAtendimentoPage = () => {
         <h2 className="text-3xl font-bold tracking-tight">MTF Diamante - Configurações de Atendimento</h2>
       </div>
 
-      <Tabs defaultValue="integracoes" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
           <TabsTrigger value="integracoes">Caixas de Entrada</TabsTrigger>
           <TabsTrigger value="lote">Configurações Globais</TabsTrigger>
-          <TabsTrigger value="templates" disabled={!selectedCaixaId}>Templates</TabsTrigger>
+          <TabsTrigger value="templates">Templates</TabsTrigger>
           <TabsTrigger value="interativas" disabled={!selectedCaixaId}>Mensagens Interativas</TabsTrigger>
           <TabsTrigger value="mapeamento" disabled={!selectedCaixaId}>Mapeamento</TabsTrigger>
         </TabsList>
@@ -65,7 +75,7 @@ const MtfDiamanteAtendimentoPage = () => {
         </TabsContent>
         
         <TabsContent value="templates">
-            {selectedCaixaId ? <TemplatesTab caixaId={selectedCaixaId} /> : <EmptyStateTab />}
+            <TemplatesTab />
         </TabsContent>
         <TabsContent value="interativas">
             {selectedCaixaId ? <MensagensInterativasTab caixaId={selectedCaixaId} /> : <EmptyStateTab />}

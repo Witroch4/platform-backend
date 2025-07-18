@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { CalendarIcon, Plus, Trash2, Edit } from 'lucide-react';
+import { CalendarIcon, Plus, Trash2, Edit, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -15,6 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { DisparoMensagemDialog } from './DisparoMensagemDialog';
 
 interface WhatsAppConfig {
   id?: string;
@@ -40,9 +41,9 @@ interface ConfiguracoesLoteTabProps {
 }
 
 const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabProps) => {
-  const [config, setConfig] = useState<WhatsAppConfig>({ 
-    phoneNumberId: '', 
-    token: '', 
+  const [config, setConfig] = useState<WhatsAppConfig>({
+    phoneNumberId: '',
+    token: '',
     chavePix: '57944155000101',
     nomeEscritorio: 'Dra. Amanda Sousa Advocacia e Consultoria Jurídica™'
   });
@@ -172,7 +173,10 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
                 Configure os lotes que serão utilizados nas mensagens interativas do sistema.
               </CardDescription>
             </div>
-            <AdicionarLoteDialog onLoteAdicionado={fetchLotes} />
+            <div className="flex items-center gap-2">
+              <DisparoMensagemDialog />
+              <AdicionarLoteDialog onLoteAdicionado={fetchLotes} />
+            </div>
           </div>
         </CardHeader>
         <CardContent>

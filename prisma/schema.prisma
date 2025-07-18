@@ -568,6 +568,7 @@ model WhatsAppTemplate {
 
   @@index([usuarioChatwitId])
   @@index([caixaEntradaId])
+  @@unique([templateId, usuarioChatwitId])
 }
 
 // Modelos para o ChatwitIA - armazenamento de chats de IA
