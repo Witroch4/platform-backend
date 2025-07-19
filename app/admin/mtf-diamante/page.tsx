@@ -18,6 +18,7 @@ import TemplatesTab from './components/TemplatesTab/index';
 import MensagensInterativasTab from './components/MensagensInterativasTab';
 import MapeamentoTab from './components/MapeamentoTab';
 import ConfiguracoesLoteTab from './components/ConfiguracoesLoteTab';
+import { MtfDataProvider } from './context/MtfDataProvider';
 
 const MtfDiamanteAtendimentoPage = () => {
   const searchParams = useSearchParams();
@@ -43,6 +44,18 @@ const MtfDiamanteAtendimentoPage = () => {
   };
 
   useEffect(() => {
+    // Executa o seed automático das variáveis MTF Diamante
+    const initializeMtfVariaveis = async () => {
+      try {
+        await fetch('/api/admin/mtf-diamante/variaveis/seed', {
+          method: 'POST'
+        });
+      } catch (error) {
+        console.error('Erro no seed automático:', error);
+      }
+    };
+
+    initializeMtfVariaveis();
     fetchConfig();
     
     // Se vier um parâmetro de tab na URL, ativar essa tab
@@ -52,39 +65,41 @@ const MtfDiamanteAtendimentoPage = () => {
   }, [tabParam]);
 
   return (
-    <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">MTF Diamante - Configurações de Atendimento</h2>
+    <MtfDataProvider>
+      <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+        <div className="flex items-center justify-between space-y-2">
+          <h2 className="text-3xl font-bold tracking-tight">MTF Diamante - Configurações de Atendimento</h2>
+        </div>
+
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="integracoes">Caixas de Entrada</TabsTrigger>
+            <TabsTrigger value="lote">Configurações Globais</TabsTrigger>
+            <TabsTrigger value="templates">Templates</TabsTrigger>
+            <TabsTrigger value="interativas" disabled={!selectedCaixaId}>Mensagens Interativas</TabsTrigger>
+            <TabsTrigger value="mapeamento" disabled={!selectedCaixaId}>Mapeamento</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="integracoes">
+            <IntegracoesTab onCaixaSelected={setSelectedCaixaId} />
+          </TabsContent>
+
+          <TabsContent value="lote">
+              {loadingConfig ? <Loader2 className="animate-spin" /> : <ConfiguracoesLoteTab configPadrao={configPadrao} onUpdate={fetchConfig} />}
+          </TabsContent>
+          
+          <TabsContent value="templates">
+              <TemplatesTab />
+          </TabsContent>
+          <TabsContent value="interativas">
+              {selectedCaixaId ? <MensagensInterativasTab caixaId={selectedCaixaId} /> : <EmptyStateTab />}
+          </TabsContent>
+          <TabsContent value="mapeamento">
+              {selectedCaixaId ? <MapeamentoTab caixaId={selectedCaixaId} /> : <EmptyStateTab />}
+          </TabsContent>
+        </Tabs>
       </div>
-
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="integracoes">Caixas de Entrada</TabsTrigger>
-          <TabsTrigger value="lote">Configurações Globais</TabsTrigger>
-          <TabsTrigger value="templates">Templates</TabsTrigger>
-          <TabsTrigger value="interativas" disabled={!selectedCaixaId}>Mensagens Interativas</TabsTrigger>
-          <TabsTrigger value="mapeamento" disabled={!selectedCaixaId}>Mapeamento</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="integracoes">
-          <IntegracoesTab onCaixaSelected={setSelectedCaixaId} />
-        </TabsContent>
-
-        <TabsContent value="lote">
-            {loadingConfig ? <Loader2 className="animate-spin" /> : <ConfiguracoesLoteTab configPadrao={configPadrao} onUpdate={fetchConfig} />}
-        </TabsContent>
-        
-        <TabsContent value="templates">
-            <TemplatesTab />
-        </TabsContent>
-        <TabsContent value="interativas">
-            {selectedCaixaId ? <MensagensInterativasTab caixaId={selectedCaixaId} /> : <EmptyStateTab />}
-        </TabsContent>
-        <TabsContent value="mapeamento">
-            {selectedCaixaId ? <MapeamentoTab caixaId={selectedCaixaId} /> : <EmptyStateTab />}
-        </TabsContent>
-      </Tabs>
-    </div>
+    </MtfDataProvider>
   );
 };
 

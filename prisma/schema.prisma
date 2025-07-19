@@ -67,6 +67,9 @@ model User {
 
   // Controle de seed executado para MTF Diamante
   mtfDiamanteSeedExecuted Boolean @default(false)
+  
+  // Controle de variáveis MTF Diamante populadas
+  mtfVariaveisPopuladas Boolean @default(false)
 
   // Relação 1-para-1 com UsuarioChatwit
   usuarioChatwit UsuarioChatwit?
@@ -732,14 +735,13 @@ model MtfDiamanteConfig {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Configurações gerais
-  valorAnalise String @default("R$ 27,90")
-  chavePix     String @default("atendimento@amandasousaprev.adv.br")
-
   // Configurações específicas do sistema
   isActive Boolean @default(true)
 
-  // Relacionamentos
+  // Relacionamento com as variáveis personalizadas (NOVO)
+  variaveis MtfDiamanteVariavel[]
+
+  // Relacionamentos existentes
   lotes          MtfDiamanteLote[]
   intentMappings MtfDiamanteIntentMapping[]
 
@@ -748,6 +750,23 @@ model MtfDiamanteConfig {
 
   @@index([userId])
   @@index([isActive])
+}
+
+// Novo modelo para variáveis dinâmicas do MTF Diamante
+model MtfDiamanteVariavel {
+  id    String @id @default(cuid())
+  chave String // Ex: "chave_pix", "nome_escritorio"
+  valor String @db.Text // Ex: "email@dominio.com", "Meu Escritório"
+
+  // Relacionamento com a configuração principal
+  configId String
+  config   MtfDiamanteConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([configId, chave]) // Garante que cada chave seja única por configuração
+  @@index([configId])
 }
 
 // Modelo para lotes do MTF Diamante

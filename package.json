@@ -121,7 +121,6 @@
 		"lottie-react": "^2.4.0",
 		"lru-cache": "^9.0.0",
 		"lucide-react": "^0.468.0",
-		"module": "^1.0.0",
 		"next": "^15.1.0",
 		"next-auth": "^5.0.0-beta.25",
 		"next-connect": "^1.0.0",
@@ -169,7 +168,7 @@
 		"urix": "^0.1.0",
 		"uuid": "^11.1.0",
 		"vaul": "^1.1.1",
-		"vinyl-fs": "^4.0.0",
+		"vinyl-fs": "^4.0.2",
 		"zod": "^3.23.4"
 	},
 	"devDependencies": {

@@ -14,6 +14,8 @@ import { Loader2, Plus, Trash2, Settings, Bot, Inbox as InboxIcon, CheckCircle2 
 import { toast } from 'sonner';
 import axios from 'axios';
 import { cn } from '@/lib/utils';
+import { CaixaCardSkeleton } from './LoadingSkeletons';
+import { useMtfData } from '../context/MtfDataProvider';
 
 // Tipos
 interface AgenteDialogflow {
@@ -46,36 +48,19 @@ interface DialogflowCaixasAgentesProps {
 }
 
 export function DialogflowCaixasAgentes({ onCaixaSelected }: DialogflowCaixasAgentesProps) {
-  const [caixas, setCaixas] = useState<CaixaEntrada[]>([]);
-  const [loading, setLoading] = useState(true);
   const [selectedCaixaId, setSelectedCaixaId] = useState<string | null>(null);
+  
+  // Usando contexto de dados para cache persistente
+  const { caixas, loadingCaixas: loading, refreshCaixas } = useMtfData();
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const response = await axios.get('/api/admin/mtf-diamante/dialogflow/caixas');
-      const fetchedCaixas = response.data.caixas || [];
-      setCaixas(fetchedCaixas);
-
-      // Lógica para manter ou definir a seleção
-      if (selectedCaixaId && !fetchedCaixas.some((c: CaixaEntrada) => c.id === selectedCaixaId)) {
-        const newSelection = fetchedCaixas.length > 0 ? fetchedCaixas[0].id : null;
-        handleSelectCaixa(newSelection);
-      } else if (!selectedCaixaId && fetchedCaixas.length > 0) {
-        handleSelectCaixa(fetchedCaixas[0].id);
-      }
-
-    } catch (error) {
-      console.error('Erro ao buscar caixas:', error);
-      toast.error('Não foi possível carregar as caixas de entrada.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Seleção automática apenas se não houver seleção
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (!selectedCaixaId && caixas.length > 0) {
+      const firstCaixaId = caixas[0].id;
+      setSelectedCaixaId(firstCaixaId);
+      onCaixaSelected(firstCaixaId);
+    }
+  }, [caixas, selectedCaixaId, onCaixaSelected]);
 
   const handleSelectCaixa = (id: string | null) => {
     setSelectedCaixaId(id);
@@ -83,13 +68,26 @@ export function DialogflowCaixasAgentes({ onCaixaSelected }: DialogflowCaixasAge
   };
 
   if (loading) {
-    return <div className="flex justify-center items-center py-8"><Loader2 className="w-8 h-8 animate-spin" /></div>;
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-end">
+          <Button disabled>
+            <Plus className="w-4 h-4 mr-2" /> Adicionar Caixa
+          </Button>
+        </div>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <CaixaCardSkeleton key={i} />
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-6">
       <div className="flex justify-end">
-        <AdicionarCaixaDialog onCaixaAdicionada={fetchData} caixasConfiguradas={caixas} />
+        <AdicionarCaixaDialog onCaixaAdicionada={refreshCaixas} caixasConfiguradas={caixas} />
       </div>
 
       {caixas.length === 0 ? (
@@ -105,7 +103,7 @@ export function DialogflowCaixasAgentes({ onCaixaSelected }: DialogflowCaixasAge
               caixa={caixa} 
               isSelected={selectedCaixaId === caixa.id}
               onSelect={handleSelectCaixa}
-              onUpdate={fetchData}
+              onUpdate={refreshCaixas}
             />
           ))}
         </div>
@@ -116,62 +114,112 @@ export function DialogflowCaixasAgentes({ onCaixaSelected }: DialogflowCaixasAge
 
 // Card de Caixa de Entrada
 function CaixaCard({ caixa, isSelected, onSelect, onUpdate }: { caixa: CaixaEntrada, isSelected: boolean, onSelect: (id: string) => void, onUpdate: () => void }) {
-  
-  const handleDeleteCaixa = async (e: React.MouseEvent) => {
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDeleteClick = (e: React.MouseEvent) => {
     e.stopPropagation(); // Impede que o clique no botão selecione o card
-    if (!confirm('Tem certeza que deseja excluir esta caixa? Todos os agentes serão removidos.')) return;
+    setShowDeleteDialog(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    setIsDeleting(true);
     try {
       await axios.delete(`/api/admin/mtf-diamante/dialogflow/caixas?id=${caixa.id}`);
       toast.success('Caixa excluída com sucesso');
       onUpdate();
+      setShowDeleteDialog(false);
     } catch (error) {
       toast.error('Erro ao excluir caixa');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
   return (
-    <Card 
-      className={cn("cursor-pointer transition-all", isSelected ? "border-primary ring-2 ring-primary" : "hover:border-gray-400")}
-      onClick={() => onSelect(caixa.id)}
-    >
-      {isSelected && <div className="absolute top-2 right-2 text-primary"><CheckCircle2 /></div>}
-      <CardHeader>
-        <div className="flex justify-between items-start">
-            <div>
-                <CardTitle className="flex items-center gap-2"><InboxIcon className="w-5 h-5" />{caixa.nome}</CardTitle>
-                <CardDescription>{caixa.inboxName} ({caixa.channelType})</CardDescription>
-            </div>
-            <Button variant="ghost" size="icon" onClick={handleDeleteCaixa}><Trash2 className="w-4 h-4 text-destructive" /></Button>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <h4 className="font-semibold mb-2 text-sm">Agentes Dialogflow</h4>
-        <div className="space-y-2">
-            {caixa.agentes.length === 0 ? (
-                <p className="text-muted-foreground text-xs">Nenhum agente configurado.</p>
-            ) : (
-                caixa.agentes.map(agente => <AgenteItem key={agente.id} agente={agente} onUpdate={onUpdate} />)
-            )}
-        </div>
-        <div className="mt-4">
-            <AdicionarAgenteDialog caixaId={caixa.id} onAgenteAdicionado={onUpdate} />
-        </div>
-      </CardContent>
-    </Card>
+    <>
+      <Card 
+        className={cn("cursor-pointer transition-all", isSelected ? "border-primary ring-2 ring-primary" : "hover:border-gray-400")}
+        onClick={() => onSelect(caixa.id)}
+      >
+        {isSelected && <div className="absolute top-2 right-2 text-primary"><CheckCircle2 /></div>}
+        <CardHeader>
+          <div className="flex justify-between items-start">
+              <div>
+                  <CardTitle className="flex items-center gap-2"><InboxIcon className="w-5 h-5" />{caixa.nome}</CardTitle>
+                  <CardDescription>{caixa.inboxName} ({caixa.channelType})</CardDescription>
+              </div>
+              <Button variant="ghost" size="icon" onClick={handleDeleteClick}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <h4 className="font-semibold mb-2 text-sm">Agentes Dialogflow</h4>
+          <div className="space-y-2">
+              {caixa.agentes.length === 0 ? (
+                  <p className="text-muted-foreground text-xs">Nenhum agente configurado.</p>
+              ) : (
+                  caixa.agentes.map(agente => <AgenteItem key={agente.id} agente={agente} onUpdate={onUpdate} />)
+              )}
+          </div>
+          <div className="mt-4">
+              <AdicionarAgenteDialog caixaId={caixa.id} onAgenteAdicionado={onUpdate} />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar Exclusão</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja excluir esta caixa? Todos os agentes serão removidos.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+              Cancelar
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              OK
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
 // Item de Agente
 function AgenteItem({ agente, onUpdate }: { agente: AgenteDialogflow, onUpdate: () => void }) {
+    const [localAtivo, setLocalAtivo] = useState(agente.ativo);
+    
+    // Sincroniza o estado local com o prop quando ele muda
+    useEffect(() => {
+        setLocalAtivo(agente.ativo);
+    }, [agente.ativo]);
     
     const handleToggleAgente = async () => {
-        try {
+        const novoEstado = !localAtivo;
+        
+        const togglePromise = async () => {
             const response = await axios.patch(`/api/admin/mtf-diamante/dialogflow/agentes/${agente.id}/toggle`);
-            toast.success(response.data.message || 'Status alterado');
-            onUpdate();
-        } catch (error) {
-            toast.error('Erro ao alterar status');
-        }
+            // Só muda o estado local APÓS o sucesso da API
+            setLocalAtivo(novoEstado);
+            return response.data;
+        };
+
+        toast.promise(togglePromise, {
+            loading: novoEstado ? 'Ativando agente...' : 'Desativando agente...',
+            success: (data) => {
+                return data.message || `Agente ${novoEstado ? 'ativado' : 'desativado'} com sucesso`;
+            },
+            error: 'Erro ao alterar status do agente',
+        });
     };
 
     return (
@@ -179,10 +227,10 @@ function AgenteItem({ agente, onUpdate }: { agente: AgenteDialogflow, onUpdate: 
             <div className="flex items-center gap-2">
                 <Bot className="w-4 h-4 text-blue-500" />
                 <span className="font-medium">{agente.nome}</span>
-                {agente.ativo && <Badge variant="default" className="bg-green-500 h-5">Ativo</Badge>}
+                {localAtivo && <Badge variant="default" className="bg-green-500 h-5">Ativo</Badge>}
             </div>
             <div className="flex items-center gap-2">
-                <Switch id={`switch-${agente.id}`} checked={agente.ativo} onCheckedChange={handleToggleAgente} />
+                <Switch id={`switch-${agente.id}`} checked={localAtivo} onCheckedChange={handleToggleAgente} />
                 <EditarAgenteDialog agente={agente} onAgenteAtualizado={onUpdate} />
             </div>
         </div>

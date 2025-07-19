@@ -6,7 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { CalendarIcon, Plus, Trash2, Edit, Send } from 'lucide-react';
+import { CalendarIcon, Plus, Trash2, Edit, HelpCircle, Loader2 } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -16,13 +17,21 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { DisparoMensagemDialog } from './DisparoMensagemDialog';
+import { LoteCardSkeleton, VariavelSkeleton } from './LoadingSkeletons';
+import { useMtfData } from '../context/MtfDataProvider';
 
 interface WhatsAppConfig {
   id?: string;
   phoneNumberId: string;
-  token: string;
-  chavePix?: string;
-  nomeEscritorio?: string;
+  whatsappToken?: string; // Só usado para novos tokens
+  tokenMask?: string; // Máscara do token existente (••••••xx345)
+  hasToken?: boolean; // Indica se existe um token salvo
+}
+
+interface MtfDiamanteVariavel {
+  id?: string;
+  chave: string;
+  valor: string;
 }
 
 interface MtfDiamanteLote {
@@ -43,59 +52,107 @@ interface ConfiguracoesLoteTabProps {
 const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabProps) => {
   const [config, setConfig] = useState<WhatsAppConfig>({
     phoneNumberId: '',
-    token: '',
-    chavePix: '57944155000101',
-    nomeEscritorio: 'Dra. Amanda Sousa Advocacia e Consultoria Jurídica™'
+    hasToken: false,
+    tokenMask: ''
   });
-  const [lotes, setLotes] = useState<MtfDiamanteLote[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [newToken, setNewToken] = useState(''); // Token digitado pelo usuário
+
+  // Usando contexto de dados para cache persistente
+  const { variaveis, loadingVariaveis, refreshVariaveis, lotes, loadingLotes, refreshLotes } = useMtfData();
 
   useEffect(() => {
     if (configPadrao) {
       setConfig(configPadrao);
     }
-    fetchLotes();
   }, [configPadrao]);
 
-  const fetchLotes = async () => {
-    try {
-      const response = await fetch('/api/admin/mtf-diamante/lotes');
-      if (response.ok) {
-        const data = await response.json();
-        setLotes(data.lotes || []);
-      }
-    } catch (error) {
-      console.error('Erro ao buscar lotes:', error);
+  const handleWhatsAppChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    if (name === 'whatsappToken') {
+      setNewToken(value);
+    } else {
+      setConfig(prev => ({ ...prev, [name]: value }));
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setConfig(prev => ({ ...prev, [name]: value }));
+  // Estado local para edição de variáveis (cópia dos dados do cache)
+  const [variaveisEditaveis, setVariaveisEditaveis] = useState<MtfDiamanteVariavel[]>([]);
+
+  // Sincroniza dados do cache com estado local para edição
+  useEffect(() => {
+    setVariaveisEditaveis([...variaveis]);
+  }, [variaveis]);
+
+  const handleVariavelChange = (index: number, field: 'chave' | 'valor', value: string) => {
+    setVariaveisEditaveis(prev => prev.map((v, i) =>
+      i === index ? { ...v, [field]: value } : v
+    ));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const adicionarVariavel = () => {
+    setVariaveisEditaveis(prev => [...prev, { chave: '', valor: '' }]);
+  };
+
+  const removerVariavel = (index: number) => {
+    setVariaveisEditaveis(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleWhatsAppSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const payload: any = {
+      phoneNumberId: config.phoneNumberId
+    };
+
+    if (newToken.trim()) {
+      payload.token = newToken;
+    }
+
     try {
       const response = await fetch('/api/admin/mtf-diamante/configuracoes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // Envia sem caixaId para salvar como configuração global
-        body: JSON.stringify({
-          phoneNumberId: config.phoneNumberId,
-          token: config.token,
-          chavePix: config.chavePix,
-          nomeEscritorio: config.nomeEscritorio
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Falha ao salvar configurações globais.');
+        throw new Error(errorData.error || 'Falha ao salvar configurações do WhatsApp.');
       }
 
-      toast.success('Configurações globais salvas com sucesso!');
-      onUpdate(); // Notifica o componente pai para recarregar os dados
+      toast.success('Configurações do WhatsApp salvas com sucesso!');
+      setNewToken('');
+      onUpdate();
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
+  };
+
+  const handleVariaveisSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Valida se todas as variáveis têm chave e valor
+    const variaveisValidas = variaveisEditaveis.filter(v => v.chave.trim() && v.valor.trim());
+
+    if (variaveisValidas.length === 0) {
+      toast.error('Adicione pelo menos uma variável válida');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/admin/mtf-diamante/variaveis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ variaveis: variaveisValidas }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Falha ao salvar variáveis.');
+      }
+
+      toast.success('Variáveis salvas com sucesso!');
+      refreshVariaveis(); // Recarrega as variáveis usando o hook de cache
     } catch (error) {
       toast.error((error as Error).message);
     }
@@ -103,84 +160,243 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
 
   return (
     <div className="space-y-6">
-      <Card>
+      {/* SEÇÃO 1: CONFIGURAÇÃO WHATSAPP */}
+      <Card className="border-blue-200 bg-blue-50/30 dark:border-blue-800 dark:bg-blue-950/30">
         <CardHeader>
-          <CardTitle>Configuração Padrão e WhatsApp Global</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+            Configuração WhatsApp
+          </CardTitle>
           <CardDescription>
-            Estas configurações se aplicam a todas as caixas de entrada que não possuem uma configuração específica (Geral e WhatsApp Padrão).
+            Configure as credenciais de acesso à API do WhatsApp Business.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="chavePix">Chave PIX (até 15 caracteres)</Label>
-              <Input
-                id="chavePix"
-                name="chavePix"
-                value={config.chavePix || ''}
-                onChange={handleChange}
-                placeholder="57944155000101"
-                maxLength={15}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="nomeEscritorio">Nome do Escritório</Label>
-              <Input
-                id="nomeEscritorio"
-                name="nomeEscritorio"
-                value={config.nomeEscritorio || ''}
-                onChange={handleChange}
-                placeholder="Dra. Amanda Sousa Advocacia e Consultoria Jurídica™"
-                required
-              />
-            </div>
-            <Separator className="my-4" />
+          <form onSubmit={handleWhatsAppSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="phoneNumberId">Phone Number ID</Label>
               <Input
                 id="phoneNumberId"
                 name="phoneNumberId"
-                value={config.phoneNumberId}
-                onChange={handleChange}
+                value={config.phoneNumberId || ''}
+                onChange={handleWhatsAppChange}
                 placeholder="ID do Número de Telefone da Meta"
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="token">Token de Acesso Permanente</Label>
-              <Input
-                id="token"
-                name="token"
-                type="password"
-                value={config.token}
-                onChange={handleChange}
-                placeholder="Seu token de acesso da API do WhatsApp"
-                required
-              />
+              <Label htmlFor="whatsappToken">Token de Acesso Permanente</Label>
+              <div className="space-y-2">
+                <Input
+                  id="whatsappToken"
+                  name="whatsappToken"
+                  type="password"
+                  value={newToken}
+                  onChange={handleWhatsAppChange}
+                  placeholder={config.hasToken ? "Digite um novo token para alterar" : "Seu token de acesso da API do WhatsApp"}
+                  required={!config.hasToken}
+                />
+                {config.hasToken && config.tokenMask && (
+                  <div className="text-xs text-gray-500 font-mono">
+                    Token configurado: {config.tokenMask}
+                  </div>
+                )}
+              </div>
             </div>
-            <Button type="submit">Salvar Configurações Globais</Button>
+            <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
+              Salvar Configurações WhatsApp
+            </Button>
           </form>
         </CardContent>
       </Card>
 
-      <Card>
+      {/* SEÇÃO 2: VARIÁVEIS DO MÉTODO */}
+      <Card className="border-purple-200 bg-purple-50/30 dark:border-purple-800 dark:bg-purple-950/30">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+            Variáveis do Método
+          </CardTitle>
+          <CardDescription>
+            Crie e gerencie variáveis personalizadas que podem ser usadas em suas automações e mensagens. Use nomes curtos e sem espaços, como chave_pix.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleVariaveisSubmit} className="space-y-4">
+            <div className="border border-gray-300 dark:border-gray-600 rounded-lg p-4 space-y-4">
+              <TooltipProvider>
+                {/* Variáveis Especiais (Padrão) */}
+                <div className="space-y-4">
+                  <h4 className="font-medium text-sm text-purple-700 dark:text-purple-300 border-b border-purple-200 dark:border-purple-700 pb-2">
+                    Variáveis Especiais
+                  </h4>
+
+                  {/* Chave PIX */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end bg-purple-50/50 dark:bg-purple-900/20 p-3 rounded-lg">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Label htmlFor="chave_pix" className="text-sm font-medium">chave_pix</Label>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <HelpCircle className="w-4 h-4 text-purple-500 cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            <p className="text-sm">
+                              <strong>Variável especial PIX</strong><br />
+                              Para ser usada com botão de copiar código no WhatsApp.
+                              Pode ter no máximo 15 caracteres.
+                              Pode colocar por exemplo CPF ou CNPJ.
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                      <Input
+                        id="chave_pix"
+                        value={variaveisEditaveis.find(v => v.chave === 'chave_pix')?.valor || ''}
+                        onChange={(e) => {
+                          const index = variaveisEditaveis.findIndex(v => v.chave === 'chave_pix');
+                          if (index >= 0) {
+                            handleVariavelChange(index, 'valor', e.target.value);
+                          }
+                        }}
+                        placeholder="Ex: 12345678901"
+                        maxLength={15}
+                        className="font-mono"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Máximo 15 caracteres</p>
+                    </div>
+                  </div>
+
+                  {/* Nome do Escritório Rodapé */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end bg-purple-50/50 dark:bg-purple-900/20 p-3 rounded-lg">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Label htmlFor="nome_do_escritorio_rodape" className="text-sm font-medium">nome_do_escritorio_rodape</Label>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <HelpCircle className="w-4 h-4 text-purple-500 cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            <p className="text-sm">
+                              <strong>Variável especial Nome do escritório</strong><br />
+                              Ela automaticamente será adicionada ao rodapé das mensagens por padrão.
+                              Esta variável é importante pois aparece muito nas mensagens.
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                      <Input
+                        id="nome_do_escritorio_rodape"
+                        value={variaveisEditaveis.find(v => v.chave === 'nome_do_escritorio_rodape')?.valor || ''}
+                        onChange={(e) => {
+                          const index = variaveisEditaveis.findIndex(v => v.chave === 'nome_do_escritorio_rodape');
+                          if (index >= 0) {
+                            handleVariavelChange(index, 'valor', e.target.value);
+                          }
+                        }}
+                        placeholder="Ex: Meu Escritório de Advocacia"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Aparece automaticamente no rodapé</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Variáveis Personalizadas */}
+                {variaveisEditaveis.filter(v => !['chave_pix', 'nome_do_escritorio_rodape'].includes(v.chave)).length > 0 && (
+                  <div className="space-y-4">
+                    <h4 className="font-medium text-sm text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700 pb-2">
+                      Variáveis Personalizadas
+                    </h4>
+                    {variaveisEditaveis
+                      .filter(v => !['chave_pix', 'nome_do_escritorio_rodape'].includes(v.chave))
+                      .map((variavel, originalIndex) => {
+                        const index = variaveisEditaveis.findIndex(v => v.id === variavel.id || (v.chave === variavel.chave && v.valor === variavel.valor));
+                        return (
+                          <div key={`${variavel.id || index}-${originalIndex}`} className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                            <div>
+                              <Label htmlFor={`chave-${index}`}>Nome da Variável (Chave)</Label>
+                              <Input
+                                id={`chave-${index}`}
+                                value={variavel.chave}
+                                onChange={(e) => handleVariavelChange(index, 'chave', e.target.value)}
+                                placeholder="Ex: minha_variavel"
+                                required
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor={`valor-${index}`}>Valor da Variável</Label>
+                              <Input
+                                id={`valor-${index}`}
+                                value={variavel.valor}
+                                onChange={(e) => handleVariavelChange(index, 'valor', e.target.value)}
+                                placeholder="Ex: Meu valor personalizado"
+                                required
+                              />
+                            </div>
+                            <div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removerVariavel(index)}
+                                className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </TooltipProvider>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={adicionarVariavel}
+                className="border-purple-300 text-purple-700 hover:bg-purple-50"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Adicionar Nova Variável
+              </Button>
+              <Button type="submit" className="bg-purple-600 hover:bg-purple-700">
+                Salvar Variáveis
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* SEÇÃO 3: CONFIGURAÇÃO DE LOTES */}
+      <Card className="border-green-200 bg-green-50/30 dark:border-green-800 dark:bg-green-950/30">
         <CardHeader>
           <div className="flex justify-between items-center">
             <div>
-              <CardTitle>Configuração de Lotes MTF Diamante</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                Configuração de Lotes MTF Diamante
+              </CardTitle>
               <CardDescription>
                 Configure os lotes que serão utilizados nas mensagens interativas do sistema.
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
               <DisparoMensagemDialog />
-              <AdicionarLoteDialog onLoteAdicionado={fetchLotes} />
+              <AdicionarLoteDialog onLoteAdicionado={refreshLotes} />
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          {lotes.length === 0 ? (
+          {loadingLotes ? (
+            <div className="space-y-4">
+              {Array.from({ length: 2 }).map((_, i) => (
+                <LoteCardSkeleton key={i} />
+              ))}
+            </div>
+          ) : lotes.length === 0 ? (
             <div className="text-center text-gray-500 py-8">
               <p>Nenhum lote configurado.</p>
               <p className="text-sm">Clique em "Adicionar Lote" para criar um novo lote.</p>
@@ -188,7 +404,7 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
           ) : (
             <div className="space-y-4">
               {lotes.map((lote) => (
-                <LoteCard key={lote.id} lote={lote} onUpdate={fetchLotes} />
+                <LoteCard key={lote.id} lote={lote} onUpdate={refreshLotes} />
               ))}
             </div>
           )}
@@ -200,28 +416,38 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
 
 // Componente para exibir um card de lote
 function LoteCard({ lote, onUpdate }: { lote: MtfDiamanteLote, onUpdate: () => void }) {
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const handleToggleActive = async () => {
-    try {
+    const togglePromise = async () => {
       const response = await fetch(`/api/admin/mtf-diamante/lotes/${lote.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isActive: !lote.isActive }),
       });
 
-      if (response.ok) {
-        toast.success('Status do lote atualizado!');
-        onUpdate();
-      } else {
+      if (!response.ok) {
         throw new Error('Erro ao atualizar status');
       }
-    } catch (error) {
-      toast.error('Erro ao atualizar status do lote');
-    }
+
+      onUpdate();
+      return response.json();
+    };
+
+    toast.promise(togglePromise, {
+      loading: lote.isActive ? 'Desativando lote...' : 'Ativando lote...',
+      success: `Lote ${lote.isActive ? 'desativado' : 'ativado'} com sucesso!`,
+      error: 'Erro ao alterar status do lote',
+    });
   };
 
-  const handleDelete = async () => {
-    if (!confirm('Tem certeza que deseja excluir este lote?')) return;
+  const handleDeleteClick = () => {
+    setShowDeleteDialog(true);
+  };
 
+  const handleConfirmDelete = async () => {
+    setIsDeleting(true);
     try {
       const response = await fetch(`/api/admin/mtf-diamante/lotes/${lote.id}`, {
         method: 'DELETE',
@@ -230,28 +456,36 @@ function LoteCard({ lote, onUpdate }: { lote: MtfDiamanteLote, onUpdate: () => v
       if (response.ok) {
         toast.success('Lote excluído com sucesso!');
         onUpdate();
+        setShowDeleteDialog(false);
       } else {
         throw new Error('Erro ao excluir lote');
       }
     } catch (error) {
       toast.error('Erro ao excluir lote');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
   return (
-    <Card className={cn("transition-all", lote.isActive ? "border-green-200 bg-green-50/50" : "border-gray-200 bg-gray-50/50")}>
+    <Card className={cn(
+      "transition-all",
+      lote.isActive
+        ? "border-green-200 bg-green-50/50 dark:border-green-700 dark:bg-green-900/20"
+        : "border-gray-200 bg-gray-50/50 dark:border-gray-700 dark:bg-gray-800/50"
+    )}>
       <CardContent className="p-4">
         <div className="flex items-center justify-between">
           <div className="flex-1">
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-lg">Lote {lote.numero}</span>
-                <span className="text-sm text-gray-500">•</span>
-                <span className="font-medium">{lote.nome}</span>
+                <span className="font-semibold text-lg dark:text-gray-100">Lote {lote.numero}</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">•</span>
+                <span className="font-medium dark:text-gray-200">{lote.nome}</span>
               </div>
-              <div className="text-lg font-bold text-green-600">{lote.valor}</div>
+              <div className="text-lg font-bold text-green-600 dark:text-green-400">{lote.valor}</div>
             </div>
-            <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
+            <div className="flex items-center gap-4 mt-2 text-sm text-gray-600 dark:text-gray-400">
               <span>Início: {format(new Date(lote.dataInicio), 'dd/MM/yyyy', { locale: ptBR })}</span>
               <span>•</span>
               <span>Fim: {format(new Date(lote.dataFim), 'dd/MM/yyyy', { locale: ptBR })}</span>
@@ -259,7 +493,7 @@ function LoteCard({ lote, onUpdate }: { lote: MtfDiamanteLote, onUpdate: () => v
           </div>
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-2">
-              <Label htmlFor={`active-${lote.id}`} className="text-sm">Ativo</Label>
+              <Label htmlFor={`active-${lote.id}`} className="text-sm dark:text-gray-300">Ativo</Label>
               <Switch
                 id={`active-${lote.id}`}
                 checked={lote.isActive}
@@ -267,12 +501,36 @@ function LoteCard({ lote, onUpdate }: { lote: MtfDiamanteLote, onUpdate: () => v
               />
             </div>
             <EditarLoteDialog lote={lote} onLoteAtualizado={onUpdate} />
-            <Button variant="ghost" size="icon" onClick={handleDelete}>
-              <Trash2 className="w-4 h-4 text-red-500" />
+            <Button variant="ghost" size="icon" onClick={handleDeleteClick} className="hover:bg-red-50 dark:hover:bg-red-900/20">
+              <Trash2 className="w-4 h-4 text-red-500 dark:text-red-400" />
             </Button>
           </div>
         </div>
       </CardContent>
+
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar Exclusão</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja excluir este lote? Esta ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

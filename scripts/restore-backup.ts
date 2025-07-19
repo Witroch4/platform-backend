@@ -1,39 +1,95 @@
 #!/usr/bin/env tsx
 
 import { PrismaClient } from '@prisma/client';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 
 const prisma = new PrismaClient();
 
-async function restoreBackup() {
-  console.log('🔄 Iniciando restauração do backup...');
+async function restoreBackup(backupFileName: string) {
+  const backupDir = join(process.cwd(), 'backups');
+  const backupPath = join(backupDir, backupFileName);
+  
+  if (!existsSync(backupPath)) {
+    console.error(`❌ Arquivo de backup não encontrado: ${backupPath}`);
+    return;
+  }
+
+  console.log(`🔄 Iniciando restauração do backup: ${backupFileName}`);
+  console.log(`📁 Caminho: ${backupPath}`);
 
   try {
-    // Ler o backup mais recente
-    const backupPath = join(process.cwd(), 'backups', 'backup_simple_2025-07-12_18-25-34.json');
+    // Ler o arquivo de backup
     const backupData = JSON.parse(readFileSync(backupPath, 'utf-8'));
+    
+    console.log(`📅 Backup criado em: ${backupData.metadata.created_at}`);
+    console.log(`📊 Tipo: ${backupData.metadata.backup_type}`);
 
-    console.log(`📅 Backup de: ${backupData.metadata.created_at}`);
-    console.log(`📊 Total de tabelas: ${Object.keys(backupData.data).length}`);
+    // Confirmar restauração
+    console.log(`⚠️  ATENÇÃO: Esta operação irá substituir todos os dados atuais!`);
+    console.log(`📋 Tabelas que serão restauradas:`);
+    
+    for (const [tableName, tableData] of Object.entries(backupData.data)) {
+      console.log(`  - ${tableName}: ${(tableData as any[]).length} registros`);
+    }
 
-    // Restaurar dados em ordem de dependência
+    // Limpar dados existentes (opcional - comentado por segurança)
+    console.log(`🧹 Limpando dados existentes...`);
+    
+    // Desabilitar foreign key checks temporariamente
+    await prisma.$executeRaw`SET FOREIGN_KEY_CHECKS = 0`;
+    
+    // Limpar tabelas na ordem correta (evitando problemas de foreign key)
+    const tablesToClear = [
+      'message',
+      'chat', 
+      'agendamento',
+      'notification',
+      'subscription',
+      'disparoMtfDiamante',
+      'mtfDiamanteIntentMapping',
+      'mtfDiamanteLote',
+      'mtfDiamanteConfig',
+      'espelhoPadrao',
+      'espelhoBiblioteca',
+      'whatsAppTemplate',
+      'whatsAppConfig',
+      'arquivoLeadChatwit',
+      'leadChatwit',
+      'usuarioChatwit',
+      'pasta',
+      'leadAutomacao',
+      'lead',
+      'automacao',
+      'account',
+      'user'
+    ];
+
+    for (const table of tablesToClear) {
+      try {
+        await prisma.$executeRaw`DELETE FROM ${table}`;
+        console.log(`  ✅ ${table} limpa`);
+      } catch (error) {
+        console.log(`  ⚠️  Erro ao limpar ${table}:`, error);
+      }
+    }
+
+    // Reabilitar foreign key checks
+    await prisma.$executeRaw`SET FOREIGN_KEY_CHECKS = 1`;
+
+    console.log(`📥 Restaurando dados...`);
+
+    // Restaurar dados na ordem correta
     const restoreOrder = [
       'users',
       'accounts', 
-      'usuarioChatwit',
-      'leadsChatwit',
-      'arquivosLeadChatwit',
       'automacoes',
       'leads',
       'leadAutomacao',
       'pastas',
-      'subscriptions',
-      'notifications',
-      'agendamentos',
-      'midias',
-      'chats',
-      'messages',
+      'usuariosChatwit',
+      'leadsChatwit',
+      'arquivosLeadChatwit',
       'whatsAppConfigs',
       'whatsAppTemplates',
       'espelhosBiblioteca',
@@ -41,55 +97,35 @@ async function restoreBackup() {
       'mtfDiamanteConfigs',
       'mtfDiamanteLotes',
       'mtfDiamanteIntentMappings',
-      'disparosMtfDiamante'
+      'disparosMtfDiamante',
+      'subscriptions',
+      'notifications',
+      'agendamentos',
+      'midias',
+      'chats',
+      'messages'
     ];
-
-    let totalRestored = 0;
 
     for (const tableName of restoreOrder) {
       const tableData = backupData.data[tableName];
-      if (!tableData || tableData.length === 0) {
-        console.log(`⏭️  ${tableName}: 0 registros (pulando)`);
-        continue;
-      }
-
-      console.log(`\n🔄 Restaurando ${tableName}: ${tableData.length} registros`);
-
-      try {
-        // Usar createMany para inserção em lote
-        const result = await (prisma as any)[tableName].createMany({
-          data: tableData,
-          skipDuplicates: true
-        });
-
-        console.log(`✅ ${tableName}: ${result.count} registros restaurados`);
-        totalRestored += result.count;
-
-      } catch (error) {
-        console.log(`⚠️  ${tableName}: Erro na restauração - ${error.message}`);
-        
-        // Tentar inserção individual para identificar problemas
-        let individualCount = 0;
-        for (const record of tableData.slice(0, 5)) { // Apenas os primeiros 5 para debug
-          try {
-            await (prisma as any)[tableName].create({
-              data: record
-            });
-            individualCount++;
-          } catch (individualError) {
-            console.log(`  ❌ Erro no registro: ${individualError.message}`);
-          }
+      if (tableData && Array.isArray(tableData) && tableData.length > 0) {
+        try {
+          // Usar createMany para inserção em lote
+          await prisma[tableName as keyof PrismaClient].createMany({
+            data: tableData,
+            skipDuplicates: true
+          });
+          console.log(`  ✅ ${tableName}: ${tableData.length} registros restaurados`);
+        } catch (error) {
+          console.log(`  ❌ Erro ao restaurar ${tableName}:`, error);
         }
-        console.log(`  📊 ${tableName}: ${individualCount} registros individuais restaurados`);
-        totalRestored += individualCount;
       }
     }
 
-    console.log(`\n🎉 Restauração concluída!`);
-    console.log(`📊 Total de registros restaurados: ${totalRestored}`);
-
+    console.log(`✅ Restauração concluída com sucesso!`);
+    
   } catch (error) {
-    console.error('❌ Erro durante a restauração:', error);
+    console.error(`❌ Erro durante a restauração:`, error);
     throw error;
   } finally {
     await prisma.$disconnect();
@@ -98,7 +134,24 @@ async function restoreBackup() {
 
 // Executar se chamado diretamente
 if (require.main === module) {
-  restoreBackup().catch(console.error);
+  const backupFile = process.argv[2];
+  
+  if (!backupFile) {
+    console.log(`📋 Uso: tsx scripts/restore-backup.ts <nome-do-arquivo-backup>`);
+    console.log(`📁 Backups disponíveis:`);
+    
+    const backupDir = join(process.cwd(), 'backups');
+    const fs = require('fs');
+    const files = fs.readdirSync(backupDir).filter(f => f.endsWith('.json'));
+    
+    files.forEach(file => {
+      console.log(`  - ${file}`);
+    });
+    
+    process.exit(1);
+  }
+  
+  restoreBackup(backupFile).catch(console.error);
 }
 
 export { restoreBackup }; 

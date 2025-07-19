@@ -55,22 +55,42 @@ export async function POST(request: Request) {
     }
 
     // --- CORREÇÃO APLICADA AQUI ---
-    // Mapear os números de telefone para uma busca mais flexível
-    const leadConditions = selectedLeads.map(leadIdentifier => ({
-      OR: [
-        { id: leadIdentifier }, // Continua buscando por ID
-        { phoneNumber: { endsWith: leadIdentifier.replace(/\D/g, '').slice(-11) } } // Busca pelos últimos 11 dígitos (DDD + número)
-      ]
-    }));
+    // Mapear os números de telefone para uma busca mais flexível, evitando duplicação
+    const leadConditions = selectedLeads.flatMap(leadIdentifier => {
+      const cleanNumber = leadIdentifier.replace(/\D/g, '');
+      const isNumeric = /^\d+$/.test(leadIdentifier);
+      
+      if (isNumeric && cleanNumber.length >= 10) {
+        // Se é um número, busca apenas por telefone
+        return [{ phoneNumber: { endsWith: cleanNumber.slice(-11) } }];
+      } else {
+        // Se não é um número, busca apenas por ID
+        return [{ id: leadIdentifier }];
+      }
+    });
 
-    const leads = await prisma.leadChatwit.findMany({
+    const leadsRaw = await prisma.leadChatwit.findMany({
       where: {
         AND: [
           { usuarioId: usuarioChatwitId }, // Garante que o lead é do usuário
           { OR: leadConditions } // Aplica as condições flexíveis de busca
         ]
       },
-      select: { id: true, name: true, nomeReal: true, phoneNumber: true }
+      select: { id: true, name: true, nomeReal: true, phoneNumber: true },
+      distinct: ['id'] // Garante que não haverá leads duplicados
+    });
+
+    // Remove duplicatas por número de telefone (mantém apenas o primeiro lead de cada número)
+    const phoneNumbersSeen = new Set<string>();
+    const leads = leadsRaw.filter(lead => {
+      if (!lead.phoneNumber) return false;
+      const cleanPhone = lead.phoneNumber.replace(/\D/g, '');
+      if (phoneNumbersSeen.has(cleanPhone)) {
+        console.log(`[Disparo Debug] Lead duplicado ignorado: ${lead.id} (${lead.phoneNumber}) - já existe lead com este número`);
+        return false;
+      }
+      phoneNumbersSeen.add(cleanPhone);
+      return true;
     });
     // --- FIM DA CORREÇÃO ---
     

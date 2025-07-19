@@ -70,33 +70,32 @@ interface TemplateDetail {
   lastEdited?: string | null;
   publicMediaUrl?: string | null;
   componentes: Array<{
-    tipo: string;
-    formato?: string;
-    texto?: string;
-    variaveis: false | Array<{
-      nome: string;
-      descricao: string;
-      exemplo: string;
+    type: string;
+    format?: string;
+    text?: string;
+    parameters?: Array<{
+      type: string;
+      example: string;
     }>;
-    botoes?: Array<{
-      tipo: string;
-      texto: string;
-      url: string | null;
-      telefone: string | null;
+    buttons?: Array<{
+      type: string;
+      text: string;
+      url?: string | null;
+      phone_number?: string | null;
       example?: string[];
     }>;
     example?: any;
   }>;
 }
 
-export default function TemplateDetailsPage({ 
-  templateId, 
-  onBack, 
-  onEdit 
-}: { 
-  templateId?: string; 
-  onBack?: () => void; 
-  onEdit?: () => void; 
+export default function TemplateDetailsPage({
+  templateId,
+  onBack,
+  onEdit
+}: {
+  templateId?: string;
+  onBack?: () => void;
+  onEdit?: () => void;
 }) {
   const params = useParams();
   const actualTemplateId = templateId || (params?.id as string);
@@ -133,13 +132,13 @@ export default function TemplateDetailsPage({
         ).catch(error => {
           console.error("Erro na requisição:", error);
           throw new Error(
-            error.response?.data?.error || 
-            error.response?.data?.details || 
-            error.message || 
+            error.response?.data?.error ||
+            error.response?.data?.details ||
+            error.message ||
             "Falha na comunicação com o servidor"
           );
         });
-        
+
         if (!res.data.success) {
           setError(res.data.details || "Erro ao carregar template");
           return;
@@ -148,42 +147,42 @@ export default function TemplateDetailsPage({
         const t = res.data.template;
         setTemplate({
           id: actualTemplateId!,
-          name: t.nome,
-          category: t.categoria,
-          subCategory: t.subCategoria,
+          name: t.name,
+          category: t.category,
+          subCategory: t.sub_category,
           status: t.status,
-          language: t.idioma,
-          qualityScore: t.qualidadeScore,
-          correctCategory: t.categoriaCorreta,
-          ctaUrlLinkTrackingOptedOut: t.ctaUrlLinkTrackingOptedOut,
-          libraryTemplateName: t.nomeTemplateBiblioteca,
-          messageSendTtlSeconds: t.mensagemSendTtlSegundos,
-          parameterFormat: t.formatoParametro,
-          previousCategory: t.categoriaAnterior,
-          lastEdited: t.ultimaEdicao,
+          language: t.language,
+          qualityScore: typeof t.quality_score === 'string' ? t.quality_score : null,
+          correctCategory: t.correct_category,
+          ctaUrlLinkTrackingOptedOut: t.cta_url_link_tracking_opted_out,
+          libraryTemplateName: t.library_template_name,
+          messageSendTtlSeconds: t.message_send_ttl_seconds,
+          parameterFormat: t.parameter_format,
+          previousCategory: t.previous_category,
+          lastEdited: t.lastEdited,
           publicMediaUrl: t.publicMediaUrl,
-          componentes: t.componentes,
+          componentes: t.components || [],
         });
 
         // variáveis do BODY
-        const bodyComp = t.componentes.find((c: any) => c.tipo === "BODY");
-        if (bodyComp && Array.isArray(bodyComp.variaveis)) {
+        const bodyComp = t.components?.find((c: any) => c.type === "BODY");
+        if (bodyComp && Array.isArray(bodyComp.parameters)) {
           setTestVariables(
-            bodyComp.variaveis.map((v: any) => v.exemplo || "")
+            bodyComp.parameters.map((v: any) => v.example || "")
           );
         }
 
         // HEADER media
-        const hdr = t.componentes.find(
+        const hdr = t.components?.find(
           (c: any) =>
-            c.tipo === "HEADER" &&
-            ["VIDEO", "IMAGE", "DOCUMENT", "LOCATION"].includes(c.formato)
+            c.type === "HEADER" &&
+            ["VIDEO", "IMAGE", "DOCUMENT", "LOCATION"].includes(c.format)
         );
         if (hdr) {
           setHasHeaderMedia(true);
           // Usar a URL pública do MinIO se disponível, caso contrário usar a URL da Meta
           let mediaUrl = t.publicMediaUrl;
-          
+
           if (!mediaUrl) {
             mediaUrl = hdr.example?.header_handle?.[0] ||
               hdr.example?.header_url ||
@@ -191,15 +190,15 @@ export default function TemplateDetailsPage({
                 ? JSON.stringify(hdr.example.header_location)
                 : "");
           }
-          
+
           setHeaderMedia(mediaUrl);
         }
 
         // pré‑preenche cupom do COPY_CODE
-        const btnComp = t.componentes.find((c: any) => c.tipo === "BUTTONS");
-        if (btnComp?.botoes) {
-          const copyBtn = btnComp.botoes.find(
-            (b: any) => b.tipo === "COPY_CODE"
+        const btnComp = t.components?.find((c: any) => c.type === "BUTTONS");
+        if (btnComp?.buttons) {
+          const copyBtn = btnComp.buttons.find(
+            (b: any) => b.type === "COPY_CODE"
           );
           if (copyBtn?.example?.length) {
             setCouponCode(copyBtn.example[0]);
@@ -253,8 +252,8 @@ export default function TemplateDetailsPage({
     if (phone.startsWith("+55") || phone.startsWith("55")) {
       const cleaned = phone.replace(/\D/g, "");
       if (cleaned.length === 12 || cleaned.length === 13) { // With or without country code
-        return phone.startsWith("+") 
-          ? phone 
+        return phone.startsWith("+")
+          ? phone
           : `+${phone}`;
       }
     }
@@ -268,7 +267,7 @@ export default function TemplateDetailsPage({
       let phone = testPhoneNumber.replace(/\D/g, "");
       if (!phone.startsWith("55")) phone = "55" + phone;
 
-      // ESSES DADOS ESTAO CORRETOS GEMINE???
+      // paylod
       const payload = {
         templateId: template.id,
         selectedLeads: [phone], // Para teste individual, um único número
@@ -289,7 +288,7 @@ export default function TemplateDetailsPage({
     if (!template) return;
     setIsDeleting(true);
     setShowDeleteDialog(false); // Fechar o diálogo
-    
+
     try {
       const res = await axios.delete("/api/admin/mtf-diamante/templates", {
         data: { name: template.name },
@@ -459,8 +458,8 @@ export default function TemplateDetailsPage({
                 <TabsContent value="visual">
                   <div className="border rounded-lg overflow-hidden">
                     {/* Fundo de chat do WhatsApp */}
-                    <div 
-                      className="relative p-3 min-h-[400px]" 
+                    <div
+                      className="relative p-3 min-h-[400px]"
                       style={{
                         backgroundImage: "url('/fundo_whatsapp.jpg')",
                         backgroundSize: "cover",
@@ -471,18 +470,18 @@ export default function TemplateDetailsPage({
                       <div className="max-w-[85%] bg-white rounded-lg shadow-sm p-3 ml-auto mr-3 mb-3">
                         {/* Header */}
                         {template.componentes.map((c, i) => (
-                          c.tipo === "HEADER" && (
+                          c.type === "HEADER" && (
                             <div key={i}>
-                              {c.formato === "TEXT" && c.texto && (
-                                <div className="font-bold text-center mb-2">{c.texto}</div>
+                              {c.format === "TEXT" && c.text && (
+                                <div className="font-bold text-center mb-2">{c.text}</div>
                               )}
-                              {c.formato === "IMAGE" && (
+                              {c.format === "IMAGE" && (
                                 <div className="mb-2 overflow-hidden rounded-md" style={{ maxHeight: "180px" }}>
                                   {headerMedia ? (
-                                    <img 
-                                      src={headerMedia} 
-                                      alt="Header" 
-                                      className="w-full object-contain rounded-md max-h-[160px]" 
+                                    <img
+                                      src={headerMedia}
+                                      alt="Header"
+                                      className="w-full object-contain rounded-md max-h-[160px]"
                                     />
                                   ) : (
                                     <div className="w-full bg-gray-200 flex items-center justify-center" style={{ height: "140px" }}>
@@ -493,7 +492,7 @@ export default function TemplateDetailsPage({
                                   )}
                                 </div>
                               )}
-                              {c.formato === "DOCUMENT" && (
+                              {c.format === "DOCUMENT" && (
                                 <div className="w-full bg-gray-100 rounded-md mb-2 p-3 flex items-center justify-center">
                                   <svg className="w-8 h-8 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
@@ -501,15 +500,15 @@ export default function TemplateDetailsPage({
                                   <span className="text-sm font-medium">Documento</span>
                                 </div>
                               )}
-                              {c.formato === "VIDEO" && (
+                              {c.format === "VIDEO" && (
                                 <div className="w-full bg-gray-100 rounded-md mb-2 flex items-center justify-center" style={{ maxHeight: "180px" }}>
                                   {headerMedia ? (
                                     <div className="flex flex-col items-center justify-center w-full h-full">
                                       {headerMedia.includes("http") ? (
-                                        <video 
-                                          src={headerMedia} 
+                                        <video
+                                          src={headerMedia}
                                           controls
-                                          className="w-full rounded-md max-h-[160px] object-contain" 
+                                          className="w-full rounded-md max-h-[160px] object-contain"
                                         />
                                       ) : (
                                         <>
@@ -530,44 +529,44 @@ export default function TemplateDetailsPage({
                             </div>
                           )
                         ))}
-                        
+
                         {/* Body */}
                         {template.componentes.map((c, i) => (
-                          c.tipo === "BODY" && c.texto && (
+                          c.type === "BODY" && c.text && (
                             <div key={i} className="text-sm whitespace-pre-line mb-2">
-                              {c.texto}
+                              {c.text}
                             </div>
                           )
                         ))}
-                        
+
                         {/* Footer */}
                         {template.componentes.map((c, i) => (
-                          c.tipo === "FOOTER" && c.texto && (
+                          c.type === "FOOTER" && c.text && (
                             <div key={i} className="text-xs text-gray-500 mb-2">
-                              {c.texto}
+                              {c.text}
                             </div>
                           )
                         ))}
-                        
+
                         <div className="text-right text-xs text-gray-500 flex justify-end items-center">
                           <span>17:12</span>
                         </div>
                       </div>
-                      
+
                       {/* Botões abaixo da mensagem */}
                       {template.componentes.map((c, i) => (
-                        c.tipo === "BUTTONS" && c.botoes && c.botoes.length > 0 && (
+                        c.type === "BUTTONS" && c.buttons && c.buttons.length > 0 && (
                           <div key={i} className="bg-white rounded-lg shadow-sm max-w-[85%] ml-auto mr-3 mt-1 overflow-hidden">
                             <div className="divide-y divide-gray-100">
-                              {c.botoes.map((button, index) => (
-                                <button 
-                                  key={index} 
+                              {c.buttons.map((button, index) => (
+                                <button
+                                  key={index}
                                   className="w-full py-3 px-4 text-sm text-cyan-500 font-medium text-center flex justify-center items-center"
                                 >
-                                  {button.tipo === "URL" && <ExternalLink className="h-4 w-4 mr-2" />}
-                                  {button.tipo === "COPY_CODE" && <Copy className="h-4 w-4 mr-2" />}
-                                  {button.tipo === "PHONE_NUMBER" && <Phone className="h-4 w-4 mr-2" />}
-                                  {button.texto}
+                                  {button.type === "URL" && <ExternalLink className="h-4 w-4 mr-2" />}
+                                  {button.type === "COPY_CODE" && <Copy className="h-4 w-4 mr-2" />}
+                                  {button.type === "PHONE_NUMBER" && <Phone className="h-4 w-4 mr-2" />}
+                                  {button.text}
                                 </button>
                               ))}
                             </div>
@@ -598,7 +597,7 @@ export default function TemplateDetailsPage({
                   <TabsTrigger value="individual">Mensagem de Teste</TabsTrigger>
                   <TabsTrigger value="massa">Envio em Massa</TabsTrigger>
                 </TabsList>
-                
+
                 <TabsContent value="individual" className="space-y-4">
                   <div>
                     <Label htmlFor="phone">Número (com DDD)</Label>
@@ -611,7 +610,7 @@ export default function TemplateDetailsPage({
                     />
                   </div>
 
-                  {template.componentes.some((c) => Array.isArray(c.variaveis)) && (
+                  {template.componentes.some((c) => Array.isArray(c.parameters)) && (
                     <div>
                       <p className="font-medium mb-2">Variáveis</p>
                       <div className="space-y-2">
@@ -623,17 +622,17 @@ export default function TemplateDetailsPage({
                             <Label className="text-xs sm:text-sm truncate">
                               {"{{" + template.componentes
                                 .flatMap((c) =>
-                                  Array.isArray(c.variaveis) ? c.variaveis : []
+                                  Array.isArray(c.parameters) ? c.parameters : []
                                 )
-                                [idx]?.nome + "}}"}
+                              [idx]?.type + "}}"}
                             </Label>
                             <div className="sm:col-span-3">
                               <Input
                                 placeholder={template.componentes
                                   .flatMap((c) =>
-                                    Array.isArray(c.variaveis) ? c.variaveis : []
+                                    Array.isArray(c.parameters) ? c.parameters : []
                                   )
-                                  [idx]?.exemplo}
+                                [idx]?.example}
                                 value={testVariables[idx]}
                                 onChange={(e) => {
                                   const arr = [...testVariables];
@@ -673,19 +672,19 @@ export default function TemplateDetailsPage({
                     </div>
                   )}
 
-                  {template.componentes.some(c => 
-                    c.tipo === "BUTTONS" && 
-                    c.botoes?.some(b => b.tipo === "COPY_CODE")
+                  {template.componentes.some(c =>
+                    c.type === "BUTTONS" &&
+                    c.buttons?.some(b => b.type === "COPY_CODE")
                   ) && (
-                    <div>
-                      <Label>Cupom (copy_code)</Label>
-                      <Input
-                        placeholder="CODE123"
-                        value={couponCode}
-                        onChange={(e) => setCouponCode(e.target.value)}
-                      />
-                    </div>
-                  )}
+                      <div>
+                        <Label>Cupom (copy_code)</Label>
+                        <Input
+                          placeholder="CODE123"
+                          value={couponCode}
+                          onChange={(e) => setCouponCode(e.target.value)}
+                        />
+                      </div>
+                    )}
 
                   <Button onClick={handleTestSend} disabled={isSending} className="mt-4">
                     {isSending ? (
@@ -696,7 +695,7 @@ export default function TemplateDetailsPage({
                     Enviar teste
                   </Button>
                 </TabsContent>
-                
+
                 <TabsContent value="massa" className="space-y-4">
                   <div className="space-y-4">
                     {/* Opção principal: Selecionar leads do sistema */}
@@ -714,9 +713,9 @@ export default function TemplateDetailsPage({
                           <p className="text-sm text-muted-foreground mb-3">
                             Selecione leads diretamente da base de dados do sistema
                           </p>
-                          <Button 
-                            variant="default" 
-                            size="sm" 
+                          <Button
+                            variant="default"
+                            size="sm"
                             onClick={() => setShowLeadsSelector(true)}
                             className="w-full"
                           >
@@ -724,7 +723,7 @@ export default function TemplateDetailsPage({
                             Selecionar Leads
                           </Button>
                         </div>
-                        
+
                         <div className="border rounded-lg p-4 hover:bg-muted/50 transition-colors">
                           <div className="flex items-center gap-2 mb-3">
                             <FileUp className="h-5 w-5 text-muted-foreground" />
@@ -733,9 +732,9 @@ export default function TemplateDetailsPage({
                           <p className="text-sm text-muted-foreground mb-3">
                             Faça upload de um arquivo CSV com contatos externos
                           </p>
-                          <Input 
-                            type="file" 
-                            accept=".csv" 
+                          <Input
+                            type="file"
+                            accept=".csv"
                             disabled={isMassUploading}
                             className="h-8"
                             onChange={(e) => {
@@ -746,11 +745,11 @@ export default function TemplateDetailsPage({
                                   const csvData = event.target?.result as string;
                                   try {
                                     const lines = csvData.split(/\r?\n/).filter(line => line.trim());
-                                    const dataLines = lines[0].toLowerCase().includes('nome') && 
-                                      lines[0].toLowerCase().includes('numero') 
-                                        ? lines.slice(1) 
-                                        : lines;
-                                    
+                                    const dataLines = lines[0].toLowerCase().includes('nome') &&
+                                      lines[0].toLowerCase().includes('numero')
+                                      ? lines.slice(1)
+                                      : lines;
+
                                     const contacts = dataLines.map(line => {
                                       const [nome, numero] = line.split(',').map(item => item.trim());
                                       return { nome, numero };
@@ -774,136 +773,136 @@ export default function TemplateDetailsPage({
                       </div>
                     </div>
 
-                  {contactList.length > 0 && (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label>Contatos carregados: {contactList.length}</Label>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => setContactList([])}
-                        >
-                          Limpar
-                        </Button>
-                      </div>
-                      <div className="border rounded-md overflow-hidden">
-                        <div className="max-h-40 overflow-y-auto">
-                          <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                              <tr>
-                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
-                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Número</th>
-                              </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                              {contactList.slice(0, 5).map((contact, idx) => (
-                                <tr key={idx}>
-                                  <td className="px-3 py-2 whitespace-nowrap text-sm">{contact.nome}</td>
-                                  <td className="px-3 py-2 whitespace-nowrap text-sm">{contact.numero}</td>
-                                </tr>
-                              ))}
-                              {contactList.length > 5 && (
+                    {contactList.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label>Contatos carregados: {contactList.length}</Label>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setContactList([])}
+                          >
+                            Limpar
+                          </Button>
+                        </div>
+                        <div className="border rounded-md overflow-hidden">
+                          <div className="max-h-40 overflow-y-auto">
+                            <table className="min-w-full divide-y divide-gray-200">
+                              <thead className="bg-gray-50">
                                 <tr>
-                                  <td colSpan={2} className="px-3 py-2 text-center text-sm text-gray-500">
-                                    ...e mais {contactList.length - 5} contatos
-                                  </td>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Número</th>
                                 </tr>
-                              )}
-                            </tbody>
-                          </table>
+                              </thead>
+                              <tbody className="bg-white divide-y divide-gray-200">
+                                {contactList.slice(0, 5).map((contact, idx) => (
+                                  <tr key={idx}>
+                                    <td className="px-3 py-2 whitespace-nowrap text-sm">{contact.nome}</td>
+                                    <td className="px-3 py-2 whitespace-nowrap text-sm">{contact.numero}</td>
+                                  </tr>
+                                ))}
+                                {contactList.length > 5 && (
+                                  <tr>
+                                    <td colSpan={2} className="px-3 py-2 text-center text-sm text-gray-500">
+                                      ...e mais {contactList.length - 5} contatos
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {template.componentes.some((c) => Array.isArray(c.variaveis)) && (
-                    <div>
-                      <p className="font-medium mb-2">Variáveis (aplicadas a todos os contatos)</p>
-                      <div className="space-y-2">
-                        {testVariables.map((val, idx) => (
-                          <div
-                            key={idx}
-                            className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-center"
-                          >
-                            <Label className="text-xs sm:text-sm truncate">
-                              {"{{" + template.componentes
-                                .flatMap((c) =>
-                                  Array.isArray(c.variaveis) ? c.variaveis : []
-                                )
-                                [idx]?.nome + "}}"}
-                            </Label>
-                            <div className="sm:col-span-3">
-                              <Input
-                                placeholder={template.componentes
+                    {template.componentes.some((c) => Array.isArray(c.variaveis)) && (
+                      <div>
+                        <p className="font-medium mb-2">Variáveis (aplicadas a todos os contatos)</p>
+                        <div className="space-y-2">
+                          {testVariables.map((val, idx) => (
+                            <div
+                              key={idx}
+                              className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-center"
+                            >
+                              <Label className="text-xs sm:text-sm truncate">
+                                {"{{" + template.componentes
                                   .flatMap((c) =>
                                     Array.isArray(c.variaveis) ? c.variaveis : []
                                   )
+                                [idx]?.nome + "}}"}
+                              </Label>
+                              <div className="sm:col-span-3">
+                                <Input
+                                  placeholder={template.componentes
+                                    .flatMap((c) =>
+                                      Array.isArray(c.variaveis) ? c.variaveis : []
+                                    )
                                   [idx]?.exemplo}
-                                value={testVariables[idx]}
-                                onChange={(e) => {
-                                  const arr = [...testVariables];
-                                  arr[idx] = e.target.value;
-                                  setTestVariables(arr);
-                                }}
-                              />
+                                  value={testVariables[idx]}
+                                  onChange={(e) => {
+                                    const arr = [...testVariables];
+                                    arr[idx] = e.target.value;
+                                    setTestVariables(arr);
+                                  }}
+                                />
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
-
-                  {hasHeaderMedia && (
-                    <div>
-                      <Label>Mídia do cabeçalho</Label>
-                      <Input
-                        placeholder="https://... ou ID"
-                        value={headerMedia}
-                        onChange={(e) => setHeaderMedia(e.target.value)}
-                      />
-                      {headerMedia && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {getMediaSourceLabel(headerMedia, template?.publicMediaUrl)}
-                          {template?.publicMediaUrl && headerMedia !== template.publicMediaUrl && (
-                            <Button
-                              variant="link"
-                              className="p-0 h-auto text-xs"
-                              onClick={() => setHeaderMedia(template.publicMediaUrl || "")}
-                            >
-                              Usar cópia local
-                            </Button>
-                          )}
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {template.componentes.some(c => 
-                    c.tipo === "BUTTONS" && 
-                    c.botoes?.some(b => b.tipo === "COPY_CODE")
-                  ) && (
-                    <div>
-                      <Label>Cupom (copy_code)</Label>
-                      <Input
-                        placeholder="CODE123"
-                        value={couponCode}
-                        onChange={(e) => setCouponCode(e.target.value)}
-                      />
-                    </div>
-                  )}
-
-                  <Button 
-                    onClick={handleMassSend} 
-                    disabled={isMassUploading || isMassSending || contactList.length === 0} 
-                    className="mt-4"
-                  >
-                    {isMassSending ? (
-                      <Loader2 className="animate-spin h-4 w-4 mr-2" />
-                    ) : (
-                      <Send className="h-4 w-4 mr-2" />
                     )}
-                    Enviar para {contactList.length} contatos
-                  </Button>
+
+                    {hasHeaderMedia && (
+                      <div>
+                        <Label>Mídia do cabeçalho</Label>
+                        <Input
+                          placeholder="https://... ou ID"
+                          value={headerMedia}
+                          onChange={(e) => setHeaderMedia(e.target.value)}
+                        />
+                        {headerMedia && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {getMediaSourceLabel(headerMedia, template?.publicMediaUrl)}
+                            {template?.publicMediaUrl && headerMedia !== template.publicMediaUrl && (
+                              <Button
+                                variant="link"
+                                className="p-0 h-auto text-xs"
+                                onClick={() => setHeaderMedia(template.publicMediaUrl || "")}
+                              >
+                                Usar cópia local
+                              </Button>
+                            )}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {template.componentes.some(c =>
+                      c.tipo === "BUTTONS" &&
+                      c.botoes?.some(b => b.tipo === "COPY_CODE")
+                    ) && (
+                        <div>
+                          <Label>Cupom (copy_code)</Label>
+                          <Input
+                            placeholder="CODE123"
+                            value={couponCode}
+                            onChange={(e) => setCouponCode(e.target.value)}
+                          />
+                        </div>
+                      )}
+
+                    <Button
+                      onClick={handleMassSend}
+                      disabled={isMassUploading || isMassSending || contactList.length === 0}
+                      className="mt-4"
+                    >
+                      {isMassSending ? (
+                        <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                      ) : (
+                        <Send className="h-4 w-4 mr-2" />
+                      )}
+                      Enviar para {contactList.length} contatos
+                    </Button>
                   </div>
                 </TabsContent>
               </Tabs>
@@ -985,10 +984,10 @@ export default function TemplateDetailsPage({
                       template.qualityScore === "GREEN"
                         ? "bg-green-100 text-green-800"
                         : template.qualityScore === "YELLOW"
-                        ? "bg-yellow-100 text-yellow-800"
-                        : template.qualityScore === "RED"
-                        ? "bg-red-100 text-red-800"
-                        : "bg-gray-100 text-gray-800"
+                          ? "bg-yellow-100 text-yellow-800"
+                          : template.qualityScore === "RED"
+                            ? "bg-red-100 text-red-800"
+                            : "bg-gray-100 text-gray-800"
                     }
                   >
                     {template.qualityScore}
@@ -1101,8 +1100,8 @@ export default function TemplateDetailsPage({
             <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
               Cancelar
             </Button>
-            <Button 
-              variant="destructive" 
+            <Button
+              variant="destructive"
               onClick={handleDelete}
               disabled={isDeleting}
             >

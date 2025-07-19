@@ -46,14 +46,35 @@ async function getWhatsAppTemplateDetailsFromAPI(templateId: string, userId: str
   if (!templateFromApi) {
     throw new Error(`Template com ID ${templateId} não encontrado na API`);
   }
-  // --- NOVA LÓGICA DE SINCRONIZAÇÃO DE MÍDIA ---
+  // --- LÓGICA OTIMIZADA DE SINCRONIZAÇÃO DE MÍDIA ---
   let publicMediaUrl: string | null = null;
+  
+  // Primeiro, verificar se já existe uma URL pública no banco de dados
+  const usuarioChatwit = await prisma.usuarioChatwit.findUnique({ where: { appUserId: userId } });
+  if (!usuarioChatwit) throw new Error('Usuário Chatwit não encontrado');
+  
+  const existingTemplate = await prisma.whatsAppTemplate.findFirst({
+    where: {
+      templateId: templateId,
+      usuarioChatwitId: usuarioChatwit.id,
+    },
+    select: { publicMediaUrl: true }
+  });
+  
   const headerComponent = templateFromApi.components.find(
     (c: any) => c.type === 'HEADER' && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(c.format)
   );
+  
   if (headerComponent) {
     const mediaUrlFromMeta = headerComponent.example?.header_handle?.[0];
-    if (mediaUrlFromMeta && isMetaMediaUrl(mediaUrlFromMeta)) {
+    
+    // Se já existe uma URL pública no MinIO, usar ela
+    if (existingTemplate?.publicMediaUrl && !isMetaMediaUrl(existingTemplate.publicMediaUrl)) {
+      publicMediaUrl = existingTemplate.publicMediaUrl;
+      console.log(`[TemplateInfo] Usando mídia já armazenada no MinIO: ${publicMediaUrl}`);
+    }
+    // Caso contrário, se a URL é da Meta, baixar e fazer upload
+    else if (mediaUrlFromMeta && isMetaMediaUrl(mediaUrlFromMeta)) {
       try {
         publicMediaUrl = await downloadMetaMediaAndUploadToMinio(
           mediaUrlFromMeta,
@@ -64,13 +85,20 @@ async function getWhatsAppTemplateDetailsFromAPI(templateId: string, userId: str
         console.log(`[TemplateInfo] Mídia sincronizada para o MinIO: ${publicMediaUrl}`);
       } catch (e) {
         console.error('[TemplateInfo] Falha ao sincronizar mídia para o MinIO:', e);
+        // Se falhar, manter a URL existente se houver
+        if (existingTemplate?.publicMediaUrl) {
+          publicMediaUrl = existingTemplate.publicMediaUrl;
+        }
       }
     }
+    // Se não é da Meta, usar a URL diretamente
+    else if (mediaUrlFromMeta) {
+      publicMediaUrl = mediaUrlFromMeta;
+      console.log(`[TemplateInfo] Usando mídia externa: ${publicMediaUrl}`);
+    }
   }
-  // --- FIM DA NOVA LÓGICA ---
+  // --- FIM DA LÓGICA OTIMIZADA ---
   try {
-    const usuarioChatwit = await prisma.usuarioChatwit.findUnique({ where: { appUserId: userId } });
-    if (!usuarioChatwit) throw new Error('Usuário Chatwit não encontrado');
     const dataToSave = {
       name: templateFromApi.name,
       category: templateFromApi.category,
