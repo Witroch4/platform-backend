@@ -73,7 +73,20 @@ model User {
 
   // Relação 1-para-1 com UsuarioChatwit
   usuarioChatwit UsuarioChatwit?
+
+  // Template Library relationships
+  createdTemplates     TemplateLibrary[]        @relation("CreatedTemplates")
+  requestedApprovals   TemplateApprovalRequest[] @relation("RequestedApprovals")
+  processedApprovals   TemplateApprovalRequest[] @relation("ProcessedApprovals")
+  
+  // Interactive Messages relationships
+  createdInteractiveMessages InteractiveMessage[]
+  
+  // Unified Template System relationships
+  templates Template[] @relation("CreatedTemplates")
 }
+
+
 
 model Account {
   id                String      @id @default(cuid())
@@ -399,6 +412,202 @@ enum EspecialidadeJuridica {
   TRIBUTARIO
 }
 
+// New enums for unified Template system
+enum TemplateType {
+  WHATSAPP_OFFICIAL     // Official Meta-approved template
+  INTERACTIVE_MESSAGE   // Custom interactive message
+  AUTOMATION_REPLY      // Simple text for automations
+}
+
+enum TemplateScope {
+  GLOBAL    // Available to all users
+  PRIVATE   // Only for creator
+}
+
+enum PlatformType {
+  FACEBOOK
+  INSTAGRAM
+  LINKEDIN
+  X
+}
+
+enum PostType {
+  POST
+  STORIES
+  REELS
+}
+
+enum RecurrenceType {
+  NONE
+  DAILY
+  WEEKLY
+}
+
+// Unified Template System Models
+model Template {
+  id          String       @id @default(cuid())
+  name        String
+  type        TemplateType
+  scope       TemplateScope @default(PRIVATE)
+  description String?
+  tags        String[]
+  language    String       @default("pt_BR")
+  isActive    Boolean      @default(true)
+  usageCount  Int          @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Relationships
+  createdById String
+  createdBy   User         @relation("CreatedTemplates", fields: [createdById], references: [id], onDelete: Cascade)
+  caixaId     String?
+  caixa       CaixaEntrada? @relation(fields: [caixaId], references: [id], onDelete: SetNull)
+
+  // Content relationships (only one will be populated based on type)
+  interactiveContent   InteractiveContent?
+  whatsappOfficialInfo WhatsAppOfficialInfo?
+
+  // Mappings
+  mapeamentos MapeamentoIntencao[] @relation("TemplateMappings")
+  approvalRequests TemplateApprovalRequest[] @relation("TemplateApprovals")
+
+  @@index([createdById])
+  @@index([caixaId])
+  @@index([type])
+  @@index([scope])
+  @@index([isActive])
+}
+
+// Interactive Content Structure (replaces MensagemInterativa functionality)
+model InteractiveContent {
+  id          String   @id @default(cuid())
+  template    Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  templateId  String   @unique
+
+  // Visual components
+  header   Header?
+  body     Body     @relation(fields: [bodyId], references: [id])
+  bodyId   String
+  footer   Footer?
+
+  // Actions (only one will be populated based on message type)
+  actionCtaUrl           ActionCtaUrl?
+  actionReplyButton      ActionReplyButton?
+  actionList             ActionList?
+  actionFlow             ActionFlow?
+  actionLocationRequest  ActionLocationRequest?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([templateId])
+}
+
+// Component Models for Interactive Content
+model Header {
+  id                   String             @id @default(cuid())
+  type                 String             // 'text', 'image', 'video', 'document'
+  content              String             @db.Text
+  interactiveContentId String             @unique
+  interactiveContent   InteractiveContent @relation(fields: [interactiveContentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Body {
+  id                   String             @id @default(cuid())
+  text                 String             @db.Text
+  interactiveContents  InteractiveContent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Footer {
+  id                   String             @id @default(cuid())
+  text                 String
+  interactiveContentId String             @unique
+  interactiveContent   InteractiveContent @relation(fields: [interactiveContentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Action Models for Interactive Content
+model ActionCtaUrl {
+  id                   String             @id @default(cuid())
+  displayText          String
+  url                  String
+  interactiveContentId String             @unique
+  interactiveContent   InteractiveContent @relation(fields: [interactiveContentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ActionReplyButton {
+  id                   String             @id @default(cuid())
+  buttons              Json               // Array of button objects
+  interactiveContentId String             @unique
+  interactiveContent   InteractiveContent @relation(fields: [interactiveContentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ActionList {
+  id                   String             @id @default(cuid())
+  buttonText           String
+  sections             Json               // Array of section objects with rows
+  interactiveContentId String             @unique
+  interactiveContent   InteractiveContent @relation(fields: [interactiveContentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ActionFlow {
+  id                   String             @id @default(cuid())
+  flowId               String
+  flowCta              String
+  flowMode             String             @default("published")
+  flowData             Json?              // Additional flow parameters
+  interactiveContentId String             @unique
+  interactiveContent   InteractiveContent @relation(fields: [interactiveContentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ActionLocationRequest {
+  id                   String             @id @default(cuid())
+  requestText          String
+  interactiveContentId String             @unique
+  interactiveContent   InteractiveContent @relation(fields: [interactiveContentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// WhatsApp Official Template Support (replaces WhatsAppTemplate functionality)
+model WhatsAppOfficialInfo {
+  id           String   @id @default(cuid())
+  templateId   String   // Meta's template ID
+  status       String   // APPROVED, REJECTED, PENDING
+  category     String   // UTILITY, MARKETING
+  qualityScore String?
+  components   Json     // Original Meta JSON for reference
+  template     Template @relation(fields: [templateIdRel], references: [id], onDelete: Cascade)
+  templateIdRel String  @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([templateId])
+  @@index([status])
+}
+
 model LeadChatwit {
   id                     String  @id @default(cuid())
   sourceId               String  @unique // ID do lead no sistema externo (ex: número de telefone)
@@ -572,6 +781,7 @@ model WhatsAppTemplate {
   @@index([usuarioChatwitId])
   @@index([caixaEntradaId])
   @@unique([templateId, usuarioChatwitId])
+  @@unique([templateId])
 }
 
 // Modelos para o ChatwitIA - armazenamento de chats de IA
@@ -665,19 +875,32 @@ model GeneratedImage {
   quality            String?
   previousResponseId String? // ID da resposta anterior usada para gerar esta imagem (multi-turn)
   responseId         String? // ID desta resposta da OpenAI para referência futura (multi-turn)
-  openaiFileId       String? // ID do arquivo na OpenAI Files API (file-XnTFUFg79jXRw6wNi9jxQM)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
 
   user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   session ChatSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId])
   @@index([sessionId])
   @@index([createdAt])
   @@index([responseId]) // Índice para busca rápida por responseId
   @@index([previousResponseId]) // Índice para busca por cadeia de refinamentos
-  @@index([openaiFileId]) // Índice para busca rápida por openaiFileId
+}
+
+// Button reaction mapping model for Dialogflow async response system
+model ButtonReactionMapping {
+  id          String   @id @default(cuid())
+  buttonId    String   @unique
+  emoji       String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([buttonId])
+  @@index([isActive])
 }
 
 // Modelo para Biblioteca de Espelhos
@@ -905,8 +1128,8 @@ model MensagemInterativa {
   botoes           BotaoMensagem[]
 
   // --- RELACIONAMENTO ADICIONADO ---
-  caixaEntradaId String
-  caixaEntrada   CaixaEntrada @relation(fields: [caixaEntradaId], references: [id], onDelete: Cascade)
+  caixaEntradaId String?
+  caixaEntrada   CaixaEntrada? @relation(fields: [caixaEntradaId], references: [id], onDelete: SetNull)
 
   // Relação com mapeamentos de intenção
   mapeamentos MapeamentoIntencao[]
@@ -946,6 +1169,12 @@ model CaixaEntrada {
   templates            WhatsAppTemplate[]
   mensagensInterativas MensagemInterativa[]
   mapeamentosIntencao  MapeamentoIntencao[]
+  
+  // Enhanced Interactive Messages
+  interactiveMessages  InteractiveMessage[]
+  
+  // Unified Template System
+  unifiedTemplates     Template[]
 
   // Relacionamento para o fallback
   fallbackParaCaixaId String?
@@ -1004,11 +1233,188 @@ model MapeamentoIntencao {
   caixaEntradaId String
   caixaEntrada   CaixaEntrada @relation(fields: [caixaEntradaId], references: [id], onDelete: Cascade)
 
+  // Legacy relationships (to be deprecated)
   templateId String?
-  template   WhatsAppTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  template   WhatsAppTemplate? @relation(fields: [templateId], references: [templateId], onDelete: SetNull)
 
   mensagemInterativaId String?
   mensagemInterativa   MensagemInterativa? @relation(fields: [mensagemInterativaId], references: [id], onDelete: SetNull)
 
+  // New unified template relationship
+  unifiedTemplateId String?
+  unifiedTemplate   Template? @relation("TemplateMappings", fields: [unifiedTemplateId], references: [id], onDelete: SetNull)
+
+  // Enhanced Interactive Message relationship
+  interactiveMessageId String?
+  interactiveMessage   InteractiveMessage? @relation("InteractiveMessageMappings", fields: [interactiveMessageId], references: [id], onDelete: SetNull)
+
   @@unique([intentName, caixaEntradaId])
+}
+
+// Template Library System Models
+model TemplateLibrary {
+  id                   String   @id @default(cuid())
+  name                 String
+  description          String?
+  type                 String   // 'template' | 'interactive_message'
+  scope                String   // 'global' | 'account_specific'
+  isApprovalRequired   Boolean  @default(true)
+  isActive             Boolean  @default(true)
+  totalUsageCount      Int      @default(0)
+  
+  // Template content stored as JSON
+  content              Json
+  
+  // Metadata
+  category             String?
+  language             String   @default("pt_BR")
+  tags                 String[] // Array of tags for categorization
+  
+  // Relationships
+  createdById          String
+  createdBy            User     @relation("CreatedTemplates", fields: [createdById], references: [id], onDelete: Cascade)
+  
+  // Approval requests
+  approvalRequests     TemplateApprovalRequest[]
+  
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  
+  @@index([createdById])
+  @@index([type])
+  @@index([scope])
+  @@index([isActive])
+  @@index([category])
+  @@map("template_library")
+}
+
+model TemplateApprovalRequest {
+  id                   String   @id @default(cuid())
+  status               String   @default("pending") // 'pending' | 'approved' | 'rejected'
+  requestMessage       String?  // Optional message from requester
+  responseMessage      String?  // Optional response from approver
+  
+  // Custom variables for this specific request
+  customVariables      Json?    // User-specific variable values
+  
+  // Relationships
+  templateLibraryId    String
+  templateLibrary      TemplateLibrary @relation(fields: [templateLibraryId], references: [id], onDelete: Cascade)
+  
+  // New unified template relationship
+  unifiedTemplateId    String?
+  unifiedTemplate      Template? @relation("TemplateApprovals", fields: [unifiedTemplateId], references: [id], onDelete: Cascade)
+  
+  requestedById        String
+  requestedBy          User     @relation("RequestedApprovals", fields: [requestedById], references: [id], onDelete: Cascade)
+  
+  processedById        String?
+  processedBy          User?    @relation("ProcessedApprovals", fields: [processedById], references: [id], onDelete: SetNull)
+  
+  requestedAt          DateTime @default(now())
+  processedAt          DateTime?
+  
+  @@index([templateLibraryId])
+  @@index([requestedById])
+  @@index([status])
+  @@map("template_approval_request")
+}
+// Webhook processing models for MTF Diamante
+model WebhookMessage {
+  id                  String   @id @default(cuid())
+  whatsappMessageId   String   // Message ID from WhatsApp (wamid)
+  conversationId      String   // Conversation ID from WhatsApp
+  contactPhone        String   // Contact phone number
+  messageContent      String   @db.Text // Message content
+  messageType         String   @default("text") // text, interactive, template, etc.
+  whatsappApiKey      String   // WhatsApp API key extracted from payload
+  inboxId             String   // Inbox ID from Chatwit
+  rawPayload          Json     // Complete raw payload from Dialogflow
+  processed           Boolean  @default(false) // Processing status
+  timestamp           DateTime @default(now()) // Message timestamp
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([whatsappMessageId])
+  @@index([conversationId])
+  @@index([contactPhone])
+  @@index([inboxId])
+  @@index([timestamp])
+  @@map("webhook_message")
+}
+
+model ConversationThread {
+  id                      String   @id @default(cuid())
+  whatsappConversationId  String   @unique // WhatsApp conversation ID
+  contactPhone            String   // Contact phone number
+  lastMessageAt           DateTime // Timestamp of last message
+  status                  String   @default("active") // active, closed
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([contactPhone])
+  @@index([lastMessageAt])
+  @@map("conversation_thread")
+}
+
+model DialogflowIntent {
+  id           String   @id @default(cuid())
+  intentName   String   // Name of the Dialogflow intent
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// Enhanced Interactive Message model for all WhatsApp interactive message types
+model InteractiveMessage {
+  id          String   @id @default(cuid())
+  caixaId     String   // Reference to CaixaEntrada
+  name        String   // User-friendly name for the message
+  type        String   // Message type: 'cta_url', 'flow', 'list', 'button', 'location', 'location_request', 'reaction', 'sticker'
+  
+  // Header fields
+  headerType     String?  // 'text', 'image', 'video', 'document'
+  headerContent  String?  @db.Text // Text content or media URL/ID
+  
+  // Body (required for most message types)
+  bodyText       String   @db.Text // Main message body text
+  
+  // Footer (optional)
+  footerText     String?  // Footer text (max 60 characters)
+  
+  // Action-specific fields stored as JSON for flexibility
+  actionData     Json?    // Contains buttons, sections, flow parameters, etc.
+  
+  // Location-specific fields (for location messages)
+  latitude       Float?   // Location latitude
+  longitude      Float?   // Location longitude
+  locationName   String?  // Location name
+  locationAddress String? // Location address
+  
+  // Reaction-specific fields
+  reactionEmoji  String?  // Emoji for reaction messages
+  targetMessageId String? // WhatsApp message ID to react to
+  
+  // Sticker-specific fields
+  stickerMediaId String?  // Media ID for sticker
+  stickerUrl     String?  // URL for sticker (not recommended by WhatsApp)
+  
+  // Status and metadata
+  isActive       Boolean  @default(true)
+  usageCount     Int      @default(0) // Track how many times this message was sent
+  
+  createdById String   // User who created the message
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  caixa       CaixaEntrada @relation(fields: [caixaId], references: [id], onDelete: Cascade)
+  createdBy   User         @relation(fields: [createdById], references: [id])
+  
+  // Relation with intent mappings
+  mapeamentos MapeamentoIntencao[] @relation("InteractiveMessageMappings")
+
+  @@index([caixaId])
+  @@index([type])
+  @@index([createdById])
+  @@index([isActive])
 }

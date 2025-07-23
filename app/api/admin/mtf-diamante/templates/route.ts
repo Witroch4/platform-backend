@@ -3,6 +3,7 @@ import axios from 'axios';
 import { auth } from '@/auth';
 import { mtfDiamanteConfig } from '@/app/config/mtf-diamante';
 import { db as prisma } from '@/lib/db';
+import { VariableConverter, type MtfDiamanteVariavel } from '@/app/lib/variable-converter';
 
 // Templates mockados para desenvolvimento (caso a API não retorne dados)
 const mockTemplates = [
@@ -89,6 +90,44 @@ async function getWhatsAppApiConfig(userId: string) {
       whatsappBusinessAccountId: process.env.WHATSAPP_BUSINESS_ID || '294585820394901',
       whatsappToken: process.env.WHATSAPP_TOKEN || mtfDiamanteConfig.whatsappToken,
     };
+  }
+}
+
+/**
+ * Função para buscar as variáveis do usuário para conversão de templates
+ */
+async function getUserVariables(userId: string): Promise<MtfDiamanteVariavel[]> {
+  try {
+    // Busca ou cria a configuração do MTF Diamante
+    let config = await prisma.mtfDiamanteConfig.findFirst({
+      where: { userId },
+      include: { variaveis: true }
+    });
+
+    if (!config) {
+      // Cria configuração padrão com variáveis iniciais
+      config = await prisma.mtfDiamanteConfig.create({
+        data: {
+          userId,
+          variaveis: {
+            create: [
+              { chave: "chave_pix", valor: "57944155000101" },
+              { chave: "nome_do_escritorio_rodape", valor: "Dra. Amanda Sousa Advocacia e Consultoria Jurídica™" }
+            ]
+          }
+        },
+        include: { variaveis: true }
+      });
+    }
+
+    return config.variaveis;
+  } catch (error) {
+    console.error('Erro ao buscar variáveis do usuário:', error);
+    // Retorna variáveis padrão em caso de erro
+    return [
+      { chave: "chave_pix", valor: "57944155000101" },
+      { chave: "nome_do_escritorio_rodape", valor: "Dra. Amanda Sousa Advocacia e Consultoria Jurídica™" }
+    ];
   }
 }
 
@@ -463,11 +502,74 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
+    // Buscar variáveis do usuário para conversão
+    const userVariables = await getUserVariables(session.user.id);
+    console.log('Variáveis do usuário carregadas:', userVariables);
+
+    // Inicializar conversor de variáveis
+    const variableConverter = new VariableConverter();
+
+    // Validar template antes da conversão
+    let allTemplateText = '';
+    body.components.forEach((component: any) => {
+      if (component.text) {
+        allTemplateText += component.text + ' ';
+      }
+    });
+
+    const validation = variableConverter.validateTemplate(allTemplateText);
+    if (!validation.isValid) {
+      return NextResponse.json({
+        success: false,
+        error: `Erro de validação de variáveis: ${validation.errors.join(', ')}`,
+      }, { status: 400 });
+    }
+
+    // Converter variáveis nos componentes do template
+    const convertedComponents = [];
+    let allParameterArrays: string[] = [];
+    let hasPixVariable = false;
+
+    try {
+      for (const component of body.components) {
+        const convertedComponent = { ...component };
+
+        // Converter variáveis em componentes de texto
+        if (component.text) {
+          const conversion = variableConverter.convertToMetaFormat(component.text, userVariables);
+          convertedComponent.text = conversion.convertedText;
+          
+          // Adicionar parâmetros ao array geral
+          allParameterArrays = [...allParameterArrays, ...conversion.parameterArray];
+          
+          // Verificar se contém variável PIX
+          if (conversion.mapping.some(m => m.customName === 'chave_pix')) {
+            hasPixVariable = true;
+          }
+
+          console.log(`Componente ${component.type} convertido:`, {
+            original: component.text,
+            converted: conversion.convertedText,
+            parameters: conversion.parameterArray,
+            mapping: conversion.mapping
+          });
+        }
+
+        convertedComponents.push(convertedComponent);
+      }
+    } catch (conversionError: any) {
+      console.error('Erro na conversão de variáveis:', conversionError);
+      return NextResponse.json({
+        success: false,
+        error: `Erro na conversão de variáveis: ${conversionError.message}`,
+      }, { status: 400 });
+    }
+
     // Extrair a URL pública da mídia dos componentes, se disponível
     let publicMediaUrl = null;
     
     // Procurar URL em componentes de cabeçalho
-    const mediaComponents = body.components.filter((component: any) => {
+    const mediaComponents = convertedComponents.filter((component: any) => {
       return ((component.type === 'HEADER' && ['IMAGE', 'VIDEO'].includes(component.format)));
     });
 
@@ -498,16 +600,30 @@ export async function POST(request: Request) {
       }
     }
 
-    // Montar o payload para a API do WhatsApp
-    const templatePayload = {
+    // Montar o payload para a API do WhatsApp com componentes convertidos
+    const templatePayload: any = {
       name: body.name,
       category: body.category,
       language: body.language,
-      components: body.components,
+      components: convertedComponents,
     };
 
+    // Se o template contém variável PIX, garantir que o PIX code está incluído no payload
+    // Nota: O PIX code será incluído nos parâmetros dos componentes, não como campo separado
+    if (hasPixVariable) {
+      const pixVariable = userVariables.find(v => v.chave === 'chave_pix');
+      if (pixVariable) {
+        console.log('Template PIX detectado, PIX code incluído nos parâmetros:', pixVariable.valor);
+      }
+    }
+
+    // Log dos parâmetros para debug (os parâmetros já estão incluídos nos componentes convertidos)
+    if (allParameterArrays.length > 0) {
+      console.log('Parâmetros de variáveis detectados:', allParameterArrays);
+    }
+
     console.log("✅ URL da mídia para salvar no banco:", publicMediaUrl);
-    console.log("✅ Payload final para API WhatsApp:", JSON.stringify(templatePayload, null, 2));
+    console.log("✅ Payload final para API WhatsApp (com variáveis convertidas):", JSON.stringify(templatePayload, null, 2));
 
     // Enviar para a API
     console.log('Enviando template para WhatsApp API');

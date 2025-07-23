@@ -5,7 +5,7 @@ import { auth } from '@/auth';
 // PATCH - Atualizar lote
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
@@ -13,6 +13,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
+    const { id } = await params;
     const body = await request.json();
     const { numero, nome, valor, dataInicio, dataFim, isActive } = body;
 
@@ -28,7 +29,7 @@ export async function PATCH(
     // Verificar se o lote existe e pertence ao usuário
     const loteExistente = await prisma.loteOab.findFirst({
       where: { 
-        id: params.id,
+        id: id,
         usuarioChatwitId: usuarioChatwit.id 
       }
     });
@@ -50,7 +51,7 @@ export async function PATCH(
 
     // Atualizar lote
     const loteAtualizado = await prisma.loteOab.update({
-      where: { id: params.id },
+      where: { id: id },
       data: updateData
     });
 
@@ -75,13 +76,15 @@ export async function PATCH(
 // DELETE - Excluir lote
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
+
+    const { id } = await params;
 
     // Buscar o usuário Chatwit
     const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
@@ -95,7 +98,7 @@ export async function DELETE(
     // Verificar se o lote existe e pertence ao usuário
     const loteExistente = await prisma.loteOab.findFirst({
       where: { 
-        id: params.id,
+        id: id,
         usuarioChatwitId: usuarioChatwit.id 
       }
     });
@@ -106,7 +109,7 @@ export async function DELETE(
 
     // Excluir lote
     await prisma.loteOab.delete({
-      where: { id: params.id }
+      where: { id: id }
     });
 
     return NextResponse.json({ 

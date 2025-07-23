@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     }
 
     // Verificar se o usuário é admin
-    if (session.user.role !== "ADMIN") {
+    if (session.user.role !== "ADMIN" && session.user.role !== "SUPERADMIN") {
       return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
     }
 

@@ -56,16 +56,18 @@ export async function POST(request: Request) {
 
     // --- CORREÇÃO APLICADA AQUI ---
     // Mapear os números de telefone para uma busca mais flexível, evitando duplicação
-    const leadConditions = selectedLeads.flatMap(leadIdentifier => {
+    const leadConditions: Array<{ phoneNumber: { endsWith: string } } | { id: string }> = [];
+    
+    selectedLeads.forEach(leadIdentifier => {
       const cleanNumber = leadIdentifier.replace(/\D/g, '');
       const isNumeric = /^\d+$/.test(leadIdentifier);
       
       if (isNumeric && cleanNumber.length >= 10) {
         // Se é um número, busca apenas por telefone
-        return [{ phoneNumber: { endsWith: cleanNumber.slice(-11) } }];
+        leadConditions.push({ phoneNumber: { endsWith: cleanNumber.slice(-11) } });
       } else {
         // Se não é um número, busca apenas por ID
-        return [{ id: leadIdentifier }];
+        leadConditions.push({ id: leadIdentifier });
       }
     });
 

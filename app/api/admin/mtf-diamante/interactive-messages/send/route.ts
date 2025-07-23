@@ -1,0 +1,206 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
+import axios from "axios";
+import {
+  convertInteractiveMessageToWhatsApp,
+  validateInteractiveMessage,
+  type InteractiveMessage,
+} from "@/app/lib/interactive-message-utils";
+import type { MtfDiamanteVariavel } from "@/app/lib/variable-utils";
+
+// Função para obter configuração do WhatsApp atual
+async function getCurrentWhatsAppConfig() {
+  const config = await prisma.whatsAppConfig.findFirst({
+    where: { isActive: true },
+    orderBy: { updatedAt: "desc" },
+  });
+
+  if (!config) {
+    return {
+      token: process.env.WHATSAPP_TOKEN || "",
+      businessId: process.env.WHATSAPP_BUSINESS_ID || "",
+      apiBase: "https://graph.facebook.com/v22.0",
+    };
+  }
+
+  return {
+    token: config.whatsappToken,
+    businessId: config.whatsappBusinessAccountId,
+    apiBase: "https://graph.facebook.com/v22.0",
+  };
+}
+
+// Função para obter variáveis do MTF Diamante
+async function getMtfDiamanteVariables(
+  userId: string
+): Promise<MtfDiamanteVariavel[]> {
+  const variables = await prisma.mtfDiamanteVariavel.findMany({
+    where: { usuarioChatwitId: userId },
+    orderBy: { chave: "asc" },
+  });
+
+  return variables.map((v) => ({
+    id: v.id,
+    chave: v.chave,
+    valor: v.valor,
+  }));
+}
+
+export async function POST(request: Request) {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const { messageId, recipientPhone, caixaId } = body;
+
+    console.log("[INTERACTIVE-MESSAGE][SEND] Usuário:", session.user.id);
+    console.log("[INTERACTIVE-MESSAGE][SEND] messageId:", messageId);
+    console.log("[INTERACTIVE-MESSAGE][SEND] recipientPhone:", recipientPhone);
+    console.log("[INTERACTIVE-MESSAGE][SEND] caixaId:", caixaId);
+
+    // Validar dados obrigatórios
+    if (!messageId || !recipientPhone) {
+      return NextResponse.json(
+        { error: "messageId and recipientPhone are required" },
+        { status: 400 }
+      );
+    }
+
+    // Buscar a mensagem interativa
+    const interactiveMessage = await prisma.interactiveMessage.findFirst({
+      where: {
+        id: messageId,
+        usuarioChatwitId: session.user.id,
+      },
+    });
+
+    if (!interactiveMessage) {
+      return NextResponse.json(
+        { error: "Interactive message not found" },
+        { status: 404 }
+      );
+    }
+
+    // Buscar variáveis do usuário
+    const variables = await getMtfDiamanteVariables(session.user.id);
+
+    // Converter dados da mensagem
+    const messageData: InteractiveMessage = {
+      id: interactiveMessage.id,
+      name: interactiveMessage.name,
+      type: interactiveMessage.type,
+      header: interactiveMessage.header as any,
+      body: interactiveMessage.body as any,
+      footer: interactiveMessage.footer as any,
+      action: interactiveMessage.action as any,
+      location: interactiveMessage.location as any,
+      reaction: interactiveMessage.reaction as any,
+      sticker: interactiveMessage.sticker as any,
+    };
+
+    // Validar mensagem
+    const validation = validateInteractiveMessage(messageData);
+    if (!validation.isValid) {
+      return NextResponse.json(
+        { error: "Invalid message", details: validation.errors },
+        { status: 400 }
+      );
+    }
+
+    // Converter para formato do WhatsApp
+    const whatsappMessage = convertInteractiveMessageToWhatsApp(
+      messageData,
+      recipientPhone,
+      variables
+    );
+
+    console.log(
+      "[INTERACTIVE-MESSAGE][SEND] WhatsApp message:",
+      JSON.stringify(whatsappMessage, null, 2)
+    );
+
+    // Obter configuração do WhatsApp
+    const whatsappConfig = await getCurrentWhatsAppConfig();
+
+    // Enviar mensagem para o WhatsApp
+    const whatsappUrl = `${whatsappConfig.apiBase}/${whatsappConfig.businessId}/messages`;
+    const whatsappHeaders = {
+      Authorization: `Bearer ${whatsappConfig.token}`,
+      "Content-Type": "application/json",
+    };
+
+    const response = await axios.post(whatsappUrl, whatsappMessage, {
+      headers: whatsappHeaders,
+    });
+
+    console.log(
+      "[INTERACTIVE-MESSAGE][SEND] WhatsApp response:",
+      response.data
+    );
+
+    // Registrar o envio no banco de dados
+    await prisma.disparoMtfDiamante.create({
+      data: {
+        usuarioChatwitId: session.user.id,
+        caixaId: caixaId || "direct_send",
+        tipo: "interactive_message",
+        destinatario: recipientPhone,
+        conteudo: {
+          messageId: messageId,
+          messageName: interactiveMessage.name,
+          messageType: interactiveMessage.type,
+          whatsappMessageId: response.data.messages?.[0]?.id,
+          processedMessage: whatsappMessage,
+        },
+        status: "sent",
+        dataEnvio: new Date(),
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      whatsappMessageId: response.data.messages?.[0]?.id,
+      message: "Interactive message sent successfully",
+    });
+  } catch (error: any) {
+    console.error("[INTERACTIVE-MESSAGE][SEND] Error:", error);
+
+    // Registrar erro no banco se possível
+    try {
+      const session = await auth();
+      if (session?.user?.id) {
+        await prisma.disparoMtfDiamante.create({
+          data: {
+            usuarioChatwitId: session.user.id,
+            caixaId: "error",
+            tipo: "interactive_message",
+            destinatario: "unknown",
+            conteudo: {
+              error: error.message,
+              stack: error.stack,
+            },
+            status: "error",
+            dataEnvio: new Date(),
+          },
+        });
+      }
+    } catch (dbError) {
+      console.error(
+        "[INTERACTIVE-MESSAGE][SEND] Error logging to database:",
+        dbError
+      );
+    }
+
+    return NextResponse.json(
+      {
+        error: "Failed to send interactive message",
+        details: error.response?.data || error.message,
+      },
+      { status: 500 }
+    );
+  }
+}

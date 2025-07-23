@@ -1,9 +1,12 @@
 "use client";
 
 import React from "react";
+import { useTheme } from "next-themes";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Phone } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { variableConverter, type MtfDiamanteVariavel } from "@/app/lib/variable-converter";
 
 interface TemplateComponent {
   tipo: string;
@@ -45,18 +48,201 @@ interface TemplatePreviewProps {
   title?: string;
   description?: string;
   useAlternativeFormat?: boolean;
+  showWhatsAppPreview?: boolean;
+  variables?: MtfDiamanteVariavel[];
+  previewMode?: 'template' | 'interactive';
+}
+
+// WhatsApp-style preview component with theme support and variable rendering
+function WhatsAppPreview({ 
+  components, 
+  useAlternativeFormat = false,
+  variables = [],
+  previewMode = 'template'
+}: { 
+  components: TemplateComponent[] | CreateTemplateComponent[];
+  useAlternativeFormat?: boolean;
+  variables?: MtfDiamanteVariavel[];
+  previewMode?: 'template' | 'interactive';
+}) {
+  const { theme } = useTheme();
+  
+  // Get WhatsApp background image based on theme
+  const getWhatsAppBackground = () => {
+    return theme === 'dark' ? '/fundo_whatsapp_black.jpg' : '/fundo_whatsapp.jpg';
+  };
+
+  // Process text with variables based on preview mode
+  const processTextWithVariables = (text: string): string => {
+    if (!text || !variables.length) return text;
+
+    if (previewMode === 'interactive') {
+      // For interactive messages, show actual variable values
+      return variableConverter.generatePreviewText(text, variables);
+    } else {
+      // For templates, show numbered variables with examples
+      return variableConverter.generateNumberedPreviewText(text, variables);
+    }
+  };
+
+  const renderComponent = (component: TemplateComponent | CreateTemplateComponent, index: number) => {
+    if (useAlternativeFormat) {
+      const comp = component as CreateTemplateComponent;
+      
+      return (
+        <div key={index} className="mb-2">
+          {comp.type === 'header' && comp.text && (
+            <div className="font-semibold text-sm mb-2 text-gray-900 dark:text-gray-100">
+              {processTextWithVariables(comp.text)}
+            </div>
+          )}
+          
+          {comp.type === 'header' && comp.format && ['image', 'video', 'document'].includes(comp.format.toLowerCase()) && comp.url && (
+            <div className="mb-2">
+              {comp.format.toLowerCase() === 'image' && (
+                <img 
+                  src={comp.url} 
+                  alt="Header media" 
+                  className="max-w-full h-auto rounded-lg max-h-48 object-cover"
+                />
+              )}
+              {comp.format.toLowerCase() === 'video' && (
+                <video 
+                  src={comp.url} 
+                  controls 
+                  className="max-w-full h-auto rounded-lg max-h-48"
+                />
+              )}
+              {comp.format.toLowerCase() === 'document' && (
+                <div className="flex items-center gap-2 p-2 bg-gray-100 dark:bg-gray-800 rounded">
+                  <div className="text-blue-600 dark:text-blue-400">📄</div>
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    {comp.filename || 'Document'}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+          
+          {comp.type === 'body' && comp.text && (
+            <div className="text-sm mb-2 text-gray-900 dark:text-gray-100 whitespace-pre-wrap">
+              {processTextWithVariables(comp.text)}
+            </div>
+          )}
+          
+          {comp.type === 'footer' && comp.text && (
+            <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+              {processTextWithVariables(comp.text)}
+            </div>
+          )}
+          
+          {comp.type === 'buttons' && comp.buttons && comp.buttons.length > 0 && (
+            <div className="mt-3 space-y-1">
+              {comp.buttons.map((button, btnIndex) => (
+                <button
+                  key={btnIndex}
+                  className="w-full p-2 text-sm border rounded text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                >
+                  {button.text}
+                  {button.type === 'PHONE_NUMBER' && button.phoneNumber && (
+                    <span className="ml-1">📞</span>
+                  )}
+                  {button.type === 'URL' && (
+                    <span className="ml-1">🔗</span>
+                  )}
+                  {button.type === 'COPY_CODE' && (
+                    <span className="ml-1">📋</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    } else {
+      const comp = component as TemplateComponent;
+      
+      return (
+        <div key={index} className="mb-2">
+          {comp.tipo === 'HEADER' && comp.texto && (
+            <div className="font-semibold text-sm mb-2 text-gray-900 dark:text-gray-100">
+              {processTextWithVariables(comp.texto)}
+            </div>
+          )}
+          
+          {comp.tipo === 'BODY' && comp.texto && (
+            <div className="text-sm mb-2 text-gray-900 dark:text-gray-100 whitespace-pre-wrap">
+              {processTextWithVariables(comp.texto)}
+            </div>
+          )}
+          
+          {comp.tipo === 'FOOTER' && comp.texto && (
+            <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+              {processTextWithVariables(comp.texto)}
+            </div>
+          )}
+          
+          {comp.botoes && comp.botoes.length > 0 && (
+            <div className="mt-3 space-y-1">
+              {comp.botoes.map((button, btnIndex) => (
+                <button
+                  key={btnIndex}
+                  className="w-full p-2 text-sm border rounded text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                >
+                  {button.texto}
+                  {button.tipo === 'PHONE_NUMBER' && button.telefone && (
+                    <span className="ml-1">📞</span>
+                  )}
+                  {button.tipo === 'URL' && (
+                    <span className="ml-1">🔗</span>
+                  )}
+                  {button.tipo === 'COPY_CODE' && (
+                    <span className="ml-1">📋</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+  };
+
+  return (
+    <div className="flex justify-center">
+      <div 
+        className={cn(
+          "whatsapp-preview rounded-lg p-4 max-w-sm w-full",
+          "bg-cover bg-center bg-no-repeat min-h-[300px]",
+          "relative"
+        )}
+        style={{
+          backgroundImage: `url('${getWhatsAppBackground()}')`
+        }}
+      >
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-3 shadow-md border border-gray-200 dark:border-gray-700">
+          {components.map((component, index) => renderComponent(component, index))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function TemplatePreview({ 
   components,
   title = "Conteúdo do Template",
   description = "Visualização",
-  useAlternativeFormat = false
+  useAlternativeFormat = false,
+  showWhatsAppPreview = false,
+  variables = [],
+  previewMode = 'template'
 }: TemplatePreviewProps) {
   // Log para depuração
   console.log("TemplatePreview recebeu:", {
     components,
-    useAlternativeFormat
+    useAlternativeFormat,
+    variables,
+    previewMode
   });
   
   // Format phone number for display
@@ -79,44 +265,54 @@ export function TemplatePreview({
     return (
       <div className="space-y-4">
         <div className="flex flex-col space-y-1.5 mb-2">
-          <h3 className="text-lg font-semibold">{title}</h3>
+          <h3 className="text-lg font-semibold text-foreground">{title}</h3>
           <p className="text-sm text-muted-foreground">{description}</p>
         </div>
 
-        <Tabs defaultValue="visual">
-          <TabsList>
-            <TabsTrigger value="visual">Visual</TabsTrigger>
-            <TabsTrigger value="json">JSON</TabsTrigger>
+        <Tabs defaultValue="whatsapp" className="w-full">
+          <TabsList className="grid w-full grid-cols-3 bg-muted">
+            <TabsTrigger value="whatsapp" className="data-[state=active]:bg-background data-[state=active]:text-foreground">WhatsApp</TabsTrigger>
+            <TabsTrigger value="visual" className="data-[state=active]:bg-background data-[state=active]:text-foreground">Visual</TabsTrigger>
+            <TabsTrigger value="json" className="data-[state=active]:bg-background data-[state=active]:text-foreground">JSON</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="visual">
+          <TabsContent value="whatsapp" className="mt-4">
+            <WhatsAppPreview 
+              components={components} 
+              useAlternativeFormat={true} 
+              variables={variables}
+              previewMode={previewMode}
+            />
+          </TabsContent>
+
+          <TabsContent value="visual" className="mt-4">
             {(components as CreateTemplateComponent[]).map((c, i) => (
-              <div key={i} className="border p-4 rounded-md mb-4">
-                <h3 className="font-semibold mb-2">{c.type.toUpperCase()}</h3>
+              <div key={i} className="border border-border p-4 rounded-md mb-4 bg-card">
+                <h3 className="font-semibold mb-2 text-card-foreground">{c.type.toUpperCase()}</h3>
                 {c.format && (
-                  <p className="text-sm mb-2">
+                  <p className="text-sm mb-2 text-card-foreground">
                     <strong>Formato:</strong> {c.format.toUpperCase()}
                   </p>
                 )}
                 {c.text && (
-                  <pre className="bg-muted p-2 rounded mb-2 whitespace-pre-wrap text-sm">
+                  <pre className="bg-muted p-2 rounded mb-2 whitespace-pre-wrap text-sm text-foreground">
                     {c.text}
                   </pre>
                 )}
                 {c.buttons && c.buttons.length > 0 && (
                   <div className="mb-2">
-                    <p className="font-medium">Botões:</p>
+                    <p className="font-medium text-card-foreground">Botões:</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {c.buttons.map((b, idx) => (
                         <div
                           key={idx}
-                          className="border p-3 rounded shadow-sm hover:shadow-md transition-shadow"
+                          className="border border-border p-3 rounded shadow-sm hover:shadow-md transition-shadow bg-background"
                         >
                           <div className="flex items-center gap-2 mb-1">
-                            <Badge variant="outline" className="font-mono text-xs">
+                            <Badge variant="outline" className="font-mono text-xs border-border">
                               {b.type.toUpperCase()}
                             </Badge>
-                            <span className="font-medium">{b.text}</span>
+                            <span className="font-medium text-foreground">{b.text}</span>
                           </div>
                           
                           {b.url && (
@@ -124,7 +320,7 @@ export function TemplatePreview({
                               href={b.url} 
                               target="_blank" 
                               rel="noopener noreferrer"
-                              className="text-blue-600 hover:underline text-sm flex items-center gap-1 mt-1"
+                              className="text-blue-600 dark:text-blue-400 hover:underline text-sm flex items-center gap-1 mt-1"
                             >
                               {b.url}
                             </a>
@@ -133,7 +329,7 @@ export function TemplatePreview({
                           {b.phoneNumber && (
                             <a 
                               href={`tel:${b.phoneNumber}`} 
-                              className="text-blue-600 hover:underline text-sm flex items-center gap-1 mt-1"
+                              className="text-blue-600 dark:text-blue-400 hover:underline text-sm flex items-center gap-1 mt-1"
                             >
                               <Phone className="h-3 w-3" />
                               {formatPhoneNumber(b.phoneNumber)}
@@ -148,8 +344,8 @@ export function TemplatePreview({
             ))}
           </TabsContent>
 
-          <TabsContent value="json">
-            <pre className="bg-muted p-4 rounded overflow-auto text-xs max-h-[400px]">
+          <TabsContent value="json" className="mt-4">
+            <pre className="bg-muted p-4 rounded overflow-auto text-xs max-h-[400px] text-foreground border border-border">
               {JSON.stringify(components, null, 2)}
             </pre>
           </TabsContent>
@@ -162,44 +358,54 @@ export function TemplatePreview({
   return (
     <div className="space-y-4">
       <div className="flex flex-col space-y-1.5 mb-2">
-        <h3 className="text-lg font-semibold">{title}</h3>
+        <h3 className="text-lg font-semibold text-foreground">{title}</h3>
         <p className="text-sm text-muted-foreground">{description}</p>
       </div>
 
-      <Tabs defaultValue="visual">
-        <TabsList>
-          <TabsTrigger value="visual">Visual</TabsTrigger>
-          <TabsTrigger value="json">JSON</TabsTrigger>
+      <Tabs defaultValue="whatsapp" className="w-full">
+        <TabsList className="grid w-full grid-cols-3 bg-muted">
+          <TabsTrigger value="whatsapp" className="data-[state=active]:bg-background data-[state=active]:text-foreground">WhatsApp</TabsTrigger>
+          <TabsTrigger value="visual" className="data-[state=active]:bg-background data-[state=active]:text-foreground">Visual</TabsTrigger>
+          <TabsTrigger value="json" className="data-[state=active]:bg-background data-[state=active]:text-foreground">JSON</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="visual">
+        <TabsContent value="whatsapp" className="mt-4">
+          <WhatsAppPreview 
+            components={components} 
+            useAlternativeFormat={false} 
+            variables={variables}
+            previewMode={previewMode}
+          />
+        </TabsContent>
+
+        <TabsContent value="visual" className="mt-4">
           {(components as TemplateComponent[]).map((c, i) => (
-            <div key={i} className="border p-4 rounded-md mb-4">
-              <h3 className="font-semibold mb-2">{c.tipo}</h3>
+            <div key={i} className="border border-border p-4 rounded-md mb-4 bg-card">
+              <h3 className="font-semibold mb-2 text-card-foreground">{c.tipo}</h3>
               {c.formato && (
-                <p className="text-sm mb-2">
+                <p className="text-sm mb-2 text-card-foreground">
                   <strong>Formato:</strong> {c.formato}
                 </p>
               )}
               {c.texto && (
-                <pre className="bg-muted p-2 rounded mb-2 whitespace-pre-wrap text-sm">
+                <pre className="bg-muted p-2 rounded mb-2 whitespace-pre-wrap text-sm text-foreground">
                   {c.texto}
                 </pre>
               )}
               {Array.isArray(c.variaveis) && (
                 <div className="mb-2">
-                  <p className="font-medium">Variáveis:</p>
+                  <p className="font-medium text-card-foreground">Variáveis:</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                     {c.variaveis.map((v, idx) => (
                       <div
                         key={idx}
-                        className="border p-2 rounded text-xs"
+                        className="border border-border p-2 rounded text-xs bg-background"
                       >
-                        <code className="font-mono bg-slate-100 px-1 rounded text-blue-600">
+                        <code className="font-mono bg-muted px-1 rounded text-blue-600 dark:text-blue-400">
                           {"{{" + v.nome + "}}"}
                         </code>
-                        <p className="mt-1 text-gray-700">{v.descricao}</p>
-                        <p className="mt-1 text-xs text-gray-500">Exemplo: {v.exemplo}</p>
+                        <p className="mt-1 text-foreground">{v.descricao}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Exemplo: {v.exemplo}</p>
                       </div>
                     ))}
                   </div>
@@ -207,18 +413,18 @@ export function TemplatePreview({
               )}
               {c.botoes && (
                 <div className="mb-2">
-                  <p className="font-medium">Botões:</p>
+                  <p className="font-medium text-card-foreground">Botões:</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {c.botoes.map((b, idx) => (
                       <div
                         key={idx}
-                        className="border p-3 rounded shadow-sm hover:shadow-md transition-shadow"
+                        className="border border-border p-3 rounded shadow-sm hover:shadow-md transition-shadow bg-background"
                       >
                         <div className="flex items-center gap-2 mb-1">
-                          <Badge variant="outline" className="font-mono text-xs">
+                          <Badge variant="outline" className="font-mono text-xs border-border">
                             {b.tipo}
                           </Badge>
-                          <span className="font-medium">{b.texto}</span>
+                          <span className="font-medium text-foreground">{b.texto}</span>
                         </div>
                         
                         {b.url && (
@@ -226,7 +432,7 @@ export function TemplatePreview({
                             href={b.url} 
                             target="_blank" 
                             rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline text-sm flex items-center gap-1 mt-1"
+                            className="text-blue-600 dark:text-blue-400 hover:underline text-sm flex items-center gap-1 mt-1"
                           >
                             {b.url}
                           </a>
@@ -235,7 +441,7 @@ export function TemplatePreview({
                         {b.telefone && (
                           <a 
                             href={`tel:${b.telefone}`} 
-                            className="text-blue-600 hover:underline text-sm flex items-center gap-1 mt-1"
+                            className="text-blue-600 dark:text-blue-400 hover:underline text-sm flex items-center gap-1 mt-1"
                           >
                             <Phone className="h-3 w-3" />
                             {formatPhoneNumber(b.telefone)}
@@ -250,8 +456,8 @@ export function TemplatePreview({
           ))}
         </TabsContent>
 
-        <TabsContent value="json">
-          <pre className="bg-muted p-4 rounded overflow-auto text-xs max-h-[400px]">
+        <TabsContent value="json" className="mt-4">
+          <pre className="bg-muted p-4 rounded overflow-auto text-xs max-h-[400px] text-foreground border border-border">
             {JSON.stringify(components, null, 2)}
           </pre>
         </TabsContent>

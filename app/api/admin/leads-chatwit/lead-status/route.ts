@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
       where: { id: session.user.id },
       select: { role: true },
     });
-    if (user?.role !== 'ADMIN') {
+    if (user?.role !== 'ADMIN' && user?.role !== 'SUPERADMIN') {
       return NextResponse.json({ error: 'Permissão negada' }, { status: 403 });
     }
 

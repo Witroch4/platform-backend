@@ -14,8 +14,21 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const mapeamentos = await db.mapeamentoIntencao.findMany({
       where: { caixaEntradaId: caixaId },
       include: {
+        // New unified template system
+        unifiedTemplate: { 
+          select: { 
+            id: true, 
+            name: true, 
+            type: true, 
+            description: true,
+            isActive: true 
+          } 
+        },
+        // Legacy support during transition
         template: { select: { id: true, name: true } },
         mensagemInterativa: { select: { id: true, nome: true } },
+        // New interactive message system
+        interactiveMessage: { select: { id: true, name: true } },
       },
       orderBy: { intentName: 'asc' },
     });
@@ -37,21 +50,29 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const body = await request.json();
-    const { id: mappingId, intentName, templateId, mensagemInterativaId } = body;
+    const { id: mappingId, intentName, templateId, mensagemInterativaId, interactiveMessageId, unifiedTemplateId } = body;
 
-    if (!intentName || (!templateId && !mensagemInterativaId)) {
-      return NextResponse.json({ error: 'Intenção e uma resposta (template ou mensagem) são obrigatórios.' }, { status: 400 });
+    // Count how many response types are provided
+    const responseCount = [templateId, mensagemInterativaId, interactiveMessageId, unifiedTemplateId].filter(Boolean).length;
+
+    if (!intentName || responseCount === 0) {
+      return NextResponse.json({ error: 'Intenção e uma resposta (template unificado, template legado ou mensagem) são obrigatórios.' }, { status: 400 });
     }
     
-    if (templateId && mensagemInterativaId) {
-        return NextResponse.json({ error: 'Escolha apenas uma resposta: template ou mensagem interativa.' }, { status: 400 });
+    if (responseCount > 1) {
+        return NextResponse.json({ error: 'Escolha apenas uma resposta: template unificado, template legado ou mensagem interativa.' }, { status: 400 });
     }
 
     const data = {
       intentName,
       caixaEntradaId: caixaId,
+      // New unified template system (priority)
+      unifiedTemplateId: unifiedTemplateId || null,
+      // Legacy support
       templateId: templateId || null,
       mensagemInterativaId: mensagemInterativaId || null,
+      // New interactive message system
+      interactiveMessageId: interactiveMessageId || null,
     };
 
     const savedMapping = await db.mapeamentoIntencao.upsert({

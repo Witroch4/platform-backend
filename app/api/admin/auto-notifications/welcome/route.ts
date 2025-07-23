@@ -18,7 +18,7 @@ export async function POST(req: Request) {
       }
     });
 
-    if (adminUser?.role !== "ADMIN") {
+    if (adminUser?.role !== "ADMIN" && adminUser?.role !== "SUPERADMIN") {
       return new NextResponse("Acesso negado", { status: 403 });
     }
 

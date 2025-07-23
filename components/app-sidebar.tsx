@@ -584,8 +584,8 @@ export function AppSidebar() {
           </SidebarGroup>
         </Collapsible>
 
-        {/* Grupo: Admin (visível somente para usuários ADMIN) */}
-        {session?.user?.role === "ADMIN" && (
+        {/* Grupo: Admin (visível para usuários ADMIN e SUPERADMIN) */}
+        {(session?.user?.role === "ADMIN" || session?.user?.role === "SUPERADMIN") && (
           <Collapsible defaultOpen={false} className="group/collapsible">
             <SidebarGroup>
               <div

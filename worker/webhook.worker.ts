@@ -17,6 +17,8 @@ import {
 import cron from 'node-cron';
 import { LEADS_QUEUE_NAME } from '@/lib/queue/leads-chatwit.queue';
 import { processLeadChatwitTask } from './WebhookWorkerTasks/leads-chatwit.task';
+import { processMtfDiamanteWebhookTask } from './WebhookWorkerTasks/mtf-diamante-webhook.task';
+import { MTF_DIAMANTE_WEBHOOK_QUEUE_NAME } from '@/lib/queue/mtf-diamante-webhook.queue';
 
 dotenv.config();
 
@@ -88,8 +90,30 @@ const autoNotificationsWorker = new Worker<IAutoNotificationJobData>(
   { connection }
 );
 
+// Worker para processar webhooks do MTF Diamante (legacy tasks)
+const mtfDiamanteWebhookWorker = new Worker(
+  MTF_DIAMANTE_WEBHOOK_QUEUE_NAME,
+  processMtfDiamanteWebhookTask,
+  {
+    connection,
+    concurrency: 5,
+    lockDuration: 30000,
+  }
+);
+
+// Worker para processar tasks assíncronas do MTF Diamante (sendMessage, sendReaction)
+const mtfDiamanteAsyncWorker = new Worker(
+  `${MTF_DIAMANTE_WEBHOOK_QUEUE_NAME}-async`,
+  processMtfDiamanteWebhookTask, // Usa a mesma função de processamento
+  {
+    connection,
+    concurrency: 10, // Mais concorrência para tasks assíncronas
+    lockDuration: 60000, // Mais tempo para envio de mensagens
+  }
+);
+
 // Tratamento de eventos dos workers
-[agendamentoWorker, manuscritoWorker, leadCellsWorker, leadsChatwitWorker, autoNotificationsWorker].forEach(worker => {
+[agendamentoWorker, manuscritoWorker, leadCellsWorker, leadsChatwitWorker, autoNotificationsWorker, mtfDiamanteWebhookWorker, mtfDiamanteAsyncWorker].forEach(worker => {
   worker.on('completed', (job) => {
     console.log(`[BullMQ] Job ${job.id} concluído com sucesso`);
   });
@@ -220,6 +244,30 @@ export async function initLeadsChatwitWorker() {
   }
 }
 
+// Exportar a função de inicialização do worker de webhook MTF Diamante
+export async function initMtfDiamanteWebhookWorker() {
+  try {
+    console.log('[BullMQ] Inicializando worker de webhook MTF Diamante...');
+    await mtfDiamanteWebhookWorker.waitUntilReady();
+    console.log('[BullMQ] Worker de webhook MTF Diamante inicializado com sucesso');
+  } catch (error) {
+    console.error('[BullMQ] Erro ao inicializar worker de webhook MTF Diamante:', error);
+    throw error;
+  }
+}
+
+// Exportar a função de inicialização do worker assíncrono MTF Diamante
+export async function initMtfDiamanteAsyncWorker() {
+  try {
+    console.log('[BullMQ] Inicializando worker assíncrono MTF Diamante...');
+    await mtfDiamanteAsyncWorker.waitUntilReady();
+    console.log('[BullMQ] Worker assíncrono MTF Diamante inicializado com sucesso');
+  } catch (error) {
+    console.error('[BullMQ] Erro ao inicializar worker assíncrono MTF Diamante:', error);
+    throw error;
+  }
+}
+
 // Tratamento de encerramento gracioso
 process.on('SIGTERM', async () => {
   console.log('Encerrando workers...');
@@ -228,6 +276,8 @@ process.on('SIGTERM', async () => {
     manuscritoWorker.close(),
     leadsChatwitWorker.close(),
     autoNotificationsWorker.close(),
+    mtfDiamanteWebhookWorker.close(),
+    mtfDiamanteAsyncWorker.close(),
   ]);
   await prisma.$disconnect();
   process.exit(0);
@@ -240,6 +290,8 @@ process.on('SIGINT', async () => {
     manuscritoWorker.close(),
     autoNotificationsWorker.close(),
     leadsChatwitWorker.close(),
+    mtfDiamanteWebhookWorker.close(),
+    mtfDiamanteAsyncWorker.close(),
   ]);
   await prisma.$disconnect();
   process.exit(0);
@@ -249,5 +301,6 @@ export {
   agendamentoWorker,
   manuscritoWorker,
   leadsChatwitWorker,
-  autoNotificationsWorker
+  autoNotificationsWorker,
+  mtfDiamanteWebhookWorker
 };

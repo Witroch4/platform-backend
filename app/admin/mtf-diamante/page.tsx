@@ -18,6 +18,7 @@ import TemplatesTab from './components/TemplatesTab/index';
 import MensagensInterativasTab from './components/MensagensInterativasTab';
 import MapeamentoTab from './components/MapeamentoTab';
 import ConfiguracoesLoteTab from './components/ConfiguracoesLoteTab';
+import { TemplateLibraryTab } from './components/TemplateLibraryTab';
 import { MtfDataProvider } from './context/MtfDataProvider';
 
 const MtfDiamanteAtendimentoPage = () => {
@@ -62,7 +63,7 @@ const MtfDiamanteAtendimentoPage = () => {
     if (tabParam) {
       setActiveTab(tabParam);
     }
-  }, [tabParam]);
+  }, [tabParam]); // Removida dependência fetchConfig para evitar re-renders
 
   return (
     <MtfDataProvider>
@@ -76,6 +77,7 @@ const MtfDiamanteAtendimentoPage = () => {
             <TabsTrigger value="integracoes">Caixas de Entrada</TabsTrigger>
             <TabsTrigger value="lote">Configurações Globais</TabsTrigger>
             <TabsTrigger value="templates">Templates</TabsTrigger>
+            <TabsTrigger value="library">Template Library</TabsTrigger>
             <TabsTrigger value="interativas" disabled={!selectedCaixaId}>Mensagens Interativas</TabsTrigger>
             <TabsTrigger value="mapeamento" disabled={!selectedCaixaId}>Mapeamento</TabsTrigger>
           </TabsList>
@@ -91,6 +93,11 @@ const MtfDiamanteAtendimentoPage = () => {
           <TabsContent value="templates">
               <TemplatesTab />
           </TabsContent>
+          
+          <TabsContent value="library">
+              <TemplateLibraryTab />
+          </TabsContent>
+          
           <TabsContent value="interativas">
               {selectedCaixaId ? <MensagensInterativasTab caixaId={selectedCaixaId} /> : <EmptyStateTab />}
           </TabsContent>

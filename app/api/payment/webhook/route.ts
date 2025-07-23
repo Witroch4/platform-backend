@@ -12,7 +12,7 @@ if (stripeSecretKey === "dummy_stripe_secret") {
 }
 
 const stripe = new Stripe(stripeSecretKey, {
-  apiVersion: "2025-01-27.acacia",
+  apiVersion: "2025-02-24.acacia",
 });
 
 // Altere o runtime para "nodejs" para evitar problemas com APIs do Node.js no Edge Runtime

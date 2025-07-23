@@ -24,7 +24,7 @@ export async function GET() {
       }
     });
 
-    const isAdmin = user?.role === "ADMIN";
+    const isAdmin = user?.role === "ADMIN" || user?.role === "SUPERADMIN";
 
     return NextResponse.json({
       isAdmin,

@@ -60,7 +60,7 @@ export function DialogflowCaixasAgentes({ onCaixaSelected }: DialogflowCaixasAge
       setSelectedCaixaId(firstCaixaId);
       onCaixaSelected(firstCaixaId);
     }
-  }, [caixas, selectedCaixaId, onCaixaSelected]);
+  }, [caixas.length, selectedCaixaId, onCaixaSelected]);
 
   const handleSelectCaixa = (id: string | null) => {
     setSelectedCaixaId(id);
@@ -262,20 +262,22 @@ function AdicionarCaixaDialog({ onCaixaAdicionada, caixasConfiguradas }: { onCai
 
     const handleAdicionarCaixa = async (caixa: Inbox) => {
         const nomeInterno = nomesInternos[caixa.id] || caixa.name;
-        try {
-            await axios.post('/api/admin/mtf-diamante/dialogflow/caixas', {
-                nome: nomeInterno,
-                accountId: caixa.account_id,
-                inboxId: caixa.id.toString(),
-                inboxName: caixa.name,
-                channelType: caixa.channel_type
-            });
-            toast.success(`Caixa "${nomeInterno}" adicionada com sucesso!`);
-            onCaixaAdicionada();
-            setOpen(false);
-        } catch (error) {
-            toast.error("Erro ao adicionar a caixa.");
-        }
+        const promise = axios.post('/api/admin/mtf-diamante/dialogflow/caixas', {
+            nome: nomeInterno,
+            accountId: caixa.account_id,
+            inboxId: caixa.id.toString(),
+            inboxName: caixa.name,
+            channelType: caixa.channel_type
+        });
+        toast.promise(promise, {
+            loading: `Adicionando caixa...`,
+            success: () => {
+                onCaixaAdicionada();
+                setOpen(false);
+                return `Caixa "${nomeInterno}" adicionada com sucesso!`;
+            },
+            error: 'Erro ao adicionar a caixa.'
+        });
     }
 
     return (

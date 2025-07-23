@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 
 interface MtfDiamanteVariavel {
   id?: string;
@@ -93,6 +93,11 @@ export function MtfDataProvider({ children }: MtfDataProviderProps) {
     caixas: 0
   });
 
+  // Refs para controlar se já foi carregado inicialmente
+  const hasLoadedVariaveis = useRef(false);
+  const hasLoadedLotes = useRef(false);
+  const hasLoadedCaixas = useRef(false);
+
   const CACHE_DURATION = 10 * 60 * 1000; // 10 minutos
 
   // Função para buscar variáveis
@@ -100,7 +105,8 @@ export function MtfDataProvider({ children }: MtfDataProviderProps) {
     const now = Date.now();
     const shouldFetch = forceRefresh || (now - lastFetchTimes.variaveis > CACHE_DURATION);
     
-    if (!shouldFetch && variaveis.length > 0) {
+    // Se já carregou e não é force refresh, não busca novamente
+    if (!shouldFetch && hasLoadedVariaveis.current) {
       return;
     }
 
@@ -111,20 +117,22 @@ export function MtfDataProvider({ children }: MtfDataProviderProps) {
         const data = await response.json();
         setVariaveis(data.variaveis || []);
         setLastFetchTimes(prev => ({ ...prev, variaveis: now }));
+        hasLoadedVariaveis.current = true;
       }
     } catch (error) {
       console.error('Erro ao buscar variáveis:', error);
     } finally {
       setLoadingVariaveis(false);
     }
-  }, [variaveis.length, lastFetchTimes.variaveis]);
+  }, [lastFetchTimes.variaveis]);
 
   // Função para buscar lotes
   const fetchLotes = useCallback(async (forceRefresh = false) => {
     const now = Date.now();
     const shouldFetch = forceRefresh || (now - lastFetchTimes.lotes > CACHE_DURATION);
     
-    if (!shouldFetch && lotes.length > 0) {
+    // Se já carregou e não é force refresh, não busca novamente
+    if (!shouldFetch && hasLoadedLotes.current) {
       return;
     }
 
@@ -135,20 +143,22 @@ export function MtfDataProvider({ children }: MtfDataProviderProps) {
         const data = await response.json();
         setLotes(data.lotes || []);
         setLastFetchTimes(prev => ({ ...prev, lotes: now }));
+        hasLoadedLotes.current = true;
       }
     } catch (error) {
       console.error('Erro ao buscar lotes:', error);
     } finally {
       setLoadingLotes(false);
     }
-  }, [lotes.length, lastFetchTimes.lotes]);
+  }, [lastFetchTimes.lotes]);
 
   // Função para buscar caixas
   const fetchCaixas = useCallback(async (forceRefresh = false) => {
     const now = Date.now();
     const shouldFetch = forceRefresh || (now - lastFetchTimes.caixas > CACHE_DURATION);
     
-    if (!shouldFetch && caixas.length > 0) {
+    // Se já carregou e não é force refresh, não busca novamente
+    if (!shouldFetch && hasLoadedCaixas.current) {
       return;
     }
 
@@ -159,20 +169,21 @@ export function MtfDataProvider({ children }: MtfDataProviderProps) {
         const data = await response.json();
         setCaixas(data.caixas || []);
         setLastFetchTimes(prev => ({ ...prev, caixas: now }));
+        hasLoadedCaixas.current = true;
       }
     } catch (error) {
       console.error('Erro ao buscar caixas:', error);
     } finally {
       setLoadingCaixas(false);
     }
-  }, [caixas.length, lastFetchTimes.caixas]);
+  }, [lastFetchTimes.caixas]);
 
   // Funções de refresh públicas
   const refreshVariaveis = useCallback(() => fetchVariaveis(true), [fetchVariaveis]);
   const refreshLotes = useCallback(() => fetchLotes(true), [fetchLotes]);
   const refreshCaixas = useCallback(() => fetchCaixas(true), [fetchCaixas]);
 
-  // Inicialização dos dados
+  // Inicialização dos dados - apenas uma vez
   useEffect(() => {
     const initializeData = async () => {
       await Promise.all([
@@ -184,7 +195,7 @@ export function MtfDataProvider({ children }: MtfDataProviderProps) {
     };
 
     initializeData();
-  }, [fetchVariaveis, fetchLotes, fetchCaixas]);
+  }, []); // Removidas as dependências que causavam re-renders infinitos
 
   const contextValue: MtfDataContextType = {
     variaveis,

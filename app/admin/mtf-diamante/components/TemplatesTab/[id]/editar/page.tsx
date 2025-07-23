@@ -48,13 +48,7 @@ interface TemplateDetail {
   }>;
 }
 
-export default function EditTemplateDetailsPage({ 
-  templateId, 
-  onBack 
-}: { 
-  templateId?: string; 
-  onBack?: () => void; 
-}) {
+export default function EditTemplateDetailsPage() {
   const params = useParams();
   const router = useRouter();
   
@@ -70,7 +64,7 @@ export default function EditTemplateDetailsPage({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  const actualTemplateId = templateId || (params?.id as string);
+  const actualTemplateId = params?.id as string;
   
   useEffect(() => {
     const fetchTemplateDetails = async () => {
@@ -276,11 +270,7 @@ export default function EditTemplateDetailsPage({
       if (response.data.success) {
         toast("Template enviado para análise", { description: "As alterações foram enviadas para análise pelo WhatsApp e serão revisadas em breve."
           });
-        if (onBack) {
-          onBack();
-        } else {
-          router.push(`/admin/templates/${actualTemplateId}`);
-        }
+        router.push(`/admin/templates/${actualTemplateId}`);
       } else {
         toast.error("Erro ao atualizar template", { description: response.data.error || "Ocorreu um erro ao enviar as alterações para análise"
          });
@@ -316,19 +306,12 @@ export default function EditTemplateDetailsPage({
           </AlertDescription>
         </Alert>
         <div className="mt-4">
-          {onBack ? (
-            <Button variant="ghost" onClick={onBack}>
+          <Button variant="ghost" asChild>
+            <Link href={`/admin/templates/${actualTemplateId}`}>
               <ArrowLeft className="h-4 w-4 mr-2" />
               Voltar para detalhes do template
-            </Button>
-          ) : (
-            <Button variant="ghost" asChild>
-              <Link href={`/admin/templates/${actualTemplateId}`}>
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Voltar para detalhes do template
-              </Link>
-            </Button>
-          )}
+            </Link>
+          </Button>
         </div>
       </div>
     );
@@ -359,17 +342,11 @@ export default function EditTemplateDetailsPage({
     <div className="container mx-auto py-10 max-w-6xl">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
-          {onBack ? (
-            <Button variant="ghost" size="icon" onClick={onBack}>
+          <Button variant="ghost" size="icon" asChild>
+            <Link href={`/admin/templates/${actualTemplateId}`}>
               <ArrowLeft className="h-4 w-4" />
-            </Button>
-          ) : (
-            <Button variant="ghost" size="icon" asChild>
-              <Link href={`/admin/templates/${actualTemplateId}`}>
-                <ArrowLeft className="h-4 w-4" />
-              </Link>
-            </Button>
-          )}
+            </Link>
+          </Button>
           <h1 className="text-2xl font-bold">Editar Template: {template.name}</h1>
         </div>
       </div>

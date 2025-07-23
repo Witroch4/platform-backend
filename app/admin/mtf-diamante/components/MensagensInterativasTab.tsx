@@ -6,8 +6,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { TrashIcon, PencilIcon } from 'lucide-react';
+import { TrashIcon, PencilIcon, Upload, Eye, Save, Plus, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
+import { EnhancedTextArea } from './EnhancedTextArea';
+import { TemplatePreview } from './TemplatesTab/components/template-preview';
+import { useVariableManager } from '../hooks/useVariableManager';
+import { TemplateLibraryService } from '@/app/lib/template-library-service';
+import { useSession } from 'next-auth/react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { MediaUploadComponent } from './shared/MediaUploadComponent';
+import { ButtonManager, type ButtonConfig } from './shared/ButtonManager';
+import { InteractiveMessageCreator, type InteractiveMessageType } from './InteractiveMessageCreator';
+import { InteractiveMessageTypeSelector } from './InteractiveMessageTypeSelector';
 
 interface MensagensInterativasTabProps {
   caixaId: string;
@@ -29,23 +40,16 @@ interface Mensagem {
 }
 
 const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
+  const [currentView, setCurrentView] = useState<'list' | 'create' | 'edit'>('list');
+  const [editingMessage, setEditingMessage] = useState<any>(null);
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Form state
-  const [id, setId] = useState<string | null>(null);
-  const [nome, setNome] = useState('');
-  const [texto, setTexto] = useState('');
-  const [headerTipo, setHeaderTipo] = useState<string | null>(null);
-  const [headerConteudo, setHeaderConteudo] = useState('');
-  const [rodape, setRodape] = useState('');
-  const [botoes, setBotoes] = useState<Botao[]>([{ titulo: '' }]);
 
   const fetchMensagens = async () => {
     if (!caixaId) return;
     try {
       setLoading(true);
-      const response = await fetch(`/api/admin/mtf-diamante/mensagens-interativas/${caixaId}`);
+      const response = await fetch(`/api/admin/mtf-diamante/interactive-messages?caixaId=${caixaId}`);
       if (!response.ok) throw new Error('Falha ao buscar mensagens.');
       const data = await response.json();
       setMensagens(data);
@@ -60,30 +64,35 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
     fetchMensagens();
   }, [caixaId]);
 
-  const resetForm = () => {
-    setId(null);
-    setNome('');
-    setTexto('');
-    setHeaderTipo(null);
-    setHeaderConteudo('');
-    setRodape('');
-    setBotoes([{ titulo: '' }]);
-  };
-
   const handleEdit = (msg: Mensagem) => {
-    setId(msg.id);
-    setNome(msg.nome);
-    setTexto(msg.texto);
-    setHeaderTipo(msg.headerTipo || null);
-    setHeaderConteudo(msg.headerConteudo || '');
-    setRodape(msg.rodape || '');
-    setBotoes(msg.botoes.length > 0 ? msg.botoes.map(b => ({...b})) : [{ titulo: '' }]);
+    // Convert old format to new format
+    const convertedMessage = {
+      id: msg.id,
+      name: msg.nome,
+      type: 'button' as InteractiveMessageType,
+      body: { text: msg.texto },
+      header: msg.headerTipo ? {
+        type: msg.headerTipo === 'text' ? 'text' : msg.headerTipo,
+        text: msg.headerTipo === 'text' ? msg.headerConteudo : undefined,
+        media_url: msg.headerTipo !== 'text' ? msg.headerConteudo : undefined
+      } : undefined,
+      footer: msg.rodape ? { text: msg.rodape } : undefined,
+      action: msg.botoes.length > 0 ? {
+        buttons: msg.botoes.map(b => ({
+          id: b.id || `btn_${Date.now()}`,
+          title: b.titulo
+        }))
+      } : undefined
+    };
+    
+    setEditingMessage(convertedMessage);
+    setCurrentView('edit');
   };
 
   const handleDelete = async (mensagemId: string) => {
     if (!confirm('Tem certeza que deseja excluir esta mensagem?')) return;
     try {
-      const response = await fetch(`/api/admin/mtf-diamante/mensagens-interativas/${mensagemId}`, { method: 'DELETE' });
+      const response = await fetch(`/api/admin/mtf-diamante/interactive-messages/${mensagemId}`, { method: 'DELETE' });
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Falha ao excluir mensagem.');
@@ -95,115 +104,151 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
     }
   };
 
-  const handleBotaoChange = (index: number, value: string) => {
-    const novosBotoes = [...botoes];
-    novosBotoes[index].titulo = value;
-    setBotoes(novosBotoes);
+  const handleSaveMessage = (message: any) => {
+    toast.success('Mensagem salva com sucesso!');
+    setCurrentView('list');
+    setEditingMessage(null);
+    fetchMensagens();
   };
 
-  const addBotao = () => {
-    if (botoes.length < 3) {
-      setBotoes([...botoes, { titulo: '' }]);
-    }
+  const handleBackToList = () => {
+    setCurrentView('list');
+    setEditingMessage(null);
   };
 
-  const removeBotao = (index: number) => {
-    if (botoes.length > 1) {
-        const novosBotoes = botoes.filter((_, i) => i !== index);
-        setBotoes(novosBotoes);
-    }
-  };
+  // Render create/edit view
+  if (currentView === 'create' || currentView === 'edit') {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={handleBackToList}
+              className="hover:bg-accent hover:text-accent-foreground"
+            >
+              ←
+            </Button>
+            <div>
+              <h2 className="text-2xl font-bold text-foreground">
+                {currentView === 'edit' ? 'Editar' : 'Criar'} Mensagem Interativa
+              </h2>
+              <p className="text-muted-foreground">
+                Crie mensagens interativas avançadas com todos os tipos suportados pelo WhatsApp Business
+              </p>
+            </div>
+          </div>
+        </div>
+        
+        <InteractiveMessageCreator
+          caixaId={caixaId}
+          onSave={handleSaveMessage}
+          editingMessage={editingMessage}
+        />
+      </div>
+    );
+  }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const response = await fetch(`/api/admin/mtf-diamante/mensagens-interativas/${caixaId}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            id, 
-            nome, 
-            texto, 
-            headerTipo, 
-            headerConteudo, 
-            rodape, 
-            botoes: botoes.filter(b => b.titulo) 
-          })
-      });
-
-      if (response.ok) {
-          toast.success(`Mensagem ${id ? 'atualizada' : 'salva'} com sucesso!`);
-          resetForm();
-          fetchMensagens();
-      } else {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Falha ao salvar mensagem.');
-      }
-    } catch (error) {
-      toast.error((error as Error).message);
-    }
-  };
-
+  // Render main list view
   return (
-    <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-            <CardHeader>
-                <CardTitle>{id ? 'Editar Mensagem' : 'Nova Mensagem Interativa'}</CardTitle>
-                <CardDescription>Crie ou edite uma mensagem com botões de resposta.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <Input placeholder="Nome da Mensagem (ex: Menu Principal)" value={nome} onChange={e => setNome(e.target.value)} required />
-                    <Textarea placeholder="Corpo da mensagem..." value={texto} onChange={e => setTexto(e.target.value)} required />
-                    <Select onValueChange={v => setHeaderTipo(v === 'null' ? null : v)} value={headerTipo || 'null'}>
-                        <SelectTrigger><SelectValue placeholder="Tipo de Cabeçalho (Opcional)" /></SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="null">Nenhum</SelectItem>
-                            <SelectItem value="text">Texto</SelectItem>
-                            <SelectItem value="image">Imagem</SelectItem>
-                        </SelectContent>
-                    </Select>
-                    {headerTipo && <Input placeholder={headerTipo === 'text' ? "Texto do cabeçalho" : "URL da Imagem"} value={headerConteudo} onChange={e => setHeaderConteudo(e.target.value)} />}
-                    <Input placeholder="Rodapé (Opcional)" value={rodape} onChange={e => setRodape(e.target.value)} />
-                    
-                    <div>
-                        <label className="text-sm font-medium">Botões (até 3)</label>
-                        {botoes.map((botao, index) => (
-                            <div key={index} className="flex items-center space-x-2 mt-2">
-                                <Input placeholder={`Título do Botão ${index + 1}`} value={botao.titulo} onChange={e => handleBotaoChange(index, e.target.value)} required/>
-                                {botoes.length > 1 && <Button type="button" variant="destructive" size="icon" onClick={() => removeBotao(index)}><TrashIcon className="h-4 w-4" /></Button>}
-                            </div>
-                        ))}
-                        {botoes.length < 3 && <Button type="button" variant="outline" size="sm" onClick={addBotao} className="mt-2">Adicionar Botão</Button>}
-                    </div>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <MessageSquare className="h-6 w-6 text-muted-foreground" />
+          <div>
+            <h2 className="text-2xl font-bold text-foreground">Mensagens Interativas</h2>
+            <p className="text-muted-foreground">
+              Gerencie mensagens interativas com botões, listas, localização e mais funcionalidades avançadas.
+            </p>
+          </div>
+        </div>
+        <Button 
+          onClick={() => setCurrentView('create')}
+          className="bg-primary text-primary-foreground hover:bg-primary/90"
+        >
+          <Plus className="h-4 w-4 mr-2" /> Nova Mensagem Interativa
+        </Button>
+      </div>
 
-                    <div className="flex gap-2">
-                      <Button type="submit">{id ? 'Atualizar' : 'Salvar'} Mensagem</Button>
-                      {id && <Button type="button" variant="outline" onClick={resetForm}>Cancelar</Button>}
+      <Card>
+        <CardHeader>
+          <CardTitle>Mensagens Salvas</CardTitle>
+          <CardDescription>
+            Gerencie suas mensagens interativas salvas
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading && (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          )}
+          
+          <div className="space-y-3">
+            {mensagens.map(msg => (
+              <div key={msg.id} className="border border-border p-4 rounded-lg flex justify-between items-start hover:bg-accent/50 transition-colors">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="font-medium text-foreground">{msg.nome}</span>
+                    <Badge variant="outline" className="text-xs">
+                      {msg.headerTipo ? `${msg.headerTipo.toUpperCase()} + ` : ''}
+                      {msg.botoes.length > 0 ? `${msg.botoes.length} BOTÕES` : 'TEXTO'}
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
+                    {msg.texto}
+                  </p>
+                  {msg.botoes.length > 0 && (
+                    <div className="flex gap-1 flex-wrap">
+                      {msg.botoes.map((botao, idx) => (
+                        <Badge key={idx} variant="secondary" className="text-xs">
+                          {botao.titulo}
+                        </Badge>
+                      ))}
                     </div>
-                </form>
-            </CardContent>
-        </Card>
-
-        <Card>
-            <CardHeader>
-                <CardTitle>Mensagens Salvas</CardTitle>
-            </CardHeader>
-            <CardContent>
-                {loading && <p>Carregando...</p>}
-                <div className="space-y-2">
-                    {mensagens.map(msg => (
-                        <div key={msg.id} className="border p-3 rounded-md flex justify-between items-center">
-                            <span className="font-medium">{msg.nome}</span>
-                            <div className="flex gap-1">
-                              <Button variant="ghost" size="icon" onClick={() => handleEdit(msg)}><PencilIcon className="h-4 w-4" /></Button>
-                              <Button variant="ghost" size="icon" onClick={() => handleDelete(msg.id)}><TrashIcon className="h-4 w-4 text-red-500" /></Button>
-                            </div>
-                        </div>
-                    ))}
+                  )}
                 </div>
-            </CardContent>
-        </Card>
+                <div className="flex gap-1 ml-4">
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={() => handleEdit(msg)}
+                    title="Editar mensagem"
+                    className="hover:bg-accent"
+                  >
+                    <PencilIcon className="h-4 w-4" />
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={() => handleDelete(msg.id)}
+                    title="Excluir mensagem"
+                    className="hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <TrashIcon className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+            
+            {!loading && mensagens.length === 0 && (
+              <div className="text-center text-muted-foreground py-12">
+                <MessageSquare className="h-16 w-16 mx-auto mb-4 opacity-50" />
+                <p className="text-lg font-medium">Nenhuma mensagem interativa ainda</p>
+                <p className="text-sm mb-4">Crie sua primeira mensagem interativa com botões, listas e mais funcionalidades</p>
+                <Button 
+                  onClick={() => setCurrentView('create')}
+                  variant="outline"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Criar Primeira Mensagem
+                </Button>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };

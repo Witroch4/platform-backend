@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTheme } from "next-themes";
 import axios from "axios";
 import { toast } from "sonner";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -55,15 +56,20 @@ export default function TemplatesTab() {
     return (
       <div className="w-full">
         <div className="flex items-center gap-4 mb-6">
-          <Button variant="ghost" size="icon" onClick={handleBackToList}>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={handleBackToList}
+            className="hover:bg-accent hover:text-accent-foreground"
+          >
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h2 className="text-2xl font-bold">Criar Novo Template</h2>
+            <h2 className="text-2xl font-bold text-foreground">Criar Novo Template</h2>
             <p className="text-muted-foreground">Crie um novo template para envio de mensagens via WhatsApp</p>
           </div>
         </div>
-        <CreateTemplatePage onBack={handleBackToList} />
+        <CreateTemplatePage />
       </div>
     );
   }
@@ -73,19 +79,20 @@ export default function TemplatesTab() {
     return (
       <div className="w-full">
         <div className="flex items-center gap-4 mb-6">
-          <Button variant="ghost" size="icon" onClick={handleBackToList}>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={handleBackToList}
+            className="hover:bg-accent hover:text-accent-foreground"
+          >
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h2 className="text-2xl font-bold">Detalhes do Template</h2>
+            <h2 className="text-2xl font-bold text-foreground">Detalhes do Template</h2>
             <p className="text-muted-foreground">Visualize e gerencie os detalhes do template</p>
           </div>
         </div>
-        <TemplateDetailsPage 
-          templateId={selectedTemplateId} 
-          onBack={handleBackToList}
-          onEdit={() => handleNavigateToEdit(selectedTemplateId)}
-        />
+        <TemplateDetailsPage templateId={selectedTemplateId} onBack={handleBackToList} />
       </div>
     );
   }
@@ -95,18 +102,23 @@ export default function TemplatesTab() {
     return (
       <div className="w-full">
         <div className="flex items-center gap-4 mb-6">
-          <Button variant="ghost" size="icon" onClick={handleBackToList}>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={handleBackToList}
+            className="hover:bg-accent hover:text-accent-foreground"
+          >
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h2 className="text-2xl font-bold">Editar Template</h2>
+            <h2 className="text-2xl font-bold text-foreground">Editar Template</h2>
             <p className="text-muted-foreground">Edite as configurações do template</p>
           </div>
         </div>
-        <Alert>
+        <Alert className="border-border bg-card">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Funcionalidade em desenvolvimento</AlertTitle>
-          <AlertDescription>
+          <AlertTitle className="text-card-foreground">Funcionalidade em desenvolvimento</AlertTitle>
+          <AlertDescription className="text-muted-foreground">
             A edição de templates será implementada em breve. Por enquanto, utilize o Business Manager da Meta para editar templates.
           </AlertDescription>
         </Alert>
@@ -128,7 +140,10 @@ export default function TemplatesTab() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button onClick={handleNavigateToCreate}>
+          <Button 
+            onClick={handleNavigateToCreate}
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
+          >
             <Plus className="h-4 w-4 mr-2" /> Novo Template
           </Button>
           <DisparoMensagemDialog />
@@ -141,6 +156,7 @@ export default function TemplatesTab() {
 }
 
 function TemplatesDisponiveis({ onTemplateClick }: { onTemplateClick: (templateId: string) => void }) {
+  const { theme } = useTheme();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

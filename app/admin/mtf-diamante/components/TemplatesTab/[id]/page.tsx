@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
 import Link from "next/link";
 import axios from "axios";
 import { toast } from "sonner";
@@ -15,12 +16,7 @@ import {
   CardContent,
   CardFooter,
 } from "@/components/ui/card";
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import {
   Dialog,
@@ -88,18 +84,18 @@ interface TemplateDetail {
   }>;
 }
 
-export default function TemplateDetailsPage({
-  templateId,
-  onBack,
-  onEdit
-}: {
+interface TemplateDetailsPageProps {
   templateId?: string;
   onBack?: () => void;
-  onEdit?: () => void;
-}) {
-  const params = useParams();
-  const actualTemplateId = templateId || (params?.id as string);
+}
+
+export default function TemplateDetailsPage({
+  templateId: propTemplateId,
+  onBack,
+}: TemplateDetailsPageProps = {}) {
   const router = useRouter();
+  // Para navegação interna, sempre usar o templateId passado via props
+  const actualTemplateId = propTemplateId;
 
   const [template, setTemplate] = useState<TemplateDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -115,7 +111,9 @@ export default function TemplateDetailsPage({
   const [isDeleting, setIsDeleting] = useState(false);
   const [isMassUploading, setIsMassUploading] = useState(false);
   const [isMassSending, setIsMassSending] = useState(false);
-  const [contactList, setContactList] = useState<{ nome: string; numero: string }[]>([]);
+  const [contactList, setContactList] = useState<
+    { nome: string; numero: string }[]
+  >([]);
   const [showSendProgress, setShowSendProgress] = useState(false);
   const [sendProgressComplete, setSendProgressComplete] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -123,21 +121,31 @@ export default function TemplateDetailsPage({
 
   useEffect(() => {
     async function fetchTemplate() {
+      if (!actualTemplateId) {
+        setError("ID do template não fornecido");
+        setIsLoading(false);
+        return;
+      }
+
       try {
         setIsLoading(true);
         setError(null);
 
-        const res = await axios.get(
-          `/api/admin/mtf-diamante/template-info?template=${actualTemplateId}`
-        ).catch(error => {
-          console.error("Erro na requisição:", error);
-          throw new Error(
-            error.response?.data?.error ||
-            error.response?.data?.details ||
-            error.message ||
-            "Falha na comunicação com o servidor"
-          );
-        });
+        console.log("Buscando template com ID:", actualTemplateId);
+
+        const res = await axios
+          .get(
+            `/api/admin/mtf-diamante/template-info?template=${actualTemplateId}`
+          )
+          .catch((error) => {
+            console.error("Erro na requisição:", error);
+            throw new Error(
+              error.response?.data?.error ||
+                error.response?.data?.details ||
+                error.message ||
+                "Falha na comunicação com o servidor"
+            );
+          });
 
         if (!res.data.success) {
           setError(res.data.details || "Erro ao carregar template");
@@ -152,7 +160,8 @@ export default function TemplateDetailsPage({
           subCategory: t.sub_category,
           status: t.status,
           language: t.language,
-          qualityScore: typeof t.quality_score === 'string' ? t.quality_score : null,
+          qualityScore:
+            typeof t.quality_score === "string" ? t.quality_score : null,
           correctCategory: t.correct_category,
           ctaUrlLinkTrackingOptedOut: t.cta_url_link_tracking_opted_out,
           libraryTemplateName: t.library_template_name,
@@ -184,7 +193,8 @@ export default function TemplateDetailsPage({
           let mediaUrl = t.publicMediaUrl;
 
           if (!mediaUrl) {
-            mediaUrl = hdr.example?.header_handle?.[0] ||
+            mediaUrl =
+              hdr.example?.header_handle?.[0] ||
               hdr.example?.header_url ||
               (typeof hdr.example?.header_location === "object"
                 ? JSON.stringify(hdr.example.header_location)
@@ -251,10 +261,9 @@ export default function TemplateDetailsPage({
     // Basic formatting for Brazil numbers
     if (phone.startsWith("+55") || phone.startsWith("55")) {
       const cleaned = phone.replace(/\D/g, "");
-      if (cleaned.length === 12 || cleaned.length === 13) { // With or without country code
-        return phone.startsWith("+")
-          ? phone
-          : `+${phone}`;
+      if (cleaned.length === 12 || cleaned.length === 13) {
+        // With or without country code
+        return phone.startsWith("+") ? phone : `+${phone}`;
       }
     }
     return phone;
@@ -298,7 +307,7 @@ export default function TemplateDetailsPage({
         if (onBack) {
           onBack();
         } else {
-          router.push("/admin/templates");
+          router.push("/admin/mtf-diamante");
         }
       } else {
         toast.error(res.data.error);
@@ -311,12 +320,15 @@ export default function TemplateDetailsPage({
   };
 
   // Dentro do componente da página, adicione esta função para exibir a origem da mídia
-  function getMediaSourceLabel(url: string, publicMediaUrl: string | null | undefined) {
+  function getMediaSourceLabel(
+    url: string,
+    publicMediaUrl: string | null | undefined
+  ) {
     if (!url) return "";
     if (publicMediaUrl && url === publicMediaUrl) {
       return "Armazenada no MinIO";
     }
-    if (url.includes('whatsapp.net') || url.includes('fbcdn.net')) {
+    if (url.includes("whatsapp.net") || url.includes("fbcdn.net")) {
       return "Hospedada nos servidores da Meta";
     }
     return "";
@@ -329,7 +341,7 @@ export default function TemplateDetailsPage({
     setIsMassSending(true);
     try {
       // Extrair apenas os números dos contatos
-      const selectedLeads = contactList.map(contact => {
+      const selectedLeads = contactList.map((contact) => {
         let numero = contact.numero.replace(/\D/g, "");
         if (!numero.startsWith("55")) numero = "55" + numero;
         return numero;
@@ -338,19 +350,33 @@ export default function TemplateDetailsPage({
         templateId: template.id,
         selectedLeads,
       };
-      console.log(`Enviando mensagem para ${selectedLeads.length} leads:`, payload);
-      const response = await axios.post("/api/admin/mtf-diamante/disparo", payload);
+      console.log(
+        `Enviando mensagem para ${selectedLeads.length} leads:`,
+        payload
+      );
+      const response = await axios.post(
+        "/api/admin/mtf-diamante/disparo",
+        payload
+      );
       if (response.data.success) {
         setSendProgressComplete(true);
-        toast.success(`Mensagens enviadas com sucesso para ${selectedLeads.length} leads!`);
+        toast.success(
+          `Mensagens enviadas com sucesso para ${selectedLeads.length} leads!`
+        );
       } else {
         setShowSendProgress(false);
-        toast.error(response.data.error || "Falha ao enviar mensagens em massa");
+        toast.error(
+          response.data.error || "Falha ao enviar mensagens em massa"
+        );
       }
     } catch (error: any) {
       console.error("Erro ao enviar mensagens em massa:", error);
       setShowSendProgress(false);
-      toast.error(error.response?.data?.error || error.message || "Erro ao enviar mensagens");
+      toast.error(
+        error.response?.data?.error ||
+          error.message ||
+          "Erro ao enviar mensagens"
+      );
     } finally {
       setIsMassSending(false);
     }
@@ -358,10 +384,12 @@ export default function TemplateDetailsPage({
 
   const handleLeadsSelection = (selectedLeads: any[]) => {
     // Converter leads do sistema para o formato de contatos
-    const contacts = selectedLeads.map(lead => ({
-      nome: lead.nomeReal || lead.name || "Lead sem nome",
-      numero: lead.phoneNumber || ""
-    })).filter(contact => contact.numero); // Filtrar apenas com número válido
+    const contacts = selectedLeads
+      .map((lead) => ({
+        nome: lead.nomeReal || lead.name || "Lead sem nome",
+        numero: lead.phoneNumber || "",
+      }))
+      .filter((contact) => contact.numero); // Filtrar apenas com número válido
 
     setContactList(contacts);
     toast.success(`${contacts.length} leads selecionados da base de dados!`);
@@ -377,7 +405,9 @@ export default function TemplateDetailsPage({
           style={{ width: 150, height: 150 }}
           aria-label="Carregando informações do template"
         />
-        <p className="mt-4 text-muted-foreground">Carregando informações do template...</p>
+        <p className="mt-4 text-muted-foreground">
+          Carregando informações do template...
+        </p>
       </div>
     );
   }
@@ -403,7 +433,7 @@ export default function TemplateDetailsPage({
             <ArrowLeft />
           </Button>
         ) : (
-          <Link href="/admin/templates">
+          <Link href="/admin/mtf-diamante">
             <Button variant="ghost" size="icon">
               <ArrowLeft />
             </Button>
@@ -411,19 +441,6 @@ export default function TemplateDetailsPage({
         )}
         <h1 className="text-2xl font-bold truncate">{template.name}</h1>
         <div className="space-x-2">
-          {onEdit ? (
-            <Button variant="outline" size="sm" onClick={onEdit}>
-              <Edit className="mr-1 h-4 w-4" />
-              Editar
-            </Button>
-          ) : (
-            <Link href={`/admin/templates/${actualTemplateId}/editar`}>
-              <Button variant="outline" size="sm">
-                <Edit className="mr-1 h-4 w-4" />
-                Editar
-              </Button>
-            </Link>
-          )}
           <Button
             variant="destructive"
             size="sm"
@@ -463,90 +480,157 @@ export default function TemplateDetailsPage({
                       style={{
                         backgroundImage: "url('/fundo_whatsapp.jpg')",
                         backgroundSize: "cover",
-                        backgroundPosition: "center"
+                        backgroundPosition: "center",
                       }}
                     >
                       {/* Mensagem de template */}
                       <div className="max-w-[85%] bg-white rounded-lg shadow-sm p-3 ml-auto mr-3 mb-3">
                         {/* Header */}
-                        {template.componentes.map((c, i) => (
-                          c.type === "HEADER" && (
-                            <div key={i}>
-                              {c.format === "TEXT" && c.text && (
-                                <div className="font-bold text-center mb-2">{c.text}</div>
-                              )}
-                              {c.format === "IMAGE" && (
-                                <div className="mb-2 overflow-hidden rounded-md" style={{ maxHeight: "180px" }}>
-                                  {headerMedia ? (
-                                    <img
-                                      src={headerMedia}
-                                      alt="Header"
-                                      className="w-full object-contain rounded-md max-h-[160px]"
-                                    />
-                                  ) : (
-                                    <div className="w-full bg-gray-200 flex items-center justify-center" style={{ height: "140px" }}>
-                                      <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                                      </svg>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                              {c.format === "DOCUMENT" && (
-                                <div className="w-full bg-gray-100 rounded-md mb-2 p-3 flex items-center justify-center">
-                                  <svg className="w-8 h-8 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                                  </svg>
-                                  <span className="text-sm font-medium">Documento</span>
-                                </div>
-                              )}
-                              {c.format === "VIDEO" && (
-                                <div className="w-full bg-gray-100 rounded-md mb-2 flex items-center justify-center" style={{ maxHeight: "180px" }}>
-                                  {headerMedia ? (
-                                    <div className="flex flex-col items-center justify-center w-full h-full">
-                                      {headerMedia.includes("http") ? (
-                                        <video
-                                          src={headerMedia}
-                                          controls
-                                          className="w-full rounded-md max-h-[160px] object-contain"
-                                        />
-                                      ) : (
-                                        <>
-                                          <CheckCircle className="w-8 h-8 text-green-500 mb-2" />
-                                          <p className="text-sm font-medium text-green-600">Vídeo processado</p>
-                                          <p className="text-xs text-gray-500 mt-1">Media Handle: {headerMedia.substring(0, 10)}...</p>
-                                        </>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <svg className="w-12 h-12 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        {template.componentes.map(
+                          (c, i) =>
+                            c.type === "HEADER" && (
+                              <div key={i}>
+                                {c.format === "TEXT" && c.text && (
+                                  <div className="font-bold text-center mb-2">
+                                    {c.text}
+                                  </div>
+                                )}
+                                {c.format === "IMAGE" && (
+                                  <div
+                                    className="mb-2 overflow-hidden rounded-md"
+                                    style={{ maxHeight: "180px" }}
+                                  >
+                                    {headerMedia ? (
+                                      <img
+                                        src={headerMedia}
+                                        alt="Header"
+                                        className="w-full object-contain rounded-md max-h-[160px]"
+                                      />
+                                    ) : (
+                                      <div
+                                        className="w-full bg-gray-200 flex items-center justify-center"
+                                        style={{ height: "140px" }}
+                                      >
+                                        <svg
+                                          className="w-12 h-12 text-gray-400"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          viewBox="0 0 24 24"
+                                          xmlns="http://www.w3.org/2000/svg"
+                                        >
+                                          <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth="2"
+                                            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                          ></path>
+                                        </svg>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                                {c.format === "DOCUMENT" && (
+                                  <div className="w-full bg-gray-100 rounded-md mb-2 p-3 flex items-center justify-center">
+                                    <svg
+                                      className="w-8 h-8 text-gray-500 mr-2"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                      xmlns="http://www.w3.org/2000/svg"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth="2"
+                                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                      ></path>
                                     </svg>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          )
-                        ))}
+                                    <span className="text-sm font-medium">
+                                      Documento
+                                    </span>
+                                  </div>
+                                )}
+                                {c.format === "VIDEO" && (
+                                  <div
+                                    className="w-full bg-gray-100 rounded-md mb-2 flex items-center justify-center"
+                                    style={{ maxHeight: "180px" }}
+                                  >
+                                    {headerMedia ? (
+                                      <div className="flex flex-col items-center justify-center w-full h-full">
+                                        {headerMedia.includes("http") ? (
+                                          <video
+                                            src={headerMedia}
+                                            controls
+                                            className="w-full rounded-md max-h-[160px] object-contain"
+                                          />
+                                        ) : (
+                                          <>
+                                            <CheckCircle className="w-8 h-8 text-green-500 mb-2" />
+                                            <p className="text-sm font-medium text-green-600">
+                                              Vídeo processado
+                                            </p>
+                                            <p className="text-xs text-gray-500 mt-1">
+                                              Media Handle:{" "}
+                                              {headerMedia.substring(0, 10)}...
+                                            </p>
+                                          </>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <svg
+                                        className="w-12 h-12 text-gray-500"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                        xmlns="http://www.w3.org/2000/svg"
+                                      >
+                                        <path
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          strokeWidth="2"
+                                          d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+                                        ></path>
+                                        <path
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          strokeWidth="2"
+                                          d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                        ></path>
+                                      </svg>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                        )}
 
                         {/* Body */}
-                        {template.componentes.map((c, i) => (
-                          c.type === "BODY" && c.text && (
-                            <div key={i} className="text-sm whitespace-pre-line mb-2">
-                              {c.text}
-                            </div>
-                          )
-                        ))}
+                        {template.componentes.map(
+                          (c, i) =>
+                            c.type === "BODY" &&
+                            c.text && (
+                              <div
+                                key={i}
+                                className="text-sm whitespace-pre-line mb-2"
+                              >
+                                {c.text}
+                              </div>
+                            )
+                        )}
 
                         {/* Footer */}
-                        {template.componentes.map((c, i) => (
-                          c.type === "FOOTER" && c.text && (
-                            <div key={i} className="text-xs text-gray-500 mb-2">
-                              {c.text}
-                            </div>
-                          )
-                        ))}
+                        {template.componentes.map(
+                          (c, i) =>
+                            c.type === "FOOTER" &&
+                            c.text && (
+                              <div
+                                key={i}
+                                className="text-xs text-gray-500 mb-2"
+                              >
+                                {c.text}
+                              </div>
+                            )
+                        )}
 
                         <div className="text-right text-xs text-gray-500 flex justify-end items-center">
                           <span>17:12</span>
@@ -554,25 +638,37 @@ export default function TemplateDetailsPage({
                       </div>
 
                       {/* Botões abaixo da mensagem */}
-                      {template.componentes.map((c, i) => (
-                        c.type === "BUTTONS" && c.buttons && c.buttons.length > 0 && (
-                          <div key={i} className="bg-white rounded-lg shadow-sm max-w-[85%] ml-auto mr-3 mt-1 overflow-hidden">
-                            <div className="divide-y divide-gray-100">
-                              {c.buttons.map((button, index) => (
-                                <button
-                                  key={index}
-                                  className="w-full py-3 px-4 text-sm text-cyan-500 font-medium text-center flex justify-center items-center"
-                                >
-                                  {button.type === "URL" && <ExternalLink className="h-4 w-4 mr-2" />}
-                                  {button.type === "COPY_CODE" && <Copy className="h-4 w-4 mr-2" />}
-                                  {button.type === "PHONE_NUMBER" && <Phone className="h-4 w-4 mr-2" />}
-                                  {button.text}
-                                </button>
-                              ))}
+                      {template.componentes.map(
+                        (c, i) =>
+                          c.type === "BUTTONS" &&
+                          c.buttons &&
+                          c.buttons.length > 0 && (
+                            <div
+                              key={i}
+                              className="bg-white rounded-lg shadow-sm max-w-[85%] ml-auto mr-3 mt-1 overflow-hidden"
+                            >
+                              <div className="divide-y divide-gray-100">
+                                {c.buttons.map((button, index) => (
+                                  <button
+                                    key={index}
+                                    className="w-full py-3 px-4 text-sm text-cyan-500 font-medium text-center flex justify-center items-center"
+                                  >
+                                    {button.type === "URL" && (
+                                      <ExternalLink className="h-4 w-4 mr-2" />
+                                    )}
+                                    {button.type === "COPY_CODE" && (
+                                      <Copy className="h-4 w-4 mr-2" />
+                                    )}
+                                    {button.type === "PHONE_NUMBER" && (
+                                      <Phone className="h-4 w-4 mr-2" />
+                                    )}
+                                    {button.text}
+                                  </button>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        )
-                      ))}
+                          )
+                      )}
                     </div>
                   </div>
                 </TabsContent>
@@ -594,7 +690,9 @@ export default function TemplateDetailsPage({
             <CardContent>
               <Tabs defaultValue="individual">
                 <TabsList className="grid w-full grid-cols-2 mb-4">
-                  <TabsTrigger value="individual">Mensagem de Teste</TabsTrigger>
+                  <TabsTrigger value="individual">
+                    Mensagem de Teste
+                  </TabsTrigger>
                   <TabsTrigger value="massa">Envio em Massa</TabsTrigger>
                 </TabsList>
 
@@ -610,7 +708,9 @@ export default function TemplateDetailsPage({
                     />
                   </div>
 
-                  {template.componentes.some((c) => Array.isArray(c.parameters)) && (
+                  {template.componentes.some((c) =>
+                    Array.isArray(c.parameters)
+                  ) && (
                     <div>
                       <p className="font-medium mb-2">Variáveis</p>
                       <div className="space-y-2">
@@ -620,19 +720,23 @@ export default function TemplateDetailsPage({
                             className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-center"
                           >
                             <Label className="text-xs sm:text-sm truncate">
-                              {"{{" + template.componentes
-                                .flatMap((c) =>
-                                  Array.isArray(c.parameters) ? c.parameters : []
-                                )
-                              [idx]?.type + "}}"}
+                              {"{{" +
+                                template.componentes.flatMap((c) =>
+                                  Array.isArray(c.parameters)
+                                    ? c.parameters
+                                    : []
+                                )[idx]?.type +
+                                "}}"}
                             </Label>
                             <div className="sm:col-span-3">
                               <Input
-                                placeholder={template.componentes
-                                  .flatMap((c) =>
-                                    Array.isArray(c.parameters) ? c.parameters : []
-                                  )
-                                [idx]?.example}
+                                placeholder={
+                                  template.componentes.flatMap((c) =>
+                                    Array.isArray(c.parameters)
+                                      ? c.parameters
+                                      : []
+                                  )[idx]?.example
+                                }
                                 value={testVariables[idx]}
                                 onChange={(e) => {
                                   const arr = [...testVariables];
@@ -657,36 +761,47 @@ export default function TemplateDetailsPage({
                       />
                       {headerMedia && (
                         <p className="text-xs text-muted-foreground mt-1">
-                          {getMediaSourceLabel(headerMedia, template?.publicMediaUrl)}
-                          {template?.publicMediaUrl && headerMedia !== template.publicMediaUrl && (
-                            <Button
-                              variant="link"
-                              className="p-0 h-auto text-xs"
-                              onClick={() => setHeaderMedia(template.publicMediaUrl || "")}
-                            >
-                              Usar cópia local
-                            </Button>
+                          {getMediaSourceLabel(
+                            headerMedia,
+                            template?.publicMediaUrl
                           )}
+                          {template?.publicMediaUrl &&
+                            headerMedia !== template.publicMediaUrl && (
+                              <Button
+                                variant="link"
+                                className="p-0 h-auto text-xs"
+                                onClick={() =>
+                                  setHeaderMedia(template.publicMediaUrl || "")
+                                }
+                              >
+                                Usar cópia local
+                              </Button>
+                            )}
                         </p>
                       )}
                     </div>
                   )}
 
-                  {template.componentes.some(c =>
-                    c.type === "BUTTONS" &&
-                    c.buttons?.some(b => b.type === "COPY_CODE")
+                  {template.componentes.some(
+                    (c) =>
+                      c.type === "BUTTONS" &&
+                      c.buttons?.some((b) => b.type === "COPY_CODE")
                   ) && (
-                      <div>
-                        <Label>Cupom (copy_code)</Label>
-                        <Input
-                          placeholder="CODE123"
-                          value={couponCode}
-                          onChange={(e) => setCouponCode(e.target.value)}
-                        />
-                      </div>
-                    )}
+                    <div>
+                      <Label>Cupom (copy_code)</Label>
+                      <Input
+                        placeholder="CODE123"
+                        value={couponCode}
+                        onChange={(e) => setCouponCode(e.target.value)}
+                      />
+                    </div>
+                  )}
 
-                  <Button onClick={handleTestSend} disabled={isSending} className="mt-4">
+                  <Button
+                    onClick={handleTestSend}
+                    disabled={isSending}
+                    className="mt-4"
+                  >
                     {isSending ? (
                       <Loader2 className="animate-spin h-4 w-4 mr-2" />
                     ) : (
@@ -700,18 +815,25 @@ export default function TemplateDetailsPage({
                   <div className="space-y-4">
                     {/* Opção principal: Selecionar leads do sistema */}
                     <div className="space-y-2">
-                      <Label className="text-base font-semibold">Lista de Contatos</Label>
+                      <Label className="text-base font-semibold">
+                        Lista de Contatos
+                      </Label>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="border rounded-lg p-4 hover:bg-muted/50 transition-colors">
                           <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-2">
                               <Users className="h-5 w-5 text-primary" />
-                              <h3 className="font-medium">Selecionar da Base</h3>
+                              <h3 className="font-medium">
+                                Selecionar da Base
+                              </h3>
                             </div>
-                            <Badge variant="default" className="text-xs">Recomendado</Badge>
+                            <Badge variant="default" className="text-xs">
+                              Recomendado
+                            </Badge>
                           </div>
                           <p className="text-sm text-muted-foreground mb-3">
-                            Selecione leads diretamente da base de dados do sistema
+                            Selecione leads diretamente da base de dados do
+                            sistema
                           </p>
                           <Button
                             variant="default"
@@ -742,24 +864,42 @@ export default function TemplateDetailsPage({
                               if (file) {
                                 const reader = new FileReader();
                                 reader.onload = (event) => {
-                                  const csvData = event.target?.result as string;
+                                  const csvData = event.target
+                                    ?.result as string;
                                   try {
-                                    const lines = csvData.split(/\r?\n/).filter(line => line.trim());
-                                    const dataLines = lines[0].toLowerCase().includes('nome') &&
-                                      lines[0].toLowerCase().includes('numero')
-                                      ? lines.slice(1)
-                                      : lines;
+                                    const lines = csvData
+                                      .split(/\r?\n/)
+                                      .filter((line) => line.trim());
+                                    const dataLines =
+                                      lines[0].toLowerCase().includes("nome") &&
+                                      lines[0].toLowerCase().includes("numero")
+                                        ? lines.slice(1)
+                                        : lines;
 
-                                    const contacts = dataLines.map(line => {
-                                      const [nome, numero] = line.split(',').map(item => item.trim());
-                                      return { nome, numero };
-                                    }).filter(contact => contact.nome && contact.numero);
+                                    const contacts = dataLines
+                                      .map((line) => {
+                                        const [nome, numero] = line
+                                          .split(",")
+                                          .map((item) => item.trim());
+                                        return { nome, numero };
+                                      })
+                                      .filter(
+                                        (contact) =>
+                                          contact.nome && contact.numero
+                                      );
 
                                     setContactList(contacts);
-                                    toast.success(`${contacts.length} contatos carregados com sucesso`);
+                                    toast.success(
+                                      `${contacts.length} contatos carregados com sucesso`
+                                    );
                                   } catch (error) {
-                                    console.error("Erro ao processar o arquivo CSV:", error);
-                                    toast.error("Erro ao processar o arquivo. Verifique o formato.");
+                                    console.error(
+                                      "Erro ao processar o arquivo CSV:",
+                                      error
+                                    );
+                                    toast.error(
+                                      "Erro ao processar o arquivo. Verifique o formato."
+                                    );
                                   }
                                 };
                                 reader.readAsText(file);
@@ -776,7 +916,9 @@ export default function TemplateDetailsPage({
                     {contactList.length > 0 && (
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <Label>Contatos carregados: {contactList.length}</Label>
+                          <Label>
+                            Contatos carregados: {contactList.length}
+                          </Label>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -790,21 +932,33 @@ export default function TemplateDetailsPage({
                             <table className="min-w-full divide-y divide-gray-200">
                               <thead className="bg-gray-50">
                                 <tr>
-                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
-                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Número</th>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Nome
+                                  </th>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Número
+                                  </th>
                                 </tr>
                               </thead>
                               <tbody className="bg-white divide-y divide-gray-200">
                                 {contactList.slice(0, 5).map((contact, idx) => (
                                   <tr key={idx}>
-                                    <td className="px-3 py-2 whitespace-nowrap text-sm">{contact.nome}</td>
-                                    <td className="px-3 py-2 whitespace-nowrap text-sm">{contact.numero}</td>
+                                    <td className="px-3 py-2 whitespace-nowrap text-sm">
+                                      {contact.nome}
+                                    </td>
+                                    <td className="px-3 py-2 whitespace-nowrap text-sm">
+                                      {contact.numero}
+                                    </td>
                                   </tr>
                                 ))}
                                 {contactList.length > 5 && (
                                   <tr>
-                                    <td colSpan={2} className="px-3 py-2 text-center text-sm text-gray-500">
-                                      ...e mais {contactList.length - 5} contatos
+                                    <td
+                                      colSpan={2}
+                                      className="px-3 py-2 text-center text-sm text-gray-500"
+                                    >
+                                      ...e mais {contactList.length - 5}{" "}
+                                      contatos
                                     </td>
                                   </tr>
                                 )}
@@ -815,9 +969,13 @@ export default function TemplateDetailsPage({
                       </div>
                     )}
 
-                    {template.componentes.some((c) => Array.isArray(c.variaveis)) && (
+                    {template.componentes.some((c) =>
+                      Array.isArray(c.parameters)
+                    ) && (
                       <div>
-                        <p className="font-medium mb-2">Variáveis (aplicadas a todos os contatos)</p>
+                        <p className="font-medium mb-2">
+                          Variáveis (aplicadas a todos os contatos)
+                        </p>
                         <div className="space-y-2">
                           {testVariables.map((val, idx) => (
                             <div
@@ -825,19 +983,23 @@ export default function TemplateDetailsPage({
                               className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-center"
                             >
                               <Label className="text-xs sm:text-sm truncate">
-                                {"{{" + template.componentes
-                                  .flatMap((c) =>
-                                    Array.isArray(c.variaveis) ? c.variaveis : []
-                                  )
-                                [idx]?.nome + "}}"}
+                                {"{{" +
+                                  template.componentes.flatMap((c) =>
+                                    Array.isArray(c.parameters)
+                                      ? c.parameters
+                                      : []
+                                  )[idx]?.type +
+                                  "}}"}
                               </Label>
                               <div className="sm:col-span-3">
                                 <Input
-                                  placeholder={template.componentes
-                                    .flatMap((c) =>
-                                      Array.isArray(c.variaveis) ? c.variaveis : []
-                                    )
-                                  [idx]?.exemplo}
+                                  placeholder={
+                                    template.componentes.flatMap((c) =>
+                                      Array.isArray(c.parameters)
+                                        ? c.parameters
+                                        : []
+                                    )[idx]?.example
+                                  }
                                   value={testVariables[idx]}
                                   onChange={(e) => {
                                     const arr = [...testVariables];
@@ -862,38 +1024,51 @@ export default function TemplateDetailsPage({
                         />
                         {headerMedia && (
                           <p className="text-xs text-muted-foreground mt-1">
-                            {getMediaSourceLabel(headerMedia, template?.publicMediaUrl)}
-                            {template?.publicMediaUrl && headerMedia !== template.publicMediaUrl && (
-                              <Button
-                                variant="link"
-                                className="p-0 h-auto text-xs"
-                                onClick={() => setHeaderMedia(template.publicMediaUrl || "")}
-                              >
-                                Usar cópia local
-                              </Button>
+                            {getMediaSourceLabel(
+                              headerMedia,
+                              template?.publicMediaUrl
                             )}
+                            {template?.publicMediaUrl &&
+                              headerMedia !== template.publicMediaUrl && (
+                                <Button
+                                  variant="link"
+                                  className="p-0 h-auto text-xs"
+                                  onClick={() =>
+                                    setHeaderMedia(
+                                      template.publicMediaUrl || ""
+                                    )
+                                  }
+                                >
+                                  Usar cópia local
+                                </Button>
+                              )}
                           </p>
                         )}
                       </div>
                     )}
 
-                    {template.componentes.some(c =>
-                      c.tipo === "BUTTONS" &&
-                      c.botoes?.some(b => b.tipo === "COPY_CODE")
+                    {template.componentes.some(
+                      (c) =>
+                        c.type === "BUTTONS" &&
+                        c.buttons?.some((b) => b.type === "COPY_CODE")
                     ) && (
-                        <div>
-                          <Label>Cupom (copy_code)</Label>
-                          <Input
-                            placeholder="CODE123"
-                            value={couponCode}
-                            onChange={(e) => setCouponCode(e.target.value)}
-                          />
-                        </div>
-                      )}
+                      <div>
+                        <Label>Cupom (copy_code)</Label>
+                        <Input
+                          placeholder="CODE123"
+                          value={couponCode}
+                          onChange={(e) => setCouponCode(e.target.value)}
+                        />
+                      </div>
+                    )}
 
                     <Button
                       onClick={handleMassSend}
-                      disabled={isMassUploading || isMassSending || contactList.length === 0}
+                      disabled={
+                        isMassUploading ||
+                        isMassSending ||
+                        contactList.length === 0
+                      }
                       className="mt-4"
                     >
                       {isMassSending ? (
@@ -1092,12 +1267,18 @@ export default function TemplateDetailsPage({
               Excluir Template
             </DialogTitle>
             <DialogDescription className="text-base">
-              Tem certeza de que deseja excluir o template <span className="font-medium">"{template?.name}"</span>?
+              Tem certeza de que deseja excluir o template{" "}
+              <span className="font-medium">"{template?.name}"</span>?
             </DialogDescription>
-            <p className="text-sm text-muted-foreground">Esta ação não pode ser desfeita.</p>
+            <p className="text-sm text-muted-foreground">
+              Esta ação não pode ser desfeita.
+            </p>
           </DialogHeader>
           <DialogFooter className="mt-4 sm:justify-end sm:space-x-2">
-            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteDialog(false)}
+            >
               Cancelar
             </Button>
             <Button

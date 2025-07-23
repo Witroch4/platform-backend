@@ -1,27 +1,27 @@
-import { auth } from "@/auth";
+import { auth } from "@/auth"; // Assumindo que este é o seu arquivo de configuração do NextAuth
 import { NextResponse, NextRequest } from "next/server";
+
+// A função `auth` já injeta o objeto `auth` no `req`.
+// Não é necessário criar tipos personalizados ou fazer asserções complexas.
+// O NextAuth gerencia isso automaticamente.
+
+export async function GET(req: NextRequest) {
+  // A função `auth()` retorna a sessão do lado do servidor.
+  const session = await auth();
+
+  if (session?.user) {
+    // Se a sessão existir, o usuário está autenticado.
+    // Você pode acessar os dados do usuário através de `session.user`.
+    return NextResponse.json({ 
+      message: "Usuário Autenticado", 
+      userId: session.user.id 
+    });
+  }
+
+  // Se não houver sessão, retorne um erro de não autorizado.
+  return NextResponse.json({ message: "Não Autenticado" }, { status: 401 });
+}
 
 export const config = {
   runtime: 'nodejs',
 };
-
-// Definindo um tipo para o contexto (já que AppRouteHandlerFnContext não está exportado)
-type RouteContext = {
-  params?: Record<string, string | string[]>;
-};
-
-export const GET = auth(async (
-  req: NextRequest,
-  ctx: RouteContext = {} // usamos nosso tipo personalizado
-): Promise<NextResponse> => {
-  // Se precisar acessar parâmetros, converte para Promise (mesmo que não existam)
-  const params = await Promise.resolve(ctx.params ?? {});
-
-  // Como NextRequest não tem "auth" na tipagem padrão, fazemos uma asserção de tipo
-  const reqWithAuth = req as NextRequest & { auth?: { user?: { id: string } } };
-
-  if (reqWithAuth.auth) {
-    return NextResponse.json({ message: "Usuário Autenticado" });
-  }
-  return NextResponse.json({ message: "Não Autenticado" }, { status: 401 });
-}) as any;

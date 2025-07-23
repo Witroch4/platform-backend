@@ -51,7 +51,8 @@ export async function GET(request: Request) {
         },
         intentMappings: {
           where: { isActive: true }
-        }
+        },
+        variaveis: true
       }
     });
 
@@ -68,9 +69,19 @@ export async function GET(request: Request) {
           const newConfig = await tx.mtfDiamanteConfig.create({
             data: {
               userId: session.user.id,
-              valorAnalise: "R$ 27,90",
-              chavePix: "atendimento@amandasousaprev.adv.br",
-              isActive: true
+              isActive: true,
+              variaveis: {
+                create: [
+                  {
+                    chave: "valor_analise",
+                    valor: "R$ 27,90"
+                  },
+                  {
+                    chave: "chave_pix",
+                    valor: "atendimento@amandasousaprev.adv.br"
+                  }
+                ]
+              }
             }
           });
           configId = newConfig.id;
@@ -150,17 +161,22 @@ export async function GET(request: Request) {
           },
           intentMappings: {
             where: { isActive: true }
-          }
+          },
+          variaveis: true
         }
       });
     }
+
+    // Extrair valores das variáveis
+    const valorAnalise = config?.variaveis?.find(v => v.chave === "valor_analise")?.valor || "";
+    const chavePix = config?.variaveis?.find(v => v.chave === "chave_pix")?.valor || "";
 
     return NextResponse.json({
       success: true,
       config: {
         id: config?.id,
-        valorAnalise: config?.valorAnalise,
-        chavePix: config?.chavePix,
+        valorAnalise,
+        chavePix,
         lotes: config?.lotes || [],
         intentMappings: config?.intentMappings || []
       }
@@ -210,9 +226,42 @@ export async function POST(request: Request) {
       const updatedConfig = await tx.mtfDiamanteConfig.update({
         where: { id: existingConfig.id },
         data: {
-          valorAnalise: validatedData.valorAnalise,
-          chavePix: validatedData.chavePix,
           updatedAt: new Date()
+        }
+      });
+
+      // Atualizar ou criar variáveis
+      await tx.mtfDiamanteVariavel.upsert({
+        where: {
+          configId_chave: {
+            configId: existingConfig.id,
+            chave: "valor_analise"
+          }
+        },
+        update: {
+          valor: validatedData.valorAnalise
+        },
+        create: {
+          configId: existingConfig.id,
+          chave: "valor_analise",
+          valor: validatedData.valorAnalise
+        }
+      });
+
+      await tx.mtfDiamanteVariavel.upsert({
+        where: {
+          configId_chave: {
+            configId: existingConfig.id,
+            chave: "chave_pix"
+          }
+        },
+        update: {
+          valor: validatedData.chavePix
+        },
+        create: {
+          configId: existingConfig.id,
+          chave: "chave_pix",
+          valor: validatedData.chavePix
         }
       });
 

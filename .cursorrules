@@ -1,0 +1,93 @@
+# Regras e contexto para o projeto Socialwise Chatwit
+# Este arquivo ajuda a IA do Cursor a entender melhor o projeto.
+
+project:
+  name: "Socialwise Chatwit"
+  description: "Um aplicativo full-stack construído com Next.js, TypeScript e Prisma. Ele integra funcionalidades de chat, automações (workers) e um painel de administração, com autenticação gerenciada pelo NextAuth.js v5."
+  techStack:
+    - "Next.js"
+    - "React"
+    - "TypeScript"
+    - "Prisma"
+    - "PostgreSQL"
+    - "NextAuth.js v5"
+    - "Docker"
+    - "Tailwind CSS" # Adicionado como uma suposição comum em projetos Next.js
+
+paths:
+  # Principais locais de configuração e lógica
+  authConfig: "auth.config.ts"
+  authLogic: "auth.ts"
+  databaseSchema: "prisma/schema.prisma"
+  migrations: "prisma/migrations/"
+  apiRoutes: "app/api/"
+  backgroundWorkers: "worker/"
+  envExample: ".env.example"
+  scripts: "scripts/"
+
+rules:
+  # Regras gerais de codificação
+  - rule: "Use sempre TypeScript para todo o código novo."
+  - rule: "A linguagem principal para comentários e strings visíveis ao usuário deve ser Português do Brasil. Nomes de variáveis, funções e arquivos devem ser em inglês."
+  - rule: "Siga os padrões de UI/UX de 'Optimistic Updates'. Modifique o estado da interface localmente de forma imediata e reverta apenas se a chamada da API falhar. Isso evita recarregamentos desnecessários da página."
+
+  # Regras de Autenticação com NextAuth.js v5
+  - rule: "A autenticação é gerenciada pelo NextAuth.js v5. A configuração principal está em `auth.ts` e `auth.config.ts`."
+  - rule: >
+      Para proteger rotas de API, use o seguinte padrão:
+      Obtenha a sessão com `const session = await auth();`.
+      Sempre verifique a existência de `session?.user?.id` antes de continuar.
+      Se não autenticado, retorne uma resposta `NextResponse.json` com status `401`.
+    example: |
+      import { auth } from "@/auth";
+      import { NextResponse } from "next/server";
+
+      export async function POST(request) {
+        const session = await auth();
+        if (!session?.user?.id) {
+          return NextResponse.json(
+            { error: "Usuário não autenticado." },
+            { status: 401 }
+          );
+        }
+        // ... resto da lógica da rota
+      }
+
+  # Regras para API Routes do Next.js
+  - rule: >
+      Ao criar rotas de API dinâmicas na pasta `app/`, lembre-se que o objeto `params` é uma Promise e precisa ser aguardado (`await`).
+    example: |
+      import { NextRequest, NextResponse } from "next/server";
+
+      export async function POST(
+        request: NextRequest,
+        { params }: { params: Promise<{ accountid: string }> }
+      ): Promise<NextResponse> {
+        const { accountid } = await params;
+        // ...
+      }
+
+  # Regras de Banco de Dados com Prisma
+  - rule: "Toda a interação com o banco de dados PostgreSQL deve ser feita através do Prisma ORM."
+  - rule: "O schema do banco de dados está definido em `prisma/schema.prisma`. Sempre que alterar este arquivo, gere uma nova migração."
+  - rule: "Para criar e aplicar migrações em desenvolvimento, use o comando `npx prisma migrate dev`."
+  - rule: "Para aplicar migrações existentes em produção ou staging, use `npx prisma migrate deploy`."
+  - rule: "Para visualizar e editar o banco de dados, use `npx prisma studio`."
+  - rule: "Para definir um campo do tipo JSON como nulo em uma atualização, use `Prisma.JsonNull`."
+    example: |
+      import { prisma } from '@/lib/prisma';
+      import { Prisma } from '@prisma/client';
+
+      await prisma.someModel.update({
+        where: { id: 1 },
+        data: {
+          someJsonField: Prisma.JsonNull,
+        },
+      });
+
+  # Comandos do Projeto
+  - rule: "Para controle de versão, siga o fluxo padrão do Git: `git add .`, `git commit -m 'feat: ...'`, `git push origin <branch-name>`."
+  - rule: "Para construir serviços com Docker, use `docker compose build`."
+  - rule: "voce já esta na pasta raiz do projeto"
+  - rule: "voce deve usar os comandos em powershell do windows"
+  

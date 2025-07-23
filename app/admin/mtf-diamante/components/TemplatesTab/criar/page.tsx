@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Loader2, AlertCircle, ArrowLeft, Save, Plus, Trash, Copy, ExternalLink, BanIcon, PhoneCall, Check, AlertTriangle, Send, Phone } from "lucide-react";
@@ -27,10 +28,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CreateTemplateComponent } from "../components/template-preview";
+import { useMtfData } from "../../../context/MtfDataProvider";
+import { EnhancedTextArea } from "../../EnhancedTextArea";
+import { SaveToLibraryButton } from "../../shared/SaveToLibraryButton";
+import { TemplateLibrarySelector } from "../../TemplateLibrarySelector";
 
 // Componente para criar um novo template de WhatsApp
-export default function CreateTemplatePage({ onBack }: { onBack?: () => void }) {
+export default function CreateTemplatePage() {
   const router = useRouter();
+  
+  // Get variables from MTF data provider
+  const { variaveis, loadingVariaveis } = useMtfData();
 
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -704,17 +712,11 @@ export default function CreateTemplatePage({ onBack }: { onBack?: () => void }) 
   return (
     <div className="container mx-auto py-10 max-w-6xl">
       <div className="flex items-center gap-2 mb-6">
-        {onBack ? (
-          <Button variant="ghost" size="icon" onClick={onBack}>
+        <Button variant="ghost" size="icon" asChild>
+          <Link href="/admin/templates">
             <ArrowLeft className="h-4 w-4" />
-          </Button>
-        ) : (
-          <Button variant="ghost" size="icon" asChild>
-            <Link href="/admin/templates">
-              <ArrowLeft className="h-4 w-4" />
-            </Link>
-          </Button>
-        )}
+          </Link>
+        </Button>
         <h1 className="text-2xl font-bold">Criar Novo Template</h1>
       </div>
       
@@ -1056,14 +1058,16 @@ export default function CreateTemplatePage({ onBack }: { onBack?: () => void }) 
                   <div 
                     className="p-5 min-h-[400px]"
                     style={{
-                      backgroundImage: "url('/fundo_whatsapp.jpg')",
+                      backgroundImage: useTheme().theme === 'dark' 
+                        ? "url('/fundo_whatsapp_black.jpg')" 
+                        : "url('/fundo_whatsapp.jpg')",
                       backgroundSize: "cover",
                       backgroundPosition: "center"
                     }}
                   >
                     {/* Balão de mensagem */}
                     <div className="flex justify-end mb-4">
-                      <div className="max-w-[80%] bg-white rounded-lg shadow p-4">
+                      <div className="max-w-[80%] bg-white dark:bg-gray-800 rounded-lg shadow p-4">
                         {category === "MARKETING" && (
                           <div className="overflow-hidden">
                             {/* Imagem de produtos */}
@@ -1075,12 +1079,12 @@ export default function CreateTemplatePage({ onBack }: { onBack?: () => void }) 
                             
                             {/* Texto da mensagem */}
                             <div className="mb-2">
-                              <div className="text-sm mb-1">Olá! Confira nossos produtos frescos agora!</div>
-                              <div className="text-xs text-gray-500">Use o código <span className="font-bold">SAÚDE</span> para obter 10% de desconto adicional em toda a sua compra.</div>
+                              <div className="text-sm mb-1 text-gray-900 dark:text-white">Olá! Confira nossos produtos frescos agora!</div>
+                              <div className="text-xs text-gray-500 dark:text-gray-400 break-words">Use o código <span className="font-bold">SAÚDE</span> para obter 10% de desconto adicional em toda a sua compra.</div>
                             </div>
                             
                             {/* Horário da mensagem */}
-                            <div className="flex justify-end items-center text-xs text-gray-500">
+                            <div className="flex justify-end items-center text-xs text-gray-500 dark:text-gray-400">
                               <span>11:59</span>
                             </div>
                           </div>
@@ -1090,12 +1094,12 @@ export default function CreateTemplatePage({ onBack }: { onBack?: () => void }) 
                           <div>
                             {/* Conteúdo de utilidade - sem imagem */}
                             <div className="mb-2">
-                              <div className="text-sm mb-1 font-medium">Boas notícias! Seu pedido 23KFEJJ2312 foi enviado!</div>
-                              <div className="text-xs text-gray-500">Aqui estão suas informações de rastreamento, por favor confira o link abaixo.</div>
+                              <div className="text-sm mb-1 font-medium text-gray-900 dark:text-white">Boas notícias! Seu pedido 23KFEJJ2312 foi enviado!</div>
+                              <div className="text-xs text-gray-500 dark:text-gray-400 break-words">Aqui estão suas informações de rastreamento, por favor confira o link abaixo.</div>
                             </div>
                             
                             {/* Horário da mensagem */}
-                            <div className="flex justify-end items-center text-xs text-gray-500">
+                            <div className="flex justify-end items-center text-xs text-gray-500 dark:text-gray-400">
                               <span>11:59</span>
                             </div>
                           </div>
@@ -1105,12 +1109,12 @@ export default function CreateTemplatePage({ onBack }: { onBack?: () => void }) 
                           <div>
                             {/* Conteúdo de autenticação - sem imagem */}
                             <div className="mb-2">
-                              <div className="text-sm mb-1">123456 é o seu código de verificação.</div>
-                              <div className="text-xs text-gray-500">Para sua segurança, não compartilhe este código.</div>
+                              <div className="text-sm mb-1 text-gray-900 dark:text-white">123456 é o seu código de verificação.</div>
+                              <div className="text-xs text-gray-500 dark:text-gray-400 break-words">Para sua segurança, não compartilhe este código.</div>
                             </div>
                             
                             {/* Horário da mensagem */}
-                            <div className="flex justify-end items-center text-xs text-gray-500">
+                            <div className="flex justify-end items-center text-xs text-gray-500 dark:text-gray-400">
                               <span>11:59</span>
                             </div>
                           </div>
@@ -1121,10 +1125,10 @@ export default function CreateTemplatePage({ onBack }: { onBack?: () => void }) 
                     {/* Botões abaixo da mensagem */}
                     {category === "MARKETING" && (
                       <div className="flex justify-end mb-4">
-                        <div className="max-w-[80%] bg-white rounded-lg shadow overflow-hidden">
-                          <div className="divide-y divide-gray-200">
-                            <button className="w-full py-2 text-sm text-blue-500 font-medium">Comprar agora</button>
-                            <button className="w-full py-2 text-sm text-blue-500 font-medium">Copiar código</button>
+                        <div className="max-w-[80%] bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+                          <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                            <button className="w-full py-2 text-sm text-blue-500 dark:text-blue-400 font-medium">Comprar agora</button>
+                            <button className="w-full py-2 text-sm text-blue-500 dark:text-blue-400 font-medium">Copiar código</button>
                           </div>
                         </div>
                       </div>
@@ -1132,8 +1136,8 @@ export default function CreateTemplatePage({ onBack }: { onBack?: () => void }) 
                     
                     {category === "UTILITY" && (
                       <div className="flex justify-end mb-4">
-                        <div className="max-w-[80%] bg-white rounded-lg shadow overflow-hidden">
-                          <button className="w-full py-2 text-sm text-blue-500 font-medium">Rastrear envio</button>
+                        <div className="max-w-[80%] bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+                          <button className="w-full py-2 text-sm text-blue-500 dark:text-blue-400 font-medium">Rastrear envio</button>
                         </div>
                       </div>
                     )}
@@ -1222,23 +1226,18 @@ export default function CreateTemplatePage({ onBack }: { onBack?: () => void }) 
                 
                 {headerType === "TEXT" && (
                   <div className="mt-2">
-                    <Label htmlFor="header-text">Texto do cabeçalho</Label>
-                    <Input
-                      id="header-text"
-                      placeholder="Texto do cabeçalho"
+                    <EnhancedTextArea
                       value={headerText}
-                      onChange={(e) => setHeaderText(e.target.value)}
-                      className={!isValidHeaderText() ? "border-red-500" : ""}
+                      onChange={setHeaderText}
+                      variables={variaveis}
+                      placeholder="Texto do cabeçalho"
+                      multiline={false}
                       maxLength={60}
+                      label="Texto do cabeçalho"
+                      description="Right-click to insert variables. Use {{1}} format for numbered variables."
+                      className={!isValidHeaderText() ? "border-red-500" : ""}
+                      disabled={loadingVariaveis}
                     />
-                    <div className="flex justify-between">
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Use {`{{1}}`} para inserir uma variável.
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {headerText.length}/60
-                      </p>
-                    </div>
                     
                     {/* Exemplo para variável no cabeçalho */}
                     {extractVariables(headerText).length > 0 && (
@@ -1295,19 +1294,6 @@ export default function CreateTemplatePage({ onBack }: { onBack?: () => void }) 
                       Faça upload do vídeo que será usado como cabeçalho. O WhatsApp aceita vídeos MP4 com até 16MB.
                     </p>
                     
-                    <Alert className="mb-2 border-yellow-400 bg-yellow-50">
-                      <AlertCircle className="h-4 w-4 text-yellow-500" />
-                      <AlertTitle className="text-yellow-700">Atenção!</AlertTitle>
-                      <AlertDescription>
-                        <p className="text-xs">De acordo com a documentação oficial do WhatsApp, para um template com cabeçalho de vídeo:</p>
-                        <ul className="text-xs list-disc pl-5 mt-1">
-                          <li>O vídeo deve ser carregado usando a API de Carregamento Retomável WhatsApp</li>
-                          <li>O header_handle deve conter o identificador retornado pela API</li>
-                          <li>Use este uploader especializado que processa o vídeo corretamente para a API do WhatsApp</li>
-                        </ul>
-                      </AlertDescription>
-                    </Alert>
-                    
                     <MetaMediaUpload
                       uploadedFiles={headerMetaMedia}
                       setUploadedFiles={setHeaderMetaMedia}
@@ -1345,25 +1331,19 @@ export default function CreateTemplatePage({ onBack }: { onBack?: () => void }) 
               
               {/* Corpo (Body) - Obrigatório */}
               <div>
-                <h3 className="text-sm font-medium mb-2">
-                  Corpo <span className="text-red-500">*</span>
-                </h3>
-                <Textarea
-                  placeholder="Texto principal da mensagem"
+                <EnhancedTextArea
                   value={bodyText}
-                  onChange={(e) => setBodyText(e.target.value)}
-                  className={!isValidBodyText() ? "border-red-500" : ""}
+                  onChange={setBodyText}
+                  variables={variaveis}
+                  placeholder="Texto principal da mensagem"
+                  multiline={true}
                   rows={5}
                   maxLength={1024}
+                  label={<>Corpo <span className="text-red-500">*</span></>}
+                  description="Main message text. Right-click to insert variables. Use {{1}}, {{2}}, etc. for numbered variables."
+                  className={!isValidBodyText() ? "border-red-500" : ""}
+                  disabled={loadingVariaveis}
                 />
-                <div className="flex justify-between">
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Texto principal da mensagem. Use {`{{1}}`}, {`{{2}}`}, etc. para inserir variáveis.
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {bodyText.length}/1024
-                  </p>
-                </div>
                 
                 {/* Exemplos para variáveis no corpo */}
                 {extractVariables(bodyText).length > 0 && (
@@ -1398,22 +1378,18 @@ export default function CreateTemplatePage({ onBack }: { onBack?: () => void }) 
               
               {/* Rodapé (Footer) - Opcional */}
               <div>
-                <h3 className="text-sm font-medium mb-2">Rodapé (Opcional)</h3>
-                <Input
-                  placeholder="Texto do rodapé"
+                <EnhancedTextArea
                   value={footerText}
-                  onChange={(e) => setFooterText(e.target.value)}
-                  className={!isValidFooterText() ? "border-red-500" : ""}
+                  onChange={setFooterText}
+                  variables={variaveis}
+                  placeholder="Texto do rodapé"
+                  multiline={false}
                   maxLength={60}
+                  label="Rodapé (Opcional)"
+                  description="Additional text that will appear at the bottom of the message. Right-click to insert variables."
+                  className={!isValidFooterText() ? "border-red-500" : ""}
+                  disabled={loadingVariaveis}
                 />
-                <div className="flex justify-between">
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Texto adicional que aparecerá na parte inferior da mensagem.
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {footerText.length}/60
-                  </p>
-                </div>
               </div>
               
               {/* Botões - Opcional */}
@@ -1576,16 +1552,18 @@ export default function CreateTemplatePage({ onBack }: { onBack?: () => void }) 
                 <div 
                   className="relative p-3 min-h-[400px]" 
                   style={{
-                    backgroundImage: "url('/fundo_whatsapp.jpg')",
+                    backgroundImage: useTheme().theme === 'dark' 
+                      ? "url('/fundo_whatsapp_black.jpg')" 
+                      : "url('/fundo_whatsapp.jpg')",
                     backgroundSize: "cover",
                     backgroundPosition: "center"
                   }}
                 >
                   {/* Mensagem de template */}
-                  <div className="max-w-[85%] bg-white rounded-lg shadow-sm p-3 ml-auto mr-3 mb-3">
+                  <div className="max-w-[80%] bg-white dark:bg-gray-800 rounded-lg shadow-sm p-3 ml-auto mr-3 mb-3">
                     {/* Header */}
                     {headerType === "TEXT" && headerText && (
-                      <div className="font-bold text-center mb-2">{headerText}</div>
+                      <div className="font-bold text-center mb-2 text-gray-900 dark:text-white break-words overflow-hidden">{headerText}</div>
                     )}
                     {headerType === "IMAGE" && (
                       <div className="mb-2 overflow-hidden rounded-md" style={{ maxHeight: "180px" }}>
@@ -1596,8 +1574,8 @@ export default function CreateTemplatePage({ onBack }: { onBack?: () => void }) 
                             className="w-full object-contain rounded-md max-h-[160px]" 
                           />
                         ) : (
-                          <div className="w-full bg-gray-200 flex items-center justify-center" style={{ height: "140px" }}>
-                            <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <div className="w-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center" style={{ height: "140px" }}>
+                            <svg className="w-12 h-12 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                             </svg>
                           </div>
@@ -1605,15 +1583,15 @@ export default function CreateTemplatePage({ onBack }: { onBack?: () => void }) 
                       </div>
                     )}
                     {headerType === "DOCUMENT" && (
-                      <div className="w-full bg-gray-100 rounded-md mb-2 p-3 flex items-center justify-center">
-                        <svg className="w-8 h-8 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-md mb-2 p-3 flex items-center justify-center">
+                        <svg className="w-8 h-8 text-gray-500 dark:text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                         </svg>
-                        <span className="text-sm font-medium">Documento</span>
+                        <span className="text-sm font-medium text-gray-900 dark:text-white">Documento</span>
                       </div>
                     )}
                     {headerType === "VIDEO" && (
-                      <div className="w-full bg-gray-100 rounded-md mb-2 flex items-center justify-center" style={{ maxHeight: "180px" }}>
+                      <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-md mb-2 flex items-center justify-center" style={{ maxHeight: "180px" }}>
                         {headerMetaMedia.length > 0 && headerMetaMedia[0].status === 'success' ? (
                           <div className="flex flex-col items-center justify-center w-full h-full">
                             {headerMetaMedia[0].url ? (
@@ -1625,13 +1603,13 @@ export default function CreateTemplatePage({ onBack }: { onBack?: () => void }) 
                             ) : (
                               <>
                                 <Check className="w-8 h-8 text-green-500 mb-2" />
-                                <p className="text-sm font-medium text-green-600">Vídeo processado</p>
-                                <p className="text-xs text-gray-500 mt-1">Media Handle: {headerMetaMedia[0].mediaHandle?.substring(0, 10)}...</p>
+                                <p className="text-sm font-medium text-green-600 dark:text-green-400">Vídeo processado</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Media Handle: {headerMetaMedia[0].mediaHandle?.substring(0, 10)}...</p>
                               </>
                             )}
                           </div>
                         ) : (
-                          <svg className="w-12 h-12 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <svg className="w-12 h-12 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                           </svg>
@@ -1640,30 +1618,30 @@ export default function CreateTemplatePage({ onBack }: { onBack?: () => void }) 
                     )}
                     
                     {/* Body */}
-                    <div className="text-sm whitespace-pre-line mb-2">
+                    <div className="text-sm whitespace-pre-wrap break-words text-gray-900 dark:text-white mb-2">
                       {bodyText || "Digite o texto principal da mensagem aqui"}
                     </div>
                     
                     {/* Footer */}
                     {footerText && (
-                      <div className="text-xs text-gray-500 mb-2">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
                         {footerText}
                       </div>
                     )}
                     
-                    <div className="text-right text-xs text-gray-500 flex justify-end items-center">
+                    <div className="text-right text-xs text-gray-500 dark:text-gray-400 flex justify-end items-center">
                       <span>17:12</span>
                     </div>
                   </div>
                   
                   {/* Botões abaixo da mensagem */}
                   {buttons.length > 0 && (
-                    <div className="bg-white rounded-lg shadow-sm max-w-[85%] ml-auto mr-3 mt-1 overflow-hidden">
-                      <div className="divide-y divide-gray-100">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm max-w-[80%] ml-auto mr-3 mt-1 overflow-hidden">
+                      <div className="divide-y divide-gray-100 dark:divide-gray-700">
                         {buttons.map((button, index) => (
                           <button 
                             key={index} 
-                            className="w-full py-3 px-4 text-sm text-cyan-500 font-medium text-center flex justify-center items-center"
+                            className="w-full py-3 px-4 text-sm text-cyan-500 dark:text-cyan-400 font-medium text-center flex justify-center items-center"
                           >
                             {button.type === "URL" && <ExternalLink className="h-4 w-4 mr-2" />}
                             {button.type === "COPY_CODE" && <Copy className="h-4 w-4 mr-2" />}
@@ -1885,22 +1863,57 @@ export default function CreateTemplatePage({ onBack }: { onBack?: () => void }) 
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Voltar
               </Button>
-              <Button
-                onClick={createTemplate}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Enviando...
-                  </>
-                ) : (
-                  <>
-                    <Send className="mr-2 h-4 w-4" />
-                    Enviar Template
-                  </>
-                )}
-              </Button>
+              <div className="flex gap-2">
+                <TemplateLibrarySelector
+                  type="template"
+                  onSelect={(template) => {
+                    // Load template data from library
+                    const content = template.content as any;
+                    setName(template.name);
+                    setCategory(template.category?.toUpperCase() as any || 'UTILITY');
+                    setLanguage(template.language || 'pt_BR');
+                    setHeaderText(content.header || '');
+                    setBodyText(content.body || '');
+                    setFooterText(content.footer || '');
+                    setButtons(content.buttons || []);
+                    if (content.mediaUrl) {
+                      setHeaderMetaMedia([{ url: content.mediaUrl, status: 'success' as const }]);
+                      setHeaderType(content.mediaType?.toUpperCase() as any || 'IMAGE');
+                    }
+                    toast.success('Template carregado da biblioteca!');
+                  }}
+                />
+                <SaveToLibraryButton 
+                  templateData={{
+                    name,
+                    category,
+                    language,
+                    headerType,
+                    headerText,
+                    bodyText,
+                    footerText,
+                    buttons,
+                    headerMetaMedia
+                  }}
+                  disabled={!isFormValid() || isSubmitting}
+                />
+                <Button
+                  onClick={createTemplate}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Enviando...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="mr-2 h-4 w-4" />
+                      Enviar Template
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
             
             {error && (

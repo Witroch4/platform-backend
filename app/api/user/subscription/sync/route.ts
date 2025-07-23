@@ -10,7 +10,7 @@ export async function POST(request: Request) {
     const session = await auth();
 
     // Verificar se o usuário está autenticado e tem permissão de administrador
-    if (!session?.user?.email || session.user.role !== "ADMIN") {
+    if (!session?.user?.email || (session.user.role !== "ADMIN" && session.user.role !== "SUPERADMIN")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

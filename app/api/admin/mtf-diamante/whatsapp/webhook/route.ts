@@ -1,390 +1,550 @@
-import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import axios from 'axios';
-import { sendTemplateMessage } from '@/lib/whatsapp';
+import { NextResponse } from "next/server";
+import {
+  addStoreMessageTask,
+  addUpdateApiKeyTask,
+  addProcessIntentTask,
+  addSendMessageTask,
+  addSendReactionTask,
+  addProcessButtonClickTask,
+  generateCorrelationId,
+  createTemplateMessageTask,
+  createInteractiveMessageTask,
+  createReactionTask,
+} from "@/lib/queue/mtf-diamante-webhook.queue";
+import {
+  extractWebhookData,
+  validateWebhookData,
+  hasValidApiKey,
+  logWebhookData,
+} from "@/lib/webhook-utils";
+import {
+  findCompleteMessageMappingByIntent,
+  findReactionByButtonId,
+} from "@/lib/dialogflow-database-queries";
 
-// Função para obter configuração do WhatsApp atual
-async function getCurrentWhatsAppConfig() {
-  // Buscar a primeira configuração ativa no banco de dados
-  const config = await prisma.whatsAppConfig.findFirst({
-    where: { isActive: true },
-    orderBy: { updatedAt: 'desc' }
-  });
-  
-  if (!config) {
-    // Se não houver configuração no banco, usar valores do .env
+/**
+ * Parse Dialogflow request to identify request type
+ */
+function parseDialogflowRequest(req: any): {
+  type: "intent" | "button_click";
+  intentName?: string;
+  buttonId?: string;
+  messageId?: string;
+  recipientPhone: string;
+  whatsappApiKey: string;
+  caixaId?: string;
+} {
+  const webhookData = extractWebhookData(req);
+
+  // Check if this is a button click
+  const chatwootPayload = req.originalDetectIntentRequest?.payload;
+  const interactive = chatwootPayload?.interactive;
+
+  if (interactive?.type === "button_reply") {
     return {
-      token: process.env.WHATSAPP_TOKEN || '',
-      businessId: process.env.WHATSAPP_BUSINESS_ID || '',
-      apiBase: 'https://graph.facebook.com/v22.0', // Forçar versão v22.0
+      type: "button_click",
+      buttonId: interactive.button_reply?.id,
+      messageId: chatwootPayload?.context?.id,
+      recipientPhone: webhookData.contactPhone,
+      whatsappApiKey: webhookData.whatsappApiKey,
+      caixaId: webhookData.inboxId,
     };
   }
-  
+
+  // Otherwise it's an intent
   return {
-    token: config.whatsappToken,
-    businessId: config.whatsappBusinessAccountId,
-    apiBase: 'https://graph.facebook.com/v22.0', // Forçar versão v22.0
+    type: "intent",
+    intentName: webhookData.intentName,
+    recipientPhone: webhookData.contactPhone,
+    whatsappApiKey: webhookData.whatsappApiKey,
+    caixaId: String(webhookData.inboxId), // Garantir que seja string
   };
 }
 
-// Função para obter configuração do MTF Diamante
-async function getMtfDiamanteConfig() {
-  const config = await prisma.mtfDiamanteConfig.findFirst({
-    where: { isActive: true },
-    include: {
-      lotes: {
-        where: { isActive: true },
-        orderBy: { numero: 'asc' }
-      },
-      intentMappings: {
-        where: { isActive: true }
-      }
+/**
+ * Extract template variables from Dialogflow payload
+ */
+function extractTemplateVariables(payload: any): Record<string, any> {
+  const variables: Record<string, any> = {};
+
+  // Extract parameters from queryResult
+  const parameters = payload.queryResult?.parameters || {};
+
+  // Common variable mappings
+  if (parameters.person?.name) {
+    variables.name = parameters.person.name;
+    variables.nome = parameters.person.name;
+  }
+
+  if (parameters.phone) {
+    variables.phone = parameters.phone;
+    variables.telefone = parameters.phone;
+  }
+
+  if (parameters.email) {
+    variables.email = parameters.email;
+  }
+
+  // Add all parameters as potential variables
+  Object.keys(parameters).forEach((key) => {
+    if (parameters[key] && typeof parameters[key] === "string") {
+      variables[key] = parameters[key];
     }
   });
 
-  if (!config) {
-    // Configuração padrão se não existir no banco
-    return {
-      valorAnalise: "R$ 27,90",
-      chavePix: "atendimento@amandasousaprev.adv.br",
-      lotes: [{
-        numero: 1,
-        nome: "Primeiro Lote",
-        valor: "R$ 287,90",
-        dataInicio: new Date(),
-        dataFim: new Date()
-      }],
-      intentMappings: []
-    };
-  }
-
-  return config;
+  return variables;
 }
 
-// Função para obter mapeamento de template por intenção
-async function getTemplateForIntent(intentName: string, mtfConfig: any) {
-  const mapping = mtfConfig.intentMappings.find(
-    (mapping: any) => mapping.intentName === intentName
-  );
-  
-  if (mapping) {
-    return mapping.templateName;
-  }
-
-  // Mapeamentos padrão se não estiver configurado
-  const defaultMappings: Record<string, string> = {
-    'Welcome': 'welcome',
-    'identificacao': 'identificacao',
-    'oab': 'oab',
-    'oab - pix': 'pix',
-    'atendimentohumano': 'menu_novo',
-    'confirmação.nome.menu': 'menu_novo',
-    'maternidade': 'maternidade_novo',
-    'invalidez': 'invalidez',
-    'auxilio': 'auxilio',
-    'consulta.juridica': 'consulta_juridica',
-    'BPC-LOAS': 'bpc_loas'
-  };
-
-  return defaultMappings[intentName] || null;
-}
-
-// Manipulador para atendimento OAB (versão dinâmica)
-async function handleOAB(req: any, telefoneLead: string, mtfConfig: any): Promise<boolean> {
+/**
+ * Process intent request by queuing appropriate message task
+ */
+async function processIntentRequest(
+  intentName: string,
+  recipientPhone: string,
+  whatsappApiKey: string,
+  caixaId: string,
+  correlationId: string,
+  originalPayload: any
+): Promise<void> {
   try {
-    const parameters = req.queryResult.parameters;
-    const nome = parameters['person']['name'];
-
-    console.log(`[MTF Diamante] Dados salvos no banco para o usuário ${nome}`);
-
-    // Obter configuração atual do WhatsApp
-    const whatsappConfig = await getCurrentWhatsAppConfig();
-    
-    // Configuração para a API do WhatsApp
-    const urlwhatsapp = `${whatsappConfig.apiBase}/${whatsappConfig.businessId}/messages`;
-    const configwhatsapp = {
-      headers: {
-        'Authorization': `Bearer ${whatsappConfig.token}`,
-        'Content-Type': 'application/json',
-      },
-    };
-
-    // Usar configurações dinâmicas do MTF Diamante
-    const loteAtivo = mtfConfig.lotes[0]; // Primeiro lote ativo
-    const messageText = `Últimas Vagas - Sr(a) *${nome}*,
-Para a análise de pontos, cobro ${mtfConfig.valorAnalise}.
-Escolha a opção que melhor se encaixa:
-- ${loteAtivo.nome}: Valor ${loteAtivo.valor}, válido até ${loteAtivo.dataFim.toLocaleDateString('pt-BR')}.
-
-O valor pago na análise será deduzido do total.
-Envie o comprovante de pagamento para a chave Pix: ${mtfConfig.chavePix}.
-Envie a prova e o espelho (NÃO envie login e senha).
-Obrigado. Escolha uma opção:`;
-
-    // Dados que seriam enviados para a API do WhatsApp
-    const data = {
-      messaging_product: "whatsapp",
-      to: telefoneLead,
-      type: "interactive",
-      interactive: {
-        type: "button",
-        header: {
-          type: "image",
-          image: {
-            link: "https://amandasousaprev.adv.br/wp-content/uploads/2024/10/AmandaFOTO.jpg",
-          },
-        },
-        body: {
-          text: messageText,
-        },
-        footer: {
-          text: "Dra. Amanda Sousa Advocacia e Consultoria Jurídica™",
-        },
-        action: {
-          buttons: [
-            {
-              type: "reply",
-              reply: {
-                id: "id_enviar_prova",
-                title: "Enviar a Prova",
-              },
-            },
-            {
-              type: "reply",
-              reply: {
-                id: "id_qual_pix",
-                title: "Qual o PIX?",
-              },
-            },
-            {
-              type: "reply",
-              reply: {
-                id: "id_finalizar",
-                title: "Foi Engano.",
-              },
-            },
-          ],
-        },
-      },
-    };
-
-    console.log('[MTF Diamante] Enviando mensagem interativa para o WhatsApp:', JSON.stringify(data));
-
-    // Enviar mensagem real (não simulação)
-    const response = await axios.post(urlwhatsapp, data, configwhatsapp);
-    
-    console.log('[MTF Diamante] Mensagem interativa enviada com sucesso.');
-    
-    return true;
-  } catch (error) {
-    console.error('Erro ao enviar atendimento OAB:', error);
-    return false;
-  }
-}
-
-// Manipulador para enviar PIX (usando template)
-async function handleOabPix(telefoneLead: string, mtfConfig: any): Promise<boolean> {
-  try {
-    // Enviar template PIX com a chave dinâmica
-    const success = await sendTemplateMessage(telefoneLead, 'pix', {
-      couponCode: mtfConfig.chavePix
-    });
-    
-    if (success) {
-      console.log('[MTF Diamante] Template PIX enviado com sucesso');
-    } else {
-      console.error('[MTF Diamante] Falha ao enviar template PIX');
-    }
-    
-    return success;
-  } catch (error) {
-    console.error('Erro ao enviar PIX:', error);
-    return false;
-  }
-}
-
-// Manipulador para enviar mensagem de template dinâmico
-async function sendDynamicTemplate(telefoneLead: string, templateName: string, mtfConfig: any): Promise<boolean> {
-  try {
-    // Buscar parâmetros específicos para o template se existir mapeamento
-    const mapping = mtfConfig.intentMappings.find(
-      (m: any) => m.templateName === templateName
+    console.log(
+      `[MTF Diamante Dispatcher] Processing intent: ${intentName} for ${recipientPhone}`
     );
-    
-    const parameters = mapping?.parameters || {};
-    
-    const success = await sendTemplateMessage(telefoneLead, templateName, parameters);
-    
-    if (success) {
-      console.log(`[MTF Diamante] Template ${templateName} enviado com sucesso`);
-    } else {
-      console.error(`[MTF Diamante] Falha ao enviar template ${templateName}`);
+
+    // Validate required data
+    if (!recipientPhone || !whatsappApiKey) {
+      console.error(
+        `[MTF Diamante Dispatcher] Missing required data - phone: ${recipientPhone}, apiKey: ${whatsappApiKey ? "present" : "missing"}`
+      );
+      return;
     }
-    
-    return success;
+
+    // O caixaId aqui é o inbox_id do Chatwit (4), mas precisamos do ID interno da CaixaEntrada
+    // Vamos buscar primeiro a CaixaEntrada pelo inboxId para obter o ID interno
+    console.log(
+      `[MTF Diamante Dispatcher] Received caixaId (inbox_id): ${caixaId} (${typeof caixaId})`
+    );
+
+    // Query database for complete message mapping
+    const messageMapping = await findCompleteMessageMappingByIntent(
+      intentName,
+      String(caixaId || "")
+    );
+
+    if (!messageMapping) {
+      console.log(
+        `[MTF Diamante Dispatcher] No mapping found for intent: ${intentName}, caixa: ${caixaId}`
+      );
+      return;
+    }
+
+    console.log(
+      `[MTF Diamante Dispatcher] Found mapping: ${messageMapping.messageType} for intent: ${intentName}`
+    );
+
+    // Create appropriate task based on message type
+    switch (messageMapping.messageType) {
+      case "template":
+        if (messageMapping.template) {
+          // Extract variables from Dialogflow payload
+          const variables = extractTemplateVariables(originalPayload);
+
+          const templateTask = createTemplateMessageTask({
+            recipientPhone,
+            whatsappApiKey:
+              messageMapping.whatsappConfig.whatsappToken || whatsappApiKey,
+            templateId: messageMapping.template.templateId,
+            templateName: messageMapping.template.name,
+            variables,
+            correlationId,
+            metadata: {
+              intentName,
+              caixaId,
+              originalPayload,
+            },
+          });
+
+          await addSendMessageTask(templateTask);
+          console.log(
+            `[MTF Diamante Dispatcher] Template message task queued for intent: ${intentName}, template: ${messageMapping.template.name}`
+          );
+        }
+        break;
+
+      case "interactive":
+        if (messageMapping.interactiveMessage) {
+          const interactiveTask = createInteractiveMessageTask({
+            recipientPhone,
+            whatsappApiKey:
+              messageMapping.whatsappConfig.whatsappToken || whatsappApiKey,
+            interactiveContent: {
+              header: messageMapping.interactiveMessage.headerTipo
+                ? {
+                    type: messageMapping.interactiveMessage.headerTipo as any,
+                    content:
+                      messageMapping.interactiveMessage.headerConteudo || "",
+                  }
+                : undefined,
+              body: messageMapping.interactiveMessage.texto,
+              footer: messageMapping.interactiveMessage.rodape,
+              buttons: messageMapping.interactiveMessage.botoes.map(
+                (botao) => ({
+                  id: botao.id,
+                  title: botao.titulo,
+                  type: "reply" as const,
+                })
+              ),
+            },
+            correlationId,
+            metadata: {
+              intentName,
+              caixaId,
+              originalPayload,
+            },
+          });
+
+          await addSendMessageTask(interactiveTask);
+          console.log(
+            `[MTF Diamante Dispatcher] Interactive message task queued for intent: ${intentName}`
+          );
+        }
+        break;
+
+      case "unified_template":
+        if (messageMapping.unifiedTemplate) {
+          // Handle unified template - this is a more complex message type
+          console.log(
+            `[MTF Diamante Dispatcher] Unified template processing for intent: ${intentName} - implementation needed`
+          );
+          // TODO: Implement unified template processing
+        }
+        break;
+
+      case "enhanced_interactive":
+        if (messageMapping.enhancedInteractiveMessage) {
+          console.log(
+            `[MTF Diamante Dispatcher] Processing enhanced interactive message for intent: ${intentName}`
+          );
+
+          const enhancedMessage = messageMapping.enhancedInteractiveMessage;
+
+          // Construir conteúdo interativo baseado no tipo
+          let interactiveContent: any = {
+            body: enhancedMessage.bodyText,
+          };
+
+          // Adicionar header se existir
+          if (enhancedMessage.headerType && enhancedMessage.headerContent) {
+            interactiveContent.header = {
+              type: enhancedMessage.headerType,
+              content: enhancedMessage.headerContent,
+            };
+          }
+
+          // Adicionar footer se existir
+          if (enhancedMessage.footerText) {
+            interactiveContent.footer = enhancedMessage.footerText;
+          }
+
+          // Processar actionData baseado no tipo de mensagem
+          if (enhancedMessage.type === "button" && enhancedMessage.actionData) {
+            // Mensagem com botões
+            const actionData = enhancedMessage.actionData as any;
+            if (actionData.buttons && Array.isArray(actionData.buttons)) {
+              interactiveContent.buttons = actionData.buttons.map(
+                (button: any) => ({
+                  id: button.id,
+                  title: button.title,
+                  type: "reply" as const,
+                })
+              );
+            }
+          } else if (
+            enhancedMessage.type === "list" &&
+            enhancedMessage.actionData
+          ) {
+            // Mensagem com lista
+            const actionData = enhancedMessage.actionData as any;
+            if (actionData.sections && Array.isArray(actionData.sections)) {
+              interactiveContent.listSections = actionData.sections;
+              interactiveContent.buttonText =
+                actionData.buttonText || "Selecionar";
+            }
+          }
+
+          console.log(`[MTF Diamante Dispatcher] Creating enhanced interactive task with data:`, {
+            recipientPhone,
+            hasWhatsappApiKey: !!(messageMapping.whatsappConfig.whatsappToken || whatsappApiKey),
+            interactiveContent,
+            correlationId,
+            enhancedMessageId: enhancedMessage.id,
+            enhancedMessageType: enhancedMessage.type,
+          });
+
+          const enhancedInteractiveTask = createInteractiveMessageTask({
+            recipientPhone,
+            whatsappApiKey:
+              messageMapping.whatsappConfig.whatsappToken || whatsappApiKey,
+            interactiveContent,
+            correlationId,
+            metadata: {
+              intentName,
+              caixaId,
+              originalPayload,
+              messageType: "enhanced_interactive",
+              enhancedMessageId: enhancedMessage.id,
+            },
+          });
+
+          console.log(`[MTF Diamante Dispatcher] Enhanced interactive task created:`, {
+            taskType: enhancedInteractiveTask.type,
+            hasRecipientPhone: !!enhancedInteractiveTask.recipientPhone,
+            hasWhatsappApiKey: !!enhancedInteractiveTask.whatsappApiKey,
+            hasMessageData: !!enhancedInteractiveTask.messageData,
+            correlationId: enhancedInteractiveTask.correlationId,
+          });
+
+          await addSendMessageTask(enhancedInteractiveTask);
+          console.log(
+            `[MTF Diamante Dispatcher] Enhanced interactive message task queued for intent: ${intentName}, type: ${enhancedMessage.type}`
+          );
+        }
+        break;
+
+      default:
+        console.log(
+          `[MTF Diamante Dispatcher] Unknown message type: ${messageMapping.messageType} for intent: ${intentName}`
+        );
+    }
   } catch (error) {
-    console.error(`Erro ao enviar template ${templateName}:`, error);
-    return false;
+    console.error(
+      `[MTF Diamante Dispatcher] Error processing intent ${intentName}:`,
+      error
+    );
+    // Don't throw - we want to return 200 OK to Dialogflow even if queuing fails
   }
 }
 
-// Identificar usuário e salvar no banco
-async function handleIdentificacao(req: any, telefoneLead: string): Promise<NextResponse> {
+/**
+ * Process button click request by queuing reaction task if configured
+ */
+async function processButtonClickRequest(
+  buttonId: string,
+  messageId: string,
+  recipientPhone: string,
+  whatsappApiKey: string,
+  correlationId: string,
+  originalPayload: any
+): Promise<void> {
   try {
-    const parameters = req.queryResult.parameters;
-    const nome = parameters['person']['name'];
+    console.log(
+      `[MTF Diamante Dispatcher] Processing button click: ${buttonId} for ${recipientPhone}`
+    );
 
-    console.log(`[MTF Diamante] Dados do usuário ${nome} (${telefoneLead}) processados`);
+    // Query database for button reaction mapping
+    const reactionMapping = await findReactionByButtonId(buttonId);
 
-    return NextResponse.json({
-      fulfillmentMessages: [
-        { text: { text: [`Perfeito, ${nome}. Posso confirmar o cadastro do seu nome?`] } },
-      ],
-      outputContexts: [
-        {
-          name: `${req.session}/contexts/menu`,
-          lifespanCount: 10,
-          parameters: {
-            person: nome,
-          },
-        },
-      ],
+    if (!reactionMapping) {
+      console.log(
+        `[MTF Diamante Dispatcher] No reaction mapping found for button: ${buttonId}`
+      );
+      return;
+    }
+
+    console.log(
+      `[MTF Diamante Dispatcher] Found reaction mapping: ${buttonId} -> ${reactionMapping.emoji}`
+    );
+
+    // Create reaction task
+    const reactionTask = createReactionTask({
+      recipientPhone,
+      messageId,
+      emoji: reactionMapping.emoji,
+      whatsappApiKey,
+      correlationId,
+      metadata: {
+        buttonId,
+        originalPayload,
+      },
     });
+
+    await addSendReactionTask(reactionTask);
+    console.log(
+      `[MTF Diamante Dispatcher] Reaction task queued for button: ${buttonId}`
+    );
   } catch (error) {
-    console.error('Erro ao processar identificação:', error);
-    return NextResponse.json({ error: 'Erro ao processar identificação' }, { status: 500 });
+    console.error(
+      `[MTF Diamante Dispatcher] Error processing button click ${buttonId}:`,
+      error
+    );
+    // Don't throw - we want to return 200 OK to Dialogflow even if queuing fails
   }
 }
 
-// Bem-vindo e verificação de usuário existente
-async function handleWelcome(req: any, telefoneLead: string): Promise<NextResponse> {
-  try {
-    // Buscar se é usuário existente (pode usar leads do sistema se necessário)
-    const exists = Math.random() > 0.5; // Simulação
-
-    if (exists) {
-      const mockName = "Cliente Existente";
-      console.log(`[MTF Diamante] Usuário existente encontrado: ${mockName}`);
-      
-      const responseData = {
-        fulfillmentMessages: [
-          {
-            text: {
-              text: [
-                `*Bem-vindo(a) de volta, Sr(a). ${mockName}!* \nSegue as opções disponíveis para atendimento (espere um pouco).`,
-              ],
-            },
-          },
-        ],
-        outputContexts: [
-          {
-            name: `${req.session}/contexts/menu`,
-            lifespanCount: 10,
-            parameters: {
-              person: mockName,
-            },
-          },
-        ],
-      };
-
-      // Enviar template de menu
-      await sendDynamicTemplate(telefoneLead, 'menu_novo', {});
-      
-      return NextResponse.json(responseData);
-    } else {
-      console.log(`[MTF Diamante] Novo usuário: ${telefoneLead}`);
-      
-      return NextResponse.json({
-        fulfillmentMessages: [
-          {
-            text: {
-              text: [
-                'Olá, tudo bem? Sou Ana, assistente virtual da Dra. Amanda Sousa. *(No momento eu ainda não consigo reconhecer mensagens de mídia (áudio, vídeo, foto, etc). Por favor, envie apenas mensagens de texto. 🚫🎵📸🚫)* Para sua segurança, informamos que o escritório *Dra. Amanda Sousa* utiliza dados pessoais em conformidade com a `Lei Geral de Proteção de Dados Pessoais (LGPD) Lei Nº 13.709/18`. Ao prosseguir com seu contato, você está de acordo com a troca de mensagens por este canal. Faço seu pré-atendimento, antes de começar qual é seu *NOME?*',
-              ],
-            },
-          },
-        ],
-      });
-    }
-  } catch (error) {
-    console.error('Erro ao processar boas-vindas:', error);
-    return NextResponse.json({ error: 'Erro ao processar boas-vindas' }, { status: 500 });
-  }
-}
-
-// Rota principal que processa o webhook
+/**
+ * Main webhook handler - Pure Dispatcher
+ * Only parses requests, queues tasks, and responds immediately to Dialogflow
+ */
 export async function POST(request: Request) {
+  const startTime = Date.now();
+
   try {
     const req = await request.json();
-    console.log('[MTF Diamante] Dialogflow Request body:', JSON.stringify(req));
+    console.log("[MTF Diamante Dispatcher] Received Dialogflow request");
 
-    // Obter configuração do MTF Diamante
-    const mtfConfig = await getMtfDiamanteConfig();
+    // LOG COMPLETO DO PAYLOAD DO DIALOGFLOW
+    console.log("[MTF Diamante Dispatcher] PAYLOAD COMPLETO DO DIALOGFLOW:");
+    console.log(JSON.stringify(req, null, 2));
 
-    // Se o payload estiver vazio ou incompleto, criar um mock básico
-    const intentName = req.queryResult?.intent?.displayName || 'Welcome';
-    const session = req.session || 'session/5584994072876';
+    // Generate correlation ID for request tracing
+    const correlationId = generateCorrelationId();
+    console.log(`[MTF Diamante Dispatcher] Correlation ID: ${correlationId}`);
 
-    // Extrai o número de telefone da sessão e remove caracteres não numéricos
-    const telefoneLead = session.split('/').pop().replace(/\D/g, '');
+    // Extract and validate webhook data
+    const webhookData = extractWebhookData(req);
+    logWebhookData(webhookData, req);
 
-    let result: any;
+    // Parse request to determine type and extract relevant data
+    const parsedRequest = parseDialogflowRequest(req);
+    console.log(
+      `[MTF Diamante Dispatcher] Request type: ${parsedRequest.type}`
+    );
 
-    // Buscar template mapeado para a intenção
-    const templateName = await getTemplateForIntent(intentName, mtfConfig);
-
-    // Processa a intenção recebida
-    switch (intentName) {
-      case 'oab':
-        await handleOAB(req, telefoneLead, mtfConfig);
-        result = NextResponse.json({});
-        break;
-        
-      case 'oab - pix':
-        await handleOabPix(telefoneLead, mtfConfig);
-        result = NextResponse.json({});
-        break;
-        
-      case 'Welcome':
-        result = await handleWelcome(req, telefoneLead);
-        break;
-        
-      case 'identificacao':
-        result = await handleIdentificacao(req, telefoneLead);
-        break;
-        
-      case 'atendimentohumano':
-      case 'confirmação.nome.menu':
-      case 'maternidade':
-      case 'invalidez':
-      case 'auxilio':
-      case 'consulta.juridica':
-      case 'BPC-LOAS':
-        if (templateName) {
-          await sendDynamicTemplate(telefoneLead, templateName, mtfConfig);
-        }
-        result = NextResponse.json({});
-        break;
-        
-      default:
-        console.log(`[MTF Diamante] Intenção desconhecida: ${intentName}`);
-        result = NextResponse.json({
-          fulfillmentMessages: [
-            {
-              text: {
-                text: ['Desculpe, não consegui entender sua solicitação. Poderia reformular?'],
-              },
-            },
-          ],
+    // Queue legacy tasks for backward compatibility (non-blocking)
+    try {
+      // 1. Store message task
+      if (validateWebhookData(webhookData)) {
+        await addStoreMessageTask({
+          payload: req,
+          messageId: webhookData.messageId,
+          conversationId: webhookData.conversationId,
+          contactPhone: webhookData.contactPhone,
+          whatsappApiKey: webhookData.whatsappApiKey,
+          inboxId: webhookData.inboxId,
         });
+      }
+
+      // 2. Update API key task
+      if (hasValidApiKey(req) && webhookData.inboxId) {
+        await addUpdateApiKeyTask({
+          inboxId: webhookData.inboxId,
+          whatsappApiKey: webhookData.whatsappApiKey,
+          payload: req,
+        });
+      }
+
+      // 3. Process intent task (legacy)
+      await addProcessIntentTask({
+        payload: req,
+        intentName: webhookData.intentName,
+        contactPhone: webhookData.contactPhone,
+      });
+
+      // 4. Process button click task (new)
+      if (parsedRequest.type === "button_click") {
+        await addProcessButtonClickTask({
+          payload: req,
+          contactPhone: parsedRequest.recipientPhone,
+          whatsappApiKey: parsedRequest.whatsappApiKey,
+          inboxId: parsedRequest.caixaId || "",
+        });
+        console.log(`[MTF Diamante Dispatcher] Button click task queued for button: ${parsedRequest.buttonId}`);
+      }
+
+      console.log(`[MTF Diamante Dispatcher] Legacy tasks queued successfully`);
+    } catch (legacyQueueError) {
+      console.error(
+        "[MTF Diamante Dispatcher] Error queuing legacy tasks:",
+        legacyQueueError
+      );
+      // Continue processing - don't let legacy task failures block the new system
     }
 
-    return result;
-  } catch (error) {
-    console.error('Erro no webhook MTF Diamante:', error);
-    return NextResponse.json(
-      { error: 'Erro interno do servidor' },
-      { status: 500 }
+    // Calculate response time for legacy tasks only
+    const legacyResponseTime = Date.now() - startTime;
+    console.log(
+      `[MTF Diamante Dispatcher] Legacy tasks processed in ${legacyResponseTime}ms`
     );
+
+    // ✅ RESPOSTA IMEDIATA E SILENCIOSA AO DIALOGFLOW
+    // Usando o objeto JSON vazio, que é mais limpo.
+    const immediateResponse = NextResponse.json({});
+
+    // Process request based on type (new async system) - NÃO BLOQUEAR A RESPOSTA
+    setImmediate(async () => {
+      try {
+        if (parsedRequest.type === "intent" && parsedRequest.intentName) {
+          // Process intent even if caixaId is missing - use empty string as fallback
+          await processIntentRequest(
+            parsedRequest.intentName,
+            parsedRequest.recipientPhone,
+            parsedRequest.whatsappApiKey,
+            parsedRequest.caixaId || "",
+            correlationId,
+            req
+          );
+        } else if (
+          parsedRequest.type === "button_click" &&
+          parsedRequest.buttonId &&
+          parsedRequest.messageId
+        ) {
+          await processButtonClickRequest(
+            parsedRequest.buttonId,
+            parsedRequest.messageId,
+            parsedRequest.recipientPhone,
+            parsedRequest.whatsappApiKey,
+            correlationId,
+            req
+          );
+        } else {
+          console.log(
+            `[MTF Diamante Dispatcher] Unhandled request type or missing data:`,
+            {
+              type: parsedRequest.type,
+              intentName: parsedRequest.intentName,
+              buttonId: parsedRequest.buttonId,
+              messageId: parsedRequest.messageId,
+              hasRecipientPhone: !!parsedRequest.recipientPhone,
+              hasWhatsappApiKey: !!parsedRequest.whatsappApiKey,
+              caixaId: parsedRequest.caixaId,
+            }
+          );
+        }
+
+        // Calculate total processing time
+        const totalResponseTime = Date.now() - startTime;
+        console.log(
+          `[MTF Diamante Dispatcher] Total async processing completed in ${totalResponseTime}ms`
+        );
+      } catch (asyncQueueError) {
+        console.error(
+          "[MTF Diamante Dispatcher] Error in async processing:",
+          asyncQueueError
+        );
+        // Error in async processing doesn't affect the response to Dialogflow
+      }
+    });
+
+    // Return immediate response to Dialogflow (prevent timeout)
+    return immediateResponse;
+  } catch (error) {
+    console.error(
+      "[MTF Diamante Dispatcher] Critical error in webhook:",
+      error
+    );
+
+    // Even on critical errors, return 200 OK to prevent Dialogflow retries
+    // Log the error for monitoring but don't expose internal details
+    return NextResponse.json({
+      fulfillmentMessages: [
+        {
+          text: {
+            text: [
+              "Desculpe, ocorreu um erro temporário. Tente novamente em alguns instantes.",
+            ],
+          },
+        },
+      ],
+    });
   }
-} 
+}

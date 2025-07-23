@@ -19,6 +19,8 @@ import { cn } from '@/lib/utils';
 import { DisparoMensagemDialog } from './DisparoMensagemDialog';
 import { LoteCardSkeleton, VariavelSkeleton } from './LoadingSkeletons';
 import { useMtfData } from '../context/MtfDataProvider';
+import { validateVariable, ensureSpecialVariables, SPECIAL_VARIABLES } from '@/app/lib/variable-utils';
+import { useVariableManager } from '../hooks/useVariableManager';
 
 interface WhatsAppConfig {
   id?: string;
@@ -32,6 +34,10 @@ interface MtfDiamanteVariavel {
   id?: string;
   chave: string;
   valor: string;
+  tipo?: 'special' | 'custom';
+  isRequired?: boolean;
+  maxLength?: number;
+  description?: string;
 }
 
 interface MtfDiamanteLote {
@@ -59,6 +65,9 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
 
   // Usando contexto de dados para cache persistente
   const { variaveis, loadingVariaveis, refreshVariaveis, lotes, loadingLotes, refreshLotes } = useMtfData();
+  
+  // Using the enhanced variable manager for better variable handling
+  const variableManager = useVariableManager();
 
   useEffect(() => {
     if (configPadrao) {
@@ -80,7 +89,35 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
 
   // Sincroniza dados do cache com estado local para edição
   useEffect(() => {
-    setVariaveisEditaveis([...variaveis]);
+    // Ensure special variables always exist
+    const specialVariables = [
+      {
+        chave: 'chave_pix',
+        valor: variaveis.find(v => v.chave === 'chave_pix')?.valor || '',
+        tipo: 'special' as const,
+        isRequired: true,
+        maxLength: 15,
+        description: 'PIX key for copy code button (max 15 characters)'
+      },
+      {
+        chave: 'nome_do_escritorio_rodape',
+        valor: variaveis.find(v => v.chave === 'nome_do_escritorio_rodape')?.valor || '',
+        tipo: 'special' as const,
+        isRequired: true,
+        description: 'Company name that appears in footer automatically'
+      }
+    ];
+
+    // Get custom variables (excluding special ones)
+    const customVariables = variaveis.filter(v => 
+      !['chave_pix', 'nome_do_escritorio_rodape'].includes(v.chave)
+    ).map(v => ({
+      ...v,
+      tipo: 'custom' as const,
+      isRequired: false
+    }));
+
+    setVariaveisEditaveis([...specialVariables, ...customVariables]);
   }, [variaveis]);
 
   const handleVariavelChange = (index: number, field: 'chave' | 'valor', value: string) => {
@@ -128,33 +165,17 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
     }
   };
 
+
+
   const handleVariaveisSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Valida se todas as variáveis têm chave e valor
-    const variaveisValidas = variaveisEditaveis.filter(v => v.chave.trim() && v.valor.trim());
-
-    if (variaveisValidas.length === 0) {
-      toast.error('Adicione pelo menos uma variável válida');
-      return;
-    }
-
-    try {
-      const response = await fetch('/api/admin/mtf-diamante/variaveis', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ variaveis: variaveisValidas }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Falha ao salvar variáveis.');
-      }
-
-      toast.success('Variáveis salvas com sucesso!');
-      refreshVariaveis(); // Recarrega as variáveis usando o hook de cache
-    } catch (error) {
-      toast.error((error as Error).message);
+    // Use the enhanced variable manager for saving
+    const success = await variableManager.saveVariables(variaveisEditaveis);
+    
+    if (success) {
+      // Refresh the cache after successful save
+      refreshVariaveis();
     }
   };
 
@@ -321,7 +342,17 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
                                 onChange={(e) => handleVariavelChange(index, 'chave', e.target.value)}
                                 placeholder="Ex: minha_variavel"
                                 required
+                                className={cn(
+                                  variavel.chave && !/^[a-z_]+$/.test(variavel.chave) 
+                                    ? "border-red-500 focus:border-red-500" 
+                                    : ""
+                                )}
                               />
+                              {variavel.chave && !/^[a-z_]+$/.test(variavel.chave) && (
+                                <p className="text-xs text-red-500 mt-1">
+                                  Use apenas letras minúsculas e underscores
+                                </p>
+                              )}
                             </div>
                             <div>
                               <Label htmlFor={`valor-${index}`}>Valor da Variável</Label>

@@ -1,4 +1,4 @@
-import { initAgendamentoWorker, initManuscritoWorker, initLeadsChatwitWorker } from './webhook.worker';
+import { initAgendamentoWorker, initManuscritoWorker, initLeadsChatwitWorker, initMtfDiamanteWebhookWorker, initMtfDiamanteAsyncWorker } from './webhook.worker';
 import { initializeExistingAgendamentos } from '@/lib/scheduler-bullmq';
 import { initJobs } from './webhook.worker';
 import dotenv from 'dotenv';
@@ -20,6 +20,12 @@ export async function initializeWorkers() {
     
     // Inicializa o worker de leads-chatwit
     await initLeadsChatwitWorker();
+
+    // Inicializa o worker de webhook MTF Diamante
+    await initMtfDiamanteWebhookWorker();
+
+    // Inicializa o worker assíncrono MTF Diamante
+    await initMtfDiamanteAsyncWorker();
 
     // Inicializa os jobs recorrentes (apenas uma vez)
     await initJobs();

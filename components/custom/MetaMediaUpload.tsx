@@ -16,7 +16,6 @@ import { useDropzone } from "react-dropzone";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Progress } from "../ui/progress";
-import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { toast } from "sonner";
 import {
   Tooltip,
@@ -587,20 +586,7 @@ export default function MetaMediaUpload({
             </div>
           </div>
         )}
-
-        {/* Alerta sobre API Meta */}
-        <Alert className="bg-amber-50 border-amber-200 text-amber-800">
-          <AlertTitle className="text-sm font-medium">Importante!</AlertTitle>
-          <AlertDescription className="text-xs">
-            Para usar a API Meta (WhatsApp), é necessário ter as credenciais corretas configuradas:
-            <ul className="list-disc pl-5 mt-1">
-              <li>WHATSAPP_TOKEN com permissões corretas</li>
-              <li>META_APP_ID configurado no .env</li>
-              <li>O token deve ter permissão para a API de Carregamento Retomável</li>
-            </ul>
-          </AlertDescription>
-        </Alert>
       </div>
     </TooltipProvider>
   );
-} 
+}

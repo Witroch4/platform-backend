@@ -287,7 +287,7 @@ export default function RedeSocialPage() {
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  {session?.user?.role === "ADMIN" && (
+                  {(session?.user?.role === "ADMIN" || session?.user?.role === "SUPERADMIN") && (
                     <>
                       <DropdownMenuItem asChild>
                         <Link href="/admin" className="flex items-center">
@@ -792,7 +792,7 @@ export default function RedeSocialPage() {
                 <p><strong>Estado:</strong> {isLoading ? "Carregando..." : "Concluído"}</p>
               </div>
             </div>
-            {session?.user?.role === "ADMIN" && (
+            {(session?.user?.role === "ADMIN" || session?.user?.role === "SUPERADMIN") && (
               <Button
                 onClick={() => router.push('/admin')}
                 variant="outline"

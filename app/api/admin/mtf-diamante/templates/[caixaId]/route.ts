@@ -14,10 +14,24 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const templates = await db.whatsAppTemplate.findMany({
       where: { caixaEntradaId: caixaId },
+      select: {
+        id: true,
+        templateId: true,
+        name: true,
+        status: true,
+        category: true,
+        language: true,
+      },
       orderBy: { name: 'asc' },
     });
 
-    return NextResponse.json(templates);
+    // Formatar para o formato esperado pelo frontend
+    const formattedTemplates = templates.map(template => ({
+      id: template.templateId,
+      name: template.name,
+    }));
+
+    return NextResponse.json(formattedTemplates);
   } catch (error) {
     console.error(`Erro ao buscar templates:`, error);
     return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });

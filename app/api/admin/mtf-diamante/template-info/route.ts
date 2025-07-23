@@ -141,7 +141,7 @@ export async function GET(req: Request) {
     if (!session?.user) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
-    if (session.user.role !== 'ADMIN') {
+    if (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN') {
       return NextResponse.json({ error: 'Sem permissão' }, { status: 403 });
     }
     const url = new URL(req.url);

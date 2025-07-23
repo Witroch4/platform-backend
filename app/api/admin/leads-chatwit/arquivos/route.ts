@@ -140,7 +140,7 @@ export async function DELETE(request: NextRequest) {
   try {
     // Usando a nova forma de autenticação do NextAuth v5
     const session = await auth();
-    if (!session || !session.user || session.user.role !== 'ADMIN') {
+    if (!session || !session.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
