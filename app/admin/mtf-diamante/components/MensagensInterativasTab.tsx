@@ -10,14 +10,15 @@ import { TrashIcon, PencilIcon, Upload, Eye, Save, Plus, MessageSquare } from 'l
 import { toast } from 'sonner';
 import { EnhancedTextArea } from './EnhancedTextArea';
 import { TemplatePreview } from './TemplatesTab/components/template-preview';
-import { useVariableManager } from '../hooks/useVariableManager';
+import { useVariableManager } from '@/hooks/useVariableManager';
 import { TemplateLibraryService } from '@/app/lib/template-library-service';
 import { useSession } from 'next-auth/react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { MediaUploadComponent } from './shared/MediaUploadComponent';
 import { ButtonManager, type ButtonConfig } from './shared/ButtonManager';
-import { InteractiveMessageCreator, type InteractiveMessageType } from './InteractiveMessageCreator';
+import InteractiveMessageCreator from './InteractiveMessageCreator';
+import type { InteractiveMessageType } from './interactive-message-creator/types';
 import { InteractiveMessageTypeSelector } from './InteractiveMessageTypeSelector';
 
 interface MensagensInterativasTabProps {

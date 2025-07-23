@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { toast } from 'sonner'
-import { ExtendedLead } from '../../types'
+import type { ExtendedLead } from '../../types'
 
 // Defina os tipos para os dados que você coletará nos diálogos
 type ManuscritoData = { selectedImages: string[] }
@@ -117,7 +117,7 @@ export const useLeadBatchProcessor = (leads: ExtendedLead[], onUpdate?: () => vo
   }, [currentStep, processingQueues.manuscriptProcessing, processingQueues.mirrorProcessing, currentManualLeadIndex])
 
   // Função para criar conexão SSE para um lead com reconexão automática
-  const createSSEConnection = (leadId: string, retryCount: number = 0) => {
+  const createSSEConnection = (leadId: string, retryCount = 0) => {
     if (sseConnections.has(leadId) && retryCount === 0) {
       console.log(`[Batch SSE] Conexão já existe para ${leadId}`)
       return

@@ -15,7 +15,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { BookOpen, Check, Loader2 } from "lucide-react";
-import { CellProps } from "../types";
+import type { CellProps } from "../types";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 

@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import type React from "react";
+import { useState, useEffect } from "react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import ConditionalSidebar from "@/components/conditional-sidebar";
 import Navbar from "@/components/navbar";

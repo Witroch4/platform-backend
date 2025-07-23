@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { TemplateLibraryService, CreateTemplateLibraryData } from '@/app/lib/template-library-service';
+import { TemplateLibraryService, type CreateTemplateLibraryData } from '@/app/lib/template-library-service';
 
 // GET - Get library items
 export async function GET(request: NextRequest) {

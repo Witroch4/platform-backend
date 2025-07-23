@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { TemplateLibraryWithCreator, CreateTemplateLibraryData } from '@/app/lib/template-library-service';
+import type { TemplateLibraryWithCreator, CreateTemplateLibraryData } from '@/app/lib/template-library-service';
 
 export interface UseTemplateLibraryOptions {
   type?: 'template' | 'interactive_message';

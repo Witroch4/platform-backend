@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import type React from "react";
 import { SessionProvider } from "next-auth/react";
 import NavbarGeral from "@/components/navbarGeral";
 import { Toaster } from "@/components/ui/toaster";

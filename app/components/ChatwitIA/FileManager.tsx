@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FileWithContent } from '@/hooks/useChatwitIA';
+import type { FileWithContent } from '@/hooks/useChatwitIA';
 import { File, Trash2, Eye, Download, FileText, FileImage, PenTool, Copy } from 'lucide-react';
 
 interface FileManagerProps {
@@ -43,7 +43,7 @@ export default function FileManager({
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
   
   // Helper to determine file icon

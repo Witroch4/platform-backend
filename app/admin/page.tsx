@@ -56,7 +56,7 @@ export default function AdminPage() {
   const handleCheckExpiringTokens = async () => {
     try {
       setLoading(prev => ({ ...prev, expiring: true }));
-      const daysNum = parseInt(days);
+      const daysNum = Number.parseInt(days);
       if (isNaN(daysNum) || daysNum <= 0) {
         toast.error("Por favor, insira um número válido de dias");
         return;

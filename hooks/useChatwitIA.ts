@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import axios from 'axios';
-import openaiService, { FilePurpose } from '@/services/openai';
+import openaiService, { type FilePurpose } from '@/services/openai';
 
 export type MessageContent = string | Array<{
   type: 'text' | 'audio' | 'image' | 'document';
@@ -389,7 +389,7 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
   };
 
   // Criar uma nova sessão de chat
-  const createChatSession = async (title: string = 'Nova conversa', modelToUse: string = model): Promise<string | null> => {
+  const createChatSession = async (title = 'Nova conversa', modelToUse: string = model): Promise<string | null> => {
     if (!authSession?.user) {
       setError('Você precisa estar logado para salvar chats.');
       return null;
@@ -560,9 +560,9 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
       }
       
       // Array para armazenar imagens geradas e parciais
-      let generatedImages: any[] = [];
-      let partialImages: { [key: string]: string } = {};
-      let lastPartialImage: string = ''; // Armazenar a última imagem parcial
+      const generatedImages: any[] = [];
+      const partialImages: { [key: string]: string } = {};
+      let lastPartialImage = ''; // Armazenar a última imagem parcial
       
       // Flag para evitar atualizações após done (movida para fora do try/catch)
       let isStreamComplete = false;
@@ -825,7 +825,7 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
               generatedImages.push(imageData);
               
               // Limpar o conteúdo de status/parcial
-              let cleanContent = streamContentRef.current
+              const cleanContent = streamContentRef.current
                 .replace(/🎨 Gerando imagem\.\.\.(\s*\(progresso\))?/g, '')
                 .replace(/\n\n!\[Gerando imagem\.\.\.\]\(data:image\/png;base64,[^)]+\)/g, '')
                 .trim();
@@ -1518,7 +1518,7 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
   };
 
   // Testar upload de arquivo localmente sem depender da OpenAI
-  const testUpload = async (file: File, purpose: string = 'test') => {
+  const testUpload = async (file: File, purpose = 'test') => {
     try {
       setIsFileLoading(true);
       setFileError(null);

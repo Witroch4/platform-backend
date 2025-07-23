@@ -1,4 +1,4 @@
-import { LeadChatwit } from "../../../types";
+import type { LeadChatwit } from "../../../types";
 
 export interface LeadItemProps {
   lead: LeadChatwit;

@@ -1,9 +1,9 @@
-import { Job } from 'bullmq';
+import type { Job } from 'bullmq';
 import axios from 'axios';
 import { prisma } from '@/lib/prisma';
 import { prepareWebhookData } from '@/lib/agendamento.service';
 import { scheduleAgendamentoJob } from '@/lib/queue/agendamento.queue';
-import { IAgendamentoJobData } from '@/lib/queue/agendamento.queue';
+import type { IAgendamentoJobData } from '@/lib/queue/agendamento.queue';
 
 const webhookUrl = process.env.WEBHOOK_URL || 'https://default-webhook-url.com';
 

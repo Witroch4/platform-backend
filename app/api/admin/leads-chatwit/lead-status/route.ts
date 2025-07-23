@@ -1,5 +1,5 @@
 // app/api/admin/leads-chatwit/lead-status/route.ts
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { auth } from '@/auth';
 

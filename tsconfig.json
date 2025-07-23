@@ -33,7 +33,7 @@
     "components/**/*",
     "types/**/*.d.ts",
     ".next/types/**/*.ts"
-  ],
+, "hooks/useApprovalRequests.ts"  ],
   "exclude": [
     "node_modules"
   ]

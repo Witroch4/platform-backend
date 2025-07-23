@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Bot, PlayCircle } from 'lucide-react'
 import { BatchProcessorOrchestrator } from './BatchProcessorOrchestrator'
 import { useLeadBatchProcessor } from './useLeadBatchProcessor'
-import { ExtendedLead } from '../../types'
+import type { ExtendedLead } from '../../types'
 import { toast } from 'sonner'
 
 type BatchProcessorTriggerProps = {

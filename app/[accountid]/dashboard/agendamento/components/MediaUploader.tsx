@@ -1,8 +1,8 @@
 // components/agendamento/MediaUploader.tsx
 "use client";
 
-import React from "react";
-import FileUpload, { UploadedFile } from "@/components/custom/FileUpload";
+import type React from "react";
+import FileUpload, { type UploadedFile } from "@/components/custom/FileUpload";
 
 interface MediaUploaderProps {
   uploadedFiles: UploadedFile[];

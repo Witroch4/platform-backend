@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import FileUpload, { UploadedFile } from "@/components/custom/FileUpload";
+import FileUpload, { type UploadedFile } from "@/components/custom/FileUpload";
 
 export default function MinioTestPage() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);

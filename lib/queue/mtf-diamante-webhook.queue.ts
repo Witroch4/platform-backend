@@ -29,11 +29,14 @@ export interface SendMessageTask {
   whatsappApiKey: string;
   correlationId?: string; // For request tracing
   messageData: {
-    type: 'template' | 'interactive';
+    type: 'template' | 'interactive' | 'text';
     // For template messages
     templateId?: string;
     templateName?: string;
     variables?: Record<string, any>;
+    // For text messages (reactions)
+    textContent?: string;
+    replyToMessageId?: string; // For replying to specific messages
     // For interactive messages (complete data from database)
     interactiveContent?: {
       header?: { 
@@ -354,6 +357,32 @@ export function createReactionTask(data: {
     emoji: data.emoji,
     whatsappApiKey: data.whatsappApiKey,
     correlationId: data.correlationId || generateCorrelationId(),
+    metadata: data.metadata
+  };
+}
+
+// Helper function to create SendMessageTask for text reactions
+export function createTextReactionTask(data: {
+  recipientPhone: string;
+  whatsappApiKey: string;
+  textMessage: string;
+  correlationId?: string;
+  metadata?: {
+    buttonId?: string;
+    originalPayload?: any;
+    replyToMessageId?: string;
+  };
+}): SendMessageTask {
+  return {
+    type: 'sendMessage',
+    recipientPhone: data.recipientPhone,
+    whatsappApiKey: data.whatsappApiKey,
+    correlationId: data.correlationId || generateCorrelationId(),
+    messageData: {
+      type: 'text',
+      textContent: data.textMessage,
+      replyToMessageId: data.metadata?.replyToMessageId
+    },
     metadata: data.metadata
   };
 }

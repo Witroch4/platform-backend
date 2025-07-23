@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import type React from 'react';
+import { useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -16,7 +17,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { X } from 'lucide-react';
-import { CreateTemplateLibraryData, TemplateLibraryContent } from '@/app/lib/template-library-service';
+import type { CreateTemplateLibraryData, TemplateLibraryContent } from '@/app/lib/template-library-service';
 
 interface CreateTemplateDialogProps {
   open: boolean;

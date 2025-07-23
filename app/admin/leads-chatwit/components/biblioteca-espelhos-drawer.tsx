@@ -34,7 +34,7 @@ import {
   Send,
   Edit2
 } from "lucide-react";
-import { LeadChatwit } from "../types";
+import type { LeadChatwit } from "../types";
 import { EspelhoDialog } from "./espelho-dialog";
 
 interface EspelhoBiblioteca {

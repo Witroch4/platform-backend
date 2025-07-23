@@ -1,7 +1,7 @@
 // components/agendamento/EmojiPicker.tsx
 "use client";
 
-import React from "react";
+import type React from "react";
 
 interface EmojiPickerProps {
   onSelect: (emoji: string) => void;

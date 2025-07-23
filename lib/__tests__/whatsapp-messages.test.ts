@@ -10,8 +10,8 @@ import {
   sendInteractiveMessage,
   formatPhoneNumber,
   sanitizeCouponCode,
-  TemplateMessageData,
-  InteractiveMessageData
+  type TemplateMessageData,
+  type InteractiveMessageData
 } from '../whatsapp-messages';
 
 // Mock axios

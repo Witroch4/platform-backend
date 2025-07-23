@@ -1,5 +1,5 @@
 import { OpenAI } from "openai";
-import { FilePurpose } from "./openai";
+import type { FilePurpose } from "./openai";
 import axios from "axios";
 
 // Initialize OpenAI client - will use API key from environment variables

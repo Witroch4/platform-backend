@@ -3,7 +3,7 @@
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { CheckCircle2, AlertTriangle } from 'lucide-react'
-import { ExtendedLead } from '../../types'
+import type { ExtendedLead } from '../../types'
 
 type ProcessingStats = {
   totalLeads: number

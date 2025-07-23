@@ -72,7 +72,7 @@ export const useImageGeneration = (sessionId?: string) => {
     prompt: string,
     revisedPrompt?: string,
     sessionId?: string,
-    model: string = 'gpt-image-1'
+    model = 'gpt-image-1'
   ): Promise<GeneratedImage | null> => {
     try {
       console.log(`Salvando imagem no MinIO: "${prompt.substring(0, 50)}..."`);

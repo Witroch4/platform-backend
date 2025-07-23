@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { writeFile } from 'fs/promises';
 import { join } from 'path';

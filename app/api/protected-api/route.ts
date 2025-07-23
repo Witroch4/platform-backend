@@ -1,5 +1,5 @@
 import { auth } from "@/auth"; // Assumindo que este é o seu arquivo de configuração do NextAuth
-import { NextResponse, NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
 // A função `auth` já injeta o objeto `auth` no `req`.
 // Não é necessário criar tipos personalizados ou fazer asserções complexas.

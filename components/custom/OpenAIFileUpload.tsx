@@ -3,7 +3,7 @@
 import React, { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { v4 as uuidv4 } from 'uuid';
-import { FileWithContent } from '@/hooks/useChatwitIA';
+import type { FileWithContent } from '@/hooks/useChatwitIA';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { FileTypes, uploadFileWithAssistants, validateFileForOpenAI, getFilePurpose } from '@/services/assistantsFileHandler';
-import { FilePurpose } from '@/services/openai';
+import type { FilePurpose } from '@/services/openai';
 
 interface OpenAIFileUploadProps {
   onFileUploaded?: (file: FileWithContent) => void;

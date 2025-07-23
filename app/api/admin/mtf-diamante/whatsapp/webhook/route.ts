@@ -10,6 +10,7 @@ import {
   createTemplateMessageTask,
   createInteractiveMessageTask,
   createReactionTask,
+  createTextReactionTask,
 } from "@/lib/queue/mtf-diamante-webhook.queue";
 import {
   extractWebhookData,
@@ -24,31 +25,83 @@ import {
 
 /**
  * Parse Dialogflow request to identify request type
+ * Enhanced to better detect button clicks from WhatsApp interactive messages
  */
 function parseDialogflowRequest(req: any): {
   type: "intent" | "button_click";
   intentName?: string;
   buttonId?: string;
+  buttonText?: string;
   messageId?: string;
+  originalMessageId?: string;
   recipientPhone: string;
   whatsappApiKey: string;
   caixaId?: string;
 } {
   const webhookData = extractWebhookData(req);
 
-  // Check if this is a button click
+  // Check if this is a button click from Dialogflow payload
   const chatwootPayload = req.originalDetectIntentRequest?.payload;
   const interactive = chatwootPayload?.interactive;
 
+  // Enhanced button click detection
   if (interactive?.type === "button_reply") {
     return {
       type: "button_click",
       buttonId: interactive.button_reply?.id,
-      messageId: chatwootPayload?.context?.id,
+      buttonText: interactive.button_reply?.title,
+      messageId: chatwootPayload?.id || chatwootPayload?.wamid,
+      originalMessageId: chatwootPayload?.context?.id,
       recipientPhone: webhookData.contactPhone,
       whatsappApiKey: webhookData.whatsappApiKey,
       caixaId: webhookData.inboxId,
     };
+  }
+
+  // Check for list reply (also a type of button interaction)
+  if (interactive?.type === "list_reply") {
+    return {
+      type: "button_click",
+      buttonId: interactive.list_reply?.id,
+      buttonText: interactive.list_reply?.title,
+      messageId: chatwootPayload?.id || chatwootPayload?.wamid,
+      originalMessageId: chatwootPayload?.context?.id,
+      recipientPhone: webhookData.contactPhone,
+      whatsappApiKey: webhookData.whatsappApiKey,
+      caixaId: webhookData.inboxId,
+    };
+  }
+
+  // Check for direct WhatsApp webhook format (fallback)
+  const whatsappMessage = req.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+  if (whatsappMessage?.type === 'interactive') {
+    const whatsappInteractive = whatsappMessage.interactive;
+    
+    if (whatsappInteractive?.type === 'button_reply') {
+      return {
+        type: "button_click",
+        buttonId: whatsappInteractive.button_reply?.id,
+        buttonText: whatsappInteractive.button_reply?.title,
+        messageId: whatsappMessage.id,
+        originalMessageId: whatsappMessage.context?.id,
+        recipientPhone: whatsappMessage.from,
+        whatsappApiKey: webhookData.whatsappApiKey,
+        caixaId: webhookData.inboxId,
+      };
+    }
+    
+    if (whatsappInteractive?.type === 'list_reply') {
+      return {
+        type: "button_click",
+        buttonId: whatsappInteractive.list_reply?.id,
+        buttonText: whatsappInteractive.list_reply?.title,
+        messageId: whatsappMessage.id,
+        originalMessageId: whatsappMessage.context?.id,
+        recipientPhone: whatsappMessage.from,
+        whatsappApiKey: webhookData.whatsappApiKey,
+        caixaId: webhookData.inboxId,
+      };
+    }
   }
 
   // Otherwise it's an intent
@@ -229,7 +282,7 @@ async function processIntentRequest(
           const enhancedMessage = messageMapping.enhancedInteractiveMessage;
 
           // Construir conteúdo interativo baseado no tipo
-          let interactiveContent: any = {
+          const interactiveContent: any = {
             body: enhancedMessage.bodyText,
           };
 
@@ -291,8 +344,6 @@ async function processIntentRequest(
               intentName,
               caixaId,
               originalPayload,
-              messageType: "enhanced_interactive",
-              enhancedMessageId: enhancedMessage.id,
             },
           });
 
@@ -352,26 +403,48 @@ async function processButtonClickRequest(
     }
 
     console.log(
-      `[MTF Diamante Dispatcher] Found reaction mapping: ${buttonId} -> ${reactionMapping.emoji}`
+      `[MTF Diamante Dispatcher] Found reaction mapping: ${buttonId} -> emoji: ${reactionMapping.emoji}, text: ${reactionMapping.textReaction}`
     );
 
-    // Create reaction task
-    const reactionTask = createReactionTask({
-      recipientPhone,
-      messageId,
-      emoji: reactionMapping.emoji,
-      whatsappApiKey,
-      correlationId,
-      metadata: {
-        buttonId,
-        originalPayload,
-      },
-    });
+    // Process emoji reaction if configured
+    if (reactionMapping.emoji) {
+      const reactionTask = createReactionTask({
+        recipientPhone,
+        messageId,
+        emoji: reactionMapping.emoji,
+        whatsappApiKey,
+        correlationId,
+        metadata: {
+          buttonId,
+          originalPayload,
+        },
+      });
 
-    await addSendReactionTask(reactionTask);
-    console.log(
-      `[MTF Diamante Dispatcher] Reaction task queued for button: ${buttonId}`
-    );
+      await addSendReactionTask(reactionTask);
+      console.log(
+        `[MTF Diamante Dispatcher] Emoji reaction task queued for button: ${buttonId} -> ${reactionMapping.emoji}`
+      );
+    }
+
+    // Process text reaction if configured
+    if (reactionMapping.textReaction) {
+      const textMessageTask = createTextReactionTask({
+        recipientPhone,
+        whatsappApiKey,
+        textMessage: reactionMapping.textReaction,
+        correlationId,
+        metadata: {
+          buttonId,
+          originalPayload,
+          replyToMessageId: messageId,
+        },
+      });
+
+      await addSendMessageTask(textMessageTask);
+      console.log(
+        `[MTF Diamante Dispatcher] Text reaction task queued for button: ${buttonId} -> "${reactionMapping.textReaction}"`
+      );
+    }
   } catch (error) {
     console.error(
       `[MTF Diamante Dispatcher] Error processing button click ${buttonId}:`,

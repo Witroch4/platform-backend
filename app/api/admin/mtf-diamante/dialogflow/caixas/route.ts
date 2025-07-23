@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { db as prisma } from '@/lib/db';
 import { auth } from '@/auth';
 import axios from 'axios';
@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
           }
         );
         const dialogflowApp = appsResponse.data.payload?.find((app: any) => app.id === 'dialogflow');
-        const hook = dialogflowApp?.hooks?.find((h: any) => h.inbox?.id === parseInt(inboxId));
+        const hook = dialogflowApp?.hooks?.find((h: any) => h.inbox?.id === Number.parseInt(inboxId));
         if (hook) {
           // Só pode existir um agente Dialogflow por caixa
           const agenteExistente = await prisma.agenteDialogflow.findFirst({

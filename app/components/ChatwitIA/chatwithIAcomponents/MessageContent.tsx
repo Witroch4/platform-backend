@@ -746,7 +746,7 @@ export default React.memo(function MessageContent({ content, isStreaming = false
     const fileIdRegex = /\[([^\]]+)\]\(file_id:([^)]+)\)/g;
     
     const parts: ContentPart[] = [];
-    let processedContent = content;
+    const processedContent = content;
     let lastIndex = 0;
 
     // Log apenas se houver mudança no conteúdo

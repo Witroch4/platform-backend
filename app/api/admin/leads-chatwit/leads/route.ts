@@ -20,8 +20,8 @@ export async function GET(request: Request): Promise<Response> {
     const leadId = url.searchParams.get("id");
     const usuarioId = url.searchParams.get("usuarioId");
     const searchTerm = url.searchParams.get("search");
-    const page = parseInt(url.searchParams.get("page") || "1");
-    const limit = parseInt(url.searchParams.get("limit") || "10");
+    const page = Number.parseInt(url.searchParams.get("page") || "1");
+    const limit = Number.parseInt(url.searchParams.get("limit") || "10");
     const skip = (page - 1) * limit;
 
     // Se um ID específico foi fornecido, buscar apenas esse lead
@@ -239,7 +239,7 @@ export async function POST(request: Request): Promise<Response> {
     if (espelhoProcessado !== undefined) updateData.espelhoProcessado = espelhoProcessado;
 
     // Verificação de ownership
-    let whereClause: any = { id };
+    const whereClause: any = { id };
     if (currentUser!.role !== "SUPERADMIN") {
       whereClause.usuario = { appUserId: session.user.id };
     }
@@ -286,7 +286,7 @@ export async function DELETE(request: Request): Promise<Response> {
     }
 
     // Verificação de ownership
-    let whereClause: any = { id };
+    const whereClause: any = { id };
     if (currentUser!.role !== "SUPERADMIN") {
       whereClause.usuario = { appUserId: session.user.id };
     }

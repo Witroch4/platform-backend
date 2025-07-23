@@ -1,20 +1,17 @@
 // Local: /api/admin/dialogflow/agentes/[id]/toggle
 
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { db as prisma } from '@/lib/db';
 import { auth } from '@/auth';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 
-// Helper para a configuração do Axios
+// Helper para a configuração do Axios (mantido)
 const getAxiosConfig = (token: string) => ({
   headers: {
     'api_access_token': token,
     'Content-Type': 'application/json'
   }
 });
-
-// Local: /api/admin/dialogflow/agentes/[id]/toggle
-// ... (importações e código inicial permanecem os mesmos) ...
 
 export async function PATCH(
   request: NextRequest,
@@ -35,131 +32,123 @@ export async function PATCH(
     if (!usuarioChatwit?.chatwitAccessToken) {
       return NextResponse.json({ error: 'Token de acesso não configurado' }, { status: 400 });
     }
-    
-    const accessToken = usuarioChatwit.chatwitAccessToken;
-    const baseURL = process.env.CHATWIT_BASE_URL;
 
-    const agenteParaAtivar = await prisma.agenteDialogflow.findFirst({
+    const agenteParaAlternar = await prisma.agenteDialogflow.findFirst({
       where: { id: id, usuarioChatwitId: usuarioChatwit.id },
       include: { caixa: true }
     });
 
-    if (!agenteParaAtivar || !agenteParaAtivar.caixa) {
+    if (!agenteParaAlternar || !agenteParaAlternar.caixa) {
       return NextResponse.json({ error: 'Agente ou caixa associada não encontrado' }, { status: 404 });
     }
 
-    // --- LÓGICA DE DESATIVAÇÃO (JÁ ESTAVA CORRETA) ---
-    if (agenteParaAtivar.ativo) {
-      console.log(`🔄 [AgenteToggle] Desativando agente '${agenteParaAtivar.nome}'...`);
-      if (agenteParaAtivar.hookId) {
-        try {
-          await axios.patch(
-            `${baseURL}/api/v1/accounts/${agenteParaAtivar.caixa.chatwitAccountId}/integrations/hooks/${agenteParaAtivar.hookId}`,
-            { status: 0 }, // 0 para inativo
-            getAxiosConfig(accessToken)
-          );
-          console.log(`✅ [AgenteToggle] Hook ${agenteParaAtivar.hookId} desativado na API.`);
-        } catch (apiError: any) {
-          console.error(`❌ Erro ao desativar hook na API: ${apiError.message}. Mesmo assim, desativando no DB local.`);
-          // Continuar para garantir que o estado local fique consistente com a intenção do usuário
-        }
-      }
-      
-      const agenteDesativado = await prisma.agenteDialogflow.update({
-        where: { id: id },
-        data: { ativo: false }
-      });
-      
-      return NextResponse.json({ message: 'Agente desativado com sucesso', agente: agenteDesativado });
-    }
-
-    // --- LÓGICA DE ATIVAÇÃO (CORRIGIDA) ---
-    console.log(`🔄 [AgenteToggle] Ativando agente '${agenteParaAtivar.nome}'...`);
+    const accessToken = usuarioChatwit.chatwitAccessToken;
+    const baseURL = process.env.CHATWIT_BASE_URL;
+    
+    const deveAtivar = !agenteParaAlternar.ativo;
+    const novoStatusApi = deveAtivar ? 1 : 0;
+    const acao = deveAtivar ? 'Ativação' : 'Desativação';
+    
+    console.log(`🔄 [AgenteToggle] Iniciando ${acao} do agente '${agenteParaAlternar.nome}'...`);
 
     const agenteAtualizado = await prisma.$transaction(async (tx) => {
-      const accountId = agenteParaAtivar.caixa.chatwitAccountId;
+      const accountId = agenteParaAlternar.caixa.chatwitAccountId;
+      let hookIdParaSalvar = agenteParaAlternar.hookId;
 
-      // 1. Desativar qualquer outro agente ativo na mesma caixa (lógica mantida, está correta)
-      const agenteAtivoAtual = await tx.agenteDialogflow.findFirst({
-        where: {
-          caixaId: agenteParaAtivar.caixaId,
-          ativo: true,
-          id: { not: id }
-        }
-      });
-
-      if (agenteAtivoAtual && agenteAtivoAtual.hookId) {
-        console.log(`[Transação] Desativando agente antigo: '${agenteAtivoAtual.nome}'.`);
-        try {
-          await axios.patch(
-            `${baseURL}/api/v1/accounts/${accountId}/integrations/hooks/${agenteAtivoAtual.hookId}`,
-            { status: 0 },
-            getAxiosConfig(accessToken)
-          );
-          await tx.agenteDialogflow.update({
-            where: { id: agenteAtivoAtual.id },
-            data: { ativo: false }
-          });
-          console.log(`[Transação] Agente '${agenteAtivoAtual.nome}' desativado com sucesso.`);
-        } catch (e: any) {
-          console.error(`❌ FALHA CRÍTICA ao desativar hook do agente antigo: ${e.message}`);
-          throw new Error(`Falha ao desativar o hook do agente '${agenteAtivoAtual.nome}'`);
-        }
+      // ==================================================================
+      // == LÓGICA PARA GARANTIR APENAS UM AGENTE ATIVO POR VEZ ==
+      // ==================================================================
+      // Se a ação é ATIVAR, primeiro desativamos qualquer outro agente na mesma caixa
+      if (deveAtivar) {
+        await tx.agenteDialogflow.updateMany({
+          where: {
+            caixaId: agenteParaAlternar.caixaId, // Na mesma caixa
+            ativo: true,                         // Que esteja ativo
+            id: { not: id }                      // E que não seja o agente que estamos ativando
+          },
+          data: { ativo: false } // Define como inativo
+        });
+        console.log(`[Transação] Outros agentes na mesma caixa foram desativados localmente.`);
       }
-
-      // 2. Ativar o novo agente (LÓGICA CORRIGIDA)
-      let hookIdParaSalvar = agenteParaAtivar.hookId;
+      // ==================================================================
 
       try {
         if (hookIdParaSalvar) {
-          // SE JÁ TEM HOOK ID, APENAS ATUALIZA O STATUS (PATCH)
-          console.log(`[Transação] Reativando hook existente (${hookIdParaSalvar}) para o agente '${agenteParaAtivar.nome}'...`);
+          // Se temos um hookId, tentamos o PATCH diretamente
+          console.log(`[Transação] Tentando ${acao} via PATCH no hook ${hookIdParaSalvar}...`);
           await axios.patch(
             `${baseURL}/api/v1/accounts/${accountId}/integrations/hooks/${hookIdParaSalvar}`,
-            { status: 1 }, // 1 para ativo
+            { status: novoStatusApi },
             getAxiosConfig(accessToken)
           );
-          console.log(`[Transação] Hook ${hookIdParaSalvar} reativado com sucesso na API.`);
-
-        } else {
-          // SE NÃO TEM HOOK ID, CRIA PELA PRIMEIRA VEZ (POST)
-          console.log(`[Transação] Criando novo hook para o agente '${agenteParaAtivar.nome}' (primeira ativação)...`);
-          const settingsPayload = {
-            project_id: agenteParaAtivar.projectId,
-            credentials: JSON.parse(agenteParaAtivar.credentials)
-          };
-          const hookData = { 
-            app_id: 'dialogflow', 
-            inbox_id: parseInt(agenteParaAtivar.caixa.inboxId), 
-            status: 1, 
-            settings: settingsPayload 
-          };
+        } else if (deveAtivar) {
+          // Se não temos hookId e a ação é ATIVAR, precisamos criar (POST)
+          console.log(`[Transação] Agente sem hookId. Criando novo hook via POST...`);
           const hookResponse = await axios.post(
             `${baseURL}/api/v1/accounts/${accountId}/integrations/hooks`, 
-            hookData, 
+            { 
+              app_id: 'dialogflow', 
+              inbox_id: Number.parseInt(agenteParaAlternar.caixa.inboxId), 
+              status: 1, 
+              settings: {
+                project_id: agenteParaAlternar.projectId,
+                credentials: JSON.parse(agenteParaAlternar.credentials)
+              }
+            }, 
             getAxiosConfig(accessToken)
           );
-          
           hookIdParaSalvar = hookResponse.data.id.toString();
-          console.log(`[Transação] Novo hook criado com sucesso. Hook ID: ${hookIdParaSalvar}`);
+        } else {
+          // Se não temos hookId e a ação é DESATIVAR, não fazemos nada na API
+          console.log(`[Transação] Agente sem hookId para desativar. Nenhuma chamada à API é necessária.`);
         }
-      } catch (apiError: any) {
-         console.error('❌ FALHA CRÍTICA: Erro ao criar/ativar hook na API:', { message: apiError.message, data: apiError.response?.data });
-         throw new Error(`Erro na API externa ao ativar agente: ${apiError.response?.data?.message || apiError.message}`);
+      } catch (apiError) {
+        if (axios.isAxiosError(apiError) && apiError.response?.status === 404) {
+          console.warn(`[Transação] Hook ${hookIdParaSalvar} não encontrado na API (404).`);
+          
+          if (deveAtivar) {
+            // Se a AÇÃO ERA ATIVAR e o hook não existe, criamos um novo.
+            console.log(`[Transação] Hook órfão detectado durante ativação. Criando um novo...`);
+            const hookResponse = await axios.post(
+              `${baseURL}/api/v1/accounts/${accountId}/integrations/hooks`,
+              {
+                app_id: 'dialogflow',
+                inbox_id: Number.parseInt(agenteParaAlternar.caixa.inboxId),
+                status: 1,
+                settings: {
+                  project_id: agenteParaAlternar.projectId,
+                  credentials: JSON.parse(agenteParaAlternar.credentials)
+                }
+              },
+              getAxiosConfig(accessToken)
+            );
+            hookIdParaSalvar = hookResponse.data.id.toString();
+          } else {
+            // Se a AÇÃO ERA DESATIVAR e o hook não existe, está tudo bem.
+            // Apenas limpamos o hookId local para corrigir a dessincronização.
+            console.log(`[Transação] Hook órfão detectado durante desativação. Apenas limpando ID local.`);
+            hookIdParaSalvar = null;
+          }
+        } else {
+          // Para qualquer outro erro, a transação deve falhar
+          const errorMessage = (apiError as AxiosError).response?.data?.message || (apiError as Error).message;
+          console.error(`❌ FALHA CRÍTICA na API durante ${acao}:`, { message: errorMessage });
+          throw new Error(`Erro na API externa: ${errorMessage}`);
+        }
       }
-      
-      // 3. Atualizar o novo agente como ativo no nosso DB
+
+      // Atualiza o estado final do agente no nosso banco de dados
       return tx.agenteDialogflow.update({
         where: { id: id },
-        data: { ativo: true, hookId: hookIdParaSalvar }
+        data: { ativo: deveAtivar, hookId: hookIdParaSalvar }
       });
     });
 
-    console.log(`✅ [AgenteToggle] Agente '${agenteAtualizado.nome}' ativado com sucesso.`);
-    return NextResponse.json({ message: 'Agente ativado com sucesso', agente: agenteAtualizado });
+    console.log(`✅ [AgenteToggle] ${acao} do agente '${agenteAtualizado.nome}' concluída com sucesso.`);
+    return NextResponse.json({ message: `Agente ${deveAtivar ? 'ativado' : 'desativado'} com sucesso`, agente: agenteAtualizado });
 
   } catch (error: any) {
-    console.error('❌ [AgenteToggle] Erro na operação:', error);
+    console.error(`❌ [AgenteToggle] Erro na operação:`, error);
     return NextResponse.json({ error: 'Erro interno do servidor', details: error.message }, { status: 500 });
   }
 }

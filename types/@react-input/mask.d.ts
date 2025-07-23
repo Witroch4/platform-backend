@@ -1,7 +1,7 @@
 // types/@react-input/mask.d.ts
 
 declare module '@react-input/mask' {
-    import * as React from 'react';
+    import type * as React from 'react';
 
     interface MaskedInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
       mask: string;

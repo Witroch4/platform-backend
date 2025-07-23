@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import type React from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { X, Save, Download, Image as ImageIcon, Eraser, Undo, Redo, Trash2 } from 'lucide-react';
 
 interface ImageEditorProps {
@@ -356,7 +357,7 @@ export default function ImageEditor({ imageUrl, fileName, onClose, onSave }: Ima
                   min="1"
                   max="50"
                   value={brushSize}
-                  onChange={(e) => setBrushSize(parseInt(e.target.value))}
+                  onChange={(e) => setBrushSize(Number.parseInt(e.target.value))}
                   className="w-full"
                 />
                 <div className="text-xs text-center text-gray-500 mt-1">

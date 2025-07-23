@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Globe, User, FileText, MessageSquare } from 'lucide-react';
-import { TemplateLibraryWithCreator, TemplateLibraryContent } from '@/app/lib/template-library-service';
+import type { TemplateLibraryWithCreator, TemplateLibraryContent } from '@/app/lib/template-library-service';
 import { useTheme } from 'next-themes';
 
 interface TemplatePreviewDialogProps {
@@ -29,7 +29,7 @@ export function TemplatePreviewDialog({ template, open, onOpenChange }: Template
 
   if (!template) return null;
 
-  const content = template.content as TemplateLibraryContent;
+  const content = template.content as unknown as TemplateLibraryContent;
 
   // Initialize variable values with examples
   React.useEffect(() => {

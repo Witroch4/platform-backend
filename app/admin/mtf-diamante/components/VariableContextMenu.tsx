@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useRef, useCallback } from 'react';
+import type React from 'react';
+import { useRef, useCallback } from 'react';
 import {
   ContextMenu,
   ContextMenuContent,

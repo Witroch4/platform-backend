@@ -1,5 +1,5 @@
 // app/api/instagram/webhook/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { instagramWebhookQueue } from "@/lib/queue/instagram-webhook.queue";
 import crypto from "crypto";
 import dotenv from "dotenv";

@@ -1,7 +1,7 @@
 "use client";
 
 import { TableRow, TableCell } from "@/components/ui/table";
-import { LeadItemProps } from "./componentes-lead-item/types";
+import type { LeadItemProps } from "./componentes-lead-item/types";
 import { useLeadState, useDialogState, useLeadHandlers } from "./componentes-lead-item/hooks";
 import { 
   SelectCell,

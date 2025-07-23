@@ -2,10 +2,42 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { Input } from "@/components/ui/input";
-import { Search, Smile, Camera, Heart, Flag } from "lucide-react";
+import { Search, Smile, Camera, Heart, Flag, Clock } from "lucide-react";
+
+// Local storage key for recently used emojis
+const RECENT_EMOJIS_KEY = "emoji-picker-recent-emojis";
+const MAX_RECENT_EMOJIS = 16;
+
+// Utility functions for managing recently used emojis
+const getRecentEmojis = (): string[] => {
+  if (typeof window === "undefined") return [];
+  try {
+    const stored = localStorage.getItem(RECENT_EMOJIS_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+};
+
+const addToRecentEmojis = (emoji: string): void => {
+  if (typeof window === "undefined") return;
+  try {
+    const recent = getRecentEmojis();
+    const filtered = recent.filter((e) => e !== emoji);
+    const updated = [emoji, ...filtered].slice(0, MAX_RECENT_EMOJIS);
+    localStorage.setItem(RECENT_EMOJIS_KEY, JSON.stringify(updated));
+  } catch {
+    // Silently fail if localStorage is not available
+  }
+};
 
 // Categorias de emojis organizadas como no WhatsApp
 const EMOJI_CATEGORIES = {
+  recent: {
+    icon: Clock,
+    name: "Recently Used",
+    emojis: [], // Will be populated dynamically
+  },
   smileys: {
     icon: Smile,
     name: "Smileys & People",
@@ -338,10 +370,21 @@ export function EmojiPicker({
   onClose,
   isOpen,
 }: EmojiPickerProps) {
-  const [activeCategory, setActiveCategory] = useState("smileys");
+  const [activeCategory, setActiveCategory] = useState("recent");
   const [searchTerm, setSearchTerm] = useState("");
   const [filteredEmojis, setFilteredEmojis] = useState<string[]>([]);
+  const [recentEmojis, setRecentEmojis] = useState<string[]>([]);
   const pickerRef = useRef<HTMLDivElement>(null);
+
+  // Load recent emojis on mount
+  useEffect(() => {
+    const recent = getRecentEmojis();
+    setRecentEmojis(recent);
+    // If no recent emojis, default to smileys category
+    if (recent.length === 0) {
+      setActiveCategory("smileys");
+    }
+  }, []);
 
   useEffect(() => {
     if (searchTerm) {
@@ -396,12 +439,35 @@ export function EmojiPicker({
     return emojiNames[emoji] || emoji;
   };
 
+  const handleEmojiSelect = (emoji: string) => {
+    // Add to recent emojis if it's not the special TEXT_RESPONSE
+    if (emoji !== "TEXT_RESPONSE") {
+      addToRecentEmojis(emoji);
+      setRecentEmojis(getRecentEmojis());
+    }
+    onEmojiSelect(emoji);
+    onClose();
+  };
+
   if (!isOpen) return null;
 
-  const currentEmojis = searchTerm
-    ? filteredEmojis
-    : EMOJI_CATEGORIES[activeCategory as keyof typeof EMOJI_CATEGORIES]
-        ?.emojis || [];
+  // Get current emojis based on active category
+  const getCurrentEmojis = () => {
+    if (searchTerm) {
+      return filteredEmojis;
+    }
+
+    if (activeCategory === "recent") {
+      return recentEmojis;
+    }
+
+    return (
+      EMOJI_CATEGORIES[activeCategory as keyof typeof EMOJI_CATEGORIES]
+        ?.emojis || []
+    );
+  };
+
+  const currentEmojis = getCurrentEmojis();
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -415,16 +481,16 @@ export function EmojiPicker({
             {/* Botão Responder com Texto */}
             <button
               onClick={() => {
-                onEmojiSelect('TEXT_RESPONSE')
-                onClose()
+                onEmojiSelect("TEXT_RESPONSE");
+                onClose();
               }}
               className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
             >
               Responder com Texto
             </button>
-            
+
             <div className="w-px h-6 bg-gray-600 mx-2" />
-            
+
             {/* Categorias de Emoji */}
             {Object.entries(EMOJI_CATEGORIES).map(([key, category]) => {
               const IconComponent = category.icon;
@@ -477,10 +543,7 @@ export function EmojiPicker({
             {currentEmojis.map((emoji, index) => (
               <button
                 key={`${emoji}-${index}`}
-                onClick={() => {
-                  onEmojiSelect(emoji);
-                  onClose();
-                }}
+                onClick={() => handleEmojiSelect(emoji)}
                 className="w-10 h-10 flex items-center justify-center text-2xl hover:bg-gray-800 rounded-lg transition-colors"
                 title={getEmojiName(emoji)}
               >
@@ -496,10 +559,7 @@ export function EmojiPicker({
             {["❤️", "😂", "😍", "👍", "🔥", "💯", "😊", "🎉"].map((emoji) => (
               <button
                 key={emoji}
-                onClick={() => {
-                  onEmojiSelect(emoji);
-                  onClose();
-                }}
+                onClick={() => handleEmojiSelect(emoji)}
                 className="w-8 h-8 flex items-center justify-center text-lg hover:bg-gray-800 rounded transition-colors"
               >
                 {emoji}

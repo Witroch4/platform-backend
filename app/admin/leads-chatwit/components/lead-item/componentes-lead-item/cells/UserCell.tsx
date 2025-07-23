@@ -1,6 +1,6 @@
 import { TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { CellProps } from "../types";
+import type { CellProps } from "../types";
 
 export function UserCell({ lead }: CellProps) {
   return (

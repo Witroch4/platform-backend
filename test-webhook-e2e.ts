@@ -43,7 +43,7 @@ interface DialogflowTestPayload {
 
 class WebhookE2ETester {
   private testResults: { test: string; passed: boolean; error?: string; duration?: number }[] = [];
-  private startTime: number = 0;
+  private startTime = 0;
 
   private log(message: string) {
     const timestamp = new Date().toISOString();

@@ -57,7 +57,7 @@ export async function downloadMetaMediaAndUploadToMinio(
     
     // Detectar o tipo MIME baseado nos primeiros bytes ou na extensão
     const buffer = Buffer.from(response.data);
-    let mimeType = response.headers['content-type'] || 'application/octet-stream';
+    const mimeType = response.headers['content-type'] || 'application/octet-stream';
     
     // Extrair a extensão da URL
     const fileExtension = mediaUrl.split('.').pop()?.toLowerCase() || '';

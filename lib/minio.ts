@@ -1,5 +1,5 @@
 // lib/minio.ts
-import { S3Client, PutObjectCommand, PutObjectCommandOutput, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, type PutObjectCommandOutput, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { v4 as uuidv4 } from 'uuid';
 import { Readable } from 'stream';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -159,7 +159,7 @@ export async function uploadToMinIO(
   file: Buffer | ArrayBuffer,
   fileName?: string,
   mimeType?: string,
-  generateThumbnail: boolean = true
+  generateThumbnail = true
 ): Promise<UploadResponse> {
   try {
     // Calcula o tamanho do arquivo para evitar cabeçalho "undefined"
@@ -258,7 +258,7 @@ export async function uploadMultipleToMinIO(
  * @param expiresIn Tempo de expiração em segundos (padrão: 24 horas)
  * @returns URL pré-assinada
  */
-export async function generatePresignedUrl(objectKey: string, expiresIn: number = 86400): Promise<string> {
+export async function generatePresignedUrl(objectKey: string, expiresIn = 86400): Promise<string> {
   try {
     const command = new GetObjectCommand({
       Bucket: BUCKET_NAME,
@@ -319,7 +319,7 @@ export function correctMinioUrl(url: string): string {
     if (!url || typeof url !== 'string') return url;
     
     // Corrige o endpoint se necessário (objstore -> objstoreapi)
-    let correctedUrl = url.replace('objstore.witdev.com.br', 'objstoreapi.witdev.com.br');
+    const correctedUrl = url.replace('objstore.witdev.com.br', 'objstoreapi.witdev.com.br');
     
     // Garante que a URL tenha o protocolo HTTPS
     return ensureHttpsProtocol(correctedUrl);

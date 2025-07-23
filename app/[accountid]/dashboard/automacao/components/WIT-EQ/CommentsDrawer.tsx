@@ -3,7 +3,7 @@
 "use client";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { InstagramUserData } from "../../guiado-facil/page";
+import type { InstagramUserData } from "../../guiado-facil/page";
 
 interface CommentsDrawerProps {
   open: boolean; // Controla se o Drawer deve ser exibido ou não

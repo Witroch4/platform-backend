@@ -1,5 +1,5 @@
 //app\auth\instagram\connect\route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { auth, update } from "@/auth";
 import { prisma } from "@/lib/prisma";
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ProcessType } from "../types";
+import type { ProcessType } from "../types";
 
 export function useDialogState() {
   // Estados para diálogos principais

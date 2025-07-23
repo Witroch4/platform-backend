@@ -376,7 +376,7 @@ class WebhookTester {
       this.log('Testing intent mapping fallback logic...');
       
       // Simulate intent mapping fallback
-      let mapeamento = await db.mapeamentoIntencao.findUnique({
+      const mapeamento = await db.mapeamentoIntencao.findUnique({
         where: { 
           intentName_caixaEntradaId: { 
             intentName: 'non.existent.intent', 

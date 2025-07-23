@@ -1,13 +1,14 @@
 "use client";
 
-import React, { useState } from "react";
+import type React from "react";
+import { useState } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import EditAgendamentoDialog from "./EditAgendamentoDialog";
 import axios from "axios";
 import { toast } from "sonner";
-import { Agendamento } from "@/types/agendamento";
+import type { Agendamento } from "@/types/agendamento";
 import { Badge } from "@/components/ui/badge";
 
 // Estende o tipo Agendamento para incluir informações de grupo

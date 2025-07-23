@@ -1,7 +1,7 @@
 'use client';
 
 import React, { forwardRef } from 'react';
-import { EnhancedTextArea, EnhancedTextAreaRef } from '../EnhancedTextArea';
+import { EnhancedTextArea, type EnhancedTextAreaRef } from '../EnhancedTextArea';
 import { variableConverter } from '@/app/lib/variable-converter';
 
 interface MtfDiamanteVariavel {

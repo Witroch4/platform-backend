@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { db as prisma } from '@/lib/db';
 import { auth } from '@/auth';
 
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
     const lote = await prisma.loteOab.create({
       data: {
         nome,
-        valor: parseFloat(valor.replace(/[^\d,]/g, '').replace(',', '.')), // Converter valor para decimal
+        valor: Number.parseFloat(valor.replace(/[^\d,]/g, '').replace(',', '.')), // Converter valor para decimal
         valorAnalise: 27.90, // Valor padrão da análise
         chavePix: '57944155000101', // Chave PIX padrão
         dataInicio: new Date(dataInicio),

@@ -6,7 +6,7 @@ import { useLeadBatchProcessor } from './useLeadBatchProcessor'
 import { AutomatedProgressDialog } from './AutomatedProgressDialog'
 import { ImageGalleryDialog } from '../image-gallery-dialog'
 import { BatchCompletionDialog } from './BatchCompletionDialog'
-import { ExtendedLead } from '../../types'
+import type { ExtendedLead } from '../../types'
 import { useEffect, useRef, useState } from 'react'
 
 type BatchProcessorOrchestratorProps = {

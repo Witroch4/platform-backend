@@ -102,7 +102,7 @@ export async function POST(request: Request): Promise<Response> {
     }
     
     let arquivos: ArquivoLeadChatwit[] = [];
-    let fileName: string = "";
+    let fileName = "";
     
     if (leadId) {
       // Buscar os arquivos de um lead específico

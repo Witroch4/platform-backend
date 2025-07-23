@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import Link from "next/link";
 import { toast } from "sonner";
-import FileUpload, { UploadedFile } from "@/components/custom/FileUpload";
+import FileUpload, { type UploadedFile } from "@/components/custom/FileUpload";
 
 interface TemplateDetail {
   id: string;

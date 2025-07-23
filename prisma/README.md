@@ -1,4 +1,11 @@
 # Seed de Usuários Administradores
+adiconar isso no final da migração
+
+-- Dentro do novo arquivo migration.sql
+
+CREATE UNIQUE INDEX "unique_active_agent_per_caixa" ON "agente_dialogflow" ("caixaId") WHERE ativo = true;
+
+
 
 Este diretório contém configurações do Prisma e scripts para seed do banco de dados.
 

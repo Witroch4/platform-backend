@@ -1,4 +1,4 @@
-import React from 'react';
+import type React from 'react';
 import { EditableTable } from './EditableTable';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -470,7 +470,7 @@ export const StructuredEditor: React.FC<StructuredEditorProps> = ({ ast, onAstCh
           const match = titleText.match(/Questão\s+(\d+)/i);
           if (match) {
             lastQuestionIndex = i;
-            lastQuestionNumber = parseInt(match[1]);
+            lastQuestionNumber = Number.parseInt(match[1]);
             break;
           }
         }

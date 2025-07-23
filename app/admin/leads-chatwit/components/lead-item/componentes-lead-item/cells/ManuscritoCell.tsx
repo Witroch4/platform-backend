@@ -1,8 +1,8 @@
 import { TableCell } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Edit3 } from "lucide-react";
-import { ManuscritoCellProps } from "../types";
-import { LeadContextMenu, ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
+import type { ManuscritoCellProps } from "../types";
+import { LeadContextMenu, type ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
 
 interface ManuscritoCellExtendedProps extends ManuscritoCellProps {
   manuscritoProcessadoLocal: boolean;

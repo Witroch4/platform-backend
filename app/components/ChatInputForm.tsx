@@ -1,7 +1,8 @@
 // app/components/ChatInputForm.tsx
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import type React from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
   Plus,
   Settings,
@@ -25,7 +26,7 @@ import {
   Code2,
 } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { FileWithContent } from "@/hooks/useChatwitIA";
+import type { FileWithContent } from "@/hooks/useChatwitIA";
 import FileManager from "./ChatwitIA/FileManager";
 import DocumentViewer from "./ChatwitIA/DocumentViewer";
 import ImageEditor from "./ChatwitIA/ImageEditor";

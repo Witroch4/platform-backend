@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { db } from '@/lib/db';
 
@@ -14,8 +14,8 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get('limit') || '50');
-    const offset = parseInt(searchParams.get('offset') || '0');
+    const limit = Number.parseInt(searchParams.get('limit') || '50');
+    const offset = Number.parseInt(searchParams.get('offset') || '0');
 
     // Buscar todas as imagens do usuário, ordenadas por data de criação (mais recentes primeiro)
     const images = await db.generatedImage.findMany({

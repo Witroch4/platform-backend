@@ -1,7 +1,7 @@
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 
-export async function downloadImagesAsZip(images: string[], name: string = 'imagens') {
+export async function downloadImagesAsZip(images: string[], name = 'imagens') {
   // Verifica se há imagens para baixar
   if (!images || images.length === 0) {
     console.error('Nenhuma imagem para baixar');

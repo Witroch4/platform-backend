@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import type React from 'react';
+import { useState } from 'react';
 import { Download, Maximize2, X, Copy, Check } from 'lucide-react';
 import { toast } from 'sonner';
 

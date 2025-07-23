@@ -83,6 +83,7 @@ export async function sendTemplateMessage(
         }
         case 'BODY': {
           const placeholders = (c.text.match(/\{\{(\d+)\}\}/g) || []).length;
+          
           if (placeholders) {
             if (!(opts.bodyVars && opts.bodyVars.length >= placeholders)) {
               throw new Error(`BODY requer ${placeholders} variáveis (foram passadas ${opts.bodyVars?.length || 0})`);

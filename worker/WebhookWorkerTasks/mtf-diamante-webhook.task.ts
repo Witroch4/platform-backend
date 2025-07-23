@@ -1,11 +1,11 @@
-import { Job } from "bullmq";
+import type { Job } from "bullmq";
 import { prisma } from "../../lib/prisma";
 import {
-  WebhookTaskData,
+  type WebhookTaskData,
   AsyncTaskData,
-  SendMessageTask,
-  SendReactionTask,
-  AllTaskData,
+  type SendMessageTask,
+  type SendReactionTask,
+  type AllTaskData,
 } from "../../lib/queue/mtf-diamante-webhook.queue";
 import {
   sendReactionMessage,
@@ -14,6 +14,7 @@ import {
 import {
   sendTemplateMessage,
   sendInteractiveMessage,
+  sendTextMessage,
 } from "../../lib/whatsapp-messages";
 
 // --- Tipos para clareza e segurança ---
@@ -29,7 +30,91 @@ interface ValidatedWebhookData {
 }
 
 /**
- * Detecta se a mensagem é um clique em botão e extrai informações relevantes
+ * Enhanced button click detection with support for multiple payload formats
+ * Implements requirements 5.1, 5.2 for detecting button interactions
+ */
+function extractEnhancedButtonClickData(rawPayload: any): {
+  isButtonClick: boolean;
+  buttonId?: string;
+  buttonText?: string;
+  originalMessageId?: string;
+  messageId?: string;
+  interactionType?: 'button_reply' | 'list_reply';
+} {
+  try {
+    // Method 1: Check Dialogflow payload format (Chatwoot integration)
+    const chatwootPayload = rawPayload?.originalDetectIntentRequest?.payload;
+    const interactive = chatwootPayload?.interactive;
+
+    if (interactive?.type === 'button_reply') {
+      return {
+        isButtonClick: true,
+        buttonId: interactive.button_reply?.id,
+        buttonText: interactive.button_reply?.title,
+        messageId: chatwootPayload?.id || chatwootPayload?.wamid,
+        originalMessageId: chatwootPayload?.context?.id,
+        interactionType: 'button_reply'
+      };
+    }
+
+    if (interactive?.type === 'list_reply') {
+      return {
+        isButtonClick: true,
+        buttonId: interactive.list_reply?.id,
+        buttonText: interactive.list_reply?.title,
+        messageId: chatwootPayload?.id || chatwootPayload?.wamid,
+        originalMessageId: chatwootPayload?.context?.id,
+        interactionType: 'list_reply'
+      };
+    }
+
+    // Method 2: Check direct WhatsApp webhook format
+    const whatsappMessage = rawPayload?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+    
+    if (whatsappMessage?.type === 'interactive') {
+      const whatsappInteractive = whatsappMessage.interactive;
+      
+      if (whatsappInteractive?.type === 'button_reply') {
+        return {
+          isButtonClick: true,
+          buttonId: whatsappInteractive.button_reply?.id,
+          buttonText: whatsappInteractive.button_reply?.title,
+          messageId: whatsappMessage.id,
+          originalMessageId: whatsappMessage.context?.id,
+          interactionType: 'button_reply'
+        };
+      }
+      
+      if (whatsappInteractive?.type === 'list_reply') {
+        return {
+          isButtonClick: true,
+          buttonId: whatsappInteractive.list_reply?.id,
+          buttonText: whatsappInteractive.list_reply?.title,
+          messageId: whatsappMessage.id,
+          originalMessageId: whatsappMessage.context?.id,
+          interactionType: 'list_reply'
+        };
+      }
+    }
+
+    // Method 3: Legacy format check
+    const legacyButtonClick = extractButtonClickData(rawPayload);
+    if (legacyButtonClick.isButtonClick) {
+      return {
+        ...legacyButtonClick,
+        interactionType: 'button_reply'
+      };
+    }
+
+    return { isButtonClick: false };
+  } catch (error) {
+    console.error('[MTF Diamante Webhook Worker] Error extracting enhanced button click data:', error);
+    return { isButtonClick: false };
+  }
+}
+
+/**
+ * Legacy button click detection for backward compatibility
  */
 function extractButtonClickData(rawPayload: any): {
   isButtonClick: boolean;
@@ -383,6 +468,25 @@ async function processSendMessage(taskData: SendMessageTask) {
         },
         templateComponents
       );
+    } else if (messageData.type === "text") {
+      console.log(`[MTF Diamante Webhook Worker] Processing text message`, {
+        ...logContext,
+        textContent: messageData.textContent,
+        replyToMessageId: messageData.replyToMessageId,
+      });
+
+      // Validate text message requirements
+      if (!messageData.textContent) {
+        throw new Error("Text content is required for text messages");
+      }
+
+      // Send text message (can be a reply or standalone)
+      result = await sendTextMessage({
+        recipientPhone,
+        whatsappApiKey,
+        text: messageData.textContent,
+        replyToMessageId: messageData.replyToMessageId,
+      });
     } else if (messageData.type === "interactive") {
       console.log(
         `[MTF Diamante Webhook Worker] Processing interactive message`,
@@ -762,7 +866,8 @@ async function processLegacyTask(jobData: WebhookTaskData) {
 
 /**
  * Process button click and send automatic reaction
- * Detects button clicks and sends configured emoji reactions
+ * Enhanced to detect button clicks and send configured emoji/text reactions
+ * Implements requirements 5.1, 5.2, 5.3, 5.4, 5.5, 5.6
  */
 async function processButtonClick(jobData: WebhookTaskData) {
   const startTime = Date.now();
@@ -770,8 +875,8 @@ async function processButtonClick(jobData: WebhookTaskData) {
   try {
     console.log('[MTF Diamante Webhook Worker] Processing button click...');
     
-    // Extract button click data from payload
-    const buttonClickData = extractButtonClickData(jobData.payload);
+    // Extract button click data from payload with enhanced detection
+    const buttonClickData = extractEnhancedButtonClickData(jobData.payload);
     
     if (!buttonClickData.isButtonClick) {
       console.log('[MTF Diamante Webhook Worker] Not a button click, skipping reaction processing');
@@ -781,16 +886,16 @@ async function processButtonClick(jobData: WebhookTaskData) {
     console.log('[MTF Diamante Webhook Worker] Button click detected:', {
       buttonId: buttonClickData.buttonId,
       buttonText: buttonClickData.buttonText,
-      originalMessageId: buttonClickData.originalMessageId
+      originalMessageId: buttonClickData.originalMessageId,
+      messageId: buttonClickData.messageId,
+      interactionType: buttonClickData.interactionType
     });
 
     // Extract validated data for API calls
     const data = extractAndValidateData(jobData);
     
-    // Look up configured reaction for this button
-    const buttonReaction = await prisma.buttonReactionMapping.findUnique({
-      where: { buttonId: buttonClickData.buttonId || '' }
-    });
+    // Look up configured reaction for this button using the enhanced query
+    const buttonReaction = await findButtonReactionWithFallback(buttonClickData.buttonId || '');
 
     if (!buttonReaction) {
       console.log(`[MTF Diamante Webhook Worker] No reaction configured for button: ${buttonClickData.buttonId}`);
@@ -799,29 +904,163 @@ async function processButtonClick(jobData: WebhookTaskData) {
 
     console.log('[MTF Diamante Webhook Worker] Found button reaction:', {
       buttonId: buttonReaction.buttonId,
+      reactionType: buttonReaction.type,
       emoji: buttonReaction.emoji,
-      textReaction: buttonReaction.textReaction
+      textReaction: buttonReaction.textReaction,
+      isActive: buttonReaction.isActive
     });
 
-    // Send emoji reaction if configured
-    if (buttonReaction.emoji) {
-      console.log(`[MTF Diamante Webhook Worker] Sending emoji reaction: ${buttonReaction.emoji}`);
+    // Determine the target message ID for reactions
+    const targetMessageId = buttonClickData.originalMessageId || buttonClickData.messageId || data.wamid;
+    
+    if (!targetMessageId) {
+      console.error('[MTF Diamante Webhook Worker] No target message ID found for reaction');
+      return;
+    }
+
+    // Process reactions based on type with enhanced error handling
+    const reactionResults = await processButtonReactions({
+      buttonReaction,
+      targetMessageId,
+      recipientPhone: data.contactPhone,
+      whatsappApiKey: data.whatsappApiKey,
+      buttonClickData,
+      correlationId: `button-click-${Date.now()}`
+    });
+
+    // Log all reaction attempts for monitoring
+    await logButtonReactionAttempts(reactionResults);
+
+    const processingTime = Date.now() - startTime;
+    console.log(`[MTF Diamante Webhook Worker] Button click processed successfully in ${processingTime}ms`, {
+      buttonId: buttonClickData.buttonId,
+      reactionsProcessed: reactionResults.length,
+      successfulReactions: reactionResults.filter(r => r.success).length
+    });
+
+  } catch (error) {
+    const processingTime = Date.now() - startTime;
+    console.error('[MTF Diamante Webhook Worker] Error processing button click:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      processingTimeMs: processingTime,
+      buttonId: jobData.payload?.originalDetectIntentRequest?.payload?.interactive?.button_reply?.id
+    });
+    throw error;
+  }
+}
+
+// ============================================================================
+// ENHANCED BUTTON REACTION PROCESSING FUNCTIONS
+// ============================================================================
+
+/**
+ * Enhanced button reaction lookup with fallback to config-based mappings
+ * Implements requirements 6.1, 6.2 for database integration
+ */
+async function findButtonReactionWithFallback(buttonId: string): Promise<{
+  id: string;
+  buttonId: string;
+  type: 'emoji' | 'text' | 'both';
+  emoji?: string;
+  textReaction?: string;
+  isActive: boolean;
+} | null> {
+  try {
+    // First try database lookup
+    const dbReaction = await prisma.buttonReactionMapping.findUnique({
+      where: { buttonId }
+    });
+
+    if (dbReaction && dbReaction.isActive) {
+      const type = dbReaction.emoji && dbReaction.textReaction ? 'both' :
+                   dbReaction.emoji ? 'emoji' : 'text';
       
+      return {
+        id: dbReaction.id,
+        buttonId: dbReaction.buttonId,
+        type,
+        emoji: dbReaction.emoji || undefined,
+        textReaction: dbReaction.textReaction || undefined,
+        isActive: dbReaction.isActive
+      };
+    }
+
+    // Fallback to config-based mapping
+    const { findReactionByButtonId } = await import('@/lib/dialogflow-database-queries');
+    const configReaction = await findReactionByButtonId(buttonId);
+    
+    if (configReaction) {
+      const type = configReaction.emoji && configReaction.textReaction ? 'both' :
+                   configReaction.emoji ? 'emoji' : 'text';
+      
+      return {
+        id: configReaction.id,
+        buttonId: configReaction.buttonId,
+        type,
+        emoji: configReaction.emoji,
+        textReaction: configReaction.textReaction,
+        isActive: configReaction.isActive
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('[MTF Diamante Webhook Worker] Error finding button reaction:', error);
+    return null;
+  }
+}
+
+/**
+ * Process button reactions with comprehensive error handling
+ * Implements requirements 5.3, 5.4, 5.5 for reaction processing
+ */
+async function processButtonReactions(params: {
+  buttonReaction: {
+    id: string;
+    buttonId: string;
+    type: 'emoji' | 'text' | 'both';
+    emoji?: string;
+    textReaction?: string;
+    isActive: boolean;
+  };
+  targetMessageId: string;
+  recipientPhone: string;
+  whatsappApiKey: string;
+  buttonClickData: any;
+  correlationId: string;
+}): Promise<Array<{
+  type: 'emoji' | 'text';
+  success: boolean;
+  messageId?: string;
+  error?: string;
+  buttonId: string;
+  recipientPhone: string;
+  targetMessageId: string;
+}>> {
+  const { buttonReaction, targetMessageId, recipientPhone, whatsappApiKey, buttonClickData, correlationId } = params;
+  const results: Array<any> = [];
+
+  // Process emoji reaction if configured
+  if (buttonReaction.emoji) {
+    console.log(`[MTF Diamante Webhook Worker] Sending emoji reaction: ${buttonReaction.emoji}`);
+    
+    try {
       const reactionResult = await sendReactionMessage({
-        recipientPhone: data.contactPhone,
-        messageId: buttonClickData.originalMessageId || data.wamid,
+        recipientPhone,
+        messageId: targetMessageId,
         emoji: buttonReaction.emoji,
-        whatsappApiKey: data.whatsappApiKey
+        whatsappApiKey
       });
 
-      // Log reaction attempt
-      await logReactionAttempt({
-        recipientPhone: data.contactPhone,
-        messageId: buttonClickData.originalMessageId || data.wamid,
-        emoji: buttonReaction.emoji,
-        buttonId: buttonClickData.buttonId || '',
+      results.push({
+        type: 'emoji',
         success: reactionResult.success,
-        error: reactionResult.error
+        messageId: reactionResult.messageId,
+        error: reactionResult.error,
+        buttonId: buttonReaction.buttonId,
+        recipientPhone,
+        targetMessageId
       });
 
       if (reactionResult.success) {
@@ -829,28 +1068,105 @@ async function processButtonClick(jobData: WebhookTaskData) {
       } else {
         console.error('[MTF Diamante Webhook Worker] Failed to send emoji reaction:', reactionResult.error);
       }
+    } catch (error) {
+      console.error('[MTF Diamante Webhook Worker] Exception sending emoji reaction:', error);
+      results.push({
+        type: 'emoji',
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        buttonId: buttonReaction.buttonId,
+        recipientPhone,
+        targetMessageId
+      });
     }
+  }
 
-    // Send text reaction if configured (as a regular message)
-    if (buttonReaction.textReaction) {
-      console.log(`[MTF Diamante Webhook Worker] Sending text reaction: ${buttonReaction.textReaction}`);
+  // Process text reaction if configured (as a reply message)
+  if (buttonReaction.textReaction) {
+    console.log(`[MTF Diamante Webhook Worker] Sending text reaction: ${buttonReaction.textReaction}`);
+    
+    try {
+      const textResult = await sendTextMessage({
+        recipientPhone,
+        whatsappApiKey,
+        text: buttonReaction.textReaction,
+        replyToMessageId: targetMessageId
+      });
+
+      results.push({
+        type: 'text',
+        success: textResult.success,
+        messageId: textResult.messageId,
+        error: textResult.error,
+        buttonId: buttonReaction.buttonId,
+        recipientPhone,
+        targetMessageId
+      });
+
+      if (textResult.success) {
+        console.log('[MTF Diamante Webhook Worker] Text reaction sent successfully');
+      } else {
+        console.error('[MTF Diamante Webhook Worker] Failed to send text reaction:', textResult.error);
+      }
+    } catch (error) {
+      console.error('[MTF Diamante Webhook Worker] Exception sending text reaction:', error);
+      results.push({
+        type: 'text',
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        buttonId: buttonReaction.buttonId,
+        recipientPhone,
+        targetMessageId
+      });
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Log button reaction attempts for monitoring and debugging
+ * Implements requirement 6.4 for comprehensive logging
+ */
+async function logButtonReactionAttempts(reactionResults: Array<{
+  type: 'emoji' | 'text';
+  success: boolean;
+  messageId?: string;
+  error?: string;
+  buttonId: string;
+  recipientPhone: string;
+  targetMessageId: string;
+}>): Promise<void> {
+  for (const result of reactionResults) {
+    try {
+      if (result.type === 'emoji') {
+        await logReactionAttempt({
+          recipientPhone: result.recipientPhone,
+          messageId: result.targetMessageId,
+          emoji: '📱', // Generic emoji for logging
+          buttonId: result.buttonId,
+          success: result.success,
+          error: result.error
+        });
+      }
       
-      // For text reactions, we could send a simple text message
-      // This would require implementing a sendTextMessage function
-      // For now, we'll just log it
-      console.log('[MTF Diamante Webhook Worker] Text reaction feature not yet implemented');
+      // For text reactions, we could extend the logging system
+      console.log('[MTF Diamante Webhook Worker] Reaction attempt logged:', {
+        timestamp: new Date().toISOString(),
+        type: result.type,
+        buttonId: result.buttonId,
+        recipientPhone: result.recipientPhone,
+        targetMessageId: result.targetMessageId,
+        success: result.success,
+        error: result.error,
+        sentMessageId: result.messageId
+      });
+    } catch (logError) {
+      console.error('[MTF Diamante Webhook Worker] Failed to log reaction attempt:', {
+        logError: logError instanceof Error ? logError.message : 'Unknown log error',
+        reactionResult: result
+      });
     }
-
-    const processingTime = Date.now() - startTime;
-    console.log(`[MTF Diamante Webhook Worker] Button click processed successfully in ${processingTime}ms`);
-
-  } catch (error) {
-    const processingTime = Date.now() - startTime;
-    console.error('[MTF Diamante Webhook Worker] Error processing button click:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      processingTimeMs: processingTime
-    });
-    throw error;
   }
 }
 

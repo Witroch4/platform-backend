@@ -8,13 +8,13 @@ import {
   DialogFooter
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { LeadChatwit } from "../../../types";
+import type { LeadChatwit } from "../../../types";
 import { getDisplayName } from "./utils";
 
 // Importar componentes de diálogo
 import { DialogDetalheLead } from "@/app/admin/leads-chatwit/components/dialog-detalhe-lead";
 import { ImageGalleryDialog } from "@/app/admin/leads-chatwit/components/image-gallery-dialog";
-import { ProcessDialog, ProcessType } from "@/app/admin/leads-chatwit/components/process-dialog";
+import { ProcessDialog, type ProcessType } from "@/app/admin/leads-chatwit/components/process-dialog";
 import { ManuscritoDialog } from "@/app/admin/leads-chatwit/components/manuscrito-dialog";
 import { EspelhoDialog } from "@/app/admin/leads-chatwit/components/espelho-dialog";
 import { AnaliseDialog } from "@/app/admin/leads-chatwit/components/analise-dialog";

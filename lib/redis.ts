@@ -13,7 +13,7 @@ function logRedisConfig() {
   if (!configLogged) {
     console.log('Configuração de conexão com o Redis:', {
       host: process.env.REDIS_HOST || '127.0.0.1',
-      port: parseInt(process.env.REDIS_PORT || '6379', 10),
+      port: Number.parseInt(process.env.REDIS_PORT || '6379', 10),
       password: process.env.REDIS_PASSWORD ? '*****' : undefined,
       useTLS: process.env.REDIS_USE_TLS === 'true',
     });
@@ -24,7 +24,7 @@ function logRedisConfig() {
 // Criação de uma única instância de conexão Redis
 const redisConnection = new IORedis({
   host: process.env.REDIS_HOST || '188.245.200.61',
-  port: parseInt(process.env.REDIS_PORT || '6380', 10),
+  port: Number.parseInt(process.env.REDIS_PORT || '6380', 10),
   password: process.env.REDIS_PASSWORD || 'WIt2357111317',
   maxRetriesPerRequest: null,
   enableReadyCheck: false,

@@ -20,14 +20,14 @@ import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { toast } from "sonner";
 import FileUpload, { UploadedFile } from "@/components/custom/FileUpload";
-import MetaMediaUpload, { MetaMediaFile } from "@/components/custom/MetaMediaUpload";
+import MetaMediaUpload, { type MetaMediaFile } from "@/components/custom/MetaMediaUpload";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { CreateTemplateComponent } from "../components/template-preview";
+import type { CreateTemplateComponent } from "../components/template-preview";
 import { useMtfData } from "../../../context/MtfDataProvider";
 import { EnhancedTextArea } from "../../EnhancedTextArea";
 import { SaveToLibraryButton } from "../../shared/SaveToLibraryButton";
@@ -1877,7 +1877,7 @@ export default function CreateTemplatePage() {
                     setFooterText(content.footer || '');
                     setButtons(content.buttons || []);
                     if (content.mediaUrl) {
-                      setHeaderMetaMedia([{ url: content.mediaUrl, status: 'success' as const }]);
+                                                              setHeaderMetaMedia([{ id: Math.random().toString(36).substring(2, 11), url: content.mediaUrl, status: 'success' as const, progress: 100 }]);
                       setHeaderType(content.mediaType?.toUpperCase() as any || 'IMAGE');
                     }
                     toast.success('Template carregado da biblioteca!');

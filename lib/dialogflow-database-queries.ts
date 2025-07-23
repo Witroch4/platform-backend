@@ -95,7 +95,8 @@ export interface CompleteMessageMapping {
 export interface ButtonReactionMapping {
   id: string;
   buttonId: string;
-  emoji: string;
+  emoji?: string;
+  textReaction?: string;
   description?: string;
   isActive: boolean;
 }
@@ -328,10 +329,9 @@ export async function findReactionByButtonId(
   try {
     console.log(`[DB Query] Finding reaction mapping for button: ${buttonId}`);
 
-    // Try database first (if ButtonReactionMapping model exists)
+    // Try database first (ButtonReactionMapping model should exist after migration)
     try {
-      // @ts-ignore - ButtonReactionMapping model may not exist yet
-      const reaction = await prisma.buttonReactionMapping?.findUnique({
+      const reaction = await prisma.buttonReactionMapping.findUnique({
         where: {
           buttonId: buttonId,
         },
@@ -339,18 +339,19 @@ export async function findReactionByButtonId(
 
       if (reaction && reaction.isActive) {
         console.log(
-          `[DB Query] Found database reaction mapping: ${buttonId} -> ${reaction.emoji}`
+          `[DB Query] Found database reaction mapping: ${buttonId} -> emoji: ${reaction.emoji}, text: ${reaction.textReaction}`
         );
         return {
           id: reaction.id,
           buttonId: reaction.buttonId,
-          emoji: reaction.emoji,
+          emoji: reaction.emoji || undefined,
+          textReaction: reaction.textReaction || undefined,
           description: reaction.description || undefined,
           isActive: reaction.isActive,
         };
       }
     } catch (dbError) {
-      console.log(`[DB Query] Database reaction mapping not available, falling back to config`);
+      console.log(`[DB Query] Database reaction mapping not available, falling back to config:`, dbError);
     }
 
     // Fallback to config-based mappings
@@ -393,10 +394,9 @@ export async function getAllActiveButtonReactions(): Promise<
   try {
     console.log("[DB Query] Fetching all active button reaction mappings");
 
-    // Try database first (if ButtonReactionMapping model exists)
+    // Try database first (ButtonReactionMapping model should exist after migration)
     try {
-      // @ts-ignore - ButtonReactionMapping model may not exist yet
-      const reactions = await prisma.buttonReactionMapping?.findMany({
+      const reactions = await prisma.buttonReactionMapping.findMany({
         where: {
           isActive: true,
         },
@@ -409,16 +409,17 @@ export async function getAllActiveButtonReactions(): Promise<
         console.log(
           `[DB Query] Found ${reactions.length} database button reaction mappings`
         );
-        return reactions.map((reaction: any) => ({
+        return reactions.map((reaction) => ({
           id: reaction.id,
           buttonId: reaction.buttonId,
-          emoji: reaction.emoji,
+          emoji: reaction.emoji || undefined,
+          textReaction: reaction.textReaction || undefined,
           description: reaction.description || undefined,
           isActive: reaction.isActive,
         }));
       }
     } catch (dbError) {
-      console.log(`[DB Query] Database reaction mappings not available, falling back to config`);
+      console.log(`[DB Query] Database reaction mappings not available, falling back to config:`, dbError);
     }
 
     // Fallback to config-based mappings

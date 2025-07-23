@@ -1,6 +1,6 @@
 // app/dashboard/automacao/components/WIT-EQ/PostSelection.tsx
 
-import { InstagramMediaItem } from "../../guiado-facil/page";
+import type { InstagramMediaItem } from "../../guiado-facil/page";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";

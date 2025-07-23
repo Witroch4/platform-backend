@@ -10,7 +10,7 @@ import MessagesList from "./chatwithIAcomponents/MessagesList";
 import ScrollToBottomButton from "./chatwithIAcomponents/ScrollToBottomButton";
 import SettingsModal from "./chatwithIAcomponents/SettingsModal";
 import ChatInputForm from "../ChatInputForm";
-import { UploadPurpose } from "../ChatInputForm";
+import type { UploadPurpose } from "../ChatInputForm";
 import { toast } from "sonner";
 
 const defaultSystemPrompt = /* …mesmo texto gigante… */ `Você é um assistente útil e amigável. Use um tom conversacional, cordial e educado. 

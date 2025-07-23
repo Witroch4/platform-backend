@@ -1,4 +1,4 @@
-import { RouteConfig } from "@/lib/route";
+import type { RouteConfig } from "@/lib/route";
 
 export const configRoutes: RouteConfig = {
   // Rotas públicas que não requerem autenticação

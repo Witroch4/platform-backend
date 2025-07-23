@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { Agendamento, Midia } from '@prisma/client';
+import type { Agendamento, Midia } from '@prisma/client';
 import { uploadToMinIO } from './minio';
 import { scheduleAgendamentoJob, cancelAgendamentoJob } from '@/lib/queue/agendamento.queue';
 
@@ -90,7 +90,7 @@ export async function createAgendamento(data: CreateAgendamentoDTO): Promise<Age
     // Processa e salva as mídias
     const midiasPromises = data.midias.map(async (midia) => {
       let url = midia.url;
-      let thumbnail_url = midia.thumbnail_url;
+      const thumbnail_url = midia.thumbnail_url;
 
       // Se não tiver URL, faz upload para o MinIO
       if (!url) {

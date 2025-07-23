@@ -1,7 +1,7 @@
 import { TableCell } from "@/components/ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Phone } from "lucide-react";
-import { CellProps } from "../types";
+import type { CellProps } from "../types";
 import { getDisplayName, formatDate } from "../utils";
 
 interface InfoCellProps extends CellProps {

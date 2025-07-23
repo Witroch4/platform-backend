@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
-import { TemplateLibrary, TemplateApprovalRequest, User } from '@prisma/client';
+import type { TemplateLibrary, TemplateApprovalRequest, User } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 export interface TemplateLibraryContent {
   header?: string;
@@ -98,7 +99,7 @@ export class TemplateLibraryService {
         description: data.description,
         type: data.type,
         scope: data.scope,
-        content: data.content,
+        content: data.content as any,
         category: data.category,
         language: data.language || 'pt_BR',
         tags: data.tags || [],
@@ -148,7 +149,7 @@ export class TemplateLibraryService {
         templateLibraryId: templateId,
         requestedById: userId,
         requestMessage,
-        customVariables: customVariables || null,
+        customVariables: customVariables || Prisma.JsonNull,
         status: 'pending'
       }
     });
@@ -204,7 +205,7 @@ export class TemplateLibraryService {
     });
 
     // Process variables in content
-    const content = message.content as TemplateLibraryContent;
+    const content = message.content as unknown as TemplateLibraryContent;
     const processedContent = this.processVariablesInContent(content, variables);
 
     return {
@@ -331,7 +332,7 @@ export class TemplateLibraryService {
       data: {
         ...(updates.name && { name: updates.name }),
         ...(updates.description !== undefined && { description: updates.description }),
-        ...(updates.content && { content: updates.content }),
+        ...(updates.content && { content: updates.content as any }),
         ...(updates.category !== undefined && { category: updates.category }),
         ...(updates.tags && { tags: updates.tags }),
         updatedAt: new Date()

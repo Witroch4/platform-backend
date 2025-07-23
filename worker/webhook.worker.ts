@@ -10,7 +10,7 @@ import { MANUSCRITO_QUEUE_NAME } from '@/lib/queue/manuscrito.queue';
 import { leadCellsQueue } from '@/lib/queue/leadcells.queue';
 import {
   AUTO_NOTIFICATIONS_QUEUE_NAME,
-  IAutoNotificationJobData,
+  type IAutoNotificationJobData,
   AutoNotificationType,
   addCheckExpiringTokensJob
 } from '@/lib/queue/instagram-webhook.queue';

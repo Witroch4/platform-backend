@@ -13,7 +13,7 @@ export async function POST(req: Request) {
     const prompt = formData.get('prompt') as string;
     const mask = formData.get('mask') as File || undefined;
     const model = formData.get('model') as string || undefined;
-    const n = formData.get('n') ? parseInt(formData.get('n') as string) : undefined;
+    const n = formData.get('n') ? Number.parseInt(formData.get('n') as string) : undefined;
     const size = formData.get('size') as string || undefined;
     const responseFormat = formData.get('response_format') as 'url' | 'b64_json' || undefined;
     const user = formData.get('user') as string || undefined;

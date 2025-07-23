@@ -1,6 +1,6 @@
-import { Job } from 'bullmq';
+import type { Job } from 'bullmq';
 import { prisma } from '../../lib/prisma';
-import { ILeadJobData } from '../../lib/queue/leads-chatwit.queue';
+import type { ILeadJobData } from '../../lib/queue/leads-chatwit.queue';
 
 // Cache para acumular jobs do mesmo lead
 const leadJobsCache: Record<string, {
@@ -121,7 +121,7 @@ async function processAccumulatedJobs(sourceId: string) {
     });
 
     // 3) Coleta todos os arquivos de todos os jobs
-    let todosArquivos: any[] = [];
+    const todosArquivos: any[] = [];
     
     for (const job of jobs) {
       const arquivos = job.data.payload.origemLead.arquivos || [];

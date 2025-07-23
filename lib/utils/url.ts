@@ -23,7 +23,7 @@ export function sanitizeUrl(url: string): string | null {
   }
 
   // Remove caracteres potencialmente perigosos
-  let sanitized = url
+  const sanitized = url
     .replace(/[^\w\s:/.?=&%\-_~#@!$'()*+,;[\]]/gi, '')
     .trim();
 

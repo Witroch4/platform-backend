@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import type React from "react";
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -12,14 +13,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { DateTimePicker } from "./date-time-picker";
 import LegendaInput from "./LegendaInput";
-import FileUpload, { UploadedFile } from "@/components/custom/FileUpload";
+import FileUpload, { type UploadedFile } from "@/components/custom/FileUpload";
 import PostTypeSelector from "./PostTypeSelector";
 import axios from "axios";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Agendamento } from "@/types/agendamento";
+import type { Agendamento } from "@/types/agendamento";
 
 // Estende o tipo Agendamento para incluir informações de grupo
 interface AgendamentoExtendido extends Agendamento {

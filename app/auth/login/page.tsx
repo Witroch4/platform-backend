@@ -5,8 +5,8 @@
 import React, { Suspense } from "react";
 import LoginForm from "@/components/auth/login-form";
 import { useRouter } from "next/navigation";
-import { z } from "zod";
-import { LoginSchema } from "@/schemas"; // Se o alias @ estiver configurado
+import type { z } from "zod";
+import type { LoginSchema } from "@/schemas"; // Se o alias @ estiver configurado
 
 const Login = () => {
   const router = useRouter();

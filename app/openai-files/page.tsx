@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import OpenAIFileUpload from '@/components/custom/OpenAIFileUpload';
-import { FileWithContent } from '@/hooks/useChatwitIA';
+import type { FileWithContent } from '@/hooks/useChatwitIA';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';

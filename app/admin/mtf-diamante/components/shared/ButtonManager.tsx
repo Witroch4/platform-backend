@@ -1,298 +1,452 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { TrashIcon, Plus, Phone, ExternalLink, Copy } from 'lucide-react';
-import { EnhancedTextArea } from '../EnhancedTextArea';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Trash2, Plus, MessageSquare, ExternalLink, Phone, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export interface ButtonConfig {
-  id?: string;
-  type: 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER' | 'COPY_CODE';
+// Types based on the design specification
+export interface InteractiveButton {
+  id: string;
   text: string;
+  type: 'reply' | 'url' | 'phone_number';
   url?: string;
-  phoneNumber?: string;
-  copyCode?: string;
+  phone_number?: string;
 }
 
-interface MtfDiamanteVariavel {
-  id?: string;
-  chave: string;
-  valor: string;
+export interface ButtonReaction {
+  buttonId: string;
+  reaction?: {
+    type: 'emoji' | 'text';
+    value: string;
+  };
 }
 
 interface ButtonManagerProps {
-  buttons: ButtonConfig[];
-  onChange: (buttons: ButtonConfig[]) => void;
-  variables: MtfDiamanteVariavel[];
+  buttons: InteractiveButton[];
+  reactions?: ButtonReaction[];
+  onChange: (buttons: InteractiveButton[]) => void;
+  onReactionChange?: (reactions: ButtonReaction[]) => void;
   maxButtons?: number;
-  allowedTypes?: ButtonConfig['type'][];
   disabled?: boolean;
   className?: string;
-  label?: string;
-  description?: string;
+  showReactionConfig?: boolean;
 }
 
+// Button type configurations
 const BUTTON_TYPES = {
-  QUICK_REPLY: {
+  reply: {
     label: 'Quick Reply',
-    icon: Plus,
+    icon: MessageSquare,
     description: 'Simple response button',
-    maxLength: 20
+    maxLength: 20,
+    supportsReactions: true
   },
-  URL: {
+  url: {
     label: 'URL Button',
     icon: ExternalLink,
     description: 'Button that opens a link',
-    maxLength: 20
+    maxLength: 20,
+    supportsReactions: false
   },
-  PHONE_NUMBER: {
+  phone_number: {
     label: 'Phone Button',
     icon: Phone,
     description: 'Button that makes a call',
-    maxLength: 20
-  },
-  COPY_CODE: {
-    label: 'Copy Code',
-    icon: Copy,
-    description: 'Button that copies text to clipboard',
-    maxLength: 15 // Special limit for copy code values
+    maxLength: 20,
+    supportsReactions: false
   }
+} as const;
+
+// Validation functions
+const validateButtonText = (text: string, type: InteractiveButton['type']): string[] => {
+  const errors: string[] = [];
+  
+  if (!text.trim()) {
+    errors.push('Button text is required');
+  }
+  
+  if (text.length > BUTTON_TYPES[type].maxLength) {
+    errors.push(`Text exceeds maximum length of ${BUTTON_TYPES[type].maxLength} characters`);
+  }
+  
+  return errors;
+};
+
+const validateUrl = (url: string): string[] => {
+  const errors: string[] = [];
+  
+  if (!url.trim()) {
+    errors.push('URL is required for URL buttons');
+    return errors;
+  }
+  
+  try {
+    new URL(url);
+  } catch {
+    errors.push('Please enter a valid URL (e.g., https://example.com)');
+  }
+  
+  return errors;
+};
+
+const validatePhoneNumber = (phone: string): string[] => {
+  const errors: string[] = [];
+  
+  if (!phone.trim()) {
+    errors.push('Phone number is required for phone buttons');
+    return errors;
+  }
+  
+  // Basic phone number validation - should start with + and contain only digits
+  const phoneRegex = /^\+[1-9]\d{1,14}$/;
+  if (!phoneRegex.test(phone)) {
+    errors.push('Please enter a valid phone number (e.g., +5511999999999)');
+  }
+  
+  return errors;
 };
 
 export const ButtonManager: React.FC<ButtonManagerProps> = ({
   buttons,
+  reactions = [],
   onChange,
-  variables,
+  onReactionChange,
   maxButtons = 3,
-  allowedTypes = ['QUICK_REPLY', 'URL', 'PHONE_NUMBER', 'COPY_CODE'],
   disabled = false,
   className,
-  label = 'Buttons',
-  description
+  showReactionConfig = true
 }) => {
+  const [validationErrors, setValidationErrors] = useState<Record<string, string[]>>({});
+
+  // Generate unique ID for new buttons
+  const generateButtonId = (): string => {
+    return `btn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  };
+
+  // Add new button
   const addButton = () => {
     if (buttons.length >= maxButtons) return;
     
-    const newButton: ButtonConfig = {
-      type: 'QUICK_REPLY',
-      text: ''
+    const newButton: InteractiveButton = {
+      id: generateButtonId(),
+      text: '',
+      type: 'reply'
     };
     
     onChange([...buttons, newButton]);
   };
 
-  const removeButton = (index: number) => {
-    if (buttons.length <= 1) return;
-    const newButtons = buttons.filter((_, i) => i !== index);
+  // Remove button
+  const removeButton = (buttonId: string) => {
+    const newButtons = buttons.filter(button => button.id !== buttonId);
     onChange(newButtons);
-  };
-
-  const updateButton = (index: number, updates: Partial<ButtonConfig>) => {
-    const newButtons = buttons.map((button, i) => 
-      i === index ? { ...button, ...updates } : button
-    );
-    onChange(newButtons);
-  };
-
-  const validateButtonValue = (type: ButtonConfig['type'], value: string): boolean => {
-    const buttonType = BUTTON_TYPES[type];
-    if (value.length > buttonType.maxLength) {
-      return false;
+    
+    // Remove associated reaction
+    if (onReactionChange) {
+      const newReactions = reactions.filter(reaction => reaction.buttonId !== buttonId);
+      onReactionChange(newReactions);
     }
     
-    // Special validation for copy code - must be exactly the value, no variables
-    if (type === 'COPY_CODE' && value.length > 15) {
-      return false;
-    }
-    
-    return true;
+    // Clear validation errors for removed button
+    const newErrors = { ...validationErrors };
+    delete newErrors[buttonId];
+    setValidationErrors(newErrors);
   };
 
-  const getButtonIcon = (type: ButtonConfig['type']) => {
+  // Update button
+  const updateButton = (buttonId: string, updates: Partial<InteractiveButton>) => {
+    const newButtons = buttons.map(button => {
+      if (button.id === buttonId) {
+        const updatedButton = { ...button, ...updates };
+        
+        // Clear type-specific fields when changing type
+        if (updates.type && updates.type !== button.type) {
+          if (updates.type !== 'url') updatedButton.url = undefined;
+          if (updates.type !== 'phone_number') updatedButton.phone_number = undefined;
+          
+          // Remove reaction if new type doesn't support reactions
+          if (!BUTTON_TYPES[updates.type].supportsReactions && onReactionChange) {
+            const newReactions = reactions.filter(reaction => reaction.buttonId !== buttonId);
+            onReactionChange(newReactions);
+          }
+        }
+        
+        return updatedButton;
+      }
+      return button;
+    });
+    
+    onChange(newButtons);
+    
+    // Validate updated button
+    validateButton(buttonId, newButtons.find(b => b.id === buttonId)!);
+  };
+
+  // Validate individual button
+  const validateButton = (buttonId: string, button: InteractiveButton) => {
+    const errors: string[] = [];
+    
+    // Validate text
+    errors.push(...validateButtonText(button.text, button.type));
+    
+    // Validate type-specific fields
+    if (button.type === 'url' && button.url !== undefined) {
+      errors.push(...validateUrl(button.url));
+    }
+    
+    if (button.type === 'phone_number' && button.phone_number !== undefined) {
+      errors.push(...validatePhoneNumber(button.phone_number));
+    }
+    
+    setValidationErrors(prev => ({
+      ...prev,
+      [buttonId]: errors
+    }));
+    
+    return errors.length === 0;
+  };
+
+  // Get button icon
+  const getButtonIcon = (type: InteractiveButton['type']) => {
     const IconComponent = BUTTON_TYPES[type].icon;
     return <IconComponent className="h-4 w-4" />;
   };
 
+  // Check if button has reaction configured
+  const hasReaction = (buttonId: string): boolean => {
+    return reactions.some(reaction => 
+      reaction.buttonId === buttonId && reaction.reaction
+    );
+  };
+
+  // Get reaction for button
+  const getReaction = (buttonId: string): ButtonReaction | undefined => {
+    return reactions.find(reaction => reaction.buttonId === buttonId);
+  };
+
+  // Handle reaction configuration (placeholder for integration with ReactionConfigManager)
+  const handleReactionConfig = (buttonId: string) => {
+    // This will be integrated with the ReactionConfigManager component
+    console.log('Configure reaction for button:', buttonId);
+  };
+
   return (
     <div className={cn("space-y-4", className)}>
-      <div className="space-y-1">
-        <div className="flex items-center justify-between">
-          <label className="text-sm font-medium leading-none">
-            {label} ({buttons.length}/{maxButtons})
-          </label>
-          {buttons.length < maxButtons && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={addButton}
-              disabled={disabled}
-              className="h-8"
-            >
-              <Plus className="h-3 w-3 mr-1" />
-              Add Button
-            </Button>
-          )}
-        </div>
-        {description && (
+      <div className="flex items-center justify-between">
+        <div className="space-y-1">
+          <Label className="text-sm font-medium">
+            Buttons ({buttons.length}/{maxButtons})
+          </Label>
           <p className="text-xs text-muted-foreground">
-            {description}
+            Add interactive buttons to your message
           </p>
+        </div>
+        
+        {buttons.length < maxButtons && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addButton}
+            disabled={disabled}
+            className="h-8"
+          >
+            <Plus className="h-3 w-3 mr-1" />
+            Add Button
+          </Button>
         )}
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-3">
         {buttons.map((button, index) => (
-          <div key={index} className="border border-border rounded-lg p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs">
-                  Button {index + 1}
-                </Badge>
-                {getButtonIcon(button.type)}
-                <span className="text-sm font-medium">
-                  {BUTTON_TYPES[button.type].label}
-                </span>
-              </div>
-              {buttons.length > 1 && (
+          <Card key={button.id} className="relative">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-xs">
+                    Button {index + 1}
+                  </Badge>
+                  {getButtonIcon(button.type)}
+                  <span className="text-sm font-medium">
+                    {BUTTON_TYPES[button.type].label}
+                  </span>
+                  {hasReaction(button.id) && (
+                    <Badge variant="secondary" className="text-xs">
+                      <Zap className="h-3 w-3 mr-1" />
+                      Reaction
+                    </Badge>
+                  )}
+                </div>
+                
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  onClick={() => removeButton(index)}
+                  onClick={() => removeButton(button.id)}
                   disabled={disabled}
                   className="h-8 w-8"
                 >
-                  <TrashIcon className="h-3 w-3" />
+                  <Trash2 className="h-3 w-3" />
                 </Button>
-              )}
-            </div>
-
-            {/* Button Type Selection */}
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground">
-                Button Type
-              </label>
-              <Select
-                value={button.type}
-                onValueChange={(value: ButtonConfig['type']) => 
-                  updateButton(index, { 
-                    type: value,
-                    // Clear type-specific fields when changing type
-                    url: undefined,
-                    phoneNumber: undefined,
-                    copyCode: undefined
-                  })
-                }
-                disabled={disabled}
-              >
-                <SelectTrigger className="h-8">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {allowedTypes.map(type => (
-                    <SelectItem key={type} value={type}>
-                      <div className="flex items-center gap-2">
-                        {getButtonIcon(type)}
-                        <span>{BUTTON_TYPES[type].label}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Button Text */}
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground">
-                Button Text (max {BUTTON_TYPES[button.type].maxLength} chars)
-              </label>
-              <EnhancedTextArea
-                value={button.text}
-                onChange={(value) => updateButton(index, { text: value })}
-                variables={variables}
-                placeholder="Button text..."
-                multiline={false}
-                disabled={disabled}
-                maxLength={BUTTON_TYPES[button.type].maxLength}
-              />
-            </div>
-
-            {/* Type-specific fields */}
-            {button.type === 'URL' && (
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground">
-                  URL
-                </label>
-                <EnhancedTextArea
-                  value={button.url || ''}
-                  onChange={(value) => updateButton(index, { url: value })}
-                  variables={variables}
-                  placeholder="https://example.com"
-                  multiline={false}
-                  disabled={disabled}
-                />
               </div>
-            )}
-
-            {button.type === 'PHONE_NUMBER' && (
+            </CardHeader>
+            
+            <CardContent className="space-y-4">
+              {/* Button Type Selection */}
               <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground">
-                  Phone Number
-                </label>
-                <EnhancedTextArea
-                  value={button.phoneNumber || ''}
-                  onChange={(value) => updateButton(index, { phoneNumber: value })}
-                  variables={variables}
-                  placeholder="+5511999999999"
-                  multiline={false}
+                <Label className="text-xs font-medium text-muted-foreground">
+                  Button Type
+                </Label>
+                <Select
+                  value={button.type}
+                  onValueChange={(value: InteractiveButton['type']) => 
+                    updateButton(button.id, { type: value })
+                  }
                   disabled={disabled}
-                />
-              </div>
-            )}
-
-            {button.type === 'COPY_CODE' && (
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground">
-                  Code to Copy (max 15 chars, no variables)
-                </label>
-                <Input
-                  value={button.copyCode || ''}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (value.length <= 15) {
-                      updateButton(index, { copyCode: value });
-                    }
-                  }}
-                  placeholder="CODE123"
-                  disabled={disabled}
-                  maxLength={15}
-                />
+                >
+                  <SelectTrigger className="h-8">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(BUTTON_TYPES).map(([type, config]) => (
+                      <SelectItem key={type} value={type}>
+                        <div className="flex items-center gap-2">
+                          {getButtonIcon(type as InteractiveButton['type'])}
+                          <span>{config.label}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <p className="text-xs text-muted-foreground">
-                  Copy code buttons cannot use variables and are limited to 15 characters
+                  {BUTTON_TYPES[button.type].description}
                 </p>
               </div>
-            )}
 
-            {/* Validation feedback */}
-            {button.text && !validateButtonValue(button.type, button.text) && (
-              <p className="text-xs text-destructive">
-                Text exceeds maximum length of {BUTTON_TYPES[button.type].maxLength} characters
-              </p>
-            )}
-          </div>
+              {/* Button Text */}
+              <div className="space-y-2">
+                <Label className="text-xs font-medium text-muted-foreground">
+                  Button Text (max {BUTTON_TYPES[button.type].maxLength} chars)
+                </Label>
+                <Input
+                  value={button.text}
+                  onChange={(e) => updateButton(button.id, { text: e.target.value })}
+                  placeholder="Enter button text..."
+                  disabled={disabled}
+                  maxLength={BUTTON_TYPES[button.type].maxLength}
+                  className={cn(
+                    validationErrors[button.id]?.some(error => error.includes('text')) && 
+                    "border-destructive focus-visible:ring-destructive"
+                  )}
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>{button.text.length}/{BUTTON_TYPES[button.type].maxLength}</span>
+                </div>
+              </div>
+
+              {/* URL Field for URL buttons */}
+              {button.type === 'url' && (
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium text-muted-foreground">
+                    URL
+                  </Label>
+                  <Input
+                    value={button.url || ''}
+                    onChange={(e) => updateButton(button.id, { url: e.target.value })}
+                    placeholder="https://example.com"
+                    disabled={disabled}
+                    className={cn(
+                      validationErrors[button.id]?.some(error => error.includes('URL')) && 
+                      "border-destructive focus-visible:ring-destructive"
+                    )}
+                  />
+                </div>
+              )}
+
+              {/* Phone Number Field for phone buttons */}
+              {button.type === 'phone_number' && (
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium text-muted-foreground">
+                    Phone Number
+                  </Label>
+                  <Input
+                    value={button.phone_number || ''}
+                    onChange={(e) => updateButton(button.id, { phone_number: e.target.value })}
+                    placeholder="+5511999999999"
+                    disabled={disabled}
+                    className={cn(
+                      validationErrors[button.id]?.some(error => error.includes('phone')) && 
+                      "border-destructive focus-visible:ring-destructive"
+                    )}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Include country code (e.g., +55 for Brazil)
+                  </p>
+                </div>
+              )}
+
+              {/* Reaction Configuration for Quick Reply buttons */}
+              {button.type === 'reply' && showReactionConfig && (
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium text-muted-foreground">
+                    Automatic Reaction
+                  </Label>
+                  <Button
+                    type="button"
+                    variant={hasReaction(button.id) ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handleReactionConfig(button.id)}
+                    disabled={disabled}
+                    className="w-full justify-start"
+                  >
+                    <Zap className="h-3 w-3 mr-2" />
+                    {hasReaction(button.id) ? (
+                      <span>
+                        Reaction: {getReaction(button.id)?.reaction?.type === 'emoji' 
+                          ? getReaction(button.id)?.reaction?.value 
+                          : `"${getReaction(button.id)?.reaction?.value}"`
+                        }
+                      </span>
+                    ) : (
+                      'Add Automatic Reaction'
+                    )}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Configure how the system responds when this button is clicked
+                  </p>
+                </div>
+              )}
+
+              {/* Validation Errors */}
+              {validationErrors[button.id] && validationErrors[button.id].length > 0 && (
+                <div className="space-y-1">
+                  {validationErrors[button.id].map((error, errorIndex) => (
+                    <p key={errorIndex} className="text-xs text-destructive">
+                      {error}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         ))}
 
         {buttons.length === 0 && (
-          <div className="text-center py-8 text-muted-foreground">
-            <Plus className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">No buttons added yet</p>
-            <p className="text-xs">Click "Add Button" to create your first button</p>
-          </div>
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center justify-center py-8 text-center">
+              <Plus className="h-8 w-8 mb-2 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground mb-1">No buttons added yet</p>
+              <p className="text-xs text-muted-foreground">
+                Click "Add Button" to create your first interactive button
+              </p>
+            </CardContent>
+          </Card>
         )}
       </div>
     </div>

@@ -45,6 +45,13 @@ export interface InteractiveMessageData {
   };
 }
 
+export interface TextMessageData {
+  recipientPhone: string;
+  whatsappApiKey: string;
+  text: string;
+  replyToMessageId?: string; // For replying to specific messages
+}
+
 export interface MessageResult {
   success: boolean;
   messageId?: string;
@@ -452,6 +459,84 @@ export async function sendInteractiveMessage(
   } catch (error: any) {
     console.error(
       "[WhatsApp Messages] Interactive message failed:",
+      error.response?.data || error.message
+    );
+
+    return {
+      success: false,
+      error: error.response?.data?.error?.message || error.message,
+      details: error.response?.data,
+    };
+  }
+}
+
+// ============================================================================
+// TEXT MESSAGE FUNCTIONS
+// ============================================================================
+
+/**
+ * Send WhatsApp text message (can be a reply or standalone)
+ */
+export async function sendTextMessage(
+  data: TextMessageData
+): Promise<MessageResult> {
+  try {
+    console.log(
+      `[WhatsApp Messages] Sending text message to ${data.recipientPhone}${data.replyToMessageId ? ' (reply)' : ''}`
+    );
+
+    const recipientPhone = formatPhoneNumber(data.recipientPhone);
+    if (!recipientPhone) {
+      throw new Error("Invalid phone number format");
+    }
+
+    // Build the payload
+    const payload: any = {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: recipientPhone,
+      type: "text",
+      text: {
+        body: data.text,
+      },
+    };
+
+    // Add context for reply if specified
+    if (data.replyToMessageId) {
+      payload.context = {
+        message_id: data.replyToMessageId,
+      };
+    }
+
+    console.log(
+      "[WhatsApp Messages] Text payload:",
+      JSON.stringify(payload, null, 2)
+    );
+
+    // Extract phone number ID from API key context
+    const phoneNumberId = process.env.FROM_PHONE_NUMBER_ID || "";
+    const apiUrl = getMessagesApiUrl(phoneNumberId);
+
+    // Send the message
+    const response = await axios.post(apiUrl, payload, {
+      headers: {
+        Authorization: `Bearer ${data.whatsappApiKey}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    console.log(
+      `[WhatsApp Messages] Text message sent successfully: ${response.data.messages?.[0]?.id}`
+    );
+
+    return {
+      success: true,
+      messageId: response.data.messages?.[0]?.id,
+      details: response.data,
+    };
+  } catch (error: any) {
+    console.error(
+      "[WhatsApp Messages] Text message failed:",
       error.response?.data || error.message
     );
 

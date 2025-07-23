@@ -1,6 +1,6 @@
 import { Queue } from 'bullmq';
 import { connection } from '@/lib/redis';
-import { WebhookPayload } from '@/types/webhook';   // mesmo tipo usado na rota
+import type { WebhookPayload } from '@/types/webhook';   // mesmo tipo usado na rota
 
 export const LEADS_QUEUE_NAME = 'filaLeadsChatwit';
 

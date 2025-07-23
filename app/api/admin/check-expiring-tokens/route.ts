@@ -25,7 +25,7 @@ export async function POST(req: Request) {
 
     const url = new URL(req.url);
     const daysParam = url.searchParams.get('days');
-    const days = daysParam ? parseInt(daysParam, 10) : 10; // Padrão: 10 dias
+    const days = daysParam ? Number.parseInt(daysParam, 10) : 10; // Padrão: 10 dias
 
     if (isNaN(days) || days <= 0) {
       return new NextResponse("O parâmetro 'days' deve ser um número positivo", { status: 400 });

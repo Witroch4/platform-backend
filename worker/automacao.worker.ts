@@ -1,10 +1,10 @@
 //worker\automacao.worker.ts
-import { Worker, Job } from "bullmq"
+import { Worker, type Job } from "bullmq"
 import { connection } from "@/lib/redis"
 import dotenv from "dotenv"
 import {
   INSTAGRAM_WEBHOOK_QUEUE_NAME,
-  IInstagramWebhookJobData,
+  type IInstagramWebhookJobData,
 } from "@/lib/queue/instagram-webhook.queue"
 import { handleInstagramWebhook } from "./automacao/eu-quero/automation"
 

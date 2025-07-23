@@ -20,7 +20,7 @@ import { DisparoMensagemDialog } from './DisparoMensagemDialog';
 import { LoteCardSkeleton, VariavelSkeleton } from './LoadingSkeletons';
 import { useMtfData } from '../context/MtfDataProvider';
 import { validateVariable, ensureSpecialVariables, SPECIAL_VARIABLES } from '@/app/lib/variable-utils';
-import { useVariableManager } from '../hooks/useVariableManager';
+import { useVariableManager } from '@/hooks/useVariableManager';
 
 interface WhatsAppConfig {
   id?: string;
@@ -635,7 +635,7 @@ function AdicionarLoteDialog({ onLoteAdicionado }: { onLoteAdicionado: () => voi
                 type="number"
                 min="1"
                 value={formData.numero}
-                onChange={(e) => setFormData(prev => ({ ...prev, numero: parseInt(e.target.value) }))}
+                onChange={(e) => setFormData(prev => ({ ...prev, numero: Number.parseInt(e.target.value) }))}
                 required
               />
             </div>
@@ -781,7 +781,7 @@ function EditarLoteDialog({ lote, onLoteAtualizado }: { lote: MtfDiamanteLote, o
                 type="number"
                 min="1"
                 value={formData.numero}
-                onChange={(e) => setFormData(prev => ({ ...prev, numero: parseInt(e.target.value) }))}
+                onChange={(e) => setFormData(prev => ({ ...prev, numero: Number.parseInt(e.target.value) }))}
                 required
               />
             </div>

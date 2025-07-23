@@ -61,7 +61,7 @@ export const autoNotificationsQueue = new Queue<IAutoNotificationJobData>(
  * Adiciona um job para verificar tokens expirando.
  * @param days Número de dias para verificar (3 ou 10)
  */
-export const addCheckExpiringTokensJob = async (days: number = 10) => {
+export const addCheckExpiringTokensJob = async (days = 10) => {
   await autoNotificationsQueue.add(
     `check-expiring-tokens-${days}`,
     {

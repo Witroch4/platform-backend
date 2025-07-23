@@ -9,8 +9,8 @@ import {
 } from "@/components/ui/tooltip";
 import { Eye, Image as ImageIcon, FileUp, Loader2, Library, AlertCircle } from "lucide-react";
 import { DotLottieReact } from "@lottiefiles/dotlottie-react";
-import { CellProps } from "../types";
-import { LeadContextMenu, ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
+import type { CellProps } from "../types";
+import { LeadContextMenu, type ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
 
 interface EspelhoCellProps extends CellProps {
   manuscritoProcessadoLocal: boolean;

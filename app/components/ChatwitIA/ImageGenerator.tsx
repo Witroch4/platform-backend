@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { ImageSize, ImageQuality, ImageStyle, ImageModel } from '@/services/openai';
+import type React from 'react';
+import { useState } from 'react';
+import type { ImageSize, ImageQuality, ImageStyle, ImageModel } from '@/services/openai';
 
 interface ImageGenerationResult {
   url: string;

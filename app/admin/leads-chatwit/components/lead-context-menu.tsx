@@ -15,7 +15,7 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 
 export type ContextType = 'geral' | 'pdf' | 'imagem' | 'arquivo' | 'manuscrito' | 'espelho' | 'analise' | 'recurso';
 export type ContextAction = 

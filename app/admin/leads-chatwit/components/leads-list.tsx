@@ -26,7 +26,7 @@ import { DialogDetalheLead } from "./dialog-detalhe-lead";
 // BatchProgressDialog removido - agora usando apenas o novo sistema
 // Imports do sistema antigo removidos - agora usando apenas o novo BatchProcessorTrigger
 import { SSEConnectionManager } from "./sse-connection-manager";
-import { LeadChatwit, ExtendedLead } from "../types";
+import type { LeadChatwit, ExtendedLead } from "../types";
 import { BatchProcessorTrigger } from "./batch-processor/BatchProcessorTrigger";
 
 interface LeadsListProps {

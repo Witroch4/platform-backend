@@ -1,7 +1,7 @@
 // app/[accountid]/dashboard/layout.tsx
 
-import React from "react";
-import { Metadata } from "next";
+import type React from "react";
+import type { Metadata } from "next";
 import DashboardLayoutClient from "@/components/dashboard-layout-client";
 import ErrorBoundary from "@/components/providers/error-boundary";
 

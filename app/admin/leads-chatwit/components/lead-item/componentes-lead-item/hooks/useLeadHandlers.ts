@@ -1,7 +1,7 @@
 import { toast } from "sonner";
 import { getConvertedImages } from "@/app/admin/leads-chatwit/components/lead-item/componentes-lead-item/utils";
-import { LeadChatwit } from "@/app/admin/leads-chatwit/types";
-import { ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
+import type { LeadChatwit } from "@/app/admin/leads-chatwit/types";
+import type { ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
 import { Prisma } from "@prisma/client";
 
 interface UseLeadHandlersProps {

@@ -1,7 +1,8 @@
 //app/[accountid]/dashboard/agendamento/page.tsx
 "use client";
 
-import React, { useEffect, useState } from "react";
+import type React from "react";
+import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -18,7 +19,7 @@ import {
 import AgendamentoForm from "@/app/[accountid]/dashboard/agendamento/components/AgendamentoForm";
 import AgendamentosList from "@/app/[accountid]/dashboard/agendamento/components/AgendamentosList";
 
-import { UploadedFile } from "@/components/custom/FileUpload";
+import type { UploadedFile } from "@/components/custom/FileUpload";
 import { toast } from "sonner";
 import useAgendamentos from "@/hooks/useAgendamentos";
 

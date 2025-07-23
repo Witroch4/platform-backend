@@ -17,7 +17,7 @@ export async function GET(
     console.log(`🔗 Buscando URL do storage para: ${fileId}`);
 
     // Primeiro tentar nos ChatFiles
-    let file = await db.chatFile.findFirst({
+    const file = await db.chatFile.findFirst({
       where: {
         OR: [
           { id: fileId },

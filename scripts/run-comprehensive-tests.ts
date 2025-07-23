@@ -101,7 +101,7 @@ const TEST_SUITES: TestSuite[] = [
 
 class TestRunner {
   private results: TestResult[] = [];
-  private startTime: number = 0;
+  private startTime = 0;
 
   async runAllTests(options: {
     skipE2E?: boolean;
@@ -144,7 +144,7 @@ class TestRunner {
     this.printSummary();
   }
 
-  private async runTestSuite(suite: TestSuite, verbose: boolean = false): Promise<TestResult> {
+  private async runTestSuite(suite: TestSuite, verbose = false): Promise<TestResult> {
     console.log(`\n🧪 Running: ${suite.name}`);
     console.log(`📝 ${suite.description}`);
     

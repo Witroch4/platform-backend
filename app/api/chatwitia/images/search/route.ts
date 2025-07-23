@@ -95,8 +95,7 @@ export async function GET(req: Request) {
         imageUrl: true,
         thumbnailUrl: true,
         createdAt: true,
-        sessionId: true,
-        openaiFileId: true
+        sessionId: true
       },
       orderBy: {
         createdAt: 'desc' // Pegar a mais recente se houver duplicatas
@@ -111,7 +110,7 @@ export async function GET(req: Request) {
       );
     }
 
-    console.log(`✅ Imagem encontrada: ${image.id}, responseId: ${image.responseId || 'nenhum'}, openaiFileId: ${image.openaiFileId || 'nenhum'}`);
+    console.log(`✅ Imagem encontrada: ${image.id}, responseId: ${image.responseId || 'nenhum'}`);
 
     return NextResponse.json({
       success: true,
@@ -125,8 +124,7 @@ export async function GET(req: Request) {
         imageUrl: image.imageUrl,
         thumbnailUrl: image.thumbnailUrl,
         createdAt: image.createdAt,
-        sessionId: image.sessionId,
-        openaiFileId: image.openaiFileId
+        sessionId: image.sessionId
       }
     });
   } catch (error: any) {

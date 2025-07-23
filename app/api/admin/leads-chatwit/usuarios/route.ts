@@ -17,8 +17,8 @@ export async function GET(request: Request): Promise<Response> {
 
     const url = new URL(request.url);
     const searchTerm = url.searchParams.get("search");
-    const page = parseInt(url.searchParams.get("page") || "1");
-    const limit = parseInt(url.searchParams.get("limit") || "10");
+    const page = Number.parseInt(url.searchParams.get("page") || "1");
+    const limit = Number.parseInt(url.searchParams.get("limit") || "10");
     const skip = (page - 1) * limit;
 
     // Buscar informações do usuário atual

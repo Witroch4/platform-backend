@@ -1,6 +1,6 @@
 import { TableCell } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { SelectCellProps } from "../types";
+import type { SelectCellProps } from "../types";
 
 export function SelectCell({ isSelected, onSelect, leadId }: SelectCellProps) {
   return (

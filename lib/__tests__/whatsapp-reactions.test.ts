@@ -8,7 +8,7 @@ import axios from 'axios';
 import {
   sendReactionMessage,
   logReactionAttempt,
-  ReactionMessageData
+  type ReactionMessageData
 } from '../whatsapp-reactions';
 
 // Mock dependencies

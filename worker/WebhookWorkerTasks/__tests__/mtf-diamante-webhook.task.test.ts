@@ -4,9 +4,9 @@
  * Requirements: 2.1, 2.2, 2.3
  */
 
-import { Job } from 'bullmq';
+import type { Job } from 'bullmq';
 import { processMtfDiamanteWebhookTask } from '../mtf-diamante-webhook.task';
-import {
+import type {
   SendMessageTask,
   SendReactionTask,
   WebhookTaskData

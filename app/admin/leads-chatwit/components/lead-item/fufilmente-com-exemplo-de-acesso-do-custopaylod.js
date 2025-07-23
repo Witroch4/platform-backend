@@ -1,4 +1,4 @@
-'use strict';
+
 
 // Importação dos módulos
 const axios = require('axios');

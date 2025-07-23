@@ -3,7 +3,7 @@
  * This file demonstrates how to integrate the VariableConverter with the existing system
  */
 
-import { VariableConverter, MtfDiamanteVariavel } from './variable-converter';
+import { VariableConverter, type MtfDiamanteVariavel } from './variable-converter';
 
 // Example: How to use VariableConverter in template creation API
 export async function processTemplateForMetaAPI(

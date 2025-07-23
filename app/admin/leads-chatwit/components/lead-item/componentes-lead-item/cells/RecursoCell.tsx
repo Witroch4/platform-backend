@@ -7,8 +7,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { FileText, Shield, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
-import { CellProps } from "../types";
-import { LeadContextMenu, ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
+import type { CellProps } from "../types";
+import { LeadContextMenu, type ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
 import { useState } from "react";
 import { toast } from "sonner";
 

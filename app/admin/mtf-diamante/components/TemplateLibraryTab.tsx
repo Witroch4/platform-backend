@@ -25,8 +25,8 @@ import {
   BookOpen
 } from 'lucide-react';
 import { useTemplateLibrary } from '../hooks/useTemplateLibrary';
-import { useApprovalRequests } from '../hooks/useApprovalRequests';
-import { TemplateLibraryWithCreator } from '@/app/lib/template-library-service';
+import { useApprovalRequests } from '../../../../hooks/useApprovalRequests';
+import type { TemplateLibraryWithCreator } from '@/app/lib/template-library-service';
 import { CreateTemplateDialog } from './TemplateLibraryTab/CreateTemplateDialog';
 import { TemplatePreviewDialog } from './TemplateLibraryTab/TemplatePreviewDialog';
 import { ApprovalRequestsTable } from './TemplateLibraryTab/ApprovalRequestsTable';

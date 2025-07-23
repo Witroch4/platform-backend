@@ -1,7 +1,7 @@
 // app/api/admin/leads-chatwit/recebearquivos/route.ts
 import { NextResponse } from 'next/server';
 import { addLeadJob } from '@/lib/queue/leads-chatwit.queue';
-import { WebhookPayload } from '@/types/webhook';
+import type { WebhookPayload } from '@/types/webhook';
 
 export async function POST(request: Request): Promise<Response> {
   try {

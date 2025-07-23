@@ -2,7 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { Message } from '@/hooks/useChatwitIA';
+import type { Message } from '@/hooks/useChatwitIA';
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { uploadToMinIO } from '@/lib/minio';
@@ -359,7 +359,7 @@ async function testImageUrl(url: string): Promise<boolean> {
 }
 
 // Função para processar requisições para a API do OpenAI, agora usando exclusivamente Responses API
-async function handleOpenAIRequest(messages: Message[], model: string, sessionId?: string, fileIds: string[] = [], previousResponseId?: string, webSearchActive: boolean = false) {
+async function handleOpenAIRequest(messages: Message[], model: string, sessionId?: string, fileIds: string[] = [], previousResponseId?: string, webSearchActive = false) {
   try {
     // Verificar se é um modelo Claude (não deveria chegar aqui, mas por segurança)
     if (model.includes('claude')) {
@@ -1130,11 +1130,11 @@ async function handleOpenAIRequest(messages: Message[], model: string, sessionId
 
     // Define a custom transformer class for Responses API events
     class ChunkTransformer implements Transformer<Uint8Array, Uint8Array> {
-      private buffer: string = '';
+      private buffer = '';
       private encoder = new TextEncoder();
       private decoder = new TextDecoder();
-      private completeContent: string = '';
-      private responseId: string = '';
+      private completeContent = '';
+      private responseId = '';
       private imageResults: any[] = [];
       private fullResponseData: any = null;
 
@@ -1823,7 +1823,7 @@ async function saveMessageToDatabase(
 }
 
 // Helper function to save uploaded images to the database for future reference
-async function saveUploadedImageToDatabase(sessionId: string, imageUrl: string, prompt: string = 'Imagem enviada pelo usuário') {
+async function saveUploadedImageToDatabase(sessionId: string, imageUrl: string, prompt = 'Imagem enviada pelo usuário') {
   try {
     const session = await auth();
     

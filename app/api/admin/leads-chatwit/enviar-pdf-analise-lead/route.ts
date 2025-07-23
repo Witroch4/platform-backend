@@ -116,7 +116,7 @@ export async function POST(request: Request): Promise<Response> {
         ...form.getHeaders(),
         api_access_token: accessToken
       },
-      maxBodyLength: Infinity // garante upload de PDFs grandes
+      maxBodyLength: Number.POSITIVE_INFINITY // garante upload de PDFs grandes
     });
 
     // 7) Atualizar o campo anotacoes do lead com a mensagem enviada

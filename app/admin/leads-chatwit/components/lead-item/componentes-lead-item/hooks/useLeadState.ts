@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { LeadChatwit } from "../../../../types";
+import type { LeadChatwit } from "../../../../types";
 import { hasEspelhoData } from "../utils";
 
 export function useLeadState(lead: LeadChatwit, onRefresh?: () => void) {

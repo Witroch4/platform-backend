@@ -1,5 +1,5 @@
 //\app\api\automacao\route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { v4 as uuidv4 } from "uuid";

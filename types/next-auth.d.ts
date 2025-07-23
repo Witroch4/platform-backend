@@ -2,7 +2,7 @@
 
 import type { DefaultSession, DefaultUser } from "next-auth";
 import { JWT } from "next-auth/jwt";
-import { UserRole } from "@prisma/client"; // Ajuste o caminho conforme a localização do seu enum UserRole
+import type { UserRole } from "@prisma/client"; // Ajuste o caminho conforme a localização do seu enum UserRole
 
 declare module "next-auth" {
   /**

@@ -1,7 +1,7 @@
 import { TableCell } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { CellProps } from "../types";
+import type { CellProps } from "../types";
 
 interface ConsultoriaCellProps extends CellProps {
   consultoriaAtiva: boolean;

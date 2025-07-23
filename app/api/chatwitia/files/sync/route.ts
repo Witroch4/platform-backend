@@ -1,8 +1,8 @@
 // app/api/chatwitia/files/sync/route.ts
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { db } from '@/lib/db';
-import { openaiService, FilePurpose } from '@/services/openai';
+import { openaiService, type FilePurpose } from '@/services/openai';
 
 // Importações de módulos Node.js somente usados no servidor
 // Não importamos o fs diretamente aqui para evitar problemas com o bundler

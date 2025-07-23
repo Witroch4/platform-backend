@@ -1,4 +1,4 @@
-import { Job } from 'bullmq';
+import type { Job } from 'bullmq';
 import { prisma } from '../../lib/prisma';
 import { sseManager } from '../../lib/sse-manager';
 
@@ -161,7 +161,7 @@ async function processEspelho(job: Job<IEspelhoJobData>) {
     if (exames.length > 0) updateData.examesParticipados = exames;
     if (seccionalMatch) updateData.seccional = seccionalMatch[1].trim();
     if (areaMatch) updateData.areaJuridica = areaMatch[1].trim();
-    if (notaMatch) updateData.notaFinal = parseFloat(notaMatch[1].replace(',', '.'));
+    if (notaMatch) updateData.notaFinal = Number.parseFloat(notaMatch[1].replace(',', '.'));
     if (situacaoMatch) updateData.situacao = situacaoMatch[1].trim();
     if (inscricaoMatch) updateData.inscricao = inscricaoMatch[1].trim();
     if (nomeMatch && !leadExistente.nomeReal) updateData.nomeReal = nomeMatch[1].trim();
@@ -211,7 +211,7 @@ async function processAnalise(job: Job<IAnaliseJobData>) {
     }
 
     // Preparar dados de atualização baseado no tipo de análise
-    let updateData: any = {
+    const updateData: any = {
       aguardandoAnalise: false,
       updatedAt: new Date()
     };

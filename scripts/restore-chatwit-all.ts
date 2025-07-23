@@ -1,7 +1,8 @@
 #!/usr/bin/env tsx
 
 import { PrismaClient, UserRole } from '@prisma/client';
-import { readFileSync, existsSync } from 'fs';
+// 'readdirSync' e 'statSync' adicionados para manipulação de arquivos e datas
+import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import * as bcryptjs from 'bcryptjs';
 
@@ -105,31 +106,64 @@ async function restoreAllChatwit(backupFileName?: string) {
   console.log('🔄 Iniciando restauração completa dos dados do Chatwit...');
 
   try {
-    // Determinar arquivo de backup
     let backupPath: string;
+
+    // Se um nome de arquivo de backup for fornecido, use-o
     if (backupFileName) {
       backupPath = join(process.cwd(), 'backups', backupFileName);
       if (!existsSync(backupPath)) {
         console.error(`❌ Arquivo de backup não encontrado: ${backupPath}`);
         return;
       }
+      console.log(`ℹ️ Usando arquivo de backup especificado: ${backupFileName}`);
     } else {
-      // Usar backup mais recente se não especificado
-      backupPath = join(process.cwd(), 'backups', 'backup_simple_2025-07-15_20-46-00.json');
-      if (!existsSync(backupPath)) {
-        console.error(`❌ Arquivo de backup padrão não encontrado: ${backupPath}`);
-        return;
+      // --- INÍCIO DA MODIFICAÇÃO ---
+      // Se nenhum arquivo for fornecido, encontre o mais recente na pasta 'backups'
+      const backupsDir = join(process.cwd(), 'backups');
+      if (!existsSync(backupsDir)) {
+          console.error(`❌ O diretório de backups não foi encontrado em: ${backupsDir}`);
+          return;
       }
+
+      const backupFiles = readdirSync(backupsDir)
+          // 1. Filtra para garantir que estamos pegando apenas arquivos JSON de backup
+          .filter(file => file.startsWith('backup-') && file.endsWith('.json'))
+          // 2. Ordena os arquivos em ordem decrescente (mais recente primeiro)
+          //    A ordenação de string (localeCompare) funciona para o formato de data ISO 8601
+          .sort((a, b) => b.localeCompare(a)); 
+
+      if (backupFiles.length === 0) {
+          console.error(`❌ Nenhum arquivo de backup (.json) encontrado no diretório: ${backupsDir}`);
+          return;
+      }
+
+      // 3. O arquivo mais recente será o primeiro da lista ordenada
+      const latestBackupFile = backupFiles[0];
+      backupPath = join(backupsDir, latestBackupFile);
+      console.log(`ℹ️ Nenhum arquivo de backup especificado. Usando o mais recente: ${latestBackupFile}`);
+      // --- FIM DA MODIFICAÇÃO ---
     }
 
     console.log(`📁 Carregando backup: ${backupPath}`);
     const backupData = JSON.parse(readFileSync(backupPath, 'utf-8'));
     
-    const usuarios = backupData.data.usuariosChatwit;
-    const leads = backupData.data.leadsChatwit;
-    const arquivos = backupData.data.arquivosLeadChatwit;
-    const espelhosBiblioteca = backupData.data.espelhosBiblioteca || [];
-    const espelhosPadrao = backupData.data.espelhosPadrao || [];
+    // Detectar formato do backup
+    let usuarios, leads, arquivos, espelhosBiblioteca, espelhosPadrao;
+    if (backupData.data) {
+      // Formato antigo
+      usuarios = backupData.data.usuariosChatwit;
+      leads = backupData.data.leadsChatwit;
+      arquivos = backupData.data.arquivosLeadChatwit;
+      espelhosBiblioteca = backupData.data.espelhosBiblioteca || [];
+      espelhosPadrao = backupData.data.espelhosPadrao || [];
+    } else {
+      // Novo formato (direto na raiz)
+      usuarios = backupData.UsuarioChatwit || [];
+      leads = backupData.LeadChatwit || [];
+      arquivos = backupData.ArquivoLeadChatwit || [];
+      espelhosBiblioteca = backupData.EspelhoBiblioteca || [];
+      espelhosPadrao = backupData.EspelhoPadrao || [];
+    }
 
     let leadsRestaurados = 0;
     let arquivosRestaurados = 0;
@@ -151,6 +185,11 @@ async function restoreAllChatwit(backupFileName?: string) {
       amandaChatwit = amandaUser.usuarioChatwit;
     }
 
+    if (!amandaChatwit) {
+        console.error('❌ Falha ao obter ou criar o UsuarioChatwit da Amanda. Abortando restauração.');
+        return;
+    }
+    
     console.log(`✅ UsuarioChatwit ID: ${amandaChatwit.id}`);
 
     // Encontrar o UsuarioChatwit da Amanda no backup
@@ -386,9 +425,9 @@ async function restoreAllChatwit(backupFileName?: string) {
 
     // Estatísticas finais
     console.log('\n📊 Resumo da restauração:');
-    console.log(`  - Espelhos: ${espelhosRestaurados} restaurados`);
-    console.log(`  - Leads: ${leadsRestaurados} restaurados`);
-    console.log(`  - Arquivos: ${arquivosRestaurados} restaurados`);
+    console.log(`   - Espelhos: ${espelhosRestaurados} restaurados`);
+    console.log(`   - Leads: ${leadsRestaurados} restaurados`);
+    console.log(`   - Arquivos: ${arquivosRestaurados} restaurados`);
 
     console.log('✅ Restauração completa concluída!');
 
@@ -406,4 +445,4 @@ if (require.main === module) {
   restoreAllChatwit(backupFile).catch(console.error);
 }
 
-export { restoreAllChatwit }; 
+export { restoreAllChatwit };

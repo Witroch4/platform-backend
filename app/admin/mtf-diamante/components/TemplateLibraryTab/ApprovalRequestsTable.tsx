@@ -23,7 +23,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { CheckCircle, XCircle, Eye, Clock } from 'lucide-react';
-import { ApprovalRequestWithDetails } from '../hooks/useApprovalRequests';
+import type { ApprovalRequestWithDetails } from '@/hooks/useApprovalRequests';
 
 interface ApprovalRequestsTableProps {
   requests: ApprovalRequestWithDetails[];

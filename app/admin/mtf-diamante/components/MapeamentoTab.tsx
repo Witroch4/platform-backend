@@ -243,7 +243,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
     } else if (mapping.interactiveMessageId || mapping.mensagemInterativaId) {
       // Para mensagens interativas, usar o ID da mensagem diretamente
       const messageId = mapping.interactiveMessageId || mapping.mensagemInterativaId;
-      setShowReactionConfig(messageId);
+      setShowReactionConfig(messageId ?? null);
       setSelectedTemplateDetails(null);
     }
   };

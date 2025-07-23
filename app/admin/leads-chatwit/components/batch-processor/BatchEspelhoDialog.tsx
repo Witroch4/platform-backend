@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import { Check, Loader2, Send, RefreshCw } from "lucide-react"
-import { ExtendedLead } from '../../types'
+import type { ExtendedLead } from '../../types'
 
 type BatchEspelhoDialogProps = {
   lead: ExtendedLead

@@ -1,87 +1,103 @@
 'use client'
 
-import React, { useState } from 'react'
-import { Card, CardContent } from '@/components/ui/card'
+import type React from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Smile, Settings } from 'lucide-react'
+import { Smile, Settings, Zap, FileText, Image, Video, Download, Play, Pause } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTheme } from 'next-themes'
 import { EmojiPicker } from './EmojiPicker'
 import { WhatsAppTextEditor } from './WhatsAppTextEditor'
 import { toast } from 'sonner'
+import type { InteractiveMessage, ButtonReaction, QuickReplyButton, MessageHeader } from '@/types/interactive-messages'
 
-interface ButtonReaction {
-  buttonId: string
-  emoji?: string
-  textReaction?: string
-}
+// Debounce hook for real-time updates
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value)
 
-interface InteractiveButton {
-  id: string
-  text: string
-  type?: string
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value)
+    }, delay)
+
+    return () => {
+      clearTimeout(handler)
+    }
+  }, [value, delay])
+
+  return debouncedValue
 }
 
 interface InteractivePreviewProps {
-  title?: string
-  headerText?: string
-  headerMedia?: {
-    type: 'image' | 'video' | 'document'
-    url: string
-    filename?: string
-  }
-  bodyText: string
-  footerText?: string
-  buttons: InteractiveButton[]
+  message: InteractiveMessage
   reactions?: ButtonReaction[]
-  onButtonReactionChange?: (buttonId: string, reaction: { emoji?: string; textReaction?: string }) => void
+  onButtonClick?: (buttonId: string) => void
+  showReactionIndicators?: boolean
   showReactionConfig?: boolean
+  onButtonReactionChange?: (buttonId: string, reaction: { emoji?: string; textResponse?: string }) => void
   className?: string
+  title?: string
+  debounceMs?: number
 }
 
 export function InteractivePreview({
-  title,
-  headerText,
-  headerMedia,
-  bodyText,
-  footerText,
-  buttons,
+  message,
   reactions = [],
-  onButtonReactionChange,
+  onButtonClick,
+  showReactionIndicators = true,
   showReactionConfig = false,
-  className = ""
+  onButtonReactionChange,
+  className = "",
+  title,
+  debounceMs = 300
 }: InteractivePreviewProps) {
   const { theme } = useTheme()
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null)
   const [showTextEditor, setShowTextEditor] = useState<string | null>(null)
   const [configMode, setConfigMode] = useState(false)
 
-  // Get WhatsApp background based on theme
-  const getWhatsAppBackground = () => {
+  // Debounce the message to prevent excessive re-renders during real-time updates
+  const debouncedMessage = useDebounce(message, debounceMs)
+
+  // Memoize WhatsApp background to prevent unnecessary recalculations
+  const whatsappBackground = useMemo(() => {
     return theme === 'dark' ? '/fundo_whatsapp_black.jpg' : '/fundo_whatsapp.jpg'
-  }
+  }, [theme])
 
   // Get reaction for a button
-  const getButtonReaction = (buttonId: string) => {
+  const getButtonReaction = useCallback((buttonId: string) => {
     return reactions.find(r => r.buttonId === buttonId)
-  }
+  }, [reactions])
+
+  // Get buttons from message action
+  const buttons = useMemo(() => {
+    if (!debouncedMessage.action || debouncedMessage.action.type !== 'button') {
+      return []
+    }
+    return debouncedMessage.action.buttons || []
+  }, [debouncedMessage.action])
 
   // Handle button click in preview mode
-  const handleButtonClick = (button: InteractiveButton) => {
+  const handleButtonClick = useCallback((button: QuickReplyButton) => {
+    if (onButtonClick) {
+      onButtonClick(button.id)
+      return
+    }
+
     if (!showReactionConfig) {
       // Normal preview mode - just show what would happen
       const reaction = getButtonReaction(button.id)
       if (reaction?.emoji) {
         toast.success(`Reação configurada: ${reaction.emoji}`, {
-          description: `Será enviada quando "${button.text}" for clicado`
+          description: `Será enviada quando "${button.title}" for clicado`
         })
-      } else if (reaction?.textReaction) {
-        toast.success(`Mensagem configurada: "${reaction.textReaction}"`, {
-          description: `Será enviada quando "${button.text}" for clicado`
+      } else if (reaction?.textResponse) {
+        toast.success(`Mensagem configurada: "${reaction.textResponse}"`, {
+          description: `Será enviada quando "${button.title}" for clicado`
         })
       } else {
-        toast.info(`Botão "${button.text}" clicado`, {
+        toast.info(`Botão "${button.title}" clicado`, {
           description: 'Nenhuma reação configurada para este botão'
         })
       }
@@ -92,35 +108,103 @@ export function InteractivePreview({
     if (configMode) {
       setShowEmojiPicker(button.id)
     }
-  }
+  }, [onButtonClick, showReactionConfig, getButtonReaction, configMode])
 
   // Handle emoji selection
-  const handleEmojiSelect = (buttonId: string, emoji: string) => {
+  const handleEmojiSelect = useCallback((buttonId: string, emoji: string) => {
     if (emoji === 'TEXT_RESPONSE') {
-      // Abrir editor de texto
+      // Open text editor
       setShowEmojiPicker(null)
       setShowTextEditor(buttonId)
     } else {
-      // Configurar emoji
-      onButtonReactionChange?.(buttonId, { emoji, textReaction: '' })
+      // Configure emoji
+      onButtonReactionChange?.(buttonId, { emoji, textResponse: '' })
       setShowEmojiPicker(null)
       toast.success(`Emoji ${emoji} configurado para o botão`)
     }
-  }
+  }, [onButtonReactionChange])
 
   // Handle text response save
-  const handleTextResponseSave = (buttonId: string, text: string) => {
-    onButtonReactionChange?.(buttonId, { emoji: '', textReaction: text })
+  const handleTextResponseSave = useCallback((buttonId: string, text: string) => {
+    onButtonReactionChange?.(buttonId, { emoji: '', textResponse: text })
     setShowTextEditor(null)
     toast.success('Resposta de texto configurada para o botão')
-  }
+  }, [onButtonReactionChange])
 
   // Remove reaction
-  const removeReaction = (buttonId: string, e: React.MouseEvent) => {
+  const removeReaction = useCallback((buttonId: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    onButtonReactionChange?.(buttonId, { emoji: '', textReaction: '' })
+    onButtonReactionChange?.(buttonId, { emoji: '', textResponse: '' })
     toast.success('Reação removida')
-  }
+  }, [onButtonReactionChange])
+
+  // Render header media component
+  const renderHeaderMedia = useCallback((header: MessageHeader) => {
+    const mediaUrl = header.mediaUrl || header.content
+
+    switch (header.type) {
+      case 'image':
+        return (
+          <div className="mb-2 relative">
+            <img 
+              src={mediaUrl} 
+              alt="Header image" 
+              className="max-w-full h-auto rounded-lg max-h-48 object-cover"
+              onError={(e) => {
+                const target = e.target as HTMLImageElement
+                target.style.display = 'none'
+              }}
+            />
+            <div className="absolute top-2 right-2 bg-black/50 rounded-full p-1">
+              <Image className="h-3 w-3 text-white" />
+            </div>
+          </div>
+        )
+      
+      case 'video':
+        return (
+          <div className="mb-2 relative">
+            <video 
+              src={mediaUrl} 
+              controls 
+              className="max-w-full h-auto rounded-lg max-h-48"
+              onError={(e) => {
+                const target = e.target as HTMLVideoElement
+                target.style.display = 'none'
+              }}
+            />
+            <div className="absolute top-2 right-2 bg-black/50 rounded-full p-1">
+              <Video className="h-3 w-3 text-white" />
+            </div>
+          </div>
+        )
+      
+      case 'document':
+        return (
+          <div className="mb-2">
+            <div className="flex items-center gap-2 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg border">
+              <div className="flex-shrink-0">
+                <FileText className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                  {header.filename || 'Document'}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Documento
+                </p>
+              </div>
+              <div className="flex-shrink-0">
+                <Download className="h-4 w-4 text-gray-400" />
+              </div>
+            </div>
+          </div>
+        )
+      
+      default:
+        return null
+    }
+  }, [])
 
   return (
     <div className={cn("space-y-4", className)}>
@@ -153,55 +237,32 @@ export function InteractivePreview({
             "relative"
           )}
           style={{
-            backgroundImage: `url('${getWhatsAppBackground()}')`
+            backgroundImage: `url('${whatsappBackground}')`
           }}
         >
           <div className="bg-white dark:bg-gray-800 rounded-lg p-3 shadow-md border border-gray-200 dark:border-gray-700">
             
-            {/* Header */}
-            {headerText && (
+            {/* Header Text */}
+            {debouncedMessage.header?.type === 'text' && debouncedMessage.header.content && (
               <div className="font-semibold text-sm mb-2 text-gray-900 dark:text-gray-100">
-                {headerText}
+                {debouncedMessage.header.content}
               </div>
             )}
 
             {/* Header Media */}
-            {headerMedia && (
-              <div className="mb-2">
-                {headerMedia.type === 'image' && (
-                  <img 
-                    src={headerMedia.url} 
-                    alt="Header media" 
-                    className="max-w-full h-auto rounded-lg max-h-48 object-cover"
-                  />
-                )}
-                {headerMedia.type === 'video' && (
-                  <video 
-                    src={headerMedia.url} 
-                    controls 
-                    className="max-w-full h-auto rounded-lg max-h-48"
-                  />
-                )}
-                {headerMedia.type === 'document' && (
-                  <div className="flex items-center gap-2 p-2 bg-gray-100 dark:bg-gray-800 rounded">
-                    <div className="text-blue-600 dark:text-blue-400">📄</div>
-                    <span className="text-sm text-gray-700 dark:text-gray-300">
-                      {headerMedia.filename || 'Document'}
-                    </span>
-                  </div>
-                )}
-              </div>
+            {debouncedMessage.header && debouncedMessage.header.type !== 'text' && (
+              renderHeaderMedia(debouncedMessage.header)
             )}
 
             {/* Body */}
             <div className="text-sm mb-2 text-gray-900 dark:text-gray-100 whitespace-pre-wrap">
-              {bodyText}
+              {debouncedMessage.body.text}
             </div>
 
             {/* Footer */}
-            {footerText && (
+            {debouncedMessage.footer?.text && (
               <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                {footerText}
+                {debouncedMessage.footer.text}
               </div>
             )}
 
@@ -210,7 +271,7 @@ export function InteractivePreview({
               <div className="mt-3 space-y-1">
                 {buttons.map((button) => {
                   const reaction = getButtonReaction(button.id)
-                  const hasReaction = reaction?.emoji || reaction?.textReaction
+                  const hasReaction = reaction?.emoji || reaction?.textResponse
                   
                   return (
                     <div key={button.id} className="relative">
@@ -225,8 +286,12 @@ export function InteractivePreview({
                         )}
                       >
                         <div className="flex items-center justify-between">
-                          <span>{button.text}</span>
+                          <span>{button.title}</span>
                           <div className="flex items-center gap-1">
+                            {/* Reaction indicator (⚡️ icon) */}
+                            {showReactionIndicators && hasReaction && (
+                              <Zap className="h-3 w-3 text-yellow-500" />
+                            )}
                             {reaction?.emoji && (
                               <span className="text-lg">{reaction.emoji}</span>
                             )}
@@ -240,9 +305,9 @@ export function InteractivePreview({
                             )}
                           </div>
                         </div>
-                        {reaction?.textReaction && (
+                        {reaction?.textResponse && (
                           <div className="text-xs text-gray-600 dark:text-gray-400 mt-1 truncate">
-                            "{reaction.textReaction}"
+                            "{reaction.textResponse}"
                           </div>
                         )}
                       </button>
@@ -266,7 +331,15 @@ export function InteractivePreview({
             {configMode && showReactionConfig && (
               <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded text-xs text-blue-700 dark:text-blue-300">
                 <Smile className="h-3 w-3 inline mr-1" />
-                Clique nos botões para configurar reações com emoji
+                Clique nos botões para configurar reações automáticas
+              </div>
+            )}
+
+            {/* Empty state */}
+            {!debouncedMessage.body.text && (
+              <div className="text-center py-8 text-gray-400">
+                <div className="text-2xl mb-2">💬</div>
+                <p className="text-sm">Sua mensagem aparecerá aqui</p>
               </div>
             )}
           </div>

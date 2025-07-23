@@ -20,7 +20,7 @@ import remarkStringify from 'remark-stringify';
 import { StructuredEditor } from './StructuredEditor';
 
 import { Badge } from "@/components/ui/badge";
-import { LeadChatwit } from "../types";
+import type { LeadChatwit } from "../types";
 
 interface EspelhoDialogProps {
   isOpen: boolean;

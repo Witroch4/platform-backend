@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useImageGallery, GalleryImage } from '@/hooks/useImageGallery';
+import { useImageGallery, type GalleryImage } from '@/hooks/useImageGallery';
 import { X, Download, ExternalLink, Calendar, Hash, Loader2, ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
 

@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { TemplatePreview, CreateTemplateComponent } from "./template-preview";
-import { MtfDiamanteVariavel } from "@/app/lib/variable-converter";
+import { TemplatePreview, type CreateTemplateComponent } from "./template-preview";
+import type { MtfDiamanteVariavel } from "@/app/lib/variable-converter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";

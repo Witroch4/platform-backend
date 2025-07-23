@@ -2,8 +2,8 @@ import { TableCell } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { RefreshCw } from "lucide-react";
-import { ImagesCellProps } from "../types";
-import { LeadContextMenu, ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
+import type { ImagesCellProps } from "../types";
+import { LeadContextMenu, type ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
 import { DeleteFileButton } from "@/app/admin/leads-chatwit/components/delete-file-button";
 
 interface ImagesCellExtendedProps extends Omit<ImagesCellProps, 'onConverter'> {

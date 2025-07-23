@@ -7,8 +7,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Eye, FileText, FileCheck, Loader2, AlertCircle } from "lucide-react";
-import { CellProps } from "../types";
-import { LeadContextMenu, ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
+import type { CellProps } from "../types";
+import { LeadContextMenu, type ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
 
 interface AnaliseCellProps extends CellProps {
   localAnaliseState: {

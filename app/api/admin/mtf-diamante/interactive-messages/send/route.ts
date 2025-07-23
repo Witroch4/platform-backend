@@ -35,8 +35,16 @@ async function getCurrentWhatsAppConfig() {
 async function getMtfDiamanteVariables(
   userId: string
 ): Promise<MtfDiamanteVariavel[]> {
+  const config = await prisma.mtfDiamanteConfig.findFirst({
+    where: { userId: userId },
+  });
+
+  if (!config) {
+    return [];
+  }
+
   const variables = await prisma.mtfDiamanteVariavel.findMany({
-    where: { usuarioChatwitId: userId },
+    where: { configId: config.id },
     orderBy: { chave: "asc" },
   });
 
@@ -93,13 +101,29 @@ export async function POST(request: Request) {
       id: interactiveMessage.id,
       name: interactiveMessage.name,
       type: interactiveMessage.type,
-      header: interactiveMessage.header as any,
-      body: interactiveMessage.body as any,
-      footer: interactiveMessage.footer as any,
-      action: interactiveMessage.action as any,
-      location: interactiveMessage.location as any,
-      reaction: interactiveMessage.reaction as any,
-      sticker: interactiveMessage.sticker as any,
+      header: interactiveMessage.headerType ? {
+        type: interactiveMessage.headerType as any,
+        text: interactiveMessage.headerContent || undefined,
+        media_url: interactiveMessage.headerContent || undefined,
+        filename: interactiveMessage.headerContent ? `file.${interactiveMessage.headerType}` : undefined, // Placeholder filename
+      } : undefined,
+      body: { text: interactiveMessage.bodyText },
+      footer: interactiveMessage.footerText ? { text: interactiveMessage.footerText } : undefined,
+      action: interactiveMessage.actionData || undefined,
+      location: (interactiveMessage.latitude && interactiveMessage.longitude) ? {
+        latitude: interactiveMessage.latitude.toString(),
+        longitude: interactiveMessage.longitude.toString(),
+        name: interactiveMessage.locationName || undefined,
+        address: interactiveMessage.locationAddress || undefined,
+      } : undefined,
+      reaction: (interactiveMessage.reactionEmoji && interactiveMessage.targetMessageId) ? {
+        message_id: interactiveMessage.targetMessageId,
+        emoji: interactiveMessage.reactionEmoji,
+      } : undefined,
+      sticker: (interactiveMessage.stickerMediaId || interactiveMessage.stickerUrl) ? {
+        id: interactiveMessage.stickerMediaId || undefined,
+        url: interactiveMessage.stickerUrl || undefined,
+      } : undefined,
     };
 
     // Validar mensagem
@@ -145,7 +169,7 @@ export async function POST(request: Request) {
     // Registrar o envio no banco de dados
     await prisma.disparoMtfDiamante.create({
       data: {
-        usuarioChatwitId: session.user.id,
+        userId: session.user.id,
         caixaId: caixaId || "direct_send",
         tipo: "interactive_message",
         destinatario: recipientPhone,

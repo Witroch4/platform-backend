@@ -187,7 +187,7 @@ export async function POST(request: Request): Promise<Response> {
     }
     
     // Modificar o payload para incluir o texto do espelho padrão se disponível
-    let payloadFinal = { ...payload };
+    const payloadFinal = { ...payload };
     
     // Adicionar texto do espelho padrão se disponível
     if (espelhoPadraoTexto && (isEspelho || isManuscrito)) {

@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import type React from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -20,7 +21,7 @@ import {
   XCircle
 } from 'lucide-react';
 import { useTemplateLibrary } from '../hooks/useTemplateLibrary';
-import { TemplateLibraryWithCreator } from '@/app/lib/template-library-service';
+import type { TemplateLibraryWithCreator } from '@/app/lib/template-library-service';
 import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
 

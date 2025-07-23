@@ -1,9 +1,10 @@
 // components/agendamento/AgendamentosList.tsx
 "use client";
 
-import React, { useMemo } from "react";
+import type React from "react";
+import { useMemo } from "react";
 import AgendamentoItem from "./AgendamentoItem";
-import { Agendamento } from "@/types/agendamento";
+import type { Agendamento } from "@/types/agendamento";
 
 interface AgendamentosListProps {
   agendamentos: Agendamento[]; // Usa a interface completa

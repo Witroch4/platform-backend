@@ -84,6 +84,9 @@ model User {
   
   // Unified Template System relationships
   templates Template[] @relation("CreatedTemplates")
+  
+  // Button reaction mappings created by this user
+  buttonReactionMappings ButtonReactionMapping[]
 }
 
 
@@ -875,6 +878,7 @@ model GeneratedImage {
   quality            String?
   previousResponseId String? // ID da resposta anterior usada para gerar esta imagem (multi-turn)
   responseId         String? // ID desta resposta da OpenAI para referência futura (multi-turn)
+  openaiFileId       String? // ID retornado pela OpenAI (nulo enquanto não houver sync)
 
   user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   session ChatSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -887,20 +891,29 @@ model GeneratedImage {
   @@index([createdAt])
   @@index([responseId]) // Índice para busca rápida por responseId
   @@index([previousResponseId]) // Índice para busca por cadeia de refinamentos
+  @@index([openaiFileId])
 }
 
 // Button reaction mapping model for Dialogflow async response system
 model ButtonReactionMapping {
-  id          String   @id @default(cuid())
-  buttonId    String   @unique
-  emoji       String
-  description String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(cuid())
+  buttonId     String   @unique
+  emoji        String?  // Emoji reaction (optional if textReaction is provided)
+  textReaction String?  // Text reaction (optional if emoji is provided)
+  description  String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  createdBy    String   // User who created this mapping
+
+  messageId   String? // ID da mensagem interativa associada
+  message     InteractiveMessage? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  creator     User     @relation(fields: [createdBy], references: [id])
 
   @@index([buttonId])
   @@index([isActive])
+  @@index([messageId])
+  @@index([createdBy])
 }
 
 // Modelo para Biblioteca de Espelhos
@@ -1412,6 +1425,7 @@ model InteractiveMessage {
   
   // Relation with intent mappings
   mapeamentos MapeamentoIntencao[] @relation("InteractiveMessageMappings")
+  buttonReactions ButtonReactionMapping[]
 
   @@index([caixaId])
   @@index([type])

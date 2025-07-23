@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useRef, useCallback, forwardRef, useImperativeHandle, useState, useEffect } from 'react';
+import type React from 'react';
+import { useRef, useCallback, forwardRef, useImperativeHandle, useState, useEffect } from 'react';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { VariableContextMenu } from './VariableContextMenu';

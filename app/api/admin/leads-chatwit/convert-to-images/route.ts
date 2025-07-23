@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import prisma from "@/lib/prisma";
 import { uploadToMinIO } from "@/lib/minio";
 import axios from "axios";
-import { Readable } from "stream";
+import type { Readable } from "stream";
 import { randomUUID } from 'crypto';
 import { isValidUrl, sanitizeUrl } from "@/lib/utils/url";
 import { fromBuffer } from 'pdf2pic';

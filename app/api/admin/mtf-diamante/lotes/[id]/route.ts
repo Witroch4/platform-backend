@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { db as prisma } from '@/lib/db';
 import { auth } from '@/auth';
 
@@ -43,7 +43,7 @@ export async function PATCH(
     
     if (nome !== undefined) updateData.nome = nome;
     if (valor !== undefined) {
-      updateData.valor = parseFloat(valor.replace(/[^\d,]/g, '').replace(',', '.'));
+      updateData.valor = Number.parseFloat(valor.replace(/[^\d,]/g, '').replace(',', '.'));
     }
     if (dataInicio !== undefined) updateData.dataInicio = new Date(dataInicio);
     if (dataFim !== undefined) updateData.dataFim = new Date(dataFim);

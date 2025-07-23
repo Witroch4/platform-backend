@@ -1,5 +1,5 @@
 // app/api/auth/instagram/account/[accountId]/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 

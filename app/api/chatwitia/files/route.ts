@@ -1,5 +1,5 @@
 // app/api/chatwitia/files/route.ts
-import { NextResponse, NextRequest } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { openaiService } from '@/services/openai';
 import { uploadFileWithAssistants } from '@/services/assistantsFileHandler';
 import type { FilePurpose } from '@/services/openai';

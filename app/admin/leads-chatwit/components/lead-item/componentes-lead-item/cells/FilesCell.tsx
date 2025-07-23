@@ -1,7 +1,7 @@
 import { TableCell } from "@/components/ui/table";
-import { FileCellProps } from "../types";
+import type { FileCellProps } from "../types";
 import { getFileTypeIcon, openExternalUrl } from "../utils";
-import { LeadContextMenu, ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
+import { LeadContextMenu, type ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
 import { DeleteFileButton } from "@/app/admin/leads-chatwit/components/delete-file-button";
 import { FileText, File } from "lucide-react";
 

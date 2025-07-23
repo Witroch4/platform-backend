@@ -1,7 +1,8 @@
 //app/[accountid]/dashboard/agendamento/components/AgendamentoForm.tsx
 "use client";
 
-import React, { useMemo } from "react";
+import type React from "react";
+import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DrawerHeader,
@@ -13,7 +14,7 @@ import LegendaInput from "./LegendaInput";
 import MediaUploader from "./MediaUploader";
 import PostTypeSelector from "./PostTypeSelector";
 import AgendarFooter from "./AgendarFooter";
-import { UploadedFile } from "@/components/custom/FileUpload";
+import type { UploadedFile } from "@/components/custom/FileUpload";
 
 interface AgendamentoFormProps {
   dateTime: Date | undefined;

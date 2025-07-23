@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { useParams } from "next/navigation";
-import { Agendamento } from "@/types/agendamento";
+import type { Agendamento } from "@/types/agendamento";
 
 /**
  * Hook para buscar agendamentos usando o accountid da URL

@@ -33,7 +33,7 @@ export async function POST(req: Request) {
 
     let imageUrl: string;
     let thumbnailUrl: string | null = null;
-    let mimeType: string = 'image/png';
+    let mimeType = 'image/png';
 
     // Verificar se é uma URL ou dados base64
     if (imageData.startsWith('http://') || imageData.startsWith('https://')) {
@@ -129,8 +129,8 @@ export async function GET(req: Request) {
 
     const { searchParams } = new URL(req.url);
     const sessionId = searchParams.get('sessionId');
-    const limit = parseInt(searchParams.get('limit') || '20');
-    const offset = parseInt(searchParams.get('offset') || '0');
+    const limit = Number.parseInt(searchParams.get('limit') || '20');
+    const offset = Number.parseInt(searchParams.get('offset') || '0');
 
     // Buscar imagens do usuário
     const whereClause: any = {
