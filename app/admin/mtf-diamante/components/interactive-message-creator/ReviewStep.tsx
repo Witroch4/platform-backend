@@ -150,7 +150,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
           type: message.type,
           header: message.header ? {
             type: message.header.type,
-            text: message.header.type === 'text' ? message.header.content : undefined,
+            content: message.header.type === 'text' ? message.header.content : (message.header.mediaUrl || message.header.content),
             media_url: message.header.type !== 'text' ? message.header.mediaUrl || message.header.content : undefined,
             filename: message.header.filename
           } : undefined,

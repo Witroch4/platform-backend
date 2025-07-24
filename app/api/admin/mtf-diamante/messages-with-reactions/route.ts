@@ -41,7 +41,9 @@ const ApiInteractiveMessageSchema = z.object({
     .object({
       type: z.enum(["text", "image", "video", "document"]),
       text: z.string().optional(),
+      content: z.string().optional(),
       media_url: z.string().url().optional(),
+      mediaUrl: z.string().url().optional(),
       filename: z.string().optional(),
     })
     .optional(),
@@ -331,7 +333,7 @@ export async function POST(request: NextRequest) {
           bodyText: message.body.text,
           headerType: message.header?.type || null,
           headerContent:
-            message.header?.media_url || message.header?.text || null,
+            message.header?.content || message.header?.media_url || message.header?.mediaUrl || message.header?.text || null,
           footerText: message.footer?.text || null,
           actionData: message.action || null,
           // Location fields
@@ -550,7 +552,7 @@ export async function PUT(request: NextRequest) {
           ...(message.header && {
             headerType: message.header.type,
             headerContent:
-              message.header.media_url || message.header.text || null,
+              message.header.content || message.header.media_url || message.header.mediaUrl || message.header.text || null,
           }),
           ...(message.footer && { footerText: message.footer.text }),
           ...(message.action !== undefined && { actionData: message.action }),

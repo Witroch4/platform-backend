@@ -142,47 +142,52 @@ export function InteractivePreview({
   const renderHeaderMedia = useCallback((header: MessageHeader) => {
     const mediaUrl = header.mediaUrl || header.content
 
+    // Não renderizar se não há URL válida
+    if (!mediaUrl || mediaUrl.trim() === '') {
+      return null
+    }
+
     switch (header.type) {
       case 'image':
         return (
-          <div className="mb-2 relative">
-            <img 
-              src={mediaUrl} 
-              alt="Header image" 
-              className="max-w-full h-auto rounded-lg max-h-48 object-cover"
-              onError={(e) => {
-                const target = e.target as HTMLImageElement
-                target.style.display = 'none'
-              }}
-            />
-            <div className="absolute top-2 right-2 bg-black/50 rounded-full p-1">
-              <Image className="h-3 w-3 text-white" />
+          <div className="mb-2 relative flex justify-center">
+            <div className="relative">
+              <img 
+                src={mediaUrl} 
+                alt="Header image" 
+                className="max-w-full h-auto rounded-lg max-h-48 object-cover"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement
+                  target.style.display = 'none'
+                }}
+              />
+
             </div>
           </div>
         )
       
       case 'video':
         return (
-          <div className="mb-2 relative">
-            <video 
-              src={mediaUrl} 
-              controls 
-              className="max-w-full h-auto rounded-lg max-h-48"
-              onError={(e) => {
-                const target = e.target as HTMLVideoElement
-                target.style.display = 'none'
-              }}
-            />
-            <div className="absolute top-2 right-2 bg-black/50 rounded-full p-1">
-              <Video className="h-3 w-3 text-white" />
+          <div className="mb-2 relative flex justify-center">
+            <div className="relative">
+              <video 
+                src={mediaUrl} 
+                controls 
+                className="max-w-full h-auto rounded-lg max-h-48"
+                onError={(e) => {
+                  const target = e.target as HTMLVideoElement
+                  target.style.display = 'none'
+                }}
+              />
+
             </div>
           </div>
         )
       
       case 'document':
         return (
-          <div className="mb-2">
-            <div className="flex items-center gap-2 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg border">
+          <div className="mb-2 flex justify-center">
+            <div className="flex items-center gap-2 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg border w-full">
               <div className="flex-shrink-0">
                 <FileText className="h-6 w-6 text-blue-600 dark:text-blue-400" />
               </div>
@@ -229,18 +234,18 @@ export function InteractivePreview({
       )}
 
       {/* WhatsApp-style preview */}
-      <div className="flex justify-center">
+      <div className="flex justify-center items-center w-full">
         <div 
           className={cn(
-            "whatsapp-preview rounded-lg p-4 max-w-sm w-full",
+            "whatsapp-preview rounded-lg p-4 max-w-sm w-full mx-auto",
             "bg-cover bg-center bg-no-repeat min-h-[300px]",
-            "relative"
+            "relative flex justify-center"
           )}
           style={{
             backgroundImage: `url('${whatsappBackground}')`
           }}
         >
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-3 shadow-md border border-gray-200 dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-3 shadow-md border border-gray-200 dark:border-gray-700 w-full">
             
             {/* Header Text */}
             {debouncedMessage.header?.type === 'text' && debouncedMessage.header.content && (

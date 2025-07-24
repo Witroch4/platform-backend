@@ -57,13 +57,14 @@ export const HeaderSchema = z.object({
   type: z.enum(['text', 'image', 'video', 'document']),
   content: z.string().optional(),
   mediaUrl: z.string().url().optional(),
+  media_url: z.string().url().optional(), // Support both formats
   mediaId: z.string().optional(),
   filename: z.string().optional(),
 }).refine((data) => {
   if (data.type === 'text') {
     return data.content && data.content.length <= MESSAGE_LIMITS.HEADER_TEXT_MAX_LENGTH;
   }
-  return data.mediaUrl || data.mediaId;
+  return data.content || data.mediaUrl || data.media_url || data.mediaId;
 }, {
   message: "Header content is required and must meet type-specific requirements"
 });

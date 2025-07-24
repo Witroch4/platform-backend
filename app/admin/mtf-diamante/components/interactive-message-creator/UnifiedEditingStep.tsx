@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +14,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   ChevronLeft,
   ChevronRight,
@@ -24,7 +23,6 @@ import {
   Image,
   Video,
   AlertCircle,
-  AlertTriangle,
   Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -35,16 +33,14 @@ import { InteractivePreview } from "../shared/InteractivePreview";
 import { WhatsAppTextEditor } from "../shared/WhatsAppTextEditor";
 import { ButtonManager } from "../shared/ButtonManager";
 import { ReactionConfigManager } from "../shared/ReactionConfigManager";
-import { MediaUploadComponent } from "../shared/MediaUploadComponent";
+import MinIOMediaUpload, { MinIOMediaFile } from "../shared/MinIOMediaUpload";
 
 // Import validation and error handling
 import { useInteractiveMessageValidation } from "../../hooks/useInteractiveMessageValidation";
-import { errorHandler } from "@/lib/error-handling/interactive-message-errors";
 
 // Import types
 import type {
   InteractiveMessage,
-  InteractiveMessageType,
   MessageHeader,
   HeaderType,
   QuickReplyButton,
@@ -79,10 +75,6 @@ const convertInteractiveToQuickReply = (
 });
 
 // Conversion functions for ButtonReaction types
-const convertLocalToLocalReaction = (
-  reaction: LocalButtonReaction
-): LocalButtonReaction => reaction;
-
 const convertCentralToLocal = (
   reaction: CentralButtonReaction
 ): LocalButtonReaction => ({
@@ -108,15 +100,6 @@ interface UnifiedEditingStepProps {
   onBack: () => void;
   disabled?: boolean;
   className?: string;
-}
-
-interface ValidationErrors {
-  name?: string[];
-  header?: string[];
-  body?: string[];
-  footer?: string[];
-  buttons?: string[];
-  general?: string[];
 }
 
 // Validation constants
@@ -145,13 +128,32 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
     "body" | "footer" | null
   >(null);
 
+  // State for managing uploaded media files
+  const [headerMediaFiles, setHeaderMediaFiles] = useState<MinIOMediaFile[]>(
+    message.header?.content
+      ? [
+          {
+            id: "header-media",
+            progress: 100,
+            status: "success",
+            url: message.header.content,
+            mime_type:
+              message.header?.type === "image"
+                ? "image/jpeg"
+                : message.header?.type === "video"
+                  ? "video/mp4"
+                  : "application/pdf",
+          },
+        ]
+      : []
+  );
+
   // Use the new validation hook
   const {
     validationState,
     validateField,
     isFieldValid,
     getFieldErrors,
-    getFieldWarnings,
     canProceed,
     handleValidationError,
   } = useInteractiveMessageValidation(message, reactions, {
@@ -159,6 +161,28 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
     debounceMs: 300,
     validateOnMount: false,
   });
+
+  // Update header media files when message header changes
+  useEffect(() => {
+    if (message.header?.content && message.header.type !== "text") {
+      setHeaderMediaFiles([
+        {
+          id: "header-media",
+          progress: 100,
+          status: "success",
+          url: message.header.content,
+          mime_type:
+            message.header?.type === "image"
+              ? "image/jpeg"
+              : message.header?.type === "video"
+                ? "video/mp4"
+                : "application/pdf",
+        },
+      ]);
+    } else if (!message.header?.content || message.header.type === "text") {
+      setHeaderMediaFiles([]);
+    }
+  }, [message.header?.content, message.header?.type]);
 
   // Extract buttons from message action and convert to InteractiveButton format
   const buttons = useMemo(() => {
@@ -175,15 +199,6 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
       return errors.map((error) => error.message);
     },
     [getFieldErrors]
-  );
-
-  // Helper function to get warning messages from validation errors
-  const getWarningMessages = useCallback(
-    (fieldName: string): string[] => {
-      const warnings = getFieldWarnings(fieldName);
-      return warnings.map((warning) => warning.message);
-    },
-    [getFieldWarnings]
   );
 
   // Handle field updates with validation
@@ -208,11 +223,21 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
           content: type === "text" ? message.header?.content || "" : "",
         };
         onMessageUpdate({ header: newHeader });
+
+        // Clear header media files when switching to text type
+        if (type === "text") {
+          setHeaderMediaFiles([]);
+        }
       } catch (error) {
         handleValidationError(error);
       }
     },
-    [onMessageUpdate, message.header, handleValidationError]
+    [
+      onMessageUpdate,
+      message.header,
+      handleValidationError,
+      setHeaderMediaFiles,
+    ]
   );
 
   const handleHeaderContentChange = useCallback(
@@ -242,6 +267,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
       validateField,
       message,
       handleValidationError,
+      setHeaderMediaFiles,
     ]
   );
 
@@ -325,22 +351,6 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
       toast.error("Please fix validation errors before proceeding");
     }
   }, [canProceed, onNext]);
-
-  // Get header type icon
-  const getHeaderTypeIcon = (type: HeaderType) => {
-    switch (type) {
-      case "text":
-        return Type;
-      case "image":
-        return Image;
-      case "video":
-        return Video;
-      case "document":
-        return FileText;
-      default:
-        return Type;
-    }
-  };
 
   // Check if form has errors
   const hasErrors = validationState.hasErrors || !canProceed();
@@ -501,16 +511,39 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
                   )}
                 </div>
               ) : (
-                <MediaUploadComponent
-                  value={message.header?.content || ""}
-                  onChange={handleHeaderContentChange}
-                  mediaType={
-                    message.header?.type as "image" | "video" | "document"
-                  }
-                  label={`${message.header?.type} URL`}
-                  description={`Upload or enter URL for ${message.header?.type} header`}
-                  disabled={disabled}
-                />
+                <div className="space-y-2">
+                  <MinIOMediaUpload
+                    uploadedFiles={headerMediaFiles}
+                    setUploadedFiles={(files) => {
+                      setHeaderMediaFiles(files);
+                      if (Array.isArray(files) && files.length > 0) {
+                        const file = files[0];
+                        if (file && file.url) {
+                          handleHeaderContentChange(file.url);
+                        }
+                      }
+                    }}
+                    allowedTypes={
+                      message.header?.type === "image"
+                        ? ["image/jpeg", "image/png", "image/jpg"]
+                        : message.header?.type === "video"
+                          ? ["video/mp4", "video/webm"]
+                          : [
+                              "application/pdf",
+                              "application/msword",
+                              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            ]
+                    }
+                    title={`Upload de ${message.header?.type === "image" ? "Imagem" : message.header?.type === "video" ? "Vídeo" : "Documento"}`}
+                    description={`Faça upload de ${message.header?.type === "image" ? "uma imagem" : message.header?.type === "video" ? "um vídeo" : "um documento"} para o cabeçalho da mensagem`}
+                    maxFiles={1}
+                    onUploadComplete={(file: MinIOMediaFile) => {
+                      if (file && file.url) {
+                        handleHeaderContentChange(file.url);
+                      }
+                    }}
+                  />
+                </div>
               )}
             </CardContent>
           </Card>
@@ -545,6 +578,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
                   placeholder="Enter your message content..."
                   maxLength={VALIDATION_LIMITS.BODY_TEXT_MAX_LENGTH}
                   inline={true}
+                  showPreview={false}
                   className={cn(
                     !isFieldValid("body.text") && "border-destructive"
                   )}
@@ -740,7 +774,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
           onClose={() => setShowTextEditor(null)}
           placeholder="Enter your message content..."
           maxLength={VALIDATION_LIMITS.BODY_TEXT_MAX_LENGTH}
-          showPreview={true}
+          showPreview={false}
         />
       )}
 
@@ -754,7 +788,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
           onClose={() => setShowTextEditor(null)}
           placeholder="Enter footer text..."
           maxLength={VALIDATION_LIMITS.FOOTER_TEXT_MAX_LENGTH}
-          showPreview={true}
+          showPreview={false}
         />
       )}
 
