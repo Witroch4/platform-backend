@@ -196,29 +196,63 @@ function CaixaCard({ caixa, isSelected, onSelect, onUpdate }: { caixa: CaixaEntr
 
 // Item de Agente
 function AgenteItem({ agente, onUpdate }: { agente: AgenteDialogflow, onUpdate: () => void }) {
-    const [localAtivo, setLocalAtivo] = useState(agente.ativo);
+    // Usando o contexto para acessar a função setCaixas
+    const { caixas, setCaixas } = useMtfData();
     
-    // Sincroniza o estado local com o prop quando ele muda
-    useEffect(() => {
-        setLocalAtivo(agente.ativo);
-    }, [agente.ativo]);
-    
-    const handleToggleAgente = async () => {
-        const novoEstado = !localAtivo;
-        
+    const handleToggleAgente = (toggledAgentId: string) => {
+        // A função que será executada pelo toast.promise
         const togglePromise = async () => {
-            const response = await axios.patch(`/api/admin/mtf-diamante/dialogflow/agentes/${agente.id}/toggle`);
-            // Só muda o estado local APÓS o sucesso da API
-            setLocalAtivo(novoEstado);
+            // 1. FAZ A CHAMADA À API PRIMEIRO.
+            // O `await` irá pausar a execução aqui até a API responder.
+            // Se a API der erro, ela vai lançar uma exceção e o código abaixo não será executado.
+            const response = await axios.patch(`/api/admin/mtf-diamante/dialogflow/agentes/${toggledAgentId}/toggle`);
+            
+            // 2. SUCESSO! A API NÃO DEU ERRO.
+            // AGORA, e somente agora, vamos manipular o estado da UI.
+            setCaixas(currentCaixas => {
+                // Encontrar a caixa que contém o agente
+                const caixaAtual = currentCaixas.find(c => 
+                    c.agentes.some(a => a.id === toggledAgentId)
+                );
+                
+                if (!caixaAtual) return currentCaixas;
+                
+                // Encontrar o agente que foi alternado
+                const agenteToToggle = caixaAtual.agentes.find(a => a.id === toggledAgentId);
+                if (!agenteToToggle) return currentCaixas;
+                
+                const deveAtivar = !agenteToToggle.ativo;
+                
+                // Criar novo array de caixas com o agente atualizado
+                const newCaixas = currentCaixas.map(c => {
+                    if (c.id !== caixaAtual.id) return c; // Não é a caixa atual
+                    
+                    const newAgentes = c.agentes.map(agente => {
+                        if (agente.id === toggledAgentId) {
+                            return { ...agente, ativo: deveAtivar };
+                        }
+                        if (deveAtivar) {
+                            // Se estamos ativando um agente, desativamos todos os outros
+                            return { ...agente, ativo: false };
+                        }
+                        return agente;
+                    });
+                    
+                    return { ...c, agentes: newAgentes };
+                });
+                
+                return newCaixas;
+            });
+            
+            // 3. Retorna os dados da resposta para a mensagem de sucesso do toast.
             return response.data;
         };
-
-        toast.promise(togglePromise, {
-            loading: novoEstado ? 'Ativando agente...' : 'Desativando agente...',
-            success: (data) => {
-                return data.message || `Agente ${novoEstado ? 'ativado' : 'desativado'} com sucesso`;
-            },
-            error: 'Erro ao alterar status do agente',
+        
+        // 4. CHAMA O TOAST.PROMISE com a função que criamos.
+        toast.promise(togglePromise(), {
+            loading: 'Processando solicitação...',
+            success: (data) => data.message || 'Status alterado com sucesso!',
+            error: (err) => err.response?.data?.error || 'Falha ao alterar o status do agente.'
         });
     };
 
@@ -227,10 +261,14 @@ function AgenteItem({ agente, onUpdate }: { agente: AgenteDialogflow, onUpdate: 
             <div className="flex items-center gap-2">
                 <Bot className="w-4 h-4 text-blue-500" />
                 <span className="font-medium">{agente.nome}</span>
-                {localAtivo && <Badge variant="default" className="bg-green-500 h-5">Ativo</Badge>}
+                {agente.ativo && <Badge variant="default" className="bg-green-500 h-5">Ativo</Badge>}
             </div>
             <div className="flex items-center gap-2">
-                <Switch id={`switch-${agente.id}`} checked={localAtivo} onCheckedChange={handleToggleAgente} />
+                <Switch 
+                    id={`switch-${agente.id}`} 
+                    checked={agente.ativo} 
+                    onCheckedChange={() => handleToggleAgente(agente.id)} 
+                />
                 <EditarAgenteDialog agente={agente} onAgenteAtualizado={onUpdate} />
             </div>
         </div>
