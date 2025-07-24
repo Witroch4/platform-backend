@@ -254,8 +254,8 @@ export async function POST(request: NextRequest) {
       )
 
       const errors = validationResults
-        .filter((result) => !result.success)
-        .map((result) => result.error.errors)
+        .filter((result: any) => !result.success)
+        .map((result: any) => result.error.errors)
         .flat()
 
       if (errors.length > 0) {

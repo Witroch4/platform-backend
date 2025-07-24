@@ -16,13 +16,8 @@ export async function GET(
     const templateId = params.id;
 
     // Buscar template no banco de dados
-    const template = await prisma.whatsappTemplate.findUnique({
+    const template = await prisma.whatsAppTemplate.findUnique({
       where: { id: templateId },
-      include: {
-        components: {
-          orderBy: { order: "asc" },
-        },
-      },
     });
 
     if (!template) {
@@ -32,31 +27,30 @@ export async function GET(
       );
     }
 
-    // Processar componentes para extrair botões
-    const processedComponents = template.components.map((component) => {
-      let parsedComponent;
-      try {
-        parsedComponent =
-          typeof component.content === "string"
-            ? JSON.parse(component.content)
-            : component.content;
-      } catch (error) {
-        console.error("Erro ao fazer parse do componente:", error);
-        parsedComponent = component.content;
-      }
+    // Processar componentes JSON para extrair botões
+    let processedComponents: any[] = [];
+    let buttons: any[] = [];
 
-      return {
-        type: component.type,
-        content: parsedComponent,
-        order: component.order,
-      };
-    });
+    try {
+      // O campo components é JSON, não uma relação
+      const componentsData = Array.isArray(template.components)
+        ? template.components
+        : [];
 
-    // Extrair botões dos componentes
-    const buttonComponent = processedComponents.find(
-      (c) => c.type === "BUTTONS"
-    );
-    const buttons = buttonComponent?.content?.buttons || [];
+      processedComponents = componentsData.map((component: any, index: number) => ({
+        type: component?.type || "UNKNOWN",
+        content: component,
+        order: index,
+      }));
+
+      // Extrair botões dos componentes
+      const buttonComponent = processedComponents.find(
+        (c) => c.type === "BUTTONS"
+      );
+      buttons = (buttonComponent?.content as any)?.buttons || [];
+    } catch (error) {
+      console.error("Erro ao processar componentes:", error);
+    }
 
     const templateDetails = {
       id: template.id,

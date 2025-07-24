@@ -1,40 +1,52 @@
-import type React from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import type React from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import type { InteractiveMessage } from './types';
-import { MESSAGE_TYPES } from './constants';
-import { Eye, MessageSquare, Save, Loader2 } from 'lucide-react';
-import { TemplatePreview } from '../TemplatesTab/components/template-preview';
-import { SaveToLibraryButton } from '../shared/SaveToLibraryButton';
+import type { InteractiveMessage } from "./types";
+import { MESSAGE_TYPES } from "./constants";
+import { Eye, MessageSquare, Save, Loader2 } from "lucide-react";
+import { TemplatePreview } from "../TemplatesTab/components/template-preview";
+import { SaveToLibraryButton } from "../shared/SaveToLibraryButton";
 
 interface PreviewStepProps {
   message: InteractiveMessage;
-  setCurrentStep: (step: "type-selection" | "configuration" | "preview") => void;
+  setCurrentStep: (
+    step: "type-selection" | "configuration" | "preview"
+  ) => void;
   handleSave: () => void;
   saving: boolean;
   editingMessage?: InteractiveMessage;
   variables: any[];
 }
 
-export const PreviewStep: React.FC<PreviewStepProps> = ({ 
-  message, 
-  setCurrentStep, 
-  handleSave, 
-  saving, 
-  editingMessage, 
-  variables 
+export const PreviewStep: React.FC<PreviewStepProps> = ({
+  message,
+  setCurrentStep,
+  handleSave,
+  saving,
+  editingMessage,
+  variables,
 }) => {
-
   const generatePreviewComponents = () => {
     const components = [];
 
     if (message.header) {
-      if (message.header.type === "text" && message.header.text) {
-        components.push({ type: "header", text: message.header.text });
-      } else if (message.header.media_url) {
-        components.push({ type: "header", format: message.header.type, url: message.header.media_url, filename: message.header.filename });
+      if (message.header.type === "text" && message.header.content) {
+        components.push({ type: "header", text: message.header.content });
+      } else if (message.header.mediaUrl) {
+        components.push({
+          type: "header",
+          format: message.header.type,
+          url: message.header.mediaUrl,
+          filename: message.header.filename,
+        });
       }
     }
 
@@ -44,12 +56,32 @@ export const PreviewStep: React.FC<PreviewStepProps> = ({
       components.push({ type: "footer", text: message.footer.text });
     }
 
-    if (message.type === "button" && message.action?.buttons) {
-      components.push({ type: "buttons", buttons: message.action.buttons.map((btn) => ({ type: "QUICK_REPLY", text: btn.title })) });
-    } else if (message.type === "cta_url" && message.action?.parameters) {
-      components.push({ type: "buttons", buttons: [{ type: "URL", text: message.action.parameters.display_text, url: message.action.parameters.url }] });
-    } else if (message.type === "list" && message.action?.sections) {
-      components.push({ type: "buttons", buttons: [{ type: "LIST", text: message.action.button || "Ver opções" }] });
+    if (message.type === "button" && message.action?.type === "button") {
+      components.push({
+        type: "buttons",
+        buttons: message.action.buttons.map((btn) => ({
+          type: "QUICK_REPLY",
+          text: btn.title,
+        })),
+      });
+    } else if (message.type === "cta_url" && message.action?.type === "cta_url") {
+      components.push({
+        type: "buttons",
+        buttons: [
+          {
+            type: "URL",
+            text: message.action.action.displayText,
+            url: message.action.action.url,
+          },
+        ],
+      });
+    } else if (message.type === "list" && message.action?.type === "list") {
+      components.push({
+        type: "buttons",
+        buttons: [
+          { type: "LIST", text: message.action.button || "Ver opções" },
+        ],
+      });
     }
 
     return components;
@@ -85,7 +117,9 @@ export const PreviewStep: React.FC<PreviewStepProps> = ({
             <div className="text-center text-muted-foreground py-12 border-2 border-dashed rounded-lg">
               <MessageSquare className="h-16 w-16 mx-auto mb-4 opacity-50" />
               <p className="text-lg">Nenhuma mensagem para visualizar</p>
-              <p className="text-sm">Configure sua mensagem para ver a visualização</p>
+              <p className="text-sm">
+                Configure sua mensagem para ver a visualização
+              </p>
             </div>
           )}
         </div>
@@ -104,19 +138,18 @@ export const PreviewStep: React.FC<PreviewStepProps> = ({
           </Button>
 
           <div className="flex gap-2">
-
             <SaveToLibraryButton
               templateData={{
                 name: message.name,
                 category: "interactive_messages",
                 language: "pt_BR",
                 headerType: message.header?.type || "NONE",
-                headerText: message.header?.text || "",
+                headerText: message.header?.content || "",
                 bodyText: message.body.text,
                 footerText: message.footer?.text || "",
-                buttons: message.action?.buttons || [],
-                headerMetaMedia: message.header?.media_url
-                  ? [{ url: message.header.media_url }]
+                buttons: message.action?.type === "button" ? message.action.buttons : [],
+                headerMetaMedia: message.header?.mediaUrl
+                  ? [{ url: message.header.mediaUrl }]
                   : [],
               }}
               messageType="interactive_message"

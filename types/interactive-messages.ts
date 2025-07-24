@@ -87,11 +87,17 @@ export interface MessageFooter {
   text: string;
 }
 
-// Button-specific interfaces
+// Button-specific interfaces - Hybrid structure for compatibility
 export interface QuickReplyButton {
   id: string;
   title: string;
   payload?: string;
+  // WhatsApp API structure (for future migration)
+  type?: "reply";
+  reply?: {
+    id: string;
+    title: string;
+  };
 }
 
 export interface ButtonReaction {
@@ -116,23 +122,47 @@ export interface ListSection {
   rows: ListRow[];
 }
 
-// CTA URL interface
+// CTA URL interface (following WhatsApp API structure)
 export interface CtaUrlAction {
+  name: "cta_url";
+  parameters: {
+    display_text: string;
+    url: string;
+  };
+}
+
+// Internal CTA URL action for our system (matches component usage)
+export interface InternalCtaUrlAction {
   displayText: string;
   url: string;
 }
 
-// Flow-specific interfaces
+// Flow-specific interfaces (following WhatsApp API structure)
 export interface FlowAction {
-  flowId: string;
-  flowCta: string;
-  flowMode: "draft" | "published";
-  flowData?: Record<string, any>;
+  name: "flow";
+  parameters: {
+    flow_message_version: string;
+    flow_id?: string;
+    flow_name?: string;
+    flow_cta: string;
+    mode?: "draft" | "published";
+    flow_token?: string;
+    flow_action?: "navigate" | "data_exchange";
+    flow_action_payload?: {
+      screen?: string;
+      data?: Record<string, any>;
+    };
+  };
 }
 
-// Location request interface
+// Location request interface (following WhatsApp API structure)
 export interface LocationRequestAction {
-  requestText: string;
+  name: "send_location";
+}
+
+// Internal location request action for our system
+export interface InternalLocationRequestAction {
+  // No additional fields needed for location request
 }
 
 // Product interfaces
@@ -167,13 +197,13 @@ export interface StickerAction {
   mediaId: string;
 }
 
-// Action union type for different message types
+// Action union type for different message types (internal system structure)
 export type MessageAction =
   | { type: "button"; buttons: QuickReplyButton[] }
-  | { type: "list"; buttonText: string; sections: ListSection[] }
-  | { type: "cta_url"; action: CtaUrlAction }
+  | { type: "list"; button: string; sections: ListSection[]; buttonText?: string }
+  | { type: "cta_url"; action: InternalCtaUrlAction }
   | { type: "flow"; action: FlowAction }
-  | { type: "location_request"; action: LocationRequestAction }
+  | { type: "location_request"; action: InternalLocationRequestAction }
   | { type: "location"; action: LocationAction }
   | { type: "reaction"; action: ReactionAction }
   | { type: "sticker"; action: StickerAction }
@@ -312,6 +342,38 @@ export const MESSAGE_LIMITS = {
   LIST_TITLE_MAX_LENGTH: 24,
   LIST_DESCRIPTION_MAX_LENGTH: 72,
 } as const;
+
+// Utility functions for WhatsApp API conversion
+export const convertToWhatsAppAPI = {
+  button: (button: QuickReplyButton) => ({
+    type: "reply" as const,
+    reply: {
+      id: button.id,
+      title: button.title,
+    },
+  }),
+  
+  ctaUrl: (action: CtaUrlAction) => ({
+    name: "cta_url" as const,
+    parameters: {
+      display_text: action.parameters.display_text,
+      url: action.parameters.url,
+    },
+  }),
+  
+  flow: (action: FlowAction) => ({
+    name: "flow" as const,
+    parameters: {
+      flow_message_version: action.parameters.flow_message_version,
+      flow_id: action.parameters.flow_id,
+      flow_cta: action.parameters.flow_cta,
+      mode: action.parameters.mode || "published",
+      flow_token: action.parameters.flow_token || "unused",
+      flow_action: action.parameters.flow_action || "navigate",
+      flow_action_payload: action.parameters.flow_action_payload,
+    },
+  }),
+};
 
 // Export our Prisma-compatible types for easy importing
 export type {

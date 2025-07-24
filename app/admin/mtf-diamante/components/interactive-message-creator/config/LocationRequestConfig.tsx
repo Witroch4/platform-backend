@@ -11,9 +11,7 @@ interface LocationRequestConfigProps {
 export const LocationRequestConfig: React.FC<LocationRequestConfigProps> = ({ message, updateAction }) => {
   React.useEffect(() => {
     updateAction({
-      action: {
-        requestText: '',
-      },
+      action: {},
       type: 'location_request',
     });
   }, [updateAction]);

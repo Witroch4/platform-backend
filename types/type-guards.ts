@@ -157,11 +157,10 @@ export function hasValidCtaUrl(action: MessageAction): boolean {
 // Flow validation guards
 export function hasValidFlow(action: MessageAction): boolean {
   if (!isFlowAction(action)) return false;
-  return typeof action.action.flowId === 'string' &&
-         action.action.flowId.length > 0 &&
-         typeof action.action.flowCta === 'string' &&
-         action.action.flowCta.length > 0 &&
-         (action.action.flowMode === 'draft' || action.action.flowMode === 'published');
+  return (typeof action.action.parameters.flow_id === 'string' || typeof action.action.parameters.flow_name === 'string') &&
+         typeof action.action.parameters.flow_cta === 'string' &&
+         action.action.parameters.flow_cta.length > 0 &&
+         (!action.action.parameters.mode || action.action.parameters.mode === 'draft' || action.action.parameters.mode === 'published');
 }
 
 // Button reaction guards
@@ -197,9 +196,7 @@ export function isCompleteMessage(message: InteractiveMessage): boolean {
       case 'flow':
         return hasValidFlow(message.action);
       case 'location_request':
-        return isLocationRequestAction(message.action) &&
-               typeof message.action.action.requestText === 'string' &&
-               message.action.action.requestText.length > 0;
+        return isLocationRequestAction(message.action);
       default:
         return false;
     }

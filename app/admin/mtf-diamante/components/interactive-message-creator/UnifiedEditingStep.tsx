@@ -1,68 +1,122 @@
-'use client'
+"use client";
 
-import type React from 'react'
-import { useState, useCallback, useMemo } from 'react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Badge } from '@/components/ui/badge'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { 
-  ChevronLeft, 
-  ChevronRight, 
-  Settings, 
-  Type, 
-  FileText, 
-  Image, 
-  Video, 
+import type React from "react";
+import { useState, useCallback, useMemo } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Settings,
+  Type,
+  FileText,
+  Image,
+  Video,
   AlertCircle,
   AlertTriangle,
-  Info
-} from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { toast } from 'sonner'
+  Info,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 // Import existing components
-import { InteractivePreview } from '../shared/InteractivePreview'
-import { WhatsAppTextEditor } from '../shared/WhatsAppTextEditor'
-import { ButtonManager } from '../shared/ButtonManager'
-import { ReactionConfigManager } from '../shared/ReactionConfigManager'
-import { MediaUploadComponent } from '../shared/MediaUploadComponent'
+import { InteractivePreview } from "../shared/InteractivePreview";
+import { WhatsAppTextEditor } from "../shared/WhatsAppTextEditor";
+import { ButtonManager } from "../shared/ButtonManager";
+import { ReactionConfigManager } from "../shared/ReactionConfigManager";
+import { MediaUploadComponent } from "../shared/MediaUploadComponent";
 
 // Import validation and error handling
-import { useInteractiveMessageValidation } from '../../hooks/useInteractiveMessageValidation'
-import { errorHandler } from '@/lib/error-handling/interactive-message-errors'
+import { useInteractiveMessageValidation } from "../../hooks/useInteractiveMessageValidation";
+import { errorHandler } from "@/lib/error-handling/interactive-message-errors";
 
 // Import types
-import type { 
-  InteractiveMessage, 
+import type {
+  InteractiveMessage,
   InteractiveMessageType,
   MessageHeader,
   HeaderType,
   QuickReplyButton,
-  ButtonReaction
-} from '@/types/interactive-messages'
+  ButtonReaction as CentralButtonReaction,
+} from "@/types/interactive-messages";
+import type {
+  InteractiveButton,
+  ButtonReaction as LocalButtonReaction,
+} from "../shared/ButtonManager";
+
+// Conversion functions between button types
+const convertQuickReplyToInteractive = (
+  button: QuickReplyButton
+): InteractiveButton => ({
+  id: button.id,
+  text: button.title,
+  type: "reply" as const,
+});
+
+const convertInteractiveToQuickReply = (
+  button: InteractiveButton
+): QuickReplyButton => ({
+  id: button.id,
+  title: button.text,
+  payload: button.id,
+  // Include WhatsApp API structure for future compatibility
+  type: "reply",
+  reply: {
+    id: button.id,
+    title: button.text,
+  },
+});
+
+// Conversion functions for ButtonReaction types
+const convertLocalToLocalReaction = (
+  reaction: LocalButtonReaction
+): LocalButtonReaction => reaction;
+
+const convertCentralToLocal = (
+  reaction: CentralButtonReaction
+): LocalButtonReaction => ({
+  buttonId: reaction.buttonId,
+  reaction:
+    reaction.type === "emoji" || reaction.type === "text"
+      ? {
+          type: reaction.type,
+          value: reaction.type === "emoji" ? "😊" : "Default text", // Default values
+        }
+      : undefined,
+});
 
 interface UnifiedEditingStepProps {
-  message: InteractiveMessage
-  reactions: ButtonReaction[]
-  onMessageUpdate: (updates: Partial<InteractiveMessage>) => void
-  onReactionUpdate: (buttonId: string, reaction: Partial<ButtonReaction>) => void
-  onNext: () => void
-  onBack: () => void
-  disabled?: boolean
-  className?: string
+  message: InteractiveMessage;
+  reactions: CentralButtonReaction[];
+  onMessageUpdate: (updates: Partial<InteractiveMessage>) => void;
+  onReactionUpdate: (
+    buttonId: string,
+    reaction: Partial<CentralButtonReaction>
+  ) => void;
+  onNext: () => void;
+  onBack: () => void;
+  disabled?: boolean;
+  className?: string;
 }
 
 interface ValidationErrors {
-  name?: string[]
-  header?: string[]
-  body?: string[]
-  footer?: string[]
-  buttons?: string[]
-  general?: string[]
+  name?: string[];
+  header?: string[];
+  body?: string[];
+  footer?: string[];
+  buttons?: string[];
+  general?: string[];
 }
 
 // Validation constants
@@ -72,7 +126,7 @@ const VALIDATION_LIMITS = {
   BODY_TEXT_MAX_LENGTH: 1024,
   FOOTER_TEXT_MAX_LENGTH: 60,
   BUTTON_MAX_COUNT: 3,
-} as const
+} as const;
 
 export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
   message,
@@ -82,10 +136,14 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
   onNext,
   onBack,
   disabled = false,
-  className
+  className,
 }) => {
-  const [reactionConfigButton, setReactionConfigButton] = useState<string | null>(null)
-  const [showTextEditor, setShowTextEditor] = useState<'body' | 'footer' | null>(null)
+  const [reactionConfigButton, setReactionConfigButton] = useState<
+    string | null
+  >(null);
+  const [showTextEditor, setShowTextEditor] = useState<
+    "body" | "footer" | null
+  >(null);
 
   // Use the new validation hook
   const {
@@ -95,147 +153,197 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
     getFieldErrors,
     getFieldWarnings,
     canProceed,
-    handleValidationError
+    handleValidationError,
   } = useInteractiveMessageValidation(message, reactions, {
     enableRealTimeValidation: true,
     debounceMs: 300,
-    validateOnMount: false
-  })
+    validateOnMount: false,
+  });
 
-  // Extract buttons from message action
+  // Extract buttons from message action and convert to InteractiveButton format
   const buttons = useMemo(() => {
-    if (message.action?.type === 'button') {
-      return message.action.buttons || []
+    if (message.action?.type === "button") {
+      return (message.action.buttons || []).map(convertQuickReplyToInteractive);
     }
-    return []
-  }, [message.action])
+    return [];
+  }, [message.action]);
 
   // Helper function to get error messages from validation errors
-  const getErrorMessages = useCallback((fieldName: string): string[] => {
-    const errors = getFieldErrors(fieldName)
-    return errors.map(error => error.message)
-  }, [getFieldErrors])
+  const getErrorMessages = useCallback(
+    (fieldName: string): string[] => {
+      const errors = getFieldErrors(fieldName);
+      return errors.map((error) => error.message);
+    },
+    [getFieldErrors]
+  );
 
   // Helper function to get warning messages from validation errors
-  const getWarningMessages = useCallback((fieldName: string): string[] => {
-    const warnings = getFieldWarnings(fieldName)
-    return warnings.map(warning => warning.message)
-  }, [getFieldWarnings])
+  const getWarningMessages = useCallback(
+    (fieldName: string): string[] => {
+      const warnings = getFieldWarnings(fieldName);
+      return warnings.map((warning) => warning.message);
+    },
+    [getFieldWarnings]
+  );
 
   // Handle field updates with validation
-  const handleNameChange = useCallback((name: string) => {
-    try {
-      onMessageUpdate({ name })
-      // Validate field immediately
-      validateField('name', name, { ...message, name })
-    } catch (error) {
-      handleValidationError(error)
-    }
-  }, [onMessageUpdate, validateField, message, handleValidationError])
-
-  const handleHeaderTypeChange = useCallback((type: HeaderType) => {
-    try {
-      const newHeader: MessageHeader = {
-        type,
-        content: type === 'text' ? (message.header?.content || '') : ''
+  const handleNameChange = useCallback(
+    (name: string) => {
+      try {
+        onMessageUpdate({ name });
+        // Validate field immediately
+        validateField("name", name, { ...message, name });
+      } catch (error) {
+        handleValidationError(error);
       }
-      onMessageUpdate({ header: newHeader })
-    } catch (error) {
-      handleValidationError(error)
-    }
-  }, [onMessageUpdate, message.header, handleValidationError])
+    },
+    [onMessageUpdate, validateField, message, handleValidationError]
+  );
 
-  const handleHeaderContentChange = useCallback((content: string) => {
-    try {
-      if (!message.header) return
-      
-      const updatedHeader: MessageHeader = {
-        ...message.header,
-        content,
-        ...(message.header.type !== 'text' && { mediaUrl: content })
+  const handleHeaderTypeChange = useCallback(
+    (type: HeaderType) => {
+      try {
+        const newHeader: MessageHeader = {
+          type,
+          content: type === "text" ? message.header?.content || "" : "",
+        };
+        onMessageUpdate({ header: newHeader });
+      } catch (error) {
+        handleValidationError(error);
       }
-      onMessageUpdate({ header: updatedHeader })
-      
-      // Validate header content immediately
-      validateField('header.content', content, { ...message, header: updatedHeader })
-    } catch (error) {
-      handleValidationError(error)
-    }
-  }, [onMessageUpdate, message.header, validateField, message, handleValidationError])
+    },
+    [onMessageUpdate, message.header, handleValidationError]
+  );
 
-  const handleBodyTextChange = useCallback((text: string) => {
-    try {
-      onMessageUpdate({ body: { text } })
-      // Validate body immediately
-      validateField('body.text', text, { ...message, body: { text } })
-    } catch (error) {
-      handleValidationError(error)
-    }
-  }, [onMessageUpdate, validateField, message, handleValidationError])
+  const handleHeaderContentChange = useCallback(
+    (content: string) => {
+      try {
+        if (!message.header) return;
 
-  const handleFooterTextChange = useCallback((text: string) => {
-    try {
-      onMessageUpdate({ footer: { text } })
-      // Validate footer immediately
-      validateField('footer.text', text, { ...message, footer: { text } })
-    } catch (error) {
-      handleValidationError(error)
-    }
-  }, [onMessageUpdate, validateField, message, handleValidationError])
+        const updatedHeader: MessageHeader = {
+          ...message.header,
+          content,
+          ...(message.header.type !== "text" && { mediaUrl: content }),
+        };
+        onMessageUpdate({ header: updatedHeader });
 
-  const handleButtonsChange = useCallback((newButtons: QuickReplyButton[]) => {
-    try {
-      onMessageUpdate({
-        action: {
-          type: 'button',
-          buttons: newButtons
-        }
-      })
-      // Validate buttons immediately
-      validateField('action.buttons', newButtons, { 
-        ...message, 
-        action: { type: 'button', buttons: newButtons } 
-      })
-    } catch (error) {
-      handleValidationError(error)
-    }
-  }, [onMessageUpdate, validateField, message, handleValidationError])
+        // Validate header content immediately
+        validateField("header.content", content, {
+          ...message,
+          header: updatedHeader,
+        });
+      } catch (error) {
+        handleValidationError(error);
+      }
+    },
+    [
+      onMessageUpdate,
+      message.header,
+      validateField,
+      message,
+      handleValidationError,
+    ]
+  );
 
-  const handleReactionChange = useCallback((buttonId: string, reaction: ButtonReaction) => {
-    onReactionUpdate(buttonId, reaction)
-  }, [onReactionUpdate])
+  const handleBodyTextChange = useCallback(
+    (text: string) => {
+      try {
+        onMessageUpdate({ body: { text } });
+        // Validate body immediately
+        validateField("body.text", text, { ...message, body: { text } });
+      } catch (error) {
+        handleValidationError(error);
+      }
+    },
+    [onMessageUpdate, validateField, message, handleValidationError]
+  );
 
-  const handleReactionRemove = useCallback((buttonId: string) => {
-    onReactionUpdate(buttonId, { buttonId })
-  }, [onReactionUpdate])
+  const handleFooterTextChange = useCallback(
+    (text: string) => {
+      try {
+        onMessageUpdate({ footer: { text } });
+        // Validate footer immediately
+        validateField("footer.text", text, { ...message, footer: { text } });
+      } catch (error) {
+        handleValidationError(error);
+      }
+    },
+    [onMessageUpdate, validateField, message, handleValidationError]
+  );
+
+  const handleButtonsChange = useCallback(
+    (newButtons: InteractiveButton[]) => {
+      try {
+        // Convert InteractiveButton back to QuickReplyButton
+        const quickReplyButtons = newButtons.map(
+          convertInteractiveToQuickReply
+        );
+
+        onMessageUpdate({
+          action: {
+            type: "button",
+            buttons: quickReplyButtons,
+          },
+        });
+        // Validate buttons immediately
+        validateField("action.buttons", quickReplyButtons, {
+          ...message,
+          action: { type: "button", buttons: quickReplyButtons },
+        });
+      } catch (error) {
+        handleValidationError(error);
+      }
+    },
+    [onMessageUpdate, validateField, message, handleValidationError]
+  );
+
+  const handleReactionChange = useCallback(
+    (reaction: LocalButtonReaction) => {
+      // Convert the local ButtonReaction to the central format
+      const centralReaction: Partial<CentralButtonReaction> = {
+        buttonId: reaction.buttonId,
+        type: (reaction.reaction?.type as any) || "emoji",
+        isActive: true,
+      };
+      onReactionUpdate(reaction.buttonId, centralReaction);
+    },
+    [onReactionUpdate]
+  );
+
+  const handleReactionRemove = useCallback(
+    (buttonId: string) => {
+      onReactionUpdate(buttonId, { buttonId });
+    },
+    [onReactionUpdate]
+  );
 
   // Handle next step
   const handleNext = useCallback(() => {
     if (canProceed()) {
-      onNext()
+      onNext();
     } else {
-      toast.error('Please fix validation errors before proceeding')
+      toast.error("Please fix validation errors before proceeding");
     }
-  }, [canProceed, onNext])
+  }, [canProceed, onNext]);
 
   // Get header type icon
   const getHeaderTypeIcon = (type: HeaderType) => {
     switch (type) {
-      case 'text':
-        return Type
-      case 'image':
-        return Image
-      case 'video':
-        return Video
-      case 'document':
-        return FileText
+      case "text":
+        return Type;
+      case "image":
+        return Image;
+      case "video":
+        return Video;
+      case "document":
+        return FileText;
       default:
-        return Type
+        return Type;
     }
-  }
+  };
 
   // Check if form has errors
-  const hasErrors = validationState.hasErrors || !canProceed()
+  const hasErrors = validationState.hasErrors || !canProceed();
 
   return (
     <div className={cn("space-y-6", className)}>
@@ -256,7 +364,6 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Left Panel - Configuration (60%) */}
         <div className="lg:col-span-3 space-y-6">
-          
           {/* Message Name Section */}
           <Card>
             <CardHeader className="pb-4">
@@ -277,21 +384,29 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
                   placeholder="Enter a descriptive name for this message"
                   disabled={disabled}
                   className={cn(
-                    !isFieldValid('name') && "border-destructive focus-visible:ring-destructive"
+                    !isFieldValid("name") &&
+                      "border-destructive focus-visible:ring-destructive"
                   )}
                 />
                 <div className="flex justify-between items-center text-xs">
                   <div className="text-muted-foreground">
                     Used for internal organization and tracking
                   </div>
-                  <Badge variant={message.name.length > VALIDATION_LIMITS.NAME_MAX_LENGTH * 0.8 ? "destructive" : "outline"}>
+                  <Badge
+                    variant={
+                      message.name.length >
+                      VALIDATION_LIMITS.NAME_MAX_LENGTH * 0.8
+                        ? "destructive"
+                        : "outline"
+                    }
+                  >
                     {message.name.length}/{VALIDATION_LIMITS.NAME_MAX_LENGTH}
                   </Badge>
                 </div>
-                {!isFieldValid('name') && (
+                {!isFieldValid("name") && (
                   <div className="flex items-center gap-1 text-sm text-destructive">
                     <AlertCircle className="h-3 w-3" />
-                    <span>{getErrorMessages('name')[0]}</span>
+                    <span>{getErrorMessages("name")[0]}</span>
                   </div>
                 )}
               </div>
@@ -310,8 +425,10 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Header Type</Label>
                 <Select
-                  value={message.header?.type || 'text'}
-                  onValueChange={(value: HeaderType) => handleHeaderTypeChange(value)}
+                  value={message.header?.type || "text"}
+                  onValueChange={(value: HeaderType) =>
+                    handleHeaderTypeChange(value)
+                  }
                   disabled={disabled}
                 >
                   <SelectTrigger>
@@ -346,7 +463,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
                 </Select>
               </div>
 
-              {message.header?.type === 'text' ? (
+              {message.header?.type === "text" ? (
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">Header Text</Label>
                   <Input
@@ -356,29 +473,40 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
                     disabled={disabled}
                     maxLength={VALIDATION_LIMITS.HEADER_TEXT_MAX_LENGTH}
                     className={cn(
-                      !isFieldValid('header.content') && "border-destructive focus-visible:ring-destructive"
+                      !isFieldValid("header.content") &&
+                        "border-destructive focus-visible:ring-destructive"
                     )}
                   />
                   <div className="flex justify-between items-center text-xs">
                     <div className="text-muted-foreground">
                       Keep it short and impactful
                     </div>
-                    <Badge variant={message.header.content.length > VALIDATION_LIMITS.HEADER_TEXT_MAX_LENGTH * 0.8 ? "destructive" : "outline"}>
-                      {message.header.content.length}/{VALIDATION_LIMITS.HEADER_TEXT_MAX_LENGTH}
+                    <Badge
+                      variant={
+                        message.header.content.length >
+                        VALIDATION_LIMITS.HEADER_TEXT_MAX_LENGTH * 0.8
+                          ? "destructive"
+                          : "outline"
+                      }
+                    >
+                      {message.header.content.length}/
+                      {VALIDATION_LIMITS.HEADER_TEXT_MAX_LENGTH}
                     </Badge>
                   </div>
-                  {!isFieldValid('header.content') && (
+                  {!isFieldValid("header.content") && (
                     <div className="flex items-center gap-1 text-sm text-destructive">
                       <AlertCircle className="h-3 w-3" />
-                      <span>{getErrorMessages('header.content')[0]}</span>
+                      <span>{getErrorMessages("header.content")[0]}</span>
                     </div>
                   )}
                 </div>
               ) : (
                 <MediaUploadComponent
-                  value={message.header?.content || ''}
+                  value={message.header?.content || ""}
                   onChange={handleHeaderContentChange}
-                  mediaType={message.header?.type as 'image' | 'video' | 'document'}
+                  mediaType={
+                    message.header?.type as "image" | "video" | "document"
+                  }
                   label={`${message.header?.type} URL`}
                   description={`Upload or enter URL for ${message.header?.type} header`}
                   disabled={disabled}
@@ -402,14 +530,14 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setShowTextEditor('body')}
+                    onClick={() => setShowTextEditor("body")}
                     disabled={disabled}
                   >
                     <Type className="h-3 w-3 mr-1" />
                     Rich Editor
                   </Button>
                 </div>
-                
+
                 <WhatsAppTextEditor
                   initialText={message.body.text}
                   onChange={handleBodyTextChange}
@@ -418,14 +546,14 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
                   maxLength={VALIDATION_LIMITS.BODY_TEXT_MAX_LENGTH}
                   inline={true}
                   className={cn(
-                    !isFieldValid('body.text') && "border-destructive"
+                    !isFieldValid("body.text") && "border-destructive"
                   )}
                 />
-                
-                {!isFieldValid('body.text') && (
+
+                {!isFieldValid("body.text") && (
                   <div className="flex items-center gap-1 text-sm text-destructive">
                     <AlertCircle className="h-3 w-3" />
-                    <span>{getErrorMessages('body.text')[0]}</span>
+                    <span>{getErrorMessages("body.text")[0]}</span>
                   </div>
                 )}
               </div>
@@ -447,38 +575,47 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setShowTextEditor('footer')}
+                    onClick={() => setShowTextEditor("footer")}
                     disabled={disabled}
                   >
                     <Type className="h-3 w-3 mr-1" />
                     Rich Editor
                   </Button>
                 </div>
-                
+
                 <Input
-                  value={message.footer?.text || ''}
+                  value={message.footer?.text || ""}
                   onChange={(e) => handleFooterTextChange(e.target.value)}
                   placeholder="Enter footer text..."
                   disabled={disabled}
                   maxLength={VALIDATION_LIMITS.FOOTER_TEXT_MAX_LENGTH}
                   className={cn(
-                    !isFieldValid('footer.text') && "border-destructive focus-visible:ring-destructive"
+                    !isFieldValid("footer.text") &&
+                      "border-destructive focus-visible:ring-destructive"
                   )}
                 />
-                
+
                 <div className="flex justify-between items-center text-xs">
                   <div className="text-muted-foreground">
                     Usually used for disclaimers or additional info
                   </div>
-                  <Badge variant={(message.footer?.text?.length || 0) > VALIDATION_LIMITS.FOOTER_TEXT_MAX_LENGTH * 0.8 ? "destructive" : "outline"}>
-                    {message.footer?.text?.length || 0}/{VALIDATION_LIMITS.FOOTER_TEXT_MAX_LENGTH}
+                  <Badge
+                    variant={
+                      (message.footer?.text?.length || 0) >
+                      VALIDATION_LIMITS.FOOTER_TEXT_MAX_LENGTH * 0.8
+                        ? "destructive"
+                        : "outline"
+                    }
+                  >
+                    {message.footer?.text?.length || 0}/
+                    {VALIDATION_LIMITS.FOOTER_TEXT_MAX_LENGTH}
                   </Badge>
                 </div>
-                
-                {!isFieldValid('footer.text') && (
+
+                {!isFieldValid("footer.text") && (
                   <div className="flex items-center gap-1 text-sm text-destructive">
                     <AlertCircle className="h-3 w-3" />
-                    <span>{getErrorMessages('footer.text')[0]}</span>
+                    <span>{getErrorMessages("footer.text")[0]}</span>
                   </div>
                 )}
               </div>
@@ -486,7 +623,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
           </Card>
 
           {/* Buttons Section - Only for button type messages */}
-          {message.type === 'button' && (
+          {message.type === "button" && (
             <Card>
               <CardHeader className="pb-4">
                 <CardTitle className="text-base">Interactive Buttons</CardTitle>
@@ -497,22 +634,22 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
               <CardContent>
                 <ButtonManager
                   buttons={buttons}
-                  reactions={reactions}
+                  reactions={reactions.map(convertCentralToLocal)}
                   onChange={handleButtonsChange}
                   onReactionChange={(reactions) => {
-                    reactions.forEach(reaction => {
-                      handleReactionChange(reaction.buttonId, reaction)
-                    })
+                    reactions.forEach((reaction) => {
+                      handleReactionChange(reaction);
+                    });
                   }}
                   maxButtons={VALIDATION_LIMITS.BUTTON_MAX_COUNT}
                   disabled={disabled}
                   showReactionConfig={false} // We'll handle this separately
                 />
-                
-                {!isFieldValid('action.buttons') && (
+
+                {!isFieldValid("action.buttons") && (
                   <div className="flex items-center gap-1 text-sm text-destructive mt-2">
                     <AlertCircle className="h-3 w-3" />
-                    <span>{getErrorMessages('action.buttons')[0]}</span>
+                    <span>{getErrorMessages("action.buttons")[0]}</span>
                   </div>
                 )}
               </CardContent>
@@ -538,7 +675,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
                   debounceMs={300}
                   className="min-h-[400px]"
                 />
-                
+
                 {/* Preview Info */}
                 <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                   <div className="flex items-start gap-2">
@@ -580,7 +717,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
               <span>Please fix errors before continuing</span>
             </div>
           )}
-          
+
           <Button
             onClick={handleNext}
             disabled={disabled || hasErrors}
@@ -593,12 +730,12 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
       </div>
 
       {/* Text Editor Modals */}
-      {showTextEditor === 'body' && (
+      {showTextEditor === "body" && (
         <WhatsAppTextEditor
           initialText={message.body.text}
           onSave={(text) => {
-            handleBodyTextChange(text)
-            setShowTextEditor(null)
+            handleBodyTextChange(text);
+            setShowTextEditor(null);
           }}
           onClose={() => setShowTextEditor(null)}
           placeholder="Enter your message content..."
@@ -607,12 +744,12 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
         />
       )}
 
-      {showTextEditor === 'footer' && (
+      {showTextEditor === "footer" && (
         <WhatsAppTextEditor
-          initialText={message.footer?.text || ''}
+          initialText={message.footer?.text || ""}
           onSave={(text) => {
-            handleFooterTextChange(text)
-            setShowTextEditor(null)
+            handleFooterTextChange(text);
+            setShowTextEditor(null);
           }}
           onClose={() => setShowTextEditor(null)}
           placeholder="Enter footer text..."
@@ -625,8 +762,16 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
       {reactionConfigButton && (
         <ReactionConfigManager
           buttonId={reactionConfigButton}
-          buttonText={buttons.find(b => b.id === reactionConfigButton)?.title || ''}
-          currentReaction={reactions.find(r => r.buttonId === reactionConfigButton)}
+          buttonText={
+            buttons.find((b) => b.id === reactionConfigButton)?.text || ""
+          }
+          currentReaction={
+            reactions.find((r) => r.buttonId === reactionConfigButton)
+              ? convertCentralToLocal(
+                  reactions.find((r) => r.buttonId === reactionConfigButton)!
+                )
+              : undefined
+          }
           onReactionChange={handleReactionChange}
           onReactionRemove={() => handleReactionRemove(reactionConfigButton)}
           isOpen={true}
@@ -634,7 +779,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
         />
       )}
     </div>
-  )
-}
+  );
+};
 
-export default UnifiedEditingStep
+export default UnifiedEditingStep;

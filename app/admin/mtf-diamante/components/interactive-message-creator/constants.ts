@@ -50,4 +50,14 @@ export const MESSAGE_TYPES = {
     icon: ImageIcon,
     description: "Envia um sticker/figurinha",
   },
+  product: {
+    label: "Produto",
+    icon: ImageIcon,
+    description: "Exibe um produto específico",
+  },
+  product_list: {
+    label: "Lista de Produtos",
+    icon: List,
+    description: "Lista de produtos do catálogo",
+  },
 };

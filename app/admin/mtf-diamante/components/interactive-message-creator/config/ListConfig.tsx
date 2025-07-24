@@ -95,8 +95,8 @@ export const ListConfig: React.FC<ListConfigProps> = ({ message, updateAction })
           <Label>Texto do Botão da Lista</Label>
           <Input
             placeholder="Ex: Ver Opções, Escolher..."
-            value={message.action && isListAction(message.action) ? message.action.buttonText : ""}
-            onChange={(e) => updateAction({ buttonText: e.target.value, type: "list" })}
+            value={message.action && isListAction(message.action) ? message.action.button : ""}
+            onChange={(e) => updateAction({ button: e.target.value, type: "list" })}
           />
         </div>
 

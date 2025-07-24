@@ -363,6 +363,7 @@ export async function POST(request: NextRequest) {
                   reactionData.reaction.type === "text"
                     ? reactionData.reaction.value
                     : null,
+                createdBy: session.user.id,
               },
             });
             savedReactions.push(savedReaction);
@@ -458,8 +459,8 @@ export async function POST(request: NextRequest) {
     const structuredError = errorHandler.handleError(
       error,
       {
-        userId: session?.user?.id,
-        caixaId: body?.caixaId,
+        userId: undefined,
+        caixaId: undefined,
         action: 'create_message_with_reactions',
         component: 'messages-with-reactions-api'
       }
@@ -601,6 +602,7 @@ export async function PUT(request: NextRequest) {
                   reactionData.reaction.type === "text"
                     ? reactionData.reaction.value
                     : null,
+                createdBy: session.user.id,
               },
             });
             updatedReactions.push(savedReaction);

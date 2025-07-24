@@ -74,7 +74,7 @@ export const ConfigurationStep: React.FC<ConfigurationStepProps> = ({
     } else if (message.type === "cta_url" && message.action && isCtaUrlAction(message.action)) {
       components.push({ type: "buttons", buttons: [{ type: "URL", text: message.action.action.displayText, url: message.action.action.url }] });
     } else if (message.type === "list" && message.action && isListAction(message.action)) {
-      components.push({ type: "buttons", buttons: [{ type: "LIST", text: message.action.buttonText || "Ver opções" }] });
+      components.push({ type: "buttons", buttons: [{ type: "LIST", text: message.action.button || "Ver opções" }] });
     }
 
     return components;

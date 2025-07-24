@@ -238,7 +238,7 @@ export class InteractiveMessageValidator {
         this.validateBodyText(value, errors, warnings);
         break;
       case 'header.content':
-        this.validateHeaderContent(value, message.header?.type, errors, warnings);
+        this.validateHeaderContent(value, errors, warnings, message.header?.type);
         break;
       case 'footer.text':
         this.validateFooterText(value, errors, warnings);
@@ -365,7 +365,7 @@ export class InteractiveMessageValidator {
     }
   }
 
-  private static validateHeaderContent(content: string, type?: string, errors: ValidationError[], warnings: ValidationError[]) {
+  private static validateHeaderContent(content: string, errors: ValidationError[], warnings: ValidationError[], type?: string) {
     if (type === 'text' && content) {
       if (content.length > MESSAGE_LIMITS.HEADER_TEXT_MAX_LENGTH) {
         errors.push({
@@ -471,7 +471,7 @@ export class InteractiveMessageValidator {
       field: prefix ? `${prefix}.${error.path.join('.')}` : error.path.join('.'),
       code: error.code.toUpperCase(),
       message: error.message,
-      value: error.received,
+      value: (error as any).received,
       severity: 'error' as const
     }));
   }

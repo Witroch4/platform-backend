@@ -401,7 +401,7 @@ export class InteractiveMessageErrorHandler {
       case ErrorCategory.AUTHENTICATION:
         actions.push({
           label: 'Fazer login novamente',
-          action: () => window.location.href = '/auth/signin',
+          action: () => { window.location.href = '/auth/signin'; },
           type: 'redirect'
         });
         break;
@@ -485,7 +485,7 @@ export class InteractiveMessageErrorHandler {
   private showErrorToast(error: StructuredError) {
     const toastOptions = {
       duration: this.getToastDuration(error.severity),
-      action: error.recoveryActions.length > 0 ? {
+      action: error.recoveryActions && error.recoveryActions.length > 0 ? {
         label: error.recoveryActions[0].label,
         onClick: error.recoveryActions[0].action
       } : undefined
@@ -585,7 +585,7 @@ export function handleValidation(
   try {
     return validationFn();
   } catch (error) {
-    throw errorHandler.handleValidationError(error, context);
+    throw errorHandler.handleValidationError(error as any[], context);
   }
 }
 

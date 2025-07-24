@@ -82,7 +82,7 @@ export async function POST(request: Request) {
     const interactiveMessage = await prisma.interactiveMessage.findFirst({
       where: {
         id: messageId,
-        usuarioChatwitId: session.user.id,
+        createdById: session.user.id,
       },
     });
 
@@ -170,18 +170,19 @@ export async function POST(request: Request) {
     await prisma.disparoMtfDiamante.create({
       data: {
         userId: session.user.id,
-        caixaId: caixaId || "direct_send",
-        tipo: "interactive_message",
-        destinatario: recipientPhone,
-        conteudo: {
+        templateId: messageId,
+        templateName: interactiveMessage.name,
+        leadId: recipientPhone,
+        leadTelefone: recipientPhone,
+        status: "SENT",
+        sentAt: new Date(),
+        parameters: JSON.parse(JSON.stringify({
           messageId: messageId,
           messageName: interactiveMessage.name,
           messageType: interactiveMessage.type,
           whatsappMessageId: response.data.messages?.[0]?.id,
           processedMessage: whatsappMessage,
-        },
-        status: "sent",
-        dataEnvio: new Date(),
+        })),
       },
     });
 
@@ -199,16 +200,17 @@ export async function POST(request: Request) {
       if (session?.user?.id) {
         await prisma.disparoMtfDiamante.create({
           data: {
-            usuarioChatwitId: session.user.id,
-            caixaId: "error",
-            tipo: "interactive_message",
-            destinatario: "unknown",
-            conteudo: {
+            userId: session.user.id,
+            templateId: "error",
+            templateName: "interactive_message_error",
+            leadId: "unknown",
+            leadTelefone: "unknown",
+            status: "FAILED",
+            errorMessage: error.message,
+            parameters: JSON.parse(JSON.stringify({
               error: error.message,
               stack: error.stack,
-            },
-            status: "error",
-            dataEnvio: new Date(),
+            })),
           },
         });
       }

@@ -55,26 +55,17 @@ export async function PATCH(
       const accountId = agenteParaAlternar.caixa.chatwitAccountId;
       let hookIdParaSalvar = agenteParaAlternar.hookId;
 
-      // ==================================================================
-      // == LÓGICA PARA GARANTIR APENAS UM AGENTE ATIVO POR VEZ ==
-      // ==================================================================
-      // Se a ação é ATIVAR, primeiro desativamos qualquer outro agente na mesma caixa
+      // Garante que só pode haver um agente ativo por vez
       if (deveAtivar) {
         await tx.agenteDialogflow.updateMany({
-          where: {
-            caixaId: agenteParaAlternar.caixaId, // Na mesma caixa
-            ativo: true,                         // Que esteja ativo
-            id: { not: id }                      // E que não seja o agente que estamos ativando
-          },
-          data: { ativo: false } // Define como inativo
+          where: { caixaId: agenteParaAlternar.caixaId, ativo: true, id: { not: id } },
+          data: { ativo: false }
         });
         console.log(`[Transação] Outros agentes na mesma caixa foram desativados localmente.`);
       }
-      // ==================================================================
 
       try {
         if (hookIdParaSalvar) {
-          // Se temos um hookId, tentamos o PATCH diretamente
           console.log(`[Transação] Tentando ${acao} via PATCH no hook ${hookIdParaSalvar}...`);
           await axios.patch(
             `${baseURL}/api/v1/accounts/${accountId}/integrations/hooks/${hookIdParaSalvar}`,
@@ -82,14 +73,13 @@ export async function PATCH(
             getAxiosConfig(accessToken)
           );
         } else if (deveAtivar) {
-          // Se não temos hookId e a ação é ATIVAR, precisamos criar (POST)
           console.log(`[Transação] Agente sem hookId. Criando novo hook via POST...`);
           const hookResponse = await axios.post(
             `${baseURL}/api/v1/accounts/${accountId}/integrations/hooks`, 
-            { 
-              app_id: 'dialogflow', 
-              inbox_id: Number.parseInt(agenteParaAlternar.caixa.inboxId), 
-              status: 1, 
+            {
+              app_id: 'dialogflow',
+              inbox_id: Number.parseInt(agenteParaAlternar.caixa.inboxId),
+              status: 1,
               settings: {
                 project_id: agenteParaAlternar.projectId,
                 credentials: JSON.parse(agenteParaAlternar.credentials)
@@ -99,10 +89,12 @@ export async function PATCH(
           );
           hookIdParaSalvar = hookResponse.data.id.toString();
         } else {
-          // Se não temos hookId e a ação é DESATIVAR, não fazemos nada na API
           console.log(`[Transação] Agente sem hookId para desativar. Nenhuma chamada à API é necessária.`);
         }
       } catch (apiError) {
+        // ==================================================================
+        // == PONTO CHAVE DA CORREÇÃO: TRATAMENTO INTELIGENTE DO ERRO 404 ==
+        // ==================================================================
         if (axios.isAxiosError(apiError) && apiError.response?.status === 404) {
           console.warn(`[Transação] Hook ${hookIdParaSalvar} não encontrado na API (404).`);
           
@@ -123,6 +115,7 @@ export async function PATCH(
               getAxiosConfig(accessToken)
             );
             hookIdParaSalvar = hookResponse.data.id.toString();
+            console.log(`[Transação] Novo hook ${hookIdParaSalvar} criado com sucesso.`);
           } else {
             // Se a AÇÃO ERA DESATIVAR e o hook não existe, está tudo bem.
             // Apenas limpamos o hookId local para corrigir a dessincronização.
@@ -131,7 +124,7 @@ export async function PATCH(
           }
         } else {
           // Para qualquer outro erro, a transação deve falhar
-          const errorMessage = (apiError as AxiosError).response?.data?.message || (apiError as Error).message;
+          const errorMessage = ((apiError as AxiosError).response?.data as any)?.message || (apiError as Error).message;
           console.error(`❌ FALHA CRÍTICA na API durante ${acao}:`, { message: errorMessage });
           throw new Error(`Erro na API externa: ${errorMessage}`);
         }
