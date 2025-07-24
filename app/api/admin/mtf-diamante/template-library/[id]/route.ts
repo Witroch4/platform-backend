@@ -5,7 +5,7 @@ import { TemplateLibraryService } from '@/app/lib/template-library-service';
 // GET - Get specific template by ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
@@ -13,7 +13,8 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const template = await TemplateLibraryService.getTemplateById(params.id);
+    const { id } = await params;
+    const template = await TemplateLibraryService.getTemplateById(id);
 
     if (!template) {
       return NextResponse.json({ error: 'Template not found' }, { status: 404 });
@@ -42,7 +43,7 @@ export async function GET(
 // PUT - Update template
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
@@ -50,6 +51,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { id } = await params;
     const body = await request.json();
     const updates = {
       name: body.name,
@@ -60,7 +62,7 @@ export async function PUT(
     };
 
     const template = await TemplateLibraryService.updateTemplate(
-      params.id,
+      id,
       session.user.id,
       updates
     );
@@ -88,7 +90,7 @@ export async function PUT(
 // DELETE - Delete template
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
@@ -96,7 +98,8 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    await TemplateLibraryService.deleteTemplate(params.id, session.user.id);
+    const { id } = await params;
+    await TemplateLibraryService.deleteTemplate(id, session.user.id);
 
     return NextResponse.json({ success: true });
   } catch (error) {

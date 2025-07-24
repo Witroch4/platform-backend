@@ -5,7 +5,7 @@ import { auth } from "@/auth";
 // GET - Buscar detalhes de um template específico
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
@@ -13,7 +13,8 @@ export async function GET(
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
 
-    const templateId = params.id;
+    const resolvedParams = await params;
+    const templateId = resolvedParams.id;
 
     // Buscar template no banco de dados
     const template = await prisma.whatsAppTemplate.findUnique({

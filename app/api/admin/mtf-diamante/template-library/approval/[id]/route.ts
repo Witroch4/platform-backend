@@ -5,7 +5,7 @@ import { TemplateLibraryService } from '@/app/lib/template-library-service';
 // PUT - Process approval request (approve/reject)
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
@@ -18,6 +18,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
+    const resolvedParams = await params;
     const body = await request.json();
     const { status, responseMessage } = body;
 
@@ -29,7 +30,7 @@ export async function PUT(
     }
 
     const approvalRequest = await TemplateLibraryService.processApprovalRequest(
-      params.id,
+      resolvedParams.id,
       session.user.id,
       status,
       responseMessage

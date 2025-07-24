@@ -15,7 +15,7 @@ import { TemplateLibraryService } from '@/app/lib/template-library-service';
 import { useSession } from 'next-auth/react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { MediaUploadComponent } from './shared/MediaUploadComponent';
+import MinIOMediaUpload from './shared/MinIOMediaUpload';
 import { ButtonManager } from './shared/ButtonManager';
 import InteractiveMessageCreator from './InteractiveMessageCreator';
 import type { InteractiveMessageType } from './interactive-message-creator/types';

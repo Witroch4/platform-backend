@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
+import { useRouter } from "next/navigation";
 import axios from "axios";
 import { toast } from "sonner";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -16,7 +17,6 @@ import { DisparoMensagemDialog } from "../DisparoMensagemDialog";
 
 // Importar os componentes das páginas
 import CreateTemplatePage from "./criar/page";
-import TemplateDetailsPage from "./[id]/page";
 
 interface Template {
   id: string;
@@ -29,26 +29,24 @@ interface Template {
 type ViewType = 'list' | 'create' | 'details' | 'edit';
 
 export default function TemplatesTab() {
+  const router = useRouter();
   const [currentView, setCurrentView] = useState<ViewType>('list');
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
   const handleNavigateToCreate = () => {
     setCurrentView('create');
   };
 
   const handleNavigateToDetails = (templateId: string) => {
-    setSelectedTemplateId(templateId);
-    setCurrentView('details');
+    router.push(`/admin/mtf-diamante/templates/${templateId}`);
   };
 
   const handleNavigateToEdit = (templateId: string) => {
-    setSelectedTemplateId(templateId);
+    // For now, just show the edit view with a message
     setCurrentView('edit');
   };
 
   const handleBackToList = () => {
     setCurrentView('list');
-    setSelectedTemplateId(null);
   };
 
   // Renderizar a view de criar template
@@ -74,31 +72,8 @@ export default function TemplatesTab() {
     );
   }
 
-  // Renderizar a view de detalhes do template
-  if (currentView === 'details' && selectedTemplateId) {
-    return (
-      <div className="w-full">
-        <div className="flex items-center gap-4 mb-6">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={handleBackToList}
-            className="hover:bg-accent hover:text-accent-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h2 className="text-2xl font-bold text-foreground">Detalhes do Template</h2>
-            <p className="text-muted-foreground">Visualize e gerencie os detalhes do template</p>
-          </div>
-        </div>
-        <TemplateDetailsPage templateId={selectedTemplateId} onBack={handleBackToList} />
-      </div>
-    );
-  }
-
   // Renderizar a view de editar template
-  if (currentView === 'edit' && selectedTemplateId) {
+  if (currentView === 'edit') {
     return (
       <div className="w-full">
         <div className="flex items-center gap-4 mb-6">

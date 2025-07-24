@@ -1,21 +1,49 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-import { Badge } from '@/components/ui/badge';
-import { Loader2, Plus, Trash2, Settings, Bot, Inbox as InboxIcon, CheckCircle2 } from 'lucide-react';
-import { toast } from 'sonner';
-import axios from 'axios';
-import { cn } from '@/lib/utils';
-import { CaixaCardSkeleton } from './LoadingSkeletons';
-import { useMtfData } from '../context/MtfDataProvider';
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import {
+  Loader2,
+  Plus,
+  Trash2,
+  Settings,
+  Bot,
+  Inbox as InboxIcon,
+  CheckCircle2,
+} from "lucide-react";
+import { toast } from "sonner";
+import axios from "axios";
+import { cn } from "@/lib/utils";
+import { CaixaCardSkeleton } from "./LoadingSkeletons";
+import { useMtfData } from "../context/MtfDataProvider";
 
 // Tipos
 interface AgenteDialogflow {
@@ -47,9 +75,11 @@ interface DialogflowCaixasAgentesProps {
   onCaixaSelected: (id: string | null) => void;
 }
 
-export function DialogflowCaixasAgentes({ onCaixaSelected }: DialogflowCaixasAgentesProps) {
+export function DialogflowCaixasAgentes({
+  onCaixaSelected,
+}: DialogflowCaixasAgentesProps) {
   const [selectedCaixaId, setSelectedCaixaId] = useState<string | null>(null);
-  
+
   // Usando contexto de dados para cache persistente
   const { caixas, loadingCaixas: loading, refreshCaixas } = useMtfData();
 
@@ -87,20 +117,25 @@ export function DialogflowCaixasAgentes({ onCaixaSelected }: DialogflowCaixasAge
   return (
     <div className="space-y-6">
       <div className="flex justify-end">
-        <AdicionarCaixaDialog onCaixaAdicionada={refreshCaixas} caixasConfiguradas={caixas} />
+        <AdicionarCaixaDialog
+          onCaixaAdicionada={refreshCaixas}
+          caixasConfiguradas={caixas}
+        />
       </div>
 
       {caixas.length === 0 ? (
         <div className="text-center text-gray-500 py-12 border-2 border-dashed rounded-lg">
-            <p className="font-semibold">Nenhuma caixa de entrada configurada.</p>
-            <p className="text-sm">Clique em "Adicionar Caixa" para sincronizar com sua conta Chatwit.</p>
+          <p className="font-semibold">Nenhuma caixa de entrada configurada.</p>
+          <p className="text-sm">
+            Clique em "Adicionar Caixa" para sincronizar com sua conta Chatwit.
+          </p>
         </div>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {caixas.map((caixa) => (
-            <CaixaCard 
-              key={caixa.id} 
-              caixa={caixa} 
+            <CaixaCard
+              key={caixa.id}
+              caixa={caixa}
               isSelected={selectedCaixaId === caixa.id}
               onSelect={handleSelectCaixa}
               onUpdate={refreshCaixas}
@@ -113,7 +148,17 @@ export function DialogflowCaixasAgentes({ onCaixaSelected }: DialogflowCaixasAge
 }
 
 // Card de Caixa de Entrada
-function CaixaCard({ caixa, isSelected, onSelect, onUpdate }: { caixa: CaixaEntrada, isSelected: boolean, onSelect: (id: string) => void, onUpdate: () => void }) {
+function CaixaCard({
+  caixa,
+  isSelected,
+  onSelect,
+  onUpdate,
+}: {
+  caixa: CaixaEntrada;
+  isSelected: boolean;
+  onSelect: (id: string) => void;
+  onUpdate: () => void;
+}) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -125,12 +170,14 @@ function CaixaCard({ caixa, isSelected, onSelect, onUpdate }: { caixa: CaixaEntr
   const handleConfirmDelete = async () => {
     setIsDeleting(true);
     try {
-      await axios.delete(`/api/admin/mtf-diamante/dialogflow/caixas?id=${caixa.id}`);
-      toast.success('Caixa excluída com sucesso');
+      await axios.delete(
+        `/api/admin/mtf-diamante/dialogflow/caixas?id=${caixa.id}`
+      );
+      toast.success("Caixa excluída com sucesso");
       onUpdate();
       setShowDeleteDialog(false);
     } catch (error) {
-      toast.error('Erro ao excluir caixa');
+      toast.error("Erro ao excluir caixa");
     } finally {
       setIsDeleting(false);
     }
@@ -138,31 +185,58 @@ function CaixaCard({ caixa, isSelected, onSelect, onUpdate }: { caixa: CaixaEntr
 
   return (
     <>
-      <Card 
-        className={cn("cursor-pointer transition-all", isSelected ? "border-primary ring-2 ring-primary" : "hover:border-gray-400")}
+      <Card
+        className={cn(
+          "cursor-pointer transition-all",
+          isSelected
+            ? "border-primary ring-2 ring-primary"
+            : "hover:border-gray-400"
+        )}
         onClick={() => onSelect(caixa.id)}
       >
-        {isSelected && <div className="absolute top-2 right-2 text-primary"><CheckCircle2 /></div>}
+        {isSelected && (
+          <div className="absolute top-2 right-2 text-primary">
+            <CheckCircle2 />
+          </div>
+        )}
         <CardHeader>
           <div className="flex justify-between items-start">
-              <div>
-                  <CardTitle className="flex items-center gap-2"><InboxIcon className="w-5 h-5" />{caixa.nome}</CardTitle>
-                  <CardDescription>{caixa.inboxName} ({caixa.channelType})</CardDescription>
-              </div>
-              <Button variant="ghost" size="icon" onClick={handleDeleteClick}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <InboxIcon className="w-5 h-5" />
+                {caixa.nome}
+              </CardTitle>
+              <CardDescription>
+                {caixa.inboxName} ({caixa.channelType})
+              </CardDescription>
+            </div>
+            <Button variant="ghost" size="icon" onClick={handleDeleteClick}>
+              <Trash2 className="w-4 h-4 text-destructive" />
+            </Button>
           </div>
         </CardHeader>
         <CardContent>
           <h4 className="font-semibold mb-2 text-sm">Agentes Dialogflow</h4>
           <div className="space-y-2">
-              {caixa.agentes.length === 0 ? (
-                  <p className="text-muted-foreground text-xs">Nenhum agente configurado.</p>
-              ) : (
-                  caixa.agentes.map(agente => <AgenteItem key={agente.id} agente={agente} onUpdate={onUpdate} />)
-              )}
+            {caixa.agentes.length === 0 ? (
+              <p className="text-muted-foreground text-xs">
+                Nenhum agente configurado.
+              </p>
+            ) : (
+              caixa.agentes.map((agente) => (
+                <AgenteItem
+                  key={agente.id}
+                  agente={agente}
+                  onUpdate={onUpdate}
+                />
+              ))
+            )}
           </div>
           <div className="mt-4">
-              <AdicionarAgenteDialog caixaId={caixa.id} onAgenteAdicionado={onUpdate} />
+            <AdicionarAgenteDialog
+              caixaId={caixa.id}
+              onAgenteAdicionado={onUpdate}
+            />
           </div>
         </CardContent>
       </Card>
@@ -172,15 +246,19 @@ function CaixaCard({ caixa, isSelected, onSelect, onUpdate }: { caixa: CaixaEntr
           <DialogHeader>
             <DialogTitle>Confirmar Exclusão</DialogTitle>
             <DialogDescription>
-              Tem certeza que deseja excluir esta caixa? Todos os agentes serão removidos.
+              Tem certeza que deseja excluir esta caixa? Todos os agentes serão
+              removidos.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteDialog(false)}
+            >
               Cancelar
             </Button>
-            <Button 
-              variant="destructive" 
+            <Button
+              variant="destructive"
               onClick={handleConfirmDelete}
               disabled={isDeleting}
             >
@@ -195,347 +273,526 @@ function CaixaCard({ caixa, isSelected, onSelect, onUpdate }: { caixa: CaixaEntr
 }
 
 // Item de Agente
-function AgenteItem({ agente, onUpdate }: { agente: AgenteDialogflow, onUpdate: () => void }) {
-    // Usando o contexto para acessar a função setCaixas
-    const { caixas, setCaixas } = useMtfData();
-    
-    const handleToggleAgente = (toggledAgentId: string) => {
-        // A função que será executada pelo toast.promise
-        const togglePromise = async () => {
-            // 1. FAZ A CHAMADA À API PRIMEIRO.
-            // O `await` irá pausar a execução aqui até a API responder.
-            // Se a API der erro, ela vai lançar uma exceção e o código abaixo não será executado.
-            const response = await axios.patch(`/api/admin/mtf-diamante/dialogflow/agentes/${toggledAgentId}/toggle`);
-            
-            // 2. SUCESSO! A API NÃO DEU ERRO.
-            // AGORA, e somente agora, vamos manipular o estado da UI.
-            setCaixas(currentCaixas => {
-                // Encontrar a caixa que contém o agente
-                const caixaAtual = currentCaixas.find(c => 
-                    c.agentes.some(a => a.id === toggledAgentId)
-                );
-                
-                if (!caixaAtual) return currentCaixas;
-                
-                // Encontrar o agente que foi alternado
-                const agenteToToggle = caixaAtual.agentes.find(a => a.id === toggledAgentId);
-                if (!agenteToToggle) return currentCaixas;
-                
-                const deveAtivar = !agenteToToggle.ativo;
-                
-                // Criar novo array de caixas com o agente atualizado
-                const newCaixas = currentCaixas.map(c => {
-                    if (c.id !== caixaAtual.id) return c; // Não é a caixa atual
-                    
-                    const newAgentes = c.agentes.map(agente => {
-                        if (agente.id === toggledAgentId) {
-                            return { ...agente, ativo: deveAtivar };
-                        }
-                        if (deveAtivar) {
-                            // Se estamos ativando um agente, desativamos todos os outros
-                            return { ...agente, ativo: false };
-                        }
-                        return agente;
-                    });
-                    
-                    return { ...c, agentes: newAgentes };
-                });
-                
-                return newCaixas;
-            });
-            
-            // 3. Retorna os dados da resposta para a mensagem de sucesso do toast.
-            return response.data;
-        };
-        
-        // 4. CHAMA O TOAST.PROMISE com a função que criamos.
-        toast.promise(togglePromise(), {
-            loading: 'Processando solicitação...',
-            success: (data) => data.message || 'Status alterado com sucesso!',
-            error: (err) => err.response?.data?.error || 'Falha ao alterar o status do agente.'
+function AgenteItem({
+  agente,
+  onUpdate,
+}: {
+  agente: AgenteDialogflow;
+  onUpdate: () => void;
+}) {
+  // Usando o contexto para acessar a função setCaixas
+  const { caixas, setCaixas } = useMtfData();
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
+  const handleToggleAgente = (toggledAgentId: string) => {
+    // A função que será executada pelo toast.promise
+    const togglePromise = async () => {
+      // Encontrar o agente atual para determinar se deve ativar ou desativar
+      const caixaAtual = caixas.find((c) =>
+        c.agentes.some((a) => a.id === toggledAgentId)
+      );
+      const agenteAtual = caixaAtual?.agentes.find(
+        (a) => a.id === toggledAgentId
+      );
+
+      if (!agenteAtual) {
+        throw new Error("Agente não encontrado");
+      }
+
+      // 1. FAZ A CHAMADA À API PRIMEIRO.
+      // Se o agente está ativo, usa DELETE para desativar
+      // Se o agente está inativo, usa POST para ativar
+      const response = agenteAtual.ativo
+        ? await axios.delete(
+            `/api/admin/mtf-diamante/dialogflow/agentes/${toggledAgentId}/toggle`
+          )
+        : await axios.post(
+            `/api/admin/mtf-diamante/dialogflow/agentes/${toggledAgentId}/toggle`
+          );
+
+      // 2. SUCESSO! A API NÃO DEU ERRO.
+      // AGORA, e somente agora, vamos manipular o estado da UI.
+      setCaixas((currentCaixas) => {
+        // Encontrar a caixa que contém o agente
+        const caixaAtual = currentCaixas.find((c) =>
+          c.agentes.some((a) => a.id === toggledAgentId)
+        );
+
+        if (!caixaAtual) return currentCaixas;
+
+        // Encontrar o agente que foi alternado
+        const agenteToToggle = caixaAtual.agentes.find(
+          (a) => a.id === toggledAgentId
+        );
+        if (!agenteToToggle) return currentCaixas;
+
+        const deveAtivar = !agenteToToggle.ativo;
+
+        // Criar novo array de caixas com o agente atualizado
+        const newCaixas = currentCaixas.map((c) => {
+          if (c.id !== caixaAtual.id) return c; // Não é a caixa atual
+
+          const newAgentes = c.agentes.map((agente) => {
+            if (agente.id === toggledAgentId) {
+              return { ...agente, ativo: deveAtivar };
+            }
+            if (deveAtivar) {
+              // Se estamos ativando um agente, desativamos todos os outros
+              return { ...agente, ativo: false };
+            }
+            return agente;
+          });
+
+          return { ...c, agentes: newAgentes };
         });
+
+        return newCaixas;
+      });
+
+      // 3. Retorna os dados da resposta para a mensagem de sucesso do toast.
+      return response.data;
     };
 
-    return (
-        <div className="flex items-center justify-between p-2 border rounded-lg text-sm">
-            <div className="flex items-center gap-2">
-                <Bot className="w-4 h-4 text-blue-500" />
-                <span className="font-medium">{agente.nome}</span>
-                {agente.ativo && <Badge variant="default" className="bg-green-500 h-5">Ativo</Badge>}
-            </div>
-            <div className="flex items-center gap-2">
-                <Switch 
-                    id={`switch-${agente.id}`} 
-                    checked={agente.ativo} 
-                    onCheckedChange={() => handleToggleAgente(agente.id)} 
-                />
-                <EditarAgenteDialog agente={agente} onAgenteAtualizado={onUpdate} />
-            </div>
-        </div>
+    // 4. CHAMA O TOAST.PROMISE com a função que criamos.
+    toast.promise(togglePromise(), {
+      loading: "Processando solicitação...",
+      success: (data) => data.message || "Status alterado com sucesso!",
+      error: (err) =>
+        err.response?.data?.error || "Falha ao alterar o status do agente.",
+    });
+  };
+
+  const handleDeleteAgente = async () => {
+    const deletePromise = axios.delete(
+      `/api/admin/mtf-diamante/dialogflow/agentes/${agente.id}`
     );
+
+    toast.promise(deletePromise, {
+      loading: "Excluindo agente...",
+      success: () => {
+        onUpdate();
+        setShowDeleteDialog(false);
+        return "Agente excluído com sucesso!";
+      },
+      error: "Erro ao excluir agente",
+    });
+  };
+
+  return (
+    <>
+      <div className="flex items-center justify-between p-2 border rounded-lg text-sm">
+        <div className="flex items-center gap-2">
+          <Bot className="w-4 h-4 text-blue-500" />
+          <span className="font-medium">{agente.nome}</span>
+          {agente.ativo && (
+            <Badge variant="default" className="bg-green-500 h-5">
+              Ativo
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Switch
+            id={`switch-${agente.id}`}
+            checked={agente.ativo}
+            onCheckedChange={() => handleToggleAgente(agente.id)}
+          />
+          <EditarAgenteDialog agente={agente} onAgenteAtualizado={onUpdate} />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowDeleteDialog(true)}
+            className="text-destructive hover:text-destructive"
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar Exclusão</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja excluir o agente "{agente.nome}"? Esta ação
+              não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteDialog(false)}
+            >
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteAgente}>
+              Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }
 
 // Dialogs (Modais)
-function AdicionarCaixaDialog({ onCaixaAdicionada, caixasConfiguradas }: { onCaixaAdicionada: () => void, caixasConfiguradas: CaixaEntrada[] }) {
-    const [open, setOpen] = useState(false);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [caixasExternas, setCaixasExternas] = useState<Inbox[]>([]);
-    const [nomesInternos, setNomesInternos] = useState<{[key: string]: string}>({});
+function AdicionarCaixaDialog({
+  onCaixaAdicionada,
+  caixasConfiguradas,
+}: {
+  onCaixaAdicionada: () => void;
+  caixasConfiguradas: CaixaEntrada[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [caixasExternas, setCaixasExternas] = useState<Inbox[]>([]);
+  const [nomesInternos, setNomesInternos] = useState<{ [key: string]: string }>(
+    {}
+  );
 
-    const fetchCaixasExternas = async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const response = await axios.get('/api/admin/mtf-diamante/dialogflow/inboxes');
-            const idsConfigurados = new Set(caixasConfiguradas.map(c => c.inboxId));
-            const disponiveis = (response.data.inboxes || []).filter((inbox: Inbox) => !idsConfigurados.has(inbox.id.toString()));
-            setCaixasExternas(disponiveis);
-        } catch (err) {
-            setError("Falha ao buscar caixas do Chatwit. Verifique a configuração de acesso.");
-        } finally {
-            setLoading(false);
-        }
+  const fetchCaixasExternas = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await axios.get(
+        "/api/admin/mtf-diamante/dialogflow/inboxes"
+      );
+      const idsConfigurados = new Set(caixasConfiguradas.map((c) => c.inboxId));
+      const disponiveis = (response.data.inboxes || []).filter(
+        (inbox: Inbox) => !idsConfigurados.has(inbox.id.toString())
+      );
+      setCaixasExternas(disponiveis);
+    } catch (err) {
+      setError(
+        "Falha ao buscar caixas do Chatwit. Verifique a configuração de acesso."
+      );
+    } finally {
+      setLoading(false);
     }
+  };
 
-    const handleAdicionarCaixa = async (caixa: Inbox) => {
-        const nomeInterno = nomesInternos[caixa.id] || caixa.name;
-        const promise = axios.post('/api/admin/mtf-diamante/dialogflow/caixas', {
-            nome: nomeInterno,
-            accountId: caixa.account_id,
-            inboxId: caixa.id.toString(),
-            inboxName: caixa.name,
-            channelType: caixa.channel_type
-        });
-        toast.promise(promise, {
-            loading: `Adicionando caixa...`,
-            success: () => {
-                onCaixaAdicionada();
-                setOpen(false);
-                return `Caixa "${nomeInterno}" adicionada com sucesso!`;
-            },
-            error: 'Erro ao adicionar a caixa.'
-        });
-    }
+  const handleAdicionarCaixa = async (caixa: Inbox) => {
+    const nomeInterno = nomesInternos[caixa.id] || caixa.name;
+    const promise = axios.post("/api/admin/mtf-diamante/dialogflow/caixas", {
+      nome: nomeInterno,
+      accountId: caixa.account_id,
+      inboxId: caixa.id.toString(),
+      inboxName: caixa.name,
+      channelType: caixa.channel_type,
+    });
+    toast.promise(promise, {
+      loading: `Adicionando caixa...`,
+      success: () => {
+        onCaixaAdicionada();
+        setOpen(false);
+        return `Caixa "${nomeInterno}" adicionada com sucesso!`;
+      },
+      error: "Erro ao adicionar a caixa.",
+    });
+  };
 
-    return (
-        <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                <Button onClick={fetchCaixasExternas}><Plus className="w-4 h-4 mr-2" /> Adicionar Caixa</Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-2xl">
-                <DialogHeader>
-                    <DialogTitle>Sincronizar Novas Caixas de Entrada</DialogTitle>
-                    <DialogDescription>Listando caixas de entrada da sua conta Chatwit que ainda não foram configuradas.</DialogDescription>
-                </DialogHeader>
-                <div className="py-4 space-y-4 max-h-[60vh] overflow-y-auto">
-                    {loading && <div className="flex justify-center"><Loader2 className="w-6 h-6 animate-spin" /></div>}
-                    {error && <div className="text-red-500 text-center">{error}</div>}
-                    {!loading && !error && caixasExternas.length === 0 && (
-                        <div className="text-center text-gray-500">
-                            <p>Todas as caixas de entrada disponíveis já foram configuradas.</p>
-                        </div>
-                    )}
-                    {!loading && !error && caixasExternas.map((caixa) => (
-                        <div key={caixa.id} className="flex items-center justify-between p-4 border rounded-lg">
-                            <div>
-                                <h4 className="font-medium">{caixa.name}</h4>
-                                <p className="text-sm text-gray-500">{caixa.channel_type}</p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <Input
-                                    placeholder="Nome interno (opcional)"
-                                    value={nomesInternos[caixa.id] || ''}
-                                    onChange={(e) => setNomesInternos(prev => ({ ...prev, [caixa.id]: e.target.value }))}
-                                    className="w-40"
-                                />
-                                <Button onClick={() => handleAdicionarCaixa(caixa)}>Adicionar</Button>
-                            </div>
-                        </div>
-                    ))}
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button onClick={fetchCaixasExternas}>
+          <Plus className="w-4 h-4 mr-2" /> Adicionar Caixa
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Sincronizar Novas Caixas de Entrada</DialogTitle>
+          <DialogDescription>
+            Listando caixas de entrada da sua conta Chatwit que ainda não foram
+            configuradas.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="py-4 space-y-4 max-h-[60vh] overflow-y-auto">
+          {loading && (
+            <div className="flex justify-center">
+              <Loader2 className="w-6 h-6 animate-spin" />
+            </div>
+          )}
+          {error && <div className="text-red-500 text-center">{error}</div>}
+          {!loading && !error && caixasExternas.length === 0 && (
+            <div className="text-center text-gray-500">
+              <p>
+                Todas as caixas de entrada disponíveis já foram configuradas.
+              </p>
+            </div>
+          )}
+          {!loading &&
+            !error &&
+            caixasExternas.map((caixa) => (
+              <div
+                key={caixa.id}
+                className="flex items-center justify-between p-4 border rounded-lg"
+              >
+                <div>
+                  <h4 className="font-medium">{caixa.name}</h4>
+                  <p className="text-sm text-gray-500">{caixa.channel_type}</p>
                 </div>
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => setOpen(false)}>Fechar</Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-    );
+                <div className="flex items-center gap-2">
+                  <Input
+                    placeholder="Nome interno (opcional)"
+                    value={nomesInternos[caixa.id] || ""}
+                    onChange={(e) =>
+                      setNomesInternos((prev) => ({
+                        ...prev,
+                        [caixa.id]: e.target.value,
+                      }))
+                    }
+                    className="w-40"
+                  />
+                  <Button onClick={() => handleAdicionarCaixa(caixa)}>
+                    Adicionar
+                  </Button>
+                </div>
+              </div>
+            ))}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            Fechar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
-function AdicionarAgenteDialog({ caixaId, onAgenteAdicionado }: { caixaId: string, onAgenteAdicionado: () => void }) {
-    const [open, setOpen] = useState(false);
-    const [loading, setLoading] = useState(false);
-    const [formData, setFormData] = useState({
-        nome: '',
-        projectId: '',
-        credentials: '',
-        region: 'us-central1'
-    });
+function AdicionarAgenteDialog({
+  caixaId,
+  onAgenteAdicionado,
+}: {
+  caixaId: string;
+  onAgenteAdicionado: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    nome: "",
+    projectId: "",
+    credentials: "",
+    region: "us-central1",
+  });
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setLoading(true);
-        try {
-            await axios.post('/api/admin/mtf-diamante/dialogflow/agentes', {
-                ...formData,
-                caixaId
-            });
-            toast.success('Agente adicionado com sucesso!');
-            onAgenteAdicionado();
-            setOpen(false);
-            setFormData({ nome: '', projectId: '', credentials: '', region: 'us-central1' });
-        } catch (error) {
-            toast.error('Erro ao adicionar agente');
-        } finally {
-            setLoading(false);
-        }
-    };
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await axios.post("/api/admin/mtf-diamante/dialogflow/agentes", {
+        ...formData,
+        caixaId,
+      });
+      toast.success("Agente adicionado com sucesso!");
+      onAgenteAdicionado();
+      setOpen(false);
+      setFormData({
+        nome: "",
+        projectId: "",
+        credentials: "",
+        region: "us-central1",
+      });
+    } catch (error) {
+      toast.error("Erro ao adicionar agente");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    return (
-        <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                <Button variant="outline" size="sm" className="w-full">
-                    <Plus className="w-4 h-4 mr-2" /> Novo Agente
-                </Button>
-            </DialogTrigger>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Adicionar Agente Dialogflow</DialogTitle>
-                    <DialogDescription>Configure um novo agente Dialogflow para esta caixa de entrada.</DialogDescription>
-                </DialogHeader>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                        <Label htmlFor="nome">Nome do Agente</Label>
-                        <Input
-                            id="nome"
-                            value={formData.nome}
-                            onChange={(e) => setFormData(prev => ({ ...prev, nome: e.target.value }))}
-                            required
-                        />
-                    </div>
-                    <div>
-                        <Label htmlFor="projectId">Project ID</Label>
-                        <Input
-                            id="projectId"
-                            value={formData.projectId}
-                            onChange={(e) => setFormData(prev => ({ ...prev, projectId: e.target.value }))}
-                            required
-                        />
-                    </div>
-                    <div>
-                        <Label htmlFor="credentials">Credenciais JSON</Label>
-                        <Textarea
-                            id="credentials"
-                            value={formData.credentials}
-                            onChange={(e) => setFormData(prev => ({ ...prev, credentials: e.target.value }))}
-                            placeholder="Cole aqui o JSON das credenciais do Google Cloud"
-                            rows={6}
-                            required
-                        />
-                    </div>
-                    <div>
-                        <Label htmlFor="region">Região</Label>
-                        <Select value={formData.region} onValueChange={(value) => setFormData(prev => ({ ...prev, region: value }))}>
-                            <SelectTrigger>
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="us-central1">us-central1</SelectItem>
-                                <SelectItem value="europe-west1">europe-west1</SelectItem>
-                                <SelectItem value="asia-northeast1">asia-northeast1</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <DialogFooter>
-                        <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-                        <Button type="submit" disabled={loading}>
-                            {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                            Adicionar
-                        </Button>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
-    );
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="w-full">
+          <Plus className="w-4 h-4 mr-2" /> Novo Agente
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Adicionar Agente Dialogflow</DialogTitle>
+          <DialogDescription>
+            Configure um novo agente Dialogflow para esta caixa de entrada.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="nome">Nome do Agente</Label>
+            <Input
+              id="nome"
+              value={formData.nome}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, nome: e.target.value }))
+              }
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="projectId">Project ID</Label>
+            <Input
+              id="projectId"
+              value={formData.projectId}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, projectId: e.target.value }))
+              }
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="credentials">Credenciais JSON</Label>
+            <Textarea
+              id="credentials"
+              value={formData.credentials}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  credentials: e.target.value,
+                }))
+              }
+              placeholder="Cole aqui o JSON das credenciais do Google Cloud"
+              rows={6}
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="region">Região</Label>
+            <Select
+              value={formData.region}
+              onValueChange={(value) =>
+                setFormData((prev) => ({ ...prev, region: value }))
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="us-central1">us-central1</SelectItem>
+                <SelectItem value="europe-west1">europe-west1</SelectItem>
+                <SelectItem value="asia-northeast1">asia-northeast1</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Adicionar
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
-function EditarAgenteDialog({ agente, onAgenteAtualizado }: { agente: AgenteDialogflow, onAgenteAtualizado: () => void }) {
-    const [open, setOpen] = useState(false);
-    const [loading, setLoading] = useState(false);
-    const [formData, setFormData] = useState({
-        nome: agente.nome,
-        projectId: agente.projectId,
-        region: agente.region
-    });
+function EditarAgenteDialog({
+  agente,
+  onAgenteAtualizado,
+}: {
+  agente: AgenteDialogflow;
+  onAgenteAtualizado: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    nome: agente.nome,
+    projectId: agente.projectId,
+    region: agente.region,
+  });
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setLoading(true);
-        try {
-            await axios.patch(`/api/admin/mtf-diamante/dialogflow/agentes/${agente.id}`, formData);
-            toast.success('Agente atualizado com sucesso!');
-            onAgenteAtualizado();
-            setOpen(false);
-        } catch (error) {
-            toast.error('Erro ao atualizar agente');
-        } finally {
-            setLoading(false);
-        }
-    };
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await axios.patch(
+        `/api/admin/mtf-diamante/dialogflow/agentes/${agente.id}`,
+        formData
+      );
+      toast.success("Agente atualizado com sucesso!");
+      onAgenteAtualizado();
+      setOpen(false);
+    } catch (error) {
+      toast.error("Erro ao atualizar agente");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    return (
-        <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                <Button variant="ghost" size="icon">
-                    <Settings className="w-4 h-4" />
-                </Button>
-            </DialogTrigger>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Editar Agente Dialogflow</DialogTitle>
-                    <DialogDescription>Atualize as configurações do agente.</DialogDescription>
-                </DialogHeader>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                        <Label htmlFor="nome">Nome do Agente</Label>
-                        <Input
-                            id="nome"
-                            value={formData.nome}
-                            onChange={(e) => setFormData(prev => ({ ...prev, nome: e.target.value }))}
-                            required
-                        />
-                    </div>
-                    <div>
-                        <Label htmlFor="projectId">Project ID</Label>
-                        <Input
-                            id="projectId"
-                            value={formData.projectId}
-                            onChange={(e) => setFormData(prev => ({ ...prev, projectId: e.target.value }))}
-                            required
-                        />
-                    </div>
-                    <div>
-                        <Label htmlFor="region">Região</Label>
-                        <Select value={formData.region} onValueChange={(value) => setFormData(prev => ({ ...prev, region: value }))}>
-                            <SelectTrigger>
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="us-central1">us-central1</SelectItem>
-                                <SelectItem value="europe-west1">europe-west1</SelectItem>
-                                <SelectItem value="asia-northeast1">asia-northeast1</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <DialogFooter>
-                        <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-                        <Button type="submit" disabled={loading}>
-                            {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                            Atualizar
-                        </Button>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
-    );
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="icon">
+          <Settings className="w-4 h-4" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Editar Agente Dialogflow</DialogTitle>
+          <DialogDescription>
+            Atualize as configurações do agente.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="nome">Nome do Agente</Label>
+            <Input
+              id="nome"
+              value={formData.nome}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, nome: e.target.value }))
+              }
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="projectId">Project ID</Label>
+            <Input
+              id="projectId"
+              value={formData.projectId}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, projectId: e.target.value }))
+              }
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="region">Região</Label>
+            <Select
+              value={formData.region}
+              onValueChange={(value) =>
+                setFormData((prev) => ({ ...prev, region: value }))
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="us-central1">us-central1</SelectItem>
+                <SelectItem value="europe-west1">europe-west1</SelectItem>
+                <SelectItem value="asia-northeast1">asia-northeast1</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Atualizar
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
 }
