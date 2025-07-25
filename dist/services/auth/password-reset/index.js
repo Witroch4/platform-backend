@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createResetPasswordToken = exports.updatePassword = exports.deleteResetPasswordToken = exports.findResetPasswordTokenByEmail = exports.findResetPasswordTokenByToken = void 0;
-const prisma_1 = require("@/lib/prisma");
+const prisma_1 = require("../../../lib/prisma");
 const uuid_1 = require("uuid");
 const findResetPasswordTokenByToken = async (token) => {
     const resetPasswordToken = await prisma_1.prisma.resetPasswordToken.findUnique({

@@ -39,6 +39,14 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { SendProgressDialog } from "../../components/TemplatesTab/components/send-progress-dialog";
 import { LeadsSelectorDialog } from "../../components/TemplatesTab/components/leads-selector-dialog";
+import { InteractivePreview } from "../../components/shared/InteractivePreview";
+import { EmojiPicker } from "../../components/shared/EmojiPicker";
+import { WhatsAppTextEditor } from "../../components/shared/WhatsAppTextEditor";
+import type {
+  InteractiveMessage,
+  HeaderType,
+  ButtonReaction,
+} from "@/types/interactive-messages";
 
 interface TemplateDetail {
   id: string;
@@ -113,6 +121,14 @@ function TemplateDetailsClient({ templateId }: { templateId: string }) {
   const [sendProgressComplete, setSendProgressComplete] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showLeadsSelector, setShowLeadsSelector] = useState(false);
+
+  // Estados para reações de botões
+  const [templateReactions, setTemplateReactions] = useState<ButtonReaction[]>(
+    []
+  );
+  const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
+  const [showTextEditor, setShowTextEditor] = useState<string | null>(null);
+  const [reactionConfigMode, setReactionConfigMode] = useState(false);
 
   useEffect(() => {
     async function fetchTemplate() {
@@ -277,6 +293,74 @@ function TemplateDetailsClient({ templateId }: { templateId: string }) {
     return "";
   }
 
+  // Converter template para formato InteractiveMessage
+  const convertTemplateToInteractiveMessage = (): InteractiveMessage | null => {
+    if (!template) return null;
+
+    const headerComponent = template.componentes.find(
+      (c) => c.type === "HEADER"
+    );
+    const bodyComponent = template.componentes.find((c) => c.type === "BODY");
+    const footerComponent = template.componentes.find(
+      (c) => c.type === "FOOTER"
+    );
+    const buttonsComponent = template.componentes.find(
+      (c) => c.type === "BUTTONS"
+    );
+
+    const message: InteractiveMessage = {
+      id: template.id,
+      name: template.name,
+      type: "button" as const,
+      body: {
+        text: bodyComponent?.text || "",
+      },
+      isActive: true,
+    };
+
+    // Header
+    if (headerComponent) {
+      if (headerComponent.format === "TEXT" && headerComponent.text) {
+        message.header = {
+          type: "text" as HeaderType,
+          content: headerComponent.text,
+        };
+      } else if (
+        headerComponent.format &&
+        ["IMAGE", "VIDEO", "DOCUMENT"].includes(headerComponent.format)
+      ) {
+        message.header = {
+          type: headerComponent.format.toLowerCase() as HeaderType,
+          content: "",
+          mediaUrl: headerMedia,
+          filename:
+            headerComponent.format === "DOCUMENT" ? "Document" : undefined,
+        };
+      }
+    }
+
+    // Footer
+    if (footerComponent?.text) {
+      message.footer = {
+        text: footerComponent.text,
+      };
+    }
+
+    // Buttons
+    if (buttonsComponent?.buttons) {
+      message.action = {
+        type: "button",
+        buttons: buttonsComponent.buttons.map((button, index) => ({
+          id: `btn_${index}`,
+          title: button.text,
+          type: "reply" as const,
+        })),
+      };
+    }
+
+    return message;
+  };
+
   const handleMassSend = async () => {
     if (!template || contactList.length === 0) return;
     setShowSendProgress(true);
@@ -334,6 +418,81 @@ function TemplateDetailsClient({ templateId }: { templateId: string }) {
 
     setContactList(contacts);
     toast.success(`${contacts.length} leads selecionados da base de dados!`);
+  };
+
+  // Funções para gerenciar reações de botões
+  const handleButtonReactionChange = (
+    buttonId: string,
+    reaction: { emoji?: string; textResponse?: string }
+  ) => {
+    setTemplateReactions((prev) => {
+      const existing = prev.find((r) => r.buttonId === buttonId);
+      const reactionType: "emoji" | "text" = reaction.emoji ? "emoji" : "text";
+
+      if (existing) {
+        return prev.map((r) =>
+          r.buttonId === buttonId
+            ? {
+                ...r,
+                ...reaction,
+                type: reactionType,
+                isActive: !!(reaction.emoji || reaction.textResponse),
+              }
+            : r
+        );
+      } else {
+        return [
+          ...prev,
+          {
+            id: `reaction_${buttonId}_${Date.now()}`,
+            buttonId,
+            messageId: template?.id || "",
+            type: reactionType,
+            isActive: true,
+            ...reaction,
+          },
+        ];
+      }
+    });
+  };
+
+  const handleEmojiSelect = (buttonId: string, emoji: string) => {
+    if (emoji === "TEXT_RESPONSE") {
+      setShowEmojiPicker(null);
+      setShowTextEditor(buttonId);
+    } else {
+      handleButtonReactionChange(buttonId, { emoji, textResponse: "" });
+      setShowEmojiPicker(null);
+      toast.success(`Emoji ${emoji} configurado para o botão`);
+    }
+  };
+
+  const handleTextResponseSave = (buttonId: string, text: string) => {
+    handleButtonReactionChange(buttonId, { emoji: "", textResponse: text });
+    setShowTextEditor(null);
+    toast.success("Resposta de texto configurada para o botão");
+  };
+
+  const handleButtonClick = (buttonId: string) => {
+    if (reactionConfigMode) {
+      setShowEmojiPicker(buttonId);
+    } else {
+      // Modo preview normal - mostrar reação configurada
+      const reaction = templateReactions.find((r) => r.buttonId === buttonId);
+      if (reaction?.emoji) {
+        toast.success(`Reação configurada: ${reaction.emoji}`, {
+          description: `Será enviada quando este botão for clicado`,
+        });
+      } else if (reaction?.textResponse) {
+        toast.success(`Mensagem configurada: "${reaction.textResponse}"`, {
+          description: `Será enviada quando este botão for clicado`,
+        });
+      } else {
+        toast.info(`Botão clicado`, {
+          description: "Nenhuma reação configurada para este botão",
+        });
+      }
+    }
   };
 
   if (isLoading) {
@@ -408,133 +567,27 @@ function TemplateDetailsClient({ templateId }: { templateId: string }) {
                   <TabsTrigger value="json">JSON</TabsTrigger>
                 </TabsList>
                 <TabsContent value="visual">
-                  <div className="border rounded-lg overflow-hidden">
-                    {/* Fundo de chat do WhatsApp */}
-                    <div
-                      className="relative p-3 min-h-[400px]"
-                      style={{
-                        backgroundImage: "url('/fundo_whatsapp.jpg')",
-                        backgroundSize: "cover",
-                        backgroundPosition: "center",
-                      }}
-                    >
-                      {/* Mensagem de template */}
-                      <div className="max-w-[85%] bg-white rounded-lg shadow-sm p-3 ml-auto mr-3 mb-3">
-                        {/* Header */}
-                        {template.componentes.map(
-                          (c, i) =>
-                            c.type === "HEADER" && (
-                              <div key={i}>
-                                {c.format === "TEXT" && c.text && (
-                                  <div className="font-bold text-center mb-2">
-                                    {c.text}
-                                  </div>
-                                )}
-                                {c.format === "IMAGE" && (
-                                  <div
-                                    className="mb-2 overflow-hidden rounded-md"
-                                    style={{ maxHeight: "180px" }}
-                                  >
-                                    {headerMedia ? (
-                                      <img
-                                        src={headerMedia}
-                                        alt="Header"
-                                        className="w-full object-contain rounded-md max-h-[160px]"
-                                      />
-                                    ) : (
-                                      <div
-                                        className="w-full bg-gray-200 flex items-center justify-center"
-                                        style={{ height: "140px" }}
-                                      >
-                                        <svg
-                                          className="w-12 h-12 text-gray-400"
-                                          fill="none"
-                                          stroke="currentColor"
-                                          viewBox="0 0 24 24"
-                                          xmlns="http://www.w3.org/2000/svg"
-                                        >
-                                          <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth="2"
-                                            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                                          ></path>
-                                        </svg>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            )
-                        )}
-
-                        {/* Body */}
-                        {template.componentes.map(
-                          (c, i) =>
-                            c.type === "BODY" &&
-                            c.text && (
-                              <div
-                                key={i}
-                                className="text-sm whitespace-pre-line mb-2"
-                              >
-                                {c.text}
-                              </div>
-                            )
-                        )}
-
-                        {/* Footer */}
-                        {template.componentes.map(
-                          (c, i) =>
-                            c.type === "FOOTER" &&
-                            c.text && (
-                              <div
-                                key={i}
-                                className="text-xs text-gray-500 mb-2"
-                              >
-                                {c.text}
-                              </div>
-                            )
-                        )}
-
-                        <div className="text-right text-xs text-gray-500 flex justify-end items-center">
-                          <span>17:12</span>
-                        </div>
+                  {(() => {
+                    const interactiveMessage =
+                      convertTemplateToInteractiveMessage();
+                    return interactiveMessage ? (
+                      <InteractivePreview
+                        message={interactiveMessage}
+                        reactions={templateReactions}
+                        onButtonClick={handleButtonClick}
+                        showReactionIndicators={true}
+                        showReactionConfig={true}
+                        onButtonReactionChange={handleButtonReactionChange}
+                        title="Preview do Template com Reações"
+                      />
+                    ) : (
+                      <div className="text-center text-muted-foreground py-12 border-2 border-dashed rounded-lg">
+                        <p className="text-lg">
+                          Erro ao carregar preview do template
+                        </p>
                       </div>
-
-                      {/* Botões abaixo da mensagem */}
-                      {template.componentes.map(
-                        (c, i) =>
-                          c.type === "BUTTONS" &&
-                          c.buttons &&
-                          c.buttons.length > 0 && (
-                            <div
-                              key={i}
-                              className="bg-white rounded-lg shadow-sm max-w-[85%] ml-auto mr-3 mt-1 overflow-hidden"
-                            >
-                              <div className="divide-y divide-gray-100">
-                                {c.buttons.map((button, index) => (
-                                  <button
-                                    key={index}
-                                    className="w-full py-3 px-4 text-sm text-cyan-500 font-medium text-center flex justify-center items-center"
-                                  >
-                                    {button.type === "URL" && (
-                                      <ExternalLink className="h-4 w-4 mr-2" />
-                                    )}
-                                    {button.type === "COPY_CODE" && (
-                                      <Copy className="h-4 w-4 mr-2" />
-                                    )}
-                                    {button.type === "PHONE_NUMBER" && (
-                                      <Phone className="h-4 w-4 mr-2" />
-                                    )}
-                                    {button.text}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )
-                      )}
-                    </div>
-                  </div>
+                    );
+                  })()}
                 </TabsContent>
                 <TabsContent value="json">
                   <pre className="bg-muted p-4 rounded overflow-auto text-xs max-h-[400px]">
@@ -745,6 +798,24 @@ function TemplateDetailsClient({ templateId }: { templateId: string }) {
         onClose={() => setShowLeadsSelector(false)}
         onConfirm={handleLeadsSelection}
       />
+
+      {/* Emoji Picker para configurar reações */}
+      {showEmojiPicker && (
+        <EmojiPicker
+          isOpen={true}
+          onEmojiSelect={(emoji) => handleEmojiSelect(showEmojiPicker, emoji)}
+          onClose={() => setShowEmojiPicker(null)}
+        />
+      )}
+
+      {/* Editor de texto para respostas automáticas */}
+      {showTextEditor && (
+        <WhatsAppTextEditor
+          onSave={(text) => handleTextResponseSave(showTextEditor, text)}
+          onClose={() => setShowTextEditor(null)}
+          placeholder="Digite a resposta que será enviada quando este botão for clicado..."
+        />
+      )}
     </div>
   );
 }

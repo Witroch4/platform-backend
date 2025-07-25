@@ -247,14 +247,14 @@ export function WhatsAppTextEditor({
       .replace(/~(.*?)~/g, "<del>$1</del>")
       .replace(
         /`(.*?)`/g,
-        '<code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">$1</code>'
+        '<code class="bg-gray-200 dark:bg-gray-700 px-1 rounded text-xs">$1</code>'
       )
       .replace(
         /^> (.+)$/gm,
-        '<blockquote class="border-l-4 border-gray-300 pl-4 italic">$1</blockquote>'
+        '<blockquote class="border-l-4 border-gray-300 pl-4 italic text-gray-600 dark:text-gray-400">$1</blockquote>'
       )
-      .replace(/^• (.+)$/gm, '<li class="ml-4">$1</li>')
-      .replace(/^\d+\. (.+)$/gm, '<li class="ml-4">$1</li>')
+      .replace(/^• (.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
+      .replace(/^\d+\. (.+)$/gm, '<li class="ml-4 list-decimal">$1</li>')
       .replace(/\n/g, "<br>");
 
     // Replace variables with their values for preview

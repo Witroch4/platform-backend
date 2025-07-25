@@ -10,6 +10,21 @@ interface MtfDiamanteVariavel {
   valor: string;
 }
 
+// Process WhatsApp formatting (bold, italic, strikethrough, etc.)
+const processWhatsAppFormatting = (text: string): string => {
+  if (!text) return text;
+  
+  return text
+    .replace(/\*(.*?)\*/g, '<strong>$1</strong>')
+    .replace(/_(.*?)_/g, '<em>$1</em>')
+    .replace(/~(.*?)~/g, '<del>$1</del>')
+    .replace(/`(.*?)`/g, '<code class="bg-gray-200 dark:bg-gray-700 px-1 rounded text-xs">$1</code>')
+    .replace(/^> (.+)$/gm, '<blockquote class="border-l-4 border-gray-300 pl-4 italic text-gray-600 dark:text-gray-400">$1</blockquote>')
+    .replace(/^• (.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
+    .replace(/^\d+\. (.+)$/gm, '<li class="ml-4 list-decimal">$1</li>')
+    .replace(/\n/g, '<br>');
+};
+
 interface BaseFieldProps {
   value: string;
   onChange: (value: string) => void;
@@ -122,9 +137,10 @@ export const BodyField = forwardRef<EnhancedTextAreaRef, BodyFieldProps>(({
           <div className="text-xs font-medium text-muted-foreground mb-2">
             Pré-visualização {previewMode === 'actual' ? '(com valores reais)' : '(formato numerado)'}:
           </div>
-          <div className="text-sm whitespace-pre-wrap">
-            {previewText}
-          </div>
+          <div 
+            className="text-sm"
+            dangerouslySetInnerHTML={{ __html: processWhatsAppFormatting(previewText) }}
+          />
         </div>
       )}
     </div>

@@ -5,7 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.initializeWorkers = initializeWorkers;
 const webhook_worker_1 = require("./webhook.worker");
-const scheduler_bullmq_1 = require("@/lib/scheduler-bullmq");
+const scheduler_bullmq_1 = require("../lib/scheduler-bullmq");
 const webhook_worker_2 = require("./webhook.worker");
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();

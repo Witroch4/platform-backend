@@ -28,6 +28,21 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { CreateTemplateComponent } from "../components/template-preview";
+
+// Process WhatsApp formatting (bold, italic, strikethrough, etc.)
+const processWhatsAppFormatting = (text: string): string => {
+  if (!text) return text;
+  
+  return text
+    .replace(/\*(.*?)\*/g, '<strong>$1</strong>')
+    .replace(/_(.*?)_/g, '<em>$1</em>')
+    .replace(/~(.*?)~/g, '<del>$1</del>')
+    .replace(/`(.*?)`/g, '<code class="bg-gray-200 dark:bg-gray-700 px-1 rounded text-xs">$1</code>')
+    .replace(/^> (.+)$/gm, '<blockquote class="border-l-4 border-gray-300 pl-4 italic text-gray-600 dark:text-gray-400">$1</blockquote>')
+    .replace(/^• (.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
+    .replace(/^\d+\. (.+)$/gm, '<li class="ml-4 list-decimal">$1</li>')
+    .replace(/\n/g, '<br>');
+};
 import { useMtfData } from "../../../context/MtfDataProvider";
 import { EnhancedTextArea } from "../../EnhancedTextArea";
 import { SaveToLibraryButton } from "../../shared/SaveToLibraryButton";
@@ -1563,7 +1578,10 @@ export default function CreateTemplatePage() {
                   <div className="max-w-[80%] bg-white dark:bg-gray-800 rounded-lg shadow-sm p-3 ml-auto mr-3 mb-3">
                     {/* Header */}
                     {headerType === "TEXT" && headerText && (
-                      <div className="font-bold text-center mb-2 text-gray-900 dark:text-white break-words overflow-hidden">{headerText}</div>
+                      <div 
+                        className="font-bold text-center mb-2 text-gray-900 dark:text-white break-words overflow-hidden"
+                        dangerouslySetInnerHTML={{ __html: processWhatsAppFormatting(headerText) }}
+                      />
                     )}
                     {headerType === "IMAGE" && (
                       <div className="mb-2 overflow-hidden rounded-md" style={{ maxHeight: "180px" }}>
@@ -1618,15 +1636,19 @@ export default function CreateTemplatePage() {
                     )}
                     
                     {/* Body */}
-                    <div className="text-sm whitespace-pre-wrap break-words text-gray-900 dark:text-white mb-2">
-                      {bodyText || "Digite o texto principal da mensagem aqui"}
-                    </div>
+                    <div 
+                      className="text-sm break-words text-gray-900 dark:text-white mb-2"
+                      dangerouslySetInnerHTML={{ 
+                        __html: processWhatsAppFormatting(bodyText || "Digite o texto principal da mensagem aqui") 
+                      }}
+                    />
                     
                     {/* Footer */}
                     {footerText && (
-                      <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                        {footerText}
-                      </div>
+                      <div 
+                        className="text-xs text-gray-500 dark:text-gray-400 mb-2"
+                        dangerouslySetInnerHTML={{ __html: processWhatsAppFormatting(footerText) }}
+                      />
                     )}
                     
                     <div className="text-right text-xs text-gray-500 dark:text-gray-400 flex justify-end items-center">

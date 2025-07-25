@@ -7,6 +7,10 @@
       "outDir": "dist/scripts",
       "esModuleInterop": true
     },
-    "include": ["bull-board-server.ts"]
+    "include": [
+      "bull-board-server.ts",
+      "auth.ts",
+      "types/**/*.d.ts"
+    ]
   }
   

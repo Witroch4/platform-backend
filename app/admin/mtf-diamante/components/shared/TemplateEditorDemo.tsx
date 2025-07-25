@@ -17,6 +17,21 @@ interface MtfDiamanteVariavel {
   valor: string;
 }
 
+// Process WhatsApp formatting (bold, italic, strikethrough, etc.)
+const processWhatsAppFormatting = (text: string): string => {
+  if (!text) return text;
+  
+  return text
+    .replace(/\*(.*?)\*/g, '<strong>$1</strong>')
+    .replace(/_(.*?)_/g, '<em>$1</em>')
+    .replace(/~(.*?)~/g, '<del>$1</del>')
+    .replace(/`(.*?)`/g, '<code class="bg-gray-200 dark:bg-gray-700 px-1 rounded text-xs">$1</code>')
+    .replace(/^> (.+)$/gm, '<blockquote class="border-l-4 border-gray-300 pl-4 italic text-gray-600 dark:text-gray-400">$1</blockquote>')
+    .replace(/^• (.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
+    .replace(/^\d+\. (.+)$/gm, '<li class="ml-4 list-decimal">$1</li>')
+    .replace(/\n/g, '<br>');
+};
+
 // Mock variables for demonstration
 const mockVariables: MtfDiamanteVariavel[] = [
   { id: '1', chave: 'nome', valor: 'João Silva' },
@@ -265,9 +280,12 @@ Atenciosamente,`);
             <CardContent>
               <div className="bg-gradient-to-b from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 rounded-lg p-4 border">
                 <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm">
-                  <div className="whitespace-pre-wrap text-sm">
-                    {getCompletePreview() || 'Digite o conteúdo do template para ver a pré-visualização...'}
-                  </div>
+                  <div 
+                    className="text-sm"
+                    dangerouslySetInnerHTML={{ 
+                      __html: processWhatsAppFormatting(getCompletePreview() || 'Digite o conteúdo do template para ver a pré-visualização...') 
+                    }}
+                  />
                 </div>
               </div>
             </CardContent>

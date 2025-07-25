@@ -26,7 +26,7 @@ jest.mock('@/app/config/button-reaction-mapping', () => ({
     getEmojiForButton: jest.fn(),
     getAllButtonReactions: jest.fn()
 }));
-const button_reaction_mapping_1 = require("@/app/config/button-reaction-mapping");
+const button_reaction_mapping_1 = require("../../app/config/button-reaction-mapping");
 describe('Dialogflow Database Queries', () => {
     beforeEach(() => {
         jest.clearAllMocks();

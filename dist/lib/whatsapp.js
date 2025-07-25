@@ -11,9 +11,9 @@ exports.testWhatsAppApiConnection = testWhatsAppApiConnection;
 exports.processCSV = processCSV;
 // lib/whatsapp.ts
 const axios_1 = __importDefault(require("axios"));
-const auth_1 = require("@/auth");
-const lib_1 = require("@/app/lib");
-const db_1 = require("@/lib/db");
+const auth_1 = require("../auth");
+const lib_1 = require("../app/lib");
+const db_1 = require("../lib/db");
 function formatE164(num) {
     const d = num.replace(/\D/g, '');
     if (!d)

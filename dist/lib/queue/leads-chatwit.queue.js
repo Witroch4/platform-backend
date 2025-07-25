@@ -4,7 +4,7 @@ exports.leadsQueue = exports.LEADS_QUEUE_NAME = void 0;
 exports.addLeadJob = addLeadJob;
 exports.addFinalAnalysisJob = addFinalAnalysisJob;
 const bullmq_1 = require("bullmq");
-const redis_1 = require("@/lib/redis");
+const redis_1 = require("../../lib/redis");
 exports.LEADS_QUEUE_NAME = 'filaLeadsChatwit';
 exports.leadsQueue = new bullmq_1.Queue(exports.LEADS_QUEUE_NAME, {
     connection: redis_1.connection,

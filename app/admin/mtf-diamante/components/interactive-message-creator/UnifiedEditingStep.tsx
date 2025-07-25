@@ -706,6 +706,18 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
                   message={message}
                   reactions={reactions}
                   showReactionIndicators={true}
+                  showReactionConfig={true}
+                  onButtonReactionChange={(buttonId, reaction) => {
+                    // Convert the reaction format to match the expected type
+                    const reactionUpdate: Partial<CentralButtonReaction> = {
+                      buttonId,
+                      type: reaction.emoji ? 'emoji' : 'text',
+                      emoji: reaction.emoji,
+                      textResponse: reaction.textResponse,
+                      isActive: true
+                    };
+                    onReactionUpdate(buttonId, reactionUpdate);
+                  }}
                   debounceMs={300}
                   className="min-h-[400px]"
                 />

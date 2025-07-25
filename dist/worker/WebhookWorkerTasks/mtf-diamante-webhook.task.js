@@ -35,7 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.processMtfDiamanteWebhookTask = processMtfDiamanteWebhookTask;
 const prisma_1 = require("../../lib/prisma");
-const whatsapp_reactions_1 = require("../../lib/whatsapp-reactions");
+const whatsapp_reactions_worker_1 = require("../../lib/whatsapp-reactions-worker");
 const whatsapp_messages_1 = require("../../lib/whatsapp-messages");
 /**
  * Enhanced button click detection with support for multiple payload formats
@@ -46,48 +46,48 @@ function extractEnhancedButtonClickData(rawPayload) {
         // Method 1: Check Dialogflow payload format (Chatwoot integration)
         const chatwootPayload = rawPayload?.originalDetectIntentRequest?.payload;
         const interactive = chatwootPayload?.interactive;
-        if (interactive?.type === 'button_reply') {
+        if (interactive?.type === "button_reply") {
             return {
                 isButtonClick: true,
                 buttonId: interactive.button_reply?.id,
                 buttonText: interactive.button_reply?.title,
                 messageId: chatwootPayload?.id || chatwootPayload?.wamid,
                 originalMessageId: chatwootPayload?.context?.id,
-                interactionType: 'button_reply'
+                interactionType: "button_reply",
             };
         }
-        if (interactive?.type === 'list_reply') {
+        if (interactive?.type === "list_reply") {
             return {
                 isButtonClick: true,
                 buttonId: interactive.list_reply?.id,
                 buttonText: interactive.list_reply?.title,
                 messageId: chatwootPayload?.id || chatwootPayload?.wamid,
                 originalMessageId: chatwootPayload?.context?.id,
-                interactionType: 'list_reply'
+                interactionType: "list_reply",
             };
         }
         // Method 2: Check direct WhatsApp webhook format
         const whatsappMessage = rawPayload?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-        if (whatsappMessage?.type === 'interactive') {
+        if (whatsappMessage?.type === "interactive") {
             const whatsappInteractive = whatsappMessage.interactive;
-            if (whatsappInteractive?.type === 'button_reply') {
+            if (whatsappInteractive?.type === "button_reply") {
                 return {
                     isButtonClick: true,
                     buttonId: whatsappInteractive.button_reply?.id,
                     buttonText: whatsappInteractive.button_reply?.title,
                     messageId: whatsappMessage.id,
                     originalMessageId: whatsappMessage.context?.id,
-                    interactionType: 'button_reply'
+                    interactionType: "button_reply",
                 };
             }
-            if (whatsappInteractive?.type === 'list_reply') {
+            if (whatsappInteractive?.type === "list_reply") {
                 return {
                     isButtonClick: true,
                     buttonId: whatsappInteractive.list_reply?.id,
                     buttonText: whatsappInteractive.list_reply?.title,
                     messageId: whatsappMessage.id,
                     originalMessageId: whatsappMessage.context?.id,
-                    interactionType: 'list_reply'
+                    interactionType: "list_reply",
                 };
             }
         }
@@ -96,13 +96,13 @@ function extractEnhancedButtonClickData(rawPayload) {
         if (legacyButtonClick.isButtonClick) {
             return {
                 ...legacyButtonClick,
-                interactionType: 'button_reply'
+                interactionType: "button_reply",
             };
         }
         return { isButtonClick: false };
     }
     catch (error) {
-        console.error('[MTF Diamante Webhook Worker] Error extracting enhanced button click data:', error);
+        console.error("[MTF Diamante Webhook Worker] Error extracting enhanced button click data:", error);
         return { isButtonClick: false };
     }
 }
@@ -113,27 +113,29 @@ function extractButtonClickData(rawPayload) {
     try {
         // Verificar se é uma mensagem interativa (button reply)
         const message = rawPayload?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-        if (message?.type === 'interactive' && message?.interactive?.type === 'button_reply') {
+        if (message?.type === "interactive" &&
+            message?.interactive?.type === "button_reply") {
             return {
                 isButtonClick: true,
                 buttonId: message.interactive.button_reply.id,
                 buttonText: message.interactive.button_reply.title,
-                originalMessageId: message.context?.id // ID da mensagem original que continha o botão
+                originalMessageId: message.context?.id, // ID da mensagem original que continha o botão
             };
         }
         // Verificar se é uma resposta de lista
-        if (message?.type === 'interactive' && message?.interactive?.type === 'list_reply') {
+        if (message?.type === "interactive" &&
+            message?.interactive?.type === "list_reply") {
             return {
                 isButtonClick: true,
                 buttonId: message.interactive.list_reply.id,
                 buttonText: message.interactive.list_reply.title,
-                originalMessageId: message.context?.id
+                originalMessageId: message.context?.id,
             };
         }
         return { isButtonClick: false };
     }
     catch (error) {
-        console.error('Erro ao extrair dados de clique em botão:', error);
+        console.error("Erro ao extrair dados de clique em botão:", error);
         return { isButtonClick: false };
     }
 }
@@ -239,6 +241,54 @@ async function storeWebhookMessage(data) {
         throw error;
     }
 }
+/**
+ * Busca a configuração real do WhatsApp do banco de dados
+ * Esta função substitui a lógica incorreta que gerava IDs falsos baseados no token
+ */
+async function getWhatsAppConfigFromDatabase(chatwootInboxId) {
+    try {
+        // Buscar a caixa de entrada pelo inboxId do Chatwoot
+        const caixaEntrada = await prisma_1.prisma.caixaEntrada.findFirst({
+            where: { inboxId: chatwootInboxId },
+            include: {
+                configuracaoWhatsApp: true,
+            },
+        });
+        if (!caixaEntrada) {
+            console.warn(`[MTF Diamante Webhook Worker] Caixa de entrada não encontrada para inboxId: ${chatwootInboxId}`);
+            return null;
+        }
+        // Se há configuração específica para esta caixa, usar ela
+        if (caixaEntrada.configuracaoWhatsApp) {
+            return {
+                phoneNumberId: caixaEntrada.configuracaoWhatsApp.phoneNumberId,
+                businessAccountId: caixaEntrada.configuracaoWhatsApp.whatsappBusinessAccountId,
+                whatsappToken: caixaEntrada.configuracaoWhatsApp.whatsappToken,
+            };
+        }
+        // Fallback: buscar configuração padrão do usuário
+        const defaultConfig = await prisma_1.prisma.whatsAppConfig.findFirst({
+            where: {
+                usuarioChatwitId: caixaEntrada.usuarioChatwitId,
+                caixaEntradaId: null, // Configuração padrão
+                isActive: true,
+            },
+        });
+        if (defaultConfig) {
+            return {
+                phoneNumberId: defaultConfig.phoneNumberId,
+                businessAccountId: defaultConfig.whatsappBusinessAccountId,
+                whatsappToken: defaultConfig.whatsappToken,
+            };
+        }
+        console.warn(`[MTF Diamante Webhook Worker] Nenhuma configuração do WhatsApp encontrada para inboxId: ${chatwootInboxId}`);
+        return null;
+    }
+    catch (error) {
+        console.error("[MTF Diamante Webhook Worker] Erro ao buscar configuração do WhatsApp:", error);
+        return null;
+    }
+}
 async function updateWhatsAppApiKey(data) {
     try {
         // A busca já usa o ID correto (string)
@@ -249,25 +299,32 @@ async function updateWhatsAppApiKey(data) {
             console.warn(`[MTF Diamante Webhook Worker] Caixa de entrada não encontrada para inboxId: ${data.chatwootInboxId}`);
             return;
         }
-        // O upsert já usa o ID interno da caixaEntrada, o que está correto.
-        await prisma_1.prisma.whatsAppConfig.upsert({
-            where: {
-                caixaEntradaId: caixaEntrada.id,
-            },
-            update: {
-                whatsappToken: data.whatsappApiKey,
-            },
-            create: {
-                whatsappToken: data.whatsappApiKey,
-                // TODO: Popular estes campos de outra forma se necessário
-                phoneNumberId: "default_phone_number_id",
-                whatsappBusinessAccountId: "default_business_account_id",
-                isActive: true,
-                caixaEntradaId: caixaEntrada.id,
-                usuarioChatwitId: caixaEntrada.usuarioChatwitId, // Garante a relação com o usuário
-            },
-        });
-        console.log(`[MTF Diamante Webhook Worker] API key atualizada para inbox: ${data.chatwootInboxId}`);
+        // Buscar configuração existente do banco
+        const existingConfig = await getWhatsAppConfigFromDatabase(data.chatwootInboxId);
+        if (existingConfig) {
+            // Se já existe configuração, apenas atualizar o token se necessário
+            if (existingConfig.whatsappToken !== data.whatsappApiKey) {
+                await prisma_1.prisma.whatsAppConfig.updateMany({
+                    where: {
+                        OR: [
+                            { caixaEntradaId: caixaEntrada.id },
+                            {
+                                usuarioChatwitId: caixaEntrada.usuarioChatwitId,
+                                caixaEntradaId: null,
+                                isActive: true,
+                            },
+                        ],
+                    },
+                    data: {
+                        whatsappToken: data.whatsappApiKey,
+                    },
+                });
+                console.log(`[MTF Diamante Webhook Worker] Token do WhatsApp atualizado para inbox: ${data.chatwootInboxId}`);
+            }
+        }
+        else {
+            console.warn(`[MTF Diamante Webhook Worker] Configuração do WhatsApp não encontrada para inbox: ${data.chatwootInboxId}. Token não será atualizado automaticamente.`);
+        }
     }
     catch (error) {
         console.error("[MTF Diamante Webhook Worker] Erro ao atualizar API key:", error);
@@ -328,6 +385,18 @@ async function processSendMessage(taskData) {
         if (!recipientPhone || !whatsappApiKey || !messageData) {
             throw new Error("Missing required task data: recipientPhone, whatsappApiKey, or messageData");
         }
+        // Buscar configuração real do WhatsApp do banco
+        let phoneNumberId = metadata?.phoneNumberId;
+        if (!phoneNumberId && metadata?.caixaId) {
+            const whatsappConfig = await getWhatsAppConfigFromDatabase(metadata.caixaId);
+            if (whatsappConfig) {
+                phoneNumberId = whatsappConfig.phoneNumberId;
+                console.log(`[MTF Diamante Webhook Worker] PhoneNumberId obtido do banco: ${phoneNumberId}`, logContext);
+            }
+        }
+        if (!phoneNumberId) {
+            throw new Error(`PhoneNumberId não encontrado para caixaId: ${metadata?.caixaId}. Verifique a configuração do WhatsApp no banco de dados.`);
+        }
         let result;
         // Determine message type and call appropriate handler
         if (messageData.type === "template") {
@@ -352,6 +421,7 @@ async function processSendMessage(taskData) {
                 templateName: messageData.templateName,
                 variables: messageData.variables || {},
                 whatsappApiKey,
+                phoneNumberId, // Use phoneNumberId from database
                 // Pass through additional template data if available
                 language: messageData.language || "pt_BR",
                 headerVar: messageData.headerVar,
@@ -375,6 +445,7 @@ async function processSendMessage(taskData) {
             result = await (0, whatsapp_messages_1.sendTextMessage)({
                 recipientPhone,
                 whatsappApiKey,
+                phoneNumberId, // Use phoneNumberId from database
                 text: messageData.textContent,
                 replyToMessageId: messageData.replyToMessageId,
             });
@@ -435,6 +506,7 @@ async function processSendMessage(taskData) {
             result = await (0, whatsapp_messages_1.sendInteractiveMessage)({
                 recipientPhone,
                 whatsappApiKey,
+                phoneNumberId, // Use phoneNumberId from database
                 header: interactiveContent.header,
                 body: interactiveContent.body,
                 footer: interactiveContent.footer,
@@ -511,6 +583,25 @@ async function processSendReaction(taskData) {
         if (!recipientPhone || !messageId || !emoji || !whatsappApiKey) {
             throw new Error("Missing required task data: recipientPhone, messageId, emoji, or whatsappApiKey");
         }
+        // Buscar configuração real do WhatsApp do banco
+        let phoneNumberId = metadata?.phoneNumberId;
+        if (!phoneNumberId && metadata?.caixaId) {
+            const whatsappConfig = await getWhatsAppConfigFromDatabase(metadata.caixaId);
+            if (whatsappConfig) {
+                phoneNumberId = whatsappConfig.phoneNumberId;
+                console.log(`[MTF Diamante Webhook Worker] PhoneNumberId obtido do banco para reação: ${phoneNumberId}`, logContext);
+            }
+        }
+        // Fallback para variável de ambiente se não encontrar no banco
+        if (!phoneNumberId) {
+            phoneNumberId = process.env.FROM_PHONE_NUMBER_ID;
+            if (phoneNumberId) {
+                console.log(`[MTF Diamante Webhook Worker] Usando phoneNumberId da variável de ambiente: ${phoneNumberId}`, logContext);
+            }
+        }
+        if (!phoneNumberId) {
+            throw new Error(`PhoneNumberId não encontrado no metadata, banco de dados ou variáveis de ambiente. Verifique a configuração do WhatsApp.`);
+        }
         // Validate emoji format (basic validation)
         if (emoji.length === 0 || emoji.length > 10) {
             throw new Error("Invalid emoji format: emoji must be 1-10 characters");
@@ -527,17 +618,18 @@ async function processSendReaction(taskData) {
             emojiLength: emoji.length,
         });
         // Send the reaction message using self-contained data
-        const result = await (0, whatsapp_reactions_1.sendReactionMessage)({
+        const result = await (0, whatsapp_reactions_worker_1.sendReactionMessage)({
             recipientPhone,
             messageId,
             emoji,
             whatsappApiKey,
+            phoneNumberId, // Use phoneNumberId from database
         });
         // Process result with detailed logging
         const processingTime = Date.now() - startTime;
         // Always log the reaction attempt for tracking/debugging
         try {
-            await (0, whatsapp_reactions_1.logReactionAttempt)({
+            await (0, whatsapp_reactions_worker_1.logReactionAttempt)({
                 recipientPhone,
                 messageId,
                 emoji,
@@ -635,6 +727,7 @@ async function processLegacyTask(jobData) {
                 await updateWhatsAppApiKey({
                     chatwootInboxId: data.chatwootInboxId,
                     whatsappApiKey: data.whatsappApiKey,
+                    payload: data.rawPayload,
                 });
                 break;
             case "process_intent":
@@ -670,39 +763,41 @@ async function processLegacyTask(jobData) {
 async function processButtonClick(jobData) {
     const startTime = Date.now();
     try {
-        console.log('[MTF Diamante Webhook Worker] Processing button click...');
+        console.log("[MTF Diamante Webhook Worker] Processing button click...");
         // Extract button click data from payload with enhanced detection
         const buttonClickData = extractEnhancedButtonClickData(jobData.payload);
         if (!buttonClickData.isButtonClick) {
-            console.log('[MTF Diamante Webhook Worker] Not a button click, skipping reaction processing');
+            console.log("[MTF Diamante Webhook Worker] Not a button click, skipping reaction processing");
             return;
         }
-        console.log('[MTF Diamante Webhook Worker] Button click detected:', {
+        console.log("[MTF Diamante Webhook Worker] Button click detected:", {
             buttonId: buttonClickData.buttonId,
             buttonText: buttonClickData.buttonText,
             originalMessageId: buttonClickData.originalMessageId,
             messageId: buttonClickData.messageId,
-            interactionType: buttonClickData.interactionType
+            interactionType: buttonClickData.interactionType,
         });
         // Extract validated data for API calls
         const data = extractAndValidateData(jobData);
         // Look up configured reaction for this button using the enhanced query
-        const buttonReaction = await findButtonReactionWithFallback(buttonClickData.buttonId || '');
+        const buttonReaction = await findButtonReactionWithFallback(buttonClickData.buttonId || "");
         if (!buttonReaction) {
             console.log(`[MTF Diamante Webhook Worker] No reaction configured for button: ${buttonClickData.buttonId}`);
             return;
         }
-        console.log('[MTF Diamante Webhook Worker] Found button reaction:', {
+        console.log("[MTF Diamante Webhook Worker] Found button reaction:", {
             buttonId: buttonReaction.buttonId,
             reactionType: buttonReaction.type,
             emoji: buttonReaction.emoji,
             textReaction: buttonReaction.textReaction,
-            isActive: buttonReaction.isActive
+            isActive: buttonReaction.isActive,
         });
         // Determine the target message ID for reactions
-        const targetMessageId = buttonClickData.originalMessageId || buttonClickData.messageId || data.wamid;
+        const targetMessageId = buttonClickData.originalMessageId ||
+            buttonClickData.messageId ||
+            data.wamid;
         if (!targetMessageId) {
-            console.error('[MTF Diamante Webhook Worker] No target message ID found for reaction');
+            console.error("[MTF Diamante Webhook Worker] No target message ID found for reaction");
             return;
         }
         // Process reactions based on type with enhanced error handling
@@ -712,7 +807,8 @@ async function processButtonClick(jobData) {
             recipientPhone: data.contactPhone,
             whatsappApiKey: data.whatsappApiKey,
             buttonClickData,
-            correlationId: `button-click-${Date.now()}`
+            correlationId: `button-click-${Date.now()}`,
+            chatwootInboxId: data.chatwootInboxId, // Pass chatwootInboxId for phoneNumberId lookup
         });
         // Log all reaction attempts for monitoring
         await logButtonReactionAttempts(reactionResults);
@@ -720,16 +816,17 @@ async function processButtonClick(jobData) {
         console.log(`[MTF Diamante Webhook Worker] Button click processed successfully in ${processingTime}ms`, {
             buttonId: buttonClickData.buttonId,
             reactionsProcessed: reactionResults.length,
-            successfulReactions: reactionResults.filter(r => r.success).length
+            successfulReactions: reactionResults.filter((r) => r.success).length,
         });
     }
     catch (error) {
         const processingTime = Date.now() - startTime;
-        console.error('[MTF Diamante Webhook Worker] Error processing button click:', {
-            error: error instanceof Error ? error.message : 'Unknown error',
+        console.error("[MTF Diamante Webhook Worker] Error processing button click:", {
+            error: error instanceof Error ? error.message : "Unknown error",
             stack: error instanceof Error ? error.stack : undefined,
             processingTimeMs: processingTime,
-            buttonId: jobData.payload?.originalDetectIntentRequest?.payload?.interactive?.button_reply?.id
+            buttonId: jobData.payload?.originalDetectIntentRequest?.payload?.interactive
+                ?.button_reply?.id,
         });
         throw error;
     }
@@ -745,39 +842,45 @@ async function findButtonReactionWithFallback(buttonId) {
     try {
         // First try database lookup
         const dbReaction = await prisma_1.prisma.buttonReactionMapping.findUnique({
-            where: { buttonId }
+            where: { buttonId },
         });
         if (dbReaction && dbReaction.isActive) {
-            const type = dbReaction.emoji && dbReaction.textReaction ? 'both' :
-                dbReaction.emoji ? 'emoji' : 'text';
+            const type = dbReaction.emoji && dbReaction.textReaction
+                ? "both"
+                : dbReaction.emoji
+                    ? "emoji"
+                    : "text";
             return {
                 id: dbReaction.id,
                 buttonId: dbReaction.buttonId,
                 type,
                 emoji: dbReaction.emoji || undefined,
                 textReaction: dbReaction.textReaction || undefined,
-                isActive: dbReaction.isActive
+                isActive: dbReaction.isActive,
             };
         }
         // Fallback to config-based mapping
-        const { findReactionByButtonId } = await Promise.resolve().then(() => __importStar(require('@/lib/dialogflow-database-queries')));
+        const { findReactionByButtonId } = await Promise.resolve().then(() => __importStar(require("../../lib/dialogflow-database-queries")));
         const configReaction = await findReactionByButtonId(buttonId);
         if (configReaction) {
-            const type = configReaction.emoji && configReaction.textReaction ? 'both' :
-                configReaction.emoji ? 'emoji' : 'text';
+            const type = configReaction.emoji && configReaction.textReaction
+                ? "both"
+                : configReaction.emoji
+                    ? "emoji"
+                    : "text";
             return {
                 id: configReaction.id,
                 buttonId: configReaction.buttonId,
                 type,
                 emoji: configReaction.emoji,
                 textReaction: configReaction.textReaction,
-                isActive: configReaction.isActive
+                isActive: configReaction.isActive,
             };
         }
         return null;
     }
     catch (error) {
-        console.error('[MTF Diamante Webhook Worker] Error finding button reaction:', error);
+        console.error("[MTF Diamante Webhook Worker] Error finding button reaction:", error);
         return null;
     }
 }
@@ -786,43 +889,54 @@ async function findButtonReactionWithFallback(buttonId) {
  * Implements requirements 5.3, 5.4, 5.5 for reaction processing
  */
 async function processButtonReactions(params) {
-    const { buttonReaction, targetMessageId, recipientPhone, whatsappApiKey, buttonClickData, correlationId } = params;
+    const { buttonReaction, targetMessageId, recipientPhone, whatsappApiKey, buttonClickData, correlationId, chatwootInboxId, } = params;
     const results = [];
+    // Buscar configuração real do WhatsApp do banco
+    let phoneNumberId;
+    const whatsappConfig = await getWhatsAppConfigFromDatabase(chatwootInboxId);
+    if (whatsappConfig) {
+        phoneNumberId = whatsappConfig.phoneNumberId;
+        console.log(`[MTF Diamante Webhook Worker] PhoneNumberId obtido do banco para reação de botão: ${phoneNumberId}`);
+    }
+    if (!phoneNumberId) {
+        throw new Error(`PhoneNumberId não encontrado para chatwootInboxId: ${chatwootInboxId}. Verifique a configuração do WhatsApp no banco de dados.`);
+    }
     // Process emoji reaction if configured
     if (buttonReaction.emoji) {
         console.log(`[MTF Diamante Webhook Worker] Sending emoji reaction: ${buttonReaction.emoji}`);
         try {
-            const reactionResult = await (0, whatsapp_reactions_1.sendReactionMessage)({
+            const reactionResult = await (0, whatsapp_reactions_worker_1.sendReactionMessage)({
                 recipientPhone,
                 messageId: targetMessageId,
                 emoji: buttonReaction.emoji,
-                whatsappApiKey
+                whatsappApiKey,
+                phoneNumberId, // Use phoneNumberId from database
             });
             results.push({
-                type: 'emoji',
+                type: "emoji",
                 success: reactionResult.success,
                 messageId: reactionResult.messageId,
                 error: reactionResult.error,
                 buttonId: buttonReaction.buttonId,
                 recipientPhone,
-                targetMessageId
+                targetMessageId,
             });
             if (reactionResult.success) {
-                console.log('[MTF Diamante Webhook Worker] Emoji reaction sent successfully');
+                console.log("[MTF Diamante Webhook Worker] Emoji reaction sent successfully");
             }
             else {
-                console.error('[MTF Diamante Webhook Worker] Failed to send emoji reaction:', reactionResult.error);
+                console.error("[MTF Diamante Webhook Worker] Failed to send emoji reaction:", reactionResult.error);
             }
         }
         catch (error) {
-            console.error('[MTF Diamante Webhook Worker] Exception sending emoji reaction:', error);
+            console.error("[MTF Diamante Webhook Worker] Exception sending emoji reaction:", error);
             results.push({
-                type: 'emoji',
+                type: "emoji",
                 success: false,
-                error: error instanceof Error ? error.message : 'Unknown error',
+                error: error instanceof Error ? error.message : "Unknown error",
                 buttonId: buttonReaction.buttonId,
                 recipientPhone,
-                targetMessageId
+                targetMessageId,
             });
         }
     }
@@ -833,34 +947,35 @@ async function processButtonReactions(params) {
             const textResult = await (0, whatsapp_messages_1.sendTextMessage)({
                 recipientPhone,
                 whatsappApiKey,
+                phoneNumberId, // Use phoneNumberId from database
                 text: buttonReaction.textReaction,
-                replyToMessageId: targetMessageId
+                replyToMessageId: targetMessageId,
             });
             results.push({
-                type: 'text',
+                type: "text",
                 success: textResult.success,
                 messageId: textResult.messageId,
                 error: textResult.error,
                 buttonId: buttonReaction.buttonId,
                 recipientPhone,
-                targetMessageId
+                targetMessageId,
             });
             if (textResult.success) {
-                console.log('[MTF Diamante Webhook Worker] Text reaction sent successfully');
+                console.log("[MTF Diamante Webhook Worker] Text reaction sent successfully");
             }
             else {
-                console.error('[MTF Diamante Webhook Worker] Failed to send text reaction:', textResult.error);
+                console.error("[MTF Diamante Webhook Worker] Failed to send text reaction:", textResult.error);
             }
         }
         catch (error) {
-            console.error('[MTF Diamante Webhook Worker] Exception sending text reaction:', error);
+            console.error("[MTF Diamante Webhook Worker] Exception sending text reaction:", error);
             results.push({
-                type: 'text',
+                type: "text",
                 success: false,
-                error: error instanceof Error ? error.message : 'Unknown error',
+                error: error instanceof Error ? error.message : "Unknown error",
                 buttonId: buttonReaction.buttonId,
                 recipientPhone,
-                targetMessageId
+                targetMessageId,
             });
         }
     }
@@ -873,18 +988,18 @@ async function processButtonReactions(params) {
 async function logButtonReactionAttempts(reactionResults) {
     for (const result of reactionResults) {
         try {
-            if (result.type === 'emoji') {
-                await (0, whatsapp_reactions_1.logReactionAttempt)({
+            if (result.type === "emoji") {
+                await (0, whatsapp_reactions_worker_1.logReactionAttempt)({
                     recipientPhone: result.recipientPhone,
                     messageId: result.targetMessageId,
-                    emoji: '📱', // Generic emoji for logging
+                    emoji: "📱", // Generic emoji for logging
                     buttonId: result.buttonId,
                     success: result.success,
-                    error: result.error
+                    error: result.error,
                 });
             }
             // For text reactions, we could extend the logging system
-            console.log('[MTF Diamante Webhook Worker] Reaction attempt logged:', {
+            console.log("[MTF Diamante Webhook Worker] Reaction attempt logged:", {
                 timestamp: new Date().toISOString(),
                 type: result.type,
                 buttonId: result.buttonId,
@@ -892,13 +1007,13 @@ async function logButtonReactionAttempts(reactionResults) {
                 targetMessageId: result.targetMessageId,
                 success: result.success,
                 error: result.error,
-                sentMessageId: result.messageId
+                sentMessageId: result.messageId,
             });
         }
         catch (logError) {
-            console.error('[MTF Diamante Webhook Worker] Failed to log reaction attempt:', {
-                logError: logError instanceof Error ? logError.message : 'Unknown log error',
-                reactionResult: result
+            console.error("[MTF Diamante Webhook Worker] Failed to log reaction attempt:", {
+                logError: logError instanceof Error ? logError.message : "Unknown log error",
+                reactionResult: result,
             });
         }
     }
@@ -912,16 +1027,44 @@ async function processLegacySendReaction(jobData) {
             throw new Error("Dados de reação não encontrados no job");
         }
         const { reactionData, whatsappApiKey } = jobData;
+        // Validate required data for reaction
+        if (!whatsappApiKey) {
+            throw new Error("WhatsApp API key is required for sending reactions");
+        }
         console.log(`[MTF Diamante Webhook Worker] Enviando reação ${reactionData.emoji} para mensagem ${reactionData.originalMessageId}`);
+        // Buscar configuração real do WhatsApp do banco usando extractAndValidateData
+        let phoneNumberId;
+        try {
+            const data = extractAndValidateData(jobData);
+            const whatsappConfig = await getWhatsAppConfigFromDatabase(data.chatwootInboxId);
+            if (whatsappConfig) {
+                phoneNumberId = whatsappConfig.phoneNumberId;
+                console.log(`[MTF Diamante Webhook Worker] PhoneNumberId obtido do banco para reação legacy: ${phoneNumberId}`);
+            }
+        }
+        catch (error) {
+            console.warn(`[MTF Diamante Webhook Worker] Não foi possível extrair dados do payload para buscar configuração: ${error}`);
+        }
+        // Fallback para variável de ambiente se não encontrar no banco
+        if (!phoneNumberId) {
+            phoneNumberId = process.env.FROM_PHONE_NUMBER_ID;
+            if (phoneNumberId) {
+                console.log(`[MTF Diamante Webhook Worker] Usando phoneNumberId da variável de ambiente para reação legacy: ${phoneNumberId}`);
+            }
+        }
+        if (!phoneNumberId) {
+            throw new Error(`PhoneNumberId não encontrado no banco de dados ou variáveis de ambiente. Verifique a configuração do WhatsApp.`);
+        }
         // Send the reaction message
-        const result = await (0, whatsapp_reactions_1.sendReactionMessage)({
+        const result = await (0, whatsapp_reactions_worker_1.sendReactionMessage)({
             recipientPhone: reactionData.recipientPhone,
             messageId: reactionData.originalMessageId,
             emoji: reactionData.emoji,
             whatsappApiKey: whatsappApiKey,
+            phoneNumberId, // Use phoneNumberId from database
         });
         // Log the reaction attempt
-        await (0, whatsapp_reactions_1.logReactionAttempt)({
+        await (0, whatsapp_reactions_worker_1.logReactionAttempt)({
             recipientPhone: reactionData.recipientPhone,
             messageId: reactionData.originalMessageId,
             emoji: reactionData.emoji,

@@ -6,9 +6,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.instagramWebhookWorker = void 0;
 //worker\automacao.worker.ts
 const bullmq_1 = require("bullmq");
-const redis_1 = require("@/lib/redis");
+const redis_1 = require("../lib/redis");
 const dotenv_1 = __importDefault(require("dotenv"));
-const instagram_webhook_queue_1 = require("@/lib/queue/instagram-webhook.queue");
+const instagram_webhook_queue_1 = require("../lib/queue/instagram-webhook.queue");
 const automation_1 = require("./automacao/eu-quero/automation");
 dotenv_1.default.config();
 /**

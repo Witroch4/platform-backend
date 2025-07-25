@@ -6,7 +6,7 @@ exports.addEspelhoJob = addEspelhoJob;
 exports.addAnaliseJob = addAnaliseJob;
 exports.addLeadCellJob = addLeadCellJob;
 const bullmq_1 = require("bullmq");
-const redis_1 = require("@/lib/redis");
+const redis_1 = require("../../lib/redis");
 // Queue unificada para todos os tipos de processamento
 const leadCellsQueue = new bullmq_1.Queue('leadCells', {
     connection: redis_1.connection,

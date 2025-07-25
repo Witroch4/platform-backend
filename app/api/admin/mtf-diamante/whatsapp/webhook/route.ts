@@ -214,6 +214,7 @@ async function processIntentRequest(
               intentName,
               caixaId,
               originalPayload,
+              phoneNumberId: messageMapping.whatsappConfig.phoneNumberId, // Add phoneNumberId to metadata
             },
           });
 
@@ -253,6 +254,7 @@ async function processIntentRequest(
               intentName,
               caixaId,
               originalPayload,
+              phoneNumberId: messageMapping.whatsappConfig.phoneNumberId, // Add phoneNumberId to metadata
             },
           });
 
@@ -344,6 +346,7 @@ async function processIntentRequest(
               intentName,
               caixaId,
               originalPayload,
+              phoneNumberId: messageMapping.whatsappConfig.phoneNumberId, // Add phoneNumberId to metadata
             },
           });
 
@@ -385,7 +388,8 @@ async function processButtonClickRequest(
   recipientPhone: string,
   whatsappApiKey: string,
   correlationId: string,
-  originalPayload: any
+  originalPayload: any,
+  phoneNumberId?: string
 ): Promise<void> {
   try {
     console.log(
@@ -416,6 +420,7 @@ async function processButtonClickRequest(
         correlationId,
         metadata: {
           buttonId,
+          phoneNumberId,
           originalPayload,
         },
       });
@@ -435,6 +440,7 @@ async function processButtonClickRequest(
         correlationId,
         metadata: {
           buttonId,
+          phoneNumberId,
           originalPayload,
           replyToMessageId: messageId,
         },
@@ -561,13 +567,18 @@ export async function POST(request: Request) {
           parsedRequest.buttonId &&
           parsedRequest.messageId
         ) {
+          // Get phoneNumberId from environment as fallback for button clicks
+          // In a real scenario, this should be obtained from the user's configuration
+          const phoneNumberId = process.env.FROM_PHONE_NUMBER_ID || "";
+          
           await processButtonClickRequest(
             parsedRequest.buttonId,
             parsedRequest.messageId,
             parsedRequest.recipientPhone,
             parsedRequest.whatsappApiKey,
             correlationId,
-            req
+            req,
+            phoneNumberId
           );
         } else {
           console.log(

@@ -3,8 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.scheduleAgendamentoBullMQ = scheduleAgendamentoBullMQ;
 exports.cancelAgendamentoBullMQ = cancelAgendamentoBullMQ;
 exports.initializeExistingAgendamentos = initializeExistingAgendamentos;
-const prisma_1 = require("@/lib/prisma");
-const agendamento_queue_1 = require("@/lib/queue/agendamento.queue");
+const prisma_1 = require("../lib/prisma");
+const agendamento_queue_1 = require("../lib/queue/agendamento.queue");
 // Variável para controlar se já inicializamos os agendamentos
 let agendamentosInitialized = false;
 /**

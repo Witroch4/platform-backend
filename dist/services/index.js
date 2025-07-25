@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.findUserbyId = exports.findUserbyEmail = void 0;
-const prisma_1 = require("@/lib/prisma");
+const prisma_1 = require("../lib/prisma");
 const findUserbyEmail = async (email) => {
     const user = await prisma_1.prisma.user.findUnique({
         where: {

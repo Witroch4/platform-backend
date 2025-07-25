@@ -4,7 +4,7 @@ exports.getWhatsAppConfig = getWhatsAppConfig;
 exports.getAllWhatsAppConfigs = getAllWhatsAppConfigs;
 exports.isConfigActive = isConfigActive;
 exports.validateWhatsAppConfig = validateWhatsAppConfig;
-const db_1 = require("@/lib/db");
+const db_1 = require("../lib/db");
 /**
  * Busca configuração do WhatsApp para uma caixa de entrada específica
  * Se não encontrar configuração específica, retorna a configuração padrão

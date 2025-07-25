@@ -22,8 +22,8 @@ jest.mock('@/auth', () => ({
 jest.mock('@/lib/db');
 const mockedAxios = axios_1.default;
 // Import mocked modules
-const lib_1 = require("@/app/lib");
-const auth_1 = require("@/auth");
+const lib_1 = require("../../app/lib");
+const auth_1 = require("../../auth");
 describe('WhatsApp Reactions Service', () => {
     beforeEach(() => {
         jest.clearAllMocks();

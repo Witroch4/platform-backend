@@ -42,7 +42,7 @@ export async function getWhatsAppConfig(userId?: string) {
   return {
     whatsappToken: config.whatsappToken,
     whatsappBusinessAccountId: config.whatsappBusinessAccountId,
-    phoneNumberId: process.env.FROM_PHONE_NUMBER_ID || '', // Usar phoneNumberId do .env pois o banco não armazena
+    phoneNumberId: config.phoneNumberId || process.env.FROM_PHONE_NUMBER_ID || '', // Usar phoneNumberId do banco primeiro, depois fallback para .env
     fbGraphApiBase: 'https://graph.facebook.com/v22.0', // Forçar versão v22.0
     isFromEnv: false
   };

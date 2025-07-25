@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-const prisma_1 = require("@/lib/prisma");
+const prisma_1 = require("../../lib/prisma");
 const button_reaction_queries_1 = require("../button-reaction-queries");
 // Mock Prisma
 jest.mock('@/lib/prisma', () => ({

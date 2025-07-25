@@ -8,9 +8,9 @@ exports.updateAgendamento = updateAgendamento;
 exports.deleteAgendamento = deleteAgendamento;
 exports.selectMidiaForSending = selectMidiaForSending;
 exports.prepareWebhookData = prepareWebhookData;
-const prisma_1 = require("@/lib/prisma");
+const prisma_1 = require("../lib/prisma");
 const minio_1 = require("./minio");
-const agendamento_queue_1 = require("@/lib/queue/agendamento.queue");
+const agendamento_queue_1 = require("../lib/queue/agendamento.queue");
 /**
  * Cria um novo agendamento
  */

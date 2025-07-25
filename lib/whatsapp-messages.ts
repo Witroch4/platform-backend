@@ -16,6 +16,7 @@ export interface TemplateMessageData {
   templateName: string;
   language?: string;
   whatsappApiKey: string;
+  phoneNumberId?: string; // Add phoneNumberId to template data
 
   // Template variables
   variables?: Record<string, any>;
@@ -29,6 +30,7 @@ export interface TemplateMessageData {
 export interface InteractiveMessageData {
   recipientPhone: string;
   whatsappApiKey: string;
+  phoneNumberId?: string; // Add phoneNumberId to interactive data
 
   // Message structure
   header?: {
@@ -48,6 +50,7 @@ export interface InteractiveMessageData {
 export interface TextMessageData {
   recipientPhone: string;
   whatsappApiKey: string;
+  phoneNumberId?: string; // Add phoneNumberId to text data
   text: string;
   replyToMessageId?: string; // For replying to specific messages
 }
@@ -275,8 +278,11 @@ export async function sendTemplateMessage(
       JSON.stringify(payload, null, 2)
     );
 
-    // Extract phone number ID from API key context (this would need to be passed or configured)
-    const phoneNumberId = process.env.FROM_PHONE_NUMBER_ID || "";
+    // Use phoneNumberId from data or fallback to environment variable
+    const phoneNumberId = data.phoneNumberId || process.env.FROM_PHONE_NUMBER_ID || "";
+    if (!phoneNumberId) {
+      throw new Error("Phone Number ID is required but not provided");
+    }
     const apiUrl = getMessagesApiUrl(phoneNumberId);
 
     // Send the message
@@ -435,8 +441,11 @@ export async function sendInteractiveMessage(
       JSON.stringify(payload, null, 2)
     );
 
-    // Extract phone number ID from API key context
-    const phoneNumberId = process.env.FROM_PHONE_NUMBER_ID || "";
+    // Use phoneNumberId from data or fallback to environment variable
+    const phoneNumberId = data.phoneNumberId || process.env.FROM_PHONE_NUMBER_ID || "";
+    if (!phoneNumberId) {
+      throw new Error("Phone Number ID is required but not provided");
+    }
     const apiUrl = getMessagesApiUrl(phoneNumberId);
 
     // Send the message
@@ -513,8 +522,11 @@ export async function sendTextMessage(
       JSON.stringify(payload, null, 2)
     );
 
-    // Extract phone number ID from API key context
-    const phoneNumberId = process.env.FROM_PHONE_NUMBER_ID || "";
+    // Use phoneNumberId from data or fallback to environment variable
+    const phoneNumberId = data.phoneNumberId || process.env.FROM_PHONE_NUMBER_ID || "";
+    if (!phoneNumberId) {
+      throw new Error("Phone Number ID is required but not provided");
+    }
     const apiUrl = getMessagesApiUrl(phoneNumberId);
 
     // Send the message

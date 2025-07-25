@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.followUpQueue = void 0;
 // worker/queues/followUpQueue.ts
 const bullmq_1 = require("bullmq");
-const redis_1 = require("@/lib/redis");
+const redis_1 = require("../../lib/redis");
 /**
  * Cria a fila "contato-sem-clique" (ou outro nome que preferir).
  */

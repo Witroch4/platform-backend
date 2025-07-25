@@ -144,8 +144,10 @@ export async function processFileWithAssistant(
     
     while (pollCount < maxPolls) {
       const runStatus = await client.beta.threads.runs.retrieve(
-        thread.id,
-        run.id
+        run.id,
+        {
+          thread_id: thread.id
+        }
       );
       
       // Calculate progress between 40-90% based on status

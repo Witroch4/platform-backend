@@ -25,6 +25,8 @@ import { useVariableManager } from '@/hooks/useVariableManager';
 interface WhatsAppConfig {
   id?: string;
   phoneNumberId: string;
+  whatsappBusinessAccountId?: string;
+  fbGraphApiBase?: string;
   whatsappToken?: string; // Só usado para novos tokens
   tokenMask?: string; // Máscara do token existente (••••••xx345)
   hasToken?: boolean; // Indica se existe um token salvo
@@ -58,6 +60,8 @@ interface ConfiguracoesLoteTabProps {
 const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabProps) => {
   const [config, setConfig] = useState<WhatsAppConfig>({
     phoneNumberId: '',
+    whatsappBusinessAccountId: '',
+    fbGraphApiBase: '',
     hasToken: false,
     tokenMask: ''
   });
@@ -138,7 +142,9 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
     e.preventDefault();
 
     const payload: any = {
-      phoneNumberId: config.phoneNumberId
+      phoneNumberId: config.phoneNumberId,
+      whatsappBusinessAccountId: config.whatsappBusinessAccountId,
+      fbGraphApiBase: config.fbGraphApiBase
     };
 
     if (newToken.trim()) {
@@ -202,6 +208,28 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
                 value={config.phoneNumberId || ''}
                 onChange={handleWhatsAppChange}
                 placeholder="ID do Número de Telefone da Meta"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="whatsappBusinessAccountId">WhatsApp Business Account ID</Label>
+              <Input
+                id="whatsappBusinessAccountId"
+                name="whatsappBusinessAccountId"
+                value={config.whatsappBusinessAccountId || ''}
+                onChange={handleWhatsAppChange}
+                placeholder="ID da Conta Business do WhatsApp"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="fbGraphApiBase">Facebook Graph API Base URL</Label>
+              <Input
+                id="fbGraphApiBase"
+                name="fbGraphApiBase"
+                value={config.fbGraphApiBase || ''}
+                onChange={handleWhatsAppChange}
+                placeholder="https://graph.facebook.com"
                 required
               />
             </div>

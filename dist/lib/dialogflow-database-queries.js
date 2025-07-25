@@ -265,7 +265,7 @@ async function findReactionByButtonId(buttonId) {
             console.log(`[DB Query] Database reaction mapping not available, falling back to config:`, dbError);
         }
         // Fallback to config-based mappings
-        const { getEmojiForButton } = await Promise.resolve().then(() => __importStar(require('@/app/config/button-reaction-mapping')));
+        const { getEmojiForButton } = await Promise.resolve().then(() => __importStar(require('../app/config/button-reaction-mapping')));
         const emoji = getEmojiForButton(buttonId);
         if (emoji) {
             console.log(`[DB Query] Found config reaction mapping: ${buttonId} -> ${emoji}`);
@@ -319,7 +319,7 @@ async function getAllActiveButtonReactions() {
             console.log(`[DB Query] Database reaction mappings not available, falling back to config:`, dbError);
         }
         // Fallback to config-based mappings
-        const { getAllButtonReactions } = await Promise.resolve().then(() => __importStar(require('@/app/config/button-reaction-mapping')));
+        const { getAllButtonReactions } = await Promise.resolve().then(() => __importStar(require('../app/config/button-reaction-mapping')));
         const configReactions = getAllButtonReactions();
         console.log(`[DB Query] Found ${configReactions.length} config button reaction mappings`);
         return configReactions.map((reaction, index) => ({

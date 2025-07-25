@@ -35,5 +35,10 @@
     "worker/**/*.ts",    /* seu código de workers */
     "lib/**/*.ts",       /* utilitários compartilhados */
     "types/**/*.d.ts"    /* definições de tipo extras */
+  ],
+  "exclude": [
+    "**/__tests__/**",   /* excluir todos os arquivos de teste */
+    "**/*.test.ts",      /* excluir arquivos .test.ts */
+    "**/*.spec.ts"       /* excluir arquivos .spec.ts */
   ]
 }

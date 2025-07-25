@@ -7,9 +7,9 @@ exports.downloadMetaMediaAndUploadToMinio = downloadMetaMediaAndUploadToMinio;
 exports.isMetaMediaUrl = isMetaMediaUrl;
 exports.getPublicMediaUrl = getPublicMediaUrl;
 const axios_1 = __importDefault(require("axios"));
-const lib_1 = require("@/app/lib");
+const lib_1 = require("../app/lib");
 const minio_1 = require("./minio");
-const db_1 = require("@/lib/db");
+const db_1 = require("../lib/db");
 /**
  * Baixa uma mídia da Meta e faz upload para o MinIO
  * @param mediaUrl URL da mídia no servidor da Meta

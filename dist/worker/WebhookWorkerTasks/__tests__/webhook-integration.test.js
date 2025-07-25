@@ -37,10 +37,10 @@ jest.mock('@/lib/dialogflow-database-queries', () => ({
     findReactionByButtonId: jest.fn()
 }));
 // Import mocked modules
-const prisma_1 = require("@/lib/prisma");
-const whatsapp_reactions_1 = require("@/lib/whatsapp-reactions");
-const whatsapp_messages_1 = require("@/lib/whatsapp-messages");
-const dialogflow_database_queries_1 = require("@/lib/dialogflow-database-queries");
+const prisma_1 = require("../../../lib/prisma");
+const whatsapp_reactions_1 = require("../../../lib/whatsapp-reactions");
+const whatsapp_messages_1 = require("../../../lib/whatsapp-messages");
+const dialogflow_database_queries_1 = require("../../../lib/dialogflow-database-queries");
 describe('Webhook Reaction Processing Integration', () => {
     beforeEach(() => {
         jest.clearAllMocks();

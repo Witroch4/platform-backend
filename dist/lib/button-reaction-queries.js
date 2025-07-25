@@ -8,7 +8,7 @@ exports.getReactionsByButtonIds = getReactionsByButtonIds;
 exports.hasButtonReaction = hasButtonReaction;
 exports.getReactionStats = getReactionStats;
 exports.deleteReactionsByButtonIds = deleteReactionsByButtonIds;
-const prisma_1 = require("@/lib/prisma");
+const prisma_1 = require("../lib/prisma");
 /**
  * Get all button reactions for a specific message
  */

@@ -72,17 +72,40 @@ function WhatsAppPreview({
     return theme === 'dark' ? '/fundo_whatsapp_black.jpg' : '/fundo_whatsapp.jpg';
   };
 
+  // Process WhatsApp formatting (bold, italic, strikethrough, etc.)
+  const processWhatsAppFormatting = (text: string): string => {
+    if (!text) return text;
+    
+    return text
+      .replace(/\*(.*?)\*/g, '<strong>$1</strong>')
+      .replace(/_(.*?)_/g, '<em>$1</em>')
+      .replace(/~(.*?)~/g, '<del>$1</del>')
+      .replace(/`(.*?)`/g, '<code class="bg-gray-200 dark:bg-gray-700 px-1 rounded text-xs">$1</code>')
+      .replace(/^> (.+)$/gm, '<blockquote class="border-l-4 border-gray-300 pl-4 italic text-gray-600 dark:text-gray-400">$1</blockquote>')
+      .replace(/^• (.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
+      .replace(/^\d+\. (.+)$/gm, '<li class="ml-4 list-decimal">$1</li>')
+      .replace(/\n/g, '<br>');
+  };
+
   // Process text with variables based on preview mode
   const processTextWithVariables = (text: string): string => {
-    if (!text || !variables.length) return text;
+    if (!text) return text;
 
-    if (previewMode === 'interactive') {
-      // For interactive messages, show actual variable values
-      return variableConverter.generatePreviewText(text, variables);
-    } else {
-      // For templates, show numbered variables with examples
-      return variableConverter.generateNumberedPreviewText(text, variables);
+    let processedText = text;
+
+    // First, process variables
+    if (variables.length > 0) {
+      if (previewMode === 'interactive') {
+        // For interactive messages, show actual variable values
+        processedText = variableConverter.generatePreviewText(processedText, variables);
+      } else {
+        // For templates, show numbered variables with examples
+        processedText = variableConverter.generateNumberedPreviewText(processedText, variables);
+      }
     }
+
+    // Then, process WhatsApp formatting
+    return processWhatsAppFormatting(processedText);
   };
 
   const renderComponent = (component: TemplateComponent | CreateTemplateComponent, index: number) => {
@@ -92,9 +115,10 @@ function WhatsAppPreview({
       return (
         <div key={index} className="mb-2">
           {comp.type === 'header' && comp.text && (
-            <div className="font-semibold text-sm mb-2 text-gray-900 dark:text-gray-100">
-              {processTextWithVariables(comp.text)}
-            </div>
+            <div 
+              className="font-semibold text-sm mb-2 text-gray-900 dark:text-gray-100"
+              dangerouslySetInnerHTML={{ __html: processTextWithVariables(comp.text) }}
+            />
           )}
           
           {comp.type === 'header' && comp.format && ['image', 'video', 'document'].includes(comp.format.toLowerCase()) && comp.url && (
@@ -125,15 +149,17 @@ function WhatsAppPreview({
           )}
           
           {comp.type === 'body' && comp.text && (
-            <div className="text-sm mb-2 text-gray-900 dark:text-gray-100 whitespace-pre-wrap">
-              {processTextWithVariables(comp.text)}
-            </div>
+            <div 
+              className="text-sm mb-2 text-gray-900 dark:text-gray-100"
+              dangerouslySetInnerHTML={{ __html: processTextWithVariables(comp.text) }}
+            />
           )}
           
           {comp.type === 'footer' && comp.text && (
-            <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-              {processTextWithVariables(comp.text)}
-            </div>
+            <div 
+              className="text-xs text-gray-500 dark:text-gray-400 mb-2"
+              dangerouslySetInnerHTML={{ __html: processTextWithVariables(comp.text) }}
+            />
           )}
           
           {comp.type === 'buttons' && comp.buttons && comp.buttons.length > 0 && (
@@ -165,21 +191,24 @@ function WhatsAppPreview({
       return (
         <div key={index} className="mb-2">
           {comp.tipo === 'HEADER' && comp.texto && (
-            <div className="font-semibold text-sm mb-2 text-gray-900 dark:text-gray-100">
-              {processTextWithVariables(comp.texto)}
-            </div>
+            <div 
+              className="font-semibold text-sm mb-2 text-gray-900 dark:text-gray-100"
+              dangerouslySetInnerHTML={{ __html: processTextWithVariables(comp.texto) }}
+            />
           )}
           
           {comp.tipo === 'BODY' && comp.texto && (
-            <div className="text-sm mb-2 text-gray-900 dark:text-gray-100 whitespace-pre-wrap">
-              {processTextWithVariables(comp.texto)}
-            </div>
+            <div 
+              className="text-sm mb-2 text-gray-900 dark:text-gray-100"
+              dangerouslySetInnerHTML={{ __html: processTextWithVariables(comp.texto) }}
+            />
           )}
           
           {comp.tipo === 'FOOTER' && comp.texto && (
-            <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-              {processTextWithVariables(comp.texto)}
-            </div>
+            <div 
+              className="text-xs text-gray-500 dark:text-gray-400 mb-2"
+              dangerouslySetInnerHTML={{ __html: processTextWithVariables(comp.texto) }}
+            />
           )}
           
           {comp.botoes && comp.botoes.length > 0 && (

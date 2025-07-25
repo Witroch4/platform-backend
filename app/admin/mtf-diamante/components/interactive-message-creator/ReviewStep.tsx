@@ -497,6 +497,13 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                     isActive: true
                   }))}
                   showReactionIndicators={true}
+                  showReactionConfig={true}
+                  onButtonReactionChange={(buttonId, reaction) => {
+                    // This is in review mode, so we'll show a toast instead of allowing changes
+                    toast.info('Para editar reações, volte ao passo anterior', {
+                      description: 'Use o botão "Back to Edit" para modificar as configurações'
+                    });
+                  }}
                   className="min-h-[400px]"
                 />
                 

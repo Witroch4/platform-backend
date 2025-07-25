@@ -102,10 +102,18 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { caixaId, phoneNumberId, token } = body;
+    const { caixaId, phoneNumberId, whatsappBusinessAccountId, fbGraphApiBase, token } = body;
 
     if (!phoneNumberId) {
       return NextResponse.json({ error: "phoneNumberId é obrigatório" }, { status: 400 });
+    }
+
+    if (!whatsappBusinessAccountId) {
+      return NextResponse.json({ error: "whatsappBusinessAccountId é obrigatório" }, { status: 400 });
+    }
+
+    if (!fbGraphApiBase) {
+      return NextResponse.json({ error: "fbGraphApiBase é obrigatório" }, { status: 400 });
     }
 
     const usuarioChatwit = await db.usuarioChatwit.findUnique({
@@ -127,7 +135,11 @@ export async function POST(request: NextRequest) {
     };
 
     // Prepara os dados para atualização
-    const updateData: any = { phoneNumberId };
+    const updateData: any = { 
+      phoneNumberId,
+      whatsappBusinessAccountId,
+      fbGraphApiBase
+    };
     
     // Só inclui o token se foi fornecido
     if (token) {
@@ -158,8 +170,8 @@ export async function POST(request: NextRequest) {
           data: {
             phoneNumberId,
             whatsappToken: token,
-            whatsappBusinessAccountId: process.env.WHATSAPP_BUSINESS_ID || '',
-            fbGraphApiBase: process.env.FB_GRAPH_API_BASE || 'https://graph.facebook.com/v22.0',
+            whatsappBusinessAccountId,
+            fbGraphApiBase,
             usuarioChatwitId: usuarioChatwit.id,
             caixaEntradaId: caixaId,
             isActive: true
@@ -190,8 +202,8 @@ export async function POST(request: NextRequest) {
           data: {
             phoneNumberId,
             whatsappToken: token,
-            whatsappBusinessAccountId: process.env.WHATSAPP_BUSINESS_ID || '',
-            fbGraphApiBase: process.env.FB_GRAPH_API_BASE || 'https://graph.facebook.com/v22.0',
+            whatsappBusinessAccountId,
+            fbGraphApiBase,
             usuarioChatwitId: usuarioChatwit.id,
             caixaEntradaId: null,
             isActive: true

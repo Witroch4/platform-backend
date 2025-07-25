@@ -52,5 +52,6 @@ declare module "next-auth/jwt" {
     role?: UserRole; // Adicionado se você deseja incluir o papel do usuário no JWT
     isNewUser?: boolean; // Indica se o usuário acabou de se registrar
     chatwitAccessToken?: string; // Token de acesso do Chatwit
+    isOAuth?: boolean; // Adicionado para compatibilidade
   }
 }

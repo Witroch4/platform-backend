@@ -6,9 +6,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handleInstagramWebhook = handleInstagramWebhook;
 const axios_1 = __importDefault(require("axios"));
-const prisma_1 = require("@/lib/prisma");
-const instagram_auth_1 = require("@/lib/instagram-auth");
-const followUpQueue_1 = require("@/worker/queues/followUpQueue");
+const prisma_1 = require("../../../lib/prisma");
+const instagram_auth_1 = require("../../../lib/instagram-auth");
+const followUpQueue_1 = require("../../../worker/queues/followUpQueue");
 // Base da Graph API do Instagram
 const IG_GRAPH_API_BASE = process.env.IG_GRAPH_API_BASE || "https://graph.instagram.com/v21.0";
 /**

@@ -32,8 +32,8 @@ jest.mock('@/lib/whatsapp-reactions', () => ({
     logReactionAttempt: jest.fn()
 }));
 // Import mocked modules
-const whatsapp_messages_1 = require("@/lib/whatsapp-messages");
-const whatsapp_reactions_1 = require("@/lib/whatsapp-reactions");
+const whatsapp_messages_1 = require("../../../lib/whatsapp-messages");
+const whatsapp_reactions_1 = require("../../../lib/whatsapp-reactions");
 describe('MTF Diamante Webhook Worker Tasks', () => {
     beforeEach(() => {
         jest.clearAllMocks();
