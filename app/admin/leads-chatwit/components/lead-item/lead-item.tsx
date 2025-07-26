@@ -1,6 +1,15 @@
 "use client";
 
 import { TableRow, TableCell } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { MoreVertical, Trash2 } from "lucide-react";
 import type { LeadItemProps } from "./componentes-lead-item/types";
 import { useLeadState, useDialogState, useLeadHandlers } from "./componentes-lead-item/hooks";
 import { 
@@ -21,6 +30,14 @@ import { LeadDialogs } from "./componentes-lead-item/dialogs";
 import { BibliotecaEspelhosDrawer } from "../biblioteca-espelhos-drawer";
 import { SSEStatusIndicator } from "../sse-status-indicator";
 import { useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export function LeadItem({
   lead,
@@ -46,6 +63,9 @@ export function LeadItem({
   
   // Estado da biblioteca de espelhos
   const [showBibliotecaEspelhos, setShowBibliotecaEspelhos] = useState(false);
+
+  // Estado para diálogo de confirmação de exclusão
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Verificar se o lead está aguardando processamento (para mostrar indicador)
   const isAwaitingProcessing = Boolean(
@@ -86,11 +106,17 @@ export function LeadItem({
     onEdit(updatedLead);
   };
 
+  // Handler para exclusão do lead
+  const handleDeleteLead = () => {
+    setShowDeleteConfirm(false);
+    onDelete(lead.id);
+  };
+
   return (
     <>
       <TableRow 
         data-lead-id={lead.id}
-        className={`group hover:bg-secondary/30 ${
+        className={`group hover:bg-secondary/30 relative ${
           leadState.consultoriaAtiva 
             ? 'border-2 border-[#AFDAFE] bg-[#4BB8EB]/10 hover:bg-[#4BB8EB]/20' 
             : ''
@@ -219,6 +245,7 @@ export function LeadItem({
           consultoriaAtiva={leadState.consultoriaAtiva}
           isUploadingEspelho={dialogState.isUploadingEspelho}
           onConsultoriaToggle={handlers.handleConsultoriaToggle}
+          onDelete={() => setShowDeleteConfirm(true)}
         />
         
         {/* Célula de Status - mostrar apenas se está aguardando processamento */}
@@ -266,6 +293,48 @@ export function LeadItem({
         onLeadUpdate={onEdit}
         usuarioId={lead.usuarioId}
       />
+
+      {/* Diálogo de Confirmação de Exclusão */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar exclusão</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja excluir o lead <strong>{lead.nomeReal || lead.name || 'Lead sem nome'}</strong>?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 mt-4">
+            <div className="text-sm bg-muted/50 p-3 rounded-md border-l-4 border-destructive/20">
+              <div className="font-medium text-foreground mb-2">Esta ação irá excluir:</div>
+              <ul className="text-muted-foreground space-y-1 list-disc list-inside">
+                <li>O lead e todas as suas informações</li>
+                <li>Todos os arquivos associados</li>
+                <li>PDFs unificados e imagens convertidas</li>
+                <li>Manuscritos e espelhos de correção</li>
+                <li>Análises e recursos</li>
+              </ul>
+              <div className="text-destructive font-medium mt-2">
+                ⚠️ Esta ação não pode ser desfeita!
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setShowDeleteConfirm(false)}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleDeleteLead}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Excluir Lead
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

@@ -56,6 +56,10 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
   const [confirmBatchDeleteFiles, setConfirmBatchDeleteFiles] = useState(false);
   const [isBatchDeletingFiles, setIsBatchDeletingFiles] = useState(false);
   
+  // Estados para excluir leads em lote
+  const [confirmBatchDeleteLeads, setConfirmBatchDeleteLeads] = useState(false);
+  const [isBatchDeletingLeads, setIsBatchDeletingLeads] = useState(false);
+  
   // Cache global de espelhos padrão para evitar múltiplas chamadas
   const [espelhosPadraoCache, setEspelhosPadraoCache] = useState<{[usuarioId: string]: any[]}>({});
   const [loadingEspelhosPadrao, setLoadingEspelhosPadrao] = useState<Set<string>>(new Set());
@@ -700,6 +704,60 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
     }
   };
 
+  // Função para excluir leads em lote
+  const handleBatchDeleteLeads = async () => {
+    setIsBatchDeletingLeads(true);
+    setConfirmBatchDeleteLeads(false);
+    
+    try {
+      const selectedLeadsData = leads.filter(lead => selectedLeads.includes(lead.id));
+      
+      toast("Iniciando exclusão", { 
+        description: `Excluindo ${selectedLeadsData.length} leads selecionados. Esta operação não pode ser desfeita.` 
+      });
+      
+      // Processar cada lead selecionado
+      for (const lead of selectedLeadsData) {
+        try {
+          console.log(`[BatchDeleteLeads] Processando lead: ${lead.id}`);
+          
+          const response = await fetch(`/api/admin/leads-chatwit/leads?id=${lead.id}`, {
+            method: "DELETE",
+          });
+
+          if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.error || `Erro ao excluir lead ${lead.id}`);
+          }
+          
+          console.log(`[BatchDeleteLeads] Lead ${lead.id} excluído com sucesso`);
+          
+        } catch (error: any) {
+          console.error(`[BatchDeleteLeads] Erro ao processar lead ${lead.id}:`, error);
+          toast.error(`Erro no lead ${lead.nomeReal || lead.name}`, {
+            description: error.message || "Erro ao excluir lead"
+          });
+        }
+      }
+      
+      // Limpar seleção e recarregar lista
+      setSelectedLeads([]);
+      fetchLeads();
+      
+      toast("Exclusão concluída", { 
+        description: `${selectedLeadsData.length} leads foram excluídos com sucesso!` 
+      });
+      
+    } catch (error: any) {
+      console.error("Erro na exclusão em lote:", error);
+      toast.error("Erro na exclusão", {
+        description: error.message || "Erro ao excluir leads em lote. Tente novamente."
+      });
+    } finally {
+      setIsBatchDeletingLeads(false);
+    }
+  };
+
   // Funções do sistema antigo removidas - agora usando apenas o novo BatchProcessorTrigger
 
   return (
@@ -739,6 +797,20 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
               )}
               Excluir Todos os Arquivos
             </Button>
+            <Button 
+              variant="destructive" 
+              size="sm"
+              onClick={() => setConfirmBatchDeleteLeads(true)}
+              disabled={isBatchDeletingLeads}
+              className="border-border hover:bg-destructive/80"
+            >
+              {isBatchDeletingLeads ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
+              Excluir Leads
+            </Button>
             <BatchProcessorTrigger 
               selectedLeads={leads
                 .filter(lead => selectedLeads.includes(lead.id))
@@ -774,7 +846,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
         </div>
       ) : (
         <div className="overflow-x-auto bg-card rounded-md border border-border">
-          <Table className="min-w-full border-border table-fixed">
+          <Table className="w-full border-border">
             <TableHeader className="bg-muted/50">
               <TableRow className="border-border hover:bg-muted/50 h-12">
                 <TableHead className="min-w-[40px] w-[40px] align-middle text-card-foreground sticky left-0 bg-muted/50 z-20 px-1">
@@ -785,17 +857,17 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
                     className="border-border"
                   />
                 </TableHead>
-                <TableHead className="min-w-[200px] max-w-[280px] align-middle text-card-foreground sticky left-[40px] bg-muted/50 z-10 px-2 text-sm">Lead</TableHead>
-                <TableHead className="min-w-[80px] max-w-[120px] align-middle text-card-foreground px-2 text-sm">Usuário</TableHead>
-                <TableHead className="min-w-[100px] max-w-[150px] align-middle text-card-foreground px-2 text-sm">Arquivos</TableHead>
-                <TableHead className="min-w-[70px] max-w-[100px] align-middle text-card-foreground px-1 text-sm">PDF</TableHead>
-                <TableHead className="min-w-[70px] max-w-[100px] align-middle text-card-foreground px-1 text-sm">Imagens</TableHead>
-                <TableHead className="min-w-[90px] max-w-[130px] align-middle text-card-foreground px-1 text-sm">Manuscrito</TableHead>
-                <TableHead className="min-w-[110px] max-w-[150px] align-middle text-card-foreground px-1 text-sm">Espelho</TableHead>
-                <TableHead className="min-w-[120px] max-w-[160px] align-middle text-card-foreground px-1 text-sm">Padrão</TableHead>
-                <TableHead className="min-w-[100px] max-w-[140px] align-middle text-card-foreground px-1 text-sm">Análise</TableHead>
-                <TableHead className="min-w-[100px] max-w-[140px] align-middle text-card-foreground px-1 text-sm">Recurso</TableHead>
-                <TableHead className="min-w-[80px] max-w-[120px] align-middle text-card-foreground px-1 text-sm">Consultoria</TableHead>
+                <TableHead className="min-w-[200px] align-middle text-card-foreground sticky left-[40px] bg-muted/50 z-10 px-2 text-sm">Lead</TableHead>
+                <TableHead className="min-w-[80px] align-middle text-card-foreground px-2 text-sm">Usuário</TableHead>
+                <TableHead className="min-w-[100px] align-middle text-card-foreground px-2 text-sm">Arquivos</TableHead>
+                <TableHead className="min-w-[70px] align-middle text-card-foreground px-1 text-sm">PDF</TableHead>
+                <TableHead className="min-w-[70px] align-middle text-card-foreground px-1 text-sm">Imagens</TableHead>
+                <TableHead className="min-w-[90px] align-middle text-card-foreground px-1 text-sm">Manuscrito</TableHead>
+                <TableHead className="min-w-[110px] align-middle text-card-foreground px-1 text-sm">Espelho</TableHead>
+                <TableHead className="min-w-[120px] align-middle text-card-foreground px-1 text-sm">Padrão</TableHead>
+                <TableHead className="min-w-[100px] align-middle text-card-foreground px-1 text-sm">Análise</TableHead>
+                <TableHead className="min-w-[100px] align-middle text-card-foreground px-1 text-sm">Recurso</TableHead>
+                <TableHead className="min-w-[80px] align-middle text-card-foreground px-1 text-sm">Consultoria</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -907,6 +979,58 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
                 <Trash2 className="h-4 w-4 mr-2" />
               )}
               Excluir Todos os Arquivos
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo de Confirmação para Exclusão de Leads em Lote */}
+      <Dialog open={confirmBatchDeleteLeads} onOpenChange={setConfirmBatchDeleteLeads}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar exclusão de leads em lote</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja excluir <strong>{selectedLeads.length} leads selecionados</strong>?
+            </DialogDescription>
+            <div className="space-y-2 mt-4">
+              <div className="text-sm bg-muted/50 p-3 rounded-md border-l-4 border-destructive/20">
+                <div className="font-medium text-foreground mb-2">Esta ação irá excluir completamente:</div>
+                <ul className="text-muted-foreground space-y-1 list-disc list-inside">
+                  <li>Os leads e todas as suas informações</li>
+                  <li>Todos os arquivos associados</li>
+                  <li>PDFs unificados e imagens convertidas</li>
+                  <li>Manuscritos e espelhos de correção</li>
+                  <li>Análises e recursos</li>
+                  <li>Histórico completo dos leads</li>
+                </ul>
+                <div className="text-destructive font-medium mt-2">
+                  ⚠️ Esta ação não pode ser desfeita!
+                </div>
+                <div className="text-sm text-muted-foreground mt-1">
+                  Nota: Esta é uma exclusão permanente e irrecuperável.
+                </div>
+              </div>
+            </div>
+          </DialogHeader>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setConfirmBatchDeleteLeads(false)}
+              disabled={isBatchDeletingLeads}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleBatchDeleteLeads}
+              disabled={isBatchDeletingLeads}
+            >
+              {isBatchDeletingLeads ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
+              Excluir Leads
             </Button>
           </DialogFooter>
         </DialogContent>
