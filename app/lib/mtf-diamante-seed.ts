@@ -28,8 +28,10 @@ export async function populateUserMtfVariaveis(userId: string): Promise<boolean>
 
     if (!config) {
       // Cria configuração com variáveis padrão
-      config = await db.mtfDiamanteConfig.create({
-        data: {
+      config = await db.mtfDiamanteConfig.upsert({
+        where: { userId },
+        update: {},
+        create: {
           userId,
           variaveis: {
             create: [

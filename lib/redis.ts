@@ -5,6 +5,9 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+// Detecta se está rodando em Docker
+const isRunningInDocker = process.env.RUN_IN_DOCKER === 'true' || process.env.NODE_ENV === 'production';
+
 // Variável para controlar se já exibimos a configuração
 let configLogged = false;
 
@@ -12,10 +15,10 @@ let configLogged = false;
 function logRedisConfig() {
   if (!configLogged) {
     console.log('Configuração de conexão com o Redis:', {
-      host: process.env.REDIS_HOST || '127.0.0.1',
+      host: process.env.REDIS_HOST || (isRunningInDocker ? 'redis' : '127.0.0.1'),
       port: Number.parseInt(process.env.REDIS_PORT || '6379', 10),
-      password: process.env.REDIS_PASSWORD ? '*****' : undefined,
       useTLS: process.env.REDIS_USE_TLS === 'true',
+      environment: isRunningInDocker ? 'Docker/Production' : 'Local Development',
     });
     configLogged = true;
   }
@@ -23,9 +26,8 @@ function logRedisConfig() {
 
 // Criação de uma única instância de conexão Redis
 const redisConnection = new IORedis({
-  host: process.env.REDIS_HOST || '188.245.200.61',
-  port: Number.parseInt(process.env.REDIS_PORT || '6380', 10),
-  password: process.env.REDIS_PASSWORD || 'WIt2357111317',
+  host: process.env.REDIS_HOST || (isRunningInDocker ? 'redis' : '127.0.0.1'),
+  port: Number.parseInt(process.env.REDIS_PORT || '6379', 10),
   maxRetriesPerRequest: null,
   enableReadyCheck: false,
   connectTimeout: 10000, // Aumenta o timeout para 10 segundos

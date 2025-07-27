@@ -29,13 +29,9 @@ export async function GET(request: Request) {
     let config = null;
     if (usuarioChatwit) {
       // Buscar configuração ativa do WhatsApp do usuário
-      config = await prisma.whatsAppConfig.findFirst({
+      config = await prisma.whatsAppGlobalConfig.findFirst({
         where: {
-          usuarioChatwitId: usuarioChatwit.id,
-          isActive: true
-        },
-        orderBy: {
-          updatedAt: 'desc'
+          usuarioChatwitId: usuarioChatwit.id
         }
       });
     }
@@ -57,21 +53,18 @@ export async function GET(request: Request) {
       success: true,
       config: {
         id: config.id,
-        fbGraphApiBase: config.fbGraphApiBase,
+        phoneNumberId: config.phoneNumberId,
+        fbGraphApiBase: config.graphApiBaseUrl,
         whatsappBusinessAccountId: config.whatsappBusinessAccountId,
-        whatsappToken: config.whatsappToken,
-        createdAt: config.createdAt,
+        whatsappToken: config.whatsappApiKey,
+        createdAt: config.updatedAt,
         updatedAt: config.updatedAt
-      },
-      isEnvConfig: false
+      }
     });
 
   } catch (error) {
-    console.error('Erro ao buscar configurações do WhatsApp:', error);
-    return NextResponse.json(
-      { error: 'Erro interno do servidor' },
-      { status: 500 }
-    );
+    console.error('Erro ao buscar configuração do WhatsApp:', error);
+    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
   }
 }
 
@@ -100,26 +93,37 @@ export async function POST(request: Request) {
 
     // Usar transação para garantir consistência
     const result = await prisma.$transaction(async (tx) => {
-      // Desativar configurações anteriores
-      await tx.whatsAppConfig.updateMany({
+      // Verificar se já existe configuração
+      const existingConfig = await tx.whatsAppGlobalConfig.findFirst({
         where: {
-          usuarioChatwitId: usuarioChatwit.id,
-          isActive: true
-        },
-        data: { isActive: false }
-      });
-
-      // Criar nova configuração
-      const newConfig = await tx.whatsAppConfig.create({
-        data: {
-          usuarioChatwitId: usuarioChatwit.id,
-          phoneNumberId: validatedData.phoneNumberId || '',
-          fbGraphApiBase: validatedData.fbGraphApiBase,
-          whatsappBusinessAccountId: validatedData.whatsappBusinessAccountId,
-          whatsappToken: validatedData.whatsappToken,
-          isActive: true
+          usuarioChatwitId: usuarioChatwit.id
         }
       });
+
+      let newConfig;
+      if (existingConfig) {
+        // Atualizar configuração existente
+        newConfig = await tx.whatsAppGlobalConfig.update({
+          where: { id: existingConfig.id },
+          data: {
+            phoneNumberId: validatedData.phoneNumberId,
+            graphApiBaseUrl: validatedData.fbGraphApiBase,
+            whatsappBusinessAccountId: validatedData.whatsappBusinessAccountId,
+            whatsappApiKey: validatedData.whatsappToken
+          }
+        });
+      } else {
+        // Criar nova configuração
+        newConfig = await tx.whatsAppGlobalConfig.create({
+          data: {
+            usuarioChatwitId: usuarioChatwit.id,
+            phoneNumberId: validatedData.phoneNumberId,
+            graphApiBaseUrl: validatedData.fbGraphApiBase,
+            whatsappBusinessAccountId: validatedData.whatsappBusinessAccountId,
+            whatsappApiKey: validatedData.whatsappToken
+          }
+        });
+      }
 
       return newConfig;
     });
@@ -129,26 +133,16 @@ export async function POST(request: Request) {
       message: 'Configurações do WhatsApp salvas com sucesso',
       config: {
         id: result.id,
-        fbGraphApiBase: result.fbGraphApiBase,
+        phoneNumberId: result.phoneNumberId,
+        fbGraphApiBase: result.graphApiBaseUrl,
         whatsappBusinessAccountId: result.whatsappBusinessAccountId,
-        createdAt: result.createdAt,
+        createdAt: result.updatedAt,
         updatedAt: result.updatedAt
       }
     });
 
   } catch (error) {
-    console.error('Erro ao salvar configurações do WhatsApp:', error);
-    
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Dados inválidos', details: error.errors },
-        { status: 400 }
-      );
-    }
-
-    return NextResponse.json(
-      { error: 'Erro interno do servidor' },
-      { status: 500 }
-    );
+    console.error('Erro ao salvar configuração do WhatsApp:', error);
+    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
   }
 } 

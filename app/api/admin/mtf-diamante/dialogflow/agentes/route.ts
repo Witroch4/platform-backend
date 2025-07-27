@@ -11,10 +11,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { nome, projectId, credentials, region, caixaId } = body;
+    const { nome, projectId, credentials, region, inboxId } = body;
 
-    if (!nome || !projectId || !credentials || !caixaId) {
-      return NextResponse.json({ error: 'Campos obrigatórios faltando: nome, projectId, credentials e caixaId' }, { status: 400 });
+    if (!nome || !projectId || !credentials || !inboxId) {
+      return NextResponse.json({ error: 'Campos obrigatórios faltando: nome, projectId, credentials e inboxId' }, { status: 400 });
     }
 
     // Buscar o usuário Chatwit correspondente ao usuário logado
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
         projectId,
         credentials,
         region: region || 'global',
-        caixaId,
+        inboxId,
         usuarioChatwitId: usuarioChatwit.id, // Usar o ID do UsuarioChatwit, não do User
       },
     });

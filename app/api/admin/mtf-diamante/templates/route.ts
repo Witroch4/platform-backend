@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import axios from 'axios';
 import { auth } from '@/auth';
 import { mtfDiamanteConfig } from '@/app/config/mtf-diamante';
-import { db as prisma } from '@/lib/db';
+import { db } from '@/lib/db';
 import { VariableConverter, type MtfDiamanteVariavel } from '@/app/lib/variable-converter';
 
 // Templates mockados para desenvolvimento (caso a API não retorne dados)
@@ -57,22 +57,19 @@ const mockTemplates = [
 async function getWhatsAppApiConfig(userId: string) {
   try {
     // Buscar configuração do usuário no banco
-    const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
+    const usuarioChatwit = await db.usuarioChatwit.findUnique({
       where: { appUserId: userId },
       include: {
-        whatsappConfigs: {
-          where: { caixaEntradaId: null, isActive: true }, // Configuração padrão
-          take: 1
-        }
+        configuracaoGlobalWhatsApp: true
       }
     });
 
-    if (usuarioChatwit?.whatsappConfigs?.[0]) {
-      const config = usuarioChatwit.whatsappConfigs[0];
+    if (usuarioChatwit?.configuracaoGlobalWhatsApp) {
+      const config = usuarioChatwit.configuracaoGlobalWhatsApp;
       return {
-        fbGraphApiBase: config.fbGraphApiBase,
+        fbGraphApiBase: config.graphApiBaseUrl,
         whatsappBusinessAccountId: config.whatsappBusinessAccountId,
-        whatsappToken: config.whatsappToken,
+        whatsappToken: config.whatsappApiKey,
       };
     }
 
@@ -99,14 +96,14 @@ async function getWhatsAppApiConfig(userId: string) {
 async function getUserVariables(userId: string): Promise<MtfDiamanteVariavel[]> {
   try {
     // Busca ou cria a configuração do MTF Diamante
-    let config = await prisma.mtfDiamanteConfig.findFirst({
+    let config = await db.mtfDiamanteConfig.findFirst({
       where: { userId },
       include: { variaveis: true }
     });
 
     if (!config) {
       // Cria configuração padrão com variáveis iniciais
-      config = await prisma.mtfDiamanteConfig.create({
+      config = await db.mtfDiamanteConfig.create({
         data: {
           userId,
           variaveis: {
@@ -136,53 +133,59 @@ async function getUserVariables(userId: string): Promise<MtfDiamanteVariavel[]> 
  */
 async function syncTemplateWithDatabase(template: any, userId: string) {
   try {
-    // Buscar o usuário Chatwit
-    const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
-      where: { appUserId: userId }
-    });
-
-    if (!usuarioChatwit) {
-      console.error(`Usuário Chatwit não encontrado para userId: ${userId}`);
-      return false;
-    }
-
-    // Verifica se já existe um template com o mesmo templateId
-    const existingTemplate = await prisma.whatsAppTemplate.findFirst({
+    // Verifica se já existe um template com o mesmo nome
+    const existingTemplate = await db.template.findFirst({
       where: { 
-        templateId: template.id.toString(),
-        usuarioChatwitId: usuarioChatwit.id
+        name: template.name,
+        createdById: userId
       },
     });
 
     // Mapeia os dados da API para os campos do modelo
     const data = {
-      templateId: template.id.toString(),
       name: template.name,
-      status: template.status,
-      category: template.category || 'UTILITY',
+      status: template.status as any,
       language: template.language || 'pt_BR',
-      components: template.components || {},
-      subCategory: template.sub_category || null,
-      qualityScore: template.quality_score?.score || null,
-      correctCategory: template.correct_category || null,
-      ctaUrlLinkTrackingOptedOut: template.cta_url_link_tracking_opted_out || null,
-      libraryTemplateName: template.library_template_name || null,
-      messageSendTtlSeconds: template.message_send_ttl_seconds || null,
-      parameterFormat: template.parameter_format || null,
-      previousCategory: template.previous_category || null,
-      lastEdited: new Date(),
-      editHistory: existingTemplate?.editHistory || undefined,
-      usuarioChatwitId: usuarioChatwit.id,
+      tags: [template.category || 'UTILITY'],
+      type: 'WHATSAPP_OFFICIAL' as any,
+      scope: 'PRIVATE' as any,
+      createdById: userId,
+      whatsappOfficialInfo: {
+        create: {
+          metaTemplateId: template.id.toString(),
+          status: template.status,
+          category: template.category || 'UTILITY',
+          components: template.components || {},
+        }
+      }
     };
 
     if (existingTemplate) {
-      await prisma.whatsAppTemplate.update({
+      await db.template.update({
         where: { id: existingTemplate.id },
-        data,
+        data: {
+          ...data,
+          whatsappOfficialInfo: {
+            upsert: {
+              create: {
+                metaTemplateId: template.id.toString(),
+                status: template.status,
+                category: template.category || 'UTILITY',
+                components: template.components || {},
+              },
+              update: {
+                metaTemplateId: template.id.toString(),
+                status: template.status,
+                category: template.category || 'UTILITY',
+                components: template.components || {},
+              }
+            }
+          }
+        },
       });
       console.log(`Template ${template.name} atualizado no banco de dados`);
     } else {
-      await prisma.whatsAppTemplate.create({
+      await db.template.create({
         data,
       });
       console.log(`Template ${template.name} criado no banco de dados`);
@@ -328,7 +331,7 @@ export async function GET(request: Request) {
     const userId = session.user.id;
 
     // Buscar o UsuarioChatwit do usuário logado
-    const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
+    const usuarioChatwit = await db.usuarioChatwit.findUnique({
       where: { appUserId: userId },
       select: { id: true }
     });
@@ -339,7 +342,7 @@ export async function GET(request: Request) {
       }, { status: 404 });
     }
 
-    const usuarioChatwitId = usuarioChatwit.id;
+
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category');
     const language = searchParams.get('language');
@@ -395,24 +398,19 @@ export async function GET(request: Request) {
     console.log('Buscando templates do banco de dados...');
 
     // Construir a condição de filtro com base nos parâmetros
-    const filterCondition: any = { usuarioChatwitId };
+    const filterCondition: any = { createdById: userId };
     if (category && category !== 'all') {
-      filterCondition.category = category;
+      filterCondition.tags = { has: category };
     }
     if (language && language !== 'all') {
       filterCondition.language = language;
     }
 
     // Buscar os templates do banco de dados
-    const dbTemplates = await prisma.whatsAppTemplate.findMany({
+    const dbTemplates = await db.template.findMany({
       where: filterCondition,
-      select: {
-        id: true,
-        templateId: true,
-        name: true,
-        status: true,
-        category: true,
-        language: true,
+      include: {
+        whatsappOfficialInfo: true
       },
       orderBy: { name: 'asc' },
     });
@@ -421,8 +419,8 @@ export async function GET(request: Request) {
 
     // Se não encontrou nenhum template e não temos filtros, verificamos se a tabela está vazia
     if (dbTemplates.length === 0 && !category && !language) {
-      const totalCount = await prisma.whatsAppTemplate.count({
-        where: { usuarioChatwitId }
+      const totalCount = await db.template.count({
+        where: { createdById: userId }
       });
 
       if (totalCount === 0) {
@@ -449,10 +447,10 @@ export async function GET(request: Request) {
 
     // Formatar os resultados do banco para o formato esperado pelo frontend
     const formattedTemplates = dbTemplates.map(template => ({
-      id: template.templateId,
+      id: template.whatsappOfficialInfo?.metaTemplateId || template.id,
       name: template.name,
       status: template.status,
-      category: template.category,
+      category: template.tags[0] || 'UTILITY',
       language: template.language,
     }));
 
@@ -633,29 +631,24 @@ export async function POST(request: Request) {
     try {
       console.log('Salvando template no banco de dados com URL pública:', publicMediaUrl);
       
-      // Buscar o usuário Chatwit
-      const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
-        where: { appUserId: session.user.id }
-      });
-
-      if (!usuarioChatwit) {
-        console.log('❌ [Templates] Usuário Chatwit não encontrado');
-        return NextResponse.json({ error: 'Usuário Chatwit não encontrado' }, { status: 404 });
-      }
-
       // Primeiro criamos o template no banco de dados
-      const createdTemplate = await prisma.whatsAppTemplate.create({
+      const createdTemplate = await db.template.create({
         data: {
-          templateId: templateResponse.id,
           name: body.name,
-          category: body.category,
-          subCategory: body.sub_category || null,
           status: templateResponse.status || 'PENDING',
           language: body.language,
-          components: body.components,
-          usuarioChatwitId: usuarioChatwit.id,
-          // Adicionar a URL pública da mídia, se disponível
-          ...(publicMediaUrl ? { publicMediaUrl } : {})
+          tags: [body.category],
+          type: 'WHATSAPP_OFFICIAL',
+          scope: 'PRIVATE',
+          createdById: session.user.id,
+          whatsappOfficialInfo: {
+            create: {
+              metaTemplateId: templateResponse.id,
+              status: templateResponse.status || 'PENDING',
+              category: body.category,
+              components: body.components,
+            }
+          }
         },
       });
 

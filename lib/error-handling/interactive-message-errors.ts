@@ -36,7 +36,7 @@ export interface StructuredError {
   timestamp: Date;
   context?: {
     userId?: string;
-    caixaId?: string;
+    inboxId?: string;
     messageId?: string;
     action?: string;
     component?: string;
@@ -158,8 +158,8 @@ const ERROR_MESSAGES: Record<string, { message: string; userMessage: string; sev
     userMessage: 'Mensagem não encontrada.',
     severity: ErrorSeverity.MEDIUM
   },
-  'BUSINESS_CAIXA_NOT_FOUND': {
-    message: 'Caixa not found',
+  'BUSINESS_INBOX_NOT_FOUND': {
+    message: 'Inbox not found',
     userMessage: 'Caixa de entrada não encontrada.',
     severity: ErrorSeverity.MEDIUM
   },

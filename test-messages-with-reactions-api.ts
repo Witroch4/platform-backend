@@ -27,7 +27,7 @@ interface TestReaction {
 }
 
 interface TestPayload {
-  caixaId: string;
+  inboxId: string;
   message: TestMessage;
   reactions: TestReaction[];
 }
@@ -36,7 +36,7 @@ async function testCreateMessageWithReactions() {
   console.log('🧪 Testing POST /api/admin/mtf-diamante/messages-with-reactions');
   
   const testPayload: TestPayload = {
-    caixaId: 'test-caixa-id',
+    inboxId: 'test-inbox-id',
     message: {
       name: 'Test Interactive Message',
       type: 'button',
@@ -195,10 +195,10 @@ async function testUpdateMessageWithReactions(messageId: string) {
 }
 
 async function testGetMessagesByCaixa() {
-  console.log('\n🧪 Testing GET /api/admin/mtf-diamante/messages-with-reactions (by caixaId)');
+  console.log('\n🧪 Testing GET /api/admin/mtf-diamante/messages-with-reactions (by inboxId)');
   
   try {
-    const response = await fetch(`${API_BASE}/api/admin/mtf-diamante/messages-with-reactions?caixaId=test-caixa-id`, {
+    const response = await fetch(`${API_BASE}/api/admin/mtf-diamante/messages-with-reactions?inboxId=test-inbox-id`, {
       method: 'GET',
       headers: {
         // Note: In a real test, you would need proper authentication headers
@@ -230,7 +230,7 @@ async function testValidationErrors() {
   console.log('\n🧪 Testing Validation Errors');
   
   const invalidPayload = {
-    caixaId: '', // Invalid empty caixaId
+    inboxId: '', // Invalid empty inboxId
     message: {
       name: '', // Invalid empty name
       type: 'invalid-type', // Invalid type
@@ -296,7 +296,7 @@ async function runAllTests() {
   console.log('\n💡 To test with real data, you need to:');
   console.log('1. Start the development server');
   console.log('2. Authenticate with a valid session');
-  console.log('3. Use valid caixaId from your database');
+  console.log('3. Use valid inboxId from your database');
 }
 
 // Run the tests

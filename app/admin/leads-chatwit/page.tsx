@@ -145,7 +145,7 @@ export default function LeadsChatwitPage() {
         
         <div className="flex items-center gap-2">
           {/* Botão de cadastro de API Key */}
-          {userInfo.role !== "SUPERADMIN" && !userInfo.isLoading && (
+          {!userInfo.isLoading && (
             <RegisterApiKeyDialog 
               userHasToken={userInfo.hasToken}
               // Passando os dados que já temos

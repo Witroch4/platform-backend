@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { auth } from '@/auth';
 
 // DELETE: Exclui um template de WhatsApp
-export async function DELETE(request: NextRequest, { params }: { params: Promise<{ caixaId: string, templateId: string }> }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ inboxId: string, templateId: string }> }) {
   const { templateId } = await params;
   try {
     const session = await auth();

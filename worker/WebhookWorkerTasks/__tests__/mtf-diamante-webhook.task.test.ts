@@ -67,7 +67,7 @@ describe('MTF Diamante Webhook Worker Tasks', () => {
         },
         metadata: {
           intentName: 'welcome',
-          caixaId: 'test-caixa-id'
+          inboxId: 'test-inbox-id'
         }
       };
 
@@ -179,7 +179,7 @@ describe('MTF Diamante Webhook Worker Tasks', () => {
         },
         metadata: {
           intentName: 'menu',
-          caixaId: 'test-caixa-id'
+          inboxId: 'test-inbox-id'
         }
       };
 

@@ -152,9 +152,19 @@ export function HeroSection() {
 											muted={isVideoMuted}
 											loop
 											playsInline
-											onLoadedData={() => console.log('Video loaded')}
+											onLoadedData={() => {
+												console.log('Video loaded successfully');
+												setVideoError(false);
+											}}
+											onLoadStart={() => console.log('Video loading started')}
+											onCanPlay={() => console.log('Video can play')}
 											onError={(e) => {
 												console.error('Video error:', e);
+												console.error('Video error details:', {
+													error: e,
+													src: '/Vídeo_IA_ChatWit_Social_Prompts.mp4',
+													videoElement: e.target
+												});
 												setVideoError(true);
 											}}
 										>
@@ -166,13 +176,9 @@ export function HeroSection() {
 										<div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl">
 											<div className="text-center text-white">
 												<div className="mb-4">
-													<Image
-														src="/01 WitdeT.png"
-														alt="Socialwise Chatwit"
-														width={100}
-														height={100}
-														className="mx-auto"
-													/>
+													<div className="w-24 h-24 mx-auto bg-white/20 rounded-full flex items-center justify-center">
+														<Bot className="h-12 w-12 text-white" />
+													</div>
 												</div>
 												<h3 className="text-xl font-bold mb-2">Socialwise Chatwit</h3>
 												<p className="text-sm opacity-90">Demonstração em Vídeo</p>

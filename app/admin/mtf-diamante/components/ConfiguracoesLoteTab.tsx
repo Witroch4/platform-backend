@@ -205,6 +205,7 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
               <Input
                 id="phoneNumberId"
                 name="phoneNumberId"
+                type="text"
                 value={config.phoneNumberId || ''}
                 onChange={handleWhatsAppChange}
                 placeholder="ID do Número de Telefone da Meta"
@@ -216,6 +217,7 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
               <Input
                 id="whatsappBusinessAccountId"
                 name="whatsappBusinessAccountId"
+                type="text"
                 value={config.whatsappBusinessAccountId || ''}
                 onChange={handleWhatsAppChange}
                 placeholder="ID da Conta Business do WhatsApp"
@@ -227,6 +229,7 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
               <Input
                 id="fbGraphApiBase"
                 name="fbGraphApiBase"
+                type="url"
                 value={config.fbGraphApiBase || ''}
                 onChange={handleWhatsAppChange}
                 placeholder="https://graph.facebook.com"
@@ -240,6 +243,7 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
                   id="whatsappToken"
                   name="whatsappToken"
                   type="password"
+                  autoComplete="off"
                   value={newToken}
                   onChange={handleWhatsAppChange}
                   placeholder={config.hasToken ? "Digite um novo token para alterar" : "Seu token de acesso da API do WhatsApp"}

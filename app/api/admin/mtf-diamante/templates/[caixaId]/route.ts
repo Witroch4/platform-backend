@@ -4,8 +4,8 @@ import { db } from '@/lib/db';
 import { auth } from '@/auth';
 
 // GET: Lista todos os templates de uma caixa
-export async function GET(request: NextRequest, { params }: { params: Promise<{ caixaId: string }> }) {
-  const { caixaId } = await params;
+export async function GET(request: NextRequest, { params }: { params: Promise<{ inboxId: string }> }) {
+  const { inboxId } = await params;
   try {
     const session = await auth();
     if (!session?.user?.id) {
@@ -13,7 +13,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const templates = await db.whatsAppTemplate.findMany({
-      where: { caixaEntradaId: caixaId },
+      where: { caixaEntradaId: inboxId },
       select: {
         id: true,
         templateId: true,
@@ -39,8 +39,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 // POST: Cria ou atualiza um template
-export async function POST(request: NextRequest, { params }: { params: Promise<{ caixaId: string }> }) {
-  const { caixaId } = await params;
+export async function POST(request: NextRequest, { params }: { params: Promise<{ inboxId: string }> }) {
+  const { inboxId } = await params;
   try {
     const session = await auth();
     if (!session?.user?.id) {
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         category,
         components,
         language: language || 'pt_BR',
-        caixaEntradaId: caixaId,
+        caixaEntradaId: inboxId,
         usuarioChatwitId: usuarioChatwit.id,
         // Campos obrigatórios com valores padrão
         templateId: `local_${new Date().getTime()}`,

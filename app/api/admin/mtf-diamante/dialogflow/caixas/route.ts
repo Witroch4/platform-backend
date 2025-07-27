@@ -25,7 +25,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Usuário Chatwit não encontrado' }, { status: 404 });
     }
 
-    const caixas = await prisma.caixaEntrada.findMany({
+    const caixas = await prisma.chatwitInbox.findMany({
       where: { usuarioChatwitId: usuarioChatwit.id },
       include: {
         agentes: {
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verificar se a caixa já existe
-    const caixaExistente = await prisma.caixaEntrada.findFirst({
+    const caixaExistente = await prisma.chatwitInbox.findFirst({
       where: {
         usuarioChatwitId: usuarioChatwit.id,
         inboxId: inboxId
@@ -98,12 +98,10 @@ export async function POST(request: NextRequest) {
     // Criar caixa no banco
     console.log('💾 [CaixasEntrada] Salvando caixa no banco...');
     
-    const caixa = await prisma.caixaEntrada.create({
+    const caixa = await prisma.chatwitInbox.create({
       data: {
         nome,
-        chatwitAccountId: accountId, // Usar chatwitAccountId
         inboxId,
-        inboxName,
         channelType,
         usuarioChatwitId: usuarioChatwit.id
       },
@@ -146,7 +144,7 @@ export async function POST(request: NextRequest) {
                 region: hook.settings?.region || 'global',
                 ativo: hook.status === true,
                 hookId: hook.id?.toString(),
-                caixaId: caixa.id,
+                inboxId: caixa.id,
                 usuarioChatwitId: usuarioChatwit.id
               }
             });
@@ -208,7 +206,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Buscar a caixa
-    const caixa = await prisma.caixaEntrada.findFirst({
+    const caixa = await prisma.chatwitInbox.findFirst({
       where: { 
         id: caixaId,
         usuarioChatwitId: usuarioChatwit.id 
@@ -221,7 +219,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Deletar caixa do banco (os agentes serão deletados automaticamente)
-    await prisma.caixaEntrada.delete({
+    await prisma.chatwitInbox.delete({
       where: { id: caixaId }
     });
 

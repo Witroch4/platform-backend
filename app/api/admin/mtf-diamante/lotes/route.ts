@@ -19,10 +19,12 @@ export async function GET() {
       return NextResponse.json({ error: 'Usuário Chatwit não encontrado' }, { status: 404 });
     }
 
-    const lotesDb = await prisma.loteOab.findMany({
-      where: { usuarioChatwitId: usuarioChatwit.id },
-      orderBy: { createdAt: 'desc' }
-    });
+    // TODO: Modelo loteOab não existe no novo schema
+    // const lotesDb = await prisma.loteOab.findMany({
+    //   where: { usuarioChatwitId: usuarioChatwit.id },
+    //   orderBy: { createdAt: 'desc' }
+    // });
+    const lotesDb = [];
 
     // Mapear para o formato esperado pelo componente
     const lotes = lotesDb.map(lote => ({

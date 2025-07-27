@@ -101,12 +101,23 @@ export interface ButtonReactionMapping {
   isActive: boolean;
 }
 
+export interface ButtonActionMapping {
+  id: string;
+  buttonId: string;
+  actionType: string; // ActionType enum value
+  actionPayload: any; // JSON payload with action-specific data
+  description?: string;
+  inboxId: string;
+  whatsappConfig: CompleteMessageMapping["whatsappConfig"];
+}
+
 // ============================================================================
 // INTENT MAPPING QUERIES
 // ============================================================================
 
 /**
- * Find complete message mapping by intent name and caixa ID
+ * Find complete message mapping by intent name and inbox ID
+ * Uses the new unified MapeamentoIntencao and Template models
  * Returns all data needed for the worker to send messages without additional DB queries
  */
 export async function findCompleteMessageMappingByIntent(
@@ -115,59 +126,54 @@ export async function findCompleteMessageMappingByIntent(
 ): Promise<CompleteMessageMapping | null> {
   try {
     console.log(
-      `[DB Query] Finding complete mapping for intent: ${intentName}, inboxId: ${inboxId} (type: ${typeof inboxId})`
+      `[DB Query] Finding unified mapping for intent: ${intentName}, inboxId: ${inboxId}`
     );
     
-    // Garantir que inboxId seja string
+    // Convert inboxId to string for consistency
     const inboxIdString = String(inboxId);
-    console.log(`[DB Query] Converted inboxId to string: ${inboxIdString} (type: ${typeof inboxIdString})`);
     
-    // PRIMEIRO: Buscar a CaixaEntrada pelo inboxId para obter o ID interno
-    console.log(`[DB Query] Step 1: Finding CaixaEntrada by inboxId: ${inboxIdString}`);
-    const caixaEntrada = await prisma.caixaEntrada.findFirst({
+    // STEP 1: Find ChatwitInbox by inboxId
+    console.log(`[DB Query] Step 1: Finding ChatwitInbox by inboxId: ${inboxIdString}`);
+    const chatwitInbox = await prisma.chatwitInbox.findFirst({
       where: {
         inboxId: inboxIdString,
       },
+      include: {
+        usuarioChatwit: {
+          include: {
+            configuracaoGlobalWhatsApp: true,
+          },
+        },
+      },
     });
 
-    if (!caixaEntrada) {
-      console.log(`[DB Query] No CaixaEntrada found for inboxId: ${inboxIdString}`);
+    if (!chatwitInbox) {
+      console.log(`[DB Query] No ChatwitInbox found for inboxId: ${inboxIdString}`);
       return null;
     }
 
-    console.log(`[DB Query] Found CaixaEntrada: ${caixaEntrada.id} (nome: ${caixaEntrada.nome}) for inboxId: ${inboxIdString}`);
+    console.log(`[DB Query] Found ChatwitInbox: ${chatwitInbox.id} (nome: ${chatwitInbox.nome})`);
     
-    // SEGUNDO: Buscar o mapeamento usando o ID interno da CaixaEntrada
-    console.log(`[DB Query] Step 2: Finding mapping with parameters:`, {
-      intentName,
-      caixaEntradaId: caixaEntrada.id,
-      whereClause: `intentName_caixaEntradaId: { intentName: "${intentName}", caixaEntradaId: "${caixaEntrada.id}" }`
-    });
-
-    // Find the intent mapping with all related data
+    // STEP 2: Find MapeamentoIntencao using the unified model
+    console.log(`[DB Query] Step 2: Finding MapeamentoIntencao for intent: ${intentName}`);
     const mapping = await prisma.mapeamentoIntencao.findUnique({
       where: {
-        intentName_caixaEntradaId: {
+        intentName_inboxId: {
           intentName,
-          caixaEntradaId: caixaEntrada.id, // Usar o ID interno da CaixaEntrada
+          inboxId: chatwitInbox.id,
         },
       },
       include: {
-        caixaEntrada: {
+        inbox: {
           include: {
-            configuracaoWhatsApp: true,
-            usuarioChatwit: true,
-          },
-        },
-        template: true,
-        mensagemInterativa: {
-          include: {
-            botoes: {
-              orderBy: { ordem: "asc" },
+            usuarioChatwit: {
+              include: {
+                configuracaoGlobalWhatsApp: true,
+              },
             },
           },
         },
-        unifiedTemplate: {
+        template: {
           include: {
             interactiveContent: {
               include: {
@@ -184,126 +190,74 @@ export async function findCompleteMessageMappingByIntent(
             whatsappOfficialInfo: true,
           },
         },
-        interactiveMessage: true,
       },
     });
 
     if (!mapping) {
       console.log(
-        `[DB Query] No mapping found for intent: ${intentName}, caixaEntrada: ${caixaEntrada.id} (inboxId: ${inboxIdString})`
+        `[DB Query] No MapeamentoIntencao found for intent: ${intentName}, inboxId: ${inboxIdString}`
       );
       return null;
     }
 
-    // Get WhatsApp configuration
-    let whatsappConfig;
-    if (mapping.caixaEntrada.configuracaoWhatsApp) {
-      whatsappConfig = {
-        phoneNumberId: mapping.caixaEntrada.configuracaoWhatsApp.phoneNumberId,
-        whatsappToken: mapping.caixaEntrada.configuracaoWhatsApp.whatsappToken,
-        whatsappBusinessAccountId:
-          mapping.caixaEntrada.configuracaoWhatsApp.whatsappBusinessAccountId,
-        fbGraphApiBase:
-          mapping.caixaEntrada.configuracaoWhatsApp.fbGraphApiBase,
-      };
-    } else {
-      // Fallback to environment variables
-      whatsappConfig = {
-        phoneNumberId: process.env.FROM_PHONE_NUMBER_ID || "",
-        whatsappToken: process.env.WHATSAPP_TOKEN || "",
-        whatsappBusinessAccountId: process.env.WHATSAPP_BUSINESS_ID || "",
-        fbGraphApiBase: "https://graph.facebook.com/v22.0",
-      };
-    }
+    // STEP 3: Get WhatsApp configuration with fallback logic
+    const whatsappConfig = await getWhatsAppConfigWithFallback(chatwitInbox);
 
-    // Determine message type and build response
-    let messageType: CompleteMessageMapping["messageType"];
+    // STEP 4: Build response based on unified Template model
     const result: CompleteMessageMapping = {
       id: mapping.id,
       intentName: mapping.intentName,
-      caixaEntradaId: mapping.caixaEntradaId,
-      messageType: "template", // default, will be overridden
+      caixaEntradaId: mapping.inboxId,
+      messageType: getTemplateMessageType(mapping.template),
       whatsappConfig,
     };
 
-    // Check for unified template (highest priority)
-    if (mapping.unifiedTemplate) {
-      messageType = "unified_template";
+    // Add template data based on type with priority resolution
+    if (mapping.template.type === 'WHATSAPP_OFFICIAL' && mapping.template.whatsappOfficialInfo) {
+      result.messageType = "unified_template";
       result.unifiedTemplate = {
-        id: mapping.unifiedTemplate.id,
-        name: mapping.unifiedTemplate.name,
-        type: mapping.unifiedTemplate.type,
-        scope: mapping.unifiedTemplate.scope,
-        description: mapping.unifiedTemplate.description || undefined,
-        language: mapping.unifiedTemplate.language,
-        interactiveContent: mapping.unifiedTemplate.interactiveContent,
-        whatsappOfficialInfo: mapping.unifiedTemplate.whatsappOfficialInfo,
-      };
-    }
-    // Check for enhanced interactive message
-    else if (mapping.interactiveMessage) {
-      messageType = "enhanced_interactive";
-      result.enhancedInteractiveMessage = {
-        id: mapping.interactiveMessage.id,
-        name: mapping.interactiveMessage.name,
-        type: mapping.interactiveMessage.type,
-        headerType: mapping.interactiveMessage.headerType || undefined,
-        headerContent: mapping.interactiveMessage.headerContent || undefined,
-        bodyText: mapping.interactiveMessage.bodyText,
-        footerText: mapping.interactiveMessage.footerText || undefined,
-        actionData: mapping.interactiveMessage.actionData,
-        latitude: mapping.interactiveMessage.latitude || undefined,
-        longitude: mapping.interactiveMessage.longitude || undefined,
-        locationName: mapping.interactiveMessage.locationName || undefined,
-        locationAddress: mapping.interactiveMessage.locationAddress || undefined,
-        reactionEmoji: mapping.interactiveMessage.reactionEmoji || undefined,
-        targetMessageId: mapping.interactiveMessage.targetMessageId || undefined,
-        stickerMediaId: mapping.interactiveMessage.stickerMediaId || undefined,
-        stickerUrl: mapping.interactiveMessage.stickerUrl || undefined,
-      };
-    }
-    // Check for legacy template
-    else if (mapping.template) {
-      messageType = "template";
-      result.template = {
         id: mapping.template.id,
-        templateId: mapping.template.templateId,
         name: mapping.template.name,
-        status: mapping.template.status,
-        category: mapping.template.category,
+        type: mapping.template.type,
+        scope: mapping.template.scope,
+        description: mapping.template.description || undefined,
         language: mapping.template.language,
-        components: mapping.template.components,
-        qualityScore: mapping.template.qualityScore || undefined,
+        interactiveContent: mapping.template.interactiveContent,
+        whatsappOfficialInfo: mapping.template.whatsappOfficialInfo,
       };
-    }
-    // Check for legacy interactive message
-    else if (mapping.mensagemInterativa) {
-      messageType = "interactive";
-      result.interactiveMessage = {
-        id: mapping.mensagemInterativa.id,
-        nome: mapping.mensagemInterativa.nome || undefined,
-        tipo: mapping.mensagemInterativa.tipo,
-        texto: mapping.mensagemInterativa.texto,
-        headerTipo: mapping.mensagemInterativa.headerTipo || undefined,
-        headerConteudo: mapping.mensagemInterativa.headerConteudo || undefined,
-        rodape: mapping.mensagemInterativa.rodape || undefined,
-        botoes: mapping.mensagemInterativa.botoes.map((botao) => ({
-          id: botao.id,
-          titulo: botao.titulo,
-          ordem: botao.ordem,
-        })),
+    } else if (mapping.template.type === 'INTERACTIVE_MESSAGE' && mapping.template.interactiveContent) {
+      result.messageType = "unified_template";
+      result.unifiedTemplate = {
+        id: mapping.template.id,
+        name: mapping.template.name,
+        type: mapping.template.type,
+        scope: mapping.template.scope,
+        description: mapping.template.description || undefined,
+        language: mapping.template.language,
+        interactiveContent: mapping.template.interactiveContent,
+        whatsappOfficialInfo: mapping.template.whatsappOfficialInfo,
+      };
+    } else if (mapping.template.type === 'AUTOMATION_REPLY' && mapping.template.simpleReplyText) {
+      result.messageType = "unified_template";
+      result.unifiedTemplate = {
+        id: mapping.template.id,
+        name: mapping.template.name,
+        type: mapping.template.type,
+        scope: mapping.template.scope,
+        description: mapping.template.description || undefined,
+        language: mapping.template.language,
+        interactiveContent: null,
+        whatsappOfficialInfo: null,
       };
     } else {
       console.log(
-        `[DB Query] No message data found for mapping: ${mapping.id}`
+        `[DB Query] Template found but no valid content for mapping: ${mapping.id}`
       );
       return null;
     }
 
-    result.messageType = messageType;
-
     console.log(
-      `[DB Query] Found complete mapping: ${messageType} for intent: ${intentName}`
+      `[DB Query] Found unified template mapping: ${result.messageType} for intent: ${intentName}`
     );
     return result;
   } catch (error) {
@@ -315,60 +269,227 @@ export async function findCompleteMessageMappingByIntent(
 }
 
 // ============================================================================
+// CREDENTIAL RESOLUTION QUERIES
+// ============================================================================
+
+/**
+ * Get WhatsApp credentials with comprehensive fallback resolution
+ * This is the main entry point for credential resolution in the system
+ */
+export async function getCredentialsWithFallback(
+  externalInboxId: string
+): Promise<CompleteMessageMapping["whatsappConfig"] | null> {
+  try {
+    const { CredentialsFallbackResolver } = await import('./credentials-fallback-resolver');
+    
+    const result = await CredentialsFallbackResolver.resolveCredentialsByExternalInboxId(externalInboxId);
+    
+    if (result.credentials) {
+      console.log(`[DB Query] Resolved credentials for external inboxId: ${externalInboxId}`);
+      console.log(`[DB Query] Source: ${result.credentials.source}, Chain: ${result.fallbackChain.join(' -> ')}`);
+      console.log(`[DB Query] Resolution time: ${result.resolutionTimeMs}ms, Cache hit: ${result.cacheHit}`);
+      
+      if (result.loopDetected) {
+        console.warn(`[DB Query] Loop detected in fallback chain for inboxId: ${externalInboxId}`);
+      }
+      
+      return {
+        phoneNumberId: result.credentials.phoneNumberId,
+        whatsappToken: result.credentials.whatsappApiKey,
+        whatsappBusinessAccountId: result.credentials.whatsappBusinessAccountId,
+        fbGraphApiBase: result.credentials.graphApiBaseUrl,
+      };
+    }
+
+    console.log(`[DB Query] No credentials found for external inboxId: ${externalInboxId}`);
+    return null;
+  } catch (error) {
+    console.error(`[DB Query] Error resolving credentials for external inboxId: ${externalInboxId}`, error);
+    return null;
+  }
+}
+
+/**
+ * Validate fallback chain configuration for an inbox
+ * Useful for admin interfaces and debugging
+ */
+export async function validateInboxFallbackChain(
+  externalInboxId: string
+): Promise<{
+  isValid: boolean;
+  issues: string[];
+  chain: string[];
+  credentials: CompleteMessageMapping["whatsappConfig"] | null;
+}> {
+  try {
+    const { CredentialsFallbackResolver } = await import('./credentials-fallback-resolver');
+    
+    // Find the internal inbox ID
+    const chatwitInbox = await prisma.chatwitInbox.findFirst({
+      where: { inboxId: externalInboxId },
+    });
+
+    if (!chatwitInbox) {
+      return {
+        isValid: false,
+        issues: [`No ChatwitInbox found for external inboxId: ${externalInboxId}`],
+        chain: [],
+        credentials: null,
+      };
+    }
+
+    // Validate the fallback chain
+    const validation = await CredentialsFallbackResolver.validateFallbackChain(chatwitInbox.id);
+    
+    // Also test credential resolution
+    const resolution = await CredentialsFallbackResolver.resolveCredentials(chatwitInbox.id);
+    
+    const credentials = resolution.credentials ? {
+      phoneNumberId: resolution.credentials.phoneNumberId,
+      whatsappToken: resolution.credentials.whatsappApiKey,
+      whatsappBusinessAccountId: resolution.credentials.whatsappBusinessAccountId,
+      fbGraphApiBase: resolution.credentials.graphApiBaseUrl,
+    } : null;
+
+    return {
+      isValid: validation.isValid && !!credentials,
+      issues: validation.issues,
+      chain: validation.chain,
+      credentials,
+    };
+  } catch (error) {
+    return {
+      isValid: false,
+      issues: [`Error validating fallback chain: ${error instanceof Error ? error.message : 'Unknown error'}`],
+      chain: [],
+      credentials: null,
+    };
+  }
+}
+
+// ============================================================================
 // BUTTON REACTION QUERIES
 // ============================================================================
 
 /**
- * Find button reaction mapping by button ID
- * Returns the emoji and metadata for button reactions
- * Falls back to config-based mappings if database model doesn't exist
+ * Find button action mapping by button ID using the unified MapeamentoBotao model
+ * Returns the action type and payload for button interactions
+ * Includes caching for frequently accessed button mappings
+ */
+export async function findActionByButtonId(
+  buttonId: string
+): Promise<ButtonActionMapping | null> {
+  try {
+    console.log(`[DB Query] Finding action mapping for button: ${buttonId}`);
+
+    // Query the unified MapeamentoBotao model
+    const buttonMapping = await prisma.mapeamentoBotao.findUnique({
+      where: {
+        buttonId: buttonId,
+      },
+      include: {
+        inbox: {
+          include: {
+            usuarioChatwit: {
+              include: {
+                configuracaoGlobalWhatsApp: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!buttonMapping) {
+      console.log(`[DB Query] No MapeamentoBotao found for button: ${buttonId}`);
+      return null;
+    }
+
+    // Validate and sanitize action payload
+    const sanitizedPayload = validateAndSanitizeActionPayload(
+      buttonMapping.actionType,
+      buttonMapping.actionPayload
+    );
+
+    if (!sanitizedPayload) {
+      console.log(`[DB Query] Invalid action payload for button: ${buttonId}`);
+      return null;
+    }
+
+    console.log(
+      `[DB Query] Found button action mapping: ${buttonId} -> ${buttonMapping.actionType}`
+    );
+
+    return {
+      id: buttonMapping.id,
+      buttonId: buttonMapping.buttonId,
+      actionType: buttonMapping.actionType,
+      actionPayload: sanitizedPayload,
+      description: buttonMapping.description || undefined,
+      inboxId: buttonMapping.inboxId,
+      whatsappConfig: await getWhatsAppConfigWithFallback(buttonMapping.inbox),
+    };
+  } catch (error) {
+    console.error("[DB Query] Error finding button action mapping:", error);
+    throw new Error(
+      `Database query failed: ${error instanceof Error ? error.message : "Unknown error"}`
+    );
+  }
+}
+
+/**
+ * Legacy function for backward compatibility - finds button reaction mapping
+ * This maintains compatibility with existing reaction-based button handling
  */
 export async function findReactionByButtonId(
   buttonId: string
 ): Promise<ButtonReactionMapping | null> {
   try {
-    console.log(`[DB Query] Finding reaction mapping for button: ${buttonId}`);
+    console.log(`[DB Query] Finding reaction mapping for button: ${buttonId} (legacy)`);
 
-    // Try database first (ButtonReactionMapping model should exist after migration)
-    try {
-      const reaction = await prisma.buttonReactionMapping.findUnique({
-        where: {
-          buttonId: buttonId,
-        },
-      });
+    // First try to find a MapeamentoBotao with SEND_TEMPLATE action that includes emoji
+    const buttonMapping = await prisma.mapeamentoBotao.findUnique({
+      where: {
+        buttonId: buttonId,
+      },
+    });
 
-      if (reaction && reaction.isActive) {
+    if (buttonMapping && buttonMapping.actionType === 'SEND_TEMPLATE') {
+      const payload = buttonMapping.actionPayload as any;
+      if (payload?.emoji || payload?.textReaction) {
         console.log(
-          `[DB Query] Found database reaction mapping: ${buttonId} -> emoji: ${reaction.emoji}, text: ${reaction.textReaction}`
+          `[DB Query] Found unified button mapping with reaction: ${buttonId} -> emoji: ${payload.emoji}`
         );
         return {
-          id: reaction.id,
-          buttonId: reaction.buttonId,
-          emoji: reaction.emoji || undefined,
-          textReaction: reaction.textReaction || undefined,
-          description: reaction.description || undefined,
-          isActive: reaction.isActive,
+          id: buttonMapping.id,
+          buttonId: buttonMapping.buttonId,
+          emoji: payload.emoji || undefined,
+          textReaction: payload.textReaction || undefined,
+          description: buttonMapping.description || undefined,
+          isActive: true,
         };
       }
-    } catch (dbError) {
-      console.log(`[DB Query] Database reaction mapping not available, falling back to config:`, dbError);
     }
 
-    // Fallback to config-based mappings
-    const { getEmojiForButton } = await import('@/app/config/button-reaction-mapping');
-    const emoji = getEmojiForButton(buttonId);
-    
-    if (emoji) {
-      console.log(
-        `[DB Query] Found config reaction mapping: ${buttonId} -> ${emoji}`
-      );
-      return {
-        id: `config-${buttonId}`,
-        buttonId,
-        emoji,
-        description: `Config-based reaction for ${buttonId}`,
-        isActive: true,
-      };
+    // Fallback to config-based mappings for legacy support
+    try {
+      const { getEmojiForButton } = await import('@/app/config/button-reaction-mapping');
+      const emoji = getEmojiForButton(buttonId);
+      
+      if (emoji) {
+        console.log(
+          `[DB Query] Found config reaction mapping: ${buttonId} -> ${emoji}`
+        );
+        return {
+          id: `config-${buttonId}`,
+          buttonId,
+          emoji,
+          description: `Config-based reaction for ${buttonId}`,
+          isActive: true,
+        };
+      }
+    } catch (importError) {
+      console.log(`[DB Query] Config-based mapping not available:`, importError);
     }
 
     console.log(
@@ -384,67 +505,283 @@ export async function findReactionByButtonId(
 }
 
 /**
- * Get all active button reaction mappings
+ * Get all active button action mappings using the unified MapeamentoBotao model
  * Useful for caching or validation purposes
- * Falls back to config-based mappings if database model doesn't exist
  */
-export async function getAllActiveButtonReactions(): Promise<
-  ButtonReactionMapping[]
-> {
+export async function getAllActiveButtonActions(): Promise<ButtonActionMapping[]> {
   try {
-    console.log("[DB Query] Fetching all active button reaction mappings");
+    console.log("[DB Query] Fetching all active button action mappings");
 
-    // Try database first (ButtonReactionMapping model should exist after migration)
-    try {
-      const reactions = await prisma.buttonReactionMapping.findMany({
-        where: {
-          isActive: true,
+    const buttonMappings = await prisma.mapeamentoBotao.findMany({
+      include: {
+        inbox: {
+          include: {
+            usuarioChatwit: {
+              include: {
+                configuracaoGlobalWhatsApp: true,
+              },
+            },
+          },
         },
-        orderBy: {
-          buttonId: "asc",
-        },
-      });
+      },
+      orderBy: {
+        buttonId: "asc",
+      },
+    });
 
-      if (reactions && reactions.length > 0) {
-        console.log(
-          `[DB Query] Found ${reactions.length} database button reaction mappings`
-        );
-        return reactions.map((reaction) => ({
-          id: reaction.id,
-          buttonId: reaction.buttonId,
-          emoji: reaction.emoji || undefined,
-          textReaction: reaction.textReaction || undefined,
-          description: reaction.description || undefined,
-          isActive: reaction.isActive,
-        }));
+    console.log(`[DB Query] Found ${buttonMappings.length} button action mappings`);
+
+    const results: ButtonActionMapping[] = [];
+    
+    for (const mapping of buttonMappings) {
+      const sanitizedPayload = validateAndSanitizeActionPayload(
+        mapping.actionType,
+        mapping.actionPayload
+      );
+
+      if (sanitizedPayload) {
+        results.push({
+          id: mapping.id,
+          buttonId: mapping.buttonId,
+          actionType: mapping.actionType,
+          actionPayload: sanitizedPayload,
+          description: mapping.description || undefined,
+          inboxId: mapping.inboxId,
+          whatsappConfig: await getWhatsAppConfigWithFallback(mapping.inbox),
+        });
       }
-    } catch (dbError) {
-      console.log(`[DB Query] Database reaction mappings not available, falling back to config:`, dbError);
     }
 
-    // Fallback to config-based mappings
-    const { getAllButtonReactions } = await import('@/app/config/button-reaction-mapping');
-    const configReactions = getAllButtonReactions();
-    
-    console.log(
-      `[DB Query] Found ${configReactions.length} config button reaction mappings`
-    );
-
-    return configReactions.map((reaction, index) => ({
-      id: `config-${index}`,
-      buttonId: reaction.buttonId,
-      emoji: reaction.emoji,
-      description: reaction.description,
-      isActive: true,
-    }));
+    return results;
   } catch (error) {
-    console.error(
-      "[DB Query] Error fetching all button reaction mappings:",
-      error
-    );
+    console.error("[DB Query] Error fetching all button action mappings:", error);
     throw new Error(
       `Database query failed: ${error instanceof Error ? error.message : "Unknown error"}`
     );
+  }
+}
+
+/**
+ * Get all active button reaction mappings (legacy compatibility)
+ * Falls back to config-based mappings and unified model
+ */
+export async function getAllActiveButtonReactions(): Promise<ButtonReactionMapping[]> {
+  try {
+    console.log("[DB Query] Fetching all active button reaction mappings (legacy)");
+
+    const results: ButtonReactionMapping[] = [];
+
+    // Get reactions from unified MapeamentoBotao model
+    const buttonMappings = await prisma.mapeamentoBotao.findMany({
+      where: {
+        actionType: 'SEND_TEMPLATE',
+      },
+      orderBy: {
+        buttonId: "asc",
+      },
+    });
+
+    for (const mapping of buttonMappings) {
+      const payload = mapping.actionPayload as any;
+      if (payload?.emoji || payload?.textReaction) {
+        results.push({
+          id: mapping.id,
+          buttonId: mapping.buttonId,
+          emoji: payload.emoji || undefined,
+          textReaction: payload.textReaction || undefined,
+          description: mapping.description || undefined,
+          isActive: true,
+        });
+      }
+    }
+
+    // Fallback to config-based mappings
+    try {
+      const { getAllButtonReactions } = await import('@/app/config/button-reaction-mapping');
+      const configReactions = getAllButtonReactions();
+      
+      for (const reaction of configReactions) {
+        // Only add if not already present from database
+        if (!results.find(r => r.buttonId === reaction.buttonId)) {
+          results.push({
+            id: `config-${reaction.buttonId}`,
+            buttonId: reaction.buttonId,
+            emoji: reaction.emoji,
+            description: reaction.description,
+            isActive: true,
+          });
+        }
+      }
+    } catch (importError) {
+      console.log(`[DB Query] Config-based mappings not available:`, importError);
+    }
+
+    console.log(`[DB Query] Found ${results.length} total button reaction mappings`);
+    return results;
+  } catch (error) {
+    console.error("[DB Query] Error fetching all button reaction mappings:", error);
+    throw new Error(
+      `Database query failed: ${error instanceof Error ? error.message : "Unknown error"}`
+    );
+  }
+}
+
+// ============================================================================
+// HELPER FUNCTIONS FOR UNIFIED MODEL
+// ============================================================================
+
+/**
+ * Get WhatsApp configuration with intelligent fallback logic using CredentialsFallbackResolver
+ * This provides comprehensive fallback chain resolution with loop detection and caching
+ */
+async function getWhatsAppConfigWithFallback(chatwitInbox: any): Promise<CompleteMessageMapping["whatsappConfig"]> {
+  try {
+    const { CredentialsFallbackResolver } = await import('./credentials-fallback-resolver');
+    
+    const result = await CredentialsFallbackResolver.resolveCredentials(chatwitInbox.id);
+    
+    if (result.credentials) {
+      console.log(`[DB Query] Resolved credentials via ${result.credentials.source} for inbox: ${chatwitInbox.id}`);
+      if (result.fallbackChain.length > 1) {
+        console.log(`[DB Query] Fallback chain: ${result.fallbackChain.join(' -> ')}`);
+      }
+      
+      return {
+        phoneNumberId: result.credentials.phoneNumberId,
+        whatsappToken: result.credentials.whatsappApiKey,
+        whatsappBusinessAccountId: result.credentials.whatsappBusinessAccountId,
+        fbGraphApiBase: result.credentials.graphApiBaseUrl,
+      };
+    }
+
+    // If resolver fails, fall back to legacy logic
+    console.log(`[DB Query] CredentialsFallbackResolver failed, using legacy fallback for inbox: ${chatwitInbox.id}`);
+    return getLegacyWhatsAppConfig(chatwitInbox);
+  } catch (error) {
+    console.error(`[DB Query] Error using CredentialsFallbackResolver:`, error);
+    return getLegacyWhatsAppConfig(chatwitInbox);
+  }
+}
+
+/**
+ * Legacy WhatsApp configuration fallback (backup method)
+ */
+function getLegacyWhatsAppConfig(chatwitInbox: any): CompleteMessageMapping["whatsappConfig"] {
+  // Priority 1: ChatwitInbox specific credentials
+  if (chatwitInbox.whatsappApiKey && chatwitInbox.phoneNumberId && chatwitInbox.whatsappBusinessAccountId) {
+    return {
+      phoneNumberId: chatwitInbox.phoneNumberId,
+      whatsappToken: chatwitInbox.whatsappApiKey,
+      whatsappBusinessAccountId: chatwitInbox.whatsappBusinessAccountId,
+      fbGraphApiBase: "https://graph.facebook.com/v22.0",
+    };
+  }
+
+  // Priority 2: WhatsAppGlobalConfig fallback
+  if (chatwitInbox.usuarioChatwit?.configuracaoGlobalWhatsApp) {
+    const globalConfig = chatwitInbox.usuarioChatwit.configuracaoGlobalWhatsApp;
+    return {
+      phoneNumberId: globalConfig.phoneNumberId,
+      whatsappToken: globalConfig.whatsappApiKey,
+      whatsappBusinessAccountId: globalConfig.whatsappBusinessAccountId,
+      fbGraphApiBase: globalConfig.graphApiBaseUrl,
+    };
+  }
+
+  // Priority 3: Environment variables (last resort)
+  return {
+    phoneNumberId: process.env.FROM_PHONE_NUMBER_ID || "",
+    whatsappToken: process.env.WHATSAPP_TOKEN || "",
+    whatsappBusinessAccountId: process.env.WHATSAPP_BUSINESS_ID || "",
+    fbGraphApiBase: "https://graph.facebook.com/v22.0",
+  };
+}
+
+/**
+ * Determine message type based on unified Template model
+ * Implements template priority resolution (unified > enhanced > legacy)
+ */
+function getTemplateMessageType(template: any): CompleteMessageMapping["messageType"] {
+  if (!template) return "template";
+  
+  // Unified template types have highest priority
+  switch (template.type) {
+    case 'WHATSAPP_OFFICIAL':
+      return "unified_template";
+    case 'INTERACTIVE_MESSAGE':
+      return "unified_template";
+    case 'AUTOMATION_REPLY':
+      return "unified_template";
+    default:
+      return "template";
+  }
+}
+
+/**
+ * Validate and sanitize action payload based on action type
+ * Ensures payload structure matches expected format for each action type
+ */
+function validateAndSanitizeActionPayload(actionType: string, payload: any): any | null {
+  try {
+    if (!payload || typeof payload !== 'object') {
+      console.log(`[DB Query] Invalid payload structure for action type: ${actionType}`);
+      return null;
+    }
+
+    switch (actionType) {
+      case 'SEND_TEMPLATE':
+        // Validate SEND_TEMPLATE payload
+        if (payload.templateId || payload.emoji || payload.textReaction || payload.simpleText) {
+          return {
+            templateId: payload.templateId || null,
+            emoji: payload.emoji || null,
+            textReaction: payload.textReaction || null,
+            simpleText: payload.simpleText || null,
+            parameters: payload.parameters || {},
+          };
+        }
+        break;
+
+      case 'ADD_TAG':
+        // Validate ADD_TAG payload
+        if (payload.tags && Array.isArray(payload.tags)) {
+          return {
+            tags: payload.tags.filter((tag: any) => typeof tag === 'string'),
+            removeExisting: Boolean(payload.removeExisting),
+          };
+        }
+        break;
+
+      case 'START_FLOW':
+        // Validate START_FLOW payload
+        if (payload.flowId) {
+          return {
+            flowId: payload.flowId,
+            flowData: payload.flowData || {},
+            flowMode: payload.flowMode || 'published',
+          };
+        }
+        break;
+
+      case 'ASSIGN_TO_AGENT':
+        // Validate ASSIGN_TO_AGENT payload
+        return {
+          agentId: payload.agentId || null,
+          department: payload.department || null,
+          priority: payload.priority || 'normal',
+          message: payload.message || null,
+        };
+
+      default:
+        console.log(`[DB Query] Unknown action type: ${actionType}`);
+        return payload; // Return as-is for unknown types
+    }
+
+    console.log(`[DB Query] Payload validation failed for action type: ${actionType}`);
+    return null;
+  } catch (error) {
+    console.error(`[DB Query] Error validating action payload:`, error);
+    return null;
   }
 }
 

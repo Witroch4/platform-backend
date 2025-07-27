@@ -13,22 +13,32 @@ export async function getWhatsAppConfig(
 
     // Se foi especificada uma caixa de entrada, buscar configuração específica
     if (caixaEntradaId) {
-      config = await db.whatsAppConfig.findFirst({
+      const inboxConfig = await db.chatwitInbox.findFirst({
         where: { 
-          caixaEntradaId, 
+          id: caixaEntradaId, 
           usuarioChatwitId,
-          isActive: true
         }
       });
+
+      if (inboxConfig && inboxConfig.whatsappApiKey) {
+        return {
+          id: inboxConfig.id,
+          usuarioChatwitId: inboxConfig.usuarioChatwitId,
+          whatsappApiKey: inboxConfig.whatsappApiKey,
+          phoneNumberId: inboxConfig.phoneNumberId,
+          whatsappBusinessAccountId: inboxConfig.whatsappBusinessAccountId,
+          graphApiBaseUrl: 'https://graph.facebook.com/v22.0', // Valor padrão
+          isActive: true,
+          caixaEntradaId: inboxConfig.id
+        };
+      }
     }
 
     // Se não encontrou configuração específica, buscar a padrão
     if (!config) {
-      config = await db.whatsAppConfig.findFirst({
+      config = await db.whatsAppGlobalConfig.findFirst({
         where: { 
-          usuarioChatwitId, 
-          caixaEntradaId: null,
-          isActive: true
+          usuarioChatwitId
         }
       });
     }
@@ -45,26 +55,60 @@ export async function getWhatsAppConfig(
  */
 export async function getAllWhatsAppConfigs(usuarioChatwitId: string) {
   try {
-    const configs = await db.whatsAppConfig.findMany({
+    // Buscar configuração global
+    const globalConfig = await db.whatsAppGlobalConfig.findFirst({
+      where: { 
+        usuarioChatwitId
+      }
+    });
+
+    // Buscar caixas com configurações específicas
+    const inboxesWithConfig = await db.chatwitInbox.findMany({
       where: { 
         usuarioChatwitId,
+        whatsappApiKey: { not: null }
+      },
+      select: {
+        id: true,
+        nome: true,
+        inboxId: true,
+        channelType: true,
+        whatsappApiKey: true,
+        phoneNumberId: true,
+        whatsappBusinessAccountId: true
+      }
+    });
+
+    const configs = [];
+
+    // Adicionar configuração global se existir
+    if (globalConfig) {
+      configs.push({
+        ...globalConfig,
+        caixaEntrada: null,
         isActive: true
-      },
-      include: {
+      });
+    }
+
+    // Adicionar configurações específicas das caixas
+    inboxesWithConfig.forEach(inbox => {
+      configs.push({
+        id: inbox.id,
+        usuarioChatwitId: inbox.usuarioChatwitId,
+        whatsappApiKey: inbox.whatsappApiKey,
+        phoneNumberId: inbox.phoneNumberId,
+        whatsappBusinessAccountId: inbox.whatsappBusinessAccountId,
+        graphApiBaseUrl: 'https://graph.facebook.com/v22.0',
+        isActive: true,
+        caixaEntradaId: inbox.id,
         caixaEntrada: {
-          select: {
-            id: true,
-            nome: true,
-            inboxId: true,
-            inboxName: true,
-            channelType: true
-          }
+          id: inbox.id,
+          nome: inbox.nome,
+          inboxId: inbox.inboxId,
+          inboxName: inbox.nome,
+          channelType: inbox.channelType
         }
-      },
-      orderBy: [
-        { caixaEntradaId: 'asc' }, // Configurações específicas primeiro
-        { createdAt: 'desc' }
-      ]
+      });
     });
 
     return configs;
@@ -79,7 +123,7 @@ export async function getAllWhatsAppConfigs(usuarioChatwitId: string) {
  */
 export function isConfigActive(config: any) {
   return config && config.isActive && 
-         config.whatsappToken && 
+         config.whatsappApiKey && 
          config.whatsappBusinessAccountId;
 }
 
@@ -89,7 +133,7 @@ export function isConfigActive(config: any) {
 export function validateWhatsAppConfig(config: any) {
   const errors: string[] = [];
 
-  if (!config.whatsappToken) {
+  if (!config.whatsappApiKey) {
     errors.push("Token do WhatsApp é obrigatório");
   }
 
@@ -97,7 +141,7 @@ export function validateWhatsAppConfig(config: any) {
     errors.push("ID da conta Business do WhatsApp é obrigatório");
   }
 
-  if (!config.fbGraphApiBase) {
+  if (!config.graphApiBaseUrl) {
     errors.push("URL base da API do Facebook é obrigatória");
   }
 

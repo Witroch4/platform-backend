@@ -17,7 +17,7 @@ export interface LogEntry {
   message: string;
   context?: {
     userId?: string;
-    caixaId?: string;
+    inboxId?: string;
     messageId?: string;
     action?: string;
     component?: string;
@@ -431,7 +431,7 @@ class InteractiveMessageLogger {
     if (context?.userId) parts.push(`user:${context.userId}`);
     if (context?.requestId) parts.push(`req:${context.requestId}`);
     if (context?.messageId) parts.push(`msg:${context.messageId}`);
-    if (context?.caixaId) parts.push(`caixa:${context.caixaId}`);
+    if (context?.inboxId) parts.push(`caixa:${context.inboxId}`);
     if (context?.component) parts.push(`comp:${context.component}`);
     if (context?.action) parts.push(`action:${context.action}`);
 

@@ -36,6 +36,11 @@ export default auth(async (req) => {
     return NextResponse.next();
   }
 
+  // Novo: Se não está logado e não é rota pública, redireciona para '/'
+  if (!isLoggedIn && !isPublicRoute) {
+    return NextResponse.redirect(new URL("/", req.url));
+  }
+
   // Verifica se a rota é superAdmin e se o usuário possui a role "SUPERADMIN"
   if (isSuperAdminRoute && (!isLoggedIn || userRole !== "SUPERADMIN")) {
     return NextResponse.redirect(new URL("/denied", req.url));

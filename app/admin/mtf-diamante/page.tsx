@@ -10,7 +10,11 @@ import { useSearchParams } from 'next/navigation';
 interface WhatsAppConfig {
   id?: string;
   phoneNumberId: string;
-  token: string;
+  whatsappBusinessAccountId?: string;
+  fbGraphApiBase?: string;
+  whatsappToken?: string;
+  tokenMask?: string;
+  hasToken?: boolean;
 }
 
 import IntegracoesTab from './components/IntegracoesTab';

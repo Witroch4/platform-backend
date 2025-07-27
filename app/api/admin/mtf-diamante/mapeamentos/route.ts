@@ -11,12 +11,12 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { id: mappingId, intentName, templateId, mensagemInterativaId, interactiveMessageId, unifiedTemplateId, caixaId } = body;
+    const { id: mappingId, intentName, templateId, mensagemInterativaId, interactiveMessageId, unifiedTemplateId, inboxId } = body;
 
     // Count how many response types are provided
     const responseCount = [templateId, mensagemInterativaId, interactiveMessageId, unifiedTemplateId].filter(Boolean).length;
 
-    if (!intentName || !caixaId || responseCount === 0) {
+    if (!intentName || !inboxId || responseCount === 0) {
       return NextResponse.json({ error: 'Intenção, caixa e uma resposta (template unificado, template legado ou mensagem) são obrigatórios.' }, { status: 400 });
     }
     
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
 
     const data = {
       intentName,
-      caixaEntradaId: caixaId,
+      caixaEntradaId: inboxId,
       // New unified template system (priority)
       unifiedTemplateId: unifiedTemplateId || null,
       // Legacy support

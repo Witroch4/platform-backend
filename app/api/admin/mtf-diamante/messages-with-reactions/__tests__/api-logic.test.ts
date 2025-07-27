@@ -52,7 +52,7 @@ const InteractiveMessageSchema = z.object({
 });
 
 const SaveMessageWithReactionsSchema = z.object({
-  caixaId: z.string().min(1),
+  inboxId: z.string().min(1),
   message: InteractiveMessageSchema,
   reactions: z.array(ButtonReactionSchema),
 });
@@ -293,7 +293,7 @@ describe("Messages with Reactions API Logic", () => {
     describe("SaveMessageWithReactionsSchema", () => {
       it("should validate complete request payload", () => {
         const validPayload = {
-          caixaId: "test-caixa-id",
+          inboxId: "test-inbox-id",
           message: {
             name: "Test Message",
             type: "button",
@@ -313,7 +313,7 @@ describe("Messages with Reactions API Logic", () => {
 
       it("should validate payload without reactions", () => {
         const validPayload = {
-          caixaId: "test-caixa-id",
+          inboxId: "test-inbox-id",
           message: {
             name: "Test Message",
             type: "button",
@@ -326,9 +326,9 @@ describe("Messages with Reactions API Logic", () => {
         expect(result.success).toBe(true);
       });
 
-      it("should reject payload with empty caixaId", () => {
+      it("should reject payload with empty inboxId", () => {
         const invalidPayload = {
-          caixaId: "",
+          inboxId: "",
           message: {
             name: "Test Message",
             type: "button",

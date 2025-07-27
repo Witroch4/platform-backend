@@ -88,7 +88,7 @@ describe("/api/admin/mtf-diamante/messages-with-reactions", () => {
 
   describe("POST /messages-with-reactions", () => {
     const validRequestBody = {
-      caixaId: "test-caixa-id",
+      inboxId: "test-caixa-id",
       message: {
         name: "Test Message",
         type: "button",
@@ -161,7 +161,7 @@ describe("/api/admin/mtf-diamante/messages-with-reactions", () => {
 
     it("should return 400 when validation fails", async () => {
       const invalidRequestBody = {
-        caixaId: "", // Invalid empty string
+        inboxId: "", // Invalid empty string
         message: {
           name: "", // Invalid empty string
           type: "invalid-type", // Invalid type
@@ -377,7 +377,7 @@ describe("/api/admin/mtf-diamante/messages-with-reactions", () => {
 
       mockPrisma.interactiveMessage.findMany.mockResolvedValue(messagesWithReactions);
 
-      const request = new NextRequest("http://localhost:3000/api/admin/mtf-diamante/messages-with-reactions?caixaId=test-caixa-id");
+      const request = new NextRequest("http://localhost:3000/api/admin/mtf-diamante/messages-with-reactions?inboxId=test-caixa-id");
 
       const response = await GET(request);
       const data = await response.json();
@@ -420,7 +420,7 @@ describe("/api/admin/mtf-diamante/messages-with-reactions", () => {
       const request = new NextRequest("http://localhost:3000/api/admin/mtf-diamante/messages-with-reactions", {
         method: "POST",
         body: JSON.stringify({
-          caixaId: "test-caixa-id",
+          inboxId: "test-caixa-id",
           message: {
             name: "Test Message",
             type: "button",
@@ -454,7 +454,7 @@ describe("/api/admin/mtf-diamante/messages-with-reactions", () => {
   describe("Data Validation", () => {
     it("should validate message name length", async () => {
       const requestWithLongName = {
-        caixaId: "test-caixa-id",
+        inboxId: "test-caixa-id",
         message: {
           name: "a".repeat(256), // Exceeds 255 character limit
           type: "button",
@@ -478,7 +478,7 @@ describe("/api/admin/mtf-diamante/messages-with-reactions", () => {
 
     it("should validate body text length", async () => {
       const requestWithLongBody = {
-        caixaId: "test-caixa-id",
+        inboxId: "test-caixa-id",
         message: {
           name: "Test Message",
           type: "button",
@@ -502,7 +502,7 @@ describe("/api/admin/mtf-diamante/messages-with-reactions", () => {
 
     it("should validate footer text length", async () => {
       const requestWithLongFooter = {
-        caixaId: "test-caixa-id",
+        inboxId: "test-caixa-id",
         message: {
           name: "Test Message",
           type: "button",
@@ -527,7 +527,7 @@ describe("/api/admin/mtf-diamante/messages-with-reactions", () => {
 
     it("should validate reaction types", async () => {
       const requestWithInvalidReaction = {
-        caixaId: "test-caixa-id",
+        inboxId: "test-caixa-id",
         message: {
           name: "Test Message",
           type: "button",

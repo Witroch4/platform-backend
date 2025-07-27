@@ -11,8 +11,7 @@ import type { MtfDiamanteVariavel } from "@/app/lib/variable-utils";
 
 // Função para obter configuração do WhatsApp atual
 async function getCurrentWhatsAppConfig() {
-  const config = await prisma.whatsAppConfig.findFirst({
-    where: { isActive: true },
+  const config = await prisma.whatsAppGlobalConfig.findFirst({
     orderBy: { updatedAt: "desc" },
   });
 
@@ -25,7 +24,7 @@ async function getCurrentWhatsAppConfig() {
   }
 
   return {
-    token: config.whatsappToken,
+    token: config.whatsappApiKey,
     businessId: config.whatsappBusinessAccountId,
     apiBase: "https://graph.facebook.com/v22.0",
   };

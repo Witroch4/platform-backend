@@ -1,7 +1,6 @@
 #!/usr/bin/env tsx
 
-import { PrismaClient, UserRole } from '@prisma/client';
-// 'readdirSync' e 'statSync' adicionados para manipulação de arquivos e datas
+import { PrismaClient, UserRole, LeadSource, EspecialidadeJuridica } from '@prisma/client';
 import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import * as bcryptjs from 'bcryptjs';
@@ -117,7 +116,6 @@ async function restoreAllChatwit(backupFileName?: string) {
       }
       console.log(`ℹ️ Usando arquivo de backup especificado: ${backupFileName}`);
     } else {
-      // --- INÍCIO DA MODIFICAÇÃO ---
       // Se nenhum arquivo for fornecido, encontre o mais recente na pasta 'backups'
       const backupsDir = join(process.cwd(), 'backups');
       if (!existsSync(backupsDir)) {
@@ -126,10 +124,7 @@ async function restoreAllChatwit(backupFileName?: string) {
       }
 
       const backupFiles = readdirSync(backupsDir)
-          // 1. Filtra para garantir que estamos pegando apenas arquivos JSON de backup
           .filter(file => file.startsWith('backup-') && file.endsWith('.json'))
-          // 2. Ordena os arquivos em ordem decrescente (mais recente primeiro)
-          //    A ordenação de string (localeCompare) funciona para o formato de data ISO 8601
           .sort((a, b) => b.localeCompare(a)); 
 
       if (backupFiles.length === 0) {
@@ -137,11 +132,9 @@ async function restoreAllChatwit(backupFileName?: string) {
           return;
       }
 
-      // 3. O arquivo mais recente será o primeiro da lista ordenada
       const latestBackupFile = backupFiles[0];
       backupPath = join(backupsDir, latestBackupFile);
       console.log(`ℹ️ Nenhum arquivo de backup especificado. Usando o mais recente: ${latestBackupFile}`);
-      // --- FIM DA MODIFICAÇÃO ---
     }
 
     console.log(`📁 Carregando backup: ${backupPath}`);
@@ -217,7 +210,7 @@ async function restoreAllChatwit(backupFileName?: string) {
             totalUsos: espelho.totalUsos,
             espelhoBibliotecaProcessado: espelho.espelhoBibliotecaProcessado,
             aguardandoEspelho: espelho.aguardandoEspelho,
-            criadoPorId: amandaChatwit.id, // Usar o ID correto do banco atual
+            criadoPorId: amandaChatwit.id,
             updatedAt: new Date()
           },
           create: {
@@ -280,7 +273,7 @@ async function restoreAllChatwit(backupFileName?: string) {
       }
     }
 
-    // Restaurar leads da Amanda
+    // Restaurar leads da Amanda - NOVA ESTRUTURA
     const leadsDaAmanda = leads.filter((l: any) => l.usuarioId === amandaBackup.id);
     console.log(`\n👥 Encontrados ${leadsDaAmanda.length} leads da Amanda no backup`);
     console.log('🔄 Iniciando restauração dos leads...');
@@ -289,60 +282,35 @@ async function restoreAllChatwit(backupFileName?: string) {
       const lead = leadsDaAmanda[i];
       
       try {
-        await prisma.leadChatwit.upsert({
+        // Primeiro, criar o Lead principal
+        const leadPrincipal = await prisma.lead.upsert({
           where: { id: lead.id },
           update: {
-            sourceId: lead.sourceId,
-            name: lead.name,
-            nomeReal: lead.nomeReal,
-            phoneNumber: lead.phoneNumber,
+            name: lead.name || lead.nomeReal,
             email: lead.email,
-            thumbnail: lead.thumbnail,
-            concluido: lead.concluido,
-            anotacoes: lead.anotacoes,
-            pdfUnificado: lead.pdfUnificado,
-            imagensConvertidas: lead.imagensConvertidas,
-            leadUrl: lead.leadUrl,
-            fezRecurso: lead.fezRecurso,
-            datasRecurso: lead.datasRecurso,
-            provaManuscrita: lead.provaManuscrita,
-            manuscritoProcessado: lead.manuscritoProcessado,
-            aguardandoManuscrito: lead.aguardandoManuscrito,
-            espelhoCorrecao: lead.espelhoCorrecao,
-            textoDOEspelho: lead.textoDOEspelho,
-            espelhoProcessado: lead.espelhoProcessado,
-            aguardandoEspelho: lead.aguardandoEspelho,
-            analiseUrl: lead.analiseUrl,
-            argumentacaoUrl: lead.argumentacaoUrl,
-            analiseProcessada: lead.analiseProcessada,
-            aguardandoAnalise: lead.aguardandoAnalise,
-            analisePreliminar: lead.analisePreliminar,
-            analiseValidada: lead.analiseValidada,
-            consultoriaFase2: lead.consultoriaFase2,
-            recursoPreliminar: lead.recursoPreliminar,
-            recursoValidado: lead.recursoValidado,
-            recursoUrl: lead.recursoUrl,
-            recursoArgumentacaoUrl: lead.recursoArgumentacaoUrl,
-            aguardandoRecurso: lead.aguardandoRecurso,
-            seccional: lead.seccional,
-            areaJuridica: lead.areaJuridica,
-            notaFinal: lead.notaFinal,
-            situacao: lead.situacao,
-            inscricao: lead.inscricao,
-            examesParticipados: lead.examesParticipados,
-            espelhoBibliotecaId: lead.espelhoBibliotecaId,
-            especialidade: lead.especialidade,
-            usuarioId: amandaChatwit.id,
+            phone: lead.phoneNumber,
+            source: LeadSource.CHATWIT_OAB,
+            sourceIdentifier: lead.sourceId || lead.id,
+            userId: amandaUser!.id,
             updatedAt: new Date()
           },
           create: {
             id: lead.id,
-            sourceId: lead.sourceId,
-            name: lead.name,
-            nomeReal: lead.nomeReal,
-            phoneNumber: lead.phoneNumber,
+            name: lead.name || lead.nomeReal,
             email: lead.email,
-            thumbnail: lead.thumbnail,
+            phone: lead.phoneNumber,
+            source: LeadSource.CHATWIT_OAB,
+            sourceIdentifier: lead.sourceId || lead.id,
+            userId: amandaUser!.id,
+            createdAt: new Date(lead.createdAt),
+            updatedAt: new Date(lead.updatedAt)
+          }
+        });
+
+        // Depois, criar o LeadOabData
+        const leadOabData = await prisma.leadOabData.upsert({
+          where: { leadId: lead.id },
+          update: {
             concluido: lead.concluido,
             anotacoes: lead.anotacoes,
             pdfUnificado: lead.pdfUnificado,
@@ -375,36 +343,70 @@ async function restoreAllChatwit(backupFileName?: string) {
             situacao: lead.situacao,
             inscricao: lead.inscricao,
             examesParticipados: lead.examesParticipados,
-            espelhoBibliotecaId: lead.espelhoBibliotecaId,
-            especialidade: lead.especialidade,
-            usuarioId: amandaChatwit.id,
-            createdAt: new Date(lead.createdAt),
-            updatedAt: new Date(lead.updatedAt)
+            especialidade: lead.especialidade ? (lead.especialidade as EspecialidadeJuridica) : null,
+            usuarioChatwitId: amandaChatwit.id,
+            espelhoBibliotecaId: lead.espelhoBibliotecaId
+          },
+          create: {
+            leadId: lead.id,
+            concluido: lead.concluido,
+            anotacoes: lead.anotacoes,
+            pdfUnificado: lead.pdfUnificado,
+            imagensConvertidas: lead.imagensConvertidas,
+            leadUrl: lead.leadUrl,
+            fezRecurso: lead.fezRecurso,
+            datasRecurso: lead.datasRecurso,
+            provaManuscrita: lead.provaManuscrita,
+            manuscritoProcessado: lead.manuscritoProcessado,
+            aguardandoManuscrito: lead.aguardandoManuscrito,
+            espelhoCorrecao: lead.espelhoCorrecao,
+            textoDOEspelho: lead.textoDOEspelho,
+            espelhoProcessado: lead.espelhoProcessado,
+            aguardandoEspelho: lead.aguardandoEspelho,
+            analiseUrl: lead.analiseUrl,
+            argumentacaoUrl: lead.argumentacaoUrl,
+            analiseProcessada: lead.analiseProcessada,
+            aguardandoAnalise: lead.aguardandoAnalise,
+            analisePreliminar: lead.analisePreliminar,
+            analiseValidada: lead.analiseValidada,
+            consultoriaFase2: lead.consultoriaFase2,
+            recursoPreliminar: lead.recursoPreliminar,
+            recursoValidado: lead.recursoValidado,
+            recursoUrl: lead.recursoUrl,
+            recursoArgumentacaoUrl: lead.recursoArgumentacaoUrl,
+            aguardandoRecurso: lead.aguardandoRecurso,
+            seccional: lead.seccional,
+            areaJuridica: lead.areaJuridica,
+            notaFinal: lead.notaFinal,
+            situacao: lead.situacao,
+            inscricao: lead.inscricao,
+            examesParticipados: lead.examesParticipados,
+            especialidade: lead.especialidade ? (lead.especialidade as EspecialidadeJuridica) : null,
+            usuarioChatwitId: amandaChatwit.id,
+            espelhoBibliotecaId: lead.espelhoBibliotecaId
           }
         });
+
         leadsRestaurados++;
         
-        // Restaurar arquivos desse lead
+        // Restaurar arquivos desse lead - NOVA ESTRUTURA
         const arquivosDoLead = arquivos.filter((a: any) => a.leadId === lead.id);
         for (const arquivo of arquivosDoLead) {
           try {
-            await prisma.arquivoLeadChatwit.upsert({
+            await prisma.arquivoLeadOab.upsert({
               where: { id: arquivo.id },
               update: {
                 fileType: arquivo.fileType,
                 dataUrl: arquivo.dataUrl,
                 pdfConvertido: arquivo.pdfConvertido,
-                leadId: lead.id,
-                updatedAt: new Date()
+                leadOabDataId: leadOabData.id
               },
               create: {
                 id: arquivo.id,
                 fileType: arquivo.fileType,
                 dataUrl: arquivo.dataUrl,
                 pdfConvertido: arquivo.pdfConvertido,
-                leadId: lead.id,
-                createdAt: new Date(arquivo.createdAt),
-                updatedAt: new Date(arquivo.updatedAt)
+                leadOabDataId: leadOabData.id
               }
             });
             arquivosRestaurados++;

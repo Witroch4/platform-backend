@@ -313,11 +313,8 @@ async function getWhatsAppConfigFromDatabase(chatwootInboxId: string): Promise<{
 } | null> {
   try {
     // Buscar a caixa de entrada pelo inboxId do Chatwoot
-    const caixaEntrada = await prisma.caixaEntrada.findFirst({
+    const caixaEntrada = await prisma.chatwitInbox.findFirst({
       where: { inboxId: chatwootInboxId },
-      include: {
-        configuracaoWhatsApp: true,
-      },
     });
 
     if (!caixaEntrada) {
@@ -328,21 +325,18 @@ async function getWhatsAppConfigFromDatabase(chatwootInboxId: string): Promise<{
     }
 
     // Se há configuração específica para esta caixa, usar ela
-    if (caixaEntrada.configuracaoWhatsApp) {
+    if (caixaEntrada.whatsappApiKey) {
       return {
-        phoneNumberId: caixaEntrada.configuracaoWhatsApp.phoneNumberId,
-        businessAccountId:
-          caixaEntrada.configuracaoWhatsApp.whatsappBusinessAccountId,
-        whatsappToken: caixaEntrada.configuracaoWhatsApp.whatsappToken,
+        phoneNumberId: caixaEntrada.phoneNumberId || '',
+        businessAccountId: caixaEntrada.whatsappBusinessAccountId || '',
+        whatsappToken: caixaEntrada.whatsappApiKey,
       };
     }
 
     // Fallback: buscar configuração padrão do usuário
-    const defaultConfig = await prisma.whatsAppConfig.findFirst({
+    const defaultConfig = await prisma.whatsAppGlobalConfig.findFirst({
       where: {
         usuarioChatwitId: caixaEntrada.usuarioChatwitId,
-        caixaEntradaId: null, // Configuração padrão
-        isActive: true,
       },
     });
 
@@ -350,7 +344,7 @@ async function getWhatsAppConfigFromDatabase(chatwootInboxId: string): Promise<{
       return {
         phoneNumberId: defaultConfig.phoneNumberId,
         businessAccountId: defaultConfig.whatsappBusinessAccountId,
-        whatsappToken: defaultConfig.whatsappToken,
+        whatsappToken: defaultConfig.whatsappApiKey,
       };
     }
 
@@ -374,7 +368,7 @@ async function updateWhatsAppApiKey(data: {
 }) {
   try {
     // A busca já usa o ID correto (string)
-    const caixaEntrada = await prisma.caixaEntrada.findFirst({
+    const caixaEntrada = await prisma.chatwitInbox.findFirst({
       where: { inboxId: data.chatwootInboxId },
     });
 
@@ -393,19 +387,13 @@ async function updateWhatsAppApiKey(data: {
     if (existingConfig) {
       // Se já existe configuração, apenas atualizar o token se necessário
       if (existingConfig.whatsappToken !== data.whatsappApiKey) {
-        await prisma.whatsAppConfig.updateMany({
+        // Atualizar configuração global
+        await prisma.whatsAppGlobalConfig.updateMany({
           where: {
-            OR: [
-              { caixaEntradaId: caixaEntrada.id },
-              {
-                usuarioChatwitId: caixaEntrada.usuarioChatwitId,
-                caixaEntradaId: null,
-                isActive: true,
-              },
-            ],
+            usuarioChatwitId: caixaEntrada.usuarioChatwitId,
           },
           data: {
-            whatsappToken: data.whatsappApiKey,
+            whatsappApiKey: data.whatsappApiKey,
           },
         });
 
@@ -493,7 +481,7 @@ async function processSendMessage(taskData: SendMessageTask) {
     recipientPhone,
     messageType: messageData.type,
     intentName: metadata?.intentName,
-    caixaId: metadata?.caixaId,
+    inboxId: metadata?.inboxId,
     taskType: "sendMessage",
   };
 
@@ -512,9 +500,9 @@ async function processSendMessage(taskData: SendMessageTask) {
 
     // Buscar configuração real do WhatsApp do banco
     let phoneNumberId = metadata?.phoneNumberId;
-    if (!phoneNumberId && metadata?.caixaId) {
+    if (!phoneNumberId && metadata?.inboxId) {
       const whatsappConfig = await getWhatsAppConfigFromDatabase(
-        metadata.caixaId
+        metadata.inboxId
       );
       if (whatsappConfig) {
         phoneNumberId = whatsappConfig.phoneNumberId;
@@ -527,7 +515,7 @@ async function processSendMessage(taskData: SendMessageTask) {
 
     if (!phoneNumberId) {
       throw new Error(
-        `PhoneNumberId não encontrado para caixaId: ${metadata?.caixaId}. Verifique a configuração do WhatsApp no banco de dados.`
+        `PhoneNumberId não encontrado para inboxId: ${metadata?.inboxId}. Verifique a configuração do WhatsApp no banco de dados.`
       );
     }
 
@@ -778,9 +766,9 @@ async function processSendReaction(taskData: SendReactionTask) {
 
     // Buscar configuração real do WhatsApp do banco
     let phoneNumberId = metadata?.phoneNumberId;
-    if (!phoneNumberId && metadata?.caixaId) {
+    if (!phoneNumberId && metadata?.inboxId) {
       const whatsappConfig = await getWhatsAppConfigFromDatabase(
-        metadata.caixaId
+        metadata.inboxId
       );
       if (whatsappConfig) {
         phoneNumberId = whatsappConfig.phoneNumberId;

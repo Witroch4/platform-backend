@@ -11,12 +11,26 @@ import {
   createInteractiveMessageTask,
   createReactionTask,
   createTextReactionTask,
+  logWithCorrelationId,
 } from "@/lib/queue/mtf-diamante-webhook.queue";
+import { recordWebhookMetrics } from "@/lib/monitoring/application-performance-monitor";
+import { performance } from 'perf_hooks';
+import { FeatureFlagManager } from "@/lib/feature-flags/feature-flag-manager";
+import { ABTestingManager } from "@/lib/feature-flags/ab-testing-manager";
+import { PrismaClient } from '@prisma/client';
+import { Redis } from 'ioredis';
 import {
   extractWebhookData,
   validateWebhookData,
   hasValidApiKey,
   logWebhookData,
+  extractUnifiedWebhookData,
+  validateUnifiedWebhookData,
+  sanitizeWebhookPayload,
+  logUnifiedWebhookData,
+  logWebhookError,
+  UnifiedWebhookPayload,
+  ExtractedWebhookData,
 } from "@/lib/webhook-utils";
 import {
   findCompleteMessageMappingByIntent,
@@ -36,7 +50,7 @@ function parseDialogflowRequest(req: any): {
   originalMessageId?: string;
   recipientPhone: string;
   whatsappApiKey: string;
-  caixaId?: string;
+  inboxId?: string;
 } {
   const webhookData = extractWebhookData(req);
 
@@ -54,7 +68,7 @@ function parseDialogflowRequest(req: any): {
       originalMessageId: chatwootPayload?.context?.id,
       recipientPhone: webhookData.contactPhone,
       whatsappApiKey: webhookData.whatsappApiKey,
-      caixaId: webhookData.inboxId,
+      inboxId: webhookData.inboxId,
     };
   }
 
@@ -68,7 +82,7 @@ function parseDialogflowRequest(req: any): {
       originalMessageId: chatwootPayload?.context?.id,
       recipientPhone: webhookData.contactPhone,
       whatsappApiKey: webhookData.whatsappApiKey,
-      caixaId: webhookData.inboxId,
+      inboxId: webhookData.inboxId,
     };
   }
 
@@ -86,7 +100,7 @@ function parseDialogflowRequest(req: any): {
         originalMessageId: whatsappMessage.context?.id,
         recipientPhone: whatsappMessage.from,
         whatsappApiKey: webhookData.whatsappApiKey,
-        caixaId: webhookData.inboxId,
+        inboxId: webhookData.inboxId,
       };
     }
     
@@ -99,7 +113,7 @@ function parseDialogflowRequest(req: any): {
         originalMessageId: whatsappMessage.context?.id,
         recipientPhone: whatsappMessage.from,
         whatsappApiKey: webhookData.whatsappApiKey,
-        caixaId: webhookData.inboxId,
+        inboxId: webhookData.inboxId,
       };
     }
   }
@@ -110,7 +124,7 @@ function parseDialogflowRequest(req: any): {
     intentName: webhookData.intentName,
     recipientPhone: webhookData.contactPhone,
     whatsappApiKey: webhookData.whatsappApiKey,
-    caixaId: String(webhookData.inboxId), // Garantir que seja string
+    inboxId: String(webhookData.inboxId), // Garantir que seja string
   };
 }
 
@@ -155,7 +169,7 @@ async function processIntentRequest(
   intentName: string,
   recipientPhone: string,
   whatsappApiKey: string,
-  caixaId: string,
+  inboxId: string,
   correlationId: string,
   originalPayload: any
 ): Promise<void> {
@@ -172,21 +186,21 @@ async function processIntentRequest(
       return;
     }
 
-    // O caixaId aqui é o inbox_id do Chatwit (4), mas precisamos do ID interno da CaixaEntrada
+    // O inboxId aqui é o inbox_id do Chatwit (4), mas precisamos do ID interno da CaixaEntrada
     // Vamos buscar primeiro a CaixaEntrada pelo inboxId para obter o ID interno
     console.log(
-      `[MTF Diamante Dispatcher] Received caixaId (inbox_id): ${caixaId} (${typeof caixaId})`
+      `[MTF Diamante Dispatcher] Received inboxId (inbox_id): ${inboxId} (${typeof inboxId})`
     );
 
     // Query database for complete message mapping
     const messageMapping = await findCompleteMessageMappingByIntent(
       intentName,
-      String(caixaId || "")
+      String(inboxId || "")
     );
 
     if (!messageMapping) {
       console.log(
-        `[MTF Diamante Dispatcher] No mapping found for intent: ${intentName}, caixa: ${caixaId}`
+        `[MTF Diamante Dispatcher] No mapping found for intent: ${intentName}, inbox: ${inboxId}`
       );
       return;
     }
@@ -212,7 +226,7 @@ async function processIntentRequest(
             correlationId,
             metadata: {
               intentName,
-              caixaId,
+              inboxId,
               originalPayload,
               phoneNumberId: messageMapping.whatsappConfig.phoneNumberId, // Add phoneNumberId to metadata
             },
@@ -252,7 +266,7 @@ async function processIntentRequest(
             correlationId,
             metadata: {
               intentName,
-              caixaId,
+              inboxId,
               originalPayload,
               phoneNumberId: messageMapping.whatsappConfig.phoneNumberId, // Add phoneNumberId to metadata
             },
@@ -344,7 +358,7 @@ async function processIntentRequest(
             correlationId,
             metadata: {
               intentName,
-              caixaId,
+              inboxId,
               originalPayload,
               phoneNumberId: messageMapping.whatsappConfig.phoneNumberId, // Add phoneNumberId to metadata
             },
@@ -461,174 +475,386 @@ async function processButtonClickRequest(
 }
 
 /**
- * Main webhook handler - Pure Dispatcher
- * Only parses requests, queues tasks, and responds immediately to Dialogflow
+ * Main webhook handler - Optimized for millisecond response
+ * Extracts payload data in under 50ms and returns 202 Accepted immediately
  */
 export async function POST(request: Request) {
-  const startTime = Date.now();
+  const startTime = performance.now();
+  let correlationId = '';
+  let payloadSize = 0;
+  let interactionType: 'intent' | 'button_reply' = 'intent';
 
   try {
+    // Parse request payload
     const req = await request.json();
-    console.log("[MTF Diamante Dispatcher] Received Dialogflow request");
+    payloadSize = JSON.stringify(req).length;
+    
+    // Generate correlation ID immediately for request tracing
+    correlationId = generateCorrelationId();
+    
+    console.log(`[MTF Diamante Dispatcher] [${correlationId}] Received Dialogflow request`);
 
-    // LOG COMPLETO DO PAYLOAD DO DIALOGFLOW
-    console.log("[MTF Diamante Dispatcher] PAYLOAD COMPLETO DO DIALOGFLOW:");
-    console.log(JSON.stringify(req, null, 2));
+    // Check if new webhook processing is enabled
+    const useNewWebhookProcessing = await isFeatureEnabled(FEATURE_FLAGS.NEW_WEBHOOK_PROCESSING, {
+      inboxId: req.originalDetectIntentRequest?.payload?.inbox_id,
+      contactPhone: req.originalDetectIntentRequest?.payload?.contact_phone,
+      timestamp: new Date(),
+    });
 
-    // Generate correlation ID for request tracing
-    const correlationId = generateCorrelationId();
-    console.log(`[MTF Diamante Dispatcher] Correlation ID: ${correlationId}`);
-
-    // Extract and validate webhook data
-    const webhookData = extractWebhookData(req);
-    logWebhookData(webhookData, req);
-
-    // Parse request to determine type and extract relevant data
-    const parsedRequest = parseDialogflowRequest(req);
-    console.log(
-      `[MTF Diamante Dispatcher] Request type: ${parsedRequest.type}`
-    );
-
-    // Queue legacy tasks for backward compatibility (non-blocking)
+    // Extract unified webhook data with validation (optimized for speed)
+    let unifiedData: UnifiedWebhookPayload;
     try {
-      // 1. Store message task
-      if (validateWebhookData(webhookData)) {
-        await addStoreMessageTask({
-          payload: req,
-          messageId: webhookData.messageId,
-          conversationId: webhookData.conversationId,
-          contactPhone: webhookData.contactPhone,
-          whatsappApiKey: webhookData.whatsappApiKey,
-          inboxId: webhookData.inboxId,
-        });
+      const useUnifiedExtraction = await isFeatureEnabled(FEATURE_FLAGS.UNIFIED_PAYLOAD_EXTRACTION);
+      
+      if (useUnifiedExtraction) {
+        unifiedData = extractUnifiedWebhookData(req);
+        unifiedData = sanitizeWebhookPayload(unifiedData);
+        
+        const validation = validateUnifiedWebhookData(unifiedData);
+        if (!validation.isValid) {
+          throw new Error(`Validation failed: ${validation.errors.join(', ')}`);
+        }
+        
+        // Set interaction type for monitoring
+        interactionType = unifiedData.interactionType;
+      } else {
+        // Fallback to legacy extraction
+        throw new Error('Unified extraction disabled, using legacy fallback');
       }
-
-      // 2. Update API key task
-      if (hasValidApiKey(req) && webhookData.inboxId) {
-        await addUpdateApiKeyTask({
-          inboxId: webhookData.inboxId,
-          whatsappApiKey: webhookData.whatsappApiKey,
-          payload: req,
-        });
-      }
-
-      // 3. Process intent task (legacy)
-      await addProcessIntentTask({
-        payload: req,
-        intentName: webhookData.intentName,
-        contactPhone: webhookData.contactPhone,
+    } catch (extractionError) {
+      // Log extraction error but continue with legacy extraction for backward compatibility
+      console.warn(`[MTF Diamante Dispatcher] [${correlationId}] Unified extraction failed, falling back to legacy:`, extractionError);
+      
+      // Fallback to legacy extraction
+      const webhookData = extractWebhookData(req);
+      logWebhookData(webhookData, req);
+      
+      // Queue legacy tasks for backward compatibility
+      await queueLegacyTasks(req, webhookData, correlationId);
+      
+      // Return 202 Accepted with correlation ID
+      const responseTime = performance.now() - startTime;
+      console.log(`[MTF Diamante Dispatcher] [${correlationId}] Legacy fallback response in ${responseTime}ms`);
+      
+      // Record webhook metrics for monitoring (fallback case)
+      recordWebhookMetrics({
+        responseTime,
+        timestamp: new Date(),
+        correlationId,
+        success: true,
+        payloadSize,
+        interactionType: 'intent', // Default for legacy fallback
       });
-
-      // 4. Process button click task (new)
-      if (parsedRequest.type === "button_click") {
-        await addProcessButtonClickTask({
-          payload: req,
-          contactPhone: parsedRequest.recipientPhone,
-          whatsappApiKey: parsedRequest.whatsappApiKey,
-          inboxId: parsedRequest.caixaId || "",
-        });
-        console.log(`[MTF Diamante Dispatcher] Button click task queued for button: ${parsedRequest.buttonId}`);
-      }
-
-      console.log(`[MTF Diamante Dispatcher] Legacy tasks queued successfully`);
-    } catch (legacyQueueError) {
-      console.error(
-        "[MTF Diamante Dispatcher] Error queuing legacy tasks:",
-        legacyQueueError
-      );
-      // Continue processing - don't let legacy task failures block the new system
+      
+      return new Response(JSON.stringify({ correlationId }), {
+        status: 202,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'X-Correlation-ID': correlationId,
+        },
+      });
     }
 
-    // Calculate response time for legacy tasks only
-    const legacyResponseTime = Date.now() - startTime;
-    console.log(
-      `[MTF Diamante Dispatcher] Legacy tasks processed in ${legacyResponseTime}ms`
-    );
+    // Log extracted data with correlation ID
+    const extractionTime = Date.now() - startTime;
+    logUnifiedWebhookData(unifiedData, correlationId, extractionTime);
 
-    // ✅ RESPOSTA IMEDIATA E SILENCIOSA AO DIALOGFLOW
-    // Usando o objeto JSON vazio, que é mais limpo.
-    const immediateResponse = NextResponse.json({});
+    // Queue jobs based on feature flags
+    if (useNewWebhookProcessing) {
+      // Use new queue system
+      const useHighPriorityQueue = await isFeatureEnabled(FEATURE_FLAGS.HIGH_PRIORITY_QUEUE, {
+        inboxId: unifiedData.inboxId,
+        contactPhone: unifiedData.contactPhone,
+      });
+      
+      const useLowPriorityQueue = await isFeatureEnabled(FEATURE_FLAGS.LOW_PRIORITY_QUEUE, {
+        inboxId: unifiedData.inboxId,
+        contactPhone: unifiedData.contactPhone,
+      });
 
-    // Process request based on type (new async system) - NÃO BLOQUEAR A RESPOSTA
+      // Queue high priority job for user response (non-blocking)
+      if (useHighPriorityQueue) {
+        setImmediate(async () => {
+          try {
+            await queueHighPriorityJob(unifiedData, correlationId);
+          } catch (error) {
+            console.error(`[MTF Diamante Dispatcher] [${correlationId}] Error queuing high priority job:`, error);
+          }
+        });
+      }
+
+      // Queue low priority job for data persistence (non-blocking)
+      if (useLowPriorityQueue) {
+        setImmediate(async () => {
+          try {
+            await queueLowPriorityJob(unifiedData, correlationId);
+          } catch (error) {
+            console.error(`[MTF Diamante Dispatcher] [${correlationId}] Error queuing low priority job:`, error);
+          }
+        });
+      }
+    }
+
+    // Queue legacy tasks for backward compatibility (non-blocking)
     setImmediate(async () => {
       try {
-        if (parsedRequest.type === "intent" && parsedRequest.intentName) {
-          // Process intent even if caixaId is missing - use empty string as fallback
-          await processIntentRequest(
-            parsedRequest.intentName,
-            parsedRequest.recipientPhone,
-            parsedRequest.whatsappApiKey,
-            parsedRequest.caixaId || "",
-            correlationId,
-            req
-          );
-        } else if (
-          parsedRequest.type === "button_click" &&
-          parsedRequest.buttonId &&
-          parsedRequest.messageId
-        ) {
-          // Get phoneNumberId from environment as fallback for button clicks
-          // In a real scenario, this should be obtained from the user's configuration
-          const phoneNumberId = process.env.FROM_PHONE_NUMBER_ID || "";
-          
-          await processButtonClickRequest(
-            parsedRequest.buttonId,
-            parsedRequest.messageId,
-            parsedRequest.recipientPhone,
-            parsedRequest.whatsappApiKey,
-            correlationId,
-            req,
-            phoneNumberId
-          );
-        } else {
-          console.log(
-            `[MTF Diamante Dispatcher] Unhandled request type or missing data:`,
-            {
-              type: parsedRequest.type,
-              intentName: parsedRequest.intentName,
-              buttonId: parsedRequest.buttonId,
-              messageId: parsedRequest.messageId,
-              hasRecipientPhone: !!parsedRequest.recipientPhone,
-              hasWhatsappApiKey: !!parsedRequest.whatsappApiKey,
-              caixaId: parsedRequest.caixaId,
-            }
-          );
-        }
-
-        // Calculate total processing time
-        const totalResponseTime = Date.now() - startTime;
-        console.log(
-          `[MTF Diamante Dispatcher] Total async processing completed in ${totalResponseTime}ms`
-        );
-      } catch (asyncQueueError) {
-        console.error(
-          "[MTF Diamante Dispatcher] Error in async processing:",
-          asyncQueueError
-        );
-        // Error in async processing doesn't affect the response to Dialogflow
+        const legacyData = convertToLegacyFormat(unifiedData);
+        await queueLegacyTasks(req, legacyData, correlationId);
+      } catch (error) {
+        console.error(`[MTF Diamante Dispatcher] [${correlationId}] Error queuing legacy tasks:`, error);
       }
     });
 
-    // Return immediate response to Dialogflow (prevent timeout)
-    return immediateResponse;
-  } catch (error) {
-    console.error(
-      "[MTF Diamante Dispatcher] Critical error in webhook:",
-      error
-    );
+    // Return 202 Accepted immediately with correlation ID
+    const responseTime = performance.now() - startTime;
+    console.log(`[MTF Diamante Dispatcher] [${correlationId}] Response sent in ${responseTime}ms`);
 
-    // Even on critical errors, return 200 OK to prevent Dialogflow retries
-    // Log the error for monitoring but don't expose internal details
-    return NextResponse.json({
-      fulfillmentMessages: [
-        {
-          text: {
-            text: [
-              "Desculpe, ocorreu um erro temporário. Tente novamente em alguns instantes.",
-            ],
-          },
-        },
-      ],
+    // Record webhook metrics for monitoring
+    recordWebhookMetrics({
+      responseTime,
+      timestamp: new Date(),
+      correlationId,
+      success: true,
+      payloadSize,
+      interactionType,
     });
+
+    return new Response(JSON.stringify({ correlationId }), {
+      status: 202,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'X-Correlation-ID': correlationId,
+      },
+    });
+
+  } catch (error) {
+    const responseTime = performance.now() - startTime;
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`[MTF Diamante Dispatcher] [${correlationId}] Critical error in webhook (${responseTime}ms):`, error);
+
+    // Record webhook metrics for monitoring (error case)
+    recordWebhookMetrics({
+      responseTime,
+      timestamp: new Date(),
+      correlationId: correlationId || 'error-fallback',
+      success: false,
+      error: errorMessage,
+      payloadSize,
+      interactionType,
+    });
+
+    // Always return 202 Accepted to prevent Dialogflow retries
+    // Include correlation ID for error tracking
+    return new Response(JSON.stringify({ 
+      correlationId: correlationId || generateCorrelationId(),
+      error: 'Internal processing error'
+    }), {
+      status: 202,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'X-Correlation-ID': correlationId || 'error-fallback',
+      },
+    });
+  }
+}
+
+/**
+ * Queue high priority job for immediate user response
+ */
+async function queueHighPriorityJob(data: UnifiedWebhookPayload, correlationId: string): Promise<void> {
+  logWithCorrelationId('info', 'Queuing high priority job for user response', correlationId, {
+    interactionType: data.interactionType,
+    intentName: data.intentName,
+    buttonId: data.buttonId,
+  });
+
+  // Import the queue functions
+  const { addRespostaRapidaJob, createIntentJob, createButtonJob } = await import('@/lib/queue/resposta-rapida.queue');
+
+  try {
+    if (data.interactionType === 'intent' && data.intentName) {
+      // Create intent processing job
+      const intentJob = createIntentJob({
+        inboxId: data.inboxId,
+        contactPhone: data.contactPhone,
+        intentName: data.intentName,
+        wamid: data.messageId,
+        credentials: {
+          token: data.credentials.whatsappApiKey,
+          phoneNumberId: data.credentials.phoneNumberId,
+          businessId: data.credentials.businessId,
+        },
+        correlationId,
+        messageId: parseInt(data.messageId) || 0,
+        accountId: 0, // TODO: Extract from payload when available
+        accountName: 'webhook', // TODO: Extract from payload when available
+        contactSource: data.contactSource,
+      });
+
+      await addRespostaRapidaJob(intentJob, { correlationId });
+      
+      logWithCorrelationId('info', 'Intent job queued successfully', correlationId, {
+        intentName: data.intentName,
+        inboxId: data.inboxId,
+      });
+
+    } else if (data.interactionType === 'button_reply' && data.buttonId) {
+      // Create button processing job
+      const buttonJob = createButtonJob({
+        inboxId: data.inboxId,
+        contactPhone: data.contactPhone,
+        buttonId: data.buttonId,
+        wamid: data.messageId,
+        credentials: {
+          token: data.credentials.whatsappApiKey,
+          phoneNumberId: data.credentials.phoneNumberId,
+          businessId: data.credentials.businessId,
+        },
+        correlationId,
+        messageId: parseInt(data.messageId) || 0,
+        accountId: 0, // TODO: Extract from payload when available
+        accountName: 'webhook', // TODO: Extract from payload when available
+        contactSource: data.contactSource,
+      });
+
+      await addRespostaRapidaJob(buttonJob, { correlationId });
+      
+      logWithCorrelationId('info', 'Button job queued successfully', correlationId, {
+        buttonId: data.buttonId,
+        inboxId: data.inboxId,
+      });
+    }
+
+    // Also process using legacy system for backward compatibility
+    if (data.interactionType === 'intent' && data.intentName) {
+      await processIntentRequest(
+        data.intentName,
+        data.contactPhone,
+        data.credentials.whatsappApiKey,
+        data.inboxId,
+        correlationId,
+        data.originalPayload
+      );
+    } else if (data.interactionType === 'button_reply' && data.buttonId) {
+      await processButtonClickRequest(
+        data.buttonId,
+        data.messageId,
+        data.contactPhone,
+        data.credentials.whatsappApiKey,
+        correlationId,
+        data.originalPayload,
+        data.credentials.phoneNumberId
+      );
+    }
+  } catch (error) {
+    logWithCorrelationId('error', 'Failed to queue high priority job', correlationId, {
+      error: error instanceof Error ? error.message : error,
+      interactionType: data.interactionType,
+    });
+    throw error;
+  }
+}
+
+/**
+ * Queue low priority job for data persistence
+ */
+async function queueLowPriorityJob(data: UnifiedWebhookPayload, correlationId: string): Promise<void> {
+  logWithCorrelationId('info', 'Queuing low priority job for data persistence', correlationId, {
+    inboxId: data.inboxId,
+    contactSource: data.contactSource,
+  });
+
+  // Import the queue functions
+  const { addPersistenciaCredenciaisJob, createCredentialsUpdateJob } = await import('@/lib/queue/persistencia-credenciais.queue');
+
+  try {
+    // Create credentials and lead update job
+    const persistenciaJob = createCredentialsUpdateJob({
+      inboxId: data.inboxId,
+      whatsappApiKey: data.credentials.whatsappApiKey,
+      phoneNumberId: data.credentials.phoneNumberId,
+      businessId: data.credentials.businessId,
+      contactSource: data.contactSource,
+      leadData: {
+        messageId: parseInt(data.messageId) || 0,
+        accountId: 0, // TODO: Extract from payload when available
+        accountName: 'webhook', // TODO: Extract from payload when available
+        contactPhone: data.contactPhone,
+        wamid: data.messageId,
+      },
+      correlationId,
+    });
+
+    await addPersistenciaCredenciaisJob(persistenciaJob);
+    
+    logWithCorrelationId('info', 'Persistence job queued successfully', correlationId, {
+      inboxId: data.inboxId,
+      contactSource: data.contactSource,
+    });
+  } catch (error) {
+    logWithCorrelationId('error', 'Failed to queue low priority job', correlationId, {
+      error: error instanceof Error ? error.message : error,
+      inboxId: data.inboxId,
+    });
+    throw error;
+  }
+}
+
+/**
+ * Convert unified data to legacy format for backward compatibility
+ */
+function convertToLegacyFormat(data: UnifiedWebhookPayload): ExtractedWebhookData {
+  return {
+    whatsappApiKey: data.credentials.whatsappApiKey,
+    messageId: data.messageId,
+    conversationId: data.conversationId,
+    contactPhone: data.contactPhone,
+    inboxId: data.inboxId,
+    intentName: data.intentName || 'Unknown',
+  };
+}
+
+/**
+ * Queue legacy tasks for backward compatibility
+ */
+async function queueLegacyTasks(req: any, webhookData: ExtractedWebhookData, correlationId: string): Promise<void> {
+  logWithCorrelationId('info', 'Queuing legacy tasks for backward compatibility', correlationId);
+
+  try {
+    // 1. Store message task
+    if (validateWebhookData(webhookData)) {
+      await addStoreMessageTask({
+        payload: req,
+        messageId: webhookData.messageId,
+        conversationId: webhookData.conversationId,
+        contactPhone: webhookData.contactPhone,
+        whatsappApiKey: webhookData.whatsappApiKey,
+        inboxId: webhookData.inboxId,
+      });
+    }
+
+    // 2. Update API key task
+    if (hasValidApiKey(req) && webhookData.inboxId) {
+      await addUpdateApiKeyTask({
+        inboxId: webhookData.inboxId,
+        whatsappApiKey: webhookData.whatsappApiKey,
+        payload: req,
+      });
+    }
+
+    // 3. Process intent task (legacy)
+    await addProcessIntentTask({
+      payload: req,
+      intentName: webhookData.intentName,
+      contactPhone: webhookData.contactPhone,
+    });
+
+    logWithCorrelationId('info', 'Legacy tasks queued successfully', correlationId);
+  } catch (error) {
+    logWithCorrelationId('error', 'Error queuing legacy tasks', correlationId, { error });
+    // Don't throw - legacy task failures shouldn't block the new system
   }
 }

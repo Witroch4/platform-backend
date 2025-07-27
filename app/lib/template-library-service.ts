@@ -1,5 +1,5 @@
-import { prisma } from '@/lib/prisma';
-import type { TemplateLibrary, TemplateApprovalRequest, User } from '@prisma/client';
+import { db } from '@/lib/db';
+import type { Template, TemplateApprovalRequest, User } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 
 export interface TemplateLibraryContent {
@@ -20,16 +20,15 @@ export interface TemplateLibraryContent {
 export interface CreateTemplateLibraryData {
   name: string;
   description?: string;
-  type: 'template' | 'interactive_message';
-  scope: 'global' | 'account_specific';
+  type: 'WHATSAPP_OFFICIAL' | 'INTERACTIVE_MESSAGE' | 'AUTOMATION_REPLY';
+  scope: 'GLOBAL' | 'PRIVATE';
   content: TemplateLibraryContent;
-  category?: string;
   language?: string;
   tags?: string[];
   createdById: string;
 }
 
-export interface TemplateLibraryWithCreator extends TemplateLibrary {
+export interface TemplateLibraryWithCreator extends Template {
   createdBy: Pick<User, 'id' | 'name' | 'email'>;
   approvalRequests?: TemplateApprovalRequest[];
 }
@@ -40,14 +39,14 @@ export class TemplateLibraryService {
    */
   static async getLibraryItems(
     userId: string,
-    type?: 'template' | 'interactive_message',
-    scope?: 'global' | 'account_specific'
+    type?: 'WHATSAPP_OFFICIAL' | 'INTERACTIVE_MESSAGE' | 'AUTOMATION_REPLY',
+    scope?: 'GLOBAL' | 'PRIVATE'
   ): Promise<TemplateLibraryWithCreator[]> {
     const whereClause: any = {
       isActive: true,
       OR: [
-        { scope: 'global' },
-        { scope: 'account_specific', createdById: userId }
+        { scope: 'GLOBAL' },
+        { scope: 'PRIVATE', createdById: userId }
       ]
     };
 
@@ -59,7 +58,7 @@ export class TemplateLibraryService {
       whereClause.scope = scope;
     }
 
-    return await prisma.templateLibrary.findMany({
+    return await db.template.findMany({
       where: whereClause,
       include: {
         createdBy: {
@@ -89,22 +88,16 @@ export class TemplateLibraryService {
   /**
    * Save template to library
    */
-  static async saveToLibrary(data: CreateTemplateLibraryData): Promise<TemplateLibrary> {
-    // For interactive messages, approval is not required
-    const isApprovalRequired = data.type === 'template';
-
-    return await prisma.templateLibrary.create({
+  static async saveToLibrary(data: CreateTemplateLibraryData): Promise<Template> {
+    return await db.template.create({
       data: {
         name: data.name,
         description: data.description,
         type: data.type,
         scope: data.scope,
-        content: data.content as any,
-        category: data.category,
         language: data.language || 'pt_BR',
         tags: data.tags || [],
-        createdById: data.createdById,
-        isApprovalRequired: isApprovalRequired
+        createdById: data.createdById
       }
     });
   }
@@ -119,7 +112,7 @@ export class TemplateLibraryService {
     customVariables?: Record<string, string>
   ): Promise<TemplateApprovalRequest> {
     // Check if template exists and requires approval
-    const template = await prisma.templateLibrary.findUnique({
+    const template = await db.template.findUnique({
       where: { id: templateId }
     });
 
@@ -127,12 +120,11 @@ export class TemplateLibraryService {
       throw new Error('Template not found');
     }
 
-    if (!template.isApprovalRequired) {
-      throw new Error('This template does not require approval');
-    }
+    // For now, all templates require approval
+    // This can be enhanced later based on template type or other criteria
 
     // Check if user already has a pending request for this template
-    const existingRequest = await prisma.templateApprovalRequest.findFirst({
+    const existingRequest = await db.templateApprovalRequest.findFirst({
       where: {
         templateLibraryId: templateId,
         requestedById: userId,
@@ -144,9 +136,9 @@ export class TemplateLibraryService {
       throw new Error('You already have a pending approval request for this template');
     }
 
-    return await prisma.templateApprovalRequest.create({
+    return await db.templateApprovalRequest.create({
       data: {
-        templateLibraryId: templateId,
+        templateId: templateId,
         requestedById: userId,
         requestMessage,
         customVariables: customVariables || Prisma.JsonNull,
@@ -164,7 +156,7 @@ export class TemplateLibraryService {
     status: 'approved' | 'rejected',
     responseMessage?: string
   ): Promise<TemplateApprovalRequest> {
-    return await prisma.templateApprovalRequest.update({
+    return await db.templateApprovalRequest.update({
       where: { id: requestId },
       data: {
         status,
@@ -182,7 +174,7 @@ export class TemplateLibraryService {
     messageId: string,
     variables: Record<string, string>
   ): Promise<{ success: boolean; processedContent: TemplateLibraryContent }> {
-    const message = await prisma.templateLibrary.findUnique({
+    const message = await db.template.findUnique({
       where: { id: messageId }
     });
 
@@ -190,23 +182,28 @@ export class TemplateLibraryService {
       throw new Error('Interactive message not found');
     }
 
-    if (message.type !== 'interactive_message') {
+    // Check if this is an interactive message type
+    if (message.type !== 'INTERACTIVE_MESSAGE') {
       throw new Error('This is not an interactive message');
     }
 
     // Increment usage count
-    await prisma.templateLibrary.update({
+    await db.template.update({
       where: { id: messageId },
       data: {
-        totalUsageCount: {
+        usageCount: {
           increment: 1
         }
       }
     });
 
     // Process variables in content
-    const content = message.content as unknown as TemplateLibraryContent;
-    const processedContent = this.processVariablesInContent(content, variables);
+    // Note: Template model doesn't have direct content field, 
+    // content is stored in interactiveContent or whatsappOfficialInfo relations
+    const processedContent = this.processVariablesInContent({
+      body: message.simpleReplyText || '',
+      variables: []
+    }, variables);
 
     return {
       success: true,
@@ -218,7 +215,7 @@ export class TemplateLibraryService {
    * Get template by ID with full details
    */
   static async getTemplateById(templateId: string): Promise<TemplateLibraryWithCreator | null> {
-    return await prisma.templateLibrary.findUnique({
+    return await db.template.findUnique({
       where: { id: templateId },
       include: {
         createdBy: {
@@ -259,7 +256,7 @@ export class TemplateLibraryService {
   static async getApprovalRequests(
     status?: 'pending' | 'approved' | 'rejected'
   ): Promise<Array<TemplateApprovalRequest & {
-    templateLibrary: TemplateLibrary;
+    template: Template;
     requestedBy: Pick<User, 'id' | 'name' | 'email'>;
     processedBy?: Pick<User, 'id' | 'name' | 'email'> | null;
   }>> {
@@ -268,10 +265,10 @@ export class TemplateLibraryService {
       whereClause.status = status;
     }
 
-    return await prisma.templateApprovalRequest.findMany({
+    return await db.templateApprovalRequest.findMany({
       where: whereClause,
       include: {
-        templateLibrary: true,
+        template: true,
         requestedBy: {
           select: {
             id: true,
@@ -302,7 +299,7 @@ export class TemplateLibraryService {
     updates: Partial<CreateTemplateLibraryData>
   ): Promise<TemplateLibrary> {
     // Check if user has permission to update (creator or admin)
-    const template = await prisma.templateLibrary.findUnique({
+    const template = await db.template.findUnique({
       where: { id: templateId }
     });
 
@@ -311,7 +308,7 @@ export class TemplateLibraryService {
     }
 
     // Check if user is creator or admin
-    const user = await prisma.user.findUnique({
+    const user = await db.user.findUnique({
       where: { id: userId }
     });
 
@@ -327,13 +324,11 @@ export class TemplateLibraryService {
       throw new Error('You do not have permission to update this template');
     }
 
-    return await prisma.templateLibrary.update({
+    return await db.template.update({
       where: { id: templateId },
       data: {
         ...(updates.name && { name: updates.name }),
         ...(updates.description !== undefined && { description: updates.description }),
-        ...(updates.content && { content: updates.content as any }),
-        ...(updates.category !== undefined && { category: updates.category }),
         ...(updates.tags && { tags: updates.tags }),
         updatedAt: new Date()
       }
@@ -345,7 +340,7 @@ export class TemplateLibraryService {
    */
   static async deleteTemplate(templateId: string, userId: string): Promise<void> {
     // Check permissions same as update
-    const template = await prisma.templateLibrary.findUnique({
+    const template = await db.template.findUnique({
       where: { id: templateId }
     });
 
@@ -353,7 +348,7 @@ export class TemplateLibraryService {
       throw new Error('Template not found');
     }
 
-    const user = await prisma.user.findUnique({
+    const user = await db.user.findUnique({
       where: { id: userId }
     });
 
@@ -370,7 +365,7 @@ export class TemplateLibraryService {
     }
 
     // Soft delete by setting isActive to false
-    await prisma.templateLibrary.update({
+    await db.template.update({
       where: { id: templateId },
       data: {
         isActive: false,
@@ -412,13 +407,15 @@ export class TemplateLibraryService {
     category: string,
     userId: string
   ): Promise<TemplateLibraryWithCreator[]> {
-    return await prisma.templateLibrary.findMany({
+    return await db.template.findMany({
       where: {
-        category,
+        tags: {
+          has: category
+        },
         isActive: true,
         OR: [
-          { scope: 'global' },
-          { scope: 'account_specific', createdById: userId }
+          { scope: 'GLOBAL' },
+          { scope: 'PRIVATE', createdById: userId }
         ]
       },
       include: {
@@ -442,13 +439,13 @@ export class TemplateLibraryService {
   static async searchTemplates(
     query: string,
     userId: string,
-    type?: 'template' | 'interactive_message'
+    type?: 'WHATSAPP_OFFICIAL' | 'INTERACTIVE_MESSAGE' | 'AUTOMATION_REPLY'
   ): Promise<TemplateLibraryWithCreator[]> {
     const whereClause: any = {
       isActive: true,
       OR: [
-        { scope: 'global' },
-        { scope: 'account_specific', createdById: userId }
+        { scope: 'GLOBAL' },
+        { scope: 'PRIVATE', createdById: userId }
       ],
       AND: {
         OR: [
@@ -462,7 +459,7 @@ export class TemplateLibraryService {
       whereClause.type = type;
     }
 
-    return await prisma.templateLibrary.findMany({
+    return await db.template.findMany({
       where: whereClause,
       include: {
         createdBy: {

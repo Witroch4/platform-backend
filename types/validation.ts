@@ -52,7 +52,7 @@ export interface MessageValidationResult {
 export interface ValidationContext {
   messageType: InteractiveMessageType;
   isEditing: boolean;
-  caixaId: string;
+  inboxId: string;
   existingMessages?: InteractiveMessage[];
 }
 

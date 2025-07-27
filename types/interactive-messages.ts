@@ -16,7 +16,7 @@ export interface PrismaTemplate {
   createdAt: Date;
   updatedAt: Date;
   createdById: string;
-  caixaId?: string | null;
+  inboxId?: string | null;
 }
 
 export interface PrismaInteractiveContent {
@@ -235,7 +235,7 @@ export interface TemplateWithContent extends PrismaTemplate {
 
 // API request/response interfaces
 export interface CreateInteractiveMessageRequest {
-  caixaId: string;
+  inboxId: string;
   message: Omit<InteractiveMessage, "id" | "createdAt" | "updatedAt">;
 }
 
@@ -283,7 +283,7 @@ export interface MessageValidationContext {
 
 // Component props interfaces
 export interface InteractiveMessageCreatorProps {
-  caixaId: string;
+  inboxId: string;
   editingMessage?: InteractiveMessage;
   onSave?: (message: InteractiveMessage) => void;
   onCancel?: () => void;

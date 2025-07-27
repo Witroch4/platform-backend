@@ -33,6 +33,7 @@ services:
     restart: unless-stopped
     depends_on:
       - redis
+      - postgres
 
   # ───────────────────────────────────────────────────────
   # Worker 1: automacao (worker/automacao.worker.ts)
@@ -43,7 +44,7 @@ services:
       context: .
       dockerfile: Dockerfile.dev
     env_file:
-      - .env.development
+      - .env.development.ngrok
     environment:
       REDIS_HOST: "redis"
       REDIS_PORT: "6379"
@@ -56,6 +57,7 @@ services:
     restart: unless-stopped
     depends_on:
       - redis
+      - postgres
 
   # ───────────────────────────────────────────────────────
   # Worker 2: webhook (worker/webhook.worker.ts)
@@ -66,7 +68,7 @@ services:
       context: .
       dockerfile: Dockerfile.dev
     env_file:
-      - .env.development
+      - .env.development.ngrok
     environment:
       REDIS_HOST: "redis"
       REDIS_PORT: "6379"
@@ -79,6 +81,7 @@ services:
     restart: unless-stopped
     depends_on:
       - redis
+      - postgres
 
   # ───────────────────────────────────────────────────────
   # Redis
@@ -90,6 +93,24 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    networks:
+      - minha_rede
+    restart: unless-stopped
+
+  # ───────────────────────────────────────────────────────
+  # Postgres (pgvector)
+  # ───────────────────────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: chatwit_postgres
+    environment:
+      POSTGRES_DB: socialWise
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
     networks:
       - minha_rede
     restart: unless-stopped
@@ -115,6 +136,8 @@ volumes:
   node_modules:
     driver: local
   redis_data:
+    driver: local
+  pg_data:
     driver: local
 
 networks:

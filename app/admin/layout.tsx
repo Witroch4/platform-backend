@@ -105,6 +105,12 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
           </AdminNavLink>
           {isSuperAdmin && (
             <>
+              <AdminNavLink href="/admin/monitoring/test" icon={<ShieldAlert className="h-5 w-5 mr-3" />}>
+                Sistema de Monitoramento (TESTE)
+              </AdminNavLink>
+              <AdminNavLink href="/admin/monitoring/dashboard" icon={<ShieldAlert className="h-5 w-5 mr-3" />}>
+                Sistema de Monitoramento (COMPLETO)
+              </AdminNavLink>
               <AdminNavLink href="/admin/notifications" icon={<Bell className="h-5 w-5 mr-3" />}>
                 Notificações
               </AdminNavLink>

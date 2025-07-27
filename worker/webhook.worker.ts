@@ -1,6 +1,6 @@
-// worker/webhook.worker.ts
+// worker/webhook.worker.ts - Parent Worker Implementation
 
-import { Worker } from 'bullmq';
+import { Worker, Job } from 'bullmq';
 import dotenv from 'dotenv';
 import { connection } from '@/lib/redis';
 import { prisma } from '@/lib/prisma';
@@ -20,6 +20,20 @@ import { processLeadChatwitTask } from './WebhookWorkerTasks/leads-chatwit.task'
 import { processMtfDiamanteWebhookTask } from './WebhookWorkerTasks/mtf-diamante-webhook.task';
 import { MTF_DIAMANTE_WEBHOOK_QUEUE_NAME } from '@/lib/queue/mtf-diamante-webhook.queue';
 
+// Import new task modules
+import { 
+  RESPOSTA_RAPIDA_QUEUE_NAME, 
+  RespostaRapidaJobData,
+  handleJobFailure as handleRespostaRapidaFailure 
+} from '@/lib/queue/resposta-rapida.queue';
+import { 
+  PERSISTENCIA_CREDENCIAIS_QUEUE_NAME, 
+  PersistenciaCredenciaisJobData,
+  handleJobFailure as handlePersistenciaFailure 
+} from '@/lib/queue/persistencia-credenciais.queue';
+import { processRespostaRapidaTask } from './WebhookWorkerTasks/respostaRapida.worker.task';
+import { processPersistenciaTask } from './WebhookWorkerTasks/persistencia.worker.task';
+
 dotenv.config();
 
 // Definindo a interface para o progresso do job de leads
@@ -27,6 +41,199 @@ interface LeadJobProgress {
   processed?: boolean;
   leadId?: string;
 }
+
+// ============================================================================
+// PARENT WORKER IMPLEMENTATION
+// ============================================================================
+
+/**
+ * Parent Worker that delegates jobs to appropriate task modules
+ * This replaces individual workers with a unified delegation system
+ */
+class ParentWorker {
+  private highPriorityWorker: Worker;
+  private lowPriorityWorker: Worker;
+
+  constructor() {
+    // High Priority Worker for user responses
+    this.highPriorityWorker = new Worker(
+      RESPOSTA_RAPIDA_QUEUE_NAME,
+      this.delegateHighPriorityJob.bind(this),
+      {
+        connection,
+        concurrency: 10, // High concurrency for user-facing responses
+        lockDuration: 30000,
+      }
+    );
+
+    // Low Priority Worker for data persistence
+    this.lowPriorityWorker = new Worker(
+      PERSISTENCIA_CREDENCIAIS_QUEUE_NAME,
+      this.delegateLowPriorityJob.bind(this),
+      {
+        connection,
+        concurrency: 5, // Lower concurrency for background tasks
+        lockDuration: 60000,
+      }
+    );
+
+    this.setupEventHandlers();
+  }
+
+  /**
+   * Delegate high priority jobs to appropriate task modules
+   */
+  private async delegateHighPriorityJob(job: Job<RespostaRapidaJobData>): Promise<any> {
+    const { type, data } = job.data;
+
+    console.log(`[Parent Worker] Delegating high priority job: ${job.name}`, {
+      type,
+      correlationId: data.correlationId,
+      interactionType: data.interactionType,
+    });
+
+    try {
+      switch (type) {
+        case 'processarResposta':
+          return await processRespostaRapidaTask(job);
+        
+        default:
+          throw new Error(`Unknown high priority job type: ${type}`);
+      }
+    } catch (error) {
+      console.error(`[Parent Worker] High priority job delegation failed: ${job.name}`, {
+        error: error instanceof Error ? error.message : error,
+        correlationId: data.correlationId,
+      });
+      
+      // Handle job failure using the appropriate handler
+      await handleRespostaRapidaFailure(job, error as Error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delegate low priority jobs to appropriate task modules
+   */
+  private async delegateLowPriorityJob(job: Job<PersistenciaCredenciaisJobData>): Promise<any> {
+    const { type, data } = job.data;
+
+    console.log(`[Parent Worker] Delegating low priority job: ${job.name}`, {
+      type,
+      correlationId: data.correlationId,
+      inboxId: data.inboxId,
+    });
+
+    try {
+      switch (type) {
+        case 'atualizarCredenciais':
+        case 'atualizarLead':
+        case 'batchUpdate':
+          return await processPersistenciaTask(job);
+        
+        default:
+          throw new Error(`Unknown low priority job type: ${type}`);
+      }
+    } catch (error) {
+      console.error(`[Parent Worker] Low priority job delegation failed: ${job.name}`, {
+        error: error instanceof Error ? error.message : error,
+        correlationId: data.correlationId,
+      });
+      
+      // Handle job failure using the appropriate handler
+      await handlePersistenciaFailure(job, error as Error);
+      throw error;
+    }
+  }
+
+  /**
+   * Setup event handlers for both workers
+   */
+  private setupEventHandlers(): void {
+    // High Priority Worker Events
+    this.highPriorityWorker.on('completed', (job, result) => {
+      console.log(`[Parent Worker] High priority job completed: ${job.name}`, {
+        jobId: job.id,
+        correlationId: job.data.data.correlationId,
+        processingTime: result?.processingTime,
+      });
+    });
+
+    this.highPriorityWorker.on('failed', (job, error) => {
+      console.error(`[Parent Worker] High priority job failed: ${job?.name}`, {
+        jobId: job?.id,
+        correlationId: job?.data?.data?.correlationId,
+        error: error.message,
+      });
+    });
+
+    // Low Priority Worker Events
+    this.lowPriorityWorker.on('completed', (job, result) => {
+      console.log(`[Parent Worker] Low priority job completed: ${job.name}`, {
+        jobId: job.id,
+        correlationId: job.data.data.correlationId,
+        credentialsUpdated: result?.credentialsUpdated,
+        leadUpdated: result?.leadUpdated,
+      });
+    });
+
+    this.lowPriorityWorker.on('failed', (job, error) => {
+      console.error(`[Parent Worker] Low priority job failed: ${job?.name}`, {
+        jobId: job?.id,
+        correlationId: job?.data?.data?.correlationId,
+        error: error.message,
+      });
+    });
+
+    // General error handlers
+    this.highPriorityWorker.on('error', (error) => {
+      console.error('[Parent Worker] High priority worker error:', error);
+    });
+
+    this.lowPriorityWorker.on('error', (error) => {
+      console.error('[Parent Worker] Low priority worker error:', error);
+    });
+
+    console.log('[Parent Worker] Event handlers setup completed');
+  }
+
+  /**
+   * Graceful shutdown of both workers
+   */
+  async shutdown(): Promise<void> {
+    console.log('[Parent Worker] Shutting down workers...');
+    
+    await Promise.all([
+      this.highPriorityWorker.close(),
+      this.lowPriorityWorker.close(),
+    ]);
+    
+    console.log('[Parent Worker] Workers shut down successfully');
+  }
+
+  /**
+   * Wait for both workers to be ready
+   */
+  async waitUntilReady(): Promise<void> {
+    await Promise.all([
+      this.highPriorityWorker.waitUntilReady(),
+      this.lowPriorityWorker.waitUntilReady(),
+    ]);
+    
+    console.log('[Parent Worker] Both workers are ready');
+  }
+
+  // Getters for accessing individual workers if needed
+  get highPriority(): Worker { return this.highPriorityWorker; }
+  get lowPriority(): Worker { return this.lowPriorityWorker; }
+}
+
+// Create the Parent Worker instance
+const parentWorker = new ParentWorker();
+
+// ============================================================================
+// LEGACY WORKERS (maintained for backward compatibility)
+// ============================================================================
 
 // Worker de agendamento
 const agendamentoWorker = new Worker(
@@ -112,7 +319,7 @@ const mtfDiamanteAsyncWorker = new Worker(
   }
 );
 
-// Tratamento de eventos dos workers
+// Tratamento de eventos dos workers legados
 [agendamentoWorker, manuscritoWorker, leadCellsWorker, leadsChatwitWorker, autoNotificationsWorker, mtfDiamanteWebhookWorker, mtfDiamanteAsyncWorker].forEach(worker => {
   worker.on('completed', (job) => {
     console.log(`[BullMQ] Job ${job.id} concluído com sucesso`);
@@ -268,10 +475,27 @@ export async function initMtfDiamanteAsyncWorker() {
   }
 }
 
+// ============================================================================
+// PARENT WORKER INITIALIZATION FUNCTIONS
+// ============================================================================
+
+// Exportar a função de inicialização do Parent Worker
+export async function initParentWorker() {
+  try {
+    console.log('[BullMQ] Inicializando Parent Worker (High & Low Priority)...');
+    await parentWorker.waitUntilReady();
+    console.log('[BullMQ] Parent Worker inicializado com sucesso');
+  } catch (error) {
+    console.error('[BullMQ] Erro ao inicializar Parent Worker:', error);
+    throw error;
+  }
+}
+
 // Tratamento de encerramento gracioso
 process.on('SIGTERM', async () => {
   console.log('Encerrando workers...');
   await Promise.all([
+    parentWorker.shutdown(),
     agendamentoWorker.close(),
     manuscritoWorker.close(),
     leadsChatwitWorker.close(),
@@ -286,6 +510,7 @@ process.on('SIGTERM', async () => {
 process.on('SIGINT', async () => {
   console.log('Encerrando workers...');
   await Promise.all([
+    parentWorker.shutdown(),
     agendamentoWorker.close(),
     manuscritoWorker.close(),
     autoNotificationsWorker.close(),
@@ -298,6 +523,7 @@ process.on('SIGINT', async () => {
 });
 
 export {
+  parentWorker,
   agendamentoWorker,
   manuscritoWorker,
   leadsChatwitWorker,

@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const caixaId = searchParams.get("caixaId");
+    const inboxId = searchParams.get("inboxId");
 
     // Função para criar máscara segura do token
     const createTokenMask = (token: string) => {
@@ -30,46 +30,62 @@ export async function GET(request: NextRequest) {
     };
 
     // Caso 1: Busca a configuração para UMA caixa específica (com fallback para a padrão)
-    if (caixaId) {
-      let config = await db.whatsAppConfig.findFirst({
-        where: { caixaEntradaId: caixaId, usuarioChatwitId: usuarioChatwit.id },
+    if (inboxId) {
+      // Buscar configuração global primeiro
+      let config = await db.whatsAppGlobalConfig.findFirst({
+        where: { usuarioChatwitId: usuarioChatwit.id },
       });
 
+      // Buscar configuração específica da caixa
+      const inboxConfig = await db.chatwitInbox.findFirst({
+        where: { id: inboxId, usuarioChatwitId: usuarioChatwit.id },
+      });
+
+      // Se não há configuração global, usar valores do .env
       if (!config) {
-        config = await db.whatsAppConfig.findFirst({
-          where: { caixaEntradaId: null, usuarioChatwitId: usuarioChatwit.id },
-        });
+        config = {
+          id: 'env-config',
+          usuarioChatwitId: usuarioChatwit.id,
+          whatsappApiKey: process.env.WHATSAPP_TOKEN || '',
+          phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || '',
+          whatsappBusinessAccountId: process.env.WHATSAPP_BUSINESS_ID || '',
+          graphApiBaseUrl: process.env.FB_GRAPH_API_BASE || 'https://graph.facebook.com/v22.0',
+          updatedAt: new Date()
+        };
       }
 
       // Transforma a configuração para não expor o token
       const configSegura = config ? {
         ...config,
-        whatsappToken: undefined, // Remove o token completo
-        hasToken: !!config.whatsappToken,
-        tokenMask: config.whatsappToken ? createTokenMask(config.whatsappToken) : undefined
+        whatsappApiKey: undefined, // Remove o token completo
+        hasToken: !!config.whatsappApiKey,
+        tokenMask: config.whatsappApiKey ? createTokenMask(config.whatsappApiKey) : undefined,
+        fbGraphApiBase: config.graphApiBaseUrl // Mapear para o campo esperado pelo frontend
       } : null;
 
       return NextResponse.json({ success: true, config: configSegura });
     }
 
     // Caso 2: Busca TUDO para a tela principal de configurações
-    const configPadrao = await db.whatsAppConfig.findFirst({
-      where: { caixaEntradaId: null, usuarioChatwitId: usuarioChatwit.id },
+    const configPadrao = await db.whatsAppGlobalConfig.findFirst({
+      where: { usuarioChatwitId: usuarioChatwit.id },
     });
 
     // Transforma a configuração padrão para não expor o token
     const configPadraoSegura = configPadrao ? {
       ...configPadrao,
-      whatsappToken: undefined, // Remove o token completo
-      hasToken: !!configPadrao.whatsappToken,
-      tokenMask: configPadrao.whatsappToken ? createTokenMask(configPadrao.whatsappToken) : undefined
+      whatsappApiKey: undefined, // Remove o token completo
+      hasToken: !!configPadrao.whatsappApiKey,
+      tokenMask: configPadrao.whatsappApiKey ? createTokenMask(configPadrao.whatsappApiKey) : undefined,
+      fbGraphApiBase: configPadrao.graphApiBaseUrl // Mapear para o campo esperado pelo frontend
     } : null;
 
-    const caixas = await db.caixaEntrada.findMany({
+    const caixas = await db.chatwitInbox.findMany({
       where: { usuarioChatwitId: usuarioChatwit.id },
       include: {
-        configuracaoWhatsApp: true,
-        _count: { select: { templates: true, mensagensInterativas: true, mapeamentosIntencao: true } },
+        templates: true,
+        mapeamentosIntencao: true,
+        _count: { select: { templates: true, mapeamentosIntencao: true } },
       },
       orderBy: { nome: 'asc' },
     });
@@ -77,12 +93,8 @@ export async function GET(request: NextRequest) {
     // Transforma as configurações das caixas para não expor tokens
     const caixasSeguras = caixas.map(caixa => ({
       ...caixa,
-      configuracaoWhatsApp: caixa.configuracaoWhatsApp ? {
-        ...caixa.configuracaoWhatsApp,
-        whatsappToken: undefined, // Remove o token completo
-        hasToken: !!caixa.configuracaoWhatsApp.whatsappToken,
-        tokenMask: caixa.configuracaoWhatsApp.whatsappToken ? createTokenMask(caixa.configuracaoWhatsApp.whatsappToken) : undefined
-      } : null
+      whatsappApiKey: caixa.whatsappApiKey ? createTokenMask(caixa.whatsappApiKey) : undefined,
+      hasToken: !!caixa.whatsappApiKey
     }));
 
     return NextResponse.json({ success: true, configPadrao: configPadraoSegura, caixas: caixasSeguras });
@@ -102,7 +114,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { caixaId, phoneNumberId, whatsappBusinessAccountId, fbGraphApiBase, token } = body;
+    const { inboxId, phoneNumberId, whatsappBusinessAccountId, fbGraphApiBase, token } = body;
 
     if (!phoneNumberId) {
       return NextResponse.json({ error: "phoneNumberId é obrigatório" }, { status: 400 });
@@ -134,79 +146,59 @@ export async function POST(request: NextRequest) {
       return `${dots}${lastFive}`;
     };
 
-    // Prepara os dados para atualização
-    const updateData: any = { 
-      phoneNumberId,
-      whatsappBusinessAccountId,
-      fbGraphApiBase
-    };
-    
-    // Só inclui o token se foi fornecido
-    if (token) {
-      updateData.whatsappToken = token;
-    }
-
-    if (caixaId) {
-      // Configuração específica para uma caixa
-      const existingConfig = await db.whatsAppConfig.findFirst({
+    if (inboxId) {
+      // Configuração específica para uma caixa - usar ChatwitInbox
+      const existingInbox = await db.chatwitInbox.findFirst({
         where: {
+          id: inboxId,
           usuarioChatwitId: usuarioChatwit.id,
-          caixaEntradaId: caixaId,
         },
       });
 
-      if (existingConfig) {
-        // Atualiza configuração existente
-        savedConfig = await db.whatsAppConfig.update({
-          where: { id: existingConfig.id },
-          data: updateData,
-        });
-      } else {
-        // Cria nova configuração (token é obrigatório para criação)
-        if (!token) {
-          return NextResponse.json({ error: "Token é obrigatório para criar nova configuração" }, { status: 400 });
-        }
-        savedConfig = await db.whatsAppConfig.create({
-          data: {
-            phoneNumberId,
-            whatsappToken: token,
-            whatsappBusinessAccountId,
-            fbGraphApiBase,
-            usuarioChatwitId: usuarioChatwit.id,
-            caixaEntradaId: caixaId,
-            isActive: true
-          },
-        });
+      if (!existingInbox) {
+        return NextResponse.json({ error: "Caixa de entrada não encontrada" }, { status: 404 });
       }
+
+      // Atualiza a caixa de entrada com as configurações
+      savedConfig = await db.chatwitInbox.update({
+        where: { id: inboxId },
+        data: {
+          phoneNumberId,
+          whatsappBusinessAccountId,
+          whatsappApiKey: token || existingInbox.whatsappApiKey,
+        },
+      });
     } else {
-      // Configuração padrão (global) - caixaEntradaId é null
-      const existingConfig = await db.whatsAppConfig.findFirst({
+      // Configuração padrão (global) - usar WhatsAppGlobalConfig
+      const existingConfig = await db.whatsAppGlobalConfig.findFirst({
         where: {
           usuarioChatwitId: usuarioChatwit.id,
-          caixaEntradaId: null,
         },
       });
 
       if (existingConfig) {
         // Atualiza a configuração existente
-        savedConfig = await db.whatsAppConfig.update({
+        savedConfig = await db.whatsAppGlobalConfig.update({
           where: { id: existingConfig.id },
-          data: updateData,
+          data: {
+            phoneNumberId,
+            whatsappBusinessAccountId,
+            graphApiBaseUrl: fbGraphApiBase,
+            whatsappApiKey: token || existingConfig.whatsappApiKey,
+          },
         });
       } else {
         // Cria uma nova configuração padrão (token é obrigatório para criação)
         if (!token) {
           return NextResponse.json({ error: "Token é obrigatório para criar nova configuração" }, { status: 400 });
         }
-        savedConfig = await db.whatsAppConfig.create({
+        savedConfig = await db.whatsAppGlobalConfig.create({
           data: {
             phoneNumberId,
-            whatsappToken: token,
+            whatsappApiKey: token,
             whatsappBusinessAccountId,
-            fbGraphApiBase,
+            graphApiBaseUrl: fbGraphApiBase,
             usuarioChatwitId: usuarioChatwit.id,
-            caixaEntradaId: null,
-            isActive: true
           },
         });
       }
@@ -215,9 +207,10 @@ export async function POST(request: NextRequest) {
     // Transforma a configuração salva para não expor o token
     const configSegura = {
       ...savedConfig,
-      whatsappToken: undefined, // Remove o token completo
-      hasToken: !!savedConfig.whatsappToken,
-      tokenMask: savedConfig.whatsappToken ? createTokenMask(savedConfig.whatsappToken) : undefined
+      whatsappApiKey: undefined, // Remove o token completo
+      hasToken: !!savedConfig.whatsappApiKey,
+      tokenMask: savedConfig.whatsappApiKey ? createTokenMask(savedConfig.whatsappApiKey) : undefined,
+      fbGraphApiBase: 'graphApiBaseUrl' in savedConfig ? savedConfig.graphApiBaseUrl : 'https://graph.facebook.com/v22.0' // Mapear para o campo esperado pelo frontend
     };
 
     return NextResponse.json({ success: true, config: configSegura });
