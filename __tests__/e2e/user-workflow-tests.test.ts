@@ -70,7 +70,7 @@ describe('Complete User Workflows E2E Tests', () => {
 
   beforeAll(async () => {
     // Import webhook handler after mocks are set up
-    const webhookModule = await import('@/app/api/admin/mtf-diamante/whatsapp/webhook/route');
+    const webhookModule = await import('@/app/api/admin/mtf-diamante/dialogflow/webhook/route');
     POST = webhookModule.POST;
   });
 

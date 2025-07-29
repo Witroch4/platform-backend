@@ -30,7 +30,7 @@ const TEST_SUITES: TestSuite[] = [
   {
     name: 'Unit Tests - Webhook Route',
     description: 'Tests webhook request parsing and task creation logic',
-    command: 'npx jest app/api/admin/mtf-diamante/whatsapp/webhook/__tests__/route.test.ts --verbose',
+    command: 'npx jest app/api/admin/mtf-diamante/dialogflow/webhook/__tests__/route.test.ts --verbose',
     required: true,
     timeout: 30000
   },

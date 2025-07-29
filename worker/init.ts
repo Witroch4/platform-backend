@@ -4,6 +4,7 @@ import {
   initLeadsChatwitWorker, 
   initMtfDiamanteWebhookWorker, 
   initMtfDiamanteAsyncWorker,
+  initInstagramTranslationWorker,
   initParentWorker 
 } from './webhook.worker';
 import { initializeExistingAgendamentos } from '../lib/scheduler-bullmq';
@@ -46,6 +47,9 @@ export async function initializeWorkers() {
 
     // Inicializa o worker assíncrono MTF Diamante
     await initMtfDiamanteAsyncWorker();
+
+    // Inicializa o worker de tradução Instagram
+    await initInstagramTranslationWorker();
 
     // ============================================================================
     // SHARED INITIALIZATION

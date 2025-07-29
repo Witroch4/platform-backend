@@ -80,7 +80,7 @@ Successfully implemented enhanced webhook processing for automatic reactions, fu
 
 ## Key Implementation Files
 
-### 1. Enhanced Webhook Route (`app/api/admin/mtf-diamante/whatsapp/webhook/route.ts`)
+### 1. Enhanced Webhook Route (`app/api/admin/mtf-diamante/dialogflow/webhook/route.ts`)
 - **Changes**: Enhanced `parseDialogflowRequest` function
 - **Features**: 
   - Multi-format button click detection

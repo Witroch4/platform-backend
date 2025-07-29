@@ -19,7 +19,7 @@ export interface WebhookTaskData {
     originalMessageId: string;
     emoji: string;
     buttonId: string;
-    caixaId?: string; // Add caixaId to reactionData
+    inboxId?: string; // Change from caixaId to inboxId
   };
 }
 
@@ -67,7 +67,7 @@ export interface SendMessageTask {
   };
   metadata?: {
     intentName?: string;
-    caixaId?: string;
+    inboxId?: string; // Change from caixaId to inboxId
     phoneNumberId?: string; // Add phoneNumberId to metadata
     originalPayload?: any; // For debugging purposes
   };
@@ -82,7 +82,7 @@ export interface SendReactionTask {
   correlationId?: string; // For request tracing
   metadata?: {
     buttonId?: string;
-    caixaId?: string; // Add caixaId to metadata
+    inboxId?: string; // Change from caixaId to inboxId
     phoneNumberId?: string; // Add phoneNumberId to metadata
     originalPayload?: any; // For debugging purposes
   };
@@ -382,7 +382,7 @@ export function createTemplateMessageTask(data: {
   correlationId?: string;
   metadata?: {
     intentName?: string;
-    caixaId?: string;
+    inboxId?: string; // Change from caixaId to inboxId
     phoneNumberId?: string;
     originalPayload?: any;
   };
@@ -410,7 +410,7 @@ export function createInteractiveMessageTask(data: {
   correlationId?: string;
   metadata?: {
     intentName?: string;
-    caixaId?: string;
+    inboxId?: string; // Change from caixaId to inboxId
     phoneNumberId?: string;
     originalPayload?: any;
   };

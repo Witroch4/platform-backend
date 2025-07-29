@@ -13,7 +13,7 @@ Successfully implemented enhanced webhook processing for automatic reactions in 
 - Added proper relations between User and ButtonReactionMapping models
 
 ### 2. Webhook Processing Enhancement
-- **Enhanced webhook route** (`app/api/admin/mtf-diamante/whatsapp/webhook/route.ts`)
+- **Enhanced webhook route** (`app/api/admin/mtf-diamante/dialogflow/webhook/route.ts`)
   - Improved button click detection for both button_reply and list_reply types
   - Added support for processing both emoji and text reactions simultaneously
   - Enhanced error handling and logging with correlation IDs
@@ -152,7 +152,7 @@ All tests pass successfully, confirming:
 
 ### Core Implementation Files
 - `prisma/schema.prisma` - Enhanced ButtonReactionMapping model
-- `app/api/admin/mtf-diamante/whatsapp/webhook/route.ts` - Enhanced webhook processing
+- `app/api/admin/mtf-diamante/dialogflow/webhook/route.ts` - Enhanced webhook processing
 - `worker/WebhookWorkerTasks/mtf-diamante-webhook.task.ts` - Enhanced worker processing
 - `lib/queue/mtf-diamante-webhook.queue.ts` - Enhanced queue system
 - `lib/whatsapp-messages.ts` - Added text message functionality

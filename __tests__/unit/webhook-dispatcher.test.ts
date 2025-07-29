@@ -14,7 +14,7 @@ jest.mock('@/lib/queue/resposta-rapida.queue');
 jest.mock('@/lib/queue/persistencia-credenciais.queue');
 
 // Import the webhook handler
-import { POST } from '@/app/api/admin/mtf-diamante/whatsapp/webhook/route';
+import { POST } from '@/app/api/admin/mtf-diamante/dialogflow/webhook/route';
 import {
   generateCorrelationId,
   logWithCorrelationId,

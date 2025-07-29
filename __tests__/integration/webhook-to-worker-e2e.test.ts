@@ -109,7 +109,7 @@ const mockAddRespostaRapidaJob = addRespostaRapidaJob as jest.MockedFunction<typ
 const mockAddPersistenciaCredenciaisJob = addPersistenciaCredenciaisJob as jest.MockedFunction<typeof addPersistenciaCredenciaisJob>;
 
 // Import the webhook handler
-import { POST as webhookHandler } from '@/app/api/admin/mtf-diamante/whatsapp/webhook/route';
+import { POST as webhookHandler } from '@/app/api/admin/mtf-diamante/dialogflow/webhook/route';
 
 // Import task processors for direct testing
 import { processRespostaRapidaTask } from '@/worker/WebhookWorkerTasks/respostaRapida.worker.task';
@@ -146,7 +146,7 @@ describe('Webhook to Worker End-to-End Integration Tests', () => {
         },
       };
 
-      const request = new NextRequest('http://localhost:3000/api/admin/mtf-diamante/whatsapp/webhook', {
+      const request = new NextRequest('http://localhost:3000/api/admin/mtf-diamante/dialogflow/webhook', {
         method: 'POST',
         body: JSON.stringify(webhookPayload),
         headers: {
@@ -323,7 +323,7 @@ describe('Webhook to Worker End-to-End Integration Tests', () => {
         }],
       };
 
-      const request = new NextRequest('http://localhost:3000/api/admin/mtf-diamante/whatsapp/webhook', {
+      const request = new NextRequest('http://localhost:3000/api/admin/mtf-diamante/dialogflow/webhook', {
         method: 'POST',
         body: JSON.stringify(webhookPayload),
         headers: {
@@ -449,7 +449,7 @@ describe('Webhook to Worker End-to-End Integration Tests', () => {
         },
       };
 
-      const request = new NextRequest('http://localhost:3000/api/admin/mtf-diamante/whatsapp/webhook', {
+      const request = new NextRequest('http://localhost:3000/api/admin/mtf-diamante/dialogflow/webhook', {
         method: 'POST',
         body: JSON.stringify(malformedPayload),
         headers: {
@@ -495,7 +495,7 @@ describe('Webhook to Worker End-to-End Integration Tests', () => {
         },
       };
 
-      const request = new NextRequest('http://localhost:3000/api/admin/mtf-diamante/whatsapp/webhook', {
+      const request = new NextRequest('http://localhost:3000/api/admin/mtf-diamante/dialogflow/webhook', {
         method: 'POST',
         body: JSON.stringify(webhookPayload),
         headers: {
@@ -572,7 +572,7 @@ describe('Webhook to Worker End-to-End Integration Tests', () => {
         },
       };
 
-      const request = new NextRequest('http://localhost:3000/api/admin/mtf-diamante/whatsapp/webhook', {
+      const request = new NextRequest('http://localhost:3000/api/admin/mtf-diamante/dialogflow/webhook', {
         method: 'POST',
         body: JSON.stringify(webhookPayload),
         headers: {
@@ -668,7 +668,7 @@ describe('Webhook to Worker End-to-End Integration Tests', () => {
             },
           },
         },
-        request: new NextRequest('http://localhost:3000/api/admin/mtf-diamante/whatsapp/webhook', {
+        request: new NextRequest('http://localhost:3000/api/admin/mtf-diamante/dialogflow/webhook', {
           method: 'POST',
           body: JSON.stringify({
             originalDetectIntentRequest: {
@@ -775,7 +775,7 @@ describe('Webhook to Worker End-to-End Integration Tests', () => {
         },
       };
 
-      const request = new NextRequest('http://localhost:3000/api/admin/mtf-diamante/whatsapp/webhook', {
+      const request = new NextRequest('http://localhost:3000/api/admin/mtf-diamante/dialogflow/webhook', {
         method: 'POST',
         body: JSON.stringify(webhookPayload),
         headers: {

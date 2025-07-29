@@ -78,7 +78,7 @@ graph TB
 
 ### 1. Webhook Dispatcher
 
-**Arquivo**: `app/api/admin/mtf-diamante/whatsapp/webhook/route.ts`
+**Arquivo**: `app/api/admin/mtf-diamante/dialogflow/webhook/route.ts`
 
 ```typescript
 interface WebhookPayload {

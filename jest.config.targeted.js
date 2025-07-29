@@ -72,7 +72,7 @@ const customJestConfig = {
       lines: 85,
       statements: 85,
     },
-    './app/api/admin/mtf-diamante/whatsapp/webhook/route.ts': {
+    './app/api/admin/mtf-diamante/dialogflow/webhook/route.ts': {
       branches: 85,
       functions: 85,
       lines: 85,
@@ -87,7 +87,7 @@ const customJestConfig = {
     'worker/WebhookWorkerTasks/**/*.ts',
     'lib/queue/**/*.ts',
     'lib/cache/**/*.ts',
-    'app/api/admin/mtf-diamante/whatsapp/webhook/route.ts',
+    'app/api/admin/mtf-diamante/dialogflow/webhook/route.ts',
     
     // Frontend component files
     'app/admin/mtf-diamante/components/TemplatesTab/**/*.tsx',

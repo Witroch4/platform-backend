@@ -33,7 +33,7 @@ O erro "Object with ID 'messages' does not exist" ocorria porque o `phoneNumberI
   - `sendTextMessage`
   - `sendReactionMessage`
 
-### 6. Webhook MTF Diamante (`app/api/admin/mtf-diamante/whatsapp/webhook/route.ts`)
+### 6. Webhook MTF Diamante (`app/api/admin/mtf-diamante/dialogflow/webhook/route.ts`)
 - ✅ Adicionado `phoneNumberId` ao metadata quando os tasks são criados:
   - Template tasks
   - Interactive tasks

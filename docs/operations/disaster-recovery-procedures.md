@@ -73,7 +73,7 @@ psql -h localhost -U username -d chatwit_prod -c "SELECT 1;"
 pm2 restart all
 
 # 4. Verify webhook endpoint
-curl -X POST http://localhost:3000/api/admin/mtf-diamante/whatsapp/webhook \
+curl -X POST http://localhost:3000/api/admin/mtf-diamante/dialogflow/webhook \
   -H "Content-Type: application/json" \
   -d '{"test": "recovery"}' \
   -w "Response time: %{time_total}s\n"
@@ -292,7 +292,7 @@ pm2 restart all
 watch -n 10 'curl -s http://localhost:3000/api/admin/monitoring/queues | jq ".overview"'
 
 # 5. Test job processing
-curl -X POST http://localhost:3000/api/admin/mtf-diamante/whatsapp/webhook \
+curl -X POST http://localhost:3000/api/admin/mtf-diamante/dialogflow/webhook \
   -H "Content-Type: application/json" \
   -d '{"test": "queue_recovery"}'
 ```

@@ -116,7 +116,7 @@ curl -s http://localhost:3000/api/admin/monitoring/alerts?component=webhook&leve
 1. **Check Payload Validation:**
 ```bash
 # Test webhook with sample payload
-curl -X POST http://localhost:3000/api/admin/mtf-diamante/whatsapp/webhook \
+curl -X POST http://localhost:3000/api/admin/mtf-diamante/dialogflow/webhook \
   -H "Content-Type: application/json" \
   -d '{
     "originalDetectIntentRequest": {

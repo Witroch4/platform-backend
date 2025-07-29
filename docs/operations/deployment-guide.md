@@ -166,7 +166,7 @@ curl http://localhost:3000/api/admin/monitoring/database
 
 ```bash
 # Test webhook response time
-curl -X POST http://localhost:3000/api/admin/mtf-diamante/whatsapp/webhook \
+curl -X POST http://localhost:3000/api/admin/mtf-diamante/dialogflow/webhook \
   -H "Content-Type: application/json" \
   -d '{"test": "payload"}' \
   -w "Response time: %{time_total}s\n"
@@ -570,7 +570,4 @@ EOF
 - Application: `GET /api/health`
 - Monitoring: `GET /api/admin/monitoring/dashboard`
 - Queues: `GET /api/admin/monitoring/queues`
-- Database: `GET /api/admin/monitoring/database`
-- Alerts: `GET /api/admin/monitoring/alerts`
-
-This deployment guide provides comprehensive instructions for deploying and maintaining the refactored ChatWit system with optimal performance and reliability.
+- Database: `

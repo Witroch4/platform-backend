@@ -29,6 +29,7 @@ import {
   sanitizeWebhookPayload,
   logUnifiedWebhookData,
   logWebhookError,
+  detectChannelType,
   UnifiedWebhookPayload,
   ExtractedWebhookData,
 } from "@/lib/webhook-utils";
@@ -36,6 +37,41 @@ import {
   findCompleteMessageMappingByIntent,
   findReactionByButtonId,
 } from "@/lib/dialogflow-database-queries";
+import {
+  addInstagramTranslationJob,
+  createInstagramTranslationJob,
+  waitForInstagramTranslationResult,
+  generateCorrelationId as generateInstagramCorrelationId,
+  logWithCorrelationId as logInstagramWithCorrelationId,
+} from "@/lib/queue/instagram-translation.queue";
+
+// Feature flag constants
+const FEATURE_FLAGS = {
+  NEW_WEBHOOK_PROCESSING: 'NEW_WEBHOOK_PROCESSING',
+  UNIFIED_PAYLOAD_EXTRACTION: 'UNIFIED_PAYLOAD_EXTRACTION',
+  HIGH_PRIORITY_QUEUE: 'HIGH_PRIORITY_QUEUE',
+  LOW_PRIORITY_QUEUE: 'LOW_PRIORITY_QUEUE',
+} as const;
+
+// Initialize Prisma and Redis instances
+const prisma = new PrismaClient();
+const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+
+// Feature flag manager instance
+const featureFlagManager = FeatureFlagManager.getInstance(prisma, redis);
+
+// Helper function to check if feature flag is enabled
+async function isFeatureEnabled(
+  flagName: string,
+  metadata?: Record<string, any>
+): Promise<boolean> {
+  try {
+    return await featureFlagManager.isEnabled(flagName, undefined, undefined, metadata);
+  } catch (error) {
+    console.error(`[FeatureFlag] Error checking flag ${flagName}:`, error);
+    return false; // Default to disabled on error
+  }
+}
 
 /**
  * Parse Dialogflow request to identify request type
@@ -475,6 +511,140 @@ async function processButtonClickRequest(
 }
 
 /**
+ * Handle Instagram translation with deferred response logic
+ */
+async function handleInstagramTranslation(
+  req: any,
+  correlationId: string,
+  startTime: number,
+  payloadSize: number
+): Promise<Response> {
+  try {
+    logInstagramWithCorrelationId('info', 'Processing Instagram translation request', correlationId);
+
+    // Extract webhook data for Instagram processing
+    const webhookData = extractWebhookData(req);
+    
+    // Validate required data for Instagram translation
+    if (!webhookData.intentName || !webhookData.inboxId || !webhookData.contactPhone) {
+      logInstagramWithCorrelationId('error', 'Missing required data for Instagram translation', correlationId, {
+        hasIntentName: !!webhookData.intentName,
+        hasInboxId: !!webhookData.inboxId,
+        hasContactPhone: !!webhookData.contactPhone,
+      });
+      
+      // Return fallback response for Dialogflow
+      return createDialogflowFallbackResponse(correlationId, 'Missing required data for Instagram translation');
+    }
+
+    // Create Instagram translation job
+    const instagramJobData = createInstagramTranslationJob({
+      intentName: webhookData.intentName,
+      inboxId: webhookData.inboxId,
+      contactPhone: webhookData.contactPhone,
+      conversationId: webhookData.conversationId,
+      originalPayload: req,
+      correlationId: generateInstagramCorrelationId(),
+    });
+
+    // Queue the Instagram translation job
+    const jobId = await addInstagramTranslationJob(instagramJobData);
+    logInstagramWithCorrelationId('info', 'Instagram translation job queued', correlationId, { jobId });
+
+    // Wait for worker completion with 4.5 second timeout
+    const result = await waitForInstagramTranslationResult(instagramJobData.correlationId, 4500);
+    
+    const responseTime = performance.now() - startTime;
+    
+    // Record webhook metrics
+    recordWebhookMetrics({
+      responseTime,
+      timestamp: new Date(),
+      correlationId,
+      success: result.success,
+      payloadSize,
+      interactionType: 'intent',
+    });
+
+    if (result.success && result.fulfillmentMessages) {
+      logInstagramWithCorrelationId('info', 'Instagram translation completed successfully', correlationId, {
+        processingTime: result.processingTime,
+        responseTime,
+      });
+
+      // Return successful Instagram response to Dialogflow
+      return new Response(JSON.stringify({
+        fulfillmentMessages: result.fulfillmentMessages,
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'X-Correlation-ID': correlationId,
+        },
+      });
+    } else {
+      logInstagramWithCorrelationId('error', 'Instagram translation failed', correlationId, {
+        error: result.error,
+        processingTime: result.processingTime,
+        responseTime,
+      });
+
+      // Return fallback response for Dialogflow
+      return createDialogflowFallbackResponse(correlationId, result.error || 'Instagram translation failed');
+    }
+
+  } catch (error) {
+    const responseTime = performance.now() - startTime;
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    logInstagramWithCorrelationId('error', 'Critical error in Instagram translation', correlationId, {
+      error: errorMessage,
+      responseTime,
+    });
+
+    // Record error metrics
+    recordWebhookMetrics({
+      responseTime,
+      timestamp: new Date(),
+      correlationId,
+      success: false,
+      error: errorMessage,
+      payloadSize,
+      interactionType: 'intent',
+    });
+
+    // Return fallback response for Dialogflow
+    return createDialogflowFallbackResponse(correlationId, errorMessage);
+  }
+}
+
+/**
+ * Create fallback response for Dialogflow when Instagram translation fails
+ */
+function createDialogflowFallbackResponse(correlationId: string, error: string): Response {
+  const fallbackMessage = {
+    fulfillmentMessages: [
+      {
+        text: {
+          text: ["Desculpe, não foi possível processar sua mensagem no momento. Tente novamente."]
+        }
+      }
+    ]
+  };
+
+  return new Response(JSON.stringify(fallbackMessage), {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'X-Correlation-ID': correlationId,
+      'X-Error': error,
+    },
+  });
+}
+
+/**
  * Main webhook handler - Optimized for millisecond response
  * Extracts payload data in under 50ms and returns 202 Accepted immediately
  */
@@ -493,6 +663,18 @@ export async function POST(request: Request) {
     correlationId = generateCorrelationId();
     
     console.log(`[MTF Diamante Dispatcher] [${correlationId}] Received Dialogflow request`);
+
+    // Detect channel type for Instagram translation
+    const channelDetection = detectChannelType(req);
+    console.log(`[MTF Diamante Dispatcher] [${correlationId}] Channel detection:`, {
+      isInstagram: channelDetection.isInstagram,
+      channelType: channelDetection.channelType,
+    });
+
+    // Handle Instagram translation with deferred response
+    if (channelDetection.isInstagram) {
+      return await handleInstagramTranslation(req, correlationId, startTime, payloadSize);
+    }
 
     // Check if new webhook processing is enabled
     const useNewWebhookProcessing = await isFeatureEnabled(FEATURE_FLAGS.NEW_WEBHOOK_PROCESSING, {

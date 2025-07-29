@@ -19,6 +19,8 @@ import { LEADS_QUEUE_NAME } from '@/lib/queue/leads-chatwit.queue';
 import { processLeadChatwitTask } from './WebhookWorkerTasks/leads-chatwit.task';
 import { processMtfDiamanteWebhookTask } from './WebhookWorkerTasks/mtf-diamante-webhook.task';
 import { MTF_DIAMANTE_WEBHOOK_QUEUE_NAME } from '@/lib/queue/mtf-diamante-webhook.queue';
+import { processInstagramTranslationTask } from './WebhookWorkerTasks/instagram-translation.task';
+import { INSTAGRAM_TRANSLATION_QUEUE_NAME } from '@/lib/queue/instagram-translation.queue';
 
 // Import new task modules
 import { 
@@ -319,8 +321,19 @@ const mtfDiamanteAsyncWorker = new Worker(
   }
 );
 
+// Worker para processar tradução de mensagens para Instagram
+const instagramTranslationWorker = new Worker(
+  INSTAGRAM_TRANSLATION_QUEUE_NAME,
+  processInstagramTranslationTask,
+  {
+    connection,
+    concurrency: 100, // High concurrency for IO-bound translation tasks
+    lockDuration: 5000, // 5 second timeout to ensure webhook response within limits
+  }
+);
+
 // Tratamento de eventos dos workers legados
-[agendamentoWorker, manuscritoWorker, leadCellsWorker, leadsChatwitWorker, autoNotificationsWorker, mtfDiamanteWebhookWorker, mtfDiamanteAsyncWorker].forEach(worker => {
+[agendamentoWorker, manuscritoWorker, leadCellsWorker, leadsChatwitWorker, autoNotificationsWorker, mtfDiamanteWebhookWorker, mtfDiamanteAsyncWorker, instagramTranslationWorker].forEach(worker => {
   worker.on('completed', (job) => {
     console.log(`[BullMQ] Job ${job.id} concluído com sucesso`);
   });
@@ -475,6 +488,18 @@ export async function initMtfDiamanteAsyncWorker() {
   }
 }
 
+// Exportar a função de inicialização do worker de tradução Instagram
+export async function initInstagramTranslationWorker() {
+  try {
+    console.log('[BullMQ] Inicializando worker de tradução Instagram...');
+    await instagramTranslationWorker.waitUntilReady();
+    console.log('[BullMQ] Worker de tradução Instagram inicializado com sucesso');
+  } catch (error) {
+    console.error('[BullMQ] Erro ao inicializar worker de tradução Instagram:', error);
+    throw error;
+  }
+}
+
 // ============================================================================
 // PARENT WORKER INITIALIZATION FUNCTIONS
 // ============================================================================
@@ -502,6 +527,7 @@ process.on('SIGTERM', async () => {
     autoNotificationsWorker.close(),
     mtfDiamanteWebhookWorker.close(),
     mtfDiamanteAsyncWorker.close(),
+    instagramTranslationWorker.close(),
   ]);
   await prisma.$disconnect();
   process.exit(0);
@@ -528,5 +554,6 @@ export {
   manuscritoWorker,
   leadsChatwitWorker,
   autoNotificationsWorker,
-  mtfDiamanteWebhookWorker
+  mtfDiamanteWebhookWorker,
+  instagramTranslationWorker
 };

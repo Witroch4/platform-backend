@@ -424,6 +424,36 @@ export function logWebhookData(data: ExtractedWebhookData, payload: any): void {
 }
 
 /**
+ * Detects the channel type from Dialogflow payload
+ */
+export function detectChannelType(payload: any): {
+  isInstagram: boolean;
+  channelType: string;
+  originalPayload: any;
+} {
+  // Handle null/undefined payloads
+  if (!payload || typeof payload !== 'object') {
+    return {
+      isInstagram: false,
+      channelType: 'unknown',
+      originalPayload: payload,
+    };
+  }
+
+  // Extract channel_type from originalDetectIntentRequest.payload
+  const channelType = payload.originalDetectIntentRequest?.payload?.channel_type || '';
+  
+  // Check if it's Instagram channel
+  const isInstagram = channelType === 'Channel::Instagram';
+  
+  return {
+    isInstagram,
+    channelType,
+    originalPayload: payload,
+  };
+}
+
+/**
  * Enhanced logging function with correlation ID support for unified webhook data
  */
 export function logUnifiedWebhookData(

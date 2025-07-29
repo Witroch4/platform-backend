@@ -37,7 +37,7 @@ Foi implementado um sistema completo de reações automáticas que detecta quand
 - Worker `processSendReaction()` para processar envio de reações
 
 ### 4. Detecção de Cliques em Botões no Webhook
-**Arquivo:** `app/api/admin/mtf-diamante/whatsapp/webhook/route.ts` (atualizado)
+**Arquivo:** `app/api/admin/mtf-diamante/dialogflow/webhook/route.ts` (atualizado)
 
 - Função `detectAndProcessButtonReply()` para detectar cliques em botões
 - Extração automática do ID do botão e WAMID da mensagem original

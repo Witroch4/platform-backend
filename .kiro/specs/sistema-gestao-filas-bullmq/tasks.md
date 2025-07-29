@@ -129,7 +129,9 @@
   - Adicionar notificações em tempo real via WebSocket
   - _Requisitos: 2.1, 2.2, 2.5_
 
-- [-] 6. Implementar API e integrações externas
+- [x] 6. Implementar API e integrações externas
+
+
 
 
 
@@ -138,20 +140,25 @@
   - Adicionar documentação automática OpenAPI/Swagger
   - _Requisitos: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7_
 
-- [-] 6.1 Implementar endpoints de monitoramento
+- [x] 6.1 Implementar endpoints de monitoramento
+
 
   - Criar /api/admin/queues com operações CRUD
   - Implementar /api/admin/jobs com controle granular
   - Adicionar /api/admin/metrics com export de dados
   - _Requisitos: 7.1, 7.2, 7.5_
 
-- [ ] 6.2 Implementar sistema de webhooks
+- [x] 6.2 Implementar sistema de webhooks
+
+
   - Criar /api/admin/webhooks para configuração
   - Implementar entrega confiável com retry e DLQ
   - Adicionar autenticação por API key e rate limiting
   - _Requisitos: 7.3, 7.4, 7.6_
 
-- [ ] 6.3 Implementar documentação automática da API
+- [x] 6.3 Implementar documentação automática da API
+
+
   - Gerar documentação OpenAPI/Swagger
   - Criar exemplos de uso para cada endpoint
   - Implementar testes automatizados da API

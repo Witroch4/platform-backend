@@ -1324,7 +1324,7 @@ class LoadTester {
 }
 
 // Usage
-const loadTester = new LoadTester('http://localhost:3000/api/admin/mtf-diamante/whatsapp/webhook');
+const loadTester = new LoadTester('http://localhost:3000/api/admin/mtf-diamante/dialogflow/webhook');
 const results = await loadTester.runLoadTest();
 console.log('Load test results:', results);
 ```

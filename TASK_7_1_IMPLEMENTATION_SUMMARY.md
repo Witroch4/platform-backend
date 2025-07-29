@@ -26,7 +26,7 @@ Successfully refactored the worker architecture from individual workers to a uni
 - **Updated `initializeWorkers()`**: Now initializes Parent Worker alongside legacy workers
 - **Maintained backward compatibility**: All existing workers still initialized
 
-### 4. Webhook Dispatcher Integration (`app/api/admin/mtf-diamante/whatsapp/webhook/route.ts`)
+### 4. Webhook Dispatcher Integration (`app/api/admin/mtf-diamante/dialogflow/webhook/route.ts`)
 - **Updated `queueHighPriorityJob()`**: Now uses `addRespostaRapidaJob()` with proper job creation
 - **Updated `queueLowPriorityJob()`**: Now uses `addPersistenciaCredenciaisJob()` with proper job creation
 - **Job Name Consistency**: All job names align with Parent Worker delegation logic
@@ -109,4 +109,4 @@ The Parent Worker architecture is now ready to handle the new unified webhook sy
 - `worker/init.ts` - Updated to initialize Parent Worker
 - `worker/WebhookWorkerTasks/respostaRapida.worker.task.ts` - Added export function
 - `worker/WebhookWorkerTasks/persistencia.worker.task.ts` - Added export function
-- `app/api/admin/mtf-diamante/whatsapp/webhook/route.ts` - Updated job queuing functions
+- `app/api/admin/mtf-diamante/dialogflow/webhook/route.ts` - Updated job queuing functions

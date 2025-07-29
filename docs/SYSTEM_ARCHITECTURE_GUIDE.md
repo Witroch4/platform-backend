@@ -21,7 +21,7 @@ chatwit-sistema-refatoracao/
 
 ## 🚀 Sistema de Webhook (Core)
 
-### `app/api/admin/mtf-diamante/whatsapp/webhook/route.ts`
+### `app/api/admin/mtf-diamante/dialogflow/webhook/route.ts`
 **Função Principal**: Endpoint principal para recebimento de webhooks do WhatsApp/Dialogflow
 
 **Principais Funções**:

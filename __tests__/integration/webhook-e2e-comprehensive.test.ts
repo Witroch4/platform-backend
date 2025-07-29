@@ -58,7 +58,7 @@ describe('Webhook E2E Integration Tests', () => {
 
   beforeAll(async () => {
     // Import the webhook handler after mocks are set up
-    const module = await import('@/app/api/admin/mtf-diamante/whatsapp/webhook/route');
+    const module = await import('@/app/api/admin/mtf-diamante/dialogflow/webhook/route');
     POST = module.POST;
   });
 

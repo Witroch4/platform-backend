@@ -15,7 +15,8 @@ const getAxiosConfig = (token: string) => ({
 
 /**
  * ATIVA um agente Dialogflow.
- * Cria um novo hook de integração e garante que nenhum outro agente esteja ativo na mesma caixa.
+ * Se o hook já existe, usa PATCH para ativá-lo. Se não existe, cria um novo com POST.
+ * Garante que nenhum outro agente esteja ativo na mesma caixa.
  * Método: POST
  */
 export async function POST(
@@ -97,9 +98,9 @@ export async function POST(
         `[Transação] ${agentesParaDesativar.count} agentes foram desativados localmente.`
       );
 
-      // 1.5. Deletar hooks dos agentes que foram desativados
+      // 1.5. Desativar hooks dos agentes que foram desativados usando PATCH
       if (agentesParaDesativar.count > 0) {
-        console.log(`[Transação] Deletando hooks dos agentes desativados...`);
+        console.log(`[Transação] Desativando hooks dos agentes desativados...`);
         
         // Buscar os agentes que foram desativados para pegar seus hookIds
         const agentesDesativados = await tx.agenteDialogflow.findMany({
@@ -111,74 +112,115 @@ export async function POST(
           },
         });
 
-        console.log(`[Transação] Encontrados ${agentesDesativados.length} agentes com hooks para deletar`);
+        console.log(`[Transação] Encontrados ${agentesDesativados.length} agentes com hooks para desativar`);
 
-        // Deletar cada hook no Chatwit
+        // Desativar cada hook no Chatwit usando PATCH
         for (const agente of agentesDesativados) {
           if (agente.hookId) {
             try {
-              console.log(`[Transação] Deletando hook ${agente.hookId} do agente ${agente.nome}...`);
+              console.log(`[Transação] Desativando hook ${agente.hookId} do agente ${agente.nome}...`);
               
-              await axios.delete(
+              await axios.patch(
                 `${baseURL}/api/v1/accounts/${accountId}/integrations/hooks/${agente.hookId}`,
+                {
+                  status: 0, // Desativar o hook
+                  settings: {
+                    project_id: agente.projectId,
+                    credentials: JSON.parse(agente.credentials),
+                    region: agente.region,
+                  }
+                },
                 getAxiosConfig(accessToken)
               );
               
-              console.log(`[Transação] Hook ${agente.hookId} deletado com sucesso`);
-              
-              // Limpar o hookId no banco
-              await tx.agenteDialogflow.update({
-                where: { id: agente.id },
-                data: { hookId: null },
-              });
+              console.log(`[Transação] Hook ${agente.hookId} desativado com sucesso`);
               
             } catch (hookError) {
-              console.error(`[Transação] Erro ao deletar hook ${agente.hookId}:`, hookError);
-              // Não falha a transação se não conseguir deletar o hook
+              console.error(`[Transação] Erro ao desativar hook ${agente.hookId}:`, hookError);
+              // Não falha a transação se não conseguir desativar o hook
             }
           }
         }
       }
 
-      // 2. Cria o novo hook na API externa
-      console.log(`[Transação] Criando novo hook via POST...`);
-      let novoHookId: string;
-      try {
-        const hookResponse = await axios.post(
-          `${baseURL}/api/v1/accounts/${accountId}/integrations/hooks`,
-          {
-            app_id: "dialogflow",
-            inbox_id: Number.parseInt(agenteParaAtivar.inbox.inboxId),
-            status: 1, // Sempre ativo
-            settings: {
-              project_id: agenteParaAtivar.projectId,
-              credentials: JSON.parse(agenteParaAtivar.credentials),
-              region: agenteParaAtivar.region, // Adicionando a região
+      // 2. Verificar se o agente já tem um hookId
+      let hookIdParaUsar: string;
+      
+      if (agenteParaAtivar.hookId) {
+        // Hook já existe, usar PATCH para ativá-lo
+        console.log(`[Transação] Hook já existe (${agenteParaAtivar.hookId}), ativando via PATCH...`);
+        
+        try {
+          const hookResponse = await axios.patch(
+            `${baseURL}/api/v1/accounts/${accountId}/integrations/hooks/${agenteParaAtivar.hookId}`,
+            {
+              status: 1, // Ativar o hook
+              settings: {
+                project_id: agenteParaAtivar.projectId,
+                credentials: JSON.parse(agenteParaAtivar.credentials),
+                region: agenteParaAtivar.region,
+              },
             },
-          },
-          getAxiosConfig(accessToken)
-        );
-        novoHookId = hookResponse.data.id.toString();
-        console.log(
-          `[Transação] Novo hook ${novoHookId} criado com sucesso na API.`
-        );
-        console.log(
-          `[Transação] Configurações enviadas: project_id=${agenteParaAtivar.projectId}, region=${agenteParaAtivar.region}`
-        );
-      } catch (apiError) {
-        const errorMessage =
-          ((apiError as AxiosError).response?.data as any)?.message ||
-          (apiError as Error).message;
-        console.error(`❌ FALHA CRÍTICA na API durante a criação do hook:`, {
-          message: errorMessage,
-        });
-        throw new Error(`Erro ao criar hook na API externa: ${errorMessage}`);
+            getAxiosConfig(accessToken)
+          );
+          
+          hookIdParaUsar = agenteParaAtivar.hookId;
+          console.log(
+            `[Transação] Hook ${hookIdParaUsar} ativado com sucesso via PATCH.`
+          );
+          console.log(
+            `[Transação] Configurações enviadas: project_id=${agenteParaAtivar.projectId}, region=${agenteParaAtivar.region}`
+          );
+        } catch (apiError) {
+          const errorMessage =
+            ((apiError as AxiosError).response?.data as any)?.message ||
+            (apiError as Error).message;
+          console.error(`❌ FALHA CRÍTICA na API durante a ativação do hook:`, {
+            message: errorMessage,
+          });
+          throw new Error(`Erro ao ativar hook na API externa: ${errorMessage}`);
+        }
+      } else {
+        // Hook não existe, criar um novo com POST
+        console.log(`[Transação] Hook não existe, criando novo via POST...`);
+        
+        try {
+          const hookResponse = await axios.post(
+            `${baseURL}/api/v1/accounts/${accountId}/integrations/hooks`,
+            {
+              app_id: "dialogflow",
+              inbox_id: Number.parseInt(agenteParaAtivar.inbox.inboxId),
+              status: 1, // Sempre ativo
+              settings: {
+                project_id: agenteParaAtivar.projectId,
+                credentials: JSON.parse(agenteParaAtivar.credentials),
+                region: agenteParaAtivar.region,
+              },
+            },
+            getAxiosConfig(accessToken)
+          );
+          hookIdParaUsar = hookResponse.data.id.toString();
+          console.log(
+            `[Transação] Novo hook ${hookIdParaUsar} criado com sucesso via POST.`
+          );
+          console.log(
+            `[Transação] Configurações enviadas: project_id=${agenteParaAtivar.projectId}, region=${agenteParaAtivar.region}`
+          );
+        } catch (apiError) {
+          const errorMessage =
+            ((apiError as AxiosError).response?.data as any)?.message ||
+            (apiError as Error).message;
+          console.error(`❌ FALHA CRÍTICA na API durante a criação do hook:`, {
+            message: errorMessage,
+          });
+          throw new Error(`Erro ao criar hook na API externa: ${errorMessage}`);
+        }
       }
 
-      // 3. Atualiza o agente no nosso banco com o status ativo e o novo hookId
+      // 3. Atualiza o agente no nosso banco com o status ativo e o hookId
       return tx.agenteDialogflow.update({
         where: { id: id },
-        data: { ativo: true, hookId: novoHookId },
+        data: { ativo: true, hookId: hookIdParaUsar },
       });
     });
 
@@ -200,7 +242,7 @@ export async function POST(
 
 /**
  * DESATIVA um agente Dialogflow.
- * Deleta o hook de integração associado.
+ * Usa PATCH para desativar o hook de integração associado.
  * Método: DELETE
  */
 export async function DELETE(
@@ -253,36 +295,44 @@ export async function DELETE(
     );
 
     const agenteAtualizado = await prisma.$transaction(async (tx) => {
-      const hookIdParaDeletar = agenteParaDesativar.hookId;
+      const hookIdParaDesativar = agenteParaDesativar.hookId;
 
       // Debug: Log detalhado do agente e hook
       console.log(`[Transação] Debug do agente para desativação:`, {
         agenteId: agenteParaDesativar.id,
         agenteNome: agenteParaDesativar.nome,
-        hookId: hookIdParaDeletar,
+        hookId: hookIdParaDesativar,
         ativo: agenteParaDesativar.ativo,
         inboxId: agenteParaDesativar.inboxId
       });
 
-      // 1. Se houver um hookId, tenta deletá-lo na API externa
-      if (hookIdParaDeletar) {
+      // 1. Se houver um hookId, tenta desativá-lo na API externa usando PATCH
+      if (hookIdParaDesativar) {
         const accountId = usuarioChatwit.chatwitAccountId;
         console.log(
-          `[Transação] Tentando deletar o hook ${hookIdParaDeletar} via DELETE...`
+          `[Transação] Tentando desativar o hook ${hookIdParaDesativar} via PATCH...`
         );
-        console.log(`[Transação] URL da API: ${baseURL}/api/v1/accounts/${accountId}/integrations/hooks/${hookIdParaDeletar}`);
+        console.log(`[Transação] URL da API: ${baseURL}/api/v1/accounts/${accountId}/integrations/hooks/${hookIdParaDesativar}`);
         
         try {
-          const response = await axios.delete(
-            `${baseURL}/api/v1/accounts/${accountId}/integrations/hooks/${hookIdParaDeletar}`,
+          const response = await axios.patch(
+            `${baseURL}/api/v1/accounts/${accountId}/integrations/hooks/${hookIdParaDesativar}`,
+            {
+              status: 0, // Desativar o hook
+              settings: {
+                project_id: agenteParaDesativar.projectId,
+                credentials: JSON.parse(agenteParaDesativar.credentials),
+                region: agenteParaDesativar.region,
+              }
+            },
             getAxiosConfig(accessToken)
           );
           console.log(
-            `[Transação] Hook ${hookIdParaDeletar} deletado com sucesso na API. Status: ${response.status}`
+            `[Transação] Hook ${hookIdParaDesativar} desativado com sucesso na API. Status: ${response.status}`
           );
         } catch (apiError) {
           // Debug: Log detalhado do erro
-          console.log(`[Transação] Erro ao deletar hook:`, {
+          console.log(`[Transação] Erro ao desativar hook:`, {
             status: (apiError as AxiosError).response?.status,
             statusText: (apiError as AxiosError).response?.statusText,
             data: (apiError as AxiosError).response?.data,
@@ -290,13 +340,13 @@ export async function DELETE(
           });
 
           // Se o hook não foi encontrado (404), consideramos a operação um sucesso,
-          // pois o estado desejado (sem hook) foi alcançado.
+          // pois o estado desejado (sem hook ativo) foi alcançado.
           if (
             axios.isAxiosError(apiError) &&
             apiError.response?.status === 404
           ) {
             console.warn(
-              `[Transação] Hook ${hookIdParaDeletar} não encontrado na API (404). O estado já está consistente.`
+              `[Transação] Hook ${hookIdParaDesativar} não encontrado na API (404). O estado já está consistente.`
             );
           } else {
             // Para qualquer outro erro, a transação deve falhar
@@ -304,24 +354,24 @@ export async function DELETE(
               ((apiError as AxiosError).response?.data as any)?.message ||
               (apiError as Error).message;
             console.error(
-              `❌ FALHA CRÍTICA na API durante a deleção do hook:`,
+              `❌ FALHA CRÍTICA na API durante a desativação do hook:`,
               { message: errorMessage }
             );
             throw new Error(
-              `Erro ao deletar hook na API externa: ${errorMessage}`
+              `Erro ao desativar hook na API externa: ${errorMessage}`
             );
           }
         }
       } else {
         console.log(
-          `[Transação] Agente sem hookId para deletar. Nenhuma chamada à API é necessária.`
+          `[Transação] Agente sem hookId para desativar. Nenhuma chamada à API é necessária.`
         );
       }
 
       // 2. Atualiza o estado do agente no nosso banco de dados
       return tx.agenteDialogflow.update({
         where: { id: id },
-        data: { ativo: false, hookId: null }, // Limpa o hookId por consistência
+        data: { ativo: false }, // Mantém o hookId para reutilização futura
       });
     });
 
