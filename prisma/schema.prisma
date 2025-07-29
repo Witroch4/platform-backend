@@ -1,88 +1,12 @@
-// ====================================================================
-//  SUPER MODELO PRISMA - Versão Final Otimizada e Comentada
-// ====================================================================
-//  Filosofia:
-//  1. Modelos Unificados: Centraliza conceitos como Leads e Templates.
-//  2. Sem Nomes Customizados: Nenhum @@map é usado. As tabelas usarão
-//     os nomes padrão do Prisma (ex: 'ChatwitInbox').
-//  3. Comentários de API: As anotações '// API:' servem como um
-//     guia para os desenvolvedores de backend sobre como interagir
-//     com cada modelo.
-// ====================================================================
-
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
 generator client {
   provider      = "prisma-client-js"
   binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
-// --- ENUMS ---
-
-enum UserRole {
-  DEFAULT
-  ADMIN
-  SUPERADMIN
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
-
-enum SubscriptionStatus {
-  ACTIVE
-  PAST_DUE
-  CANCELED
-  UNPAID
-  INCOMPLETE
-  INCOMPLETE_EXPIRED
-}
-
-enum EspecialidadeJuridica {
-  ADMINISTRATIVO
-  CIVIL
-  CONSTITUCIONAL
-  TRABALHO
-  EMPRESARIAL
-  PENAL
-  TRIBUTARIO
-}
-
-// Enum para a origem do lead no modelo unificado.
-enum LeadSource {
-  INSTAGRAM
-  CHATWIT_OAB
-  MANUAL
-}
-
-// Enum para o sistema de templates unificado.
-enum TemplateType {
-  WHATSAPP_OFFICIAL // Template oficial da Meta com componentes estruturados.
-  INTERACTIVE_MESSAGE // Mensagem interativa customizada (botões, listas).
-  AUTOMATION_REPLY // Resposta de texto simples para automações.
-}
-
-// Define a visibilidade de um template.
-enum TemplateScope {
-  GLOBAL // Disponível para todos (biblioteca global).
-  PRIVATE // Disponível apenas para o criador.
-}
-
-// Define o status de aprovação de um template.
-enum TemplateStatus {
-  PENDING
-  APPROVED
-  REJECTED
-}
-
-// Enum para os tipos de ação de um botão.
-enum ActionType {
-  SEND_TEMPLATE
-  ADD_TAG
-  START_FLOW
-  ASSIGN_TO_AGENT
-}
-
-// --- CORE AUTH & USER MODELS ---
 
 model User {
   id                        String                    @id @default(cuid())
@@ -97,23 +21,23 @@ model User {
   createdAt                 DateTime                  @default(now())
   updatedAt                 DateTime                  @updatedAt
   isNew                     Boolean                   @default(true)
-  accounts                  Account[]
-  subscriptions             Subscription[]
-  usuarioChatwit            UsuarioChatwit?
-  templates                 Template[]
-  approvalRequests          TemplateApprovalRequest[] @relation("ApprovalRequests")
-  processedApprovalRequests TemplateApprovalRequest[] @relation("ProcessedBy")
-  pastas                    Pasta[]
-  automacoes                Automacao[]
-  agendamentos              Agendamento[]
-  notifications             Notification[]
-  chatSessions              ChatSession[]
-  generatedImages           GeneratedImage[]
-  mtfDiamanteConfig         MtfDiamanteConfig?
-  disparosMtfDiamante       DisparoMtfDiamante[]
   mtfDiamanteSeedExecuted   Boolean                   @default(false)
   mtfVariaveisPopuladas     Boolean                   @default(false)
+  accounts                  Account[]
+  agendamentos              Agendamento[]
+  automacoes                Automacao[]
+  chatSessions              ChatSession[]
+  disparosMtfDiamante       DisparoMtfDiamante[]
+  generatedImages           GeneratedImage[]
   Lead                      Lead[]
+  mtfDiamanteConfig         MtfDiamanteConfig?
+  notifications             Notification[]
+  pastas                    Pasta[]
+  subscriptions             Subscription[]
+  templates                 Template[]
+  processedApprovalRequests TemplateApprovalRequest[] @relation("ProcessedBy")
+  approvalRequests          TemplateApprovalRequest[] @relation("ApprovalRequests")
+  usuarioChatwit            UsuarioChatwit?
 }
 
 model Account {
@@ -122,12 +46,12 @@ model Account {
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String?       @db.Text
-  access_token      String?       @db.Text
+  refresh_token     String?
+  access_token      String?
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String?       @db.Text
+  id_token          String?
   session_state     String?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
@@ -135,8 +59,8 @@ model Account {
   igUsername        String?
   isMain            Boolean       @default(false)
   user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  automacoes        Automacao[]
   agendamentos      Agendamento[]
+  automacoes        Automacao[]
   chats             Chat[]
   leads             Lead[]
 
@@ -144,61 +68,47 @@ model Account {
   @@index([userId])
 }
 
-// --- UNIFIED LEAD SYSTEM ---
-
-// O modelo central para TODOS os contatos.
 model Lead {
   id               String                @id @default(cuid())
   name             String?
   email            String?
   phone            String?
   avatarUrl        String?
-  // API de Criação: A API deve sempre preencher 'source' e 'sourceIdentifier'
-  // para sabermos de onde o lead veio (ex: 'INSTAGRAM', 'id_do_usuario_no_insta').
   source           LeadSource
   sourceIdentifier String
   tags             String[]
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
-  // API de Credenciais: Note que a 'whatsapp_api_key' NÃO fica aqui.
-  // Ela pertence à infraestrutura (ChatwitInbox/WhatsAppGlobalConfig).
   userId           String?
-  user             User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
   accountId        String?
-  account          Account?              @relation(fields: [accountId], references: [id], onDelete: SetNull)
-  // API de Consulta: Ao buscar um Lead, use `include: { oabData: true, instagramProfile: true }`
-  // para obter os dados específicos da fonte.
-  instagramProfile LeadInstagramProfile?
-  oabData          LeadOabData?
-  automacoes       LeadAutomacao[]
   chats            Chat[]
   disparos         DisparoMtfDiamante[]
+  account          Account?              @relation(fields: [accountId], references: [id])
+  user             User?                 @relation(fields: [userId], references: [id])
+  automacoes       LeadAutomacao[]
+  instagramProfile LeadInstagramProfile?
+  oabData          LeadOabData?
 
   @@unique([source, sourceIdentifier, accountId])
   @@index([userId, accountId, email, phone])
-  @@index([tags]) // MELHORIA: Índice para acelerar a busca por tags.
+  @@index([tags])
 }
 
-// Dados específicos para leads do Instagram.
-// API de Criação: Deve ser criado aninhado dentro de um `Lead` quando `source` for `INSTAGRAM`.
 model LeadInstagramProfile {
   id            String    @id @default(cuid())
   leadId        String    @unique
-  lead          Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
   isFollower    Boolean   @default(false)
   lastMessageAt DateTime?
   isOnline      Boolean   @default(false)
+  lead          Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
 }
 
-// Dados específicos para leads do Chatwit/OAB.
-// API de Criação: Deve ser criado aninhado dentro de um `Lead` quando `source` for `CHATWIT_OAB`.
 model LeadOabData {
   id                     String                 @id @default(cuid())
   leadId                 String                 @unique
-  lead                   Lead                   @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  // Campos específicos da OAB migrados
+  nomeReal               String?
   concluido              Boolean                @default(false)
-  anotacoes              String?                @db.Text
+  anotacoes              String?
   pdfUnificado           String?
   imagensConvertidas     String?
   leadUrl                String?
@@ -231,10 +141,11 @@ model LeadOabData {
   examesParticipados     Json?
   especialidade          EspecialidadeJuridica?
   usuarioChatwitId       String
-  usuarioChatwit         UsuarioChatwit         @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
-  arquivos               ArquivoLeadOab[]
   espelhoBibliotecaId    String?
-  espelhoBiblioteca      EspelhoBiblioteca?     @relation(fields: [espelhoBibliotecaId], references: [id], onDelete: SetNull)
+  arquivos               ArquivoLeadOab[]
+  espelhoBiblioteca      EspelhoBiblioteca?     @relation(fields: [espelhoBibliotecaId], references: [id])
+  lead                   Lead                   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  usuarioChatwit         UsuarioChatwit         @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
 
   @@index([usuarioChatwitId, espelhoBibliotecaId])
 }
@@ -242,23 +153,19 @@ model LeadOabData {
 model ArquivoLeadOab {
   id            String      @id @default(cuid())
   leadOabDataId String
-  leadOabData   LeadOabData @relation(fields: [leadOabDataId], references: [id], onDelete: Cascade)
   fileType      String
   dataUrl       String
   pdfConvertido String?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+  leadOabData   LeadOabData @relation(fields: [leadOabDataId], references: [id], onDelete: Cascade)
 
   @@index([leadOabDataId])
 }
 
-// --- CHATWIT & WHATSAPP HIERARCHY ---
-
-// O usuário "dono" da conta no Chatwit.
 model UsuarioChatwit {
   id                         String                @id @default(cuid())
   appUserId                  String                @unique
-  appUser                    User                  @relation(fields: [appUserId], references: [id], onDelete: Cascade)
   name                       String
   availableName              String?
   accountName                String
@@ -267,68 +174,53 @@ model UsuarioChatwit {
   chatwitAccountId           String
   createdAt                  DateTime              @default(now())
   updatedAt                  DateTime              @updatedAt
-  // API: Este é o elo para a configuração de fallback.
-  configuracaoGlobalWhatsApp WhatsAppGlobalConfig?
-  leadsOabData               LeadOabData[]
-  inboxes                    ChatwitInbox[]
   agentesDialogflow          AgenteDialogflow[]
+  inboxes                    ChatwitInbox[]
   espelhosBiblioteca         EspelhoBiblioteca[]
   espelhosPadrao             EspelhoPadrao[]
+  leadsOabData               LeadOabData[]
+  appUser                    User                  @relation(fields: [appUserId], references: [id], onDelete: Cascade)
+  configuracaoGlobalWhatsApp WhatsAppGlobalConfig?
 }
 
-// MODELO DE FALLBACK. Armazena as credenciais PADRÃO de WhatsApp para uma conta `UsuarioChatwit`.
 model WhatsAppGlobalConfig {
   id                        String         @id @default(cuid())
   usuarioChatwitId          String         @unique
-  usuarioChatwit            UsuarioChatwit @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
-  // API de Configuração: Crie uma tela no seu admin onde o usuário preenche estes dados uma única vez.
-  // API de Implementação: Este campo corresponde à `whatsapp_api_key` do payload.
-  whatsappApiKey            String         @db.Text // MELHORIA: Nome padronizado.
+  whatsappApiKey            String
   phoneNumberId             String
   whatsappBusinessAccountId String
   graphApiBaseUrl           String         @default("https://graph.facebook.com/v22.0")
   updatedAt                 DateTime       @updatedAt
+  usuarioChatwit            UsuarioChatwit @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
 }
 
-// MODELO DE OVERRIDE. Representa uma caixa de entrada específica ('WhatsApp - ANA').
 model ChatwitInbox {
   id                        String               @id @default(cuid())
   nome                      String
-  inboxId                   String // ID do sistema Chatwit (Ex: "4")
+  inboxId                   String
   channelType               String
   createdAt                 DateTime             @default(now())
   updatedAt                 DateTime             @updatedAt
   usuarioChatwitId          String
-  usuarioChatwit            UsuarioChatwit       @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
-  // API de Persistência (Worker): Quando um webhook chegar, seu worker de baixa prioridade deve usar
-  // `prisma.chatwitInbox.updateMany({ where: { inboxId: '...' } })` para atualizar estes campos
-  // com os dados do payload (`whatsapp_api_key`, `business_id`, etc.).
-  //
-  // API de Envio: Antes de enviar uma mensagem, chame uma função `getActiveCredentials(inboxExternalId)`
-  // que implementa a lógica de fallback (primeiro checa aqui, depois em `WhatsAppGlobalConfig`).
-  whatsappApiKey            String?              @db.Text // MELHORIA: Nome padronizado.
+  whatsappApiKey            String?
   phoneNumberId             String?
   whatsappBusinessAccountId String?
   fallbackParaInboxId       String?
+  agentes                   AgenteDialogflow[]
   fallbackParaInbox         ChatwitInbox?        @relation("FallbackInbox", fields: [fallbackParaInboxId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   fallbackDeInboxes         ChatwitInbox[]       @relation("FallbackInbox")
-  agentes                   AgenteDialogflow[]
-  templates                 Template[]
-  mapeamentosIntencao       MapeamentoIntencao[]
+  usuarioChatwit            UsuarioChatwit       @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
   mapeamentosBotoes         MapeamentoBotao[]
+  mapeamentosIntencao       MapeamentoIntencao[]
+  templates                 Template[]
 
   @@unique([usuarioChatwitId, inboxId])
 }
 
-// --- UNIFIED TEMPLATE & ACTION SYSTEM ---
-
-// Sistema de Templates Unificado. Substitui os antigos `WhatsAppTemplate`, `MensagemInterativa`, etc.
 model Template {
   id                   String                    @id @default(cuid())
   name                 String
   description          String?
-  // API de Criação: A rota de criação de template deve receber um `type` (`WHATSAPP_OFFICIAL`, `INTERACTIVE_MESSAGE`...)
-  // e usar criação aninhada para popular `whatsappOfficialInfo` ou `interactiveContent`.
   type                 TemplateType
   scope                TemplateScope             @default(PRIVATE)
   status               TemplateStatus            @default(APPROVED)
@@ -336,17 +228,17 @@ model Template {
   tags                 String[]
   isActive             Boolean                   @default(true)
   usageCount           Int                       @default(0)
-  simpleReplyText      String?                   @db.Text
+  simpleReplyText      String?
   createdAt            DateTime                  @default(now())
   updatedAt            DateTime                  @updatedAt
   createdById          String
-  createdBy            User                      @relation(fields: [createdById], references: [id], onDelete: Cascade)
   inboxId              String?
-  inbox                ChatwitInbox?             @relation(fields: [inboxId], references: [id], onDelete: SetNull)
   interactiveContent   InteractiveContent?
-  whatsappOfficialInfo WhatsAppOfficialInfo?
   mapeamentos          MapeamentoIntencao[]
+  createdBy            User                      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  inbox                ChatwitInbox?             @relation(fields: [inboxId], references: [id])
   approvalRequests     TemplateApprovalRequest[]
+  whatsappOfficialInfo WhatsAppOfficialInfo?
 
   @@index([createdById, inboxId, type, scope, status, isActive])
 }
@@ -354,37 +246,30 @@ model Template {
 model TemplateApprovalRequest {
   id              String    @id @default(cuid())
   templateId      String
-  template        Template  @relation(fields: [templateId], references: [id], onDelete: Cascade)
   status          String    @default("pending")
   requestMessage  String?
   responseMessage String?
   requestedById   String
-  requestedBy     User      @relation("ApprovalRequests", fields: [requestedById], references: [id], onDelete: Cascade)
   processedById   String?
-  processedBy     User?     @relation("ProcessedBy", fields: [processedById], references: [id], onDelete: SetNull)
   requestedAt     DateTime  @default(now())
   processedAt     DateTime?
+  processedBy     User?     @relation("ProcessedBy", fields: [processedById], references: [id])
+  requestedBy     User      @relation("ApprovalRequests", fields: [requestedById], references: [id], onDelete: Cascade)
+  template        Template  @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
   @@index([templateId, requestedById, status])
 }
 
-// NOVO MODELO CRÍTICO para responder a cliques. Mapeia um `buttonId` único a uma ação específica.
 model MapeamentoBotao {
   id            String       @id @default(cuid())
-  // API de Criação de Templates: Ao salvar um template com botões, sua API deve percorrer
-  // os botões e criar/atualizar registros nesta tabela.
   buttonId      String       @unique
-  // API de Webhook (Dispatcher/Worker): Quando `interaction_type` for `button_reply`, extraia o `button_id`
-  // do payload e faça uma busca direta e rápida: `prisma.mapeamentoBotao.findUnique({ where: { buttonId: '...' } })`.
-  // Execute a ação (`actionType`) encontrada.
   actionType    ActionType
-  actionPayload Json // MELHORIA: Mudado de String para Json para flexibilidade máxima.
+  actionPayload Json
   description   String?
-  // API: O mapeamento é sempre no escopo de um Inbox.
   inboxId       String
-  inbox         ChatwitInbox @relation(fields: [inboxId], references: [id], onDelete: Cascade)
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
+  inbox         ChatwitInbox @relation(fields: [inboxId], references: [id], onDelete: Cascade)
 
   @@index([inboxId])
 }
@@ -392,24 +277,23 @@ model MapeamentoBotao {
 model InteractiveContent {
   id                    String                 @id @default(cuid())
   templateId            String                 @unique
-  template              Template               @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  header                Header?
-  body                  Body                   @relation(fields: [bodyId], references: [id])
   bodyId                String
-  footer                Footer?
-  actionCtaUrl          ActionCtaUrl?
-  actionReplyButton     ActionReplyButton?
-  actionList            ActionList?
-  actionFlow            ActionFlow?
-  actionLocationRequest ActionLocationRequest?
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
+  actionCtaUrl          ActionCtaUrl?
+  actionFlow            ActionFlow?
+  actionList            ActionList?
+  actionLocationRequest ActionLocationRequest?
+  actionReplyButton     ActionReplyButton?
+  footer                Footer?
+  header                Header?
+  body                  Body                   @relation(fields: [bodyId], references: [id])
+  template              Template               @relation(fields: [templateId], references: [id], onDelete: Cascade)
 }
 
 model WhatsAppOfficialInfo {
   id             String   @id @default(cuid())
   templateId     String   @unique
-  template       Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
   metaTemplateId String
   status         String
   category       String
@@ -417,6 +301,7 @@ model WhatsAppOfficialInfo {
   components     Json
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+  template       Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
   @@index([metaTemplateId, status])
 }
@@ -424,14 +309,14 @@ model WhatsAppOfficialInfo {
 model Header {
   id                   String             @id @default(cuid())
   type                 String
-  content              String             @db.Text
+  content              String
   interactiveContentId String             @unique
   interactiveContent   InteractiveContent @relation(fields: [interactiveContentId], references: [id], onDelete: Cascade)
 }
 
 model Body {
   id                  String               @id @default(cuid())
-  text                String               @db.Text
+  text                String
   interactiveContents InteractiveContent[]
 }
 
@@ -482,45 +367,38 @@ model ActionLocationRequest {
   interactiveContent   InteractiveContent @relation(fields: [interactiveContentId], references: [id], onDelete: Cascade)
 }
 
-// --- INTEGRAÇÕES E MAPEAMENTOS ADICIONAIS ---
-
 model AgenteDialogflow {
   id               String         @id @default(cuid())
   nome             String
   projectId        String
-  credentials      String         @db.Text
+  credentials      String
   region           String         @default("global")
   hookId           String?
   ativo            Boolean        @default(false)
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   usuarioChatwitId String
-  usuarioChatwit   UsuarioChatwit @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
-  inboxId          String         @unique
+  inboxId          String
   inbox            ChatwitInbox   @relation(fields: [inboxId], references: [id], onDelete: Cascade)
+  usuarioChatwit   UsuarioChatwit @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
 }
 
 model MapeamentoIntencao {
   id         String       @id @default(cuid())
   intentName String
   inboxId    String
-  inbox      ChatwitInbox @relation(fields: [inboxId], references: [id], onDelete: Cascade)
   templateId String
+  inbox      ChatwitInbox @relation(fields: [inboxId], references: [id], onDelete: Cascade)
   template   Template     @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
   @@unique([intentName, inboxId])
 }
 
-// --- AUTOMAÇÃO INSTAGRAM ---
-
 model Automacao {
   id               String          @id @default(cuid())
   userId           String
-  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   folderId         String?
-  folder           Pasta?          @relation(fields: [folderId], references: [id], onDelete: SetNull)
   accountId        String
-  account          Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
   selectedMediaId  String?
   anyMediaSelected Boolean         @default(false)
   anyword          Boolean         @default(true)
@@ -531,6 +409,9 @@ model Automacao {
   live             Boolean         @default(true)
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
+  account          Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  folder           Pasta?          @relation(fields: [folderId], references: [id])
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   leadsAutomacao   LeadAutomacao[]
 
   @@index([userId, accountId])
@@ -544,32 +425,30 @@ model LeadAutomacao {
   waitingForEmail Boolean   @default(false)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
-  lead            Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
   automacao       Automacao @relation(fields: [automacaoId], references: [id], onDelete: Cascade)
+  lead            Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   @@unique([leadId, automacaoId])
 }
 
-// --- FEATURE MTF DIAMANTE ---
-
 model MtfDiamanteConfig {
   id        String                @id @default(cuid())
   userId    String                @unique
-  user      User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   isActive  Boolean               @default(true)
   createdAt DateTime              @default(now())
   updatedAt DateTime              @updatedAt
+  user      User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   variaveis MtfDiamanteVariavel[]
 }
 
 model MtfDiamanteVariavel {
   id        String            @id @default(cuid())
   configId  String
-  config    MtfDiamanteConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
   chave     String
   valor     Json
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt
+  config    MtfDiamanteConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
 
   @@unique([configId, chave])
 }
@@ -577,10 +456,8 @@ model MtfDiamanteVariavel {
 model DisparoMtfDiamante {
   id           String    @id @default(cuid())
   userId       String
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   templateName String
   leadId       String
-  lead         Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
   status       String    @default("PENDING")
   scheduledAt  DateTime?
   sentAt       DateTime?
@@ -588,11 +465,11 @@ model DisparoMtfDiamante {
   errorMessage String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+  lead         Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status, leadId])
 }
-
-// --- TOKENS DE AUTENTICAÇÃO ---
 
 model VerificationToken {
   id      String   @id @default(cuid())
@@ -621,22 +498,19 @@ model ResetPasswordToken {
   @@unique([email, token])
 }
 
-// --- MODELOS DE SUPORTE ---
-
 model Pasta {
   id         String      @id @default(cuid())
   name       String
   userId     String
-  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
   automacoes Automacao[]
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Subscription {
   id                   String             @id @default(cuid())
   userId               String
-  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   stripeSubscriptionId String             @unique
   stripeCustomerId     String
   status               SubscriptionStatus
@@ -646,28 +520,26 @@ model Subscription {
   canceledAt           DateTime?
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Notification {
   id        String   @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   title     String
   message   String
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
-// MELHORIA: Campos em camelCase para consistência.
 model Agendamento {
   id                             String   @id @default(cuid())
   userId                         String
-  user                           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   accountId                      String
-  account                        Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
   data                           DateTime
   descricao                      String?
   facebook                       Boolean  @default(false)
@@ -687,18 +559,20 @@ model Agendamento {
   concluidoLK                    Boolean  @default(false)
   concluidoX                     Boolean  @default(false)
   createdAt                      DateTime @default(now())
+  account                        Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  user                           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   midias                         Midia[]
 }
 
 model Midia {
   id            String      @id @default(cuid())
   agendamentoId String
-  agendamento   Agendamento @relation(fields: [agendamentoId], references: [id], onDelete: Cascade)
   url           String
   mime_type     String
   thumbnail_url String?
   contador      Int         @default(0)
   createdAt     DateTime    @default(now())
+  agendamento   Agendamento @relation(fields: [agendamentoId], references: [id], onDelete: Cascade)
 
   @@index([agendamentoId])
 }
@@ -706,11 +580,11 @@ model Midia {
 model Chat {
   id        String    @id @default(cuid())
   leadId    String
-  lead      Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
   accountId String
-  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  lead      Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
   messages  Message[]
 
   @@unique([leadId, accountId])
@@ -719,11 +593,11 @@ model Chat {
 model Message {
   id         String   @id @default(cuid())
   chatId     String
-  chat       Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  content    String   @db.Text
+  content    String
   isFromLead Boolean  @default(true)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  chat       Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
 
   @@index([chatId])
 }
@@ -731,14 +605,14 @@ model Message {
 model ChatSession {
   id              String           @id @default(cuid())
   userId          String
-  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   title           String           @default("Nova conversa")
   model           String           @default("chatgpt-4o-latest")
   summary         String?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
-  messages        ChatMessage[]
   files           ChatFile[]
+  messages        ChatMessage[]
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   generatedImages GeneratedImage[]
 
   @@index([userId])
@@ -747,11 +621,10 @@ model ChatSession {
 model ChatMessage {
   id              String      @id @default(cuid())
   sessionId       String
-  session         ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   role            String
-  content         String      @db.Text
+  content         String
   contentType     String      @default("text")
-  audioData       String?     @db.Text
+  audioData       String?
   imageUrl        String?
   modelUsed       String?
   inputTokens     Int?
@@ -762,6 +635,7 @@ model ChatMessage {
   topP            Float?
   responseStatus  String?
   createdAt       DateTime    @default(now())
+  session         ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
 }
@@ -769,7 +643,6 @@ model ChatMessage {
 model ChatFile {
   id            String      @id @default(cuid())
   sessionId     String
-  session       ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   storageUrl    String
   openaiFileId  String?
   status        String      @default("stored")
@@ -779,6 +652,7 @@ model ChatFile {
   fileType      String
   createdAt     DateTime    @default(now())
   syncedAt      DateTime?
+  session       ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId, openaiFileId])
 }
@@ -786,11 +660,9 @@ model ChatFile {
 model GeneratedImage {
   id            String       @id @default(cuid())
   userId        String
-  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   sessionId     String?
-  session       ChatSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  prompt        String       @db.Text
-  revisedPrompt String?      @db.Text
+  prompt        String
+  revisedPrompt String?
   model         String
   imageUrl      String
   thumbnailUrl  String?
@@ -800,6 +672,8 @@ model GeneratedImage {
   openaiFileId  String?
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
+  session       ChatSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, sessionId])
 }
@@ -828,7 +702,7 @@ model EspelhoPadrao {
   especialidade           EspecialidadeJuridica @unique
   nome                    String
   descricao               String?
-  textoMarkdown           String?               @db.Text
+  textoMarkdown           String?
   espelhoCorrecao         String?
   isAtivo                 Boolean               @default(true)
   totalUsos               Int                   @default(0)
@@ -844,7 +718,7 @@ model EspelhoPadrao {
 
 model ModeloRecurso {
   id        String   @id @default(cuid())
-  texto     String   @db.Text
+  texto     String
   isGlobal  Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -857,7 +731,7 @@ model WebhookMessage {
   whatsappMessageId String
   conversationId    String
   contactPhone      String
-  messageContent    String   @db.Text
+  messageContent    String
   messageType       String   @default("text")
   inboxId           String
   rawPayload        Json
@@ -881,9 +755,6 @@ model ConversationThread {
   @@index([contactPhone, lastMessageAt])
 }
 
-// --- FEATURE FLAGS AND MONITORING MODELS ---
-
-// Feature Flags for gradual rollout and A/B testing
 model FeatureFlag {
   id                String   @id @default(cuid())
   name              String   @unique
@@ -896,35 +767,316 @@ model FeatureFlag {
   createdBy         String
 }
 
-// User Feedback for system improvements
 model UserFeedback {
-  id                   String   @id @default(cuid())
-  userId               String
-  userEmail            String?
-  type                 String   // BUG_REPORT, FEATURE_REQUEST, PERFORMANCE_ISSUE, GENERAL_FEEDBACK, FEATURE_FLAG_FEEDBACK
-  category             String
-  title                String
-  description          String
-  severity             String   // LOW, MEDIUM, HIGH, CRITICAL
-  status               String   @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, CLOSED
-  metadata             Json     @default("{}")
-  featureFlagContext   Json?    // Context when feedback is related to feature flags
-  systemContext        Json     // Browser, URL, session info, etc.
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  userId             String
+  userEmail          String?
+  type               String
+  category           String
+  title              String
+  description        String
+  severity           String
+  status             String   @default("OPEN")
+  metadata           Json     @default("{}")
+  featureFlagContext Json?
+  systemContext      Json
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   @@index([type, severity, status])
   @@index([createdAt])
 }
 
-// ====================================================================
-//  QUEUE MANAGEMENT SYSTEM MODELS
-// ====================================================================
-//  Sistema avançado de gestão de filas BullMQ com funcionalidades
-//  empresariais para monitoramento, alertas e controle granular
-// ====================================================================
+model QueueConfig {
+  id              String   @id @default(cuid())
+  name            String   @unique @db.VarChar(255)
+  displayName     String?  @db.VarChar(255)
+  description     String?
+  priority        Int      @default(0)
+  concurrency     Int      @default(1)
+  rateLimiter     Json?
+  retryPolicy     Json
+  cleanupPolicy   Json
+  alertThresholds Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  createdBy       String   @db.VarChar(255)
 
-// --- QUEUE MANAGEMENT ENUMS ---
+  @@index([name, priority])
+}
+
+model QueueMetrics {
+  id                  String   @id @default(cuid())
+  queueName           String   @db.VarChar(255)
+  timestamp           DateTime
+  waitingCount        Int
+  activeCount         Int
+  completedCount      Int
+  failedCount         Int
+  delayedCount        Int
+  throughputPerMinute Decimal? @db.Decimal(10, 2)
+  avgProcessingTime   Decimal? @db.Decimal(10, 2)
+  successRate         Decimal? @db.Decimal(5, 2)
+  errorRate           Decimal? @db.Decimal(5, 2)
+  memoryUsage         BigInt?
+  cpuUsage            Decimal? @db.Decimal(5, 2)
+  createdAt           DateTime @default(now())
+
+  @@index([queueName, timestamp(sort: Desc)])
+  @@index([timestamp(sort: Desc)])
+}
+
+model JobMetrics {
+  id             String    @id @default(cuid())
+  jobId          String    @db.VarChar(255)
+  queueName      String    @db.VarChar(255)
+  jobName        String?   @db.VarChar(255)
+  jobType        String?   @db.VarChar(255)
+  status         JobState
+  createdAt      DateTime
+  startedAt      DateTime?
+  completedAt    DateTime?
+  processingTime Int?
+  waitTime       Int?
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(1)
+  memoryPeak     BigInt?
+  cpuTime        Int?
+  errorMessage   String?
+  correlationId  String?   @db.VarChar(255)
+  flowId         String?   @db.VarChar(255)
+  parentJobId    String?   @db.VarChar(255)
+  payloadSize    Int?
+  resultSize     Int?
+
+  @@index([queueName, status])
+  @@index([correlationId])
+  @@index([flowId])
+  @@index([createdAt(sort: Desc)])
+}
+
+model AlertRule {
+  id          String        @id @default(cuid())
+  name        String        @db.VarChar(255)
+  description String?
+  queueName   String?       @db.VarChar(255)
+  condition   Json
+  severity    AlertSeverity
+  channels    Json
+  cooldown    Int           @default(5)
+  enabled     Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  createdBy   String        @db.VarChar(255)
+  alerts      Alert[]
+
+  @@index([queueName, enabled])
+}
+
+model Alert {
+  id             String        @id @default(cuid())
+  ruleId         String
+  queueName      String?       @db.VarChar(255)
+  severity       AlertSeverity
+  title          String        @db.VarChar(500)
+  message        String
+  metrics        Json?
+  status         AlertStatus   @default(active)
+  createdAt      DateTime      @default(now())
+  acknowledgedAt DateTime?
+  acknowledgedBy String?       @db.VarChar(255)
+  resolvedAt     DateTime?
+  resolutionNote String?
+  rule           AlertRule     @relation(fields: [ruleId], references: [id])
+
+  @@index([ruleId, status])
+  @@index([severity, createdAt(sort: Desc)])
+}
+
+model JobFlow {
+  id                  String          @id @default(cuid())
+  flowId              String          @unique @db.VarChar(255)
+  name                String?         @db.VarChar(255)
+  description         String?
+  rootJobId           String          @db.VarChar(255)
+  status              String          @default("pending") @db.VarChar(20)
+  totalJobs           Int             @default(0)
+  completedJobs       Int             @default(0)
+  failedJobs          Int             @default(0)
+  startedAt           DateTime?
+  completedAt         DateTime?
+  estimatedCompletion DateTime?
+  createdAt           DateTime        @default(now())
+  metadata            Json?
+  dependencies        JobDependency[]
+
+  @@index([status, createdAt(sort: Desc)])
+}
+
+model JobDependency {
+  id             String   @id @default(cuid())
+  flowId         String   @db.VarChar(255)
+  jobId          String   @db.VarChar(255)
+  parentJobId    String?  @db.VarChar(255)
+  dependencyType String   @default("sequential") @db.VarChar(50)
+  condition      Json?
+  createdAt      DateTime @default(now())
+  flow           JobFlow  @relation(fields: [flowId], references: [flowId])
+
+  @@index([flowId, jobId])
+}
+
+model SystemConfig {
+  id          String   @id @default(cuid())
+  key         String   @unique @db.VarChar(255)
+  value       Json
+  description String?
+  category    String?  @db.VarChar(100)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?  @db.VarChar(255)
+
+  @@index([category])
+}
+
+model QueueUser {
+  id          String        @id @default(cuid())
+  userId      String        @unique @db.VarChar(255)
+  email       String        @db.VarChar(255)
+  name        String        @db.VarChar(255)
+  role        QueueUserRole @default(viewer)
+  permissions Json?
+  queueAccess Json?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  lastLogin   DateTime?
+
+  @@index([role, email])
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  userId       String   @db.VarChar(255)
+  action       String   @db.VarChar(255)
+  resourceType String   @db.VarChar(100)
+  resourceId   String?  @db.VarChar(255)
+  queueName    String?  @db.VarChar(255)
+  details      Json?
+  ipAddress    String?  @db.Inet
+  userAgent    String?
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt(sort: Desc)])
+  @@index([resourceType, resourceId])
+}
+
+model AutomationPolicy {
+  id               String    @id @default(cuid())
+  name             String    @db.VarChar(255)
+  description      String?
+  queueName        String?   @db.VarChar(255)
+  triggerCondition Json
+  actions          Json
+  enabled          Boolean   @default(true)
+  priority         Int       @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  createdBy        String    @db.VarChar(255)
+  lastExecuted     DateTime?
+  executionCount   Int       @default(0)
+
+  @@index([enabled, priority])
+  @@index([queueName])
+}
+
+model WebhookConfig {
+  id          String            @id @default(cuid())
+  name        String            @db.VarChar(255)
+  url         String            @db.VarChar(1000)
+  events      Json
+  headers     Json?
+  secret      String?           @db.VarChar(255)
+  enabled     Boolean           @default(true)
+  retryPolicy Json?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  createdBy   String            @db.VarChar(255)
+  deliveries  WebhookDelivery[]
+
+  @@index([enabled])
+}
+
+model WebhookDelivery {
+  id             String        @id @default(cuid())
+  webhookId      String
+  eventType      WebhookEvent
+  payload        Json
+  responseStatus Int?
+  responseBody   String?
+  attempts       Int           @default(1)
+  deliveredAt    DateTime?
+  createdAt      DateTime      @default(now())
+  webhook        WebhookConfig @relation(fields: [webhookId], references: [id])
+
+  @@index([webhookId, eventType])
+  @@index([createdAt(sort: Desc)])
+}
+
+enum UserRole {
+  DEFAULT
+  ADMIN
+  SUPERADMIN
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  UNPAID
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+}
+
+enum EspecialidadeJuridica {
+  ADMINISTRATIVO
+  CIVIL
+  CONSTITUCIONAL
+  TRABALHO
+  EMPRESARIAL
+  PENAL
+  TRIBUTARIO
+}
+
+enum LeadSource {
+  INSTAGRAM
+  CHATWIT_OAB
+  MANUAL
+}
+
+enum TemplateType {
+  WHATSAPP_OFFICIAL
+  INTERACTIVE_MESSAGE
+  AUTOMATION_REPLY
+}
+
+enum TemplateScope {
+  GLOBAL
+  PRIVATE
+}
+
+enum TemplateStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ActionType {
+  SEND_TEMPLATE
+  ADD_TAG
+  START_FLOW
+  ASSIGN_TO_AGENT
+}
 
 enum QueueState {
   healthy
@@ -1017,271 +1169,4 @@ enum QueueUserRole {
   operator
   admin
   superadmin
-}
-
-// --- QUEUE CONFIGURATION ---
-
-// API: Configuração de filas com políticas de retry, limpeza e alertas
-model QueueConfig {
-  id              String   @id @default(cuid())
-  name            String   @unique @db.VarChar(255)
-  displayName     String?  @db.VarChar(255)
-  description     String?
-  priority        Int      @default(0)
-  concurrency     Int      @default(1)
-  rateLimiter     Json?    // { max: number, duration: number, bounceBack?: boolean }
-  retryPolicy     Json     // { attempts: number, backoff: 'fixed' | 'exponential', delay: number }
-  cleanupPolicy   Json     // { removeOnComplete: number, removeOnFail: number, maxAge?: number }
-  alertThresholds Json     // Thresholds para diferentes tipos de alerta
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  createdBy       String   @db.VarChar(255)
-
-  @@index([name, priority])
-}
-
-// --- METRICS MODELS ---
-
-// API: Métricas de fila coletadas em intervalos regulares
-model QueueMetrics {
-  id                  String    @id @default(cuid())
-  queueName           String    @db.VarChar(255)
-  timestamp           DateTime
-  waitingCount        Int
-  activeCount         Int
-  completedCount      Int
-  failedCount         Int
-  delayedCount        Int
-  throughputPerMinute Decimal?  @db.Decimal(10, 2)
-  avgProcessingTime   Decimal?  @db.Decimal(10, 2)
-  successRate         Decimal?  @db.Decimal(5, 2)
-  errorRate           Decimal?  @db.Decimal(5, 2)
-  memoryUsage         BigInt?
-  cpuUsage            Decimal?  @db.Decimal(5, 2)
-  createdAt           DateTime  @default(now())
-
-  @@index([queueName, timestamp(sort: Desc)])
-  @@index([timestamp(sort: Desc)])
-}
-
-// API: Métricas detalhadas de jobs individuais
-model JobMetrics {
-  id             String    @id @default(cuid())
-  jobId          String    @db.VarChar(255)
-  queueName      String    @db.VarChar(255)
-  jobName        String?   @db.VarChar(255)
-  jobType        String?   @db.VarChar(255)
-  status         JobState
-  createdAt      DateTime
-  startedAt      DateTime?
-  completedAt    DateTime?
-  processingTime Int?      // milliseconds
-  waitTime       Int?      // milliseconds
-  attempts       Int       @default(0)
-  maxAttempts    Int       @default(1)
-  memoryPeak     BigInt?
-  cpuTime        Int?      // milliseconds
-  errorMessage   String?
-  correlationId  String?   @db.VarChar(255)
-  flowId         String?   @db.VarChar(255)
-  parentJobId    String?   @db.VarChar(255)
-  payloadSize    Int?
-  resultSize     Int?
-
-  @@index([queueName, status])
-  @@index([correlationId])
-  @@index([flowId])
-  @@index([createdAt(sort: Desc)])
-}
-
-// --- ALERT SYSTEM ---
-
-// API: Regras de alerta configuráveis
-model AlertRule {
-  id          String        @id @default(cuid())
-  name        String        @db.VarChar(255)
-  description String?
-  queueName   String?       @db.VarChar(255) // null = global
-  condition   Json          // { metric: string, operator: string, threshold: number|string, timeWindow: number, aggregation?: string }
-  severity    AlertSeverity
-  channels    Json          // Array de { type: string, config: object }
-  cooldown    Int           @default(5) // minutes
-  enabled     Boolean       @default(true)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  createdBy   String        @db.VarChar(255)
-  alerts      Alert[]
-
-  @@index([queueName, enabled])
-}
-
-// API: Histórico de alertas disparados
-model Alert {
-  id              String        @id @default(cuid())
-  ruleId          String
-  rule            AlertRule     @relation(fields: [ruleId], references: [id])
-  queueName       String?       @db.VarChar(255)
-  severity        AlertSeverity
-  title           String        @db.VarChar(500)
-  message         String
-  metrics         Json?         // Snapshot das métricas que dispararam o alerta
-  status          AlertStatus   @default(active)
-  createdAt       DateTime      @default(now())
-  acknowledgedAt  DateTime?
-  acknowledgedBy  String?       @db.VarChar(255)
-  resolvedAt      DateTime?
-  resolutionNote  String?
-
-  @@index([ruleId, status])
-  @@index([severity, createdAt(sort: Desc)])
-}
-
-// --- FLOW SYSTEM ---
-
-// API: Fluxos de trabalho com dependências entre jobs
-model JobFlow {
-  id                  String    @id @default(cuid())
-  flowId              String    @unique @db.VarChar(255)
-  name                String?   @db.VarChar(255)
-  description         String?
-  rootJobId           String    @db.VarChar(255)
-  status              String    @default("pending") @db.VarChar(20) // pending, running, completed, failed, cancelled
-  totalJobs           Int       @default(0)
-  completedJobs       Int       @default(0)
-  failedJobs          Int       @default(0)
-  startedAt           DateTime?
-  completedAt         DateTime?
-  estimatedCompletion DateTime?
-  createdAt           DateTime  @default(now())
-  metadata            Json?
-  dependencies        JobDependency[]
-
-  @@index([status, createdAt(sort: Desc)])
-}
-
-// API: Dependências entre jobs em um fluxo
-model JobDependency {
-  id             String   @id @default(cuid())
-  flowId         String   @db.VarChar(255)
-  flow           JobFlow  @relation(fields: [flowId], references: [flowId])
-  jobId          String   @db.VarChar(255)
-  parentJobId    String?  @db.VarChar(255)
-  dependencyType String   @default("sequential") @db.VarChar(50) // sequential, parallel, conditional
-  condition      Json?    // Condições para execução condicional
-  createdAt      DateTime @default(now())
-
-  @@index([flowId, jobId])
-}
-
-// --- SYSTEM CONFIGURATION ---
-
-// API: Configurações do sistema de gestão de filas
-model SystemConfig {
-  id          String   @id @default(cuid())
-  key         String   @unique @db.VarChar(255)
-  value       Json
-  description String?
-  category    String?  @db.VarChar(100)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  updatedBy   String?  @db.VarChar(255)
-
-  @@index([category])
-}
-
-// --- USER MANAGEMENT ---
-
-// API: Usuários do sistema de gestão de filas
-model QueueUser {
-  id          String        @id @default(cuid())
-  userId      String        @unique @db.VarChar(255)
-  email       String        @db.VarChar(255)
-  name        String        @db.VarChar(255)
-  role        QueueUserRole @default(viewer)
-  permissions Json?         // Array de permissões específicas
-  queueAccess Json?         // Mapeamento de fila -> permissões
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  lastLogin   DateTime?
-
-  @@index([role, email])
-}
-
-// --- AUDIT SYSTEM ---
-
-// API: Log de auditoria para todas as ações do sistema
-model AuditLog {
-  id           String    @id @default(cuid())
-  userId       String    @db.VarChar(255)
-  action       String    @db.VarChar(255)
-  resourceType String    @db.VarChar(100)
-  resourceId   String?   @db.VarChar(255)
-  queueName    String?   @db.VarChar(255)
-  details      Json?     // Detalhes específicos da ação
-  ipAddress    String?   @db.Inet
-  userAgent    String?
-  createdAt    DateTime  @default(now())
-
-  @@index([userId])
-  @@index([createdAt(sort: Desc)])
-  @@index([resourceType, resourceId])
-}
-
-// --- AUTOMATION SYSTEM ---
-
-// API: Políticas de automação para recuperação e otimização
-model AutomationPolicy {
-  id               String   @id @default(cuid())
-  name             String   @db.VarChar(255)
-  description      String?
-  queueName        String?  @db.VarChar(255) // null = global
-  triggerCondition Json     // Condições que disparam a política
-  actions          Json     // Array de ações a serem executadas
-  enabled          Boolean  @default(true)
-  priority         Int      @default(0)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  createdBy        String   @db.VarChar(255)
-  lastExecuted     DateTime?
-  executionCount   Int      @default(0)
-
-  @@index([enabled, priority])
-  @@index([queueName])
-}
-
-// --- WEBHOOK SYSTEM ---
-
-// API: Configuração de webhooks para eventos do sistema
-model WebhookConfig {
-  id          String            @id @default(cuid())
-  name        String            @db.VarChar(255)
-  url         String            @db.VarChar(1000)
-  events      Json              // Array de eventos que disparam o webhook
-  headers     Json?             // Headers customizados
-  secret      String?           @db.VarChar(255)
-  enabled     Boolean           @default(true)
-  retryPolicy Json?             // Política de retry para falhas
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-  createdBy   String            @db.VarChar(255)
-  deliveries  WebhookDelivery[]
-
-  @@index([enabled])
-}
-
-// API: Log de entregas de webhook
-model WebhookDelivery {
-  id             String       @id @default(cuid())
-  webhookId      String
-  webhook        WebhookConfig @relation(fields: [webhookId], references: [id])
-  eventType      WebhookEvent
-  payload        Json
-  responseStatus Int?
-  responseBody   String?
-  attempts       Int          @default(1)
-  deliveredAt    DateTime?
-  createdAt      DateTime     @default(now())
-
-  @@index([webhookId, eventType])
-  @@index([createdAt(sort: Desc)])
 }

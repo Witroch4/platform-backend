@@ -26,23 +26,9 @@ interface MtfDiamanteLote {
   isActive: boolean;
 }
 
-interface AgenteDialogflow {
-  id: string;
-  nome: string;
-  projectId: string;
-  region: string;
-  ativo: boolean;
-}
+import type { AgenteDialogflow, ChatwitInbox } from "@/types/dialogflow";
 
-interface MtfCaixa {
-  id: string;
-  nome: string;
-  inboxId: string;
-  inboxName: string;
-  chatwitAccountId: string;
-  channelType: string;
-  agentes: AgenteDialogflow[];
-}
+type MtfCaixa = ChatwitInbox;
 
 interface MtfDataContextType {
   // Variáveis
@@ -188,7 +174,24 @@ export function MtfDataProvider({ children }: MtfDataProviderProps) {
         );
         if (response.ok) {
           const data = await response.json();
-          setCaixas(data.caixas || []);
+          // Garantir que agentes seja sempre um array válido
+          const caixasProcessadas = (data.caixas || []).map((caixa: any) => ({
+            ...caixa,
+            agentes: Array.isArray(caixa.agentes) ? caixa.agentes : []
+          }));
+          
+          // Debug: Log dos dados recebidos
+          console.log('🔍 [MtfDataProvider] Caixas recebidas da API:', caixasProcessadas.length);
+          caixasProcessadas.forEach((caixa, index) => {
+            console.log(`📦 [MtfDataProvider] Caixa ${index + 1}: ${caixa.nome} - Agentes: ${caixa.agentes?.length || 0}`);
+            if (caixa.agentes && caixa.agentes.length > 0) {
+              caixa.agentes.forEach((agente: any, agenteIndex: number) => {
+                console.log(`  🤖 [MtfDataProvider] Agente ${agenteIndex + 1}: ${agente.nome} (${agente.ativo ? 'ATIVO' : 'INATIVO'})`);
+              });
+            }
+          });
+          
+          setCaixas(caixasProcessadas);
           setLastFetchTimes((prev) => ({ ...prev, caixas: now }));
           hasLoadedCaixas.current = true;
         }

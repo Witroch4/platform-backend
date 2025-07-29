@@ -17,7 +17,6 @@ const QueueManagementConfigSchema = z.object({
     maxRetriesPerRequest: z.number().default(3),
     retryDelayOnFailover: z.number().default(100),
     enableReadyCheck: z.boolean().default(true),
-    maxRetriesPerRequest: z.number().default(3),
     lazyConnect: z.boolean().default(true),
   }),
 

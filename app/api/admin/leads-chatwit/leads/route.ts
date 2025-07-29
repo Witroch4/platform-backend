@@ -349,6 +349,7 @@ export async function POST(request: Request): Promise<Response> {
     // Verificar quais campos foram enviados e montar o objeto de update
     const updateData: any = {};
     
+    if (nomeReal !== undefined) updateData.nomeReal = nomeReal;
     if (anotacoes !== undefined) updateData.anotacoes = anotacoes;
     if (concluido !== undefined) updateData.concluido = concluido;
     if (fezRecurso !== undefined) updateData.fezRecurso = fezRecurso;
@@ -381,9 +382,8 @@ export async function POST(request: Request): Promise<Response> {
     });
 
     // Se houver campos para atualizar no modelo Lead, faça isso separadamente
-    if (nomeReal !== undefined || email !== undefined) {
+    if (email !== undefined) {
       const leadUpdateData: any = {};
-      if (nomeReal !== undefined) leadUpdateData.name = nomeReal;
       if (email !== undefined) leadUpdateData.email = email;
       
       await prisma.lead.update({

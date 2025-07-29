@@ -72,7 +72,7 @@ async function processManuscrito(job: Job<IManuscritoJobData>) {
     console.log(`[BullMQ] Atualizando lead ${leadID} com o manuscrito processado`);
 
     // Verificar se o lead existe
-    const leadExistente = await prisma.leadChatwit.findUnique({
+    const leadExistente = await prisma.leadOabData.findUnique({
       where: { id: leadID },
     });
 
@@ -81,7 +81,7 @@ async function processManuscrito(job: Job<IManuscritoJobData>) {
     }
 
     // Atualizar o lead com o conteúdo do manuscrito
-    const leadAtualizado = await prisma.leadChatwit.update({
+    const leadAtualizado = await prisma.leadOabData.update({
       where: { id: leadID },
       data: {
         provaManuscrita: conteudoUnificado,
@@ -123,7 +123,7 @@ async function processEspelho(job: Job<IEspelhoJobData>) {
     console.log(`[BullMQ] Atualizando lead ${leadID} com o espelho processado`);
 
     // Verificar se o lead existe
-    const leadExistente = await prisma.leadChatwit.findUnique({
+    const leadExistente = await prisma.leadOabData.findUnique({
       where: { id: leadID },
     });
 
@@ -166,7 +166,7 @@ async function processEspelho(job: Job<IEspelhoJobData>) {
     if (inscricaoMatch) updateData.inscricao = inscricaoMatch[1].trim();
     if (nomeMatch && !leadExistente.nomeReal) updateData.nomeReal = nomeMatch[1].trim();
 
-    const leadAtualizado = await prisma.leadChatwit.update({
+    const leadAtualizado = await prisma.leadOabData.update({
       where: { id: leadID },
       data: updateData,
     });
@@ -202,7 +202,7 @@ async function processAnalise(job: Job<IAnaliseJobData>) {
     console.log(`[BullMQ] Atualizando lead ${leadID} com a análise processada`);
 
     // Verificar se o lead existe
-    const leadExistente = await prisma.leadChatwit.findUnique({
+    const leadExistente = await prisma.leadOabData.findUnique({
       where: { id: leadID },
     });
 
@@ -245,7 +245,7 @@ async function processAnalise(job: Job<IAnaliseJobData>) {
     }
 
     // Atualizar o lead
-    const leadAtualizado = await prisma.leadChatwit.update({
+    const leadAtualizado = await prisma.leadOabData.update({
       where: { id: leadID },
       data: updateData,
     });

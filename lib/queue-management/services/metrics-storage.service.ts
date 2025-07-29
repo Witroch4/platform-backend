@@ -176,13 +176,26 @@ export class MetricsStorageService implements MetricStorage {
   }
 
   /**
-   * Create database partitions for time-based data
+   * Create database partitions for time-based data with automatic management
    */
   async createPartition(tableName: string, startDate: Date, endDate: Date): Promise<void> {
     try {
       const partitionName = `${tableName}_${this.formatDateForPartition(startDate)}`
       
-      // Create partition table
+      // Check if partition already exists
+      const existingPartition = await this.prisma.$queryRaw<Array<{ exists: boolean }>>`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_name = ${partitionName}
+        ) as exists
+      `
+      
+      if (existingPartition[0]?.exists) {
+        console.log(`Partition ${partitionName} already exists`)
+        return
+      }
+
+      // Create partition table with proper constraints
       await this.prisma.$executeRawUnsafe(`
         CREATE TABLE IF NOT EXISTS ${partitionName} 
         PARTITION OF ${tableName}
@@ -192,15 +205,22 @@ export class MetricsStorageService implements MetricStorage {
       // Create optimized indexes for the partition
       await this.createPartitionIndexes(partitionName)
 
+      // Enable compression for older partitions (PostgreSQL specific)
+      if (this.config.compressionEnabled && this.isOldPartition(startDate)) {
+        await this.enablePartitionCompression(partitionName)
+      }
+
       // Update partition registry
       const partitions = this.partitions.get(tableName) || []
       partitions.push({
         tableName: partitionName,
         startDate,
         endDate,
-        isActive: true
+        isActive: endDate > new Date()
       })
       this.partitions.set(tableName, partitions)
+
+      console.log(`Created partition ${partitionName} for period ${startDate.toISOString()} to ${endDate.toISOString()}`)
 
     } catch (error) {
       throw new QueueManagementError(
@@ -211,38 +231,131 @@ export class MetricsStorageService implements MetricStorage {
   }
 
   /**
-   * Clean up old data based on retention policy
+   * Enable compression for old partition data
+   */
+  private async enablePartitionCompression(partitionName: string): Promise<void> {
+    try {
+      // Enable row-level compression (PostgreSQL specific)
+      await this.prisma.$executeRawUnsafe(`
+        ALTER TABLE ${partitionName} SET (toast_tuple_target = 128)
+      `)
+      
+      // Vacuum and analyze the partition
+      await this.prisma.$executeRawUnsafe(`VACUUM ANALYZE ${partitionName}`)
+      
+      console.log(`Enabled compression for partition ${partitionName}`)
+    } catch (error) {
+      console.error(`Failed to enable compression for ${partitionName}:`, error)
+    }
+  }
+
+  /**
+   * Check if partition is old enough for compression
+   */
+  private isOldPartition(startDate: Date): boolean {
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    return startDate < thirtyDaysAgo
+  }
+
+  /**
+   * Automatic partition management - creates future partitions
+   */
+  async managePartitions(): Promise<void> {
+    try {
+      const now = new Date()
+      const tables = ['queue_metrics', 'job_metrics']
+
+      for (const tableName of tables) {
+        // Create partitions for next 3 months
+        for (let i = 0; i < 3; i++) {
+          const startDate = new Date(now.getFullYear(), now.getMonth() + i, 1)
+          const endDate = new Date(now.getFullYear(), now.getMonth() + i + 1, 1)
+          
+          await this.createPartition(tableName, startDate, endDate)
+        }
+      }
+
+      // Clean up old partitions beyond retention period
+      await this.cleanupOldPartitions()
+
+    } catch (error) {
+      console.error('Failed to manage partitions:', error)
+    }
+  }
+
+  /**
+   * Clean up old partitions beyond retention period
+   */
+  private async cleanupOldPartitions(): Promise<void> {
+    const cutoffDate = new Date()
+    cutoffDate.setDate(cutoffDate.getDate() - this.config.retentionDays)
+
+    for (const [tableName, partitions] of this.partitions) {
+      const oldPartitions = partitions.filter(p => p.endDate < cutoffDate)
+      
+      for (const partition of oldPartitions) {
+        try {
+          await this.prisma.$executeRawUnsafe(`DROP TABLE IF EXISTS ${partition.tableName}`)
+          console.log(`Dropped old partition ${partition.tableName}`)
+          
+          // Remove from registry
+          const updatedPartitions = partitions.filter(p => p.tableName !== partition.tableName)
+          this.partitions.set(tableName, updatedPartitions)
+        } catch (error) {
+          console.error(`Failed to drop partition ${partition.tableName}:`, error)
+        }
+      }
+    }
+  }
+
+  /**
+   * Clean up old data based on retention policy (90 days default)
    */
   async cleanupOldData(): Promise<{ deletedRecords: number; freedSpace: number }> {
     try {
       const cutoffDate = new Date()
       cutoffDate.setDate(cutoffDate.getDate() - this.config.retentionDays)
 
+      console.log(`Starting cleanup of data older than ${cutoffDate.toISOString()}`)
+
       let totalDeleted = 0
       let totalFreedSpace = 0
 
-      // Clean up queue metrics
-      const queueMetricsDeleted = await this.prisma.queueMetrics.deleteMany({
-        where: {
-          timestamp: { lt: cutoffDate }
-        }
-      })
-      totalDeleted += queueMetricsDeleted.count
+      // Clean up queue metrics (only if not using partitioning)
+      if (!this.config.partitioningEnabled) {
+        const queueMetricsDeleted = await this.prisma.queueMetrics.deleteMany({
+          where: {
+            timestamp: { lt: cutoffDate }
+          }
+        })
+        totalDeleted += queueMetricsDeleted.count
+        console.log(`Deleted ${queueMetricsDeleted.count} old queue metrics records`)
 
-      // Clean up job metrics
-      const jobMetricsDeleted = await this.prisma.jobMetrics.deleteMany({
-        where: {
-          createdAt: { lt: cutoffDate }
-        }
-      })
-      totalDeleted += jobMetricsDeleted.count
+        // Clean up job metrics
+        const jobMetricsDeleted = await this.prisma.jobMetrics.deleteMany({
+          where: {
+            createdAt: { lt: cutoffDate }
+          }
+        })
+        totalDeleted += jobMetricsDeleted.count
+        console.log(`Deleted ${jobMetricsDeleted.count} old job metrics records`)
+      }
 
-      // Drop old partitions
-      const droppedPartitions = await this.dropOldPartitions(cutoffDate)
-      totalFreedSpace += droppedPartitions.freedSpace
+      // Drop old partitions (more efficient for partitioned tables)
+      if (this.config.partitioningEnabled) {
+        const droppedPartitions = await this.dropOldPartitions(cutoffDate)
+        totalFreedSpace += droppedPartitions.freedSpace
+        console.log(`Dropped old partitions, freed ${droppedPartitions.freedSpace} bytes`)
+      }
+
+      // Clean up old aggregated data from cache
+      await this.cleanupOldCacheData(cutoffDate)
 
       // Update cleanup statistics
       await this.updateCleanupStats(totalDeleted, totalFreedSpace)
+
+      console.log(`Cleanup completed: ${totalDeleted} records deleted, ${totalFreedSpace} bytes freed`)
 
       return {
         deletedRecords: totalDeleted,
@@ -254,6 +367,41 @@ export class MetricsStorageService implements MetricStorage {
         `Failed to cleanup old data: ${error.message}`,
         'CLEANUP_ERROR'
       )
+    }
+  }
+
+  /**
+   * Clean up old cached data
+   */
+  private async cleanupOldCacheData(cutoffDate: Date): Promise<void> {
+    try {
+      const cutoffTimestamp = cutoffDate.getTime()
+      
+      // Clean up old metrics cache entries
+      const patterns = [
+        'metrics:*',
+        'queue:metrics:*',
+        'pre_agg:*'
+      ]
+
+      for (const pattern of patterns) {
+        const keys = await this.redis.keys(pattern)
+        
+        for (const key of keys) {
+          // Extract timestamp from key if possible
+          const timestampMatch = key.match(/:(\d{13})/)
+          if (timestampMatch) {
+            const keyTimestamp = parseInt(timestampMatch[1])
+            if (keyTimestamp < cutoffTimestamp) {
+              await this.redis.del(key)
+            }
+          }
+        }
+      }
+
+      console.log('Cleaned up old cache data')
+    } catch (error) {
+      console.error('Failed to cleanup old cache data:', error)
     }
   }
 
@@ -350,6 +498,67 @@ export class MetricsStorageService implements MetricStorage {
     }
   }
 
+  /**
+   * Compress old data to save storage space
+   */
+  async compressOldData(): Promise<{ compressedPartitions: number; spaceSaved: number }> {
+    try {
+      let compressedPartitions = 0
+      let spaceSaved = 0
+
+      const thirtyDaysAgo = new Date()
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+      for (const [tableName, partitions] of this.partitions) {
+        for (const partition of partitions) {
+          if (partition.startDate < thirtyDaysAgo && partition.isActive) {
+            try {
+              // Get size before compression
+              const sizeBefore = await this.getPartitionSize(partition.tableName)
+              
+              // Enable compression
+              await this.enablePartitionCompression(partition.tableName)
+              
+              // Get size after compression
+              const sizeAfter = await this.getPartitionSize(partition.tableName)
+              
+              spaceSaved += sizeBefore - sizeAfter
+              compressedPartitions++
+              
+              console.log(`Compressed partition ${partition.tableName}, saved ${sizeBefore - sizeAfter} bytes`)
+              
+            } catch (error) {
+              console.error(`Failed to compress partition ${partition.tableName}:`, error)
+            }
+          }
+        }
+      }
+
+      return { compressedPartitions, spaceSaved }
+
+    } catch (error) {
+      throw new QueueManagementError(
+        `Failed to compress old data: ${error.message}`,
+        'COMPRESSION_ERROR'
+      )
+    }
+  }
+
+  /**
+   * Get partition size in bytes
+   */
+  private async getPartitionSize(partitionName: string): Promise<number> {
+    try {
+      const result = await this.prisma.$queryRaw<Array<{ size: bigint }>>`
+        SELECT pg_total_relation_size(${partitionName}) as size
+      `
+      return Number(result[0]?.size || 0)
+    } catch (error) {
+      console.error(`Failed to get partition size for ${partitionName}:`, error)
+      return 0
+    }
+  }
+
   // Private helper methods
 
   private async initializePartitioning(): Promise<void> {
@@ -382,10 +591,20 @@ export class MetricsStorageService implements MetricStorage {
       try {
         await this.cleanupOldData()
         await this.optimizeIndexes()
+        await this.managePartitions() // Ensure future partitions exist
       } catch (error) {
         console.error('Scheduled cleanup failed:', error)
       }
     }, cleanupInterval)
+
+    // Also run partition management every 6 hours
+    setInterval(async () => {
+      try {
+        await this.managePartitions()
+      } catch (error) {
+        console.error('Partition management failed:', error)
+      }
+    }, 6 * 60 * 60 * 1000) // 6 hours
   }
 
   private async storeQueueMetrics(metrics: Metric[]): Promise<void> {

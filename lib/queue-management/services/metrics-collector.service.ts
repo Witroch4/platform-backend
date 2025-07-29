@@ -311,7 +311,7 @@ export class MetricsCollectorService extends EventEmitter {
   }
 
   /**
-   * Calculate percentiles for processing times
+   * Calculate percentiles for processing times (P50, P95, P99)
    */
   calculatePercentiles(values: number[]): Percentiles {
     if (values.length === 0) {
@@ -328,6 +328,64 @@ export class MetricsCollectorService extends EventEmitter {
       p95: this.getPercentile(sorted, 0.95),
       p99: this.getPercentile(sorted, 0.99),
       max: sorted[len - 1]
+    }
+  }
+
+  /**
+   * Aggregate metrics with different granularities (1m, 5m, 1h, 1d)
+   */
+  async aggregateMetricsWithGranularity(
+    queueName: string,
+    timeRange: TimeRange,
+    granularities: string[] = ['1m', '5m', '1h', '1d']
+  ): Promise<Record<string, AggregatedMetrics>> {
+    const results: Record<string, AggregatedMetrics> = {}
+
+    for (const granularity of granularities) {
+      try {
+        results[granularity] = await this.getAggregatedMetrics(queueName, timeRange, granularity)
+      } catch (error) {
+        console.error(`Failed to aggregate metrics for granularity ${granularity}:`, error)
+        // Continue with other granularities
+      }
+    }
+
+    return results
+  }
+
+  /**
+   * Collect job metrics with enhanced details
+   */
+  async collectJobMetrics(jobId: string): Promise<any> {
+    try {
+      // Get job metrics from database
+      const jobMetrics = await this.prisma.jobMetrics.findFirst({
+        where: { jobId }
+      })
+
+      if (!jobMetrics) {
+        throw new QueueManagementError(
+          `Job metrics not found for job ${jobId}`,
+          'JOB_METRICS_NOT_FOUND'
+        )
+      }
+
+      // Calculate additional metrics
+      const processingTime = jobMetrics.processingTime || 0
+      const waitTime = jobMetrics.waitTime || 0
+      const totalTime = processingTime + waitTime
+
+      return {
+        ...jobMetrics,
+        efficiency: waitTime > 0 ? processingTime / totalTime : 1,
+        retryRate: jobMetrics.attempts > 1 ? (jobMetrics.attempts - 1) / jobMetrics.maxAttempts : 0,
+        memoryEfficiency: jobMetrics.memoryPeak ? (jobMetrics.payloadSize || 0) / Number(jobMetrics.memoryPeak) : 0
+      }
+    } catch (error) {
+      throw new QueueManagementError(
+        `Failed to collect job metrics for ${jobId}: ${error.message}`,
+        'JOB_METRICS_ERROR'
+      )
     }
   }
 
@@ -385,7 +443,7 @@ export class MetricsCollectorService extends EventEmitter {
     const queues: Record<string, any> = {}
 
     // Collect current state for all registered queues
-    for (const [queueName, queue] of this.registeredQueues) {
+    for (const [queueName, queue] of Array.from(this.registeredQueues.entries())) {
       try {
         const [waiting, active, completed, failed] = await Promise.all([
           queue.getWaiting(),
@@ -441,7 +499,7 @@ export class MetricsCollectorService extends EventEmitter {
       name: 'queue',
       collect: async () => {
         const metrics: Metric[] = []
-        for (const queueName of this.registeredQueues.keys()) {
+        for (const queueName of Array.from(this.registeredQueues.keys())) {
           const queueMetrics = await this.collectQueueMetrics(queueName)
           metrics.push(...this.convertQueueMetricsToMetrics(queueMetrics))
         }
@@ -485,7 +543,7 @@ export class MetricsCollectorService extends EventEmitter {
       const allMetrics: Metric[] = []
 
       // Collect from all registered collectors
-      for (const collector of this.collectors.values()) {
+      for (const collector of Array.from(this.collectors.values())) {
         if (collector.isEnabled()) {
           try {
             const metrics = await collector.collect()
@@ -548,7 +606,7 @@ export class MetricsCollectorService extends EventEmitter {
     }
 
     // Insert into database
-    for (const data of grouped.values()) {
+    for (const data of Array.from(grouped.values())) {
       await this.prisma.queueMetrics.create({
         data: {
           queueName: data.queueName,

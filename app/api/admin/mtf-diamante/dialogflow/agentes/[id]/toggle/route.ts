@@ -43,12 +43,12 @@ export async function POST(
 
     const agenteParaAtivar = await prisma.agenteDialogflow.findFirst({
       where: { id: id, usuarioChatwitId: usuarioChatwit.id },
-      include: { caixa: true },
+      include: { inbox: true },
     });
 
-    if (!agenteParaAtivar || !agenteParaAtivar.caixa) {
+    if (!agenteParaAtivar || !agenteParaAtivar.inbox) {
       return NextResponse.json(
-        { error: "Agente ou caixa associada não encontrado" },
+        { error: "Agente ou inbox associada não encontrado" },
         { status: 404 }
       );
     }
@@ -62,25 +62,83 @@ export async function POST(
 
     const accessToken = usuarioChatwit.chatwitAccessToken;
     const baseURL = process.env.CHATWIT_BASE_URL;
-    const accountId = agenteParaAtivar.caixa.chatwitAccountId;
+    const accountId = usuarioChatwit.chatwitAccountId;
 
     console.log(
       `🔄 [Agente Ativação] Iniciando ativação do agente '${agenteParaAtivar.nome}'...`
     );
 
     const agenteAtualizado = await prisma.$transaction(async (tx) => {
-      // 1. Garante que outros agentes na mesma caixa sejam desativados localmente primeiro
-      await tx.agenteDialogflow.updateMany({
+      // 1. Garante que outros agentes na mesma inbox sejam desativados localmente primeiro
+      console.log(`[Transação] Verificando agentes ativos na inbox ${agenteParaAtivar.inboxId}...`);
+      
+      const agentesAtivos = await tx.agenteDialogflow.findMany({
         where: {
-          caixaId: agenteParaAtivar.caixaId,
+          inboxId: agenteParaAtivar.inboxId,
+          ativo: true,
+        },
+      });
+      
+      console.log(`[Transação] Encontrados ${agentesAtivos.length} agentes ativos na inbox`);
+      agentesAtivos.forEach(agente => {
+        console.log(`[Transação] - Agente ativo: ${agente.nome} (ID: ${agente.id})`);
+      });
+
+      const agentesParaDesativar = await tx.agenteDialogflow.updateMany({
+        where: {
+          inboxId: agenteParaAtivar.inboxId,
           ativo: true,
           id: { not: id },
         },
         data: { ativo: false },
       });
+      
       console.log(
-        `[Transação] Outros agentes na mesma caixa foram desativados localmente.`
+        `[Transação] ${agentesParaDesativar.count} agentes foram desativados localmente.`
       );
+
+      // 1.5. Deletar hooks dos agentes que foram desativados
+      if (agentesParaDesativar.count > 0) {
+        console.log(`[Transação] Deletando hooks dos agentes desativados...`);
+        
+        // Buscar os agentes que foram desativados para pegar seus hookIds
+        const agentesDesativados = await tx.agenteDialogflow.findMany({
+          where: {
+            inboxId: agenteParaAtivar.inboxId,
+            ativo: false,
+            id: { not: id },
+            hookId: { not: null }, // Só agentes que têm hookId
+          },
+        });
+
+        console.log(`[Transação] Encontrados ${agentesDesativados.length} agentes com hooks para deletar`);
+
+        // Deletar cada hook no Chatwit
+        for (const agente of agentesDesativados) {
+          if (agente.hookId) {
+            try {
+              console.log(`[Transação] Deletando hook ${agente.hookId} do agente ${agente.nome}...`);
+              
+              await axios.delete(
+                `${baseURL}/api/v1/accounts/${accountId}/integrations/hooks/${agente.hookId}`,
+                getAxiosConfig(accessToken)
+              );
+              
+              console.log(`[Transação] Hook ${agente.hookId} deletado com sucesso`);
+              
+              // Limpar o hookId no banco
+              await tx.agenteDialogflow.update({
+                where: { id: agente.id },
+                data: { hookId: null },
+              });
+              
+            } catch (hookError) {
+              console.error(`[Transação] Erro ao deletar hook ${agente.hookId}:`, hookError);
+              // Não falha a transação se não conseguir deletar o hook
+            }
+          }
+        }
+      }
 
       // 2. Cria o novo hook na API externa
       console.log(`[Transação] Criando novo hook via POST...`);
@@ -90,11 +148,12 @@ export async function POST(
           `${baseURL}/api/v1/accounts/${accountId}/integrations/hooks`,
           {
             app_id: "dialogflow",
-            inbox_id: Number.parseInt(agenteParaAtivar.caixa.inboxId),
+            inbox_id: Number.parseInt(agenteParaAtivar.inbox.inboxId),
             status: 1, // Sempre ativo
             settings: {
               project_id: agenteParaAtivar.projectId,
               credentials: JSON.parse(agenteParaAtivar.credentials),
+              region: agenteParaAtivar.region, // Adicionando a região
             },
           },
           getAxiosConfig(accessToken)
@@ -102,6 +161,9 @@ export async function POST(
         novoHookId = hookResponse.data.id.toString();
         console.log(
           `[Transação] Novo hook ${novoHookId} criado com sucesso na API.`
+        );
+        console.log(
+          `[Transação] Configurações enviadas: project_id=${agenteParaAtivar.projectId}, region=${agenteParaAtivar.region}`
         );
       } catch (apiError) {
         const errorMessage =
@@ -166,12 +228,12 @@ export async function DELETE(
 
     const agenteParaDesativar = await prisma.agenteDialogflow.findFirst({
       where: { id: id, usuarioChatwitId: usuarioChatwit.id },
-      include: { caixa: true },
+      include: { inbox: true },
     });
 
-    if (!agenteParaDesativar || !agenteParaDesativar.caixa) {
+    if (!agenteParaDesativar || !agenteParaDesativar.inbox) {
       return NextResponse.json(
-        { error: "Agente ou caixa associada não encontrado" },
+        { error: "Agente ou inbox associada não encontrado" },
         { status: 404 }
       );
     }
@@ -193,21 +255,40 @@ export async function DELETE(
     const agenteAtualizado = await prisma.$transaction(async (tx) => {
       const hookIdParaDeletar = agenteParaDesativar.hookId;
 
+      // Debug: Log detalhado do agente e hook
+      console.log(`[Transação] Debug do agente para desativação:`, {
+        agenteId: agenteParaDesativar.id,
+        agenteNome: agenteParaDesativar.nome,
+        hookId: hookIdParaDeletar,
+        ativo: agenteParaDesativar.ativo,
+        inboxId: agenteParaDesativar.inboxId
+      });
+
       // 1. Se houver um hookId, tenta deletá-lo na API externa
       if (hookIdParaDeletar) {
-        const accountId = agenteParaDesativar.caixa.chatwitAccountId;
+        const accountId = usuarioChatwit.chatwitAccountId;
         console.log(
           `[Transação] Tentando deletar o hook ${hookIdParaDeletar} via DELETE...`
         );
+        console.log(`[Transação] URL da API: ${baseURL}/api/v1/accounts/${accountId}/integrations/hooks/${hookIdParaDeletar}`);
+        
         try {
-          await axios.delete(
+          const response = await axios.delete(
             `${baseURL}/api/v1/accounts/${accountId}/integrations/hooks/${hookIdParaDeletar}`,
             getAxiosConfig(accessToken)
           );
           console.log(
-            `[Transação] Hook ${hookIdParaDeletar} deletado com sucesso na API.`
+            `[Transação] Hook ${hookIdParaDeletar} deletado com sucesso na API. Status: ${response.status}`
           );
         } catch (apiError) {
+          // Debug: Log detalhado do erro
+          console.log(`[Transação] Erro ao deletar hook:`, {
+            status: (apiError as AxiosError).response?.status,
+            statusText: (apiError as AxiosError).response?.statusText,
+            data: (apiError as AxiosError).response?.data,
+            message: (apiError as Error).message
+          });
+
           // Se o hook não foi encontrado (404), consideramos a operação um sucesso,
           // pois o estado desejado (sem hook) foi alcançado.
           if (

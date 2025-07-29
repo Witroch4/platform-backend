@@ -344,6 +344,42 @@ export class PermissionManagerService implements PermissionManagerInterface {
   }
 
   /**
+   * Validate flow-related permissions
+   */
+  validateFlowOperation(user: User, action: string, flowId: string): void {
+    let requiredPermission: Permission
+
+    switch (action) {
+      case 'view':
+        requiredPermission = PERMISSIONS.FLOW_VIEW
+        break
+      case 'manage':
+      case 'create':
+      case 'update':
+        requiredPermission = PERMISSIONS.FLOW_MANAGE
+        break
+      case 'cancel':
+        requiredPermission = PERMISSIONS.FLOW_CANCEL
+        break
+      case 'retry':
+        requiredPermission = PERMISSIONS.FLOW_RETRY
+        break
+      default:
+        throw new InsufficientPermissionsError(action, `flow:${flowId}`, user.userId)
+    }
+
+    this.checkPermission(user, requiredPermission)
+
+    // Log the flow operation
+    this.logger.audit(
+      `flow:${action}`,
+      user.userId,
+      `flow:${flowId}`,
+      { action, flowId }
+    )
+  }
+
+  /**
    * Create permission context for logging
    */
   createPermissionContext(

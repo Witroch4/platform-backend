@@ -17,7 +17,10 @@ export * from './metrics-aggregator.service'
 export * from './anomaly-detector.service'
 export * from './metrics-manager.service'
 
-// Services to be implemented in subsequent tasks
+// Alert and notification services
 export * from './alert-engine.service'
+export * from './notification.service'
+
+// Services to be implemented in subsequent tasks
 export * from './flow-analyzer.service'
 export * from './policy-engine.service'

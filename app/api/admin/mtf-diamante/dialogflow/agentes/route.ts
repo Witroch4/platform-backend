@@ -13,6 +13,14 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { nome, projectId, credentials, region, inboxId } = body;
 
+    // Debug: Log dos dados recebidos
+    console.log('🔍 [Agentes] Dados recebidos para criação:', {
+      nome,
+      projectId: projectId ? `${projectId.substring(0, 10)}...` : 'não informado',
+      region,
+      inboxId
+    });
+
     if (!nome || !projectId || !credentials || !inboxId) {
       return NextResponse.json({ error: 'Campos obrigatórios faltando: nome, projectId, credentials e inboxId' }, { status: 400 });
     }
@@ -35,6 +43,13 @@ export async function POST(request: NextRequest) {
         inboxId,
         usuarioChatwitId: usuarioChatwit.id, // Usar o ID do UsuarioChatwit, não do User
       },
+    });
+
+    console.log('✅ [Agentes] Agente criado com sucesso:', {
+      id: newAgente.id,
+      nome: newAgente.nome,
+      region: newAgente.region,
+      projectId: newAgente.projectId
     });
 
     return NextResponse.json({ message: 'Agente criado com sucesso', agente: newAgente }, { status: 201 });

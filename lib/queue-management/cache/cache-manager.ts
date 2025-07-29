@@ -24,6 +24,9 @@ export interface CacheStats {
 
 export class CacheManager {
   private redis: Redis
+  private connectionPool: Redis[] = []
+  private poolSize: number = 5
+  private currentPoolIndex: number = 0
   private stats: CacheStats = {
     hits: 0,
     misses: 0,
@@ -32,23 +35,19 @@ export class CacheManager {
     hitRate: 0,
   }
   private config = getQueueManagementConfig()
+  private invalidationSubscriber: Redis | null = null
 
   constructor(redis?: Redis) {
     if (redis) {
       this.redis = redis
+      this.initializeConnectionPool()
     } else {
-      this.redis = new Redis({
-        host: this.config.redis.host,
-        port: this.config.redis.port,
-        password: this.config.redis.password,
-        db: this.config.redis.db,
-        maxRetriesPerRequest: this.config.redis.maxRetriesPerRequest,
-        retryDelayOnFailover: this.config.redis.retryDelayOnFailover,
-        enableReadyCheck: this.config.redis.enableReadyCheck,
-        lazyConnect: this.config.redis.lazyConnect,
-        keyPrefix: 'qm:', // Queue Management prefix
-      })
+      this.redis = this.createRedisConnection()
+      this.initializeConnectionPool()
     }
+
+    // Set up intelligent cache invalidation
+    this.setupCacheInvalidation()
 
     // Set up error handling
     this.redis.on('error', (error) => {
@@ -58,6 +57,166 @@ export class CacheManager {
     this.redis.on('connect', () => {
       console.log('Redis cache connected')
     })
+  }
+
+  /**
+   * Initialize connection pool for better performance
+   */
+  private initializeConnectionPool(): void {
+    for (let i = 0; i < this.poolSize; i++) {
+      const connection = this.createRedisConnection()
+      this.connectionPool.push(connection)
+    }
+    console.log(`Initialized Redis connection pool with ${this.poolSize} connections`)
+  }
+
+  /**
+   * Create a new Redis connection with optimized settings
+   */
+  private createRedisConnection(): Redis {
+    return new Redis({
+      host: this.config.redis.host,
+      port: this.config.redis.port,
+      password: this.config.redis.password,
+      db: this.config.redis.db,
+      maxRetriesPerRequest: this.config.redis.maxRetriesPerRequest,
+      retryDelayOnFailover: this.config.redis.retryDelayOnFailover,
+      enableReadyCheck: this.config.redis.enableReadyCheck,
+      lazyConnect: this.config.redis.lazyConnect,
+      keyPrefix: 'qm:', // Queue Management prefix
+      // Connection pool settings
+      family: 4,
+      keepAlive: true,
+      connectTimeout: 10000,
+      commandTimeout: 5000,
+      // Optimizations
+      enableAutoPipelining: true,
+      maxRetriesPerRequest: 3,
+    })
+  }
+
+  /**
+   * Get connection from pool (round-robin)
+   */
+  private getPooledConnection(): Redis {
+    const connection = this.connectionPool[this.currentPoolIndex]
+    this.currentPoolIndex = (this.currentPoolIndex + 1) % this.poolSize
+    return connection
+  }
+
+  /**
+   * Setup intelligent cache invalidation based on events
+   */
+  private setupCacheInvalidation(): void {
+    this.invalidationSubscriber = this.createRedisConnection()
+    
+    // Subscribe to queue events for cache invalidation
+    this.invalidationSubscriber.subscribe(
+      'queue:events',
+      'job:events',
+      'metrics:events',
+      'system:events'
+    )
+
+    this.invalidationSubscriber.on('message', async (channel, message) => {
+      try {
+        const event = JSON.parse(message)
+        await this.handleCacheInvalidationEvent(event)
+      } catch (error) {
+        console.error('Cache invalidation error:', error)
+      }
+    })
+  }
+
+  /**
+   * Handle cache invalidation events
+   */
+  private async handleCacheInvalidationEvent(event: any): Promise<void> {
+    const { type, queueName, jobId } = event
+
+    switch (type) {
+      case 'queue.updated':
+      case 'queue.paused':
+      case 'queue.resumed':
+        await this.invalidateQueueCache(queueName)
+        break
+      
+      case 'job.completed':
+      case 'job.failed':
+      case 'job.retried':
+        await this.invalidateJobCache(jobId)
+        await this.invalidateQueueMetrics(queueName)
+        break
+      
+      case 'metrics.updated':
+        await this.invalidateMetricsCache(queueName)
+        break
+      
+      case 'system.updated':
+        await this.invalidateSystemCache()
+        break
+    }
+  }
+
+  /**
+   * Invalidate queue-specific cache
+   */
+  private async invalidateQueueCache(queueName: string): Promise<void> {
+    const patterns = [
+      `queue:health:${queueName}`,
+      `queue:config:${queueName}`,
+      `queue:metrics:${queueName}:*`,
+      `metrics:*:${queueName}:*`
+    ]
+
+    for (const pattern of patterns) {
+      await this.deletePattern(pattern)
+    }
+  }
+
+  /**
+   * Invalidate job-specific cache
+   */
+  private async invalidateJobCache(jobId: string): Promise<void> {
+    const patterns = [
+      `job:*:${jobId}`,
+      `metrics:job:${jobId}:*`
+    ]
+
+    for (const pattern of patterns) {
+      await this.deletePattern(pattern)
+    }
+  }
+
+  /**
+   * Invalidate metrics cache for a queue
+   */
+  private async invalidateQueueMetrics(queueName: string): Promise<void> {
+    const patterns = [
+      `metrics:*:${queueName}:*`,
+      `metrics:aggregated:${queueName}:*`,
+      `metrics:realtime`,
+      `metrics:dashboard`
+    ]
+
+    for (const pattern of patterns) {
+      await this.deletePattern(pattern)
+    }
+  }
+
+  /**
+   * Invalidate system-wide cache
+   */
+  private async invalidateSystemCache(): Promise<void> {
+    const patterns = [
+      'system:*',
+      'metrics:system:*',
+      'metrics:dashboard'
+    ]
+
+    for (const pattern of patterns) {
+      await this.deletePattern(pattern)
+    }
   }
 
   /**

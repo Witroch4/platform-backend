@@ -162,27 +162,19 @@ async function restoreAllChatwit(backupFileName?: string) {
     let arquivosRestaurados = 0;
     let espelhosRestaurados = 0;
 
-    // Verificar se usuários existem, se não, executar seed
+    // Verificar se usuários existem
     const amandaUser = await prisma.user.findUnique({
       where: { email: 'amandasousa22.adv@gmail.com' },
       include: { usuarioChatwit: true }
     });
 
-    let amandaChatwit;
     if (!amandaUser || !amandaUser.usuarioChatwit) {
-      console.log('⚠️ Usuários não encontrados, executando seed...');
-      const seedResult = await seedAdminUsers();
-      amandaChatwit = seedResult.amandaChatwit;
-    } else {
-      console.log(`✅ Usuário Amanda encontrado: ${amandaUser.name} (${amandaUser.email})`);
-      amandaChatwit = amandaUser.usuarioChatwit;
+      console.error('❌ Usuário Amanda ou UsuarioChatwit não encontrado. Execute o seed primeiro.');
+      throw new Error('Usuários não encontrados. Execute o seed antes do restore.');
     }
 
-    if (!amandaChatwit) {
-        console.error('❌ Falha ao obter ou criar o UsuarioChatwit da Amanda. Abortando restauração.');
-        return;
-    }
-    
+    const amandaChatwit = amandaUser.usuarioChatwit;
+    console.log(`✅ Usuário Amanda encontrado: ${amandaUser.name} (${amandaUser.email})`);
     console.log(`✅ UsuarioChatwit ID: ${amandaChatwit.id}`);
 
     // Encontrar o UsuarioChatwit da Amanda no backup
@@ -274,12 +266,18 @@ async function restoreAllChatwit(backupFileName?: string) {
     }
 
     // Restaurar leads da Amanda - NOVA ESTRUTURA
-    const leadsDaAmanda = leads.filter((l: any) => l.usuarioId === amandaBackup.id);
+    const leadsDaAmanda = leads.filter((l: any) => l && l.usuarioId === amandaBackup.id);
     console.log(`\n👥 Encontrados ${leadsDaAmanda.length} leads da Amanda no backup`);
     console.log('🔄 Iniciando restauração dos leads...');
 
     for (let i = 0; i < leadsDaAmanda.length; i++) {
       const lead = leadsDaAmanda[i];
+      
+      // Verificar se o lead é válido
+      if (!lead || !lead.id) {
+        console.log(`⚠️ Lead inválido encontrado no índice ${i}, pulando...`);
+        continue;
+      }
       
       try {
         // Primeiro, criar o Lead principal
@@ -390,8 +388,14 @@ async function restoreAllChatwit(backupFileName?: string) {
         leadsRestaurados++;
         
         // Restaurar arquivos desse lead - NOVA ESTRUTURA
-        const arquivosDoLead = arquivos.filter((a: any) => a.leadId === lead.id);
+        const arquivosDoLead = arquivos.filter((a: any) => a && a.leadId === lead.id);
         for (const arquivo of arquivosDoLead) {
+          // Verificar se o arquivo é válido
+          if (!arquivo || !arquivo.id) {
+            console.log(`⚠️ Arquivo inválido encontrado para lead ${lead.id}, pulando...`);
+            continue;
+          }
+          
           try {
             await prisma.arquivoLeadOab.upsert({
               where: { id: arquivo.id },
