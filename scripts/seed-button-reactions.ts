@@ -14,17 +14,22 @@ async function seedButtonReactions() {
 
   try {
     // Clear existing mappings
-    await prisma.buttonReactionMapping.deleteMany();
+    await prisma.mapeamentoBotao.deleteMany();
     console.log('✅ Cleared existing button reaction mappings');
 
     // Insert default mappings
     for (const mapping of DEFAULT_BUTTON_REACTIONS) {
-      await prisma.buttonReactionMapping.create({
+      const actionPayload = {
+        emoji: mapping.emoji || null,
+        textReaction: mapping.textReaction || null,
+      };
+      
+      await prisma.mapeamentoBotao.create({
         data: {
           buttonId: mapping.buttonId,
-          emoji: mapping.emoji,
+          actionType: 'SEND_TEMPLATE',
+          actionPayload,
           description: mapping.description,
-          isActive: true,
         },
       });
       console.log(`✅ Created mapping: ${mapping.buttonId} -> ${mapping.emoji}`);

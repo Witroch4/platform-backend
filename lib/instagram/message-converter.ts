@@ -32,8 +32,8 @@ export interface ButtonTemplatePayload {
 }
 
 export interface InstagramTemplate {
-  type: 'generic' | 'button';
-  payload: GenericTemplatePayload | ButtonTemplatePayload;
+  type: 'generic' | 'button' | 'quick_replies';
+  payload: GenericTemplatePayload | ButtonTemplatePayload | any;
 }
 
 // WhatsApp template interfaces (based on existing Prisma models)
@@ -105,13 +105,6 @@ export class MessageConverter {
       const bodyLength = whatsappTemplate.body.text.length;
       const templateType = this.determineTemplateType(bodyLength);
 
-      if (templateType === 'incompatible') {
-        return {
-          success: false,
-          error: `Message body exceeds Instagram limit of ${this.rules.maxBodyLengthForButton} characters (${bodyLength} chars)`,
-        };
-      }
-
       let instagramTemplate: InstagramTemplate;
       const warnings: string[] = [];
 
@@ -122,10 +115,18 @@ export class MessageConverter {
           payload: result.payload,
         };
         warnings.push(...result.warnings);
-      } else {
+      } else if (templateType === 'button') {
         const result = this.convertToButtonTemplate(whatsappTemplate);
         instagramTemplate = {
           type: 'button',
+          payload: result.payload,
+        };
+        warnings.push(...result.warnings);
+      } else {
+        // quick_replies
+        const result = this.convertToQuickReplies(whatsappTemplate);
+        instagramTemplate = {
+          type: 'quick_replies',
           payload: result.payload,
         };
         warnings.push(...result.warnings);
@@ -147,13 +148,13 @@ export class MessageConverter {
   /**
    * Determine template type based on body length
    */
-  private determineTemplateType(bodyLength: number): 'generic' | 'button' | 'incompatible' {
+  private determineTemplateType(bodyLength: number): 'generic' | 'button' | 'quick_replies' {
     if (bodyLength <= this.rules.maxBodyLengthForGeneric) {
       return 'generic';
     } else if (bodyLength <= this.rules.maxBodyLengthForButton) {
       return 'button';
     } else {
-      return 'incompatible';
+      return 'quick_replies';
     }
   }
 
@@ -166,11 +167,10 @@ export class MessageConverter {
   } {
     const warnings: string[] = [];
     
-    // Title: body text (truncated if needed)
-    let title = template.body.text;
+    // Title: body text (should already be ≤80 chars when this function is called)
+    const title = template.body.text;
     if (title.length > this.rules.maxTitleLength) {
-      title = title.substring(0, this.rules.maxTitleLength - 3) + '...';
-      warnings.push(`Title truncated to ${this.rules.maxTitleLength} characters`);
+      throw new Error(`Generic Template should only be used for messages ≤${this.rules.maxTitleLength} characters. Got ${title.length} characters.`);
     }
 
     // Subtitle: footer text (truncated if needed)
@@ -250,6 +250,39 @@ export class MessageConverter {
   }
 
   /**
+   * Convert to Quick Replies (>640 chars)
+   */
+  private convertToQuickReplies(template: WhatsAppTemplate): {
+    payload: any; // Quick replies payload
+    warnings: string[];
+  } {
+    const warnings: string[] = [];
+
+    // Text: body text (no length limit for quick replies)
+    const text = template.body.text;
+
+    // Discard header and footer for quick replies
+    if (template.header) {
+      warnings.push('Header discarded in Quick Replies format');
+    }
+    if (template.footer) {
+      warnings.push('Footer discarded in Quick Replies format');
+    }
+
+    // Convert buttons to quick replies (limit to 13)
+    const buttonResult = this.convertButtonsToQuickReplies(template.buttons || []);
+    warnings.push(...buttonResult.warnings);
+
+    return {
+      payload: {
+        text,
+        quick_replies: buttonResult.quickReplies,
+      },
+      warnings,
+    };
+  }
+
+  /**
    * Convert WhatsApp buttons to Instagram buttons
    */
   private convertButtons(buttons: WhatsAppTemplate['buttons']): {
@@ -313,6 +346,57 @@ export class MessageConverter {
         // Unsupported button type
         return null;
     }
+  }
+
+  /**
+   * Convert WhatsApp buttons to Instagram quick replies
+   */
+  private convertButtonsToQuickReplies(buttons: WhatsAppTemplate['buttons']): {
+    quickReplies: any[];
+    warnings: string[];
+  } {
+    if (!buttons || buttons.length === 0) {
+      return { quickReplies: [], warnings: [] };
+    }
+
+    const warnings: string[] = [];
+    const quickReplies: any[] = [];
+
+    // Limit to max 13 quick replies (Instagram limit)
+    const maxQuickReplies = 13;
+    const buttonsToProcess = buttons.slice(0, maxQuickReplies);
+    if (buttons.length > maxQuickReplies) {
+      warnings.push(`Only first ${maxQuickReplies} buttons will be used as quick replies (${buttons.length} provided)`);
+    }
+
+    for (const button of buttonsToProcess) {
+      const quickReply = this.convertSingleButtonToQuickReply(button);
+      if (quickReply) {
+        quickReplies.push(quickReply);
+      } else {
+        warnings.push(`Button "${button.title}" could not be converted to quick reply (unsupported type: ${button.type})`);
+      }
+    }
+
+    return {
+      quickReplies,
+      warnings,
+    };
+  }
+
+  /**
+   * Convert a single WhatsApp button to Instagram quick reply
+   */
+  private convertSingleButtonToQuickReply(button: WhatsAppTemplate['buttons'][0]): any | null {
+    if (!button) return null;
+
+    // For quick replies, we convert all button types to text quick replies
+    // The payload will contain the original button data
+    return {
+      content_type: 'text',
+      title: button.title.substring(0, 20), // Instagram limit for quick reply title
+      payload: button.payload || button.id || button.url || 'default_payload',
+    };
   }
 
   /**

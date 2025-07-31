@@ -102,6 +102,12 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    
+    // Verificar se é um teste de webhook
+    if (body.testWebhook) {
+      return await testWebhook(request);
+    }
+    
     const config = WebhookConfigSchema.parse(body);
 
     // Check if webhook with same name already exists
@@ -136,10 +142,9 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * POST /api/admin/webhooks/test
  * Test webhook delivery
  */
-export async function POST(request: NextRequest) {
+async function testWebhook(request: NextRequest) {
   try {
     const body = await request.json();
     const { webhookId, eventType, testPayload } = WebhookTestSchema.parse(body);

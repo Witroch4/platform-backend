@@ -23,18 +23,23 @@ const UpdateButtonReactionSchema = ButtonReactionSchema.partial().extend({
 
 // Helper function to format reaction response
 function formatReaction(reaction: any) {
+  // Parse actionPayload to extract emoji and textReaction
+  const actionPayload = reaction.actionPayload as any;
+  const emoji = actionPayload?.emoji;
+  const textReaction = actionPayload?.textReaction;
+  
   return {
     id: reaction.id,
     buttonId: reaction.buttonId,
-    messageId: reaction.messageId,
-    type: reaction.description ? 'text' : 'emoji',
-    emoji: reaction.emoji,
-    textReaction: reaction.description,
-    description: reaction.description,
-    isActive: reaction.isActive,
+    messageId: reaction.inboxId, // Use inboxId instead of messageId
+    type: textReaction ? 'text' : 'emoji',
+    emoji: emoji || null,
+    textReaction: textReaction || null,
+    description: reaction.description || null,
+    isActive: true, // MapeamentoBotao doesn't have isActive field, assume active
     createdAt: reaction.createdAt,
     updatedAt: reaction.updatedAt,
-    createdBy: reaction.createdBy,
+    createdBy: reaction.createdBy || 'system',
   }
 }
 
@@ -54,23 +59,21 @@ export async function GET(request: NextRequest) {
 
     // Get specific reaction by ID
     if (reactionId) {
-      const reaction = await prisma.buttonReactionMapping.findFirst({
+      const reaction = await prisma.mapeamentoBotao.findFirst({
         where: { 
           id: reactionId,
-          message: {
-            caixa: {
-              usuarioChatwit: {
-                appUserId: session.user.id,
-              },
+          inbox: {
+            usuarioChatwit: {
+              appUserId: session.user.id,
             },
           },
         },
         include: {
-          message: {
+          inbox: {
             select: {
               id: true,
-              name: true,
-              type: true,
+              nome: true,
+              channelType: true,
             },
           },
         },
@@ -91,24 +94,21 @@ export async function GET(request: NextRequest) {
 
     // Get specific button reaction
     if (buttonId) {
-      const reaction = await prisma.buttonReactionMapping.findFirst({
+      const reaction = await prisma.mapeamentoBotao.findFirst({
         where: { 
           buttonId,
-          message: {
-            caixa: {
-              usuarioChatwit: {
-                appUserId: session.user.id,
-              },
+          inbox: {
+            usuarioChatwit: {
+              appUserId: session.user.id,
             },
           },
-          ...(includeInactive ? {} : { isActive: true }),
         },
         include: {
-          message: {
+          inbox: {
             select: {
               id: true,
-              name: true,
-              type: true,
+              nome: true,
+              channelType: true,
             },
           },
         },
@@ -122,24 +122,21 @@ export async function GET(request: NextRequest) {
 
     // Get all reactions for a message
     if (messageId) {
-      const reactions = await prisma.buttonReactionMapping.findMany({
+      const reactions = await prisma.mapeamentoBotao.findMany({
         where: { 
-          messageId,
-          message: {
-            caixa: {
-              usuarioChatwit: {
-                appUserId: session.user.id,
-              },
+          inboxId: messageId, // Use inboxId instead of messageId
+          inbox: {
+            usuarioChatwit: {
+              appUserId: session.user.id,
             },
           },
-          ...(includeInactive ? {} : { isActive: true }),
         },
         include: {
-          message: {
+          inbox: {
             select: {
               id: true,
-              name: true,
-              type: true,
+              nome: true,
+              channelType: true,
             },
           },
         },
@@ -158,23 +155,20 @@ export async function GET(request: NextRequest) {
     const offset = (page - 1) * limit
 
     const [reactions, total] = await Promise.all([
-      prisma.buttonReactionMapping.findMany({
+      prisma.mapeamentoBotao.findMany({
         where: {
-          message: {
-            caixa: {
-              usuarioChatwit: {
-                appUserId: session.user.id,
-              },
+          inbox: {
+            usuarioChatwit: {
+              appUserId: session.user.id,
             },
           },
-          ...(includeInactive ? {} : { isActive: true }),
         },
         include: {
-          message: {
+          inbox: {
             select: {
               id: true,
-              name: true,
-              type: true,
+              nome: true,
+              channelType: true,
             },
           },
         },
@@ -182,16 +176,13 @@ export async function GET(request: NextRequest) {
         skip: offset,
         take: limit,
       }),
-      prisma.buttonReactionMapping.count({
+      prisma.mapeamentoBotao.count({
         where: {
-          message: {
-            caixa: {
-              usuarioChatwit: {
-                appUserId: session.user.id,
-              },
+          inbox: {
+            usuarioChatwit: {
+              appUserId: session.user.id,
             },
           },
-          ...(includeInactive ? {} : { isActive: true }),
         },
       }),
     ])
@@ -230,10 +221,11 @@ export async function POST(request: NextRequest) {
       const { messageId, reactions } = body
 
       // Verify message exists and user has access
-      const message = await prisma.interactiveMessage.findFirst({
+      const message = await prisma.template.findFirst({
         where: {
           id: messageId,
-          caixa: {
+          type: "INTERACTIVE_MESSAGE",
+          inbox: {
             usuarioChatwit: {
               appUserId: session.user.id,
             },
@@ -267,22 +259,27 @@ export async function POST(request: NextRequest) {
 
       // Execute transaction for bulk creation
       const result = await prisma.$transaction(async (tx) => {
-        // Remove existing reactions for this message
-        await tx.buttonReactionMapping.deleteMany({
-          where: { messageId }
+        // Remove existing reactions for this inbox
+        await tx.mapeamentoBotao.deleteMany({
+          where: { inboxId: messageId }
         })
 
         // Create new reactions
         const createdReactions = []
         for (const reactionData of reactions) {
           if (reactionData.reaction) {
-            const created = await tx.buttonReactionMapping.create({
+            const actionPayload = {
+              emoji: reactionData.reaction.type === 'emoji' ? reactionData.reaction.value : null,
+              textReaction: reactionData.reaction.type === 'text' ? reactionData.reaction.value : null,
+            };
+            
+            const created = await tx.mapeamentoBotao.create({
               data: {
                 buttonId: reactionData.buttonId,
-                messageId,
-                emoji: reactionData.reaction.value,
+                inboxId: messageId,
+                actionType: 'SEND_TEMPLATE',
+                actionPayload,
                 description: reactionData.reaction.type === 'text' ? reactionData.reaction.value : null,
-                createdBy: session.user.id,
               },
             })
             createdReactions.push(created)
@@ -311,10 +308,11 @@ export async function POST(request: NextRequest) {
 
     // Verify message exists and user has access (if messageId provided)
     if (messageId) {
-      const message = await prisma.interactiveMessage.findFirst({
+      const message = await prisma.template.findFirst({
         where: {
           id: messageId,
-          caixa: {
+          type: "INTERACTIVE_MESSAGE",
+          inbox: {
             usuarioChatwit: {
               appUserId: session.user.id,
             },
@@ -331,7 +329,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if reaction already exists for this button
-    const existingReaction = await prisma.buttonReactionMapping.findUnique({
+    const existingReaction = await prisma.mapeamentoBotao.findUnique({
       where: { buttonId },
     })
 
@@ -343,21 +341,25 @@ export async function POST(request: NextRequest) {
     }
 
     // Create the reaction
-    const createdReaction = await prisma.buttonReactionMapping.create({
+    const actionPayload = {
+      emoji: reaction?.type === 'emoji' ? reaction.value : null,
+      textReaction: reaction?.type === 'text' ? reaction.value : null,
+    };
+    
+    const createdReaction = await prisma.mapeamentoBotao.create({
       data: {
         buttonId,
-        messageId: messageId || null,
-        emoji: reaction?.value || null,
+        inboxId: messageId || null,
+        actionType: 'SEND_TEMPLATE',
+        actionPayload,
         description: reaction?.type === 'text' ? reaction.value : description || null,
-        isActive: isActive ?? true,
-        createdBy: session.user.id,
       },
       include: {
-        message: {
+        inbox: {
           select: {
             id: true,
-            name: true,
-            type: true,
+            nome: true,
+            channelType: true,
           },
         },
       },
@@ -415,14 +417,12 @@ export async function PUT(request: NextRequest) {
     const { id, buttonId, messageId, reaction, description, isActive } = validation.data
 
     // Verify reaction exists and user has access
-    const existingReaction = await prisma.buttonReactionMapping.findFirst({
+    const existingReaction = await prisma.mapeamentoBotao.findFirst({
       where: {
         id,
-        message: {
-          caixa: {
-            usuarioChatwit: {
-              appUserId: session.user.id,
-            },
+        inbox: {
+          usuarioChatwit: {
+            appUserId: session.user.id,
           },
         },
       },
@@ -437,7 +437,7 @@ export async function PUT(request: NextRequest) {
 
     // If updating buttonId, check for conflicts
     if (buttonId && buttonId !== existingReaction.buttonId) {
-      const conflictingReaction = await prisma.buttonReactionMapping.findUnique({
+      const conflictingReaction = await prisma.mapeamentoBotao.findUnique({
         where: { buttonId },
       })
 
@@ -450,11 +450,12 @@ export async function PUT(request: NextRequest) {
     }
 
     // If updating messageId, verify new message exists and user has access
-    if (messageId && messageId !== existingReaction.messageId) {
-      const message = await prisma.interactiveMessage.findFirst({
+    if (messageId && messageId !== existingReaction.inboxId) {
+      const message = await prisma.template.findFirst({
         where: {
           id: messageId,
-          caixa: {
+          type: "INTERACTIVE_MESSAGE",
+          inbox: {
             usuarioChatwit: {
               appUserId: session.user.id,
             },
@@ -471,24 +472,25 @@ export async function PUT(request: NextRequest) {
     }
 
     // Update the reaction
-    const updatedReaction = await prisma.buttonReactionMapping.update({
+    const actionPayload = {
+      emoji: reaction?.type === 'emoji' ? reaction.value : null,
+      textReaction: reaction?.type === 'text' ? reaction.value : null,
+    };
+    
+    const updatedReaction = await prisma.mapeamentoBotao.update({
       where: { id },
       data: {
         ...(buttonId && { buttonId }),
-        ...(messageId !== undefined && { messageId }),
-        ...(reaction && {
-          emoji: reaction.value,
-          description: reaction.type === 'text' ? reaction.value : null,
-        }),
+        ...(messageId !== undefined && { inboxId: messageId }),
+        ...(reaction && { actionPayload }),
         ...(description !== undefined && { description }),
-        ...(isActive !== undefined && { isActive }),
       },
       include: {
-        message: {
+        inbox: {
           select: {
             id: true,
-            name: true,
-            type: true,
+            nome: true,
+            channelType: true,
           },
         },
       },
@@ -542,14 +544,12 @@ export async function DELETE(request: NextRequest) {
     // Delete specific reaction by ID
     if (reactionId) {
       // Verify reaction exists and user has access
-      const reaction = await prisma.buttonReactionMapping.findFirst({
+      const reaction = await prisma.mapeamentoBotao.findFirst({
         where: {
           id: reactionId,
-          message: {
-            caixa: {
-              usuarioChatwit: {
-                appUserId: session.user.id,
-              },
+          inbox: {
+            usuarioChatwit: {
+              appUserId: session.user.id,
             },
           },
         },
@@ -563,18 +563,17 @@ export async function DELETE(request: NextRequest) {
       }
 
       if (softDelete) {
-        // Soft delete - mark as inactive
-        await prisma.buttonReactionMapping.update({
+        // Soft delete - MapeamentoBotao doesn't have isActive field, so we'll just delete
+        await prisma.mapeamentoBotao.delete({
           where: { id: reactionId },
-          data: { isActive: false },
         })
         return NextResponse.json({ 
           success: true, 
-          message: 'Reação desativada com sucesso' 
+          message: 'Reação removida com sucesso' 
         })
       } else {
         // Hard delete
-        await prisma.buttonReactionMapping.delete({
+        await prisma.mapeamentoBotao.delete({
           where: { id: reactionId },
         })
         return NextResponse.json({ 
@@ -587,14 +586,12 @@ export async function DELETE(request: NextRequest) {
     // Delete specific button reaction
     if (buttonId) {
       // Verify reaction exists and user has access
-      const reaction = await prisma.buttonReactionMapping.findFirst({
+      const reaction = await prisma.mapeamentoBotao.findFirst({
         where: {
           buttonId,
-          message: {
-            caixa: {
-              usuarioChatwit: {
-                appUserId: session.user.id,
-              },
+          inbox: {
+            usuarioChatwit: {
+              appUserId: session.user.id,
             },
           },
         },
@@ -608,16 +605,16 @@ export async function DELETE(request: NextRequest) {
       }
 
       if (softDelete) {
-        await prisma.buttonReactionMapping.update({
+        // Soft delete - MapeamentoBotao doesn't have isActive field, so we'll just delete
+        await prisma.mapeamentoBotao.delete({
           where: { buttonId },
-          data: { isActive: false },
         })
         return NextResponse.json({ 
           success: true, 
-          message: 'Reação do botão desativada' 
+          message: 'Reação do botão removida' 
         })
       } else {
-        await prisma.buttonReactionMapping.delete({
+        await prisma.mapeamentoBotao.delete({
           where: { buttonId },
         })
         return NextResponse.json({ 
@@ -630,10 +627,11 @@ export async function DELETE(request: NextRequest) {
     // Delete all reactions for a message (with cascade delete logic)
     if (messageId) {
       // Verify message exists and user has access
-      const message = await prisma.interactiveMessage.findFirst({
+      const message = await prisma.template.findFirst({
         where: {
           id: messageId,
-          caixa: {
+          type: "INTERACTIVE_MESSAGE",
+          inbox: {
             usuarioChatwit: {
               appUserId: session.user.id,
             },
@@ -649,18 +647,18 @@ export async function DELETE(request: NextRequest) {
       }
 
       if (softDelete) {
-        const result = await prisma.buttonReactionMapping.updateMany({
-          where: { messageId },
-          data: { isActive: false },
+        // Soft delete - MapeamentoBotao doesn't have isActive field, so we'll just delete
+        const result = await prisma.mapeamentoBotao.deleteMany({
+          where: { inboxId: messageId },
         })
         return NextResponse.json({ 
           success: true, 
-          message: `${result.count} reações desativadas`,
+          message: `${result.count} reações removidas`,
           count: result.count,
         })
       } else {
-        const result = await prisma.buttonReactionMapping.deleteMany({
-          where: { messageId },
+        const result = await prisma.mapeamentoBotao.deleteMany({
+          where: { inboxId: messageId },
         })
         return NextResponse.json({ 
           success: true, 

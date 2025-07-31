@@ -1119,16 +1119,21 @@ async function findButtonReactionWithFallback(buttonId: string): Promise<{
   isActive: boolean;
 } | null> {
   try {
-    // First try database lookup
-    const dbReaction = await prisma.buttonReactionMapping.findUnique({
+    // First try database lookup using MapeamentoBotao
+    const dbReaction = await prisma.mapeamentoBotao.findUnique({
       where: { buttonId },
     });
 
-    if (dbReaction && dbReaction.isActive) {
+    if (dbReaction) {
+      // Parse the actionPayload to extract emoji and textReaction
+      const actionPayload = dbReaction.actionPayload as any;
+      const emoji = actionPayload?.emoji;
+      const textReaction = actionPayload?.textReaction;
+      
       const type =
-        dbReaction.emoji && dbReaction.textReaction
+        emoji && textReaction
           ? "both"
-          : dbReaction.emoji
+          : emoji
             ? "emoji"
             : "text";
 
@@ -1136,9 +1141,9 @@ async function findButtonReactionWithFallback(buttonId: string): Promise<{
         id: dbReaction.id,
         buttonId: dbReaction.buttonId,
         type,
-        emoji: dbReaction.emoji || undefined,
-        textReaction: dbReaction.textReaction || undefined,
-        isActive: dbReaction.isActive,
+        emoji: emoji || undefined,
+        textReaction: textReaction || undefined,
+        isActive: true, // MapeamentoBotao doesn't have isActive field, assume active
       };
     }
 

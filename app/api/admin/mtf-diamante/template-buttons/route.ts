@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     }
 
     // Buscar template no banco de dados
-    const template = await db.whatsAppTemplate.findFirst({
+    const template = await db.template.findFirst({
       where: { name: templateName }
     });
 

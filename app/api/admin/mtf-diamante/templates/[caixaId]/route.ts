@@ -12,14 +12,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    const templates = await db.whatsAppTemplate.findMany({
-      where: { caixaEntradaId: inboxId },
+    const templates = await db.template.findMany({
+      where: { inboxId: inboxId },
       select: {
         id: true,
-        templateId: true,
         name: true,
         status: true,
-        category: true,
+        type: true,
         language: true,
       },
       orderBy: { name: 'asc' },
@@ -27,7 +26,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     // Formatar para o formato esperado pelo frontend
     const formattedTemplates = templates.map(template => ({
-      id: template.templateId,
+      id: template.id,
       name: template.name,
     }));
 
@@ -54,32 +53,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!name || !category || !components) {
       return NextResponse.json({ error: 'Nome, categoria e componentes são obrigatórios' }, { status: 400 });
     }
-    
-    const usuarioChatwit = await db.usuarioChatwit.findUnique({
-        where: { appUserId: session.user.id },
-    });
 
-    if (!usuarioChatwit) {
-        return NextResponse.json({ error: 'Usuário Chatwit não encontrado' }, { status: 404 });
-    }
-
-    const savedTemplate = await db.whatsAppTemplate.upsert({
+    const savedTemplate = await db.template.upsert({
       where: { id: id || '' },
       update: {
         name,
-        category,
-        components,
+        type: category as any,
+        simpleReplyText: components,
         language: language || 'pt_BR',
       },
       create: {
         name,
-        category,
-        components,
+        type: category as any,
+        simpleReplyText: components,
         language: language || 'pt_BR',
-        caixaEntradaId: inboxId,
-        usuarioChatwitId: usuarioChatwit.id,
-        // Campos obrigatórios com valores padrão
-        templateId: `local_${new Date().getTime()}`,
+        inboxId: inboxId,
+        createdById: session.user.id,
         status: 'APPROVED',
       },
     });

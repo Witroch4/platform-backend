@@ -78,51 +78,75 @@ export async function POST(request: Request) {
     }
 
     // Buscar a mensagem interativa
-    const interactiveMessage = await prisma.interactiveMessage.findFirst({
+    const template = await prisma.template.findFirst({
       where: {
         id: messageId,
         createdById: session.user.id,
+        type: "INTERACTIVE_MESSAGE",
       },
+      include: {
+        interactiveContent: {
+          include: {
+            header: true,
+            body: true,
+            footer: true,
+            actionCtaUrl: true,
+            actionReplyButton: true,
+            actionList: true,
+            actionFlow: true,
+            actionLocationRequest: true
+          }
+        }
+      }
     });
 
-    if (!interactiveMessage) {
+    if (!template || !template.interactiveContent) {
       return NextResponse.json(
         { error: "Interactive message not found" },
         { status: 404 }
       );
     }
 
+    const interactive = template.interactiveContent;
+
     // Buscar variáveis do usuário
     const variables = await getMtfDiamanteVariables(session.user.id);
 
+    // Determinar o tipo de ação
+    let actionType = null;
+    let actionData = null;
+    
+    if (interactive.actionCtaUrl) {
+      actionType = 'cta_url';
+      actionData = interactive.actionCtaUrl;
+    } else if (interactive.actionReplyButton) {
+      actionType = 'button';
+      actionData = interactive.actionReplyButton;
+    } else if (interactive.actionList) {
+      actionType = 'list';
+      actionData = interactive.actionList;
+    } else if (interactive.actionFlow) {
+      actionType = 'flow';
+      actionData = interactive.actionFlow;
+    } else if (interactive.actionLocationRequest) {
+      actionType = 'location_request';
+      actionData = interactive.actionLocationRequest;
+    }
+
     // Converter dados da mensagem
     const messageData: InteractiveMessage = {
-      id: interactiveMessage.id,
-      name: interactiveMessage.name,
-      type: interactiveMessage.type,
-      header: interactiveMessage.headerType ? {
-        type: interactiveMessage.headerType as any,
-        text: interactiveMessage.headerContent || undefined,
-        media_url: interactiveMessage.headerContent || undefined,
-        filename: interactiveMessage.headerContent ? `file.${interactiveMessage.headerType}` : undefined, // Placeholder filename
+      id: template.id,
+      name: template.name,
+      type: actionType as any,
+      header: interactive.header ? {
+        type: interactive.header.type as any,
+        text: interactive.header.content || undefined,
+        media_url: interactive.header.content || undefined,
+        filename: interactive.header.content ? `file.${interactive.header.type}` : undefined, // Placeholder filename
       } : undefined,
-      body: { text: interactiveMessage.bodyText },
-      footer: interactiveMessage.footerText ? { text: interactiveMessage.footerText } : undefined,
-      action: interactiveMessage.actionData || undefined,
-      location: (interactiveMessage.latitude && interactiveMessage.longitude) ? {
-        latitude: interactiveMessage.latitude.toString(),
-        longitude: interactiveMessage.longitude.toString(),
-        name: interactiveMessage.locationName || undefined,
-        address: interactiveMessage.locationAddress || undefined,
-      } : undefined,
-      reaction: (interactiveMessage.reactionEmoji && interactiveMessage.targetMessageId) ? {
-        message_id: interactiveMessage.targetMessageId,
-        emoji: interactiveMessage.reactionEmoji,
-      } : undefined,
-      sticker: (interactiveMessage.stickerMediaId || interactiveMessage.stickerUrl) ? {
-        id: interactiveMessage.stickerMediaId || undefined,
-        url: interactiveMessage.stickerUrl || undefined,
-      } : undefined,
+      body: { text: interactive.body?.text || '' },
+      footer: interactive.footer ? { text: interactive.footer.text } : undefined,
+      action: actionData || undefined,
     };
 
     // Validar mensagem
@@ -170,15 +194,15 @@ export async function POST(request: Request) {
       data: {
         userId: session.user.id,
         templateId: messageId,
-        templateName: interactiveMessage.name,
+        templateName: template.name,
         leadId: recipientPhone,
         leadTelefone: recipientPhone,
         status: "SENT",
         sentAt: new Date(),
         parameters: JSON.parse(JSON.stringify({
           messageId: messageId,
-          messageName: interactiveMessage.name,
-          messageType: interactiveMessage.type,
+          messageName: template.name,
+          messageType: actionType,
           whatsappMessageId: response.data.messages?.[0]?.id,
           processedMessage: whatsappMessage,
         })),

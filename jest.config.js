@@ -30,5 +30,12 @@ module.exports = {
     }
   },
   extensionsToTreatAsEsm: ['.ts'],
-  testTimeout: 30000
+  testTimeout: 30000,
+  // Configurações para detectar handles abertos
+  detectOpenHandles: true,
+  forceExit: true,
+  // Configuração para forçar garbage collection
+  testEnvironmentOptions: {
+    nodeOptions: ['--expose-gc']
+  }
 };

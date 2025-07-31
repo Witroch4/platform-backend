@@ -15,6 +15,7 @@ export interface CompleteMessageMapping {
   id: string;
   intentName: string;
   caixaEntradaId: string;
+  usuarioChatwitId: string;
 
   // Message type and data
   messageType:
@@ -59,6 +60,7 @@ export interface CompleteMessageMapping {
     scope: string;
     description?: string;
     language: string;
+    simpleReplyText?: string;
     interactiveContent?: any;
     whatsappOfficialInfo?: any;
   };
@@ -208,6 +210,7 @@ export async function findCompleteMessageMappingByIntent(
       id: mapping.id,
       intentName: mapping.intentName,
       caixaEntradaId: mapping.inboxId,
+      usuarioChatwitId: chatwitInbox.usuarioChatwitId,
       messageType: getTemplateMessageType(mapping.template),
       whatsappConfig,
     };

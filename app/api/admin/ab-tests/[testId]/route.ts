@@ -8,17 +8,17 @@ const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { testId: string } }
+  { params }: { params: Promise<{ testId: string }> }
 ) {
   try {
-    const { testId } = params;
+    const { testId } = await params;
     const abTestManager = ABTestingManager.getInstance(prisma, redis);
     
     const results = await abTestManager.getABTestResults(testId);
     
     return NextResponse.json(results);
   } catch (error) {
-    console.error(`[ABTests API] Error getting test results for ${params.testId}:`, error);
+    console.error(`[ABTests API] Error getting test results for ${(await params).testId}:`, error);
     return NextResponse.json(
       { error: 'Failed to get A/B test results' },
       { status: 500 }
@@ -28,10 +28,10 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { testId: string } }
+  { params }: { params: Promise<{ testId: string }> }
 ) {
   try {
-    const { testId } = params;
+    const { testId } = await params;
     const body = await request.json();
     const { action, startedBy = 'admin-api' } = body;
 
@@ -59,7 +59,7 @@ export async function POST(
         );
     }
   } catch (error) {
-    console.error(`[ABTests API] Error performing action on test ${params.testId}:`, error);
+    console.error(`[ABTests API] Error performing action on test ${(await params).testId}:`, error);
     return NextResponse.json(
       { error: 'Failed to perform action on A/B test' },
       { status: 500 }
@@ -69,10 +69,10 @@ export async function POST(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { testId: string } }
+  { params }: { params: Promise<{ testId: string }> }
 ) {
   try {
-    const { testId } = params;
+    const { testId } = await params;
     const body = await request.json();
     const { userId, metricName, value, metadata } = body;
 
@@ -92,7 +92,7 @@ export async function PUT(
       message: 'Metric recorded successfully',
     });
   } catch (error) {
-    console.error(`[ABTests API] Error recording metric for test ${params.testId}:`, error);
+    console.error(`[ABTests API] Error recording metric for test ${(await params).testId}:`, error);
     return NextResponse.json(
       { error: 'Failed to record metric' },
       { status: 500 }

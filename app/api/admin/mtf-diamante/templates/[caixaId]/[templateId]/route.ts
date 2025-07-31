@@ -24,7 +24,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
         return NextResponse.json({ error: 'Este template está em uso por um mapeamento e não pode ser excluído.' }, { status: 409 });
     }
 
-    await db.whatsAppTemplate.delete({
+    await db.template.delete({
       where: { id: templateId },
     });
 

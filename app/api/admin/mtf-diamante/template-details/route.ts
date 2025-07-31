@@ -57,7 +57,7 @@ export async function GET(request: Request) {
     };
 
     // 1. Verificar se o template existe no banco
-    const dbTemplate = await db.whatsAppTemplate.findFirst({
+    const dbTemplate = await db.template.findFirst({
       where: {
         name: templateName
       }
@@ -94,41 +94,29 @@ export async function GET(request: Request) {
           
           // Atualizar o banco de dados com as informações mais recentes da API
           if (dbTemplate) {
-            await db.whatsAppTemplate.update({
+            await db.template.update({
               where: { id: dbTemplate.id },
               data: {
-                status: apiTemplate.status,
-                components: apiTemplate.components,
+                status: apiTemplate.status as any,
+                simpleReplyText: JSON.stringify(apiTemplate.components),
                 language: apiTemplate.language,
-                category: apiTemplate.category,
-                lastEdited: new Date()
+                type: apiTemplate.category as any,
+                updatedAt: new Date()
               }
             });
           } else {
-                      // Buscar o usuário Chatwit
-          const usuarioChatwit = await db.usuarioChatwit.findUnique({
-            where: { appUserId: session.user.id }
-          });
-
-          if (!usuarioChatwit) {
-            console.log('❌ [TemplateDetails] Usuário Chatwit não encontrado');
-            return NextResponse.json({ error: 'Usuário Chatwit não encontrado' }, { status: 404 });
-          }
-
-          // Criar o template no banco se ele não existir
-          await db.whatsAppTemplate.create({
-            data: {
-              templateId: apiTemplate.id,
-              name: apiTemplate.name,
-              status: apiTemplate.status,
-              components: apiTemplate.components,
-              language: apiTemplate.language,
-              category: apiTemplate.category,
-              isFavorite: false,
-              lastEdited: new Date(),
-              usuarioChatwitId: usuarioChatwit.id
-            }
-          });
+            // Criar o template no banco se ele não existir
+            await db.template.create({
+              data: {
+                name: apiTemplate.name,
+                status: apiTemplate.status as any,
+                simpleReplyText: JSON.stringify(apiTemplate.components),
+                language: apiTemplate.language,
+                type: apiTemplate.category as any,
+                createdById: session.user.id,
+                isActive: true
+              }
+            });
           }
         }
       }

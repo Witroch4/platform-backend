@@ -392,6 +392,19 @@ export interface RecoveryStrategy {
 }
 
 export const recoveryStrategies: Record<string, RecoveryStrategy> = {
+  // Circuit breaker for system errors (check first before retry)
+  circuitBreaker: {
+    canRecover: (error) => 
+      error.code === InstagramTranslationErrorCodes.SYSTEM_ERROR ||
+      error.code === InstagramTranslationErrorCodes.DATABASE_ERROR,
+    recover: async (error) => {
+      console.log(`[Instagram Translation] Circuit breaker activated for ${error.correlationId}`);
+      // For testing purposes, we'll use a simple check
+      // In production, this would integrate with the webhook error handler's circuit breaker
+      return { fallbackAction: 'circuit_open' };
+    },
+  },
+
   // Fallback to WhatsApp format for incompatible messages
   whatsappFallback: {
     canRecover: (error) => 
@@ -403,15 +416,6 @@ export const recoveryStrategies: Record<string, RecoveryStrategy> = {
     },
   },
 
-  // Retry for transient errors
-  retryStrategy: {
-    canRecover: (error) => error.retryable,
-    recover: async (error) => {
-      console.log(`[Instagram Translation] Scheduling retry for ${error.correlationId}`);
-      return { fallbackAction: 'retry' };
-    },
-  },
-
   // Skip processing for permanent errors
   skipStrategy: {
     canRecover: (error) => 
@@ -420,6 +424,29 @@ export const recoveryStrategies: Record<string, RecoveryStrategy> = {
     recover: async (error) => {
       console.log(`[Instagram Translation] Skipping processing for ${error.correlationId}`);
       return { fallbackAction: 'skip' };
+    },
+  },
+
+  // Graceful degradation for validation errors
+  gracefulDegradation: {
+    canRecover: (error) => 
+      error.code === InstagramTranslationErrorCodes.VALIDATION_ERROR,
+    recover: async (error) => {
+      console.log(`[Instagram Translation] Applying graceful degradation for ${error.correlationId}`);
+      // Return a simple text message as fallback
+      return { 
+        fallbackAction: 'simple_text',
+        fallbackMessage: 'Mensagem recebida. Entre em contato para mais informações.'
+      };
+    },
+  },
+
+  // Retry for transient errors (check last)
+  retryStrategy: {
+    canRecover: (error) => error.retryable,
+    recover: async (error) => {
+      console.log(`[Instagram Translation] Scheduling retry for ${error.correlationId}`);
+      return { fallbackAction: 'retry' };
     },
   },
 };

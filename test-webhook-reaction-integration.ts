@@ -25,14 +25,17 @@ async function setupTestData() {
   });
 
   // Create test button reaction mapping with both emoji and text
-  const testReaction = await prisma.buttonReactionMapping.create({
+  const actionPayload = {
+    emoji: '🧪',
+    textReaction: 'Test reaction message from integration test!',
+  };
+  
+  const testReaction = await prisma.mapeamentoBotao.create({
     data: {
       buttonId: testButtonId,
-      emoji: '🧪',
-      textReaction: 'Test reaction message from integration test!',
+      actionType: 'SEND_TEMPLATE',
+      actionPayload,
       description: 'Integration test reaction',
-      isActive: true,
-      createdBy: testUser.id
     }
   });
 
@@ -49,7 +52,7 @@ async function cleanupTestData() {
   console.log('Cleaning up test data...');
   
   try {
-    await prisma.buttonReactionMapping.deleteMany({
+    await prisma.mapeamentoBotao.deleteMany({
       where: { buttonId: testButtonId }
     });
     

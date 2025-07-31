@@ -6,8 +6,8 @@ import { webhookManager } from './webhook-manager';
 export const webhookQueue = new Queue('webhook-delivery', {
   connection,
   defaultJobOptions: {
-    removeOnComplete: 100,
-    removeOnFail: 50,
+    removeOnComplete: 100 as any,
+    removeOnFail: 50 as any,
     attempts: 3,
     backoff: {
       type: 'exponential',
@@ -42,8 +42,8 @@ export const webhookWorker = new Worker(
   {
     connection,
     concurrency: 10, // Process up to 10 webhooks concurrently
-    removeOnComplete: 100,
-    removeOnFail: 50,
+    removeOnComplete: 100 as any,
+    removeOnFail: 50 as any,
   }
 );
 

@@ -352,6 +352,22 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
     }
   }, [canProceed, onNext]);
 
+  // Instagram template type determination
+  const getInstagramTemplateType = useCallback(() => {
+    const bodyLength = message.body.text.length;
+    const hasImage = message.header?.type === 'image' && message.header?.content;
+    
+    if (bodyLength > 640) {
+      return { type: 'quick_replies', reason: `Quick Replies (${bodyLength} chars > 640)` };
+    } else if (bodyLength <= 80) {
+      return { type: 'generic', reason: `Generic Template (${bodyLength} chars ≤ 80)` };
+    } else {
+      return { type: 'button', reason: `Button Template (${bodyLength} chars: 81-640)` };
+    }
+  }, [message.body.text, message.header]);
+
+  const instagramTemplate = getInstagramTemplateType();
+
   // Check if form has errors
   const hasErrors = validationState.hasErrors || !canProceed();
 
@@ -590,6 +606,47 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
                     <span>{getErrorMessages("body.text")[0]}</span>
                   </div>
                 )}
+
+                {/* Instagram Template Info */}
+                <div className={cn(
+                  "mt-3 p-3 rounded-lg border",
+                  instagramTemplate.type === 'quick_replies' 
+                    ? "bg-yellow-50 border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-800"
+                    : instagramTemplate.type === 'generic'
+                    ? "bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800"
+                    : "bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800"
+                )}>
+                  <div className="flex items-start gap-2">
+                    <Info className={cn(
+                      "h-4 w-4 mt-0.5 flex-shrink-0",
+                      instagramTemplate.type === 'quick_replies' 
+                        ? "text-yellow-600 dark:text-yellow-400"
+                        : instagramTemplate.type === 'generic'
+                        ? "text-blue-600 dark:text-blue-400"
+                        : "text-green-600 dark:text-green-400"
+                    )} />
+                    <div className={cn(
+                      "text-xs",
+                      instagramTemplate.type === 'quick_replies' 
+                        ? "text-yellow-700 dark:text-yellow-300"
+                        : instagramTemplate.type === 'generic'
+                        ? "text-blue-700 dark:text-blue-300"
+                        : "text-green-700 dark:text-green-300"
+                    )}>
+                      <p className="font-medium mb-1">Instagram Template: {instagramTemplate.type.toUpperCase().replace('_', ' ')}</p>
+                      <p>{instagramTemplate.reason}</p>
+                      {instagramTemplate.type === 'generic' && (
+                        <p className="mt-1">• Suporta imagem, título, subtítulo e botões</p>
+                      )}
+                      {instagramTemplate.type === 'button' && (
+                        <p className="mt-1">• Apenas texto e botões (imagem e rodapé serão descartados)</p>
+                      )}
+                      {instagramTemplate.type === 'quick_replies' && (
+                        <p className="mt-1">• Texto longo com respostas rápidas (imagem e rodapé serão descartados)</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>

@@ -136,7 +136,7 @@ export class RollbackManager {
           
           console.log(`[Rollback] Rolled back flag: ${flagConfig.flagName}`);
         } catch (error) {
-          const errorMsg = `Failed to rollback flag ${flagConfig.flagName}: ${error.message}`;
+          const errorMsg = `Failed to rollback flag ${flagConfig.flagName}: ${error instanceof Error ? error.message : 'Unknown error'}`;
           errors.push(errorMsg);
           console.error(`[Rollback] ${errorMsg}`);
         }
@@ -168,7 +168,7 @@ export class RollbackManager {
         executedAt: new Date(),
         executedBy,
         success: false,
-        errors: [error.message],
+        errors: [error instanceof Error ? error.message : 'Unknown error'],
         duration: Date.now() - startTime,
       };
 
@@ -267,7 +267,7 @@ export class RollbackManager {
     } catch (error) {
       return {
         canRollback: false,
-        reason: `Error checking rollback status: ${error.message}`,
+        reason: `Error checking rollback status: ${error instanceof Error ? error.message : 'Unknown error'}`,
       };
     }
   }

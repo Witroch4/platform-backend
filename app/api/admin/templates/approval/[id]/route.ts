@@ -9,7 +9,7 @@ import { TemplateStatus } from '@prisma/client';
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ): Promise<Response> {
   try {
     const session = await auth();
@@ -22,7 +22,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Sem permissão para processar aprovações' }, { status: 403 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
     const { action, responseMessage } = body; // action: 'approve' | 'reject'
 
@@ -142,7 +142,7 @@ export async function PUT(
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ): Promise<Response> {
   try {
     const session = await auth();
@@ -150,7 +150,7 @@ export async function GET(
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     if (!id) {
       return NextResponse.json(

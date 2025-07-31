@@ -22,62 +22,97 @@ export async function GET(request: NextRequest) {
     }
 
     const whereClause: any = {
-      caixaId: caixaId,
+      inboxId: caixaId,
     };
 
     if (type) {
       whereClause.type = type;
     }
 
-    const messages = await prisma.interactiveMessage.findMany({
-      where: whereClause,
+    const messages = await prisma.template.findMany({
+      where: {
+        ...whereClause,
+        type: "INTERACTIVE_MESSAGE",
+        interactiveContent: {
+          isNot: null
+        }
+      },
+      include: {
+        interactiveContent: {
+          include: {
+            header: true,
+            body: true,
+            footer: true,
+            actionCtaUrl: true,
+            actionReplyButton: true,
+            actionList: true,
+            actionFlow: true,
+            actionLocationRequest: true
+          }
+        }
+      },
       orderBy: {
         createdAt: "desc",
       },
     });
 
     return NextResponse.json(
-      messages.map((msg) => ({
-        id: msg.id,
-        nome: msg.name,
-        texto: msg.bodyText,
-        headerTipo: msg.headerType,
-        headerConteudo: msg.headerContent,
-        rodape: msg.footerText,
-        botoes: (msg.actionData as any)?.buttons || [],
-        // Campos adicionais para compatibilidade
-        name: msg.name,
-        type: msg.type,
-        content: {
-          name: msg.name,
-          type: msg.type,
-          header: msg.headerType ? {
-            type: msg.headerType,
-            text: msg.headerContent || "",
-            media_url: msg.headerType !== 'text' ? msg.headerContent || "" : ""
-          } : undefined,
-          body: {
-            text: msg.bodyText
+      messages.map((template) => {
+        const interactive = template.interactiveContent;
+        if (!interactive) return null;
+
+        // Determinar o tipo de ação
+        let actionType = null;
+        let actionData = null;
+        
+        if (interactive.actionCtaUrl) {
+          actionType = 'cta_url';
+          actionData = interactive.actionCtaUrl;
+        } else if (interactive.actionReplyButton) {
+          actionType = 'button';
+          actionData = interactive.actionReplyButton;
+        } else if (interactive.actionList) {
+          actionType = 'list';
+          actionData = interactive.actionList;
+        } else if (interactive.actionFlow) {
+          actionType = 'flow';
+          actionData = interactive.actionFlow;
+        } else if (interactive.actionLocationRequest) {
+          actionType = 'location_request';
+          actionData = interactive.actionLocationRequest;
+        }
+
+        return {
+          id: template.id,
+          nome: template.name,
+          texto: interactive.body?.text || '',
+          headerTipo: interactive.header?.type || null,
+          headerConteudo: interactive.header?.content || null,
+          rodape: interactive.footer?.text || null,
+          botoes: actionType === 'button' ? (actionData?.buttons as any) || [] : [],
+          // Campos adicionais para compatibilidade
+          name: template.name,
+          type: actionType,
+          content: {
+            name: template.name,
+            type: actionType,
+            header: interactive.header ? {
+              type: interactive.header.type,
+              text: interactive.header.content || "",
+              media_url: interactive.header.type !== 'text' ? interactive.header.content || "" : ""
+            } : undefined,
+            body: {
+              text: interactive.body?.text || ''
+            },
+            footer: interactive.footer ? {
+              text: interactive.footer.text
+            } : undefined,
+            action: actionData,
           },
-          footer: msg.footerText ? {
-            text: msg.footerText
-          } : undefined,
-          action: msg.actionData,
-          // Location fields
-          latitude: msg.latitude,
-          longitude: msg.longitude,
-          locationName: msg.locationName,
-          locationAddress: msg.locationAddress,
-          // Reaction fields
-          reactionEmoji: msg.reactionEmoji,
-          targetMessageId: msg.targetMessageId,
-          // Sticker fields
-          stickerMediaId: msg.stickerMediaId,
-          stickerUrl: msg.stickerUrl
-        },
-        createdAt: msg.createdAt,
-        updatedAt: msg.updatedAt,
-      }))
+          createdAt: template.createdAt,
+          updatedAt: template.updatedAt,
+        };
+      }).filter(Boolean)
     );
   } catch (error) {
     console.error("Error fetching interactive messages:", error);
@@ -138,66 +173,152 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Criar mensagem interativa
-    const interactiveMessage = await prisma.interactiveMessage.create({
+    // Criar template e conteúdo interativo
+    const template = await prisma.template.create({
       data: {
-        caixaId,
         name: message.name,
-        type: message.type,
-        bodyText: message.body.text,
-        headerType: message.header?.type || null,
-        headerContent: message.header?.media_url || message.header?.text || null,
-        footerText: message.footer?.text || null,
-        actionData: message.action || null,
-        // Location fields
-        latitude: message.latitude || null,
-        longitude: message.longitude || null,
-        locationName: message.locationName || null,
-        locationAddress: message.locationAddress || null,
-        // Reaction fields
-        reactionEmoji: message.reactionEmoji || null,
-        targetMessageId: message.targetMessageId || null,
-        // Sticker fields
-        stickerMediaId: message.stickerMediaId || null,
-        stickerUrl: message.stickerUrl || null,
+        type: "INTERACTIVE_MESSAGE",
+        description: `Mensagem interativa: ${message.name}`,
+        scope: "PRIVATE",
+        status: "APPROVED",
+        language: "pt_BR",
+        tags: [],
+        isActive: true,
         createdById: session.user.id,
+        inboxId: caixaId,
+        interactiveContent: {
+          create: {
+            body: {
+              create: {
+                text: message.body.text
+              }
+            },
+            ...(message.header && {
+              header: {
+                create: {
+                  type: message.header.type,
+                  content: message.header.media_url || message.header.text || ""
+                }
+              }
+            }),
+            ...(message.footer && {
+              footer: {
+                create: {
+                  text: message.footer.text
+                }
+              }
+            }),
+            ...(message.type === 'cta_url' && message.action && {
+              actionCtaUrl: {
+                create: {
+                  displayText: message.action.displayText || "Clique aqui",
+                  url: message.action.url || ""
+                }
+              }
+            }),
+            ...(message.type === 'button' && message.action && {
+              actionReplyButton: {
+                create: {
+                  buttons: message.action.buttons || []
+                }
+              }
+            }),
+            ...(message.type === 'list' && message.action && {
+              actionList: {
+                create: {
+                  buttonText: message.action.buttonText || "Ver opções",
+                  sections: message.action.sections || []
+                }
+              }
+            }),
+            ...(message.type === 'flow' && message.action && {
+              actionFlow: {
+                create: {
+                  flowId: message.action.flowId || "",
+                  flowCta: message.action.flowCta || "Iniciar",
+                  flowMode: message.action.flowMode || "published",
+                  flowData: message.action.flowData || null
+                }
+              }
+            }),
+            ...(message.type === 'location_request' && message.action && {
+              actionLocationRequest: {
+                create: {
+                  requestText: message.action.requestText || "Compartilhar localização"
+                }
+              }
+            })
+          }
+        }
       },
+      include: {
+        interactiveContent: {
+          include: {
+            header: true,
+            body: true,
+            footer: true,
+            actionCtaUrl: true,
+            actionReplyButton: true,
+            actionList: true,
+            actionFlow: true,
+            actionLocationRequest: true
+          }
+        }
+      }
     });
+
+    const interactive = template.interactiveContent;
+    if (!interactive) {
+      return NextResponse.json(
+        { error: "Failed to create interactive content" },
+        { status: 500 }
+      );
+    }
+
+    // Determinar o tipo de ação
+    let actionType = null;
+    let actionData = null;
+    
+    if (interactive.actionCtaUrl) {
+      actionType = 'cta_url';
+      actionData = interactive.actionCtaUrl;
+    } else if (interactive.actionReplyButton) {
+      actionType = 'button';
+      actionData = interactive.actionReplyButton;
+    } else if (interactive.actionList) {
+      actionType = 'list';
+      actionData = interactive.actionList;
+    } else if (interactive.actionFlow) {
+      actionType = 'flow';
+      actionData = interactive.actionFlow;
+    } else if (interactive.actionLocationRequest) {
+      actionType = 'location_request';
+      actionData = interactive.actionLocationRequest;
+    }
 
     return NextResponse.json({
       success: true,
       message: {
-        id: interactiveMessage.id,
-        name: interactiveMessage.name,
-        type: interactiveMessage.type,
+        id: template.id,
+        name: template.name,
+        type: actionType,
         content: {
-          name: interactiveMessage.name,
-          type: interactiveMessage.type,
-          header: interactiveMessage.headerType ? {
-            type: interactiveMessage.headerType,
-            text: interactiveMessage.headerContent || "",
-            media_url: interactiveMessage.headerType !== 'text' ? interactiveMessage.headerContent || "" : ""
+          name: template.name,
+          type: actionType,
+          header: interactive.header ? {
+            type: interactive.header.type,
+            text: interactive.header.content || "",
+            media_url: interactive.header.type !== 'text' ? interactive.header.content || "" : ""
           } : undefined,
           body: {
-            text: interactiveMessage.bodyText
+            text: interactive.body?.text || ''
           },
-          footer: interactiveMessage.footerText ? {
-            text: interactiveMessage.footerText
+          footer: interactive.footer ? {
+            text: interactive.footer.text
           } : undefined,
-          action: interactiveMessage.actionData,
-          // Location fields
-          latitude: interactiveMessage.latitude,
-          longitude: interactiveMessage.longitude,
-          locationName: interactiveMessage.locationName,
-          locationAddress: interactiveMessage.locationAddress,
-          // Reaction fields
-          reactionEmoji: interactiveMessage.reactionEmoji,
-          targetMessageId: interactiveMessage.targetMessageId,
-          // Sticker fields
-          stickerMediaId: interactiveMessage.stickerMediaId,
-          stickerUrl: interactiveMessage.stickerUrl
+          action: actionData,
         },
-        createdAt: interactiveMessage.createdAt,
+        createdAt: template.createdAt,
       },
     });
   } catch (error) {

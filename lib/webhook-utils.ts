@@ -77,11 +77,12 @@ export function extractWebhookData(payload: any): ExtractedWebhookData {
                    payload.originalDetectIntentRequest?.payload?.id ||
                    `msg_${Date.now()}`;
 
-  // Extract conversation ID
-  const conversationId = payload.originalDetectIntentRequest?.payload?.conversation_id ||
-                        payload.originalDetectIntentRequest?.payload?.from ||
-                        payload.session?.split('/').pop() ||
-                        '';
+  // Extract conversation ID and ensure it's a string
+  const rawConversationId = payload.originalDetectIntentRequest?.payload?.conversation_id ||
+                           payload.originalDetectIntentRequest?.payload?.from ||
+                           payload.session?.split('/').pop() ||
+                           '';
+  const conversationId = String(rawConversationId);
 
   // Extract contact phone from session or payload
   const contactPhone = extractContactPhone(payload);
@@ -145,7 +146,8 @@ export function extractUnifiedWebhookData(payload: any): UnifiedWebhookPayload {
   // Extract message context
   const messageId = chatwootPayload.message_id || chatwootPayload.wamid || chatwootPayload.id || `msg_${Date.now()}`;
   const wamid = chatwootPayload.wamid || messageId;
-  const conversationId = chatwootPayload.conversation_id || chatwootPayload.from || contactPhone;
+  const rawConversationId = chatwootPayload.conversation_id || chatwootPayload.from || contactPhone;
+  const conversationId = String(rawConversationId);
 
   // Extract contact source for lead identification
   const contactSource = chatwootPayload.contact_source || 'chatwit_webhook';

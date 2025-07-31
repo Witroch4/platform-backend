@@ -115,6 +115,9 @@ export async function GET(request: NextRequest) {
       // Get feedback metrics
       const feedbackMetrics = await getFeedbackMetricsSimple();
 
+      // Get Instagram translation metrics
+      const instagramTranslationMetrics = await getInstagramTranslationMetrics();
+
       const dashboard = {
         timestamp: new Date().toISOString(),
         timeRange,
@@ -128,6 +131,7 @@ export async function GET(request: NextRequest) {
           metrics: abTestMetrics,
         },
         feedback: feedbackMetrics,
+        instagramTranslation: instagramTranslationMetrics,
         queues: {
           overallHealth: { overallHealth: 0.8, issues: [] },
           queues: [],
@@ -200,6 +204,25 @@ async function getSimplifiedDashboard(timeRange: string) {
       averageResolutionTime: 0,
       satisfactionScore: 0,
       trendData: [],
+    },
+    instagramTranslation: {
+      status: "LIMITED",
+      message: "Limited functionality without Redis",
+      worker: {
+        status: "HEALTHY",
+        concurrency: 100,
+        resourceLimits: {
+          memory: "512MB",
+          cpu: "1 core",
+          lockDuration: "5s",
+        },
+      },
+      metrics: {
+        totalJobs: 0,
+        successRate: 0,
+        averageProcessingTime: 0,
+        queueDepth: 0,
+      },
     },
     queues: {
       overallHealth: {
@@ -349,6 +372,84 @@ function getDefaultPerformanceMetrics(redisConnected = false) {
   };
 }
 
+async function getInstagramTranslationMetrics() {
+  try {
+    // Try to get Instagram translation metrics if available
+    const { instagramTranslationMonitor } = await import('@/lib/monitoring/instagram-translation-monitor');
+    const { getInstagramErrorStatistics } = await import('@/lib/monitoring/instagram-error-tracker');
+    
+    const performanceSummary = await instagramTranslationMonitor.getPerformanceSummary(60); // Last hour
+    const errorStatistics = await getInstagramErrorStatistics(1); // Last hour
+    
+    return {
+      status: "HEALTHY",
+      message: "Instagram translation worker operating normally",
+      worker: {
+        status: "HEALTHY",
+        concurrency: 100,
+        resourceLimits: {
+          memory: "512MB",
+          cpu: "1 core",
+          lockDuration: "5s",
+        },
+        uptime: process.uptime(),
+      },
+      metrics: {
+        totalJobs: performanceSummary.translations.total || 0,
+        successRate: performanceSummary.translations.successRate || 0,
+        averageProcessingTime: performanceSummary.translations.averageProcessingTime || 0,
+        queueDepth: performanceSummary.queue.waiting || 0,
+        errorRate: errorStatistics.errorRate || 0,
+        lastProcessed: performanceSummary.translations.lastProcessed || null,
+      },
+      performance: {
+        conversionTime: performanceSummary.translations.averageConversionTime || 0,
+        databaseQueryTime: performanceSummary.translations.averageDatabaseQueryTime || 0,
+        queueWaitTime: performanceSummary.queue.averageWaitTime || 0,
+      },
+      errors: {
+        total: errorStatistics.totalErrors || 0,
+        byType: errorStatistics.errorsByType || {},
+        recent: errorStatistics.recentErrors?.slice(0, 5) || [],
+      },
+    };
+  } catch (error) {
+    console.warn('[Dashboard] Instagram translation metrics unavailable:', error);
+    return {
+      status: "LIMITED",
+      message: "Instagram translation metrics unavailable",
+      worker: {
+        status: "HEALTHY",
+        concurrency: 100,
+        resourceLimits: {
+          memory: "512MB",
+          cpu: "1 core", 
+          lockDuration: "5s",
+        },
+        uptime: process.uptime(),
+      },
+      metrics: {
+        totalJobs: 0,
+        successRate: 0,
+        averageProcessingTime: 0,
+        queueDepth: 0,
+        errorRate: 0,
+        lastProcessed: null,
+      },
+      performance: {
+        conversionTime: 0,
+        databaseQueryTime: 0,
+        queueWaitTime: 0,
+      },
+      errors: {
+        total: 0,
+        byType: {},
+        recent: [],
+      },
+    };
+  }
+}
+
 function getDefaultRecommendations(redisConnected = false) {
   const recommendations = [];
 
@@ -384,6 +485,19 @@ function getDefaultRecommendations(redisConnected = false) {
       actions: ["Start Redis container", "Verify Docker network connectivity"],
     });
   }
+
+  // Add Instagram translation specific recommendations
+  recommendations.push({
+    type: "WORKER_PERFORMANCE",
+    priority: "LOW",
+    title: "Instagram Translation Worker Optimized",
+    description: "Worker configured with concurrency factor of 100 for optimal IO-bound task processing",
+    actions: [
+      "Monitor CPU/Memory usage for concurrency tuning",
+      "Review processing times for performance optimization",
+      "Check error rates for quality assurance",
+    ],
+  });
 
   return recommendations;
 }

@@ -18,12 +18,17 @@ async function testButtonEmojiMapping() {
     // 1. Criar mapeamento de reação para teste
     console.log('1. Criando mapeamento de reação de teste...')
     
-    const testButtonReaction = await prisma.buttonReactionMapping.create({
+    const actionPayload = {
+      emoji: '👍',
+      textReaction: null,
+    };
+    
+    const testButtonReaction = await prisma.mapeamentoBotao.create({
       data: {
         buttonId: 'test_button_123',
-        messageId: 'test_message_456',
-        emoji: '👍',
-        createdBy: 'test_user'
+        inboxId: 'test_message_456',
+        actionType: 'SEND_TEMPLATE',
+        actionPayload,
       }
     })
     
@@ -86,7 +91,7 @@ async function testButtonEmojiMapping() {
     // 4. Verificar se o mapeamento pode ser encontrado
     console.log('\n4. Verificando busca de mapeamento...')
     
-    const foundReaction = await prisma.buttonReactionMapping.findUnique({
+    const foundReaction = await prisma.mapeamentoBotao.findUnique({
       where: { buttonId: 'test_button_123' }
     })
     
@@ -103,24 +108,27 @@ async function testButtonEmojiMapping() {
     // 5. Testar múltiplos mapeamentos
     console.log('\n5. Testando múltiplos mapeamentos...')
     
-    const multipleMappings = await prisma.buttonReactionMapping.createMany({
+    const multipleMappings = await prisma.mapeamentoBotao.createMany({
       data: [
         {
           buttonId: 'btn_sim',
-          messageId: 'msg_confirmacao',
-          emoji: '✅',
+          inboxId: 'msg_confirmacao',
+          actionType: 'SEND_TEMPLATE',
+          actionPayload: { emoji: '✅' },
           createdBy: 'test_user'
         },
         {
           buttonId: 'btn_nao',
-          messageId: 'msg_confirmacao',
-          emoji: '❌',
+          inboxId: 'msg_confirmacao',
+          actionType: 'SEND_TEMPLATE',
+          actionPayload: { emoji: '❌' },
           createdBy: 'test_user'
         },
         {
           buttonId: 'btn_ajuda',
-          messageId: 'msg_menu',
-          textReaction: 'Obrigado por solicitar ajuda! Nossa equipe entrará em contato.',
+          inboxId: 'msg_menu',
+          actionType: 'SEND_TEMPLATE',
+          actionPayload: { textReaction: 'Obrigado por solicitar ajuda! Nossa equipe entrará em contato.' },
           createdBy: 'test_user'
         }
       ]
@@ -131,8 +139,8 @@ async function testButtonEmojiMapping() {
     // 6. Buscar todos os mapeamentos de uma mensagem
     console.log('\n6. Buscando mapeamentos por mensagem...')
     
-    const messageReactions = await prisma.buttonReactionMapping.findMany({
-      where: { messageId: 'msg_confirmacao' }
+    const messageReactions = await prisma.mapeamentoBotao.findMany({
+      where: { inboxId: 'msg_confirmacao' }
     })
     
     console.log(`✅ Encontrados ${messageReactions.length} mapeamentos para msg_confirmacao:`)
@@ -143,9 +151,11 @@ async function testButtonEmojiMapping() {
     // 7. Testar atualização de mapeamento
     console.log('\n7. Testando atualização de mapeamento...')
     
-    const updatedReaction = await prisma.buttonReactionMapping.update({
+    const updatedReaction = await prisma.mapeamentoBotao.update({
       where: { buttonId: 'test_button_123' },
-      data: { emoji: '🎉' }
+      data: { 
+        actionPayload: { emoji: '🎉' }
+      }
     })
     
     console.log('✅ Mapeamento atualizado:', {
@@ -169,7 +179,7 @@ async function testButtonEmojiMapping() {
     // Limpar dados de teste
     console.log('\n🧹 Limpando dados de teste...')
     
-    await prisma.buttonReactionMapping.deleteMany({
+    await prisma.mapeamentoBotao.deleteMany({
       where: {
         OR: [
           { buttonId: { startsWith: 'test_' } },

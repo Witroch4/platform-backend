@@ -27,10 +27,10 @@ const JobUpdateSchema = z.object({
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { jobId: string } }
+  { params }: { params: Promise<{ jobId: string }> }
 ) {
   try {
-    const { jobId } = params;
+    const { jobId } = await params;
     const { searchParams } = new URL(request.url);
     const queueName = searchParams.get('queueName');
     const includePayload = searchParams.get('includePayload') === 'true';
@@ -110,7 +110,7 @@ export async function GET(
     });
 
   } catch (error) {
-    return handleApiError(error, `Failed to fetch job details for ${params.jobId}`);
+    return handleApiError(error, `Failed to fetch job details for ${(await params).jobId}`);
   }
 }
 
@@ -120,10 +120,10 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { jobId: string } }
+  { params }: { params: Promise<{ jobId: string }> }
 ) {
   try {
-    const { jobId } = params;
+    const { jobId } = await params;
     const body = await request.json();
     const updates = JobUpdateSchema.parse(body);
     const { searchParams } = new URL(request.url);
@@ -176,7 +176,7 @@ export async function PUT(
     });
 
   } catch (error) {
-    return handleApiError(error, `Failed to update job ${params.jobId}`);
+    return handleApiError(error, `Failed to update job ${(await params).jobId}`);
   }
 }
 
@@ -186,10 +186,10 @@ export async function PUT(
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { jobId: string } }
+  { params }: { params: Promise<{ jobId: string }> }
 ) {
   try {
-    const { jobId } = params;
+    const { jobId } = await params;
     const body = await request.json();
     const { action, queueName, options } = JobActionSchema.parse(body);
 
@@ -266,7 +266,7 @@ export async function POST(
     });
 
   } catch (error) {
-    return handleApiError(error, `Failed to perform action on job ${params.jobId}`);
+    return handleApiError(error, `Failed to perform action on job ${(await params).jobId}`);
   }
 }
 
@@ -276,10 +276,10 @@ export async function POST(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { jobId: string } }
+  { params }: { params: Promise<{ jobId: string }> }
 ) {
   try {
-    const { jobId } = params;
+    const { jobId } = await params;
     const { searchParams } = new URL(request.url);
     const queueName = searchParams.get('queueName');
     const force = searchParams.get('force') === 'true';
@@ -333,6 +333,6 @@ export async function DELETE(
     });
 
   } catch (error) {
-    return handleApiError(error, `Failed to delete job ${params.jobId}`);
+    return handleApiError(error, `Failed to delete job ${(await params).jobId}`);
   }
 }

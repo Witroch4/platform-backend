@@ -12,7 +12,7 @@ function generateOTP(numberOfDigits: number) {
 }
 
 export const findTwoFactorAuthTokenByEmail = async (email: string) => {
-	const token = await prisma.twoFactorToken.findUnique({
+	const token = await prisma.twoFactorToken.findFirst({
 		where: {
 			email,
 		},

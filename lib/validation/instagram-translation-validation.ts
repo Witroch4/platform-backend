@@ -318,6 +318,227 @@ export function validateForInstagramConversion(template: any): {
   };
 }
 
+// Enhanced Input Validation Functions
+export function validateJobData(data: any): {
+  valid: boolean;
+  errors: string[];
+  sanitizedData?: any;
+} {
+  const errors: string[] = [];
+  
+  // Required fields validation
+  if (!data.intentName || typeof data.intentName !== 'string' || data.intentName.trim().length === 0) {
+    errors.push('intentName is required and must be a non-empty string');
+  }
+  
+  if (!data.inboxId || typeof data.inboxId !== 'string' || data.inboxId.trim().length === 0) {
+    errors.push('inboxId is required and must be a non-empty string');
+  }
+  
+  if (!data.contactPhone || typeof data.contactPhone !== 'string' || data.contactPhone.trim().length === 0) {
+    errors.push('contactPhone is required and must be a non-empty string');
+  }
+  
+  // Convert conversationId to string if it's a number, then validate
+  const conversationIdStr = data.conversationId ? String(data.conversationId).trim() : '';
+  if (!conversationIdStr || conversationIdStr.length === 0) {
+    errors.push('conversationId is required and must be a non-empty string');
+  }
+  
+  if (!data.correlationId || typeof data.correlationId !== 'string' || data.correlationId.trim().length === 0) {
+    errors.push('correlationId is required and must be a non-empty string');
+  }
+  
+  if (!data.originalPayload || typeof data.originalPayload !== 'object') {
+    errors.push('originalPayload is required and must be an object');
+  }
+  
+  // Sanitize data if valid
+  if (errors.length === 0) {
+    const sanitizedData = {
+      intentName: data.intentName.trim(),
+      inboxId: data.inboxId.trim(),
+      contactPhone: data.contactPhone.trim(),
+      conversationId: conversationIdStr, // Use the converted string version
+      correlationId: data.correlationId.trim(),
+      originalPayload: data.originalPayload,
+      metadata: {
+        timestamp: new Date(),
+        retryCount: 0,
+        ...data.metadata,
+      },
+    };
+    
+    return { valid: true, errors: [], sanitizedData };
+  }
+  
+  return { valid: false, errors };
+}
+
+export function validateCorrelationId(correlationId: any): {
+  valid: boolean;
+  error?: string;
+  sanitized?: string;
+} {
+  if (!correlationId) {
+    return { valid: false, error: 'Correlation ID is required' };
+  }
+  
+  if (typeof correlationId !== 'string') {
+    return { valid: false, error: 'Correlation ID must be a string' };
+  }
+  
+  const sanitized = correlationId.trim();
+  
+  if (sanitized.length === 0) {
+    return { valid: false, error: 'Correlation ID cannot be empty' };
+  }
+  
+  if (sanitized.length > 100) {
+    return { valid: false, error: 'Correlation ID too long (max 100 characters)' };
+  }
+  
+  // Check for valid characters (alphanumeric, hyphens, underscores)
+  if (!/^[a-zA-Z0-9\-_]+$/.test(sanitized)) {
+    return { valid: false, error: 'Correlation ID contains invalid characters' };
+  }
+  
+  return { valid: true, sanitized };
+}
+
+export function validateTimeout(timeoutMs: any): {
+  valid: boolean;
+  error?: string;
+  sanitized?: number;
+} {
+  if (timeoutMs === undefined || timeoutMs === null) {
+    return { valid: true, sanitized: 4500 }; // Default timeout
+  }
+  
+  if (typeof timeoutMs !== 'number') {
+    return { valid: false, error: 'Timeout must be a number' };
+  }
+  
+  if (timeoutMs < 100) {
+    return { valid: false, error: 'Timeout too short (minimum 100ms)' };
+  }
+  
+  if (timeoutMs > 30000) {
+    return { valid: false, error: 'Timeout too long (maximum 30 seconds)' };
+  }
+  
+  return { valid: true, sanitized: Math.floor(timeoutMs) };
+}
+
+export function sanitizeErrorMessage(error: any): string {
+  if (!error) {
+    return 'Unknown error occurred';
+  }
+  
+  if (typeof error === 'string') {
+    return error.substring(0, 500); // Limit error message length
+  }
+  
+  if (error instanceof Error) {
+    return error.message.substring(0, 500);
+  }
+  
+  if (typeof error === 'object' && error.message) {
+    return String(error.message).substring(0, 500);
+  }
+  
+  return String(error).substring(0, 500);
+}
+
+// Security validation functions
+export function validatePayloadSecurity(payload: any): {
+  safe: boolean;
+  issues: string[];
+} {
+  const issues: string[] = [];
+  
+  // Check for potential XSS patterns
+  const xssPatterns = [
+    /<script/i,
+    /javascript:/i,
+    /on\w+\s*=/i,
+    /<iframe/i,
+    /<object/i,
+    /<embed/i,
+  ];
+  
+  const payloadString = JSON.stringify(payload);
+  
+  for (const pattern of xssPatterns) {
+    if (pattern.test(payloadString)) {
+      issues.push(`Potential XSS pattern detected: ${pattern.source}`);
+    }
+  }
+  
+  // Check for SQL injection patterns
+  const sqlPatterns = [
+    /union\s+select/i,
+    /drop\s+table/i,
+    /delete\s+from/i,
+    /insert\s+into/i,
+    /update\s+set/i,
+  ];
+  
+  for (const pattern of sqlPatterns) {
+    if (pattern.test(payloadString)) {
+      issues.push(`Potential SQL injection pattern detected: ${pattern.source}`);
+    }
+  }
+  
+  // Check payload size
+  if (payloadString.length > 100000) { // 100KB limit
+    issues.push('Payload too large (exceeds 100KB)');
+  }
+  
+  return {
+    safe: issues.length === 0,
+    issues,
+  };
+}
+
+// Rate limiting validation
+export function validateRateLimit(inboxId: string, rateLimitMap: Map<string, number[]>): {
+  allowed: boolean;
+  reason?: string;
+  retryAfter?: number;
+} {
+  const now = Date.now();
+  const windowMs = 60000; // 1 minute window
+  const maxRequests = 100; // Max 100 requests per minute per inbox
+  
+  if (!rateLimitMap.has(inboxId)) {
+    rateLimitMap.set(inboxId, []);
+  }
+  
+  const requests = rateLimitMap.get(inboxId)!;
+  
+  // Remove old requests outside the window
+  const validRequests = requests.filter(timestamp => now - timestamp < windowMs);
+  rateLimitMap.set(inboxId, validRequests);
+  
+  if (validRequests.length >= maxRequests) {
+    const oldestRequest = Math.min(...validRequests);
+    const retryAfter = Math.ceil((oldestRequest + windowMs - now) / 1000);
+    
+    return {
+      allowed: false,
+      reason: `Rate limit exceeded for inbox ${inboxId}`,
+      retryAfter,
+    };
+  }
+  
+  // Add current request
+  validRequests.push(now);
+  rateLimitMap.set(inboxId, validRequests);
+  
+  return { allowed: true };
+}
+
 // Export all schemas and types
 export type ChannelType = z.infer<typeof ChannelTypeSchema>;
 export type WhatsAppTemplate = z.infer<typeof WhatsAppTemplateSchema>;

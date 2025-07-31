@@ -68,16 +68,15 @@ async function testDisparoDebug() {
     });
 
     // 3. Buscar um lead para teste
-    const lead = await prisma.leadChatwit.findFirst({
+    const lead = await prisma.lead.findFirst({
       where: {
-        usuarioId: template.usuarioChatwitId,
-        phoneNumber: { not: null }
+        userId: template.usuarioChatwitId,
+        phone: { not: null }
       },
       select: {
         id: true,
         name: true,
-        nomeReal: true,
-        phoneNumber: true
+        phone: true
       }
     });
 
@@ -88,8 +87,8 @@ async function testDisparoDebug() {
 
     console.log('\n👤 Lead encontrado:');
     console.log(`- ID: ${lead.id}`);
-    console.log(`- Nome: ${lead.nomeReal || lead.name}`);
-    console.log(`- Telefone: ${lead.phoneNumber}`);
+    console.log(`- Nome: ${lead.name}`);
+    console.log(`- Telefone: ${lead.phone}`);
 
     // 4. Simular diferentes cenários de parâmetros
     const testScenarios = [

@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { auth } from '@/auth';
+import { invalidateTemplateMappingCache } from '@/lib/cache/instagram-template-cache';
 
 // GET: Lista todos os mapeamentos de uma caixa de entrada
 export async function GET(request: NextRequest, { params }: { params: Promise<{ caixaId: string }> }) {
@@ -12,23 +13,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const mapeamentos = await db.mapeamentoIntencao.findMany({
-      where: { caixaEntradaId: caixaId },
+      where: { inboxId: caixaId },
       include: {
-        // New unified template system
-        unifiedTemplate: { 
-          select: { 
-            id: true, 
-            name: true, 
-            type: true, 
-            description: true,
-            isActive: true 
-          } 
-        },
-        // Legacy support during transition
         template: { select: { id: true, name: true } },
-        mensagemInterativa: { select: { id: true, nome: true } },
-        // New interactive message system
-        interactiveMessage: { select: { id: true, name: true } },
+        inbox: { select: { id: true, nome: true } },
       },
       orderBy: { intentName: 'asc' },
     });
@@ -50,36 +38,98 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const body = await request.json();
-    const { id: mappingId, intentName, templateId, mensagemInterativaId, interactiveMessageId, unifiedTemplateId } = body;
-
-    // Count how many response types are provided
-    const responseCount = [templateId, mensagemInterativaId, interactiveMessageId, unifiedTemplateId].filter(Boolean).length;
-
-    if (!intentName || responseCount === 0) {
-      return NextResponse.json({ error: 'Intenção e uma resposta (template unificado, template legado ou mensagem) são obrigatórios.' }, { status: 400 });
-    }
+    console.log("=== DEBUG API ===");
+    console.log("Body recebido:", body);
+    console.log("caixaId from params:", caixaId);
     
-    if (responseCount > 1) {
-        return NextResponse.json({ error: 'Escolha apenas uma resposta: template unificado, template legado ou mensagem interativa.' }, { status: 400 });
+    const { id: mappingId, intentName, templateId } = body;
+    
+    console.log("Campos extraídos:");
+    console.log("- mappingId:", mappingId);
+    console.log("- intentName:", intentName);
+    console.log("- templateId:", templateId);
+
+    if (!intentName || !templateId) {
+      console.log("Validação falhou:");
+      console.log("- intentName existe:", !!intentName);
+      console.log("- templateId existe:", !!templateId);
+      return NextResponse.json({ error: 'Intenção e template são obrigatórios.' }, { status: 400 });
     }
 
     const data = {
       intentName,
-      caixaEntradaId: caixaId,
-      // New unified template system (priority)
-      unifiedTemplateId: unifiedTemplateId || null,
-      // Legacy support
-      templateId: templateId || null,
-      mensagemInterativaId: mensagemInterativaId || null,
-      // New interactive message system
-      interactiveMessageId: interactiveMessageId || null,
+      inboxId: caixaId,
+      templateId,
     };
+    
+    console.log("Data para salvar:", data);
 
     const savedMapping = await db.mapeamentoIntencao.upsert({
       where: { id: mappingId || '' },
       update: data,
       create: data,
     });
+    
+    console.log("Mapeamento salvo:", savedMapping);
+
+    // Invalidate Instagram template cache for this mapping
+    try {
+      // Find the ChatwitInbox to get the correct inboxId for cache invalidation
+      const chatwitInbox = await db.chatwitInbox.findUnique({
+        where: { id: caixaId },
+        select: { inboxId: true, usuarioChatwitId: true }
+      });
+      
+      if (chatwitInbox) {
+        // Use the correct usuarioChatwitId and Chatwit inboxId for cache invalidation
+        console.log(`[API Cache Invalidation] [DEBUG] Preparing cache invalidation for mapping creation:`, {
+          operation: 'POST /mapeamentos/[caixaId]',
+          userContext: { usuarioChatwitId: chatwitInbox.usuarioChatwitId, inboxId: chatwitInbox.inboxId },
+          intentName,
+          templateId,
+          internalCaixaId: caixaId,
+          externalInboxId: chatwitInbox.inboxId,
+          cacheKeyFormat: `${intentName}:${chatwitInbox.usuarioChatwitId}:${chatwitInbox.inboxId}`,
+          mappingId: savedMapping.id
+        });
+        
+        await invalidateTemplateMappingCache(intentName, chatwitInbox.usuarioChatwitId, chatwitInbox.inboxId);
+        
+        console.log(`[API Cache Invalidation] [SUCCESS] Instagram cache cleared for mapping creation:`, {
+          operation: 'POST /mapeamentos/[caixaId]',
+          userContext: { usuarioChatwitId: chatwitInbox.usuarioChatwitId, inboxId: chatwitInbox.inboxId },
+          intentName,
+          templateId,
+          internalCaixaId: caixaId,
+          externalInboxId: chatwitInbox.inboxId,
+          mappingId: savedMapping.id,
+          reason: 'New mapping created or updated'
+        });
+      } else {
+        console.warn(`[API Cache Invalidation] [ERROR] ChatwitInbox not found for cache invalidation:`, {
+          operation: 'POST /mapeamentos/[caixaId]',
+          intentName,
+          templateId,
+          internalCaixaId: caixaId,
+          error: 'ChatwitInbox not found',
+          impact: 'Cache not invalidated - may serve stale data'
+        });
+      }
+    } catch (cacheError) {
+      console.error('[API Cache Invalidation] [ERROR] Error clearing Instagram cache:', {
+        operation: 'POST /mapeamentos/[caixaId]',
+        intentName,
+        templateId,
+        internalCaixaId: caixaId,
+        error: cacheError instanceof Error ? {
+          message: cacheError.message,
+          name: cacheError.name,
+          stack: cacheError.stack
+        } : cacheError,
+        impact: 'Cache not invalidated - may serve stale data'
+      });
+      // Don't fail the request if cache invalidation fails
+    }
 
     return NextResponse.json(savedMapping, { status: 201 });
   } catch (error) {

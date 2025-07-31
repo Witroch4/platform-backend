@@ -23,7 +23,7 @@ export async function PUT(req: Request) {
 
     // Obter os dados do corpo da requisição
     const body = await req.json();
-    const { templateId, name, components } = body;
+    const { templateId, name, components, submit_for_review } = body;
 
     if (!templateId || !name || !components) {
       return NextResponse.json({ 
@@ -34,8 +34,16 @@ export async function PUT(req: Request) {
 
     try {
       // Verificar se o template existe no banco
-      const existingTemplate = await prisma.whatsAppTemplate.findFirst({
-        where: { templateId: templateId }
+      const existingTemplate = await prisma.template.findFirst({
+        where: { 
+          whatsappOfficialInfo: {
+            metaTemplateId: templateId
+          },
+          createdById: session.user.id
+        },
+        include: {
+          whatsappOfficialInfo: true
+        }
       });
 
       if (!existingTemplate) {
@@ -46,13 +54,48 @@ export async function PUT(req: Request) {
       }
 
       // Atualizar o template no banco de dados
-      await prisma.whatsAppTemplate.update({
+      await prisma.template.update({
         where: { id: existingTemplate.id },
         data: {
-          components: components,
-          lastEdited: new Date()
+          name: name,
+          updatedAt: new Date(),
+          whatsappOfficialInfo: {
+            update: {
+              components: components,
+              updatedAt: new Date()
+            }
+          }
         }
       });
+
+      // Se submit_for_review for true, enviar para análise no WhatsApp
+      if (submit_for_review) {
+        try {
+          const config = {
+            fbGraphApiBase: process.env.FB_GRAPH_API_BASE || 'https://graph.facebook.com/v22.0',
+            whatsappBusinessAccountId: process.env.WHATSAPP_BUSINESS_ID || '294585820394901',
+            whatsappToken: process.env.WHATSAPP_TOKEN || mtfDiamanteConfig.whatsappToken,
+          };
+
+          // Enviar template para análise no WhatsApp
+          const url = `${config.fbGraphApiBase}/${config.whatsappBusinessAccountId}/message_templates`;
+          const response = await axios.post(url, {
+            name: name,
+            category: existingTemplate.whatsappOfficialInfo?.category || 'UTILITY',
+            components: components
+          }, {
+            headers: {
+              Authorization: `Bearer ${config.whatsappToken}`,
+              'Content-Type': 'application/json',
+            }
+          });
+
+          console.log('Template enviado para análise no WhatsApp:', response.data);
+        } catch (whatsappError) {
+          console.error('Erro ao enviar template para análise no WhatsApp:', whatsappError);
+          // Não falhar a operação se o envio para análise falhar
+        }
+      }
 
       return NextResponse.json({ 
         success: true, 

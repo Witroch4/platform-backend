@@ -37,10 +37,11 @@ interface MapeamentoTabProps {
 interface Mapeamento {
   id: string;
   intentName: string;
-  templateId?: string | null;
+  templateId: string;
+  template?: { id: string; name: string; type: string };
+  // Campos de exibição para compatibilidade (não usados na API)
   mensagemInterativaId?: string | null;
   interactiveMessageId?: string | null;
-  template?: { id: string; name: string };
   mensagemInterativa?: { id: string; nome: string };
   interactiveMessage?: { id: string; name: string };
 }
@@ -168,10 +169,15 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
   const handleEdit = (mapeamento: Mapeamento) => {
     setId(mapeamento.id);
     setIntentName(mapeamento.intentName);
-    setSelectedTemplate(mapeamento.templateId || null);
-    setSelectedMensagem(
-      mapeamento.interactiveMessageId || mapeamento.mensagemInterativaId || null
-    );
+    
+    // Verificar se é template ou mensagem interativa baseado no tipo
+    if (mapeamento.template?.type === 'INTERACTIVE_MESSAGE') {
+      setSelectedMensagem(mapeamento.templateId);
+      setSelectedTemplate(null);
+    } else {
+      setSelectedTemplate(mapeamento.templateId);
+      setSelectedMensagem(null);
+    }
   };
 
   const handleDelete = async (mappingId: string) => {
@@ -194,6 +200,13 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validar que pelo menos uma opção foi selecionada
+    if (!selectedTemplate && !selectedMensagem) {
+      toast.error("Selecione um template ou mensagem interativa");
+      return;
+    }
+    
     try {
       const response = await fetch(`/api/admin/mtf-diamante/mapeamentos`, {
         method: "POST",
@@ -201,8 +214,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
         body: JSON.stringify({
           id,
           intentName,
-          templateId: selectedTemplate,
-          interactiveMessageId: selectedMensagem, // Use the new field
+          templateId: selectedTemplate || selectedMensagem, // Usar o que foi selecionado como templateId
           caixaId,
         }),
       });
@@ -211,6 +223,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
         const errorData = await response.json();
         throw new Error(errorData.error || `Falha ao salvar mapeamento.`);
       }
+      
       toast.success("Mapeamento salvo com sucesso!");
       resetForm();
       fetchData();
@@ -240,11 +253,6 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
   const handleConfigureReactions = (mapping: Mapeamento) => {
     if (mapping.templateId) {
       fetchTemplateDetails(mapping.templateId);
-    } else if (mapping.interactiveMessageId || mapping.mensagemInterativaId) {
-      // Para mensagens interativas, usar o ID da mensagem diretamente
-      const messageId = mapping.interactiveMessageId || mapping.mensagemInterativaId;
-      setShowReactionConfig(messageId ?? null);
-      setSelectedTemplateDetails(null);
     }
   };
 

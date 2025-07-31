@@ -4,8 +4,56 @@ import {
   InstagramTranslationJobData,
   InstagramTranslationResult,
   logWithCorrelationId,
+  InstagramTranslationErrorCodes,
 } from '@/lib/queue/instagram-translation.queue';
+import {
+  instagramTranslationMonitor,
+  recordInstagramTranslationMetrics,
+  recordInstagramWorkerPerformanceMetrics,
+} from '@/lib/monitoring/instagram-translation-monitor';
+import {
+  instagramTranslationLogger,
+  createLogContext,
+  updateLogContext,
+} from '@/lib/logging/instagram-translation-logger';
+import {
+  trackInstagramError,
+} from '@/lib/monitoring/instagram-error-tracker';
 import { findCompleteMessageMappingByIntent } from '@/lib/dialogflow-database-queries';
+import {
+  findOptimizedCompleteMessageMapping,
+  recordDatabaseQuery,
+} from '@/lib/instagram/optimized-database-queries';
+import {
+  getCachedConversionResult,
+  setCachedConversionResult,
+} from '@/lib/cache/instagram-template-cache';
+import {
+  createInstagramGenericTemplate,
+  createInstagramButtonTemplate,
+  createInstagramQuickReplies,
+  createInstagramFallbackMessage,
+  convertWhatsAppButtonsToInstagram,
+  convertEnhancedButtonsToInstagram,
+  determineInstagramTemplateType,
+  validateInstagramTemplate,
+  DialogflowFulfillmentMessage,
+} from '@/lib/instagram/payload-builder';
+import {
+  validateJobData,
+  validateForInstagramConversion,
+  sanitizeErrorMessage,
+} from '@/lib/validation/instagram-translation-validation';
+import {
+  InstagramTranslationError,
+  createTemplateNotFoundError,
+  createDatabaseError,
+  createConversionFailedError,
+  createValidationError,
+  logError,
+  attemptRecovery,
+  isRetryableError,
+} from '@/lib/error-handling/instagram-translation-errors';
 
 const prisma = new PrismaClient();
 
@@ -17,358 +65,1272 @@ export async function processInstagramTranslationTask(
   job: Job<InstagramTranslationJobData>
 ): Promise<InstagramTranslationResult> {
   const startTime = Date.now();
-  const { intentName, inboxId, contactPhone, correlationId } = job.data;
+  const correlationId = job.data.correlationId;
+  const initialCpuUsage = process.cpuUsage();
+  const initialMemoryUsage = process.memoryUsage();
+
+  // Create logging context
+  const logContext = createLogContext(correlationId, {
+    jobId: job.id?.toString(),
+    intentName: job.data.intentName,
+    inboxId: job.data.inboxId,
+    retryCount: job.attemptsMade,
+  });
+
+  // Log job start
+  instagramTranslationLogger.workerJobStarted(logContext);
 
   logWithCorrelationId('info', 'Starting Instagram translation processing', correlationId, {
-    intentName,
-    inboxId,
-    contactPhone,
+    jobId: job.id,
+    attemptsMade: job.attemptsMade,
+    maxAttempts: job.opts?.attempts,
   });
 
   try {
-    // Query database for complete message mapping
-    const messageMapping = await findCompleteMessageMappingByIntent(intentName, inboxId);
+    // Validate job data
+    const validation = validateJobData(job.data);
+    if (!validation.valid) {
+      const error = createValidationError('job_data', validation.errors.join(', '), correlationId);
+      logError(error);
+      throw error;
+    }
 
-    if (!messageMapping) {
-      logWithCorrelationId('warn', 'No message mapping found for intent', correlationId, {
+    const { intentName, inboxId, contactPhone } = validation.sanitizedData!;
+
+    // Query database for complete message mapping with optimized caching
+    let messageMapping;
+    let databaseQueryTime = 0;
+    try {
+      const dbQueryStart = Date.now();
+      messageMapping = await findOptimizedCompleteMessageMapping(intentName, inboxId);
+      databaseQueryTime = Date.now() - dbQueryStart;
+      
+      // Record database query performance
+      recordDatabaseQuery('findOptimizedCompleteMessageMapping', databaseQueryTime, true);
+      
+      // Log database query performance
+      instagramTranslationLogger.workerDatabaseQuery(logContext, 'findOptimizedCompleteMessageMapping', databaseQueryTime);
+    } catch (dbError) {
+      const error = createDatabaseError('findOptimizedCompleteMessageMapping', dbError as Error, correlationId);
+      logError(error);
+      
+      // Record failed database query
+      recordDatabaseQuery('findOptimizedCompleteMessageMapping', databaseQueryTime, false, dbError as Error);
+      
+      // Track error
+      trackInstagramError(correlationId, InstagramTranslationErrorCodes.DATABASE_ERROR, error, {
         intentName,
         inboxId,
-      });
-
-      return {
-        success: false,
-        error: `No message mapping found for intent: ${intentName}`,
-        processingTime: Date.now() - startTime,
-      };
+        retryCount: job.attemptsMade,
+        jobId: job.id?.toString(),
+      }, { queryType: 'findOptimizedCompleteMessageMapping' });
+      
+      throw error;
     }
+
+    if (!messageMapping) {
+      const error = createTemplateNotFoundError(intentName, inboxId, correlationId);
+      logError(error);
+      
+      // Track error
+      trackInstagramError(correlationId, InstagramTranslationErrorCodes.TEMPLATE_NOT_FOUND, error, {
+        intentName,
+        inboxId,
+        retryCount: job.attemptsMade,
+        jobId: job.id?.toString(),
+      }, { queryType: 'findCompleteMessageMappingByIntent' });
+      
+      throw error;
+    }
+
+    // Extract usuarioChatwitId for cache operations
+    const usuarioChatwitId = messageMapping.usuarioChatwitId;
+    if (!usuarioChatwitId) {
+      const error = createDatabaseError('usuarioChatwitId missing from message mapping', new Error('usuarioChatwitId is required for cache operations'), correlationId);
+      logError(error);
+      throw error;
+    }
+
+    // Log cache key information for debugging
+    logWithCorrelationId('debug', 'Cache key components extracted for Instagram translation', correlationId, {
+      userContext: { usuarioChatwitId, inboxId },
+      intentName,
+      cacheKeyFormat: `${intentName}:${usuarioChatwitId}:${inboxId}`,
+      operation: 'instagram_translation_cache_lookup',
+      step: 'cache_key_generation'
+    });
+
+    // Update log context with message type
+    const updatedLogContext = updateLogContext(logContext, {
+      messageType: messageMapping.messageType,
+    });
 
     logWithCorrelationId('info', 'Found message mapping', correlationId, {
       messageType: messageMapping.messageType,
       intentName,
     });
 
-    // Process based on message type
+    // Process based on message type with comprehensive error handling and caching
     let fulfillmentMessages: any[] = [];
+    let conversionTime = 0;
+    let validationTime = 0;
 
-    switch (messageMapping.messageType) {
-      case 'interactive':
-        if (messageMapping.interactiveMessage) {
-          fulfillmentMessages = await convertInteractiveMessageToInstagram(
-            messageMapping.interactiveMessage,
-            correlationId
-          );
-        }
-        break;
+    // Log conversion start
+    const bodyLength = getBodyLengthFromMapping(messageMapping);
+    const hasImage = getHasImageFromMapping(messageMapping);
+    
+    instagramTranslationLogger.workerConversionStarted(updatedLogContext, messageMapping.messageType, bodyLength);
 
-      case 'enhanced_interactive':
-        if (messageMapping.enhancedInteractiveMessage) {
-          fulfillmentMessages = await convertEnhancedInteractiveMessageToInstagram(
-            messageMapping.enhancedInteractiveMessage,
-            correlationId
-          );
-        }
-        break;
+    // Try to get cached conversion result first
+    const cachedResult = await getCachedConversionResult(intentName, usuarioChatwitId, inboxId, bodyLength, hasImage);
+    if (cachedResult && cachedResult.templateType !== 'incompatible') {
+      fulfillmentMessages = cachedResult.fulfillmentMessages;
+      conversionTime = cachedResult.processingTime;
+      
+      logWithCorrelationId('info', 'Using cached conversion result for Instagram translation', correlationId, {
+        userContext: { usuarioChatwitId, inboxId },
+        intentName,
+        cacheKey: `${intentName}:${usuarioChatwitId}:${inboxId}:${bodyLength}:${hasImage}`,
+        templateType: cachedResult.templateType,
+        bodyLength: cachedResult.originalBodyLength,
+        buttonsCount: cachedResult.buttonsCount,
+        hasImage: cachedResult.hasImage,
+        cachedAt: cachedResult.cachedAt,
+        processingTime: cachedResult.processingTime,
+        operation: 'instagram_translation_cache_hit'
+      });
+    } else {
+      // Cache miss - perform conversion
+      try {
+        const conversionStart = Date.now();
+      
+      switch (messageMapping.messageType) {
+        case 'unified_template':
+          if (messageMapping.unifiedTemplate) {
+            fulfillmentMessages = await convertUnifiedTemplateToInstagram(
+              messageMapping.unifiedTemplate,
+              correlationId,
+              updatedLogContext
+            );
+          } else {
+            throw createConversionFailedError('Unified template data is missing', correlationId);
+          }
+          break;
 
-      case 'template':
-        if (messageMapping.template) {
+        case 'interactive':
+          if (messageMapping.interactiveMessage) {
+            fulfillmentMessages = await convertInteractiveMessageToInstagram(
+              messageMapping.interactiveMessage,
+              correlationId,
+              updatedLogContext
+            );
+          } else {
+            throw createConversionFailedError('Interactive message data is missing', correlationId);
+          }
+          break;
+
+        case 'enhanced_interactive':
+          if (messageMapping.enhancedInteractiveMessage) {
+            fulfillmentMessages = await convertEnhancedInteractiveMessageToInstagram(
+              messageMapping.enhancedInteractiveMessage,
+              correlationId,
+              updatedLogContext
+            );
+          } else {
+            throw createConversionFailedError('Enhanced interactive message data is missing', correlationId);
+          }
+          break;
+
+        case 'template':
           // Templates are not supported for Instagram conversion yet
-          logWithCorrelationId('warn', 'Template messages not supported for Instagram', correlationId, {
-            templateName: messageMapping.template.name,
+          const templateError = createConversionFailedError(
+            'Template messages are not supported for Instagram conversion',
+            correlationId,
+            { templateName: messageMapping.template?.name }
+          );
+          logError(templateError);
+          
+          // Track error
+          trackInstagramError(correlationId, InstagramTranslationErrorCodes.CONVERSION_FAILED, templateError, {
+            intentName,
+            inboxId,
+            messageType: messageMapping.messageType,
+            retryCount: job.attemptsMade,
+            jobId: job.id?.toString(),
+          }, { templateName: messageMapping.template?.name });
+          
+          throw templateError;
+
+        default:
+          const unsupportedError = createConversionFailedError(
+            `Unsupported message type for Instagram: ${messageMapping.messageType}`,
+            correlationId,
+            { messageType: messageMapping.messageType }
+          );
+          logError(unsupportedError);
+          
+          // Track error
+          trackInstagramError(correlationId, InstagramTranslationErrorCodes.CONVERSION_FAILED, unsupportedError, {
+            intentName,
+            inboxId,
+            messageType: messageMapping.messageType,
+            retryCount: job.attemptsMade,
+            jobId: job.id?.toString(),
+          }, { messageType: messageMapping.messageType });
+          
+          throw unsupportedError;
+      }
+        
+        conversionTime = Date.now() - conversionStart;
+        
+        // Cache the conversion result for future use
+        if (fulfillmentMessages.length > 0) {
+          const templateType = determineTemplateTypeFromMessages(fulfillmentMessages);
+          const buttonsCount = countButtonsInMessages(fulfillmentMessages);
+          
+          await setCachedConversionResult(intentName, usuarioChatwitId, inboxId, bodyLength, hasImage, {
+            fulfillmentMessages,
+            templateType: templateType as 'generic' | 'button' | 'incompatible',
+            processingTime: conversionTime,
+            buttonsCount,
           });
           
-          return {
-            success: false,
-            error: 'Template messages are not supported for Instagram conversion',
-            processingTime: Date.now() - startTime,
-          };
+          logWithCorrelationId('info', 'Instagram conversion result cached successfully', correlationId, {
+            userContext: { usuarioChatwitId, inboxId },
+            intentName,
+            cacheKey: `${intentName}:${usuarioChatwitId}:${inboxId}:${bodyLength}:${hasImage}`,
+            templateType,
+            bodyLength,
+            buttonsCount,
+            hasImage,
+            processingTime: conversionTime,
+            messagesGenerated: fulfillmentMessages.length,
+            operation: 'instagram_translation_cache_set'
+          });
         }
-        break;
-
-      default:
-        logWithCorrelationId('warn', 'Unsupported message type for Instagram', correlationId, {
+        
+      } catch (conversionError) {
+      if (conversionError instanceof InstagramTranslationError) {
+        // Track conversion error
+        trackInstagramError(correlationId, conversionError.code as string, conversionError, {
+          intentName,
+          inboxId,
           messageType: messageMapping.messageType,
+          retryCount: job.attemptsMade,
+          jobId: job.id?.toString(),
         });
         
-        return {
-          success: false,
-          error: `Unsupported message type for Instagram: ${messageMapping.messageType}`,
-          processingTime: Date.now() - startTime,
-        };
+        throw conversionError;
+      }
+      
+      const error = createConversionFailedError(
+        sanitizeErrorMessage(conversionError),
+        correlationId,
+        { originalError: conversionError instanceof Error ? conversionError.message : String(conversionError) }
+      );
+      logError(error);
+      
+        // Track error
+        trackInstagramError(correlationId, InstagramTranslationErrorCodes.CONVERSION_FAILED, error, {
+          intentName,
+          inboxId,
+          messageType: messageMapping.messageType,
+          retryCount: job.attemptsMade,
+          jobId: job.id?.toString(),
+        }, { originalError: conversionError instanceof Error ? conversionError.message : String(conversionError) });
+        
+        throw error;
+      }
     }
 
     if (fulfillmentMessages.length === 0) {
-      return {
-        success: false,
-        error: 'No Instagram messages generated from conversion',
-        processingTime: Date.now() - startTime,
-      };
+      const error = createConversionFailedError('No Instagram messages generated from conversion', correlationId);
+      logError(error);
+      
+      // Track error
+      trackInstagramError(correlationId, InstagramTranslationErrorCodes.CONVERSION_FAILED, error, {
+        intentName,
+        inboxId,
+        messageType: messageMapping.messageType,
+        retryCount: job.attemptsMade,
+        jobId: job.id?.toString(),
+      });
+      
+      throw error;
     }
 
     const processingTime = Date.now() - startTime;
+    const finalCpuUsage = process.cpuUsage(initialCpuUsage);
+    const finalMemoryUsage = process.memoryUsage();
+    const queueWaitTime = job.processedOn ? job.processedOn - (job.timestamp || 0) : 0;
+
+    // Log successful completion
+    instagramTranslationLogger.workerJobCompleted(updatedLogContext, true, processingTime, fulfillmentMessages.length);
+
     logWithCorrelationId('info', 'Instagram translation completed successfully', correlationId, {
       processingTime,
       messagesGenerated: fulfillmentMessages.length,
+      jobId: job.id,
     });
 
-    return {
+    // Record translation metrics
+    const templateType = determineTemplateTypeFromMessages(fulfillmentMessages);
+    recordInstagramTranslationMetrics({
+      correlationId,
+      conversionTime,
+      templateType: templateType as 'generic' | 'button' | 'incompatible',
+      bodyLength,
+      buttonsCount: countButtonsInMessages(fulfillmentMessages),
+      hasImage: hasImageInMessages(fulfillmentMessages),
+      success: true,
+      timestamp: new Date(),
+      retryCount: job.attemptsMade,
+      messageType: messageMapping.messageType as 'interactive' | 'enhanced_interactive' | 'template' | 'unified_template',
+    });
+
+    // Record worker performance metrics
+    recordInstagramWorkerPerformanceMetrics({
+      correlationId,
+      jobId: job.id?.toString() || 'unknown',
+      processingTime,
+      queueWaitTime,
+      databaseQueryTime,
+      conversionTime,
+      validationTime,
+      success: true,
+      timestamp: new Date(),
+      retryCount: job.attemptsMade,
+      memoryUsage: finalMemoryUsage,
+      cpuUsage: finalCpuUsage,
+    });
+
+    // Log the exact fulfillment messages being returned
+    console.log(`[Instagram Worker] [${correlationId}] FULFILLMENT MESSAGES GENERATED:`, JSON.stringify(fulfillmentMessages, null, 2));
+    console.log(`[Instagram Worker] [${correlationId}] FULFILLMENT MESSAGES STRUCTURE:`, fulfillmentMessages.map((msg, index) => ({
+      index,
+      hasCustomPayload: !!msg.custom_payload,
+      hasInstagramPayload: !!(msg.custom_payload && msg.custom_payload.instagram),
+      messageKeys: Object.keys(msg),
+      customPayloadKeys: msg.custom_payload ? Object.keys(msg.custom_payload) : [],
+      instagramPayloadKeys: msg.custom_payload && msg.custom_payload.instagram ? Object.keys(msg.custom_payload.instagram) : [],
+      instagramPayloadType: msg.custom_payload && msg.custom_payload.instagram ? msg.custom_payload.instagram.attachment?.type : 'unknown',
+    })));
+
+    const result = {
       success: true,
       fulfillmentMessages,
       processingTime,
+      metadata: {
+        messagesGenerated: fulfillmentMessages.length,
+        messageType: messageMapping.messageType,
+        attemptsMade: job.attemptsMade,
+        templateType,
+        conversionTime,
+        databaseQueryTime,
+      },
     };
+
+    console.log(`[Instagram Worker] [${correlationId}] FINAL RESULT BEING RETURNED:`, JSON.stringify(result, null, 2));
+
+    return result;
 
   } catch (error) {
     const processingTime = Date.now() - startTime;
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const finalCpuUsage = process.cpuUsage(initialCpuUsage);
+    const finalMemoryUsage = process.memoryUsage();
+    const queueWaitTime = job.processedOn ? job.processedOn - (job.timestamp || 0) : 0;
     
-    logWithCorrelationId('error', 'Error processing Instagram translation', correlationId, {
+    // Log job failure
+    instagramTranslationLogger.workerJobFailed(logContext, error as Error, error instanceof InstagramTranslationError ? error.retryable : false);
+    
+    // Handle Instagram translation errors
+    if (error instanceof InstagramTranslationError) {
+      logWithCorrelationId('error', 'Instagram translation error occurred', correlationId, {
+        errorCode: error.code,
+        retryable: error.retryable,
+        processingTime,
+        attemptsMade: job.attemptsMade,
+      });
+
+      // Attempt recovery if possible
+      try {
+        const recovery = await attemptRecovery(error);
+        if (recovery.fallbackAction === 'simple_text' && recovery.fallbackMessage) {
+          // Log successful recovery
+          instagramTranslationLogger.errorRecoverySucceeded(logContext, error.code, 'simple_text');
+          
+          // Return a simple fallback message
+          return {
+            success: true,
+            fulfillmentMessages: createInstagramFallbackMessage(recovery.fallbackMessage),
+            processingTime,
+            metadata: {
+              fallbackUsed: true,
+              originalError: error.code,
+            },
+          };
+        }
+      } catch (recoveryError) {
+        instagramTranslationLogger.errorRecoveryFailed(logContext, error.code, recoveryError as Error);
+        
+        logWithCorrelationId('error', 'Error recovery failed', correlationId, {
+          recoveryError: sanitizeErrorMessage(recoveryError),
+        });
+      }
+
+      // Record failed translation metrics
+      recordInstagramTranslationMetrics({
+        correlationId,
+        conversionTime: 0,
+        templateType: 'incompatible',
+        bodyLength: 0,
+        buttonsCount: 0,
+        hasImage: false,
+        success: false,
+        error: error.message,
+        errorCode: error.code,
+        timestamp: new Date(),
+        retryCount: job.attemptsMade,
+        messageType: 'interactive',
+      });
+
+      // Record failed worker performance metrics
+      recordInstagramWorkerPerformanceMetrics({
+        correlationId,
+        jobId: job.id?.toString() || 'unknown',
+        processingTime,
+        queueWaitTime,
+        databaseQueryTime: 0,
+        conversionTime: 0,
+        validationTime: 0,
+        success: false,
+        error: error.message,
+        errorCode: error.code,
+        timestamp: new Date(),
+        retryCount: job.attemptsMade,
+        memoryUsage: finalMemoryUsage,
+        cpuUsage: finalCpuUsage,
+      });
+
+      // If retryable and we haven't exceeded attempts, let BullMQ retry
+      if (error.retryable && job.attemptsMade < (job.opts?.attempts || 3)) {
+        logWithCorrelationId('info', 'Rethrowing retryable error for BullMQ retry', correlationId, {
+          attemptsMade: job.attemptsMade,
+          maxAttempts: job.opts?.attempts,
+        });
+        throw error; // Let BullMQ handle the retry
+      }
+
+      return {
+        success: false,
+        error: error.message,
+        processingTime,
+        metadata: {
+          errorCode: error.code,
+          retryable: error.retryable,
+          attemptsMade: job.attemptsMade,
+          correlationId: error.correlationId,
+        },
+      };
+    }
+
+    // Handle unexpected errors
+    const errorMessage = sanitizeErrorMessage(error);
+    logWithCorrelationId('error', 'Unexpected error processing Instagram translation', correlationId, {
       error: errorMessage,
       processingTime,
-      intentName,
-      inboxId,
+      jobId: job.id,
+      attemptsMade: job.attemptsMade,
     });
+
+    // Track unexpected error
+    trackInstagramError(correlationId, InstagramTranslationErrorCodes.SYSTEM_ERROR, error as Error, {
+      intentName: job.data.intentName,
+      inboxId: job.data.inboxId,
+      retryCount: job.attemptsMade,
+      jobId: job.id?.toString(),
+    }, { unexpectedError: true });
+
+    // Record failed translation metrics
+    recordInstagramTranslationMetrics({
+      correlationId,
+      conversionTime: 0,
+      templateType: 'incompatible',
+      bodyLength: 0,
+      buttonsCount: 0,
+      hasImage: false,
+      success: false,
+      error: errorMessage,
+      errorCode: InstagramTranslationErrorCodes.SYSTEM_ERROR,
+      timestamp: new Date(),
+      retryCount: job.attemptsMade,
+      messageType: 'interactive',
+    });
+
+    // Record failed worker performance metrics
+    recordInstagramWorkerPerformanceMetrics({
+      correlationId,
+      jobId: job.id?.toString() || 'unknown',
+      processingTime,
+      queueWaitTime,
+      databaseQueryTime: 0,
+      conversionTime: 0,
+      validationTime: 0,
+      success: false,
+      error: errorMessage,
+      errorCode: InstagramTranslationErrorCodes.SYSTEM_ERROR,
+      timestamp: new Date(),
+      retryCount: job.attemptsMade,
+      memoryUsage: finalMemoryUsage,
+      cpuUsage: finalCpuUsage,
+    });
+
+    // Check if error might be retryable
+    const retryable = isRetryableError(error as Error);
+    if (retryable && job.attemptsMade < (job.opts?.attempts || 3)) {
+      logWithCorrelationId('info', 'Rethrowing potentially retryable error', correlationId, {
+        attemptsMade: job.attemptsMade,
+        maxAttempts: job.opts?.attempts,
+      });
+      throw error; // Let BullMQ handle the retry
+    }
 
     return {
       success: false,
       error: errorMessage,
       processingTime,
+      metadata: {
+        unexpectedError: true,
+        attemptsMade: job.attemptsMade,
+      },
     };
   }
 }
 
 /**
- * Convert interactive message to Instagram format
+ * Convert unified template to Instagram format with comprehensive validation
  */
-async function convertInteractiveMessageToInstagram(
-  interactiveMessage: any,
-  correlationId: string
-): Promise<any[]> {
-  logWithCorrelationId('info', 'Converting interactive message to Instagram', correlationId);
-
-  const bodyText = interactiveMessage.texto || '';
-  const bodyLength = bodyText.length;
-
-  // Determine template type based on body length
-  if (bodyLength <= 80) {
-    // Use Generic Template for messages ≤80 characters
-    return createGenericTemplate(interactiveMessage, correlationId);
-  } else if (bodyLength <= 640) {
-    // Use Button Template for messages 81-640 characters
-    return createButtonTemplate(interactiveMessage, correlationId);
-  } else {
-    // Message too long for Instagram
-    throw new Error(`Message body too long for Instagram (${bodyLength} chars, max 640)`);
-  }
-}
-
-/**
- * Convert enhanced interactive message to Instagram format
- */
-async function convertEnhancedInteractiveMessageToInstagram(
-  enhancedMessage: any,
-  correlationId: string
-): Promise<any[]> {
-  logWithCorrelationId('info', 'Converting enhanced interactive message to Instagram', correlationId);
-
-  const bodyText = enhancedMessage.bodyText || '';
-  const bodyLength = bodyText.length;
-
-  // Determine template type based on body length
-  if (bodyLength <= 80) {
-    // Use Generic Template for messages ≤80 characters
-    return createGenericTemplateFromEnhanced(enhancedMessage, correlationId);
-  } else if (bodyLength <= 640) {
-    // Use Button Template for messages 81-640 characters
-    return createButtonTemplateFromEnhanced(enhancedMessage, correlationId);
-  } else {
-    // Message too long for Instagram
-    throw new Error(`Message body too long for Instagram (${bodyLength} chars, max 640)`);
-  }
-}
-
-/**
- * Create Generic Template for Instagram (≤80 characters)
- */
-function createGenericTemplate(interactiveMessage: any, correlationId: string): any[] {
-  logWithCorrelationId('info', 'Creating Generic Template for Instagram', correlationId);
-
-  const element: any = {
-    title: interactiveMessage.texto.substring(0, 80), // Limit title to 80 chars
-  };
-
-  // Add subtitle from footer if available
-  if (interactiveMessage.rodape) {
-    element.subtitle = interactiveMessage.rodape.substring(0, 80); // Limit subtitle to 80 chars
-  }
-
-  // Add image from header if available
-  if (interactiveMessage.headerTipo === 'image' && interactiveMessage.headerConteudo) {
-    element.image_url = interactiveMessage.headerConteudo;
-  }
-
-  // Convert buttons (limit to 3 for Instagram)
-  if (interactiveMessage.botoes && interactiveMessage.botoes.length > 0) {
-    element.buttons = convertButtonsToInstagram(interactiveMessage.botoes.slice(0, 3), correlationId);
-  }
-
-  const payload = {
-    template_type: 'generic',
-    elements: [element],
-  };
-
-  return [
-    {
-      custom_payload: {
-        instagram: payload,
-      },
-    },
-  ];
-}
-
-/**
- * Create Button Template for Instagram (81-640 characters)
- */
-function createButtonTemplate(interactiveMessage: any, correlationId: string): any[] {
-  logWithCorrelationId('info', 'Creating Button Template for Instagram', correlationId);
-
-  const payload: any = {
-    template_type: 'button',
-    text: interactiveMessage.texto.substring(0, 640), // Limit text to 640 chars
-  };
-
-  // Convert buttons (limit to 3 for Instagram)
-  if (interactiveMessage.botoes && interactiveMessage.botoes.length > 0) {
-    payload.buttons = convertButtonsToInstagram(interactiveMessage.botoes.slice(0, 3), correlationId);
-  }
-
-  return [
-    {
-      custom_payload: {
-        instagram: payload,
-      },
-    },
-  ];
-}
-
-/**
- * Create Generic Template from enhanced interactive message
- */
-function createGenericTemplateFromEnhanced(enhancedMessage: any, correlationId: string): any[] {
-  logWithCorrelationId('info', 'Creating Generic Template from enhanced message', correlationId);
-
-  const element: any = {
-    title: enhancedMessage.bodyText.substring(0, 80), // Limit title to 80 chars
-  };
-
-  // Add subtitle from footer if available
-  if (enhancedMessage.footerText) {
-    element.subtitle = enhancedMessage.footerText.substring(0, 80); // Limit subtitle to 80 chars
-  }
-
-  // Add image from header if available
-  if (enhancedMessage.headerType === 'image' && enhancedMessage.headerContent) {
-    element.image_url = enhancedMessage.headerContent;
-  }
-
-  // Convert buttons from actionData
-  if (enhancedMessage.type === 'button' && enhancedMessage.actionData?.buttons) {
-    element.buttons = convertEnhancedButtonsToInstagram(
-      enhancedMessage.actionData.buttons.slice(0, 3),
-      correlationId
-    );
-  }
-
-  const payload = {
-    template_type: 'generic',
-    elements: [element],
-  };
-
-  return [
-    {
-      custom_payload: {
-        instagram: payload,
-      },
-    },
-  ];
-}
-
-/**
- * Create Button Template from enhanced interactive message
- */
-function createButtonTemplateFromEnhanced(enhancedMessage: any, correlationId: string): any[] {
-  logWithCorrelationId('info', 'Creating Button Template from enhanced message', correlationId);
-
-  const payload: any = {
-    template_type: 'button',
-    text: enhancedMessage.bodyText.substring(0, 640), // Limit text to 640 chars
-  };
-
-  // Convert buttons from actionData
-  if (enhancedMessage.type === 'button' && enhancedMessage.actionData?.buttons) {
-    payload.buttons = convertEnhancedButtonsToInstagram(
-      enhancedMessage.actionData.buttons.slice(0, 3),
-      correlationId
-    );
-  }
-
-  return [
-    {
-      custom_payload: {
-        instagram: payload,
-      },
-    },
-  ];
-}
-
-/**
- * Convert WhatsApp buttons to Instagram format
- */
-function convertButtonsToInstagram(buttons: any[], correlationId: string): any[] {
-  logWithCorrelationId('info', 'Converting buttons to Instagram format', correlationId, {
-    buttonCount: buttons.length,
+async function convertUnifiedTemplateToInstagram(
+  unifiedTemplate: any,
+  correlationId: string,
+  logContext: any
+): Promise<DialogflowFulfillmentMessage[]> {
+  logWithCorrelationId('info', 'Converting unified template to Instagram', correlationId, {
+    templateType: unifiedTemplate.type,
+    templateName: unifiedTemplate.name,
   });
 
-  return buttons.map((botao) => {
-    const instagramButton: any = {
-      title: botao.titulo.substring(0, 20), // Instagram button title limit
-    };
+  // Handle different template types
+  switch (unifiedTemplate.type) {
+    case 'INTERACTIVE_MESSAGE':
+      if (unifiedTemplate.interactiveContent) {
+        return await convertInteractiveContentToInstagram(
+          unifiedTemplate.interactiveContent,
+          correlationId,
+          logContext
+        );
+      } else {
+        throw createConversionFailedError('Interactive content is missing from unified template', correlationId);
+      }
 
-    // Map button types
-    if (botao.tipo === 'web_url' && botao.url) {
-      instagramButton.type = 'web_url';
-      instagramButton.url = botao.url;
-    } else {
-      // Default to postback for other types
-      instagramButton.type = 'postback';
-      instagramButton.payload = botao.id;
+    case 'AUTOMATION_REPLY':
+      if (unifiedTemplate.simpleReplyText) {
+        return await convertSimpleReplyToInstagram(
+          unifiedTemplate.simpleReplyText,
+          correlationId,
+          logContext
+        );
+      } else {
+        throw createConversionFailedError('Simple reply text is missing from unified template', correlationId);
+      }
+
+    case 'WHATSAPP_OFFICIAL':
+      // WhatsApp Official templates are not supported for Instagram yet
+      const whatsappError = createConversionFailedError(
+        'WhatsApp Official templates are not supported for Instagram conversion',
+        correlationId,
+        { templateName: unifiedTemplate.name, templateType: unifiedTemplate.type }
+      );
+      logError(whatsappError);
+      throw whatsappError;
+
+    default:
+      const unsupportedError = createConversionFailedError(
+        `Unsupported unified template type for Instagram: ${unifiedTemplate.type}`,
+        correlationId,
+        { templateType: unifiedTemplate.type, templateName: unifiedTemplate.name }
+      );
+      logError(unsupportedError);
+      throw unsupportedError;
+  }
+}
+
+/**
+ * Convert InteractiveContent to Instagram format
+ */
+async function convertInteractiveContentToInstagram(
+  interactiveContent: any,
+  correlationId: string,
+  logContext: any
+): Promise<DialogflowFulfillmentMessage[]> {
+  logWithCorrelationId('info', 'Converting interactive content to Instagram', correlationId);
+
+  // Extract body text
+  const bodyText = interactiveContent.body?.text || '';
+  if (!bodyText) {
+    throw createValidationError(
+      'interactive_content.body.text',
+      'Body text is required for interactive content',
+      correlationId
+    );
+  }
+
+  // Extract header information
+  const hasImage = interactiveContent.header?.type === 'image' && interactiveContent.header?.content;
+  const imageUrl = hasImage ? interactiveContent.header.content : undefined;
+
+  // Extract footer text
+  const footerText = interactiveContent.footer?.text;
+
+  // Determine template type based on body length
+  const templateType = determineInstagramTemplateType(bodyText, hasImage);
+  
+  // Log template type detection
+  instagramTranslationLogger.workerTemplateTypeDetected(logContext, templateType, 
+    `Body length: ${bodyText.length}, Has image: ${hasImage}`);
+  
+  // Note: No longer throwing error for long messages - Quick Replies will handle them
+
+  // Convert buttons to Instagram format
+  let instagramButtons: any[] = [];
+  try {
+    const originalButtonCount = interactiveContent.actionReplyButton?.buttons?.length || 0;
+    
+    if (interactiveContent.actionReplyButton?.buttons) {
+      instagramButtons = convertUnifiedButtonsToInstagram(interactiveContent.actionReplyButton.buttons);
     }
+    
+    // Log button conversion
+    instagramTranslationLogger.workerButtonsConverted(logContext, originalButtonCount, instagramButtons.length);
+  } catch (buttonError) {
+    logWithCorrelationId('warn', 'Error converting unified buttons, using empty array', correlationId, {
+      error: sanitizeErrorMessage(buttonError),
+    });
+    instagramButtons = [];
+  }
 
-    return instagramButton;
+  let fulfillmentMessages: DialogflowFulfillmentMessage[];
+
+  try {
+    if (templateType === 'generic') {
+      // Use Generic Template for messages ≤80 characters
+      fulfillmentMessages = createInstagramGenericTemplate(
+        bodyText,
+        footerText, // subtitle
+        imageUrl, // image URL
+        instagramButtons
+      );
+    } else if (templateType === 'button') {
+      // Use Button Template for messages 81-640 characters
+      fulfillmentMessages = createInstagramButtonTemplate(
+        bodyText,
+        instagramButtons
+      );
+    } else {
+      // Use Quick Replies for messages >640 characters
+      fulfillmentMessages = createInstagramQuickReplies(
+        bodyText,
+        instagramButtons
+      );
+    }
+  } catch (templateError) {
+    throw createConversionFailedError(
+      `Failed to create Instagram template from interactive content: ${sanitizeErrorMessage(templateError)}`,
+      correlationId,
+      { templateType, bodyLength: bodyText.length }
+    );
+  }
+
+  // Validate the generated template
+  if (fulfillmentMessages.length > 0) {
+    const socialwiseResponse = fulfillmentMessages[0].payload?.socialwiseResponse;
+    const template = socialwiseResponse?.payload;
+    
+    if (template) {
+      const templateValidation = validateInstagramTemplate(template);
+      
+      // Log validation result
+      instagramTranslationLogger.workerValidationPerformed(logContext, 'unified_instagram_template', 
+        templateValidation.isValid, templateValidation.errors);
+      
+      if (!templateValidation.isValid) {
+        logWithCorrelationId('error', 'Generated Instagram template validation failed', correlationId, {
+          errors: templateValidation.errors,
+          template,
+          messageFormat: socialwiseResponse.message_format,
+        });
+        
+        throw createConversionFailedError(
+          `Generated unified template validation failed: ${templateValidation.errors.join(', ')}`,
+          correlationId,
+          { validationErrors: templateValidation.errors }
+        );
+      }
+    }
+  }
+
+  logWithCorrelationId('info', 'Interactive content converted successfully', correlationId, {
+    templateType,
+    bodyLength: bodyText.length,
+    buttonsCount: instagramButtons.length,
+    hasImage,
   });
+
+  return fulfillmentMessages;
 }
 
 /**
- * Convert enhanced buttons to Instagram format
+ * Convert simple reply text to Instagram format
  */
-function convertEnhancedButtonsToInstagram(buttons: any[], correlationId: string): any[] {
-  logWithCorrelationId('info', 'Converting enhanced buttons to Instagram format', correlationId, {
-    buttonCount: buttons.length,
+async function convertSimpleReplyToInstagram(
+  simpleReplyText: string,
+  correlationId: string,
+  logContext: any
+): Promise<DialogflowFulfillmentMessage[]> {
+  logWithCorrelationId('info', 'Converting simple reply to Instagram', correlationId);
+
+  if (!simpleReplyText || simpleReplyText.trim().length === 0) {
+    throw createValidationError(
+      'simple_reply_text',
+      'Simple reply text cannot be empty',
+      correlationId
+    );
+  }
+
+  const bodyText = simpleReplyText.trim();
+  
+  // Determine template type based on body length
+  const templateType = determineInstagramTemplateType(bodyText, false);
+  
+  // Log template type detection
+  instagramTranslationLogger.workerTemplateTypeDetected(logContext, templateType, 
+    `Body length: ${bodyText.length}, Simple reply`);
+  
+  // Note: No longer throwing error for long messages - Quick Replies will handle them
+
+  let fulfillmentMessages: DialogflowFulfillmentMessage[];
+
+  try {
+    if (templateType === 'generic') {
+      // Use Generic Template for messages ≤80 characters
+      fulfillmentMessages = createInstagramGenericTemplate(
+        bodyText,
+        undefined, // no subtitle
+        undefined, // no image
+        [] // no buttons
+      );
+    } else if (templateType === 'button') {
+      // Use Button Template for messages 81-640 characters
+      fulfillmentMessages = createInstagramButtonTemplate(
+        bodyText,
+        [] // no buttons
+      );
+    } else {
+      // Use Quick Replies for messages >640 characters
+      fulfillmentMessages = createInstagramQuickReplies(
+        bodyText,
+        [] // no buttons
+      );
+    }
+  } catch (templateError) {
+    throw createConversionFailedError(
+      `Failed to create Instagram template from simple reply: ${sanitizeErrorMessage(templateError)}`,
+      correlationId,
+      { templateType, bodyLength: bodyText.length }
+    );
+  }
+
+  // Validate the generated template
+  if (fulfillmentMessages.length > 0) {
+    const socialwiseResponse = fulfillmentMessages[0].payload?.socialwiseResponse;
+    const template = socialwiseResponse?.payload;
+    
+    if (template) {
+      const templateValidation = validateInstagramTemplate(template);
+      
+      // Log validation result
+      instagramTranslationLogger.workerValidationPerformed(logContext, 'simple_reply_instagram_template', 
+        templateValidation.isValid, templateValidation.errors);
+      
+      if (!templateValidation.isValid) {
+        logWithCorrelationId('error', 'Generated Instagram template validation failed', correlationId, {
+          errors: templateValidation.errors,
+          template,
+          messageFormat: socialwiseResponse.message_format,
+        });
+        
+        throw createConversionFailedError(
+          `Generated simple reply template validation failed: ${templateValidation.errors.join(', ')}`,
+          correlationId,
+          { validationErrors: templateValidation.errors }
+        );
+      }
+    }
+  }
+
+  logWithCorrelationId('info', 'Simple reply converted successfully', correlationId, {
+    templateType,
+    bodyLength: bodyText.length,
   });
+
+  return fulfillmentMessages;
+}
+
+/**
+ * Convert unified buttons to Instagram format
+ */
+function convertUnifiedButtonsToInstagram(buttons: any): any[] {
+  if (!Array.isArray(buttons)) {
+    return [];
+  }
 
   return buttons.map((button) => {
     const instagramButton: any = {
-      title: button.title.substring(0, 20), // Instagram button title limit
+      title: button.title ? button.title.substring(0, 20) : 'Button', // Instagram button title limit
+      type: 'postback',
+      payload: button.id || 'default_payload',
     };
-
-    // Map button types based on enhanced button structure
-    if (button.type === 'url' && button.url) {
+    
+    // Map button types based on unified button structure
+    if (button.type === 'web_url' && button.url) {
       instagramButton.type = 'web_url';
       instagramButton.url = button.url;
-    } else {
-      // Default to postback for other types
-      instagramButton.type = 'postback';
-      instagramButton.payload = button.id;
+      delete instagramButton.payload;
     }
-
+    
     return instagramButton;
-  });
+  }).slice(0, 3); // Limit to 3 buttons for Instagram
 }
+
+/**
+ * Convert interactive message to Instagram format with comprehensive validation
+ */
+async function convertInteractiveMessageToInstagram(
+  interactiveMessage: any,
+  correlationId: string,
+  logContext: any
+): Promise<DialogflowFulfillmentMessage[]> {
+  logWithCorrelationId('info', 'Converting interactive message to Instagram', correlationId);
+
+  // Validate the interactive message structure
+  const validation = validateForInstagramConversion(interactiveMessage);
+  if (!validation.valid) {
+    throw createValidationError(
+      'interactive_message',
+      validation.errors.join(', '),
+      correlationId
+    );
+  }
+
+  // Log warnings if any
+  if (validation.warnings.length > 0) {
+    logWithCorrelationId('warn', 'Conversion warnings detected', correlationId, {
+      warnings: validation.warnings,
+    });
+  }
+
+  const bodyText = interactiveMessage.texto || '';
+  const hasImage = interactiveMessage.headerTipo === 'image' && interactiveMessage.headerConteudo;
+  
+  // Log detailed message info for debugging
+  console.log(`[Instagram Worker] [${correlationId}] INTERACTIVE MESSAGE DETAILS:`, {
+    bodyText: bodyText.substring(0, 100) + (bodyText.length > 100 ? '...' : ''),
+    bodyLength: bodyText.length,
+    hasImage,
+    headerTipo: interactiveMessage.headerTipo,
+    headerConteudo: interactiveMessage.headerConteudo ? 'present' : 'missing',
+    rodape: interactiveMessage.rodape,
+    botoesCount: interactiveMessage.botoes?.length || 0,
+  });
+  
+  // Determine template type based on body length
+  const templateType = determineInstagramTemplateType(bodyText, hasImage);
+  
+  // Log template type detection with detailed reasoning
+  console.log(`[Instagram Worker] [${correlationId}] TEMPLATE TYPE SELECTION:`, {
+    bodyLength: bodyText.length,
+    hasImage,
+    templateType,
+    reasoning: bodyText.length <= 80 ? 'Generic (≤80 chars)' : bodyText.length <= 640 ? 'Button (81-640 chars)' : 'Quick Replies (>640 chars)'
+  });
+  
+  instagramTranslationLogger.workerTemplateTypeDetected(logContext, templateType, 
+    `Body length: ${bodyText.length}, Has image: ${hasImage}`);
+  
+  // Note: No longer throwing error for long messages - Quick Replies will handle them
+
+  // Convert buttons to Instagram format with error handling
+  let instagramButtons: any[] = [];
+  try {
+    const originalButtonCount = interactiveMessage.botoes?.length || 0;
+    instagramButtons = interactiveMessage.botoes 
+      ? convertWhatsAppButtonsToInstagram(interactiveMessage.botoes)
+      : [];
+    
+    // Log button conversion
+    instagramTranslationLogger.workerButtonsConverted(logContext, originalButtonCount, instagramButtons.length);
+  } catch (buttonError) {
+    logWithCorrelationId('warn', 'Error converting buttons, using empty array', correlationId, {
+      error: sanitizeErrorMessage(buttonError),
+    });
+    instagramButtons = [];
+  }
+
+  let fulfillmentMessages: DialogflowFulfillmentMessage[];
+
+  try {
+    console.log(`[Instagram Worker] [${correlationId}] CREATING TEMPLATE:`, {
+      templateType,
+      bodyLength: bodyText.length,
+      buttonsCount: instagramButtons.length,
+      hasImage,
+    });
+    
+    if (templateType === 'generic') {
+      // Use Generic Template for messages ≤80 characters
+      console.log(`[Instagram Worker] [${correlationId}] Creating Generic Template with:`, {
+        title: bodyText,
+        subtitle: interactiveMessage.rodape,
+        imageUrl: hasImage ? interactiveMessage.headerConteudo : undefined,
+        buttonsCount: instagramButtons.length,
+      });
+      
+      fulfillmentMessages = createInstagramGenericTemplate(
+        bodyText,
+        interactiveMessage.rodape, // subtitle
+        hasImage ? interactiveMessage.headerConteudo : undefined, // image URL
+        instagramButtons
+      );
+    } else if (templateType === 'button') {
+      // Use Button Template for messages 81-640 characters
+      console.log(`[Instagram Worker] [${correlationId}] Creating Button Template with:`, {
+        text: bodyText,
+        buttonsCount: instagramButtons.length,
+        note: 'Header and footer discarded for Button Template',
+      });
+      
+      fulfillmentMessages = createInstagramButtonTemplate(
+        bodyText,
+        instagramButtons
+      );
+    } else {
+      // Use Quick Replies for messages >640 characters
+      console.log(`[Instagram Worker] [${correlationId}] Creating Quick Replies with:`, {
+        text: bodyText.substring(0, 100) + (bodyText.length > 100 ? '...' : ''),
+        textLength: bodyText.length,
+        buttonsCount: instagramButtons.length,
+        note: 'Header and footer discarded for Quick Replies',
+      });
+      
+      fulfillmentMessages = createInstagramQuickReplies(
+        bodyText,
+        instagramButtons
+      );
+    }
+    
+    console.log(`[Instagram Worker] [${correlationId}] TEMPLATE CREATED SUCCESSFULLY:`, {
+      templateType,
+      messagesCount: fulfillmentMessages.length,
+      firstMessageStructure: fulfillmentMessages[0] ? Object.keys(fulfillmentMessages[0]) : [],
+      socialwiseResponseFormat: fulfillmentMessages[0]?.payload?.socialwiseResponse?.message_format,
+    });
+    
+  } catch (templateError) {
+    console.log(`[Instagram Worker] [${correlationId}] TEMPLATE CREATION FAILED:`, {
+      templateType,
+      bodyLength: bodyText.length,
+      error: sanitizeErrorMessage(templateError),
+    });
+    
+    throw createConversionFailedError(
+      `Failed to create Instagram template: ${sanitizeErrorMessage(templateError)}`,
+      correlationId,
+      { templateType, bodyLength: bodyText.length }
+    );
+  }
+
+  // Validate the generated template
+  if (fulfillmentMessages.length > 0) {
+    const socialwiseResponse = fulfillmentMessages[0].payload?.socialwiseResponse;
+    const template = socialwiseResponse?.payload;
+    
+    if (template) {
+      const templateValidation = validateInstagramTemplate(template);
+      
+      // Log validation result
+      instagramTranslationLogger.workerValidationPerformed(logContext, 'instagram_template', 
+        templateValidation.isValid, templateValidation.errors);
+      
+      if (!templateValidation.isValid) {
+        logWithCorrelationId('error', 'Generated Instagram template validation failed', correlationId, {
+          errors: templateValidation.errors,
+          template,
+          messageFormat: socialwiseResponse.message_format,
+        });
+        
+        throw createConversionFailedError(
+          `Generated template validation failed: ${templateValidation.errors.join(', ')}`,
+          correlationId,
+          { validationErrors: templateValidation.errors }
+        );
+      }
+    }
+  }
+
+  logWithCorrelationId('info', 'Interactive message converted successfully', correlationId, {
+    templateType,
+    bodyLength: bodyText.length,
+    buttonsCount: instagramButtons.length,
+    hasImage,
+  });
+
+  return fulfillmentMessages;
+}
+
+/**
+ * Convert enhanced interactive message to Instagram format with comprehensive validation
+ */
+async function convertEnhancedInteractiveMessageToInstagram(
+  enhancedMessage: any,
+  correlationId: string,
+  logContext: any
+): Promise<DialogflowFulfillmentMessage[]> {
+  logWithCorrelationId('info', 'Converting enhanced interactive message to Instagram', correlationId);
+
+  // Basic validation of enhanced message structure
+  if (!enhancedMessage.bodyText) {
+    throw createValidationError(
+      'enhanced_message.bodyText',
+      'Body text is required for enhanced interactive messages',
+      correlationId
+    );
+  }
+
+  const bodyText = enhancedMessage.bodyText;
+  const hasImage = enhancedMessage.headerType === 'image' && enhancedMessage.headerContent;
+  
+  // Determine template type based on body length
+  const templateType = determineInstagramTemplateType(bodyText, hasImage);
+  
+  // Log template type detection
+  instagramTranslationLogger.workerTemplateTypeDetected(logContext, templateType, 
+    `Body length: ${bodyText.length}, Has image: ${hasImage}, Message type: ${enhancedMessage.type}`);
+  
+  // Note: No longer throwing error for long messages - Quick Replies will handle them
+
+  // Convert buttons from actionData with error handling
+  let instagramButtons: any[] = [];
+  try {
+    const originalButtonCount = enhancedMessage.actionData?.buttons?.length || 0;
+    if (enhancedMessage.type === 'button' && enhancedMessage.actionData?.buttons) {
+      instagramButtons = convertEnhancedButtonsToInstagram(enhancedMessage.actionData.buttons);
+    }
+    
+    // Log button conversion
+    instagramTranslationLogger.workerButtonsConverted(logContext, originalButtonCount, instagramButtons.length);
+  } catch (buttonError) {
+    logWithCorrelationId('warn', 'Error converting enhanced buttons, using empty array', correlationId, {
+      error: sanitizeErrorMessage(buttonError),
+      messageType: enhancedMessage.type,
+    });
+    instagramButtons = [];
+  }
+
+  let fulfillmentMessages: DialogflowFulfillmentMessage[];
+
+  try {
+    if (templateType === 'generic') {
+      // Use Generic Template for messages ≤80 characters
+      fulfillmentMessages = createInstagramGenericTemplate(
+        bodyText,
+        enhancedMessage.footerText, // subtitle
+        hasImage ? enhancedMessage.headerContent : undefined, // image URL
+        instagramButtons
+      );
+    } else if (templateType === 'button') {
+      // Use Button Template for messages 81-640 characters
+      fulfillmentMessages = createInstagramButtonTemplate(
+        bodyText,
+        instagramButtons
+      );
+    } else {
+      // Use Quick Replies for messages >640 characters
+      fulfillmentMessages = createInstagramQuickReplies(
+        bodyText,
+        instagramButtons
+      );
+    }
+  } catch (templateError) {
+    throw createConversionFailedError(
+      `Failed to create Instagram template from enhanced message: ${sanitizeErrorMessage(templateError)}`,
+      correlationId,
+      { 
+        templateType, 
+        bodyLength: bodyText.length,
+        messageType: enhancedMessage.type,
+        hasActionData: !!enhancedMessage.actionData,
+      }
+    );
+  }
+
+  // Validate the generated template
+  if (fulfillmentMessages.length > 0) {
+    const socialwiseResponse = fulfillmentMessages[0].payload?.socialwiseResponse;
+    const template = socialwiseResponse?.payload;
+    
+    if (template) {
+      const templateValidation = validateInstagramTemplate(template);
+      
+      // Log validation result
+      instagramTranslationLogger.workerValidationPerformed(logContext, 'enhanced_instagram_template', 
+        templateValidation.isValid, templateValidation.errors);
+      
+      if (!templateValidation.isValid) {
+        logWithCorrelationId('error', 'Generated Instagram template validation failed', correlationId, {
+          errors: templateValidation.errors,
+          template,
+          messageType: enhancedMessage.type,
+          messageFormat: socialwiseResponse.message_format,
+        });
+        
+        throw createConversionFailedError(
+          `Generated enhanced template validation failed: ${templateValidation.errors.join(', ')}`,
+          correlationId,
+          { 
+            validationErrors: templateValidation.errors,
+            messageType: enhancedMessage.type,
+          }
+        );
+      }
+    }
+  }
+
+  logWithCorrelationId('info', 'Enhanced interactive message converted successfully', correlationId, {
+    templateType,
+    bodyLength: bodyText.length,
+    buttonsCount: instagramButtons.length,
+    hasImage,
+    messageType: enhancedMessage.type,
+  });
+
+  return fulfillmentMessages;
+}
+
+// Helper functions for extracting data from different message mapping types
+function getBodyLengthFromMapping(messageMapping: any): number {
+  // Unified template
+  if (messageMapping.unifiedTemplate) {
+    if (messageMapping.unifiedTemplate.interactiveContent?.body?.text) {
+      return messageMapping.unifiedTemplate.interactiveContent.body.text.length;
+    }
+    if (messageMapping.unifiedTemplate.simpleReplyText) {
+      return messageMapping.unifiedTemplate.simpleReplyText.length;
+    }
+    return 0;
+  }
+  
+  // Legacy interactive message
+  if (messageMapping.interactiveMessage?.texto) {
+    return messageMapping.interactiveMessage.texto.length;
+  }
+  
+  // Legacy enhanced interactive message
+  if (messageMapping.enhancedInteractiveMessage?.bodyText) {
+    return messageMapping.enhancedInteractiveMessage.bodyText.length;
+  }
+  
+  return 0;
+}
+
+function getHasImageFromMapping(messageMapping: any): boolean {
+  // Unified template
+  if (messageMapping.unifiedTemplate?.interactiveContent?.header) {
+    const header = messageMapping.unifiedTemplate.interactiveContent.header;
+    return header.type === 'image' && !!header.content;
+  }
+  
+  // Legacy interactive message
+  if (messageMapping.interactiveMessage) {
+    return messageMapping.interactiveMessage.headerTipo === 'image' && 
+           !!messageMapping.interactiveMessage.headerConteudo;
+  }
+  
+  // Legacy enhanced interactive message
+  if (messageMapping.enhancedInteractiveMessage) {
+    return messageMapping.enhancedInteractiveMessage.headerType === 'image' && 
+           !!messageMapping.enhancedInteractiveMessage.headerContent;
+  }
+  
+  return false;
+}
+
+// Helper functions for metrics extraction
+function determineTemplateTypeFromMessages(messages: any[]): string {
+  if (messages.length === 0) return 'incompatible';
+  
+  const firstMessage = messages[0];
+  const socialwiseResponse = firstMessage?.payload?.socialwiseResponse;
+  
+  if (socialwiseResponse?.message_format) {
+    // Convert Socialwise format to template type
+    switch (socialwiseResponse.message_format) {
+      case 'GENERIC_TEMPLATE':
+        return 'generic';
+      case 'BUTTON_TEMPLATE':
+        return 'button';
+      case 'QUICK_REPLIES':
+        return 'quick_replies';
+      default:
+        return 'generic';
+    }
+  }
+  
+  return 'generic';
+}
+
+function countButtonsInMessages(messages: any[]): number {
+  if (messages.length === 0) return 0;
+  
+  const firstMessage = messages[0];
+  const socialwiseResponse = firstMessage?.payload?.socialwiseResponse;
+  const payload = socialwiseResponse?.payload;
+  
+  if (socialwiseResponse?.message_format === 'GENERIC_TEMPLATE' && payload?.elements?.[0]?.buttons) {
+    return payload.elements[0].buttons.length;
+  }
+  
+  if (socialwiseResponse?.message_format === 'BUTTON_TEMPLATE' && payload?.buttons) {
+    return payload.buttons.length;
+  }
+  
+  if (socialwiseResponse?.message_format === 'QUICK_REPLIES' && payload?.quick_replies) {
+    return payload.quick_replies.length;
+  }
+  
+  return 0;
+}
+
+function hasImageInMessages(messages: any[]): boolean {
+  if (messages.length === 0) return false;
+  
+  const firstMessage = messages[0];
+  const socialwiseResponse = firstMessage?.payload?.socialwiseResponse;
+  const payload = socialwiseResponse?.payload;
+  
+  if (socialwiseResponse?.message_format === 'GENERIC_TEMPLATE' && payload?.elements?.[0]?.image_url) {
+    return true;
+  }
+  
+  return false;
+}
+

@@ -46,19 +46,21 @@ async function getWhatsAppTemplateDetailsFromAPI(templateId: string, userId: str
   if (!templateFromApi) {
     throw new Error(`Template com ID ${templateId} não encontrado na API`);
   }
+  
   // --- LÓGICA OTIMIZADA DE SINCRONIZAÇÃO DE MÍDIA ---
   let publicMediaUrl: string | null = null;
   
   // Primeiro, verificar se já existe uma URL pública no banco de dados
-  const usuarioChatwit = await prisma.usuarioChatwit.findUnique({ where: { appUserId: userId } });
-  if (!usuarioChatwit) throw new Error('Usuário Chatwit não encontrado');
-  
-  const existingTemplate = await prisma.whatsAppTemplate.findFirst({
+  const existingTemplate = await prisma.template.findFirst({
     where: {
-      templateId: templateId,
-      usuarioChatwitId: usuarioChatwit.id,
+      whatsappOfficialInfo: {
+        metaTemplateId: templateId
+      },
+      createdById: userId
     },
-    select: { publicMediaUrl: true }
+    include: {
+      whatsappOfficialInfo: true
+    }
   });
   
   const headerComponent = templateFromApi.components.find(
@@ -69,8 +71,11 @@ async function getWhatsAppTemplateDetailsFromAPI(templateId: string, userId: str
     const mediaUrlFromMeta = headerComponent.example?.header_handle?.[0];
     
     // Se já existe uma URL pública no MinIO, usar ela
-    if (existingTemplate?.publicMediaUrl && !isMetaMediaUrl(existingTemplate.publicMediaUrl)) {
-      publicMediaUrl = existingTemplate.publicMediaUrl;
+    if (existingTemplate?.whatsappOfficialInfo?.components && 
+        typeof existingTemplate.whatsappOfficialInfo.components === 'object' &&
+        'publicMediaUrl' in existingTemplate.whatsappOfficialInfo.components &&
+        !isMetaMediaUrl(existingTemplate.whatsappOfficialInfo.components.publicMediaUrl as string)) {
+      publicMediaUrl = existingTemplate.whatsappOfficialInfo.components.publicMediaUrl as string;
       console.log(`[TemplateInfo] Usando mídia já armazenada no MinIO: ${publicMediaUrl}`);
     }
     // Caso contrário, se a URL é da Meta, baixar e fazer upload
@@ -86,8 +91,10 @@ async function getWhatsAppTemplateDetailsFromAPI(templateId: string, userId: str
       } catch (e) {
         console.error('[TemplateInfo] Falha ao sincronizar mídia para o MinIO:', e);
         // Se falhar, manter a URL existente se houver
-        if (existingTemplate?.publicMediaUrl) {
-          publicMediaUrl = existingTemplate.publicMediaUrl;
+        if (existingTemplate?.whatsappOfficialInfo?.components && 
+            typeof existingTemplate.whatsappOfficialInfo.components === 'object' &&
+            'publicMediaUrl' in existingTemplate.whatsappOfficialInfo.components) {
+          publicMediaUrl = existingTemplate.whatsappOfficialInfo.components.publicMediaUrl as string;
         }
       }
     }
@@ -98,34 +105,58 @@ async function getWhatsAppTemplateDetailsFromAPI(templateId: string, userId: str
     }
   }
   // --- FIM DA LÓGICA OTIMIZADA ---
+  
   try {
-    const dataToSave = {
-      name: templateFromApi.name,
-      category: templateFromApi.category,
-      status: templateFromApi.status,
-      language: templateFromApi.language,
-      components: templateFromApi.components,
-      publicMediaUrl: publicMediaUrl,
-      lastEdited: new Date(),
+    // Atualizar ou criar o template no banco de dados
+    const componentsWithMedia = {
+      ...templateFromApi.components,
+      publicMediaUrl: publicMediaUrl
     };
-    await prisma.whatsAppTemplate.upsert({
-      where: {
-        templateId_usuarioChatwitId: {
-          templateId: templateId,
-          usuarioChatwitId: usuarioChatwit.id,
-        },
-      },
-      update: dataToSave,
-      create: {
-        templateId: templateId,
-        usuarioChatwitId: usuarioChatwit.id,
-        ...dataToSave,
-      },
-    });
+    
+    if (existingTemplate) {
+      // Atualizar template existente
+      await prisma.template.update({
+        where: { id: existingTemplate.id },
+        data: {
+          name: templateFromApi.name,
+          status: templateFromApi.status as any,
+          language: templateFromApi.language || 'pt_BR',
+          whatsappOfficialInfo: {
+            update: {
+              status: templateFromApi.status,
+              category: templateFromApi.category,
+              components: componentsWithMedia,
+            }
+          }
+        }
+      });
+    } else {
+      // Criar novo template
+      await prisma.template.create({
+        data: {
+          name: templateFromApi.name,
+          status: templateFromApi.status as any,
+          language: templateFromApi.language || 'pt_BR',
+          type: 'WHATSAPP_OFFICIAL' as any,
+          scope: 'PRIVATE' as any,
+          createdById: userId,
+          whatsappOfficialInfo: {
+            create: {
+              metaTemplateId: templateId,
+              status: templateFromApi.status,
+              category: templateFromApi.category,
+              components: componentsWithMedia,
+            }
+          }
+        }
+      });
+    }
+    
     console.log(`Template ${templateFromApi.name} sincronizado no banco de dados.`);
   } catch (dbError) {
     console.error('Erro ao salvar template no banco:', dbError);
   }
+  
   templateFromApi.publicMediaUrl = publicMediaUrl;
   return templateFromApi;
 }

@@ -75,3 +75,43 @@ console.error = (...args) => {
     originalConsoleError(...args);
   }
 };
+
+// Global test cleanup to prevent hanging handles
+afterEach(async () => {
+  // Clean up any pending timers
+  jest.clearAllTimers();
+  
+  // Clean up any pending promises
+  await new Promise(resolve => setImmediate(resolve));
+});
+
+// Global teardown to close database connections and other resources
+afterAll(async () => {
+  // Close Prisma connections if they exist
+  try {
+    const { prisma } = require('@/lib/prisma');
+    if (prisma && typeof prisma.$disconnect === 'function') {
+      await prisma.$disconnect();
+    }
+  } catch (error) {
+    // Ignore errors if prisma is not available
+  }
+  
+  // Close any other database connections
+  try {
+    const { db } = require('@/lib/db');
+    if (db && typeof db.$disconnect === 'function') {
+      await db.$disconnect();
+    }
+  } catch (error) {
+    // Ignore errors if db is not available
+  }
+  
+  // Force garbage collection to clean up any remaining handles
+  if (global.gc) {
+    global.gc();
+  }
+  
+  // Wait a bit to ensure all async operations complete
+  await new Promise(resolve => setTimeout(resolve, 100));
+});

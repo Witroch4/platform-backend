@@ -31,20 +31,21 @@ interface TemplateDetail {
   lastEdited?: Date | null;
   publicMediaUrl?: string | null;
   components: Array<{
-    tipo: string;
-    formato?: string;
-    texto?: string;
-    variaveis: false | Array<{
-      nome: string;
-      descricao: string;
-      exemplo: string;
+    type: string;
+    format?: string;
+    text?: string;
+    variables?: false | Array<{
+      name: string;
+      description: string;
+      example: string;
     }>;
-    botoes?: Array<{
-      tipo: string;
-      texto: string;
+    buttons?: Array<{
+      type: string;
+      text: string;
       url: string | null;
-      telefone: string | null;
+      phone_number: string | null;
     }>;
+    example?: any;
   }>;
 }
 
@@ -84,21 +85,21 @@ export default function EditTemplateDetailsPage() {
           const templateData = response.data.template;
           const template = {
             id: actualTemplateId,
-            name: templateData.nome,
-            category: templateData.categoria,
+            name: templateData.name,
+            category: templateData.category,
             status: templateData.status || "UNKNOWN",
-            language: templateData.idioma || "pt_BR",
-            subCategory: templateData.subCategoria,
-            qualityScore: templateData.qualidadeScore,
-            correctCategory: templateData.categoriaCorreta,
-            ctaUrlLinkTrackingOptedOut: templateData.ctaUrlLinkTrackingOptedOut,
-            libraryTemplateName: templateData.nomeTemplateBiblioteca,
-            messageSendTtlSeconds: templateData.mensagemSendTtlSegundos,
-            parameterFormat: templateData.formatoParametro,
-            previousCategory: templateData.categoriaAnterior,
-            lastEdited: templateData.ultimaEdicao ? new Date(templateData.ultimaEdicao) : null,
+            language: templateData.language || "pt_BR",
+            subCategory: templateData.sub_category,
+            qualityScore: templateData.quality_score,
+            correctCategory: templateData.correct_category,
+            ctaUrlLinkTrackingOptedOut: templateData.cta_url_link_tracking_opted_out,
+            libraryTemplateName: templateData.library_template_name,
+            messageSendTtlSeconds: templateData.message_send_ttl_seconds,
+            parameterFormat: templateData.parameter_format,
+            previousCategory: templateData.previous_category,
+            lastEdited: templateData.lastEdited ? new Date(templateData.lastEdited) : null,
             publicMediaUrl: templateData.publicMediaUrl,
-            components: templateData.componentes
+            components: templateData.components || []
           };
           
           setTemplate(template);
@@ -112,8 +113,8 @@ export default function EditTemplateDetailsPage() {
           };
           
           template.components.forEach((component: any) => {
-            if (component.tipo === "HEADER" && 
-               ["IMAGE", "VIDEO", "DOCUMENT"].includes(component.formato)) {
+            if (component.type === "HEADER" && 
+               ["IMAGE", "VIDEO", "DOCUMENT"].includes(component.format)) {
               // Preferir usar a URL pública do MinIO se disponível
               if (template.publicMediaUrl) {
                 formValues.headerUrl = template.publicMediaUrl;
@@ -124,10 +125,10 @@ export default function EditTemplateDetailsPage() {
                   id: 'existing-header',
                   url: template.publicMediaUrl,
                   progress: 100,
-                  mime_type: component.formato === 'IMAGE' ? 'image/jpeg' :
-                            component.formato === 'VIDEO' ? 'video/mp4' :
-                            component.formato === 'DOCUMENT' ? 'application/pdf' : 'application/octet-stream',
-                  visible_name: `Mídia do cabeçalho (${component.formato.toLowerCase()})`
+                  mime_type: component.format === 'IMAGE' ? 'image/jpeg' :
+                            component.format === 'VIDEO' ? 'video/mp4' :
+                            component.format === 'DOCUMENT' ? 'application/pdf' : 'application/octet-stream',
+                  visible_name: `Mídia do cabeçalho (${component.format.toLowerCase()})`
                 }]);
               } 
               // Caso contrário, usar a URL do WhatsApp
@@ -140,23 +141,23 @@ export default function EditTemplateDetailsPage() {
                     id: 'existing-header',
                     url: formValues.headerUrl,
                     progress: 100,
-                    mime_type: component.formato === 'IMAGE' ? 'image/jpeg' :
-                              component.formato === 'VIDEO' ? 'video/mp4' :
-                              component.formato === 'DOCUMENT' ? 'application/pdf' : 'application/octet-stream',
-                    visible_name: `Mídia do cabeçalho (${component.formato.toLowerCase()})`
+                    mime_type: component.format === 'IMAGE' ? 'image/jpeg' :
+                              component.format === 'VIDEO' ? 'video/mp4' :
+                              component.format === 'DOCUMENT' ? 'application/pdf' : 'application/octet-stream',
+                    visible_name: `Mídia do cabeçalho (${component.format.toLowerCase()})`
                   }]);
                 }
               }
-            } else if (component.tipo === "BODY" && component.texto) {
-              formValues.bodyText = component.texto;
-            } else if (component.tipo === "FOOTER" && component.texto) {
-              formValues.footerText = component.texto;
-            } else if (component.tipo === "BUTTONS" && component.botoes) {
-              formValues.buttons = component.botoes.map((botao: any) => ({
-                tipo: botao.tipo,
-                texto: botao.texto,
+            } else if (component.type === "BODY" && component.text) {
+              formValues.bodyText = component.text;
+            } else if (component.type === "FOOTER" && component.text) {
+              formValues.footerText = component.text;
+            } else if (component.type === "BUTTONS" && component.buttons) {
+              formValues.buttons = component.buttons.map((botao: any) => ({
+                tipo: botao.type,
+                texto: botao.text,
                 url: botao.url || "",
-                telefone: botao.telefone || ""
+                telefone: botao.phone_number || ""
               }));
             }
           });
@@ -217,7 +218,7 @@ export default function EditTemplateDetailsPage() {
       const updatedComponents = [...template.components];
       
       // Atualizar URL do header se houver componente de header com formato de imagem
-      const headerIdx = updatedComponents.findIndex(c => c.tipo === "HEADER" && c.formato === "IMAGE");
+      const headerIdx = updatedComponents.findIndex(c => c.type === "HEADER" && c.format === "IMAGE");
       if (headerIdx >= 0 && formData.headerUrl) {
         updatedComponents[headerIdx] = {
           ...updatedComponents[headerIdx],
@@ -228,33 +229,33 @@ export default function EditTemplateDetailsPage() {
       }
       
       // Atualizar texto do body
-      const bodyIdx = updatedComponents.findIndex(c => c.tipo === "BODY");
+      const bodyIdx = updatedComponents.findIndex(c => c.type === "BODY");
       if (bodyIdx >= 0) {
         updatedComponents[bodyIdx] = {
           ...updatedComponents[bodyIdx],
-          texto: formData.bodyText
+          text: formData.bodyText
         };
       }
       
       // Atualizar texto do footer
-      const footerIdx = updatedComponents.findIndex(c => c.tipo === "FOOTER");
+      const footerIdx = updatedComponents.findIndex(c => c.type === "FOOTER");
       if (footerIdx >= 0) {
         updatedComponents[footerIdx] = {
           ...updatedComponents[footerIdx],
-          texto: formData.footerText
+          text: formData.footerText
         };
       }
       
       // Atualizar botões
-      const buttonsIdx = updatedComponents.findIndex(c => c.tipo === "BUTTONS");
+      const buttonsIdx = updatedComponents.findIndex(c => c.type === "BUTTONS");
       if (buttonsIdx >= 0) {
         updatedComponents[buttonsIdx] = {
           ...updatedComponents[buttonsIdx],
-          botoes: formData.buttons.map((btn: any) => ({
-            tipo: btn.tipo,
-            texto: btn.texto,
+          buttons: formData.buttons.map((btn: any) => ({
+            type: btn.tipo,
+            text: btn.texto,
             url: btn.url || null,
-            telefone: btn.telefone || null
+            phone_number: btn.telefone || null
           }))
         };
       }
@@ -318,10 +319,10 @@ export default function EditTemplateDetailsPage() {
   }
   
   // Verificar quais componentes existem no template
-  const hasHeaderImage = template.components.some(c => c.tipo === "HEADER" && c.formato === "IMAGE");
-  const hasBody = template.components.some(c => c.tipo === "BODY");
-  const hasFooter = template.components.some(c => c.tipo === "FOOTER");
-  const hasButtons = template.components.some(c => c.tipo === "BUTTONS");
+  const hasHeaderImage = template.components.some(c => c.type === "HEADER" && c.format === "IMAGE");
+  const hasBody = template.components.some(c => c.type === "BODY");
+  const hasFooter = template.components.some(c => c.type === "FOOTER");
+  const hasButtons = template.components.some(c => c.type === "BUTTONS");
   
   // Adicionar função para verificar a origem da mídia
   function getMediaSourceLabel(url: string, template: TemplateDetail | null) {

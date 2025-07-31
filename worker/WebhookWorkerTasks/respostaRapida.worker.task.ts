@@ -5,11 +5,9 @@ import {
   RespostaRapidaJobData,
   handleJobFailure,
 } from "../../lib/queue/resposta-rapida.queue";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../../lib/prisma";
 import { recordWorkerMetrics } from "../../lib/monitoring/application-performance-monitor";
 import { performance } from 'perf_hooks';
-
-const prisma = new PrismaClient();
 
 // ============================================================================
 // INTERFACES
@@ -1200,8 +1198,8 @@ class ButtonProcessor {
         },
       });
 
-      if (reaction && reaction.actionPayload?.emoji) {
-        return reaction.actionPayload.emoji;
+      if (reaction && reaction.actionPayload && typeof reaction.actionPayload === 'object' && 'emoji' in reaction.actionPayload) {
+        return (reaction.actionPayload as any).emoji;
       }
 
       // Fallback to config-based mapping

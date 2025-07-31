@@ -44,6 +44,7 @@ import {
   generateCorrelationId as generateInstagramCorrelationId,
   logWithCorrelationId as logInstagramWithCorrelationId,
 } from "@/lib/queue/instagram-translation.queue";
+import { createInstagramFallbackMessage } from "@/lib/instagram/payload-builder";
 
 // Feature flag constants
 const FEATURE_FLAGS = {
@@ -525,6 +526,17 @@ async function handleInstagramTranslation(
     // Extract webhook data for Instagram processing
     const webhookData = extractWebhookData(req);
     
+    // Log extracted data for debugging
+    logInstagramWithCorrelationId('debug', 'Extracted webhook data for Instagram translation', correlationId, {
+      intentName: webhookData.intentName,
+      inboxId: webhookData.inboxId,
+      contactPhone: webhookData.contactPhone,
+      conversationId: webhookData.conversationId,
+      hasConversationId: !!webhookData.conversationId,
+      conversationIdLength: webhookData.conversationId?.length || 0,
+      cacheKeyWillInclude: 'usuarioChatwitId will be extracted from database query',
+    });
+    
     // Validate required data for Instagram translation
     if (!webhookData.intentName || !webhookData.inboxId || !webhookData.contactPhone) {
       logInstagramWithCorrelationId('error', 'Missing required data for Instagram translation', correlationId, {
@@ -542,7 +554,7 @@ async function handleInstagramTranslation(
       intentName: webhookData.intentName,
       inboxId: webhookData.inboxId,
       contactPhone: webhookData.contactPhone,
-      conversationId: webhookData.conversationId,
+      conversationId: webhookData.conversationId || webhookData.contactPhone || `conv_${Date.now()}`,
       originalPayload: req,
       correlationId: generateInstagramCorrelationId(),
     });
@@ -555,6 +567,27 @@ async function handleInstagramTranslation(
     const result = await waitForInstagramTranslationResult(instagramJobData.correlationId, 4500);
     
     const responseTime = performance.now() - startTime;
+    
+    // Handle null result case (job not found or in unknown state)
+    if (!result) {
+      logInstagramWithCorrelationId('error', 'Instagram translation job returned null result', correlationId, {
+        responseTime,
+        jobId,
+      });
+      
+      // Record error metrics
+      recordWebhookMetrics({
+        responseTime,
+        timestamp: new Date(),
+        correlationId,
+        success: false,
+        error: 'Job returned null result',
+        payloadSize,
+        interactionType: 'intent',
+      });
+      
+      return createDialogflowFallbackResponse(correlationId, 'Erro interno no processamento da mensagem.');
+    }
     
     // Record webhook metrics
     recordWebhookMetrics({
@@ -570,17 +603,53 @@ async function handleInstagramTranslation(
       logInstagramWithCorrelationId('info', 'Instagram translation completed successfully', correlationId, {
         processingTime: result.processingTime,
         responseTime,
+        messagesCount: result.fulfillmentMessages.length,
       });
 
-      // Return successful Instagram response to Dialogflow
-      return new Response(JSON.stringify({
+      // Validate that we have proper Instagram fulfillment messages
+      if (!Array.isArray(result.fulfillmentMessages) || result.fulfillmentMessages.length === 0) {
+        logInstagramWithCorrelationId('warn', 'Empty fulfillment messages received from worker', correlationId);
+        return createDialogflowFallbackResponse(correlationId, 'Empty response from Instagram translation');
+      }
+
+      // Validate Socialwise payload structure
+      const hasValidSocialwisePayload = result.fulfillmentMessages.some(msg => 
+        msg.payload && msg.payload.socialwiseResponse
+      );
+
+      if (!hasValidSocialwisePayload) {
+        logInstagramWithCorrelationId('warn', 'Invalid Socialwise payload structure', correlationId, {
+          fulfillmentMessages: result.fulfillmentMessages,
+        });
+        return createDialogflowFallbackResponse(correlationId, 'Invalid Socialwise payload structure');
+      }
+
+      // Log the exact response being sent to Dialogflow
+      const dialogflowResponse = {
         fulfillmentMessages: result.fulfillmentMessages,
-      }), {
+      };
+      
+      console.log(`[MTF Diamante Dispatcher] [${correlationId}] EXACT RESPONSE SENT TO DIALOGFLOW:`, JSON.stringify(dialogflowResponse, null, 2));
+      console.log(`[MTF Diamante Dispatcher] [${correlationId}] FULFILLMENT MESSAGES DETAILS:`, result.fulfillmentMessages.map((msg, index) => ({
+        index,
+        hasPayload: !!msg.payload,
+        hasSocialwiseResponse: !!(msg.payload && msg.payload.socialwiseResponse),
+        originalStructure: Object.keys(msg),
+        payloadKeys: msg.payload ? Object.keys(msg.payload) : [],
+        socialwiseResponseKeys: msg.payload && msg.payload.socialwiseResponse ? Object.keys(msg.payload.socialwiseResponse) : [],
+        messageFormat: msg.payload?.socialwiseResponse?.message_format,
+        finalStructure: 'payload.socialwiseResponse'
+      })));
+
+      // Return successful Instagram response to Dialogflow
+      return new Response(JSON.stringify(dialogflowResponse), {
         status: 200,
         headers: {
           'Content-Type': 'application/json',
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'X-Correlation-ID': correlationId,
+          'X-Processing-Time': result.processingTime.toString(),
+          'X-Response-Time': responseTime.toString(),
         },
       });
     } else {
@@ -590,8 +659,19 @@ async function handleInstagramTranslation(
         responseTime,
       });
 
-      // Return fallback response for Dialogflow
-      return createDialogflowFallbackResponse(correlationId, result.error || 'Instagram translation failed');
+      // Categorize error types for better fallback handling
+      let fallbackMessage = 'Desculpe, não foi possível processar sua mensagem no momento.';
+      
+      if (result.error?.includes('timeout')) {
+        fallbackMessage = 'Processamento demorou muito. Tente novamente.';
+      } else if (result.error?.includes('too long')) {
+        fallbackMessage = 'Sua mensagem é muito longa para o Instagram. Tente uma mensagem mais curta.';
+      } else if (result.error?.includes('No message mapping')) {
+        fallbackMessage = 'Mensagem não configurada para Instagram.';
+      }
+
+      // Return categorized fallback response for Dialogflow
+      return createDialogflowFallbackResponse(correlationId, fallbackMessage);
     }
 
   } catch (error) {
@@ -622,24 +702,25 @@ async function handleInstagramTranslation(
 /**
  * Create fallback response for Dialogflow when Instagram translation fails
  */
-function createDialogflowFallbackResponse(correlationId: string, error: string): Response {
-  const fallbackMessage = {
-    fulfillmentMessages: [
-      {
-        text: {
-          text: ["Desculpe, não foi possível processar sua mensagem no momento. Tente novamente."]
-        }
-      }
-    ]
+function createDialogflowFallbackResponse(correlationId: string, fallbackMessage: string): Response {
+  console.log(`[MTF Diamante Dispatcher] [${correlationId}] CREATING FALLBACK RESPONSE - Message: ${fallbackMessage}`);
+  
+  // Create Instagram-specific fallback message using the provided fallbackMessage
+  const instagramFallback = createInstagramFallbackMessage(fallbackMessage);
+  
+  const fallbackResponse = {
+    fulfillmentMessages: instagramFallback,
   };
 
-  return new Response(JSON.stringify(fallbackMessage), {
+  console.log(`[MTF Diamante Dispatcher] [${correlationId}] FALLBACK RESPONSE SENT TO DIALOGFLOW:`, JSON.stringify(fallbackResponse, null, 2));
+
+  return new Response(JSON.stringify(fallbackResponse), {
     status: 200,
     headers: {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'X-Correlation-ID': correlationId,
-      'X-Error': error,
+      'X-Fallback-Message': fallbackMessage,
     },
   });
 }
@@ -663,6 +744,19 @@ export async function POST(request: Request) {
     correlationId = generateCorrelationId();
     
     console.log(`[MTF Diamante Dispatcher] [${correlationId}] Received Dialogflow request`);
+    
+    // Log complete payload for debugging (only for Instagram channels)
+    const channelTypeCheck = req.originalDetectIntentRequest?.payload?.channel_type;
+    if (channelTypeCheck === 'Channel::Instagram') {
+      console.log(`[MTF Diamante Dispatcher] [${correlationId}] COMPLETE DIALOGFLOW PAYLOAD:`, JSON.stringify(req, null, 2));
+      
+      // Log specific sections for easier analysis
+      console.log(`[MTF Diamante Dispatcher] [${correlationId}] PAYLOAD SECTIONS:`);
+      console.log('- queryResult:', JSON.stringify(req.queryResult, null, 2));
+      console.log('- originalDetectIntentRequest:', JSON.stringify(req.originalDetectIntentRequest, null, 2));
+      console.log('- session:', req.session);
+      console.log('- responseId:', req.responseId);
+    }
 
     // Detect channel type for Instagram translation
     const channelDetection = detectChannelType(req);

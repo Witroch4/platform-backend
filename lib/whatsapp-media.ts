@@ -28,24 +28,31 @@ export async function downloadMetaMediaAndUploadToMinio(
   userId: string
 ): Promise<string> {
   try {
-    console.log(`[Media] Iniciando download da mídia: ${mediaUrl}`);
+    console.log(`[WhatsAppMedia] Iniciando download e upload para MinIO: ${mediaUrl}`);
+    
+    // Verificar se já existe uma URL pública no banco de dados
+    const template = await db.template.findFirst({
+      where: {
+        whatsappOfficialInfo: {
+          metaTemplateId: templateId
+        },
+        createdById: userId
+      },
+      include: {
+        whatsappOfficialInfo: true
+      }
+    });
+    
+    if (template?.whatsappOfficialInfo?.components && 
+        typeof template.whatsappOfficialInfo.components === 'object' &&
+        'publicMediaUrl' in template.whatsappOfficialInfo.components &&
+        !isMetaMediaUrl(template.whatsappOfficialInfo.components.publicMediaUrl as string)) {
+      console.log(`[WhatsAppMedia] URL pública já existe no MinIO: ${template.whatsappOfficialInfo.components.publicMediaUrl}`);
+      return template.whatsappOfficialInfo.components.publicMediaUrl as string;
+    }
     
     // Obter configuração do WhatsApp para acessar a API da Meta
     const whatsappConfig = await getWhatsAppConfig(userId);
-    
-    // Verificar se já existe uma URL pública para este template
-    const template = await db.whatsAppTemplate.findFirst({
-      where: { 
-        templateId: templateId,
-        usuarioChatwitId: userId
-      }
-    }) as unknown as WhatsAppTemplateWithMedia | null;
-    
-    // Se já tiver uma URL pública armazenada, retorne-a diretamente
-    if (template?.publicMediaUrl) {
-      console.log(`[Media] Template já possui URL pública: ${template.publicMediaUrl}`);
-      return template.publicMediaUrl;
-    }
     
     // Baixar a mídia da Meta
     const response = await axios.get(mediaUrl, {
@@ -65,23 +72,35 @@ export async function downloadMetaMediaAndUploadToMinio(
     // Criar um nome de arquivo com o ID do template
     const fileName = `whatsapp_media_${templateId}_${Date.now()}.${fileExtension}`;
     
-    console.log(`[Media] Fazendo upload para MinIO: ${fileName} (${mimeType})`);
+    console.log(`[WhatsAppMedia] Fazendo upload para MinIO: ${fileName} (${mimeType})`);
     
     // Fazer upload para o MinIO
     const uploadResult = await uploadToMinIO(buffer, fileName, mimeType);
     
-    // Atualizar o banco de dados com a URL pública usando SQL direto para evitar erro de tipo
-    await db.$executeRaw`
-      UPDATE "WhatsAppTemplate"
-      SET "publicMediaUrl" = ${uploadResult.url}
-      WHERE "templateId" = ${templateId} AND "usuarioChatwitId" = ${userId}
-    `;
+    // Atualizar o banco de dados com a URL pública
+    if (template) {
+      const componentsWithMedia = {
+        ...(template.whatsappOfficialInfo?.components || {}),
+        publicMediaUrl: uploadResult.url
+      };
+      
+      await db.template.update({
+        where: { id: template.id },
+        data: {
+          whatsappOfficialInfo: {
+            update: {
+              components: componentsWithMedia
+            }
+          }
+        }
+      });
+    }
     
-    console.log(`[Media] Upload concluído: ${uploadResult.url}`);
+    console.log(`[WhatsAppMedia] Upload concluído: ${uploadResult.url}`);
     return uploadResult.url;
     
   } catch (error) {
-    console.error('[Media] Erro ao processar mídia:', error);
+    console.error('[WhatsAppMedia] Erro ao processar mídia:', error);
     throw new Error(`Falha ao processar mídia: ${error}`);
   }
 }
@@ -109,16 +128,23 @@ export async function getPublicMediaUrl(
 ): Promise<string | null> {
   try {
     // Verificar se existe URL pública no banco de dados
-    const template = await db.whatsAppTemplate.findFirst({
-      where: { 
-        templateId: templateId,
-        usuarioChatwitId: userId
+    const template = await db.template.findFirst({
+      where: {
+        whatsappOfficialInfo: {
+          metaTemplateId: templateId
+        },
+        createdById: userId
+      },
+      include: {
+        whatsappOfficialInfo: true
       }
-    }) as unknown as WhatsAppTemplateWithMedia | null;
+    });
     
     // Se já tiver URL pública, retorná-la
-    if (template?.publicMediaUrl) {
-      return template.publicMediaUrl;
+    if (template?.whatsappOfficialInfo?.components && 
+        typeof template.whatsappOfficialInfo.components === 'object' &&
+        'publicMediaUrl' in template.whatsappOfficialInfo.components) {
+      return template.whatsappOfficialInfo.components.publicMediaUrl as string;
     }
     
     // Se foi fornecida uma URL da Meta, baixar e fazer upload
@@ -129,7 +155,7 @@ export async function getPublicMediaUrl(
     
     return null;
   } catch (error) {
-    console.error('[Media] Erro ao obter URL pública:', error);
+    console.error('[WhatsAppMedia] Erro ao obter URL pública:', error);
     return null;
   }
 } 

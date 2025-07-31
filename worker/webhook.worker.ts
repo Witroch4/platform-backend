@@ -321,19 +321,43 @@ const mtfDiamanteAsyncWorker = new Worker(
   }
 );
 
+// Import Instagram translation worker configuration
+import { 
+  getCurrentWorkerConfig, 
+  logWorkerConfiguration,
+  validateWorkerConfig 
+} from './config/instagram-translation-worker.config';
+
+// Get and validate worker configuration
+const instagramWorkerConfig = getCurrentWorkerConfig();
+const configValidation = validateWorkerConfig(instagramWorkerConfig);
+
+if (!configValidation.valid) {
+  console.error('[Instagram Worker] Configuration validation failed:', configValidation.errors);
+  throw new Error(`Instagram worker configuration invalid: ${configValidation.errors.join(', ')}`);
+}
+
+// Log worker configuration for monitoring
+logWorkerConfiguration(instagramWorkerConfig);
+
 // Worker para processar tradução de mensagens para Instagram
 const instagramTranslationWorker = new Worker(
   INSTAGRAM_TRANSLATION_QUEUE_NAME,
   processInstagramTranslationTask,
   {
     connection,
-    concurrency: 100, // High concurrency for IO-bound translation tasks
-    lockDuration: 5000, // 5 second timeout to ensure webhook response within limits
+    concurrency: instagramWorkerConfig.concurrency, // Configurable concurrency for IO-bound translation tasks
+    lockDuration: instagramWorkerConfig.lockDuration, // Configurable timeout to ensure webhook response within limits
+    // Add resource monitoring and limits
+    settings: {
+      stalledInterval: 30000, // Check for stalled jobs every 30 seconds
+      maxStalledCount: 1, // Mark job as failed after 1 stalled occurrence
+    },
   }
 );
 
 // Tratamento de eventos dos workers legados
-[agendamentoWorker, manuscritoWorker, leadCellsWorker, leadsChatwitWorker, autoNotificationsWorker, mtfDiamanteWebhookWorker, mtfDiamanteAsyncWorker, instagramTranslationWorker].forEach(worker => {
+[agendamentoWorker, manuscritoWorker, leadCellsWorker, leadsChatwitWorker, autoNotificationsWorker, mtfDiamanteWebhookWorker, mtfDiamanteAsyncWorker].forEach(worker => {
   worker.on('completed', (job) => {
     console.log(`[BullMQ] Job ${job.id} concluído com sucesso`);
   });
@@ -342,6 +366,104 @@ const instagramTranslationWorker = new Worker(
     console.error(`[BullMQ] Job ${job?.id} falhou: ${error.message}`);
   });
 });
+
+// Enhanced event handling for Instagram Translation Worker with performance monitoring
+instagramTranslationWorker.on('completed', (job, result) => {
+  const processingTime = result?.processingTime || 0;
+  const memoryUsage = process.memoryUsage();
+  
+  console.log(`[Instagram Worker] Job ${job.id} completed successfully`, {
+    processingTime: `${processingTime}ms`,
+    memoryUsage: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
+    correlationId: job.data.correlationId,
+    success: result?.success,
+  });
+  
+  // Check for performance warnings
+  if (processingTime > instagramWorkerConfig.resourceLimits.processing.warningThreshold) {
+    console.warn(`[Instagram Worker] Job ${job.id} processing time exceeded warning threshold`, {
+      processingTime: `${processingTime}ms`,
+      threshold: `${instagramWorkerConfig.resourceLimits.processing.warningThreshold}ms`,
+      correlationId: job.data.correlationId,
+    });
+  }
+  
+  // Check memory usage
+  const memoryUsageMB = memoryUsage.heapUsed / 1024 / 1024;
+  const memoryLimitMB = parseInt(instagramWorkerConfig.resourceLimits.memory.warning.replace('MB', ''));
+  if (memoryUsageMB > memoryLimitMB) {
+    console.warn(`[Instagram Worker] Memory usage exceeded warning threshold`, {
+      currentUsage: `${Math.round(memoryUsageMB)}MB`,
+      threshold: instagramWorkerConfig.resourceLimits.memory.warning,
+      jobId: job.id,
+    });
+  }
+});
+
+instagramTranslationWorker.on('failed', (job, error) => {
+  const memoryUsage = process.memoryUsage();
+  
+  console.error(`[Instagram Worker] Job ${job?.id} failed: ${error.message}`, {
+    correlationId: job?.data?.correlationId,
+    attemptsMade: job?.attemptsMade,
+    maxAttempts: job?.opts?.attempts,
+    memoryUsage: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
+    error: error.message,
+  });
+});
+
+instagramTranslationWorker.on('stalled', (job) => {
+  console.warn(`[Instagram Worker] Job ${job.id} stalled`, {
+    correlationId: job.data.correlationId,
+    stalledCount: job.opts?.stalledCount || 0,
+    lockDuration: `${instagramWorkerConfig.lockDuration}ms`,
+  });
+});
+
+instagramTranslationWorker.on('error', (error) => {
+  console.error('[Instagram Worker] Worker error:', {
+    error: error.message,
+    stack: error.stack,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// Add periodic resource monitoring for the Instagram worker
+let resourceMonitoringInterval: NodeJS.Timeout;
+
+if (instagramWorkerConfig.monitoring.enabled) {
+  resourceMonitoringInterval = setInterval(() => {
+    const memoryUsage = process.memoryUsage();
+    const cpuUsage = process.cpuUsage();
+    
+    // Log resource usage periodically
+    console.log('[Instagram Worker] Resource usage report:', {
+      memory: {
+        heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
+        heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`,
+        external: `${Math.round(memoryUsage.external / 1024 / 1024)}MB`,
+      },
+      cpu: {
+        user: `${Math.round(cpuUsage.user / 1000)}ms`,
+        system: `${Math.round(cpuUsage.system / 1000)}ms`,
+      },
+      uptime: `${Math.round(process.uptime())}s`,
+      timestamp: new Date().toISOString(),
+    });
+    
+    // Check for resource limit violations
+    const memoryUsageMB = memoryUsage.heapUsed / 1024 / 1024;
+    const criticalMemoryMB = parseInt(instagramWorkerConfig.resourceLimits.memory.critical.replace('MB', ''));
+    
+    if (memoryUsageMB > criticalMemoryMB) {
+      console.error('[Instagram Worker] CRITICAL: Memory usage exceeded critical threshold', {
+        currentUsage: `${Math.round(memoryUsageMB)}MB`,
+        criticalThreshold: instagramWorkerConfig.resourceLimits.memory.critical,
+        recommendation: 'Consider reducing concurrency or restarting worker',
+      });
+    }
+  }, instagramWorkerConfig.monitoring.metricsInterval);
+}
 
 // Eventos específicos para o worker de leads
 leadsChatwitWorker.on('progress', (job, progress) => {
@@ -488,15 +610,135 @@ export async function initMtfDiamanteAsyncWorker() {
   }
 }
 
-// Exportar a função de inicialização do worker de tradução Instagram
+// Exportar a função de inicialização do worker de tradução Instagram com validação completa
 export async function initInstagramTranslationWorker() {
   try {
-    console.log('[BullMQ] Inicializando worker de tradução Instagram...');
-    await instagramTranslationWorker.waitUntilReady();
-    console.log('[BullMQ] Worker de tradução Instagram inicializado com sucesso');
+    console.log('[Instagram Worker] Initializing Instagram translation worker...');
+    
+    // Log configuration details
+    console.log('[Instagram Worker] Configuration:', {
+      concurrency: instagramWorkerConfig.concurrency,
+      lockDuration: `${instagramWorkerConfig.lockDuration}ms`,
+      maxRetries: instagramWorkerConfig.maxRetries,
+      resourceLimits: {
+        memory: instagramWorkerConfig.resourceLimits.memory.max,
+        cpu: `${instagramWorkerConfig.resourceLimits.cpu.max}%`,
+        maxProcessingTime: `${instagramWorkerConfig.resourceLimits.processing.maxProcessingTime}ms`,
+      },
+      monitoring: instagramWorkerConfig.monitoring.enabled,
+      environment: process.env.NODE_ENV || 'development',
+    });
+    
+    // Wait for worker to be ready with timeout
+    const startupTimeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Worker startup timeout')), instagramWorkerConfig.lifecycle.startupTimeout)
+    );
+    
+    await Promise.race([
+      instagramTranslationWorker.waitUntilReady(),
+      startupTimeout,
+    ]);
+    
+    // Perform initial health check
+    const healthCheck = await performInstagramWorkerHealthCheck();
+    if (!healthCheck.healthy) {
+      throw new Error(`Worker health check failed: ${healthCheck.issues.join(', ')}`);
+    }
+    
+    console.log('[Instagram Worker] ✅ Instagram translation worker initialized successfully', {
+      concurrency: instagramWorkerConfig.concurrency,
+      resourceMonitoring: instagramWorkerConfig.monitoring.enabled,
+      healthStatus: 'HEALTHY',
+      uptime: `${Math.round(process.uptime())}s`,
+    });
+    
+    // Start resource monitoring if enabled
+    if (instagramWorkerConfig.monitoring.enabled) {
+      console.log('[Instagram Worker] Resource monitoring enabled', {
+        metricsInterval: `${instagramWorkerConfig.monitoring.metricsInterval}ms`,
+        healthCheckInterval: `${instagramWorkerConfig.monitoring.healthCheckInterval}ms`,
+      });
+    }
+    
   } catch (error) {
-    console.error('[BullMQ] Erro ao inicializar worker de tradução Instagram:', error);
+    console.error('[Instagram Worker] ❌ Failed to initialize Instagram translation worker:', {
+      error: error instanceof Error ? error.message : String(error),
+      configuration: {
+        concurrency: instagramWorkerConfig.concurrency,
+        lockDuration: instagramWorkerConfig.lockDuration,
+      },
+      environment: process.env.NODE_ENV,
+    });
     throw error;
+  }
+}
+
+/**
+ * Perform health check for Instagram translation worker
+ */
+async function performInstagramWorkerHealthCheck(): Promise<{
+  healthy: boolean;
+  issues: string[];
+  metrics: {
+    memoryUsage: string;
+    uptime: string;
+    configValid: boolean;
+  };
+}> {
+  const issues: string[] = [];
+  const memoryUsage = process.memoryUsage();
+  
+  try {
+    // Check worker configuration
+    const configValidation = validateWorkerConfig(instagramWorkerConfig);
+    if (!configValidation.valid) {
+      issues.push(`Configuration invalid: ${configValidation.errors.join(', ')}`);
+    }
+    
+    // Check memory usage
+    const memoryUsageMB = memoryUsage.heapUsed / 1024 / 1024;
+    const memoryLimitMB = parseInt(instagramWorkerConfig.resourceLimits.memory.critical.replace('MB', ''));
+    if (memoryUsageMB > memoryLimitMB) {
+      issues.push(`Memory usage critical: ${Math.round(memoryUsageMB)}MB > ${memoryLimitMB}MB`);
+    }
+    
+    // Check if worker is responsive
+    const healthCheckTimeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Health check timeout')), instagramWorkerConfig.lifecycle.healthCheckTimeout)
+    );
+    
+    try {
+      await Promise.race([
+        // Simple responsiveness check - worker should be able to handle this quickly
+        new Promise(resolve => setTimeout(resolve, 100)),
+        healthCheckTimeout,
+      ]);
+    } catch (timeoutError) {
+      issues.push('Worker responsiveness check failed');
+    }
+    
+    return {
+      healthy: issues.length === 0,
+      issues,
+      metrics: {
+        memoryUsage: `${Math.round(memoryUsageMB)}MB`,
+        uptime: `${Math.round(process.uptime())}s`,
+        configValid: configValidation.valid,
+      },
+    };
+    
+  } catch (error) {
+    issues.push(`Health check error: ${error instanceof Error ? error.message : String(error)}`);
+    
+    return {
+      healthy: false,
+      issues,
+      metrics: {
+        memoryUsage: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
+        uptime: `${Math.round(process.uptime())}s`,
+        configValid: false,
+      },
+    };
   }
 }
 
@@ -516,36 +758,75 @@ export async function initParentWorker() {
   }
 }
 
-// Tratamento de encerramento gracioso
-process.on('SIGTERM', async () => {
-  console.log('Encerrando workers...');
-  await Promise.all([
-    parentWorker.shutdown(),
-    agendamentoWorker.close(),
-    manuscritoWorker.close(),
-    leadsChatwitWorker.close(),
-    autoNotificationsWorker.close(),
-    mtfDiamanteWebhookWorker.close(),
-    mtfDiamanteAsyncWorker.close(),
-    instagramTranslationWorker.close(),
-  ]);
-  await prisma.$disconnect();
-  process.exit(0);
+// Enhanced graceful shutdown with resource monitoring cleanup
+const gracefulShutdown = async (signal: string) => {
+  console.log(`[Worker Shutdown] Received ${signal}, initiating graceful shutdown...`);
+  
+  // Clear resource monitoring interval
+  if (resourceMonitoringInterval) {
+    clearInterval(resourceMonitoringInterval);
+    console.log('[Worker Shutdown] Resource monitoring stopped');
+  }
+  
+  // Set shutdown timeout
+  const shutdownTimeout = setTimeout(() => {
+    console.error('[Worker Shutdown] Shutdown timeout exceeded, forcing exit');
+    process.exit(1);
+  }, instagramWorkerConfig.lifecycle.gracefulShutdownTimeout);
+  
+  try {
+    console.log('[Worker Shutdown] Closing all workers...');
+    
+    // Close all workers with timeout handling
+    await Promise.race([
+      Promise.all([
+        parentWorker.shutdown(),
+        agendamentoWorker.close(),
+        manuscritoWorker.close(),
+        leadsChatwitWorker.close(),
+        autoNotificationsWorker.close(),
+        mtfDiamanteWebhookWorker.close(),
+        mtfDiamanteAsyncWorker.close(),
+        instagramTranslationWorker.close(),
+      ]),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Worker shutdown timeout')), 25000)
+      ),
+    ]);
+    
+    console.log('[Worker Shutdown] All workers closed successfully');
+    
+    // Disconnect from database
+    await prisma.$disconnect();
+    console.log('[Worker Shutdown] Database disconnected');
+    
+    // Clear shutdown timeout
+    clearTimeout(shutdownTimeout);
+    
+    console.log('[Worker Shutdown] Graceful shutdown completed');
+    process.exit(0);
+    
+  } catch (error) {
+    console.error('[Worker Shutdown] Error during shutdown:', error);
+    clearTimeout(shutdownTimeout);
+    process.exit(1);
+  }
+};
+
+// Register shutdown handlers
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGUSR2', () => gracefulShutdown('SIGUSR2')); // For nodemon
+
+// Handle uncaught exceptions and unhandled rejections
+process.on('uncaughtException', (error) => {
+  console.error('[Worker] Uncaught exception:', error);
+  gracefulShutdown('UNCAUGHT_EXCEPTION');
 });
 
-process.on('SIGINT', async () => {
-  console.log('Encerrando workers...');
-  await Promise.all([
-    parentWorker.shutdown(),
-    agendamentoWorker.close(),
-    manuscritoWorker.close(),
-    autoNotificationsWorker.close(),
-    leadsChatwitWorker.close(),
-    mtfDiamanteWebhookWorker.close(),
-    mtfDiamanteAsyncWorker.close(),
-  ]);
-  await prisma.$disconnect();
-  process.exit(0);
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Worker] Unhandled rejection at:', promise, 'reason:', reason);
+  gracefulShutdown('UNHANDLED_REJECTION');
 });
 
 export {

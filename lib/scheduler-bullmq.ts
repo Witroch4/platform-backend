@@ -81,10 +81,13 @@ export async function initializeExistingAgendamentos() {
     for (const agendamento of agendamentos) {
       await scheduleAgendamentoJob({
         id: agendamento.id,
-        Data: agendamento.Data,
+        Data: agendamento.data,
         userId: agendamento.userId,
         accountId: agendamento.accountId,
-        Diario: agendamento.Diario,
+        Diario: agendamento.diario,
+        Semanal: agendamento.semanal,
+        Randomizar: agendamento.randomizar,
+        TratarComoPostagensIndividuais: agendamento.tratarComoPostagensIndividuais,
       });
     }
 

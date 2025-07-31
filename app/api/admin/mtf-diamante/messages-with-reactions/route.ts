@@ -77,58 +77,71 @@ const SaveMessageWithReactionsSchema = z.object({
 
 // Helper function to format reaction response
 function formatReaction(reaction: any) {
+  // Parse actionPayload to extract emoji and textReaction
+  const actionPayload = reaction.actionPayload as any;
+  const emoji = actionPayload?.emoji;
+  const textReaction = actionPayload?.textReaction;
+  
   return {
     id: reaction.id,
     buttonId: reaction.buttonId,
-    messageId: reaction.messageId,
-    type: reaction.description ? "text" : "emoji",
-    emoji: reaction.emoji,
-    textReaction: reaction.description,
-    isActive: reaction.isActive,
+    messageId: reaction.inboxId, // Use inboxId instead of messageId
+    type: textReaction ? "text" : "emoji",
+    emoji: emoji || null,
+    textReaction: textReaction || null,
+    isActive: true, // MapeamentoBotao doesn't have isActive field, assume active
     createdAt: reaction.createdAt,
   };
 }
 
 // Helper function to format message response
-function formatMessage(message: any) {
+function formatMessage(template: any) {
+  const interactive = template.interactiveContent;
+  if (!interactive) return null;
+
+  // Determinar o tipo de ação
+  let actionType = null;
+  let actionData = null;
+  
+  if (interactive.actionCtaUrl) {
+    actionType = 'cta_url';
+    actionData = interactive.actionCtaUrl;
+  } else if (interactive.actionReplyButton) {
+    actionType = 'button';
+    actionData = interactive.actionReplyButton;
+  } else if (interactive.actionList) {
+    actionType = 'list';
+    actionData = interactive.actionList;
+  } else if (interactive.actionFlow) {
+    actionType = 'flow';
+    actionData = interactive.actionFlow;
+  } else if (interactive.actionLocationRequest) {
+    actionType = 'location_request';
+    actionData = interactive.actionLocationRequest;
+  }
+
   return {
-    id: message.id,
-    name: message.name,
-    type: message.type,
+    id: template.id,
+    name: template.name,
+    type: actionType,
     content: {
-      name: message.name,
-      type: message.type,
-      header: message.headerType
-        ? {
-            type: message.headerType,
-            text: message.headerContent || "",
-            media_url:
-              message.headerType !== "text" ? message.headerContent || "" : "",
-          }
-        : undefined,
+      name: template.name,
+      type: actionType,
+      header: interactive.header ? {
+        type: interactive.header.type,
+        text: interactive.header.content || "",
+        media_url: interactive.header.type !== 'text' ? interactive.header.content || "" : ""
+      } : undefined,
       body: {
-        text: message.bodyText,
+        text: interactive.body?.text || ''
       },
-      footer: message.footerText
-        ? {
-            text: message.footerText,
-          }
-        : undefined,
-      action: message.actionData,
-      // Location fields
-      latitude: message.latitude,
-      longitude: message.longitude,
-      locationName: message.locationName,
-      locationAddress: message.locationAddress,
-      // Reaction fields
-      reactionEmoji: message.reactionEmoji,
-      targetMessageId: message.targetMessageId,
-      // Sticker fields
-      stickerMediaId: message.stickerMediaId,
-      stickerUrl: message.stickerUrl,
+      footer: interactive.footer ? {
+        text: interactive.footer.text
+      } : undefined,
+      action: actionData,
     },
-    createdAt: message.createdAt,
-    updatedAt: message.updatedAt,
+    createdAt: template.createdAt,
+    updatedAt: template.updatedAt,
   };
 }
 
@@ -276,7 +289,7 @@ export async function POST(request: NextRequest) {
     // Verify caixa exists and user has access
     let caixa;
     try {
-      caixa = await prisma.caixaEntrada.findFirst({
+      caixa = await prisma.chatwitInbox.findFirst({
         where: {
           id: caixaId,
           usuarioChatwit: {
@@ -325,30 +338,97 @@ export async function POST(request: NextRequest) {
     try {
       result = await prisma.$transaction(async (tx) => {
       // Create the interactive message
-      const savedMessage = await tx.interactiveMessage.create({
+      const savedMessage = await tx.template.create({
         data: {
-          caixaId,
           name: message.name,
-          type: message.type,
-          bodyText: message.body.text,
-          headerType: message.header?.type || null,
-          headerContent:
-            message.header?.content || message.header?.media_url || message.header?.mediaUrl || message.header?.text || null,
-          footerText: message.footer?.text || null,
-          actionData: message.action || null,
-          // Location fields
-          latitude: message.latitude || null,
-          longitude: message.longitude || null,
-          locationName: message.locationName || null,
-          locationAddress: message.locationAddress || null,
-          // Reaction fields
-          reactionEmoji: message.reactionEmoji || null,
-          targetMessageId: message.targetMessageId || null,
-          // Sticker fields
-          stickerMediaId: message.stickerMediaId || null,
-          stickerUrl: message.stickerUrl || null,
+          type: "INTERACTIVE_MESSAGE",
+          description: `Mensagem interativa: ${message.name}`,
+          scope: "PRIVATE",
+          status: "APPROVED",
+          language: "pt_BR",
+          tags: [],
+          isActive: true,
           createdById: session.user.id,
+          inboxId: caixaId,
+          interactiveContent: {
+            create: {
+              body: {
+                create: {
+                  text: message.body.text
+                }
+              },
+              ...(message.header && {
+                header: {
+                  create: {
+                    type: message.header.type,
+                    content: message.header.media_url || message.header.text || ""
+                  }
+                }
+              }),
+              ...(message.footer && {
+                footer: {
+                  create: {
+                    text: message.footer.text
+                  }
+                }
+              }),
+              ...(message.type === 'cta_url' && message.action && {
+                actionCtaUrl: {
+                  create: {
+                    displayText: message.action.displayText || "Clique aqui",
+                    url: message.action.url || ""
+                  }
+                }
+              }),
+              ...(message.type === 'button' && message.action && {
+                actionReplyButton: {
+                  create: {
+                    buttons: message.action.buttons || []
+                  }
+                }
+              }),
+              ...(message.type === 'list' && message.action && {
+                actionList: {
+                  create: {
+                    buttonText: message.action.buttonText || "Ver opções",
+                    sections: message.action.sections || []
+                  }
+                }
+              }),
+              ...(message.type === 'flow' && message.action && {
+                actionFlow: {
+                  create: {
+                    flowId: message.action.flowId || "",
+                    flowCta: message.action.flowCta || "Iniciar",
+                    flowMode: message.action.flowMode || "published",
+                    flowData: message.action.flowData || null
+                  }
+                }
+              }),
+              ...(message.type === 'location_request' && message.action && {
+                actionLocationRequest: {
+                  create: {
+                    requestText: message.action.requestText || "Compartilhar localização"
+                  }
+                }
+              })
+            }
+          }
         },
+        include: {
+          interactiveContent: {
+            include: {
+              header: true,
+              body: true,
+              footer: true,
+              actionCtaUrl: true,
+              actionReplyButton: true,
+              actionList: true,
+              actionFlow: true,
+              actionLocationRequest: true
+            }
+          }
+        }
       });
 
       // Create button reactions if any
@@ -356,16 +436,21 @@ export async function POST(request: NextRequest) {
       if (reactions.length > 0) {
         for (const reactionData of reactions) {
           if (reactionData.reaction) {
-            const savedReaction = await tx.buttonReactionMapping.create({
+            const actionPayload = {
+              emoji: reactionData.reaction.type === 'emoji' ? reactionData.reaction.value : null,
+              textReaction: reactionData.reaction.type === 'text' ? reactionData.reaction.value : null,
+            };
+            
+            const savedReaction = await tx.mapeamentoBotao.create({
               data: {
                 buttonId: reactionData.buttonId,
-                messageId: savedMessage.id,
-                emoji: reactionData.reaction.value, // Store both emoji and text in emoji field
+                inboxId: savedMessage.id,
+                actionType: 'SEND_TEMPLATE',
+                actionPayload,
                 description:
                   reactionData.reaction.type === "text"
                     ? reactionData.reaction.value
                     : null,
-                createdBy: session.user.id,
               },
             });
             savedReactions.push(savedReaction);
@@ -526,11 +611,26 @@ export async function PUT(request: NextRequest) {
     }
 
     // Verify message exists and user has access
-    const existingMessage = await prisma.interactiveMessage.findFirst({
+    const existingMessage = await prisma.template.findFirst({
       where: {
         id: messageId,
         createdById: session.user.id,
+        type: "INTERACTIVE_MESSAGE",
       },
+      include: {
+        interactiveContent: {
+          include: {
+            header: true,
+            body: true,
+            footer: true,
+            actionCtaUrl: true,
+            actionReplyButton: true,
+            actionList: true,
+            actionFlow: true,
+            actionLocationRequest: true
+          }
+        }
+      }
     });
 
     if (!existingMessage) {
@@ -542,69 +642,187 @@ export async function PUT(request: NextRequest) {
 
     // Execute atomic transaction
     const result = await prisma.$transaction(async (tx) => {
-      // Update the interactive message
-      const updatedMessage = await tx.interactiveMessage.update({
+      // Update the template
+      const updatedTemplate = await tx.template.update({
         where: { id: messageId },
         data: {
           ...(message.name && { name: message.name }),
-          ...(message.type && { type: message.type }),
-          ...(message.body?.text && { bodyText: message.body.text }),
-          ...(message.header && {
-            headerType: message.header.type,
-            headerContent:
-              message.header.content || message.header.media_url || message.header.mediaUrl || message.header.text || null,
-          }),
-          ...(message.footer && { footerText: message.footer.text }),
-          ...(message.action !== undefined && { actionData: message.action }),
-          // Location fields
-          ...(message.latitude !== undefined && { latitude: message.latitude }),
-          ...(message.longitude !== undefined && {
-            longitude: message.longitude,
-          }),
-          ...(message.locationName !== undefined && {
-            locationName: message.locationName,
-          }),
-          ...(message.locationAddress !== undefined && {
-            locationAddress: message.locationAddress,
-          }),
-          // Reaction fields
-          ...(message.reactionEmoji !== undefined && {
-            reactionEmoji: message.reactionEmoji,
-          }),
-          ...(message.targetMessageId !== undefined && {
-            targetMessageId: message.targetMessageId,
-          }),
-          // Sticker fields
-          ...(message.stickerMediaId !== undefined && {
-            stickerMediaId: message.stickerMediaId,
-          }),
-          ...(message.stickerUrl !== undefined && {
-            stickerUrl: message.stickerUrl,
-          }),
         },
+        include: {
+          interactiveContent: {
+            include: {
+              header: true,
+              body: true,
+              footer: true,
+              actionCtaUrl: true,
+              actionReplyButton: true,
+              actionList: true,
+              actionFlow: true,
+              actionLocationRequest: true
+            }
+          }
+        }
+      });
+
+      // Update interactive content if it exists
+      if (updatedTemplate.interactiveContent) {
+        const interactiveContentId = updatedTemplate.interactiveContent.id;
+        
+        // Update body
+        if (message.body?.text) {
+          await tx.body.update({
+            where: { id: updatedTemplate.interactiveContent.bodyId },
+            data: { text: message.body.text }
+          });
+        }
+
+        // Update header
+        if (message.header) {
+          if (updatedTemplate.interactiveContent.header) {
+            await tx.header.update({
+              where: { id: updatedTemplate.interactiveContent.header.id },
+              data: {
+                type: message.header.type,
+                content: message.header.content || message.header.media_url || message.header.mediaUrl || message.header.text || ""
+              }
+            });
+          } else {
+            await tx.header.create({
+              data: {
+                type: message.header.type,
+                content: message.header.content || message.header.media_url || message.header.mediaUrl || message.header.text || "",
+                interactiveContentId
+              }
+            });
+          }
+        }
+
+        // Update footer
+        if (message.footer) {
+          if (updatedTemplate.interactiveContent.footer) {
+            await tx.footer.update({
+              where: { id: updatedTemplate.interactiveContent.footer.id },
+              data: { text: message.footer.text }
+            });
+          } else {
+            await tx.footer.create({
+              data: {
+                text: message.footer.text,
+                interactiveContentId
+              }
+            });
+          }
+        }
+
+        // Update actions based on type
+        if (message.action && message.type) {
+          // Delete existing actions
+          if (updatedTemplate.interactiveContent.actionCtaUrl) {
+            await tx.actionCtaUrl.delete({ where: { id: updatedTemplate.interactiveContent.actionCtaUrl.id } });
+          }
+          if (updatedTemplate.interactiveContent.actionReplyButton) {
+            await tx.actionReplyButton.delete({ where: { id: updatedTemplate.interactiveContent.actionReplyButton.id } });
+          }
+          if (updatedTemplate.interactiveContent.actionList) {
+            await tx.actionList.delete({ where: { id: updatedTemplate.interactiveContent.actionList.id } });
+          }
+          if (updatedTemplate.interactiveContent.actionFlow) {
+            await tx.actionFlow.delete({ where: { id: updatedTemplate.interactiveContent.actionFlow.id } });
+          }
+          if (updatedTemplate.interactiveContent.actionLocationRequest) {
+            await tx.actionLocationRequest.delete({ where: { id: updatedTemplate.interactiveContent.actionLocationRequest.id } });
+          }
+
+          // Create new action based on type
+          if (message.type === 'cta_url') {
+            await tx.actionCtaUrl.create({
+              data: {
+                displayText: message.action.displayText || "Clique aqui",
+                url: message.action.url || "",
+                interactiveContentId
+              }
+            });
+          } else if (message.type === 'button') {
+            await tx.actionReplyButton.create({
+              data: {
+                buttons: message.action.buttons || [],
+                interactiveContentId
+              }
+            });
+          } else if (message.type === 'list') {
+            await tx.actionList.create({
+              data: {
+                buttonText: message.action.buttonText || "Ver opções",
+                sections: message.action.sections || [],
+                interactiveContentId
+              }
+            });
+          } else if (message.type === 'flow') {
+            await tx.actionFlow.create({
+              data: {
+                flowId: message.action.flowId || "",
+                flowCta: message.action.flowCta || "Iniciar",
+                flowMode: message.action.flowMode || "published",
+                flowData: message.action.flowData || null,
+                interactiveContentId
+              }
+            });
+          } else if (message.type === 'location_request') {
+            await tx.actionLocationRequest.create({
+              data: {
+                requestText: message.action.requestText || "Compartilhar localização",
+                interactiveContentId
+              }
+            });
+          }
+        }
+      }
+
+      // Fetch updated template with all relations
+      const updatedMessage = await tx.template.findUnique({
+        where: { id: messageId },
+        include: {
+          interactiveContent: {
+            include: {
+              header: true,
+              body: true,
+              footer: true,
+              actionCtaUrl: true,
+              actionReplyButton: true,
+              actionList: true,
+              actionFlow: true,
+              actionLocationRequest: true
+            }
+          }
+        }
       });
 
       // Update button reactions if provided
       let updatedReactions = [];
       if (reactions && reactions.length >= 0) {
         // Remove existing reactions for this message
-        await tx.buttonReactionMapping.deleteMany({
-          where: { messageId },
+        await tx.mapeamentoBotao.deleteMany({
+          where: { inboxId: messageId },
         });
 
         // Create new reactions
         for (const reactionData of reactions) {
           if (reactionData.reaction) {
-            const savedReaction = await tx.buttonReactionMapping.create({
+            const actionPayload = {
+              emoji: reactionData.reaction.type === 'emoji' ? reactionData.reaction.value : null,
+              textReaction: reactionData.reaction.type === 'text' ? reactionData.reaction.value : null,
+            };
+            
+            const savedReaction = await tx.mapeamentoBotao.create({
               data: {
                 buttonId: reactionData.buttonId,
-                messageId: messageId,
-                emoji: reactionData.reaction.value, // Store both emoji and text in emoji field
+                inboxId: messageId,
+                actionType: 'SEND_TEMPLATE',
+                actionPayload,
                 description:
                   reactionData.reaction.type === "text"
                     ? reactionData.reaction.value
                     : null,
-                createdBy: session.user.id,
               },
             });
             updatedReactions.push(savedReaction);
@@ -676,21 +894,38 @@ export async function GET(request: NextRequest) {
 
     if (messageId) {
       // Get specific message with reactions
-      const message = await prisma.interactiveMessage.findFirst({
+      const message = await prisma.template.findFirst({
         where: {
           id: messageId,
-          caixa: {
+          type: "INTERACTIVE_MESSAGE",
+          inbox: {
             usuarioChatwit: {
               appUserId: session.user.id,
             },
           },
         },
         include: {
-          buttonReactions: {
-            where: { isActive: true },
-            orderBy: { createdAt: "asc" },
-          },
+          interactiveContent: {
+            include: {
+              header: true,
+              body: true,
+              footer: true,
+              actionCtaUrl: true,
+              actionReplyButton: true,
+              actionList: true,
+              actionFlow: true,
+              actionLocationRequest: true
+            }
+          }
+        }
+      });
+
+      // Get button reactions for this message
+      const buttonReactions = await prisma.mapeamentoBotao.findMany({
+        where: { 
+          inboxId: messageId,
         },
+        orderBy: { createdAt: "asc" },
       });
 
       if (!message) {
@@ -701,7 +936,7 @@ export async function GET(request: NextRequest) {
       }
 
       const formattedMessage = formatMessage(message);
-      const formattedReactions = message.buttonReactions.map(formatReaction);
+      const formattedReactions = buttonReactions.map(formatReaction);
 
       return NextResponse.json({
         success: true,
@@ -712,27 +947,54 @@ export async function GET(request: NextRequest) {
 
     if (caixaId) {
       // Get all messages for a caixa with their reactions
-      const messages = await prisma.interactiveMessage.findMany({
+      const messages = await prisma.template.findMany({
         where: {
-          caixaId,
-          caixa: {
+          inboxId: caixaId,
+          type: "INTERACTIVE_MESSAGE",
+          inbox: {
             usuarioChatwit: {
               appUserId: session.user.id,
             },
           },
         },
         include: {
-          buttonReactions: {
-            where: { isActive: true },
-            orderBy: { createdAt: "asc" },
-          },
+          interactiveContent: {
+            include: {
+              header: true,
+              body: true,
+              footer: true,
+              actionCtaUrl: true,
+              actionReplyButton: true,
+              actionList: true,
+              actionFlow: true,
+              actionLocationRequest: true
+            }
+          }
         },
         orderBy: { createdAt: "desc" },
       });
 
+      // Get all button reactions for these messages
+      const messageIds = messages.map(m => m.id);
+      const allButtonReactions = await prisma.mapeamentoBotao.findMany({
+        where: { 
+          inboxId: { in: messageIds },
+        },
+        orderBy: { createdAt: "asc" },
+      });
+
+      // Group reactions by message ID
+      const reactionsByMessageId = allButtonReactions.reduce((acc, reaction) => {
+        if (!acc[reaction.inboxId]) {
+          acc[reaction.inboxId] = [];
+        }
+        acc[reaction.inboxId].push(reaction);
+        return acc;
+      }, {} as Record<string, any[]>);
+
       const formattedMessages = messages.map((message) => ({
         ...formatMessage(message),
-        reactions: message.buttonReactions.map(formatReaction),
+        reactions: (reactionsByMessageId[message.id] || []).map(formatReaction),
       }));
 
       return NextResponse.json({

@@ -42,10 +42,10 @@ export async function POST(request: Request) {
     const usuarioChatwitId = usuarioChatwit.id;
 
     // A busca de template já está correta
-    const template = await prisma.whatsAppTemplate.findFirst({
+    const template = await prisma.template.findFirst({
       where: {
-        templateId: templateId,
-        usuarioChatwitId: usuarioChatwitId,
+        id: templateId,
+        createdById: session.user.id,
       },
       select: { id: true, name: true, status: true },
     });
@@ -144,10 +144,10 @@ export async function POST(request: Request) {
         leads.map(async (lead) => {
           try {
             // Buscar o template completo para analisar variáveis
-            const templateCompleto = await prisma.whatsAppTemplate.findFirst({
+            const templateCompleto = await prisma.template.findFirst({
               where: {
-                templateId: templateId,
-                usuarioChatwitId: usuarioChatwitId,
+                id: templateId,
+                createdById: session.user.id,
               },
             });
 
@@ -158,9 +158,10 @@ export async function POST(request: Request) {
             const sendOpts: any = {};
 
             // Auto-preencher variáveis com dados do lead
-            if (templateCompleto?.components) {
-              const components = templateCompleto.components as any[];
-              const bodyComponent = components.find((c) => c.type === "BODY");
+            if (templateCompleto?.simpleReplyText) {
+              try {
+                const components = JSON.parse(templateCompleto.simpleReplyText) as any[];
+                const bodyComponent = components.find((c) => c.type === "BODY");
 
               if (bodyComponent?.text) {
                 const placeholders =
@@ -181,6 +182,9 @@ export async function POST(request: Request) {
                   sendOpts.bodyVars = autoVars;
                 }
               }
+            } catch (error) {
+              console.error('[Disparo] Erro ao processar componentes do template:', error);
+            }
             }
 
             // Processar parâmetros manuais (sobrescreve auto-preenchimento se fornecido)

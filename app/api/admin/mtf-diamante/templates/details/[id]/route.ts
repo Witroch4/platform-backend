@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 import { auth } from "@/auth";
 
 // GET - Buscar detalhes de um template específico
@@ -17,7 +17,7 @@ export async function GET(
     const templateId = resolvedParams.id;
 
     // Buscar template no banco de dados
-    const template = await prisma.whatsAppTemplate.findUnique({
+    const template = await db.template.findUnique({
       where: { id: templateId },
     });
 

@@ -482,7 +482,7 @@ export async function prepareWebhookData(agendamentoId: string): Promise<any> {
     let allMidias = null;
 
     // Se for para tratar como postagens individuais, seleciona apenas uma mídia
-    if (agendamento.TratarComoPostagensIndividuais) {
+    if (agendamento.tratarComoPostagensIndividuais) {
       midia = await selectMidiaForSending(agendamentoId);
       if (!midia) {
         throw new Error(`Nenhuma mídia disponível para o agendamento: ${agendamentoId}`);
@@ -500,19 +500,19 @@ export async function prepareWebhookData(agendamentoId: string): Promise<any> {
       userId: agendamento.userId,
       userName: agendamento.user.name,
       userEmail: agendamento.user.email,
-      descricao: agendamento.Descricao,
-      data: agendamento.Data.toISOString(),
-      instagram: agendamento.Instagram,
-      facebook: agendamento.Facebook,
-      linkedin: agendamento.Linkedin,
-      x: agendamento.X,
-      stories: agendamento.Stories,
-      reels: agendamento.Reels,
-      postNormal: agendamento.PostNormal,
-      diario: agendamento.Diario,
-      semanal: agendamento.Semanal,
-      randomizar: agendamento.Randomizar,
-      tratarComoPostagensIndividuais: agendamento.TratarComoPostagensIndividuais,
+      descricao: agendamento.descricao,
+      data: agendamento.data.toISOString(),
+      instagram: agendamento.instagram,
+      facebook: agendamento.facebook,
+      linkedin: agendamento.linkedin,
+      x: agendamento.x,
+      stories: agendamento.stories,
+      reels: agendamento.reels,
+      postNormal: agendamento.postNormal,
+      diario: agendamento.diario,
+      semanal: agendamento.semanal,
+      randomizar: agendamento.randomizar,
+      tratarComoPostagensIndividuais: agendamento.tratarComoPostagensIndividuais,
       tokenExpired,
       instagramAccountId: instagramAccount.providerAccountId,
       instagramAccessToken: instagramAccount.access_token,
@@ -521,7 +521,7 @@ export async function prepareWebhookData(agendamentoId: string): Promise<any> {
     };
 
     // Se for para tratar como postagens individuais, adiciona apenas uma mídia
-    if (agendamento.TratarComoPostagensIndividuais && midia) {
+    if (agendamento.tratarComoPostagensIndividuais && midia) {
       webhookData.midiaUrl = correctMinioUrl(midia.url);
       webhookData.midiaMimeType = midia.mime_type;
       webhookData.midiaThumbnailUrl = midia.thumbnail_url ? correctMinioUrl(midia.thumbnail_url) : null;
@@ -540,7 +540,7 @@ export async function prepareWebhookData(agendamentoId: string): Promise<any> {
     }
 
     // Log dos dados do webhook
-    if (agendamento.TratarComoPostagensIndividuais) {
+    if (agendamento.tratarComoPostagensIndividuais) {
       console.log(`[AgendamentoService] Webhook preparado para agendamento ${agendamentoId} (postagem individual):`, {
         id: webhookData.id,
         midiaUrl: webhookData.midiaUrl,

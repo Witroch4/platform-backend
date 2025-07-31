@@ -84,7 +84,7 @@ export class FeatureFlagManager {
       });
 
       // Update cache
-      this.cache.set(name, flag);
+      this.cache.set(name, flag as FeatureFlag);
       this.cacheExpiry.set(name, Date.now() + this.CACHE_TTL);
 
       // Store in Redis for distributed cache
@@ -95,7 +95,7 @@ export class FeatureFlagManager {
       );
 
       console.log(`[FeatureFlag] Set flag ${name}: enabled=${enabled}, rollout=${rolloutPercentage}%`);
-      return flag;
+      return flag as FeatureFlag;
     } catch (error) {
       console.error(`[FeatureFlag] Error setting flag ${name}:`, error);
       throw error;
@@ -194,7 +194,7 @@ export class FeatureFlagManager {
       return {
         flagName,
         enabled: false,
-        reason: `Evaluation error: ${error.message}`,
+        reason: `Evaluation error: ${error instanceof Error ? error.message : 'Unknown error'}`,
         userId,
         inboxId,
         metadata,

@@ -41,10 +41,10 @@ const QueueActionSchema = z.object({
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { queueName: string } }
+  { params }: { params: Promise<{ queueName: string }> }
 ) {
   try {
-    const { queueName } = params;
+    const { queueName } = await params;
     const { searchParams } = new URL(request.url);
     const timeWindow = parseInt(searchParams.get('timeWindow') || '60');
     const includeJobs = searchParams.get('includeJobs') === 'true';
@@ -121,7 +121,7 @@ export async function GET(
     });
 
   } catch (error) {
-    return handleApiError(error, `Failed to fetch queue details for ${params.queueName}`);
+    return handleApiError(error, `Failed to fetch queue details for ${(await params).queueName}`);
   }
 }
 
@@ -131,10 +131,10 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { queueName: string } }
+  { params }: { params: Promise<{ queueName: string }> }
 ) {
   try {
-    const { queueName } = params;
+    const { queueName } = await params;
     const body = await request.json();
     const updates = QueueUpdateSchema.parse(body);
 
@@ -166,7 +166,7 @@ export async function PUT(
     });
 
   } catch (error) {
-    return handleApiError(error, `Failed to update queue configuration for ${params.queueName}`);
+    return handleApiError(error, `Failed to update queue configuration for ${(await params).queueName}`);
   }
 }
 
@@ -176,10 +176,10 @@ export async function PUT(
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { queueName: string } }
+  { params }: { params: Promise<{ queueName: string }> }
 ) {
   try {
-    const { queueName } = params;
+    const { queueName } = await params;
     const body = await request.json();
     const { action, options } = QueueActionSchema.parse(body);
 
@@ -253,7 +253,7 @@ export async function POST(
     });
 
   } catch (error) {
-    return handleApiError(error, `Failed to perform action on queue ${params.queueName}`);
+    return handleApiError(error, `Failed to perform action on queue ${(await params).queueName}`);
   }
 }
 
@@ -263,10 +263,10 @@ export async function POST(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { queueName: string } }
+  { params }: { params: Promise<{ queueName: string }> }
 ) {
   try {
-    const { queueName } = params;
+    const { queueName } = await params;
 
     // Check if queue exists
     const health = queueMonitor.getQueueHealth(queueName);
@@ -298,7 +298,7 @@ export async function DELETE(
     });
 
   } catch (error) {
-    return handleApiError(error, `Failed to delete queue ${params.queueName}`);
+    return handleApiError(error, `Failed to delete queue ${(await params).queueName}`);
   }
 }
 

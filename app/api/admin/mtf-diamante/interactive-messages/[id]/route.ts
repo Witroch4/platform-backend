@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { invalidateTemplateMappingCache } from "@/lib/cache/instagram-template-cache";
 
 // DELETE - Deletar mensagem interativa
 export async function DELETE(
@@ -23,21 +24,87 @@ export async function DELETE(
     }
 
     // Verificar se a mensagem existe
-    const existingMessage = await prisma.interactiveMessage.findUnique({
-      where: { id },
+    const existingMessage = await prisma.template.findUnique({
+      where: {
+        id,
+        type: "INTERACTIVE_MESSAGE",
+      },
+      include: {
+        interactiveContent: true,
+      },
     });
 
     if (!existingMessage) {
-      return NextResponse.json(
-        { error: "Message not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Message not found" }, { status: 404 });
     }
 
-    // Deletar a mensagem
-    await prisma.interactiveMessage.delete({
+    // Verificar se a mensagem está sendo usada em mapeamentos
+    const mappings = await prisma.mapeamentoIntencao.findMany({
+      where: { templateId: id },
+      select: { intentName: true, inboxId: true },
+    });
+
+    // Deletar a mensagem (cascade irá deletar o interactiveContent automaticamente)
+    await prisma.template.delete({
       where: { id },
     });
+
+    // Invalidate Instagram template cache for all affected mappings
+    if (mappings.length > 0) {
+      try {
+        for (const mapping of mappings) {
+          // Find the ChatwitInbox to get the correct inboxId for cache invalidation
+          const chatwitInbox = await prisma.chatwitInbox.findUnique({
+            where: { id: mapping.inboxId },
+            select: { inboxId: true, usuarioChatwitId: true },
+          });
+
+          if (chatwitInbox) {
+            // Use the correct usuarioChatwitId and Chatwit inboxId for cache invalidation
+            console.log(`[API Cache Invalidation] [DEBUG] Preparing cache invalidation for template deletion:`, {
+              operation: 'DELETE /interactive-messages/[id]',
+              userContext: { usuarioChatwitId: chatwitInbox.usuarioChatwitId, inboxId: chatwitInbox.inboxId },
+              intentName: mapping.intentName,
+              templateId: id,
+              internalInboxId: mapping.inboxId,
+              externalInboxId: chatwitInbox.inboxId,
+              cacheKeyFormat: `${mapping.intentName}:${chatwitInbox.usuarioChatwitId}:${chatwitInbox.inboxId}`
+            });
+            
+            await invalidateTemplateMappingCache(
+              mapping.intentName,
+              chatwitInbox.usuarioChatwitId,
+              chatwitInbox.inboxId
+            );
+            
+            console.log(`[API Cache Invalidation] [SUCCESS] Instagram cache cleared for template deletion:`, {
+              operation: 'DELETE /interactive-messages/[id]',
+              userContext: { usuarioChatwitId: chatwitInbox.usuarioChatwitId, inboxId: chatwitInbox.inboxId },
+              intentName: mapping.intentName,
+              templateId: id,
+              internalInboxId: mapping.inboxId,
+              externalInboxId: chatwitInbox.inboxId,
+              reason: 'Template deleted'
+            });
+          } else {
+            console.warn(`[API Cache Invalidation] [ERROR] ChatwitInbox not found for cache invalidation:`, {
+              operation: 'DELETE /interactive-messages/[id]',
+              intentName: mapping.intentName,
+              templateId: id,
+              internalInboxId: mapping.inboxId,
+              error: 'ChatwitInbox not found',
+              impact: 'Cache not invalidated - may serve stale data'
+            });
+          }
+        }
+      } catch (cacheError) {
+        console.error(
+          "[Cache Invalidation] Error clearing Instagram cache:",
+          cacheError
+        );
+        // Don't fail the request if cache invalidation fails
+      }
+    }
 
     return NextResponse.json({
       success: true,
@@ -72,51 +139,84 @@ export async function GET(
       );
     }
 
-    const message = await prisma.interactiveMessage.findUnique({
-      where: { id },
+    const template = await prisma.template.findUnique({
+      where: {
+        id,
+        type: "INTERACTIVE_MESSAGE",
+      },
+      include: {
+        interactiveContent: {
+          include: {
+            header: true,
+            body: true,
+            footer: true,
+            actionCtaUrl: true,
+            actionReplyButton: true,
+            actionList: true,
+            actionFlow: true,
+            actionLocationRequest: true,
+          },
+        },
+      },
     });
 
-    if (!message) {
-      return NextResponse.json(
-        { error: "Message not found" },
-        { status: 404 }
-      );
+    if (!template || !template.interactiveContent) {
+      return NextResponse.json({ error: "Message not found" }, { status: 404 });
+    }
+
+    const interactive = template.interactiveContent;
+
+    // Determinar o tipo de ação
+    let actionType = null;
+    let actionData = null;
+
+    if (interactive.actionCtaUrl) {
+      actionType = "cta_url";
+      actionData = interactive.actionCtaUrl;
+    } else if (interactive.actionReplyButton) {
+      actionType = "button";
+      actionData = interactive.actionReplyButton;
+    } else if (interactive.actionList) {
+      actionType = "list";
+      actionData = interactive.actionList;
+    } else if (interactive.actionFlow) {
+      actionType = "flow";
+      actionData = interactive.actionFlow;
+    } else if (interactive.actionLocationRequest) {
+      actionType = "location_request";
+      actionData = interactive.actionLocationRequest;
     }
 
     return NextResponse.json({
       success: true,
       message: {
-        id: message.id,
-        name: message.name,
-        type: message.type,
+        id: template.id,
+        name: template.name,
+        type: actionType,
         content: {
-          name: message.name,
-          type: message.type,
-          header: message.headerType ? {
-            type: message.headerType,
-            text: message.headerContent || "",
-            media_url: message.headerType !== 'text' ? message.headerContent || "" : ""
-          } : undefined,
+          name: template.name,
+          type: actionType,
+          header: interactive.header
+            ? {
+                type: interactive.header.type,
+                text: interactive.header.content || "",
+                media_url:
+                  interactive.header.type !== "text"
+                    ? interactive.header.content || ""
+                    : "",
+              }
+            : undefined,
           body: {
-            text: message.bodyText
+            text: interactive.body?.text || "",
           },
-          footer: message.footerText ? {
-            text: message.footerText
-          } : undefined,
-          action: message.actionData,
-          // Location fields
-          latitude: message.latitude,
-          longitude: message.longitude,
-          locationName: message.locationName,
-          locationAddress: message.locationAddress,
-          // Reaction fields
-          reactionEmoji: message.reactionEmoji,
-          targetMessageId: message.targetMessageId,
-          // Sticker fields
-          stickerMediaId: message.stickerMediaId,
-          stickerUrl: message.stickerUrl
+          footer: interactive.footer
+            ? {
+                text: interactive.footer.text,
+              }
+            : undefined,
+          action: actionData,
         },
-        createdAt: message.createdAt,
+        createdAt: template.createdAt,
         updatedAt: message.updatedAt,
       },
     });
@@ -147,7 +247,10 @@ export async function PUT(
     // LOG DETALHADO
     console.log("[INTERACTIVE-MESSAGE][PUT] Usuário:", session.user.id);
     console.log("[INTERACTIVE-MESSAGE][PUT] id:", id);
-    console.log("[INTERACTIVE-MESSAGE][PUT] message:", JSON.stringify(message, null, 2));
+    console.log(
+      "[INTERACTIVE-MESSAGE][PUT] message:",
+      JSON.stringify(message, null, 2)
+    );
 
     if (!id) {
       return NextResponse.json(
@@ -172,74 +275,317 @@ export async function PUT(
     }
 
     // Verificar se a mensagem existe
-    const existingMessage = await prisma.interactiveMessage.findUnique({
-      where: { id },
+    const existingTemplate = await prisma.template.findUnique({
+      where: {
+        id,
+        type: "INTERACTIVE_MESSAGE",
+      },
+      include: {
+        interactiveContent: {
+          include: {
+            header: true,
+            body: true,
+            footer: true,
+            actionCtaUrl: true,
+            actionReplyButton: true,
+            actionList: true,
+            actionFlow: true,
+            actionLocationRequest: true,
+          },
+        },
+      },
     });
 
-    if (!existingMessage) {
-      return NextResponse.json(
-        { error: "Message not found" },
-        { status: 404 }
-      );
+    if (!existingTemplate || !existingTemplate.interactiveContent) {
+      return NextResponse.json({ error: "Message not found" }, { status: 404 });
     }
 
-    // Atualizar mensagem interativa
-    const updatedMessage = await prisma.interactiveMessage.update({
+    // Atualizar template
+    const updatedTemplate = await prisma.template.update({
       where: { id },
       data: {
         name: message.name,
-        type: message.type,
-        bodyText: message.body.text,
-        headerType: message.header?.type || null,
-        headerContent: message.header?.media_url || message.header?.text || null,
-        footerText: message.footer?.text || null,
-        actionData: message.action || null,
-        // Location fields
-        latitude: message.latitude || null,
-        longitude: message.longitude || null,
-        locationName: message.locationName || null,
-        locationAddress: message.locationAddress || null,
-        // Reaction fields
-        reactionEmoji: message.reactionEmoji || null,
-        targetMessageId: message.targetMessageId || null,
-        // Sticker fields
-        stickerMediaId: message.stickerMediaId || null,
-        stickerUrl: message.stickerUrl || null,
+      },
+      include: {
+        interactiveContent: {
+          include: {
+            header: true,
+            body: true,
+            footer: true,
+            actionCtaUrl: true,
+            actionReplyButton: true,
+            actionList: true,
+            actionFlow: true,
+            actionLocationRequest: true,
+          },
+        },
       },
     });
+
+    // Atualizar conteúdo interativo
+    const interactiveContentId = updatedTemplate.interactiveContent!.id;
+
+    // Update body
+    if (message.body?.text) {
+      await prisma.body.update({
+        where: { id: updatedTemplate.interactiveContent!.bodyId },
+        data: { text: message.body.text },
+      });
+    }
+
+    // Update header
+    if (message.header) {
+      if (updatedTemplate.interactiveContent!.header) {
+        await prisma.header.update({
+          where: { id: updatedTemplate.interactiveContent!.header.id },
+          data: {
+            type: message.header.type,
+            content: message.header.media_url || message.header.text || "",
+          },
+        });
+      } else {
+        await prisma.header.create({
+          data: {
+            type: message.header.type,
+            content: message.header.media_url || message.header.text || "",
+            interactiveContentId,
+          },
+        });
+      }
+    }
+
+    // Update footer
+    if (message.footer) {
+      if (updatedTemplate.interactiveContent!.footer) {
+        await prisma.footer.update({
+          where: { id: updatedTemplate.interactiveContent!.footer.id },
+          data: { text: message.footer.text },
+        });
+      } else {
+        await prisma.footer.create({
+          data: {
+            text: message.footer.text,
+            interactiveContentId,
+          },
+        });
+      }
+    }
+
+    // Update actions based on type
+    if (message.action && message.type) {
+      // Delete existing actions
+      if (updatedTemplate.interactiveContent!.actionCtaUrl) {
+        await prisma.actionCtaUrl.delete({
+          where: { id: updatedTemplate.interactiveContent!.actionCtaUrl.id },
+        });
+      }
+      if (updatedTemplate.interactiveContent!.actionReplyButton) {
+        await prisma.actionReplyButton.delete({
+          where: {
+            id: updatedTemplate.interactiveContent!.actionReplyButton.id,
+          },
+        });
+      }
+      if (updatedTemplate.interactiveContent!.actionList) {
+        await prisma.actionList.delete({
+          where: { id: updatedTemplate.interactiveContent!.actionList.id },
+        });
+      }
+      if (updatedTemplate.interactiveContent!.actionFlow) {
+        await prisma.actionFlow.delete({
+          where: { id: updatedTemplate.interactiveContent!.actionFlow.id },
+        });
+      }
+      if (updatedTemplate.interactiveContent!.actionLocationRequest) {
+        await prisma.actionLocationRequest.delete({
+          where: {
+            id: updatedTemplate.interactiveContent!.actionLocationRequest.id,
+          },
+        });
+      }
+
+      // Create new action based on type
+      if (message.type === "cta_url") {
+        await prisma.actionCtaUrl.create({
+          data: {
+            displayText: message.action.displayText || "Clique aqui",
+            url: message.action.url || "",
+            interactiveContentId,
+          },
+        });
+      } else if (message.type === "button") {
+        await prisma.actionReplyButton.create({
+          data: {
+            buttons: message.action.buttons || [],
+            interactiveContentId,
+          },
+        });
+      } else if (message.type === "list") {
+        await prisma.actionList.create({
+          data: {
+            buttonText: message.action.buttonText || "Ver opções",
+            sections: message.action.sections || [],
+            interactiveContentId,
+          },
+        });
+      } else if (message.type === "flow") {
+        await prisma.actionFlow.create({
+          data: {
+            flowId: message.action.flowId || "",
+            flowCta: message.action.flowCta || "Iniciar",
+            flowMode: message.action.flowMode || "published",
+            flowData: message.action.flowData || null,
+            interactiveContentId,
+          },
+        });
+      } else if (message.type === "location_request") {
+        await prisma.actionLocationRequest.create({
+          data: {
+            requestText:
+              message.action.requestText || "Compartilhar localização",
+            interactiveContentId,
+          },
+        });
+      }
+    }
+
+    // Fetch updated template with all relations
+    const updatedMessage = await prisma.template.findUnique({
+      where: { id },
+      include: {
+        interactiveContent: {
+          include: {
+            header: true,
+            body: true,
+            footer: true,
+            actionCtaUrl: true,
+            actionReplyButton: true,
+            actionList: true,
+            actionFlow: true,
+            actionLocationRequest: true,
+          },
+        },
+      },
+    });
+
+    if (!updatedMessage || !updatedMessage.interactiveContent) {
+      return NextResponse.json(
+        { error: "Failed to update message" },
+        { status: 500 }
+      );
+    }
+
+    const interactive = updatedMessage.interactiveContent;
+
+    // Determinar o tipo de ação
+    let actionType = null;
+    let actionData = null;
+
+    if (interactive.actionCtaUrl) {
+      actionType = "cta_url";
+      actionData = interactive.actionCtaUrl;
+    } else if (interactive.actionReplyButton) {
+      actionType = "button";
+      actionData = interactive.actionReplyButton;
+    } else if (interactive.actionList) {
+      actionType = "list";
+      actionData = interactive.actionList;
+    } else if (interactive.actionFlow) {
+      actionType = "flow";
+      actionData = interactive.actionFlow;
+    } else if (interactive.actionLocationRequest) {
+      actionType = "location_request";
+      actionData = interactive.actionLocationRequest;
+    }
+
+    // Invalidate Instagram template cache for all mappings using this template
+    try {
+      const mappings = await prisma.mapeamentoIntencao.findMany({
+        where: { templateId: id },
+        select: { intentName: true, inboxId: true },
+      });
+
+      for (const mapping of mappings) {
+        // Find the ChatwitInbox to get the correct inboxId for cache invalidation
+        const chatwitInbox = await prisma.chatwitInbox.findUnique({
+          where: { id: mapping.inboxId },
+          select: { inboxId: true, usuarioChatwitId: true },
+        });
+
+        if (chatwitInbox) {
+          // Use the correct usuarioChatwitId and Chatwit inboxId for cache invalidation
+          console.log(`[API Cache Invalidation] [DEBUG] Preparing cache invalidation for template update:`, {
+            operation: 'PUT /interactive-messages/[id]',
+            userContext: { usuarioChatwitId: chatwitInbox.usuarioChatwitId, inboxId: chatwitInbox.inboxId },
+            intentName: mapping.intentName,
+            templateId: id,
+            internalInboxId: mapping.inboxId,
+            externalInboxId: chatwitInbox.inboxId,
+            cacheKeyFormat: `${mapping.intentName}:${chatwitInbox.usuarioChatwitId}:${chatwitInbox.inboxId}`
+          });
+          
+          await invalidateTemplateMappingCache(
+            mapping.intentName,
+            chatwitInbox.usuarioChatwitId,
+            chatwitInbox.inboxId
+          );
+          
+          console.log(`[API Cache Invalidation] [SUCCESS] Instagram cache cleared for template update:`, {
+            operation: 'PUT /interactive-messages/[id]',
+            userContext: { usuarioChatwitId: chatwitInbox.usuarioChatwitId, inboxId: chatwitInbox.inboxId },
+            intentName: mapping.intentName,
+            templateId: id,
+            internalInboxId: mapping.inboxId,
+            externalInboxId: chatwitInbox.inboxId,
+            reason: 'Template updated'
+          });
+        } else {
+          console.warn(`[API Cache Invalidation] [ERROR] ChatwitInbox not found for cache invalidation:`, {
+            operation: 'PUT /interactive-messages/[id]',
+            intentName: mapping.intentName,
+            templateId: id,
+            internalInboxId: mapping.inboxId,
+            error: 'ChatwitInbox not found',
+            impact: 'Cache not invalidated - may serve stale data'
+          });
+        }
+      }
+    } catch (cacheError) {
+      console.error(
+        "[Cache Invalidation] Error clearing Instagram cache:",
+        cacheError
+      );
+      // Don't fail the request if cache invalidation fails
+    }
 
     return NextResponse.json({
       success: true,
       message: {
         id: updatedMessage.id,
         name: updatedMessage.name,
-        type: updatedMessage.type,
+        type: actionType,
         content: {
           name: updatedMessage.name,
-          type: updatedMessage.type,
-          header: updatedMessage.headerType ? {
-            type: updatedMessage.headerType,
-            text: updatedMessage.headerContent || "",
-            media_url: updatedMessage.headerType !== 'text' ? updatedMessage.headerContent || "" : ""
-          } : undefined,
+          type: actionType,
+          header: interactive.header
+            ? {
+                type: interactive.header.type,
+                text: interactive.header.content || "",
+                media_url:
+                  interactive.header.type !== "text"
+                    ? interactive.header.content || ""
+                    : "",
+              }
+            : undefined,
           body: {
-            text: updatedMessage.bodyText
+            text: interactive.body?.text || "",
           },
-          footer: updatedMessage.footerText ? {
-            text: updatedMessage.footerText
-          } : undefined,
-          action: updatedMessage.actionData,
-          // Location fields
-          latitude: updatedMessage.latitude,
-          longitude: updatedMessage.longitude,
-          locationName: updatedMessage.locationName,
-          locationAddress: updatedMessage.locationAddress,
-          // Reaction fields
-          reactionEmoji: updatedMessage.reactionEmoji,
-          targetMessageId: updatedMessage.targetMessageId,
-          // Sticker fields
-          stickerMediaId: updatedMessage.stickerMediaId,
-          stickerUrl: updatedMessage.stickerUrl
+          footer: interactive.footer
+            ? {
+                text: interactive.footer.text,
+              }
+            : undefined,
+          action: actionData,
         },
         createdAt: updatedMessage.createdAt,
         updatedAt: updatedMessage.updatedAt,
