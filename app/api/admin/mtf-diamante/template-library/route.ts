@@ -10,9 +10,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { searchParams } = new URL(request.url);
-    const type = searchParams.get('type') as 'template' | 'interactive_message' | null;
-    const scope = searchParams.get('scope') as 'global' | 'account_specific' | null;
+  const { searchParams } = new URL(request.url);
+  const rawType = searchParams.get('type');
+  const rawScope = searchParams.get('scope');
+
+  const type =
+    rawType === 'template'
+      ? 'WHATSAPP_OFFICIAL'
+      : rawType === 'interactive_message'
+        ? 'INTERACTIVE_MESSAGE'
+        : (rawType as 'WHATSAPP_OFFICIAL' | 'INTERACTIVE_MESSAGE' | 'AUTOMATION_REPLY' | null);
+
+  const scope =
+    rawScope === 'global'
+      ? 'GLOBAL'
+      : rawScope === 'account_specific'
+        ? 'PRIVATE'
+        : (rawScope as 'GLOBAL' | 'PRIVATE' | null);
     const category = searchParams.get('category');
     const search = searchParams.get('search');
 
@@ -52,16 +66,29 @@ export async function POST(request: NextRequest) {
     const {
       name,
       description,
-      type,
-      scope,
+      type: rawBodyType,
+      scope: rawBodyScope,
       content,
-      category,
       language,
       tags
     } = body;
 
+    const bodyType =
+      rawBodyType === 'template'
+        ? 'WHATSAPP_OFFICIAL'
+        : rawBodyType === 'interactive_message'
+          ? 'INTERACTIVE_MESSAGE'
+          : rawBodyType as 'WHATSAPP_OFFICIAL' | 'INTERACTIVE_MESSAGE' | 'AUTOMATION_REPLY';
+
+    const bodyScope =
+      rawBodyScope === 'global'
+        ? 'GLOBAL'
+        : rawBodyScope === 'account_specific'
+          ? 'PRIVATE'
+          : rawBodyScope as 'GLOBAL' | 'PRIVATE';
+
     // Validate required fields
-    if (!name || !type || !scope || !content) {
+    if (!name || !rawBodyType || !rawBodyScope || !content) {
       return NextResponse.json(
         { error: 'Missing required fields: name, type, scope, content' },
         { status: 400 }
@@ -69,23 +96,23 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate type
-    if (!['template', 'interactive_message'].includes(type)) {
+    if (!['WHATSAPP_OFFICIAL', 'INTERACTIVE_MESSAGE', 'AUTOMATION_REPLY'].includes(bodyType)) {
       return NextResponse.json(
-        { error: 'Invalid type. Must be "template" or "interactive_message"' },
+        { error: 'Invalid type' },
         { status: 400 }
       );
     }
 
     // Validate scope
-    if (!['global', 'account_specific'].includes(scope)) {
+    if (!['GLOBAL', 'PRIVATE'].includes(bodyScope)) {
       return NextResponse.json(
-        { error: 'Invalid scope. Must be "global" or "account_specific"' },
+        { error: 'Invalid scope' },
         { status: 400 }
       );
     }
 
     // Only admins can create global templates
-    if (scope === 'global' && session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN') {
+    if (bodyScope === 'GLOBAL' && session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN') {
       return NextResponse.json(
         { error: 'Only administrators can create global templates' },
         { status: 403 }
@@ -95,10 +122,9 @@ export async function POST(request: NextRequest) {
     const templateData: CreateTemplateLibraryData = {
       name,
       description,
-      type,
-      scope,
+      type: bodyType,
+      scope: bodyScope,
       content,
-      category,
       language,
       tags,
       createdById: session.user.id

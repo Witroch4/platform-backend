@@ -47,25 +47,37 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const body = await request.json();
-    // Simplificando os campos por agora
-    const { id, name, category, components, language } = body;
+    const {
+      id,
+      name,
+      type: rawType,
+      text,
+      language,
+    } = body;
 
-    if (!name || !category || !components) {
-      return NextResponse.json({ error: 'Nome, categoria e componentes são obrigatórios' }, { status: 400 });
+    if (!name || !text) {
+      return NextResponse.json({ error: 'Nome e texto são obrigatórios' }, { status: 400 });
     }
+
+    const type =
+      rawType === 'template'
+        ? 'WHATSAPP_OFFICIAL'
+        : rawType === 'interactive_message'
+          ? 'INTERACTIVE_MESSAGE'
+          : rawType as 'WHATSAPP_OFFICIAL' | 'INTERACTIVE_MESSAGE' | 'AUTOMATION_REPLY';
 
     const savedTemplate = await db.template.upsert({
       where: { id: id || '' },
       update: {
         name,
-        type: category as any,
-        simpleReplyText: components,
+        type,
+        simpleReplyText: text,
         language: language || 'pt_BR',
       },
       create: {
         name,
-        type: category as any,
-        simpleReplyText: components,
+        type,
+        simpleReplyText: text,
         language: language || 'pt_BR',
         inboxId: inboxId,
         createdById: session.user.id,

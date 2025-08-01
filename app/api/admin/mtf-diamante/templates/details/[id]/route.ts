@@ -28,45 +28,13 @@ export async function GET(
       );
     }
 
-    // Processar componentes JSON para extrair botões
-    let processedComponents: any[] = [];
-    let buttons: any[] = [];
-
-    try {
-      // O campo components é JSON, não uma relação
-      const componentsData = Array.isArray(template.components)
-        ? template.components
-        : [];
-
-      processedComponents = componentsData.map((component: any, index: number) => ({
-        type: component?.type || "UNKNOWN",
-        content: component,
-        order: index,
-      }));
-
-      // Extrair botões dos componentes
-      const buttonComponent = processedComponents.find(
-        (c) => c.type === "BUTTONS"
-      );
-      buttons = (buttonComponent?.content as any)?.buttons || [];
-    } catch (error) {
-      console.error("Erro ao processar componentes:", error);
-    }
-
     const templateDetails = {
       id: template.id,
       name: template.name,
-      category: template.category,
       language: template.language,
       status: template.status,
-      components: processedComponents,
-      buttons: buttons.map((btn: any, index: number) => ({
-        id: `template_${templateId}_btn_${index}`,
-        text: btn.text,
-        type: btn.type,
-        url: btn.url || null,
-        phoneNumber: btn.phone_number || null,
-      })),
+      tags: template.tags,
+      text: template.simpleReplyText,
     };
 
     return NextResponse.json(templateDetails);
