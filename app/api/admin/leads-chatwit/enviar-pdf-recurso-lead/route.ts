@@ -50,10 +50,10 @@ export async function POST(request: Request): Promise<Response> {
 
     // 1) Busca o lead + arquivos + usuário Chatwit
     const lead = await prisma.leadOabData.findUnique({
-      where: { sourceId },
+      where: { leadId: sourceId },
       include: {
         arquivos: true,
-        usuario: {
+        usuarioChatwit: {
           select: {
             chatwitAccountId: true
           }
@@ -67,12 +67,12 @@ export async function POST(request: Request): Promise<Response> {
 
     // 2) Buscar o usuário Chatwit para obter token e accountId
     const usuarioChatwit = await prisma.usuarioChatwit.findFirst({
-      where: { 
-        leads: {
-          some: { sourceId }
+      where: {
+        leadsOabData: {
+          some: { leadId: sourceId }
         }
       },
-      select: { 
+      select: {
         chatwitAccountId: true
       }
     });
@@ -85,12 +85,12 @@ export async function POST(request: Request): Promise<Response> {
     if (!accessToken) {
       // Buscar token do usuário Chatwit
       const usuarioComToken = await prisma.usuarioChatwit.findFirst({
-        where: { 
-          leads: {
-            some: { sourceId }
+        where: {
+          leadsOabData: {
+            some: { leadId: sourceId }
           }
         },
-        select: { 
+        select: {
           chatwitAccountId: true
         }
       });
@@ -155,9 +155,9 @@ export async function POST(request: Request): Promise<Response> {
     if (urlAccessToken && urlAccessToken !== CHATWOOT_ACCESS_TOKEN) {
       // Buscar o usuário Chatwit associado ao lead
       const usuarioChatwit = await prisma.usuarioChatwit.findFirst({
-        where: { 
-          leads: {
-            some: { sourceId }
+        where: {
+          leadsOabData: {
+            some: { leadId: sourceId }
           }
         }
       });
@@ -174,7 +174,7 @@ export async function POST(request: Request): Promise<Response> {
     }
     
     await prisma.leadOabData.update({
-      where: { sourceId },
+      where: { leadId: sourceId },
       data: updateData
     });
 
