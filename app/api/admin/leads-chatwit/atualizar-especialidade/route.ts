@@ -22,7 +22,6 @@ export async function PUT(request: Request): Promise<Response> {
       where: { id: leadId },
       data: {
         especialidade: especialidade || null,
-        updatedAt: new Date(),
       },
     });
 

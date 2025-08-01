@@ -67,7 +67,6 @@ export async function GET(request: Request): Promise<Response> {
           usuarioChatwitId: usuarioId,
           pdfUnificado: { not: null }
         },
-        orderBy: { updatedAt: 'desc' },
         take: 1
       });
       

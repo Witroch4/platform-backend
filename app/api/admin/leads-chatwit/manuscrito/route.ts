@@ -73,8 +73,6 @@ export async function DELETE(request: Request) {
         aguardandoEspelho: false,
         espelhoProcessado: false,
         
-        // Atualizar timestamp
-        updatedAt: new Date()
       },
     });
 
