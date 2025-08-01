@@ -371,9 +371,9 @@ export class WebhookManager {
       pendingDeliveries,
       averageResponseTime,
       lastSuccessAt: deliveries.find((d) => d.responseStatus && d.responseStatus >= 200 && d.responseStatus < 300)
-        ?.deliveredAt ?? null,
+        ?.deliveredAt ?? undefined,
       lastFailureAt: deliveries.find((d) => d.responseStatus && (d.responseStatus < 200 || d.responseStatus >= 300))
-        ?.deliveredAt ?? null,
+        ?.deliveredAt ?? undefined,
     };
   }
 
