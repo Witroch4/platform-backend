@@ -6,16 +6,16 @@ import { db } from "@/lib/db";
  */
 export async function getWhatsAppConfig(
   usuarioChatwitId: string,
-  caixaEntradaId?: string
+  inboxId?: string
 ) {
   try {
     let config = null;
 
     // Se foi especificada uma caixa de entrada, buscar configuração específica
-    if (caixaEntradaId) {
+    if (inboxId) {
       const inboxConfig = await db.chatwitInbox.findFirst({
-        where: { 
-          id: caixaEntradaId, 
+        where: {
+          id: inboxId,
           usuarioChatwitId,
         }
       });
@@ -29,7 +29,7 @@ export async function getWhatsAppConfig(
           whatsappBusinessAccountId: inboxConfig.whatsappBusinessAccountId,
           graphApiBaseUrl: 'https://graph.facebook.com/v22.0', // Valor padrão
           isActive: true,
-          caixaEntradaId: inboxConfig.id
+          inboxId: inboxConfig.id
         };
       }
     }
@@ -85,7 +85,7 @@ export async function getAllWhatsAppConfigs(usuarioChatwitId: string) {
     if (globalConfig) {
       configs.push({
         ...globalConfig,
-        caixaEntrada: null,
+        chatwitInbox: null,
         isActive: true
       });
     }
@@ -100,8 +100,8 @@ export async function getAllWhatsAppConfigs(usuarioChatwitId: string) {
         whatsappBusinessAccountId: inbox.whatsappBusinessAccountId,
         graphApiBaseUrl: 'https://graph.facebook.com/v22.0',
         isActive: true,
-        caixaEntradaId: inbox.id,
-        caixaEntrada: {
+        inboxId: inbox.id,
+        chatwitInbox: {
           id: inbox.id,
           nome: inbox.nome,
           inboxId: inbox.inboxId,

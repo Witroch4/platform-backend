@@ -10,7 +10,7 @@ async function testDisparoDebug() {
 
   try {
     // 1. Buscar um template para análise
-    const template = await prisma.whatsAppTemplate.findFirst({
+    const template = await prisma.template.findFirst({
       where: {
         status: 'APPROVED'
       },

@@ -47,13 +47,13 @@ describe('Dialogflow Database Queries', () => {
       const mockMapping = {
         id: 'mapping-123',
         intentName: 'welcome',
-        caixaEntradaId: 'caixa-456',
+        inboxId: 'caixa-456',
         templateId: 'template-789',
         mensagemInterativaId: null,
         unifiedTemplateId: null,
         interactiveMessageId: null,
-        caixaEntrada: {
-          configuracaoWhatsApp: {
+        chatwitInbox: {
+          whatsAppGlobalConfig: {
             phoneNumberId: 'phone-123',
             whatsappToken: 'token-456',
             whatsappBusinessAccountId: 'business-789',
@@ -87,7 +87,7 @@ describe('Dialogflow Database Queries', () => {
       expect(result).toEqual({
         id: 'mapping-123',
         intentName: 'welcome',
-        caixaEntradaId: 'caixa-456',
+        inboxId: 'caixa-456',
         messageType: 'template',
         template: {
           id: 'template-789',
@@ -114,15 +114,15 @@ describe('Dialogflow Database Queries', () => {
 
       expect(mockPrisma.mapeamentoIntencao.findUnique).toHaveBeenCalledWith({
         where: {
-          intentName_caixaEntradaId: {
+          intentName_inboxId: {
             intentName: 'welcome',
-            caixaEntradaId: 'caixa-456'
+            inboxId: 'caixa-456'
           }
         },
         include: expect.objectContaining({
-          caixaEntrada: {
+          chatwitInbox: {
             include: {
-              configuracaoWhatsApp: true,
+              whatsAppGlobalConfig: true,
               usuarioChatwit: true
             }
           },
@@ -142,11 +142,11 @@ describe('Dialogflow Database Queries', () => {
       const mockMapping = {
         id: 'mapping-456',
         intentName: 'menu',
-        caixaEntradaId: 'caixa-789',
+        inboxId: 'caixa-789',
         templateId: null,
         mensagemInterativaId: 'interactive-123',
-        caixaEntrada: {
-          configuracaoWhatsApp: {
+        chatwitInbox: {
+          whatsAppGlobalConfig: {
             phoneNumberId: 'phone-456',
             whatsappToken: 'token-789',
             whatsappBusinessAccountId: 'business-123',
@@ -178,7 +178,7 @@ describe('Dialogflow Database Queries', () => {
       expect(result).toEqual({
         id: 'mapping-456',
         intentName: 'menu',
-        caixaEntradaId: 'caixa-789',
+        inboxId: 'caixa-789',
         messageType: 'interactive',
         interactiveMessage: {
           id: 'interactive-123',
@@ -206,10 +206,10 @@ describe('Dialogflow Database Queries', () => {
       const mockMapping = {
         id: 'mapping-789',
         intentName: 'test',
-        caixaEntradaId: 'caixa-123',
+        inboxId: 'caixa-123',
         templateId: 'template-456',
-        caixaEntrada: {
-          configuracaoWhatsApp: null // No WhatsApp config
+        chatwitInbox: {
+          whatsAppGlobalConfig: null // No WhatsApp config
         },
         template: {
           id: 'template-456',
@@ -259,13 +259,13 @@ describe('Dialogflow Database Queries', () => {
       const mockMapping = {
         id: 'mapping-empty',
         intentName: 'empty',
-        caixaEntradaId: 'caixa-123',
+        inboxId: 'caixa-123',
         templateId: null,
         mensagemInterativaId: null,
         unifiedTemplateId: null,
         interactiveMessageId: null,
-        caixaEntrada: {
-          configuracaoWhatsApp: {
+        chatwitInbox: {
+          whatsAppGlobalConfig: {
             phoneNumberId: 'phone-123',
             whatsappToken: 'token-456',
             whatsappBusinessAccountId: 'business-789',
@@ -514,12 +514,12 @@ describe('Dialogflow Database Queries', () => {
       const mockMapping = {
         id: 'mapping-priority',
         intentName: 'priority_test',
-        caixaEntradaId: 'caixa-priority',
+        inboxId: 'caixa-priority',
         templateId: 'template-123',
         mensagemInterativaId: 'interactive-456',
         unifiedTemplateId: 'unified-789',
-        caixaEntrada: {
-          configuracaoWhatsApp: {
+        chatwitInbox: {
+          whatsAppGlobalConfig: {
             phoneNumberId: 'phone-123',
             whatsappToken: 'token-456',
             whatsappBusinessAccountId: 'business-789',
