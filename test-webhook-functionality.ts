@@ -56,28 +56,28 @@ class WebhookTester {
     try {
       // Test 1: WhatsAppConfig query
       this.log('Testing WhatsAppConfig.findFirst query...');
-      const config = await db.whatsAppConfig.findFirst({
+      const config = await db.whatsAppGlobalConfig.findFirst({
         where: { 
           phoneNumberId: TEST_CONFIG.phoneNumberId,
           isActive: true 
         },
-        include: { 
-          caixaEntrada: true,
-          usuarioChatwit: true 
+        include: {
+          chatwitInbox: true,
+          usuarioChatwit: true
         },
       });
       this.addResult('WhatsAppConfig query with includes', true);
 
       // Test 2: Fallback configuration query
       this.log('Testing fallback WhatsAppConfig query...');
-      const fallbackConfig = await db.whatsAppConfig.findFirst({
-        where: { 
-          caixaEntradaId: null,
-          isActive: true 
+      const fallbackConfig = await db.whatsAppGlobalConfig.findFirst({
+        where: {
+          inboxId: null,
+          isActive: true
         },
-        include: { 
-          caixaEntrada: true,
-          usuarioChatwit: true 
+        include: {
+          chatwitInbox: true,
+          usuarioChatwit: true
         },
       });
       this.addResult('Fallback WhatsAppConfig query', true);
@@ -85,16 +85,16 @@ class WebhookTester {
       // Test 3: MapeamentoIntencao query
       this.log('Testing MapeamentoIntencao query...');
       const mapping = await db.mapeamentoIntencao.findUnique({
-        where: { 
-          intentName_caixaEntradaId: { 
-            intentName: 'test.intent', 
-            caixaEntradaId: 'test_caixa_id' 
-          } 
+        where: {
+          intentName_inboxId: {
+            intentName: 'test.intent',
+            inboxId: 'test_caixa_id'
+          }
         },
-        include: { 
-          template: true, 
-          mensagemInterativa: { 
-            include: { 
+        include: {
+          template: true,
+          mensagemInterativa: {
+            include: {
               botoes: true 
             } 
           } 
@@ -104,10 +104,10 @@ class WebhookTester {
 
       // Test 4: CaixaEntrada fallback relationship
       this.log('Testing CaixaEntrada fallback relationship...');
-      const caixa = await db.caixaEntrada.findFirst({
+      const caixa = await db.chatwitInbox.findFirst({
         where: { id: 'test_caixa_id' },
         include: {
-          fallbackParaCaixa: true,
+          fallbackParaInbox: true,
           mapeamentosIntencao: {
             include: {
               template: true,
@@ -343,14 +343,14 @@ class WebhookTester {
       this.log('Testing configuration fallback logic...');
       
       // Simulate the webhook's fallback logic
-      let config = await db.whatsAppConfig.findFirst({
-        where: { 
+      let config = await db.whatsAppGlobalConfig.findFirst({
+        where: {
           phoneNumberId: 'non_existent_phone_id',
-          isActive: true 
+          isActive: true
         },
-        include: { 
-          caixaEntrada: true,
-          usuarioChatwit: true 
+        include: {
+          chatwitInbox: true,
+          usuarioChatwit: true
         },
       });
 
@@ -360,14 +360,14 @@ class WebhookTester {
 
       // Fallback to default configuration
       if (!config) {
-        config = await db.whatsAppConfig.findFirst({
-          where: { 
-            caixaEntradaId: null,
-            isActive: true 
+        config = await db.whatsAppGlobalConfig.findFirst({
+          where: {
+            inboxId: null,
+            isActive: true
           },
-          include: { 
-            caixaEntrada: true,
-            usuarioChatwit: true 
+          include: {
+            chatwitInbox: true,
+            usuarioChatwit: true
           },
         });
       }
@@ -377,11 +377,11 @@ class WebhookTester {
       
       // Simulate intent mapping fallback
       const mapeamento = await db.mapeamentoIntencao.findUnique({
-        where: { 
-          intentName_caixaEntradaId: { 
-            intentName: 'non.existent.intent', 
-            caixaEntradaId: 'test_caixa_id' 
-          } 
+        where: {
+          intentName_inboxId: {
+            intentName: 'non.existent.intent',
+            inboxId: 'test_caixa_id'
+          }
         },
         include: { 
           template: true, 
@@ -401,11 +401,11 @@ class WebhookTester {
         // This would normally use caixaDeOrigem.fallbackParaCaixaId
         // For testing, we'll just verify the query structure
         const fallbackQuery = db.mapeamentoIntencao.findUnique({
-          where: { 
-            intentName_caixaEntradaId: { 
-              intentName: 'non.existent.intent', 
-              caixaEntradaId: 'fallback_caixa_id' 
-            } 
+          where: {
+            intentName_inboxId: {
+              intentName: 'non.existent.intent',
+              inboxId: 'fallback_caixa_id'
+            }
           },
           include: { 
             template: true, 
@@ -430,14 +430,14 @@ class WebhookTester {
 
     try {
       // Test WhatsAppConfig relationships
-      const configRelationships = await db.whatsAppConfig.findFirst({
+      const configRelationships = await db.whatsAppGlobalConfig.findFirst({
         include: {
           usuarioChatwit: {
             include: {
               appUser: true
             }
           },
-          caixaEntrada: {
+          chatwitInbox: {
             include: {
               mapeamentosIntencao: {
                 include: {
@@ -449,7 +449,7 @@ class WebhookTester {
                   }
                 }
               },
-              fallbackParaCaixa: true
+              fallbackParaInbox: true
             }
           }
         }
@@ -457,10 +457,10 @@ class WebhookTester {
       this.addResult('WhatsAppConfig relationship includes', true);
 
       // Test CaixaEntrada relationships
-      const caixaRelationships = await db.caixaEntrada.findFirst({
+      const caixaRelationships = await db.chatwitInbox.findFirst({
         include: {
           usuarioChatwit: true,
-          configuracaoWhatsApp: true,
+          whatsAppGlobalConfig: true,
           templates: true,
           mensagensInterativas: {
             include: {
@@ -473,8 +473,8 @@ class WebhookTester {
               mensagemInterativa: true
             }
           },
-          fallbackParaCaixa: true,
-          fallbackDeCaixas: true
+          fallbackParaInbox: true,
+          fallbackDeInboxes: true
         }
       });
       this.addResult('CaixaEntrada relationship includes', true);
@@ -482,7 +482,7 @@ class WebhookTester {
       // Test MapeamentoIntencao relationships
       const mapeamentoRelationships = await db.mapeamentoIntencao.findFirst({
         include: {
-          caixaEntrada: {
+          chatwitInbox: {
             include: {
               usuarioChatwit: true
             }

@@ -79,12 +79,12 @@ class WebhookE2ETester {
 
       // Test WhatsAppConfig model structure
       this.startTimer();
-      const configCount = await db.whatsAppConfig.count();
+      const configCount = await db.whatsAppGlobalConfig.count();
       this.addResult('WhatsAppConfig model access', true);
 
       // Test CaixaEntrada model structure
       this.startTimer();
-      const caixaCount = await db.caixaEntrada.count();
+      const caixaCount = await db.chatwitInbox.count();
       this.addResult('CaixaEntrada model access', true);
 
       // Test MapeamentoIntencao model structure
@@ -94,7 +94,7 @@ class WebhookE2ETester {
 
       // Test WhatsAppTemplate model structure
       this.startTimer();
-      const templateCount = await db.whatsAppTemplate.count();
+      const templateCount = await db.template.count();
       this.addResult('WhatsAppTemplate model access', true);
 
       // Test MensagemInterativa model structure
@@ -171,28 +171,28 @@ class WebhookE2ETester {
     try {
       // Test 1: WhatsAppConfig query with includes (main query pattern)
       this.startTimer();
-      const configQuery = await db.whatsAppConfig.findFirst({
-        where: { 
+      const configQuery = await db.whatsAppGlobalConfig.findFirst({
+        where: {
           phoneNumberId: TEST_CONFIG.phoneNumberId,
-          isActive: true 
+          isActive: true
         },
-        include: { 
-          caixaEntrada: true,
-          usuarioChatwit: true 
+        include: {
+          chatwitInbox: true,
+          usuarioChatwit: true
         },
       });
       this.addResult('WhatsAppConfig query with includes', true);
 
       // Test 2: Fallback configuration query
       this.startTimer();
-      const fallbackConfigQuery = await db.whatsAppConfig.findFirst({
-        where: { 
-          caixaEntradaId: null,
-          isActive: true 
+      const fallbackConfigQuery = await db.whatsAppGlobalConfig.findFirst({
+        where: {
+          inboxId: null,
+          isActive: true
         },
-        include: { 
-          caixaEntrada: true,
-          usuarioChatwit: true 
+        include: {
+          chatwitInbox: true,
+          usuarioChatwit: true
         },
       });
       this.addResult('Fallback WhatsAppConfig query', true);
@@ -200,11 +200,11 @@ class WebhookE2ETester {
       // Test 3: MapeamentoIntencao query with complex includes
       this.startTimer();
       const mapeamentoQuery = await db.mapeamentoIntencao.findUnique({
-        where: { 
-          intentName_caixaEntradaId: { 
-            intentName: 'test.intent', 
-            caixaEntradaId: 'test_caixa_id' 
-          } 
+        where: {
+          intentName_inboxId: {
+            intentName: 'test.intent',
+            inboxId: 'test_caixa_id'
+          }
         },
         include: { 
           template: true, 
@@ -219,10 +219,10 @@ class WebhookE2ETester {
 
       // Test 4: CaixaEntrada fallback relationship query
       this.startTimer();
-      const caixaQuery = await db.caixaEntrada.findFirst({
+      const caixaQuery = await db.chatwitInbox.findFirst({
         where: { id: 'test_caixa_id' },
         include: {
-          fallbackParaCaixa: true,
+          fallbackParaInbox: true,
           mapeamentosIntencao: {
             include: {
               template: true,
@@ -502,10 +502,10 @@ class WebhookE2ETester {
         name: 'Database query performance',
         test: async () => {
           const start = Date.now();
-          await db.whatsAppConfig.findFirst({
+          await db.whatsAppGlobalConfig.findFirst({
             where: { isActive: true },
-            include: { 
-              caixaEntrada: {
+            include: {
+              chatwitInbox: {
                 include: {
                   mapeamentosIntencao: {
                     include: {

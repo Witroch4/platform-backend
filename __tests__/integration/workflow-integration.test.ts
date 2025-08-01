@@ -23,10 +23,10 @@ jest.mock('@/lib/prisma', () => ({
     webhookMessage: {
       create: jest.fn(),
     },
-    caixaEntrada: {
+    chatwitInbox: {
       findFirst: jest.fn(),
     },
-    whatsAppConfig: {
+    whatsAppGlobalConfig: {
       upsert: jest.fn(),
     },
     dialogflowIntent: {

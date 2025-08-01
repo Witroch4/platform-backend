@@ -49,8 +49,8 @@ async function simpleBackup() {
         espelhosPadrao: await prisma.espelhoPadrao.findMany(),
         
         // === WHATSAPP E COMUNICAÇÃO ===
-        whatsAppConfigs: await prisma.whatsAppConfig.findMany(),
-        whatsAppTemplates: await prisma.whatsAppTemplate.findMany(),
+        whatsAppConfigs: await prisma.whatsAppGlobalConfig.findMany(),
+        templates: await prisma.template.findMany(),
         
         // === MTF DIAMANTE ===
         mtfDiamanteConfigs: await prisma.mtfDiamanteConfig.findMany(),
@@ -67,7 +67,7 @@ async function simpleBackup() {
         botoesMensagem: await prisma.botaoMensagem.findMany(),
         
         // === CAIXA DE ENTRADA ===
-        caixasEntrada: await prisma.caixaEntrada.findMany(),
+        chatwitInboxes: await prisma.chatwitInbox.findMany(),
         
         // === AGENTES DIALOGFLOW ===
         agentesDialogflow: await prisma.agenteDialogflow.findMany(),
@@ -124,7 +124,7 @@ async function simpleBackup() {
     
     console.log(`\n=== WHATSAPP ===`);
     console.log(`  whatsAppConfigs: ${backup.data.whatsAppConfigs.length} registros`);
-    console.log(`  whatsAppTemplates: ${backup.data.whatsAppTemplates.length} registros`);
+    console.log(`  templates: ${backup.data.templates.length} registros`);
     
     console.log(`\n=== MTF DIAMANTE ===`);
     console.log(`  mtfDiamanteConfigs: ${backup.data.mtfDiamanteConfigs.length} registros`);
@@ -141,7 +141,7 @@ async function simpleBackup() {
     console.log(`  botoesMensagem: ${backup.data.botoesMensagem.length} registros`);
     
     console.log(`\n=== OUTROS ===`);
-    console.log(`  caixasEntrada: ${backup.data.caixasEntrada.length} registros`);
+    console.log(`  chatwitInboxes: ${backup.data.chatwitInboxes.length} registros`);
     console.log(`  agentesDialogflow: ${backup.data.agentesDialogflow.length} registros`);
     console.log(`  mapeamentosIntencao: ${backup.data.mapeamentosIntencao.length} registros`);
     console.log(`  modelosRecurso: ${backup.data.modelosRecurso.length} registros`);
