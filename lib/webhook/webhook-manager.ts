@@ -1,11 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import { prisma } from '../prisma';
-import { redis } from '../redis/redis-client';
+import { redis } from '../redis';
 import { webhookQueue } from './webhook-queue';
 import { paginateArray, applySorting, applyFilters } from '../utils/api-helpers';
-import { PrismaClient } from '@prisma/client';
-import { WebhookConfig, WebhookDelivery } from '@prisma/client';
 
 // Interfaces
 export interface WebhookConfig {
@@ -310,7 +308,9 @@ export class WebhookManager {
       },
     });
 
-    const items = deliveries.map(delivery => this.formatWebhookDelivery(delivery));
+    const items = deliveries.map((delivery: any) =>
+      this.formatWebhookDelivery(delivery)
+    );
 
     const total = await prisma.webhookDelivery.count({ where });
 
@@ -430,7 +430,7 @@ export class WebhookManager {
       },
     });
 
-    return webhooks.map(webhook => this.formatWebhookConfig(webhook));
+    return webhooks.map((webhook: any) => this.formatWebhookConfig(webhook));
   }
 
   async createWebhookDelivery(webhookConfigId: string, payload: any, headers: Record<string, string> = {}): Promise<WebhookDelivery> {
@@ -532,14 +532,14 @@ export class WebhookManager {
    * Get webhook statistics
    */
   async getWebhookStats(webhookId: string): Promise<WebhookStats> {
-    const stats = await prisma.webhook_deliveries.groupBy({
+    const stats = await prisma.webhookDelivery.groupBy({
       by: ['response_status'],
-      where: { webhook_id: webhookId },
+      where: { webhookId },
       _count: true
     });
 
-    const deliveries = await prisma.webhook_deliveries.findMany({
-      where: { webhook_id: webhookId },
+    const deliveries = await prisma.webhookDelivery.findMany({
+      where: { webhookId },
       select: {
         response_status: true,
         delivered_at: true,
@@ -574,9 +574,9 @@ export class WebhookManager {
       pendingDeliveries,
       averageResponseTime: 0, // TODO: Calculate from delivery records
       successRate: Math.round(successRate * 100) / 100,
-      lastDeliveryAt: deliveries[0]?.created_at,
-      lastSuccessAt: deliveries.find(d => d.response_status && d.response_status >= 200 && d.response_status < 300)?.delivered_at,
-      lastFailureAt: deliveries.find(d => d.response_status && (d.response_status < 200 || d.response_status >= 300))?.delivered_at,
+        lastDeliveryAt: deliveries[0]?.createdAt,
+        lastSuccessAt: deliveries.find(d => d.responseStatus && d.responseStatus >= 200 && d.responseStatus < 300)?.deliveredAt,
+        lastFailureAt: deliveries.find(d => d.responseStatus && (d.responseStatus < 200 || d.responseStatus >= 300))?.deliveredAt,
       consecutiveFailures
     };
   }
@@ -610,7 +610,7 @@ export class WebhookManager {
     } = options;
 
     // Build where clause
-    const where: any = { webhook_id: webhookId };
+    const where: any = { webhookId };
     
     if (status) {
       // Map status to database conditions
@@ -631,7 +631,7 @@ export class WebhookManager {
     }
 
     if (eventType) {
-      where.event_type = eventType;
+      where.eventType = eventType;
     }
 
     if (startTime) {
@@ -639,7 +639,7 @@ export class WebhookManager {
     }
 
     // Get deliveries
-    const deliveries = await prisma.webhook_deliveries.findMany({
+    const deliveries = await prisma.webhookDelivery.findMany({
       where,
       orderBy: { [sortBy]: sortOrder },
       ...(limit > 0 && {
@@ -653,7 +653,7 @@ export class WebhookManager {
     // Get pagination info if limit is specified
     let pagination;
     if (limit > 0) {
-      const total = await prisma.webhook_deliveries.count({ where });
+      const total = await prisma.webhookDelivery.count({ where });
       pagination = {
         page,
         limit,
@@ -671,7 +671,7 @@ export class WebhookManager {
    * Retry failed delivery
    */
   async retryDelivery(deliveryId: string): Promise<boolean> {
-    const delivery = await prisma.webhook_deliveries.findUnique({
+    const delivery = await prisma.webhookDelivery.findUnique({
       where: { id: deliveryId }
     });
 
@@ -680,7 +680,7 @@ export class WebhookManager {
     }
 
     // Reset delivery status and queue for retry
-    await prisma.webhook_deliveries.update({
+    await prisma.webhookDelivery.update({
       where: { id: deliveryId },
       data: {
         response_status: null,
@@ -692,7 +692,7 @@ export class WebhookManager {
     // Queue for delivery
     await webhookQueue.add('deliver-webhook', {
       deliveryId,
-      webhookId: delivery.webhook_id,
+      webhookId: delivery.webhookId,
       attempt: delivery.attempts + 1
     });
 
@@ -703,7 +703,7 @@ export class WebhookManager {
    * Cancel pending delivery
    */
   async cancelDelivery(deliveryId: string): Promise<boolean> {
-    const result = await prisma.webhook_deliveries.updateMany({
+    const result = await prisma.webhookDelivery.updateMany({
       where: {
         id: deliveryId,
         response_status: null
@@ -721,7 +721,7 @@ export class WebhookManager {
    * Mark delivery as successful
    */
   async markDeliverySuccess(deliveryId: string): Promise<boolean> {
-    const result = await prisma.webhook_deliveries.updateMany({
+    const result = await prisma.webhookDelivery.updateMany({
       where: {
         id: deliveryId,
         response_status: null
@@ -741,7 +741,7 @@ export class WebhookManager {
    */
   async resetWebhookFailures(webhookId: string): Promise<void> {
     // This could involve resetting failure counters or enabling a disabled webhook
-    await this.updateWebhook(webhookId, { enabled: true });
+    await this.updateWebhookConfig(webhookId, { enabled: true });
   }
 
   /**
@@ -753,18 +753,18 @@ export class WebhookManager {
     responseTime?: number;
     error?: string;
   }> {
-    const delivery = await prisma.webhook_deliveries.findUnique({
+    const delivery = await prisma.webhookDelivery.findUnique({
       where: { id: deliveryId },
       include: {
-        webhook_configs: true
+          webhookConfig: true
       }
     });
 
-    if (!delivery || !delivery.webhook_configs) {
+      if (!delivery || !delivery.webhookConfig) {
       throw new Error(`Delivery or webhook not found: ${deliveryId}`);
     }
 
-    const webhook = delivery.webhook_configs;
+      const webhook = delivery.webhookConfig;
     const startTime = Date.now();
 
     try {
@@ -772,7 +772,7 @@ export class WebhookManager {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'User-Agent': 'ChatWit-Webhook/1.0',
-        'X-Webhook-Event': delivery.event_type,
+        'X-Webhook-Event': delivery.eventType,
         'X-Webhook-Delivery': deliveryId,
         'X-Webhook-Timestamp': delivery.created_at.toISOString(),
         ...webhook.headers
@@ -799,7 +799,7 @@ export class WebhookManager {
       const responseBody = await response.text();
 
       // Update delivery record
-      await prisma.webhook_deliveries.update({
+      await prisma.webhookDelivery.update({
         where: { id: deliveryId },
         data: {
           response_status: response.status,
@@ -821,7 +821,7 @@ export class WebhookManager {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
       // Update delivery record with error
-      await prisma.webhook_deliveries.update({
+      await prisma.webhookDelivery.update({
         where: { id: deliveryId },
         data: {
           response_status: 0, // Indicates network/timeout error
@@ -840,7 +840,7 @@ export class WebhookManager {
 
   // Private helper methods
   private async getWebhooksForEvent(eventType: string): Promise<WebhookConfig[]> {
-    const webhooks = await prisma.webhook_configs.findMany({
+    const webhooks = await prisma.webhookConfig.findMany({
       where: {
         enabled: true,
         events: {
@@ -870,11 +870,11 @@ export class WebhookManager {
   private async createDelivery(webhookId: string, event: WebhookEvent): Promise<string> {
     const deliveryId = uuidv4();
 
-    await prisma.webhook_deliveries.create({
+    await prisma.webhookDelivery.create({
       data: {
         id: deliveryId,
-        webhook_id: webhookId,
-        event_type: event.eventType,
+        webhookId,
+        eventType: event.eventType,
         payload: event.data,
         attempts: 0
       }
@@ -944,8 +944,8 @@ export class WebhookManager {
 
     return {
       id: delivery.id,
-      webhookId: delivery.webhook_id,
-      eventType: delivery.event_type,
+        webhookId: delivery.webhookId,
+      eventType: delivery.eventType,
       payload: delivery.payload,
       status,
       attempts: delivery.attempts,

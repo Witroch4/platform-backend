@@ -78,11 +78,13 @@ export async function downloadMetaMediaAndUploadToMinio(
     const uploadResult = await uploadToMinIO(buffer, fileName, mimeType);
     
     // Atualizar o banco de dados com a URL pública
-    if (template) {
-      const componentsWithMedia = {
-        ...(template.whatsappOfficialInfo?.components || {}),
-        publicMediaUrl: uploadResult.url
-      };
+      if (template) {
+        const existingComponents =
+          (template.whatsappOfficialInfo?.components as Record<string, unknown>) || {};
+        const componentsWithMedia = {
+          ...existingComponents,
+          publicMediaUrl: uploadResult.url
+        };
       
       await db.template.update({
         where: { id: template.id },
