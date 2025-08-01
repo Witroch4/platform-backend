@@ -1,32 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma, UserFeedback } from '@prisma/client';
 import { Redis } from 'ioredis';
-
-export interface UserFeedback {
-  id: string;
-  userId: string;
-  userEmail?: string;
-  type: 'BUG_REPORT' | 'FEATURE_REQUEST' | 'PERFORMANCE_ISSUE' | 'GENERAL_FEEDBACK' | 'FEATURE_FLAG_FEEDBACK';
-  category: string;
-  title: string;
-  description: string;
-  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-  status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
-  metadata?: Record<string, any>;
-  featureFlagContext?: {
-    flagName: string;
-    enabled: boolean;
-    variant?: string;
-  };
-  systemContext: {
-    userAgent: string;
-    url: string;
-    timestamp: Date;
-    sessionId?: string;
-    correlationId?: string;
-  };
-  createdAt: Date;
-  updatedAt: Date;
-}
 
 export interface FeedbackMetrics {
   totalFeedback: number;
@@ -79,8 +52,8 @@ export class FeedbackCollector {
     title: string,
     description: string,
     severity: UserFeedback['severity'] = 'MEDIUM',
-    metadata?: Record<string, any>,
-    systemContext?: Partial<UserFeedback['systemContext']>,
+    metadata?: Prisma.JsonObject,
+    systemContext?: Prisma.JsonObject,
     userEmail?: string
   ): Promise<UserFeedback> {
     const feedbackId = `feedback_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -163,7 +136,7 @@ export class FeedbackCollector {
     variant: string | undefined,
     experience: 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL',
     description: string,
-    metadata?: Record<string, any>
+    metadata?: Prisma.JsonObject
   ): Promise<UserFeedback> {
     const feedback = await this.submitFeedback(
       userId,

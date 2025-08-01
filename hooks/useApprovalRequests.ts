@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { TemplateApprovalRequest, TemplateLibrary, User } from '@prisma/client';
+import type { TemplateApprovalRequest, Template, User } from '@prisma/client';
 
 export interface ApprovalRequestWithDetails extends TemplateApprovalRequest {
-  templateLibrary: TemplateLibrary;
+  templateLibrary: Template;
   requestedBy: Pick<User, 'id' | 'name' | 'email'>;
   processedBy?: Pick<User, 'id' | 'name' | 'email'> | null;
 }
