@@ -217,7 +217,7 @@ export async function GET(
           action: actionData,
         },
         createdAt: template.createdAt,
-        updatedAt: message.updatedAt,
+        updatedAt: template.updatedAt,
       },
     });
   } catch (error) {
