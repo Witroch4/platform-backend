@@ -68,20 +68,20 @@ export async function createAgendamento(data: CreateAgendamentoDTO): Promise<Age
       data: {
         userId: data.userId,
         accountId: data.accountId,
-        Data: data.Data,
-        Descricao: data.Descricao,
-        Facebook: data.Facebook || false,
-        Instagram: data.Instagram || false,
-        Linkedin: data.Linkedin || false,
-        X: data.X || false,
-        Stories: data.Stories || false,
-        Reels: data.Reels || false,
-        PostNormal: data.PostNormal || false,
-        Diario: data.Diario || false,
-        Semanal: data.Semanal || false,
-        Randomizar: data.Randomizar || false,
-        TratarComoUnicoPost: data.TratarComoUnicoPost || false,
-        TratarComoPostagensIndividuais: data.TratarComoPostagensIndividuais || false,
+        data: data.Data,
+        descricao: data.Descricao,
+        facebook: data.Facebook || false,
+        instagram: data.Instagram || false,
+        linkedin: data.Linkedin || false,
+        x: data.X || false,
+        stories: data.Stories || false,
+        reels: data.Reels || false,
+        postNormal: data.PostNormal || false,
+        diario: data.Diario || false,
+        semanal: data.Semanal || false,
+        randomizar: data.Randomizar || false,
+        tratarComoUnicoPost: data.TratarComoUnicoPost || false,
+        tratarComoPostagensIndividuais: data.TratarComoPostagensIndividuais || false,
       },
     });
 
@@ -118,11 +118,11 @@ export async function createAgendamento(data: CreateAgendamentoDTO): Promise<Age
     // Agenda o job na fila BullMQ
     await scheduleAgendamentoJob({
       id: agendamento.id,
-      Data: agendamento.Data,
+      Data: agendamento.data,
       userId: agendamento.userId,
       accountId: agendamento.accountId,
-      Diario: agendamento.Diario,
-      Semanal: agendamento.Semanal,
+      Diario: agendamento.diario,
+      Semanal: agendamento.semanal,
     });
 
     return agendamento;
@@ -209,7 +209,7 @@ export async function getAgendamentosByUser(userId: string): Promise<Agendamento
         },
       },
       orderBy: {
-        Data: 'asc',
+        data: 'asc',
       },
     });
   } catch (error) {
@@ -236,7 +236,7 @@ export async function getAgendamentosByAccount(accountId: string): Promise<Agend
         },
       },
       orderBy: {
-        Data: 'asc',
+        data: 'asc',
       },
     });
   } catch (error) {
@@ -264,20 +264,20 @@ export async function updateAgendamento(id: string, data: UpdateAgendamentoDTO):
     const updateData: any = {};
 
     // Atualiza apenas os campos fornecidos
-    if (data.Data !== undefined) updateData.Data = data.Data;
-    if (data.Descricao !== undefined) updateData.Descricao = data.Descricao;
-    if (data.Facebook !== undefined) updateData.Facebook = data.Facebook;
-    if (data.Instagram !== undefined) updateData.Instagram = data.Instagram;
-    if (data.Linkedin !== undefined) updateData.Linkedin = data.Linkedin;
-    if (data.X !== undefined) updateData.X = data.X;
-    if (data.Stories !== undefined) updateData.Stories = data.Stories;
-    if (data.Reels !== undefined) updateData.Reels = data.Reels;
-    if (data.PostNormal !== undefined) updateData.PostNormal = data.PostNormal;
-    if (data.Diario !== undefined) updateData.Diario = data.Diario;
-    if (data.Semanal !== undefined) updateData.Semanal = data.Semanal;
-    if (data.Randomizar !== undefined) updateData.Randomizar = data.Randomizar;
-    if (data.TratarComoUnicoPost !== undefined) updateData.TratarComoUnicoPost = data.TratarComoUnicoPost;
-    if (data.TratarComoPostagensIndividuais !== undefined) updateData.TratarComoPostagensIndividuais = data.TratarComoPostagensIndividuais;
+    if (data.Data !== undefined) updateData.data = data.Data;
+    if (data.Descricao !== undefined) updateData.descricao = data.Descricao;
+    if (data.Facebook !== undefined) updateData.facebook = data.Facebook;
+    if (data.Instagram !== undefined) updateData.instagram = data.Instagram;
+    if (data.Linkedin !== undefined) updateData.linkedin = data.Linkedin;
+    if (data.X !== undefined) updateData.x = data.X;
+    if (data.Stories !== undefined) updateData.stories = data.Stories;
+    if (data.Reels !== undefined) updateData.reels = data.Reels;
+    if (data.PostNormal !== undefined) updateData.postNormal = data.PostNormal;
+    if (data.Diario !== undefined) updateData.diario = data.Diario;
+    if (data.Semanal !== undefined) updateData.semanal = data.Semanal;
+    if (data.Randomizar !== undefined) updateData.randomizar = data.Randomizar;
+    if (data.TratarComoUnicoPost !== undefined) updateData.tratarComoUnicoPost = data.TratarComoUnicoPost;
+    if (data.TratarComoPostagensIndividuais !== undefined) updateData.tratarComoPostagensIndividuais = data.TratarComoPostagensIndividuais;
 
     // Atualiza o agendamento
     const updatedAgendamento = await prisma.agendamento.update({
@@ -327,11 +327,11 @@ export async function updateAgendamento(id: string, data: UpdateAgendamentoDTO):
       // Agenda um novo job com a nova data
       await scheduleAgendamentoJob({
         id: updatedAgendamento.id,
-        Data: updatedAgendamento.Data,
+        Data: updatedAgendamento.data,
         userId: updatedAgendamento.userId,
         accountId: updatedAgendamento.accountId,
-        Diario: updatedAgendamento.Diario,
-        Semanal: updatedAgendamento.Semanal,
+        Diario: updatedAgendamento.diario,
+        Semanal: updatedAgendamento.semanal,
       });
     }
 
@@ -378,12 +378,12 @@ export async function selectMidiaForSending(agendamentoId: string): Promise<Midi
       return null;
     }
 
-    console.log(`[AgendamentoService] Agendamento ${agendamentoId} tem ${agendamento.midias.length} mídias. TratarComoPostagensIndividuais: ${agendamento.TratarComoPostagensIndividuais}, Randomizar: ${agendamento.Randomizar}`);
+    console.log(`[AgendamentoService] Agendamento ${agendamentoId} tem ${agendamento.midias.length} mídias. TratarComoPostagensIndividuais: ${agendamento.tratarComoPostagensIndividuais}, Randomizar: ${agendamento.randomizar}`);
 
     let selectedMidia: Midia | null = null;
 
     // Se for para tratar como postagens individuais, seleciona com base no contador
-    if (agendamento.TratarComoPostagensIndividuais) {
+    if (agendamento.tratarComoPostagensIndividuais) {
       // Determina o menor contador
       const minContador = Math.min(...agendamento.midias.map(m => m.contador));
       console.log(`[AgendamentoService] Menor contador encontrado: ${minContador}`);
@@ -407,7 +407,7 @@ export async function selectMidiaForSending(agendamentoId: string): Promise<Midi
         // Atualiza o objeto com o novo valor do contador
         selectedMidia.contador += 1;
       }
-    } else if (agendamento.Randomizar) {
+    } else if (agendamento.randomizar) {
       // Se for apenas para randomizar (sem tratar como postagens individuais),
       // seleciona uma mídia aleatoriamente sem incrementar contador
       selectedMidia = agendamento.midias[Math.floor(Math.random() * agendamento.midias.length)];
