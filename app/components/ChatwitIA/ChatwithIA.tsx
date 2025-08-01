@@ -62,6 +62,7 @@ export default function ChatwitIA({
     messages,
     sendMessage,
     isLoading,
+    isFetchingSession,
     clearMessages,
     error,
     files,
@@ -232,10 +233,11 @@ export default function ChatwitIA({
 
   // Process initial message once when component mounts or chatId changes
   useEffect(() => {
-    if (!initialMessage || isLoading || initialMessageSentRef.current) {
-      console.log(`⏸️ Pulando processamento de mensagem inicial. 
-        initialMessage: ${!!initialMessage}, 
-        isLoading: ${isLoading}, 
+    if (!initialMessage || isLoading || isFetchingSession || initialMessageSentRef.current) {
+      console.log(`⏸️ Pulando processamento de mensagem inicial.
+        initialMessage: ${!!initialMessage},
+        isLoading: ${isLoading},
+        isFetching: ${isFetchingSession},
         alreadySent: ${initialMessageSentRef.current}`);
       return;
     }
@@ -256,7 +258,7 @@ export default function ChatwitIA({
       console.log(`🧹 Limpando sessionStorage para chatId: ${chatId}`);
       sessionStorage.removeItem(`pending_${chatId}`);
     }
-  }, [initialMessage, chatId, isLoading]);
+  }, [initialMessage, chatId, isLoading, isFetchingSession]);
 
   /* ----- CNIS analysis toggle ----- */
   const handleToggleCnisAnalysis = (isActive: boolean) => {

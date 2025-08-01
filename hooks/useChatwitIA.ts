@@ -344,10 +344,10 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
         typeof m.content === 'string' && m.content.includes('![Imagem gerada](data:image/')
       ).length);
       
-      // 🔧 CORREÇÃO: Só atualizar mensagens se realmente mudaram
-      const shouldUpdateMessages = messages.length === 0 || 
-                                  messages.length !== convertedMessages.length ||
-                                  currentSessionId !== id;
+      // 🔧 CORREÇÃO: Evitar sobrescrever mensagens locais quando já há conteúdo
+      const shouldUpdateMessages =
+        messages.length === 0 ||
+        currentSessionId !== id;
       
       if (shouldUpdateMessages) {
         console.log(`📝 Atualizando mensagens do banco (${convertedMessages.length} mensagens)`);
