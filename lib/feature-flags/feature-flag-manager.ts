@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import { PrismaClient, Prisma, FeatureFlag } from '@prisma/client';
 import { Redis } from 'ioredis';
 
@@ -86,7 +85,7 @@ export class FeatureFlagManager {
 
       console.log(`[FeatureFlag] Set flag ${name}: enabled=${enabled}, rollout=${rolloutPercentage}%`);
       return flag as FeatureFlag;
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`[FeatureFlag] Error setting flag ${name}:`, error);
       throw error;
     }
@@ -179,7 +178,7 @@ export class FeatureFlagManager {
         inboxId,
         metadata,
       };
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`[FeatureFlag] Error evaluating flag ${flagName}:`, error);
       return {
         flagName,
@@ -284,7 +283,7 @@ export class FeatureFlagManager {
       return await this.prisma.featureFlag.findMany({
         orderBy: { updatedAt: 'desc' },
       });
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[FeatureFlag] Error getting all flags:', error);
       return [];
     }
@@ -306,7 +305,7 @@ export class FeatureFlagManager {
         disabled: parseInt(metrics.disabled || '0'),
         reasons: JSON.parse(metrics.reasons || '{}'),
       };
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`[FeatureFlag] Error getting metrics for ${flagName}:`, error);
       return { evaluations: 0, enabled: 0, disabled: 0, reasons: {} };
     }
@@ -349,9 +348,9 @@ export class FeatureFlagManager {
       }
 
       return flag;
-    } catch (error) {
-      console.error(`[FeatureFlag] Error getting flag ${name}:`, error);
-      return null;
+      } catch (error: unknown) {
+        console.error(`[FeatureFlag] Error getting flag ${name}:`, error);
+        return null;
     }
   }
 
@@ -444,40 +443,7 @@ export async function initializeDefaultFeatureFlags(): Promise<void> {
     }
 
     console.log('[FeatureFlag] Default feature flags initialized');
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[FeatureFlag] Error initializing default flags:', error);
   }
 }
-=======
-import { Prisma } from '@prisma/client'
-
-export interface FeatureFlagState {
-  enabled: boolean
-  conditions: Prisma.JsonObject | null
-}
-
-export type ConditionContext = Record<string, any>
-
-export function evaluateConditions(
-  conditions: Prisma.JsonObject | undefined,
-  context: ConditionContext
-): boolean {
-  if (!conditions || typeof conditions !== 'object') return true
-
-  for (const [key, value] of Object.entries(conditions)) {
-    const ctxValue = context[key]
-    if (value && typeof value === 'object') {
-      if ('equals' in (value as any) && ctxValue !== (value as any).equals) {
-        return false
-      }
-      if ('not' in (value as any) && ctxValue === (value as any).not) {
-        return false
-      }
-    } else if (ctxValue !== value) {
-      return false
-    }
-  }
-
-  return true
-}
->>>>>>> 2e45d85462b61011f5f293ab34968a4c66ff84ba
