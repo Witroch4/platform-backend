@@ -33,7 +33,7 @@ export async function GET(
     const query = DeliveryQuerySchema.parse(Object.fromEntries(searchParams));
 
     // Check if webhook exists
-    const webhook = await webhookManager.getWebhook(webhookId);
+    const webhook = await webhookManager.getWebhookById(webhookId);
     if (!webhook) {
       return NextResponse.json(
         { 
@@ -119,7 +119,7 @@ export async function POST(
     const { action, deliveryIds } = DeliveryActionSchema.parse(body);
 
     // Check if webhook exists
-    const webhook = await webhookManager.getWebhook(webhookId);
+    const webhook = await webhookManager.getWebhookById(webhookId);
     if (!webhook) {
       return NextResponse.json(
         { 

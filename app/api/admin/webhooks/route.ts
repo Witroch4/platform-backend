@@ -149,7 +149,7 @@ async function testWebhook(request: NextRequest) {
     const body = await request.json();
     const { webhookId, eventType, testPayload } = WebhookTestSchema.parse(body);
 
-    const webhook = await webhookManager.getWebhook(webhookId);
+    const webhook = await webhookManager.getWebhookById(webhookId);
     if (!webhook) {
       return NextResponse.json(
         { 
