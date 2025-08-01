@@ -91,7 +91,6 @@ export async function addInstagramTranslationJob(
       metadata: {
         timestamp: new Date(),
         retryCount: 0,
-        queuedAt: new Date().toISOString(),
         ...data.metadata,
       }
     }, {

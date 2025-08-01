@@ -787,9 +787,6 @@ export async function warmInstagramTemplateCache(
     // For now, get recent templates as a proxy
     const recentMappings = await prisma.mapeamentoIntencao.findMany({
       take: limit,
-      orderBy: {
-        updatedAt: 'desc',
-      },
       select: {
         intentName: true,
         inboxId: true,
