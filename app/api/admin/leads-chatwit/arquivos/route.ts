@@ -45,28 +45,27 @@ export async function GET(request: Request): Promise<Response> {
     
     if (leadId) {
       // Buscar arquivos de um lead específico
-      arquivos = await prismaClient.arquivoLeadChatwit.findMany({
-        where: { leadId },
+      arquivos = await prismaClient.arquivoLeadOab.findMany({
+        where: { leadOabDataId: leadId },
         orderBy: { createdAt: "desc" },
       });
     } else if (usuarioId) {
       // Buscar leads do usuário
-      const leads = await prismaClient.leadChatwit.findMany({
-        where: { usuarioId },
+      const leads = await prismaClient.leadOabData.findMany({
+        where: { usuarioChatwitId: usuarioId },
         select: { id: true },
       });
-      
+
       const leadIds = leads.map(lead => lead.id);
-      
+
       // Buscar arquivos de todos os leads do usuário
-      arquivos = await prismaClient.arquivoLeadChatwit.findMany({
-        where: { leadId: { in: leadIds } },
+      arquivos = await prismaClient.arquivoLeadOab.findMany({
+        where: { leadOabDataId: { in: leadIds } },
         orderBy: { createdAt: "desc" },
         include: {
-          lead: {
+          leadOabData: {
             select: {
               id: true,
-              name: true,
               nomeReal: true,
             },
           },
@@ -100,7 +99,7 @@ export async function POST(request: Request): Promise<Response> {
     }
     
     // Verifique se o lead existe
-    const lead = await prismaClient.leadChatwit.findUnique({
+    const lead = await prismaClient.leadOabData.findUnique({
       where: { id: leadId },
     });
     
@@ -112,9 +111,9 @@ export async function POST(request: Request): Promise<Response> {
     }
     
     // Adicione o arquivo
-    const arquivo = await prismaClient.arquivoLeadChatwit.create({
+    const arquivo = await prismaClient.arquivoLeadOab.create({
       data: {
-        leadId,
+        leadOabDataId: leadId,
         fileType,
         dataUrl,
       },
@@ -155,7 +154,7 @@ export async function DELETE(request: NextRequest) {
 
     // Se for um arquivo específico
     if (arquivoId && type === 'arquivo') {
-      const arquivo = await prismaClient.arquivoLeadChatwit.findUnique({
+      const arquivo = await prismaClient.arquivoLeadOab.findUnique({
         where: { id: arquivoId },
       });
 
@@ -186,7 +185,7 @@ export async function DELETE(request: NextRequest) {
       }
 
       // Delete do banco
-      await prismaClient.arquivoLeadChatwit.delete({
+      await prismaClient.arquivoLeadOab.delete({
         where: { id: arquivoId },
       });
 
@@ -196,7 +195,7 @@ export async function DELETE(request: NextRequest) {
 
     // Se for um PDF unificado
     if (leadId && type === 'pdf') {
-      const lead = await prismaClient.leadChatwit.findUnique({
+      const lead = await prismaClient.leadOabData.findUnique({
         where: { id: leadId },
       });
 
@@ -226,7 +225,7 @@ export async function DELETE(request: NextRequest) {
       }
 
       // Atualiza o lead para remover a referência ao PDF
-      await prismaClient.leadChatwit.update({
+      await prismaClient.leadOabData.update({
         where: { id: leadId },
         data: { pdfUnificado: null },
       });
@@ -237,7 +236,7 @@ export async function DELETE(request: NextRequest) {
 
     // Se for imagens convertidas
     if (leadId && type === 'imagem') {
-      const lead = await prismaClient.leadChatwit.findUnique({
+      const lead = await prismaClient.leadOabData.findUnique({
         where: { id: leadId },
         include: {
           arquivos: true
@@ -273,8 +272,8 @@ export async function DELETE(request: NextRequest) {
       }
 
       // Atualiza os arquivos para remover as referências às imagens
-      await prismaClient.arquivoLeadChatwit.updateMany({
-        where: { leadId: leadId }, // Corrigido: usar leadId em vez de leadChatwitId
+      await prismaClient.arquivoLeadOab.updateMany({
+        where: { leadOabDataId: leadId },
         data: { pdfConvertido: null },
       });
 
@@ -305,7 +304,7 @@ export async function PATCH(request: Request): Promise<Response> {
     }
     
     // Atualize o arquivo
-    const arquivo = await prismaClient.arquivoLeadChatwit.update({
+    const arquivo = await prismaClient.arquivoLeadOab.update({
       where: { id },
       data: {
         ...(pdfConvertido !== undefined && { pdfConvertido }),

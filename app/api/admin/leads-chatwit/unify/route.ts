@@ -50,7 +50,7 @@ export async function GET(request: Request): Promise<Response> {
     
     if (leadId) {
       // Buscar o lead específico
-      const lead = await prisma.leadChatwit.findUnique({
+      const lead = await prisma.leadOabData.findUnique({
         where: { id: leadId },
       });
       
@@ -59,12 +59,12 @@ export async function GET(request: Request): Promise<Response> {
       }
       
       pdfUrl = lead.pdfUnificado;
-    } 
+    }
     else if (usuarioId) {
       // Buscar os leads do usuário que tenham PDF unificado
-      const leads = await prisma.leadChatwit.findMany({
+      const leads = await prisma.leadOabData.findMany({
         where: {
-          usuarioId,
+          usuarioChatwitId: usuarioId,
           pdfUnificado: { not: null }
         },
         orderBy: { updatedAt: 'desc' },
@@ -106,8 +106,8 @@ export async function POST(request: Request): Promise<Response> {
     
     if (leadId) {
       // Buscar os arquivos de um lead específico
-      arquivos = await prisma.arquivoLeadChatwit.findMany({
-        where: { leadId },
+      arquivos = await prisma.arquivoLeadOab.findMany({
+        where: { leadOabDataId: leadId },
       });
       
       if (arquivos.length === 0) {
@@ -125,7 +125,7 @@ export async function POST(request: Request): Promise<Response> {
         console.log(`[API Unify] Único arquivo PDF detectado para o lead ${leadId}. Usando diretamente: ${unicoArquivoPdf.dataUrl}`);
         
         // Atualizar o registro do Lead com a URL do PDF existente
-        await prisma.leadChatwit.update({
+        await prisma.leadOabData.update({
           where: { id: leadId },
           data: { pdfUnificado: unicoArquivoPdf.dataUrl },
         });
@@ -140,8 +140,8 @@ export async function POST(request: Request): Promise<Response> {
     } 
     else if (usuarioId) {
       // Buscar todos os leads do usuário com seus arquivos
-      const leads = await prisma.leadChatwit.findMany({
-        where: { usuarioId },
+      const leads = await prisma.leadOabData.findMany({
+        where: { usuarioChatwitId: usuarioId },
         include: { arquivos: true },
       });
       
@@ -174,7 +174,7 @@ export async function POST(request: Request): Promise<Response> {
     
     // Atualizar o registro do Lead com a URL do PDF unificado
     if (leadId) {
-      await prisma.leadChatwit.update({
+      await prisma.leadOabData.update({
         where: { id: leadId },
         data: { pdfUnificado: pdfUrl },
       });

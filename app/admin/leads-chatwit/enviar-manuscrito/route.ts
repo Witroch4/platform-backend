@@ -29,7 +29,7 @@ export async function POST(request: Request): Promise<Response> {
     
     if (leadId) {
       if (isManuscrito && !isEspelho) { // Garantir que é apenas manuscrito, não espelho
-        await prisma.leadChatwit.update({
+        await prisma.leadOabData.update({
           where: { id: leadId },
           data: { aguardandoManuscrito: true }
         });
@@ -55,7 +55,7 @@ export async function POST(request: Request): Promise<Response> {
       
       // Resetar aguardandoManuscrito para false em caso de erro (apenas para manuscrito)
       if (isManuscrito && !isEspelho && leadId) {
-        await prisma.leadChatwit.update({
+        await prisma.leadOabData.update({
           where: { id: leadId },
           data: { aguardandoManuscrito: false }
         }).catch(e => {
