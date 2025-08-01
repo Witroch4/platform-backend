@@ -2,7 +2,29 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import axios from 'axios';
+import type { AxiosError } from 'axios';
 import openaiService, { type FilePurpose } from '@/services/openai';
+
+function isAxiosError<T = any>(err: unknown): err is AxiosError<T> {
+  return typeof err === 'object' && err !== null && 'isAxiosError' in (err as any);
+}
+
+function formatAxiosError(error: unknown): string {
+  if (isAxiosError(error)) {
+    if (error.response) {
+      return `Erro do servidor: ${error.response.status}` +
+        (error.response.data ? ` - ${JSON.stringify(error.response.data)}` : '');
+    }
+    if (error.request) {
+      return 'Sem resposta do servidor. Verifique sua conexão.';
+    }
+    return error.message;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return 'Erro desconhecido';
+}
 
 export type MessageContent = string | Array<{
   type: 'text' | 'audio' | 'image' | 'document';
@@ -376,8 +398,8 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
           console.log(`🔗 ResponseId já existe em memória: ${lastResponseId}`);
         }
       }
-    } catch (err) {
-      console.error('Erro ao carregar chat do banco:', err);
+    } catch (error: unknown) {
+      console.error('Erro ao carregar chat do banco:', error);
       setError('Não foi possível carregar a conversa.');
       // 🔧 CORREÇÃO: Só limpar mensagens se realmente houve erro e não temos conteúdo válido
       if (messages.length === 0) {
@@ -404,8 +426,8 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
       const newSessionId = response.data.id;
       setCurrentSessionId(newSessionId);
       return newSessionId;
-    } catch (err) {
-      console.error('Erro ao criar sessão de chat:', err);
+    } catch (error: unknown) {
+      console.error('Erro ao criar sessão de chat:', error);
       setError('Não foi possível criar uma nova conversa.');
       return null;
     }
@@ -451,8 +473,8 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
       });
       
       return response.data;
-    } catch (err) {
-      console.error('Erro ao salvar mensagem no banco:', err);
+    } catch (error: unknown) {
+      console.error('Erro ao salvar mensagem no banco:', error);
       // Não exibir erro na interface para não interromper a experiência do usuário
       return null;
     }
@@ -527,7 +549,7 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
         try {
           // Enviar previousResponseId específico se há referência de imagem
           await saveChatMessageToDB(currentSessionId, userMessage, 'text', previousResponseIdToSend);
-        } catch (saveError) {
+        } catch (saveError: unknown) {
           console.error('Erro ao salvar mensagem do usuário:', saveError);
         }
       }
@@ -943,9 +965,10 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
           }
         }
       }
-    } catch (err: any) {
-      console.error('Error in chat:', err);
-      setError(err.message || 'Ocorreu um erro ao processar sua solicitação.');
+    } catch (error: unknown) {
+      console.error('Error in chat:', error);
+      const message = error instanceof Error ? error.message : 'Ocorreu um erro ao processar sua solicitação.';
+      setError(message);
       
       // Cancelar timeouts pendentes em caso de erro
       if (updateTimeoutRef.current) {
@@ -1003,8 +1026,8 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
     try {
       const response = await axios.get('/api/chatwitia/sessions');
       return response.data;
-    } catch (err) {
-      console.error('Erro ao obter chats:', err);
+    } catch (error: unknown) {
+      console.error('Erro ao obter chats:', error);
       return [];
     }
   };
@@ -1023,8 +1046,8 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
         setMessages([]);
         setCurrentSessionId(null);
       }
-    } catch (err) {
-      console.error('Erro ao excluir chat:', err);
+    } catch (error: unknown) {
+      console.error('Erro ao excluir chat:', error);
     }
   };
 
@@ -1073,8 +1096,7 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
       return fileData;
     } catch (error: unknown) {
       console.error("Erro durante upload:", error);
-      const message = error instanceof Error ? error.message : 'Erro desconhecido';
-      setFileError(`Erro ao enviar arquivo: ${message}`);
+      setFileError(formatAxiosError(error));
       throw error;
     } finally {
       setIsFileLoading(false);
@@ -1110,19 +1132,7 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
       return response.data.data;
     } catch (error: unknown) {
       console.error('Erro detalhado ao listar arquivos:', error);
-      
-      // Detalhes específicos do erro
-      if (error.response) {
-        console.error('Resposta de erro do servidor:', error.response.data);
-        console.error('Status HTTP:', error.response.status);
-        setFileError(`Erro do servidor: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
-      } else if (error.request) {
-        console.error('Sem resposta do servidor. Requisição:', error.request);
-        setFileError('Sem resposta do servidor. Verifique sua conexão.');
-      } else {
-        const message = error instanceof Error ? error.message : 'Erro ao listar arquivos';
-        setFileError(`Erro ao listar arquivos: ${message}`);
-      }
+      setFileError(formatAxiosError(error));
       
       return [];
     } finally {
@@ -1162,19 +1172,7 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
       return response.data;
     } catch (error: unknown) {
       console.error('Erro detalhado ao obter arquivo:', error);
-      
-      // Detalhes específicos do erro
-      if (error.response) {
-        console.error('Resposta de erro do servidor:', error.response.data);
-        console.error('Status HTTP:', error.response.status);
-        setFileError(`Erro do servidor: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
-      } else if (error.request) {
-        console.error('Sem resposta do servidor. Requisição:', error.request);
-        setFileError('Sem resposta do servidor. Verifique sua conexão.');
-      } else {
-        const message = error instanceof Error ? error.message : 'Erro ao obter arquivo';
-        setFileError(`Erro ao obter arquivo: ${message}`);
-      }
+      setFileError(formatAxiosError(error));
       
       return null;
     } finally {
@@ -1238,18 +1236,7 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
     } catch (error: unknown) {
       console.error('Erro detalhado ao obter conteúdo do arquivo:', error);
       
-      // Detalhes específicos do erro
-      if (error.response) {
-        console.error('Resposta de erro do servidor:', error.response.data);
-        console.error('Status HTTP:', error.response.status);
-        setFileError(`Erro do servidor: ${error.response.status}`);
-      } else if (error.request) {
-        console.error('Sem resposta do servidor. Requisição:', error.request);
-        setFileError('Sem resposta do servidor. Verifique sua conexão.');
-      } else {
-        const message = error instanceof Error ? error.message : 'Erro ao obter conteúdo do arquivo';
-        setFileError(`Erro ao obter conteúdo do arquivo: ${message}`);
-      }
+      setFileError(formatAxiosError(error));
       
       return null;
     } finally {
@@ -1278,18 +1265,7 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
     } catch (error: unknown) {
       console.error('Erro detalhado ao excluir arquivo:', error);
       
-      // Detalhes específicos do erro
-      if (error.response) {
-        console.error('Resposta de erro do servidor:', error.response.data);
-        console.error('Status HTTP:', error.response.status);
-        setFileError(`Erro do servidor: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
-      } else if (error.request) {
-        console.error('Sem resposta do servidor. Requisição:', error.request);
-        setFileError('Sem resposta do servidor. Verifique sua conexão.');
-      } else {
-        const message = error instanceof Error ? error.message : 'Erro ao excluir arquivo';
-        setFileError(`Erro ao excluir arquivo: ${message}`);
-      }
+      setFileError(formatAxiosError(error));
       
       return null;
     } finally {
@@ -1363,18 +1339,7 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
     } catch (error: unknown) {
       console.error('Erro detalhado ao editar imagem:', error);
       
-      // Detalhes específicos do erro
-      if (error.response) {
-        console.error('Resposta de erro do servidor:', error.response.data);
-        console.error('Status HTTP:', error.response.status);
-        setFileError(`Erro do servidor: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
-      } else if (error.request) {
-        console.error('Sem resposta do servidor. Requisição:', error.request);
-        setFileError('Sem resposta do servidor. Verifique sua conexão.');
-      } else {
-        const message = error instanceof Error ? error.message : 'Erro ao editar imagem';
-        setFileError(`Erro ao editar imagem: ${message}`);
-      }
+      setFileError(formatAxiosError(error));
       
       return null;
     } finally {
@@ -1441,18 +1406,7 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
     } catch (error: unknown) {
       console.error('Erro detalhado ao criar variação de imagem:', error);
       
-      // Detalhes específicos do erro
-      if (error.response) {
-        console.error('Resposta de erro do servidor:', error.response.data);
-        console.error('Status HTTP:', error.response.status);
-        setFileError(`Erro do servidor: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
-      } else if (error.request) {
-        console.error('Sem resposta do servidor. Requisição:', error.request);
-        setFileError('Sem resposta do servidor. Verifique sua conexão.');
-      } else {
-        const message = error instanceof Error ? error.message : 'Erro ao criar variação de imagem';
-        setFileError(`Erro ao criar variação de imagem: ${message}`);
-      }
+      setFileError(formatAxiosError(error));
       
       return null;
     } finally {
@@ -1499,28 +1453,30 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
       };
     } catch (error: unknown) {
       console.error('Erro ao testar conexão com o backend:', error);
-      
-      // Detalhes específicos do erro
-      if (error.response) {
-        return {
-          success: false,
-          status: error.response.status,
-          message: `Erro na resposta: ${error.response.status}`,
-          data: error.response.data
-        };
-      } else if (error.request) {
-        return {
-          success: false,
-          status: 'timeout',
-          message: 'Sem resposta do servidor'
-        };
-      } else {
-        return {
-          success: false,
-          status: 'error',
-          message: `Erro na conexão: ${error instanceof Error ? error.message : 'Erro desconhecido'}`
-        };
+
+      if (isAxiosError(error)) {
+        if (error.response) {
+          return {
+            success: false,
+            status: error.response.status,
+            message: `Erro na resposta: ${error.response.status}`,
+            data: error.response.data
+          };
+        }
+        if (error.request) {
+          return {
+            success: false,
+            status: 'timeout',
+            message: 'Sem resposta do servidor'
+          };
+        }
       }
+
+      return {
+        success: false,
+        status: 'error',
+        message: `Erro na conexão: ${formatAxiosError(error)}`
+      };
     }
   };
 
@@ -1585,7 +1541,7 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
           console.error(`Teste de upload: Erro na tentativa ${retryCount + 1}:`, error);
           
           // Se foi erro de timeout
-          if (error.name === 'AbortError') {
+          if (error instanceof Error && error.name === 'AbortError') {
             console.error('Teste de upload: Timeout atingido');
             throw new Error('Timeout ao fazer upload do arquivo');
           }
