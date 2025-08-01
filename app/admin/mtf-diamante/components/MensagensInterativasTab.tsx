@@ -143,7 +143,7 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
         </div>
         
         <InteractiveMessageCreator
-          caixaId={caixaId}
+          inboxId={caixaId}
           onSave={handleSaveMessage}
           editingMessage={editingMessage}
         />

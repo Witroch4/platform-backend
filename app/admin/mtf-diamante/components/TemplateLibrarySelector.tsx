@@ -58,9 +58,9 @@ export const TemplateLibrarySelector: React.FC<TemplateLibrarySelectorProps> = (
   };
 
   const handleSelectTemplate = (template: TemplateLibraryWithCreator) => {
-    // Check if template requires approval and user doesn't have it
-    if (template.isApprovalRequired && 
-        !template.approvalRequests?.some(r => r.status === 'approved')) {
+    // If template has approval requests but none approved, block usage
+    const approved = template.approvalRequests?.some(r => r.status === 'approved');
+    if (template.approvalRequests && !approved) {
       toast.error('Este template requer aprovação antes de ser usado');
       return;
     }
@@ -85,15 +85,15 @@ export const TemplateLibrarySelector: React.FC<TemplateLibrarySelectorProps> = (
   };
 
   const getScopeIcon = (scope: string) => {
-    return scope === 'global' ? <Globe className="h-4 w-4" /> : <User className="h-4 w-4" />;
+    return scope === 'GLOBAL' ? <Globe className="h-4 w-4" /> : <User className="h-4 w-4" />;
   };
 
   const getScopeLabel = (scope: string) => {
-    return scope === 'global' ? 'Biblioteca' : 'Privado';
+    return scope === 'GLOBAL' ? 'Biblioteca' : 'Privado';
   };
 
   const getScopeBadgeVariant = (scope: string) => {
-    return scope === 'global' ? 'default' : 'secondary';
+    return scope === 'GLOBAL' ? 'default' : 'secondary';
   };
 
   const getTypeLabel = (type: string) => {
@@ -101,13 +101,9 @@ export const TemplateLibrarySelector: React.FC<TemplateLibrarySelectorProps> = (
   };
 
   const getApprovalStatus = (template: TemplateLibraryWithCreator) => {
-    if (!template.isApprovalRequired) {
-      return <Badge variant="secondary" className="text-xs">Sem Aprovação Necessária</Badge>;
-    }
-
     const latestRequest = template.approvalRequests?.[0];
     if (!latestRequest) {
-      return <Badge variant="outline" className="text-xs">Não Solicitado</Badge>;
+      return <Badge variant="secondary" className="text-xs">Sem Aprovação Necessária</Badge>;
     }
 
     switch (latestRequest.status) {
@@ -123,8 +119,8 @@ export const TemplateLibrarySelector: React.FC<TemplateLibrarySelectorProps> = (
   };
 
   const canUseTemplate = (template: TemplateLibraryWithCreator) => {
-    return !template.isApprovalRequired || 
-           template.approvalRequests?.some(r => r.status === 'approved');
+    return template.approvalRequests ?
+      template.approvalRequests.some(r => r.status === 'approved') : true;
   };
 
   const defaultTrigger = (
@@ -213,7 +209,7 @@ export const TemplateLibrarySelector: React.FC<TemplateLibrarySelectorProps> = (
                     <CardContent className="space-y-3">
                       <div className="flex items-center justify-between text-sm text-muted-foreground">
                         <span>Por {template.createdBy.name || template.createdBy.email}</span>
-                        <span>Usado {template.totalUsageCount} vezes</span>
+                        <span>Usado {template.usageCount ?? 0} vezes</span>
                       </div>
 
                       <div className="flex items-center gap-2 flex-wrap">

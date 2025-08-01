@@ -33,7 +33,7 @@ interface InteractiveMessageState {
 
 export const InteractiveMessageCreator: React.FC<
   InteractiveMessageCreatorProps
-> = ({ caixaId, onSave, editingMessage }) => {
+> = ({ inboxId, onSave, editingMessage }) => {
 
   const { variables, loading: variablesLoading } = useVariableManager();
 
@@ -239,22 +239,22 @@ export const InteractiveMessageCreator: React.FC<
     message: state.message,
     reactions: state.reactions.map(r => ({
       buttonId: r.buttonId,
-      reaction: r.type === 'emoji' 
+      reaction: r.type === 'emoji'
         ? { type: 'emoji' as const, value: r.emoji || '' }
         : { type: 'text' as const, value: r.textResponse || '' }
     })),
-    caixaId,
+    inboxId,
     onSave: handleSave,
     onBack: handleBackToConfiguration,
     editingMessage,
     disabled: state.saving
   }), [
     state.message, 
-    state.reactions, 
-    caixaId, 
-    handleSave, 
-    handleBackToConfiguration, 
-    editingMessage, 
+    state.reactions,
+    inboxId,
+    handleSave,
+    handleBackToConfiguration,
+    editingMessage,
     state.saving
   ]);
 
