@@ -205,7 +205,7 @@ export const LibraryManagementInterface: React.FC<LibraryManagementInterfaceProp
                         )}
                         <div className="flex items-center gap-4 text-sm text-muted-foreground">
                           <span>Por {template.createdBy.name || template.createdBy.email}</span>
-                          <span>Usado {template.totalUsageCount} vezes</span>
+                          <span>Usado {template.usageCount ?? 0} vezes</span>
                           <span>Categoria: {template.category}</span>
                         </div>
                       </div>
@@ -278,7 +278,7 @@ export const LibraryManagementInterface: React.FC<LibraryManagementInterfaceProp
                         )}
                         <div className="flex items-center gap-4 text-sm text-muted-foreground">
                           <span>Por {template.createdBy.name || template.createdBy.email}</span>
-                          <span>Usado {template.totalUsageCount} vezes</span>
+                          <span>Usado {template.usageCount ?? 0} vezes</span>
                           <span>Categoria: {template.category}</span>
                         </div>
                       </div>
