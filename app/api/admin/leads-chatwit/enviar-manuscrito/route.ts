@@ -64,13 +64,17 @@ export async function POST(request: Request): Promise<Response> {
       console.log("[Enviar Recurso] Recurso finalizado:", payload.RecursoFinalizado);
     } else if (leadId) {
       // Primeiro, verificar se o lead existe
-      let lead = await prisma.leadChatwit.findUnique({
+      let lead = await prisma.leadOabData.findUnique({
         where: { id: leadId },
         select: {
           id: true,
           especialidade: true,
-          sourceId: true,
-          phoneNumber: true,
+          lead: {
+            select: {
+              sourceIdentifier: true,
+              phone: true,
+            }
+          },
           espelhoBibliotecaId: true
         }
       });
@@ -81,13 +85,17 @@ export async function POST(request: Request): Promise<Response> {
         
         // Tentar buscar pelo sourceId (telefone)
         if (payload.telefone) {
-          lead = await prisma.leadChatwit.findFirst({
-            where: { phoneNumber: payload.telefone },
+          lead = await prisma.leadOabData.findFirst({
+            where: { lead: { phone: payload.telefone } },
             select: {
               id: true,
               especialidade: true,
-              sourceId: true,
-              phoneNumber: true,
+              lead: {
+                select: {
+                  sourceIdentifier: true,
+                  phone: true,
+                }
+              },
               espelhoBibliotecaId: true
             }
           });
@@ -98,13 +106,17 @@ export async function POST(request: Request): Promise<Response> {
         
         // Se ainda não encontrou, tentar buscar pelo espelhoBibliotecaId
         if (!lead && payload.espelhoBibliotecaId) {
-          lead = await prisma.leadChatwit.findFirst({
+          lead = await prisma.leadOabData.findFirst({
             where: { espelhoBibliotecaId: payload.espelhoBibliotecaId },
             select: {
               id: true,
               especialidade: true,
-              sourceId: true,
-              phoneNumber: true,
+              lead: {
+                select: {
+                  sourceIdentifier: true,
+                  phone: true,
+                }
+              },
               espelhoBibliotecaId: true
             }
           });
@@ -115,13 +127,17 @@ export async function POST(request: Request): Promise<Response> {
         
         // Se ainda não encontrou, verificar se o leadID fornecido é na verdade um espelhoBibliotecaId
         if (!lead) {
-          lead = await prisma.leadChatwit.findFirst({
+          lead = await prisma.leadOabData.findFirst({
             where: { espelhoBibliotecaId: leadId },
             select: {
               id: true,
               especialidade: true,
-              sourceId: true,
-              phoneNumber: true,
+              lead: {
+                select: {
+                  sourceIdentifier: true,
+                  phone: true,
+                }
+              },
               espelhoBibliotecaId: true
             }
           });
@@ -165,9 +181,9 @@ export async function POST(request: Request): Promise<Response> {
       
       if (isManuscrito && !isEspelho && !isProva) {
         // Marcar manuscrito como AGUARDANDO processamento
-        await prisma.leadChatwit.update({
+        await prisma.leadOabData.update({
           where: { id: actualLeadId },
-          data: { 
+          data: {
             manuscritoProcessado: false,  // NÃO processado ainda
             aguardandoManuscrito: true    // Aguardando processamento
           }
@@ -175,9 +191,9 @@ export async function POST(request: Request): Promise<Response> {
         console.log("[Enviar Manuscrito] Lead marcado como aguardando processamento");
       } else if (isEspelho && !isManuscrito && !isProva) {
         // Marcar espelho como AGUARDANDO processamento
-        await prisma.leadChatwit.update({
+        await prisma.leadOabData.update({
           where: { id: actualLeadId },
-          data: { 
+          data: {
             espelhoProcessado: false,     // NÃO processado ainda
             aguardandoEspelho: true       // Aguardando processamento
           }

@@ -32,7 +32,7 @@ export async function POST(request: Request): Promise<Response> {
     }
     
     // Buscar o lead no banco de dados
-    const lead = await prisma.leadChatwit.findUnique({
+    const lead = await prisma.leadOabData.findUnique({
       where: { id: leadId }
     });
     
@@ -42,9 +42,9 @@ export async function POST(request: Request): Promise<Response> {
     }
     
     // Marcar o lead como análise validada
-    await prisma.leadChatwit.update({
+    await prisma.leadOabData.update({
       where: { id: leadId },
-      data: { 
+      data: {
         analiseValidada: true,
         // Atualizar o payload da análise preliminar, caso tenha sido editado
         analisePreliminar: payload.analiseData

@@ -49,9 +49,9 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     // 1) Busca o lead + arquivos + usuário Chatwit
-    const lead = await prisma.leadChatwit.findUnique({
+    const lead = await prisma.leadOabData.findUnique({
       where: { sourceId },
-      include: { 
+      include: {
         arquivos: true,
         usuario: {
           select: {
@@ -173,7 +173,7 @@ export async function POST(request: Request): Promise<Response> {
       }
     }
     
-    await prisma.leadChatwit.update({
+    await prisma.leadOabData.update({
       where: { sourceId },
       data: updateData
     });

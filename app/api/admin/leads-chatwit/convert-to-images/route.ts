@@ -250,12 +250,12 @@ async function convertPdfToImages(pdfBuffer: Buffer, options: PDF2PicOptions): P
 // Corrigir a relação com ArquivoLeadChatwit usando o nome correto do campo
 async function atualizarStatusArquivos(leadId: string, arquivosConvertidos: boolean): Promise<void> {
   try {
-    await prisma.arquivoLeadChatwit.updateMany({
+    await prisma.arquivoLeadOab.updateMany({
       where: {
-        leadId: leadId // Usar o nome correto do campo conforme seu schema Prisma
+        leadOabDataId: leadId
       },
       data: {
-        pdfConvertido: arquivosConvertidos ? "true" : "false" // Usar o campo correto do modelo
+        pdfConvertido: arquivosConvertidos ? "true" : "false"
       }
     });
     
@@ -314,7 +314,7 @@ export async function POST(request: NextRequest) {
     if (!pdfUrls || !Array.isArray(pdfUrls) || pdfUrls.length === 0) {
       log.info(`URLs de PDF não fornecidas no payload, buscando PDF unificado do lead ${leadId}`);
       
-      const lead = await prisma.leadChatwit.findUnique({
+      const lead = await prisma.leadOabData.findUnique({
         where: {
           id: leadId
         },
@@ -425,10 +425,10 @@ export async function POST(request: NextRequest) {
         await atualizarStatusArquivos(leadId, true);
         
         // Armazenar URLs das imagens no campo imagensConvertidas
-        const updateResult = await prisma.leadChatwit.update({
+        const updateResult = await prisma.leadOabData.update({
           where: { id: leadId },
           data: {
-            imagensConvertidas: JSON.stringify(convertedUrls) 
+            imagensConvertidas: JSON.stringify(convertedUrls)
           }
         });
         
@@ -474,9 +474,9 @@ export async function GET(request: Request): Promise<Response> {
       );
     }
 
-    const arquivos = await prisma.arquivoLeadChatwit.findMany({
+    const arquivos = await prisma.arquivoLeadOab.findMany({
       where: {
-        leadId: leadId
+        leadOabDataId: leadId
       },
       select: {
         id: true,

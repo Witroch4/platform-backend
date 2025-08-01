@@ -18,7 +18,7 @@ export async function PUT(request: Request): Promise<Response> {
     console.log(`[Atualizar Especialidade] Atualizando lead ${leadId} com especialidade: ${especialidade}`);
 
     // Atualizar a especialidade do lead
-    const updatedLead = await prisma.leadChatwit.update({
+    const updatedLead = await prisma.leadOabData.update({
       where: { id: leadId },
       data: {
         especialidade: especialidade || null,

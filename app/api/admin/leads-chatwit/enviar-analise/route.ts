@@ -25,22 +25,26 @@ export async function POST(req: Request) {
     console.log("[Enviar Análise] Processando lead:", leadId);
 
     // Buscar dados do lead no banco
-    const lead = await prisma.leadChatwit.findUnique({
+    const lead = await prisma.leadOabData.findUnique({
       where: { id: leadId },
       select: {
         id: true,
-        name: true,
         nomeReal: true,
-        phoneNumber: true,
         arquivos: true,
         pdfUnificado: true,
         leadUrl: true,
-        sourceId: true,
         concluido: true,
         fezRecurso: true,
         provaManuscrita: true,
         textoDOEspelho: true,
-        espelhoCorrecao: true
+        espelhoCorrecao: true,
+        lead: {
+          select: {
+            name: true,
+            phone: true,
+            sourceIdentifier: true
+          }
+        }
       }
     });
 
@@ -54,7 +58,7 @@ export async function POST(req: Request) {
 
     console.log("[Enviar Análise] Lead encontrado:", {
       id: lead.id,
-      name: lead.name,
+      name: lead.lead?.name,
       temManuscrito: !!lead.provaManuscrita,
       temEspelho: !!(lead.textoDOEspelho || lead.espelhoCorrecao)
     });
@@ -62,8 +66,8 @@ export async function POST(req: Request) {
     // Preparar payload para o sistema externo
     const payload = {
       leadID: lead.id,
-      nome: lead.nomeReal || lead.name || "Lead sem nome",
-      telefone: lead.phoneNumber,
+      nome: lead.nomeReal || lead.lead?.name || "Lead sem nome",
+      telefone: lead.lead?.phone,
       analise: true, // Flag para indicar que é análise
       arquivos: lead.arquivos?.map((a: any) => ({
         id: a.id,
@@ -89,7 +93,7 @@ export async function POST(req: Request) {
       }),
       metadata: {
         leadUrl: lead.leadUrl,
-        sourceId: lead.sourceId || sourceId,
+        sourceId: lead.lead?.sourceIdentifier || sourceId,
         concluido: lead.concluido,
         fezRecurso: lead.fezRecurso
       }
@@ -133,7 +137,7 @@ export async function POST(req: Request) {
     console.log("[Enviar Análise] Enviado com sucesso para o sistema externo");
 
     // Marcar o lead como aguardando análise
-    await prisma.leadChatwit.update({
+    await prisma.leadOabData.update({
       where: { id: leadId },
       data: {
         aguardandoAnalise: true
