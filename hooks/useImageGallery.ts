@@ -53,9 +53,10 @@ export const useImageGallery = () => {
       } else {
         throw new Error(data.error || 'Erro desconhecido');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro ao carregar galeria:', error);
-      setError(error.message || 'Erro ao carregar galeria');
+      const message = error instanceof Error ? error.message : 'Erro ao carregar galeria';
+      setError(message);
     } finally {
       setIsLoading(false);
     }

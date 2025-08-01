@@ -281,7 +281,7 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
       
       console.log(`🔗 ❌ Nenhum responseId encontrado para sessão ${sessionId}`);
       return null;
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Erro ao buscar último responseId:', error);
       return null;
     }
@@ -1071,9 +1071,10 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
       setFiles(prev => [...prev, fileData]);
       
       return fileData;
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Erro durante upload:", error);
-      setFileError(`Erro ao enviar arquivo: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      const message = error instanceof Error ? error.message : 'Erro desconhecido';
+      setFileError(`Erro ao enviar arquivo: ${message}`);
       throw error;
     } finally {
       setIsFileLoading(false);
@@ -1107,7 +1108,7 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
       
       setFiles(response.data.data || []);
       return response.data.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro detalhado ao listar arquivos:', error);
       
       // Detalhes específicos do erro
@@ -1119,7 +1120,8 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
         console.error('Sem resposta do servidor. Requisição:', error.request);
         setFileError('Sem resposta do servidor. Verifique sua conexão.');
       } else {
-        setFileError(`Erro ao listar arquivos: ${error.message}`);
+        const message = error instanceof Error ? error.message : 'Erro ao listar arquivos';
+        setFileError(`Erro ao listar arquivos: ${message}`);
       }
       
       return [];
@@ -1158,7 +1160,7 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
       });
       
       return response.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro detalhado ao obter arquivo:', error);
       
       // Detalhes específicos do erro
@@ -1170,7 +1172,8 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
         console.error('Sem resposta do servidor. Requisição:', error.request);
         setFileError('Sem resposta do servidor. Verifique sua conexão.');
       } else {
-        setFileError(`Erro ao obter arquivo: ${error.message}`);
+        const message = error instanceof Error ? error.message : 'Erro ao obter arquivo';
+        setFileError(`Erro ao obter arquivo: ${message}`);
       }
       
       return null;
@@ -1232,7 +1235,7 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
       });
       
       return content;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro detalhado ao obter conteúdo do arquivo:', error);
       
       // Detalhes específicos do erro
@@ -1244,7 +1247,8 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
         console.error('Sem resposta do servidor. Requisição:', error.request);
         setFileError('Sem resposta do servidor. Verifique sua conexão.');
       } else {
-        setFileError(`Erro ao obter conteúdo do arquivo: ${error.message}`);
+        const message = error instanceof Error ? error.message : 'Erro ao obter conteúdo do arquivo';
+        setFileError(`Erro ao obter conteúdo do arquivo: ${message}`);
       }
       
       return null;
@@ -1271,7 +1275,7 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
       setFiles(prev => prev.filter(f => f.id !== fileId));
       
       return response.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro detalhado ao excluir arquivo:', error);
       
       // Detalhes específicos do erro
@@ -1283,7 +1287,8 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
         console.error('Sem resposta do servidor. Requisição:', error.request);
         setFileError('Sem resposta do servidor. Verifique sua conexão.');
       } else {
-        setFileError(`Erro ao excluir arquivo: ${error.message}`);
+        const message = error instanceof Error ? error.message : 'Erro ao excluir arquivo';
+        setFileError(`Erro ao excluir arquivo: ${message}`);
       }
       
       return null;
@@ -1355,7 +1360,7 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
       console.log('Imagem editada com sucesso');
       
       return response.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro detalhado ao editar imagem:', error);
       
       // Detalhes específicos do erro
@@ -1367,7 +1372,8 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
         console.error('Sem resposta do servidor. Requisição:', error.request);
         setFileError('Sem resposta do servidor. Verifique sua conexão.');
       } else {
-        setFileError(`Erro ao editar imagem: ${error.message}`);
+        const message = error instanceof Error ? error.message : 'Erro ao editar imagem';
+        setFileError(`Erro ao editar imagem: ${message}`);
       }
       
       return null;
@@ -1432,7 +1438,7 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
       console.log('Variação da imagem criada com sucesso');
       
       return response.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro detalhado ao criar variação de imagem:', error);
       
       // Detalhes específicos do erro
@@ -1444,7 +1450,8 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
         console.error('Sem resposta do servidor. Requisição:', error.request);
         setFileError('Sem resposta do servidor. Verifique sua conexão.');
       } else {
-        setFileError(`Erro ao criar variação de imagem: ${error.message}`);
+        const message = error instanceof Error ? error.message : 'Erro ao criar variação de imagem';
+        setFileError(`Erro ao criar variação de imagem: ${message}`);
       }
       
       return null;
@@ -1462,12 +1469,12 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
       console.log('Resultado do teste de conexão OpenAI:', result);
       
       return result;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro ao testar conexão com OpenAI:', error);
       return {
         success: false,
         status: 'error',
-        message: `Erro na conexão: ${error.message || 'Erro desconhecido'}`
+        message: `Erro na conexão: ${error instanceof Error ? error.message : 'Erro desconhecido'}`
       };
     }
   };
@@ -1490,7 +1497,7 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
         message: 'Conexão com o backend OK',
         data: response.data
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro ao testar conexão com o backend:', error);
       
       // Detalhes específicos do erro
@@ -1511,7 +1518,7 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
         return {
           success: false,
           status: 'error',
-          message: `Erro na conexão: ${error.message || 'Erro desconhecido'}`
+          message: `Erro na conexão: ${error instanceof Error ? error.message : 'Erro desconhecido'}`
         };
       }
     }
@@ -1574,7 +1581,7 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
               type: file.type
             }
           };
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error(`Teste de upload: Erro na tentativa ${retryCount + 1}:`, error);
           
           // Se foi erro de timeout
@@ -1599,14 +1606,15 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
       
       // Iniciar tentativas de upload
       return await attemptUpload();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Teste de upload: Erro final:', error);
-      setFileError(error.message || 'Erro desconhecido no teste de upload');
+      const message = error instanceof Error ? error.message : 'Erro desconhecido no teste de upload';
+      setFileError(message);
       
       return {
         success: false,
-        status: error.name === 'AbortError' ? 'timeout' : 'error',
-        message: error.message || 'Erro desconhecido no teste de upload',
+        status: error instanceof Error && error.name === 'AbortError' ? 'timeout' : 'error',
+        message,
         file: {
           name: file.name,
           size: file.size,
