@@ -164,8 +164,7 @@ export async function POST(request: Request): Promise<Response> {
           data: {
             recursoPreliminar: webhookData.textoRecurso || JSON.stringify(webhookData),
             recursoValidado: false,
-            aguardandoRecurso: false,
-            updatedAt: new Date()
+            aguardandoRecurso: false
           }
         });
         
@@ -254,8 +253,7 @@ export async function POST(request: Request): Promise<Response> {
             recursoUrl: recursoUrl,
             recursoArgumentacaoUrl: recursoArgumentacaoUrl,
             recursoValidado: true,
-            aguardandoRecurso: false,
-            updatedAt: new Date()
+            aguardandoRecurso: false
           }
         });
         
@@ -338,8 +336,7 @@ export async function POST(request: Request): Promise<Response> {
             aguardandoProcessamento: false,
             totalUsos: {
               increment: 1
-            },
-            updatedAt: new Date()
+            }
           }
         });
         
@@ -425,8 +422,7 @@ export async function POST(request: Request): Promise<Response> {
             ...(urlsEspelho.length > 0 && { espelhoCorrecao: JSON.stringify(urlsEspelho) }),
             // Marcar como processado e remover estado de aguardando
             espelhoBibliotecaProcessado: true,
-            aguardandoEspelho: false,
-            updatedAt: new Date()
+            aguardandoEspelho: false
           }
         });
         
@@ -500,8 +496,7 @@ export async function POST(request: Request): Promise<Response> {
           data: {
             analisePreliminar: webhookData,
             analiseValidada: false,
-            aguardandoAnalise: true, // Mantém aguardando análise até que seja validada
-            updatedAt: new Date()
+            aguardandoAnalise: true // Mantém aguardando análise até que seja validada
           }
         });
         
@@ -676,8 +671,7 @@ export async function POST(request: Request): Promise<Response> {
             analiseUrl: analiseUrl,
             analiseProcessada: true,
             analiseValidada: true, // Marcar como validada para consultoria fase 2
-            aguardandoAnalise: false,
-            updatedAt: new Date()
+            aguardandoAnalise: false
           }
         });
         
@@ -1094,8 +1088,7 @@ export async function POST(request: Request): Promise<Response> {
         // Atualizar o lead com as informações do espelho de consultoria
         const leadUpdateData: any = {
           espelhoProcessado: true,      // Marcar como processado
-          aguardandoEspelho: false,     // Não está mais aguardando
-          updatedAt: new Date()
+          aguardandoEspelho: false      // Não está mais aguardando
         };
         
         // Adicionar texto do espelho se fornecido

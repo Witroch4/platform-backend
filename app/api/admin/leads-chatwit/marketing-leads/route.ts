@@ -146,9 +146,6 @@ export async function GET(request: NextRequest) {
           }
         },
         lead: true
-      },
-      orderBy: {
-        createdAt: 'desc'
       }
     });
 
