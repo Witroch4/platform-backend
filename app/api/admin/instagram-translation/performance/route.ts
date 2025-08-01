@@ -152,9 +152,9 @@ export async function GET(request: NextRequest) {
         queryBreakdown: queryStats.status === 'fulfilled' 
           ? queryStats.value.monitor.queryBreakdown 
           : [],
-        cacheMetrics: cacheStats.status === 'fulfilled' 
-          ? await instagramTemplateCache.getDetailedMetrics?.() || {}
-          : {},
+        cacheMetrics: cacheStats.status === 'fulfilled'
+          ? await instagramTemplateCache.getQueryPerformanceMetrics?.() || []
+          : [],
         connectionPoolMetrics: connectionPoolHealth.status === 'fulfilled' 
           ? connectionPoolHealth.value.metrics 
           : {},

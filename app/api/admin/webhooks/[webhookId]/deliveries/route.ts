@@ -149,18 +149,29 @@ export async function POST(
 
         switch (action) {
           case 'retry':
-            result = await webhookManager.retryDelivery(deliveryId);
-            message = result ? 'Delivery retry initiated' : 'Failed to retry delivery';
+            await webhookManager.retryWebhookDelivery(deliveryId);
+            result = true;
+            message = 'Delivery retry initiated';
             break;
           
           case 'cancel':
-            result = await webhookManager.cancelDelivery(deliveryId);
-            message = result ? 'Delivery cancelled' : 'Failed to cancel delivery';
+            await webhookManager.markDeliveryAsFailed(
+              deliveryId,
+              'Delivery cancelled'
+            );
+            result = true;
+            message = 'Delivery cancelled';
             break;
           
           case 'mark_success':
-            result = await webhookManager.markDeliverySuccess(deliveryId);
-            message = result ? 'Delivery marked as successful' : 'Failed to mark delivery as successful';
+            await webhookManager.markDeliveryAsDelivered(
+              deliveryId,
+              200,
+              'Manually marked as successful',
+              0
+            );
+            result = true;
+            message = 'Delivery marked as successful';
             break;
           
           default:
