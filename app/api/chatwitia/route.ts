@@ -1269,8 +1269,6 @@ async function handleOpenAIRequest(messages: Message[], model: string, sessionId
                                   imageUrl: imageUrl,
                                   thumbnailUrl: thumbnailUrl,
                                   mimeType: uploadResult.mime_type,
-                                  previousResponseId: this.previousResponseId || null,
-                                  responseId: this.responseId || null,
                                   createdAt: new Date()
                                 }
                               });
