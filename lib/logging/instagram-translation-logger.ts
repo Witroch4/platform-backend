@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { performance } from 'perf_hooks';
 import { connection } from '../redis';
 import type IORedis from 'ioredis';
@@ -599,3 +600,32 @@ export async function initializeInstagramTranslationLogging(): Promise<void> {
     throw error;
   }
 }
+=======
+import { logger, LOG_CATEGORIES } from './interactive-message-logger'
+
+export interface TranslationLogContext {
+  usuarioChatwitId: string
+  contextData?: Record<string, any>
+}
+
+/**
+ * Registra o evento de tradução de template do Instagram.
+ */
+export function logInstagramTranslation(
+  message: string,
+  { usuarioChatwitId, contextData = {} }: TranslationLogContext
+): void {
+  try {
+    logger.info(
+      message,
+      LOG_CATEGORIES.SYSTEM,
+      { userId: usuarioChatwitId },
+      contextData
+    )
+  } catch (error: any) {
+    console.error(
+      `[logInstagramTranslation] Erro ao registrar tradução para o usuário ${usuarioChatwitId}: ${error.message}`
+    )
+  }
+}
+>>>>>>> 2e45d85462b61011f5f293ab34968a4c66ff84ba
