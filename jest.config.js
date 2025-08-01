@@ -10,6 +10,9 @@ module.exports = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
   },
+  automock: false,
+  restoreMocks: true,
+  moduleDirectories: ['node_modules', '<rootDir>'],
   transform: {
     '^.+\\.(ts|tsx)$': ['ts-jest', {
       tsconfig: {
