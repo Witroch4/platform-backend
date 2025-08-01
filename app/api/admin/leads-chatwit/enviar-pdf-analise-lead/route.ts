@@ -49,7 +49,7 @@ export async function POST(request: Request): Promise<Response> {
 
     // 1) Busca o lead + arquivos
     const lead = await prisma.leadOabData.findUnique({
-      where: { sourceId },
+      where: { leadId: sourceId },
       include: { arquivos: true }
     });
     
@@ -61,9 +61,9 @@ export async function POST(request: Request): Promise<Response> {
     // Buscar o token do usuário Chatwit
     if (!accessToken) {
       const usuarioChatwit = await prisma.usuarioChatwit.findFirst({
-        where: { 
-          leads: {
-            some: { sourceId }
+        where: {
+          leadsOabData: {
+            some: { leadId: sourceId }
           }
         },
         select: { chatwitAccessToken: true }
@@ -130,9 +130,9 @@ export async function POST(request: Request): Promise<Response> {
     if (urlAccessToken && urlAccessToken !== CHATWOOT_ACCESS_TOKEN) {
       // Buscar o usuário Chatwit associado ao lead
       const usuarioChatwit = await prisma.usuarioChatwit.findFirst({
-        where: { 
-          leads: {
-            some: { sourceId }
+        where: {
+          leadsOabData: {
+            some: { leadId: sourceId }
           }
         }
       });
@@ -146,7 +146,7 @@ export async function POST(request: Request): Promise<Response> {
     }
     
     await prisma.leadOabData.update({
-      where: { sourceId },
+      where: { leadId: sourceId },
       data: updateData
     });
 
