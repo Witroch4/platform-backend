@@ -58,9 +58,9 @@ export async function PATCH(
       return new NextResponse("Não autorizado", { status: 401 });
     }
     
-    const { title, model, lastResponseId } = await req.json();
-    
-    console.log(`🔧 PATCH sessão ${sessionId}:`, { title, model, lastResponseId });
+    const { title, model } = await req.json();
+
+    console.log(`🔧 PATCH sessão ${sessionId}:`, { title, model });
     
     // Verificar se a sessão pertence ao usuário
     const chatSession = await db.chatSession.findUnique({
@@ -80,15 +80,13 @@ export async function PATCH(
       },
       data: {
         ...(title && { title }),
-        ...(model && { model }),
-        ...(lastResponseId && { lastResponseId })
+        ...(model && { model })
       }
     });
-    
+
     console.log(`✅ Sessão ${sessionId} atualizada:`, {
       title: updatedSession.title,
-      model: updatedSession.model,
-      lastResponseId: updatedSession.lastResponseId
+      model: updatedSession.model
     });
     
     return NextResponse.json(updatedSession);

@@ -87,8 +87,6 @@ export async function GET(req: Request) {
       where: baseWhere,
       select: {
         id: true,
-        responseId: true,
-        previousResponseId: true,
         prompt: true,
         revisedPrompt: true,
         model: true,
@@ -110,14 +108,12 @@ export async function GET(req: Request) {
       );
     }
 
-    console.log(`✅ Imagem encontrada: ${image.id}, responseId: ${image.responseId || 'nenhum'}`);
+    console.log(`✅ Imagem encontrada: ${image.id}`);
 
     return NextResponse.json({
       success: true,
       image: {
         id: image.id,
-        responseId: image.responseId,
-        previousResponseId: image.previousResponseId,
         prompt: image.prompt,
         revisedPrompt: image.revisedPrompt,
         model: image.model,

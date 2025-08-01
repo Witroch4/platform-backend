@@ -64,7 +64,7 @@ export async function POST(
     
     // Extrair dados do corpo da requisição
     const body = await req.json();
-    const { role, content, contentType = "text", audioData, imageUrl, previousResponseId, responseId } = body;
+    const { role, content, contentType = "text", audioData, imageUrl } = body;
     
     // Verificar se a sessão pertence ao usuário
     const chatSession = await db.chatSession.findUnique({
@@ -85,9 +85,7 @@ export async function POST(
         content,
         contentType,
         audioData,
-        imageUrl,
-        previousResponseId,
-        responseId
+        imageUrl
       }
     });
     
