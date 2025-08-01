@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
+import { auth } from '@/auth';
 import {
   getQueryPerformanceStats,
   warmInstagramTemplateCache,
@@ -18,7 +17,7 @@ import { instagramTemplateCache } from '@/lib/cache/instagram-template-cache';
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await auth();
     
     if (!session?.user) {
       return NextResponse.json(
@@ -78,8 +77,16 @@ export async function GET(request: NextRequest) {
       response.summary.totalQueries = stats.monitor.totalQueries;
       response.summary.cacheHitRate = stats.cache.hitRate;
       response.summary.averageResponseTime = stats.cache.averageResponseTime;
-      response.summary.errorRate = stats.monitor.totalQueries > 0 
-        ? ((stats.monitor.totalQueries - stats.monitor.queryBreakdown.reduce((sum, q) => sum + q.count, 0)) / stats.monitor.totalQueries) * 100
+      response.summary.errorRate = stats.monitor.totalQueries > 0
+        ? ((
+            stats.monitor.totalQueries -
+            stats.monitor.queryBreakdown.reduce(
+              (sum: number, q: { count: number }) => sum + q.count,
+              0
+            )
+          ) /
+            stats.monitor.totalQueries) *
+          100
         : 0;
     } else {
       response.queryPerformance = { error: 'Failed to retrieve query performance stats' };
@@ -185,7 +192,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await auth();
     
     if (!session?.user) {
       return NextResponse.json(
@@ -276,7 +283,7 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await auth();
     
     if (!session?.user) {
       return NextResponse.json(
