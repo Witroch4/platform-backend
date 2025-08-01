@@ -21,7 +21,7 @@ export async function GET(
     }
 
     // Check if user has access to this template
-    const hasAccess = template.scope === 'global' || 
+    const hasAccess = template.scope === 'GLOBAL' ||
                      template.createdById === session.user.id ||
                      session.user.role === 'ADMIN' ||
                      session.user.role === 'SUPERADMIN';
@@ -56,8 +56,6 @@ export async function PUT(
     const updates = {
       name: body.name,
       description: body.description,
-      content: body.content,
-      category: body.category,
       tags: body.tags
     };
 
