@@ -1,6 +1,13 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { Redis } from 'ioredis';
 import { FeatureFlagManager } from './feature-flag-manager';
+
+type J = Prisma.JsonValue;
+type JObj = Prisma.JsonObject;
+
+function isJsonObject(v: J | undefined | null): v is JObj {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
 
 export interface RollbackPlan {
   id: string;
@@ -74,7 +81,7 @@ export class RollbackManager {
           previousState: {
             enabled: flag.enabled,
             rolloutPercentage: flag.rolloutPercentage,
-            conditions: flag.conditions,
+            conditions: isJsonObject(flag.conditions) ? flag.conditions : undefined,
           },
           rollbackState: {
             enabled: false,
@@ -130,7 +137,7 @@ export class RollbackManager {
             flagConfig.flagName,
             flagConfig.rollbackState.enabled,
             flagConfig.rollbackState.rolloutPercentage,
-            flagConfig.rollbackState.conditions,
+            flagConfig.rollbackState.conditions ?? {},
             `rollback-${executedBy}`
           );
           

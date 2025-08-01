@@ -1,6 +1,13 @@
 import { PrismaClient, Prisma, FeatureFlag } from '@prisma/client';
 import { Redis } from 'ioredis';
 
+type J = Prisma.JsonValue;
+type JObj = Prisma.JsonObject;
+
+function isJsonObject(v: J | undefined | null): v is JObj {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
 
 export interface FeatureFlagEvaluation {
   flagName: string;
@@ -8,7 +15,7 @@ export interface FeatureFlagEvaluation {
   reason: string;
   userId?: string;
   inboxId?: string;
-  metadata?: Prisma.JsonObject;
+  metadata?: Prisma.JsonValue;
 }
 
 export interface ABTestConfig {
@@ -49,7 +56,7 @@ export class FeatureFlagManager {
     name: string,
     enabled: boolean,
     rolloutPercentage: number = 100,
-    conditions?: Prisma.JsonObject,
+    conditions?: Prisma.JsonValue,
     createdBy: string = 'system'
   ): Promise<FeatureFlag> {
     try {
@@ -95,7 +102,7 @@ export class FeatureFlagManager {
     flagName: string,
     userId?: string,
     inboxId?: string,
-    metadata?: Prisma.JsonObject
+    metadata?: Prisma.JsonValue
   ): Promise<boolean> {
     const evaluation = await this.evaluate(flagName, userId, inboxId, metadata);
     return evaluation.enabled;
@@ -105,7 +112,7 @@ export class FeatureFlagManager {
     flagName: string,
     userId?: string,
     inboxId?: string,
-    metadata?: Prisma.JsonObject
+    metadata?: Prisma.JsonValue
   ): Promise<FeatureFlagEvaluation> {
     try {
       const flag = await this.getFeatureFlag(flagName);
@@ -151,12 +158,15 @@ export class FeatureFlagManager {
       }
 
       // Check conditions
-      if (flag.conditions && Object.keys(flag.conditions).length > 0) {
-        const conditionsMet = await this.evaluateConditions(flag.conditions, {
-          userId,
-          inboxId,
-          metadata,
-        });
+      if (flag.conditions) {
+        const conditionsMet = await this.evaluateConditions(
+          isJsonObject(flag.conditions) ? flag.conditions : {},
+          {
+            userId,
+            inboxId,
+            metadata: isJsonObject(metadata) ? metadata : {},
+          }
+        );
 
         if (!conditionsMet) {
           return {
@@ -374,7 +384,7 @@ export class FeatureFlagManager {
     context: {
       userId?: string;
       inboxId?: string;
-      metadata?: Prisma.JsonObject;
+      metadata?: Prisma.JsonValue;
     }
   ): Promise<boolean> {
     // Simple condition evaluation - can be extended
@@ -387,9 +397,11 @@ export class FeatureFlagManager {
           if (context.userId !== value) return false;
           break;
         case 'metadata':
-          if (!context.metadata) return false;
-          for (const [metaKey, metaValue] of Object.entries(value)) {
-            if (context.metadata[metaKey] !== metaValue) return false;
+          if (!isJsonObject(context.metadata)) return false;
+          if (isJsonObject(value)) {
+            for (const [metaKey, metaValue] of Object.entries(value)) {
+              if (context.metadata[metaKey] !== metaValue) return false;
+            }
           }
           break;
       }
