@@ -29,8 +29,18 @@ export async function POST(request: Request): Promise<Response> {
     }
     
     // Buscar o lead no banco de dados
-    const lead = await prisma.leadChatwit.findUnique({
-      where: { id: leadId }
+    const lead = await prisma.leadOabData.findUnique({
+      where: { id: leadId },
+      include: {
+        lead: {
+          select: {
+            name: true,
+            email: true,
+            phone: true,
+            sourceIdentifier: true
+          }
+        }
+      }
     });
     
     if (!lead) {
@@ -49,7 +59,7 @@ export async function POST(request: Request): Promise<Response> {
       updateData.recursoPreliminar = { textoRecurso: payload.textoRecurso };
     }
 
-    await prisma.leadChatwit.update({
+    await prisma.leadOabData.update({
       where: { id: leadId },
       data: updateData
     });
@@ -60,7 +70,7 @@ export async function POST(request: Request): Promise<Response> {
     const requestPayload = {
       // Flags necessárias para o sistema externo
       leadID: leadId,
-      telefone: lead.phoneNumber,
+      telefone: lead.lead?.phone,
       RecursoFinalizado: true, // Flag principal do recurso
       recursoValidado: true,    // Flag para indicar que foi validado
       
@@ -68,8 +78,8 @@ export async function POST(request: Request): Promise<Response> {
       textoRecurso: payload.textoRecurso || '',
       
       // Dados do lead
-      nome: lead.nomeReal || lead.name || "",
-      email: lead.email || "",
+      nome: lead.nomeReal || lead.lead?.name || "",
+      email: lead.lead?.email || "",
       
       // Dados da análise preliminar (necessários para o recurso)
       analisePreliminar: lead.analisePreliminar || null,
@@ -80,7 +90,7 @@ export async function POST(request: Request): Promise<Response> {
       // Metadados
       metadata: {
         leadUrl: lead.leadUrl,
-        sourceId: lead.sourceId,
+        sourceId: lead.lead?.sourceIdentifier,
         consultoriaFase2: lead.consultoriaFase2,
         especialidade: lead.especialidade
       }

@@ -80,7 +80,7 @@ export async function GET(request: Request): Promise<Response> {
           // Contar o número de leads por usuário
           _count: {
             select: {
-              leads: true,
+              leadsOabData: true,
             },
           },
         },
@@ -91,7 +91,7 @@ export async function GET(request: Request): Promise<Response> {
     // Formatar os dados para a resposta
     const formattedUsuarios = usuarios.map(usuario => ({
       ...usuario,
-      leadsCount: usuario._count.leads,
+      leadsCount: usuario._count.leadsOabData,
       _count: undefined, // Remove o campo _count
     }));
 

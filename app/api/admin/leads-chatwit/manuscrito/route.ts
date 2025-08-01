@@ -14,7 +14,7 @@ export async function PUT(request: Request) {
       );
     }
 
-    const lead = await prisma.leadChatwit.update({
+    const lead = await prisma.leadOabData.update({
       where: { id: leadId },
       data: {
         provaManuscrita: texto,
@@ -51,7 +51,7 @@ export async function DELETE(request: Request) {
     console.log(`[API Manuscrito] Iniciando exclusão do manuscrito para lead: ${leadId}`);
 
     // Resetar completamente todas as informações relacionadas ao manuscrito
-    const lead = await prisma.leadChatwit.update({
+    const lead = await prisma.leadOabData.update({
       where: { id: leadId },
       data: {
         // Campos específicos do manuscrito

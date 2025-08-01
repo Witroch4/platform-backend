@@ -20,7 +20,7 @@ export async function DELETE(request: Request): Promise<Response> {
     console.log(`[Excluir Espelho] Excluindo espelho do lead: ${leadId}`);
 
     // Resetar todos os campos relacionados ao espelho
-    const updatedLead = await prisma.leadChatwit.update({
+    const updatedLead = await prisma.leadOabData.update({
       where: { id: leadId },
       data: {
         espelhoCorrecao: null,
@@ -64,7 +64,7 @@ export async function PUT(request: Request): Promise<Response> {
     console.log(`[Salvar Espelho] Salvando espelho do lead: ${leadId}`);
 
     // Atualizar o espelho no banco de dados
-    const updatedLead = await prisma.leadChatwit.update({
+    const updatedLead = await prisma.leadOabData.update({
       where: { id: leadId },
       data: {
         textoDOEspelho: texto ? texto : Prisma.JsonNull,

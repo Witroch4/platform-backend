@@ -49,14 +49,17 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     // 1) Busca o lead + arquivos + usuário Chatwit
-    const lead = await prisma.leadOabData.findUnique({
-      where: { sourceId },
+    const lead = await prisma.leadOabData.findFirst({
+      where: { lead: { sourceIdentifier: sourceId } },
       include: {
         arquivos: true,
-        usuario: {
+        usuarioChatwit: {
           select: {
             chatwitAccountId: true
           }
+        },
+        lead: {
+          select: { sourceIdentifier: true }
         }
       }
     });
@@ -67,12 +70,12 @@ export async function POST(request: Request): Promise<Response> {
 
     // 2) Buscar o usuário Chatwit para obter token e accountId
     const usuarioChatwit = await prisma.usuarioChatwit.findFirst({
-      where: { 
-        leads: {
-          some: { sourceId }
+      where: {
+        leadsOabData: {
+          some: { lead: { sourceIdentifier: sourceId } }
         }
       },
-      select: { 
+      select: {
         chatwitAccountId: true
       }
     });
@@ -85,12 +88,12 @@ export async function POST(request: Request): Promise<Response> {
     if (!accessToken) {
       // Buscar token do usuário Chatwit
       const usuarioComToken = await prisma.usuarioChatwit.findFirst({
-        where: { 
-          leads: {
-            some: { sourceId }
+        where: {
+          leadsOabData: {
+            some: { lead: { sourceIdentifier: sourceId } }
           }
         },
-        select: { 
+        select: {
           chatwitAccountId: true
         }
       });
@@ -155,9 +158,9 @@ export async function POST(request: Request): Promise<Response> {
     if (urlAccessToken && urlAccessToken !== CHATWOOT_ACCESS_TOKEN) {
       // Buscar o usuário Chatwit associado ao lead
       const usuarioChatwit = await prisma.usuarioChatwit.findFirst({
-        where: { 
-          leads: {
-            some: { sourceId }
+        where: {
+          leadsOabData: {
+            some: { lead: { sourceIdentifier: sourceId } }
           }
         }
       });
@@ -173,8 +176,8 @@ export async function POST(request: Request): Promise<Response> {
       }
     }
     
-    await prisma.leadOabData.update({
-      where: { sourceId },
+    await prisma.leadOabData.updateMany({
+      where: { lead: { sourceIdentifier: sourceId } },
       data: updateData
     });
 

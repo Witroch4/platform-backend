@@ -33,7 +33,12 @@ export async function POST(request: Request): Promise<Response> {
     
     // Buscar o lead no banco de dados
     const lead = await prisma.leadOabData.findUnique({
-      where: { id: leadId }
+      where: { id: leadId },
+      include: {
+        lead: {
+          select: { phone: true }
+        }
+      }
     });
     
     if (!lead) {
@@ -63,7 +68,7 @@ export async function POST(request: Request): Promise<Response> {
     const requestPayload = {
       // Flags necessárias para o sistema externo
       leadID: leadId,
-      telefone: lead.phoneNumber,
+      telefone: lead.lead?.phone,
       
       // Flag correta baseada no tipo de análise
       ...(isAnaliseSimulado 
@@ -74,7 +79,7 @@ export async function POST(request: Request): Promise<Response> {
       // Garantir que os campos do cabeçalho estejam explicitamente presentes
       exameDescricao: analiseData.exameDescricao || "",
       inscricao: analiseData.inscricao || "",
-      nomeExaminando: analiseData.nomeExaminando || lead.nomeReal || lead.name || "",
+      nomeExaminando: analiseData.nomeExaminando || lead.nomeReal || lead.lead?.name || "",
       seccional: analiseData.seccional || "",
       areaJuridica: analiseData.areaJuridica || "",
       notaFinal: analiseData.notaFinal || "",
