@@ -520,7 +520,7 @@ export class WebhookManager {
         error: result.error,
         deliveryId
       };
-    } catch (error) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -817,7 +817,7 @@ export class WebhookManager {
         error: response.ok ? undefined : `HTTP ${response.status}: ${response.statusText}`
       };
 
-    } catch (error) {
+    } catch (error: unknown) {
       const responseTime = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
@@ -908,7 +908,7 @@ export class WebhookManager {
     try {
       const cached = await redis.get(`webhook:config:${webhookId}`);
       return cached ? JSON.parse(cached) : null;
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[WebhookManager] Error getting cached webhook config:', error);
       return null;
     }

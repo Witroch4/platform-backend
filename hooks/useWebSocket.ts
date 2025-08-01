@@ -154,13 +154,13 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
         originalClose.call(mockWs);
       };
 
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[WebSocket] Connection error:', error);
-      setState(prev => ({ 
-        ...prev, 
-        connected: false, 
-        connecting: false, 
-        error: error instanceof Error ? error.message : 'Connection failed' 
+      setState(prev => ({
+        ...prev,
+        connected: false,
+        connecting: false,
+        error: error instanceof Error ? error.message : 'Connection failed'
       }));
       
       scheduleReconnect();

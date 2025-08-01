@@ -60,7 +60,7 @@ export const useImageGeneration = (sessionId?: string) => {
           console.log(`Carregadas ${images.length} imagens da sessão ${sessionId}`);
         }
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Erro ao carregar imagens da sessão:', error);
     } finally {
       setIsLoading(false);
@@ -113,9 +113,10 @@ export const useImageGeneration = (sessionId?: string) => {
       }
       
       return null;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro ao salvar imagem no MinIO:', error);
-      toast.error(`Erro ao salvar imagem: ${error.message}`);
+      const message = error instanceof Error ? error.message : JSON.stringify(error);
+      toast.error(`Erro ao salvar imagem: ${message}`);
       return null;
     }
   }, []);
@@ -241,8 +242,8 @@ export const useImageGeneration = (sessionId?: string) => {
         
         return images;
       }
-    } catch (error: any) {
-      const errorMessage = error?.message || 'Erro desconhecido ao gerar imagem';
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido ao gerar imagem';
       console.error('Erro na geração de imagem:', error);
       
       setError(errorMessage);
