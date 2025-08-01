@@ -1,17 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma, FeatureFlag } from '@prisma/client';
 import { Redis } from 'ioredis';
 
-export interface FeatureFlag {
-  id: string;
-  name: string;
-  description: string;
-  enabled: boolean;
-  rolloutPercentage: number;
-  conditions?: Record<string, any>;
-  createdAt: Date;
-  updatedAt: Date;
-  createdBy: string;
-}
 
 export interface FeatureFlagEvaluation {
   flagName: string;
@@ -19,14 +8,14 @@ export interface FeatureFlagEvaluation {
   reason: string;
   userId?: string;
   inboxId?: string;
-  metadata?: Record<string, any>;
+  metadata?: Prisma.JsonObject;
 }
 
 export interface ABTestConfig {
   name: string;
   variants: {
-    control: { percentage: number; config: Record<string, any> };
-    treatment: { percentage: number; config: Record<string, any> };
+    control: { percentage: number; config: Prisma.JsonObject };
+    treatment: { percentage: number; config: Prisma.JsonObject };
   };
   metrics: string[];
   startDate: Date;
@@ -60,7 +49,7 @@ export class FeatureFlagManager {
     name: string,
     enabled: boolean,
     rolloutPercentage: number = 100,
-    conditions?: Record<string, any>,
+    conditions?: Prisma.JsonObject,
     createdBy: string = 'system'
   ): Promise<FeatureFlag> {
     try {
@@ -106,7 +95,7 @@ export class FeatureFlagManager {
     flagName: string,
     userId?: string,
     inboxId?: string,
-    metadata?: Record<string, any>
+    metadata?: Prisma.JsonObject
   ): Promise<boolean> {
     const evaluation = await this.evaluate(flagName, userId, inboxId, metadata);
     return evaluation.enabled;
@@ -116,7 +105,7 @@ export class FeatureFlagManager {
     flagName: string,
     userId?: string,
     inboxId?: string,
-    metadata?: Record<string, any>
+    metadata?: Prisma.JsonObject
   ): Promise<FeatureFlagEvaluation> {
     try {
       const flag = await this.getFeatureFlag(flagName);
@@ -381,11 +370,11 @@ export class FeatureFlagManager {
   }
 
   private async evaluateConditions(
-    conditions: Record<string, any>,
+    conditions: Prisma.JsonObject,
     context: {
       userId?: string;
       inboxId?: string;
-      metadata?: Record<string, any>;
+      metadata?: Prisma.JsonObject;
     }
   ): Promise<boolean> {
     // Simple condition evaluation - can be extended

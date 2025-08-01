@@ -296,7 +296,7 @@ export class TemplateLibraryService {
     templateId: string,
     userId: string,
     updates: Partial<CreateTemplateLibraryData>
-  ): Promise<TemplateLibrary> {
+  ): Promise<Template> {
     // Check if user has permission to update (creator or admin)
     const template = await db.template.findUnique({
       where: { id: templateId }
