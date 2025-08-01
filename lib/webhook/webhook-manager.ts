@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import { prisma } from '../prisma';
@@ -202,7 +201,7 @@ export class WebhookManager {
     // Primeiro, verifica se há entregas pendentes
     const pendingCount = await prisma.webhookDelivery.count({
       where: {
-        webhookConfigId: id,
+        webhookId: id,
         status: 'pending',
       },
     });
@@ -214,7 +213,7 @@ export class WebhookManager {
     // Deleta em transação para garantir consistência
     await prisma.$transaction([
       prisma.webhookDelivery.deleteMany({
-        where: { webhookConfigId: id },
+        where: { webhookId: id },
       }),
       prisma.webhookConfig.delete({
         where: { id },
@@ -274,18 +273,18 @@ export class WebhookManager {
   }
 
   async listWebhookDeliveries(options: {
-    webhookConfigId?: string;
+    webhookId?: string;
     page?: number;
     limit?: number;
     status?: string;
     search?: string;
   } = {}): Promise<{ items: WebhookDelivery[]; total: number; page: number; limit: number }> {
-    const { webhookConfigId, page = 1, limit = 20, status, search } = options;
+    const { webhookId, page = 1, limit = 20, status, search } = options;
     const skip = (page - 1) * limit;
 
     const where: any = {};
-    if (webhookConfigId) {
-      where.webhookConfigId = webhookConfigId;
+    if (webhookId) {
+      where.webhookId = webhookId;
     }
     if (status) {
       where.status = status;
@@ -337,38 +336,38 @@ export class WebhookManager {
   }
 
   async retryWebhookDelivery(id: string): Promise<WebhookDelivery> {
-    await prisma.webhookDelivery.update({
+    const delivery = await prisma.webhookDelivery.update({
       where: { id },
       data: {
-        status: 'pending',
-        retryCount: { increment: 1 },
-        updatedAt: new Date(),
-      },
+        responseStatus: null,
+        responseBody: null,
+        attempts: { increment: 1 }
+      }
     });
 
-    // Queue for delivery
-    await webhookQueue.add('deliver-webhook', {
-      deliveryId: id,
-      webhookId: id, // Assuming webhookId is the same as deliveryId for simplicity here
-      attempt: 1
-    }, {
-      attempts: 3, // Assuming a default retry policy
-      backoff: {
-        type: 'exponential',
-        delay: 1000
+    await webhookQueue.add(
+      'deliver-webhook',
+      {
+        deliveryId: id,
+        webhookId: delivery.webhookId,
+        attempt: delivery.attempts
       },
-      removeOnComplete: 100,
-      removeOnFail: 50
-    });
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 1000 },
+        removeOnComplete: 100,
+        removeOnFail: 50
+      }
+    );
 
-    return this.getWebhookDeliveryById(id)!;
+    return this.formatWebhookDelivery(delivery);
   }
 
-  async retryFailedDeliveries(webhookConfigId?: string): Promise<{ success: number; failed: number }> {
+  async retryFailedDeliveries(webhookId?: string): Promise<{ success: number; failed: number }> {
     const result = await prisma.webhookDelivery.updateMany({
       where: {
         status: 'failed',
-        ...(webhookConfigId && { webhookConfigId }),
+        ...(webhookId && { webhookId }),
       },
       data: {
         status: 'pending',
@@ -380,11 +379,11 @@ export class WebhookManager {
     return { success: result.count, failed: 0 };
   }
 
-  async cancelPendingDeliveries(webhookConfigId?: string): Promise<{ success: number; failed: number }> {
+  async cancelPendingDeliveries(webhookId?: string): Promise<{ success: number; failed: number }> {
     const result = await prisma.webhookDelivery.updateMany({
       where: {
         status: 'pending',
-        ...(webhookConfigId && { webhookConfigId }),
+        ...(webhookId && { webhookId }),
       },
       data: {
         status: 'cancelled',
@@ -434,20 +433,22 @@ export class WebhookManager {
     return webhooks.map((webhook: any) => this.formatWebhookConfig(webhook));
   }
 
-  async createWebhookDelivery(webhookConfigId: string, payload: any, headers: Record<string, string> = {}): Promise<WebhookDelivery> {
-    await prisma.webhookDelivery.create({
+  async createWebhookDelivery(
+    webhookId: string,
+    payload: any,
+    headers: Record<string, string> = {}
+  ): Promise<WebhookDelivery> {
+    const delivery = await prisma.webhookDelivery.create({
       data: {
-        webhookConfigId,
+        webhookId,
+        eventType: 'manual',
         payload,
         headers,
-        status: 'pending',
-        retryCount: 0,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
+        attempts: 0
+      }
     });
 
-    return this.getWebhookDeliveryById(id)!;
+    return this.formatWebhookDelivery(delivery);
   }
 
   /**
@@ -966,116 +967,4 @@ export class WebhookManager {
 
 // Global webhook manager instance
 export const webhookManager = WebhookManager.getInstance();
-=======
-import { prisma } from '../prisma';
-import { connection as redis } from '../redis';
-import type { WebhookConfig, WebhookDelivery } from '@prisma/client';
 
-export interface CreateWebhookDTO {
-  accountId: string;
-  url: string;
-  httpMethod?: string;
-  headers?: Record<string, string>;
-  events?: string[];
-  requestTimeout?: number;
-  enabled?: boolean;
-}
-
-export interface UpdateWebhookDTO {
-  url?: string;
-  httpMethod?: string;
-  headers?: Record<string, string>;
-  events?: string[];
-  requestTimeout?: number;
-  enabled?: boolean;
-}
-
-/** Create a new webhook configuration */
-export async function createWebhook(
-  data: CreateWebhookDTO
-): Promise<WebhookConfig> {
-  return prisma.webhookConfig.create({
-    data: {
-      accountId: data.accountId,
-      url: data.url,
-      httpMethod: data.httpMethod ?? 'POST',
-      headers: data.headers ?? {},
-      events: data.events ?? [],
-      requestTimeout: data.requestTimeout ?? 10000,
-      enabled: data.enabled ?? true,
-    },
-  });
-}
-
-/** Fetch a single webhook configuration by id */
-export async function getWebhook(id: string): Promise<WebhookConfig | null> {
-  return prisma.webhookConfig.findUnique({ where: { id } });
-}
-
-/** List webhook configurations for an account */
-export async function listWebhooks(accountId: string): Promise<WebhookConfig[]> {
-  return prisma.webhookConfig.findMany({
-    where: { accountId },
-    orderBy: { createdAt: 'desc' },
-  });
-}
-
-/** Update a webhook configuration */
-export async function updateWebhook(
-  id: string,
-  data: UpdateWebhookDTO
-): Promise<WebhookConfig> {
-  return prisma.webhookConfig.update({
-    where: { id },
-    data: {
-      url: data.url,
-      httpMethod: data.httpMethod,
-      headers: data.headers,
-      events: data.events,
-      requestTimeout: data.requestTimeout,
-      enabled: data.enabled,
-    },
-  });
-}
-
-/** Delete a webhook configuration */
-export async function deleteWebhook(id: string): Promise<void> {
-  await prisma.webhookConfig.delete({ where: { id } });
-}
-
-export interface LogDeliveryDTO {
-  webhookConfigId: string;
-  responseStatus: number;
-  responseBody?: string;
-  responseHeaders?: Record<string, string>;
-}
-
-/** Store webhook delivery result */
-export async function logWebhookDelivery(
-  data: LogDeliveryDTO
-): Promise<WebhookDelivery> {
-  return prisma.webhookDelivery.create({
-    data: {
-      webhookConfigId: data.webhookConfigId,
-      responseStatus: data.responseStatus,
-      responseBody: data.responseBody ?? '',
-      responseHeaders: data.responseHeaders ?? {},
-    },
-  });
-}
-
-/** Aggregate delivery statistics for a webhook */
-export async function getWebhookStats(webhookConfigId: string) {
-  return prisma.webhookDelivery.aggregate({
-    where: { webhookConfigId },
-    _count: true,
-    _min: { responseStatus: true, createdAt: true },
-    _max: { responseStatus: true, createdAt: true },
-  });
-}
-
-/** Queue webhook payload for asynchronous processing */
-export async function queueWebhookPayload(id: string, payload: unknown) {
-  await redis.rpush(`webhook:${id}`, JSON.stringify(payload));
-}
->>>>>>> 2e45d85462b61011f5f293ab34968a4c66ff84ba

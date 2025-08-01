@@ -51,10 +51,10 @@ const WebhookActionSchema = z.object({
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ webhookId: string }> }
+  { params }: { params: { webhookId: string } }
 ) {
+  const { webhookId } = params;
   try {
-    const { webhookId } = await params;
     const { searchParams } = new URL(request.url);
     const includeDeliveries = searchParams.get('includeDeliveries') === 'true';
     const deliveryLimit = parseInt(searchParams.get('deliveryLimit') || '50');
@@ -104,7 +104,7 @@ export async function GET(
     });
 
   } catch (error) {
-    return handleApiError(error, `Failed to fetch webhook details for ${params.webhookId}`);
+    return handleApiError(error, `Failed to fetch webhook details for ${webhookId}`);
   }
 }
 
@@ -114,10 +114,10 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ webhookId: string }> }
+  { params }: { params: { webhookId: string } }
 ) {
+  const { webhookId } = params;
   try {
-    const { webhookId } = await params;
     const body = await request.json();
     const updates = WebhookUpdateSchema.parse(body);
 
@@ -167,7 +167,7 @@ export async function PUT(
     });
 
   } catch (error) {
-    return handleApiError(error, `Failed to update webhook ${params.webhookId}`);
+    return handleApiError(error, `Failed to update webhook ${webhookId}`);
   }
 }
 
@@ -177,10 +177,10 @@ export async function PUT(
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ webhookId: string }> }
+  { params }: { params: { webhookId: string } }
 ) {
+  const { webhookId } = params;
   try {
-    const { webhookId } = await params;
     const body = await request.json();
     const { action, testPayload } = WebhookActionSchema.parse(body);
 
@@ -259,7 +259,7 @@ export async function POST(
     });
 
   } catch (error) {
-    return handleApiError(error, `Failed to perform action on webhook ${params.webhookId}`);
+    return handleApiError(error, `Failed to perform action on webhook ${webhookId}`);
   }
 }
 
@@ -269,10 +269,10 @@ export async function POST(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ webhookId: string }> }
+  { params }: { params: { webhookId: string } }
 ) {
+  const { webhookId } = params;
   try {
-    const { webhookId } = await params;
     const { searchParams } = new URL(request.url);
     const force = searchParams.get('force') === 'true';
 
@@ -321,6 +321,6 @@ export async function DELETE(
     });
 
   } catch (error) {
-    return handleApiError(error, `Failed to delete webhook ${params.webhookId}`);
+    return handleApiError(error, `Failed to delete webhook ${webhookId}`);
   }
 }

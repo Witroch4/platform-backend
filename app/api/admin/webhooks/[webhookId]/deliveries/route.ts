@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { validateInput, handleApiError, createSuccessResponse } from '../../../../../../lib/utils/api-helpers';
-import { webhookManager } from '../../../../../../lib/webhook/webhook-manager';
+import { webhookManager, type WebhookDelivery } from '../../../../../../lib/webhook/webhook-manager';
 
 // Validation schemas
 const DeliveryQuerySchema = z.object({
@@ -25,10 +25,10 @@ const DeliveryActionSchema = z.object({
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ webhookId: string }> }
+  { params }: { params: { webhookId: string } }
 ) {
+  const { webhookId } = params;
   try {
-    const { webhookId } = await params;
     const { searchParams } = new URL(request.url);
     const query = DeliveryQuerySchema.parse(Object.fromEntries(searchParams));
 
@@ -68,17 +68,17 @@ export async function GET(
       limit: 10000 // Get all for stats
     });
 
-    const summary = {
-      total: allDeliveries.items.length,
-      byStatus: {
-        success: allDeliveries.items.filter(d => d.status === 'success').length,
-        failed: allDeliveries.items.filter(d => d.status === 'failed').length,
-        pending: allDeliveries.items.filter(d => d.status === 'pending').length,
-        retrying: allDeliveries.items.filter(d => d.status === 'retrying').length,
-      },
-      averageResponseTime: calculateAverageResponseTime(allDeliveries.items),
-      successRate: calculateSuccessRate(allDeliveries.items)
-    };
+      const summary = {
+        total: allDeliveries.items.length,
+        byStatus: {
+          success: allDeliveries.items.filter((d: WebhookDelivery) => d.status === 'success').length,
+          failed: allDeliveries.items.filter((d: WebhookDelivery) => d.status === 'failed').length,
+          pending: allDeliveries.items.filter((d: WebhookDelivery) => d.status === 'pending').length,
+          retrying: allDeliveries.items.filter((d: WebhookDelivery) => d.status === 'retrying').length,
+        },
+        averageResponseTime: calculateAverageResponseTime(allDeliveries.items),
+        successRate: calculateSuccessRate(allDeliveries.items)
+      };
 
     return createSuccessResponse({
       webhook: {
@@ -101,7 +101,7 @@ export async function GET(
     });
 
   } catch (error) {
-    return handleApiError(error, `Failed to fetch webhook deliveries for ${params.webhookId}`);
+    return handleApiError(error, `Failed to fetch webhook deliveries for ${webhookId}`);
   }
 }
 
@@ -111,10 +111,10 @@ export async function GET(
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ webhookId: string }> }
+  { params }: { params: { webhookId: string } }
 ) {
+  const { webhookId } = params;
   try {
-    const { webhookId } = await params;
     const body = await request.json();
     const { action, deliveryIds } = DeliveryActionSchema.parse(body);
 
@@ -199,7 +199,7 @@ export async function POST(
     });
 
   } catch (error) {
-    return handleApiError(error, `Failed to perform batch action on webhook deliveries for ${params.webhookId}`);
+    return handleApiError(error, `Failed to perform batch action on webhook deliveries for ${webhookId}`);
   }
 }
 
@@ -215,26 +215,32 @@ function getTimeRangeMs(timeRange: string): number {
   }
 }
 
-function calculateAverageResponseTime(deliveries: any[]): number {
-  const successfulDeliveries = deliveries.filter(d => 
-    d.status === 'success' && d.responseTime !== undefined && d.responseTime !== null
+function calculateAverageResponseTime(deliveries: WebhookDelivery[]): number {
+  const successfulDeliveries = deliveries.filter(
+    (d: WebhookDelivery) =>
+      d.status === 'success' && d.responseTime !== undefined && d.responseTime !== null
   );
   
   if (successfulDeliveries.length === 0) return 0;
   
-  const sum = successfulDeliveries.reduce((acc, d) => acc + d.responseTime, 0);
+  const sum = successfulDeliveries.reduce(
+    (acc: number, d: WebhookDelivery) => acc + (d.responseTime ?? 0),
+    0
+  );
   return Math.round((sum / successfulDeliveries.length) * 100) / 100;
 }
 
-function calculateSuccessRate(deliveries: any[]): number {
+function calculateSuccessRate(deliveries: WebhookDelivery[]): number {
   if (deliveries.length === 0) return 0;
   
-  const completedDeliveries = deliveries.filter(d => 
+  const completedDeliveries = deliveries.filter((d: WebhookDelivery) =>
     d.status === 'success' || d.status === 'failed'
   );
   
   if (completedDeliveries.length === 0) return 0;
   
-  const successfulDeliveries = completedDeliveries.filter(d => d.status === 'success');
+  const successfulDeliveries = completedDeliveries.filter(
+    (d: WebhookDelivery) => d.status === 'success'
+  );
   return Math.round((successfulDeliveries.length / completedDeliveries.length) * 10000) / 100;
 }
