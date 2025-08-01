@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
       plans,
       executions,
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Rollback API] Error getting rollback data:', error);
     return NextResponse.json(
       { error: 'Failed to get rollback data' },
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
         execution,
       });
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Rollback API] Error executing rollback:', error);
     return NextResponse.json(
       { error: 'Failed to execute rollback' },
@@ -110,7 +110,7 @@ export async function PUT(request: NextRequest) {
       message: 'Rollback plan executed',
       execution,
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Rollback API] Error executing rollback plan:', error);
     return NextResponse.json(
       { error: 'Failed to execute rollback plan' },

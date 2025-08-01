@@ -383,7 +383,7 @@ export class ABTestingManager {
       }
       
       return tests.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[ABTest] Error getting all A/B tests:', error);
       return [];
     }
@@ -393,7 +393,7 @@ export class ABTestingManager {
     try {
       const testData = await this.redis.get(`ab_test:${testId}`);
       return testData ? JSON.parse(testData) : null;
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`[ABTest] Error getting test ${testId}:`, error);
       return null;
     }
@@ -403,7 +403,7 @@ export class ABTestingManager {
     try {
       const assignmentData = await this.redis.get(`ab_test_assignment:${testId}:${userId}`);
       return assignmentData ? JSON.parse(assignmentData) : null;
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`[ABTest] Error getting assignment for user ${userId} in test ${testId}:`, error);
       return null;
     }
@@ -502,7 +502,7 @@ export async function createWebhookPerformanceTest(): Promise<string> {
 
     console.log(`[ABTest] Created webhook performance test: ${test.id}`);
     return test.id;
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[ABTest] Error creating webhook performance test:', error);
     throw error;
   }

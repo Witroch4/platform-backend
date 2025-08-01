@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       targetPercentage,
       incrementPercentage,
       intervalMinutes
-    ).catch(error => {
+    ).catch((error: unknown) => {
       console.error(`[FeatureFlags API] Gradual rollout failed for ${flagName}:`, error);
     });
 
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
         intervalMinutes,
       },
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[FeatureFlags API] Error starting gradual rollout:', error);
     return NextResponse.json(
       { error: 'Failed to start gradual rollout' },
