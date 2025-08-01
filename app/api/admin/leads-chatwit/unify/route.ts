@@ -29,7 +29,7 @@ interface LeadChatwit {
   leadUrl?: string | null;
   fezRecurso: boolean;
   datasRecurso?: string | null;
-  usuarioId: string;
+  usuarioChatwitId: string;
   arquivos: ArquivoLeadChatwit[];
 }
 

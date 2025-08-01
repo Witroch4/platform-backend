@@ -7,6 +7,7 @@ import { webhookQueue } from "./webhook-queue";
 import { paginateArray, applySorting, applyFilters } from "../utils/api-helpers";
 
 const defaultEvent = Object.values(Prisma.$Enums.WebhookEvent)[0] as Prisma.$Enums.WebhookEvent;
+const DEFAULT_WEBHOOK_TIMEOUT_MS = 10000;
 
 // Interfaces
 export interface WebhookConfig {
@@ -184,7 +185,7 @@ export class WebhookManager {
       },
     });
 
-    const items = webhooks.map((webhook) => this.formatWebhookConfig(webhook));
+    const items = webhooks.map((webhook: any) => this.formatWebhookConfig(webhook));
 
     return {
       items,
@@ -308,7 +309,7 @@ export class WebhookManager {
       }),
     ]);
 
-    const items = webhooks.map((w) => this.formatWebhookConfig(w));
+    const items = webhooks.map((w: any) => this.formatWebhookConfig(w));
     const pagination = {
       page,
       limit,
@@ -349,17 +350,23 @@ export class WebhookManager {
     const activeWebhooks = await prisma.webhookConfig.count({ where: { enabled: true } });
 
     const successfulDeliveries = deliveries.filter(
-      (d) => d.responseStatus && d.responseStatus >= 200 && d.responseStatus < 300,
+      (d: WebhookDelivery) =>
+        d.responseStatus !== undefined && d.responseStatus >= 200 && d.responseStatus < 300,
     ).length;
     const failedDeliveries = deliveries.filter(
-      (d) => d.responseStatus && (d.responseStatus < 200 || d.responseStatus >= 300),
+      (d: WebhookDelivery) =>
+        d.responseStatus !== undefined && (d.responseStatus < 200 || d.responseStatus >= 300),
     ).length;
-    const pendingDeliveries = deliveries.filter((d) => !d.responseStatus).length;
+    const pendingDeliveries = deliveries.filter((d: WebhookDelivery) => !d.responseStatus).length;
 
     const totalDeliveries = successfulDeliveries + failedDeliveries + pendingDeliveries;
-    const delivered = deliveries.filter((d) => d.deliveredAt && d.createdAt);
+    const delivered = deliveries.filter((d: WebhookDelivery) => d.deliveredAt && d.createdAt);
     const averageResponseTime =
-      delivered.reduce((sum, d) => sum + (d.deliveredAt!.getTime() - d.createdAt.getTime() || 0), 0) /
+      delivered.reduce(
+        (sum: number, d: WebhookDelivery) =>
+          sum + (d.deliveredAt!.getTime() - d.createdAt.getTime() || 0),
+        0,
+      ) /
         (delivered.length || 1);
 
     return {
@@ -395,12 +402,14 @@ export class WebhookManager {
 
     const totalDeliveries = deliveries.length;
     const successfulDeliveries = deliveries.filter(
-      (d) => d.responseStatus && d.responseStatus >= 200 && d.responseStatus < 300,
+      (d: WebhookDelivery) =>
+        d.responseStatus !== undefined && d.responseStatus >= 200 && d.responseStatus < 300,
     ).length;
     const failedDeliveries = deliveries.filter(
-      (d) => d.responseStatus && (d.responseStatus < 200 || d.responseStatus >= 300),
+      (d: WebhookDelivery) =>
+        d.responseStatus !== undefined && (d.responseStatus < 200 || d.responseStatus >= 300),
     ).length;
-    const pendingDeliveries = deliveries.filter((d) => !d.responseStatus).length;
+    const pendingDeliveries = deliveries.filter((d: WebhookDelivery) => !d.responseStatus).length;
 
     const successRate = totalDeliveries > 0 ? (successfulDeliveries / totalDeliveries) * 100 : 0;
 
@@ -491,7 +500,7 @@ export class WebhookManager {
       }),
     });
 
-    const items = deliveries.map((delivery) => this.formatWebhookDelivery(delivery));
+    const items = deliveries.map((delivery: any) => this.formatWebhookDelivery(delivery));
 
     let pagination;
     if (limit > 0) {
@@ -759,7 +768,7 @@ export class WebhookManager {
         method: "POST",
         headers,
         body: JSON.stringify(delivery.payload),
-        signal: AbortSignal.timeout(webhook.timeout || 10000),
+        signal: AbortSignal.timeout(DEFAULT_WEBHOOK_TIMEOUT_MS),
       });
 
       const responseTime = Date.now() - startTime;
@@ -815,7 +824,7 @@ export class WebhookManager {
       },
     });
 
-    return webhooks.map((webhook) => this.formatWebhookConfig(webhook));
+    return webhooks.map((webhook: any) => this.formatWebhookConfig(webhook));
   }
 
   private shouldTriggerWebhook(webhook: WebhookConfig, event: WebhookEvent): boolean {

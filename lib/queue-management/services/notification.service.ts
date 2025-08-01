@@ -360,6 +360,7 @@ export class NotificationService {
       metrics: alert.metrics
     }
 
+    const DEFAULT_TIMEOUT_MS = 10000
     const response = await fetch(config.url, {
       method: config.method,
       headers: {
@@ -367,7 +368,7 @@ export class NotificationService {
         ...config.headers
       },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(config.timeout)
+      signal: AbortSignal.timeout(config.timeout ?? DEFAULT_TIMEOUT_MS)
     })
 
     if (!response.ok) {
