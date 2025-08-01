@@ -1,6 +1,6 @@
 import { PrismaClient, Prisma, UserFeedback } from '@prisma/client';
 import { Redis } from 'ioredis';
-import { toJson } from '../utils/json';
+import { toInputJson } from '../utils/json';
 
 export interface FeedbackMetrics {
   totalFeedback: number;
@@ -43,13 +43,20 @@ export class FeedbackCollector {
     title: string,
     description: string,
     severity: UserFeedback['severity'] = 'MEDIUM',
-    metadata?: Prisma.JsonValue,
-    systemContext?: Prisma.JsonValue,
+    metadata?: Prisma.JsonNullValueInput | Prisma.InputJsonValue | string,
+    systemContext?: Prisma.JsonNullValueInput | Prisma.InputJsonValue | string,
     userEmail?: string | null
   ): Promise<UserFeedback> {
-    const feedbackId = `feedback_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    const ctx = systemContext as Prisma.JsonObject | null | undefined
+    const feedbackId = `feedback_${Date.now()}_${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
+
+    const ctx =
+      typeof systemContext === 'object' &&
+      systemContext !== null &&
+      !Array.isArray(systemContext)
+        ? (systemContext as Prisma.InputJsonObject)
+        : undefined;
     const feedback: UserFeedback = {
       id: feedbackId,
       userId,
@@ -60,14 +67,14 @@ export class FeedbackCollector {
       description,
       severity,
       status: 'OPEN',
-      metadata: toJson(metadata),
-      systemContext: toJson({
+      metadata: (toInputJson(metadata) ?? Prisma.DbNull) as any,
+      systemContext: (toInputJson({
         userAgent: ctx?.userAgent ?? 'Unknown',
         url: ctx?.url ?? 'Unknown',
         timestamp: new Date().toISOString(),
         sessionId: (ctx?.sessionId ?? null) as any,
         correlationId: (ctx?.correlationId ?? null) as any,
-      }),
+      }) ?? Prisma.DbNull) as any,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -128,11 +135,11 @@ export class FeedbackCollector {
     variant: string | undefined,
     experience: 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL',
     description: string,
-    metadata?: Prisma.JsonValue
+    metadata?: Prisma.JsonNullValueInput | Prisma.InputJsonValue | string
   ): Promise<UserFeedback> {
     const metaObj =
-      typeof metadata === 'object' && !Array.isArray(metadata) && metadata !== null
-        ? (metadata as Prisma.JsonObject)
+      typeof metadata === 'object' && metadata !== null && !Array.isArray(metadata)
+        ? (metadata as Prisma.InputJsonObject)
         : {}
 
     const feedback = await this.submitFeedback(
@@ -142,7 +149,7 @@ export class FeedbackCollector {
       `Feature Flag Feedback: ${flagName}`,
       description,
       experience === 'NEGATIVE' ? 'HIGH' : 'MEDIUM',
-      toJson({
+      toInputJson({
         experience,
         ...metaObj,
       }),
@@ -151,7 +158,7 @@ export class FeedbackCollector {
     );
 
     // Add feature flag context
-    feedback.featureFlagContext = toJson({
+    feedback.featureFlagContext = toInputJson({
       flagName,
       enabled,
       variant,
