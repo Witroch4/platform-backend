@@ -54,8 +54,6 @@ async function simpleBackup() {
         
         // === MTF DIAMANTE ===
         mtfDiamanteConfigs: await prisma.mtfDiamanteConfig.findMany(),
-        mtfDiamanteLotes: await prisma.mtfDiamanteLote.findMany(),
-        mtfDiamanteIntentMappings: await prisma.mtfDiamanteIntentMapping.findMany(),
         disparosMtfDiamante: await prisma.disparoMtfDiamante.findMany(),
         
         // === OAB E LOTES ===
@@ -128,8 +126,6 @@ async function simpleBackup() {
     
     console.log(`\n=== MTF DIAMANTE ===`);
     console.log(`  mtfDiamanteConfigs: ${backup.data.mtfDiamanteConfigs.length} registros`);
-    console.log(`  mtfDiamanteLotes: ${backup.data.mtfDiamanteLotes.length} registros`);
-    console.log(`  mtfDiamanteIntentMappings: ${backup.data.mtfDiamanteIntentMappings.length} registros`);
     console.log(`  disparosMtfDiamante: ${backup.data.disparosMtfDiamante.length} registros`);
     
     console.log(`\n=== OAB ===`);
