@@ -349,7 +349,7 @@ export async function POST(request: NextRequest) {
     const createdReaction = await prisma.mapeamentoBotao.create({
       data: {
         buttonId,
-        inboxId: messageId || null,
+        inboxId: messageId || undefined,
         actionType: 'SEND_TEMPLATE',
         actionPayload,
         description: reaction?.type === 'text' ? reaction.value : description || null,
