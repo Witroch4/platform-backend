@@ -1,7 +1,7 @@
 // app/api/admin/mtf-diamante/disparo/route.ts
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 import { z } from "zod";
 import { sendTemplateMessage } from "@/lib/whatsapp";
 
@@ -28,18 +28,11 @@ export async function POST(request: Request) {
     const { templateId, selectedLeads, delayMinutes, parameters } =
       disparoSchema.parse(body);
 
-    const usuarioChatwit = await prisma.usuarioChatwit.findFirst({
+    // Buscar o usuário Chatwit (opcional, pode não existir)
+    const usuarioChatwit = await db.usuarioChatwit.findFirst({
       where: { appUserId: appUserId },
       select: { id: true },
     });
-
-    if (!usuarioChatwit?.id) {
-      return NextResponse.json(
-        { error: "Usuário Chatwit não encontrado para o usuário logado" },
-        { status: 404 }
-      );
-    }
-    const usuarioChatwitId = usuarioChatwit.id;
 
     // A busca de template já está correta
     const template = await prisma.template.findFirst({
@@ -87,25 +80,25 @@ export async function POST(request: Request) {
       }
     });
 
-    const leadsRaw = await prisma.leadChatwit.findMany({
+    const leadsRaw = await db.lead.findMany({
       where: {
         AND: [
-          { usuarioId: usuarioChatwitId }, // Garante que o lead é do usuário
+          { userId: session.user.id }, // Garante que o lead é do usuário
           { OR: leadConditions }, // Aplica as condições flexíveis de busca
         ],
       },
-      select: { id: true, name: true, nomeReal: true, phoneNumber: true },
+      select: { id: true, name: true, phone: true },
       distinct: ["id"], // Garante que não haverá leads duplicados
     });
 
     // Remove duplicatas por número de telefone (mantém apenas o primeiro lead de cada número)
     const phoneNumbersSeen = new Set<string>();
     const leads = leadsRaw.filter((lead) => {
-      if (!lead.phoneNumber) return false;
-      const cleanPhone = lead.phoneNumber.replace(/\D/g, "");
+      if (!lead.phone) return false;
+      const cleanPhone = lead.phone.replace(/\D/g, "");
       if (phoneNumbersSeen.has(cleanPhone)) {
         console.log(
-          `[Disparo Debug] Lead duplicado ignorado: ${lead.id} (${lead.phoneNumber}) - já existe lead com este número`
+          `[Disparo Debug] Lead duplicado ignorado: ${lead.id} (${lead.phone}) - já existe lead com este número`
         );
         return false;
       }
@@ -126,15 +119,15 @@ export async function POST(request: Request) {
       templateId: template.id,
       templateName: template.name,
       leadId: lead.id,
-      leadNome: lead.nomeReal || lead.name,
-      leadTelefone: lead.phoneNumber,
+      leadNome: lead.name,
+      leadTelefone: lead.phone,
       status: "PENDING",
       scheduledAt: new Date(Date.now() + delayMinutes * 60 * 1000),
       parameters: parameters || {},
       userId: appUserId,
     }));
 
-    await prisma.disparoMtfDiamante.createMany({
+    await db.disparoMtfDiamante.createMany({
       data: disparosData,
       skipDuplicates: true,
     });
@@ -144,15 +137,15 @@ export async function POST(request: Request) {
         leads.map(async (lead) => {
           try {
             // Buscar o template completo para analisar variáveis
-            const templateCompleto = await prisma.template.findFirst({
+            const templateCompleto = await db.template.findFirst({
               where: {
                 id: templateId,
                 createdById: session.user.id,
               },
             });
 
-            // Preparar nome do lead (nomeReal tem prioridade, depois name)
-            const nomeDoLead = lead.nomeReal || lead.name || "Cliente";
+            // Preparar nome do lead
+            const nomeDoLead = lead.name || "Cliente";
 
             // Converter parameters para o formato esperado por sendTemplateMessage
             const sendOpts: any = {};
@@ -228,11 +221,11 @@ export async function POST(request: Request) {
               }
             }
             const success = await sendTemplateMessage(
-              lead.phoneNumber || "",
+              lead.phone || "",
               template.name,
               sendOpts
             );
-            await prisma.disparoMtfDiamante.updateMany({
+            await db.disparoMtfDiamante.updateMany({
               where: {
                 leadId: lead.id,
                 templateId: template.id,
@@ -246,7 +239,7 @@ export async function POST(request: Request) {
             });
             return { success };
           } catch (error) {
-            await prisma.disparoMtfDiamante.updateMany({
+            await db.disparoMtfDiamante.updateMany({
               where: {
                 leadId: lead.id,
                 templateId: template.id,
@@ -317,7 +310,7 @@ export async function GET(request: Request) {
     }
 
     const [disparos, total] = await Promise.all([
-      prisma.disparoMtfDiamante.findMany({
+      db.disparoMtfDiamante.findMany({
         where: whereClause,
         orderBy: {
           createdAt: "desc",
@@ -325,7 +318,7 @@ export async function GET(request: Request) {
         skip: (page - 1) * limit,
         take: limit,
       }),
-      prisma.disparoMtfDiamante.count({
+      db.disparoMtfDiamante.count({
         where: whereClause,
       }),
     ]);
