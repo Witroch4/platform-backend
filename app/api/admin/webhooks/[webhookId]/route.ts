@@ -59,7 +59,7 @@ export async function GET(
     const includeDeliveries = searchParams.get('includeDeliveries') === 'true';
     const deliveryLimit = parseInt(searchParams.get('deliveryLimit') || '50');
 
-    const webhook = await webhookManager.getWebhook(webhookId);
+    const webhook = await webhookManager.getWebhookById(webhookId);
     if (!webhook) {
       return NextResponse.json(
         { 
@@ -121,7 +121,7 @@ export async function PUT(
     const body = await request.json();
     const updates = WebhookUpdateSchema.parse(body);
 
-    const webhook = await webhookManager.getWebhook(webhookId);
+    const webhook = await webhookManager.getWebhookById(webhookId);
     if (!webhook) {
       return NextResponse.json(
         { 
@@ -184,7 +184,7 @@ export async function POST(
     const body = await request.json();
     const { action, testPayload } = WebhookActionSchema.parse(body);
 
-    const webhook = await webhookManager.getWebhook(webhookId);
+    const webhook = await webhookManager.getWebhookById(webhookId);
     if (!webhook) {
       return NextResponse.json(
         { 
@@ -276,7 +276,7 @@ export async function DELETE(
     const { searchParams } = new URL(request.url);
     const force = searchParams.get('force') === 'true';
 
-    const webhook = await webhookManager.getWebhook(webhookId);
+    const webhook = await webhookManager.getWebhookById(webhookId);
     if (!webhook) {
       return NextResponse.json(
         { 

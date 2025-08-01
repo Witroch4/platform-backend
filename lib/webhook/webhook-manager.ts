@@ -140,6 +140,112 @@ export class WebhookManager {
     return webhook;
   }
 
+  // --------------------------------------------------------------
+  // Thin wrapper methods used by API routes
+  // --------------------------------------------------------------
+
+  /** Get a webhook by its id */
+  async getWebhookById(id: string): Promise<WebhookConfig | null> {
+    const webhook = await prisma.webhookConfig.findUnique({ where: { id } });
+    return webhook ? this.formatWebhookConfig(webhook) : null;
+  }
+
+  /** Get a webhook by its name */
+  async getWebhookByName(name: string): Promise<WebhookConfig | null> {
+    const webhook = await prisma.webhookConfig.findFirst({ where: { name } });
+    return webhook ? this.formatWebhookConfig(webhook) : null;
+  }
+
+  /** Create a new webhook */
+  async createWebhook(data: Partial<WebhookConfig>): Promise<WebhookConfig> {
+    const webhook = await prisma.webhookConfig.create({
+      data: {
+        name: data.name || '',
+        url: data.url || '',
+        events: data.events || [],
+        headers: data.headers || {},
+        secret: data.secret,
+        enabled: data.enabled ?? true,
+        retryPolicy: data.retryPolicy,
+        filters: data.filters,
+        timeout: data.timeout ?? 10000,
+        createdBy: data.createdBy || 'system',
+      },
+    });
+    return this.formatWebhookConfig(webhook);
+  }
+
+  /** Update an existing webhook */
+  async updateWebhook(id: string, data: Partial<WebhookConfig>): Promise<WebhookConfig> {
+    const webhook = await prisma.webhookConfig.update({
+      where: { id },
+      data,
+    });
+    return this.formatWebhookConfig(webhook);
+  }
+
+  /** Delete a webhook */
+  async deleteWebhook(id: string, _force = false): Promise<void> {
+    await prisma.webhookConfig.delete({ where: { id } });
+  }
+
+  /** List webhooks with pagination */
+  async getAllWebhooks(options: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    enabled?: boolean;
+    events?: string[];
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+  } = {}): Promise<{ items: WebhookConfig[]; pagination: any }> {
+    const {
+      page = 1,
+      limit = 20,
+      search,
+      enabled,
+      events,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+    } = options;
+
+    const where: any = {};
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { url: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+    if (enabled !== undefined) {
+      where.enabled = enabled;
+    }
+    if (events && events.length > 0) {
+      where.events = { hasSome: events };
+    }
+
+    const [total, webhooks] = await Promise.all([
+      prisma.webhookConfig.count({ where }),
+      prisma.webhookConfig.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { [sortBy]: sortOrder },
+      }),
+    ]);
+
+    const items = webhooks.map(w => this.formatWebhookConfig(w));
+    const pagination = {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      hasNext: page * limit < total,
+      hasPrev: page > 1,
+    };
+
+    return { items, pagination };
+  }
+
   async listWebhookConfigs(options: {
     page?: number;
     limit?: number;
