@@ -106,9 +106,13 @@ export async function POST(request: Request): Promise<Response> {
     
     if (leadId) {
       // Buscar os arquivos de um lead específico
-      arquivos = await prisma.arquivoLeadOab.findMany({
+      const results = await prisma.arquivoLeadOab.findMany({
         where: { leadOabDataId: leadId },
       });
+      arquivos = results.map(({ leadOabDataId, ...arquivo }) => ({
+        ...arquivo,
+        leadId: leadOabDataId,
+      }));
       
       if (arquivos.length === 0) {
         return NextResponse.json({ error: "Nenhum arquivo encontrado para esse lead" }, { status: 404 });
@@ -144,8 +148,13 @@ export async function POST(request: Request): Promise<Response> {
         where: { usuarioChatwitId: usuarioId },
         include: { arquivos: true },
       });
-      
-      arquivos = leads.flatMap((lead: LeadChatwit) => lead.arquivos);
+
+      arquivos = leads.flatMap((lead: LeadChatwit) =>
+        lead.arquivos.map(({ leadOabDataId, ...arquivo }) => ({
+          ...arquivo,
+          leadId: leadOabDataId,
+        }))
+      );
       
       if (arquivos.length === 0) {
         return NextResponse.json({ error: "Nenhum arquivo encontrado para os leads desse usuário" }, { status: 404 });

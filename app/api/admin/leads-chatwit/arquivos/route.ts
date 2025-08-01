@@ -45,10 +45,14 @@ export async function GET(request: Request): Promise<Response> {
     
     if (leadId) {
       // Buscar arquivos de um lead específico
-      arquivos = await prismaClient.arquivoLeadOab.findMany({
+      const results = await prismaClient.arquivoLeadOab.findMany({
         where: { leadOabDataId: leadId },
         orderBy: { createdAt: "desc" },
       });
+      arquivos = results.map(({ leadOabDataId, ...arquivo }) => ({
+        ...arquivo,
+        leadId: leadOabDataId,
+      }));
     } else if (usuarioId) {
       // Buscar leads do usuário
       const leads = await prismaClient.leadOabData.findMany({
@@ -59,7 +63,7 @@ export async function GET(request: Request): Promise<Response> {
       const leadIds = leads.map(lead => lead.id);
 
       // Buscar arquivos de todos os leads do usuário
-      arquivos = await prismaClient.arquivoLeadOab.findMany({
+      const results = await prismaClient.arquivoLeadOab.findMany({
         where: { leadOabDataId: { in: leadIds } },
         orderBy: { createdAt: "desc" },
         include: {
@@ -71,6 +75,13 @@ export async function GET(request: Request): Promise<Response> {
           },
         },
       });
+      arquivos = results.map(({ leadOabDataId, leadOabData, ...arquivo }) => ({
+        ...arquivo,
+        leadId: leadOabDataId,
+        lead: leadOabData
+          ? { id: leadOabData.id, nomeReal: leadOabData.nomeReal, name: null }
+          : undefined,
+      }));
     }
     
     return NextResponse.json({ arquivos });
