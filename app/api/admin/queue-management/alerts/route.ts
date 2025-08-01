@@ -1,8 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
+interface Alert {
+  id: string;
+  ruleId: string;
+  queueName?: string;
+  severity: 'info' | 'warning' | 'error' | 'critical';
+  title: string;
+  message: string;
+  metrics?: Record<string, any>;
+  status: 'active' | 'acknowledged' | 'resolved';
+  createdAt: Date;
+  acknowledgedAt?: Date;
+  acknowledgedBy?: string;
+  resolvedAt?: Date;
+  resolutionNote?: string;
+}
+
 // Mock data for demonstration - in production this would come from database
-let mockAlerts = [
+let mockAlerts: Alert[] = [
   {
     id: 'alert-1',
     ruleId: 'rule-1',
@@ -149,7 +165,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { alertId, action, note } = AlertActionSchema.parse(body);
+    const { alertId, action, note }: z.infer<typeof AlertActionSchema> =
+      AlertActionSchema.parse(body);
 
     const alertIndex = mockAlerts.findIndex(alert => alert.id === alertId);
     
@@ -163,7 +180,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const alert = mockAlerts[alertIndex];
+    const alert: Alert = mockAlerts[alertIndex];
     let message = '';
 
     switch (action) {
@@ -173,7 +190,9 @@ export async function POST(request: NextRequest) {
             ...alert,
             status: 'acknowledged',
             acknowledgedAt: new Date(),
-            acknowledgedBy: 'current-user@example.com' // In production, get from auth
+            acknowledgedBy: 'current-user@example.com', // In production, get from auth
+            resolvedAt: undefined,
+            resolutionNote: undefined,
           };
           message = 'Alert acknowledged successfully';
         } else {
@@ -193,7 +212,7 @@ export async function POST(request: NextRequest) {
             ...alert,
             status: 'resolved',
             resolvedAt: new Date(),
-            ...(note && { resolutionNote: note })
+            ...(note && { resolutionNote: note }),
           };
           message = 'Alert resolved successfully';
         } else {
@@ -213,7 +232,9 @@ export async function POST(request: NextRequest) {
           ...alert,
           status: 'resolved',
           resolvedAt: new Date(),
-          resolutionNote: note || 'Dismissed by user'
+          resolutionNote: note || 'Dismissed by user',
+          acknowledgedAt: alert.acknowledgedAt ?? new Date(),
+          acknowledgedBy: alert.acknowledgedBy ?? 'current-user@example.com',
         };
         message = 'Alert dismissed successfully';
         break;

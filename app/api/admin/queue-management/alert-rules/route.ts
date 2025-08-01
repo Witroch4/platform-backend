@@ -1,8 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
+interface AlertCondition {
+  metric: string;
+  operator: '>' | '<' | '==' | '!=' | 'contains';
+  threshold: number | string;
+  timeWindow: number;
+  aggregation?: 'avg' | 'sum' | 'max' | 'min' | 'count';
+}
+
+interface NotificationChannel {
+  type: 'email' | 'slack' | 'webhook' | 'sms';
+  config: Record<string, any>;
+}
+
+interface AlertRule {
+  id: string;
+  name: string;
+  description?: string;
+  queueName?: string;
+  condition: AlertCondition;
+  severity: 'info' | 'warning' | 'error' | 'critical';
+  channels: NotificationChannel[];
+  cooldown: number;
+  enabled: boolean;
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // Mock data for demonstration - in production this would come from database
-let mockAlertRules = [
+let mockAlertRules: AlertRule[] = [
   {
     id: 'rule-1',
     name: 'High Queue Backlog',
@@ -189,9 +217,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const ruleData = AlertRuleSchema.parse(body);
+    const ruleData: z.infer<typeof AlertRuleSchema> = AlertRuleSchema.parse(body);
 
-    const newRule = {
+    const newRule: AlertRule = {
       id: `rule-${Date.now()}`,
       ...ruleData,
       createdBy: 'current-user@example.com', // In production, get from auth
@@ -237,7 +265,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, ...updateData } = body;
+    const { id, ...updateData } = body as { id?: string } & Partial<AlertRule>;
 
     if (!id) {
       return NextResponse.json(
