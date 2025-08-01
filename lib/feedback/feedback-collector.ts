@@ -1,5 +1,6 @@
 import { PrismaClient, Prisma, UserFeedback } from '@prisma/client';
 import { Redis } from 'ioredis';
+import { toJson } from '../utils/json';
 
 export interface FeedbackMetrics {
   totalFeedback: number;
@@ -42,30 +43,31 @@ export class FeedbackCollector {
     title: string,
     description: string,
     severity: UserFeedback['severity'] = 'MEDIUM',
-    metadata?: Prisma.JsonObject,
-    systemContext?: Prisma.JsonObject,
-    userEmail?: string
+    metadata?: Prisma.JsonValue,
+    systemContext?: Prisma.JsonValue,
+    userEmail?: string | null
   ): Promise<UserFeedback> {
     const feedbackId = `feedback_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
+    const ctx = systemContext as Prisma.JsonObject | null | undefined
     const feedback: UserFeedback = {
       id: feedbackId,
       userId,
-      userEmail,
+      userEmail: userEmail ?? null,
       type,
       category,
       title,
       description,
       severity,
       status: 'OPEN',
-      metadata,
-      systemContext: {
-        userAgent: systemContext?.userAgent || 'Unknown',
-        url: systemContext?.url || 'Unknown',
-        timestamp: new Date(),
-        sessionId: systemContext?.sessionId,
-        correlationId: systemContext?.correlationId,
-      },
+      metadata: toJson(metadata),
+      systemContext: toJson({
+        userAgent: ctx?.userAgent ?? 'Unknown',
+        url: ctx?.url ?? 'Unknown',
+        timestamp: new Date().toISOString(),
+        sessionId: (ctx?.sessionId ?? null) as any,
+        correlationId: (ctx?.correlationId ?? null) as any,
+      }),
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -83,7 +85,7 @@ export class FeedbackCollector {
           description: feedback.description,
           severity: feedback.severity,
           status: feedback.status,
-          metadata: feedback.metadata || {},
+          metadata: feedback.metadata,
           systemContext: feedback.systemContext,
           createdAt: feedback.createdAt,
           updatedAt: feedback.updatedAt,
@@ -126,8 +128,13 @@ export class FeedbackCollector {
     variant: string | undefined,
     experience: 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL',
     description: string,
-    metadata?: Prisma.JsonObject
+    metadata?: Prisma.JsonValue
   ): Promise<UserFeedback> {
+    const metaObj =
+      typeof metadata === 'object' && !Array.isArray(metadata) && metadata !== null
+        ? (metadata as Prisma.JsonObject)
+        : {}
+
     const feedback = await this.submitFeedback(
       userId,
       'FEATURE_FLAG_FEEDBACK',
@@ -135,20 +142,20 @@ export class FeedbackCollector {
       `Feature Flag Feedback: ${flagName}`,
       description,
       experience === 'NEGATIVE' ? 'HIGH' : 'MEDIUM',
-      {
+      toJson({
         experience,
-        ...metadata,
-      },
+        ...metaObj,
+      }),
       undefined,
-      undefined
+      null
     );
 
     // Add feature flag context
-    feedback.featureFlagContext = {
+    feedback.featureFlagContext = toJson({
       flagName,
       enabled,
       variant,
-    };
+    });
 
     // Update feedback with feature flag context
     await this.prisma.userFeedback.update({
@@ -447,7 +454,9 @@ export class FeedbackCollector {
     }
   }
 
-  private calculateSatisfactionScore(feedback: UserFeedback[]): number {
+  private calculateSatisfactionScore(
+    feedback: Array<Pick<UserFeedback, 'severity'>>
+  ): number {
     if (feedback.length === 0) return 0;
     
     const scores = feedback.map(f => {
@@ -463,7 +472,9 @@ export class FeedbackCollector {
     return scores.reduce((acc, score) => acc + score, 0) / scores.length;
   }
 
-  private generateTrendData(feedback: UserFeedback[]): FeedbackMetrics['trendData'] {
+  private generateTrendData(
+    feedback: Array<Pick<UserFeedback, 'createdAt' | 'severity'>>
+  ): FeedbackMetrics['trendData'] {
     const trendMap = new Map<string, { count: number; severitySum: number }>();
     
     feedback.forEach(f => {
@@ -567,7 +578,9 @@ export class FeedbackCollector {
     }
     
     if (feedback.featureFlagContext) {
-      actions.push(`Review feature flag: ${feedback.featureFlagContext.flagName}`);
+      const ctx = feedback.featureFlagContext as Prisma.JsonObject | null
+      const flagName = ctx && typeof ctx.flagName === 'string' ? ctx.flagName : 'unknown'
+      actions.push(`Review feature flag: ${flagName}`)
       if (sentiment === 'NEGATIVE') {
         actions.push('Consider feature flag rollback');
       }
