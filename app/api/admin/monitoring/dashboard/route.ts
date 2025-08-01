@@ -397,15 +397,13 @@ async function getInstagramTranslationMetrics() {
       metrics: {
         totalJobs: performanceSummary.translations.total || 0,
         successRate: performanceSummary.translations.successRate || 0,
-        averageProcessingTime: performanceSummary.translations.averageProcessingTime || 0,
+        averageProcessingTime: performanceSummary.worker.avgProcessingTime || 0,
         queueDepth: performanceSummary.queue.waiting || 0,
         errorRate: errorStatistics.errorRate || 0,
-        lastProcessed: performanceSummary.translations.lastProcessed || null,
       },
       performance: {
-        conversionTime: performanceSummary.translations.averageConversionTime || 0,
-        databaseQueryTime: performanceSummary.translations.averageDatabaseQueryTime || 0,
-        queueWaitTime: performanceSummary.queue.averageWaitTime || 0,
+        conversionTime: performanceSummary.translations.avgConversionTime || 0,
+        queueWaitTime: performanceSummary.worker.avgQueueWaitTime || 0,
       },
       errors: {
         total: errorStatistics.totalErrors || 0,
@@ -434,11 +432,9 @@ async function getInstagramTranslationMetrics() {
         averageProcessingTime: 0,
         queueDepth: 0,
         errorRate: 0,
-        lastProcessed: null,
       },
       performance: {
         conversionTime: 0,
-        databaseQueryTime: 0,
         queueWaitTime: 0,
       },
       errors: {

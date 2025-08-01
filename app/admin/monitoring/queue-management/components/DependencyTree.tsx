@@ -82,7 +82,7 @@ export function DependencyTree({
       const treeNode = buildTree(node, depth);
       nodes.push(treeNode);
       
-      if (treeNode.expanded && hasChildren) {
+      if (treeNode.expanded && treeNode.hasChildren) {
         node.children.forEach(child => processNode(child, depth + 1));
       }
     };

@@ -26,6 +26,11 @@ import {
 } from 'lucide-react';
 import { FlowTree, FlowNode, JobState } from '@/types/queue-management';
 
+interface FlowNodeExtended extends FlowNode {
+  level: number;
+  parentId?: string;
+}
+
 interface FlowTimelineProps {
   flowTree: FlowTree;
   onNodeSelect?: (nodeId: string) => void;
@@ -72,7 +77,7 @@ export function FlowTimeline({
   // Convert FlowTree to enhanced timeline events
   const timelineEvents = useMemo(() => {
     const events: TimelineEvent[] = [];
-    const allNodes = new Map<string, FlowNode>();
+    const allNodes = new Map<string, FlowNodeExtended>();
     
     // First pass: collect all nodes
     const collectNodes = (node: FlowNode, level = 0, parentId?: string) => {
@@ -82,7 +87,7 @@ export function FlowTimeline({
     collectNodes(flowTree.rootJob);
     
     // Second pass: create timeline events with dependency analysis
-    const processNode = (node: FlowNode, level = 0, parentId?: string) => {
+    const processNode = (node: FlowNodeExtended) => {
       const startTime = node.metrics?.timing?.startedAt;
       const endTime = node.metrics?.timing?.completedAt;
       const duration = node.metrics?.timing?.processingTime;
@@ -106,7 +111,7 @@ export function FlowTimeline({
         duration,
         waitTime,
         processingTime: duration,
-        level,
+        level: node.level,
         dependencies: node.dependencies || [],
         error: node.error,
         progress: node.status === 'active' ? 
@@ -114,17 +119,21 @@ export function FlowTimeline({
           node.status === 'completed' ? 100 : 0,
         queueName: node.metrics?.queueName || 'unknown',
         attempts: node.metrics?.attempts || 0,
-        parentId,
+        parentId: node.parentId,
         children: node.children.map(child => child.jobId),
         isBlocked,
         blockingDependencies
       });
       
       // Process children
-      node.children.forEach(child => processNode(child, level + 1, node.jobId));
+      node.children.forEach(child => {
+        const childNode = allNodes.get(child.jobId);
+        if (childNode) processNode(childNode);
+      });
     };
-    
-    processNode(flowTree.rootJob);
+
+    const rootNode = allNodes.get(flowTree.rootJob.jobId);
+    if (rootNode) processNode(rootNode);
     return events;
   }, [flowTree, enableRealTimeUpdates]);
 
@@ -731,7 +740,7 @@ export function FlowTimeline({
                               <span>{event.queueName}</span>
                             </>
                           )}
-                          {event.attempts > 0 && (
+                          {(event.attempts ?? 0) > 0 && (
                             <>
                               <span>•</span>
                               <span>{event.attempts} attempts</span>

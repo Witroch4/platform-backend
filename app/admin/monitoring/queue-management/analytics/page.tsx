@@ -118,18 +118,22 @@ export default function AnalyticsPage() {
   };
 
   // Export metrics
-  const handleExport = async (format: 'csv' | 'json') => {
-    try {
-      const response = await fetch('/api/admin/queue-management/metrics', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'export',
-          queueName: selectedQueue,
-          timeRange: getTimeRangeObject(timeRange),
-          format
-        })
-      });
+  type ExportFormat = 'png' | 'csv' | 'json';
+  const handleExport = (format: ExportFormat) => {
+    if (format === 'png') return;
+
+    (async () => {
+      try {
+        const response = await fetch('/api/admin/queue-management/metrics', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'export',
+            queueName: selectedQueue,
+            timeRange: getTimeRangeObject(timeRange),
+            format
+          })
+        });
 
       if (!response.ok) {
         throw new Error('Export failed');
@@ -161,6 +165,7 @@ export default function AnalyticsPage() {
       console.error('Export failed:', err);
       setError('Export failed');
     }
+    })();
   };
 
   useEffect(() => {
