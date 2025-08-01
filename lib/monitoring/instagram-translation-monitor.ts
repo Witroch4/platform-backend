@@ -211,7 +211,7 @@ export class InstagramTranslationMonitor {
   private checkTranslationPerformanceAlerts(metrics: InstagramTranslationMetrics): void {
     // Alert on slow conversion
     if (metrics.conversionTime > INSTAGRAM_ALERT_THRESHOLDS.CONVERSION_TIME) {
-      apm.createAlert({
+      apm.triggerAlert({
         level: 'warning',
         component: 'instagram-translation',
         message: `Slow Instagram translation: ${metrics.conversionTime}ms`,
@@ -228,7 +228,7 @@ export class InstagramTranslationMonitor {
     if (!metrics.success) {
       const alertLevel = metrics.retryCount >= 2 ? 'error' : 'warning';
       
-      apm.createAlert({
+      apm.triggerAlert({
         level: alertLevel,
         component: 'instagram-translation',
         message: `Instagram translation failed: ${metrics.error}`,
@@ -244,7 +244,7 @@ export class InstagramTranslationMonitor {
 
     // Alert on incompatible messages
     if (metrics.templateType === 'incompatible') {
-      apm.createAlert({
+      apm.triggerAlert({
         level: 'info',
         component: 'instagram-translation',
         message: `Message incompatible with Instagram: ${metrics.bodyLength} characters`,
@@ -261,7 +261,7 @@ export class InstagramTranslationMonitor {
   private checkResourceUsageAlerts(metrics: InstagramWorkerPerformanceMetrics): void {
     // Alert on high memory usage
     if (metrics.memoryUsage.rss > INSTAGRAM_ALERT_THRESHOLDS.MEMORY_USAGE) {
-      apm.createAlert({
+      apm.triggerAlert({
         level: 'warning',
         component: 'instagram-translation',
         message: `High memory usage in Instagram worker: ${Math.round(metrics.memoryUsage.rss / 1024 / 1024)}MB`,
@@ -276,7 +276,7 @@ export class InstagramTranslationMonitor {
     // Calculate CPU usage percentage
     const cpuPercent = this.calculateCpuUsagePercent(metrics.cpuUsage);
     if (cpuPercent > INSTAGRAM_ALERT_THRESHOLDS.CPU_USAGE_PERCENT) {
-      apm.createAlert({
+      apm.triggerAlert({
         level: 'warning',
         component: 'instagram-translation',
         message: `High CPU usage in Instagram worker: ${cpuPercent.toFixed(1)}%`,
@@ -291,7 +291,7 @@ export class InstagramTranslationMonitor {
 
     // Alert on long processing time
     if (metrics.processingTime > INSTAGRAM_ALERT_THRESHOLDS.CONVERSION_TIME * 2) {
-      apm.createAlert({
+      apm.triggerAlert({
         level: 'warning',
         component: 'instagram-translation',
         message: `Long Instagram worker processing time: ${metrics.processingTime}ms`,
@@ -328,7 +328,7 @@ export class InstagramTranslationMonitor {
         // Check queue depth
         const totalJobs = queueHealth.waiting + queueHealth.active;
         if (totalJobs > INSTAGRAM_ALERT_THRESHOLDS.QUEUE_DEPTH) {
-          apm.createAlert({
+          apm.triggerAlert({
             level: 'warning',
             component: 'instagram-translation',
             message: `High Instagram translation queue depth: ${totalJobs} jobs`,
@@ -344,7 +344,7 @@ export class InstagramTranslationMonitor {
         const performanceStats = queueMonitor.getQueuePerformanceStats('instagram-translation', 5);
         if (performanceStats) {
           if (performanceStats.errorRate > INSTAGRAM_ALERT_THRESHOLDS.ERROR_RATE) {
-            apm.createAlert({
+            apm.triggerAlert({
               level: 'error',
               component: 'instagram-translation',
               message: `High Instagram translation error rate: ${performanceStats.errorRate.toFixed(1)}%`,
@@ -357,7 +357,7 @@ export class InstagramTranslationMonitor {
           }
 
           if (performanceStats.successRate < INSTAGRAM_ALERT_THRESHOLDS.SUCCESS_RATE_THRESHOLD) {
-            apm.createAlert({
+            apm.triggerAlert({
               level: 'error',
               component: 'instagram-translation',
               message: `Low Instagram translation success rate: ${performanceStats.successRate.toFixed(1)}%`,
@@ -372,7 +372,7 @@ export class InstagramTranslationMonitor {
 
         // Check if queue is paused
         if (queueHealth.paused) {
-          apm.createAlert({
+          apm.triggerAlert({
             level: 'warning',
             component: 'instagram-translation',
             message: 'Instagram translation queue is paused',
@@ -387,7 +387,7 @@ export class InstagramTranslationMonitor {
     } catch (error) {
       console.error('[Instagram Monitor] Health check error:', error);
       
-      apm.createAlert({
+      apm.triggerAlert({
         level: 'error',
         component: 'instagram-translation',
         message: `Instagram translation health check failed: ${error instanceof Error ? error.message : error}`,
@@ -411,7 +411,7 @@ export class InstagramTranslationMonitor {
       const avgConversionTime = recentTranslations.reduce((sum, m) => sum + m.conversionTime, 0) / recentTranslations.length;
       
       if (avgConversionTime > INSTAGRAM_ALERT_THRESHOLDS.CONVERSION_TIME) {
-        apm.createAlert({
+        apm.triggerAlert({
           level: 'warning',
           component: 'instagram-translation',
           message: `High average Instagram conversion time: ${avgConversionTime.toFixed(0)}ms`,
@@ -428,7 +428,7 @@ export class InstagramTranslationMonitor {
       const errorRate = (errorCount / recentTranslations.length) * 100;
       
       if (errorRate > INSTAGRAM_ALERT_THRESHOLDS.ERROR_RATE) {
-        apm.createAlert({
+        apm.triggerAlert({
           level: 'error',
           component: 'instagram-translation',
           message: `High Instagram translation error rate: ${errorRate.toFixed(1)}%`,
@@ -452,7 +452,7 @@ export class InstagramTranslationMonitor {
       // Alert on frequent specific errors
       for (const [errorCode, count] of Object.entries(errorsByCode)) {
         if (count > 5) { // More than 5 occurrences of the same error
-          apm.createAlert({
+          apm.triggerAlert({
             level: 'warning',
             component: 'instagram-translation',
             message: `Frequent Instagram translation error: ${errorCode} (${count} occurrences)`,
@@ -476,7 +476,7 @@ export class InstagramTranslationMonitor {
       const avgMemoryUsage = recentWorkerMetrics.reduce((sum, m) => sum + m.memoryUsage.rss, 0) / recentWorkerMetrics.length;
       
       if (avgMemoryUsage > INSTAGRAM_ALERT_THRESHOLDS.MEMORY_USAGE * 0.8) { // 80% of threshold
-        apm.createAlert({
+        apm.triggerAlert({
           level: 'info',
           component: 'instagram-translation',
           message: `Instagram worker memory usage trending high: ${Math.round(avgMemoryUsage / 1024 / 1024)}MB average`,

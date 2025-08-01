@@ -74,14 +74,14 @@ export class DatabaseMonitor {
   createMonitoredPrismaClient(prisma: PrismaClient): PrismaClient {
     // Create a proxy to intercept all database operations
     return new Proxy(prisma, {
-      get: (target, prop) => {
-        const originalMethod = target[prop as keyof PrismaClient];
+      get: (target: PrismaClient, prop: keyof PrismaClient) => {
+        const originalMethod = target[prop];
         
         // If it's a model (like user, lead, etc.)
         if (typeof originalMethod === 'object' && originalMethod !== null) {
-          return new Proxy(originalMethod, {
-            get: (modelTarget, modelProp) => {
-              const modelMethod = modelTarget[modelProp as keyof typeof modelTarget];
+          return new Proxy(originalMethod as Record<string, any>, {
+            get: (modelTarget: Record<string, any>, modelProp: string) => {
+              const modelMethod = modelTarget[modelProp];
               
               // If it's a database operation method
               if (typeof modelMethod === 'function' && this.isDatabaseOperation(modelProp as string)) {
@@ -311,7 +311,7 @@ export class DatabaseMonitor {
       // Create APM alert
       const alertLevel = metrics.executionTime > DATABASE_ALERT_THRESHOLDS.VERY_SLOW_QUERY_TIME ? 'error' : 'warning';
       
-      apm.createAlert({
+      apm.triggerAlert({
         level: alertLevel,
         component: 'database',
         message: `Slow query detected: ${metrics.queryType} (${metrics.executionTime}ms)`,
@@ -326,7 +326,7 @@ export class DatabaseMonitor {
 
     // Alert on query failure
     if (!metrics.success) {
-      apm.createAlert({
+      apm.triggerAlert({
         level: 'error',
         component: 'database',
         message: `Database query failed: ${metrics.queryType}`,
@@ -394,7 +394,7 @@ export class DatabaseMonitor {
     const connectionUsage = (metrics.activeConnections / metrics.connectionPoolSize) * 100;
     
     if (connectionUsage > DATABASE_ALERT_THRESHOLDS.MAX_CONNECTION_USAGE) {
-      apm.createAlert({
+      apm.triggerAlert({
         level: 'warning',
         component: 'database',
         message: `High database connection usage: ${connectionUsage.toFixed(1)}%`,
@@ -434,7 +434,7 @@ export class DatabaseMonitor {
 
       // Alert on high frequency queries
       if (frequency > DATABASE_ALERT_THRESHOLDS.QUERY_FREQUENCY_ALERT) {
-        apm.createAlert({
+        apm.triggerAlert({
           level: 'info',
           component: 'database',
           message: `High frequency query detected: ${queryType} (${frequency} times in 5 minutes)`,
@@ -449,7 +449,7 @@ export class DatabaseMonitor {
 
       // Alert on high error rate
       if (errorRate > DATABASE_ALERT_THRESHOLDS.HIGH_ERROR_RATE && queries.length > 10) {
-        apm.createAlert({
+        apm.triggerAlert({
           level: 'error',
           component: 'database',
           message: `High error rate for query: ${queryType} (${errorRate.toFixed(1)}%)`,
@@ -590,7 +590,7 @@ export class DatabaseMonitor {
 
   // Get database dashboard data
   getDatabaseDashboard(): {
-    performance: ReturnType<typeof this.getQueryPerformanceStats>;
+    performance: ReturnType<DatabaseMonitor['getQueryPerformanceStats']>;
     slowQueries: SlowQueryAlert[];
     recentFailures: DatabaseQueryMetrics[];
     connectionStatus: DatabaseConnectionMetrics | null;

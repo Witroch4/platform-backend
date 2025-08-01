@@ -1,4 +1,4 @@
-import { Queue, Job } from 'bullmq';
+import { Queue, Job, QueueEvents } from 'bullmq';
 import { connection } from '../redis';
 import type IORedis from 'ioredis';
 import { apm } from './application-performance-monitor';
@@ -59,6 +59,7 @@ export class QueueMonitor {
   private static instance: QueueMonitor;
   private redis: IORedis;
   private monitoredQueues: Map<string, Queue> = new Map();
+  private queueEventsMap: Map<string, QueueEvents> = new Map();
   private metricsHistory: Map<string, QueueHealthMetrics[]> = new Map();
   private jobMetricsHistory: Map<string, JobMetrics[]> = new Map();
   
@@ -82,7 +83,11 @@ export class QueueMonitor {
   registerQueue(queue: Queue, queueName?: string): void {
     const name = queueName || queue.name;
     this.monitoredQueues.set(name, queue);
-    
+
+    // Create QueueEvents instance
+    const events = new QueueEvents(name, { connection: this.redis });
+    this.queueEventsMap.set(name, events);
+
     // Initialize metrics history
     if (!this.metricsHistory.has(name)) {
       this.metricsHistory.set(name, []);
@@ -92,54 +97,68 @@ export class QueueMonitor {
     }
 
     // Set up queue event listeners
-    this.setupQueueEventListeners(queue, name);
+    this.setupQueueEventListeners(queue, events, name);
 
     console.log(`[QueueMonitor] Registered queue for monitoring: ${name}`);
   }
 
   // Set up event listeners for a queue
-  private setupQueueEventListeners(queue: Queue, queueName: string): void {
+  private setupQueueEventListeners(queue: Queue, events: QueueEvents, queueName: string): void {
     // Job completed event
-    queue.on('completed', (job: Job) => {
-      this.recordJobCompletion(job, queueName, 'completed');
+    events.on('completed', async ({ jobId }) => {
+      const job = await queue.getJob(jobId);
+      if (job) {
+        this.recordJobCompletion(job, queueName, 'completed');
+      }
     });
 
     // Job failed event
-    queue.on('failed', (job: Job, error: Error) => {
-      this.recordJobCompletion(job, queueName, 'failed', error);
+    events.on('failed', async ({ jobId, failedReason }) => {
+      const job = await queue.getJob(jobId);
+      const error = new Error(failedReason);
+      if (job) {
+        this.recordJobCompletion(job, queueName, 'failed', error);
+      }
     });
 
     // Job active event
-    queue.on('active', (job: Job) => {
-      this.recordJobStart(job, queueName);
+    events.on('active', async ({ jobId }) => {
+      const job = await queue.getJob(jobId);
+      if (job) {
+        this.recordJobStart(job, queueName);
+      }
     });
 
     // Job waiting event
-    queue.on('waiting', (job: Job) => {
-      this.recordJobWaiting(job, queueName);
+    events.on('waiting', async ({ jobId }) => {
+      const job = await queue.getJob(jobId);
+      if (job) {
+        this.recordJobWaiting(job, queueName);
+      }
     });
 
     // Job stalled event
-    queue.on('stalled', (job: Job) => {
+    events.on('stalled', async ({ jobId }) => {
+      const job = await queue.getJob(jobId);
       console.warn(`[QueueMonitor] Job stalled in queue ${queueName}:`, {
-        jobId: job.id,
-        jobName: job.name,
-        attempts: job.attemptsMade,
+        jobId: job?.id || jobId,
+        jobName: job?.name,
+        attempts: job?.attemptsMade,
       });
 
-      apm.createAlert({
+      apm.triggerAlert({
         level: 'warning',
         component: 'queue',
-        message: `Job stalled in queue ${queueName}: ${job.name}`,
-        metrics: { jobId: job.id, jobName: job.name, queueName },
+        message: `Job stalled in queue ${queueName}: ${job?.name ?? jobId}`,
+        metrics: { jobId: jobId, jobName: job?.name, queueName },
       });
     });
 
     // Queue error event
-    queue.on('error', (error: Error) => {
+    events.on('error', (error: Error) => {
       console.error(`[QueueMonitor] Queue error in ${queueName}:`, error);
 
-      apm.createAlert({
+      apm.triggerAlert({
         level: 'error',
         component: 'queue',
         message: `Queue error in ${queueName}: ${error.message}`,
@@ -254,7 +273,7 @@ export class QueueMonitor {
   private checkJobPerformanceAlerts(jobMetrics: JobMetrics): void {
     // Alert on long processing time
     if (jobMetrics.processingTime && jobMetrics.processingTime > QUEUE_ALERT_THRESHOLDS.MAX_PROCESSING_TIME) {
-      apm.createAlert({
+      apm.triggerAlert({
         level: 'warning',
         component: 'queue',
         message: `Long job processing time in queue ${jobMetrics.queueName}: ${jobMetrics.processingTime}ms`,
@@ -271,7 +290,7 @@ export class QueueMonitor {
     if (jobMetrics.status === 'failed') {
       const alertLevel = jobMetrics.attempts >= jobMetrics.maxAttempts ? 'error' : 'warning';
       
-      apm.createAlert({
+      apm.triggerAlert({
         level: alertLevel,
         component: 'queue',
         message: `Job failed in queue ${jobMetrics.queueName}: ${jobMetrics.error}`,
@@ -288,7 +307,7 @@ export class QueueMonitor {
 
     // Alert on high retry count
     if (jobMetrics.attempts > 2) {
-      apm.createAlert({
+      apm.triggerAlert({
         level: 'warning',
         component: 'queue',
         message: `Job with high retry count in queue ${jobMetrics.queueName}`,
@@ -374,7 +393,7 @@ export class QueueMonitor {
   private checkQueueHealthAlerts(metrics: QueueHealthMetrics): void {
     // Alert on too many waiting jobs
     if (metrics.waiting > QUEUE_ALERT_THRESHOLDS.MAX_WAITING_JOBS) {
-      apm.createAlert({
+      apm.triggerAlert({
         level: 'warning',
         component: 'queue',
         message: `High number of waiting jobs in queue ${metrics.queueName}: ${metrics.waiting}`,
@@ -384,7 +403,7 @@ export class QueueMonitor {
 
     // Alert on too many failed jobs
     if (metrics.failed > QUEUE_ALERT_THRESHOLDS.MAX_FAILED_JOBS) {
-      apm.createAlert({
+      apm.triggerAlert({
         level: 'error',
         component: 'queue',
         message: `High number of failed jobs in queue ${metrics.queueName}: ${metrics.failed}`,
@@ -395,7 +414,7 @@ export class QueueMonitor {
     // Alert on queue depth
     const totalJobs = metrics.waiting + metrics.active + metrics.delayed;
     if (totalJobs > QUEUE_ALERT_THRESHOLDS.MAX_QUEUE_DEPTH) {
-      apm.createAlert({
+      apm.triggerAlert({
         level: 'warning',
         component: 'queue',
         message: `High queue depth in ${metrics.queueName}: ${totalJobs} jobs`,
@@ -405,7 +424,7 @@ export class QueueMonitor {
 
     // Alert if queue is paused unexpectedly
     if (metrics.paused) {
-      apm.createAlert({
+      apm.triggerAlert({
         level: 'warning',
         component: 'queue',
         message: `Queue ${metrics.queueName} is paused`,
@@ -604,7 +623,7 @@ export class QueueMonitor {
       await queue.pause();
       console.log(`[QueueMonitor] Queue paused: ${queueName}`);
       
-      apm.createAlert({
+      apm.triggerAlert({
         level: 'info',
         component: 'queue',
         message: `Queue manually paused: ${queueName}`,
@@ -630,7 +649,7 @@ export class QueueMonitor {
       await queue.resume();
       console.log(`[QueueMonitor] Queue resumed: ${queueName}`);
       
-      apm.createAlert({
+      apm.triggerAlert({
         level: 'info',
         component: 'queue',
         message: `Queue manually resumed: ${queueName}`,
@@ -656,7 +675,7 @@ export class QueueMonitor {
       const cleaned = await queue.clean(0, 0, 'failed');
       console.log(`[QueueMonitor] Cleaned ${cleaned.length} failed jobs from queue: ${queueName}`);
       
-      apm.createAlert({
+      apm.triggerAlert({
         level: 'info',
         component: 'queue',
         message: `Cleaned ${cleaned.length} failed jobs from queue: ${queueName}`,
@@ -674,11 +693,17 @@ export class QueueMonitor {
   async shutdown(): Promise<void> {
     try {
       console.log('[QueueMonitor] Shutting down queue monitor...');
-      
+
       // Remove event listeners
       for (const [queueName, queue] of this.monitoredQueues.entries()) {
         queue.removeAllListeners();
       }
+
+      // Close QueueEvents
+      for (const events of this.queueEventsMap.values()) {
+        await events.close();
+      }
+      this.queueEventsMap.clear();
 
       // Clear monitoring data
       this.monitoredQueues.clear();

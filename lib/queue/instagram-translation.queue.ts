@@ -26,6 +26,8 @@ export interface InstagramTranslationJobData {
   metadata?: {
     timestamp: Date;
     retryCount?: number;
+    queuedAt?: string;
+    critical?: boolean;
   };
 }
 
@@ -34,6 +36,7 @@ export interface InstagramTranslationResult {
   fulfillmentMessages?: any[];
   error?: string;
   processingTime: number;
+  metadata?: Record<string, any>;
 }
 
 // Enhanced retry configuration with exponential backoff
