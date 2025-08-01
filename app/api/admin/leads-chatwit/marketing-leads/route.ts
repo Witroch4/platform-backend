@@ -25,13 +25,17 @@ export async function GET(request: NextRequest) {
       AND: [
         // Filtrar apenas leads com telefone válido
         {
-          phoneNumber: {
-            not: null
+          lead: {
+            phone: {
+              not: null
+            }
           }
         },
         {
-          phoneNumber: {
-            not: ""
+          lead: {
+            phone: {
+              not: ""
+            }
           }
         }
       ]
@@ -61,7 +65,7 @@ export async function GET(request: NextRequest) {
       if (usuarioChatwit?.chatwitAccessToken) {
         // Para usuários não-SUPERADMIN, filtrar apenas leads do próprio usuário
         whereConditions.AND.push({
-          usuario: {
+          usuarioChatwit: {
             appUserId: session.user.id
           }
         });
@@ -93,9 +97,11 @@ export async function GET(request: NextRequest) {
       whereConditions.AND.push({
         OR: [
           {
-            name: {
-              contains: search,
-              mode: "insensitive"
+            lead: {
+              name: {
+                contains: search,
+                mode: "insensitive"
+              }
             }
           },
           {
@@ -105,15 +111,19 @@ export async function GET(request: NextRequest) {
             }
           },
           {
-            email: {
-              contains: search,
-              mode: "insensitive"
+            lead: {
+              email: {
+                contains: search,
+                mode: "insensitive"
+              }
             }
           },
           {
-            phoneNumber: {
-              contains: search,
-              mode: "insensitive"
+            lead: {
+              phone: {
+                contains: search,
+                mode: "insensitive"
+              }
             }
           }
         ]
@@ -121,12 +131,12 @@ export async function GET(request: NextRequest) {
     }
 
     // Buscar leads
-    const leads = await db.leadChatwit.findMany({
+    const leads = await db.leadOabData.findMany({
       where: whereConditions,
       skip,
       take: limit,
       include: {
-        usuario: {
+        usuarioChatwit: {
           select: {
             id: true,
             name: true,
@@ -134,7 +144,8 @@ export async function GET(request: NextRequest) {
             channel: true,
             accountName: true
           }
-        }
+        },
+        lead: true
       },
       orderBy: {
         createdAt: 'desc'
@@ -142,7 +153,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Contar total de leads
-    const total = await db.leadChatwit.count({
+    const total = await db.leadOabData.count({
       where: whereConditions
     });
 

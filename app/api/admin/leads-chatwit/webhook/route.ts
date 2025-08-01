@@ -66,9 +66,9 @@ export async function POST(request: Request): Promise<Response> {
       // Buscar pelo telefone se não tiver o leadID
       if (!leadID && webhookData.telefone) {
         console.log("[Webhook] Buscando lead por telefone");
-        const lead = await prisma.leadChatwit.findFirst({
+        const lead = await prisma.leadOabData.findFirst({
           where: {
-            phoneNumber: webhookData.telefone
+            lead: { phone: webhookData.telefone }
           }
         });
         
@@ -129,9 +129,9 @@ export async function POST(request: Request): Promise<Response> {
       // Buscar pelo telefone se não tiver o leadID
       if (!leadID && webhookData.telefone) {
         console.log("[Webhook] Buscando lead por telefone");
-        const lead = await prisma.leadChatwit.findFirst({
+        const lead = await prisma.leadOabData.findFirst({
           where: {
-            phoneNumber: webhookData.telefone
+            lead: { phone: webhookData.telefone }
           }
         });
         
@@ -157,7 +157,7 @@ export async function POST(request: Request): Promise<Response> {
       
       try {
         // Armazenar o pré-recurso no banco
-        const leadUpdate = await prisma.leadChatwit.update({
+        const leadUpdate = await prisma.leadOabData.update({
           where: {
             id: leadID
           },
@@ -203,9 +203,9 @@ export async function POST(request: Request): Promise<Response> {
       // Buscar pelo telefone se não tiver o leadID
       if (!leadID && webhookData.telefone) {
         console.log("[Webhook] Buscando lead por telefone");
-        const lead = await prisma.leadChatwit.findFirst({
+        const lead = await prisma.leadOabData.findFirst({
           where: {
-            phoneNumber: webhookData.telefone
+            lead: { phone: webhookData.telefone }
           }
         });
         
@@ -246,7 +246,7 @@ export async function POST(request: Request): Promise<Response> {
       
       try {
         // Atualizar o lead com as URLs do recurso validado
-        const leadUpdate = await prisma.leadChatwit.update({
+        const leadUpdate = await prisma.leadOabData.update({
           where: {
             id: leadID
           },
@@ -465,9 +465,9 @@ export async function POST(request: Request): Promise<Response> {
       // Buscar pelo telefone se não tiver o leadID
       if (!leadID && webhookData.telefone) {
         console.log("[Webhook] Buscando lead por telefone");
-        const lead = await prisma.leadChatwit.findFirst({
+        const lead = await prisma.leadOabData.findFirst({
           where: {
-            phoneNumber: webhookData.telefone
+            lead: { phone: webhookData.telefone }
           }
         });
         
@@ -493,7 +493,7 @@ export async function POST(request: Request): Promise<Response> {
       
       try {
         // Armazenar o payload completo da pré-análise de simulado
-        const leadUpdate = await prisma.leadChatwit.update({
+        const leadUpdate = await prisma.leadOabData.update({
           where: {
             id: leadID
           },
@@ -539,9 +539,9 @@ export async function POST(request: Request): Promise<Response> {
       // Buscar pelo telefone se não tiver o leadID
       if (!leadID && webhookData.telefone) {
         console.log("[Webhook] Buscando lead por telefone");
-        const lead = await prisma.leadChatwit.findFirst({
+        const lead = await prisma.leadOabData.findFirst({
           where: {
-            phoneNumber: webhookData.telefone
+            lead: { phone: webhookData.telefone }
           }
         });
         
@@ -627,9 +627,9 @@ export async function POST(request: Request): Promise<Response> {
       // Buscar pelo telefone se não tiver o leadID
       if (!leadID && webhookData.telefone) {
         console.log("[Webhook] Buscando lead por telefone");
-        const lead = await prisma.leadChatwit.findFirst({
+        const lead = await prisma.leadOabData.findFirst({
           where: {
-            phoneNumber: webhookData.telefone
+            lead: { phone: webhookData.telefone }
           }
         });
         
@@ -668,7 +668,7 @@ export async function POST(request: Request): Promise<Response> {
       
       try {
         // Atualizar o lead com a URL da consultoria fase 2
-        const leadUpdate = await prisma.leadChatwit.update({
+        const leadUpdate = await prisma.leadOabData.update({
           where: {
             id: leadID
           },
@@ -716,9 +716,9 @@ export async function POST(request: Request): Promise<Response> {
       // Buscar pelo telefone se não tiver o leadID
       if (!leadID && webhookData.telefone) {
         console.log("[Webhook] Buscando lead por telefone");
-        const lead = await prisma.leadChatwit.findFirst({
+        const lead = await prisma.leadOabData.findFirst({
           where: {
-            phoneNumber: webhookData.telefone
+            lead: { phone: webhookData.telefone }
           }
         });
         
@@ -773,9 +773,9 @@ export async function POST(request: Request): Promise<Response> {
       // Buscar pelo telefone se não tiver o leadID
       if (!leadID && webhookData.telefone) {
         console.log("[Webhook] Buscando lead por telefone");
-        const lead = await prisma.leadChatwit.findFirst({
+        const lead = await prisma.leadOabData.findFirst({
           where: {
-            phoneNumber: webhookData.telefone
+            lead: { phone: webhookData.telefone }
           }
         });
         
@@ -830,9 +830,9 @@ export async function POST(request: Request): Promise<Response> {
       // Buscar pelo telefone se não tiver o leadID
       if (!leadID && webhookData.telefone) {
         console.log("[Webhook] Buscando lead por telefone");
-        const lead = await prisma.leadChatwit.findFirst({
+        const lead = await prisma.leadOabData.findFirst({
           where: {
-            phoneNumber: webhookData.telefone
+            lead: { phone: webhookData.telefone }
           }
         });
         
@@ -907,9 +907,9 @@ export async function POST(request: Request): Promise<Response> {
       // Buscar pelo telefone se não tiver o leadID
       if (!leadID && webhookData.telefone) {
         console.log("[Webhook] Buscando lead por telefone");
-        const lead = await prisma.leadChatwit.findFirst({
+        const lead = await prisma.leadOabData.findFirst({
           where: {
-            phoneNumber: webhookData.telefone
+            lead: { phone: webhookData.telefone }
           }
         });
         
@@ -984,9 +984,9 @@ export async function POST(request: Request): Promise<Response> {
       // Buscar pelo telefone se não tiver o leadID
       if (!leadID && webhookData.telefone) {
         console.log("[Webhook] Buscando lead por telefone");
-        const lead = await prisma.leadChatwit.findFirst({
+        const lead = await prisma.leadOabData.findFirst({
           where: {
-            phoneNumber: webhookData.telefone
+            lead: { phone: webhookData.telefone }
           }
         });
         
@@ -1046,9 +1046,9 @@ export async function POST(request: Request): Promise<Response> {
       // Buscar pelo telefone se não tiver o leadID
       if (!leadID && webhookData.telefone) {
         console.log("[Webhook] Buscando lead por telefone");
-        const lead = await prisma.leadChatwit.findFirst({
+        const lead = await prisma.leadOabData.findFirst({
           where: {
-            phoneNumber: webhookData.telefone
+            lead: { phone: webhookData.telefone }
           }
         });
         
@@ -1110,7 +1110,7 @@ export async function POST(request: Request): Promise<Response> {
         
         console.log("[Webhook] Atualizando lead com dados de consultoria:", leadUpdateData);
         
-        const leadUpdate = await prisma.leadChatwit.update({
+        const leadUpdate = await prisma.leadOabData.update({
           where: {
             id: leadID
           },
@@ -1153,9 +1153,9 @@ export async function POST(request: Request): Promise<Response> {
       // Segunda tentativa: buscar pelo telefone
       if (!leadID && webhookData.telefone) {
         console.log("[Webhook] Buscando lead por telefone");
-        const lead = await prisma.leadChatwit.findFirst({
+        const lead = await prisma.leadOabData.findFirst({
           where: {
-            phoneNumber: webhookData.telefone
+            lead: { phone: webhookData.telefone }
           }
         });
         

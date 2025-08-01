@@ -146,7 +146,7 @@ export async function DELETE(request: Request) {
     });
     
     // Remover associações com leads
-    await db.leadChatwit.updateMany({
+    await db.leadOabData.updateMany({
       where: { espelhoBibliotecaId: espelhoId },
       data: { espelhoBibliotecaId: null }
     });

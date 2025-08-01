@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     }
 
     /* 4 ─ Busca lead */
-    const lead = await db.leadChatwit.findUnique({
+    const lead = await db.leadOabData.findUnique({
       where:  { id: leadId },
       select: {
         id: true,

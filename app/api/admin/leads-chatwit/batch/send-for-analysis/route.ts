@@ -22,7 +22,7 @@ export async function POST(req: Request) {
     for (const leadData of leadsToProcess) {
       
       // Atualiza o BD com os dados do manuscrito e espelho
-      await db.leadChatwit.update({
+      await db.leadOabData.update({
           where: { id: leadData.leadId },
           data: {
               // Salve os dados do manuscrito e espelho aqui, se necessário

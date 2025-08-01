@@ -32,7 +32,7 @@ export async function POST(request: Request) {
       }
       
       // Atualizar o lead para usar este espelho
-      await db.leadChatwit.update({
+      await db.leadOabData.update({
         where: { id: leadId },
         data: { 
           espelhoBibliotecaId: espelhoId,
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
       // Desassociar espelho
       
       // Primeiro, buscar o espelho atual para decrementar o contador
-      const lead = await db.leadChatwit.findUnique({
+      const lead = await db.leadOabData.findUnique({
         where: { id: leadId },
         select: { espelhoBibliotecaId: true }
       });
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
       }
       
       // Remover associação
-      await db.leadChatwit.update({
+      await db.leadOabData.update({
         where: { id: leadId },
         data: { espelhoBibliotecaId: null }
       });

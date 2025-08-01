@@ -29,7 +29,7 @@ function extractIds(leadUrl: string) {
 async function downloadFile(fileUrl: string) {
   const res = await axios.get<ArrayBuffer>(fileUrl, { responseType: 'arraybuffer' });
   const contentType = res.headers['content-type'] ?? 'application/octet-stream';
-  const filename    = decodeURIComponent(new URL(fileUrl).pathname.split('/').pop()!);
+  const filename = decodeURIComponent(new URL(fileUrl).pathname.split('/').pop()!);
   return { buffer: Buffer.from(res.data), mime: contentType, filename };
 }
 
@@ -40,7 +40,9 @@ export async function POST(request: Request): Promise<Response> {
     // Extrair os parâmetros da URL
     const url = new URL(request.url);
     const sourceId = url.searchParams.get('sourceId');
-    const message = url.searchParams.get('message') || 'Segue o nosso Recurso, qualquer dúvida estamos à disposição.';
+    const message =
+      url.searchParams.get('message') ||
+      'Segue o nosso Recurso, qualquer dúvida estamos à disposição.';
     // Extrair accessToken personalizado se fornecido via URL
     let accessToken = url.searchParams.get('accessToken') || null;
 
@@ -48,82 +50,70 @@ export async function POST(request: Request): Promise<Response> {
       return NextResponse.json({ error: 'sourceId obrigatório' }, { status: 400 });
     }
 
-    // 1) Busca o lead + arquivos + usuário Chatwit
-    const lead = await prisma.leadOabData.findUnique({
-      where: { leadId: sourceId },
+    // 1) Busca o lead + arquivos + usuário Chatwit (novo schema: via relação lead -> sourceIdentifier)
+    const lead = await prisma.leadOabData.findFirst({
+      where: { lead: { sourceIdentifier: sourceId } },
       include: {
         arquivos: true,
         usuarioChatwit: {
           select: {
-            chatwitAccountId: true
-          }
-        }
-      }
+            chatwitAccountId: true,
+          },
+        },
+        lead: {
+          select: { sourceIdentifier: true },
+        },
+      },
     });
-    
+
     if (!lead || !lead.leadUrl) {
       throw new Error('Lead não encontrado ou sem leadUrl');
     }
 
-    // 2) Buscar o usuário Chatwit para obter token e accountId
+    // 2) Buscar o usuário Chatwit para obter accountId
     const usuarioChatwit = await prisma.usuarioChatwit.findFirst({
       where: {
         leadsOabData: {
-          some: { leadId: sourceId }
-        }
+          some: { lead: { sourceIdentifier: sourceId } },
+        },
       },
-      select: {
-        chatwitAccountId: true
-      }
+      select: { chatwitAccountId: true },
     });
-    
+
     if (!usuarioChatwit?.chatwitAccountId) {
-      return NextResponse.json({ error: 'Usuário Chatwit não configurado' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Usuário Chatwit não configurado' },
+        { status: 400 }
+      );
     }
 
-    // 3) Obter token de acesso
-    if (!accessToken) {
-      // Buscar token do usuário Chatwit
-      const usuarioComToken = await prisma.usuarioChatwit.findFirst({
-        where: {
-          leadsOabData: {
-            some: { leadId: sourceId }
-          }
-        },
-        select: {
-          chatwitAccountId: true
-        }
-      });
-      
-      if (usuarioComToken) {
-        console.log('Usando configuração do usuário Chatwit');
-      }
-    }
-    
-    // Se ainda não tiver, usa o token padrão do ambiente
+    // 3) Obter token de acesso (se não veio na URL, usa o do ambiente)
     if (!accessToken) {
       accessToken = CHATWOOT_ACCESS_TOKEN || null;
       console.log('Usando token de acesso padrão do ambiente');
     }
-
-    // Verificar se tem token de acesso
     if (!accessToken) {
-      return NextResponse.json({ error: 'Token de acesso não configurado' }, { status: 500 });
+      return NextResponse.json(
+        { error: 'Token de acesso não configurado' },
+        { status: 500 }
+      );
     }
 
     // 4) Seleciona a URL do PDF (prioriza recursoUrl → pdfUnificado → primeiro arquivo pdf)
     const pdfUrl =
       lead.recursoUrl ||
       lead.pdfUnificado ||
-      lead.arquivos.find((a: { id: string; dataUrl: string; fileType: string }) => a.fileType === 'pdf')?.dataUrl;
+      lead.arquivos.find(
+        (a: { id: string; dataUrl: string; fileType: string }) => a.fileType === 'pdf'
+      )?.dataUrl;
 
     if (!pdfUrl) {
       throw new Error('Nenhum PDF de recurso disponível para este lead');
     }
 
-    // 5) Extrai conversationId da URL (accountId já temos do banco)
+    // 5) Extrai conversationId da URL (accountId vem do banco)
     const { conversationId } = extractIds(lead.leadUrl);
-    const accountId = usuarioChatwit.chatwitAccountId; // Usar o ID do banco
+    const accountId = usuarioChatwit.chatwitAccountId;
 
     // 6) Baixa o PDF
     const { buffer, mime, filename } = await downloadFile(pdfUrl);
@@ -140,42 +130,17 @@ export async function POST(request: Request): Promise<Response> {
     const cwRes = await axios.post(chatwootUrl, form, {
       headers: {
         ...form.getHeaders(),
-        api_access_token: accessToken
+        api_access_token: accessToken,
       },
-      maxBodyLength: Number.POSITIVE_INFINITY // garante upload de PDFs grandes
+      maxBodyLength: Number.POSITIVE_INFINITY, // garante upload de PDFs grandes
     });
 
     // 9) Atualizar o campo anotacoes do lead com a mensagem enviada
-    const updateData: any = { 
-      anotacoes: message
-    };
-    
-    // Se tiver um accessToken personalizado na URL que não é o do ambiente, salva no usuário Chatwit
-    const urlAccessToken = url.searchParams.get('accessToken');
-    if (urlAccessToken && urlAccessToken !== CHATWOOT_ACCESS_TOKEN) {
-      // Buscar o usuário Chatwit associado ao lead
-      const usuarioChatwit = await prisma.usuarioChatwit.findFirst({
-        where: {
-          leadsOabData: {
-            some: { leadId: sourceId }
-          }
-        }
-      });
-      
-      if (usuarioChatwit) {
-        // Atualizar apenas se o campo existir no modelo
-        await prisma.usuarioChatwit.update({
-          where: { id: usuarioChatwit.id },
-          data: { 
-            // Removido chatwitAccessToken pois não existe mais no modelo
-          }
-        });
-      }
-    }
-    
-    await prisma.leadOabData.update({
-      where: { leadId: sourceId },
-      data: updateData
+    const updateData: any = { anotacoes: message };
+
+    await prisma.leadOabData.updateMany({
+      where: { lead: { sourceIdentifier: sourceId } },
+      data: updateData,
     });
 
     return NextResponse.json({ ok: true, chatwoot: cwRes.data });
@@ -186,4 +151,4 @@ export async function POST(request: Request): Promise<Response> {
 }
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic'; 
+export const dynamic = 'force-dynamic';

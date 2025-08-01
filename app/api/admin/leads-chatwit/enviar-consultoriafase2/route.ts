@@ -29,11 +29,19 @@ export async function POST(request: Request): Promise<Response> {
     }
     
     // Buscar o lead no banco de dados
-    const lead = await prisma.leadChatwit.findUnique({
+    const lead = await prisma.leadOabData.findUnique({
       where: { id: leadId },
       include: {
-        usuario: true,
-        arquivos: true
+        usuarioChatwit: true,
+        arquivos: true,
+        lead: {
+          select: {
+            name: true,
+            phone: true,
+            sourceIdentifier: true,
+            email: true
+          }
+        }
       }
     });
     
@@ -43,7 +51,7 @@ export async function POST(request: Request): Promise<Response> {
     }
     
     // Marcar o lead como aguardando análise
-    await prisma.leadChatwit.update({
+    await prisma.leadOabData.update({
       where: { id: leadId },
       data: { 
         aguardandoAnalise: true
@@ -138,8 +146,8 @@ export async function POST(request: Request): Promise<Response> {
       ...payload,
       analisesimulado: true, // Flag específica para análise de simulado
       leadID: leadId,
-      nome: lead.nomeReal || lead.name || "Lead sem nome",
-      telefone: lead.phoneNumber,
+      nome: lead.nomeReal || lead.lead?.name || "Lead sem nome",
+      telefone: lead.lead?.phone,
       textoManuscrito: textoManuscrito, // Adiciona o texto do manuscrito formatado
       textoEspelho: textoEspelho, // Adiciona o texto do espelho formatado
       arquivos: lead.arquivos.map((a: { id: string; dataUrl: string; fileType: string }) => ({
@@ -161,7 +169,7 @@ export async function POST(request: Request): Promise<Response> {
       })),
       metadata: {
         leadUrl: lead.leadUrl,
-        sourceId: lead.sourceId,
+        sourceId: lead.lead?.sourceIdentifier,
         concluido: lead.concluido,
         fezRecurso: lead.fezRecurso,
         manuscritoProcessado: lead.manuscritoProcessado,
