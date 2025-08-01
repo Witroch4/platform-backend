@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
+import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { sendTemplateMessage } from "@/lib/whatsapp";
 
@@ -116,11 +117,8 @@ export async function POST(request: Request) {
 
     // O restante do código de disparo continua igual
     const disparosData = leads.map((lead) => ({
-      templateId: template.id,
       templateName: template.name,
       leadId: lead.id,
-      leadNome: lead.name,
-      leadTelefone: lead.phone,
       status: "PENDING",
       scheduledAt: new Date(Date.now() + delayMinutes * 60 * 1000),
       parameters: parameters || {},
@@ -228,7 +226,7 @@ export async function POST(request: Request) {
             await db.disparoMtfDiamante.updateMany({
               where: {
                 leadId: lead.id,
-                templateId: template.id,
+                templateName: template.name,
                 status: "PENDING",
               },
               data: {
@@ -242,7 +240,7 @@ export async function POST(request: Request) {
             await db.disparoMtfDiamante.updateMany({
               where: {
                 leadId: lead.id,
-                templateId: template.id,
+                templateName: template.name,
                 status: "PENDING",
               },
               data: {

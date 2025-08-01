@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
       enabled: flags.filter(f => f.enabled).length,
       rollout: flags.filter(f => f.enabled && f.rolloutPercentage < 100).length,
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[FeatureFlags API] Error getting flags:', error);
     return NextResponse.json(
       { error: 'Failed to get feature flags' },
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     );
 
     return NextResponse.json(flag);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[FeatureFlags API] Error creating/updating flag:', error);
     return NextResponse.json(
       { error: 'Failed to create/update feature flag' },
@@ -84,7 +84,7 @@ export async function DELETE(request: NextRequest) {
     await featureFlagManager.rollback(flagName, reason);
 
     return NextResponse.json({ success: true, message: 'Flag rolled back successfully' });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[FeatureFlags API] Error deleting flag:', error);
     return NextResponse.json(
       { error: 'Failed to delete feature flag' },

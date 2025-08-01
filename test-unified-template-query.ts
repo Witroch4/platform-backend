@@ -31,8 +31,9 @@ async function testUnifiedTemplateQuery() {
 
     console.log("✅ Query structure is valid");
     console.log("Found mapeamento:", mapeamento ? "Yes" : "No");
-  } catch (error: any) {
-    console.error("❌ Query failed:", error.message);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : JSON.stringify(error);
+    console.error("❌ Query failed:", message);
   }
 
   await db.$disconnect();

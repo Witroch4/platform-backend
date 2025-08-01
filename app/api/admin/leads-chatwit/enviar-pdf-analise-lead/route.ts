@@ -7,12 +7,10 @@ import axios from 'axios';
 const CHATWOOT_ACCESS_TOKEN = process.env.CHATWITACESSTOKEN; // => UXDyxpWNGhTJCGXydACZPaCZ
 const CHATWOOT_BASE_URL = process.env.CHATWIT_BASE_URL ?? 'https://chatwit.witdev.com.br';
 console.log('CHATWOOT_ACCESS_TOKEN', CHATWOOT_ACCESS_TOKEN);
+
 // ---- Utilidades -------------------------------------------------------------
 
-/**
- * Extrai accountId e conversationId de uma URL do tipo
- * https://.../accounts/3/conversations/1199
- */
+/** Extrai accountId e conversationId de URLs do tipo https://.../accounts/3/conversations/1199 */
 function extractIds(leadUrl: string) {
   const url = new URL(leadUrl);
   const [, , account, accountId, , conversationId] = url.pathname.split('/');
@@ -22,9 +20,7 @@ function extractIds(leadUrl: string) {
   return { accountId, conversationId };
 }
 
-/**
- * Faz download do arquivo remoto e devolve {buffer, mime, filename}
- */
+/** Faz download do arquivo remoto e devolve {buffer, mime, filename} */
 async function downloadFile(fileUrl: string) {
   const res = await axios.get<ArrayBuffer>(fileUrl, { responseType: 'arraybuffer' });
   const contentType = res.headers['content-type'] ?? 'application/octet-stream';
@@ -47,18 +43,17 @@ export async function POST(request: Request): Promise<Response> {
       return NextResponse.json({ error: 'sourceId obrigatório' }, { status: 400 });
     }
 
-    // 1) Busca o lead + arquivos
+    // 1) Busca o lead + arquivos (novo schema: via relação lead -> sourceIdentifier)
     const lead = await prisma.leadOabData.findFirst({
       where: { lead: { sourceIdentifier: sourceId } },
       include: { arquivos: true }
     });
-    
+
     if (!lead || !lead.leadUrl) {
       throw new Error('Lead não encontrado ou sem leadUrl');
     }
-    
-    // Se não tiver accessToken na URL, verifica se existe no banco de dados
-    // Buscar o token do usuário Chatwit
+
+    // 2) Token: prioriza token salvo para o usuário relacionado a este lead
     if (!accessToken) {
       const usuarioChatwit = await prisma.usuarioChatwit.findFirst({
         where: {
@@ -68,25 +63,24 @@ export async function POST(request: Request): Promise<Response> {
         },
         select: { chatwitAccessToken: true }
       });
-      
+
       if (usuarioChatwit?.chatwitAccessToken) {
         accessToken = usuarioChatwit.chatwitAccessToken;
         console.log('Usando token de acesso do usuário Chatwit');
       }
     }
-    
+
     // Se ainda não tiver, usa o token padrão do ambiente
     if (!accessToken) {
       accessToken = CHATWOOT_ACCESS_TOKEN || null;
       console.log('Usando token de acesso padrão do ambiente');
     }
 
-    // Verificar se tem token de acesso
     if (!accessToken) {
       return NextResponse.json({ error: 'Token de acesso não configurado' }, { status: 500 });
     }
 
-    // 2) Seleciona a URL do PDF (prioriza analiseUrl → pdfUnificado → primeiro arquivo pdf)
+    // 3) Seleciona a URL do PDF (prioriza analiseUrl → pdfUnificado → primeiro arquivo pdf)
     const pdfUrl =
       lead.analiseUrl ||
       lead.pdfUnificado ||
@@ -96,19 +90,19 @@ export async function POST(request: Request): Promise<Response> {
       throw new Error('Nenhum PDF disponível para este lead');
     }
 
-    // 3) Extrai ids do Chatwoot
+    // 4) Extrai ids do Chatwoot
     const { accountId, conversationId } = extractIds(lead.leadUrl);
 
-    // 4) Baixa o PDF
+    // 5) Baixa o PDF
     const { buffer, mime, filename } = await downloadFile(pdfUrl);
 
-    // 5) Monta multipart/form-data
+    // 6) Monta multipart/form-data
     const form = new FormData();
     form.append('content', message);
     form.append('message_type', 'outgoing');
     form.append('attachments[]', buffer, { filename, contentType: mime });
 
-    // 6) Envia para o Chatwoot
+    // 7) Envia para o Chatwoot
     const chatwootUrl = `${CHATWOOT_BASE_URL}/api/v1/accounts/${accountId}/conversations/${conversationId}/messages`;
 
     const cwRes = await axios.post(chatwootUrl, form, {
@@ -116,19 +110,14 @@ export async function POST(request: Request): Promise<Response> {
         ...form.getHeaders(),
         api_access_token: accessToken
       },
-      maxBodyLength: Number.POSITIVE_INFINITY // garante upload de PDFs grandes
+      maxBodyLength: Number.POSITIVE_INFINITY
     });
 
-    // 7) Atualizar o campo anotacoes do lead com a mensagem enviada
-    // e salvar o accessToken se foi fornecido via URL e não é o mesmo do ambiente
-    const updateData: any = { 
-      anotacoes: message
-    };
-    
-    // Se tiver um accessToken personalizado na URL que não é o do ambiente, salva no usuário Chatwit
+    // 8) Atualiza anotações e persiste accessToken customizado (se veio na URL)
+    const updateData: any = { anotacoes: message };
+
     const urlAccessToken = url.searchParams.get('accessToken');
     if (urlAccessToken && urlAccessToken !== CHATWOOT_ACCESS_TOKEN) {
-      // Buscar o usuário Chatwit associado ao lead
       const usuarioChatwit = await prisma.usuarioChatwit.findFirst({
         where: {
           leadsOabData: {
@@ -136,7 +125,7 @@ export async function POST(request: Request): Promise<Response> {
           }
         }
       });
-      
+
       if (usuarioChatwit) {
         await prisma.usuarioChatwit.update({
           where: { id: usuarioChatwit.id },
@@ -144,7 +133,7 @@ export async function POST(request: Request): Promise<Response> {
         });
       }
     }
-    
+
     await prisma.leadOabData.updateMany({
       where: { lead: { sourceIdentifier: sourceId } },
       data: updateData

@@ -44,7 +44,7 @@ interface UnifiedButtonReaction {
 interface ReviewStepProps {
   message: InteractiveMessage
   reactions: UnifiedButtonReaction[]
-  caixaId: string
+  inboxId: string
   onSave?: (savedMessage: InteractiveMessage) => void
   onBack: () => void
   editingMessage?: InteractiveMessage
@@ -89,7 +89,7 @@ const getMessageTypeDisplay = (type: string): string => {
 export const ReviewStep: React.FC<ReviewStepProps> = ({
   message,
   reactions,
-  caixaId,
+  inboxId,
   onSave,
   onBack,
   editingMessage,
@@ -144,7 +144,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
     try {
       // Prepare the unified save payload
       const savePayload = {
-        caixaId,
+        inboxId,
         message: {
           name: message.name,
           type: message.type,
@@ -240,7 +240,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
 
       toast.error(errorMessage)
     }
-  }, [message, reactions, caixaId, editingMessage, onSave, saveState.saving])
+  }, [message, reactions, inboxId, editingMessage, onSave, saveState.saving])
 
   // Validation check
   const canSave = useMemo(() => {

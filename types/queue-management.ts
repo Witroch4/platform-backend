@@ -2,7 +2,7 @@
 export type JobState = 'waiting' | 'active' | 'completed' | 'failed' | 'delayed' | 'paused';
 export type QueueStatus = 'healthy' | 'warning' | 'critical';
 export type AlertSeverity = 'info' | 'warning' | 'error' | 'critical';
-export type FlowStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+export type FlowStatus = 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
 
 export interface QueueHealth {
   name: string;

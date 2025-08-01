@@ -62,7 +62,7 @@ export function useVariableManager(): UseVariableManagerReturn {
       const data = await response.json();
       const loadedVariables = ensureSpecialVariables(data.variaveis || []);
       setVariables(loadedVariables);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error loading variables:', error);
       toast.error('Failed to load variables');
       // Set default special variables if loading fails
@@ -114,9 +114,10 @@ export function useVariableManager(): UseVariableManagerReturn {
       toast.success('Variables saved successfully!');
       await refreshVariables(); // Reload variables after saving
       return true;
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error saving variables:', error);
-      toast.error((error as Error).message);
+      const message = error instanceof Error ? error.message : 'Failed to save variables';
+      toast.error(message);
       return false;
     } finally {
       setSaving(false);

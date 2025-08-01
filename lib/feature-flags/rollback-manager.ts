@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import { PrismaClient } from '@prisma/client';
 import { Redis } from 'ioredis';
 import { FeatureFlagManager } from './feature-flag-manager';
@@ -136,11 +135,11 @@ export class RollbackManager {
           );
           
           console.log(`[Rollback] Rolled back flag: ${flagConfig.flagName}`);
-        } catch (error) {
-          const errorMsg = `Failed to rollback flag ${flagConfig.flagName}: ${error instanceof Error ? error.message : 'Unknown error'}`;
-          errors.push(errorMsg);
-          console.error(`[Rollback] ${errorMsg}`);
-        }
+          } catch (error: unknown) {
+            const errorMsg = `Failed to rollback flag ${flagConfig.flagName}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+            errors.push(errorMsg);
+            console.error(`[Rollback] ${errorMsg}`);
+          }
       }
 
       const execution: RollbackExecution = {
@@ -163,8 +162,8 @@ export class RollbackManager {
 
       console.log(`[Rollback] Completed rollback plan: ${planId} in ${execution.duration}ms`);
       return execution;
-    } catch (error) {
-      const execution: RollbackExecution = {
+      } catch (error: unknown) {
+        const execution: RollbackExecution = {
         planId,
         executedAt: new Date(),
         executedBy,
@@ -213,20 +212,20 @@ export class RollbackManager {
       }
       
       return plans.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-    } catch (error) {
-      console.error('[Rollback] Error getting rollback plans:', error);
-      return [];
-    }
+      } catch (error: unknown) {
+        console.error('[Rollback] Error getting rollback plans:', error);
+        return [];
+      }
   }
 
   async getRollbackExecutions(limit: number = 50): Promise<RollbackExecution[]> {
     try {
       const executions = await this.redis.lrange('rollback_executions', 0, limit - 1);
       return executions.map(exec => JSON.parse(exec));
-    } catch (error) {
-      console.error('[Rollback] Error getting rollback executions:', error);
-      return [];
-    }
+      } catch (error: unknown) {
+        console.error('[Rollback] Error getting rollback executions:', error);
+        return [];
+      }
   }
 
   async canRollback(flagName: string): Promise<{
@@ -265,12 +264,12 @@ export class RollbackManager {
         canRollback: true,
         reason: 'Ready for rollback',
       };
-    } catch (error) {
-      return {
-        canRollback: false,
-        reason: `Error checking rollback status: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      };
-    }
+      } catch (error: unknown) {
+        return {
+          canRollback: false,
+          reason: `Error checking rollback status: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        };
+      }
   }
 
   private async sendRollbackAlert(
@@ -300,9 +299,9 @@ export class RollbackManager {
       
       // Send to monitoring system
       console.log(`[Rollback] Alert sent:`, alert);
-    } catch (error) {
-      console.error('[Rollback] Error sending rollback alert:', error);
-    }
+      } catch (error: unknown) {
+        console.error('[Rollback] Error sending rollback alert:', error);
+      }
   }
 }
 
@@ -323,7 +322,7 @@ export async function quickEmergencyRollback(
     await rollbackManager.emergencyRollback(flagNames, reason, 'quick-emergency');
     
     console.log(`[Rollback] Quick emergency rollback completed for flags: ${flagNames.join(', ')}`);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Rollback] Quick emergency rollback failed:', error);
     throw error;
   }
@@ -346,35 +345,8 @@ export async function rollbackAllFlags(reason: string = 'System-wide rollback'):
     await rollbackManager.emergencyRollback(flagNames, reason, 'system-wide-rollback');
     
     console.log(`[Rollback] System-wide rollback completed for ${flagNames.length} flags`);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Rollback] System-wide rollback failed:', error);
     throw error;
   }
 }
-=======
-import type { Prisma } from '@prisma/client'
-
-export interface RollbackFlagState {
-  id: number
-  previousState: {
-    enabled: boolean
-    conditions: Record<string, any> | undefined
-  }
-}
-
-export interface RollbackPlan {
-  flags: RollbackFlagState[]
-}
-
-export function createRollbackPlan(flags: { id: number; state: { enabled: boolean; conditions: Prisma.JsonObject | null } }[]): RollbackPlan {
-  return {
-    flags: flags.map((f) => ({
-      id: f.id,
-      previousState: {
-        enabled: f.state.enabled,
-        conditions: f.state.conditions ?? undefined
-      }
-    }))
-  }
-}
->>>>>>> 2e45d85462b61011f5f293ab34968a4c66ff84ba

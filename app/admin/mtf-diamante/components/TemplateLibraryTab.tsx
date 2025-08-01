@@ -109,17 +109,13 @@ export function TemplateLibraryTab() {
   };
 
   const getScopeIcon = (scope: string) => {
-    return scope === 'global' ? <Globe className="h-4 w-4" /> : <User className="h-4 w-4" />;
+    return scope === 'GLOBAL' ? <Globe className="h-4 w-4" /> : <User className="h-4 w-4" />;
   };
 
   const getApprovalStatus = (template: TemplateLibraryWithCreator) => {
-    if (!template.isApprovalRequired) {
-      return <Badge variant="secondary">Sem Aprovação Necessária</Badge>;
-    }
-
     const latestRequest = template.approvalRequests?.[0];
     if (!latestRequest) {
-      return <Badge variant="outline">Não Solicitado</Badge>;
+      return <Badge variant="secondary">Sem Aprovação Necessária</Badge>;
     }
 
     switch (latestRequest.status) {
@@ -135,11 +131,11 @@ export function TemplateLibraryTab() {
   };
 
   const getScopeLabel = (scope: string) => {
-    return scope === 'global' ? 'Biblioteca' : 'Privado';
+    return scope === 'GLOBAL' ? 'Biblioteca' : 'Privado';
   };
 
   const getScopeBadgeVariant = (scope: string) => {
-    return scope === 'global' ? 'default' : 'secondary';
+    return scope === 'GLOBAL' ? 'default' : 'secondary';
   };
 
   const getTypeLabel = (type: string) => {
@@ -275,7 +271,7 @@ export function TemplateLibraryTab() {
                   <CardContent className="space-y-3">
                     <div className="flex items-center justify-between text-sm text-muted-foreground">
                       <span>Por {template.createdBy.name || template.createdBy.email}</span>
-                      <span>Usado {template.totalUsageCount} vezes</span>
+                      <span>Usado {template.usageCount ?? 0} vezes</span>
                     </div>
 
                     <div className="flex items-center gap-2 flex-wrap">
@@ -301,8 +297,8 @@ export function TemplateLibraryTab() {
                         Visualizar
                       </Button>
 
-                      {template.isApprovalRequired && 
-                       !template.approvalRequests?.some(r => r.status === 'approved') && (
+                      {template.approvalRequests &&
+                       !template.approvalRequests.some(r => r.status === 'approved') && (
                         <Button
                           variant="outline"
                           size="sm"

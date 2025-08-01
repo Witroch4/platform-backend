@@ -37,7 +37,7 @@ export async function saveTempFile(buffer: Buffer, extension: string): Promise<s
         } catch (permError) {
           console.warn('[iLovePDF] Aviso: Não foi possível definir permissões para o diretório temp:', permError);
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('[iLovePDF] Erro ao criar diretório temporário:', error);
         throw new Error(`Não foi possível criar o diretório temporário na raiz do projeto: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -48,7 +48,7 @@ export async function saveTempFile(buffer: Buffer, extension: string): Promise<s
     await fs.promises.writeFile(filePath, buffer);
     console.log(`[iLovePDF] Arquivo temporário salvo com sucesso: ${filePath}`);
     return filePath;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[iLovePDF] Erro ao salvar arquivo temporário:', error);
     throw new Error(`Falha ao salvar arquivo temporário: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -106,7 +106,7 @@ export async function unifyFilesToPdf(fileUrls: string[]): Promise<Buffer> {
         await mergeTask.addFile(pdfFile);
         console.log(`[iLovePDF] Arquivo ${i + 1} adicionado à tarefa de mesclagem`);
         processedFiles.push(fileUrl);
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error(`[iLovePDF] Erro ao processar arquivo ${i + 1}: ${fileUrl}`, error);
         failedFiles.push({ url: fileUrl, error: error instanceof Error ? error.message : String(error) });
       }
@@ -155,7 +155,7 @@ export async function convertImageToPdf(imageUrl: string): Promise<Buffer> {
     try {
       await fs.promises.unlink(tempFilePath);
       console.log(`[iLovePDF] Arquivo temporário excluído: ${tempFilePath}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(`[iLovePDF] Erro ao excluir arquivo temporário ${tempFilePath}:`, error);
     }
     return Buffer.from(pdfBuf);
@@ -176,7 +176,7 @@ export function isImage(url: string): boolean {
     const extension = pathname.split('.').pop()?.toLowerCase() || '';
     const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'tiff', 'tif'];
     return imageExtensions.includes(extension);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`[iLovePDF] Erro ao verificar se URL é imagem: ${url}`, error);
     const ext = url.toLowerCase();
     return ext.endsWith('.jpg') || ext.endsWith('.jpeg') || ext.endsWith('.png');
@@ -302,7 +302,7 @@ export async function convertOfficeToPdf(officeUrl: string): Promise<Buffer> {
       if (fileExtension && ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'odt', 'odp', 'ods'].includes(fileExtension)) {
         extension = fileExtension;
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.warn(`[iLovePDF] Não foi possível determinar a extensão do arquivo, usando .docx como padrão`);
     }
     const tempFilePath = await saveTempFile(officeBuffer, extension);
@@ -323,7 +323,7 @@ export async function convertOfficeToPdf(officeUrl: string): Promise<Buffer> {
       console.error(`[iLovePDF] Erro ao excluir arquivo temporário ${tempFilePath}:`, error);
     }
     return Buffer.from(pdfBuf);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[iLovePDF] Erro ao converter arquivo Office em PDF:', error);
     throw new Error(`Falha ao converter arquivo Office em PDF: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -340,7 +340,7 @@ export function isOfficeFile(url: string): boolean {
     const extension = pathname.split('.').pop()?.toLowerCase() || '';
     const officeExtensions = ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'odt', 'odp', 'ods'];
     return officeExtensions.includes(extension);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`[iLovePDF] Erro ao verificar se URL é arquivo Office: ${url}`, error);
     const ext = url.toLowerCase();
     return ext.endsWith('.doc') || ext.endsWith('.docx') ||
@@ -360,7 +360,7 @@ export function isPdf(url: string): boolean {
     const pathname = urlObj.pathname;
     const extension = pathname.split('.').pop()?.toLowerCase() || '';
     return extension === 'pdf';
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`[iLovePDF] Erro ao verificar se URL é PDF: ${url}`, error);
     return url.toLowerCase().endsWith('.pdf');
   }

@@ -82,16 +82,15 @@ export const SaveToLibraryButton: React.FC<SaveToLibraryButtonProps> = ({
         }))
       };
 
-      const libraryData = {
+      const libraryData: CreateTemplateLibraryData = {
         name: templateData.name,
         description: `${messageType === 'template' ? 'Template' : 'Mensagem interativa'} criado via interface`,
-        type: messageType,
-        scope: 'global' as const,
+        type: messageType === 'template' ? 'WHATSAPP_OFFICIAL' : 'INTERACTIVE_MESSAGE',
+        scope: 'GLOBAL',
         content,
-        category: templateData.category?.toLowerCase() || 'utility',
         language: templateData.language || 'pt_BR',
         tags: [messageType, templateData.category?.toLowerCase() || 'utility'],
-        createdById: session.user.id
+        createdById: session.user.id,
       };
 
       await TemplateLibraryService.saveToLibrary(libraryData);

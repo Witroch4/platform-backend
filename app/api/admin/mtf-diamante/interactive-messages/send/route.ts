@@ -193,10 +193,8 @@ export async function POST(request: Request) {
     await prisma.disparoMtfDiamante.create({
       data: {
         userId: session.user.id,
-        templateId: messageId,
         templateName: template.name,
         leadId: recipientPhone,
-        leadTelefone: recipientPhone,
         status: "SENT",
         sentAt: new Date(),
         parameters: JSON.parse(JSON.stringify({
@@ -224,10 +222,8 @@ export async function POST(request: Request) {
         await prisma.disparoMtfDiamante.create({
           data: {
             userId: session.user.id,
-            templateId: "error",
             templateName: "interactive_message_error",
             leadId: "unknown",
-            leadTelefone: "unknown",
             status: "FAILED",
             errorMessage: error.message,
             parameters: JSON.parse(JSON.stringify({

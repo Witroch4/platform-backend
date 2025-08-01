@@ -29,18 +29,18 @@ export function TemplatePreviewDialog({ template, open, onOpenChange }: Template
 
   if (!template) return null;
 
-  const content = template.content as unknown as TemplateLibraryContent;
+  const content = (template as any).content as TemplateLibraryContent | undefined;
 
   // Initialize variable values with examples
   React.useEffect(() => {
-    if (content.variables) {
+    if (content?.variables) {
       const initialValues: Record<string, string> = {};
       content.variables.forEach((variable, index) => {
         initialValues[variable] = `Example ${index + 1}`;
       });
       setVariableValues(initialValues);
     }
-  }, [content.variables]);
+  }, [content?.variables]);
 
   const processText = (text: string): string => {
     return Object.entries(variableValues).reduce((processed, [key, value]) => {
@@ -53,7 +53,7 @@ export function TemplatePreviewDialog({ template, open, onOpenChange }: Template
   };
 
   const getScopeIcon = (scope: string) => {
-    return scope === 'global' ? <Globe className="h-4 w-4" /> : <User className="h-4 w-4" />;
+    return scope === 'GLOBAL' ? <Globe className="h-4 w-4" /> : <User className="h-4 w-4" />;
   };
 
   return (
@@ -65,8 +65,8 @@ export function TemplatePreviewDialog({ template, open, onOpenChange }: Template
             <DialogTitle>{template.name}</DialogTitle>
             <div className="flex items-center gap-1">
               {getScopeIcon(template.scope)}
-              <Badge variant={template.scope === 'global' ? 'default' : 'secondary'}>
-                {template.scope === 'global' ? 'Global' : 'Account'}
+              <Badge variant={template.scope === 'GLOBAL' ? 'default' : 'secondary'}>
+                {template.scope === 'GLOBAL' ? 'Global' : 'Account'}
               </Badge>
             </div>
           </div>
@@ -95,7 +95,7 @@ export function TemplatePreviewDialog({ template, open, onOpenChange }: Template
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Usage count:</span>
-                  <span>{template.totalUsageCount}</span>
+                  <span>{template.usageCount ?? 0}</span>
                 </div>
                 {template.category && (
                   <div className="flex justify-between">
@@ -122,7 +122,7 @@ export function TemplatePreviewDialog({ template, open, onOpenChange }: Template
             )}
 
             {/* Variable Controls */}
-            {content.variables && content.variables.length > 0 && (
+            {content?.variables && content.variables.length > 0 && (
               <div>
                 <h4 className="font-medium mb-2">Variables</h4>
                 <div className="space-y-2">
@@ -205,7 +205,7 @@ export function TemplatePreviewDialog({ template, open, onOpenChange }: Template
                     </div>
                   )}
                   
-                  {content.buttons && content.buttons.length > 0 && (
+                  {content?.buttons && content.buttons.length > 0 && (
                     <div className="mt-3 space-y-1">
                       {content.buttons.map((button, index) => (
                         <Button
@@ -224,7 +224,7 @@ export function TemplatePreviewDialog({ template, open, onOpenChange }: Template
             </div>
 
             {/* Approval Status */}
-            {template.isApprovalRequired && (
+            {template.approvalRequests && (
               <div>
                 <h4 className="font-medium mb-2">Approval Status</h4>
                 <div className="space-y-2">
