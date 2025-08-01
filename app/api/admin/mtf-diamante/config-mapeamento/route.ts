@@ -5,21 +5,7 @@ import { z } from 'zod';
 
 const mtfConfigSchema = z.object({
   valorAnalise: z.string().min(1, "Valor da análise é obrigatório"),
-  chavePix: z.string().min(1, "Chave PIX é obrigatória"),
-  lotes: z.array(z.object({
-    numero: z.number().min(1),
-    nome: z.string().min(1),
-    valor: z.string().min(1),
-    dataInicio: z.string().datetime(),
-    dataFim: z.string().datetime(),
-    isActive: z.boolean()
-  })).min(1, "Deve haver pelo menos um lote"),
-  intentMappings: z.array(z.object({
-    intentName: z.string(),
-    templateName: z.string(),
-    parameters: z.any().optional(),
-    isActive: z.boolean()
-  })).optional().default([])
+  chavePix: z.string().min(1, "Chave PIX é obrigatória")
 });
 
 export async function GET(request: Request) {
@@ -46,12 +32,6 @@ export async function GET(request: Request) {
         isActive: true
       },
       include: {
-        lotes: {
-          orderBy: { numero: 'asc' }
-        },
-        intentMappings: {
-          where: { isActive: true }
-        },
         variaveis: true
       }
     });
@@ -86,61 +66,7 @@ export async function GET(request: Request) {
           });
           configId = newConfig.id;
 
-          // Criar lote padrão
-          await tx.mtfDiamanteLote.create({
-            data: {
-              configId: newConfig.id,
-              numero: 1,
-              nome: "Primeiro Lote",
-              valor: "R$ 287,90",
-              dataInicio: new Date(),
-              dataFim: new Date(),
-              isActive: true
-            }
-          });
         }
-
-        // Criar mapeamentos padrão (seed inicial) - sempre, mesmo se config já existir
-        console.log('Criando mapeamentos padrão...');
-        const defaultMappings = [
-          {
-            intentName: "oab",
-            templateName: "oab",
-            parameters: {},
-            isActive: true
-          },
-          {
-            intentName: "atendimentohumano",
-            templateName: "welcome",
-            parameters: {},
-            isActive: true
-          },
-          {
-            intentName: "oab - pix",
-            templateName: "pix",
-            parameters: {},
-            isActive: true
-          }
-        ];
-
-        // Garantir que configId existe neste ponto
-        if (!configId) {
-          throw new Error('ConfigId não encontrado ao criar mapeamentos padrão');
-        }
-
-        await Promise.all(
-          defaultMappings.map(mapping =>
-            tx.mtfDiamanteIntentMapping.create({
-              data: {
-                configId: configId,
-                intentName: mapping.intentName,
-                templateName: mapping.templateName,
-                parameters: mapping.parameters,
-                isActive: mapping.isActive
-              }
-            })
-          )
-        );
 
         // Marcar o seed como executado para este usuário
         await tx.user.update({
@@ -156,12 +82,6 @@ export async function GET(request: Request) {
           isActive: true
         },
         include: {
-          lotes: {
-            orderBy: { numero: 'asc' }
-          },
-          intentMappings: {
-            where: { isActive: true }
-          },
           variaveis: true
         }
       });
@@ -176,9 +96,7 @@ export async function GET(request: Request) {
       config: {
         id: config?.id,
         valorAnalise,
-        chavePix,
-        lotes: config?.lotes || [],
-        intentMappings: config?.intentMappings || []
+        chavePix
       }
     });
 
@@ -265,49 +183,7 @@ export async function POST(request: Request) {
         }
       });
 
-      // Remover lotes existentes
-      await tx.mtfDiamanteLote.deleteMany({
-        where: { configId: existingConfig.id }
-      });
-
-      // Criar novos lotes
-      const lotes = await Promise.all(
-        validatedData.lotes.map(lote =>
-          tx.mtfDiamanteLote.create({
-            data: {
-              configId: existingConfig.id,
-              numero: lote.numero,
-              nome: lote.nome,
-              valor: lote.valor,
-              dataInicio: new Date(lote.dataInicio),
-              dataFim: new Date(lote.dataFim),
-              isActive: lote.isActive
-            }
-          })
-        )
-      );
-
-      // Remover mapeamentos existentes
-      await tx.mtfDiamanteIntentMapping.deleteMany({
-        where: { configId: existingConfig.id }
-      });
-
-      // Criar novos mapeamentos
-      const intentMappings = await Promise.all(
-        validatedData.intentMappings.map(mapping =>
-          tx.mtfDiamanteIntentMapping.create({
-            data: {
-              configId: existingConfig.id,
-              intentName: mapping.intentName,
-              templateName: mapping.templateName,
-              parameters: mapping.parameters || {},
-              isActive: mapping.isActive
-            }
-          })
-        )
-      );
-
-      return { config: updatedConfig, lotes, intentMappings };
+      return { config: updatedConfig };
     });
 
     return NextResponse.json({
