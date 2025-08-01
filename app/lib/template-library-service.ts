@@ -126,7 +126,7 @@ export class TemplateLibraryService {
     // Check if user already has a pending request for this template
     const existingRequest = await db.templateApprovalRequest.findFirst({
       where: {
-        templateLibraryId: templateId,
+        templateId: templateId,
         requestedById: userId,
         status: 'pending'
       }
@@ -141,7 +141,6 @@ export class TemplateLibraryService {
         templateId: templateId,
         requestedById: userId,
         requestMessage,
-        customVariables: customVariables || Prisma.JsonNull,
         status: 'pending'
       }
     });
