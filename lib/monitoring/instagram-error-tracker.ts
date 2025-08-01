@@ -316,7 +316,7 @@ export class InstagramErrorTracker {
   ): void {
     const alertLevel = severity === ErrorSeverity.CRITICAL ? 'critical' : 'error';
     
-    apm.createAlert({
+    apm.triggerAlert({
       level: alertLevel,
       component: 'instagram-translation',
       message: `${severity.toUpperCase()} Instagram translation error: ${errorCode}`,
@@ -383,7 +383,7 @@ export class InstagramErrorTracker {
           
           if (!lastAlert || (now - parseInt(lastAlert)) > (30 * 60 * 1000)) { // 30 minutes
             // Create pattern alert
-            apm.createAlert({
+            apm.triggerAlert({
               level: pattern.severity === ErrorSeverity.CRITICAL ? 'critical' : 'warning',
               component: 'instagram-translation',
               message: `Error pattern detected: ${pattern.pattern} (${pattern.occurrences} occurrences)`,

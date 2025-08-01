@@ -320,6 +320,16 @@ export class ApplicationPerformanceMonitor {
     });
   }
 
+  // Expose alert creation for other modules
+  public triggerAlert(alertData: {
+    level: AlertLevel;
+    component: string;
+    message: string;
+    metrics?: any;
+  }): void {
+    this.createAlert(alertData);
+  }
+
   // Store alert in Redis
   private async storeAlertInRedis(alert: Alert): Promise<void> {
     try {
@@ -700,6 +710,15 @@ export function recordDatabaseMetrics(metrics: DatabaseMetrics): void {
 
 export function recordCacheMetrics(metrics: CacheMetrics): void {
   apm.recordCacheMetrics(metrics);
+}
+
+export function createAPMAlert(alertData: {
+  level: AlertLevel;
+  component: string;
+  message: string;
+  metrics?: any;
+}): void {
+  apm.triggerAlert(alertData);
 }
 
 // Performance measurement decorators
