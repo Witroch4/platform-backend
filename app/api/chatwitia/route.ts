@@ -46,55 +46,8 @@ export async function POST(req: Request) {
       );
     }
 
-    // 🔗 Determinar o responseId correto para usar
-    let finalPreviousResponseId = null;
-    if (sessionId) {
-      try {
-        console.log(`🔍 Buscando lastResponseId da sessão no banco: ${sessionId}`);
-        const session = await db.chatSession.findUnique({
-          where: { id: sessionId },
-          select: { lastResponseId: true }
-        });
-        
-        // 🔧 NOVA LÓGICA SIMPLIFICADA:
-        // - Se previousResponseId é fornecido E é diferente do lastResponseId da sessão,
-        //   é uma referência específica de imagem (via interface)
-        // - Caso contrário, usar lastResponseId da sessão normalmente
-        
-        if (previousResponseId && previousResponseId !== session?.lastResponseId) {
-          // Verificar se o previousResponseId fornecido existe no banco (validação)
-          const messageWithResponseId = await db.chatMessage.findFirst({
-            where: {
-              sessionId: sessionId,
-              responseId: previousResponseId
-            },
-            select: { responseId: true }
-          });
-          
-          if (messageWithResponseId) {
-            finalPreviousResponseId = previousResponseId;
-            console.log(`🖼️ ✅ Usando responseId específico para referência de imagem: ${finalPreviousResponseId}`);
-            console.log(`ℹ️ LastResponseId da sessão: ${session?.lastResponseId}, mas usando responseId da imagem referenciada: ${previousResponseId}`);
-          } else {
-            console.log(`⚠️ ResponseId fornecido não encontrado no banco: ${previousResponseId}, usando lastResponseId da sessão`);
-            finalPreviousResponseId = session?.lastResponseId || null;
-          }
-        } else {
-          // Usar lastResponseId da sessão normalmente
-          finalPreviousResponseId = session?.lastResponseId || null;
-          if (finalPreviousResponseId) {
-            console.log(`🔗 ✅ Usando lastResponseId da sessão: ${finalPreviousResponseId}`);
-          } else {
-            console.log(`🔗 ❌ Nenhum responseId encontrado (nova conversa)`);
-          }
-        }
-      } catch (error) {
-        console.error('❌ Erro ao buscar responseId:', error);
-        finalPreviousResponseId = null;
-      }
-    } else {
-      console.log(`🔗 ℹ️ Nenhuma sessão fornecida (nova conversa)`);
-    }
+    // 🔗 Determinar o responseId a ser usado (se fornecido)
+    let finalPreviousResponseId = previousResponseId || null;
 
     // Verifica se é um modelo Anthropic/Claude
     const isClaudeModel = model.includes('claude');
@@ -538,79 +491,8 @@ async function handleOpenAIRequest(messages: Message[], model: string, sessionId
     
     // 🔍 Verificar compatibilidade entre modelo atual e previous_response_id
     // Se temos um previous_response_id, verificar se há incompatibilidade entre reasoning/non-reasoning models
-    // Usar o previousResponseId que já foi validado e buscado do banco de dados
+    // Usar o previousResponseId diretamente (modelos antigos não possuem mais relacionamentos)
     let compatiblePreviousResponseId = previousResponseId;
-    
-    if (compatiblePreviousResponseId && sessionId) {
-      try {
-        // Buscar a última mensagem do assistente para verificar qual modelo foi usado
-        const lastAssistantMessage = await db.chatMessage.findFirst({
-          where: {
-            sessionId: sessionId,
-            role: 'assistant',
-            responseId: compatiblePreviousResponseId
-          },
-          select: { modelUsed: true, responseId: true },
-          orderBy: { createdAt: 'desc' }
-        });
-        
-        if (lastAssistantMessage?.modelUsed) {
-          const previousModelWasReasoning = lastAssistantMessage.modelUsed.startsWith('o');
-          const currentModelIsReasoning = isOSeriesModel;
-          
-          // 🔧 CORREÇÃO: Para multi-turn image generation, permitir transição entre modelos compatíveis
-          // Modelos que suportam image generation podem fazer multi-turn mesmo sendo diferentes
-          const imageCompatibleModels = [
-            'gpt-4o-2024-11-20', 'gpt-4o', 'gpt-4o-2024-05-13', 'gpt-4o-2024-08-06',
-            'gpt-4.1', 'gpt-4.1-2025-04-14', 'gpt-4.1-mini', 'gpt-4.1-mini-2025-04-14',
-            'gpt-4.1-nano', 'gpt-4.1-nano-2025-04-14', 'o3-mini', 'o3'
-          ];
-          
-          const previousModelSupportsImages = imageCompatibleModels.some(m => 
-            lastAssistantMessage.modelUsed?.includes(m.split('-')[0])
-          );
-          const currentModelSupportsImages = supportsImageGeneration;
-          
-          // Se ambos os modelos suportam geração de imagem, permitir multi-turn
-          if (previousModelSupportsImages && currentModelSupportsImages) {
-            console.log(`✅ Multi-turn image generation permitido entre modelos compatíveis`);
-          }
-          // Para modelos reasoning, verificar se são exatamente o mesmo modelo
-          else if (previousModelWasReasoning && currentModelIsReasoning) {
-            // Extrair o modelo base (ex: o4-mini, o3, o1) para comparação
-            const extractBaseModel = (modelName: string) => {
-              // Remove datas e sufixos para comparar apenas o tipo base
-              return modelName.replace(/-\d{4}-\d{2}-\d{2}$/, '').replace(/-latest$/, '');
-            };
-            
-            const previousBaseModel = extractBaseModel(lastAssistantMessage.modelUsed);
-            const currentBaseModel = extractBaseModel(openaiModel);
-            
-            if (previousBaseModel !== currentBaseModel) {
-              console.log(`⚠️ Incompatibilidade entre modelos reasoning: modelo anterior (${lastAssistantMessage.modelUsed} → ${previousBaseModel}) ≠ modelo atual (${openaiModel} → ${currentBaseModel})`);
-              console.log(`🔄 Removendo previous_response_id - reasoning items só funcionam com o mesmo modelo`);
-              compatiblePreviousResponseId = undefined;
-            } else {
-              console.log(`✅ Compatibilidade confirmada: mesmo modelo reasoning (${currentBaseModel})`);
-            }
-          }
-          // Para modelos non-reasoning, verificar se ambos são non-reasoning
-          else if (!previousModelWasReasoning && !currentModelIsReasoning) {
-            console.log(`✅ Compatibilidade confirmada: ambos são modelos non-reasoning`);
-          }
-          // Se há incompatibilidade entre reasoning e non-reasoning models
-          else if (previousModelWasReasoning !== currentModelIsReasoning) {
-            console.log(`⚠️ Incompatibilidade detectada: modelo anterior (${lastAssistantMessage.modelUsed}) era reasoning: ${previousModelWasReasoning}, modelo atual (${openaiModel}) é reasoning: ${currentModelIsReasoning}`);
-            console.log(`🔄 Removendo previous_response_id para evitar erro de reasoning input items`);
-            compatiblePreviousResponseId = undefined;
-          }
-        }
-      } catch (error) {
-        console.error('❌ Erro ao verificar compatibilidade de modelos:', error);
-        // Em caso de erro, remover previous_response_id por segurança
-        compatiblePreviousResponseId = undefined;
-      }
-    }
     
     console.log(`🚀 Usando Responses API exclusivamente para modelo original: ${model}, modelo mapeado: ${openaiModel}`);
     console.log(`📊 É modelo da série O (reasoning): ${isOSeriesModel}`);
@@ -1523,23 +1405,9 @@ async function handleOpenAIRequest(messages: Message[], model: string, sessionId
                           role: 'assistant',
                           content: contentToSave,
                           contentType: 'text',
-                          responseId: this.responseId,
                           responsesApiResponse: this.fullResponseData,
                           usage: this.fullResponseData?.usage
                         });
-
-                        // 🔗 Atualizar lastResponseId na sessão
-                        if (this.sessionIdForDB && this.responseId) {
-                          try {
-                            await db.chatSession.update({
-                              where: { id: this.sessionIdForDB },
-                              data: { lastResponseId: this.responseId }
-                            });
-                            console.log(`🔗 LastResponseId atualizado na sessão: ${this.responseId}`);
-                          } catch (error) {
-                            console.error('Erro ao atualizar lastResponseId na sessão:', error);
-                          }
-                        }
                         
                         console.log('✅ Assistant message saved to database [COMPLETED]');
                       } catch (dbError) {
@@ -1788,8 +1656,6 @@ async function saveMessageToDatabase(
         role: message.role,
         content: message.content,
         contentType: message.contentType,
-        previousResponseId: message.previousResponseId,
-        responseId: message.responseId,
         imageUrl: message.imageUrl,
         audioData: message.audioData,
         // Novos campos da Responses API
@@ -1800,8 +1666,7 @@ async function saveMessageToDatabase(
         reasoningTokens: message.usage?.reasoning_tokens,
         temperature: responsesData?.temperature,
         topP: responsesData?.top_p,
-        responseStatus: responsesData?.status,
-        responseCreatedAt: responsesData?.created_at ? new Date(responsesData.created_at * 1000) : undefined
+        responseStatus: responsesData?.status
       }
     });
     
@@ -1811,7 +1676,7 @@ async function saveMessageToDatabase(
       data: { updatedAt: new Date() }
     });
     
-    console.log(`Message saved to database for session ${sessionId} with responseId: ${message.responseId || 'none'}`);
+    console.log(`Message saved to database for session ${sessionId}`);
     if (message.responsesApiResponse) {
       console.log(`📊 Responses API data saved: model=${responsesData?.model}, tokens=${message.usage?.total_tokens}, status=${responsesData?.status}`);
     }
