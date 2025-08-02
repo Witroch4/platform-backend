@@ -1,12 +1,12 @@
 import { v4 as uuidv4 } from "uuid";
-import crypto from "node:crypto";
-import { Prisma } from "@prisma/client";
+import * as crypto from "node:crypto";
+import { Prisma, WebhookEvent } from "@prisma/client";
 import { prisma } from "../prisma";
 import { connection as redis } from "../redis";
 import { webhookQueue } from "./webhook-queue";
 import { paginateArray, applySorting, applyFilters } from "../utils/api-helpers";
 
-const defaultEvent = Object.values(Prisma.$Enums.WebhookEvent)[0] as Prisma.$Enums.WebhookEvent;
+const defaultEvent = Object.values(WebhookEvent)[0] as WebhookEvent;
 const DEFAULT_WEBHOOK_TIMEOUT_MS = 10000;
 
 // Interfaces
@@ -29,7 +29,7 @@ export interface WebhookConfig {
     jobTypes?: string[];
     severityLevels?: string[];
   };
-  timeout: number;
+  timeout?: number;
   createdAt?: Date;
   updatedAt?: Date;
   createdBy?: string;
@@ -65,8 +65,8 @@ export interface WebhookStats {
   consecutiveFailures: number;
 }
 
-export interface WebhookEvent {
-  eventType: string;
+export interface WebhookEventPayload {
+  eventType: WebhookEvent;
   timestamp: Date;
   data: any;
   queueName?: string;
@@ -111,8 +111,6 @@ export class WebhookManager {
         enabled: data.enabled ?? true,
         secret: data.secret,
         retryPolicy: data.retryPolicy as any,
-        filters: data.filters as any,
-        timeout: data.timeout ?? 10000,
         createdBy: data.createdBy || "system",
       },
     });
@@ -206,8 +204,6 @@ export class WebhookManager {
     if (data.secret !== undefined) updateData.secret = data.secret;
     if (data.enabled !== undefined) updateData.enabled = data.enabled;
     if (data.retryPolicy !== undefined) updateData.retryPolicy = data.retryPolicy as any;
-    if (data.filters !== undefined) updateData.filters = data.filters as any;
-    if (data.timeout !== undefined) updateData.timeout = data.timeout;
     if (data.createdBy !== undefined) updateData.createdBy = data.createdBy;
 
     const webhook = await prisma.webhookConfig.update({
@@ -296,7 +292,7 @@ export class WebhookManager {
       where.enabled = enabled;
     }
     if (events && events.length > 0) {
-      where.events = { hasSome: events };
+      where.events = { array_contains: events };
     }
 
     const [total, webhooks] = await Promise.all([
@@ -336,7 +332,7 @@ export class WebhookManager {
     lastSuccessAt: Date | null;
     lastFailureAt: Date | null;
   }> {
-    const deliveries = await prisma.webhookDelivery.findMany({
+    const deliveries = (await prisma.webhookDelivery.findMany({
       select: {
         responseStatus: true,
         createdAt: true,
@@ -344,7 +340,7 @@ export class WebhookManager {
       },
       orderBy: { deliveredAt: "desc" },
       take: 1000,
-    });
+    })) as WebhookDelivery[];
 
     const totalWebhooks = await prisma.webhookConfig.count();
     const activeWebhooks = await prisma.webhookConfig.count({ where: { enabled: true } });
@@ -388,7 +384,7 @@ export class WebhookManager {
   // Estatísticas por webhookId
   // ---------------------------------------------------------------------------
   async getWebhookStatsById(webhookId: string): Promise<WebhookStats> {
-    const deliveries = await prisma.webhookDelivery.findMany({
+    const deliveries = (await prisma.webhookDelivery.findMany({
       where: { webhookId },
       select: {
         responseStatus: true,
@@ -398,7 +394,7 @@ export class WebhookManager {
       },
       orderBy: { createdAt: "desc" },
       take: 1000,
-    });
+    })) as WebhookDelivery[];
 
     const totalDeliveries = deliveries.length;
     const successfulDeliveries = deliveries.filter(
@@ -593,6 +589,19 @@ export class WebhookManager {
     return { success: result.count, failed: 0 };
   }
 
+  async resetWebhookFailures(webhookId: string): Promise<void> {
+    await prisma.webhookDelivery.updateMany({
+      where: {
+        webhookId,
+        NOT: { responseStatus: null },
+      },
+      data: {
+        responseStatus: null,
+        deliveredAt: null,
+      },
+    });
+  }
+
   async markDeliveryAsDelivered(
     id: string,
     responseStatus: number,
@@ -642,9 +651,8 @@ export class WebhookManager {
     const delivery = await prisma.webhookDelivery.create({
       data: {
         webhookId,
-        eventType: defaultEvent as unknown as string, // DB enum; o tipo da interface é string
+        eventType: defaultEvent,
         payload,
-        headers: (headers as any) ?? {},
         attempts: 0,
       },
     });
@@ -655,7 +663,7 @@ export class WebhookManager {
   /**
    * Trigger webhook for an event
    */
-  async triggerWebhook(event: WebhookEvent): Promise<void> {
+  async triggerWebhook(event: WebhookEventPayload): Promise<void> {
     const webhooks = await this.getWebhooksForEvent(event.eventType);
 
     for (const webhook of webhooks) {
@@ -703,7 +711,7 @@ export class WebhookManager {
     }
 
     const deliveryId = await this.createDelivery(webhookId, {
-      eventType,
+      eventType: eventType as WebhookEvent,
       timestamp: new Date(),
       data: payload,
     });
@@ -820,14 +828,14 @@ export class WebhookManager {
     const webhooks = await prisma.webhookConfig.findMany({
       where: {
         enabled: true,
-        events: { has: eventType },
+        events: { array_contains: eventType },
       },
     });
 
     return webhooks.map((webhook: any) => this.formatWebhookConfig(webhook));
   }
 
-  private shouldTriggerWebhook(webhook: WebhookConfig, event: WebhookEvent): boolean {
+  private shouldTriggerWebhook(webhook: WebhookConfig, event: WebhookEventPayload): boolean {
     if (webhook.filters) {
       if (webhook.filters.queueNames && event.queueName) {
         if (!webhook.filters.queueNames.includes(event.queueName)) {
@@ -839,7 +847,7 @@ export class WebhookManager {
     return true;
   }
 
-  private async createDelivery(webhookId: string, event: WebhookEvent): Promise<string> {
+  private async createDelivery(webhookId: string, event: WebhookEventPayload): Promise<string> {
     const deliveryId = uuidv4();
 
     await prisma.webhookDelivery.create({
@@ -904,8 +912,6 @@ export class WebhookManager {
       secret: webhook.secret,
       enabled: webhook.enabled,
       retryPolicy: webhook.retryPolicy,
-      filters: webhook.filters,
-      timeout: webhook.timeout ?? 10000,
       createdAt: webhook.createdAt,
       updatedAt: webhook.updatedAt,
       createdBy: webhook.createdBy,
