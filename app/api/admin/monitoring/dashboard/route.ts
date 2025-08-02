@@ -1,5 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import type { ErrorStatistics as BaseErrorStatistics } from '@/lib/monitoring/instagram-error-tracker';
+
+interface TimeRange {
+  start: Date;
+  end: Date;
+  granularity: 'minute' | 'hour' | 'day';
+}
+
+interface ErrorStatistics extends BaseErrorStatistics {
+  errorsByType?: Record<string, number>;
+  recentErrors?: unknown[];
+}
 
 // Função para criar conexão Redis com fallback
 function createRedisConnection() {
@@ -34,10 +46,10 @@ function createRedisConnection() {
     });
 
     // Adicionar tratamento de erros para evitar logs desnecessários
-    redis.on("error", (error) => {
+    redis.on("error", (error: Error) => {
       console.warn(
         "[Dashboard Redis] Connection error (using fallback mode):",
-        error.message
+        (error as Error).message
       );
     });
 
@@ -46,7 +58,7 @@ function createRedisConnection() {
     });
 
     return redis;
-  } catch (error) {
+  } catch (error: unknown) {
     console.warn(
       "[Dashboard] Redis not available, using fallback mode:",
       error
@@ -58,10 +70,52 @@ function createRedisConnection() {
 const prisma = new PrismaClient();
 const redis = createRedisConnection();
 
+type DashboardRange = '1h' | '24h' | '7d' | '30d';
+
+function parseTimeRange(value: string | null): DashboardRange {
+  switch (value) {
+    case '1h':
+    case '24h':
+    case '7d':
+    case '30d':
+      return value;
+    default:
+      return '24h';
+  }
+}
+
+function getTimeRangeObject(range: DashboardRange): TimeRange {
+  const now = new Date();
+  let start: Date;
+  let granularity: 'minute' | 'hour' | 'day' = 'minute';
+
+  switch (range) {
+    case '1h':
+      start = new Date(now.getTime() - 60 * 60 * 1000);
+      granularity = 'minute';
+      break;
+    case '24h':
+      start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      granularity = 'minute';
+      break;
+    case '7d':
+      start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      granularity = 'hour';
+      break;
+    case '30d':
+      start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      granularity = 'day';
+      break;
+  }
+
+  return { start, end: now, granularity };
+}
+
 export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const timeRangeParam = parseTimeRange(searchParams.get('timeRange'));
+  const timeRange = getTimeRangeObject(timeRangeParam);
   try {
-    const { searchParams } = new URL(request.url);
-    const timeRange = searchParams.get("timeRange") || "24h";
 
     // Test Redis connection
     let redisAvailable = false;
@@ -70,10 +124,10 @@ export async function GET(request: NextRequest) {
         await redis.ping();
         redisAvailable = true;
         console.log("[Dashboard] Redis connection verified ✅");
-      } catch (error) {
+      } catch (error: unknown) {
         console.warn(
           "[Dashboard] Redis ping failed, using fallback mode:",
-          error.message
+          (error as Error).message
         );
         redisAvailable = false;
       }
@@ -81,7 +135,7 @@ export async function GET(request: NextRequest) {
 
     if (!redisAvailable) {
       // Return simplified dashboard data without Redis dependencies
-      return NextResponse.json(await getSimplifiedDashboard(timeRange));
+      return NextResponse.json(await getSimplifiedDashboard(timeRangeParam));
     }
 
     try {
@@ -92,13 +146,14 @@ export async function GET(request: NextRequest) {
       const { ABTestingManager } = await import(
         "@/lib/feature-flags/ab-testing-manager"
       );
-      const { FeedbackCollector } = await import(
-        "@/lib/feedback/feedback-collector"
-      );
+      const {
+        FeedbackCollector,
+        getFeedbackCollector,
+      } = await import('@/lib/feedback/feedback-collector');
 
       const featureFlagManager = FeatureFlagManager.getInstance(prisma, redis);
       const abTestManager = ABTestingManager.getInstance(prisma, redis);
-      const feedbackCollector = FeedbackCollector.getInstance(prisma, redis);
+      const feedbackCollector = getFeedbackCollector(prisma, redis);
 
       // Get system overview
       const systemOverview = await getSystemOverviewSimple(redisAvailable);
@@ -120,7 +175,7 @@ export async function GET(request: NextRequest) {
 
       const dashboard = {
         timestamp: new Date().toISOString(),
-        timeRange,
+        timeRange: timeRangeParam,
         systemOverview,
         featureFlags: {
           flags: featureFlags,
@@ -150,16 +205,16 @@ export async function GET(request: NextRequest) {
         "[Dashboard] Manager initialization failed, using simplified mode:",
         managerError
       );
-      return NextResponse.json(await getSimplifiedDashboard(timeRange));
+      return NextResponse.json(await getSimplifiedDashboard(timeRangeParam));
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("[Dashboard] Error generating dashboard:", error);
-    return NextResponse.json(await getSimplifiedDashboard(timeRange));
+    return NextResponse.json(await getSimplifiedDashboard(timeRangeParam));
   }
 }
 
 // Função para dashboard simplificado sem dependências
-async function getSimplifiedDashboard(timeRange: string) {
+async function getSimplifiedDashboard(timeRange: DashboardRange) {
   return {
     timestamp: new Date().toISOString(),
     timeRange,
@@ -348,7 +403,7 @@ async function getFeedbackMetricsSimple() {
       satisfactionScore: 3.5,
       trendData: [],
     };
-  } catch (error) {
+  } catch (error: unknown) {
     console.warn("[Dashboard] Error getting feedback metrics:", error);
     return {
       totalFeedback: 0,
@@ -379,7 +434,7 @@ async function getInstagramTranslationMetrics() {
     const { getInstagramErrorStatistics } = await import('@/lib/monitoring/instagram-error-tracker');
     
     const performanceSummary = await instagramTranslationMonitor.getPerformanceSummary(60); // Last hour
-    const errorStatistics = await getInstagramErrorStatistics(1); // Last hour
+    const errorStatistics = await getInstagramErrorStatistics(1) as ErrorStatistics; // Last hour
     
     return {
       status: "HEALTHY",
@@ -411,7 +466,7 @@ async function getInstagramTranslationMetrics() {
         recent: errorStatistics.recentErrors?.slice(0, 5) || [],
       },
     };
-  } catch (error) {
+  } catch (error: unknown) {
     console.warn('[Dashboard] Instagram translation metrics unavailable:', error);
     return {
       status: "LIMITED",
