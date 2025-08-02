@@ -1,4 +1,5 @@
 // app/api/admin/leads/merge/route.ts
+/// <reference path="../../../../../declarations.d.ts" />
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
@@ -99,7 +100,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         if (!primaryLead.avatarUrl && secondaryLead.avatarUrl) updateData.avatarUrl = secondaryLead.avatarUrl;
         
         // Mesclar tags
-        const mergedTags = [...new Set([...primaryLead.tags, ...secondaryLead.tags])];
+        const mergedTags = Array.from(new Set([...primaryLead.tags, ...secondaryLead.tags]));
         if (mergedTags.length > primaryLead.tags.length) {
           updateData.tags = mergedTags;
         }
@@ -323,7 +324,7 @@ export async function GET(request: NextRequest): Promise<Response> {
 
       duplicateGroups = Object.entries(phoneGroups)
         .filter(([_, leads]: [string, any]) => leads.length > 1)
-        .map(([phone, leads]) => ({
+        .map(([phone, leads]: [string, any]) => ({
           criteria: 'phone',
           value: phone,
           leads,
@@ -368,7 +369,7 @@ export async function GET(request: NextRequest): Promise<Response> {
 
       duplicateGroups = Object.entries(emailGroups)
         .filter(([_, leads]: [string, any]) => leads.length > 1)
-        .map(([email, leads]) => ({
+        .map(([email, leads]: [string, any]) => ({
           criteria: 'email',
           value: email,
           leads,

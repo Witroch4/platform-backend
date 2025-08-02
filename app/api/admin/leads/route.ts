@@ -1,7 +1,8 @@
 // app/api/admin/leads/route.ts
+/// <reference path="../../../../declarations.d.ts" />
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { LeadSource } from "@prisma/client";
+import { LeadSource, Prisma } from "@prisma/client";
 import { type NextRequest, NextResponse } from "next/server";
 
 /**
@@ -32,9 +33,9 @@ export async function GET(request: NextRequest): Promise<Response> {
 		const sortOrder = searchParams.get("sortOrder") === "asc" ? "asc" : "desc";
 
 		// Construir condições de filtro
-		const whereConditions: Record<string, unknown> = {
-			userId: session.user.id, // Filtrar apenas leads do usuário atual
-		};
+                const whereConditions: Prisma.LeadWhereInput = {
+                        userId: session.user.id,
+                };
 
 		// Filtro por source
 		if (source && Object.values(LeadSource).includes(source)) {
@@ -136,7 +137,7 @@ export async function GET(request: NextRequest): Promise<Response> {
 			stats: {
 				chatsCount: lead._count.chats,
 				automacoesCount: lead._count.automacoes,
-				disparosCount: lead._count.disparos,
+                                disparosCount: lead._count?.disparos ?? 0,
 			},
 		}));
 
@@ -218,10 +219,10 @@ export async function POST(request: NextRequest): Promise<Response> {
 		}
 
 		// Criar lead com dados relacionados
-		const leadData: Record<string, unknown> = {
-			name,
-			email,
-			phone,
+                const leadData: Prisma.LeadCreateInput = {
+                        name,
+                        email,
+                        phone,
 			avatarUrl,
 			source,
 			sourceIdentifier,
