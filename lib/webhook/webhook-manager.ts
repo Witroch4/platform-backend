@@ -347,20 +347,22 @@ export class WebhookManager {
 
     const successfulDeliveries = deliveries.filter(
       (d: WebhookDelivery) =>
-        d.responseStatus !== undefined && d.responseStatus >= 200 && d.responseStatus < 300,
+        d.responseStatus != null && d.responseStatus >= 200 && d.responseStatus < 300,
     ).length;
     const failedDeliveries = deliveries.filter(
       (d: WebhookDelivery) =>
-        d.responseStatus !== undefined && (d.responseStatus < 200 || d.responseStatus >= 300),
+        d.responseStatus != null && (d.responseStatus < 200 || d.responseStatus >= 300),
     ).length;
-    const pendingDeliveries = deliveries.filter((d: WebhookDelivery) => !d.responseStatus).length;
+    const pendingDeliveries = deliveries.filter((d: WebhookDelivery) => d.responseStatus == null).length;
 
     const totalDeliveries = successfulDeliveries + failedDeliveries + pendingDeliveries;
-    const delivered = deliveries.filter((d: WebhookDelivery) => d.deliveredAt && d.createdAt);
+    const delivered = deliveries.filter(
+      (d: WebhookDelivery) => d.deliveredAt != null && d.createdAt != null,
+    );
     const averageResponseTime =
       delivered.reduce(
         (sum: number, d: WebhookDelivery) =>
-          sum + (d.deliveredAt!.getTime() - d.createdAt.getTime() || 0),
+          sum + ((d.deliveredAt?.getTime() ?? 0) - d.createdAt.getTime()),
         0,
       ) /
         (delivered.length || 1);
@@ -373,10 +375,17 @@ export class WebhookManager {
       failedDeliveries,
       pendingDeliveries,
       averageResponseTime,
-      lastSuccessAt: deliveries.find((d) => d.responseStatus && d.responseStatus >= 200 && d.responseStatus < 300)
-        ?.deliveredAt ?? undefined,
-      lastFailureAt: deliveries.find((d) => d.responseStatus && (d.responseStatus < 200 || d.responseStatus >= 300))
-        ?.deliveredAt ?? undefined,
+      lastSuccessAt: deliveries.find(
+        (d) =>
+          d.responseStatus != null &&
+          d.responseStatus >= 200 &&
+          d.responseStatus < 300,
+      )?.deliveredAt ?? undefined,
+      lastFailureAt: deliveries.find(
+        (d) =>
+          d.responseStatus != null &&
+          (d.responseStatus < 200 || d.responseStatus >= 300),
+      )?.deliveredAt ?? undefined,
     };
   }
 
@@ -399,22 +408,22 @@ export class WebhookManager {
     const totalDeliveries = deliveries.length;
     const successfulDeliveries = deliveries.filter(
       (d: WebhookDelivery) =>
-        d.responseStatus !== undefined && d.responseStatus >= 200 && d.responseStatus < 300,
+        d.responseStatus != null && d.responseStatus >= 200 && d.responseStatus < 300,
     ).length;
     const failedDeliveries = deliveries.filter(
       (d: WebhookDelivery) =>
-        d.responseStatus !== undefined && (d.responseStatus < 200 || d.responseStatus >= 300),
+        d.responseStatus != null && (d.responseStatus < 200 || d.responseStatus >= 300),
     ).length;
-    const pendingDeliveries = deliveries.filter((d: WebhookDelivery) => !d.responseStatus).length;
+    const pendingDeliveries = deliveries.filter((d: WebhookDelivery) => d.responseStatus == null).length;
 
     const successRate = totalDeliveries > 0 ? (successfulDeliveries / totalDeliveries) * 100 : 0;
 
     // Consecutivos com falha (do mais recente para trás)
     let consecutiveFailures = 0;
     for (const d of deliveries) {
-      if (d.responseStatus && (d.responseStatus < 200 || d.responseStatus >= 300)) {
+      if (d.responseStatus != null && (d.responseStatus < 200 || d.responseStatus >= 300)) {
         consecutiveFailures++;
-      } else if (d.responseStatus && d.responseStatus >= 200 && d.responseStatus < 300) {
+      } else if (d.responseStatus != null && d.responseStatus >= 200 && d.responseStatus < 300) {
         break;
       }
     }
@@ -427,10 +436,17 @@ export class WebhookManager {
       averageResponseTime: 0, // Pode ser calculado se gravar / medir consistentemente
       successRate: Math.round(successRate * 100) / 100,
       lastDeliveryAt: deliveries[0]?.createdAt,
-      lastSuccessAt: deliveries.find((d) => d.responseStatus && d.responseStatus >= 200 && d.responseStatus < 300)
-        ?.deliveredAt,
-      lastFailureAt: deliveries.find((d) => d.responseStatus && (d.responseStatus < 200 || d.responseStatus >= 300))
-        ?.deliveredAt,
+      lastSuccessAt: deliveries.find(
+        (d) =>
+          d.responseStatus != null &&
+          d.responseStatus >= 200 &&
+          d.responseStatus < 300,
+      )?.deliveredAt,
+      lastFailureAt: deliveries.find(
+        (d) =>
+          d.responseStatus != null &&
+          (d.responseStatus < 200 || d.responseStatus >= 300),
+      )?.deliveredAt,
       consecutiveFailures,
     };
   }
@@ -921,7 +937,7 @@ export class WebhookManager {
   private formatWebhookDelivery(delivery: any): WebhookDelivery {
     let status: "pending" | "success" | "failed" | "retrying" = "pending";
 
-    if (delivery.responseStatus !== null && delivery.responseStatus !== undefined) {
+    if (delivery.responseStatus != null) {
       if (delivery.responseStatus >= 200 && delivery.responseStatus < 300) {
         status = "success";
       } else {
@@ -941,7 +957,8 @@ export class WebhookManager {
       responseBody: delivery.responseBody ?? null,
       responseTime: delivery.responseTime ?? null,
       error:
-        delivery.responseStatus && (delivery.responseStatus < 200 || delivery.responseStatus >= 300)
+        delivery.responseStatus != null &&
+        (delivery.responseStatus < 200 || delivery.responseStatus >= 300)
           ? delivery.responseBody
           : undefined,
       nextRetryAt: delivery.nextRetryAt ?? null,
