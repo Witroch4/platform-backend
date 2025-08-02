@@ -70,7 +70,7 @@ const ApiInteractiveMessageSchema = z.object({
 });
 
 const SaveMessageWithReactionsSchema = z.object({
-  caixaId: z.string().min(1, "Caixa ID is required"),
+  inboxId: z.string().min(1, "Inbox ID is required"),
   message: ApiInteractiveMessageSchema,
   reactions: z.array(ApiButtonReactionSchema),
 });
@@ -182,7 +182,7 @@ export async function POST(request: NextRequest) {
       const error = errorHandler.handleError(
         new Error("Invalid JSON in request body"),
         {
-          userId: session.user.id,
+          userId: session.user!.id,
           action: 'parse_request_body',
           component: 'messages-with-reactions-api'
         }
@@ -206,7 +206,7 @@ export async function POST(request: NextRequest) {
       const validationError = errorHandler.handleValidationError(
         validationResult.error.errors,
         {
-          userId: session.user.id,
+          userId: session.user!.id,
           action: 'validate_request',
           component: 'messages-with-reactions-api'
         }
@@ -229,7 +229,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { caixaId, message, reactions } = validationResult.data;
+    const { inboxId, message, reactions } = validationResult.data;
 
     // Additional business logic validation
     try {
@@ -255,8 +255,8 @@ export async function POST(request: NextRequest) {
       const error = errorHandler.handleError(
         businessValidationError,
         {
-          userId: session.user.id,
-          caixaId,
+          userId: session.user!.id,
+          inboxId,
           action: 'business_validation',
           component: 'messages-with-reactions-api'
         }
@@ -275,7 +275,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Enhanced logging for debugging
-    console.log(`[${requestId}] Creating message - User: ${session.user.id}, CaixaId: ${caixaId}`);
+    console.log(`[${requestId}] Creating message - User: ${session.user!.id}, InboxId: ${inboxId}`);
     console.log(`[${requestId}] Message data:`, {
       name: message.name,
       type: message.type,
@@ -291,9 +291,9 @@ export async function POST(request: NextRequest) {
     try {
       caixa = await prisma.chatwitInbox.findFirst({
         where: {
-          id: caixaId,
+          id: inboxId,
           usuarioChatwit: {
-            appUserId: session.user.id,
+            appUserId: session.user!.id,
           },
         },
       });
@@ -301,8 +301,8 @@ export async function POST(request: NextRequest) {
       const error = errorHandler.handleError(
         dbError,
         {
-          userId: session.user.id,
-          caixaId,
+          userId: session.user!.id,
+          inboxId,
           action: 'verify_caixa_access',
           component: 'messages-with-reactions-api'
         }
@@ -321,7 +321,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!caixa) {
-      console.warn(`[${requestId}] Caixa not found or access denied - CaixaId: ${caixaId}, UserId: ${session.user.id}`);
+      console.warn(`[${requestId}] Caixa not found or access denied - InboxId: ${inboxId}, UserId: ${session.user!.id}`);
       
       return NextResponse.json(
         { 
@@ -348,8 +348,8 @@ export async function POST(request: NextRequest) {
           language: "pt_BR",
           tags: [],
           isActive: true,
-          createdById: session.user.id,
-          inboxId: caixaId,
+          createdById: session.user!.id,
+          inboxId: inboxId,
           interactiveContent: {
             create: {
               body: {
@@ -470,8 +470,8 @@ export async function POST(request: NextRequest) {
       const error = errorHandler.handleError(
         transactionError,
         {
-          userId: session.user.id,
-          caixaId,
+          userId: session.user!.id,
+          inboxId,
           action: 'database_transaction',
           component: 'messages-with-reactions-api'
         }
@@ -547,7 +547,7 @@ export async function POST(request: NextRequest) {
       error,
       {
         userId: undefined,
-        caixaId: undefined,
+        inboxId: undefined,
         action: 'create_message_with_reactions',
         component: 'messages-with-reactions-api'
       }
@@ -614,7 +614,7 @@ export async function PUT(request: NextRequest) {
     const existingMessage = await prisma.template.findFirst({
       where: {
         id: messageId,
-        createdById: session.user.id,
+        createdById: session.user!.id,
         type: "INTERACTIVE_MESSAGE",
       },
       include: {
@@ -883,11 +883,11 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const messageId = searchParams.get("messageId");
-    const caixaId = searchParams.get("caixaId");
+    const inboxId = searchParams.get("inboxId");
 
-    if (!messageId && !caixaId) {
+    if (!messageId && !inboxId) {
       return NextResponse.json(
-        { error: "Either messageId or caixaId is required" },
+        { error: "Either messageId or inboxId is required" },
         { status: 400 }
       );
     }
@@ -900,7 +900,7 @@ export async function GET(request: NextRequest) {
           type: "INTERACTIVE_MESSAGE",
           inbox: {
             usuarioChatwit: {
-              appUserId: session.user.id,
+              appUserId: session.user!.id,
             },
           },
         },
@@ -945,15 +945,15 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    if (caixaId) {
+    if (inboxId) {
       // Get all messages for a caixa with their reactions
       const messages = await prisma.template.findMany({
         where: {
-          inboxId: caixaId,
+          inboxId: inboxId,
           type: "INTERACTIVE_MESSAGE",
           inbox: {
             usuarioChatwit: {
-              appUserId: session.user.id,
+              appUserId: session.user!.id,
             },
           },
         },

@@ -9,7 +9,7 @@ async function testValidationErrors() {
   console.log('🧪 Testing Validation Errors');
   
   const invalidPayload = {
-    caixaId: '', // Invalid empty caixaId
+    inboxId: '', // Invalid empty inboxId
     message: {
       name: '', // Invalid empty name
       type: 'invalid-type', // Invalid type
