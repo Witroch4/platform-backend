@@ -627,7 +627,7 @@ export default function QueueManagementDashboard() {
           <MetricsSummary
             queues={queues}
             historicalMetrics={historicalMetrics}
-            timeRange={getTimeRangeObject(timeRange)}
+            timeRange={timeRange}
           />
           
           <QueueGrid
@@ -651,7 +651,7 @@ export default function QueueManagementDashboard() {
           <MetricsSummary
             queues={queues}
             historicalMetrics={historicalMetrics}
-            timeRange={getTimeRangeObject(timeRange)}
+            timeRange={timeRange}
           />
         </TabsContent>
 

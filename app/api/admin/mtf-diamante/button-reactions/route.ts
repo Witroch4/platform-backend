@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/auth'
 import { z } from 'zod'
+import { ActionType } from '@prisma/client'
 
 // Validation schemas
 const ReactionSchema = z.object({
@@ -271,15 +272,15 @@ export async function POST(request: NextRequest) {
             const actionPayload = {
               emoji: reactionData.reaction.type === 'emoji' ? reactionData.reaction.value : null,
               textReaction: reactionData.reaction.type === 'text' ? reactionData.reaction.value : null,
-            };
+            } as any;
             
             const created = await tx.mapeamentoBotao.create({
               data: {
                 buttonId: reactionData.buttonId,
                 inboxId: messageId,
-                actionType: 'SEND_TEMPLATE',
+                actionType: ActionType.SEND_TEMPLATE,
                 actionPayload,
-                description: reactionData.reaction.type === 'text' ? reactionData.reaction.value : null,
+                description: reactionData.reaction.type === 'text' ? reactionData.reaction.value : null as any,
               },
             })
             createdReactions.push(created)
@@ -344,15 +345,15 @@ export async function POST(request: NextRequest) {
     const actionPayload = {
       emoji: reaction?.type === 'emoji' ? reaction.value : null,
       textReaction: reaction?.type === 'text' ? reaction.value : null,
-    };
+    } as any;
     
     const createdReaction = await prisma.mapeamentoBotao.create({
       data: {
         buttonId,
-        inboxId: messageId || undefined,
-        actionType: 'SEND_TEMPLATE',
+        inboxId: messageId || '',
+        actionType: ActionType.SEND_TEMPLATE,
         actionPayload,
-        description: reaction?.type === 'text' ? reaction.value : description || null,
+        description: reaction?.type === 'text' ? reaction.value : description || null as any,
       },
       include: {
         inbox: {

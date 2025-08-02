@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
             const results = await abTestManager.getABTestResults(test.id);
             return { ...test, results };
           } catch (error) {
-            return { ...test, error: error.message };
+            return { ...test, error: error instanceof Error ? error.message : 'Unknown error' };
           }
         }
         return test;

@@ -54,11 +54,11 @@ export async function GET(request: Request) {
                 create: [
                   {
                     chave: "valor_analise",
-                    valor: "R$ 27,90"
+                    valor: "R$ 27,90" as any
                   },
                   {
                     chave: "chave_pix",
-                    valor: "atendimento@amandasousaprev.adv.br"
+                    valor: "atendimento@amandasousaprev.adv.br" as any
                   }
                 ]
               }
@@ -88,8 +88,8 @@ export async function GET(request: Request) {
     }
 
     // Extrair valores das variáveis
-    const valorAnalise = config?.variaveis?.find(v => v.chave === "valor_analise")?.valor || "";
-    const chavePix = config?.variaveis?.find(v => v.chave === "chave_pix")?.valor || "";
+    const valorAnalise = (config?.variaveis?.find(v => v.chave === "valor_analise")?.valor as string) || "";
+    const chavePix = (config?.variaveis?.find(v => v.chave === "chave_pix")?.valor as string) || "";
 
     return NextResponse.json({
       success: true,
@@ -157,12 +157,12 @@ export async function POST(request: Request) {
           }
         },
         update: {
-          valor: validatedData.valorAnalise
+          valor: validatedData.valorAnalise as any
         },
         create: {
           configId: existingConfig.id,
           chave: "valor_analise",
-          valor: validatedData.valorAnalise
+          valor: validatedData.valorAnalise as any
         }
       });
 
@@ -174,12 +174,12 @@ export async function POST(request: Request) {
           }
         },
         update: {
-          valor: validatedData.chavePix
+          valor: validatedData.chavePix as any
         },
         create: {
           configId: existingConfig.id,
           chave: "chave_pix",
-          valor: validatedData.chavePix
+          valor: validatedData.chavePix as any
         }
       });
 

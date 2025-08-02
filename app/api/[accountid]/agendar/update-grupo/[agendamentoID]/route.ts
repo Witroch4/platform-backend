@@ -145,7 +145,7 @@ export async function PATCH(
         // Se cada agendamento tem sua própria mídia, preserva-a
         const agendamentoUpdateData = {
           ...updateData,
-          midias: agendamento.TratarComoPostagensIndividuais ? agendamento.midias : updateData.midias,
+          midias: agendamento.tratarComoPostagensIndividuais ? agendamento.midias : updateData.midias,
         };
 
         const updatedAgendamento = await updateAgendamento(agendamento.id, agendamentoUpdateData);

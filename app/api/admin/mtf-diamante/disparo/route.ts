@@ -1,7 +1,6 @@
 // app/api/admin/mtf-diamante/disparo/route.ts
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { db } from "@/lib/db";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { sendTemplateMessage } from "@/lib/whatsapp";
@@ -30,7 +29,7 @@ export async function POST(request: Request) {
       disparoSchema.parse(body);
 
     // Buscar o usuário Chatwit (opcional, pode não existir)
-    const usuarioChatwit = await db.usuarioChatwit.findFirst({
+    const usuarioChatwit = await prisma.usuarioChatwit.findFirst({
       where: { appUserId: appUserId },
       select: { id: true },
     });
@@ -63,7 +62,7 @@ export async function POST(request: Request) {
     // --- CORREÇÃO APLICADA AQUI ---
     // Mapear os números de telefone para uma busca mais flexível, evitando duplicação
     const leadConditions: Array<
-      { phoneNumber: { endsWith: string } } | { id: string }
+      { phone: { endsWith: string } } | { id: string }
     > = [];
 
     selectedLeads.forEach((leadIdentifier) => {
@@ -73,7 +72,7 @@ export async function POST(request: Request) {
       if (isNumeric && cleanNumber.length >= 10) {
         // Se é um número, busca apenas por telefone
         leadConditions.push({
-          phoneNumber: { endsWith: cleanNumber.slice(-11) },
+          phone: { endsWith: cleanNumber.slice(-11) },
         });
       } else {
         // Se não é um número, busca apenas por ID
@@ -81,7 +80,7 @@ export async function POST(request: Request) {
       }
     });
 
-    const leadsRaw = await db.lead.findMany({
+    const leadsRaw = await prisma.lead.findMany({
       where: {
         AND: [
           { userId: session.user.id }, // Garante que o lead é do usuário
@@ -121,11 +120,11 @@ export async function POST(request: Request) {
       leadId: lead.id,
       status: "PENDING",
       scheduledAt: new Date(Date.now() + delayMinutes * 60 * 1000),
-      parameters: parameters || {},
+      parameters: parameters || {} as any,
       userId: appUserId,
     }));
 
-    await db.disparoMtfDiamante.createMany({
+    await prisma.disparoMtfDiamante.createMany({
       data: disparosData,
       skipDuplicates: true,
     });
@@ -135,7 +134,7 @@ export async function POST(request: Request) {
         leads.map(async (lead) => {
           try {
             // Buscar o template completo para analisar variáveis
-            const templateCompleto = await db.template.findFirst({
+            const templateCompleto = await prisma.template.findFirst({
               where: {
                 id: templateId,
                 createdById: session.user.id,
@@ -152,7 +151,7 @@ export async function POST(request: Request) {
             if (templateCompleto?.simpleReplyText) {
               try {
                 const components = JSON.parse(templateCompleto.simpleReplyText) as any[];
-                const bodyComponent = components.find((c) => c.type === "BODY");
+                const bodyComponent = components.find((c: any) => c.type === "BODY");
 
               if (bodyComponent?.text) {
                 const placeholders =
@@ -192,30 +191,30 @@ export async function POST(request: Request) {
                 paramKeys.length > 0 &&
                 paramKeys.every((key) => /^\d+$/.test(key))
               ) {
-                sendOpts.bodyVars = paramKeys.map((key) => parameters[key]);
+                sendOpts.bodyVars = paramKeys.map((key) => (parameters as any)[key]);
                 console.log(
                   `[Disparo] Usando parâmetros manuais: [${sendOpts.bodyVars.join(", ")}]`
                 );
               } else {
                 // Se parameters tem outras propriedades, mapear adequadamente
                 if (
-                  parameters.bodyVars &&
-                  Array.isArray(parameters.bodyVars) &&
-                  parameters.bodyVars.length > 0
+                  (parameters as any).bodyVars &&
+                  Array.isArray((parameters as any).bodyVars) &&
+                  (parameters as any).bodyVars.length > 0
                 ) {
-                  sendOpts.bodyVars = parameters.bodyVars;
+                  sendOpts.bodyVars = (parameters as any).bodyVars;
                   console.log(
                     `[Disparo] Usando bodyVars manuais: [${sendOpts.bodyVars.join(", ")}]`
                   );
                 }
-                if (parameters.headerVar)
-                  sendOpts.headerVar = parameters.headerVar;
-                if (parameters.headerMedia)
-                  sendOpts.headerMedia = parameters.headerMedia;
-                if (parameters.buttonOverrides)
-                  sendOpts.buttonOverrides = parameters.buttonOverrides;
-                if (parameters.couponCode)
-                  sendOpts.couponCode = parameters.couponCode;
+                if ((parameters as any).headerVar)
+                  sendOpts.headerVar = (parameters as any).headerVar;
+                if ((parameters as any).headerMedia)
+                  sendOpts.headerMedia = (parameters as any).headerMedia;
+                if ((parameters as any).buttonOverrides)
+                  sendOpts.buttonOverrides = (parameters as any).buttonOverrides;
+                if ((parameters as any).couponCode)
+                  sendOpts.couponCode = (parameters as any).couponCode;
               }
             }
             const success = await sendTemplateMessage(
@@ -223,7 +222,7 @@ export async function POST(request: Request) {
               template.name,
               sendOpts
             );
-            await db.disparoMtfDiamante.updateMany({
+            await prisma.disparoMtfDiamante.updateMany({
               where: {
                 leadId: lead.id,
                 templateName: template.name,
@@ -232,12 +231,12 @@ export async function POST(request: Request) {
               data: {
                 status: success ? "SENT" : "FAILED",
                 sentAt: new Date(),
-                errorMessage: success ? null : "Falha no envio",
+                errorMessage: success ? null : "Falha no envio" as any,
               },
             });
             return { success };
           } catch (error) {
-            await db.disparoMtfDiamante.updateMany({
+            await prisma.disparoMtfDiamante.updateMany({
               where: {
                 leadId: lead.id,
                 templateName: template.name,
@@ -246,7 +245,7 @@ export async function POST(request: Request) {
               data: {
                 status: "FAILED",
                 errorMessage:
-                  error instanceof Error ? error.message : "Erro desconhecido",
+                  error instanceof Error ? error.message : "Erro desconhecido" as any,
               },
             });
             return { success: false };
@@ -308,7 +307,7 @@ export async function GET(request: Request) {
     }
 
     const [disparos, total] = await Promise.all([
-      db.disparoMtfDiamante.findMany({
+      prisma.disparoMtfDiamante.findMany({
         where: whereClause,
         orderBy: {
           createdAt: "desc",
@@ -316,7 +315,7 @@ export async function GET(request: Request) {
         skip: (page - 1) * limit,
         take: limit,
       }),
-      db.disparoMtfDiamante.count({
+      prisma.disparoMtfDiamante.count({
         where: whereClause,
       }),
     ]);

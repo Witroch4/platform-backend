@@ -251,7 +251,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       // Detectar loops
       for (const inbox of usuarioChatwit.inboxes) {
         const visited = new Set<string>();
-        let current = inbox;
+        let current: typeof inbox | null = inbox;
         
         while (current && current.fallbackParaInboxId) {
           if (visited.has(current.id)) {
@@ -263,7 +263,8 @@ export async function POST(request: NextRequest): Promise<Response> {
             break;
           }
           visited.add(current.id);
-          current = usuarioChatwit.inboxes.find(i => i.id === current.fallbackParaInboxId) || null;
+          const nextInbox = usuarioChatwit.inboxes.find(i => i.id === current.fallbackParaInboxId);
+          current = nextInbox || null;
         }
       }
 
@@ -282,7 +283,7 @@ export async function POST(request: NextRequest): Promise<Response> {
 
       // Detectar cadeias sem credenciais finais
       for (const inbox of usuarioChatwit.inboxes) {
-        let current = inbox;
+        let current: typeof inbox | null = inbox;
         let hasCredentials = false;
         
         while (current) {

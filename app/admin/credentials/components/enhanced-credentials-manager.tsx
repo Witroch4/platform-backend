@@ -520,7 +520,6 @@ export function EnhancedCredentialsManager() {
                        value={showApiKeys ? globalForm.whatsappApiKey : globalForm.whatsappApiKey.replace(/./g, '*')}
                        onChange={(e) => setGlobalForm(prev => ({ ...prev, whatsappApiKey: e.target.value }))}
                        className="min-h-[80px] pr-10"
-                       type={showApiKeys ? "text" : "password"}
                        autoComplete="off"
                      />
                     <Button
