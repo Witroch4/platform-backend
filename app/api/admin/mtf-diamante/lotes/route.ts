@@ -1,6 +1,25 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { db as prisma } from '@/lib/db';
 import { auth } from '@/auth';
+import type { PrismaClient } from '@prisma/client';
+
+interface LoteOab {
+  id: string;
+  nome: string;
+  valor: number;
+  dataInicio: Date;
+  dataFim: Date;
+  ativo: boolean;
+}
+
+type PrismaWithLoteOab = PrismaClient & {
+  loteOab: {
+    findMany(args?: any): Promise<LoteOab[]>;
+    create(args: { data: any }): Promise<LoteOab>;
+  };
+};
+
+const prismaWithLoteOab = prisma as unknown as PrismaWithLoteOab;
 
 // GET - Listar lotes
 export async function GET() {
@@ -20,11 +39,11 @@ export async function GET() {
     }
 
     // TODO: Modelo loteOab não existe no novo schema
-    // const lotesDb = await prisma.loteOab.findMany({
+    // const lotesDb = await prismaWithLoteOab.loteOab.findMany({
     //   where: { usuarioChatwitId: usuarioChatwit.id },
     //   orderBy: { createdAt: 'desc' }
     // });
-    const lotesDb = [];
+    const lotesDb: LoteOab[] = [];
 
     // Mapear para o formato esperado pelo componente
     const lotes = lotesDb.map(lote => ({
@@ -70,7 +89,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Criar lote no banco
-    const lote = await prisma.loteOab.create({
+    const lote = await prismaWithLoteOab.loteOab.create({
       data: {
         nome,
         valor: Number.parseFloat(valor.replace(/[^\d,]/g, '').replace(',', '.')), // Converter valor para decimal
