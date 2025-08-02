@@ -275,9 +275,6 @@ export function TemplateLibraryTab() {
                     </div>
 
                     <div className="flex items-center gap-2 flex-wrap">
-                      {template.category && (
-                        <Badge variant="outline">{template.category}</Badge>
-                      )}
                       <Badge variant="outline" className="text-xs">
                         {getTypeLabel(template.type)}
                       </Badge>

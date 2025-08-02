@@ -182,7 +182,7 @@ export function MtfDataProvider({ children }: MtfDataProviderProps) {
           
           // Debug: Log dos dados recebidos
           console.log('🔍 [MtfDataProvider] Caixas recebidas da API:', caixasProcessadas.length);
-          caixasProcessadas.forEach((caixa, index) => {
+          caixasProcessadas.forEach((caixa: any, index: number) => {
             console.log(`📦 [MtfDataProvider] Caixa ${index + 1}: ${caixa.nome} - Agentes: ${caixa.agentes?.length || 0}`);
             if (caixa.agentes && caixa.agentes.length > 0) {
               caixa.agentes.forEach((agente: any, agenteIndex: number) => {

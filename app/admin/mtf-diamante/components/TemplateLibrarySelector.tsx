@@ -213,9 +213,6 @@ export const TemplateLibrarySelector: React.FC<TemplateLibrarySelectorProps> = (
                       </div>
 
                       <div className="flex items-center gap-2 flex-wrap">
-                        {template.category && (
-                          <Badge variant="outline" className="text-xs">{template.category}</Badge>
-                        )}
                         <Badge variant="outline" className="text-xs">
                           {getTypeLabel(template.type)}
                         </Badge>

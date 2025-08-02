@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Library, Loader2 } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
-import { TemplateLibraryService } from '@/app/lib/template-library-service';
+import { TemplateLibraryService, type CreateTemplateLibraryData } from '@/app/lib/template-library-service';
 
 interface SaveToLibraryButtonProps {
   templateData: {

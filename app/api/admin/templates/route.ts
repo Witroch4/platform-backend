@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
-import { TemplateType, TemplateScope, TemplateStatus } from '@prisma/client';
+import { Prisma, TemplateType, TemplateScope, TemplateStatus } from '@prisma/client';
 
 /**
  * GET - Lista templates usando o modelo unificado com filtros e paginação
@@ -96,9 +96,9 @@ export async function GET(request: NextRequest): Promise<Response> {
 
     // Validar campo de ordenação
     const validSortFields = ['createdAt', 'updatedAt', 'name', 'usageCount', 'type', 'status'];
-    const orderBy = validSortFields.includes(sortBy) 
-      ? { [sortBy]: sortOrder }
-      : { createdAt: 'desc' };
+    const orderBy: Prisma.TemplateOrderByWithRelationInput = validSortFields.includes(sortBy)
+      ? { [sortBy]: sortOrder === 'asc' ? Prisma.SortOrder.asc : Prisma.SortOrder.desc }
+      : { createdAt: Prisma.SortOrder.desc };
 
     console.log(`[Templates API] Buscando templates - Página: ${page}, Tipo: ${type}, Escopo: ${scope}`);
 
@@ -157,7 +157,7 @@ export async function GET(request: NextRequest): Promise<Response> {
         take: limit,
       }),
       prisma.template.count({ where: whereConditions }),
-    ]);
+    ]) as [any[], number];
 
     // Formatar resposta
     const formattedTemplates = templates.map(template => ({

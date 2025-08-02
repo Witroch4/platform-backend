@@ -230,14 +230,6 @@ export function ApprovalRequestsTable({ requests, loading, onProcessRequest }: A
                 </div>
               </div>
 
-              {selectedRequest.customVariables && (
-                <div>
-                  <h4 className="font-medium mb-2">Custom Variables</h4>
-                  <div className="p-2 bg-muted rounded text-sm font-mono">
-                    <pre>{JSON.stringify(selectedRequest.customVariables, null, 2)}</pre>
-                  </div>
-                </div>
-              )}
 
               {selectedRequest.status !== 'pending' && (
                 <div>
