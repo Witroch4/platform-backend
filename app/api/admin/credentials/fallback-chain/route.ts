@@ -252,7 +252,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       for (const inbox of usuarioChatwit.inboxes) {
         const visited = new Set<string>();
         let current: typeof inbox | null = inbox;
-        
+
         while (current && current.fallbackParaInboxId) {
           if (visited.has(current.id)) {
             validationResults.loops.push({
@@ -263,8 +263,10 @@ export async function POST(request: NextRequest): Promise<Response> {
             break;
           }
           visited.add(current.id);
-          const nextInbox = usuarioChatwit.inboxes.find(i => i.id === current.fallbackParaInboxId);
-          current = nextInbox || null;
+          const nextInbox = usuarioChatwit.inboxes.find(
+            i => i.id === current.fallbackParaInboxId
+          );
+          current = nextInbox ?? null;
         }
       }
 
@@ -285,15 +287,21 @@ export async function POST(request: NextRequest): Promise<Response> {
       for (const inbox of usuarioChatwit.inboxes) {
         let current: typeof inbox | null = inbox;
         let hasCredentials = false;
-        
+
         while (current) {
-          if (current.whatsappApiKey || current.phoneNumberId || current.whatsappBusinessAccountId) {
+          if (
+            current.whatsappApiKey ||
+            current.phoneNumberId ||
+            current.whatsappBusinessAccountId
+          ) {
             hasCredentials = true;
             break;
           }
-          current = current.fallbackParaInboxId ? 
-            usuarioChatwit.inboxes.find(i => i.id === current.fallbackParaInboxId) || null : 
-            null;
+          current = current.fallbackParaInboxId
+            ? usuarioChatwit.inboxes.find(
+                i => i.id === current.fallbackParaInboxId
+              ) ?? null
+            : null;
         }
 
         if (!hasCredentials) {
