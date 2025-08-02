@@ -25,7 +25,7 @@ export function toJson(value: unknown): Prisma.JsonValue {
 
 export function toInputJson(
   value: unknown
-): Prisma.JsonNullValueInput | Prisma.InputJsonValue | undefined {
+): Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue | undefined {
   if (value === undefined) {
     return undefined
   }
@@ -39,14 +39,14 @@ export function toInputJson(
     return value.map(v => toInputJson(v)) as Prisma.InputJsonValue
   }
   if (typeof value === 'object') {
-    const obj: Record<string, Prisma.InputJsonValue | Prisma.JsonNullValueInput> = {}
+    const obj: Record<string, Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput> = {}
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
       const converted = toInputJson(v)
       if (converted !== undefined) {
         obj[k] = converted
       }
     }
-    return obj
+    return obj as any
   }
   if (
     typeof value === 'string' ||
