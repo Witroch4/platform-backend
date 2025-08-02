@@ -97,12 +97,6 @@ export function TemplatePreviewDialog({ template, open, onOpenChange }: Template
                   <span className="text-muted-foreground">Usage count:</span>
                   <span>{template.usageCount ?? 0}</span>
                 </div>
-                {template.category && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Category:</span>
-                    <span>{template.category}</span>
-                  </div>
-                )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Language:</span>
                   <span>{template.language}</span>
@@ -151,21 +145,21 @@ export function TemplatePreviewDialog({ template, open, onOpenChange }: Template
             <div>
               <h4 className="font-medium mb-2">Raw Content</h4>
               <div className="space-y-2 text-sm">
-                {content.header && (
+                {content?.header && (
                   <div>
                     <span className="text-muted-foreground">Header:</span>
                     <div className="bg-muted p-2 rounded text-xs font-mono">
-                      {content.header}
+                      {content?.header}
                     </div>
                   </div>
                 )}
                 <div>
                   <span className="text-muted-foreground">Body:</span>
                   <div className="bg-muted p-2 rounded text-xs font-mono">
-                    {content.body}
+                    {content?.body}
                   </div>
                 </div>
-                {content.footer && (
+                {content?.footer && (
                   <div>
                     <span className="text-muted-foreground">Footer:</span>
                     <div className="bg-muted p-2 rounded text-xs font-mono">
@@ -189,17 +183,17 @@ export function TemplatePreviewDialog({ template, open, onOpenChange }: Template
             >
               <Card className="bg-white dark:bg-gray-800 shadow-md">
                 <CardContent className="p-3 space-y-2">
-                  {content.header && (
+                  {content?.header && (
                     <div className="font-semibold text-sm">
-                      {processText(content.header)}
+                    {content ? processText(content.header) : ''}
                     </div>
                   )}
                   
                   <div className="text-sm">
-                    {processText(content.body)}
+                    {content ? processText(content.body) : ''}
                   </div>
                   
-                  {content.footer && (
+                  {content?.footer && (
                     <div className="text-xs text-muted-foreground">
                       {processText(content.footer)}
                     </div>

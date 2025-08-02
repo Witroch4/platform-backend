@@ -64,8 +64,10 @@ export function CreateTemplateDialog({ open, onOpenChange, onSubmit }: CreateTem
         variableMatches.map(match => match.replace(/[{}]/g, ''))
       )];
 
-      const submitData = {
+      const submitData: Omit<CreateTemplateLibraryData, 'createdById'> = {
         ...formData,
+        type: formData.type === 'template' ? 'WHATSAPP_OFFICIAL' : 'INTERACTIVE_MESSAGE',
+        scope: formData.scope === 'global' ? 'GLOBAL' : 'PRIVATE',
         content: {
           ...formData.content,
           variables: [...new Set([...formData.content.variables, ...extractedVariables])]

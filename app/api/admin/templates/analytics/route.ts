@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
-import { TemplateType, TemplateScope, TemplateStatus } from '@prisma/client';
+import { Prisma, TemplateType, TemplateScope, TemplateStatus } from '@prisma/client';
 
 /**
  * GET - Retorna analytics e estatísticas dos templates
@@ -114,7 +114,10 @@ export async function GET(request: NextRequest): Promise<Response> {
       
       // Templates com mapeamentos
       prisma.template.findMany({
-        where: whereConditions,
+        where: {
+          ...whereConditions,
+          mapeamentos: { some: {} },
+        },
         select: {
           id: true,
           name: true,
@@ -125,16 +128,9 @@ export async function GET(request: NextRequest): Promise<Response> {
             },
           },
         },
-        having: {
-          mapeamentos: {
-            _count: {
-              gt: 0,
-            },
-          },
-        },
         orderBy: {
           mapeamentos: {
-            _count: 'desc',
+            _count: Prisma.SortOrder.desc,
           },
         },
         take: 10,
