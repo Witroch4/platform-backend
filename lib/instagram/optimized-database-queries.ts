@@ -184,12 +184,13 @@ export async function findOptimizedCompleteMessageMapping(
   const queryName = 'findOptimizedCompleteMessageMapping';
   const startTime = Date.now();
   let cacheHit = false;
+  // usuarioChatwitId needs to be available across try/catch scopes
+  let usuarioChatwitId: string | null = null;
 
   try {
     // Try cache first - we need to get the usuarioChatwitId first for the cache key
     // For now, we'll skip cache on first attempt and get it from DB, then cache with proper key
     let cached: CompleteMessageMapping | null = null;
-    let usuarioChatwitId: string | null = null;
     
     console.log(`[Instagram DB] [DEBUG] Starting optimized query for template mapping:`, {
       intentName,
