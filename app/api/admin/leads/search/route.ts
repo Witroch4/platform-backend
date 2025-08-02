@@ -1,4 +1,5 @@
 // app/api/admin/leads/search/route.ts
+/// <reference path="../../../../../declarations.d.ts" />
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
@@ -175,7 +176,7 @@ export async function GET(request: NextRequest): Promise<Response> {
         stats: {
           chatsCount: lead._count.chats,
           automacoesCount: lead._count.automacoes,
-          disparosCount: lead._count.disparos,
+          disparosCount: lead._count?.disparos ?? 0,
         },
       };
 
