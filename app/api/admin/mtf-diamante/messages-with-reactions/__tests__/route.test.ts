@@ -184,7 +184,7 @@ describe("/api/admin/mtf-diamante/messages-with-reactions", () => {
       expect(data.details).toBeDefined();
     });
 
-    it("should return 404 when caixa is not found", async () => {
+    it("should return 404 when inbox is not found", async () => {
       mockPrisma.caixaEntrada.findFirst.mockResolvedValue(null);
 
       const request = new NextRequest("http://localhost:3000/api/admin/mtf-diamante/messages-with-reactions", {
@@ -367,7 +367,7 @@ describe("/api/admin/mtf-diamante/messages-with-reactions", () => {
       expect(data.reactions).toHaveLength(1);
     });
 
-    it("should get all messages for a caixa", async () => {
+    it("should get all messages for an inbox", async () => {
       const messagesWithReactions = [
         {
           ...mockMessage,
@@ -389,14 +389,14 @@ describe("/api/admin/mtf-diamante/messages-with-reactions", () => {
       expect(data.messages[0].reactions).toHaveLength(1);
     });
 
-    it("should return 400 when neither messageId nor caixaId is provided", async () => {
+    it("should return 400 when neither messageId nor inboxId is provided", async () => {
       const request = new NextRequest("http://localhost:3000/api/admin/mtf-diamante/messages-with-reactions");
 
       const response = await GET(request);
       const data = await response.json();
 
       expect(response.status).toBe(400);
-      expect(data.error).toBe("Either messageId or caixaId is required");
+      expect(data.error).toBe("Either messageId or inboxId is required");
     });
 
     it("should return 404 when message is not found", async () => {

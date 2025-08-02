@@ -74,7 +74,7 @@ describe("API Error Handling Integration Tests", () => {
     });
 
     (prisma.caixaEntrada.findFirst as jest.Mock).mockResolvedValue({
-      id: "caixa123",
+      id: "inbox123",
       usuarioChatwit: { appUserId: "user123" },
     });
 
@@ -118,7 +118,7 @@ describe("API Error Handling Integration Tests", () => {
     beforeEach(() => {
       mockRequest = {
         json: jest.fn().mockResolvedValue({
-          caixaId: "caixa123",
+          inboxId: "inbox123",
           message: {
             name: "Test Message",
             type: "button",
@@ -173,7 +173,7 @@ describe("API Error Handling Integration Tests", () => {
 
     it("should handle validation errors", async () => {
       mockRequest.json = jest.fn().mockResolvedValue({
-        caixaId: "", // Invalid - empty string
+        inboxId: "", // Invalid - empty string
         message: {
           name: "", // Invalid - empty string
           type: "button",
@@ -454,7 +454,7 @@ describe("API Error Handling Integration Tests", () => {
       const data = await response.json();
 
       expect(response.status).toBe(400);
-      expect(data.error).toBe("Either messageId or caixaId is required");
+      expect(data.error).toBe("Either messageId or inboxId is required");
     });
 
     it("should handle message not found in GET requests", async () => {
@@ -494,7 +494,7 @@ describe("API Error Handling Integration Tests", () => {
     it("should log detailed error information for debugging", async () => {
       mockRequest = {
         json: jest.fn().mockResolvedValue({
-          caixaId: "caixa123",
+          inboxId: "inbox123",
           message: {
             name: "Test Message",
             type: "button",

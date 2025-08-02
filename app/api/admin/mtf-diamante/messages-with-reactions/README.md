@@ -25,7 +25,7 @@ Creates a new interactive message with associated button reactions.
 
 ```typescript
 {
-  caixaId: string;           // ID of the caixa (inbox)
+  inboxId: string;           // ID of the inbox
   message: {
     name: string;            // Message name (1-255 chars)
     type: MessageType;       // Message type (button, list, etc.)
@@ -82,7 +82,7 @@ Creates a new interactive message with associated button reactions.
 curl -X POST /api/admin/mtf-diamante/messages-with-reactions \
   -H "Content-Type: application/json" \
   -d '{
-    "caixaId": "caixa123",
+    "inboxId": "inbox123",
     "message": {
       "name": "Welcome Message",
       "type": "button",
@@ -138,7 +138,7 @@ Retrieves messages with their reactions.
 #### Query Parameters
 
 - `messageId`: Get specific message with reactions
-- `caixaId`: Get all messages for a caixa with reactions
+- `inboxId`: Get all messages for an inbox with reactions
 
 #### Response
 
@@ -274,7 +274,7 @@ The API works with the existing database schema:
 ### InteractiveMessage Table
 - Maps to `interactiveMessage` table
 - Stores message content and metadata
-- Links to `caixaEntrada` via `caixaId`
+- Links to `caixaEntrada` via `inboxId`
 
 ### ButtonReactionMapping Table
 - Maps to `buttonReactionMapping` table
@@ -347,7 +347,7 @@ const response = await fetch('/api/admin/mtf-diamante/messages-with-reactions', 
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    caixaId: 'your-caixa-id',
+    inboxId: 'your-inbox-id',
     message: {
       name: 'Simple Question',
       type: 'button',
@@ -374,7 +374,7 @@ const response = await fetch('/api/admin/mtf-diamante/messages-with-reactions', 
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    caixaId: 'your-caixa-id',
+    inboxId: 'your-inbox-id',
     message: {
       name: 'Product Announcement',
       type: 'button',
@@ -410,7 +410,7 @@ If migrating from separate message and reaction APIs:
 // Create message
 const messageResponse = await fetch('/api/admin/mtf-diamante/interactive-messages', {
   method: 'POST',
-  body: JSON.stringify({ caixaId, message })
+  body: JSON.stringify({ inboxId, message })
 });
 
 // Create reactions
@@ -425,7 +425,7 @@ const reactionResponse = await fetch('/api/admin/mtf-diamante/button-reactions',
 // Create message with reactions atomically
 const response = await fetch('/api/admin/mtf-diamante/messages-with-reactions', {
   method: 'POST',
-  body: JSON.stringify({ caixaId, message, reactions })
+  body: JSON.stringify({ inboxId, message, reactions })
 });
 ```
 

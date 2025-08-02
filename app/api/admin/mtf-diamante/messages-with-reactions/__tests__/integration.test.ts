@@ -6,7 +6,7 @@ import { NextRequest } from 'next/server'
 // Mock dependencies
 jest.mock('@/lib/prisma', () => ({
   prisma: {
-    caixaEntrada: {
+    chatwitInbox: {
       findFirst: jest.fn(),
     },
     interactiveMessage: {
@@ -39,7 +39,7 @@ describe('Messages with Reactions API - Integration Tests', () => {
     },
   }
 
-  const mockCaixa = {
+  const mockInbox = {
     id: 'caixa-internal-123',
     inboxId: 'caixa-123',
     usuarioChatwitId: 'user-chatwit-123',
@@ -51,13 +51,13 @@ describe('Messages with Reactions API - Integration Tests', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockAuth.mockResolvedValue(mockSession)
-    mockPrisma.caixaEntrada.findFirst.mockResolvedValue(mockCaixa)
+    mockPrisma.chatwitInbox.findFirst.mockResolvedValue(mockInbox)
   })
 
   describe('Atomic Save Operations (POST)', () => {
     it('should create message with reactions atomically', async () => {
       const requestBody = {
-        caixaId: 'caixa-123',
+        inboxId: 'caixa-123',
         message: {
           name: 'Test Interactive Message',
           type: 'button',
@@ -103,7 +103,7 @@ describe('Messages with Reactions API - Integration Tests', () => {
         targetMessageId: null,
         stickerMediaId: null,
         stickerUrl: null,
-        caixaId: 'caixa-123',
+        inboxId: 'caixa-123',
         createdById: 'user-123',
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -193,7 +193,7 @@ describe('Messages with Reactions API - Integration Tests', () => {
 
     it('should handle transaction rollback on failure', async () => {
       const requestBody = {
-        caixaId: 'caixa-123',
+        inboxId: 'caixa-123',
         message: {
           name: 'Test Message',
           type: 'button',
@@ -231,7 +231,7 @@ describe('Messages with Reactions API - Integration Tests', () => {
 
     it('should handle unique constraint violations', async () => {
       const requestBody = {
-        caixaId: 'caixa-123',
+        inboxId: 'caixa-123',
         message: {
           name: 'Test Message',
           type: 'button',
@@ -270,7 +270,7 @@ describe('Messages with Reactions API - Integration Tests', () => {
 
     it('should validate request data comprehensively', async () => {
       const invalidRequestBody = {
-        caixaId: '', // Invalid empty caixaId
+        inboxId: '', // Invalid empty inboxId
         message: {
           name: '', // Invalid empty name
           type: 'invalid_type', // Invalid type
@@ -303,7 +303,7 @@ describe('Messages with Reactions API - Integration Tests', () => {
         code: 'VALIDATION_FAILED',
         details: expect.arrayContaining([
           expect.objectContaining({
-            field: expect.stringContaining('caixaId'),
+            field: expect.stringContaining('inboxId'),
             message: expect.any(String),
           }),
           expect.objectContaining({
@@ -323,7 +323,7 @@ describe('Messages with Reactions API - Integration Tests', () => {
       mockAuth.mockResolvedValue(null)
 
       const requestBody = {
-        caixaId: 'caixa-123',
+        inboxId: 'caixa-123',
         message: {
           name: 'Test Message',
           type: 'button',
@@ -351,11 +351,11 @@ describe('Messages with Reactions API - Integration Tests', () => {
       })
     })
 
-    it('should handle caixa access validation', async () => {
-      mockPrisma.caixaEntrada.findFirst.mockResolvedValue(null)
+    it('should handle inbox access validation', async () => {
+      mockPrisma.chatwitInbox.findFirst.mockResolvedValue(null)
 
       const requestBody = {
-        caixaId: 'unauthorized-caixa',
+        inboxId: 'unauthorized-caixa',
         message: {
           name: 'Test Message',
           type: 'button',
@@ -610,7 +610,7 @@ describe('Messages with Reactions API - Integration Tests', () => {
       })
     })
 
-    it('should retrieve all messages for a caixa', async () => {
+    it('should retrieve all messages for an inbox', async () => {
       const mockMessages = [
         {
           id: 'msg-1',
@@ -670,7 +670,7 @@ describe('Messages with Reactions API - Integration Tests', () => {
 
       mockPrisma.interactiveMessage.findMany.mockResolvedValue(mockMessages)
 
-      const request = new NextRequest('http://localhost:3000/api/admin/mtf-diamante/messages-with-reactions?caixaId=caixa-123')
+      const request = new NextRequest('http://localhost:3000/api/admin/mtf-diamante/messages-with-reactions?inboxId=caixa-123')
 
       const response = await GET(request)
       const responseData = await response.json()
@@ -708,7 +708,7 @@ describe('Messages with Reactions API - Integration Tests', () => {
 
       expect(response.status).toBe(400)
       expect(responseData).toMatchObject({
-        error: 'Either messageId or caixaId is required',
+        error: 'Either messageId or inboxId is required',
       })
     })
 
@@ -729,10 +729,10 @@ describe('Messages with Reactions API - Integration Tests', () => {
 
   describe('Error Handling and Edge Cases', () => {
     it('should handle database connection errors', async () => {
-      mockPrisma.caixaEntrada.findFirst.mockRejectedValue(new Error('Connection timeout'))
+      mockPrisma.chatwitInbox.findFirst.mockRejectedValue(new Error('Connection timeout'))
 
       const requestBody = {
-        caixaId: 'caixa-123',
+        inboxId: 'caixa-123',
         message: {
           name: 'Test Message',
           type: 'button',
@@ -762,7 +762,7 @@ describe('Messages with Reactions API - Integration Tests', () => {
 
     it('should handle foreign key constraint violations', async () => {
       const requestBody = {
-        caixaId: 'caixa-123',
+        inboxId: 'caixa-123',
         message: {
           name: 'Test Message',
           type: 'button',
@@ -799,10 +799,10 @@ describe('Messages with Reactions API - Integration Tests', () => {
     })
 
     it('should handle unexpected server errors', async () => {
-      mockPrisma.caixaEntrada.findFirst.mockRejectedValue(new Error('Unexpected error'))
+      mockPrisma.chatwitInbox.findFirst.mockRejectedValue(new Error('Unexpected error'))
 
       const requestBody = {
-        caixaId: 'caixa-123',
+        inboxId: 'caixa-123',
         message: {
           name: 'Test Message',
           type: 'button',
@@ -832,7 +832,7 @@ describe('Messages with Reactions API - Integration Tests', () => {
 
     it('should handle large payloads efficiently', async () => {
       const largeMessage = {
-        caixaId: 'caixa-123',
+        inboxId: 'caixa-123',
         message: {
           name: 'Large Message Test',
           type: 'button',
@@ -870,7 +870,7 @@ describe('Messages with Reactions API - Integration Tests', () => {
         targetMessageId: null,
         stickerMediaId: null,
         stickerUrl: null,
-        caixaId: 'caixa-123',
+        inboxId: 'caixa-123',
         createdById: 'user-123',
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -928,7 +928,7 @@ describe('Messages with Reactions API - Integration Tests', () => {
   describe('Concurrent Operations', () => {
     it('should handle concurrent requests safely', async () => {
       const requests = Array.from({ length: 5 }, (_, i) => ({
-        caixaId: 'caixa-123',
+        inboxId: 'caixa-123',
         message: {
           name: `Concurrent Message ${i}`,
           type: 'button',
