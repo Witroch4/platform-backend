@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { validateInput, handleApiError, createSuccessResponse } from '../../../../lib/utils/api-helpers';
-import { webhookManager } from '../../../../lib/webhook/webhook-manager';
+import { webhookManager, type WebhookConfig } from '../../../../lib/webhook/webhook-manager';
 
 // Validation schemas
 const WebhookConfigSchema = z.object({
@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const webhook = await webhookManager.createWebhook(config);
+    const webhook = await webhookManager.createWebhook(config as Partial<WebhookConfig>);
 
     return createSuccessResponse({
       message: 'Webhook created successfully',

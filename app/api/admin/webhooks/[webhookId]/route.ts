@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { validateInput, handleApiError, createSuccessResponse } from '../../../../../lib/utils/api-helpers';
-import { webhookManager } from '../../../../../lib/webhook/webhook-manager';
+import { webhookManager, type WebhookConfig } from '../../../../../lib/webhook/webhook-manager';
 
 // Validation schemas
 const WebhookUpdateSchema = z.object({
@@ -75,7 +75,7 @@ export async function GET(
     }
 
     // Get webhook statistics
-    const stats = await webhookManager.getWebhookStats(webhookId);
+    const stats = await webhookManager.getWebhookStatsById(webhookId);
 
     const response: any = {
       webhook: {
@@ -154,7 +154,7 @@ export async function PUT(
       }
     }
 
-    const updatedWebhook = await webhookManager.updateWebhook(webhookId, updates);
+      const updatedWebhook = await webhookManager.updateWebhook(webhookId, updates as Partial<WebhookConfig>);
 
     return createSuccessResponse({
       message: 'Webhook updated successfully',
@@ -293,7 +293,7 @@ export async function DELETE(
 
     // Check if webhook has pending deliveries (unless force is true)
     if (!force) {
-      const stats = await webhookManager.getWebhookStats(webhookId);
+      const stats = await webhookManager.getWebhookStatsById(webhookId);
       if (stats.pendingDeliveries > 0) {
         return NextResponse.json(
           { 
