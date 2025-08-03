@@ -3,14 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { QueueManagerService } from "@/lib/queue-management/services/queue-manager.service";
 import { AuditLogService } from "@/lib/services/audit-log.service";
 
-interface RouteParams {
-  params: {
-    queueName: string;
-    action: string;
-  };
-}
-
-export async function POST(request: NextRequest, { params }: RouteParams) {
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ queueName: string; action: string }> }
+) {
   try {
     // Verificação de autenticação e autorização
     const session = await auth();
@@ -21,7 +17,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const { queueName, action } = params;
+    const { queueName, action } = await params;
     const queueManager = QueueManagerService.getInstance();
     const auditLog = AuditLogService.getInstance();
 
@@ -81,7 +77,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     });
 
   } catch (error) {
-    console.error(`Erro ao executar ação ${params.action} na fila ${params.queueName}:`, error);
+    const { queueName, action } = await params;
+    console.error(`Erro ao executar ação ${action} na fila ${queueName}:`, error);
     return NextResponse.json(
       { error: "Erro interno do servidor" },
       { status: 500 }

@@ -140,12 +140,15 @@ process.on('SIGTERM', () => {
 
 export {
   ProductionMonitor,
-  DisasterRecoveryManager,
   type InfrastructureAlert,
   type ConnectionHealth,
   type BackupStatus,
+} from './production-monitor';
+
+export {
+  DisasterRecoveryManager,
   type RecoveryProcedure,
   type RecoveryExecution,
-} from './production-monitor';
+} from './disaster-recovery';
 
 export { type RecoveryResult } from './disaster-recovery';

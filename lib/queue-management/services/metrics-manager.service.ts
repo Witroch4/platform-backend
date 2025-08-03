@@ -466,7 +466,7 @@ export class MetricsManagerService extends EventEmitter {
   // Private helper methods
 
   private initializeServices(): void {
-    this.collector = MetricsCollectorService.getInstance(this.redis, this.prisma)
+    this.collector = MetricsCollectorService.getInstance(this.prisma, this.redis)
     this.storage = MetricsStorageService.getInstance(this.prisma, this.redis)
     this.aggregator = MetricsAggregatorService.getInstance(this.prisma, this.redis)
     this.anomalyDetector = AnomalyDetectorService.getInstance(this.prisma, this.redis)

@@ -44,7 +44,7 @@ describe('Metrics System Integration', () => {
 
   describe('MetricsCollectorService', () => {
     it('should collect system metrics', async () => {
-      const collector = MetricsCollectorService.getInstance(redis, prisma)
+      const collector = MetricsCollectorService.getInstance(prisma, redis)
       
       const systemMetrics = await collector.collectSystemMetrics()
       
@@ -56,7 +56,7 @@ describe('Metrics System Integration', () => {
     })
 
     it('should calculate percentiles correctly', async () => {
-      const collector = MetricsCollectorService.getInstance(redis, prisma)
+      const collector = MetricsCollectorService.getInstance(prisma, redis)
       
       const values = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
       const percentiles = collector.calculatePercentiles(values)
@@ -68,7 +68,7 @@ describe('Metrics System Integration', () => {
     })
 
     it('should handle empty values array', async () => {
-      const collector = MetricsCollectorService.getInstance(redis, prisma)
+      const collector = MetricsCollectorService.getInstance(prisma, redis)
       
       const percentiles = collector.calculatePercentiles([])
       
