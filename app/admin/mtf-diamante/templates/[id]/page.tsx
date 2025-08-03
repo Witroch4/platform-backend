@@ -90,11 +90,37 @@ interface TemplateDetailsPageProps {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
-export default async function TemplateDetailsPage({
+// Server Component para resolver os params
+export default function TemplateDetailsPage({
   params,
 }: TemplateDetailsPageProps) {
-  const resolvedParams = await params;
-  const templateId = resolvedParams.id;
+  return <TemplateDetailsWrapper params={params} />;
+}
+
+// Wrapper para lidar com a Promise dos params
+function TemplateDetailsWrapper({ params }: { params: Promise<{ id: string }> }) {
+  const [templateId, setTemplateId] = useState<string | null>(null);
+
+  useEffect(() => {
+    params.then((resolvedParams) => {
+      setTemplateId(resolvedParams.id);
+    });
+  }, [params]);
+
+  if (!templateId) {
+    return (
+      <div className="flex flex-col justify-center items-center h-[60vh]">
+        <DotLottieReact
+          src="/animations/loading.lottie"
+          autoplay
+          loop
+          style={{ width: 150, height: 150 }}
+          aria-label="Carregando..."
+        />
+        <p className="mt-4 text-muted-foreground">Carregando...</p>
+      </div>
+    );
+  }
 
   return <TemplateDetailsClient templateId={templateId} />;
 }

@@ -38,6 +38,7 @@ model User {
   processedApprovalRequests TemplateApprovalRequest[] @relation("ProcessedBy")
   approvalRequests          TemplateApprovalRequest[] @relation("ApprovalRequests")
   usuarioChatwit            UsuarioChatwit?
+  auditLogs                 AuditLog[]
 }
 
 model Account {
@@ -1172,3 +1173,4 @@ enum QueueUserRole {
   admin
   superadmin
 }
+

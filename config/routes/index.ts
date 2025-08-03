@@ -37,5 +37,7 @@ export const configRoutes: ConfigRoutes = {
     "/admin/notifications/*",
     "/admin/users",
     "/admin/users/*",
+    "/admin/queue-management",
+    "/admin/queue-management/*",
   ],
 };

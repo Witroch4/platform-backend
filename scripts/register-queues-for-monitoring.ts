@@ -15,6 +15,7 @@ import { agendamentoQueue } from '../lib/queue/agendamento.queue';
 import { instagramWebhookQueue, autoNotificationsQueue } from '../lib/queue/instagram-webhook.queue';
 import { followUpQueue } from '../lib/queue/followUp.queue';
 import { manuscritoQueue } from '../lib/queue/manuscrito.queue';
+import { mtfDiamanteWebhookQueue, asyncWebhookQueue } from '../lib/queue/mtf-diamante-webhook.queue';
 
 async function registerQueues() {
   console.log('🔧 Registrando filas no sistema de monitoramento...\n');
@@ -32,6 +33,8 @@ async function registerQueues() {
       { queue: autoNotificationsQueue, name: 'auto-notifications' },
       { queue: followUpQueue, name: 'follow-up' },
       { queue: manuscritoQueue, name: 'manuscrito' },
+      { queue: mtfDiamanteWebhookQueue, name: 'mtf-diamante-webhook' },
+      { queue: asyncWebhookQueue, name: 'mtf-diamante-webhook-async' },
     ];
 
     console.log('2️⃣ Registrando filas...');

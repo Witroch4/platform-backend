@@ -1,4 +1,4 @@
-import { getRedisInstance } from '@/lib/connections';
+import { getRedisInstance, getPrismaInstance } from '@/lib/connections';
 import type { PrismaClient, Prisma, FeatureFlag } from '@prisma/client';
 
 type J = Prisma.JsonValue;

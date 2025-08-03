@@ -1,4 +1,4 @@
-import { getRedisInstance } from '@/lib/connections';
+import { getRedisInstance, getPrismaInstance } from '@/lib/connections';
 import type { PrismaClient } from '@prisma/client';
 import { FeatureFlagManager } from './feature-flag-manager';
 

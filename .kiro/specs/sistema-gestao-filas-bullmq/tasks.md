@@ -1,5 +1,24 @@
 # Implementation Plan
 
+## Nota sobre Sistema de Autenticação
+
+Este projeto aproveitará o sistema de autenticação Auth.js 5 já existente no projeto, incluindo:
+
+- Sistema de roles: DEFAULT, ADMIN, SUPERADMIN (definido no Prisma)
+- Middleware de autenticação já configurado
+- Rotas protegidas já definidas em `config/routes/index.ts`
+- O dashboard de filas será acessível apenas para usuários com role SUPERADMIN
+
+## Nota sobre Sistema de Conexões Singleton
+
+Este projeto utilizará o sistema de conexões singleton já implementado em `lib/connections.ts`:
+
+- **getPrismaInstance()**: Instância singleton do Prisma Client com configurações otimizadas
+- **getRedisInstance()**: Instância singleton do Redis com connection pooling
+- **Benefícios**: Evita cold starts, reutiliza conexões, suporte a HMR
+- **Padrão**: Todos os serviços devem usar estas funções em vez de criar novas instâncias
+- **Compatibilidade**: Sistema já usado extensivamente no projeto (feature flags, feedback, monitoring)
+
 - [x] 1. Setup infraestrutura base
   - Configurar estrutura de banco de dados, sistema de configuração e logging
   - Implementar migrations do Prisma e validação de configurações
@@ -116,7 +135,6 @@
   - _Requisitos: 5.1, 5.2, 5.7_
 
 - [x] 5.3 Implementar dashboard de analytics
-
   - Criar MetricsChart com múltiplos tipos de gráfico
 
   - Implementar PerformanceDashboard com métricas históricas
@@ -130,61 +148,53 @@
   - _Requisitos: 2.1, 2.2, 2.5_
 
 - [x] 6. Implementar API e integrações externas
-
-
-
-
-
   - Criar endpoints de monitoramento com operações CRUD
   - Implementar sistema de webhooks com entrega confiável
   - Adicionar documentação automática OpenAPI/Swagger
   - _Requisitos: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7_
 
 - [x] 6.1 Implementar endpoints de monitoramento
-
-
   - Criar /api/admin/queues com operações CRUD
   - Implementar /api/admin/jobs com controle granular
   - Adicionar /api/admin/metrics com export de dados
   - _Requisitos: 7.1, 7.2, 7.5_
 
 - [x] 6.2 Implementar sistema de webhooks
-
-
   - Criar /api/admin/webhooks para configuração
   - Implementar entrega confiável com retry e DLQ
   - Adicionar autenticação por API key e rate limiting
   - _Requisitos: 7.3, 7.4, 7.6_
 
 - [x] 6.3 Implementar documentação automática da API
-
-
   - Gerar documentação OpenAPI/Swagger
   - Criar exemplos de uso para cada endpoint
   - Implementar testes automatizados da API
   - _Requisitos: 7.7_
 
-- [ ] 7. Implementar segurança e auditoria
-  - Configurar sistema de autenticação OAuth2/SAML/JWT
-  - Implementar controle de acesso granular com roles
+- [x] 7. Implementar segurança e auditoria (aproveitando Auth.js 5 existente)
+  - Criar rotas específicas do dashboard de filas para SUPERADMIN
+  - Implementar controle de acesso granular aproveitando roles existentes
   - Adicionar sistema de auditoria completo com logs
   - _Requisitos: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7_
 
-- [ ] 7.1 Implementar sistema de autenticação
-  - Configurar OAuth2/SAML/JWT para autenticação
-  - Criar middleware de autenticação para todas as rotas
-  - Implementar refresh tokens e logout seguro
+- [x] 7.1 Configurar rotas do dashboard de filas para SUPERADMIN
+  - Adicionar rotas `/admin/queue-management` e `/admin/queue-management/*` às superAdminRoutes
+  - Aproveitar middleware existente que já valida role SUPERADMIN
+  - Criar página de login específica ou reutilizar `/auth/login` existente
   - _Requisitos: 6.1, 6.4_
 
-- [ ] 7.2 Implementar controle de acesso granular
-  - Criar sistema de roles (viewer, operator, admin, superadmin)
-  - Implementar permissões por fila e namespace
-  - Adicionar restrições por tenant quando aplicável
+- [x] 7.2 Implementar controle de acesso granular nas APIs
+  - Aproveitar sistema de roles existente (DEFAULT, ADMIN, SUPERADMIN)
+  - Implementar middleware de validação SUPERADMIN nas rotas da API de filas
+  - Adicionar permissões específicas por operação (view, manage, delete)
+  - Reutilizar função de autenticação do auth.ts existente
   - _Requisitos: 6.2, 6.4_
 
-- [ ] 7.3 Implementar sistema de auditoria completo
-  - Criar audit log com timestamp, usuário, ação e contexto
-  - Implementar busca e filtro no audit log
+- [x] 7.3 Implementar sistema de auditoria completo
+  - Aproveitar tabela AuditLog existente no schema Prisma
+  - Implementar logging automático de todas as operações de fila
+  - Adicionar busca e filtro no audit log com interface web
+  - Integrar com sistema de usuários existente para rastreamento
   - Adicionar confirmação adicional para ações críticas
   - _Requisitos: 6.3, 6.5, 6.6, 6.7_
 
@@ -192,90 +202,110 @@
   - Criar PolicyEngineService com políticas configuráveis
   - Implementar sistema de auto-recuperação para falhas
   - Adicionar otimizações automáticas baseadas em padrões
+  -  mais sobre o sistema app\admin\queue-management\README.md
   - _Requisitos: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7_
 
 - [ ] 8.1 Implementar PolicyEngineService
-  - Criar sistema de políticas configuráveis
+  - Criar sistema de políticas configuráveis usando lib/connections.ts
   - Implementar auto-retry com backoff configurável
   - Adicionar pausar filas automaticamente em sobrecarga
+  - Usar getPrismaInstance() e getRedisInstance() para conexões singleton
+  -  mais sobre o sistema app\admin\queue-management\README.md
   - _Requisitos: 8.1, 8.2_
 
 - [ ] 8.2 Implementar sistema de auto-recuperação
-  - Criar runbooks automáticos para falhas críticas
+  - Criar runbooks automáticos para falhas críticas usando lib/connections.ts
   - Implementar isolamento automático de jobs problemáticos
   - Adicionar modo de emergência com processamento mínimo
+  - Usar getPrismaInstance() e getRedisInstance() para conexões singleton
+  -  mais sobre o sistema app\admin\queue-management\README.md
   - _Requisitos: 8.4, 8.6, 8.7_
 
 - [ ] 8.3 Implementar otimizações automáticas
-  - Criar sugestões de otimização baseadas em padrões
+  - Criar sugestões de otimização baseadas em padrões usando lib/connections.ts
   - Implementar auto-scaling de workers baseado na carga
   - Adicionar detecção de anomalias para otimização proativa
+  - Usar getPrismaInstance() e getRedisInstance() para conexões singleton
+  -  mais sobre o sistema app\admin\queue-management\README.md
   - _Requisitos: 8.3, 8.5_
 
 - [ ] 9. Implementar integrações com ferramentas externas
   - Integrar com Prometheus/Grafana para métricas
   - Implementar distributed tracing com OpenTelemetry/Jaeger
   - Adicionar integração com sistemas de log ELK/Splunk
+  -  mais sobre o sistema app\admin\queue-management\README.md
   - _Requisitos: 9.1, 9.2, 9.3_
 
 - [ ] 9.1 Implementar integração com Prometheus/Grafana
-  - Exportar métricas no formato Prometheus
+  - Exportar métricas no formato Prometheus usando lib/connections.ts
   - Criar dashboards Grafana pré-configurados
   - Implementar alertas integrados com Alertmanager
+  - Usar getPrismaInstance() e getRedisInstance() para conexões singleton
+  -  mais sobre o sistema app\admin\queue-management\README.md
   - _Requisitos: 9.1_
 
 - [ ] 9.2 Implementar distributed tracing
-  - Integrar com OpenTelemetry/Jaeger
+  - Integrar com OpenTelemetry/Jaeger usando lib/connections.ts
   - Adicionar tracing para jobs e workflows
   - Implementar correlation IDs para rastreamento completo
+  - Usar getPrismaInstance() e getRedisInstance() para conexões singleton
+  -  mais sobre o sistema app\admin\queue-management\README.md
   - _Requisitos: 9.2_
 
 - [ ] 9.3 Implementar integração com sistemas de log
-  - Enviar logs estruturados para ELK/Splunk
+  - Enviar logs estruturados para ELK/Splunk usando lib/connections.ts
   - Configurar parsing e indexação automática
   - Adicionar dashboards de log para análise
+  - Usar getPrismaInstance() e getRedisInstance() para conexões singleton
   - _Requisitos: 9.3_
 
 - [ ] 10. Implementar otimizações de performance e escalabilidade
   - Otimizar queries do dashboard para alta performance
   - Configurar suporte a alta escala com 10k+ jobs/minuto
   - Implementar degradação graceful com circuit breakers
+  -  mais sobre o sistema app\admin\queue-management\README.md
   - _Requisitos: 10.1, 10.2, 10.3, 10.4, 10.6, 10.7_
 
 - [ ] 10.1 Implementar otimizações de performance
-  - Otimizar queries do dashboard para < 2s com 1000+ filas
+  - Otimizar queries do dashboard para < 2s com 1000+ filas usando lib/connections.ts
   - Implementar lazy loading e paginação inteligente
   - Adicionar cache inteligente com invalidação automática
+  - Usar getPrismaInstance() e getRedisInstance() para conexões singleton
   - _Requisitos: 10.1, 10.4_
 
 - [ ] 10.2 Implementar suporte a alta escala
-  - Configurar suporte a 10k+ jobs/minuto
+  - Configurar suporte a 10k+ jobs/minuto usando lib/connections.ts
   - Implementar particionamento temporal para queries
-  - Adicionar connection pooling otimizado
+  - Adicionar connection pooling otimizado (já implementado no sistema singleton)
+  - Usar getPrismaInstance() e getRedisInstance() para conexões singleton
   - _Requisitos: 10.2, 10.3, 10.6_
 
 - [ ] 10.3 Implementar degradação graceful
-  - Criar sistema de circuit breaker
+  - Criar sistema de circuit breaker usando lib/connections.ts
   - Implementar fallbacks para componentes indisponíveis
   - Adicionar modo degradado mantendo funcionalidades críticas
+  - Usar getPrismaInstance() e getRedisInstance() para conexões singleton
   - _Requisitos: 10.7_
 
 - [ ] 11. Implementar suite completa de testes
   - Criar testes unitários para todos os services principais
   - Implementar testes de integração end-to-end
   - Adicionar testes de segurança e compliance
+  -  mais sobre o sistema app\admin\queue-management\README.md
   - _Requisitos: Todos os requisitos, 6.1, 6.2, 6.3, 10.1, 10.2_
 
 - [ ] 11.1 Implementar testes unitários abrangentes
-  - Criar testes para todos os services principais
-  - Implementar mocks para Redis e PostgreSQL
+  - Criar testes para todos os services principais usando lib/connections.ts
+  - Implementar mocks para Redis e PostgreSQL (getPrismaInstance, getRedisInstance)
   - Adicionar testes de validação e error handling
+  - Testar sistema de conexões singleton
   - _Requisitos: Todos os requisitos_
 
 - [ ] 11.2 Implementar testes de integração
-  - Criar testes end-to-end para fluxos completos
+  - Criar testes end-to-end para fluxos completos usando lib/connections.ts
   - Implementar testes de performance com carga
   - Adicionar testes de resiliência e recuperação
+  - Testar conexões singleton em ambiente de teste
   - _Requisitos: 10.1, 10.2_
 
 - [ ] 11.3 Implementar testes de segurança
@@ -287,13 +317,15 @@
 - [ ] 12. Implementar documentação e deploy
   - Criar documentação completa do sistema
   - Implementar pipeline de CI/CD automatizado
-  - Configurar monitoramento de produção
+  - Configurar monitoramento de produção]
+  -  mais sobre o sistema app\admin\queue-management\README.md
   - _Requisitos: Todos os requisitos, 9.4, 9.5, 10.5_
 
 - [ ] 12.1 Criar documentação completa do sistema
-  - Documentar arquitetura e componentes principais
-  - Criar guias de instalação e configuração
+  - Documentar arquitetura e componentes principais incluindo lib/connections.ts
+  - Criar guias de instalação e configuração do sistema de conexões singleton
   - Implementar exemplos de uso e troubleshooting
+  - Documentar padrões de uso do getPrismaInstance() e getRedisInstance()
   - _Requisitos: Todos os requisitos_
 
 - [ ] 12.2 Implementar pipeline de CI/CD
@@ -302,8 +334,15 @@
   - Adicionar monitoramento de deploy e health checks
   - _Requisitos: 10.5_
 
-- [ ] 12.3 Configurar monitoramento de produção
-  - Implementar alertas de infraestrutura
+- [x] 12.3 Configurar monitoramento de produção
+
+
+
+
+
+  - Implementar alertas de infraestrutura usando lib/connections.ts
   - Configurar backup automático de configurações
   - Adicionar disaster recovery procedures
+  - Monitorar saúde das conexões singleton (Prisma e Redis)
+  - painel de gestao app\admin\queue-management\README.md
   - _Requisitos: 9.4, 9.5_

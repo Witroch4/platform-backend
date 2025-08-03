@@ -13,18 +13,27 @@ export function createRouteMatchers(config: RouteConfig, req: NextRequest) {
 
   // Função para verificar se o caminho corresponde a um padrão
   const matchPath = (path: string, pattern: string): boolean => {
-    // Converter o padrão em uma expressão regular
-    const regexPattern = pattern
-      .replace(/\//g, "\\/")  // Escapar barras
-      .replace(/\*/g, ".*");  // Converter * em .*
+    // Verificação exata
+    if (pattern === path) return true;
 
-    const regex = new RegExp(`^${regexPattern}$`);
-    return regex.test(path);
+    // Verificação com wildcard /*
+    if (pattern.endsWith("/*")) {
+      const basePattern = pattern.slice(0, -2);
+      return path.startsWith(basePattern + "/") || path === basePattern;
+    }
+
+    // Verificação com wildcard * no final
+    if (pattern.endsWith("*")) {
+      const basePattern = pattern.slice(0, -1);
+      return path.startsWith(basePattern);
+    }
+
+    return false;
   };
 
   // Verificar se o caminho corresponde a algum dos padrões em uma lista
   const matchAnyPattern = (path: string, patterns: string[]): boolean => {
-    return patterns.some(pattern => matchPath(path, pattern));
+    return patterns.some((pattern) => matchPath(path, pattern));
   };
 
   return {
