@@ -6,7 +6,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
-import { connection as redisConnection } from '../redis';
+import { getRedisInstance } from '../connections';
 
 // Connection pool configuration
 export interface ConnectionPoolConfig {
@@ -291,7 +291,7 @@ class ConnectionPoolMonitor {
   private async testRedisConnectivity(): Promise<boolean> {
     try {
       const start = Date.now();
-      await redisConnection.ping();
+      await getRedisInstance().ping();
       const latency = Date.now() - start;
       
       if (latency > 1000) {

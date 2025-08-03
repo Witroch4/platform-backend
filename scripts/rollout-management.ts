@@ -1,13 +1,12 @@
 #!/usr/bin/env ts-node
 
 import { PrismaClient } from '@prisma/client';
-import { Redis } from 'ioredis';
+import { getRedisInstance } from '../lib/connections';
 import { FeatureFlagManager } from '../lib/feature-flags/feature-flag-manager';
 import { RollbackManager } from '../lib/feature-flags/rollback-manager';
 import { ABTestingManager, createWebhookPerformanceTest } from '../lib/feature-flags/ab-testing-manager';
 
 const prisma = new PrismaClient();
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
 class RolloutManager {
   private featureFlagManager: FeatureFlagManager;
@@ -15,6 +14,7 @@ class RolloutManager {
   private abTestManager: ABTestingManager;
 
   constructor() {
+    const redis = getRedisInstance();
     this.featureFlagManager = FeatureFlagManager.getInstance(prisma, redis);
     this.rollbackManager = RollbackManager.getInstance(prisma, redis);
     this.abTestManager = ABTestingManager.getInstance(prisma, redis);
@@ -285,7 +285,7 @@ async function main() {
     process.exit(1);
   } finally {
     await prisma.$disconnect();
-    redis.disconnect();
+    // The redis instance is now managed globally, so no need to disconnect here
   }
 }
 

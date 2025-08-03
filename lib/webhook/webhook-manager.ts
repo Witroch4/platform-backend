@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from "uuid";
 import * as crypto from "node:crypto";
 import { Prisma, WebhookEvent } from "@prisma/client";
 import { prisma } from "../prisma";
-import { connection as redis } from "../redis";
+import { getRedisInstance } from "../connections";
 import { webhookQueue } from "./webhook-queue";
 import { paginateArray, applySorting, applyFilters } from "../utils/api-helpers";
 
@@ -380,12 +380,12 @@ export class WebhookManager {
           d.responseStatus != null &&
           d.responseStatus >= 200 &&
           d.responseStatus < 300,
-      )?.deliveredAt ?? undefined,
+      )?.deliveredAt ?? null,
       lastFailureAt: deliveries.find(
         (d) =>
           d.responseStatus != null &&
           (d.responseStatus < 200 || d.responseStatus >= 300),
-      )?.deliveredAt ?? undefined,
+      )?.deliveredAt ?? null,
     };
   }
 
@@ -441,12 +441,12 @@ export class WebhookManager {
           d.responseStatus != null &&
           d.responseStatus >= 200 &&
           d.responseStatus < 300,
-      )?.deliveredAt,
+      )?.deliveredAt || undefined,
       lastFailureAt: deliveries.find(
         (d) =>
           d.responseStatus != null &&
           (d.responseStatus < 200 || d.responseStatus >= 300),
-      )?.deliveredAt,
+      )?.deliveredAt || undefined,
       consecutiveFailures,
     };
   }
@@ -889,7 +889,7 @@ export class WebhookManager {
 
   private async cacheWebhookConfig(webhook: any): Promise<void> {
     const config = this.formatWebhookConfig(webhook);
-    await redis.setex(
+    await getRedisInstance().setex(
       `webhook:config:${webhook.id}`,
       3600, // 1 hour
       JSON.stringify(config),
@@ -898,7 +898,7 @@ export class WebhookManager {
 
   private async getCachedWebhookConfig(webhookId: string): Promise<WebhookConfig | null> {
     try {
-      const cached = await redis.get(`webhook:config:${webhookId}`);
+      const cached = await getRedisInstance().get(`webhook:config:${webhookId}`);
       return cached ? JSON.parse(cached) : null;
     } catch (error: unknown) {
       console.error("[WebhookManager] Error getting cached webhook config:", error);

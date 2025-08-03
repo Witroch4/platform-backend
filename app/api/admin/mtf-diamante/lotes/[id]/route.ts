@@ -26,45 +26,53 @@ export async function PATCH(
       return NextResponse.json({ error: 'Usuário Chatwit não encontrado' }, { status: 404 });
     }
 
-    // Verificar se o lote existe e pertence ao usuário
-    const loteExistente = await prisma.loteOab.findFirst({
+    // Buscar configuração MTF Diamante do usuário
+    const mtfConfig = await prisma.mtfDiamanteConfig.findUnique({
+      where: { userId: session.user.id }
+    });
+
+    if (!mtfConfig) {
+      return NextResponse.json({ error: 'Configuração MTF Diamante não encontrada' }, { status: 404 });
+    }
+
+    // Buscar variável do lote
+    const loteVariavel = await prisma.mtfDiamanteVariavel.findFirst({
       where: { 
-        id: id,
-        usuarioChatwitId: usuarioChatwit.id 
+        configId: mtfConfig.id,
+        chave: `lote_${id}`
       }
     });
 
-    if (!loteExistente) {
+    if (!loteVariavel) {
       return NextResponse.json({ error: 'Lote não encontrado' }, { status: 404 });
     }
 
     // Preparar dados para atualização
-    const updateData: any = {};
+    const loteData = loteVariavel.valor as any || {};
     
-    if (nome !== undefined) updateData.nome = nome;
-    if (valor !== undefined) {
-      updateData.valor = Number.parseFloat(valor.replace(/[^\d,]/g, '').replace(',', '.'));
-    }
-    if (dataInicio !== undefined) updateData.dataInicio = new Date(dataInicio);
-    if (dataFim !== undefined) updateData.dataFim = new Date(dataFim);
-    if (isActive !== undefined) updateData.ativo = isActive;
+    if (nome !== undefined) loteData.nome = nome;
+    if (valor !== undefined) loteData.valor = Number.parseFloat(valor.replace(/[^\d,]/g, '').replace(',', '.'));
+    if (dataInicio !== undefined) loteData.dataInicio = new Date(dataInicio);
+    if (dataFim !== undefined) loteData.dataFim = new Date(dataFim);
+    if (isActive !== undefined) loteData.ativo = isActive;
+    if (numero !== undefined) loteData.numero = numero;
 
-    // Atualizar lote
-    const loteAtualizado = await prisma.loteOab.update({
-      where: { id: id },
-      data: updateData
+    // Atualizar variável do lote
+    const loteAtualizado = await prisma.mtfDiamanteVariavel.update({
+      where: { id: loteVariavel.id },
+      data: { valor: loteData }
     });
 
     return NextResponse.json({ 
       message: 'Lote atualizado com sucesso',
       lote: {
         id: loteAtualizado.id,
-        numero: numero || 1,
-        nome: loteAtualizado.nome,
-        valor: `R$ ${loteAtualizado.valor.toFixed(2).replace('.', ',')}`,
-        dataInicio: loteAtualizado.dataInicio,
-        dataFim: loteAtualizado.dataFim,
-        isActive: loteAtualizado.ativo
+        numero: loteData.numero || 1,
+        nome: loteData.nome,
+        valor: `R$ ${loteData.valor?.toFixed(2).replace('.', ',') || '0,00'}`,
+        dataInicio: loteData.dataInicio,
+        dataFim: loteData.dataFim,
+        isActive: loteData.ativo
       }
     });
   } catch (error) {
@@ -95,21 +103,30 @@ export async function DELETE(
       return NextResponse.json({ error: 'Usuário Chatwit não encontrado' }, { status: 404 });
     }
 
-    // Verificar se o lote existe e pertence ao usuário
-    const loteExistente = await prisma.loteOab.findFirst({
+    // Buscar configuração MTF Diamante do usuário
+    const mtfConfig = await prisma.mtfDiamanteConfig.findUnique({
+      where: { userId: session.user.id }
+    });
+
+    if (!mtfConfig) {
+      return NextResponse.json({ error: 'Configuração MTF Diamante não encontrada' }, { status: 404 });
+    }
+
+    // Buscar variável do lote
+    const loteVariavel = await prisma.mtfDiamanteVariavel.findFirst({
       where: { 
-        id: id,
-        usuarioChatwitId: usuarioChatwit.id 
+        configId: mtfConfig.id,
+        chave: `lote_${id}`
       }
     });
 
-    if (!loteExistente) {
+    if (!loteVariavel) {
       return NextResponse.json({ error: 'Lote não encontrado' }, { status: 404 });
     }
 
-    // Excluir lote
-    await prisma.loteOab.delete({
-      where: { id: id }
+    // Excluir variável do lote
+    await prisma.mtfDiamanteVariavel.delete({
+      where: { id: loteVariavel.id }
     });
 
     return NextResponse.json({ 

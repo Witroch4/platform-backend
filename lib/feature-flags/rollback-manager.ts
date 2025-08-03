@@ -1,5 +1,5 @@
-import { PrismaClient, Prisma } from '@prisma/client';
-import { Redis } from 'ioredis';
+import { getRedisInstance, getPrismaInstance } from '../connections';
+import type { PrismaClient, Prisma } from '@prisma/client';
 import { FeatureFlagManager } from './feature-flag-manager';
 
 type J = Prisma.JsonValue;
@@ -42,16 +42,20 @@ export interface RollbackExecution {
 export class RollbackManager {
   private static instance: RollbackManager;
   private prisma: PrismaClient;
-  private redis: Redis;
+  private redis: ReturnType<typeof getRedisInstance>;
   private featureFlagManager: FeatureFlagManager;
 
-  constructor(prisma: PrismaClient, redis: Redis) {
+  constructor(prisma?: PrismaClient, redis?: ReturnType<typeof getRedisInstance>) {
+    if (!prisma) prisma = getPrismaInstance();
+    if (!prisma || !redis) {
+      throw new Error('Prisma and Redis instances required for first initialization');
+    }
     this.prisma = prisma;
     this.redis = redis;
     this.featureFlagManager = FeatureFlagManager.getInstance(prisma, redis);
   }
 
-  static getInstance(prisma?: PrismaClient, redis?: Redis): RollbackManager {
+  static getInstance(prisma?: PrismaClient, redis?: ReturnType<typeof getRedisInstance>): RollbackManager {
     if (!RollbackManager.instance) {
       if (!prisma || !redis) {
         throw new Error('Prisma and Redis instances required for first initialization');
@@ -318,11 +322,8 @@ export async function quickEmergencyRollback(
   reason: string = 'Emergency situation detected'
 ): Promise<void> {
   try {
-    const { PrismaClient } = await import('@prisma/client');
-    const { Redis } = await import('ioredis');
-    
-    const prisma = new PrismaClient();
-    const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+    const prisma = getPrismaInstance();
+    const redis = getRedisInstance();
     
     const rollbackManager = RollbackManager.getInstance(prisma, redis);
     
@@ -337,11 +338,8 @@ export async function quickEmergencyRollback(
 
 export async function rollbackAllFlags(reason: string = 'System-wide rollback'): Promise<void> {
   try {
-    const { PrismaClient } = await import('@prisma/client');
-    const { Redis } = await import('ioredis');
-    
-    const prisma = new PrismaClient();
-    const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+    const prisma = getPrismaInstance();
+    const redis = getRedisInstance();
     
     const featureFlagManager = FeatureFlagManager.getInstance(prisma, redis);
     const rollbackManager = RollbackManager.getInstance(prisma, redis);

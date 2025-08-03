@@ -6,10 +6,23 @@
 
 // Configuration
 export { default as getQueueManagementConfig, type QueueManagementConfig } from './config'
-export * from './constants'
 
-// Types
-export * from './types'
+// Export specific constants to avoid conflicts
+export {
+  JOB_STATES,
+  QUEUE_STATES,
+  ERROR_CODES,
+  HTTP_STATUS,
+  // Exclude AlertSeverity and AlertStatus to avoid conflicts
+} from './constants'
+
+// Export specific types to avoid conflicts
+export {
+  AlertAnomaly,
+  JobBatchResult,
+  MetricsExportResult,
+  // Exclude conflicting types
+} from './types'
 
 // Services
 export * from './services'

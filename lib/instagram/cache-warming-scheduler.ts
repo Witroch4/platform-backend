@@ -206,8 +206,20 @@ class CacheWarmingScheduler {
       const templatesToWarm: TemplateAccessInfo[] = [];
       
       for (const template of prioritizedTemplates) {
+        // Get the inbox to find usuarioChatwitId
+        const inbox = await this.prisma.chatwitInbox.findUnique({
+          where: { id: template.inboxId },
+          select: { usuarioChatwitId: true }
+        });
+        
+        if (!inbox) {
+          console.warn(`[CacheWarmingScheduler] Inbox not found: ${template.inboxId}`);
+          continue;
+        }
+        
         const cached = await instagramTemplateCache.getTemplateMapping(
           template.intentName, 
+          inbox.usuarioChatwitId,
           template.inboxId
         );
         

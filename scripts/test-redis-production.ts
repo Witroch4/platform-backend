@@ -8,7 +8,7 @@ process.env.REDIS_HOST = 'redis'; // Simula o host do container Docker
 // Não carrega o .env local para simular produção
 // process.env.NODE_ENV = 'production' fará o Next.js usar .env.production
 
-import IORedis from 'ioredis';
+import { getRedisInstance } from '../lib/connections';
 
 async function testProductionRedisConfig() {
   console.log('🔍 Testando configuração do Redis para produção...');
@@ -25,20 +25,10 @@ async function testProductionRedisConfig() {
   console.log('  - Ambiente:', isRunningInDocker ? 'Docker/Production' : 'Local Development');
   console.log('  - Host padrão:', isRunningInDocker ? 'redis' : '127.0.0.1');
   
-  // Cria conexão com a mesma lógica do lib/redis.ts
-  const redisConnection = new IORedis({
-    host: process.env.REDIS_HOST || (isRunningInDocker ? 'redis' : '127.0.0.1'),
-    port: Number.parseInt(process.env.REDIS_PORT || '6379', 10),
-    maxRetriesPerRequest: null,
-    enableReadyCheck: false,
-    connectTimeout: 10000,
-    retryStrategy: (times) => {
-      const delay = Math.min(times * 50, 2000);
-      return delay;
-    },
-  });
-  
   try {
+    // Usa o conector global
+    const redisConnection = getRedisInstance();
+    
     // Testa a conexão
     await redisConnection.ping();
     console.log('✅ Redis conectado com sucesso!');
@@ -58,8 +48,6 @@ async function testProductionRedisConfig() {
     console.log('  - Rede: minha_rede (Docker network)');
     console.log('\n🔧 Para testar em Docker:');
     console.log('  docker compose -f docker-compose-dev.yml up redis');
-  } finally {
-    await redisConnection.quit();
   }
 }
 

@@ -184,17 +184,17 @@ export function TemplatePreviewDialog({ template, open, onOpenChange }: Template
               <Card className="bg-white dark:bg-gray-800 shadow-md">
                 <CardContent className="p-3 space-y-2">
                   {content?.header && (
-                    <div className="font-semibold text-sm">
+                    <div className="font-semibold text-sm break-words overflow-wrap-anywhere">
                     {content ? processText(content.header) : ''}
                     </div>
                   )}
                   
-                  <div className="text-sm">
+                  <div className="text-sm break-words overflow-wrap-anywhere">
                     {content ? processText(content.body) : ''}
                   </div>
                   
                   {content?.footer && (
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-xs text-muted-foreground break-words overflow-wrap-anywhere">
                       {processText(content.footer)}
                     </div>
                   )}

@@ -1,6 +1,5 @@
 import { performance } from 'perf_hooks';
-import { connection } from '../redis';
-import type IORedis from 'ioredis';
+import { getRedisInstance } from '../connections';
 
 // Performance metrics interfaces
 export interface WebhookMetrics {
@@ -71,7 +70,7 @@ export interface Alert {
 
 export class ApplicationPerformanceMonitor {
   private static instance: ApplicationPerformanceMonitor;
-  private redis: IORedis;
+  private redis: ReturnType<typeof getRedisInstance>;
   private alerts: Map<string, Alert> = new Map();
   private metricsBuffer: {
     webhook: WebhookMetrics[];
@@ -89,8 +88,8 @@ export class ApplicationPerformanceMonitor {
   private readonly METRICS_FLUSH_INTERVAL = 30000; // 30 seconds
   private readonly ALERT_CHECK_INTERVAL = 60000; // 1 minute
 
-  constructor(redisConnection?: IORedis) {
-    this.redis = redisConnection || connection;
+  constructor(redisConnection?: ReturnType<typeof getRedisInstance>) {
+    this.redis = redisConnection || getRedisInstance();
     this.startPeriodicTasks();
   }
 

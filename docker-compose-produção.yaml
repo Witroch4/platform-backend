@@ -1,8 +1,8 @@
 #docker-compose-produção.yaml (vou rodar ele no portainer)
 services:
-  chatwit_social_app:
-    image: witrocha/chatwit-social:latest
-    command: node server.js
+  socialwise_app:
+    image: witrocha/socialwise:latest
+    command: sh -c "npx prisma generate && (node /app/scripts/init-db.js || node /app/scripts/init-db-simple.js) && node /app/server.js"
     networks:
       - minha_rede
     environment:
@@ -75,20 +75,20 @@ services:
           memory: 1024M
       labels:
         - traefik.enable=true
-        - traefik.http.routers.chatwit_social.rule=Host(`chatwit-social.witdev.com.br`)
-        - traefik.http.routers.chatwit_social.entrypoints=websecure
-        - traefik.http.routers.chatwit_social.tls.certresolver=letsencryptresolver
-        - traefik.http.routers.chatwit_social.priority=1
-        - traefik.http.services.chatwit_social.loadbalancer.server.port=3000
-        - traefik.http.services.chatwit_social.loadbalancer.passHostHeader=true
-        - traefik.http.middlewares.chatwit_social_secure.headers.stsSeconds=31536000
-        - traefik.http.middlewares.chatwit_social_secure.headers.stsIncludeSubdomains=true
-        - traefik.http.middlewares.chatwit_social_secure.headers.stsPreload=true
-        - traefik.http.middlewares.chatwit_social_secure.headers.contentTypeNosniff=true
-        - traefik.http.middlewares.chatwit_social_secure.headers.browserXssFilter=true
-        - traefik.http.middlewares.chatwit_social_secure.headers.forceSTSHeader=true
-        - traefik.http.middlewares.chatwit_social_secure.headers.sslRedirect=true
-        - traefik.http.routers.chatwit_social.middlewares=chatwit_social_secure@docker
+        - traefik.http.routers.socialwise_app.rule=Host(`socialwise.witdev.com.br`)
+        - traefik.http.routers.socialwise_app.entrypoints=websecure
+        - traefik.http.routers.socialwise_app.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.socialwise_app.priority=1
+        - traefik.http.services.socialwise_app.loadbalancer.server.port=3000
+        - traefik.http.services.socialwise_app.loadbalancer.passHostHeader=true
+        - traefik.http.middlewares.socialwise_app_secure.headers.stsSeconds=31536000
+        - traefik.http.middlewares.socialwise_app_secure.headers.stsIncludeSubdomains=true
+        - traefik.http.middlewares.socialwise_app_secure.headers.stsPreload=true
+        - traefik.http.middlewares.socialwise_app_secure.headers.contentTypeNosniff=true
+        - traefik.http.middlewares.socialwise_app_secure.headers.browserXssFilter=true
+        - traefik.http.middlewares.socialwise_app_secure.headers.forceSTSHeader=true
+        - traefik.http.middlewares.socialwise_app_secure.headers.sslRedirect=true
+        - traefik.http.routers.socialwise_app.middlewares=socialwise_app_secure@docker
     logging:
       driver: json-file
       options:
@@ -96,9 +96,8 @@ services:
         max-file: "3"
 
   worker_automacao:
-    image: witrocha/chatwit-social:latest
-    #command: node dist/worker/automacao.worker.js
-    command: npm run start:automacao:prod
+    image: witrocha/socialwise:latest
+    command: sh -c "npx prisma generate && (node /app/scripts/init-db.js || node /app/scripts/init-db-simple.js) && node /app/dist/worker/automacao.worker.js"
     networks:
       - minha_rede
     environment:
@@ -176,9 +175,8 @@ services:
         max-file: "3"
 
   worker_webhook:
-    image: witrocha/chatwit-social:latest
-    #command: node dist/worker/webhook.worker.js
-    command: npm run start:webhook:prod
+    image: witrocha/socialwise:latest
+    command: sh -c "npx prisma generate && (node /app/scripts/init-db.js || node /app/scripts/init-db-simple.js) && node /app/dist/worker/webhook.worker.js"
     networks:
       - minha_rede
     environment:

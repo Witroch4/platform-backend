@@ -1,4 +1,4 @@
-import IORedis from 'ioredis';
+import { getRedisInstance } from '@/lib/connections';
 
 // --- Interface da Conexão ---
 interface SseConnection {
@@ -15,8 +15,8 @@ const globalForSse = globalThis as unknown as {
 // --- Classe SseManager ---
 class SseManager {
   private connectionsByLead: Map<string, Map<string, SseConnection>> = new Map();
-  private publisher!: IORedis;
-  private subscriber!: IORedis;
+  private publisher!: ReturnType<typeof getRedisInstance>;
+  private subscriber!: ReturnType<typeof getRedisInstance>;
   private isInitialized = false;
 
   constructor() {
@@ -25,23 +25,15 @@ class SseManager {
   }
 
   private initializeRedis() {
-    const redisConfig = {
-      host: process.env.REDIS_HOST || 'redis',
-      port: Number.parseInt(process.env.REDIS_PORT || '6379', 10),
-      password: process.env.REDIS_PASSWORD,
-      maxRetriesPerRequest: null,
-      connectTimeout: 15000,
-      retryStrategy: (times: number) => Math.min(times * 100, 3000),
-    };
+    // Usar singleton para publisher e subscriber
+    // Nota: Para pub/sub, precisamos de instâncias separadas
+    const baseRedis = getRedisInstance();
+    
+    console.log('[SSE Redis] ⚙️ Usando conexão singleton');
 
-    console.log('[SSE Redis] ⚙️ Inicializando com configuração:', {
-      host: redisConfig.host, 
-      port: redisConfig.port, 
-      password: redisConfig.password ? '******' : 'undefined',
-    });
-
-    this.publisher = new IORedis(redisConfig);
-    this.subscriber = new IORedis(redisConfig);
+    // Clonar configuração para pub/sub
+    this.publisher = baseRedis.duplicate();
+    this.subscriber = baseRedis.duplicate();
 
     this.subscriber.on('message', this.handleRedisMessage.bind(this));
     

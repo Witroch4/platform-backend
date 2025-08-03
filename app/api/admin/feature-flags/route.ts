@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-import { Redis } from 'ioredis';
+import { getPrismaInstance, getRedisInstance } from '@/lib/connections';
 import { FeatureFlagManager } from '@/lib/feature-flags/feature-flag-manager';
 import { RollbackManager } from '@/lib/feature-flags/rollback-manager';
 
-const prisma = new PrismaClient();
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+const prisma = getPrismaInstance();
+const redis = getRedisInstance();
 
 export async function GET(request: NextRequest) {
   try {

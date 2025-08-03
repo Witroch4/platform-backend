@@ -18,7 +18,7 @@ import { performance } from 'perf_hooks';
 import { FeatureFlagManager } from "@/lib/feature-flags/feature-flag-manager";
 import { ABTestingManager } from "@/lib/feature-flags/ab-testing-manager";
 import { PrismaClient } from '@prisma/client';
-import { Redis } from 'ioredis';
+import { getRedisInstance } from '@/lib/connections';
 import {
   extractWebhookData,
   validateWebhookData,
@@ -56,7 +56,7 @@ const FEATURE_FLAGS = {
 
 // Initialize Prisma and Redis instances
 const prisma = new PrismaClient();
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+const redis = getRedisInstance();
 
 // Feature flag manager instance
 const featureFlagManager = FeatureFlagManager.getInstance(prisma, redis);

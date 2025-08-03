@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
 import type { ErrorStatistics as BaseErrorStatistics } from '@/lib/monitoring/instagram-error-tracker';
+import { getRedisInstance, getPrismaInstance } from '@/lib/connections';
 
 interface TimeRange {
   start: Date;
@@ -13,62 +13,8 @@ interface ErrorStatistics extends BaseErrorStatistics {
   recentErrors?: unknown[];
 }
 
-// Função para criar conexão Redis com fallback
-function createRedisConnection() {
-  try {
-    const { Redis } = require("ioredis");
-
-    // Detectar se está rodando no Docker ou local
-    const isDocker =
-      process.env.NODE_ENV === "production" ||
-      process.env.REDIS_HOST === "redis";
-    const redisHost = isDocker ? "redis" : "localhost";
-    const redisPort = parseInt(process.env.REDIS_PORT || "6379");
-    const redisUrl =
-      process.env.REDIS_URL || `redis://${redisHost}:${redisPort}`;
-
-    console.log(
-      `[Dashboard] Environment: ${process.env.NODE_ENV}, Docker: ${isDocker}`
-    );
-    console.log(`[Dashboard] Connecting to Redis: ${redisUrl}`);
-
-    const redis = new Redis(redisUrl, {
-      retryDelayOnFailover: 100,
-      maxRetriesPerRequest: 3,
-      lazyConnect: true,
-      connectTimeout: 5000,
-      commandTimeout: 5000,
-      // Configurações para Docker
-      family: 4,
-      keepAlive: true,
-      // Tratamento de erros
-      enableOfflineQueue: false,
-    });
-
-    // Adicionar tratamento de erros para evitar logs desnecessários
-    redis.on("error", (error: Error) => {
-      console.warn(
-        "[Dashboard Redis] Connection error (using fallback mode):",
-        (error as Error).message
-      );
-    });
-
-    redis.on("connect", () => {
-      console.log("[Dashboard Redis] ✅ Connected successfully");
-    });
-
-    return redis;
-  } catch (error: unknown) {
-    console.warn(
-      "[Dashboard] Redis not available, using fallback mode:",
-      error
-    );
-    return null;
-  }
-}
-
-const prisma = new PrismaClient();
-const redis = createRedisConnection();
+const prisma = getPrismaInstance();
+const redis = getRedisInstance();
 
 type DashboardRange = '1h' | '24h' | '7d' | '30d';
 

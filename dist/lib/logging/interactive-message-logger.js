@@ -238,8 +238,8 @@ class InteractiveMessageLogger {
             parts.push(`req:${context.requestId}`);
         if (context?.messageId)
             parts.push(`msg:${context.messageId}`);
-        if (context?.caixaId)
-            parts.push(`caixa:${context.caixaId}`);
+        if (context?.inboxId)
+            parts.push(`caixa:${context.inboxId}`);
         if (context?.component)
             parts.push(`comp:${context.component}`);
         if (context?.action)

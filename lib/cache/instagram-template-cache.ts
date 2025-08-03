@@ -1,5 +1,4 @@
-import { connection } from "../redis";
-import type IORedis from "ioredis";
+import { getRedisInstance } from "../connections";
 import { CompleteMessageMapping } from "../dialogflow-database-queries";
 import {
   logCacheHit,
@@ -75,7 +74,7 @@ export interface CacheHealth {
 }
 
 export class InstagramTemplateCache {
-  private redis: IORedis;
+  private redis: ReturnType<typeof getRedisInstance>;
   private stats: CacheStats = {
     hits: 0,
     misses: 0,
@@ -87,8 +86,8 @@ export class InstagramTemplateCache {
   };
   private responseTimes: number[] = [];
 
-  constructor(redisConnection?: IORedis) {
-    this.redis = redisConnection || connection;
+  constructor(redisConnection?: ReturnType<typeof getRedisInstance>) {
+    this.redis = redisConnection || getRedisInstance();
     this.initializeHealthCheck();
   }
 

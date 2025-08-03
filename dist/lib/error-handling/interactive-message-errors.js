@@ -119,8 +119,8 @@ const ERROR_MESSAGES = {
         userMessage: 'Mensagem não encontrada.',
         severity: ErrorSeverity.MEDIUM
     },
-    'BUSINESS_CAIXA_NOT_FOUND': {
-        message: 'Caixa not found',
+    'BUSINESS_INBOX_NOT_FOUND': {
+        message: 'Inbox not found',
         userMessage: 'Caixa de entrada não encontrada.',
         severity: ErrorSeverity.MEDIUM
     },

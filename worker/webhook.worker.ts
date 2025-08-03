@@ -2,7 +2,7 @@
 
 import { Worker, Job } from 'bullmq';
 import dotenv from 'dotenv';
-import { connection } from '@/lib/redis';
+import { getRedisInstance } from '@/lib/connections';
 import { prisma } from '@/lib/prisma';
 import { processAgendamentoTask } from './WebhookWorkerTasks/agendamento.task';
 import { processLeadCellTask } from './WebhookWorkerTasks/leadcells.task';
@@ -62,7 +62,7 @@ class ParentWorker {
       RESPOSTA_RAPIDA_QUEUE_NAME,
       this.delegateHighPriorityJob.bind(this),
       {
-        connection,
+        connection: getRedisInstance(),
         concurrency: 10, // High concurrency for user-facing responses
         lockDuration: 30000,
       }
@@ -73,7 +73,7 @@ class ParentWorker {
       PERSISTENCIA_CREDENCIAIS_QUEUE_NAME,
       this.delegateLowPriorityJob.bind(this),
       {
-        connection,
+        connection: getRedisInstance(),
         concurrency: 5, // Lower concurrency for background tasks
         lockDuration: 60000,
       }
@@ -241,14 +241,14 @@ const parentWorker = new ParentWorker();
 const agendamentoWorker = new Worker(
   'agendamento',
   processAgendamentoTask,
-  { connection }
+  { connection: getRedisInstance() }
 );
 
 // Worker de manuscrito (mantido para compatibilidade)
 const manuscritoWorker = new Worker(
   MANUSCRITO_QUEUE_NAME,
   processLeadCellTask,
-  { connection }
+  { connection: getRedisInstance() }
 );
 
 // Worker unificado para lead cells (manuscrito, espelho, análise)
@@ -256,7 +256,7 @@ const leadCellsWorker = new Worker(
   'leadCells',
   processLeadCellTask,
   { 
-    connection,
+    connection: getRedisInstance(),
     concurrency: 5,
     lockDuration: 30000,
   }
@@ -267,7 +267,7 @@ const leadsChatwitWorker = new Worker(
   LEADS_QUEUE_NAME,
   processLeadChatwitTask,
   { 
-    connection, 
+    connection: getRedisInstance(), 
     concurrency: 10,  // Aumentamos a concorrência pois agora acumulamos jobs
     lockDuration: 30000,  // Aumentamos o tempo de bloqueio para 30s para permitir acumulação
   }
@@ -296,7 +296,7 @@ const autoNotificationsWorker = new Worker<IAutoNotificationJobData>(
       throw error;
     }
   },
-  { connection }
+  { connection: getRedisInstance() }
 );
 
 // Worker para processar webhooks do MTF Diamante (legacy tasks)
@@ -304,7 +304,7 @@ const mtfDiamanteWebhookWorker = new Worker(
   MTF_DIAMANTE_WEBHOOK_QUEUE_NAME,
   processMtfDiamanteWebhookTask,
   {
-    connection,
+    connection: getRedisInstance(),
     concurrency: 5,
     lockDuration: 30000,
   }
@@ -315,7 +315,7 @@ const mtfDiamanteAsyncWorker = new Worker(
   `${MTF_DIAMANTE_WEBHOOK_QUEUE_NAME}-async`,
   processMtfDiamanteWebhookTask, // Usa a mesma função de processamento
   {
-    connection,
+    connection: getRedisInstance(),
     concurrency: 10, // Mais concorrência para tasks assíncronas
     lockDuration: 60000, // Mais tempo para envio de mensagens
   }
@@ -345,14 +345,11 @@ const instagramTranslationWorker = new Worker(
   INSTAGRAM_TRANSLATION_QUEUE_NAME,
   processInstagramTranslationTask,
   {
-    connection,
+    connection: getRedisInstance(),
     concurrency: instagramWorkerConfig.concurrency, // Configurable concurrency for IO-bound translation tasks
     lockDuration: instagramWorkerConfig.lockDuration, // Configurable timeout to ensure webhook response within limits
-    // Add resource monitoring and limits
-    settings: {
-      stalledInterval: 30000, // Check for stalled jobs every 30 seconds
-      maxStalledCount: 1, // Mark job as failed after 1 stalled occurrence
-    },
+    stalledInterval: 30000, // Check for stalled jobs every 30 seconds
+    maxStalledCount: 1, // Mark job as failed after 1 stalled occurrence
   }
 );
 
@@ -412,9 +409,9 @@ instagramTranslationWorker.on('failed', (job, error) => {
   });
 });
 
-instagramTranslationWorker.on('stalled', (job) => {
+instagramTranslationWorker.on('stalled', (job: any) => {
   console.warn(`[Instagram Worker] Job ${job.id} stalled`, {
-    correlationId: job.data.correlationId,
+    correlationId: job.data?.correlationId,
     stalledCount: job.opts?.stalledCount || 0,
     lockDuration: `${instagramWorkerConfig.lockDuration}ms`,
   });

@@ -7,7 +7,7 @@ exports.getWhatsAppConfig = getWhatsAppConfig;
 exports.getWhatsAppApiUrl = getWhatsAppApiUrl;
 exports.getWhatsAppTemplatesUrl = getWhatsAppTemplatesUrl;
 exports.getApiVersion = getApiVersion;
-const prisma_1 = __importDefault(require("../../lib/prisma"));
+const prisma_1 = __importDefault(require("@/lib/prisma"));
 /**
  * Obtém as configurações ativas do WhatsApp para um usuário
  * Retorna as configurações do banco de dados ou utiliza os valores de fallback do .env
@@ -21,13 +21,9 @@ async function getWhatsAppConfig(userId) {
             where: { appUserId: userId }
         });
         if (usuarioChatwit) {
-            config = await prisma_1.default.whatsAppConfig.findFirst({
+            config = await prisma_1.default.whatsAppGlobalConfig.findFirst({
                 where: {
-                    usuarioChatwitId: usuarioChatwit.id,
-                    isActive: true
-                },
-                orderBy: {
-                    updatedAt: 'desc'
+                    usuarioChatwitId: usuarioChatwit.id
                 }
             });
         }
@@ -44,7 +40,7 @@ async function getWhatsAppConfig(userId) {
     }
     // Forçamos a versão v22.0 mesmo para configurações do banco
     return {
-        whatsappToken: config.whatsappToken,
+        whatsappToken: config.whatsappApiKey,
         whatsappBusinessAccountId: config.whatsappBusinessAccountId,
         phoneNumberId: config.phoneNumberId || process.env.FROM_PHONE_NUMBER_ID || '', // Usar phoneNumberId do banco primeiro, depois fallback para .env
         fbGraphApiBase: 'https://graph.facebook.com/v22.0', // Forçar versão v22.0

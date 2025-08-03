@@ -1,10 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createVerificationToken = exports.deleteVerificationTokenbyId = exports.findVerificationTokenbyToken = exports.findVerificationTokenbyEmail = void 0;
-const prisma_1 = require("../../../lib/prisma");
+const prisma_1 = require("@/lib/prisma");
 const uuid_1 = require("uuid");
 const findVerificationTokenbyEmail = async (email) => {
-    const token = await prisma_1.prisma.verificationToken.findUnique({
+    const token = await prisma_1.prisma.verificationToken.findFirst({
         where: {
             email,
         },

@@ -1,5 +1,5 @@
 import { Queue, Job } from 'bullmq';
-import { connection } from '../redis';
+import { getRedisInstance } from '../connections';
 
 export const PERSISTENCIA_CREDENCIAIS_QUEUE_NAME = 'persistencia-credenciais';
 
@@ -37,7 +37,7 @@ export interface PersistenciaCredenciaisJobData {
 export const persistenciaCredenciaisQueue = new Queue<PersistenciaCredenciaisJobData>(
   PERSISTENCIA_CREDENCIAIS_QUEUE_NAME,
   {
-    connection,
+    connection: getRedisInstance(),
     defaultJobOptions: {
       // Low priority processing
       priority: 1,
@@ -61,7 +61,7 @@ export const persistenciaCredenciaisQueue = new Queue<PersistenciaCredenciaisJob
 export const persistenciaCredenciaisDeadLetterQueue = new Queue<PersistenciaCredenciaisJobData>(
   `${PERSISTENCIA_CREDENCIAIS_QUEUE_NAME}-dead-letter`,
   {
-    connection,
+    connection: getRedisInstance(),
     defaultJobOptions: {
       // Keep failed jobs longer for analysis
       removeOnComplete: 50,

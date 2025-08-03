@@ -148,10 +148,10 @@ export async function POST(request: Request): Promise<Response> {
         include: { arquivos: true },
       });
 
-      arquivos = leads.flatMap((lead: LeadChatwit) =>
-        lead.arquivos.map(({ leadOabDataId, ...arquivo }) => ({
+      arquivos = leads.flatMap((lead) =>
+        lead.arquivos.map((arquivo) => ({
           ...arquivo,
-          leadId: leadOabDataId,
+          leadId: arquivo.leadOabDataId,
         }))
       );
       

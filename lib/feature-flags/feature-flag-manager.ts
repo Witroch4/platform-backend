@@ -1,5 +1,5 @@
-import { PrismaClient, Prisma, FeatureFlag } from '@prisma/client';
-import { Redis } from 'ioredis';
+import { getRedisInstance } from '@/lib/connections';
+import type { PrismaClient, Prisma, FeatureFlag } from '@prisma/client';
 
 type J = Prisma.JsonValue;
 type JObj = Prisma.JsonObject;
@@ -32,17 +32,21 @@ export interface ABTestConfig {
 export class FeatureFlagManager {
   private static instance: FeatureFlagManager;
   private prisma: PrismaClient;
-  private redis: Redis;
+  private redis: ReturnType<typeof getRedisInstance>;
   private cache: Map<string, FeatureFlag> = new Map();
   private cacheExpiry: Map<string, number> = new Map();
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-  constructor(prisma: PrismaClient, redis: Redis) {
+  constructor(prisma?: PrismaClient, redis?: ReturnType<typeof getRedisInstance>) {
+    if (!prisma) prisma = getPrismaInstance();
+    if (!prisma || !redis) {
+      throw new Error('Prisma and Redis instances required for first initialization');
+    }
     this.prisma = prisma;
     this.redis = redis;
   }
 
-  static getInstance(prisma?: PrismaClient, redis?: Redis): FeatureFlagManager {
+  static getInstance(prisma?: PrismaClient, redis?: ReturnType<typeof getRedisInstance>): FeatureFlagManager {
     if (!FeatureFlagManager.instance) {
       if (!prisma || !redis) {
         throw new Error('Prisma and Redis instances required for first initialization');
@@ -424,11 +428,8 @@ export class FeatureFlagManager {
 // Initialize default feature flags
 export async function initializeDefaultFeatureFlags(): Promise<void> {
   try {
-    const { PrismaClient } = await import('@prisma/client');
-    const { Redis } = await import('ioredis');
-    
-    const prisma = new PrismaClient();
-    const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+    const prisma = getPrismaInstance();
+    const redis = getRedisInstance();
     
     const flagManager = FeatureFlagManager.getInstance(prisma, redis);
 

@@ -10,6 +10,9 @@ exports.addLegacySendReactionTask = addLegacySendReactionTask;
 exports.addSendMessageTask = addSendMessageTask;
 exports.addSendReactionTask = addSendReactionTask;
 exports.generateCorrelationId = generateCorrelationId;
+exports.validateCorrelationId = validateCorrelationId;
+exports.getTimestampFromCorrelationId = getTimestampFromCorrelationId;
+exports.logWithCorrelationId = logWithCorrelationId;
 exports.createTemplateMessageTask = createTemplateMessageTask;
 exports.createInteractiveMessageTask = createInteractiveMessageTask;
 exports.createReactionTask = createReactionTask;
@@ -159,9 +162,76 @@ async function addSendReactionTask(data) {
         throw error;
     }
 }
-// Helper function to generate correlation IDs for request tracing
+// Enhanced correlation ID generation with timestamp and random components
 function generateCorrelationId() {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const timestamp = Date.now();
+    const randomPart = Math.random().toString(36).substr(2, 9);
+    const processId = process.pid.toString(36);
+    return `${timestamp}-${processId}-${randomPart}`;
+}
+/**
+ * Validates correlation ID format
+ * Expected format: timestamp-processId-randomPart
+ */
+function validateCorrelationId(correlationId) {
+    if (!correlationId || typeof correlationId !== 'string') {
+        return false;
+    }
+    // Check format: should have 3 parts separated by hyphens
+    const parts = correlationId.split('-');
+    if (parts.length !== 3) {
+        return false;
+    }
+    // First part should be a valid timestamp (13 digits)
+    const timestamp = parseInt(parts[0], 10);
+    if (isNaN(timestamp) || timestamp.toString().length !== 13) {
+        return false;
+    }
+    // Second part should be process ID (base36)
+    if (!/^[0-9a-z]+$/.test(parts[1])) {
+        return false;
+    }
+    // Third part should be random string (base36)
+    if (!/^[0-9a-z]+$/.test(parts[2])) {
+        return false;
+    }
+    return true;
+}
+/**
+ * Extracts timestamp from correlation ID
+ */
+function getTimestampFromCorrelationId(correlationId) {
+    if (!validateCorrelationId(correlationId)) {
+        return null;
+    }
+    const timestamp = parseInt(correlationId.split('-')[0], 10);
+    return isNaN(timestamp) ? null : timestamp;
+}
+/**
+ * Enhanced logging function with correlation ID support
+ */
+function logWithCorrelationId(level, message, correlationId, additionalData) {
+    const logData = {
+        timestamp: new Date().toISOString(),
+        level: level.toUpperCase(),
+        message,
+        correlationId: correlationId || 'unknown',
+        ...additionalData,
+    };
+    const logMessage = `[${logData.level}] [${logData.correlationId}] ${logData.message}`;
+    switch (level) {
+        case 'error':
+            console.error(logMessage, additionalData ? logData : '');
+            break;
+        case 'warn':
+            console.warn(logMessage, additionalData ? logData : '');
+            break;
+        case 'debug':
+            console.debug(logMessage, additionalData ? logData : '');
+            break;
+        default:
+            console.log(logMessage, additionalData ? logData : '');
+    }
 }
 // Helper function to create SendMessageTask with template data
 function createTemplateMessageTask(data) {

@@ -21,7 +21,7 @@ exports.getApiVersion = exports.getWhatsAppTemplatesUrl = exports.getWhatsAppApi
 // Exportar funções do módulo de configurações do WhatsApp
 __exportStar(require("./whatsapp-config"), exports);
 // Exportar outras funções conforme necessário
-var prisma_1 = require("../../lib/prisma");
+var prisma_1 = require("@/lib/prisma");
 Object.defineProperty(exports, "prisma", { enumerable: true, get: function () { return __importDefault(prisma_1).default; } });
 // Exportar funções úteis da lib
 const whatsapp_config_1 = require("./whatsapp-config");

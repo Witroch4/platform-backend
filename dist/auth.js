@@ -9,11 +9,11 @@ exports.update = exports.signOut = exports.signIn = exports.auth = exports.POST 
 const prisma_adapter_1 = require("@auth/prisma-adapter");
 const next_auth_1 = __importDefault(require("next-auth"));
 const auth_config_1 = __importDefault(require("./auth.config"));
-const prisma_1 = require("./lib/prisma");
+const db_1 = require("./lib/db");
 const services_1 = require("./services");
 const auth_1 = require("./services/auth");
 _a = (0, next_auth_1.default)({
-    adapter: (0, prisma_adapter_1.PrismaAdapter)(prisma_1.prisma),
+    adapter: (0, prisma_adapter_1.PrismaAdapter)(db_1.db),
     secret: process.env.AUTH_SECRET,
     session: {
         strategy: "jwt",
@@ -54,14 +54,14 @@ _a = (0, next_auth_1.default)({
                 token.email = user.email;
                 token.name = user.name;
                 token.role = user.role;
-                const dbUser = await prisma_1.prisma.user.findUnique({
+                const dbUser = await db_1.db.user.findUnique({
                     where: { id: user.id },
                     select: { password: true }
                 });
                 token.isOAuth = !dbUser?.password;
                 token.isTwoFactorAuthEnabled = user.isTwoFactorAuthEnabled || false;
                 // Buscar chatwitAccessToken do UsuarioChatwit
-                const usuarioChatwit = await prisma_1.prisma.usuarioChatwit.findUnique({
+                const usuarioChatwit = await db_1.db.usuarioChatwit.findUnique({
                     where: { appUserId: user.id },
                     select: { chatwitAccessToken: true }
                 });
@@ -73,7 +73,7 @@ _a = (0, next_auth_1.default)({
                 const isTwoFactorAuthEnabled = await (0, auth_1.isTwoFactorAuthenticationEnabled)(user.id);
                 token.isTwoFactorAuthEnabled = isTwoFactorAuthEnabled ?? false;
                 console.log("Requisição Prisma: Buscando conta do Instagram");
-                const instagramAccount = await prisma_1.prisma.account.findFirst({
+                const instagramAccount = await db_1.db.account.findFirst({
                     where: {
                         userId: user.id,
                         provider: "instagram",

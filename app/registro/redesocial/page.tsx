@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Instagram, Facebook, MessageSquare, Send, AlertCircle, Plus, Trash2, RefreshCw, CheckCircle, Users, BarChart, Calendar, Zap, Home, LogOut, Bot, FileText, Shield, Star, ArrowRight, MessageCircle } from "lucide-react";
@@ -29,10 +29,16 @@ interface InstagramAccount {
   isMain: boolean;
 }
 
+/** 
+ * ⚠️ NÃO use window no escopo do módulo.
+ * Pegue primeiro o valor do .env (estático), e só caia para window dentro de um useEffect.
+ */
+const ENV_REDIRECT = process.env.NEXT_PUBLIC_INSTAGRAM_REDIRECT_URI || null;
+
 export default function RedeSocialPage() {
-  
   const { data: session, update } = useSession();
   const router = useRouter();
+
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>("instagram");
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
@@ -41,30 +47,49 @@ export default function RedeSocialPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
 
-  // URL de autorização do Instagram
-  const redirectUri = process.env.NEXT_PUBLIC_INSTAGRAM_REDIRECT_URI || `${window.location.origin}/registro/redesocial/callback`;
-  
-  // Depuração do redirectUri
+  // ✅ redirectUri começa pelo .env (estático). Se vazio, completa no cliente.
+  const [redirectUri, setRedirectUri] = useState<string | null>(ENV_REDIRECT);
+
   useEffect(() => {
-    console.log(`redirectUri na página de registro: ${redirectUri}`);
+    if (!redirectUri && typeof window !== "undefined") {
+      setRedirectUri(`${window.location.origin}/registro/redesocial/callback`);
+    }
   }, [redirectUri]);
-  
-  const instagramAuthUrl = `https://www.instagram.com/oauth/authorize?enable_fb_login=0&force_authentication=1&client_id=${process.env.NEXT_PUBLIC_INSTAGRAM_APP_ID}&redirect_uri=${encodeURIComponent(
-    redirectUri
-  )}&response_type=code&scope=instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,instagram_business_content_publish`;
+
+  // Gera a URL do Instagram só quando tiver redirectUri disponível
+  const instagramAuthUrl = useMemo(() => {
+    if (!redirectUri) return null;
+    const params = new URLSearchParams({
+      enable_fb_login: "0",
+      force_authentication: "1",
+      client_id: process.env.NEXT_PUBLIC_INSTAGRAM_APP_ID || "",
+      redirect_uri: redirectUri,
+      response_type: "code",
+      scope: [
+        "instagram_business_basic",
+        "instagram_business_manage_messages",
+        "instagram_business_manage_comments",
+        "instagram_business_content_publish",
+      ].join(","),
+    });
+    return `https://www.instagram.com/oauth/authorize?${params.toString()}`;
+  }, [redirectUri]);
+
+  // Debug do redirectUri somente no cliente
+  useEffect(() => {
+    if (redirectUri) {
+      console.log(`redirectUri na página de registro: ${redirectUri}`);
+    }
+  }, [redirectUri]);
 
   // Função para enviar notificação de boas-vindas
   const sendWelcomeNotification = async () => {
     try {
       const response = await fetch('/api/auth/welcome-notification', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
       });
-
       const data = await response.json();
-
       if (data.success) {
         toast("Bem-vindo!", {
           description: "Notificação de boas-vindas enviada com sucesso.",
@@ -77,25 +102,16 @@ export default function RedeSocialPage() {
 
   // useEffect principal simplificado
   useEffect(() => {
-    // Se a sessão ainda está carregando, não fazemos nada
-    if (session === undefined) {
-      return;
-    }
+    if (session === undefined) return;
 
-    // Se usuário não está autenticado
     if (!session?.user?.id) {
       setIsLoading(false);
       return;
     }
 
-    // Se o usuário está autenticado e não foi verificado ainda
     if (session?.user && !sessionChecked) {
       setSessionChecked(true);
-      
-      // Buscar contas conectadas
       fetchAccounts();
-
-      // Enviar notificação de boas-vindas apenas uma vez
       sendWelcomeNotification();
     }
   }, [session, sessionChecked]);
@@ -105,31 +121,18 @@ export default function RedeSocialPage() {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
       const fromLogin = urlParams.get('fromLogin');
-
       if (fromLogin === 'true') {
-        // Remover o parâmetro da URL
         window.history.replaceState({}, document.title, window.location.pathname);
-
-        // Forçar atualização da sessão uma única vez
-        update().then(() => {
-          // Resetar o flag para permitir nova verificação
-          setSessionChecked(false);
-        });
+        update().then(() => setSessionChecked(false));
       }
     }
   }, []);
 
-  // Modificar a função fetchAccounts para ser mais robusta
   const fetchAccounts = async () => {
-    if (!session?.user?.id) {
-      return;
-    }
-
+    if (!session?.user?.id) return;
     try {
       setIsLoading(true);
-
-      // Usar a rota correta e adicionar timestamp para evitar cache
-      const timestamp = new Date().getTime();
+      const timestamp = Date.now();
       const response = await fetch(`/api/auth/instagram/accounts?t=${timestamp}`, {
         method: 'GET',
         headers: {
@@ -142,24 +145,17 @@ export default function RedeSocialPage() {
       });
 
       console.log("Status da resposta API:", response.status);
-
-      if (!response.ok) {
-        throw new Error(`Erro na API: ${response.status} ${response.statusText}`);
-      }
+      if (!response.ok) throw new Error(`Erro na API: ${response.status} ${response.statusText}`);
 
       const responseText = await response.text();
       console.log("Resposta bruta da API:", responseText);
 
       try {
         const data = JSON.parse(responseText);
-        console.log("Dados parseados da API:", data);
-
         if (Array.isArray(data)) {
           setConnectedAccounts(data);
-          console.log(`${data.length} contas carregadas com sucesso`);
         } else if (data.accounts && Array.isArray(data.accounts)) {
           setConnectedAccounts(data.accounts);
-          console.log(`${data.accounts.length} contas carregadas com sucesso`);
         } else {
           console.error("Formato de resposta inesperado:", data);
           setConnectedAccounts([]);
@@ -175,61 +171,47 @@ export default function RedeSocialPage() {
     }
   };
 
-  // Função para atualizar a lista de contas
   const handleRefresh = () => {
     setIsRefreshing(true);
     fetchAccounts();
   };
 
-  // Função para conectar ao Instagram
   const handleInstagramConnect = async () => {
     try {
       setIsConnecting(true);
       setConnectionError(null);
-      // Redirecionar para a URL de autenticação do Instagram
+      if (!instagramAuthUrl) return; // aguarda resolver redirectUri
       window.location.href = instagramAuthUrl;
     } catch (error) {
       console.error("Erro ao conectar com Instagram:", error);
       setConnectionError("Ocorreu um erro ao tentar conectar com o Instagram. Tente novamente mais tarde.");
-      toast.error("Erro de conexão", { description: "Não foi possível conectar ao Instagram. Tente novamente mais tarde.",
-       });
+      toast.error("Erro de conexão", { description: "Não foi possível conectar ao Instagram. Tente novamente mais tarde." });
     } finally {
       setIsConnecting(false);
     }
   };
 
-  // Função para desconectar uma conta do Instagram
   const handleDisconnectAccount = async (accountId: string) => {
     try {
       const response = await fetch("/api/auth/instagram/disconnect", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ accountId }),
       });
 
       if (response.ok) {
-        // Remover a conta da lista local
-        setConnectedAccounts(prevAccounts =>
-          prevAccounts.filter(account => account.id !== accountId)
-        );
-
-        toast("Conta desconectada", { description: "A conta do Instagram foi desconectada com sucesso.",
-          });
+        setConnectedAccounts(prev => prev.filter(a => a.id !== accountId));
+        toast("Conta desconectada", { description: "A conta do Instagram foi desconectada com sucesso." });
       } else {
         const data = await response.json();
-        toast.error("Erro ao desconectar", { description: data.error || "Não foi possível desconectar a conta. Tente novamente.",
-         });
+        toast.error("Erro ao desconectar", { description: data.error || "Não foi possível desconectar a conta. Tente novamente." });
       }
     } catch (error) {
       console.error("Erro ao desconectar conta:", error);
-      toast.error("Erro ao desconectar", { description: "Ocorreu um erro ao tentar desconectar a conta. Tente novamente.",
-       });
+      toast.error("Erro ao desconectar", { description: "Ocorreu um erro ao tentar desconectar a conta. Tente novamente." });
     }
   };
 
-  // Função para navegar para o dashboard com a conta selecionada usando providerAccountId
   const navigateToDashboard = (providerAccountId: string) => {
     router.push(`/${providerAccountId}/dashboard`);
   };
@@ -242,7 +224,7 @@ export default function RedeSocialPage() {
           <div className="flex items-center">
             <Link href="/" className="flex items-center">
               <Image
-                src="/01 WitdeT.png"
+                				src="/01%20WitdeT.png"
                 							alt="Socialwise Chatwit Logo"
                 width={40}
                 height={40}
@@ -321,7 +303,7 @@ export default function RedeSocialPage() {
           <div className="relative z-10">
             <div className="flex items-center gap-4 mb-6">
               <div className="bg-white dark:bg-gray-800 rounded-2xl p-3 shadow-lg">
-                <Image src="/01 WitdeT.png" alt="W Logo" width={50} height={50} className="h-12 w-12" />
+                							<Image src="/01%20WitdeT.png" alt="W Logo" width={50} height={50} className="h-12 w-12" />
               </div>
               <div>
                 <h1 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white">
@@ -758,7 +740,7 @@ export default function RedeSocialPage() {
         <section className="text-center py-16">
           <div className="max-w-2xl mx-auto">
             <div className="mb-8">
-              <Image src="/01 WitdeT.png" alt="ChatWit Logo" width={120} height={120} className="mx-auto mb-6" />
+              							<Image src="/01%20WitdeT.png" alt="ChatWit Logo" width={120} height={120} className="mx-auto mb-6" />
             </div>
             <h2 className="text-3xl md:text-4xl font-bold mb-6 text-gray-900 dark:text-white">
               Transforme Sua Presença Digital Hoje

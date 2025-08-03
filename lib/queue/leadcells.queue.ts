@@ -1,5 +1,5 @@
 import { Queue } from 'bullmq';
-import { connection } from '@/lib/redis';
+import { getRedisInstance } from '@/lib/connections';
 
 // Interfaces para diferentes tipos de jobs
 interface IManuscritoJobData {
@@ -36,7 +36,7 @@ type ILeadCellJobData = IManuscritoJobData | IEspelhoJobData | IAnaliseJobData;
 
 // Queue unificada para todos os tipos de processamento
 const leadCellsQueue = new Queue('leadCells', {
-  connection,
+  connection: getRedisInstance(),
   defaultJobOptions: {
     removeOnComplete: 10,
     removeOnFail: 5,

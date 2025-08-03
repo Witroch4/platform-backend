@@ -5,8 +5,8 @@
  */
 
 import { db } from '../../db'
-import { redis } from '../../redis'
-import { logger } from '../../log'
+import { getRedisInstance } from '../../connections'
+import log from '../../log'
 import {
   Alert,
   NotificationChannel,
@@ -92,7 +92,7 @@ export class NotificationService {
           this.scheduleEscalation(alert, channel)
         }
       } catch (error) {
-        logger.error('Failed to send notification', {
+        log.error('Failed to send notification', {
           error,
           alertId: alert.id,
           channelType: channel.type
@@ -106,7 +106,7 @@ export class NotificationService {
           status: 'failed',
           attempts: 1,
           lastAttempt: new Date(),
-          error: error instanceof Error ? error.message : 'Unknown error'
+          error: error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error'
         })
       }
     }
@@ -137,7 +137,7 @@ export class NotificationService {
         delivery.status = 'sent'
         delivery.deliveredAt = new Date()
         
-        logger.info('Notification sent successfully', {
+        log.info('Notification sent successfully', {
           alertId: alert.id,
           channelType: channel.type,
           attempt
@@ -147,7 +147,7 @@ export class NotificationService {
       } catch (error) {
         lastError = error instanceof Error ? error : new Error('Unknown error')
         
-        logger.warn('Notification attempt failed', {
+        log.warn('Notification attempt failed', {
           alertId: alert.id,
           channelType: channel.type,
           attempt,
@@ -171,13 +171,13 @@ export class NotificationService {
    */
   async escalateAlert(alert: Alert): Promise<void> {
     try {
-      logger.info('Escalating alert', { alertId: alert.id })
+      log.info('Escalating alert', { alertId: alert.id })
 
       // Get escalation channels based on severity
       const escalationChannels = this.getEscalationChannels(alert.severity)
 
       if (escalationChannels.length === 0) {
-        logger.warn('No escalation channels configured', { alertId: alert.id })
+        log.warn('No escalation channels configured', { alertId: alert.id })
         return
       }
 
@@ -193,12 +193,12 @@ export class NotificationService {
       // Record escalation
       await this.recordEscalation(alert.id, escalationChannels)
 
-      logger.info('Alert escalated successfully', {
+      log.info('Alert escalated successfully', {
         alertId: alert.id,
         channels: escalationChannels.map(c => c.type)
       })
     } catch (error) {
-      logger.error('Failed to escalate alert', { error, alertId: alert.id })
+      log.error('Failed to escalate alert', { error, alertId: alert.id })
     }
   }
 
@@ -210,7 +210,7 @@ export class NotificationService {
     if (timer) {
       clearTimeout(timer)
       this.escalationTimers.delete(alertId)
-      logger.info('Escalation cancelled', { alertId })
+      log.info('Escalation cancelled', { alertId })
     }
   }
 
@@ -296,7 +296,7 @@ export class NotificationService {
   private async sendEmailNotification(alert: Alert, config: EmailConfig): Promise<void> {
     // Email implementation would go here
     // For now, just log
-    logger.info('Email notification would be sent', {
+    log.info('Email notification would be sent', {
       alertId: alert.id,
       to: config.from,
       subject: alert.title
@@ -306,7 +306,7 @@ export class NotificationService {
   private async sendSMSNotification(alert: Alert, config: SMSConfig): Promise<void> {
     // SMS implementation would go here
     // For now, just log
-    logger.info('SMS notification would be sent', {
+    log.info('SMS notification would be sent', {
       alertId: alert.id,
       provider: config.provider
     })
@@ -389,7 +389,7 @@ export class NotificationService {
 
     this.escalationTimers.set(alert.id, timer)
 
-    logger.info('Escalation scheduled', {
+    log.info('Escalation scheduled', {
       alertId: alert.id,
       delayMinutes: this.config.escalationDelay
     })
@@ -416,7 +416,7 @@ export class NotificationService {
 
   private async recordEscalation(alertId: string, channels: NotificationChannel[]): Promise<void> {
     // In a real implementation, this would record the escalation in the database
-    logger.info('Escalation recorded', {
+    log.info('Escalation recorded', {
       alertId,
       channels: channels.map(c => c.type)
     })

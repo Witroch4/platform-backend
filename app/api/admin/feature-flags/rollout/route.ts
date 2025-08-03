@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-import { Redis } from 'ioredis';
 import { FeatureFlagManager } from '@/lib/feature-flags/feature-flag-manager';
-
-const prisma = new PrismaClient();
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+import { getRedisInstance, getPrismaInstance } from '@/lib/connections';
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,6 +26,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const prisma = getPrismaInstance();
+    const redis = getRedisInstance();
     const featureFlagManager = FeatureFlagManager.getInstance(prisma, redis);
     
     // Start gradual rollout (this will run asynchronously)

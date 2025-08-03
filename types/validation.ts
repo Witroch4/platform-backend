@@ -215,6 +215,10 @@ export const VALIDATION_MESSAGES = {
   LIST_TITLE_TOO_LONG: `Título da lista deve ter no máximo ${MESSAGE_LIMITS.LIST_TITLE_MAX_LENGTH} caracteres`,
   LIST_DESCRIPTION_TOO_LONG: `Descrição da lista deve ter no máximo ${MESSAGE_LIMITS.LIST_DESCRIPTION_MAX_LENGTH} caracteres`,
   
+  // Instagram specific messages
+  INSTAGRAM_QUICK_REPLIES_TOO_LONG: `Texto excede o limite de ${MESSAGE_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_LENGTH} caracteres para Quick Replies do Instagram. Esta mensagem não será vinculada ao Instagram.`,
+  INSTAGRAM_QUICK_REPLIES_WARNING: `Texto longo com respostas rápidas (imagem e rodapé serão descartados)`,
+  
   // Count messages
   TOO_MANY_BUTTONS: `Máximo de ${MESSAGE_LIMITS.BUTTON_MAX_COUNT} botões permitidos`,
   TOO_MANY_SECTIONS: `Máximo de ${MESSAGE_LIMITS.LIST_SECTION_MAX_COUNT} seções permitidas`,

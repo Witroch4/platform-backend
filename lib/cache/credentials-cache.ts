@@ -1,5 +1,5 @@
-import { connection } from '../redis';
-import type IORedis from 'ioredis';
+import { getRedisInstance } from '../connections';
+
 
 // Cache key prefixes for organization
 const CACHE_PREFIXES = {
@@ -44,7 +44,7 @@ export interface CacheHealth {
 }
 
 export class CredentialsCache {
-  private redis: IORedis;
+  private redis: ReturnType<typeof getRedisInstance>;
   private stats: CacheStats = {
     hits: 0,
     misses: 0,
@@ -52,8 +52,8 @@ export class CredentialsCache {
     lastUpdated: new Date(),
   };
 
-  constructor(redisConnection?: IORedis) {
-    this.redis = redisConnection || connection;
+  constructor(redisConnection?: ReturnType<typeof getRedisInstance>) {
+    this.redis = redisConnection || getRedisInstance();
     this.initializeHealthCheck();
   }
 

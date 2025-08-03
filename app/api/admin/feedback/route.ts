@@ -1,13 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-import { Redis } from 'ioredis';
 import {
   FeedbackCollector,
   getFeedbackCollector,
 } from '@/lib/feedback/feedback-collector';
-
-const prisma = new PrismaClient();
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+import { getRedisInstance, getPrismaInstance } from '@/lib/connections';
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,13 +15,15 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') as any;
     const category = searchParams.get('category');
 
+    const prisma = getPrismaInstance();
+    const redis = getRedisInstance();
     const feedbackCollector = getFeedbackCollector(prisma, redis);
     
     const feedback = await feedbackCollector.getAllFeedback(limit, offset, {
-      type,
-      severity,
-      status,
-      category,
+      type: type || undefined,
+      severity: severity || undefined,
+      status: status || undefined,
+      category: category || undefined,
     });
 
     const metrics = await feedbackCollector.getFeedbackMetrics();
@@ -70,6 +68,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const prisma = getPrismaInstance();
+    const redis = getRedisInstance();
     const feedbackCollector = getFeedbackCollector(prisma, redis);
     
     const feedback = await feedbackCollector.submitFeedback(

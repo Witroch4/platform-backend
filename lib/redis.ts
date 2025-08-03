@@ -1,6 +1,6 @@
 //lib/redis.ts
 
-import IORedis from 'ioredis';
+import { getRedisInstance } from './connections';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
@@ -15,43 +15,15 @@ let configLogged = false;
 function logRedisConfig() {
   if (!configLogged) {
     console.log('Configuração de conexão com o Redis:', {
-      host: process.env.REDIS_HOST || (isRunningInDocker ? 'redis' : '127.0.0.1'),
-      port: Number.parseInt(process.env.REDIS_PORT || '6379', 10),
-      useTLS: process.env.REDIS_USE_TLS === 'true',
       environment: isRunningInDocker ? 'Docker/Production' : 'Local Development',
+      usingGlobalConnector: true,
     });
     configLogged = true;
   }
 }
 
-// Criação de uma única instância de conexão Redis
-const redisConnection = new IORedis({
-  host: process.env.REDIS_HOST || (isRunningInDocker ? 'redis' : '127.0.0.1'),
-  port: Number.parseInt(process.env.REDIS_PORT || '6379', 10),
-  maxRetriesPerRequest: null,
-  enableReadyCheck: false,
-  connectTimeout: 10000, // Aumenta o timeout para 10 segundos
-  retryStrategy: (times) => {
-    const delay = Math.min(times * 50, 2000);
-    return delay;
-  },
-  // Se usar TLS:
-  tls: process.env.REDIS_USE_TLS === 'true' ? {} : undefined,
-});
-
-// Variável para controlar se já exibimos a mensagem de conexão
-let connectionLogged = false;
-
-redisConnection.on('error', (err) => {
-  console.error('Erro na conexão com o Redis:', err);
-});
-
-redisConnection.on('connect', () => {
-  if (!connectionLogged) {
-    console.log('Conectado ao Redis com sucesso!');
-    connectionLogged = true;
-  }
-});
+// Obtém a instância global do Redis
+const redisConnection = getRedisInstance();
 
 // Exibe a configuração apenas uma vez
 logRedisConfig();

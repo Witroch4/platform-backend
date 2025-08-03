@@ -11,10 +11,20 @@ const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
 /**
  * Inicializa todos os workers e agendamentos existentes
+ * Updated to use the new Parent Worker architecture
  */
 async function initializeWorkers() {
     try {
         console.log('[Worker] Inicializando workers...');
+        // ============================================================================
+        // PARENT WORKER INITIALIZATION (NEW ARCHITECTURE)
+        // ============================================================================
+        // Initialize the Parent Worker for both high and low priority queues
+        await (0, webhook_worker_1.initParentWorker)();
+        console.log('[Worker] Parent Worker (High & Low Priority) inicializado com sucesso');
+        // ============================================================================
+        // LEGACY WORKERS (BACKWARD COMPATIBILITY)
+        // ============================================================================
         // Inicializa o worker de agendamento (agora é feito no bull-board-server.ts)
         // await initAgendamentoWorker();
         // Inicializa o worker de manuscrito
@@ -25,11 +35,17 @@ async function initializeWorkers() {
         await (0, webhook_worker_1.initMtfDiamanteWebhookWorker)();
         // Inicializa o worker assíncrono MTF Diamante
         await (0, webhook_worker_1.initMtfDiamanteAsyncWorker)();
+        // Inicializa o worker de tradução Instagram
+        await (0, webhook_worker_1.initInstagramTranslationWorker)();
+        // ============================================================================
+        // SHARED INITIALIZATION
+        // ============================================================================
         // Inicializa os jobs recorrentes (apenas uma vez)
         await (0, webhook_worker_2.initJobs)();
         // Inicializa os agendamentos existentes
         const result = await (0, scheduler_bullmq_1.initializeExistingAgendamentos)();
-        console.log(`[Worker] Workers inicializados com sucesso. ${result.count} agendamentos carregados.`);
+        console.log(`[Worker] Todos os workers inicializados com sucesso. ${result.count} agendamentos carregados.`);
+        console.log('[Worker] Parent Worker está processando filas de alta e baixa prioridade');
         return { success: true, count: result.count };
     }
     catch (error) {

@@ -250,7 +250,7 @@ export function QueueGrid({
                       size="sm"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onBatchAction({ type: 'pauseQueue', queueName: queue.name });
+                        onBatchAction({ action: 'pause_queue', queueName: queue.name });
                       }}
                       className="h-7 px-2"
                     >
@@ -261,7 +261,7 @@ export function QueueGrid({
                       size="sm"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onBatchAction({ type: 'resumeQueue', queueName: queue.name });
+                        onBatchAction({ action: 'resume_queue', queueName: queue.name });
                       }}
                       className="h-7 px-2"
                     >

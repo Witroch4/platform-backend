@@ -1,5 +1,4 @@
 // app/api/admin/leads/route.ts
-/// <reference path="../../../../declarations.d.ts" />
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { LeadSource, Prisma } from "@prisma/client";
@@ -60,7 +59,7 @@ export async function GET(request: NextRequest): Promise<Response> {
 
 		// Validar campo de ordenação
 		const validSortFields = ["createdAt", "updatedAt", "name", "email", "phone"];
-		const orderBy = validSortFields.includes(sortBy) ? { [sortBy]: sortOrder } : { createdAt: "desc" };
+		const orderBy = validSortFields.includes(sortBy) ? { [sortBy]: sortOrder as Prisma.SortOrder } : { createdAt: "desc" as Prisma.SortOrder };
 
 		console.log(
 			`[Leads API] Buscando leads - Página: ${page}, Limite: ${limit}, Source: ${source}, Busca: "${search}"`,
@@ -70,17 +69,7 @@ export async function GET(request: NextRequest): Promise<Response> {
 		const [leadsData, total] = await Promise.all([
 			prisma.lead.findMany({
 				where: whereConditions,
-				select: {
-					id: true,
-					name: true,
-					email: true,
-					phone: true,
-					avatarUrl: true,
-					source: true,
-					sourceIdentifier: true,
-					tags: true,
-					createdAt: true,
-					updatedAt: true,
+				include: {
 					user: {
 						select: { id: true, name: true, email: true },
 					},
@@ -227,8 +216,8 @@ export async function POST(request: NextRequest): Promise<Response> {
 			source,
 			sourceIdentifier,
 			tags,
-			userId: session.user.id,
-			accountId: accountId || null,
+			user: { connect: { id: session.user.id } },
+			account: accountId ? { connect: { id: accountId } } : undefined,
 		};
 
 		// Adicionar dados específicos por source

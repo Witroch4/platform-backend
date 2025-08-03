@@ -1,7 +1,7 @@
 // lib/queue/agendamento.queue.ts
 
 import { Queue } from 'bullmq';
-import { connection } from '@/lib/redis';
+import { getRedisInstance } from '@/lib/connections';
 
 const AGENDAMENTO_QUEUE_NAME = 'agendamento';
 
@@ -15,13 +15,14 @@ export interface IAgendamentoJobData {
   accountId: string;
   Diario?: boolean;
   Semanal?: boolean;
+  TratarComoPostagensIndividuais?: boolean;
 }
 
 /**
  * Criação da Fila de Agendamento
  */
 export const agendamentoQueue = new Queue<IAgendamentoJobData>('agendamento', {
-  connection,
+  connection: getRedisInstance(),
   defaultJobOptions: {
     attempts: 3,
     backoff: {
@@ -44,6 +45,7 @@ export async function scheduleAgendamentoJob(agendamento: {
   accountId: string;
   Diario?: boolean;
   Semanal?: boolean;
+  TratarComoPostagensIndividuais?: boolean;
 }) {
   // Calcula o delay em milissegundos
   const delay = new Date(agendamento.Data).getTime() - Date.now();
@@ -56,6 +58,7 @@ export async function scheduleAgendamentoJob(agendamento: {
     accountId: agendamento.accountId,
     Diario: agendamento.Diario,
     Semanal: agendamento.Semanal,
+    TratarComoPostagensIndividuais: agendamento.TratarComoPostagensIndividuais,
   };
   
 

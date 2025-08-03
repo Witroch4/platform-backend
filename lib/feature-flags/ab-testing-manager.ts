@@ -1,5 +1,5 @@
-import { PrismaClient } from '@prisma/client';
-import { Redis } from 'ioredis';
+import { getRedisInstance } from '@/lib/connections';
+import type { PrismaClient } from '@prisma/client';
 import { FeatureFlagManager } from './feature-flag-manager';
 
 export interface ABTest {
@@ -65,16 +65,20 @@ export interface ABTestAssignment {
 export class ABTestingManager {
   private static instance: ABTestingManager;
   private prisma: PrismaClient;
-  private redis: Redis;
+  private redis: ReturnType<typeof getRedisInstance>;
   private featureFlagManager: FeatureFlagManager;
 
-  constructor(prisma: PrismaClient, redis: Redis) {
+  constructor(prisma?: PrismaClient, redis?: ReturnType<typeof getRedisInstance>) {
+    if (!prisma) prisma = getPrismaInstance();
+    if (!prisma || !redis) {
+      throw new Error('Prisma and Redis instances required for first initialization');
+    }
     this.prisma = prisma;
     this.redis = redis;
     this.featureFlagManager = FeatureFlagManager.getInstance(prisma, redis);
   }
 
-  static getInstance(prisma?: PrismaClient, redis?: Redis): ABTestingManager {
+  static getInstance(prisma?: PrismaClient, redis?: ReturnType<typeof getRedisInstance>): ABTestingManager {
     if (!ABTestingManager.instance) {
       if (!prisma || !redis) {
         throw new Error('Prisma and Redis instances required for first initialization');
@@ -455,11 +459,8 @@ export class ABTestingManager {
 // Utility function to create common A/B tests
 export async function createWebhookPerformanceTest(): Promise<string> {
   try {
-    const { PrismaClient } = await import('@prisma/client');
-    const { Redis } = await import('ioredis');
-    
-    const prisma = new PrismaClient();
-    const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+    const prisma = getPrismaInstance();
+    const redis = getRedisInstance();
     
     const abTestManager = ABTestingManager.getInstance(prisma, redis);
     

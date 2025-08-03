@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-import { Redis } from 'ioredis';
 import { ABTestingManager } from '@/lib/feature-flags/ab-testing-manager';
-
-const prisma = new PrismaClient();
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+import { getRedisInstance, getPrismaInstance } from '@/lib/connections';
 
 export async function GET(request: NextRequest) {
   try {
+    const prisma = getPrismaInstance();
+    const redis = getRedisInstance();
     const abTestManager = ABTestingManager.getInstance(prisma, redis);
     const tests = await abTestManager.getAllABTests();
     
@@ -81,6 +79,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const prisma = getPrismaInstance();
+    const redis = getRedisInstance();
     const abTestManager = ABTestingManager.getInstance(prisma, redis);
     
     const test = await abTestManager.createABTest(

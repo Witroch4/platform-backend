@@ -11,7 +11,7 @@ import { findOptimizedCompleteMessageMapping } from '@/lib/instagram/optimized-d
 import { processInstagramTranslationTask } from '@/worker/WebhookWorkerTasks/instagram-translation.task';
 import { InstagramTranslationJobData } from '@/lib/queue/instagram-translation.queue';
 import { Job } from 'bullmq';
-import IORedis from 'ioredis';
+import { getRedisInstance } from '../../lib/connections';
 
 // Mock dependencies
 jest.mock('ioredis');

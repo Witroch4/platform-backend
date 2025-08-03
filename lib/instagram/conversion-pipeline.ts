@@ -10,9 +10,9 @@ import {
   convertPrismaTemplateToWhatsApp, 
   convertCompleteMessageMappingToWhatsApp,
   canConvertToInstagram,
-  type PrismaTemplate,
   type CompleteMessageMapping 
 } from './template-adapter';
+import type { TemplateWithContent } from '../../types/interactive-messages';
 
 export interface ConversionPipelineResult {
   success: boolean;
@@ -27,7 +27,7 @@ export interface ConversionPipelineResult {
  * Convert a Prisma template directly to Instagram format
  */
 export function convertTemplateToInstagram(
-  template: PrismaTemplate | CompleteMessageMapping
+  template: TemplateWithContent | CompleteMessageMapping
 ): ConversionPipelineResult {
   try {
     // Step 1: Convert to WhatsApp format
@@ -36,9 +36,14 @@ export function convertTemplateToInstagram(
     if ('unifiedTemplate' in template) {
       // CompleteMessageMapping
       whatsappTemplate = convertCompleteMessageMappingToWhatsApp(template);
-    } else {
+    } else if ('id' in template && 'name' in template && 'type' in template) {
       // PrismaTemplate
       whatsappTemplate = convertPrismaTemplateToWhatsApp(template);
+    } else {
+      return {
+        success: false,
+        error: 'Invalid template type provided',
+      };
     }
 
     if (!whatsappTemplate) {
@@ -85,7 +90,7 @@ export function convertTemplateToInstagram(
  * Batch convert multiple templates to Instagram format
  */
 export function convertMultipleTemplatesToInstagram(
-  templates: (PrismaTemplate | CompleteMessageMapping)[]
+  templates: (TemplateWithContent | CompleteMessageMapping)[]
 ): ConversionPipelineResult[] {
   return templates.map(template => convertTemplateToInstagram(template));
 }

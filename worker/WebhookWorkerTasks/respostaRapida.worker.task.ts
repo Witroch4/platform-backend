@@ -1,5 +1,5 @@
 import { Worker, Job } from "bullmq";
-import { connection } from "../../lib/redis";
+import { getRedisInstance } from "../../lib/connections";
 import {
   RESPOSTA_RAPIDA_QUEUE_NAME,
   RespostaRapidaJobData,
@@ -1820,7 +1820,7 @@ export const respostaRapidaWorker = new Worker<RespostaRapidaJobData>(
     }
   },
   {
-    connection,
+    connection: getRedisInstance(),
     concurrency: 5, // Process up to 5 jobs concurrently
   }
 );

@@ -116,7 +116,7 @@ function WhatsAppPreview({
         <div key={index} className="mb-2">
           {comp.type === 'header' && comp.text && (
             <div 
-              className="font-semibold text-sm mb-2 text-gray-900 dark:text-gray-100"
+              className="font-semibold text-sm mb-2 text-gray-900 dark:text-gray-100 break-words overflow-wrap-anywhere"
               dangerouslySetInnerHTML={{ __html: processTextWithVariables(comp.text) }}
             />
           )}
@@ -150,14 +150,14 @@ function WhatsAppPreview({
           
           {comp.type === 'body' && comp.text && (
             <div 
-              className="text-sm mb-2 text-gray-900 dark:text-gray-100"
+              className="text-sm mb-2 text-gray-900 dark:text-gray-100 break-words overflow-wrap-anywhere"
               dangerouslySetInnerHTML={{ __html: processTextWithVariables(comp.text) }}
             />
           )}
           
           {comp.type === 'footer' && comp.text && (
             <div 
-              className="text-xs text-gray-500 dark:text-gray-400 mb-2"
+              className="text-xs text-gray-500 dark:text-gray-400 mb-2 break-words overflow-wrap-anywhere"
               dangerouslySetInnerHTML={{ __html: processTextWithVariables(comp.text) }}
             />
           )}
@@ -199,14 +199,14 @@ function WhatsAppPreview({
           
           {comp.tipo === 'BODY' && comp.texto && (
             <div 
-              className="text-sm mb-2 text-gray-900 dark:text-gray-100"
+              className="text-sm mb-2 text-gray-900 dark:text-gray-100 break-words overflow-wrap-anywhere"
               dangerouslySetInnerHTML={{ __html: processTextWithVariables(comp.texto) }}
             />
           )}
           
           {comp.tipo === 'FOOTER' && comp.texto && (
             <div 
-              className="text-xs text-gray-500 dark:text-gray-400 mb-2"
+              className="text-xs text-gray-500 dark:text-gray-400 mb-2 break-words overflow-wrap-anywhere"
               dangerouslySetInnerHTML={{ __html: processTextWithVariables(comp.texto) }}
             />
           )}

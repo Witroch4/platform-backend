@@ -1,6 +1,6 @@
 # Regras e contexto para o projeto Socialwise Chatwit
 # Este arquivo ajuda a IA do Cursor a entender melhor o projeto.
-
+no Next.js 15, os parâmetros de rota são uma Promise.
 project:
   name: "Socialwise Chatwit"
   description: "Um aplicativo full-stack construído com Next.js, TypeScript e Prisma. Ele integra funcionalidades de chat, automações (workers) e um painel de administração, com autenticação gerenciada pelo NextAuth.js v5."

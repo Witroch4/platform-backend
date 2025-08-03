@@ -5,13 +5,17 @@
  * using Redis Pub/Sub and job result storage
  */
 
-import { connection } from '../redis';
+import { getRedisInstance } from '../connections';
 import { 
   InstagramTranslationResult,
-  InstagramTranslationErrorCodes,
   createErrorResult,
-  validateCorrelationId,
 } from '../queue/instagram-translation.queue';
+import { 
+  InstagramTranslationErrorCodes,
+} from '../error-handling/instagram-translation-errors';
+import { 
+  validateCorrelationId,
+} from '../validation/instagram-translation-validation';
 import { EventEmitter } from 'events';
 
 // Communication channels
@@ -62,16 +66,16 @@ export type CommunicationMessage =
  * Communication Manager for Instagram Translation
  */
 export class InstagramTranslationCommunicationManager extends EventEmitter {
-  private subscriber: typeof connection;
-  private publisher: typeof connection;
+  private subscriber: ReturnType<typeof getRedisInstance>;
+  private publisher: ReturnType<typeof getRedisInstance>;
   private isSubscribed = false;
   private activeListeners = new Map<string, NodeJS.Timeout>();
 
   constructor() {
     super();
     // Use separate connections for pub/sub to avoid blocking
-    this.subscriber = connection.duplicate();
-    this.publisher = connection.duplicate();
+    this.subscriber = getRedisInstance().duplicate();
+    this.publisher = getRedisInstance().duplicate();
     
     this.setupSubscriber();
   }

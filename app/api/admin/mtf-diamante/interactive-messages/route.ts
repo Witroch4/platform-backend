@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
           headerTipo: interactive.header?.type || null,
           headerConteudo: interactive.header?.content || null,
           rodape: interactive.footer?.text || null,
-          botoes: actionType === 'button' ? (actionData?.buttons as any) || [] : [],
+          botoes: actionType === 'button' && actionData && 'buttons' in actionData ? (actionData.buttons as any) || [] : [],
           // Campos adicionais para compatibilidade
           name: template.name,
           type: actionType,

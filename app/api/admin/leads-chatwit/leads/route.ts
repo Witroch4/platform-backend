@@ -238,8 +238,8 @@ export async function GET(request: Request): Promise<Response> {
         situacao: lead.situacao || null,
         inscricao: lead.inscricao || null,
         examesParticipados: lead.examesParticipados || null,
-        createdAt: leadData?.createdAt || lead.createdAt,
-        updatedAt: leadData?.updatedAt || lead.updatedAt,
+        createdAt: leadData?.createdAt,
+        updatedAt: leadData?.updatedAt,
         usuarioId: lead.usuarioChatwitId,
         usuario: lead.usuarioChatwit ? {
           id: lead.usuarioChatwitId,

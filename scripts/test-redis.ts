@@ -1,6 +1,6 @@
 #!/usr/bin/env ts-node
 
-import { Redis } from 'ioredis';
+import { getRedisInstance } from '../lib/connections';
 import * as dotenv from 'dotenv';
 
 // Carregar variáveis de ambiente
@@ -9,24 +9,9 @@ dotenv.config({ path: '.env.development' });
 async function testRedisConnection() {
   console.log('🔍 Testando conexão com Redis...');
   
-  const redisHost = process.env.REDIS_HOST || 'localhost';
-  const redisPort = parseInt(process.env.REDIS_PORT || '6379');
-  const redisUrl = process.env.REDIS_URL || `redis://${redisHost}:${redisPort}`;
-  
-  console.log(`📡 Tentando conectar em: ${redisUrl}`);
-  
-  const redis = new Redis(redisUrl, {
-    retryDelayOnFailover: 100,
-    maxRetriesPerRequest: 3,
-    lazyConnect: true,
-    connectTimeout: 5000,
-    commandTimeout: 5000,
-    family: 4,
-    keepAlive: true,
-    enableOfflineQueue: false,
-  });
-
   try {
+    const redis = getRedisInstance();
+    
     // Testar conexão
     console.log('⏳ Testando ping...');
     const pong = await redis.ping();
@@ -58,11 +43,9 @@ async function testRedisConnection() {
     console.log('   docker exec -it <redis-container> redis-cli ping');
     console.log('');
     console.log('4. Verificar variáveis de ambiente:');
-    console.log(`   REDIS_HOST=${redisHost}`);
-    console.log(`   REDIS_PORT=${redisPort}`);
-    console.log(`   REDIS_URL=${redisUrl}`);
-  } finally {
-    redis.disconnect();
+    console.log(`   REDIS_HOST=${process.env.REDIS_HOST || 'localhost'}`);
+    console.log(`   REDIS_PORT=${process.env.REDIS_PORT || '6379'}`);
+    console.log(`   REDIS_URL=${process.env.REDIS_URL || 'redis://localhost:6379'}`);
   }
 }
 

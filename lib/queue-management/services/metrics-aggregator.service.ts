@@ -5,8 +5,8 @@
  * moving averages, trend analysis, and pre-aggregation for fast queries.
  */
 
-import { PrismaClient } from '@prisma/client'
-import { Redis } from 'ioredis'
+import { getPrismaInstance, getRedisInstance } from '../../connections'
+import type { PrismaClient } from '@prisma/client'
 import { EventEmitter } from 'events'
 import { 
   AggregatedMetrics,
@@ -47,15 +47,15 @@ interface TrendData {
 export class MetricsAggregatorService extends EventEmitter {
   private static instance: MetricsAggregatorService | null = null
   private prisma: PrismaClient
-  private redis: Redis
+  private redis: ReturnType<typeof getRedisInstance>
   private config: AggregationConfig
   private aggregationScheduler: NodeJS.Timeout | null = null
   private isAggregating = false
 
-  constructor(prisma: PrismaClient, redis: Redis) {
+  constructor(prisma: PrismaClient, redis?: ReturnType<typeof getRedisInstance>) {
     super()
     this.prisma = prisma
-    this.redis = redis
+    this.redis = redis || getRedisInstance()
     
     const queueConfig = getQueueManagementConfig()
     this.config = {
@@ -76,11 +76,11 @@ export class MetricsAggregatorService extends EventEmitter {
   /**
    * Get singleton instance
    */
-  static getInstance(prisma?: PrismaClient, redis?: Redis): MetricsAggregatorService {
+  static getInstance(prisma?: PrismaClient, redis?: ReturnType<typeof getRedisInstance>): MetricsAggregatorService {
     if (!MetricsAggregatorService.instance) {
-      if (!prisma || !redis) {
+      if (!prisma) {
         throw new QueueManagementError(
-          'Prisma and Redis instances required for first initialization',
+          'Prisma instance required for first initialization',
           'INITIALIZATION_ERROR'
         )
       }
@@ -139,7 +139,7 @@ export class MetricsAggregatorService extends EventEmitter {
 
     } catch (error) {
       throw new QueueManagementError(
-        `Failed to aggregate metrics by interval: ${error.message}`,
+        `Failed to aggregate metrics by interval: ${(error instanceof Error ? error.message : "Unknown error")}`,
         'AGGREGATION_ERROR'
       )
     }
@@ -181,7 +181,7 @@ export class MetricsAggregatorService extends EventEmitter {
 
     } catch (error) {
       throw new QueueManagementError(
-        `Failed to calculate percentiles: ${error.message}`,
+        `Failed to calculate percentiles: ${(error instanceof Error ? error.message : "Unknown error")}`,
         'PERCENTILE_ERROR'
       )
     }
@@ -235,7 +235,7 @@ export class MetricsAggregatorService extends EventEmitter {
 
     } catch (error) {
       throw new QueueManagementError(
-        `Failed to calculate moving average: ${error.message}`,
+        `Failed to calculate moving average: ${(error instanceof Error ? error.message : "Unknown error")}`,
         'MOVING_AVERAGE_ERROR'
       )
     }
@@ -302,7 +302,7 @@ export class MetricsAggregatorService extends EventEmitter {
 
     } catch (error) {
       throw new QueueManagementError(
-        `Failed to calculate trend: ${error.message}`,
+        `Failed to calculate trend: ${(error instanceof Error ? error.message : "Unknown error")}`,
         'TREND_ERROR'
       )
     }
@@ -331,7 +331,7 @@ export class MetricsAggregatorService extends EventEmitter {
     } catch (error) {
       this.emit('pre_aggregation_error', error)
       throw new QueueManagementError(
-        `Failed to pre-aggregate data: ${error.message}`,
+        `Failed to pre-aggregate data: ${(error instanceof Error ? error.message : "Unknown error")}`,
         'PRE_AGGREGATION_ERROR'
       )
     } finally {
@@ -359,7 +359,7 @@ export class MetricsAggregatorService extends EventEmitter {
 
     } catch (error) {
       throw new QueueManagementError(
-        `Failed to get aggregated data: ${error.message}`,
+        `Failed to get aggregated data: ${(error instanceof Error ? error.message : "Unknown error")}`,
         'AGGREGATED_DATA_ERROR'
       )
     }
@@ -388,7 +388,7 @@ export class MetricsAggregatorService extends EventEmitter {
 
     } catch (error) {
       throw new QueueManagementError(
-        `Failed to cleanup old aggregations: ${error.message}`,
+        `Failed to cleanup old aggregations: ${(error instanceof Error ? error.message : "Unknown error")}`,
         'CLEANUP_ERROR'
       )
     }

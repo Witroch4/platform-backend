@@ -1,6 +1,5 @@
 import { Queue, Job, QueueEvents } from 'bullmq';
-import { connection } from '../redis';
-import type IORedis from 'ioredis';
+import { getRedisInstance } from '../connections';
 import { apm } from './application-performance-monitor';
 
 // Queue monitoring interfaces
@@ -57,7 +56,7 @@ export const QUEUE_ALERT_THRESHOLDS = {
 
 export class QueueMonitor {
   private static instance: QueueMonitor;
-  private redis: IORedis;
+  private redis: ReturnType<typeof getRedisInstance>;
   private monitoredQueues: Map<string, Queue> = new Map();
   private queueEventsMap: Map<string, QueueEvents> = new Map();
   private metricsHistory: Map<string, QueueHealthMetrics[]> = new Map();
@@ -67,8 +66,8 @@ export class QueueMonitor {
   private readonly MONITORING_INTERVAL = 30000; // 30 seconds
   private readonly CLEANUP_INTERVAL = 300000; // 5 minutes
 
-  constructor(redisConnection?: IORedis) {
-    this.redis = redisConnection || connection;
+  constructor(redisConnection?: ReturnType<typeof getRedisInstance>) {
+    this.redis = redisConnection || getRedisInstance();
     this.startMonitoring();
   }
 

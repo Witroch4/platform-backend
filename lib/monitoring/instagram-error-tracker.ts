@@ -1,7 +1,6 @@
-import { connection } from '../redis';
-import type IORedis from 'ioredis';
+import { getRedisInstance } from '../connections';
 import { apm } from './application-performance-monitor';
-import { InstagramTranslationErrorCodes } from '../queue/instagram-translation.queue';
+import { InstagramTranslationErrorCodes } from '../error-handling/instagram-translation-errors';
 
 // Error category definitions
 export enum ErrorCategory {
@@ -84,7 +83,7 @@ export interface ErrorStatistics {
 
 export class InstagramErrorTracker {
   private static instance: InstagramErrorTracker;
-  private redis: IORedis;
+  private redis: ReturnType<typeof getRedisInstance>;
   private errorBuffer: ErrorTrackingEntry[] = [];
   private errorPatterns: Map<string, ErrorPattern> = new Map();
   
@@ -94,8 +93,8 @@ export class InstagramErrorTracker {
   private readonly ERROR_RETENTION_DAYS = 7;
   private readonly PATTERN_THRESHOLD = 3; // Minimum occurrences to consider a pattern
 
-  constructor(redisConnection?: IORedis) {
-    this.redis = redisConnection || connection;
+  constructor(redisConnection?: ReturnType<typeof getRedisInstance>) {
+    this.redis = redisConnection || getRedisInstance();
     this.startErrorTracking();
   }
 

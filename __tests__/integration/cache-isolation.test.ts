@@ -10,7 +10,7 @@ import { PrismaClient } from '@prisma/client';
 import { InstagramTemplateCache } from '@/lib/cache/instagram-template-cache';
 import { findOptimizedCompleteMessageMapping } from '@/lib/instagram/optimized-database-queries';
 import { CompleteMessageMapping } from '@/lib/dialogflow-database-queries';
-import IORedis from 'ioredis';
+import { getRedisInstance } from '../../lib/connections';
 
 // Mock Redis for testing
 jest.mock('ioredis');

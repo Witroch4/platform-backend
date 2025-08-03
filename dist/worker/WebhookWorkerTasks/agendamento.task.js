@@ -5,9 +5,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.processAgendamentoTask = processAgendamentoTask;
 const axios_1 = __importDefault(require("axios"));
-const prisma_1 = require("../../lib/prisma");
-const agendamento_service_1 = require("../../lib/agendamento.service");
-const agendamento_queue_1 = require("../../lib/queue/agendamento.queue");
+const prisma_1 = require("@/lib/prisma");
+const agendamento_service_1 = require("@/lib/agendamento.service");
+const agendamento_queue_1 = require("@/lib/queue/agendamento.queue");
 const webhookUrl = process.env.WEBHOOK_URL || 'https://default-webhook-url.com';
 async function processAgendamentoTask(job) {
     console.log(`[BullMQ] Processando job de agendamento: ${job.id}`);

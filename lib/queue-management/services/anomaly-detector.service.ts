@@ -6,7 +6,7 @@
  */
 
 import { PrismaClient } from '@prisma/client'
-import { Redis } from 'ioredis'
+import { getRedisInstance } from '../../connections'
 import { EventEmitter } from 'events'
 import { 
   Anomaly,
@@ -60,16 +60,16 @@ export class AnomalyDetectorService extends EventEmitter implements AnomalyDetec
   
   private static instance: AnomalyDetectorService | null = null
   private prisma: PrismaClient
-  private redis: Redis
+  private redis: ReturnType<typeof getRedisInstance>
   private config: AnomalyDetectionConfig
   private baselines: Map<string, StatisticalBaseline> = new Map()
   private seasonalPatterns: Map<string, SeasonalPattern> = new Map()
   private detectionInterval: NodeJS.Timeout | null = null
 
-  constructor(prisma: PrismaClient, redis: Redis) {
+  constructor(prisma: PrismaClient, redis?: ReturnType<typeof getRedisInstance>) {
     super()
     this.prisma = prisma
-    this.redis = redis
+    this.redis = redis || getRedisInstance()
     
     const queueConfig = getQueueManagementConfig()
     this.config = {
@@ -86,11 +86,11 @@ export class AnomalyDetectorService extends EventEmitter implements AnomalyDetec
   /**
    * Get singleton instance
    */
-  static getInstance(prisma?: PrismaClient, redis?: Redis): AnomalyDetectorService {
+  static getInstance(prisma?: PrismaClient, redis?: ReturnType<typeof getRedisInstance>): AnomalyDetectorService {
     if (!AnomalyDetectorService.instance) {
-      if (!prisma || !redis) {
+      if (!prisma) {
         throw new QueueManagementError(
-          'Prisma and Redis instances required for first initialization',
+          'Prisma instance required for first initialization',
           'INITIALIZATION_ERROR'
         )
       }
@@ -136,8 +136,9 @@ export class AnomalyDetectorService extends EventEmitter implements AnomalyDetec
       return uniqueAnomalies
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error'
       throw new QueueManagementError(
-        `Failed to detect anomalies: ${error.message}`,
+        `Failed to detect anomalies: ${errorMessage}`,
         'ANOMALY_DETECTION_ERROR'
       )
     }
@@ -174,8 +175,9 @@ export class AnomalyDetectorService extends EventEmitter implements AnomalyDetec
       })
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error'
       throw new QueueManagementError(
-        `Failed to train anomaly detector: ${error.message}`,
+        `Failed to train anomaly detector: ${errorMessage}`,
         'TRAINING_ERROR'
       )
     }
@@ -232,8 +234,9 @@ export class AnomalyDetectorService extends EventEmitter implements AnomalyDetec
       return trendPrediction
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error'
       throw new QueueManagementError(
-        `Failed to analyze trends: ${error.message}`,
+        `Failed to analyze trends: ${errorMessage}`,
         'TREND_ANALYSIS_ERROR'
       )
     }
@@ -260,8 +263,9 @@ export class AnomalyDetectorService extends EventEmitter implements AnomalyDetec
       }
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error'
       throw new QueueManagementError(
-        `Failed to forecast: ${error.message}`,
+        `Failed to forecast: ${errorMessage}`,
         'FORECAST_ERROR'
       )
     }
@@ -298,8 +302,9 @@ export class AnomalyDetectorService extends EventEmitter implements AnomalyDetec
       return patterns.sort((a, b) => b.confidence - a.confidence)
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error'
       throw new QueueManagementError(
-        `Failed to detect seasonal patterns: ${error.message}`,
+        `Failed to detect seasonal patterns: ${errorMessage}`,
         'SEASONAL_DETECTION_ERROR'
       )
     }
@@ -350,8 +355,9 @@ export class AnomalyDetectorService extends EventEmitter implements AnomalyDetec
       return performanceBaseline
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error'
       throw new QueueManagementError(
-        `Failed to create baseline: ${error.message}`,
+        `Failed to create baseline: ${errorMessage}`,
         'BASELINE_CREATION_ERROR'
       )
     }
@@ -528,7 +534,7 @@ export class AnomalyDetectorService extends EventEmitter implements AnomalyDetec
     metrics: Metric[],
     queueName: string,
     metricType: string
-  ): Anomaly[] {
+  ): Promise<Anomaly[]> {
     const key = `${queueName}:${metricType}`
     const pattern = this.seasonalPatterns.get(key)
     
@@ -709,10 +715,10 @@ export class AnomalyDetectorService extends EventEmitter implements AnomalyDetec
 
   private getMetricValue(item: any, metricType: string): number {
     switch (metricType) {
-      case 'throughput': return item.throughputPerMinute || 0
-      case 'processing_time': return item.avgProcessingTime || 0
-      case 'success_rate': return item.successRate || 0
-      case 'error_rate': return item.errorRate || 0
+      case 'throughput': return Number(item.throughputPerMinute) || 0
+      case 'processing_time': return Number(item.avgProcessingTime) || 0
+      case 'success_rate': return Number(item.successRate) || 0
+      case 'error_rate': return Number(item.errorRate) || 0
       default: return 0
     }
   }
@@ -733,14 +739,14 @@ export class AnomalyDetectorService extends EventEmitter implements AnomalyDetec
         {
           name: 'throughput',
           type: 'gauge' as const,
-          value: item.throughputPerMinute || 0,
+          value: Number(item.throughputPerMinute) || 0,
           timestamp: item.timestamp,
           labels: { queueName: item.queueName, type: 'queue' }
         },
         {
           name: 'processing_time',
           type: 'gauge' as const,
-          value: item.avgProcessingTime || 0,
+          value: Number(item.avgProcessingTime) || 0,
           timestamp: item.timestamp,
           labels: { queueName: item.queueName, type: 'queue' }
         }
@@ -757,28 +763,12 @@ export class AnomalyDetectorService extends EventEmitter implements AnomalyDetec
 
   private async storeAnomalies(anomalies: Anomaly[]): Promise<void> {
     // Store anomalies in database for historical analysis
+    // TODO: Create anomalies table in Prisma schema
+    console.log(`Storing ${anomalies.length} anomalies (not implemented yet)`)
+    
+    // For now, just log the anomalies
     for (const anomaly of anomalies) {
-      try {
-        await this.prisma.anomalies.create({
-          data: {
-            id: anomaly.id,
-            queueName: anomaly.queueName,
-            metric: anomaly.metric,
-            timestamp: anomaly.timestamp,
-            value: anomaly.value,
-            expectedValue: anomaly.expectedValue,
-            deviation: anomaly.deviation,
-            severity: anomaly.severity,
-            description: anomaly.description,
-            createdAt: new Date()
-          }
-        })
-      } catch (error) {
-        // Ignore duplicate key errors
-        if (!error.message.includes('unique constraint')) {
-          console.error('Failed to store anomaly:', error)
-        }
-      }
+      console.log(`Anomaly detected: ${anomaly.queueName} - ${anomaly.metric} - ${anomaly.severity}`)
     }
   }
 
@@ -794,29 +784,10 @@ export class AnomalyDetectorService extends EventEmitter implements AnomalyDetec
   }
 
   private async storePerformanceBaseline(baseline: PerformanceBaseline): Promise<void> {
-    await this.prisma.performanceBaselines.upsert({
-      where: {
-        queueName_metric: {
-          queueName: baseline.queueName,
-          metric: baseline.metric
-        }
-      },
-      update: {
-        baseline: baseline.baseline,
-        warningThreshold: baseline.threshold.warning,
-        criticalThreshold: baseline.threshold.critical,
-        calculatedAt: baseline.calculatedAt,
-        validUntil: baseline.validUntil
-      },
-      create: {
-        queueName: baseline.queueName,
-        metric: baseline.metric,
-        baseline: baseline.baseline,
-        warningThreshold: baseline.threshold.warning,
-        criticalThreshold: baseline.threshold.critical,
-        calculatedAt: baseline.calculatedAt,
-        validUntil: baseline.validUntil
-      }
-    })
+    // TODO: Create performanceBaselines table in Prisma schema
+    console.log(`Storing performance baseline for ${baseline.queueName} - ${baseline.metric} (not implemented yet)`)
+    
+    // For now, just log the baseline
+    console.log(`Baseline: ${baseline.baseline}, Warning: ${baseline.threshold.warning}, Critical: ${baseline.threshold.critical}`)
   }
 }

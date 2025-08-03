@@ -1,7 +1,7 @@
 // lib/queue/instagram-webhook.queue.ts
 
 import { Queue } from 'bullmq';
-import { connection } from '@/lib/redis';
+import { getRedisInstance } from '@/lib/connections';
 
 /**
  * Nome da fila para os webhooks do Instagram.
@@ -46,7 +46,7 @@ export interface IAutoNotificationJobData {
  */
 export const instagramWebhookQueue = new Queue<IInstagramWebhookJobData>(
   INSTAGRAM_WEBHOOK_QUEUE_NAME,
-  { connection }
+  { connection: getRedisInstance() }
 );
 
 /**
@@ -54,7 +54,7 @@ export const instagramWebhookQueue = new Queue<IInstagramWebhookJobData>(
  */
 export const autoNotificationsQueue = new Queue<IAutoNotificationJobData>(
   AUTO_NOTIFICATIONS_QUEUE_NAME,
-  { connection }
+  { connection: getRedisInstance() }
 );
 
 /**

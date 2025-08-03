@@ -4,7 +4,7 @@
  */
 
 import { PrismaClient } from '@prisma/client'
-import Redis from 'ioredis'
+import { getRedisInstance } from '../../lib/connections'
 import { QueueConfigManager } from '../../lib/queue-management/services/QueueConfigManager'
 import { 
   QueueConfig, 
@@ -39,7 +39,7 @@ const mockRedis = {
   setex: jest.fn(),
   del: jest.fn(),
   keys: jest.fn()
-} as unknown as Redis
+} as unknown as ReturnType<typeof getRedisInstance>
 
 describe('QueueConfigManager', () => {
   let configManager: QueueConfigManager

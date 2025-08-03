@@ -5,7 +5,7 @@ exports.agendamentoQueue = void 0;
 exports.scheduleAgendamentoJob = scheduleAgendamentoJob;
 exports.cancelAgendamentoJob = cancelAgendamentoJob;
 const bullmq_1 = require("bullmq");
-const redis_1 = require("../../lib/redis");
+const redis_1 = require("@/lib/redis");
 const AGENDAMENTO_QUEUE_NAME = 'agendamento';
 /**
  * Criação da Fila de Agendamento

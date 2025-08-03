@@ -4,8 +4,8 @@ import {
   InstagramTranslationJobData,
   InstagramTranslationResult,
   logWithCorrelationId,
-  InstagramTranslationErrorCodes,
 } from '@/lib/queue/instagram-translation.queue';
+import { InstagramTranslationErrorCodes } from '@/lib/error-handling/instagram-translation-errors';
 import {
   instagramTranslationMonitor,
   recordInstagramTranslationMetrics,

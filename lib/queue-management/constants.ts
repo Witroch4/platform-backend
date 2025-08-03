@@ -229,6 +229,10 @@ export const EVENT_TYPES = {
   FLOW_COMPLETED: 'flow.completed',
   FLOW_FAILED: 'flow.failed',
   FLOW_CANCELLED: 'flow.cancelled',
+  FLOW_ANALYZED: 'flow.analyzed',
+  FLOW_RETRIED: 'flow.retried',
+  ORPHANED_JOBS_DETECTED: 'flow.orphaned.jobs.detected',
+  CIRCULAR_DEPENDENCIES_DETECTED: 'flow.circular.dependencies.detected',
   
   // Alert Events
   ALERT_TRIGGERED: 'alert.triggered',
@@ -384,6 +388,7 @@ export const HTTP_STATUS = {
   CONFLICT: 409,
   UNPROCESSABLE_ENTITY: 422,
   TOO_MANY_REQUESTS: 429,
+  REQUEST_TIMEOUT: 408,
   INTERNAL_SERVER_ERROR: 500,
   SERVICE_UNAVAILABLE: 503,
 } as const

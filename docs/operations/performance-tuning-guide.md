@@ -837,7 +837,7 @@ const redisConfig = {
   db: 0,
   
   // Connection pool settings
-  maxRetriesPerRequest: 3,
+  maxRetriesPerRequest: null, // BullMQ requer que seja null
   retryDelayOnFailover: 100,
   enableReadyCheck: false,
   maxLoadingTimeout: 1000,

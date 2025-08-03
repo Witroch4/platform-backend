@@ -3,8 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.scheduleAgendamentoBullMQ = scheduleAgendamentoBullMQ;
 exports.cancelAgendamentoBullMQ = cancelAgendamentoBullMQ;
 exports.initializeExistingAgendamentos = initializeExistingAgendamentos;
-const prisma_1 = require("../lib/prisma");
-const agendamento_queue_1 = require("../lib/queue/agendamento.queue");
+const prisma_1 = require("@/lib/prisma");
+const agendamento_queue_1 = require("@/lib/queue/agendamento.queue");
 // Variável para controlar se já inicializamos os agendamentos
 let agendamentosInitialized = false;
 /**
@@ -71,10 +71,13 @@ async function initializeExistingAgendamentos() {
         for (const agendamento of agendamentos) {
             await (0, agendamento_queue_1.scheduleAgendamentoJob)({
                 id: agendamento.id,
-                Data: agendamento.Data,
+                Data: agendamento.data,
                 userId: agendamento.userId,
                 accountId: agendamento.accountId,
-                Diario: agendamento.Diario,
+                Diario: agendamento.diario,
+                Semanal: agendamento.semanal,
+                Randomizar: agendamento.randomizar,
+                TratarComoPostagensIndividuais: agendamento.tratarComoPostagensIndividuais,
             });
         }
         console.log('[Scheduler] Todos os agendamentos existentes foram inicializados');

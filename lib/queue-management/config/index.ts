@@ -4,7 +4,7 @@
  */
 
 import { PrismaClient } from '@prisma/client'
-import Redis from 'ioredis'
+import { getRedisInstance } from '../../../lib/connections'
 import { QueueConfigManager } from '../services/QueueConfigManager'
 import { 
   QueueConfig, 
@@ -18,18 +18,18 @@ import {
 // Global instances
 let globalConfigManager: QueueConfigManager | null = null
 let globalPrisma: PrismaClient | null = null
-let globalRedis: Redis | null = null
+let globalRedis: ReturnType<typeof getRedisInstance> | null = null
 
 /**
  * Initializes the global configuration manager
  */
 export function initializeConfigManager(
   prisma: PrismaClient,
-  redis?: Redis,
+  redis?: ReturnType<typeof getRedisInstance>,
   options?: QueueConfigManagerOptions
 ): QueueConfigManager {
   globalPrisma = prisma
-  globalRedis = redis
+  globalRedis = redis || null
   globalConfigManager = new QueueConfigManager(prisma, redis, options)
   return globalConfigManager
 }
@@ -49,7 +49,7 @@ export function getConfigManager(): QueueConfigManager {
  */
 export function createConfigManager(
   prisma: PrismaClient,
-  redis?: Redis,
+  redis?: ReturnType<typeof getRedisInstance>,
   options?: QueueConfigManagerOptions
 ): QueueConfigManager {
   return new QueueConfigManager(prisma, redis, options)

@@ -248,37 +248,32 @@ async function storeWebhookMessage(data) {
 async function getWhatsAppConfigFromDatabase(chatwootInboxId) {
     try {
         // Buscar a caixa de entrada pelo inboxId do Chatwoot
-        const caixaEntrada = await prisma_1.prisma.caixaEntrada.findFirst({
+        const caixaEntrada = await prisma_1.prisma.chatwitInbox.findFirst({
             where: { inboxId: chatwootInboxId },
-            include: {
-                configuracaoWhatsApp: true,
-            },
         });
         if (!caixaEntrada) {
             console.warn(`[MTF Diamante Webhook Worker] Caixa de entrada não encontrada para inboxId: ${chatwootInboxId}`);
             return null;
         }
         // Se há configuração específica para esta caixa, usar ela
-        if (caixaEntrada.configuracaoWhatsApp) {
+        if (caixaEntrada.whatsappApiKey) {
             return {
-                phoneNumberId: caixaEntrada.configuracaoWhatsApp.phoneNumberId,
-                businessAccountId: caixaEntrada.configuracaoWhatsApp.whatsappBusinessAccountId,
-                whatsappToken: caixaEntrada.configuracaoWhatsApp.whatsappToken,
+                phoneNumberId: caixaEntrada.phoneNumberId || '',
+                businessAccountId: caixaEntrada.whatsappBusinessAccountId || '',
+                whatsappToken: caixaEntrada.whatsappApiKey,
             };
         }
         // Fallback: buscar configuração padrão do usuário
-        const defaultConfig = await prisma_1.prisma.whatsAppConfig.findFirst({
+        const defaultConfig = await prisma_1.prisma.whatsAppGlobalConfig.findFirst({
             where: {
                 usuarioChatwitId: caixaEntrada.usuarioChatwitId,
-                caixaEntradaId: null, // Configuração padrão
-                isActive: true,
             },
         });
         if (defaultConfig) {
             return {
                 phoneNumberId: defaultConfig.phoneNumberId,
                 businessAccountId: defaultConfig.whatsappBusinessAccountId,
-                whatsappToken: defaultConfig.whatsappToken,
+                whatsappToken: defaultConfig.whatsappApiKey,
             };
         }
         console.warn(`[MTF Diamante Webhook Worker] Nenhuma configuração do WhatsApp encontrada para inboxId: ${chatwootInboxId}`);
@@ -292,7 +287,7 @@ async function getWhatsAppConfigFromDatabase(chatwootInboxId) {
 async function updateWhatsAppApiKey(data) {
     try {
         // A busca já usa o ID correto (string)
-        const caixaEntrada = await prisma_1.prisma.caixaEntrada.findFirst({
+        const caixaEntrada = await prisma_1.prisma.chatwitInbox.findFirst({
             where: { inboxId: data.chatwootInboxId },
         });
         if (!caixaEntrada) {
@@ -304,19 +299,13 @@ async function updateWhatsAppApiKey(data) {
         if (existingConfig) {
             // Se já existe configuração, apenas atualizar o token se necessário
             if (existingConfig.whatsappToken !== data.whatsappApiKey) {
-                await prisma_1.prisma.whatsAppConfig.updateMany({
+                // Atualizar configuração global
+                await prisma_1.prisma.whatsAppGlobalConfig.updateMany({
                     where: {
-                        OR: [
-                            { caixaEntradaId: caixaEntrada.id },
-                            {
-                                usuarioChatwitId: caixaEntrada.usuarioChatwitId,
-                                caixaEntradaId: null,
-                                isActive: true,
-                            },
-                        ],
+                        usuarioChatwitId: caixaEntrada.usuarioChatwitId,
                     },
                     data: {
-                        whatsappToken: data.whatsappApiKey,
+                        whatsappApiKey: data.whatsappApiKey,
                     },
                 });
                 console.log(`[MTF Diamante Webhook Worker] Token do WhatsApp atualizado para inbox: ${data.chatwootInboxId}`);
@@ -376,7 +365,7 @@ async function processSendMessage(taskData) {
         recipientPhone,
         messageType: messageData.type,
         intentName: metadata?.intentName,
-        caixaId: metadata?.caixaId,
+        inboxId: metadata?.inboxId,
         taskType: "sendMessage",
     };
     console.log(`[MTF Diamante Webhook Worker] Starting sendMessage task processing`, logContext);
@@ -387,15 +376,15 @@ async function processSendMessage(taskData) {
         }
         // Buscar configuração real do WhatsApp do banco
         let phoneNumberId = metadata?.phoneNumberId;
-        if (!phoneNumberId && metadata?.caixaId) {
-            const whatsappConfig = await getWhatsAppConfigFromDatabase(metadata.caixaId);
+        if (!phoneNumberId && metadata?.inboxId) {
+            const whatsappConfig = await getWhatsAppConfigFromDatabase(metadata.inboxId);
             if (whatsappConfig) {
                 phoneNumberId = whatsappConfig.phoneNumberId;
                 console.log(`[MTF Diamante Webhook Worker] PhoneNumberId obtido do banco: ${phoneNumberId}`, logContext);
             }
         }
         if (!phoneNumberId) {
-            throw new Error(`PhoneNumberId não encontrado para caixaId: ${metadata?.caixaId}. Verifique a configuração do WhatsApp no banco de dados.`);
+            throw new Error(`PhoneNumberId não encontrado para inboxId: ${metadata?.inboxId}. Verifique a configuração do WhatsApp no banco de dados.`);
         }
         let result;
         // Determine message type and call appropriate handler
@@ -585,8 +574,8 @@ async function processSendReaction(taskData) {
         }
         // Buscar configuração real do WhatsApp do banco
         let phoneNumberId = metadata?.phoneNumberId;
-        if (!phoneNumberId && metadata?.caixaId) {
-            const whatsappConfig = await getWhatsAppConfigFromDatabase(metadata.caixaId);
+        if (!phoneNumberId && metadata?.inboxId) {
+            const whatsappConfig = await getWhatsAppConfigFromDatabase(metadata.inboxId);
             if (whatsappConfig) {
                 phoneNumberId = whatsappConfig.phoneNumberId;
                 console.log(`[MTF Diamante Webhook Worker] PhoneNumberId obtido do banco para reação: ${phoneNumberId}`, logContext);
@@ -840,27 +829,31 @@ async function processButtonClick(jobData) {
  */
 async function findButtonReactionWithFallback(buttonId) {
     try {
-        // First try database lookup
-        const dbReaction = await prisma_1.prisma.buttonReactionMapping.findUnique({
+        // First try database lookup using MapeamentoBotao
+        const dbReaction = await prisma_1.prisma.mapeamentoBotao.findUnique({
             where: { buttonId },
         });
-        if (dbReaction && dbReaction.isActive) {
-            const type = dbReaction.emoji && dbReaction.textReaction
+        if (dbReaction) {
+            // Parse the actionPayload to extract emoji and textReaction
+            const actionPayload = dbReaction.actionPayload;
+            const emoji = actionPayload?.emoji;
+            const textReaction = actionPayload?.textReaction;
+            const type = emoji && textReaction
                 ? "both"
-                : dbReaction.emoji
+                : emoji
                     ? "emoji"
                     : "text";
             return {
                 id: dbReaction.id,
                 buttonId: dbReaction.buttonId,
                 type,
-                emoji: dbReaction.emoji || undefined,
-                textReaction: dbReaction.textReaction || undefined,
-                isActive: dbReaction.isActive,
+                emoji: emoji || undefined,
+                textReaction: textReaction || undefined,
+                isActive: true, // MapeamentoBotao doesn't have isActive field, assume active
             };
         }
         // Fallback to config-based mapping
-        const { findReactionByButtonId } = await Promise.resolve().then(() => __importStar(require("../../lib/dialogflow-database-queries")));
+        const { findReactionByButtonId } = await Promise.resolve().then(() => __importStar(require("@/lib/dialogflow-database-queries")));
         const configReaction = await findReactionByButtonId(buttonId);
         if (configReaction) {
             const type = configReaction.emoji && configReaction.textReaction

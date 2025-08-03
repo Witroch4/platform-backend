@@ -8,11 +8,10 @@
 import { EventEmitter } from 'events'
 import { Job } from 'bullmq'
 import { 
-  BatchResult, 
   JobAction, 
-  BatchAction, 
-  User 
+  BatchAction
 } from '../../../types/queue-management'
+import { User } from '../types/user.types'
 import { 
   DEFAULTS, 
   ERROR_CODES, 
@@ -134,7 +133,7 @@ export class BatchOperationService extends EventEmitter {
         successful: progress.successful,
         failed: progress.failed,
         duration: progress.completedAt.getTime() - progress.startedAt.getTime(),
-        userId: user?.userId
+        userId: user?.id
       })
 
       this.emit(EVENT_TYPES.BATCH_OPERATION_COMPLETED, progress)
@@ -147,7 +146,7 @@ export class BatchOperationService extends EventEmitter {
       this.logger.error(`Batch operation failed: ${operation}`, error, {
         operationId,
         operation,
-        userId: user?.userId
+        userId: user?.id
       })
 
       // Attempt rollback if enabled
@@ -156,11 +155,12 @@ export class BatchOperationService extends EventEmitter {
       }
 
       this.emit(EVENT_TYPES.BATCH_OPERATION_FAILED, progress)
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error'
       throw new QueueManagementError(
-        `Batch operation failed: ${error.message}`,
+        `Batch operation failed: ${errorMessage}`,
         ERROR_CODES.INTERNAL_ERROR,
         500,
-        { operationId, originalError: error.message }
+        { operationId, originalError: errorMessage }
       )
     } finally {
       // Clean up after some time
@@ -212,9 +212,10 @@ export class BatchOperationService extends EventEmitter {
           progress.successful++
         } catch (error) {
           progress.failed++
+          const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error'
           progress.errors.push({
             id: queueName,
-            error: error.message
+            error: errorMessage
           })
           
           this.logger.error(`Queue operation failed for ${queueName}:`, error, {
@@ -243,7 +244,7 @@ export class BatchOperationService extends EventEmitter {
         total: progress.total,
         successful: progress.successful,
         failed: progress.failed,
-        userId: user?.userId
+        userId: user?.id
       })
 
       this.emit(EVENT_TYPES.BATCH_OPERATION_COMPLETED, progress)
@@ -256,15 +257,16 @@ export class BatchOperationService extends EventEmitter {
       this.logger.error(`Batch queue operation failed: ${operation}`, error, {
         operationId,
         operation,
-        userId: user?.userId
+        userId: user?.id
       })
 
       this.emit(EVENT_TYPES.BATCH_OPERATION_FAILED, progress)
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error'
       throw new QueueManagementError(
-        `Batch queue operation failed: ${error.message}`,
+        `Batch queue operation failed: ${errorMessage}`,
         ERROR_CODES.INTERNAL_ERROR,
         500,
-        { operationId, originalError: error.message }
+        { operationId, originalError: errorMessage }
       )
     } finally {
       setTimeout(() => {
@@ -314,7 +316,7 @@ export class BatchOperationService extends EventEmitter {
       operation: progress.operation,
       processed: progress.processed,
       total: progress.total,
-      userId: user?.userId
+      userId: user?.id
     })
 
     this.emit(EVENT_TYPES.BATCH_OPERATION_CANCELLED, progress)
@@ -347,17 +349,18 @@ export class BatchOperationService extends EventEmitter {
         operationId,
         operation: progress.operation,
         rollbackActions: progress.rollbackInfo.rollbackActions.length,
-        userId: user?.userId
+        userId: user?.id
       })
 
       return true
     } catch (error) {
       this.logger.error(`Failed to rollback batch operation: ${operationId}`, error, {
         operationId,
-        userId: user?.userId
+        userId: user?.id
       })
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error'
       throw new QueueManagementError(
-        `Failed to rollback batch operation: ${error.message}`,
+        `Failed to rollback batch operation: ${errorMessage}`,
         ERROR_CODES.INTERNAL_ERROR
       )
     }
@@ -469,9 +472,10 @@ export class BatchOperationService extends EventEmitter {
         progress.successful++
       } catch (error) {
         progress.failed++
+        const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error'
         progress.errors.push({
           id: job.id!,
-          error: error.message
+          error: errorMessage
         })
       }
 
@@ -571,7 +575,8 @@ export class BatchOperationService extends EventEmitter {
       try {
         await this.executeRollbackAction(action)
       } catch (error) {
-        rollbackErrors.push(`Failed to rollback ${action.type} for ${action.jobId || action.queueName}: ${error.message}`)
+        const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error'
+        rollbackErrors.push(`Failed to rollback ${action.type} for ${action.jobId || action.queueName}: ${errorMessage}`)
       }
     }
 

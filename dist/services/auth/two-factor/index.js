@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createTwoFactorAuthToken = exports.findTwoFactorAuthTokeByToken = exports.deleteTwoFactorAuthTokenById = exports.isTwoFactorAuthenticationEnabled = exports.findTwoFactorAuthTokenByEmail = void 0;
-const prisma_1 = require("../../../lib/prisma");
+const prisma_1 = require("@/lib/prisma");
 // Create a local implementation instead of importing
 function generateOTP(numberOfDigits) {
     const digits = "0123456789";
@@ -13,7 +13,7 @@ function generateOTP(numberOfDigits) {
     return OTP;
 }
 const findTwoFactorAuthTokenByEmail = async (email) => {
-    const token = await prisma_1.prisma.twoFactorToken.findUnique({
+    const token = await prisma_1.prisma.twoFactorToken.findFirst({
         where: {
             email,
         },

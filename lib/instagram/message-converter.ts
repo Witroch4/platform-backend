@@ -320,7 +320,7 @@ export class MessageConverter {
   /**
    * Convert a single WhatsApp button to Instagram button
    */
-  private convertSingleButton(button: WhatsAppTemplate['buttons'][0]): InstagramButton | null {
+  private convertSingleButton(button: NonNullable<WhatsAppTemplate['buttons']>[0]): InstagramButton | null {
     if (!button) return null;
 
     // Map button types
@@ -387,7 +387,7 @@ export class MessageConverter {
   /**
    * Convert a single WhatsApp button to Instagram quick reply
    */
-  private convertSingleButtonToQuickReply(button: WhatsAppTemplate['buttons'][0]): any | null {
+  private convertSingleButtonToQuickReply(button: NonNullable<WhatsAppTemplate['buttons']>[0]): any | null {
     if (!button) return null;
 
     // For quick replies, we convert all button types to text quick replies

@@ -233,7 +233,7 @@ export default function ContasPage() {
         <div className="flex items-center gap-4 mb-4">
           <div className="relative h-12 w-12 flex-shrink-0">
             <Image
-              src="/01 WitdeT.png"
+              				src="/01%20WitdeT.png"
               alt="WitDev Logo"
               fill
               className="object-contain"

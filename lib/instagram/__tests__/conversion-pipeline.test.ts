@@ -7,12 +7,13 @@ import {
   convertMultipleTemplatesToInstagram,
   getConversionStatistics,
 } from '../conversion-pipeline';
-import type { PrismaTemplate, CompleteMessageMapping } from '../template-adapter';
+import type { CompleteMessageMapping } from '../template-adapter';
+import type { TemplateWithContent } from '../../../types/interactive-messages';
 
 describe('Conversion Pipeline', () => {
   describe('convertTemplateToInstagram', () => {
-    it('should convert PrismaTemplate to Instagram Generic Template', () => {
-      const prismaTemplate: PrismaTemplate = {
+      it('should convert PrismaTemplate to Instagram Generic Template', () => {
+    const prismaTemplate: TemplateWithContent = {
         id: '1',
         name: 'Test Template',
         type: 'INTERACTIVE_MESSAGE',
@@ -51,7 +52,7 @@ describe('Conversion Pipeline', () => {
 
     it('should convert PrismaTemplate to Instagram Button Template', () => {
       const longText = 'A'.repeat(120); // 120 chars - Button Template
-      const prismaTemplate: PrismaTemplate = {
+      const prismaTemplate: TemplateWithContent = {
         id: '1',
         name: 'Test Template',
         type: 'INTERACTIVE_MESSAGE',
@@ -110,7 +111,7 @@ describe('Conversion Pipeline', () => {
     });
 
     it('should skip template without interactive content', () => {
-      const prismaTemplate: PrismaTemplate = {
+      const prismaTemplate: TemplateWithContent = {
         id: '1',
         name: 'Test Template',
         type: 'AUTOMATION_REPLY',
@@ -124,7 +125,7 @@ describe('Conversion Pipeline', () => {
     });
 
     it('should skip template with empty body text', () => {
-      const prismaTemplate: PrismaTemplate = {
+      const prismaTemplate: TemplateWithContent = {
         id: '1',
         name: 'Test Template',
         type: 'INTERACTIVE_MESSAGE',

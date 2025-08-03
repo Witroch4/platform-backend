@@ -5,8 +5,8 @@
  * with optimized database operations and automatic data lifecycle management.
  */
 
-import { PrismaClient } from '@prisma/client'
-import { Redis } from 'ioredis'
+import { getPrismaInstance, getRedisInstance } from '../../connections'
+import type { PrismaClient } from '@prisma/client'
 import { 
   Metric, 
   MetricQuery, 
@@ -37,14 +37,14 @@ interface PartitionInfo {
 export class MetricsStorageService implements MetricStorage {
   private static instance: MetricsStorageService | null = null
   private prisma: PrismaClient
-  private redis: Redis
+  private redis: ReturnType<typeof getRedisInstance>
   private config: StorageConfig
   private partitions: Map<string, PartitionInfo[]> = new Map()
   private cleanupInterval: NodeJS.Timeout | null = null
 
-  constructor(prisma: PrismaClient, redis: Redis) {
+  constructor(prisma: PrismaClient, redis?: ReturnType<typeof getRedisInstance>) {
     this.prisma = prisma
-    this.redis = redis
+    this.redis = redis || getRedisInstance()
     
     const queueConfig = getQueueManagementConfig()
     this.config = {
@@ -62,11 +62,11 @@ export class MetricsStorageService implements MetricStorage {
   /**
    * Get singleton instance
    */
-  static getInstance(prisma?: PrismaClient, redis?: Redis): MetricsStorageService {
+  static getInstance(prisma?: PrismaClient, redis?: ReturnType<typeof getRedisInstance>): MetricsStorageService {
     if (!MetricsStorageService.instance) {
-      if (!prisma || !redis) {
+      if (!prisma) {
         throw new QueueManagementError(
-          'Prisma and Redis instances required for first initialization',
+          'Prisma instance required for first initialization',
           'INITIALIZATION_ERROR'
         )
       }
@@ -98,8 +98,9 @@ export class MetricsStorageService implements MetricStorage {
       await this.updateStorageStats(metrics.length)
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error occurred';
       throw new QueueManagementError(
-        `Failed to store metrics: ${error.message}`,
+        `Failed to store metrics: ${errorMessage}`,
         'STORAGE_ERROR'
       )
     }
@@ -144,8 +145,9 @@ export class MetricsStorageService implements MetricStorage {
       return metrics
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error occurred';
       throw new QueueManagementError(
-        `Failed to query metrics: ${error.message}`,
+        `Failed to query metrics: ${errorMessage}`,
         'QUERY_ERROR'
       )
     }
@@ -168,8 +170,9 @@ export class MetricsStorageService implements MetricStorage {
       return await this.performRealTimeAggregation(query)
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error occurred';
       throw new QueueManagementError(
-        `Failed to aggregate metrics: ${error.message}`,
+        `Failed to aggregate metrics: ${errorMessage}`,
         'AGGREGATION_ERROR'
       )
     }
@@ -223,8 +226,9 @@ export class MetricsStorageService implements MetricStorage {
       console.log(`Created partition ${partitionName} for period ${startDate.toISOString()} to ${endDate.toISOString()}`)
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error occurred';
       throw new QueueManagementError(
-        `Failed to create partition: ${error.message}`,
+        `Failed to create partition: ${errorMessage}`,
         'PARTITION_ERROR'
       )
     }
@@ -363,8 +367,9 @@ export class MetricsStorageService implements MetricStorage {
       }
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error occurred';
       throw new QueueManagementError(
-        `Failed to cleanup old data: ${error.message}`,
+        `Failed to cleanup old data: ${errorMessage}`,
         'CLEANUP_ERROR'
       )
     }
@@ -421,8 +426,9 @@ export class MetricsStorageService implements MetricStorage {
       await this.updateIndexStats()
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error occurred';
       throw new QueueManagementError(
-        `Failed to optimize indexes: ${error.message}`,
+        `Failed to optimize indexes: ${errorMessage}`,
         'INDEX_OPTIMIZATION_ERROR'
       )
     }
@@ -471,8 +477,9 @@ export class MetricsStorageService implements MetricStorage {
       }
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error occurred';
       throw new QueueManagementError(
-        `Failed to get storage stats: ${error.message}`,
+        `Failed to get storage stats: ${errorMessage}`,
         'STATS_ERROR'
       )
     }
@@ -491,8 +498,9 @@ export class MetricsStorageService implements MetricStorage {
       }
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error occurred';
       throw new QueueManagementError(
-        `Failed to pre-aggregate metrics: ${error.message}`,
+        `Failed to pre-aggregate metrics: ${errorMessage}`,
         'PRE_AGGREGATION_ERROR'
       )
     }
@@ -537,8 +545,9 @@ export class MetricsStorageService implements MetricStorage {
       return { compressedPartitions, spaceSaved }
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error occurred';
       throw new QueueManagementError(
-        `Failed to compress old data: ${error.message}`,
+        `Failed to compress old data: ${errorMessage}`,
         'COMPRESSION_ERROR'
       )
     }
@@ -673,12 +682,13 @@ export class MetricsStorageService implements MetricStorage {
     // Batch upsert job metrics
     for (const data of jobData.values()) {
       await this.prisma.jobMetrics.upsert({
-        where: { jobId: data.jobId },
+        where: { id: data.jobId },
         update: {
           ...data.metrics,
           updatedAt: data.timestamp
         },
         create: {
+          id: data.jobId,
           jobId: data.jobId,
           queueName: data.queueName,
           jobName: data.jobName,
@@ -726,15 +736,8 @@ export class MetricsStorageService implements MetricStorage {
       } catch (error) {
         // If batch insert fails, try individual upserts
         for (const item of batch) {
-          await this.prisma.queueMetrics.upsert({
-            where: {
-              queueName_timestamp: {
-                queueName: item.queueName,
-                timestamp: item.timestamp
-              }
-            },
-            update: item,
-            create: item
+          await this.prisma.queueMetrics.create({
+            data: item
           })
         }
       }
@@ -996,7 +999,8 @@ export class MetricsStorageService implements MetricStorage {
         await this.prisma.$executeRawUnsafe(indexSql)
       } catch (error) {
         // Index might already exist, continue with others
-        console.warn('Index creation warning:', error.message)
+        const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error occurred';
+        console.warn('Index creation warning:', errorMessage)
       }
     }
   }

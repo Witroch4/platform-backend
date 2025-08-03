@@ -60,6 +60,9 @@ export async function GET(request: Request) {
     const dbTemplate = await db.template.findFirst({
       where: {
         name: templateName
+      },
+      include: {
+        whatsappOfficialInfo: true
       }
     });
 
@@ -69,8 +72,8 @@ export async function GET(request: Request) {
         name: dbTemplate.name,
         status: dbTemplate.status,
         language: dbTemplate.language,
-        components: dbTemplate.components,
-        category: dbTemplate.category,
+        components: dbTemplate.whatsappOfficialInfo?.components || null,
+        category: dbTemplate.whatsappOfficialInfo?.category || dbTemplate.tags[0] || 'UTILITY',
       };
     }
 

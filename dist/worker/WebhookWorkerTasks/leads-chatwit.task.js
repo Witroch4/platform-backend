@@ -85,25 +85,57 @@ async function processAccumulatedJobs(sourceId) {
                 }
             });
         }
-        // 2) Upsert do lead usando sourceId agora marcado @unique
-        const lead = await prisma_1.prisma.leadChatwit.upsert({
-            where: { sourceId },
+        // 2) Criar ou atualizar o Lead (nome do Chatwit)
+        const lead = await prisma_1.prisma.lead.upsert({
+            where: {
+                source_sourceIdentifier_accountId: {
+                    source: 'CHATWIT_OAB',
+                    sourceIdentifier: origemLead.source_id,
+                    accountId: null // Para leads sem account específica
+                }
+            },
             update: {
-                thumbnail: origemLead.thumbnail,
-                leadUrl: origemLead.leadUrl
-                // Removido chatwitAccessToken pois não é mais necessário no LeadChatwit
+                name: origemLead.name || 'Lead sem nome',
+                phone: origemLead.phone_number,
+                avatarUrl: origemLead.thumbnail,
+                updatedAt: new Date()
             },
             create: {
-                usuarioId: usuarioDb.id,
-                sourceId: origemLead.source_id,
                 name: origemLead.name || 'Lead sem nome',
-                phoneNumber: origemLead.phone_number,
-                thumbnail: origemLead.thumbnail,
-                leadUrl: origemLead.leadUrl
-                // Removido chatwitAccessToken pois não é mais necessário no LeadChatwit
+                phone: origemLead.phone_number,
+                avatarUrl: origemLead.thumbnail,
+                source: 'CHATWIT_OAB',
+                sourceIdentifier: origemLead.source_id,
+                tags: [],
+                userId: usuarioDb.appUserId
             }
         });
-        // 3) Coleta todos os arquivos de todos os jobs
+        // 3) Criar ou atualizar o LeadOabData (dados específicos da OAB)
+        const leadOabData = await prisma_1.prisma.leadOabData.upsert({
+            where: { leadId: lead.id },
+            update: {
+                leadUrl: origemLead.leadUrl,
+                updatedAt: new Date()
+            },
+            create: {
+                leadId: lead.id,
+                leadUrl: origemLead.leadUrl,
+                usuarioChatwitId: usuarioDb.id,
+                concluido: false,
+                fezRecurso: false,
+                manuscritoProcessado: false,
+                aguardandoManuscrito: false,
+                espelhoProcessado: false,
+                aguardandoEspelho: false,
+                analiseProcessada: false,
+                aguardandoAnalise: false,
+                analiseValidada: false,
+                consultoriaFase2: false,
+                recursoValidado: false,
+                aguardandoRecurso: false
+            }
+        });
+        // 4) Coleta todos os arquivos de todos os jobs
         const todosArquivos = [];
         for (const job of jobs) {
             const arquivos = job.data.payload.origemLead.arquivos || [];
@@ -112,16 +144,16 @@ async function processAccumulatedJobs(sourceId) {
             todosArquivos.push(...arquivos);
         }
         console.log(`[BullMQ] Total de arquivos coletados: ${todosArquivos.length}`);
-        // 4) Criar anexos em lote - sem nenhuma deduplicação
+        // 5) Criar anexos em lote - sem nenhuma deduplicação
         if (todosArquivos.length > 0) {
             // Insere em blocos para evitar problemas com muitos arquivos
             const batchSize = 10;
             for (let i = 0; i < todosArquivos.length; i += batchSize) {
                 const batch = todosArquivos.slice(i, i + batchSize);
                 try {
-                    const result = await prisma_1.prisma.arquivoLeadChatwit.createMany({
+                    const result = await prisma_1.prisma.arquivoLeadOab.createMany({
                         data: batch.map(a => ({
-                            leadId: lead.id,
+                            leadOabDataId: leadOabData.id,
                             fileType: a.file_type,
                             dataUrl: a.data_url
                         })),
@@ -135,17 +167,18 @@ async function processAccumulatedJobs(sourceId) {
                 }
             }
             // Verifica quantos arquivos temos no total após a operação
-            const totalArquivos = await prisma_1.prisma.arquivoLeadChatwit.count({
-                where: { leadId: lead.id }
+            const totalArquivos = await prisma_1.prisma.arquivoLeadOab.count({
+                where: { leadOabDataId: leadOabData.id }
             });
             console.log(`[BullMQ] Total de arquivos no banco para o lead ${sourceId}: ${totalArquivos}`);
         }
         // Marca os jobs como bem-sucedidos
         for (const job of jobs) {
-            await job.updateProgress({ processed: true, leadId: lead.id });
+            await job.updateProgress({ processed: true, leadId: leadOabData.id });
         }
         console.log(`[BullMQ] Processamento em lote concluído para lead ${sourceId}.`);
-        return { leadId: lead.id, jobsProcessados: jobs.length, arquivos: todosArquivos.length };
+        console.log(`[BullMQ] Lead criado: ${lead.id}, LeadOabData: ${leadOabData.id}`);
+        return { leadId: leadOabData.id, jobsProcessados: jobs.length, arquivos: todosArquivos.length };
     }
     catch (error) {
         console.error(`[BullMQ] Erro ao processar lote para lead ${sourceId}:`, error);

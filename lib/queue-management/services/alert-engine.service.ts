@@ -5,8 +5,8 @@
  */
 
 import { db } from '../../db'
-import { redis } from '../../redis'
-import { logger } from '../../log'
+import { getRedisInstance } from '../../connections'
+import logger from '../../log'
 import {
   AlertRule,
   AlertRuleCreateInput,
@@ -310,7 +310,7 @@ export class AlertEngineService {
       }
 
       // Process triggered alerts
-      const triggeredEvaluations = evaluations.filter(eval => eval.triggered)
+      const triggeredEvaluations = evaluations.filter(evaluation => evaluation.triggered)
       for (const evaluation of triggeredEvaluations) {
         await this.processTriggeredAlert(evaluation)
       }
@@ -589,7 +589,7 @@ export class AlertEngineService {
       const anomalies = await this.anomalyDetector.detect(detectionData)
 
       // Create predictive alerts for detected anomalies
-      await this.createPredictiveAlerts(anomalies)
+      await this.createPredictiveAlertsFromAnomalies(anomalies)
 
       logger.info('Anomaly detection completed', {
         queueName,
@@ -695,7 +695,7 @@ export class AlertEngineService {
 
   private convertMetricsForAnomalyDetection(metrics: any, queueName?: string): any[] {
     // Convert metrics to the format expected by the anomaly detector
-    const converted = []
+    const converted: any[] = []
     
     if (Array.isArray(metrics)) {
       // If metrics is already an array, use it directly
@@ -738,7 +738,7 @@ export class AlertEngineService {
     return converted
   }
 
-  private async createPredictiveAlerts(anomalies: any[]): Promise<void> {
+  private async createPredictiveAlertsFromAnomalies(anomalies: any[]): Promise<void> {
     for (const anomaly of anomalies) {
       try {
         // Create a predictive alert rule if one doesn't exist
@@ -859,7 +859,7 @@ export class AlertEngineService {
     const cacheKey = CACHE_KEYS.ACTIVE_ALERTS()
     
     try {
-      const cached = await redis.get(cacheKey)
+      const cached = await getRedisInstance().get(cacheKey)
       if (cached) {
         return JSON.parse(cached)
       }
@@ -870,7 +870,7 @@ export class AlertEngineService {
     const rules = await this.listAlertRules({ enabled: true })
     
     try {
-      await redis.setex(cacheKey, DEFAULTS.CACHE_TTL.ALERTS, JSON.stringify(rules))
+      await getRedisInstance().setex(cacheKey, DEFAULTS.CACHE_TTL.ALERTS, JSON.stringify(rules))
     } catch (error) {
       logger.warn('Failed to cache rules', { error })
     }
@@ -895,7 +895,7 @@ export class AlertEngineService {
 
   private extractMetricValue(metrics: Record<string, any>, metricPath: string): number | string {
     const keys = metricPath.split('.')
-    let value = metrics
+    let value: any = metrics
 
     for (const key of keys) {
       if (value && typeof value === 'object' && key in value) {
@@ -905,7 +905,7 @@ export class AlertEngineService {
       }
     }
 
-    return value
+    return typeof value === 'number' || typeof value === 'string' ? value : 0
   }
 
   private evaluateCondition(
@@ -999,7 +999,7 @@ export class AlertEngineService {
 
     // Also set in Redis for persistence across restarts
     const cacheKey = CACHE_KEYS.ALERT_COOLDOWN(ruleId)
-    redis.setex(cacheKey, cooldownMinutes * 60, cooldownEnd.toISOString()).catch(error => {
+    getRedisInstance().setex(cacheKey, cooldownMinutes * 60, cooldownEnd.toISOString()).catch(error => {
       logger.warn('Failed to set cooldown in Redis', { error, ruleId })
     })
   }
@@ -1009,7 +1009,7 @@ export class AlertEngineService {
     
     const cacheKey = CACHE_KEYS.ALERT_COOLDOWN(ruleId)
     try {
-      await redis.del(cacheKey)
+      await getRedisInstance().del(cacheKey)
     } catch (error) {
       logger.warn('Failed to clear cooldown from Redis', { error, ruleId })
     }
@@ -1018,7 +1018,7 @@ export class AlertEngineService {
   private async clearRulesCache(): Promise<void> {
     const cacheKey = CACHE_KEYS.ACTIVE_ALERTS()
     try {
-      await redis.del(cacheKey)
+      await getRedisInstance().del(cacheKey)
     } catch (error) {
       logger.warn('Failed to clear rules cache', { error })
     }

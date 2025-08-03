@@ -341,6 +341,8 @@ export const MESSAGE_LIMITS = {
   LIST_ROW_MAX_COUNT: 10,
   LIST_TITLE_MAX_LENGTH: 24,
   LIST_DESCRIPTION_MAX_LENGTH: 72,
+  // Instagram specific limits
+  INSTAGRAM_QUICK_REPLIES_MAX_LENGTH: 1000,
 } as const;
 
 // Utility functions for WhatsApp API conversion

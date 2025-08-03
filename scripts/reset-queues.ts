@@ -1,6 +1,6 @@
 // scripts/reset-queues.ts
 
-import { Redis } from 'ioredis';
+import { getRedisInstance } from '../lib/connections';
 import dotenv from 'dotenv';
 import { agendamentoQueue } from '../lib/queue/agendamento.queue';
 import { instagramWebhookQueue, autoNotificationsQueue } from '../lib/queue/instagram-webhook.queue';
@@ -8,22 +8,7 @@ import { followUpQueue } from '../worker/queues/followUpQueue';
 
 dotenv.config();
 
-// Configuração do Redis
-const redisConfig = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: Number.parseInt(process.env.REDIS_PORT || '6379'),
-  password: process.env.REDIS_PASSWORD,
-  tls: process.env.REDIS_TLS === 'true' ? {} : undefined,
-};
-
-console.log('Configuração de conexão com o Redis:', {
-  ...redisConfig,
-  password: redisConfig.password ? '*****' : undefined,
-  useTLS: !!redisConfig.tls,
-});
-
-// Conecta ao Redis
-const redis = new Redis(redisConfig);
+console.log('Iniciando script de reset de filas...');
 
 // Padrões de chaves para filas antigas
 const oldQueuePatterns = [
@@ -33,6 +18,8 @@ const oldQueuePatterns = [
 
 // Função para limpar as filas antigas
 async function cleanOldQueues() {
+  const redis = getRedisInstance();
+  
   try {
     console.log('Iniciando limpeza de filas antigas...');
 
@@ -65,6 +52,8 @@ async function cleanOldQueues() {
 
 // Função para limpar e reiniciar as filas
 async function resetQueues() {
+  const redis = getRedisInstance();
+  
   try {
     console.log('Iniciando reset das filas...');
 

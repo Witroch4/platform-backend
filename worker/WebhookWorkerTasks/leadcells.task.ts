@@ -86,7 +86,14 @@ async function processManuscrito(job: Job<IManuscritoJobData>) {
       data: {
         provaManuscrita: conteudoUnificado,
         manuscritoProcessado: true,
-        aguardandoManuscrito: false,
+        aguardandoManuscrito: false
+      },
+    });
+
+    // Atualizar o modelo Lead pai com a data
+    await prisma.lead.update({
+      where: { id: leadID },
+      data: {
         updatedAt: new Date()
       },
     });
@@ -156,7 +163,6 @@ async function processEspelho(job: Job<IEspelhoJobData>) {
       textoDOEspelho: conteudoUnificado,
       espelhoProcessado: true,
       aguardandoEspelho: false,
-      updatedAt: new Date(),
     };
     if (exames.length > 0) updateData.examesParticipados = exames;
     if (seccionalMatch) updateData.seccional = seccionalMatch[1].trim();
@@ -169,6 +175,14 @@ async function processEspelho(job: Job<IEspelhoJobData>) {
     const leadAtualizado = await prisma.leadOabData.update({
       where: { id: leadID },
       data: updateData,
+    });
+
+    // Atualizar o modelo Lead pai com a data
+    await prisma.lead.update({
+      where: { id: leadID },
+      data: {
+        updatedAt: new Date()
+      },
     });
 
     console.log(`[BullMQ] Lead atualizado com sucesso: ${leadAtualizado.id}`);
@@ -212,8 +226,7 @@ async function processAnalise(job: Job<IAnaliseJobData>) {
 
     // Preparar dados de atualização baseado no tipo de análise
     const updateData: any = {
-      aguardandoAnalise: false,
-      updatedAt: new Date()
+      aguardandoAnalise: false
     };
 
     let message = '';
@@ -248,6 +261,14 @@ async function processAnalise(job: Job<IAnaliseJobData>) {
     const leadAtualizado = await prisma.leadOabData.update({
       where: { id: leadID },
       data: updateData,
+    });
+
+    // Atualizar o modelo Lead pai com a data
+    await prisma.lead.update({
+      where: { id: leadID },
+      data: {
+        updatedAt: new Date()
+      },
     });
 
     console.log(`[BullMQ] Lead atualizado com sucesso: ${leadAtualizado.id}`);

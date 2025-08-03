@@ -10,8 +10,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendReactionMessage = sendReactionMessage;
 exports.logReactionAttempt = logReactionAttempt;
 const axios_1 = __importDefault(require("axios"));
-const lib_1 = require("../app/lib");
-const auth_1 = require("../auth");
+const lib_1 = require("@/app/lib");
+const auth_1 = require("@/auth");
 /**
  * Send a reaction message to a WhatsApp message
  */

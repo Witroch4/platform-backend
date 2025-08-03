@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals'
 import { PrismaClient } from '@prisma/client'
-import Redis from 'ioredis'
+import { getRedisInstance } from '../../connections'
 import { MetricsCollectorService } from '../services/metrics-collector.service'
 import { MetricsStorageService } from '../services/metrics-storage.service'
 import { MetricsAggregatorService } from '../services/metrics-aggregator.service'
@@ -17,7 +17,7 @@ import { getCacheOptimizerService } from '../cache/cache-optimizer'
 
 describe('Metrics System Integration', () => {
   let prisma: PrismaClient
-  let redis: Redis
+  let redis: ReturnType<typeof getRedisInstance>
   let metricsManager: MetricsManagerService
 
   beforeAll(async () => {
@@ -30,11 +30,7 @@ describe('Metrics System Integration', () => {
       }
     })
     
-    redis = new Redis({
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
-      db: 15 // Use test database
-    })
+    redis = getRedisInstance()
 
     // Initialize metrics manager
     metricsManager = MetricsManagerService.getInstance(prisma, redis)
@@ -43,7 +39,7 @@ describe('Metrics System Integration', () => {
 
   afterAll(async () => {
     await prisma.$disconnect()
-    await redis.quit()
+    // Não precisa desconectar redis pois é singleton global
   })
 
   describe('MetricsCollectorService', () => {

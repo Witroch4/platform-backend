@@ -364,6 +364,18 @@ export class InteractiveMessageValidator {
         severity: 'warning'
       });
     }
+    
+    // Instagram Quick Replies specific validation
+    if (text.length > MESSAGE_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_LENGTH) {
+      warnings.push({
+        field: 'body.text',
+        code: 'INSTAGRAM_QUICK_REPLIES_LIMIT',
+        message: VALIDATION_MESSAGES.INSTAGRAM_QUICK_REPLIES_TOO_LONG,
+        value: text.length,
+        limit: MESSAGE_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_LENGTH,
+        severity: 'warning'
+      });
+    }
   }
 
   private static validateHeaderContent(content: string, errors: ValidationError[], warnings: ValidationError[], type?: string) {

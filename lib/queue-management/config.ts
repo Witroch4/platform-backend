@@ -14,7 +14,7 @@ const QueueManagementConfigSchema = z.object({
     port: z.number().default(6379),
     password: z.string().optional(),
     db: z.number().default(0),
-    maxRetriesPerRequest: z.number().default(3),
+    maxRetriesPerRequest: z.number().nullable().default(null), // BullMQ requer que seja null
     retryDelayOnFailover: z.number().default(100),
     enableReadyCheck: z.boolean().default(true),
     lazyConnect: z.boolean().default(true),
@@ -118,7 +118,7 @@ const defaultConfig: QueueManagementConfig = {
     port: parseInt(process.env.REDIS_PORT || '6379'),
     password: process.env.REDIS_PASSWORD,
     db: parseInt(process.env.REDIS_DB || '0'),
-    maxRetriesPerRequest: 3,
+    maxRetriesPerRequest: null, // BullMQ requer que seja null
     retryDelayOnFailover: 100,
     enableReadyCheck: true,
     lazyConnect: true,

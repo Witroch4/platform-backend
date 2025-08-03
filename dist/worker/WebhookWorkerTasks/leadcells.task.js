@@ -36,14 +36,14 @@ async function processManuscrito(job) {
             .join('\n\n---------------------------------\n\n');
         console.log(`[BullMQ] Atualizando lead ${leadID} com o manuscrito processado`);
         // Verificar se o lead existe
-        const leadExistente = await prisma_1.prisma.leadChatwit.findUnique({
+        const leadExistente = await prisma_1.prisma.leadOabData.findUnique({
             where: { id: leadID },
         });
         if (!leadExistente) {
             throw new Error(`Lead não encontrado com ID: ${leadID}`);
         }
         // Atualizar o lead com o conteúdo do manuscrito
-        const leadAtualizado = await prisma_1.prisma.leadChatwit.update({
+        const leadAtualizado = await prisma_1.prisma.leadOabData.update({
             where: { id: leadID },
             data: {
                 provaManuscrita: conteudoUnificado,
@@ -78,7 +78,7 @@ async function processEspelho(job) {
             .join('\n\n---------------------------------\n\n');
         console.log(`[BullMQ] Atualizando lead ${leadID} com o espelho processado`);
         // Verificar se o lead existe
-        const leadExistente = await prisma_1.prisma.leadChatwit.findUnique({
+        const leadExistente = await prisma_1.prisma.leadOabData.findUnique({
             where: { id: leadID },
         });
         if (!leadExistente) {
@@ -123,7 +123,7 @@ async function processEspelho(job) {
             updateData.inscricao = inscricaoMatch[1].trim();
         if (nomeMatch && !leadExistente.nomeReal)
             updateData.nomeReal = nomeMatch[1].trim();
-        const leadAtualizado = await prisma_1.prisma.leadChatwit.update({
+        const leadAtualizado = await prisma_1.prisma.leadOabData.update({
             where: { id: leadID },
             data: updateData,
         });
@@ -152,7 +152,7 @@ async function processAnalise(job) {
         const { leadID, analiseUrl, argumentacaoUrl, analisePreliminar, nome, analiseSimulado, analiseValidada, analiseSimuladoValidada } = job.data;
         console.log(`[BullMQ] Atualizando lead ${leadID} com a análise processada`);
         // Verificar se o lead existe
-        const leadExistente = await prisma_1.prisma.leadChatwit.findUnique({
+        const leadExistente = await prisma_1.prisma.leadOabData.findUnique({
             where: { id: leadID },
         });
         if (!leadExistente) {
@@ -192,7 +192,7 @@ async function processAnalise(job) {
                 : 'Sua análise foi validada e está sendo finalizada!';
         }
         // Atualizar o lead
-        const leadAtualizado = await prisma_1.prisma.leadChatwit.update({
+        const leadAtualizado = await prisma_1.prisma.leadOabData.update({
             where: { id: leadID },
             data: updateData,
         });

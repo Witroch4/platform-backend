@@ -4,31 +4,40 @@ exports.getWhatsAppConfig = getWhatsAppConfig;
 exports.getAllWhatsAppConfigs = getAllWhatsAppConfigs;
 exports.isConfigActive = isConfigActive;
 exports.validateWhatsAppConfig = validateWhatsAppConfig;
-const db_1 = require("../lib/db");
+const db_1 = require("@/lib/db");
 /**
  * Busca configuração do WhatsApp para uma caixa de entrada específica
  * Se não encontrar configuração específica, retorna a configuração padrão
  */
-async function getWhatsAppConfig(usuarioChatwitId, caixaEntradaId) {
+async function getWhatsAppConfig(usuarioChatwitId, inboxId) {
     try {
         let config = null;
         // Se foi especificada uma caixa de entrada, buscar configuração específica
-        if (caixaEntradaId) {
-            config = await db_1.db.whatsAppConfig.findFirst({
+        if (inboxId) {
+            const inboxConfig = await db_1.db.chatwitInbox.findFirst({
                 where: {
-                    caixaEntradaId,
+                    id: inboxId,
                     usuarioChatwitId,
-                    isActive: true
                 }
             });
+            if (inboxConfig && inboxConfig.whatsappApiKey) {
+                return {
+                    id: inboxConfig.id,
+                    usuarioChatwitId: inboxConfig.usuarioChatwitId,
+                    whatsappApiKey: inboxConfig.whatsappApiKey,
+                    phoneNumberId: inboxConfig.phoneNumberId,
+                    whatsappBusinessAccountId: inboxConfig.whatsappBusinessAccountId,
+                    graphApiBaseUrl: 'https://graph.facebook.com/v22.0', // Valor padrão
+                    isActive: true,
+                    inboxId: inboxConfig.id
+                };
+            }
         }
         // Se não encontrou configuração específica, buscar a padrão
         if (!config) {
-            config = await db_1.db.whatsAppConfig.findFirst({
+            config = await db_1.db.whatsAppGlobalConfig.findFirst({
                 where: {
-                    usuarioChatwitId,
-                    caixaEntradaId: null,
-                    isActive: true
+                    usuarioChatwitId
                 }
             });
         }
@@ -44,26 +53,56 @@ async function getWhatsAppConfig(usuarioChatwitId, caixaEntradaId) {
  */
 async function getAllWhatsAppConfigs(usuarioChatwitId) {
     try {
-        const configs = await db_1.db.whatsAppConfig.findMany({
+        // Buscar configuração global
+        const globalConfig = await db_1.db.whatsAppGlobalConfig.findFirst({
+            where: {
+                usuarioChatwitId
+            }
+        });
+        // Buscar caixas com configurações específicas
+        const inboxesWithConfig = await db_1.db.chatwitInbox.findMany({
             where: {
                 usuarioChatwitId,
+                whatsappApiKey: { not: null }
+            },
+            select: {
+                id: true,
+                nome: true,
+                inboxId: true,
+                channelType: true,
+                whatsappApiKey: true,
+                phoneNumberId: true,
+                whatsappBusinessAccountId: true
+            }
+        });
+        const configs = [];
+        // Adicionar configuração global se existir
+        if (globalConfig) {
+            configs.push({
+                ...globalConfig,
+                chatwitInbox: null,
                 isActive: true
-            },
-            include: {
-                caixaEntrada: {
-                    select: {
-                        id: true,
-                        nome: true,
-                        inboxId: true,
-                        inboxName: true,
-                        channelType: true
-                    }
+            });
+        }
+        // Adicionar configurações específicas das caixas
+        inboxesWithConfig.forEach(inbox => {
+            configs.push({
+                id: inbox.id,
+                usuarioChatwitId: inbox.usuarioChatwitId,
+                whatsappApiKey: inbox.whatsappApiKey,
+                phoneNumberId: inbox.phoneNumberId,
+                whatsappBusinessAccountId: inbox.whatsappBusinessAccountId,
+                graphApiBaseUrl: 'https://graph.facebook.com/v22.0',
+                isActive: true,
+                inboxId: inbox.id,
+                chatwitInbox: {
+                    id: inbox.id,
+                    nome: inbox.nome,
+                    inboxId: inbox.inboxId,
+                    inboxName: inbox.nome,
+                    channelType: inbox.channelType
                 }
-            },
-            orderBy: [
-                { caixaEntradaId: 'asc' }, // Configurações específicas primeiro
-                { createdAt: 'desc' }
-            ]
+            });
         });
         return configs;
     }
@@ -77,7 +116,7 @@ async function getAllWhatsAppConfigs(usuarioChatwitId) {
  */
 function isConfigActive(config) {
     return config && config.isActive &&
-        config.whatsappToken &&
+        config.whatsappApiKey &&
         config.whatsappBusinessAccountId;
 }
 /**
@@ -85,13 +124,13 @@ function isConfigActive(config) {
  */
 function validateWhatsAppConfig(config) {
     const errors = [];
-    if (!config.whatsappToken) {
+    if (!config.whatsappApiKey) {
         errors.push("Token do WhatsApp é obrigatório");
     }
     if (!config.whatsappBusinessAccountId) {
         errors.push("ID da conta Business do WhatsApp é obrigatório");
     }
-    if (!config.fbGraphApiBase) {
+    if (!config.graphApiBaseUrl) {
         errors.push("URL base da API do Facebook é obrigatória");
     }
     return {

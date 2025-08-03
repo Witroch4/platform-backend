@@ -279,21 +279,21 @@ export function QueueDetails({
           <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
-              onClick={() => onBatchAction({ type: 'pauseQueue', queueName })}
+              onClick={() => onBatchAction({ action: 'pause_queue', queueName })}
             >
               <Pause className="h-4 w-4 mr-2" />
               Pause Queue
             </Button>
             <Button
               variant="outline"
-              onClick={() => onBatchAction({ type: 'resumeQueue', queueName })}
+              onClick={() => onBatchAction({ action: 'resume_queue', queueName })}
             >
               <Play className="h-4 w-4 mr-2" />
               Resume Queue
             </Button>
             <Button
               variant="outline"
-              onClick={() => onBatchAction({ type: 'retryAllFailed', queueName })}
+              onClick={() => onBatchAction({ action: 'retry_all_failed', queueName })}
               disabled={queueHealth.counts.failed === 0}
             >
               <RefreshCw className="h-4 w-4 mr-2" />
@@ -301,7 +301,11 @@ export function QueueDetails({
             </Button>
             <Button
               variant="outline"
-              onClick={() => onBatchAction({ type: 'cleanCompleted', queueName, olderThan: 24 * 60 * 60 * 1000 })}
+              onClick={() => onBatchAction({ 
+                action: 'clean_completed', 
+                queueName, 
+                options: { olderThan: 24 * 60 * 60 * 1000 } 
+              })}
               disabled={queueHealth.counts.completed === 0}
             >
               <Trash2 className="h-4 w-4 mr-2" />

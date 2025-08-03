@@ -1,10 +1,10 @@
 import { Queue, Worker, Job } from 'bullmq';
-import { connection } from '../redis';
+import { getRedisInstance } from '../connections';
 import { webhookManager } from './webhook-manager';
 
 // Webhook queue for processing deliveries
 export const webhookQueue = new Queue('webhook-delivery', {
-  connection,
+  connection: getRedisInstance(),
   defaultJobOptions: {
     removeOnComplete: 100 as any,
     removeOnFail: 50 as any,
@@ -40,7 +40,7 @@ export const webhookWorker = new Worker(
     }
   },
   {
-    connection,
+    connection: getRedisInstance(),
     concurrency: 10, // Process up to 10 webhooks concurrently
     removeOnComplete: 100 as any,
     removeOnFail: 50 as any,

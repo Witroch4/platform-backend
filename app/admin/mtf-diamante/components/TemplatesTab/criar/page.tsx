@@ -1579,7 +1579,7 @@ export default function CreateTemplatePage() {
                     {/* Header */}
                     {headerType === "TEXT" && headerText && (
                       <div 
-                        className="font-bold text-center mb-2 text-gray-900 dark:text-white break-words overflow-hidden"
+                        className="font-bold text-center mb-2 text-gray-900 dark:text-white break-words overflow-wrap-anywhere"
                         dangerouslySetInnerHTML={{ __html: processWhatsAppFormatting(headerText) }}
                       />
                     )}
@@ -1646,7 +1646,7 @@ export default function CreateTemplatePage() {
                     {/* Footer */}
                     {footerText && (
                       <div 
-                        className="text-xs text-gray-500 dark:text-gray-400 mb-2"
+                        className="text-xs text-gray-500 dark:text-gray-400 mb-2 break-words overflow-wrap-anywhere"
                         dangerouslySetInnerHTML={{ __html: processWhatsAppFormatting(footerText) }}
                       />
                     )}

@@ -8,9 +8,9 @@ exports.updateAgendamento = updateAgendamento;
 exports.deleteAgendamento = deleteAgendamento;
 exports.selectMidiaForSending = selectMidiaForSending;
 exports.prepareWebhookData = prepareWebhookData;
-const prisma_1 = require("../lib/prisma");
+const prisma_1 = require("@/lib/prisma");
 const minio_1 = require("./minio");
-const agendamento_queue_1 = require("../lib/queue/agendamento.queue");
+const agendamento_queue_1 = require("@/lib/queue/agendamento.queue");
 /**
  * Cria um novo agendamento
  */
@@ -21,20 +21,20 @@ async function createAgendamento(data) {
             data: {
                 userId: data.userId,
                 accountId: data.accountId,
-                Data: data.Data,
-                Descricao: data.Descricao,
-                Facebook: data.Facebook || false,
-                Instagram: data.Instagram || false,
-                Linkedin: data.Linkedin || false,
-                X: data.X || false,
-                Stories: data.Stories || false,
-                Reels: data.Reels || false,
-                PostNormal: data.PostNormal || false,
-                Diario: data.Diario || false,
-                Semanal: data.Semanal || false,
-                Randomizar: data.Randomizar || false,
-                TratarComoUnicoPost: data.TratarComoUnicoPost || false,
-                TratarComoPostagensIndividuais: data.TratarComoPostagensIndividuais || false,
+                data: data.Data,
+                descricao: data.Descricao,
+                facebook: data.Facebook || false,
+                instagram: data.Instagram || false,
+                linkedin: data.Linkedin || false,
+                x: data.X || false,
+                stories: data.Stories || false,
+                reels: data.Reels || false,
+                postNormal: data.PostNormal || false,
+                diario: data.Diario || false,
+                semanal: data.Semanal || false,
+                randomizar: data.Randomizar || false,
+                tratarComoUnicoPost: data.TratarComoUnicoPost || false,
+                tratarComoPostagensIndividuais: data.TratarComoPostagensIndividuais || false,
             },
         });
         console.log(`[AgendamentoService] Agendamento criado: ${agendamento.id}`);
@@ -65,11 +65,11 @@ async function createAgendamento(data) {
         // Agenda o job na fila BullMQ
         await (0, agendamento_queue_1.scheduleAgendamentoJob)({
             id: agendamento.id,
-            Data: agendamento.Data,
+            Data: agendamento.data,
             userId: agendamento.userId,
             accountId: agendamento.accountId,
-            Diario: agendamento.Diario,
-            Semanal: agendamento.Semanal,
+            Diario: agendamento.diario,
+            Semanal: agendamento.semanal,
         });
         return agendamento;
     }
@@ -152,7 +152,7 @@ async function getAgendamentosByUser(userId) {
                 },
             },
             orderBy: {
-                Data: 'asc',
+                data: 'asc',
             },
         });
     }
@@ -179,7 +179,7 @@ async function getAgendamentosByAccount(accountId) {
                 },
             },
             orderBy: {
-                Data: 'asc',
+                data: 'asc',
             },
         });
     }
@@ -205,33 +205,33 @@ async function updateAgendamento(id, data) {
         const updateData = {};
         // Atualiza apenas os campos fornecidos
         if (data.Data !== undefined)
-            updateData.Data = data.Data;
+            updateData.data = data.Data;
         if (data.Descricao !== undefined)
-            updateData.Descricao = data.Descricao;
+            updateData.descricao = data.Descricao;
         if (data.Facebook !== undefined)
-            updateData.Facebook = data.Facebook;
+            updateData.facebook = data.Facebook;
         if (data.Instagram !== undefined)
-            updateData.Instagram = data.Instagram;
+            updateData.instagram = data.Instagram;
         if (data.Linkedin !== undefined)
-            updateData.Linkedin = data.Linkedin;
+            updateData.linkedin = data.Linkedin;
         if (data.X !== undefined)
-            updateData.X = data.X;
+            updateData.x = data.X;
         if (data.Stories !== undefined)
-            updateData.Stories = data.Stories;
+            updateData.stories = data.Stories;
         if (data.Reels !== undefined)
-            updateData.Reels = data.Reels;
+            updateData.reels = data.Reels;
         if (data.PostNormal !== undefined)
-            updateData.PostNormal = data.PostNormal;
+            updateData.postNormal = data.PostNormal;
         if (data.Diario !== undefined)
-            updateData.Diario = data.Diario;
+            updateData.diario = data.Diario;
         if (data.Semanal !== undefined)
-            updateData.Semanal = data.Semanal;
+            updateData.semanal = data.Semanal;
         if (data.Randomizar !== undefined)
-            updateData.Randomizar = data.Randomizar;
+            updateData.randomizar = data.Randomizar;
         if (data.TratarComoUnicoPost !== undefined)
-            updateData.TratarComoUnicoPost = data.TratarComoUnicoPost;
+            updateData.tratarComoUnicoPost = data.TratarComoUnicoPost;
         if (data.TratarComoPostagensIndividuais !== undefined)
-            updateData.TratarComoPostagensIndividuais = data.TratarComoPostagensIndividuais;
+            updateData.tratarComoPostagensIndividuais = data.TratarComoPostagensIndividuais;
         // Atualiza o agendamento
         const updatedAgendamento = await prisma_1.prisma.agendamento.update({
             where: { id },
@@ -273,11 +273,11 @@ async function updateAgendamento(id, data) {
             // Agenda um novo job com a nova data
             await (0, agendamento_queue_1.scheduleAgendamentoJob)({
                 id: updatedAgendamento.id,
-                Data: updatedAgendamento.Data,
+                Data: updatedAgendamento.data,
                 userId: updatedAgendamento.userId,
                 accountId: updatedAgendamento.accountId,
-                Diario: updatedAgendamento.Diario,
-                Semanal: updatedAgendamento.Semanal,
+                Diario: updatedAgendamento.diario,
+                Semanal: updatedAgendamento.semanal,
             });
         }
         return updatedAgendamento;
@@ -319,10 +319,10 @@ async function selectMidiaForSending(agendamentoId) {
             console.log("[AgendamentoService] Agendamento não encontrado ou sem mídias:", agendamentoId);
             return null;
         }
-        console.log(`[AgendamentoService] Agendamento ${agendamentoId} tem ${agendamento.midias.length} mídias. TratarComoPostagensIndividuais: ${agendamento.TratarComoPostagensIndividuais}, Randomizar: ${agendamento.Randomizar}`);
+        console.log(`[AgendamentoService] Agendamento ${agendamentoId} tem ${agendamento.midias.length} mídias. TratarComoPostagensIndividuais: ${agendamento.tratarComoPostagensIndividuais}, Randomizar: ${agendamento.randomizar}`);
         let selectedMidia = null;
         // Se for para tratar como postagens individuais, seleciona com base no contador
-        if (agendamento.TratarComoPostagensIndividuais) {
+        if (agendamento.tratarComoPostagensIndividuais) {
             // Determina o menor contador
             const minContador = Math.min(...agendamento.midias.map(m => m.contador));
             console.log(`[AgendamentoService] Menor contador encontrado: ${minContador}`);
@@ -342,7 +342,7 @@ async function selectMidiaForSending(agendamentoId) {
                 selectedMidia.contador += 1;
             }
         }
-        else if (agendamento.Randomizar) {
+        else if (agendamento.randomizar) {
             // Se for apenas para randomizar (sem tratar como postagens individuais),
             // seleciona uma mídia aleatoriamente sem incrementar contador
             selectedMidia = agendamento.midias[Math.floor(Math.random() * agendamento.midias.length)];
@@ -411,7 +411,7 @@ async function prepareWebhookData(agendamentoId) {
         let midia = null;
         let allMidias = null;
         // Se for para tratar como postagens individuais, seleciona apenas uma mídia
-        if (agendamento.TratarComoPostagensIndividuais) {
+        if (agendamento.tratarComoPostagensIndividuais) {
             midia = await selectMidiaForSending(agendamentoId);
             if (!midia) {
                 throw new Error(`Nenhuma mídia disponível para o agendamento: ${agendamentoId}`);
@@ -429,19 +429,19 @@ async function prepareWebhookData(agendamentoId) {
             userId: agendamento.userId,
             userName: agendamento.user.name,
             userEmail: agendamento.user.email,
-            descricao: agendamento.Descricao,
-            data: agendamento.Data.toISOString(),
-            instagram: agendamento.Instagram,
-            facebook: agendamento.Facebook,
-            linkedin: agendamento.Linkedin,
-            x: agendamento.X,
-            stories: agendamento.Stories,
-            reels: agendamento.Reels,
-            postNormal: agendamento.PostNormal,
-            diario: agendamento.Diario,
-            semanal: agendamento.Semanal,
-            randomizar: agendamento.Randomizar,
-            tratarComoPostagensIndividuais: agendamento.TratarComoPostagensIndividuais,
+            descricao: agendamento.descricao,
+            data: agendamento.data.toISOString(),
+            instagram: agendamento.instagram,
+            facebook: agendamento.facebook,
+            linkedin: agendamento.linkedin,
+            x: agendamento.x,
+            stories: agendamento.stories,
+            reels: agendamento.reels,
+            postNormal: agendamento.postNormal,
+            diario: agendamento.diario,
+            semanal: agendamento.semanal,
+            randomizar: agendamento.randomizar,
+            tratarComoPostagensIndividuais: agendamento.tratarComoPostagensIndividuais,
             tokenExpired,
             instagramAccountId: instagramAccount.providerAccountId,
             instagramAccessToken: instagramAccount.access_token,
@@ -449,7 +449,7 @@ async function prepareWebhookData(agendamentoId) {
             igUsername: instagramAccount.igUsername,
         };
         // Se for para tratar como postagens individuais, adiciona apenas uma mídia
-        if (agendamento.TratarComoPostagensIndividuais && midia) {
+        if (agendamento.tratarComoPostagensIndividuais && midia) {
             webhookData.midiaUrl = correctMinioUrl(midia.url);
             webhookData.midiaMimeType = midia.mime_type;
             webhookData.midiaThumbnailUrl = midia.thumbnail_url ? correctMinioUrl(midia.thumbnail_url) : null;
@@ -467,7 +467,7 @@ async function prepareWebhookData(agendamentoId) {
             webhookData.midiaThumbnailUrl = allMidias[0].thumbnail_url ? correctMinioUrl(allMidias[0].thumbnail_url) : null;
         }
         // Log dos dados do webhook
-        if (agendamento.TratarComoPostagensIndividuais) {
+        if (agendamento.tratarComoPostagensIndividuais) {
             console.log(`[AgendamentoService] Webhook preparado para agendamento ${agendamentoId} (postagem individual):`, {
                 id: webhookData.id,
                 midiaUrl: webhookData.midiaUrl,

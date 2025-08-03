@@ -36,7 +36,7 @@ export async function POST(request: Request): Promise<Response> {
       where: { id: leadId },
       include: {
         lead: {
-          select: { phone: true }
+          select: { phone: true, name: true }
         }
       }
     });

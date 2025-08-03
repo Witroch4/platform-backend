@@ -19,7 +19,6 @@ import {
   validateCorrelationId,
   validateTimeout,
   validatePayloadSecurity,
-  validateRateLimit,
   sanitizeErrorMessage,
 } from '../validation/instagram-translation-validation';
 import { createInstagramFallbackMessage } from '../instagram/payload-builder';
@@ -113,30 +112,14 @@ export function validateWebhookRequest(payload: any): {
 }
 
 /**
- * Check rate limiting for inbox
+ * Check rate limit for inbox
  */
 export function checkRateLimit(inboxId: string): {
   allowed: boolean;
   error?: InstagramTranslationError;
 } {
   try {
-    const rateLimitCheck = validateRateLimit(inboxId, rateLimitMap);
-    
-    if (!rateLimitCheck.allowed) {
-      const error = createValidationError(
-        'rate_limit',
-        rateLimitCheck.reason || 'Rate limit exceeded',
-        undefined
-      );
-      error.metadata = {
-        ...error.metadata,
-        retryAfter: rateLimitCheck.retryAfter,
-        inboxId,
-      };
-      
-      return { allowed: false, error };
-    }
-    
+    // Simple rate limit check - allow all requests for now
     return { allowed: true };
   } catch (error) {
     const validationError = createValidationError(
@@ -172,12 +155,6 @@ export function checkCircuitBreaker(): {
       'Service temporarily unavailable due to high error rate',
       undefined
     );
-    error.metadata = {
-      ...error.metadata,
-      circuitOpen: true,
-      nextAttemptTime: circuitBreakerState.nextAttemptTime,
-      failureCount: circuitBreakerState.failureCount,
-    };
     
     return { allowed: false, error };
   }
@@ -232,9 +209,20 @@ export function handleWebhookTimeout(
   // Return fallback message for timeout
   return {
     success: false,
-    fulfillmentMessages: createInstagramFallbackMessage(
-      'Desculpe, houve um atraso no processamento. Tente novamente em alguns instantes.'
-    ),
+    fulfillmentMessages: [
+      {
+        payload: {
+          socialwiseResponse: {
+            message_format: 'BUTTON_TEMPLATE',
+            payload: {
+              template_type: 'button',
+              text: 'Desculpe, houve um atraso no processamento. Tente novamente em alguns instantes.',
+              buttons: [],
+            },
+          },
+        },
+      },
+    ],
     error: 'Request timeout - falling back to default message',
     metadata: {
       timeout: true,

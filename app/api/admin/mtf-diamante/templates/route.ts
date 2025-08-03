@@ -117,7 +117,11 @@ async function getUserVariables(userId: string): Promise<MtfDiamanteVariavel[]> 
       });
     }
 
-    return config.variaveis;
+    return config.variaveis.map(v => ({
+      id: v.id,
+      chave: v.chave,
+      valor: String(v.valor || ''),
+    }));
   } catch (error) {
     console.error('Erro ao buscar variáveis do usuário:', error);
     // Retorna variáveis padrão em caso de erro

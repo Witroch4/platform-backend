@@ -10,6 +10,7 @@ export interface IFollowUpJobData {
     automacaoId: string;
     quickReplyTexto?: string | null; // Agora permite string, null ou undefined
     followUpMsg: string;
+    buttonPayload?: string;
   }
 
 

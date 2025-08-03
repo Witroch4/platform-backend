@@ -40,8 +40,8 @@ export function HeroSection() {
 				<div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
 					<div className="text-center lg:text-left">
 						<div className="flex items-center justify-center lg:justify-start mb-6">
-							<Image
-								src="/01 WitdeT.png"
+							<img
+								src="/01%20WitdeT.png"
 								alt="Socialwise Chatwit Logo"
 								width={80}
 								height={80}
@@ -64,14 +64,14 @@ export function HeroSection() {
 						{/* AI Models Integration */}
 						<div className="flex items-center justify-center lg:justify-start mb-8 space-x-4">
 							<div className="flex items-center space-x-2">
-								<Image
+								<img
 									src="/gpt-logo.png"
 									alt="OpenAI GPT"
 									width={32}
 									height={32}
 									className="dark:hidden"
 								/>
-								<Image
+								<img
 									src="/gpt-dark-logo.png"
 									alt="OpenAI GPT"
 									width={32}
@@ -81,14 +81,14 @@ export function HeroSection() {
 								<span className="text-sm text-gray-600 dark:text-gray-400">GPT-4</span>
 							</div>
 							<div className="flex items-center space-x-2">
-								<Image
+								<img
 									src="/gemine-logo.png"
 									alt="Google Gemini"
 									width={32}
 									height={32}
 									className="dark:hidden"
 								/>
-								<Image
+								<img
 									src="/gemine-dack-logo.png"
 									alt="Google Gemini"
 									width={32}
@@ -147,7 +147,7 @@ export function HeroSection() {
 										<video
 											id="hero-video"
 											className="w-full h-full object-cover rounded-xl"
-											poster="/01 WitdeT.png"
+											poster="/01%20WitdeT.png"
 											preload="metadata"
 											muted={isVideoMuted}
 											loop

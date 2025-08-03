@@ -1,24 +1,9 @@
-import { Redis } from 'ioredis';
+import { getRedisInstance } from '../lib/connections';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Configuração do Redis
-const redisConfig = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: Number.parseInt(process.env.REDIS_PORT || '6379'),
-  password: process.env.REDIS_PASSWORD,
-  tls: process.env.REDIS_TLS === 'true' ? {} : undefined,
-};
-
-console.log('Configuração de conexão com o Redis:', {
-  ...redisConfig,
-  password: redisConfig.password ? '*****' : undefined,
-  useTLS: !!redisConfig.tls,
-});
-
-// Conecta ao Redis
-const redis = new Redis(redisConfig);
+console.log('Iniciando script de listagem de filas...');
 
 // Padrões de chaves para filas
 const queuePatterns = [
@@ -30,6 +15,8 @@ const queuePatterns = [
 
 // Função para listar as filas
 async function listQueues() {
+  const redis = getRedisInstance();
+  
   try {
     console.log('Listando filas no Redis...');
 

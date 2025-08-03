@@ -75,11 +75,12 @@ export async function getAllWhatsAppConfigs(usuarioChatwitId: string) {
         channelType: true,
         whatsappApiKey: true,
         phoneNumberId: true,
-        whatsappBusinessAccountId: true
+        whatsappBusinessAccountId: true,
+        usuarioChatwitId: true
       }
     });
 
-    const configs = [];
+    const configs: any[] = [];
 
     // Adicionar configuração global se existir
     if (globalConfig) {

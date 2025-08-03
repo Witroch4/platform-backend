@@ -5,16 +5,16 @@
  */
 
 import { QueueUserRole } from '@prisma/client'
+import { Permission } from '../constants'
 
-// User
+// User - Compatível com o tipo do queue-management.ts
 export interface User {
   id: string
-  userId: string
   email: string
   name: string
   role: QueueUserRole
-  permissions: string[]
-  queueAccess: Record<string, string[]>
+  permissions: Permission[]
+  queueAccess: Record<string, Permission[]>
   createdAt: Date
   updatedAt: Date
   lastLogin?: Date

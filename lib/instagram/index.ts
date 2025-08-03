@@ -19,6 +19,20 @@ export * from '../validation/instagram-translation-validation';
 // Error Handling
 export * from '../error-handling/instagram-translation-errors';
 
+// Message Converter - export specific types to avoid conflicts
+export {
+  messageConverter,
+  type ConversionResult,
+  type InstagramTemplate,
+  type WhatsAppTemplate,
+} from './message-converter';
+
+// Conversion Pipeline
+export * from './conversion-pipeline';
+
+// Template Adapter
+export * from './template-adapter';
+
 // Re-export commonly used types and functions
 export type {
   InstagramTranslationJobData,
@@ -31,11 +45,7 @@ export type {
   HealthAlert,
 } from './queue-monitor';
 
-export type {
-  WhatsAppTemplate,
-  InstagramTemplate,
-  ConversionResult,
-} from '../validation/instagram-translation-validation';
+// Types are already exported from message-converter above
 
 export {
   InstagramTranslationError,

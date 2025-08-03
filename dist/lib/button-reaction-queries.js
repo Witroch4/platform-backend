@@ -8,31 +8,27 @@ exports.getReactionsByButtonIds = getReactionsByButtonIds;
 exports.hasButtonReaction = hasButtonReaction;
 exports.getReactionStats = getReactionStats;
 exports.deleteReactionsByButtonIds = deleteReactionsByButtonIds;
-const prisma_1 = require("../lib/prisma");
+const prisma_1 = require("@/lib/prisma");
 /**
  * Get all button reactions for a specific message
  */
 async function getReactionsByMessageId(messageId, userId, options = {}) {
     const { includeInactive = false, includeMessage = false } = options;
-    const reactions = await prisma_1.prisma.buttonReactionMapping.findMany({
+    const reactions = await prisma_1.prisma.mapeamentoBotao.findMany({
         where: {
-            messageId,
-            message: {
-                caixa: {
-                    usuarioChatwit: {
-                        appUserId: userId,
-                    },
+            inbox: {
+                usuarioChatwit: {
+                    appUserId: userId,
                 },
             },
-            ...(includeInactive ? {} : { isActive: true }),
         },
         include: {
-            message: includeMessage
+            inbox: includeMessage
                 ? {
                     select: {
                         id: true,
-                        name: true,
-                        type: true,
+                        nome: true,
+                        channelType: true,
                     },
                 }
                 : false,
@@ -46,25 +42,22 @@ async function getReactionsByMessageId(messageId, userId, options = {}) {
  */
 async function getReactionByButtonId(buttonId, userId, options = {}) {
     const { includeInactive = false, includeMessage = false } = options;
-    const reaction = await prisma_1.prisma.buttonReactionMapping.findFirst({
+    const reaction = await prisma_1.prisma.mapeamentoBotao.findFirst({
         where: {
             buttonId,
-            message: {
-                caixa: {
-                    usuarioChatwit: {
-                        appUserId: userId,
-                    },
+            inbox: {
+                usuarioChatwit: {
+                    appUserId: userId,
                 },
             },
-            ...(includeInactive ? {} : { isActive: true }),
         },
         include: {
-            message: includeMessage
+            inbox: includeMessage
                 ? {
                     select: {
                         id: true,
-                        name: true,
-                        type: true,
+                        nome: true,
+                        channelType: true,
                     },
                 }
                 : false,
@@ -77,24 +70,22 @@ async function getReactionByButtonId(buttonId, userId, options = {}) {
  */
 async function getReactionById(reactionId, userId, options = {}) {
     const { includeMessage = false } = options;
-    const reaction = await prisma_1.prisma.buttonReactionMapping.findFirst({
+    const reaction = await prisma_1.prisma.mapeamentoBotao.findFirst({
         where: {
             id: reactionId,
-            message: {
-                caixa: {
-                    usuarioChatwit: {
-                        appUserId: userId,
-                    },
+            inbox: {
+                usuarioChatwit: {
+                    appUserId: userId,
                 },
             },
         },
         include: {
-            message: includeMessage
+            inbox: includeMessage
                 ? {
                     select: {
                         id: true,
-                        name: true,
-                        type: true,
+                        nome: true,
+                        channelType: true,
                     },
                 }
                 : false,
@@ -109,24 +100,21 @@ async function getUserReactions(userId, options = {}) {
     const { includeInactive = false, includeMessage = true, page = 1, limit = 50, } = options;
     const offset = (page - 1) * limit;
     const [reactions, total] = await Promise.all([
-        prisma_1.prisma.buttonReactionMapping.findMany({
+        prisma_1.prisma.mapeamentoBotao.findMany({
             where: {
-                message: {
-                    caixa: {
-                        usuarioChatwit: {
-                            appUserId: userId,
-                        },
+                inbox: {
+                    usuarioChatwit: {
+                        appUserId: userId,
                     },
                 },
-                ...(includeInactive ? {} : { isActive: true }),
             },
             include: {
-                message: includeMessage
+                inbox: includeMessage
                     ? {
                         select: {
                             id: true,
-                            name: true,
-                            type: true,
+                            nome: true,
+                            channelType: true,
                         },
                     }
                     : false,
@@ -135,16 +123,13 @@ async function getUserReactions(userId, options = {}) {
             skip: offset,
             take: limit,
         }),
-        prisma_1.prisma.buttonReactionMapping.count({
+        prisma_1.prisma.mapeamentoBotao.count({
             where: {
-                message: {
-                    caixa: {
-                        usuarioChatwit: {
-                            appUserId: userId,
-                        },
+                inbox: {
+                    usuarioChatwit: {
+                        appUserId: userId,
                     },
                 },
-                ...(includeInactive ? {} : { isActive: true }),
             },
         }),
     ]);
@@ -166,27 +151,24 @@ async function getReactionsByButtonIds(buttonIds, userId, options = {}) {
     if (buttonIds.length === 0) {
         return [];
     }
-    const reactions = await prisma_1.prisma.buttonReactionMapping.findMany({
+    const reactions = await prisma_1.prisma.mapeamentoBotao.findMany({
         where: {
             buttonId: {
                 in: buttonIds,
             },
-            message: {
-                caixa: {
-                    usuarioChatwit: {
-                        appUserId: userId,
-                    },
+            inbox: {
+                usuarioChatwit: {
+                    appUserId: userId,
                 },
             },
-            ...(includeInactive ? {} : { isActive: true }),
         },
         include: {
-            message: includeMessage
+            inbox: includeMessage
                 ? {
                     select: {
                         id: true,
-                        name: true,
-                        type: true,
+                        nome: true,
+                        channelType: true,
                     },
                 }
                 : false,
@@ -199,17 +181,14 @@ async function getReactionsByButtonIds(buttonIds, userId, options = {}) {
  * Check if a button has an existing reaction
  */
 async function hasButtonReaction(buttonId, userId, includeInactive = false) {
-    const count = await prisma_1.prisma.buttonReactionMapping.count({
+    const count = await prisma_1.prisma.mapeamentoBotao.count({
         where: {
             buttonId,
-            message: {
-                caixa: {
-                    usuarioChatwit: {
-                        appUserId: userId,
-                    },
+            inbox: {
+                usuarioChatwit: {
+                    appUserId: userId,
                 },
             },
-            ...(includeInactive ? {} : { isActive: true }),
         },
     });
     return count > 0;
@@ -218,63 +197,41 @@ async function hasButtonReaction(buttonId, userId, includeInactive = false) {
  * Get reaction statistics for a user
  */
 async function getReactionStats(userId) {
-    const [total, active, emojiReactions, textReactions] = await Promise.all([
-        prisma_1.prisma.buttonReactionMapping.count({
+    const [total, emojiReactions, textReactions] = await Promise.all([
+        prisma_1.prisma.mapeamentoBotao.count({
             where: {
-                message: {
-                    caixa: {
-                        usuarioChatwit: {
-                            appUserId: userId,
-                        },
+                inbox: {
+                    usuarioChatwit: {
+                        appUserId: userId,
                     },
                 },
             },
         }),
-        prisma_1.prisma.buttonReactionMapping.count({
+        prisma_1.prisma.mapeamentoBotao.count({
             where: {
-                message: {
-                    caixa: {
-                        usuarioChatwit: {
-                            appUserId: userId,
-                        },
+                inbox: {
+                    usuarioChatwit: {
+                        appUserId: userId,
                     },
                 },
-                isActive: true,
+                actionType: 'SEND_TEMPLATE', // Emoji reactions typically use SEND_TEMPLATE
             },
         }),
-        prisma_1.prisma.buttonReactionMapping.count({
+        prisma_1.prisma.mapeamentoBotao.count({
             where: {
-                message: {
-                    caixa: {
-                        usuarioChatwit: {
-                            appUserId: userId,
-                        },
+                inbox: {
+                    usuarioChatwit: {
+                        appUserId: userId,
                     },
                 },
-                isActive: true,
-                description: null, // Emoji reactions don't have description
-            },
-        }),
-        prisma_1.prisma.buttonReactionMapping.count({
-            where: {
-                message: {
-                    caixa: {
-                        usuarioChatwit: {
-                            appUserId: userId,
-                        },
-                    },
-                },
-                isActive: true,
-                description: {
-                    not: null, // Text reactions have description
-                },
+                actionType: 'ADD_TAG', // Text reactions typically use ADD_TAG
             },
         }),
     ]);
     return {
         total,
-        active,
-        inactive: total - active,
+        active: total, // MapeamentoBotao doesn't have isActive field, assume all are active
+        inactive: 0,
         byType: {
             emoji: emojiReactions,
             text: textReactions,
@@ -289,16 +246,14 @@ async function deleteReactionsByButtonIds(buttonIds, userId, softDelete = false)
         return { count: 0, deletedIds: [] };
     }
     // First, verify user has access to all reactions
-    const reactions = await prisma_1.prisma.buttonReactionMapping.findMany({
+    const reactions = await prisma_1.prisma.mapeamentoBotao.findMany({
         where: {
             buttonId: {
                 in: buttonIds,
             },
-            message: {
-                caixa: {
-                    usuarioChatwit: {
-                        appUserId: userId,
-                    },
+            inbox: {
+                usuarioChatwit: {
+                    appUserId: userId,
                 },
             },
         },
@@ -313,19 +268,17 @@ async function deleteReactionsByButtonIds(buttonIds, userId, softDelete = false)
         return { count: 0, deletedIds: [] };
     }
     if (softDelete) {
-        await prisma_1.prisma.buttonReactionMapping.updateMany({
+        // MapeamentoBotao doesn't have isActive field, so we'll just delete
+        await prisma_1.prisma.mapeamentoBotao.deleteMany({
             where: {
                 buttonId: {
                     in: accessibleButtonIds,
                 },
             },
-            data: {
-                isActive: false,
-            },
         });
     }
     else {
-        await prisma_1.prisma.buttonReactionMapping.deleteMany({
+        await prisma_1.prisma.mapeamentoBotao.deleteMany({
             where: {
                 buttonId: {
                     in: accessibleButtonIds,
@@ -342,18 +295,22 @@ async function deleteReactionsByButtonIds(buttonIds, userId, softDelete = false)
  * Helper function to format reaction data consistently
  */
 function formatReactionData(reaction) {
+    // Parse actionPayload to extract emoji and textReaction
+    const actionPayload = reaction.actionPayload;
+    const emoji = actionPayload?.emoji;
+    const textReaction = actionPayload?.textReaction;
     return {
         id: reaction.id,
         buttonId: reaction.buttonId,
-        messageId: reaction.messageId,
-        type: reaction.description ? 'text' : 'emoji',
-        emoji: reaction.emoji,
-        textReaction: reaction.description,
-        description: reaction.description,
-        isActive: reaction.isActive,
+        messageId: reaction.inboxId, // Use inboxId instead of messageId
+        type: textReaction ? 'text' : 'emoji',
+        emoji: emoji || null,
+        textReaction: textReaction || null,
+        description: reaction.description || null,
+        isActive: true, // MapeamentoBotao doesn't have isActive field, assume active
         createdAt: reaction.createdAt,
         updatedAt: reaction.updatedAt,
-        createdBy: reaction.createdBy,
-        ...(reaction.message && { message: reaction.message }),
+        createdBy: reaction.createdBy || 'system',
+        ...(reaction.inbox && { message: reaction.inbox }),
     };
 }

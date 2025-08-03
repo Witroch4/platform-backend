@@ -4,14 +4,21 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.extractWebhookData = extractWebhookData;
+exports.extractUnifiedWebhookData = extractUnifiedWebhookData;
 exports.extractContactPhone = extractContactPhone;
 exports.validateWebhookData = validateWebhookData;
+exports.validateUnifiedWebhookData = validateUnifiedWebhookData;
+exports.sanitizeWebhookPayload = sanitizeWebhookPayload;
 exports.extractMessageContent = extractMessageContent;
 exports.extractMessageType = extractMessageType;
 exports.hasValidApiKey = hasValidApiKey;
 exports.logWebhookData = logWebhookData;
+exports.detectChannelType = detectChannelType;
+exports.logUnifiedWebhookData = logUnifiedWebhookData;
+exports.logWebhookError = logWebhookError;
 /**
  * Extracts WhatsApp API key and message information from Dialogflow payload
+ * Legacy function maintained for backward compatibility
  */
 function extractWebhookData(payload) {
     // Handle null/undefined payloads
@@ -34,11 +41,12 @@ function extractWebhookData(payload) {
         payload.originalDetectIntentRequest?.payload?.wamid ||
         payload.originalDetectIntentRequest?.payload?.id ||
         `msg_${Date.now()}`;
-    // Extract conversation ID
-    const conversationId = payload.originalDetectIntentRequest?.payload?.conversation_id ||
+    // Extract conversation ID and ensure it's a string
+    const rawConversationId = payload.originalDetectIntentRequest?.payload?.conversation_id ||
         payload.originalDetectIntentRequest?.payload?.from ||
         payload.session?.split('/').pop() ||
         '';
+    const conversationId = String(rawConversationId);
     // Extract contact phone from session or payload
     const contactPhone = extractContactPhone(payload);
     // Extract inbox ID and convert to string
@@ -55,6 +63,80 @@ function extractWebhookData(payload) {
         contactPhone,
         inboxId,
         intentName
+    };
+}
+/**
+ * Enhanced extraction function for unified webhook payload structure
+ * Optimized for millisecond response times and new "Super Modelo" requirements
+ */
+function extractUnifiedWebhookData(payload) {
+    // Handle null/undefined payloads with minimal processing
+    if (!payload || typeof payload !== 'object') {
+        throw new Error('Invalid payload: payload is null or not an object');
+    }
+    const originalDetectIntentRequest = payload.originalDetectIntentRequest;
+    if (!originalDetectIntentRequest?.payload) {
+        throw new Error('Invalid payload: missing originalDetectIntentRequest.payload');
+    }
+    const chatwootPayload = originalDetectIntentRequest.payload;
+    // Extract required fields with validation
+    const inboxId = String(chatwootPayload.inbox_id || '');
+    if (!inboxId) {
+        throw new Error('Invalid payload: missing inbox_id');
+    }
+    const contactPhone = extractContactPhone(payload);
+    if (!contactPhone) {
+        throw new Error('Invalid payload: missing or invalid contact_phone');
+    }
+    // Extract credentials (source of truth from payload)
+    const whatsappApiKey = chatwootPayload.whatsapp_api_key || chatwootPayload.access_token || '';
+    const phoneNumberId = chatwootPayload.phone_number_id || '';
+    const businessId = chatwootPayload.business_id || '';
+    if (!whatsappApiKey) {
+        throw new Error('Invalid payload: missing whatsapp_api_key');
+    }
+    // Extract message context
+    const messageId = chatwootPayload.message_id || chatwootPayload.wamid || chatwootPayload.id || `msg_${Date.now()}`;
+    const wamid = chatwootPayload.wamid || messageId;
+    const rawConversationId = chatwootPayload.conversation_id || chatwootPayload.from || contactPhone;
+    const conversationId = String(rawConversationId);
+    // Extract contact source for lead identification
+    const contactSource = chatwootPayload.contact_source || 'chatwit_webhook';
+    // Determine interaction type
+    const interactive = chatwootPayload.interactive;
+    let interactionType = 'intent';
+    let intentName;
+    let buttonId;
+    if (interactive?.type === 'button_reply' || interactive?.type === 'list_reply') {
+        interactionType = 'button_reply';
+        buttonId = interactive.button_reply?.id || interactive.list_reply?.id;
+    }
+    else {
+        intentName = payload.queryResult?.intent?.displayName || 'Unknown';
+    }
+    // Extract lead data for persistence
+    const leadData = {
+        messageId: Number(chatwootPayload.message_id) || 0,
+        accountId: Number(chatwootPayload.account_id) || 0,
+        accountName: chatwootPayload.account_name || '',
+    };
+    return {
+        inboxId,
+        contactPhone,
+        contactSource,
+        credentials: {
+            whatsappApiKey,
+            phoneNumberId,
+            businessId,
+        },
+        messageId,
+        wamid,
+        conversationId,
+        interactionType,
+        intentName,
+        buttonId,
+        leadData,
+        originalPayload: payload,
     };
 }
 /**
@@ -94,11 +176,111 @@ function extractContactPhone(payload) {
 }
 /**
  * Validates if the extracted webhook data is complete
+ * Legacy function maintained for backward compatibility
  */
 function validateWebhookData(data) {
     return !!(data.messageId &&
         data.contactPhone &&
         data.intentName);
+}
+/**
+ * Validates unified webhook payload data
+ * Performs comprehensive validation for required fields and security
+ */
+function validateUnifiedWebhookData(data) {
+    const errors = [];
+    // Validate core identification
+    if (!data.inboxId || typeof data.inboxId !== 'string') {
+        errors.push('Invalid or missing inboxId');
+    }
+    if (!data.contactPhone || typeof data.contactPhone !== 'string') {
+        errors.push('Invalid or missing contactPhone');
+    }
+    else if (!/^\d{10,15}$/.test(data.contactPhone)) {
+        errors.push('contactPhone must be 10-15 digits');
+    }
+    if (!data.contactSource || typeof data.contactSource !== 'string') {
+        errors.push('Invalid or missing contactSource');
+    }
+    // Validate credentials
+    if (!data.credentials.whatsappApiKey || typeof data.credentials.whatsappApiKey !== 'string') {
+        errors.push('Invalid or missing whatsappApiKey');
+    }
+    else if (data.credentials.whatsappApiKey.length < 10) {
+        errors.push('whatsappApiKey too short (minimum 10 characters)');
+    }
+    // phoneNumberId and businessId are optional but should be strings if present
+    if (data.credentials.phoneNumberId && typeof data.credentials.phoneNumberId !== 'string') {
+        errors.push('phoneNumberId must be a string');
+    }
+    if (data.credentials.businessId && typeof data.credentials.businessId !== 'string') {
+        errors.push('businessId must be a string');
+    }
+    // Validate message context
+    if (!data.messageId || typeof data.messageId !== 'string') {
+        errors.push('Invalid or missing messageId');
+    }
+    if (!data.wamid || typeof data.wamid !== 'string') {
+        errors.push('Invalid or missing wamid');
+    }
+    // Validate interaction type specific fields
+    if (data.interactionType === 'intent') {
+        if (!data.intentName || typeof data.intentName !== 'string') {
+            errors.push('intentName is required for intent interactions');
+        }
+    }
+    else if (data.interactionType === 'button_reply') {
+        if (!data.buttonId || typeof data.buttonId !== 'string') {
+            errors.push('buttonId is required for button_reply interactions');
+        }
+    }
+    else {
+        errors.push('interactionType must be either "intent" or "button_reply"');
+    }
+    // Validate lead data types
+    if (typeof data.leadData.messageId !== 'number') {
+        errors.push('leadData.messageId must be a number');
+    }
+    if (typeof data.leadData.accountId !== 'number') {
+        errors.push('leadData.accountId must be a number');
+    }
+    return {
+        isValid: errors.length === 0,
+        errors,
+    };
+}
+/**
+ * Sanitizes webhook payload data for security
+ * Removes potentially dangerous fields and normalizes data
+ */
+function sanitizeWebhookPayload(data) {
+    return {
+        ...data,
+        // Sanitize phone number (remove non-digits)
+        contactPhone: data.contactPhone.replace(/\D/g, ''),
+        // Sanitize credentials (trim whitespace)
+        credentials: {
+            whatsappApiKey: data.credentials.whatsappApiKey.trim(),
+            phoneNumberId: data.credentials.phoneNumberId.trim(),
+            businessId: data.credentials.businessId.trim(),
+        },
+        // Sanitize string fields
+        inboxId: data.inboxId.trim(),
+        contactSource: data.contactSource.trim(),
+        messageId: data.messageId.trim(),
+        wamid: data.wamid.trim(),
+        conversationId: data.conversationId.trim(),
+        // Sanitize optional fields
+        intentName: data.intentName?.trim(),
+        buttonId: data.buttonId?.trim(),
+        // Sanitize lead data
+        leadData: {
+            ...data.leadData,
+            accountName: data.leadData.accountName.trim(),
+        },
+        // Keep original payload as-is for debugging (but could be removed in production)
+        originalPayload: data.originalPayload,
+    };
 }
 /**
  * Extracts message content from Dialogflow payload
@@ -136,6 +318,7 @@ function hasValidApiKey(payload) {
 }
 /**
  * Logs webhook data for debugging purposes
+ * Legacy function maintained for backward compatibility
  */
 function logWebhookData(data, payload) {
     console.log('[MTF Diamante Webhook] Dados extraídos:', {
@@ -151,4 +334,76 @@ function logWebhookData(data, payload) {
     });
     // Log detalhado do originalDetectIntentRequest.payload
     console.log('[MTF Diamante Webhook] originalDetectIntentRequest.payload:', JSON.stringify(payload.originalDetectIntentRequest?.payload, null, 2));
+}
+/**
+ * Detects the channel type from Dialogflow payload
+ */
+function detectChannelType(payload) {
+    // Handle null/undefined payloads
+    if (!payload || typeof payload !== 'object') {
+        return {
+            isInstagram: false,
+            channelType: 'unknown',
+            originalPayload: payload,
+        };
+    }
+    // Extract channel_type from originalDetectIntentRequest.payload
+    const channelType = payload.originalDetectIntentRequest?.payload?.channel_type || '';
+    // Check if it's Instagram channel
+    const isInstagram = channelType === 'Channel::Instagram';
+    return {
+        isInstagram,
+        channelType,
+        originalPayload: payload,
+    };
+}
+/**
+ * Enhanced logging function with correlation ID support for unified webhook data
+ */
+function logUnifiedWebhookData(data, correlationId, processingTimeMs) {
+    const logData = {
+        correlationId,
+        timestamp: new Date().toISOString(),
+        processingTimeMs,
+        extractedData: {
+            inboxId: data.inboxId,
+            contactPhone: data.contactPhone ? `${data.contactPhone.substring(0, 4)}****${data.contactPhone.substring(data.contactPhone.length - 4)}` : 'N/A',
+            contactSource: data.contactSource,
+            interactionType: data.interactionType,
+            intentName: data.intentName,
+            buttonId: data.buttonId,
+            hasCredentials: {
+                whatsappApiKey: !!data.credentials.whatsappApiKey,
+                phoneNumberId: !!data.credentials.phoneNumberId,
+                businessId: !!data.credentials.businessId,
+            },
+            messageContext: {
+                messageId: data.messageId,
+                wamid: data.wamid,
+                conversationId: data.conversationId ? `${data.conversationId.substring(0, 8)}...` : 'N/A',
+            },
+            leadData: {
+                messageId: data.leadData.messageId,
+                accountId: data.leadData.accountId,
+                accountName: data.leadData.accountName,
+            },
+        },
+    };
+    console.log(`[MTF Diamante Webhook] [${correlationId}] Unified webhook data extracted:`, logData);
+}
+/**
+ * Logs webhook processing errors with correlation ID
+ */
+function logWebhookError(error, correlationId, context) {
+    const errorData = {
+        correlationId,
+        timestamp: new Date().toISOString(),
+        error: {
+            name: error.name,
+            message: error.message,
+            stack: error.stack,
+        },
+        context,
+    };
+    console.error(`[MTF Diamante Webhook] [${correlationId}] Error:`, errorData);
 }

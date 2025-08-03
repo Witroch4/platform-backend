@@ -4,7 +4,7 @@
  * Central cache management system with intelligent invalidation
  */
 
-import Redis from 'ioredis'
+import { getRedisInstance } from '../../../lib/connections'
 import { getQueueManagementConfig } from '../config'
 import { CACHE_KEYS } from '../constants'
 
@@ -23,8 +23,8 @@ export interface CacheStats {
 }
 
 export class CacheManager {
-  private redis: Redis
-  private connectionPool: Redis[] = []
+  private redis: ReturnType<typeof getRedisInstance>
+  private connectionPool: ReturnType<typeof getRedisInstance>[] = []
   private poolSize: number = 5
   private currentPoolIndex: number = 0
   private stats: CacheStats = {
@@ -35,14 +35,14 @@ export class CacheManager {
     hitRate: 0,
   }
   private config = getQueueManagementConfig()
-  private invalidationSubscriber: Redis | null = null
+  private invalidationSubscriber: ReturnType<typeof getRedisInstance> | null = null
 
-  constructor(redis?: Redis) {
+  constructor(redis?: ReturnType<typeof getRedisInstance>) {
     if (redis) {
       this.redis = redis
       this.initializeConnectionPool()
     } else {
-      this.redis = this.createRedisConnection()
+      this.redis = getRedisInstance()
       this.initializeConnectionPool()
     }
 
@@ -64,51 +64,28 @@ export class CacheManager {
    */
   private initializeConnectionPool(): void {
     for (let i = 0; i < this.poolSize; i++) {
-      const connection = this.createRedisConnection()
+      const connection = getRedisInstance()
       this.connectionPool.push(connection)
     }
     console.log(`Initialized Redis connection pool with ${this.poolSize} connections`)
   }
 
-  /**
-   * Create a new Redis connection with optimized settings
-   */
-  private createRedisConnection(): Redis {
-    return new Redis({
-      host: this.config.redis.host,
-      port: this.config.redis.port,
-      password: this.config.redis.password,
-      db: this.config.redis.db,
-      maxRetriesPerRequest: this.config.redis.maxRetriesPerRequest,
-      retryDelayOnFailover: this.config.redis.retryDelayOnFailover,
-      enableReadyCheck: this.config.redis.enableReadyCheck,
-      lazyConnect: this.config.redis.lazyConnect,
-      keyPrefix: 'qm:', // Queue Management prefix
-      // Connection pool settings
-      family: 4,
-      keepAlive: true,
-      connectTimeout: 10000,
-      commandTimeout: 5000,
-      // Optimizations
-      enableAutoPipelining: true,
-      maxRetriesPerRequest: 3,
-    })
-  }
+
 
   /**
    * Get connection from pool (round-robin)
    */
-  private getPooledConnection(): Redis {
+  private getPooledConnection(): ReturnType<typeof getRedisInstance> {
     const connection = this.connectionPool[this.currentPoolIndex]
     this.currentPoolIndex = (this.currentPoolIndex + 1) % this.poolSize
-    return connection
+    return connection!
   }
 
   /**
    * Setup intelligent cache invalidation based on events
    */
   private setupCacheInvalidation(): void {
-    this.invalidationSubscriber = this.createRedisConnection()
+    this.invalidationSubscriber = getRedisInstance()
     
     // Subscribe to queue events for cache invalidation
     this.invalidationSubscriber.subscribe(
@@ -192,6 +169,22 @@ export class CacheManager {
    * Invalidate metrics cache for a queue
    */
   private async invalidateQueueMetrics(queueName: string): Promise<void> {
+    const patterns = [
+      `metrics:*:${queueName}:*`,
+      `metrics:aggregated:${queueName}:*`,
+      `metrics:realtime`,
+      `metrics:dashboard`
+    ]
+
+    for (const pattern of patterns) {
+      await this.deletePattern(pattern)
+    }
+  }
+
+  /**
+   * Invalidate metrics cache for a queue
+   */
+  private async invalidateMetricsCache(queueName: string): Promise<void> {
     const patterns = [
       `metrics:*:${queueName}:*`,
       `metrics:aggregated:${queueName}:*`,

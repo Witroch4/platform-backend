@@ -8,7 +8,7 @@ exports.groupErrorsByField = groupErrorsByField;
 exports.hasFieldError = hasFieldError;
 exports.getFieldErrors = getFieldErrors;
 const zod_1 = require("zod");
-const validation_1 = require("../../types/validation");
+const validation_1 = require("@/types/validation");
 // Custom validation error class
 class InteractiveMessageValidationError extends Error {
     errors;

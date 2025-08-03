@@ -6,15 +6,15 @@
 
 import { 
   User, 
-  Permission, 
-  UserRole,
   QueueConfig 
 } from '../../../types/queue-management'
+import { UserRole } from '../constants'
 import { 
   PERMISSIONS, 
   ROLE_PERMISSIONS, 
   USER_ROLES,
-  ERROR_CODES 
+  ERROR_CODES,
+  Permission
 } from '../constants'
 import { InsufficientPermissionsError, UserNotFoundError } from '../errors'
 import { Logger } from '../utils/logger'
@@ -71,7 +71,7 @@ export class PermissionManagerService implements PermissionManagerInterface {
       return false
     } catch (error) {
       this.logger.error('Error checking permission:', error, {
-        userId: user.userId,
+        userId: user.id,
         permission,
         queueName
       })
@@ -85,7 +85,7 @@ export class PermissionManagerService implements PermissionManagerInterface {
   checkPermission(user: User, permission: Permission, queueName?: string): void {
     if (!this.hasPermission(user, permission, queueName)) {
       const resource = queueName ? `queue:${queueName}` : 'system'
-      throw new InsufficientPermissionsError(permission, resource, user.userId)
+      throw new InsufficientPermissionsError(permission, resource, user.id)
     }
   }
 
@@ -113,7 +113,7 @@ export class PermissionManagerService implements PermissionManagerInterface {
         requiredPermission = PERMISSIONS.JOB_DELAY
         break
       default:
-        throw new InsufficientPermissionsError(action, `job:${jobId || 'unknown'}`, user.userId)
+        throw new InsufficientPermissionsError(action, `job:${jobId || 'unknown'}`, user.id)
     }
 
     this.checkPermission(user, requiredPermission, queueName)
@@ -121,7 +121,7 @@ export class PermissionManagerService implements PermissionManagerInterface {
     // Log the permission check
     this.logger.audit(
       `job:${action}`,
-      user.userId,
+      user.id,
       `job:${jobId || 'unknown'}`,
       { queueName, action }
     )
@@ -154,7 +154,7 @@ export class PermissionManagerService implements PermissionManagerInterface {
         requiredPermission = PERMISSIONS.QUEUE_RESUME
         break
       default:
-        throw new InsufficientPermissionsError(action, `queue:${queueName}`, user.userId)
+        throw new InsufficientPermissionsError(action, `queue:${queueName}`, user.id)
     }
 
     this.checkPermission(user, requiredPermission, queueName)
@@ -162,7 +162,7 @@ export class PermissionManagerService implements PermissionManagerInterface {
     // Log the permission check
     this.logger.audit(
       `queue:${action}`,
-      user.userId,
+      user.id,
       `queue:${queueName}`,
       { queueName, action }
     )
@@ -190,7 +190,7 @@ export class PermissionManagerService implements PermissionManagerInterface {
         this.checkPermission(user, PERMISSIONS.QUEUE_RESUME, queueName)
         break
       default:
-        throw new InsufficientPermissionsError(action, `queue:${queueName}`, user.userId)
+        throw new InsufficientPermissionsError(action, `queue:${queueName}`, user.id)
     }
 
     // Additional validation for large batch operations
@@ -198,14 +198,14 @@ export class PermissionManagerService implements PermissionManagerInterface {
       throw new InsufficientPermissionsError(
         `batch operation with ${jobCount} jobs`,
         `queue:${queueName}`,
-        user.userId
+        user.id
       )
     }
 
     // Log the batch operation
     this.logger.audit(
       `batch:${action}`,
-      user.userId,
+      user.id,
       `queue:${queueName}`,
       { queueName, action, jobCount }
     )
@@ -292,7 +292,7 @@ export class PermissionManagerService implements PermissionManagerInterface {
         requiredPermission = PERMISSIONS.ANALYTICS_ADVANCED
         break
       default:
-        throw new InsufficientPermissionsError(action, 'system', user.userId)
+        throw new InsufficientPermissionsError(action, 'system', user.id)
     }
 
     this.checkPermission(user, requiredPermission)
@@ -300,7 +300,7 @@ export class PermissionManagerService implements PermissionManagerInterface {
     // Log the system operation
     this.logger.audit(
       `system:${action}`,
-      user.userId,
+      user.id,
       'system',
       { action }
     )
@@ -329,7 +329,7 @@ export class PermissionManagerService implements PermissionManagerInterface {
         requiredPermission = PERMISSIONS.ALERT_RESOLVE
         break
       default:
-        throw new InsufficientPermissionsError(action, `alert:${alertId || 'unknown'}`, user.userId)
+        throw new InsufficientPermissionsError(action, `alert:${alertId || 'unknown'}`, user.id)
     }
 
     this.checkPermission(user, requiredPermission)
@@ -337,7 +337,7 @@ export class PermissionManagerService implements PermissionManagerInterface {
     // Log the alert operation
     this.logger.audit(
       `alert:${action}`,
-      user.userId,
+      user.id,
       `alert:${alertId || 'unknown'}`,
       { action, alertId }
     )
@@ -365,7 +365,7 @@ export class PermissionManagerService implements PermissionManagerInterface {
         requiredPermission = PERMISSIONS.FLOW_RETRY
         break
       default:
-        throw new InsufficientPermissionsError(action, `flow:${flowId}`, user.userId)
+        throw new InsufficientPermissionsError(action, `flow:${flowId}`, user.id)
     }
 
     this.checkPermission(user, requiredPermission)
@@ -373,7 +373,7 @@ export class PermissionManagerService implements PermissionManagerInterface {
     // Log the flow operation
     this.logger.audit(
       `flow:${action}`,
-      user.userId,
+      user.id,
       `flow:${flowId}`,
       { action, flowId }
     )
@@ -440,7 +440,7 @@ export class PermissionManagerService implements PermissionManagerInterface {
       throw new InsufficientPermissionsError(
         `rate limit exceeded (${requestCount}/${maxRequests})`,
         'api',
-        user.userId
+        user.id
       )
     }
   }

@@ -4,7 +4,7 @@
  */
 
 import { PrismaClient } from '@prisma/client'
-import Redis from 'ioredis'
+import { getRedisInstance } from '../../../lib/connections'
 import { 
   QueueConfig, 
   SystemConfig, 
@@ -22,14 +22,14 @@ import {
 
 export class QueueConfigManager {
   private prisma: PrismaClient
-  private redis?: Redis
+  private redis?: ReturnType<typeof getRedisInstance>
   private options: Required<QueueConfigManagerOptions>
   private configCache = new Map<string, QueueConfig>()
   private systemConfigCache = new Map<string, any>()
 
   constructor(
     prisma: PrismaClient,
-    redis?: Redis,
+    redis?: ReturnType<typeof getRedisInstance>,
     options: QueueConfigManagerOptions = {}
   ) {
     this.prisma = prisma
@@ -342,11 +342,11 @@ export class QueueConfigManager {
       id: config.id,
       key: config.key,
       value: config.value,
-      description: config.description,
-      category: config.category,
+      description: config.description ?? undefined,
+      category: config.category ?? undefined,
       createdAt: config.createdAt,
       updatedAt: config.updatedAt,
-      updatedBy: config.updatedBy
+      updatedBy: config.updatedBy ?? undefined
     }))
   }
 

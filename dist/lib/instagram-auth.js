@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getInstagramUserToken = getInstagramUserToken;
 // lib/instagram-auth.ts
-const prisma_1 = require("../lib/prisma");
+const prisma_1 = require("@/lib/prisma");
 /**
  * Retorna o access_token da conta do Instagram
  * com base no igUserId (ex.: "17841468190323715").

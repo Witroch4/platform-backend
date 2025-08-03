@@ -1,5 +1,5 @@
 import { Worker, Job } from 'bullmq';
-import { connection } from '../../lib/redis';
+import { getRedisInstance } from '../../lib/connections';
 import { 
   PersistenciaCredenciaisJobData, 
   PERSISTENCIA_CREDENCIAIS_QUEUE_NAME,
@@ -200,7 +200,7 @@ class PersistenciaWorker {
       PERSISTENCIA_CREDENCIAIS_QUEUE_NAME,
       this.processJob.bind(this),
       {
-        connection,
+        connection: getRedisInstance(),
         concurrency: 5, // Process up to 5 jobs concurrently
       }
     );

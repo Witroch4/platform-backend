@@ -7,7 +7,7 @@
 
 import { EventEmitter } from 'events'
 import { Queue, Job } from 'bullmq'
-import { Redis } from 'ioredis'
+import { getRedisInstance } from '../../../lib/connections'
 import { 
   QueueConfig, 
   User,
@@ -97,17 +97,17 @@ export interface AutoScalingEvent {
 export class FlowControlService extends EventEmitter {
   private logger: Logger
   private permissionManager = getPermissionManager()
-  private redis: Redis
+  private redis: ReturnType<typeof getRedisInstance>
   private flowConfigs = new Map<string, FlowControlConfig>()
   private rateLimiters = new Map<string, RateLimiter>()
   private circuitBreakers = new Map<string, CircuitBreaker>()
   private autoScalers = new Map<string, AutoScaler>()
   private monitoringInterval: NodeJS.Timeout | null = null
 
-  constructor(redis: Redis) {
+  constructor() {
     super()
     this.logger = new Logger('FlowControlService')
-    this.redis = redis
+    this.redis = getRedisInstance()
     this.startMonitoring()
   }
 
@@ -150,23 +150,23 @@ export class FlowControlService extends EventEmitter {
         priorityRules: config.priorityRules.length,
         autoScaling: config.autoScaling.enabled,
         circuitBreaker: config.circuitBreaker.enabled,
-        userId: user?.userId
+        userId: user?.id
       })
 
       this.emit(EVENT_TYPES.FLOW_CONTROL_CONFIGURED, {
         queueName: config.queueName,
         config,
-        userId: user?.userId,
+        userId: user?.id,
         timestamp: new Date()
       })
 
     } catch (error) {
       this.logger.error(`Failed to configure flow control for queue ${config.queueName}:`, error, {
         queueName: config.queueName,
-        userId: user?.userId
+        userId: user?.id
       })
       throw new QueueManagementError(
-        `Failed to configure flow control: ${error.message}`,
+        `Failed to configure flow control: ${error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error'}`,
         ERROR_CODES.INTERNAL_ERROR
       )
     }
@@ -329,8 +329,9 @@ export class FlowControlService extends EventEmitter {
    * Get optimal concurrency for a queue
    */
   public async getOptimalConcurrency(queueName: string, currentMetrics: any): Promise<number> {
+    const config = this.flowConfigs.get(queueName)
+    
     try {
-      const config = this.flowConfigs.get(queueName)
       if (!config) {
         return DEFAULTS.CONCURRENCY || 1
       }
@@ -393,14 +394,14 @@ export class FlowControlService extends EventEmitter {
         queueName,
         oldConcurrency,
         newConcurrency,
-        userId: user?.userId
+        userId: user?.id
       })
 
       this.emit(EVENT_TYPES.CONCURRENCY_UPDATED, {
         queueName,
         oldConcurrency,
         newConcurrency,
-        userId: user?.userId,
+        userId: user?.id,
         timestamp: new Date()
       })
 
@@ -408,10 +409,10 @@ export class FlowControlService extends EventEmitter {
       this.logger.error(`Failed to update concurrency for queue ${queueName}:`, error, {
         queueName,
         newConcurrency,
-        userId: user?.userId
+        userId: user?.id
       })
       throw new QueueManagementError(
-        `Failed to update concurrency: ${error.message}`,
+        `Failed to update concurrency: ${error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error'}`,
         ERROR_CODES.INTERNAL_ERROR
       )
     }
@@ -475,22 +476,22 @@ export class FlowControlService extends EventEmitter {
 
       this.logger.info(`Flow control removed for queue: ${queueName}`, {
         queueName,
-        userId: user?.userId
+        userId: user?.id
       })
 
       this.emit(EVENT_TYPES.FLOW_CONTROL_REMOVED, {
         queueName,
-        userId: user?.userId,
+        userId: user?.id,
         timestamp: new Date()
       })
 
     } catch (error) {
       this.logger.error(`Failed to remove flow control for queue ${queueName}:`, error, {
         queueName,
-        userId: user?.userId
+        userId: user?.id
       })
       throw new QueueManagementError(
-        `Failed to remove flow control: ${error.message}`,
+        `Failed to remove flow control: ${error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error'}`,
         ERROR_CODES.INTERNAL_ERROR
       )
     }
@@ -646,7 +647,7 @@ export class FlowControlService extends EventEmitter {
 // Helper classes
 
 class RateLimiter {
-  constructor(private config: RateLimiterConfig, private redis: Redis) {}
+  constructor(private config: RateLimiterConfig, private redis: ReturnType<typeof getRedisInstance>) {}
 
   async checkLimit(key: string): Promise<{ allowed: boolean; current: number; limit: number; resetTime: Date; windowMs: number }> {
     const now = Date.now()
@@ -738,8 +739,8 @@ class CircuitBreaker {
   }
 
   private shouldAttemptReset(): boolean {
-    return this.lastFailureTime && 
-           (Date.now() - this.lastFailureTime.getTime()) >= this.config.recoveryTimeout
+    return !!(this.lastFailureTime && 
+           (Date.now() - this.lastFailureTime.getTime()) >= this.config.recoveryTimeout)
   }
 }
 
@@ -804,9 +805,9 @@ const FLOW_CONTROL_EVENTS = {
 // Export singleton instance
 let flowControlServiceInstance: FlowControlService | null = null
 
-export function getFlowControlService(redis: Redis): FlowControlService {
+export function getFlowControlService(): FlowControlService {
   if (!flowControlServiceInstance) {
-    flowControlServiceInstance = new FlowControlService(redis)
+    flowControlServiceInstance = new FlowControlService()
   }
   return flowControlServiceInstance
 }

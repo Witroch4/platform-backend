@@ -255,21 +255,21 @@ export const logger = new Logger('QueueManagement')
  * Performance measurement decorator
  */
 export function measurePerformance(logger: Logger, operation: string) {
-  return function (target: any, propertyName: string, descriptor: PropertyDescriptor) {
-    const method = descriptor.value
+  return function (target: any, propertyName: string) {
+    const method = target[propertyName]
 
-    descriptor.value = async function (...args: any[]) {
+    target[propertyName] = async function (...args: any[]) {
       const start = Date.now()
       try {
         const result = await method.apply(this, args)
         const duration = Date.now() - start
         logger.performance(operation, duration, { method: propertyName })
         return result
-      } catch (error) {
+      } catch (error: any) {
         const duration = Date.now() - start
         logger.performance(`${operation} (failed)`, duration, { 
           method: propertyName, 
-          error: error.message 
+          error: error?.message || 'Unknown error'
         })
         throw error
       }
@@ -281,11 +281,11 @@ export function measurePerformance(logger: Logger, operation: string) {
  * Audit logging decorator
  */
 export function auditLog(logger: Logger, action: string) {
-  return function (target: any, propertyName: string, descriptor: PropertyDescriptor) {
-    const method = descriptor.value
+  return function (target: any, propertyName: string) {
+    const method = target[propertyName]
 
-    descriptor.value = async function (...args: any[]) {
-      const context = this.getAuditContext ? this.getAuditContext() : {}
+    target[propertyName] = async function (...args: any[]) {
+      const context = (this as any).getAuditContext ? (this as any).getAuditContext() : {}
       try {
         const result = await method.apply(this, args)
         logger.audit(action, context.userId || 'system', context.resource || propertyName, {
@@ -293,10 +293,10 @@ export function auditLog(logger: Logger, action: string) {
           args: args.length > 0 ? args[0] : undefined
         })
         return result
-      } catch (error) {
+      } catch (error: any) {
         logger.audit(`${action} (failed)`, context.userId || 'system', context.resource || propertyName, {
           method: propertyName,
-          error: error.message
+          error: error?.message || 'Unknown error'
         })
         throw error
       }

@@ -107,7 +107,7 @@ async function processAccumulatedJobs(sourceId: string) {
         source_sourceIdentifier_accountId: {
           source: 'CHATWIT_OAB',
           sourceIdentifier: origemLead.source_id,
-          accountId: null // Para leads sem account específica
+          accountId: '' // Para leads sem account específica
         }
       },
       update: {
@@ -122,6 +122,7 @@ async function processAccumulatedJobs(sourceId: string) {
         avatarUrl: origemLead.thumbnail,
         source: 'CHATWIT_OAB',
         sourceIdentifier: origemLead.source_id,
+        accountId: '',
         tags: [],
         userId: usuarioDb.appUserId
       }
@@ -131,8 +132,7 @@ async function processAccumulatedJobs(sourceId: string) {
     const leadOabData = await prisma.leadOabData.upsert({
       where: { leadId: lead.id },
       update: {
-        leadUrl: origemLead.leadUrl,
-        updatedAt: new Date()
+        leadUrl: origemLead.leadUrl
       },
       create: {
         leadId: lead.id,
@@ -150,6 +150,14 @@ async function processAccumulatedJobs(sourceId: string) {
         consultoriaFase2: false,
         recursoValidado: false,
         aguardandoRecurso: false
+      }
+    });
+
+    // Atualizar o timestamp do Lead pai
+    await prisma.lead.update({
+      where: { id: lead.id },
+      data: {
+        updatedAt: new Date()
       }
     });
 

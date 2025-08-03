@@ -4,7 +4,19 @@
  * Comprehensive error handling utilities for Instagram message translation
  */
 
-import { InstagramTranslationErrorCodes } from '../queue/instagram-translation.queue';
+// Error codes for Instagram translation
+export enum InstagramTranslationErrorCodes {
+  TEMPLATE_NOT_FOUND = 'TEMPLATE_NOT_FOUND',
+  MESSAGE_TOO_LONG = 'MESSAGE_TOO_LONG',
+  INVALID_CHANNEL = 'INVALID_CHANNEL',
+  DATABASE_ERROR = 'DATABASE_ERROR',
+  CONVERSION_FAILED = 'CONVERSION_FAILED',
+  VALIDATION_ERROR = 'VALIDATION_ERROR',
+  TIMEOUT_ERROR = 'TIMEOUT_ERROR',
+  QUEUE_ERROR = 'QUEUE_ERROR',
+  SYSTEM_ERROR = 'SYSTEM_ERROR',
+  UNKNOWN_ERROR = 'UNKNOWN_ERROR',
+}
 
 // Base Error Class
 export class InstagramTranslationError extends Error {

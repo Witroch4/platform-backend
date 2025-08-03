@@ -1,5 +1,7 @@
-import { PrismaClient, Prisma, UserFeedback } from '@prisma/client';
-import { Redis } from 'ioredis';
+import { getRedisInstance } from '@/lib/connections';
+import type { PrismaClient, UserFeedback } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { getPrismaInstance } from '../connections';
 import { toInputJson } from '../utils/json';
 
 export interface FeatureFlagContext {
@@ -36,9 +38,13 @@ export interface FeedbackAnalysis {
 
 export class FeedbackCollector {
   private prisma: PrismaClient;
-  private redis: Redis;
+  private redis: ReturnType<typeof getRedisInstance>;
 
-  constructor(prisma: PrismaClient, redis: Redis) {
+  constructor(prisma?: PrismaClient, redis?: ReturnType<typeof getRedisInstance>) {
+    if (!prisma) prisma = getPrismaInstance();
+    if (!prisma || !redis) {
+      throw new Error('Prisma and Redis instances required for first initialization');
+    }
     this.prisma = prisma;
     this.redis = redis;
   }
@@ -101,9 +107,9 @@ export class FeedbackCollector {
           description: feedback.description,
           severity: feedback.severity,
           status: feedback.status,
-          metadata: feedback.metadata,
-          featureFlagContext: feedback.featureFlagContext,
-          systemContext: feedback.systemContext,
+          metadata: feedback.metadata as any,
+          featureFlagContext: feedback.featureFlagContext as any,
+          systemContext: feedback.systemContext as any,
           createdAt: feedback.createdAt,
           updatedAt: feedback.updatedAt,
         },
@@ -179,7 +185,7 @@ export class FeedbackCollector {
     await this.prisma.userFeedback.update({
       where: { id: feedback.id },
       data: {
-        featureFlagContext: feedback.featureFlagContext,
+        featureFlagContext: feedback.featureFlagContext as any,
       },
     });
 
@@ -613,7 +619,7 @@ let feedbackCollectorInstance: FeedbackCollector | null = null
 
 export function getFeedbackCollector(
   prisma?: PrismaClient,
-  redis?: Redis
+  redis?: ReturnType<typeof getRedisInstance>
 ): FeedbackCollector {
   if (!feedbackCollectorInstance) {
     if (!prisma || !redis) {

@@ -279,7 +279,6 @@ async function storeWebhookMessage(data: ValidatedWebhookData) {
         contactPhone: data.contactPhone,
         messageContent,
         messageType,
-        whatsappApiKey: data.whatsappApiKey,
         inboxId: data.chatwootInboxId, // ID da caixa de entrada do Chatwoot
         rawPayload: data.rawPayload,
         processed: true,
@@ -421,17 +420,12 @@ async function processDialogflowIntent(data: {
   contactPhone: string;
 }) {
   try {
-    // Criar registro apenas com os campos que existem no modelo DialogflowIntent
-    await prisma.dialogflowIntent.create({
-      data: {
-        intentName: data.intentName,
-        // Removido: payload, processed, timestamp - estes campos não existem no modelo
-      },
-    });
-
+    // Log the intent processing since DialogflowIntent model doesn't exist
     console.log(
       `[MTF Diamante Webhook Worker] Intent processada: ${data.intentName} para ${data.contactPhone}`
     );
+    
+    // TODO: Implement intent storage if needed - DialogflowIntent model doesn't exist in schema
   } catch (error) {
     console.error(
       "[MTF Diamante Webhook Worker] Erro ao processar intent:",
@@ -1148,28 +1142,10 @@ async function findButtonReactionWithFallback(buttonId: string): Promise<{
     }
 
     // Fallback to config-based mapping
-    const { findReactionByButtonId } = await import(
-      "@/lib/dialogflow-database-queries"
-    );
-    const configReaction = await findReactionByButtonId(buttonId);
+    // TODO: Implement config-based mapping if needed - module not found
+    // For now, return null as no config-based mapping is available
 
-    if (configReaction) {
-      const type =
-        configReaction.emoji && configReaction.textReaction
-          ? "both"
-          : configReaction.emoji
-            ? "emoji"
-            : "text";
-
-      return {
-        id: configReaction.id,
-        buttonId: configReaction.buttonId,
-        type,
-        emoji: configReaction.emoji,
-        textReaction: configReaction.textReaction,
-        isActive: configReaction.isActive,
-      };
-    }
+    return null;
 
     return null;
   } catch (error) {

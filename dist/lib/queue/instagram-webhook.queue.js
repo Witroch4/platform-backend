@@ -3,7 +3,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.addWelcomeNotificationJob = exports.addCheckExpiringTokensJob = exports.autoNotificationsQueue = exports.instagramWebhookQueue = exports.AutoNotificationType = exports.AUTO_NOTIFICATIONS_QUEUE_NAME = exports.INSTAGRAM_WEBHOOK_QUEUE_NAME = void 0;
 const bullmq_1 = require("bullmq");
-const redis_1 = require("../../lib/redis");
+const redis_1 = require("@/lib/redis");
 /**
  * Nome da fila para os webhooks do Instagram.
  */

@@ -13,7 +13,7 @@ export function Footer() {
 						<Link href="/" className="inline-block mb-6">
 							<div className="flex items-center">
 								<Image
-									src="/01 WitdeT.png"
+									src="/01%20WitdeT.png"
 									alt="Socialwise Chatwit Logo"
 									width={50}
 									height={50}

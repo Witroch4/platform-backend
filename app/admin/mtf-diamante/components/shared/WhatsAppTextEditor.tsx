@@ -62,8 +62,11 @@ export function WhatsAppTextEditor({
   // Update text and trigger onChange
   const updateText = useCallback(
     (newText: string) => {
-      setText(newText);
-      onChange?.(newText);
+      // Truncate text if it exceeds maxLength
+      const truncatedText = maxLength ? newText.slice(0, maxLength) : newText;
+      
+      setText(truncatedText);
+      onChange?.(truncatedText);
 
       // Validate text
       const newErrors: string[] = [];
@@ -94,16 +97,14 @@ export function WhatsAppTextEditor({
 
       updateText(newText);
 
-      // Position cursor after inserted variable
+      // Position cursor after inserted variable (respecting maxLength)
       setTimeout(() => {
         textarea.focus();
-        textarea.setSelectionRange(
-          start + variable.length,
-          start + variable.length
-        );
+        const finalLength = Math.min(start + variable.length, maxLength || Infinity);
+        textarea.setSelectionRange(finalLength, finalLength);
       }, 0);
     },
-    [text, updateText]
+    [text, updateText, maxLength]
   );
 
   // WhatsApp formatting functions
@@ -140,13 +141,11 @@ export function WhatsAppTextEditor({
           text.substring(0, start) + formattedText + text.substring(end);
         updateText(newText);
 
-        // Reposition cursor
+        // Reposition cursor (respecting maxLength)
         setTimeout(() => {
           textarea.focus();
-          textarea.setSelectionRange(
-            start + formattedText.length,
-            start + formattedText.length
-          );
+          const finalLength = Math.min(start + formattedText.length, maxLength || Infinity);
+          textarea.setSelectionRange(finalLength, finalLength);
         }, 0);
       } else {
         // Insert empty markers if no text selected
@@ -171,13 +170,11 @@ export function WhatsAppTextEditor({
           text.substring(0, start) + markers + text.substring(end);
         updateText(newText);
 
-        // Position cursor between markers
+        // Position cursor between markers (respecting maxLength)
         setTimeout(() => {
           textarea.focus();
-          textarea.setSelectionRange(
-            start + markers.length / 2,
-            start + markers.length / 2
-          );
+          const finalLength = Math.min(start + markers.length / 2, maxLength || Infinity);
+          textarea.setSelectionRange(finalLength, finalLength);
         }, 0);
       }
     },
@@ -206,13 +203,11 @@ export function WhatsAppTextEditor({
 
       setTimeout(() => {
         textarea.focus();
-        textarea.setSelectionRange(
-          start + prefix.length,
-          start + prefix.length
-        );
+        const finalLength = Math.min(start + prefix.length, maxLength || Infinity);
+        textarea.setSelectionRange(finalLength, finalLength);
       }, 0);
     },
-    [text, updateText]
+    [text, updateText, maxLength]
   );
 
   // Insert quote function
@@ -235,9 +230,10 @@ export function WhatsAppTextEditor({
 
     setTimeout(() => {
       textarea.focus();
-      textarea.setSelectionRange(start + 2, start + 2);
+      const finalLength = Math.min(start + 2, maxLength || Infinity);
+      textarea.setSelectionRange(finalLength, finalLength);
     }, 0);
-  }, [text, updateText]);
+      }, [text, updateText, maxLength]);
 
   // Generate preview text with WhatsApp formatting
   const getPreviewText = useCallback(() => {
@@ -295,6 +291,7 @@ export function WhatsAppTextEditor({
               value={text}
               onChange={(e) => updateText(e.target.value)}
               placeholder={placeholder}
+              maxLength={maxLength}
               className={`min-h-[100px] ${isOverLimit ? "border-red-500" : ""}`}
               rows={4}
             />
@@ -367,7 +364,7 @@ export function WhatsAppTextEditor({
         {showPreview && text && (
           <div className="p-2 bg-muted rounded-md text-sm">
             <div className="text-xs text-muted-foreground mb-1">Preview:</div>
-            <div dangerouslySetInnerHTML={{ __html: getPreviewText() }} />
+            <div className="break-words overflow-wrap-anywhere" dangerouslySetInnerHTML={{ __html: getPreviewText() }} />
           </div>
         )}
       </div>
@@ -516,6 +513,7 @@ export function WhatsAppTextEditor({
                   value={text}
                   onChange={(e) => updateText(e.target.value)}
                   placeholder={placeholder}
+                  maxLength={maxLength}
                   className={`min-h-[300px] font-mono text-sm ${isOverLimit ? "border-red-500" : ""}`}
                   rows={15}
                 />
@@ -528,7 +526,7 @@ export function WhatsAppTextEditor({
                   Preview
                 </label>
                 <div
-                  className="min-h-[300px] p-3 border rounded-md bg-white dark:bg-gray-950 text-sm overflow-y-auto"
+                  className="min-h-[300px] p-3 border rounded-md bg-white dark:bg-gray-950 text-sm overflow-y-auto break-words overflow-wrap-anywhere"
                   dangerouslySetInnerHTML={{ __html: getPreviewText() }}
                 />
               </div>

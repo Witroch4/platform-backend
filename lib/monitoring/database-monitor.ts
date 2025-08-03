@@ -1,8 +1,7 @@
 import { performance } from 'perf_hooks';
 import { PrismaClient } from '@prisma/client';
 import { apm } from './application-performance-monitor';
-import { connection } from '../redis';
-import type IORedis from 'ioredis';
+import { getRedisInstance } from '../connections';
 import crypto from 'crypto';
 
 // Database monitoring interfaces
@@ -48,7 +47,7 @@ export const DATABASE_ALERT_THRESHOLDS = {
 
 export class DatabaseMonitor {
   private static instance: DatabaseMonitor;
-  private redis: IORedis;
+  private redis: ReturnType<typeof getRedisInstance>;
   private queryMetrics: DatabaseQueryMetrics[] = [];
   private slowQueries: Map<string, SlowQueryAlert> = new Map();
   private connectionMetrics: DatabaseConnectionMetrics[] = [];
@@ -58,8 +57,8 @@ export class DatabaseMonitor {
   private readonly MONITORING_INTERVAL = 60000; // 1 minute
   private readonly CLEANUP_INTERVAL = 300000; // 5 minutes
 
-  constructor(redisConnection?: IORedis) {
-    this.redis = redisConnection || connection;
+  constructor(redisConnection?: ReturnType<typeof getRedisInstance>) {
+    this.redis = redisConnection || getRedisInstance();
     this.startMonitoring();
   }
 

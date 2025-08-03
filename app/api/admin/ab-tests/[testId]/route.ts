@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-import { Redis } from 'ioredis';
 import { ABTestingManager } from '@/lib/feature-flags/ab-testing-manager';
-
-const prisma = new PrismaClient();
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+import { getRedisInstance, getPrismaInstance } from '@/lib/connections';
 
 export async function GET(
   request: NextRequest,
@@ -12,6 +8,8 @@ export async function GET(
 ) {
   try {
     const { testId } = await params;
+    const prisma = getPrismaInstance();
+    const redis = getRedisInstance();
     const abTestManager = ABTestingManager.getInstance(prisma, redis);
     
     const results = await abTestManager.getABTestResults(testId);
@@ -35,6 +33,8 @@ export async function POST(
     const body = await request.json();
     const { action, startedBy = 'admin-api' } = body;
 
+    const prisma = getPrismaInstance();
+    const redis = getRedisInstance();
     const abTestManager = ABTestingManager.getInstance(prisma, redis);
 
     switch (action) {
@@ -83,6 +83,8 @@ export async function PUT(
       );
     }
 
+    const prisma = getPrismaInstance();
+    const redis = getRedisInstance();
     const abTestManager = ABTestingManager.getInstance(prisma, redis);
     
     await abTestManager.recordMetric(testId, userId, metricName, value, metadata);

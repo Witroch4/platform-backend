@@ -25,9 +25,9 @@ const DeliveryActionSchema = z.object({
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { webhookId: string } }
+  { params }: { params: Promise<{ webhookId: string }> }
 ) {
-  const { webhookId } = params;
+  const { webhookId } = await params;
   try {
     const { searchParams } = new URL(request.url);
     const query = DeliveryQuerySchema.parse(Object.fromEntries(searchParams));
@@ -111,9 +111,9 @@ export async function GET(
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { webhookId: string } }
+  { params }: { params: Promise<{ webhookId: string }> }
 ) {
-  const { webhookId } = params;
+  const { webhookId } = await params;
   try {
     const body = await request.json();
     const { action, deliveryIds } = DeliveryActionSchema.parse(body);

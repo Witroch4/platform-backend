@@ -299,7 +299,7 @@ export function InteractivePreview({
             {debouncedMessage.header?.type === "text" &&
               debouncedMessage.header.content && (
                 <div
-                  className="font-semibold text-sm mb-2 text-gray-900 dark:text-gray-100"
+                  className="font-semibold text-sm mb-2 text-gray-900 dark:text-gray-100 break-words overflow-wrap-anywhere"
                   dangerouslySetInnerHTML={{
                     __html: processWhatsAppFormatting(
                       debouncedMessage.header.content
@@ -315,7 +315,7 @@ export function InteractivePreview({
 
             {/* Body */}
             <div
-              className="text-sm mb-2 text-gray-900 dark:text-gray-100"
+              className="text-sm mb-2 text-gray-900 dark:text-gray-100 break-words overflow-wrap-anywhere"
               dangerouslySetInnerHTML={{
                 __html: processWhatsAppFormatting(debouncedMessage.body.text),
               }}
@@ -324,7 +324,7 @@ export function InteractivePreview({
             {/* Footer */}
             {debouncedMessage.footer?.text && (
               <div
-                className="text-xs text-gray-500 dark:text-gray-400 mb-2"
+                className="text-xs text-gray-500 dark:text-gray-400 mb-2 break-words overflow-wrap-anywhere"
                 dangerouslySetInnerHTML={{
                   __html: processWhatsAppFormatting(
                     debouncedMessage.footer.text

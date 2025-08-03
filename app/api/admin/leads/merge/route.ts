@@ -1,5 +1,4 @@
 // app/api/admin/leads/merge/route.ts
-/// <reference path="../../../../../declarations.d.ts" />
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';

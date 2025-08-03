@@ -1,20 +1,8 @@
 import { Queue } from 'bullmq';
-import { connection } from '../redis';
+import { getRedisInstance } from '../connections';
+import { InstagramTranslationErrorCodes } from '../error-handling/instagram-translation-errors';
 
 export const INSTAGRAM_TRANSLATION_QUEUE_NAME = 'instagram-translation';
-
-// Error codes for Instagram translation
-export enum InstagramTranslationErrorCodes {
-  TEMPLATE_NOT_FOUND = 'TEMPLATE_NOT_FOUND',
-  MESSAGE_TOO_LONG = 'MESSAGE_TOO_LONG',
-  INVALID_CHANNEL = 'INVALID_CHANNEL',
-  DATABASE_ERROR = 'DATABASE_ERROR',
-  CONVERSION_FAILED = 'CONVERSION_FAILED',
-  VALIDATION_ERROR = 'VALIDATION_ERROR',
-  TIMEOUT_ERROR = 'TIMEOUT_ERROR',
-  QUEUE_ERROR = 'QUEUE_ERROR',
-  SYSTEM_ERROR = 'SYSTEM_ERROR',
-}
 
 export interface InstagramTranslationJobData {
   intentName: string;
@@ -60,7 +48,7 @@ const RETRY_CONFIG = {
 export const instagramTranslationQueue = new Queue<InstagramTranslationJobData>(
   INSTAGRAM_TRANSLATION_QUEUE_NAME,
   {
-    connection,
+    connection: getRedisInstance(),
     defaultJobOptions: RETRY_CONFIG,
   }
 );
@@ -376,5 +364,127 @@ export function logWithCorrelationId(
       break;
     default:
       console.log(logMessage, additionalData ? logData : '');
+  }
+}
+
+/**
+ * Create error result for Instagram translation
+ */
+export function createErrorResult(
+  correlationId: string,
+  error: string,
+  errorCode: InstagramTranslationErrorCodes,
+  processingTime: number
+): InstagramTranslationResult {
+  return {
+    success: false,
+    error,
+    processingTime,
+    metadata: {
+      correlationId,
+      errorCode,
+      timestamp: new Date().toISOString(),
+    },
+  };
+}
+
+/**
+ * Create success result for Instagram translation
+ */
+export function createSuccessResult(
+  correlationId: string,
+  fulfillmentMessages: any[],
+  processingTime: number,
+  metadata?: Record<string, any>
+): InstagramTranslationResult {
+  return {
+    success: true,
+    fulfillmentMessages,
+    processingTime,
+    metadata: {
+      correlationId,
+      timestamp: new Date().toISOString(),
+      ...metadata,
+    },
+  };
+}
+
+/**
+ * Get queue health information
+ */
+export async function getQueueHealth(): Promise<{
+  name: string;
+  counts: {
+    waiting: number;
+    active: number;
+    completed: number;
+    failed: number;
+    delayed: number;
+  };
+  status: 'healthy' | 'warning' | 'error';
+  lastUpdated: Date;
+  error?: string;
+}> {
+  try {
+    const [waiting, active, completed, failed, delayed] = await Promise.all([
+      instagramTranslationQueue.getWaiting(),
+      instagramTranslationQueue.getActive(),
+      instagramTranslationQueue.getCompleted(),
+      instagramTranslationQueue.getFailed(),
+      instagramTranslationQueue.getDelayed(),
+    ]);
+
+    const counts = {
+      waiting: waiting.length,
+      active: active.length,
+      completed: completed.length,
+      failed: failed.length,
+      delayed: delayed.length,
+    };
+
+    // Determine status based on counts
+    let status: 'healthy' | 'warning' | 'error' = 'healthy';
+    if (counts.failed > 10 || counts.active > 50) {
+      status = 'warning';
+    }
+    if (counts.failed > 50 || counts.active > 100) {
+      status = 'error';
+    }
+
+    return {
+      name: INSTAGRAM_TRANSLATION_QUEUE_NAME,
+      counts,
+      status,
+      lastUpdated: new Date(),
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logWithCorrelationId('error', 'Failed to get queue health', undefined, { error: errorMessage });
+    
+    return {
+      name: INSTAGRAM_TRANSLATION_QUEUE_NAME,
+      counts: { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 },
+      status: 'error',
+      lastUpdated: new Date(),
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * Clean up old completed and failed jobs
+ */
+export async function cleanupOldJobs(): Promise<void> {
+  try {
+    // Clean completed jobs older than 1 hour, keep last 100
+    await instagramTranslationQueue.clean(60 * 60 * 1000, 100, 'completed');
+    
+    // Clean failed jobs older than 24 hours, keep last 50
+    await instagramTranslationQueue.clean(24 * 60 * 60 * 1000, 50, 'failed');
+    
+    logWithCorrelationId('info', 'Old jobs cleaned up successfully');
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logWithCorrelationId('error', 'Failed to clean up old jobs', undefined, { error: errorMessage });
   }
 }

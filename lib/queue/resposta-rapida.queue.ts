@@ -1,5 +1,5 @@
 import { Queue, Job } from 'bullmq';
-import { connection } from '../redis';
+import { getRedisInstance } from '../connections';
 
 export const RESPOSTA_RAPIDA_QUEUE_NAME = 'resposta-rapida';
 
@@ -31,7 +31,7 @@ export interface RespostaRapidaJobData {
 export const respostaRapidaQueue = new Queue<RespostaRapidaJobData>(
   RESPOSTA_RAPIDA_QUEUE_NAME,
   {
-    connection,
+    connection: getRedisInstance(),
     defaultJobOptions: {
       // High priority processing
       priority: 100,
@@ -55,7 +55,7 @@ export const respostaRapidaQueue = new Queue<RespostaRapidaJobData>(
 export const respostaRapidaDeadLetterQueue = new Queue<RespostaRapidaJobData>(
   `${RESPOSTA_RAPIDA_QUEUE_NAME}-dead-letter`,
   {
-    connection,
+    connection: getRedisInstance(),
     defaultJobOptions: {
       // Keep failed jobs longer for analysis
       removeOnComplete: 10,

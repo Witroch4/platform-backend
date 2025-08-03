@@ -7,7 +7,7 @@
  */
 
 import { PrismaClient } from '@prisma/client'
-import { Redis } from 'ioredis'
+import { getRedisInstance } from '../../../lib/connections'
 import { Queue } from 'bullmq'
 import { EventEmitter } from 'events'
 import { 
@@ -41,16 +41,16 @@ interface MetricsManagerConfig {
 
 export class MetricsManagerService extends EventEmitter {
   private static instance: MetricsManagerService | null = null
-  private collector: MetricsCollectorService
-  private storage: MetricsStorageService
-  private aggregator: MetricsAggregatorService
-  private anomalyDetector: AnomalyDetectorService
+  private collector!: MetricsCollectorService
+  private storage!: MetricsStorageService
+  private aggregator!: MetricsAggregatorService
+  private anomalyDetector!: AnomalyDetectorService
   private config: MetricsManagerConfig
   private isInitialized = false
 
   constructor(
     private prisma: PrismaClient,
-    private redis: Redis
+    private redis: ReturnType<typeof getRedisInstance>
   ) {
     super()
     
@@ -68,7 +68,7 @@ export class MetricsManagerService extends EventEmitter {
   /**
    * Get singleton instance
    */
-  static getInstance(prisma?: PrismaClient, redis?: Redis): MetricsManagerService {
+  static getInstance(prisma?: PrismaClient, redis?: ReturnType<typeof getRedisInstance>): MetricsManagerService {
     if (!MetricsManagerService.instance) {
       if (!prisma || !redis) {
         throw new QueueManagementError(
@@ -103,7 +103,7 @@ export class MetricsManagerService extends EventEmitter {
 
     } catch (error) {
       throw new QueueManagementError(
-        `Failed to initialize metrics manager: ${error.message}`,
+        `Failed to initialize metrics manager: ${(error instanceof Error ? error.message : "Unknown error")}`,
         'INITIALIZATION_ERROR'
       )
     }
@@ -118,7 +118,7 @@ export class MetricsManagerService extends EventEmitter {
       this.emit('queue_registered', { queueName })
     } catch (error) {
       throw new QueueManagementError(
-        `Failed to register queue ${queueName}: ${error.message}`,
+        `Failed to register queue ${queueName}: ${(error instanceof Error ? error.message : "Unknown error")}`,
         'QUEUE_REGISTRATION_ERROR'
       )
     }
@@ -133,7 +133,7 @@ export class MetricsManagerService extends EventEmitter {
       this.emit('queue_unregistered', { queueName })
     } catch (error) {
       throw new QueueManagementError(
-        `Failed to unregister queue ${queueName}: ${error.message}`,
+        `Failed to unregister queue ${queueName}: ${(error instanceof Error ? error.message : "Unknown error")}`,
         'QUEUE_UNREGISTRATION_ERROR'
       )
     }
@@ -147,7 +147,7 @@ export class MetricsManagerService extends EventEmitter {
       return await this.collector.getRealTimeMetrics()
     } catch (error) {
       throw new QueueManagementError(
-        `Failed to get real-time metrics: ${error.message}`,
+        `Failed to get real-time metrics: ${(error instanceof Error ? error.message : "Unknown error")}`,
         'REAL_TIME_METRICS_ERROR'
       )
     }
@@ -168,7 +168,14 @@ export class MetricsManagerService extends EventEmitter {
       let failedJobs = 0
       let totalThroughput = 0
 
-      const queueMetrics = []
+      const queueMetrics: Array<{
+        queueName: string;
+        status: string;
+        jobCount: number;
+        throughput: number;
+        errorRate: number;
+        avgProcessingTime: number;
+      }> = []
       
       for (const queueName of queueNames) {
         const queueData = realTimeMetrics.queues[queueName]
@@ -211,8 +218,9 @@ export class MetricsManagerService extends EventEmitter {
       }
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error occurred';
       throw new QueueManagementError(
-        `Failed to get dashboard metrics: ${error.message}`,
+        `Failed to get dashboard metrics: ${errorMessage}`,
         'DASHBOARD_METRICS_ERROR'
       )
     }
@@ -229,8 +237,9 @@ export class MetricsManagerService extends EventEmitter {
     try {
       return await this.aggregator.getAggregatedData(queueName, timeRange, granularity)
     } catch (error) {
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error occurred';
       throw new QueueManagementError(
-        `Failed to get aggregated metrics: ${error.message}`,
+        `Failed to get aggregated metrics: ${errorMessage}`,
         'AGGREGATED_METRICS_ERROR'
       )
     }
@@ -251,8 +260,9 @@ export class MetricsManagerService extends EventEmitter {
       // Analyze trends
       return await this.anomalyDetector.analyze(metrics)
     } catch (error) {
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error occurred';
       throw new QueueManagementError(
-        `Failed to get trend analysis: ${error.message}`,
+        `Failed to get trend analysis: ${errorMessage}`,
         'TREND_ANALYSIS_ERROR'
       )
     }
@@ -276,8 +286,9 @@ export class MetricsManagerService extends EventEmitter {
       const metrics = await this.getAllMetricsInRange(range)
       return await this.anomalyDetector.detect(metrics)
     } catch (error) {
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error occurred';
       throw new QueueManagementError(
-        `Failed to detect anomalies: ${error.message}`,
+        `Failed to detect anomalies: ${errorMessage}`,
         'ANOMALY_DETECTION_ERROR'
       )
     }
@@ -294,8 +305,9 @@ export class MetricsManagerService extends EventEmitter {
     try {
       return await this.anomalyDetector.createBaseline(queueName, metric, timeRange)
     } catch (error) {
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error occurred';
       throw new QueueManagementError(
-        `Failed to create baseline: ${error.message}`,
+        `Failed to create baseline: ${errorMessage}`,
         'BASELINE_CREATION_ERROR'
       )
     }
@@ -318,8 +330,9 @@ export class MetricsManagerService extends EventEmitter {
 
       return await this.collector.exportMetrics(format, filters)
     } catch (error) {
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error occurred';
       throw new QueueManagementError(
-        `Failed to export metrics: ${error.message}`,
+        `Failed to export metrics: ${errorMessage}`,
         'EXPORT_ERROR'
       )
     }
@@ -338,8 +351,9 @@ export class MetricsManagerService extends EventEmitter {
     try {
       return await this.storage.getStorageStats()
     } catch (error) {
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error occurred';
       throw new QueueManagementError(
-        `Failed to get storage stats: ${error.message}`,
+        `Failed to get storage stats: ${errorMessage}`,
         'STORAGE_STATS_ERROR'
       )
     }
@@ -358,8 +372,9 @@ export class MetricsManagerService extends EventEmitter {
         freedSpace: storageCleanup.freedSpace
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error occurred';
       throw new QueueManagementError(
-        `Failed to cleanup old data: ${error.message}`,
+        `Failed to cleanup old data: ${errorMessage}`,
         'CLEANUP_ERROR'
       )
     }
@@ -373,8 +388,9 @@ export class MetricsManagerService extends EventEmitter {
       await this.storage.optimizeIndexes()
       await this.aggregator.preAggregateData()
     } catch (error) {
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error occurred';
       throw new QueueManagementError(
-        `Failed to optimize storage: ${error.message}`,
+        `Failed to optimize storage: ${errorMessage}`,
         'OPTIMIZATION_ERROR'
       )
     }
@@ -436,10 +452,11 @@ export class MetricsManagerService extends EventEmitter {
       }
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error occurred';
       return {
         status: 'critical',
         components: {
-          system: { status: 'critical', message: error.message }
+          system: { status: 'critical', message: errorMessage }
         },
         lastUpdate: new Date()
       }

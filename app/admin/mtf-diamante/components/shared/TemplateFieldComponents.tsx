@@ -138,7 +138,7 @@ export const BodyField = forwardRef<EnhancedTextAreaRef, BodyFieldProps>(({
             Pré-visualização {previewMode === 'actual' ? '(com valores reais)' : '(formato numerado)'}:
           </div>
           <div 
-            className="text-sm"
+            className="text-sm break-words overflow-wrap-anywhere"
             dangerouslySetInnerHTML={{ __html: processWhatsAppFormatting(previewText) }}
           />
         </div>

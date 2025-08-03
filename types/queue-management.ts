@@ -4,6 +4,93 @@ export type QueueStatus = 'healthy' | 'warning' | 'critical';
 export type AlertSeverity = 'info' | 'warning' | 'error' | 'critical';
 export type FlowStatus = 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
 
+// Adicionando tipos que estavam faltando
+export type QueueState = QueueStatus;
+
+// Importando tipos das constantes para manter consistência
+import { Permission, UserRole } from '../lib/queue-management/constants';
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  permissions: Permission[];
+  queueAccess: Record<string, Permission[]>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Bottleneck {
+  jobId: string;
+  jobName: string;
+  queueName: string;
+  duration: number;
+  impact: number;
+  suggestions: string[];
+}
+
+export interface FlowMetrics {
+  flowId: string;
+  totalDuration: number;
+  criticalPath: string[];
+  parallelism: number;
+  efficiency: number;
+  bottlenecks: Bottleneck[];
+}
+
+export interface FlowIssue {
+  type: 'stuck_flow' | 'bottleneck' | 'circular_dependency' | 'orphaned_job';
+  severity: AlertSeverity;
+  description: string;
+  affectedJobs: string[];
+  suggestions: string[];
+}
+
+export interface Optimization {
+  type: 'parallelization' | 'resource_allocation' | 'dependency_optimization';
+  description: string;
+  estimatedImprovement: number;
+  implementation: string;
+}
+
+export interface FlowAnalysis {
+  flowId: string;
+  tree: FlowTree;
+  metrics: FlowMetrics;
+  issues: FlowIssue[];
+  optimizations: Optimization[];
+}
+
+export interface RateLimiterConfig {
+  max: number;
+  duration: number; // milliseconds
+  key?: string;
+}
+
+export interface QueueConfig {
+  name: string;
+  concurrency: number;
+  rateLimiter?: RateLimiterConfig;
+  priority?: number;
+  delay?: number;
+  attempts?: number;
+  backoff?: {
+    type: 'exponential' | 'fixed';
+    delay: number;
+  };
+  alertThresholds?: {
+    queueSize?: {
+      warning: number;
+      critical: number;
+    };
+    errorRate?: {
+      warning: number;
+      critical: number;
+    };
+  };
+}
+
 export interface QueueHealth {
   name: string;
   status: QueueStatus;
@@ -143,6 +230,7 @@ export interface JobFilters {
     end: Date;
   };
   search?: string;
+  correlationId?: string;
 }
 
 export interface SortOptions {
@@ -151,15 +239,47 @@ export interface SortOptions {
 }
 
 export interface JobAction {
-  type: 'retry' | 'remove' | 'promote' | 'delay';
+  action: 'retry' | 'remove' | 'promote' | 'delay';
   jobIds: string[];
   delay?: number;
 }
 
 export interface BatchAction {
-  type: 'retryAllFailed' | 'cleanCompleted' | 'pauseQueue' | 'resumeQueue';
+  action: 'retry_all_failed' | 'clean_completed' | 'pause_queue' | 'resume_queue';
   queueName: string;
-  olderThan?: number;
+  options?: Record<string, any>;
+}
+
+export interface BatchResult {
+  success: boolean;
+  processed: number;
+  failed: number;
+  errors: string[];
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  pagination: Pagination;
+}
+
+export interface JobActionResult {
+  success: boolean;
+  processed: number;
+  failed: number;
+  results: JobActionResultItem[];
+}
+
+export interface JobActionResultItem {
+  jobId: string;
+  success: boolean;
+  error?: string;
+}
+
+export interface BatchActionResult {
+  success: boolean;
+  processed: number;
+  failed: number;
+  results: JobActionResultItem[];
 }
 
 export interface QueueMetrics {

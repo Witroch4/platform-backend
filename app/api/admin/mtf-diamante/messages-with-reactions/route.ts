@@ -534,7 +534,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      messageId: result.message.id,
+      messageId: result.message?.id || null,
       reactionIds: result.reactions.map((r) => r.id),
       message: formattedMessage,
       reactions: formattedReactions,
@@ -842,7 +842,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      messageId: result.message.id,
+      messageId: result.message?.id || null,
       reactionIds: result.reactions.map((r) => r.id),
       message: formattedMessage,
       reactions: formattedReactions,

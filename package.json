@@ -23,8 +23,7 @@
 		"test:targeted:frontend": "jest __tests__/frontend/ --config=jest.config.targeted.js --verbose",
 		"test:targeted:coverage": "jest --config=jest.config.targeted.js --coverage --verbose",
 		"build:workers": "tsc --project tsconfig.worker.json && tsc-alias --project tsconfig.worker.json",
-		"build:bullboard": "tsc --project tsconfig.scripts.json",
-		"build": "next build && npm run build:workers && npm run build:bullboard",
+		"build": "next build && npm run build:workers",
 		"start:worker": "tsx --tsconfig tsconfig.worker.json worker/automacao.worker.ts",
 		"worker": "tsx --tsconfig tsconfig.worker.json worker/webhook.worker.ts",
 		"start:webhook:prod": "node dist/worker/webhook.worker.js",
@@ -71,9 +70,6 @@
 		"@auth/prisma-adapter": "^2.0.0",
 		"@aws-sdk/client-s3": "^3.758.0",
 		"@aws-sdk/s3-request-presigner": "^3.758.0",
-		"@bull-board/api": "6.9.6",
-		"@bull-board/express": "6.9.6",
-		"@bull-board/ui": "6.9.6",
 		"@emotion/react": "^11.14.0",
 		"@emotion/styled": "^11.14.0",
 		"@hookform/resolvers": "^3.3.4",
@@ -101,7 +97,7 @@
 		"@radix-ui/react-toast": "^1.2.4",
 		"@radix-ui/react-toggle": "^1.1.1",
 		"@radix-ui/react-toggle-group": "^1.1.1",
-		"@radix-ui/react-tooltip": "^1.1.6",
+		"@radix-ui/react-tooltip": "1.1.6",
 		"@react-input/mask": "^2.0.4",
 		"@stripe/react-stripe-js": "^3.1.1",
 		"@stripe/stripe-js": "^5.6.0",
@@ -206,8 +202,8 @@
 		"@types/react": "^18",
 		"@types/react-datepicker": "^6.2.0",
 		"@types/react-dom": "^18",
-                "@types/uuid": "^9.0.8",
-                "dotenv-cli": "^9.0.0",
+		"@types/uuid": "^9.0.8",
+		"dotenv-cli": "^9.0.0",
 		"eslint": "^9.16.0",
 		"eslint-config-next": "^15.1.0",
 		"jest": "^30.0.4",
@@ -222,8 +218,5 @@
 		"tsconfig-paths": "^4.2.0",
 		"tsx": "^4.19.4",
 		"typescript": "^5"
-	},
-	"prisma": {
-		"seed": "tsx prisma/seed.ts"
 	}
 }

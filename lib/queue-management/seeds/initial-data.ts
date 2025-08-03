@@ -332,7 +332,7 @@ export async function seedDefaultAlertRules() {
 
   for (const rule of alertRules) {
     await prisma.alertRule.upsert({
-      where: { name: rule.name },
+      where: { id: rule.name }, // Using name as id for seeding
       update: {
         description: rule.description,
         condition: rule.condition,
@@ -342,7 +342,10 @@ export async function seedDefaultAlertRules() {
         enabled: rule.enabled,
         createdBy: rule.createdBy,
       },
-      create: rule,
+      create: {
+        ...rule,
+        id: rule.name, // Using name as id for seeding
+      },
     })
   }
 
@@ -433,7 +436,7 @@ export async function seedDefaultAutomationPolicies() {
 
   for (const policy of policies) {
     await prisma.automationPolicy.upsert({
-      where: { name: policy.name },
+      where: { id: policy.name }, // Using name as id for seeding
       update: {
         description: policy.description,
         triggerCondition: policy.triggerCondition,
@@ -442,7 +445,10 @@ export async function seedDefaultAutomationPolicies() {
         priority: policy.priority,
         createdBy: policy.createdBy,
       },
-      create: policy,
+      create: {
+        ...policy,
+        id: policy.name, // Using name as id for seeding
+      },
     })
   }
 
@@ -490,7 +496,7 @@ export async function seedSampleWebhooks() {
 
   for (const webhook of webhooks) {
     await prisma.webhookConfig.upsert({
-      where: { name: webhook.name },
+      where: { id: webhook.name }, // Using name as id for seeding
       update: {
         url: webhook.url,
         events: webhook.events,
@@ -499,7 +505,10 @@ export async function seedSampleWebhooks() {
         retryPolicy: webhook.retryPolicy,
         createdBy: webhook.createdBy,
       },
-      create: webhook,
+      create: {
+        ...webhook,
+        id: webhook.name, // Using name as id for seeding
+      },
     })
   }
 
@@ -589,12 +598,3 @@ export async function cleanupQueueManagementData() {
   }
 }
 
-// Export individual seed functions for selective seeding
-export {
-  seedSystemConfigs,
-  seedDefaultQueueConfigs,
-  seedDefaultAlertRules,
-  seedDefaultAutomationPolicies,
-  seedSampleWebhooks,
-  seedDefaultQueueUser,
-}

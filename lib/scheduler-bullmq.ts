@@ -69,7 +69,7 @@ export async function initializeExistingAgendamentos() {
     // Busca todos os agendamentos futuros
     const agendamentos = await prisma.agendamento.findMany({
       where: {
-        Data: {
+        data: {
           gte: new Date(), // Apenas agendamentos futuros
         },
       },
@@ -86,7 +86,6 @@ export async function initializeExistingAgendamentos() {
         accountId: agendamento.accountId,
         Diario: agendamento.diario,
         Semanal: agendamento.semanal,
-        Randomizar: agendamento.randomizar,
         TratarComoPostagensIndividuais: agendamento.tratarComoPostagensIndividuais,
       });
     }

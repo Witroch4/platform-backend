@@ -50,7 +50,7 @@ async function getMtfDiamanteVariables(
   return variables.map((v) => ({
     id: v.id,
     chave: v.chave,
-    valor: v.valor,
+    valor: String(v.valor || ''),
   }));
 }
 

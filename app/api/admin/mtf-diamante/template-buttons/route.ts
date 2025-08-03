@@ -29,7 +29,10 @@ export async function GET(request: Request) {
 
     // Buscar template no banco de dados
     const template = await db.template.findFirst({
-      where: { name: templateName }
+      where: { name: templateName },
+      include: {
+        whatsappOfficialInfo: true
+      }
     });
 
     if (!template) {
@@ -56,12 +59,12 @@ export async function GET(request: Request) {
         originalComponent: any;
       }>,
       allComponents: null as any[] | null,
-      rawComponents: template.components,
+      rawComponents: template.whatsappOfficialInfo?.components || null,
     };
 
     // Extrair informações sobre os botões
     try {
-      const components = template.components as any;
+      const components = template.whatsappOfficialInfo?.components as any;
       
       // 1. Buscar botões em formato de array de componentes
       if (Array.isArray(components)) {
@@ -126,7 +129,7 @@ export async function GET(request: Request) {
         error: "Erro ao processar componentes do template", 
         details: (error as Error).message,
         templateName,
-        components: template.components
+        components: template.whatsappOfficialInfo?.components || null
       }, { status: 500 });
     }
 

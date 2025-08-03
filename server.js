@@ -5,14 +5,46 @@ const next = require("next");
 const { spawn } = require("child_process");
 const path = require("path");
 
+// Função de fechamento de conexões simplificada
+async function closeConnections() {
+  console.log("🔌 Fechando conexões...");
+  // Implementação simplificada - as conexões serão fechadas automaticamente
+}
+
+// Monitoramento simplificado para containers
+if (process.env.NODE_ENV === 'production') {
+  // Iniciar monitoramento básico após 30 segundos
+  setTimeout(() => {
+    console.log("📊 Monitoramento básico iniciado");
+  }, 30000);
+}
+
 // Verifica se está em ambiente de desenvolvimento
 const dev = process.env.NODE_ENV !== "production";
+
+// Função para verificar conexão do banco (sem inicialização pesada)
+async function checkDatabaseConnection() {
+  if (process.env.NODE_ENV === 'production') {
+    try {
+      const { PrismaClient } = require('@prisma/client');
+      const prisma = new PrismaClient();
+      await prisma.$connect();
+      console.log('✅ Conexão com banco de dados verificada');
+      await prisma.$disconnect();
+    } catch (error) {
+      console.error('❌ Erro na conexão com banco:', error.message);
+      process.exit(1);
+    }
+  }
+}
 
 // Inicializa o app Next
 const app = next({ dev });
 const handle = app.getRequestHandler();
 
-app.prepare().then(() => {
+app.prepare().then(async () => {
+  // Verificar conexão com banco em produção
+  await checkDatabaseConnection();
   // Cria um servidor HTTP simples
   const server = createServer((req, res) => {
     const parsedUrl = parse(req.url, true);
@@ -31,9 +63,11 @@ app.prepare().then(() => {
   // Inicia o servidor na porta 3000
   server.listen(3000, (err) => {
     if (err) throw err;
-    console.log(
-      `> [server] Servidor rodando na porta 3000 ${dev ? "(modo desenvolvimento)" : "(produção)"}`
-    );
+    console.log(`🚀 Servidor iniciado com sucesso!`);
+    console.log(`📡 Porta: 3000`);
+    console.log(`🌍 Ambiente: ${dev ? "desenvolvimento" : "produção"}`);
+    console.log(`🔗 URL: http://localhost:3000`);
+    console.log(`✅ Sistema pronto para uso!`);
   });
 
   if (dev && !process.env.RUN_IN_DOCKER) {
@@ -81,7 +115,8 @@ app.prepare().then(() => {
         conn.destroy();
       }
 
-      server.close(() => {
+      server.close(async () => {
+        await closeConnections();
         console.log("> [server] Servidor encerrado.");
         process.exit(0);
       });

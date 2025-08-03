@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-import { Redis } from 'ioredis';
 import { RollbackManager } from '@/lib/feature-flags/rollback-manager';
-
-const prisma = new PrismaClient();
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+import { getRedisInstance, getPrismaInstance } from '@/lib/connections';
 
 export async function GET(request: NextRequest) {
   try {
+    const prisma = getPrismaInstance();
+    const redis = getRedisInstance();
     const rollbackManager = RollbackManager.getInstance(prisma, redis);
     
     const plans = await rollbackManager.getAllRollbackPlans();
@@ -38,6 +36,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const prisma = getPrismaInstance();
+    const redis = getRedisInstance();
     const rollbackManager = RollbackManager.getInstance(prisma, redis);
 
     if (type === 'emergency') {
@@ -97,6 +97,8 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    const prisma = getPrismaInstance();
+    const redis = getRedisInstance();
     const rollbackManager = RollbackManager.getInstance(prisma, redis);
     
     const execution = await rollbackManager.executeRollbackPlan(

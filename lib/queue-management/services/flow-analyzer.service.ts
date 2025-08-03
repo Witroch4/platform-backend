@@ -91,8 +91,8 @@ export class FlowAnalyzerService extends EventEmitter {
   /**
    * Analyze a complete flow
    */
-  @measurePerformance(new Logger('FlowAnalyzerService'), 'analyzeFlow')
   public async analyzeFlow(flowId: string, user?: User): Promise<FlowAnalysis> {
+    const start = Date.now()
     try {
       // Validate permissions
       if (user) {
@@ -105,7 +105,7 @@ export class FlowAnalyzerService extends EventEmitter {
         return cached
       }
 
-      this.logger.info(`Analyzing flow: ${flowId}`, { flowId, userId: user?.userId })
+      this.logger.info(`Analyzing flow: ${flowId}`, { flowId, userId: user?.id })
 
       // Get flow tree
       const tree = await this.getFlowTree(flowId, user)
@@ -130,6 +130,9 @@ export class FlowAnalyzerService extends EventEmitter {
       // Cache the result
       this.analysisCache.set(flowId, analysis)
 
+      const duration = Date.now() - start
+      this.logger.performance('analyzeFlow', duration, { method: 'analyzeFlow' })
+
       this.logger.info(`Flow analysis completed: ${flowId}`, {
         flowId,
         totalJobs: tree.totalJobs,
@@ -137,25 +140,32 @@ export class FlowAnalyzerService extends EventEmitter {
         failedJobs: tree.failedJobs,
         issuesFound: issues.length,
         optimizationsFound: optimizations.length,
-        userId: user?.userId
+        userId: user?.id
       })
 
       this.emit(EVENT_TYPES.FLOW_ANALYZED, {
         flowId,
         analysis,
-        userId: user?.userId,
+        userId: user?.id,
         timestamp: new Date()
       })
 
       return analysis
 
     } catch (error) {
+      const duration = Date.now() - start
+      this.logger.performance('analyzeFlow (failed)', duration, { 
+        method: 'analyzeFlow', 
+        error: error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error'
+      })
+      
       this.logger.error(`Failed to analyze flow ${flowId}:`, error, {
         flowId,
-        userId: user?.userId
+        userId: user?.id
       })
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error'
       throw new QueueManagementError(
-        `Failed to analyze flow: ${error.message}`,
+        `Failed to analyze flow: ${errorMessage}`,
         ERROR_CODES.INTERNAL_ERROR
       )
     }
@@ -186,7 +196,7 @@ export class FlowAnalyzerService extends EventEmitter {
       }
 
       // Get all job metrics for this flow
-      const jobMetrics = await this.prisma.jobMetric.findMany({
+      const jobMetrics = await this.prisma.jobMetrics.findMany({
         where: { flowId },
         orderBy: { createdAt: 'desc' }
       })
@@ -214,10 +224,11 @@ export class FlowAnalyzerService extends EventEmitter {
       }
       this.logger.error(`Failed to get flow tree for ${flowId}:`, error, {
         flowId,
-        userId: user?.userId
+        userId: user?.id
       })
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error'
       throw new QueueManagementError(
-        `Failed to get flow tree: ${error.message}`,
+        `Failed to get flow tree: ${errorMessage}`,
         ERROR_CODES.INTERNAL_ERROR
       )
     }
@@ -242,7 +253,7 @@ export class FlowAnalyzerService extends EventEmitter {
       }
 
       // Get all job metrics for this flow
-      const jobMetrics = await this.prisma.jobMetric.findMany({
+      const jobMetrics = await this.prisma.jobMetrics.findMany({
         where: { flowId },
         orderBy: { createdAt: 'desc' }
       })
@@ -286,10 +297,11 @@ export class FlowAnalyzerService extends EventEmitter {
       }
       this.logger.error(`Failed to get flow metrics for ${flowId}:`, error, {
         flowId,
-        userId: user?.userId
+        userId: user?.id
       })
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error'
       throw new QueueManagementError(
-        `Failed to get flow metrics: ${error.message}`,
+        `Failed to get flow metrics: ${errorMessage}`,
         ERROR_CODES.INTERNAL_ERROR
       )
     }
@@ -323,7 +335,7 @@ export class FlowAnalyzerService extends EventEmitter {
       })
 
       // Cancel all active jobs in the flow
-      const activeJobs = await this.prisma.jobMetric.findMany({
+      const activeJobs = await this.prisma.jobMetrics.findMany({
         where: {
           flowId,
           status: { in: ['waiting', 'active', 'delayed'] }
@@ -335,7 +347,7 @@ export class FlowAnalyzerService extends EventEmitter {
         try {
           // This would need integration with the actual queue to cancel jobs
           // For now, we'll just update the status in our metrics
-          await this.prisma.jobMetric.update({
+          await this.prisma.jobMetrics.update({
             where: { id: jobMetric.id },
             data: { status: 'failed' }
           })
@@ -349,14 +361,14 @@ export class FlowAnalyzerService extends EventEmitter {
         flowId,
         cancelledJobs,
         totalJobs: flow.totalJobs,
-        userId: user?.userId
+        userId: user?.id
       })
 
       this.emit(EVENT_TYPES.FLOW_CANCELLED, {
         flowId,
         cancelledJobs,
         totalJobs: flow.totalJobs,
-        userId: user?.userId,
+        userId: user?.id,
         timestamp: new Date()
       })
 
@@ -371,10 +383,11 @@ export class FlowAnalyzerService extends EventEmitter {
       }
       this.logger.error(`Failed to cancel flow ${flowId}:`, error, {
         flowId,
-        userId: user?.userId
+        userId: user?.id
       })
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error'
       throw new QueueManagementError(
-        `Failed to cancel flow: ${error.message}`,
+        `Failed to cancel flow: ${errorMessage}`,
         ERROR_CODES.INTERNAL_ERROR
       )
     }
@@ -417,7 +430,7 @@ export class FlowAnalyzerService extends EventEmitter {
       })
 
       // Retry all failed jobs in the flow
-      const failedJobs = await this.prisma.jobMetric.findMany({
+      const failedJobs = await this.prisma.jobMetrics.findMany({
         where: {
           flowId,
           status: 'failed'
@@ -429,7 +442,7 @@ export class FlowAnalyzerService extends EventEmitter {
         try {
           // This would need integration with the actual queue to retry jobs
           // For now, we'll just update the status in our metrics
-          await this.prisma.jobMetric.update({
+          await this.prisma.jobMetrics.update({
             where: { id: jobMetric.id },
             data: { 
               status: 'waiting',
@@ -446,14 +459,14 @@ export class FlowAnalyzerService extends EventEmitter {
         flowId,
         retriedJobs,
         totalFailedJobs: failedJobs.length,
-        userId: user?.userId
+        userId: user?.id
       })
 
       this.emit(EVENT_TYPES.FLOW_RETRIED, {
         flowId,
         retriedJobs,
         totalFailedJobs: failedJobs.length,
-        userId: user?.userId,
+        userId: user?.id,
         timestamp: new Date()
       })
 
@@ -468,10 +481,11 @@ export class FlowAnalyzerService extends EventEmitter {
       }
       this.logger.error(`Failed to retry flow ${flowId}:`, error, {
         flowId,
-        userId: user?.userId
+        userId: user?.id
       })
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error'
       throw new QueueManagementError(
-        `Failed to retry flow: ${error.message}`,
+        `Failed to retry flow: ${errorMessage}`,
         ERROR_CODES.INTERNAL_ERROR
       )
     }
@@ -494,12 +508,12 @@ export class FlowAnalyzerService extends EventEmitter {
       const orphanedJobs: OrphanedJob[] = []
 
       // Find jobs with missing parent jobs
-      const jobsWithMissingParents = await this.prisma.jobMetric.findMany({
+      const jobsWithMissingParents = await this.prisma.jobMetrics.findMany({
         where: {
           parentJobId: { not: null },
           NOT: {
             parentJobId: {
-              in: await this.prisma.jobMetric.findMany({
+              in: await this.prisma.jobMetrics.findMany({
                 select: { jobId: true }
               }).then(jobs => jobs.map(j => j.jobId))
             }
@@ -519,7 +533,7 @@ export class FlowAnalyzerService extends EventEmitter {
       }
 
       // Find jobs with missing flows
-      const jobsWithMissingFlows = await this.prisma.jobMetric.findMany({
+      const jobsWithMissingFlows = await this.prisma.jobMetrics.findMany({
         where: {
           flowId: { not: null },
           NOT: {
@@ -564,8 +578,9 @@ export class FlowAnalyzerService extends EventEmitter {
 
     } catch (error) {
       this.logger.error('Failed to detect orphaned jobs:', error)
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error'
       throw new QueueManagementError(
-        `Failed to detect orphaned jobs: ${error.message}`,
+        `Failed to detect orphaned jobs: ${errorMessage}`,
         ERROR_CODES.INTERNAL_ERROR
       )
     }
@@ -627,8 +642,9 @@ export class FlowAnalyzerService extends EventEmitter {
 
     } catch (error) {
       this.logger.error('Failed to detect circular dependencies:', error)
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error'
       throw new QueueManagementError(
-        `Failed to detect circular dependencies: ${error.message}`,
+        `Failed to detect circular dependencies: ${errorMessage}`,
         ERROR_CODES.INTERNAL_ERROR
       )
     }
@@ -640,9 +656,13 @@ export class FlowAnalyzerService extends EventEmitter {
   public async detectBottlenecks(flowId: string, jobMetrics?: any[]): Promise<Bottleneck[]> {
     try {
       if (!jobMetrics) {
-        jobMetrics = await this.prisma.jobMetric.findMany({
+        jobMetrics = await this.prisma.jobMetrics.findMany({
           where: { flowId }
         })
+      }
+
+      if (!jobMetrics || jobMetrics.length === 0) {
+        return []
       }
 
       const bottlenecks: Bottleneck[] = []
@@ -694,10 +714,11 @@ export class FlowAnalyzerService extends EventEmitter {
     } catch (error) {
       this.logger.error(`Failed to suggest optimizations for flow ${flowId}:`, error, {
         flowId,
-        userId: user?.userId
+        userId: user?.id
       })
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error'
       throw new QueueManagementError(
-        `Failed to suggest optimizations: ${error.message}`,
+        `Failed to suggest optimizations: ${errorMessage}`,
         ERROR_CODES.INTERNAL_ERROR
       )
     }
@@ -752,7 +773,7 @@ export class FlowAnalyzerService extends EventEmitter {
         changesCount: changes.length,
         durationReduction: improvements.totalDurationReduction,
         parallelismIncrease: improvements.parallelismIncrease,
-        userId: user?.userId
+        userId: user?.id
       })
 
       return result
@@ -761,10 +782,11 @@ export class FlowAnalyzerService extends EventEmitter {
       this.logger.error(`Failed to simulate flow changes for ${flowId}:`, error, {
         flowId,
         changesCount: changes.length,
-        userId: user?.userId
+        userId: user?.id
       })
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : "Unknown error") : 'Unknown error'
       throw new QueueManagementError(
-        `Failed to simulate flow changes: ${error.message}`,
+        `Failed to simulate flow changes: ${errorMessage}`,
         ERROR_CODES.INTERNAL_ERROR
       )
     }
@@ -808,9 +830,8 @@ export class FlowAnalyzerService extends EventEmitter {
     return {
       jobId,
       queueName: 'unknown',
-      jobName: 'Unknown',
       jobType: 'unknown',
-      status: 'unknown',
+      status: 'waiting',
       timing: {
         createdAt: new Date()
       },
@@ -818,9 +839,7 @@ export class FlowAnalyzerService extends EventEmitter {
         memoryPeak: 0,
         cpuTime: 0
       },
-      attempts: 0,
-      maxAttempts: 1,
-      payloadSize: 0
+      attempts: 0
     }
   }
 

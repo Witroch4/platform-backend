@@ -173,8 +173,8 @@ export function JobList({
     }
   };
 
-  const handleJobAction = (type: JobAction['type'], jobIds: string[] = selectedJobs) => {
-    onJobAction({ type, jobIds });
+  const handleJobAction = (action: JobAction['action'], jobIds: string[] = selectedJobs) => {
+    onJobAction({ action, jobIds });
     setSelectedJobs([]);
   };
 

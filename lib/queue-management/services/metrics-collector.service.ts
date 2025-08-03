@@ -5,9 +5,9 @@
  * and system resources in real-time and at regular intervals.
  */
 
-import { Queue, Job } from 'bullmq'
+import { Queue, Job, QueueEvents } from 'bullmq'
 import { EventEmitter } from 'events'
-import { Redis } from 'ioredis'
+import { getPrismaInstance, getRedisInstance } from '../../connections'
 import { PrismaClient } from '@prisma/client'
 import { 
   QueueMetrics, 
@@ -28,10 +28,11 @@ import {
 import { getQueueManagementConfig } from '../config'
 import { CACHE_KEYS, TIME_GRANULARITIES, METRIC_TYPES } from '../constants'
 import { QueueManagementError } from '../errors'
+import { JobState } from '@prisma/client'
 
 export class MetricsCollectorService extends EventEmitter {
   private static instance: MetricsCollectorService | null = null
-  private redis: Redis
+  private redis: ReturnType<typeof getRedisInstance>
   private prisma: PrismaClient
   private config: MetricCollectionConfig
   private collectors: Map<string, MetricCollector> = new Map()
@@ -39,9 +40,9 @@ export class MetricsCollectorService extends EventEmitter {
   private isCollecting = false
   private registeredQueues: Map<string, Queue> = new Map()
 
-  constructor(redis: Redis, prisma: PrismaClient) {
+  constructor(prisma: PrismaClient, redis?: ReturnType<typeof getRedisInstance>) {
     super()
-    this.redis = redis
+    this.redis = redis || getRedisInstance()
     this.prisma = prisma
     
     const queueConfig = getQueueManagementConfig()
@@ -60,15 +61,15 @@ export class MetricsCollectorService extends EventEmitter {
   /**
    * Get singleton instance
    */
-  static getInstance(redis?: Redis, prisma?: PrismaClient): MetricsCollectorService {
+  static getInstance(prisma?: PrismaClient, redis?: ReturnType<typeof getRedisInstance>): MetricsCollectorService {
     if (!MetricsCollectorService.instance) {
-      if (!redis || !prisma) {
+      if (!prisma) {
         throw new QueueManagementError(
-          'Redis and Prisma instances required for first initialization',
+          'Prisma instance required for first initialization',
           'INITIALIZATION_ERROR'
         )
       }
-      MetricsCollectorService.instance = new MetricsCollectorService(redis, prisma)
+      MetricsCollectorService.instance = new MetricsCollectorService(prisma, redis)
     }
     return MetricsCollectorService.instance
   }
@@ -211,7 +212,7 @@ export class MetricsCollectorService extends EventEmitter {
       return metrics
     } catch (error) {
       throw new QueueManagementError(
-        `Failed to collect metrics for queue ${queueName}: ${error.message}`,
+        `Failed to collect metrics for queue ${queueName}: ${(error instanceof Error ? error.message : "Unknown error")}`,
         'METRICS_COLLECTION_ERROR'
       )
     }
@@ -256,7 +257,7 @@ export class MetricsCollectorService extends EventEmitter {
       return metrics
     } catch (error) {
       throw new QueueManagementError(
-        `Failed to collect system metrics: ${error.message}`,
+        `Failed to collect system metrics: ${(error instanceof Error ? error.message : "Unknown error")}`,
         'SYSTEM_METRICS_ERROR'
       )
     }
@@ -304,7 +305,7 @@ export class MetricsCollectorService extends EventEmitter {
       }
     } catch (error) {
       throw new QueueManagementError(
-        `Failed to get aggregated metrics: ${error.message}`,
+        `Failed to get aggregated metrics: ${(error instanceof Error ? error.message : "Unknown error")}`,
         'AGGREGATION_ERROR'
       )
     }
@@ -383,7 +384,7 @@ export class MetricsCollectorService extends EventEmitter {
       }
     } catch (error) {
       throw new QueueManagementError(
-        `Failed to collect job metrics for ${jobId}: ${error.message}`,
+        `Failed to collect job metrics for ${jobId}: ${(error instanceof Error ? error.message : "Unknown error")}`,
         'JOB_METRICS_ERROR'
       )
     }
@@ -429,7 +430,7 @@ export class MetricsCollectorService extends EventEmitter {
       }
     } catch (error) {
       throw new QueueManagementError(
-        `Failed to export metrics: ${error.message}`,
+        `Failed to export metrics: ${(error instanceof Error ? error.message : "Unknown error")}`,
         'EXPORT_ERROR'
       )
     }
@@ -520,21 +521,37 @@ export class MetricsCollectorService extends EventEmitter {
   }
 
   private setupQueueEventListeners(queueName: string, queue: Queue): void {
+    // Create QueueEvents instance for this queue
+    const queueEvents = new QueueEvents(queueName, { connection: this.redis })
+    
     // Listen to job events for real-time metrics
-    queue.on('completed', async (job: Job) => {
-      await this.recordJobEvent(queueName, 'completed', job)
+    queueEvents.on('completed', async ({ jobId }) => {
+      const job = await queue.getJob(jobId)
+      if (job) {
+        await this.recordJobEvent(queueName, 'completed', job)
+      }
     })
 
-    queue.on('failed', async (job: Job, error: Error) => {
-      await this.recordJobEvent(queueName, 'failed', job, error)
+    queueEvents.on('failed', async ({ jobId, failedReason }) => {
+      const job = await queue.getJob(jobId)
+      const error = new Error(failedReason)
+      if (job) {
+        await this.recordJobEvent(queueName, 'failed', job, error)
+      }
     })
 
-    queue.on('active', async (job: Job) => {
-      await this.recordJobEvent(queueName, 'active', job)
+    queueEvents.on('active', async ({ jobId }) => {
+      const job = await queue.getJob(jobId)
+      if (job) {
+        await this.recordJobEvent(queueName, 'active', job)
+      }
     })
 
-    queue.on('waiting', async (job: Job) => {
-      await this.recordJobEvent(queueName, 'waiting', job)
+    queueEvents.on('waiting', async ({ jobId }) => {
+      const job = await queue.getJob(jobId)
+      if (job) {
+        await this.recordJobEvent(queueName, 'waiting', job)
+      }
     })
   }
 
@@ -633,19 +650,18 @@ export class MetricsCollectorService extends EventEmitter {
     for (const metric of metrics) {
       if (metric.labels?.jobId) {
         await this.prisma.jobMetrics.upsert({
-          where: { jobId: metric.labels.jobId },
+          where: { id: metric.labels.jobId },
           update: {
-            [metric.name]: metric.value,
-            updatedAt: new Date()
+            [metric.name]: metric.value
           },
           create: {
+            id: metric.labels.jobId,
             jobId: metric.labels.jobId,
             queueName: metric.labels.queueName || '',
             jobName: metric.labels.jobName || '',
             jobType: metric.labels.jobType || '',
-            status: metric.labels.status || 'unknown',
-            createdAt: metric.timestamp,
-            [metric.name]: metric.value
+            status: (metric.labels.status as JobState) || 'waiting',
+            createdAt: metric.timestamp
           }
         })
       }
@@ -904,22 +920,22 @@ export class MetricsCollectorService extends EventEmitter {
       
       // Update or create job metrics record
       await this.prisma.jobMetrics.upsert({
-        where: { jobId: job.id! },
+        where: { id: job.id! },
         update: {
-          status: event,
+          status: (event as JobState),
           ...(event === 'completed' && { completedAt: timestamp }),
-          ...(event === 'failed' && { error: error?.message }),
-          updatedAt: timestamp
+          ...(event === 'failed' && { errorMessage: error?.message })
         },
         create: {
+          id: job.id!,
           jobId: job.id!,
           queueName,
           jobName: job.name,
           jobType: job.name,
-          status: event,
+          status: (event as JobState),
           createdAt: job.timestamp ? new Date(job.timestamp) : timestamp,
           ...(event === 'completed' && { completedAt: timestamp }),
-          ...(event === 'failed' && { error: error?.message })
+          ...(event === 'failed' && { errorMessage: error?.message })
         }
       })
 

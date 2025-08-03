@@ -1,6 +1,5 @@
 import { performance } from 'perf_hooks';
-import { connection } from '../redis';
-import type IORedis from 'ioredis';
+import { getRedisInstance } from '../connections';
 import { apm, recordWorkerMetrics, recordWebhookMetrics } from './application-performance-monitor';
 import { queueMonitor, registerQueueForMonitoring } from './queue-monitor';
 import { instagramTranslationQueue } from '../queue/instagram-translation.queue';
@@ -18,7 +17,7 @@ export interface InstagramTranslationMetrics {
   errorCode?: string;
   timestamp: Date;
   retryCount: number;
-  messageType: 'interactive' | 'enhanced_interactive' | 'template';
+  messageType: 'interactive' | 'enhanced_interactive' | 'template' | 'unified_template';
 }
 
 export interface InstagramWorkerPerformanceMetrics {
@@ -67,7 +66,7 @@ export const INSTAGRAM_ALERT_THRESHOLDS = {
 
 export class InstagramTranslationMonitor {
   private static instance: InstagramTranslationMonitor;
-  private redis: IORedis;
+  private redis: ReturnType<typeof getRedisInstance>;
   private metricsBuffer: {
     translations: InstagramTranslationMetrics[];
     workerPerformance: InstagramWorkerPerformanceMetrics[];
@@ -86,8 +85,8 @@ export class InstagramTranslationMonitor {
   private monitoringStartTime: number;
   private lastCpuUsage: NodeJS.CpuUsage;
 
-  constructor(redisConnection?: IORedis) {
-    this.redis = redisConnection || connection;
+  constructor(redisConnection?: ReturnType<typeof getRedisInstance>) {
+    this.redis = redisConnection || getRedisInstance();
     this.monitoringStartTime = Date.now();
     this.lastCpuUsage = process.cpuUsage();
     this.startMonitoring();

@@ -264,7 +264,7 @@ export async function POST(request: NextRequest): Promise<Response> {
           }
           visited.add(current.id);
           const nextInbox = usuarioChatwit.inboxes.find(
-            i => i.id === current.fallbackParaInboxId
+            i => i.id === current!.fallbackParaInboxId
           );
           current = nextInbox ?? null;
         }
@@ -299,7 +299,7 @@ export async function POST(request: NextRequest): Promise<Response> {
           }
           current = current.fallbackParaInboxId
             ? usuarioChatwit.inboxes.find(
-                i => i.id === current.fallbackParaInboxId
+                i => i.id === current!.fallbackParaInboxId
               ) ?? null
             : null;
         }
