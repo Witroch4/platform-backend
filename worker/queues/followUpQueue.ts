@@ -1,6 +1,6 @@
 // worker/queues/followUpQueue.ts
 import { Queue } from "bullmq";
-import { connection } from "@/lib/redis";
+import { getRedisInstance } from "@/lib/connections";
 
 /**
  * Define a interface com os dados que deseja enviar à fila.
@@ -20,7 +20,7 @@ export interface IFollowUpJobData {
 export const followUpQueue = new Queue<IFollowUpJobData>(
   "contato-sem-clique", // Nome da fila
   {
-    connection,
+    connection: getRedisInstance(),
     defaultJobOptions: {
       removeOnComplete: true, // ou false, conforme necessidade
       removeOnFail: false,

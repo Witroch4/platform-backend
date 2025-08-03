@@ -1,6 +1,6 @@
 //worker\automacao.worker.ts
 import { Worker, type Job } from "bullmq"
-import { connection } from "@/lib/redis"
+import { getRedisInstance } from "@/lib/connections"
 import dotenv from "dotenv"
 import {
   INSTAGRAM_WEBHOOK_QUEUE_NAME,
@@ -32,7 +32,7 @@ export const instagramWebhookWorker = new Worker<IInstagramWebhookJobData>(
       throw error
     }
   },
-  { connection }
+  { connection: getRedisInstance() }
 )
 
 // Logs do BullMQ

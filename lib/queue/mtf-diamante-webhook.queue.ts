@@ -1,5 +1,5 @@
 import { Queue } from 'bullmq';
-import { connection } from '../redis';
+import { getRedisInstance } from '../connections';
 
 export const MTF_DIAMANTE_WEBHOOK_QUEUE_NAME = 'mtf-diamante-webhook';
 
@@ -98,7 +98,7 @@ export type AllTaskData = WebhookTaskData | AsyncTaskData;
 export const mtfDiamanteWebhookQueue = new Queue<WebhookTaskData>(
   MTF_DIAMANTE_WEBHOOK_QUEUE_NAME,
   {
-    connection,
+    connection: getRedisInstance(),
     defaultJobOptions: {
       attempts: 3,
       backoff: { type: 'exponential', delay: 2000 },
@@ -112,11 +112,11 @@ export const mtfDiamanteWebhookQueue = new Queue<WebhookTaskData>(
 export const asyncWebhookQueue = new Queue<AsyncTaskData>(
   `${MTF_DIAMANTE_WEBHOOK_QUEUE_NAME}-async`,
   {
-    connection,
+    connection: getRedisInstance(),
     defaultJobOptions: {
       attempts: 3,
-      backoff: { 
-        type: 'exponential', 
+      backoff: {
+        type: 'exponential',
         delay: 2000
       },
       removeOnComplete: 100,

@@ -1,5 +1,5 @@
 import { Queue } from 'bullmq';
-import { connection } from '@/lib/redis';
+import { getRedisInstance } from '@/lib/connections';
 
 export const MANUSCRITO_QUEUE_NAME = 'filaManuscrito';
 
@@ -10,7 +10,7 @@ export interface IManuscritoJobData {
 
 export const manuscritoQueue = new Queue<IManuscritoJobData>(
   MANUSCRITO_QUEUE_NAME,
-  { connection }
+  { connection: getRedisInstance() }
 );
 
 export async function addManuscritoJob(data: IManuscritoJobData) {
