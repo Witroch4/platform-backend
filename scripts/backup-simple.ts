@@ -1,11 +1,11 @@
 #!/usr/bin/env tsx
 
-import { PrismaClient } from '@prisma/client';
+import { getPrismaInstance } from "@/lib/connections";
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { format } from 'date-fns';
 
-const prisma = new PrismaClient();
+const prisma = getPrismaInstance();
 
 async function simpleBackup() {
   const timestamp = format(new Date(), 'yyyy-MM-dd_HH-mm-ss');

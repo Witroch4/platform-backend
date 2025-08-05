@@ -2,7 +2,7 @@
 
 import { PrismaClient, LeadSource, EspecialidadeJuridica } from '@prisma/client';
 
-const prisma = new PrismaClient();
+const prisma = getPrismaInstance();
 
 interface MigrationStats {
   usersMigrated: number;

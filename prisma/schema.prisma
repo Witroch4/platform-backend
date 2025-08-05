@@ -39,6 +39,7 @@ model User {
   approvalRequests          TemplateApprovalRequest[] @relation("ApprovalRequests")
   usuarioChatwit            UsuarioChatwit?
   auditLogs                 AuditLog[]
+  intents                   Intent[]
 }
 
 model Account {
@@ -240,6 +241,7 @@ model Template {
   inbox                ChatwitInbox?             @relation(fields: [inboxId], references: [id])
   approvalRequests     TemplateApprovalRequest[]
   whatsappOfficialInfo WhatsAppOfficialInfo?
+  intents              Intent[]
 
   @@index([createdById, inboxId, type, scope, status, isActive])
 }
@@ -384,6 +386,7 @@ model AgenteDialogflow {
   usuarioChatwit   UsuarioChatwit @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
 }
 
+// intent do dialogflw (não da IA)
 model MapeamentoIntencao {
   id         String       @id @default(cuid())
   intentName String
@@ -790,6 +793,26 @@ model UserFeedback {
   @@index([createdAt])
 }
 
+// 1) Novo enum para segurança de domínio
+enum IntentActionType {
+  TEMPLATE
+  INTERACTIVE
+  TEXT
+  HUMAN_FALLBACK
+}
+
+model NegativeExample {
+  id        String                @id @default(cuid())
+  intentId  String
+  text      String
+  embedding Unsupported("vector")
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+
+  @@index([intentId])
+  @@index([createdAt])
+}
+
 model QueueConfig {
   id              String   @id @default(cuid())
   name            String   @unique @db.VarChar(255)
@@ -1175,3 +1198,69 @@ enum QueueUserRole {
   superadmin
 }
 
+// AI Integration Models
+model Intent {
+  id                  String                      @id @default(cuid())
+  name                String                      @unique
+  slug                String                      @unique
+  description         String?
+  actionType          IntentActionType
+  templateId          String?
+  // embedding           Unsupported("vector(1536)") // Temporarily commented - causing Prisma Client issues
+  similarityThreshold Float                       @default(0.8)
+  isActive            Boolean                     @default(true)
+  usageCount          Int                         @default(0)
+  createdAt           DateTime                    @default(now())
+  updatedAt           DateTime                    @updatedAt
+  createdById         String
+  accountId           String?
+
+  createdBy User           @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  template  Template?      @relation(fields: [templateId], references: [id])
+  hitLogs   IntentHitLog[]
+
+  @@index([accountId, isActive])
+  @@index([slug])
+}
+
+model LlmAudit {
+  id             String   @id @default(cuid())
+  conversationId String
+  messageId      String
+  accountId      String
+  mode           String // 'INTENT_CLASSIFY' | 'DYNAMIC_GENERATE'
+  inputText      String // PII mascarado
+  resultJson     Json
+  score          Float?
+  tokensUsed     Int?
+  modelUsed      String?
+  latencyMs      Int?
+  traceId        String?
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime @default(dbgenerated("NOW() + INTERVAL '90 days'"))
+
+  @@index([conversationId, createdAt])
+  @@index([accountId, createdAt])
+  @@index([expiresAt])
+}
+
+model IntentHitLog {
+  id             String   @id @default(cuid())
+  conversationId String
+  messageId      String
+  accountId      String
+  intentId       String
+  candidateName  String
+  similarity     Float
+  chosen         Boolean  @default(false)
+  traceId        String?
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime @default(dbgenerated("NOW() + INTERVAL '90 days'"))
+
+  intent Intent @relation(fields: [intentId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([accountId, createdAt])
+  @@index([intentId])
+  @@index([expiresAt])
+}

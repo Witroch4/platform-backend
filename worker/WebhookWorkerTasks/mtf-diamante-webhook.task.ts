@@ -1,5 +1,5 @@
 import type { Job } from "bullmq";
-import { prisma } from "../../lib/prisma";
+import { getPrismaInstance } from "../../lib/connections";
 import {
   type WebhookTaskData,
   AsyncTaskData,
@@ -272,7 +272,7 @@ async function storeWebhookMessage(data: ValidatedWebhookData) {
     const messageType = extractMessageType(data.rawPayload);
 
     // 1. Armazena a mensagem do webhook usando os IDs corretos
-    await prisma.webhookMessage.create({
+    await getPrismaInstance().webhookMessage.create({
       data: {
         whatsappMessageId: data.wamid, // CORREÇÃO: Usando o WAMID real do WhatsApp
         conversationId: data.chatwootConversationId, // ID da conversa do Chatwoot
@@ -312,7 +312,7 @@ async function getWhatsAppConfigFromDatabase(chatwootInboxId: string): Promise<{
 } | null> {
   try {
     // Buscar a caixa de entrada pelo inboxId do Chatwoot
-    const caixaEntrada = await prisma.chatwitInbox.findFirst({
+    const caixaEntrada = await getPrismaInstance().chatwitInbox.findFirst({
       where: { inboxId: chatwootInboxId },
     });
 
@@ -333,7 +333,7 @@ async function getWhatsAppConfigFromDatabase(chatwootInboxId: string): Promise<{
     }
 
     // Fallback: buscar configuração padrão do usuário
-    const defaultConfig = await prisma.whatsAppGlobalConfig.findFirst({
+    const defaultConfig = await getPrismaInstance().whatsAppGlobalConfig.findFirst({
       where: {
         usuarioChatwitId: caixaEntrada.usuarioChatwitId,
       },
@@ -367,7 +367,7 @@ async function updateWhatsAppApiKey(data: {
 }) {
   try {
     // A busca já usa o ID correto (string)
-    const caixaEntrada = await prisma.chatwitInbox.findFirst({
+    const caixaEntrada = await getPrismaInstance().chatwitInbox.findFirst({
       where: { inboxId: data.chatwootInboxId },
     });
 
@@ -387,7 +387,7 @@ async function updateWhatsAppApiKey(data: {
       // Se já existe configuração, apenas atualizar o token se necessário
       if (existingConfig.whatsappToken !== data.whatsappApiKey) {
         // Atualizar configuração global
-        await prisma.whatsAppGlobalConfig.updateMany({
+        await getPrismaInstance().whatsAppGlobalConfig.updateMany({
           where: {
             usuarioChatwitId: caixaEntrada.usuarioChatwitId,
           },
@@ -1114,7 +1114,7 @@ async function findButtonReactionWithFallback(buttonId: string): Promise<{
 } | null> {
   try {
     // First try database lookup using MapeamentoBotao
-    const dbReaction = await prisma.mapeamentoBotao.findUnique({
+    const dbReaction = await getPrismaInstance().mapeamentoBotao.findUnique({
       where: { buttonId },
     });
 

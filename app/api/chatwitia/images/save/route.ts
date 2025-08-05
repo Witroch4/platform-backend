@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from "@/auth";
-import { db } from "@/lib/db";
+import { getPrismaInstance } from "@/lib/connections"
 import { uploadToMinIO } from '@/lib/minio';
 
 export async function POST(req: Request) {
@@ -76,7 +76,7 @@ export async function POST(req: Request) {
     }
 
     // Salvar no banco de dados
-    const savedImage = await db.generatedImage.create({
+    const savedImage = await getPrismaInstance().generatedImage.create({
       data: {
         userId: session.user.id,
         sessionId: sessionId || null,
@@ -141,7 +141,7 @@ export async function GET(req: Request) {
       whereClause.sessionId = sessionId;
     }
 
-    const images = await db.generatedImage.findMany({
+    const images = await getPrismaInstance().generatedImage.findMany({
       where: whereClause,
       orderBy: {
         createdAt: 'desc'
@@ -160,7 +160,7 @@ export async function GET(req: Request) {
       }
     });
 
-    const total = await db.generatedImage.count({
+    const total = await getPrismaInstance().generatedImage.count({
       where: whereClause
     });
 

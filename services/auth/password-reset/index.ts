@@ -1,8 +1,8 @@
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 import { v4 as uuid } from "uuid";
 
 export const findResetPasswordTokenByToken = async (token: string) => {
-	const resetPasswordToken = await prisma.resetPasswordToken.findUnique({
+	const resetPasswordToken = await getPrismaInstance().resetPasswordToken.findUnique({
 		where: { token },
 	});
 
@@ -10,7 +10,7 @@ export const findResetPasswordTokenByToken = async (token: string) => {
 };
 
 export const findResetPasswordTokenByEmail = async (email: string) => {
-	const passwordResetToken = await prisma.resetPasswordToken.findFirst({
+	const passwordResetToken = await getPrismaInstance().resetPasswordToken.findFirst({
 		where: { email },
 	});
 
@@ -18,13 +18,13 @@ export const findResetPasswordTokenByEmail = async (email: string) => {
 };
 
 export const deleteResetPasswordToken = async (id: string) => {
-	await prisma.resetPasswordToken.delete({
+	await getPrismaInstance().resetPasswordToken.delete({
 		where: { id },
 	});
 };
 
 export const updatePassword = async (id: string, password: string) => {
-	await prisma.user.update({
+	await getPrismaInstance().user.update({
 		where: { id },
 		data: { password },
 	});
@@ -39,7 +39,7 @@ export const createResetPasswordToken = async (email: string) => {
 		await deleteResetPasswordToken(existingToken.id);
 	}
 
-	const verificationToken = await prisma.resetPasswordToken.create({
+	const verificationToken = await getPrismaInstance().resetPasswordToken.create({
 		data: {
 			email,
 			token,

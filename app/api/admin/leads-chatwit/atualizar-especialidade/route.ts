@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-
+import { getPrismaInstance } from '@/lib/connections';
+const prisma = getPrismaInstance();
 /**
  * Handler da rota PUT para atualizar a especialidade de um lead.
  */

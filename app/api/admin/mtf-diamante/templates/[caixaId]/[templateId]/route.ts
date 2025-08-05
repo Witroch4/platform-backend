@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { getPrismaInstance } from '@/lib/connections';
 import { auth } from '@/auth';
 
 // DELETE: Exclui um template de WhatsApp
@@ -16,7 +16,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     }
 
     // Verificar se o template não está sendo usado em um mapeamento
-    const mapping = await db.mapeamentoIntencao.findFirst({
+    const mapping = await getPrismaInstance().mapeamentoIntencao.findFirst({
         where: { templateId: templateId }
     });
 
@@ -24,7 +24,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
         return NextResponse.json({ error: 'Este template está em uso por um mapeamento e não pode ser excluído.' }, { status: 409 });
     }
 
-    await db.template.delete({
+    await getPrismaInstance().template.delete({
       where: { id: templateId },
     });
 

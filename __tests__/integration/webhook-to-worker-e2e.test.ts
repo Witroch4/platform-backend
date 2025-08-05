@@ -93,7 +93,7 @@ jest.mock('@/lib/queue/persistencia-credenciais.queue', () => ({
 }));
 
 // Import mocked functions
-import { prisma } from '@/lib/prisma';
+import { getPrismaInstance } from '@/lib/connections';
 import { credentialsCache } from '@/lib/cache/credentials-cache';
 import { sendTextMessage, sendInteractiveMessage } from '@/lib/whatsapp-messages';
 import { sendReactionMessage } from '@/lib/whatsapp-reactions';

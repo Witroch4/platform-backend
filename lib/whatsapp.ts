@@ -2,7 +2,7 @@
 import axios from 'axios';
 import { auth } from '@/auth';
 import { getWhatsAppConfig as _getWhatsAppConfig, getWhatsAppApiUrl as _getWhatsAppApiUrl } from '@/app/lib';
-import { db } from '@/lib/db';
+import { getPrismaInstance } from '@/lib/connections';
 
 export interface SendOpts {
   bodyVars?: (string | number)[];
@@ -39,14 +39,14 @@ export async function sendTemplateMessage(
   try {
     const session = await auth();
     if (!session?.user?.id) throw new Error('401');
-    const usuarioChatwit = await db.usuarioChatwit.findUnique({
+    const usuarioChatwit = await getPrismaInstance().usuarioChatwit.findUnique({
       where: { appUserId: session.user.id },
       select: { id: true }
     });
     if (!usuarioChatwit) throw new Error('Usuário Chatwit não encontrado');
     const cfg = await _getWhatsAppConfig(session.user.id);
     const api = _getWhatsAppApiUrl(cfg);
-    const tpl = await db.template.findFirst({
+    const tpl = await getPrismaInstance().template.findFirst({
       where: {
         name: templateName,
         // Removendo campo que não existe no schema
@@ -204,7 +204,7 @@ export function processCSV(csv: string) {
 export async function getWhatsAppTemplate(templateId: string, userId: string) {
   try {
     // Buscar template no banco de dados
-    const tpl = await db.template.findFirst({
+    const tpl = await getPrismaInstance().template.findFirst({
       where: {
         whatsappOfficialInfo: {
           metaTemplateId: templateId

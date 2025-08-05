@@ -65,7 +65,7 @@ jest.mock('../../lib/instagram/cache-warming-scheduler', () => ({
 }));
 
 // Now import the modules after mocking
-import { PrismaClient } from '@prisma/client';
+import { getPrismaInstance } from "@/lib/connections";
 import {
   instagramTemplateCache,
   getCachedTemplateMapping,

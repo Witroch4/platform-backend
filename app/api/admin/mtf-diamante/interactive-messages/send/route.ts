@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 import { auth } from "@/auth";
 import axios from "axios";
 import {
@@ -11,7 +11,7 @@ import type { MtfDiamanteVariavel } from "@/app/lib/variable-utils";
 
 // Função para obter configuração do WhatsApp atual
 async function getCurrentWhatsAppConfig() {
-  const config = await prisma.whatsAppGlobalConfig.findFirst({
+  const config = await getPrismaInstance().whatsAppGlobalConfig.findFirst({
     orderBy: { updatedAt: "desc" },
   });
 
@@ -34,7 +34,7 @@ async function getCurrentWhatsAppConfig() {
 async function getMtfDiamanteVariables(
   userId: string
 ): Promise<MtfDiamanteVariavel[]> {
-  const config = await prisma.mtfDiamanteConfig.findFirst({
+  const config = await getPrismaInstance().mtfDiamanteConfig.findFirst({
     where: { userId: userId },
   });
 
@@ -42,7 +42,7 @@ async function getMtfDiamanteVariables(
     return [];
   }
 
-  const variables = await prisma.mtfDiamanteVariavel.findMany({
+  const variables = await getPrismaInstance().mtfDiamanteVariavel.findMany({
     where: { configId: config.id },
     orderBy: { chave: "asc" },
   });
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
     }
 
     // Buscar a mensagem interativa
-    const template = await prisma.template.findFirst({
+    const template = await getPrismaInstance().template.findFirst({
       where: {
         id: messageId,
         createdById: session.user.id,
@@ -190,7 +190,7 @@ export async function POST(request: Request) {
     );
 
     // Registrar o envio no banco de dados
-    await prisma.disparoMtfDiamante.create({
+    await getPrismaInstance().disparoMtfDiamante.create({
       data: {
         userId: session.user.id,
         templateName: template.name,
@@ -219,7 +219,7 @@ export async function POST(request: Request) {
     try {
       const session = await auth();
       if (session?.user?.id) {
-        await prisma.disparoMtfDiamante.create({
+        await getPrismaInstance().disparoMtfDiamante.create({
           data: {
             userId: session.user.id,
             templateName: "interactive_message_error",

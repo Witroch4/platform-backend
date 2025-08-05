@@ -1,9 +1,16 @@
 // prisma/seed.ts
-import { PrismaClient, UserRole } from '@prisma/client';
+import { getPrismaInstance } from "@/lib/connections";
+
+// Definindo os tipos manualmente baseado no schema
+enum UserRole {
+  DEFAULT = 'DEFAULT',
+  ADMIN = 'ADMIN',
+  SUPERADMIN = 'SUPERADMIN'
+}
 import * as bcryptjs from 'bcryptjs';
 import { restoreAllChatwit } from '../scripts/restore-chatwit-all';
 
-const prisma = new PrismaClient();
+const prisma = getPrismaInstance();
 
 async function main() {
   console.log('🚀 Iniciando seed do banco de dados...');

@@ -1,7 +1,7 @@
 // app/api/admin/templates/approval/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { prisma } from '@/lib/prisma';
+import { getPrismaInstance } from '@/lib/connections';
 import { TemplateStatus } from '@prisma/client';
 
 /**
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest): Promise<Response> {
 
     // Buscar solicitações de aprovação
     const [approvalRequests, total] = await Promise.all([
-      prisma.templateApprovalRequest.findMany({
+      getPrismaInstance().templateApprovalRequest.findMany({
         where: {
           status,
         },
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest): Promise<Response> {
         skip,
         take: limit,
       }),
-      prisma.templateApprovalRequest.count({
+      getPrismaInstance().templateApprovalRequest.count({
         where: { status },
       }),
     ]);
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     }
 
     // Verificar se o template existe e pertence ao usuário
-    const template = await prisma.template.findFirst({
+    const template = await getPrismaInstance().template.findFirst({
       where: {
         id: templateId,
         createdById: session.user.id,
@@ -129,7 +129,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     }
 
     // Verificar se já existe uma solicitação pendente
-    const existingRequest = await prisma.templateApprovalRequest.findFirst({
+    const existingRequest = await getPrismaInstance().templateApprovalRequest.findFirst({
       where: {
         templateId,
         status: 'pending',
@@ -144,7 +144,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     }
 
     // Criar solicitação de aprovação
-    const approvalRequest = await prisma.templateApprovalRequest.create({
+    const approvalRequest = await getPrismaInstance().templateApprovalRequest.create({
       data: {
         templateId,
         requestMessage,

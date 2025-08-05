@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { db } from "@/lib/db";
+import { getPrismaInstance } from "@/lib/connections"
 
 // Use Node.js runtime for Prisma compatibility
 export const runtime = 'nodejs';
@@ -14,7 +14,7 @@ export async function GET() {
       return new NextResponse("Não autorizado", { status: 401 });
     }
     
-    const chatSessions = await db.chatSession.findMany({
+    const chatSessions = await getPrismaInstance().chatSession.findMany({
       where: {
         userId: session.user.id
       },
@@ -41,7 +41,7 @@ export async function POST(req: Request) {
     
     const { title, model = "chatgpt-4o-latest" } = await req.json();
     
-    const chatSession = await db.chatSession.create({
+    const chatSession = await getPrismaInstance().chatSession.create({
       data: {
         userId: session.user.id,
         title: title || "Nova conversa",

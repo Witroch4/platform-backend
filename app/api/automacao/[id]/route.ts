@@ -1,7 +1,8 @@
 //app\api\automacao\[id]\route.ts
 import { type NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 import { auth } from "@/auth";
+const prisma = getPrismaInstance();
 import { v4 as uuidv4 } from "uuid";
 
 // Forçar o uso do runtime NodeJS (em vez do Edge)

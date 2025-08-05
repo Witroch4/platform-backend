@@ -1,7 +1,7 @@
 // app/api/admin/leads/search/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { prisma } from '@/lib/prisma';
+import { getPrismaInstance } from '@/lib/connections';
 import { LeadSource } from '@prisma/client';
 
 /**
@@ -114,7 +114,7 @@ export async function GET(request: NextRequest): Promise<Response> {
 
     // Executar busca
     const [leads, total] = await Promise.all([
-      prisma.lead.findMany({
+      getPrismaInstance().lead.findMany({
         where: whereConditions,
         include: {
           user: {
@@ -154,7 +154,7 @@ export async function GET(request: NextRequest): Promise<Response> {
         skip,
         take: limit,
       }),
-      prisma.lead.count({ where: whereConditions }),
+      getPrismaInstance().lead.count({ where: whereConditions }),
     ]);
 
     // Formatar resposta com destaque dos termos encontrados
@@ -232,7 +232,7 @@ export async function GET(request: NextRequest): Promise<Response> {
 
     // Calcular estatísticas por source
     if (total > 0) {
-      const sourceStats = await prisma.lead.groupBy({
+      const sourceStats = await getPrismaInstance().lead.groupBy({
         by: ['source'],
         where: whereConditions,
         _count: true,
@@ -244,13 +244,13 @@ export async function GET(request: NextRequest): Promise<Response> {
 
       // Contar leads com email, telefone e tags
       const [withEmailCount, withPhoneCount, withTagsCount] = await Promise.all([
-        prisma.lead.count({
+        getPrismaInstance().lead.count({
           where: { ...whereConditions, email: { not: null } },
         }),
-        prisma.lead.count({
+        getPrismaInstance().lead.count({
           where: { ...whereConditions, phone: { not: null } },
         }),
-        prisma.lead.count({
+        getPrismaInstance().lead.count({
           where: { ...whereConditions, tags: { isEmpty: false } },
         }),
       ]);

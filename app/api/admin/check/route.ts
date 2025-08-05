@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections";
+const prisma = getPrismaInstance();
 
 // GET: Verificar se o usuário atual é administrador
 export async function GET() {

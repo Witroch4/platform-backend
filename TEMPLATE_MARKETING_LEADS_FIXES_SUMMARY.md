@@ -48,7 +48,7 @@ function TemplateDetailsWrapper({ params }: { params: Promise<{ id: string }> })
 ### 2. `app/api/admin/leads-chatwit/marketing-leads/route.ts`
 ```typescript
 // Correções implementadas:
-- import { prisma } from '@/lib/prisma'; // Correção da importação
+- import { getPrismaInstance } from '@/lib/connections'; // Correção da importação
 - Processamento de dados para evitar 'undefined' como string
 - Estruturação adequada do objeto leadData
 - Logs de debug melhorados

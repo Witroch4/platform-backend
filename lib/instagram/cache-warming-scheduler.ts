@@ -5,7 +5,7 @@
  * templates to improve response times and reduce database load.
  */
 
-import { PrismaClient } from '@prisma/client';
+import { getPrismaInstance } from "@/lib/connections";
 import { instagramTemplateCache } from '../cache/instagram-template-cache';
 import { findOptimizedCompleteMessageMapping } from './optimized-database-queries';
 
@@ -40,7 +40,7 @@ interface TemplateAccessInfo {
 
 class CacheWarmingScheduler {
   private config: CacheWarmingConfig;
-  private prisma: PrismaClient;
+  private prisma: any;
   private warmingInterval?: NodeJS.Timeout;
   private isWarming = false;
   private warmingStats = {
@@ -54,7 +54,7 @@ class CacheWarmingScheduler {
 
   constructor(config: Partial<CacheWarmingConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
-    this.prisma = new PrismaClient();
+    this.prisma = getPrismaInstance();
     
     // Don't start scheduler in test environment
     if (this.config.enabled && process.env.NODE_ENV !== 'test') {
@@ -183,7 +183,7 @@ class CacheWarmingScheduler {
       });
 
       // Convert to access info and calculate priorities
-      const accessInfos: TemplateAccessInfo[] = recentMappings.map(mapping => {
+      const accessInfos: TemplateAccessInfo[] = recentMappings.map((mapping: any) => {
         const daysSinceAccess = (Date.now() - mapping.updatedAt.getTime()) / (24 * 60 * 60 * 1000);
         const priority = Math.max(1, 10 - daysSinceAccess); // Higher priority for more recent access
         

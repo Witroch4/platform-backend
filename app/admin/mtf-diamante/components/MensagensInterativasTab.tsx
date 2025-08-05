@@ -11,7 +11,6 @@ import { toast } from 'sonner';
 import { EnhancedTextArea } from './EnhancedTextArea';
 import { TemplatePreview } from './TemplatesTab/components/template-preview';
 import { useVariableManager } from '@/hooks/useVariableManager';
-import { TemplateLibraryService } from '@/app/lib/template-library-service';
 import { useSession } from 'next-auth/react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';

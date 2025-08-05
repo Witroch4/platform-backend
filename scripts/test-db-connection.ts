@@ -6,7 +6,7 @@ const path = require('path');
 require('dotenv').config({ path: path.resolve(process.cwd(), '.env.production'), override: true });
 
 // Inicializa o Prisma Client
-const prisma = new PrismaClient();
+const prisma = getPrismaInstance();
 
 async function testConnection() {
   console.log('🔍 Testando conexão com o banco de dados...');

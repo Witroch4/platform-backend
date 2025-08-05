@@ -212,9 +212,8 @@ async function getSimplifiedDashboard(timeRange: DashboardRange) {
       worker: {
         status: "HEALTHY",
         concurrency: 100,
-        resourceLimits: {
-          memory: "512MB",
-          cpu: "1 core",
+        processing: {
+          maxProcessingTime: "4.5s",
           lockDuration: "5s",
         },
       },
@@ -388,9 +387,8 @@ async function getInstagramTranslationMetrics() {
       worker: {
         status: "HEALTHY",
         concurrency: 100,
-        resourceLimits: {
-          memory: "512MB",
-          cpu: "1 core",
+        processing: {
+          maxProcessingTime: "4.5s",
           lockDuration: "5s",
         },
         uptime: process.uptime(),
@@ -420,9 +418,8 @@ async function getInstagramTranslationMetrics() {
       worker: {
         status: "HEALTHY",
         concurrency: 100,
-        resourceLimits: {
-          memory: "512MB",
-          cpu: "1 core", 
+        processing: {
+          maxProcessingTime: "4.5s",
           lockDuration: "5s",
         },
         uptime: process.uptime(),

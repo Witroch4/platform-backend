@@ -5,7 +5,8 @@
 
 import { PrismaClient } from "@prisma/client";
 
-const prisma = new PrismaClient();
+import { getPrismaInstance } from './connections';
+const prisma = getPrismaInstance();
 
 // ============================================================================
 // INTERFACES

@@ -52,7 +52,8 @@ jest.mock("@/lib/error-handling/interactive-message-errors", () => ({
 }));
 
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections";
+const prisma = getPrismaInstance();
 import { InteractiveMessageValidator } from "@/lib/validation/interactive-message-validation";
 import { errorHandler } from "@/lib/error-handling/interactive-message-errors";
 

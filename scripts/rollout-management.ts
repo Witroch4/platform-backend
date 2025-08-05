@@ -1,12 +1,12 @@
 #!/usr/bin/env ts-node
 
-import { PrismaClient } from '@prisma/client';
+import { getPrismaInstance } from "@/lib/connections";
 import { getRedisInstance } from '../lib/connections';
 import { FeatureFlagManager } from '../lib/feature-flags/feature-flag-manager';
 import { RollbackManager } from '../lib/feature-flags/rollback-manager';
 import { ABTestingManager, createWebhookPerformanceTest } from '../lib/feature-flags/ab-testing-manager';
 
-const prisma = new PrismaClient();
+const prisma = getPrismaInstance();
 
 class RolloutManager {
   private featureFlagManager: FeatureFlagManager;

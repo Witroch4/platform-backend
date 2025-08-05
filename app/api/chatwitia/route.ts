@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import type { Message } from '@/hooks/useChatwitIA';
 import { auth } from "@/auth";
-import { db } from "@/lib/db";
+import { getPrismaInstance } from "@/lib/connections"
 import { uploadToMinIO } from '@/lib/minio';
 // @ts-ignore - Adding Anthropic SDK
 import Anthropic from '@anthropic-ai/sdk';
@@ -116,7 +116,7 @@ export async function POST(req: Request) {
       if (session?.user?.id) {
         try {
           // Verificar se a sessão pertence ao usuário
-          const chatSession = await db.chatSession.findUnique({
+          const chatSession = await getPrismaInstance().chatSession.findUnique({
             where: {
               id: sessionId,
               userId: session.user.id
@@ -141,7 +141,7 @@ export async function POST(req: Request) {
               const summary = words.slice(0, 5).join(' ') + (words.length > 5 ? '...' : '');
               
               // Atualizar o título da sessão no banco de dados
-              await db.chatSession.update({
+              await getPrismaInstance().chatSession.update({
                 where: { id: sessionId },
                 data: { 
                   title: summary,
@@ -619,7 +619,7 @@ async function handleOpenAIRequest(messages: Message[], model: string, sessionId
         let fileName = `file-${fileId}`;
         
         // Buscar informações do arquivo no banco de dados
-        const chatFile = await db.chatFile.findFirst({
+        const chatFile = await getPrismaInstance().chatFile.findFirst({
           where: { openaiFileId: fileId }
         });
         
@@ -629,7 +629,7 @@ async function handleOpenAIRequest(messages: Message[], model: string, sessionId
           console.log(`📁 Arquivo encontrado no ChatFile: ${fileName}, tipo: ${fileType}`);
         } else {
           // Se não encontrar no ChatFile, buscar no GeneratedImage
-          const generatedImage = await db.generatedImage.findFirst({
+          const generatedImage = await getPrismaInstance().generatedImage.findFirst({
             where: { openaiFileId: fileId }
           });
           
@@ -677,7 +677,7 @@ async function handleOpenAIRequest(messages: Message[], model: string, sessionId
           let fileName = `file-${fileId}`;
           
           // Buscar informações do arquivo no banco de dados
-          const chatFile = await db.chatFile.findFirst({
+          const chatFile = await getPrismaInstance().chatFile.findFirst({
             where: { openaiFileId: fileId }
           });
           
@@ -687,7 +687,7 @@ async function handleOpenAIRequest(messages: Message[], model: string, sessionId
             console.log(`📁 Arquivo (parâmetro) encontrado no ChatFile: ${fileName}, tipo: ${fileType}`);
           } else {
             // Se não encontrar no ChatFile, buscar no GeneratedImage
-            const generatedImage = await db.generatedImage.findFirst({
+            const generatedImage = await getPrismaInstance().generatedImage.findFirst({
               where: { openaiFileId: fileId }
             });
             
@@ -1259,7 +1259,7 @@ async function handleOpenAIRequest(messages: Message[], model: string, sessionId
                               console.log(`💾 Image saved to MinIO: ${imageUrl}`);
                               
                               // Save to database
-                              const savedImage = await db.generatedImage.create({
+                              const savedImage = await getPrismaInstance().generatedImage.create({
                                 data: {
                                   userId: session.user.id,
                                   sessionId: this.sessionIdForDB || null,
@@ -1360,7 +1360,7 @@ async function handleOpenAIRequest(messages: Message[], model: string, sessionId
                           const session = await auth();
                           
                           if (session?.user?.id) {
-                            const savedImages = await db.generatedImage.findMany({
+                            const savedImages = await getPrismaInstance().generatedImage.findMany({
                               where: {
                                 userId: session.user.id,
                                 sessionId: this.sessionIdForDB
@@ -1632,7 +1632,7 @@ async function saveMessageToDatabase(
     }
     
     // Verify that the chat session belongs to the user
-    const chatSession = await db.chatSession.findUnique({
+    const chatSession = await getPrismaInstance().chatSession.findUnique({
       where: {
         id: sessionId,
         userId: session.user.id
@@ -1648,7 +1648,7 @@ async function saveMessageToDatabase(
     const responsesData = message.responsesApiResponse;
     
     // Save the message to the database
-    const savedMessage = await db.chatMessage.create({
+    const savedMessage = await getPrismaInstance().chatMessage.create({
       data: {
         sessionId,
         role: message.role,
@@ -1669,7 +1669,7 @@ async function saveMessageToDatabase(
     });
     
     // Update the session's updatedAt timestamp
-    await db.chatSession.update({
+    await getPrismaInstance().chatSession.update({
       where: { id: sessionId },
       data: { updatedAt: new Date() }
     });
@@ -1696,7 +1696,7 @@ async function saveUploadedImageToDatabase(sessionId: string, imageUrl: string, 
     }
     
     // Save the uploaded image to the generatedImage table for consistency
-    const savedImage = await db.generatedImage.create({
+    const savedImage = await getPrismaInstance().generatedImage.create({
       data: {
         userId: session.user.id,
         sessionId: sessionId,

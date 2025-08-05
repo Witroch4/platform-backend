@@ -31,13 +31,19 @@
     "app/**/*",
     "pages/**/*",
     "components/**/*",
+    "lib/**/*",
     "types/**/*.d.ts",
-    ".next/types/**/*.ts"
-, "hooks/useApprovalRequests.ts"  ],
+    ".next/types/**/*.ts",
+    "hooks/useApprovalRequests.ts"
+  ],
   "exclude": [
     "node_modules",
     "**/__tests__/**",
     "**/*.test.ts",
-    "**/*.spec.ts"
+    "**/*.spec.ts",
+    "worker/**/*",
+    "scripts/**/*",
+    "bull-board-server.ts",
+    "auth.ts"
   ]
 }

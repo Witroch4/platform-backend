@@ -1,7 +1,7 @@
 // app/api/admin/templates/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { prisma } from '@/lib/prisma';
+import { getPrismaInstance } from '@/lib/connections';
 import { TemplateType, TemplateScope, TemplateStatus } from '@prisma/client';
 
 /**
@@ -27,7 +27,7 @@ export async function GET(
     }
 
     // Buscar template com todos os dados relacionados
-    const template = await prisma.template.findFirst({
+    const template = await getPrismaInstance().template.findFirst({
       where: {
         id,
         OR: [
@@ -91,7 +91,7 @@ export async function GET(
 
     // Incrementar contador de uso se não for o criador visualizando
     if (template.createdById !== session.user.id) {
-      await prisma.template.update({
+      await getPrismaInstance().template.update({
         where: { id },
         data: { usageCount: { increment: 1 } },
       });
@@ -167,7 +167,7 @@ export async function PUT(
     }
 
     // Verificar se o template existe e se o usuário pode editá-lo
-    const existingTemplate = await prisma.template.findFirst({
+    const existingTemplate = await getPrismaInstance().template.findFirst({
       where: {
         id,
         createdById: session.user.id, // Apenas o criador pode editar
@@ -298,7 +298,7 @@ export async function PUT(
     }
 
     // Executar atualização
-    const updatedTemplate = await prisma.template.update({
+    const updatedTemplate = await getPrismaInstance().template.update({
       where: { id },
       data: updateData,
       include: {
@@ -360,7 +360,7 @@ export async function DELETE(
     }
 
     // Verificar se o template existe e se o usuário pode deletá-lo
-    const existingTemplate = await prisma.template.findFirst({
+    const existingTemplate = await getPrismaInstance().template.findFirst({
       where: {
         id,
         createdById: session.user.id, // Apenas o criador pode deletar
@@ -390,7 +390,7 @@ export async function DELETE(
     }
 
     // Remover template (dados relacionados serão removidos em cascata)
-    await prisma.template.delete({
+    await getPrismaInstance().template.delete({
       where: { id },
     });
 

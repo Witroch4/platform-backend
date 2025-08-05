@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { getPrismaInstance } from '@/lib/connections';
 import { auth } from '@/auth';
 import { invalidateTemplateMappingCache } from '@/lib/cache/instagram-template-cache';
 
@@ -12,7 +12,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    const mapeamentos = await db.mapeamentoIntencao.findMany({
+    const mapeamentos = await getPrismaInstance().mapeamentoIntencao.findMany({
       where: { inboxId: caixaId },
       include: {
         template: { select: { id: true, name: true } },
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     
     console.log("Data para salvar:", data);
 
-    const savedMapping = await db.mapeamentoIntencao.upsert({
+    const savedMapping = await getPrismaInstance().mapeamentoIntencao.upsert({
       where: { id: mappingId || '' },
       update: data,
       create: data,
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Invalidate Instagram template cache for this mapping
     try {
       // Find the ChatwitInbox to get the correct inboxId for cache invalidation
-      const chatwitInbox = await db.chatwitInbox.findUnique({
+      const chatwitInbox = await getPrismaInstance().chatwitInbox.findUnique({
         where: { id: caixaId },
         select: { inboxId: true, usuarioChatwitId: true }
       });

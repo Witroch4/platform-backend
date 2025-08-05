@@ -1,7 +1,7 @@
 // app/api/admin/credentials/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { prisma } from '@/lib/prisma';
+import { getPrismaInstance } from '@/lib/connections';
 
 /**
  * GET - Lista configurações de credenciais (ChatwitInbox e WhatsAppGlobalConfig)
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     const type = searchParams.get('type'); // 'inbox' | 'global' | null (ambos)
 
     // Buscar usuário Chatwit
-    const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
+    const usuarioChatwit = await getPrismaInstance().usuarioChatwit.findUnique({
       where: { appUserId: session.user.id },
       include: {
         configuracaoGlobalWhatsApp: true,

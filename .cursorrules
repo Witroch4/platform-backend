@@ -75,7 +75,7 @@ rules:
   - rule: "Para visualizar e editar o banco de dados, use `npx prisma studio`."
   - rule: "Para definir um campo do tipo JSON como nulo em uma atualização, use `Prisma.JsonNull`."
     example: |
-      import { prisma } from '@/lib/prisma';
+      import { getPrismaInstance } from '@/lib/connections';
       import { Prisma } from '@prisma/client';
 
       await prisma.someModel.update({

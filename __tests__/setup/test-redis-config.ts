@@ -1,34 +1,47 @@
 /**
- * Redis configuration for tests
- * Fixes port configuration issue (6380 → 6379)
+ * Redis Configuration for Tests
  */
 
 export const testRedisConfig = {
   host: 'localhost',
-  port: 6379, // Fixed: was 6380, now 6379
-  db: 15, // Use separate DB for tests
-  retryDelayOnFailover: 100,
-  enableReadyCheck: false,
-  maxRetriesPerRequest: null,
-  lazyConnect: true,
+  port: 6380, // Porta diferente para testes
+  db: 15,     // Database diferente para testes
+  password: undefined,
+  maxRetriesPerRequest: 3,
+  lazyConnect: true,  // Changed to true
+  connectTimeout: 5000,
+  enableOfflineQueue: true, // Changed to true
+  enableReadyCheck: true,
 };
 
-// Mock Redis connection for tests
-export const createMockRedisConnection = () => ({
-  get: jest.fn().mockResolvedValue(null),
-  setex: jest.fn().mockResolvedValue('OK'),
-  del: jest.fn().mockResolvedValue(1),
-  exists: jest.fn().mockResolvedValue(0),
-  mget: jest.fn().mockResolvedValue([]),
-  keys: jest.fn().mockResolvedValue([]),
-  ping: jest.fn().mockResolvedValue('PONG'),
-  info: jest.fn().mockResolvedValue('used_memory_human:10.5M'),
-  pipeline: jest.fn().mockReturnValue({
-    setex: jest.fn().mockReturnThis(),
-    exec: jest.fn().mockResolvedValue([]),
-  }),
-  disconnect: jest.fn().mockResolvedValue(undefined),
-  quit: jest.fn().mockResolvedValue(undefined),
-});
+export function createMockRedisConnection() {
+  // Para testes que não precisam de Redis real
+  return {
+    host: testRedisConfig.host,
+    port: testRedisConfig.port,
+    password: testRedisConfig.password,
+    db: testRedisConfig.db,
+  };
+}
 
-export default testRedisConfig;
+export function isRedisAvailable(): Promise<boolean> {
+  return new Promise((resolve) => {
+    try {
+      // Import the real IORedis, not the mock
+      const Redis = require('ioredis');
+      const redis = new Redis(testRedisConfig);
+      
+      redis.ping()
+        .then(() => {
+          redis.disconnect();
+          resolve(true);
+        })
+        .catch(() => {
+          redis.disconnect();
+          resolve(false);
+        });
+    } catch (error) {
+      resolve(false);
+    }
+  });
+}

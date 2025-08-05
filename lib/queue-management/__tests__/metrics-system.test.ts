@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals'
-import { PrismaClient } from '@prisma/client'
+import { getPrismaInstance } from "@/lib/connections"
 import { getRedisInstance } from '../../connections'
 import { MetricsCollectorService } from '../services/metrics-collector.service'
 import { MetricsStorageService } from '../services/metrics-storage.service'

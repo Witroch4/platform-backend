@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import axios from 'axios';
 import { auth } from '@/auth';
 import { getWhatsAppConfig } from '@/app/lib';
-import { db } from "@/lib/db";
+import { getPrismaInstance } from "@/lib/connections"
 
 /**
  * Endpoint para obter detalhes de um template específico
@@ -57,7 +57,7 @@ export async function GET(request: Request) {
     };
 
     // 1. Verificar se o template existe no banco
-    const dbTemplate = await db.template.findFirst({
+    const dbTemplate = await getPrismaInstance().template.findFirst({
       where: {
         name: templateName
       },
@@ -97,7 +97,7 @@ export async function GET(request: Request) {
           
           // Atualizar o banco de dados com as informações mais recentes da API
           if (dbTemplate) {
-            await db.template.update({
+            await getPrismaInstance().template.update({
               where: { id: dbTemplate.id },
               data: {
                 status: apiTemplate.status as any,
@@ -109,7 +109,7 @@ export async function GET(request: Request) {
             });
           } else {
             // Criar o template no banco se ele não existir
-            await db.template.create({
+            await getPrismaInstance().template.create({
               data: {
                 name: apiTemplate.name,
                 status: apiTemplate.status as any,

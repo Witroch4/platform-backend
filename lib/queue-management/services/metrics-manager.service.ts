@@ -6,7 +6,7 @@
  * metrics operations.
  */
 
-import { PrismaClient } from '@prisma/client'
+import { getPrismaInstance } from "@/lib/connections"
 import { getRedisInstance } from '../../../lib/connections'
 import { Queue } from 'bullmq'
 import { EventEmitter } from 'events'
@@ -49,7 +49,7 @@ export class MetricsManagerService extends EventEmitter {
   private isInitialized = false
 
   constructor(
-    private prisma: PrismaClient,
+    private prisma: any,
     private redis: ReturnType<typeof getRedisInstance>
   ) {
     super()
@@ -68,7 +68,7 @@ export class MetricsManagerService extends EventEmitter {
   /**
    * Get singleton instance
    */
-  static getInstance(prisma?: PrismaClient, redis?: ReturnType<typeof getRedisInstance>): MetricsManagerService {
+  static getInstance(prisma?: any, redis?: ReturnType<typeof getRedisInstance>): MetricsManagerService {
     if (!MetricsManagerService.instance) {
       if (!prisma || !redis) {
         throw new QueueManagementError(

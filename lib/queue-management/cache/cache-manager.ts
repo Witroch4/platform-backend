@@ -50,7 +50,7 @@ export class CacheManager {
     this.setupCacheInvalidation()
 
     // Set up error handling
-    this.redis.on('error', (error) => {
+    this.redis.on('error', (error: Error) => {
       console.error('Redis cache error:', error)
     })
 
@@ -95,7 +95,7 @@ export class CacheManager {
       'system:events'
     )
 
-    this.invalidationSubscriber.on('message', async (channel, message) => {
+    this.invalidationSubscriber.on('message', async (channel: string, message: string) => {
       try {
         const event = JSON.parse(message)
         await this.handleCacheInvalidationEvent(event)
@@ -474,7 +474,7 @@ export class CacheManager {
 
       for (const [field, value] of Object.entries(hash)) {
         try {
-          result[field] = JSON.parse(value) as T
+          result[field] = JSON.parse(value as string) as T
         } catch {
           result[field] = value as T
         }

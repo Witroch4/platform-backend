@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { db } from '@/lib/db';
+import { getPrismaInstance } from '@/lib/connections';
 
 // Use Node.js runtime instead of Edge to enable Prisma
 export const runtime = 'nodejs';
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
       // Associar espelho
       
       // Primeiro, verificar se o espelho existe e está ativo
-      const espelho = await db.espelhoBiblioteca.findFirst({
+      const espelho = await getPrismaInstance().espelhoBiblioteca.findFirst({
         where: {
           id: espelhoId,
           isAtivo: true
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
       }
       
       // Atualizar o lead para usar este espelho
-      await db.leadOabData.update({
+      await getPrismaInstance().leadOabData.update({
         where: { id: leadId },
         data: { 
           espelhoBibliotecaId: espelhoId,
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
       });
       
       // Incrementar contador de uso do espelho
-      await db.espelhoBiblioteca.update({
+      await getPrismaInstance().espelhoBiblioteca.update({
         where: { id: espelhoId },
         data: {
           totalUsos: {
@@ -63,14 +63,14 @@ export async function POST(request: Request) {
       // Desassociar espelho
       
       // Primeiro, buscar o espelho atual para decrementar o contador
-      const lead = await db.leadOabData.findUnique({
+      const lead = await getPrismaInstance().leadOabData.findUnique({
         where: { id: leadId },
         select: { espelhoBibliotecaId: true }
       });
       
       if (lead?.espelhoBibliotecaId) {
         // Decrementar contador do espelho que estava sendo usado
-        await db.espelhoBiblioteca.update({
+        await getPrismaInstance().espelhoBiblioteca.update({
           where: { id: lead.espelhoBibliotecaId },
           data: {
             totalUsos: {
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
       }
       
       // Remover associação
-      await db.leadOabData.update({
+      await getPrismaInstance().leadOabData.update({
         where: { id: leadId },
         data: { espelhoBibliotecaId: null }
       });

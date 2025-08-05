@@ -3,7 +3,8 @@
  * Remove hooks órfãos que não estão mais associados a agentes ativos
  */
 
-import { db as prisma } from '../lib/db';
+import { getPrismaInstance } from '../lib/connections';
+const prisma = getPrismaInstance();
 import axios from 'axios';
 
 interface DialogflowHook {

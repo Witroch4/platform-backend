@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 
 export async function GET() {
   try {
@@ -10,7 +10,7 @@ export async function GET() {
       return NextResponse.json({ error: "Usuário não autenticado" }, { status: 401 });
     }
 
-    const user = await prisma.user.findUnique({
+    const user = await getPrismaInstance().user.findUnique({
       where: { id: session.user.id },
       select: { role: true }
     });
@@ -20,7 +20,7 @@ export async function GET() {
     }
 
     // Buscar o usuário Chatwit
-    const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
+    const usuarioChatwit = await getPrismaInstance().usuarioChatwit.findUnique({
       where: { appUserId: session.user.id },
       select: { chatwitAccessToken: true }
     });

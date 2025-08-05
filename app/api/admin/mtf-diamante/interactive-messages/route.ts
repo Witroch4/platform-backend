@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 
 // GET - Listar mensagens interativas
 export async function GET(request: NextRequest) {
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
       whereClause.type = type;
     }
 
-    const messages = await prisma.template.findMany({
+    const messages = await getPrismaInstance().template.findMany({
       where: {
         ...whereClause,
         type: "INTERACTIVE_MESSAGE",
@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Criar template e conteúdo interativo
-    const template = await prisma.template.create({
+    const template = await getPrismaInstance().template.create({
       data: {
         name: message.name,
         type: "INTERACTIVE_MESSAGE",

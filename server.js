@@ -27,7 +27,7 @@ async function checkDatabaseConnection() {
   if (process.env.NODE_ENV === 'production') {
     try {
       const { PrismaClient } = require('@prisma/client');
-      const prisma = new PrismaClient();
+      const prisma = getPrismaInstance();
       await prisma.$connect();
       console.log('✅ Conexão com banco de dados verificada');
       await prisma.$disconnect();

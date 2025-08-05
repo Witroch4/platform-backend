@@ -1,8 +1,8 @@
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 import { v4 as uuid } from "uuid";
 
 export const findVerificationTokenbyEmail = async (email: string) => {
-	const token = await prisma.verificationToken.findFirst({
+	const token = await getPrismaInstance().verificationToken.findFirst({
 		where: {
 			email,
 		},
@@ -11,7 +11,7 @@ export const findVerificationTokenbyEmail = async (email: string) => {
 };
 
 export const findVerificationTokenbyToken = async (token: string) => {
-	const existingToken = await prisma.verificationToken.findUnique({
+	const existingToken = await getPrismaInstance().verificationToken.findUnique({
 		where: {
 			token,
 		},
@@ -20,7 +20,7 @@ export const findVerificationTokenbyToken = async (token: string) => {
 };
 
 export const deleteVerificationTokenbyId = async (id: string) => {
-	const token = await prisma.verificationToken.delete({
+	const token = await getPrismaInstance().verificationToken.delete({
 		where: {
 			id,
 		},
@@ -37,7 +37,7 @@ export const createVerificationToken = async (email: string) => {
 		await deleteVerificationTokenbyId(existingToken.id);
 	}
 
-	const verificationToken = await prisma.verificationToken.create({
+	const verificationToken = await getPrismaInstance().verificationToken.create({
 		data: {
 			email,
 			token,

@@ -22,10 +22,16 @@ function logRedisConfig() {
   }
 }
 
-// Obtém a instância global do Redis
-const redisConnection = getRedisInstance();
+// Lazy initialization to avoid Edge Runtime issues
+let _redisConnection: ReturnType<typeof getRedisInstance> | null = null;
 
-// Exibe a configuração apenas uma vez
-logRedisConfig();
+// Obtém a instância global do Redis (lazy initialization)
+function getConnection() {
+  if (!_redisConnection) {
+    _redisConnection = getRedisInstance();
+    logRedisConfig();
+  }
+  return _redisConnection;
+}
 
-export { redisConnection as connection };
+export { getConnection as connection };

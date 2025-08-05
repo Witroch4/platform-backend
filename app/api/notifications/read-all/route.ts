@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 
 // POST: Marcar todas as notificações do usuário como lidas
 export async function POST() {
@@ -12,7 +12,7 @@ export async function POST() {
     }
 
     // Marcar todas as notificações não lidas do usuário como lidas
-    await prisma.notification.updateMany({
+    await getPrismaInstance().notification.updateMany({
       where: {
         userId: session.user.id,
         isRead: false

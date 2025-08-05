@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 
 // POST: Enviar notificação para usuários com tokens expirando
 export async function POST(req: Request) {
@@ -12,7 +12,7 @@ export async function POST(req: Request) {
     }
 
     // Verificar se o usuário é administrador
-    const adminUser = await prisma.user.findUnique({
+    const adminUser = await getPrismaInstance().user.findUnique({
       where: {
         id: session.user.id
       }
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     const expiryThreshold = now + (days * 24 * 60 * 60); // Timestamp para X dias no futuro
 
     // Buscar usuários com contas do Instagram cujos tokens expiram em menos de X dias
-    const usersWithExpiringTokens = await prisma.user.findMany({
+    const usersWithExpiringTokens = await getPrismaInstance().user.findMany({
       where: {
         accounts: {
           some: {
@@ -98,7 +98,7 @@ export async function POST(req: Request) {
           ? `Atenção! O token de acesso da sua conta do Instagram ${account.igUsername ? `@${account.igUsername}` : account.providerAccountId} expirará em ${daysUntilExpiry} dias (${formattedDate}). É URGENTE que você faça login novamente para renovar o token, caso contrário suas automações deixarão de funcionar.`
           : `O token de acesso da sua conta do Instagram ${account.igUsername ? `@${account.igUsername}` : account.providerAccountId} expirará em ${daysUntilExpiry} dias (${formattedDate}). Por favor, faça login novamente para renovar o token e garantir que suas automações continuem funcionando.`;
 
-        const notification = await prisma.notification.create({
+        const notification = await getPrismaInstance().notification.create({
           data: {
             userId: user.id,
             title,

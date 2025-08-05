@@ -491,8 +491,8 @@ export class InstagramTemplateCache {
 
         const values = await this.redis.mget(...keys);
         return values
-          .filter((value) => value !== null)
-          .map((value) => JSON.parse(value!));
+          .filter((value: any) => value !== null)
+          .map((value: any) => JSON.parse(value!));
       }
     } catch (error) {
       console.error(
@@ -622,8 +622,8 @@ export class InstagramTemplateCache {
       console.log(
         `[InstagramTemplateCache] Batch get completed for ${requests.length} mappings`,
         {
-          hits: values.filter((v) => v !== null).length,
-          misses: values.filter((v) => v === null).length,
+          hits: values.filter((v: any) => v !== null).length,
+          misses: values.filter((v: any) => v === null).length,
           latency,
         }
       );

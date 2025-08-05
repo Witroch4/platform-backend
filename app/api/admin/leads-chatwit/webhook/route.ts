@@ -1,10 +1,22 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { getPrismaInstance } from "@/lib/connections";
 import { addManuscritoJob, addEspelhoJob, addAnaliseJob } from '@/lib/queue/leadcells.queue';
-import { sseManager } from '@/lib/sse-manager';
+// Lazy import to avoid Edge Runtime issues
+const getSseManager = () => import('@/lib/sse-manager').then(m => m.sseManager);
+
+// Helper function to send SSE notifications
+async function sendSseNotification(leadId: string, data: any) {
+  try {
+    const sseManager = await getSseManager();
+    return sseManager.sendNotification(leadId, data);
+  } catch (error) {
+    console.error('[SSE] Erro ao enviar notificação:', error);
+    return false;
+  }
+}
 
 // Criando uma instância do Prisma fora do escopo da rota
-const prisma = new PrismaClient();
+const prisma = getPrismaInstance();
 
 /**
  * Handler da rota POST.
@@ -171,7 +183,7 @@ export async function POST(request: Request): Promise<Response> {
         console.log("[Webhook] Pré-recurso armazenado para o lead:", leadID);
         
         // Enviar notificação SSE
-        sseManager.sendNotification(leadID, {
+        await sendSseNotification(leadID, {
           type: 'recurso_preliminar',
           message: 'Pré-recurso foi gerado e está aguardando validação!',
           leadId: leadID,
@@ -260,7 +272,7 @@ export async function POST(request: Request): Promise<Response> {
         console.log("[Webhook] Recurso validado processado para o lead:", leadID);
         
         // Enviar notificação SSE
-        sseManager.sendNotification(leadID, {
+        await sendSseNotification(leadID, {
           type: 'recurso_validado',
           message: 'Seu recurso foi validado e está pronto!',
           leadId: leadID,
@@ -429,7 +441,7 @@ export async function POST(request: Request): Promise<Response> {
         console.log("[Webhook] Espelho da biblioteca atualizado com texto:", espelhoAtualizado.id);
         
         // Enviar notificação SSE (para biblioteca geral)
-        sseManager.sendNotification('biblioteca_geral', {
+        await sendSseNotification('biblioteca_geral', {
           type: 'espelho_biblioteca_processado',
           message: 'Novo espelho foi adicionado à biblioteca!',
           espelhoId: espelhoAtualizado.id,
@@ -503,7 +515,7 @@ export async function POST(request: Request): Promise<Response> {
         console.log("[Webhook] Pré-análise de simulado armazenada para o lead:", leadID);
         
         // Enviar notificação SSE
-        sseManager.sendNotification(leadID, {
+        await sendSseNotification(leadID, {
           type: 'analise_simulado_preliminar',
           message: 'Pré-análise do seu simulado foi processada com sucesso!',
           leadId: leadID,
@@ -590,7 +602,7 @@ export async function POST(request: Request): Promise<Response> {
         console.log("[Webhook] Análise validada processada para o lead:", leadID);
         
         // Enviar notificação SSE
-        sseManager.sendNotification(leadID, {
+        await sendSseNotification(leadID, {
           type: 'analise_validada',
           message: 'Sua análise foi validada e está pronta!',
           leadId: leadID,
@@ -678,7 +690,7 @@ export async function POST(request: Request): Promise<Response> {
         console.log("[Webhook] Consultoria fase 2 processada para o lead:", leadID);
         
         // Enviar notificação SSE
-        sseManager.sendNotification(leadID, {
+        await sendSseNotification(leadID, {
           type: 'consultoria_fase2',
           message: 'Sua consultoria fase 2 foi processada e está pronta!',
           leadId: leadID,
@@ -1113,7 +1125,7 @@ export async function POST(request: Request): Promise<Response> {
         console.log("[Webhook] Espelho de consultoria fase 2 processado para o lead:", leadID);
         
         // Enviar notificação SSE
-        sseManager.sendNotification(leadID, {
+        await sendSseNotification(leadID, {
           type: 'espelho_consultoria_fase2',
           message: 'Espelho de consultoria fase 2 foi processado!',
           leadId: leadID,

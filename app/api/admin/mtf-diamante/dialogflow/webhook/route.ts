@@ -17,7 +17,7 @@ import { recordWebhookMetrics } from "@/lib/monitoring/application-performance-m
 import { performance } from 'perf_hooks';
 import { FeatureFlagManager } from "@/lib/feature-flags/feature-flag-manager";
 import { ABTestingManager } from "@/lib/feature-flags/ab-testing-manager";
-import { PrismaClient } from '@prisma/client';
+import { getPrismaInstance } from "@/lib/connections";
 import { getRedisInstance } from '@/lib/connections';
 import {
   extractWebhookData,
@@ -55,7 +55,7 @@ const FEATURE_FLAGS = {
 } as const;
 
 // Initialize Prisma and Redis instances
-const prisma = new PrismaClient();
+const prisma = getPrismaInstance();
 const redis = getRedisInstance();
 
 // Feature flag manager instance

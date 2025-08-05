@@ -427,7 +427,7 @@ export class InstagramTranslationLogger {
   ): Promise<InstagramTranslationLogEntry[]> {
     try {
       const keys = await this.redis.keys('chatwit:logs:instagram-translation:*');
-      const recentKeys = keys.filter(key => {
+      const recentKeys = keys.filter((key: any) => {
         const timestamp = key.split(':').pop();
         if (!timestamp) return false;
         
@@ -437,7 +437,7 @@ export class InstagramTranslationLogger {
       });
 
       const logBatches = await Promise.all(
-        recentKeys.map(key => this.redis.get(key))
+        recentKeys.map((key: any) => this.redis.get(key))
       );
 
       const allLogs: InstagramTranslationLogEntry[] = [];

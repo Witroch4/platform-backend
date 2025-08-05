@@ -7,8 +7,8 @@
 
 import { Queue, Job, QueueEvents } from 'bullmq'
 import { EventEmitter } from 'events'
-import { getPrismaInstance, getRedisInstance } from '../../connections'
-import { PrismaClient } from '@prisma/client'
+import { getPrismaInstance, getRedisInstance } from '@/lib/connections'
+import type { PrismaClient } from "@prisma/client";
 import { 
   QueueMetrics, 
   SystemMetrics, 

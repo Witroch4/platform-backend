@@ -4,7 +4,7 @@
  * Core service for managing alert rules, evaluating conditions, and processing alerts
  */
 
-import { db } from '../../db'
+import { getPrismaInstance } from '@/lib/connections'
 import { getRedisInstance } from '../../connections'
 import logger from '../../log'
 import {
@@ -111,7 +111,7 @@ export class AlertEngineService {
       // Validate input
       this.validateAlertRuleInput(input)
 
-      const rule = await db.alertRule.create({
+      const rule = await getPrismaInstance().alertRule.create({
         data: {
           name: input.name,
           description: input.description,
@@ -153,7 +153,7 @@ export class AlertEngineService {
   async updateAlertRule(ruleId: string, input: AlertRuleUpdateInput): Promise<AlertRule> {
     try {
       // Check if rule exists
-      const existingRule = await db.alertRule.findUnique({
+      const existingRule = await getPrismaInstance().alertRule.findUnique({
         where: { id: ruleId }
       })
 
@@ -166,7 +166,7 @@ export class AlertEngineService {
         this.validateAlertCondition(input.condition)
       }
 
-      const rule = await db.alertRule.update({
+      const rule = await getPrismaInstance().alertRule.update({
         where: { id: ruleId },
         data: {
           ...(input.name && { name: input.name }),
@@ -205,7 +205,7 @@ export class AlertEngineService {
    */
   async deleteAlertRule(ruleId: string): Promise<boolean> {
     try {
-      const rule = await db.alertRule.findUnique({
+      const rule = await getPrismaInstance().alertRule.findUnique({
         where: { id: ruleId }
       })
 
@@ -214,7 +214,7 @@ export class AlertEngineService {
       }
 
       // Delete the rule (alerts will be cascade deleted if configured)
-      await db.alertRule.delete({
+      await getPrismaInstance().alertRule.delete({
         where: { id: ruleId }
       })
 
@@ -244,7 +244,7 @@ export class AlertEngineService {
    */
   async getAlertRule(ruleId: string): Promise<AlertRule | null> {
     try {
-      const rule = await db.alertRule.findUnique({
+      const rule = await getPrismaInstance().alertRule.findUnique({
         where: { id: ruleId }
       })
 
@@ -265,7 +265,7 @@ export class AlertEngineService {
    */
   async listAlertRules(filters: AlertRuleQueryFilters = {}): Promise<AlertRule[]> {
     try {
-      const rules = await db.alertRule.findMany({
+      const rules = await getPrismaInstance().alertRule.findMany({
         where: {
           ...(filters.queueName && { queueName: filters.queueName }),
           ...(filters.severity && { severity: { in: filters.severity } }),
@@ -279,7 +279,7 @@ export class AlertEngineService {
         ]
       })
 
-      return rules.map(rule => this.mapAlertRuleFromDb(rule))
+      return rules.map((rule: any) => this.mapAlertRuleFromDb(rule))
     } catch (error) {
       logger.error('Failed to list alert rules', { error, filters })
       throw new QueueManagementError(
@@ -407,7 +407,7 @@ export class AlertEngineService {
    */
   async acknowledgeAlert(alertId: string, input: AlertAcknowledgeInput): Promise<Alert> {
     try {
-      const existingAlert = await db.alert.findUnique({
+      const existingAlert = await getPrismaInstance().alert.findUnique({
         where: { id: alertId }
       })
 
@@ -419,7 +419,7 @@ export class AlertEngineService {
         throw new AlertAlreadyAcknowledgedError(alertId, existingAlert.acknowledgedBy || 'unknown')
       }
 
-      const alert = await db.alert.update({
+      const alert = await getPrismaInstance().alert.update({
         where: { id: alertId },
         data: {
           status: 'acknowledged',
@@ -454,7 +454,7 @@ export class AlertEngineService {
    */
   async resolveAlert(alertId: string, input: AlertResolveInput): Promise<Alert> {
     try {
-      const existingAlert = await db.alert.findUnique({
+      const existingAlert = await getPrismaInstance().alert.findUnique({
         where: { id: alertId }
       })
 
@@ -462,7 +462,7 @@ export class AlertEngineService {
         throw new AlertNotFoundError(alertId)
       }
 
-      const alert = await db.alert.update({
+      const alert = await getPrismaInstance().alert.update({
         where: { id: alertId },
         data: {
           status: 'resolved',
@@ -500,7 +500,7 @@ export class AlertEngineService {
    */
   async escalateAlert(alertId: string): Promise<void> {
     try {
-      const alert = await db.alert.findUnique({
+      const alert = await getPrismaInstance().alert.findUnique({
         where: { id: alertId }
       })
 
@@ -663,7 +663,7 @@ export class AlertEngineService {
    */
   async listAlerts(filters: AlertQueryFilters = {}): Promise<Alert[]> {
     try {
-      const alerts = await db.alert.findMany({
+      const alerts = await getPrismaInstance().alert.findMany({
         where: {
           ...(filters.ruleId && { ruleId: filters.ruleId }),
           ...(filters.queueName && { queueName: filters.queueName }),
@@ -679,7 +679,7 @@ export class AlertEngineService {
         ]
       })
 
-      return alerts.map(alert => this.mapAlertFromDb(alert))
+      return alerts.map((alert: any) => this.mapAlertFromDb(alert))
     } catch (error) {
       logger.error('Failed to list alerts', { error, filters })
       throw new QueueManagementError(
@@ -778,7 +778,7 @@ export class AlertEngineService {
         }
 
         // Create an immediate alert for the detected anomaly
-        const alert = await db.alert.create({
+        const alert = await getPrismaInstance().alert.create({
           data: {
             ruleId: existingRule?.id || 'predictive',
             queueName: anomaly.queueName,
@@ -812,7 +812,7 @@ export class AlertEngineService {
     prediction: any,
     severity: AlertSeverity
   ): Promise<Alert> {
-    const alert = await db.alert.create({
+    const alert = await getPrismaInstance().alert.create({
       data: {
         ruleId: 'predictive',
         queueName,
@@ -942,7 +942,7 @@ export class AlertEngineService {
   }
 
   private async createAlert(rule: AlertRule, evaluation: AlertEvaluation): Promise<Alert> {
-    const alert = await db.alert.create({
+    const alert = await getPrismaInstance().alert.create({
       data: {
         ruleId: rule.id!,
         queueName: rule.queueName,
@@ -999,7 +999,7 @@ export class AlertEngineService {
 
     // Also set in Redis for persistence across restarts
     const cacheKey = CACHE_KEYS.ALERT_COOLDOWN(ruleId)
-    getRedisInstance().setex(cacheKey, cooldownMinutes * 60, cooldownEnd.toISOString()).catch(error => {
+    getRedisInstance().setex(cacheKey, cooldownMinutes * 60, cooldownEnd.toISOString()).catch((error: Error) => {
       logger.warn('Failed to set cooldown in Redis', { error, ruleId })
     })
   }

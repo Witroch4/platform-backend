@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { getPrismaInstance } from '@/lib/connections';
 import { auth } from '@/auth';
 import { invalidateTemplateMappingCache } from '@/lib/cache/instagram-template-cache';
 import { logApiCacheInvalidation, createCacheLogContext } from '@/lib/logging/cache-logging';
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
       templateId,
     };
 
-    const savedMapping = await db.mapeamentoIntencao.upsert({
+    const savedMapping = await getPrismaInstance().mapeamentoIntencao.upsert({
       where: { id: mappingId || '' },
       update: data,
       create: data,
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     // Invalidate Instagram template cache for this mapping
     try {
       // Find the ChatwitInbox to get the correct inboxId for cache invalidation
-      const chatwitInbox = await db.chatwitInbox.findUnique({
+      const chatwitInbox = await getPrismaInstance().chatwitInbox.findUnique({
         where: { id: caixaId },
         select: { inboxId: true, usuarioChatwitId: true }
       });
@@ -121,12 +121,12 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Get mapping details before deletion for cache invalidation
-    const existingMapping = await db.mapeamentoIntencao.findUnique({
+    const existingMapping = await getPrismaInstance().mapeamentoIntencao.findUnique({
       where: { id: mappingId },
       select: { intentName: true, inboxId: true }
     });
 
-    await db.mapeamentoIntencao.delete({
+    await getPrismaInstance().mapeamentoIntencao.delete({
       where: { id: mappingId }
     });
 
@@ -134,7 +134,7 @@ export async function DELETE(request: NextRequest) {
     if (existingMapping) {
       try {
         // Find the ChatwitInbox to get the correct inboxId for cache invalidation
-        const chatwitInbox = await db.chatwitInbox.findUnique({
+        const chatwitInbox = await getPrismaInstance().chatwitInbox.findUnique({
           where: { id: existingMapping.inboxId },
           select: { inboxId: true, usuarioChatwitId: true }
         });

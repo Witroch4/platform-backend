@@ -1,4 +1,12 @@
-import { prisma } from "@/lib/prisma";
+// Função para obter Prisma compatível com Edge Runtime
+function getPrismaForTwoFactor() {
+  if (typeof (globalThis as any).EdgeRuntime !== 'undefined') {
+    const { getPrismaInstanceEdge } = require("@/lib/edge-connections");
+    return getPrismaInstanceEdge();
+  }
+  const { getPrismaInstance } = require("@/lib/connections");
+  return getPrismaInstance();
+}
 // Create a local implementation instead of importing
 function generateOTP(numberOfDigits: number) {
 	const digits = "0123456789";
@@ -12,7 +20,7 @@ function generateOTP(numberOfDigits: number) {
 }
 
 export const findTwoFactorAuthTokenByEmail = async (email: string) => {
-	const token = await prisma.twoFactorToken.findFirst({
+	const token = await getPrismaForTwoFactor().twoFactorToken.findFirst({
 		where: {
 			email,
 		},
@@ -20,7 +28,7 @@ export const findTwoFactorAuthTokenByEmail = async (email: string) => {
 	return token;
 };
 export const isTwoFactorAuthenticationEnabled = async (id: string) => {
-	const user = await prisma.user.findUnique({
+	const user = await getPrismaForTwoFactor().user.findUnique({
 		where: {
 			id,
 		},
@@ -32,7 +40,7 @@ export const isTwoFactorAuthenticationEnabled = async (id: string) => {
 };
 
 export const deleteTwoFactorAuthTokenById = async (id: string) => {
-	const token = await prisma.twoFactorToken.delete({
+	const token = await getPrismaForTwoFactor().twoFactorToken.delete({
 		where: {
 			id,
 		},
@@ -41,7 +49,7 @@ export const deleteTwoFactorAuthTokenById = async (id: string) => {
 };
 
 export const findTwoFactorAuthTokeByToken = async (token: string) => {
-	const existingToken = await prisma.twoFactorToken.findUnique({
+	const existingToken = await getPrismaForTwoFactor().twoFactorToken.findUnique({
 		where: {
 			token,
 		},
@@ -58,7 +66,7 @@ export const createTwoFactorAuthToken = async (email: string) => {
 		await deleteTwoFactorAuthTokenById(existingToken.id);
 	}
 
-	const twoFactorAuthToken = await prisma.twoFactorToken.create({
+	const twoFactorAuthToken = await getPrismaForTwoFactor().twoFactorToken.create({
 		data: {
 			email,
 			token,

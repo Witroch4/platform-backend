@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 
 // GET: Obter todas as notificações do usuário atual
 export async function GET() {
@@ -12,7 +12,7 @@ export async function GET() {
     }
 
     // Buscar notificações do usuário, ordenadas por data de criação (mais recentes primeiro)
-    const notifications = await prisma.notification.findMany({
+    const notifications = await getPrismaInstance().notification.findMany({
       where: {
         userId: session.user.id
       },
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     }
 
     // Verificar se a notificação pertence ao usuário
-    const notification = await prisma.notification.findUnique({
+    const notification = await getPrismaInstance().notification.findUnique({
       where: {
         id: notificationId,
         userId: session.user.id
@@ -61,7 +61,7 @@ export async function POST(req: Request) {
     }
 
     // Atualizar notificação para lida
-    const updatedNotification = await prisma.notification.update({
+    const updatedNotification = await getPrismaInstance().notification.update({
       where: {
         id: notificationId
       },

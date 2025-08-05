@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma';
+import { getPrismaInstance } from '@/lib/connections';
 import type { Agendamento, Midia } from '@prisma/client';
 import { uploadToMinIO } from './minio';
 import { scheduleAgendamentoJob, cancelAgendamentoJob } from '@/lib/queue/agendamento.queue';
@@ -64,7 +64,7 @@ export interface UpdateAgendamentoDTO {
 export async function createAgendamento(data: CreateAgendamentoDTO): Promise<Agendamento> {
   try {
     // Cria o agendamento no banco de dados
-    const agendamento = await prisma.agendamento.create({
+    const agendamento = await getPrismaInstance().agendamento.create({
       data: {
         userId: data.userId,
         accountId: data.accountId,
@@ -100,7 +100,7 @@ export async function createAgendamento(data: CreateAgendamentoDTO): Promise<Age
       }
 
       // Cria o registro da mídia no banco
-      return prisma.midia.create({
+      return getPrismaInstance().midia.create({
         data: {
           agendamentoId: agendamento.id,
           url,
@@ -162,7 +162,7 @@ function inferMimeTypeFromUrl(url: string): string {
  */
 export async function getAgendamentoById(id: string): Promise<Agendamento | null> {
   try {
-    return await prisma.agendamento.findUnique({
+    return await getPrismaInstance().agendamento.findUnique({
       where: { id },
       include: {
         midias: true,
@@ -195,7 +195,7 @@ export async function getAgendamentoById(id: string): Promise<Agendamento | null
  */
 export async function getAgendamentosByUser(userId: string): Promise<Agendamento[]> {
   try {
-    return await prisma.agendamento.findMany({
+    return await getPrismaInstance().agendamento.findMany({
       where: { userId },
       include: {
         midias: true,
@@ -223,7 +223,7 @@ export async function getAgendamentosByUser(userId: string): Promise<Agendamento
  */
 export async function getAgendamentosByAccount(accountId: string): Promise<Agendamento[]> {
   try {
-    return await prisma.agendamento.findMany({
+    return await getPrismaInstance().agendamento.findMany({
       where: { accountId },
       include: {
         midias: true,
@@ -251,7 +251,7 @@ export async function getAgendamentosByAccount(accountId: string): Promise<Agend
 export async function updateAgendamento(id: string, data: UpdateAgendamentoDTO): Promise<Agendamento> {
   try {
     // Busca o agendamento atual
-    const existingAgendamento = await prisma.agendamento.findUnique({
+    const existingAgendamento = await getPrismaInstance().agendamento.findUnique({
       where: { id },
       include: { midias: true },
     });
@@ -280,7 +280,7 @@ export async function updateAgendamento(id: string, data: UpdateAgendamentoDTO):
     if (data.TratarComoPostagensIndividuais !== undefined) updateData.tratarComoPostagensIndividuais = data.TratarComoPostagensIndividuais;
 
     // Atualiza o agendamento
-    const updatedAgendamento = await prisma.agendamento.update({
+    const updatedAgendamento = await getPrismaInstance().agendamento.update({
       where: { id },
       data: updateData,
     });
@@ -297,7 +297,7 @@ export async function updateAgendamento(id: string, data: UpdateAgendamentoDTO):
       const midiasToKeepIds = midiasToKeep.map((m) => m.id!);
 
       // Remove mídias que não estão na lista de mídias a manter
-      await prisma.midia.deleteMany({
+      await getPrismaInstance().midia.deleteMany({
         where: {
           agendamentoId: id,
           id: { notIn: midiasToKeepIds },
@@ -307,7 +307,7 @@ export async function updateAgendamento(id: string, data: UpdateAgendamentoDTO):
       // Adiciona novas mídias
       const newMidias = data.midias.filter((m) => !m.id);
       for (const midia of newMidias) {
-        await prisma.midia.create({
+        await getPrismaInstance().midia.create({
           data: {
             agendamentoId: id,
             url: midia.url,
@@ -351,7 +351,7 @@ export async function deleteAgendamento(id: string): Promise<void> {
     await cancelAgendamentoJob(id);
 
     // Exclui o agendamento (as mídias serão excluídas em cascata)
-    await prisma.agendamento.delete({
+    await getPrismaInstance().agendamento.delete({
       where: { id },
     });
 
@@ -368,7 +368,7 @@ export async function deleteAgendamento(id: string): Promise<void> {
 export async function selectMidiaForSending(agendamentoId: string): Promise<Midia | null> {
   try {
     // Busca o agendamento com suas mídias
-    const agendamento = await prisma.agendamento.findUnique({
+    const agendamento = await getPrismaInstance().agendamento.findUnique({
       where: { id: agendamentoId },
       include: { midias: true },
     });
@@ -397,7 +397,7 @@ export async function selectMidiaForSending(agendamentoId: string): Promise<Midi
 
       // Incrementa o contador da mídia selecionada
       if (selectedMidia) {
-        await prisma.midia.update({
+        await getPrismaInstance().midia.update({
           where: { id: selectedMidia.id },
           data: { contador: { increment: 1 } },
         });
@@ -441,7 +441,7 @@ function correctMinioUrl(url: string): string {
 export async function prepareWebhookData(agendamentoId: string): Promise<any> {
   try {
     // Busca o agendamento com suas mídias
-    const agendamento = await prisma.agendamento.findUnique({
+    const agendamento = await getPrismaInstance().agendamento.findUnique({
       where: { id: agendamentoId },
       include: {
         midias: true,
@@ -478,8 +478,8 @@ export async function prepareWebhookData(agendamentoId: string): Promise<any> {
       ? instagramAccount.expires_at * 1000 < Date.now()
       : false;
 
-    let midia = null;
-    let allMidias = null;
+    let midia: any = null;
+    let allMidias: any = null;
 
     // Se for para tratar como postagens individuais, seleciona apenas uma mídia
     if (agendamento.tratarComoPostagensIndividuais) {
@@ -527,7 +527,7 @@ export async function prepareWebhookData(agendamentoId: string): Promise<any> {
       webhookData.midiaThumbnailUrl = midia.thumbnail_url ? correctMinioUrl(midia.thumbnail_url) : null;
     } else if (allMidias && allMidias.length > 0) {
       // Se não for para tratar como postagens individuais, adiciona todas as mídias
-      webhookData.midias = allMidias.map(m => ({
+      webhookData.midias = allMidias.map((m: Midia) => ({
         url: correctMinioUrl(m.url),
         mime_type: m.mime_type,
         thumbnail_url: m.thumbnail_url ? correctMinioUrl(m.thumbnail_url) : null,

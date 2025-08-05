@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { db } from '@/lib/db';
+import { getPrismaInstance } from '@/lib/connections';
 
 export async function GET() {
   try {
@@ -11,7 +11,7 @@ export async function GET() {
     }
 
     // Buscar o usuário Chatwit
-    const usuarioChatwit = await db.usuarioChatwit.findUnique({
+    const usuarioChatwit = await getPrismaInstance().usuarioChatwit.findUnique({
       where: { appUserId: session.user.id },
       select: {
         chatwitAccountId: true,
@@ -50,13 +50,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Buscar ou criar o usuário Chatwit
-    let usuarioChatwit = await db.usuarioChatwit.findUnique({
+    let usuarioChatwit = await getPrismaInstance().usuarioChatwit.findUnique({
       where: { appUserId: session.user.id }
     });
 
     if (!usuarioChatwit) {
       // Criar novo usuário Chatwit se não existir
-      usuarioChatwit = await db.usuarioChatwit.create({
+      usuarioChatwit = await getPrismaInstance().usuarioChatwit.create({
         data: {
           appUserId: session.user.id,
           name: session.user.name || 'Usuário',
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
       });
     } else {
       // Atualizar o usuário Chatwit existente
-      await db.usuarioChatwit.update({
+      await getPrismaInstance().usuarioChatwit.update({
         where: { id: usuarioChatwit.id },
         data: {
           chatwitAccountId,

@@ -1,7 +1,7 @@
 // app/api/admin/templates/approval/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { prisma } from '@/lib/prisma';
+import { getPrismaInstance } from '@/lib/connections';
 import { TemplateStatus } from '@prisma/client';
 
 /**
@@ -41,7 +41,7 @@ export async function PUT(
     }
 
     // Buscar solicitação de aprovação
-    const approvalRequest = await prisma.templateApprovalRequest.findUnique({
+    const approvalRequest = await getPrismaInstance().templateApprovalRequest.findUnique({
       where: { id },
       include: {
         template: true,
@@ -63,7 +63,7 @@ export async function PUT(
     }
 
     // Processar aprovação em transação
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await getPrismaInstance().$transaction(async (tx) => {
       // Atualizar solicitação de aprovação
       const updatedRequest = await tx.templateApprovalRequest.update({
         where: { id },
@@ -160,7 +160,7 @@ export async function GET(
     }
 
     // Buscar solicitação com todos os dados
-    const approvalRequest = await prisma.templateApprovalRequest.findUnique({
+    const approvalRequest = await getPrismaInstance().templateApprovalRequest.findUnique({
       where: { id },
       include: {
         template: {

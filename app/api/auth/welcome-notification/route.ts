@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections";
+const prisma = getPrismaInstance();
 
 /**
  * Endpoint para verificar se o usuário é novo e enviar uma notificação de boas-vindas imediatamente.

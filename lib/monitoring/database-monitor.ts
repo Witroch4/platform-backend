@@ -1,4 +1,5 @@
 import { performance } from 'perf_hooks';
+import { getPrismaInstance } from "@/lib/connections";
 import { PrismaClient } from '@prisma/client';
 import { apm } from './application-performance-monitor';
 import { getRedisInstance } from '../connections';

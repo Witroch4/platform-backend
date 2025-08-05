@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 
 // POST: Enviar notificação de boas-vindas para todos os usuários
 export async function POST(req: Request) {
@@ -12,7 +12,7 @@ export async function POST(req: Request) {
     }
 
     // Verificar se o usuário é administrador
-    const adminUser = await prisma.user.findUnique({
+    const adminUser = await getPrismaInstance().user.findUnique({
       where: {
         id: session.user.id
       }
@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     }
 
     // Buscar todos os usuários
-    const users = await prisma.user.findMany({
+    const users = await getPrismaInstance().user.findMany({
       select: {
         id: true,
       }
@@ -43,7 +43,7 @@ export async function POST(req: Request) {
 
     const notifications = await Promise.all(
       users.map(async (user) => {
-        return prisma.notification.create({
+        return getPrismaInstance().notification.create({
           data: {
             userId: user.id,
             title,

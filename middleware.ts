@@ -1,6 +1,7 @@
 // middleware.ts
 import { auth } from "@/auth"; // Importe o auth já configurado
 import { NextResponse } from "next/server";
+import { UserRole } from "@prisma/client";
 import { configRoutes } from "./config/routes/index";
 import { createRouteMatchers } from "./lib/route";
 
@@ -60,14 +61,14 @@ export default auth(async (req) => {
       return NextResponse.redirect(new URL("/auth/login", req.url));
     }
 
-    // Verifica se a rota é superAdmin e se o usuário possui a role "SUPERADMIN"
-    if (isSuperAdminRoute && userRole !== "SUPERADMIN") {
+    // Verifica se a rota é superAdmin e se o usuário possui a role SUPERADMIN
+    if (isSuperAdminRoute && userRole !== UserRole.SUPERADMIN) {
       console.log(`[Middleware] Acesso negado para SuperAdmin: ${pathName}, Role: ${userRole}`);
       return NextResponse.redirect(new URL("/denied", req.url));
     }
 
-    // Verifica se a rota é admin e se o usuário possui pelo menos a role "ADMIN"
-    if (isAdminRoute && !isSuperAdminRoute && userRole !== "ADMIN" && userRole !== "SUPERADMIN") {
+    // Verifica se a rota é admin e se o usuário possui pelo menos a role ADMIN
+    if (isAdminRoute && !isSuperAdminRoute && userRole !== UserRole.ADMIN && userRole !== UserRole.SUPERADMIN) {
       console.log(`[Middleware] Acesso negado para Admin: ${pathName}, Role: ${userRole}`);
       return NextResponse.redirect(new URL("/denied", req.url));
     }

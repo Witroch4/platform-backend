@@ -8,7 +8,7 @@
 import { Job } from 'bullmq';
 import { processInstagramTranslationTask } from '@/worker/WebhookWorkerTasks/instagram-translation.task';
 import { InstagramTranslationJobData } from '@/lib/queue/instagram-translation.queue';
-import { PrismaClient } from '@prisma/client';
+import { getPrismaInstance } from "@/lib/connections";
 import { getRedisInstance } from '../../lib/connections';
 
 // Mock dependencies

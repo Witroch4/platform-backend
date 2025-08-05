@@ -1,8 +1,8 @@
 #!/usr/bin/env ts-node
 
-import { PrismaClient } from '@prisma/client';
+import { getPrismaInstance } from "@/lib/connections";
 
-const prisma = new PrismaClient();
+const prisma = getPrismaInstance();
 
 async function initializeMonitoring() {
   try {

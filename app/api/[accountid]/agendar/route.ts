@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 import { createAgendamento, getAgendamentosByAccount } from "@/lib/agendamento.service";
 
 /**
@@ -54,7 +54,7 @@ export async function POST(
     }
 
     // Busca a conta do Instagram usando o accountid (que é o providerAccountId)
-    const instagramAccount = await prisma.account.findFirst({
+    const instagramAccount = await getPrismaInstance().account.findFirst({
       where: {
         providerAccountId: accountid,
         userId: session.user.id,
@@ -169,7 +169,7 @@ export async function GET(
     console.log("[Agendar] Listando agendamentos para accountid:", accountid);
 
     // Verifica se a conta pertence ao usuário autenticado
-    const account = await prisma.account.findFirst({
+    const account = await getPrismaInstance().account.findFirst({
       where: {
         providerAccountId: accountid,
         userId: session.user.id,

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { db } from '@/lib/db';
+import { getPrismaInstance } from '@/lib/connections';
 
 // Use Node.js runtime instead of Edge to enable Prisma
 export const runtime = 'nodejs';
@@ -14,7 +14,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "ID do usuário é obrigatório" }, { status: 400 });
     }
     
-    const espelhos = await db.espelhoBiblioteca.findMany({
+    const espelhos = await getPrismaInstance().espelhoBiblioteca.findMany({
       where: {
         criadoPorId: usuarioId,
         isAtivo: true
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
     
-    const novoEspelho = await db.espelhoBiblioteca.create({
+    const novoEspelho = await getPrismaInstance().espelhoBiblioteca.create({
       data: {
         nome,
         descricao,
@@ -97,7 +97,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "ID do espelho é obrigatório" }, { status: 400 });
     }
     
-    const espelhoAtualizado = await db.espelhoBiblioteca.update({
+    const espelhoAtualizado = await getPrismaInstance().espelhoBiblioteca.update({
       where: { id },
       data: {
         ...(nome && { nome }),
@@ -137,7 +137,7 @@ export async function DELETE(request: Request) {
     }
     
     // Soft delete - marcar como inativo ao invés de deletar
-    await db.espelhoBiblioteca.update({
+    await getPrismaInstance().espelhoBiblioteca.update({
       where: { id: espelhoId },
       data: {
         isAtivo: false,
@@ -146,7 +146,7 @@ export async function DELETE(request: Request) {
     });
     
     // Remover associações com leads
-    await db.leadOabData.updateMany({
+    await getPrismaInstance().leadOabData.updateMany({
       where: { espelhoBibliotecaId: espelhoId },
       data: { espelhoBibliotecaId: null }
     });

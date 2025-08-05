@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections";
+const prisma = getPrismaInstance();
 
 // Forçar ambiente Node (em vez de Edge)
 export const runtime = "nodejs";

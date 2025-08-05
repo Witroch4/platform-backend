@@ -3,7 +3,7 @@
 import { NextResponse } from 'next/server';
 import { uploadToMinIO, correctMinioUrl } from '@/lib/minio';
 import { auth } from '@/auth';
-import { db } from '@/lib/db';
+import { getPrismaInstance } from '@/lib/connections';
 import type { UploadPurpose } from '@/app/components/ChatInputForm';
 
 export async function POST(request: Request) {
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
         if (isImage) {
           // Usar GeneratedImage para imagens
           console.log(`[Upload] Salvando imagem no modelo GeneratedImage`);
-          const generatedImage = await db.generatedImage.create({
+          const generatedImage = await getPrismaInstance().generatedImage.create({
             data: {
               userId: session.user.id!,
               sessionId: sessionId,
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
         } else if (isPdf) {
           // Usar ChatFile apenas para PDFs
           console.log(`[Upload] Salvando PDF no modelo ChatFile`);
-          const chatFile = await db.chatFile.create({
+          const chatFile = await getPrismaInstance().chatFile.create({
             data: {
               sessionId: sessionId,
               filename: fileName,
@@ -98,7 +98,7 @@ export async function POST(request: Request) {
         } else {
           // Outros tipos de arquivo - usar ChatFile
           console.log(`[Upload] Salvando arquivo genérico no modelo ChatFile`);
-          const chatFile = await db.chatFile.create({
+          const chatFile = await getPrismaInstance().chatFile.create({
             data: {
               sessionId: sessionId,
               filename: fileName,

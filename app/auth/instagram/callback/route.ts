@@ -1,7 +1,8 @@
 // app/auth/instagram/callback/route.ts
 import { NextResponse } from 'next/server';
 import { auth, update } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections";
+const prisma = getPrismaInstance();
 
 export const runtime = "nodejs";
 

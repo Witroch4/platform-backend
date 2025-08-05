@@ -1,10 +1,10 @@
 #!/usr/bin/env tsx
 
-import { PrismaClient } from '@prisma/client';
+import { getPrismaInstance } from "@/lib/connections";
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-const prisma = new PrismaClient();
+const prisma = getPrismaInstance();
 
 async function restoreEspelhosBiblioteca() {
   console.log('🔄 Iniciando restauração dos espelhos da biblioteca...');

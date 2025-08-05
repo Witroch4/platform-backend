@@ -2,7 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { auth } from "@/auth"; // Certifique-se de que esse arquivo exporta { auth, handlers, ... } conforme a nova configuração do NextAuth v5
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 import { cookies } from "next/headers";
 
 export async function GET(request: Request) {
@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     }
 
     // Localize o usuário no banco de dados a partir do email presente na sessão
-    const user = await prisma.user.findUnique({
+    const user = await getPrismaInstance().user.findUnique({
       where: { email: session.user.email },
     });
 
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
 
     // Busca o registro de assinatura mais recente do usuário.
     // Caso o usuário possua múltiplos registros, este exemplo retorna o mais recente.
-    const subscription = await prisma.subscription.findFirst({
+    const subscription = await getPrismaInstance().subscription.findFirst({
       where: { userId: user.id },
       orderBy: { createdAt: "desc" },
     });
@@ -78,7 +78,7 @@ export async function PUT(request: Request) {
     }
 
     // Buscar a assinatura do usuário
-    const subscription = await prisma.subscription.findFirst({
+    const subscription = await getPrismaInstance().subscription.findFirst({
       where: { userId },
       orderBy: { createdAt: "desc" },
     });
@@ -88,7 +88,7 @@ export async function PUT(request: Request) {
     }
 
     // Atualizar o status da assinatura
-    await prisma.subscription.update({
+    await getPrismaInstance().subscription.update({
       where: { id: subscription.id },
       data: { status },
     });

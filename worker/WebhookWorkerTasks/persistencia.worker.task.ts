@@ -6,7 +6,7 @@ import {
   handleJobFailure 
 } from '../../lib/queue/persistencia-credenciais.queue';
 import { credentialsCache, WhatsAppCredentials } from '../../lib/cache/credentials-cache';
-import { prisma } from '../../lib/prisma';
+import { getPrismaInstance } from '../../lib/connections';
 import { LeadSource } from '@prisma/client';
 import { UnifiedLeadManager, LeadCreationData } from '../../lib/lead-management';
 import { recordWorkerMetrics } from '../../lib/monitoring/application-performance-monitor';
@@ -49,7 +49,7 @@ class CredentialsFallbackResolver {
       }
 
       // Get inbox configuration from database
-      const inbox = await prisma.chatwitInbox.findFirst({
+      const inbox = await getPrismaInstance().chatwitInbox.findFirst({
         where: { inboxId },
         include: {
           usuarioChatwit: {
@@ -288,7 +288,7 @@ class PersistenciaWorker {
       
       if (!isRecentlyUpdated) {
         // Update credentials in database
-        await prisma.chatwitInbox.updateMany({
+        await getPrismaInstance().chatwitInbox.updateMany({
           where: { inboxId: data.inboxId },
           data: {
             whatsappApiKey: data.whatsappApiKey,
@@ -446,7 +446,7 @@ class PersistenciaWorker {
           
           if (!isRecentlyUpdated) {
             // Update credentials in database
-            await prisma.chatwitInbox.updateMany({
+            await getPrismaInstance().chatwitInbox.updateMany({
               where: { inboxId: item.inboxId },
               data: {
                 whatsappApiKey: item.credentials.whatsappApiKey,

@@ -1,7 +1,7 @@
 // app/api/auth/instagram/connect/route.ts
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 
 export async function POST(request: NextRequest) {
   try {
@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
     const igBusinessId = userData.user_id || null;
 
     // Verificar se já existe uma conta com este providerAccountId
-    const existingAccount = await prisma.account.findFirst({
+    const existingAccount = await getPrismaInstance().account.findFirst({
       where: {
         provider: "instagram",
         providerAccountId: tokenData.user_id,
@@ -156,7 +156,7 @@ export async function POST(request: NextRequest) {
       }
       
       // Atualizar a conta existente
-      account = await prisma.account.update({
+      account = await getPrismaInstance().account.update({
         where: {
           id: existingAccount.id,
         },
@@ -171,7 +171,7 @@ export async function POST(request: NextRequest) {
       });
     } else {
       // Verificar se já existe alguma conta do Instagram para este usuário
-      const existingAccounts = await prisma.account.findMany({
+      const existingAccounts = await getPrismaInstance().account.findMany({
         where: {
           userId: session.user.id,
           provider: "instagram",
@@ -179,7 +179,7 @@ export async function POST(request: NextRequest) {
       });
 
       // Criar uma nova conta
-      account = await prisma.account.create({
+      account = await getPrismaInstance().account.create({
         data: {
           userId: session.user.id,
           type: "oauth",

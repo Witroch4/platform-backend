@@ -5,7 +5,7 @@
  * cache isolation across the entire system stack.
  */
 
-import { PrismaClient } from '@prisma/client';
+import { getPrismaInstance } from "@/lib/connections";
 import { InstagramTemplateCache } from '@/lib/cache/instagram-template-cache';
 import { findOptimizedCompleteMessageMapping } from '@/lib/instagram/optimized-database-queries';
 import { processInstagramTranslationTask } from '@/worker/WebhookWorkerTasks/instagram-translation.task';

@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 import { z } from "zod";
 import { 
   InteractiveMessageSchema,
@@ -289,7 +289,7 @@ export async function POST(request: NextRequest) {
     // Verify caixa exists and user has access
     let caixa;
     try {
-      caixa = await prisma.chatwitInbox.findFirst({
+      caixa = await getPrismaInstance().chatwitInbox.findFirst({
         where: {
           id: inboxId,
           usuarioChatwit: {
@@ -336,7 +336,7 @@ export async function POST(request: NextRequest) {
     // Execute atomic transaction with enhanced error handling
     let result;
     try {
-      result = await prisma.$transaction(async (tx) => {
+      result = await getPrismaInstance().$transaction(async (tx) => {
       // Create the interactive message
       const savedMessage = await tx.template.create({
         data: {
@@ -611,7 +611,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Verify message exists and user has access
-    const existingMessage = await prisma.template.findFirst({
+    const existingMessage = await getPrismaInstance().template.findFirst({
       where: {
         id: messageId,
         createdById: session.user!.id,
@@ -641,7 +641,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Execute atomic transaction
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await getPrismaInstance().$transaction(async (tx) => {
       // Update the template
       const updatedTemplate = await tx.template.update({
         where: { id: messageId },
@@ -894,7 +894,7 @@ export async function GET(request: NextRequest) {
 
     if (messageId) {
       // Get specific message with reactions
-      const message = await prisma.template.findFirst({
+      const message = await getPrismaInstance().template.findFirst({
         where: {
           id: messageId,
           type: "INTERACTIVE_MESSAGE",
@@ -921,7 +921,7 @@ export async function GET(request: NextRequest) {
       });
 
       // Get button reactions for this message
-      const buttonReactions = await prisma.mapeamentoBotao.findMany({
+      const buttonReactions = await getPrismaInstance().mapeamentoBotao.findMany({
         where: { 
           inboxId: messageId,
         },
@@ -947,7 +947,7 @@ export async function GET(request: NextRequest) {
 
     if (inboxId) {
       // Get all messages for a caixa with their reactions
-      const messages = await prisma.template.findMany({
+      const messages = await getPrismaInstance().template.findMany({
         where: {
           inboxId: inboxId,
           type: "INTERACTIVE_MESSAGE",
@@ -976,7 +976,7 @@ export async function GET(request: NextRequest) {
 
       // Get all button reactions for these messages
       const messageIds = messages.map(m => m.id);
-      const allButtonReactions = await prisma.mapeamentoBotao.findMany({
+      const allButtonReactions = await getPrismaInstance().mapeamentoBotao.findMany({
         where: { 
           inboxId: { in: messageIds },
         },

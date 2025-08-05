@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { db as prisma } from '@/lib/db';
+import { getPrismaInstance } from '@/lib/connections';
+const prisma = getPrismaInstance();
 import axios from 'axios';
 
 // GET - Buscar caixas de entrada do Chatwit

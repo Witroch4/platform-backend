@@ -254,7 +254,7 @@ const queueAlerts = apm.getAlertsByComponent('queue');
 
 ```typescript
 import { createMonitoredPrisma } from '@/lib/monitoring/init-monitoring';
-import { prisma } from '@/lib/prisma';
+import { getPrismaInstance } from '@/lib/connections';
 
 // Criar cliente Prisma com monitoramento
 const monitoredPrisma = createMonitoredPrisma(prisma);

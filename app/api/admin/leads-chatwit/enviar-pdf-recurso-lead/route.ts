@@ -1,6 +1,7 @@
 // app/api/admin/leads-chatwit/enviar-pdf-recurso-lead/route.ts
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { getPrismaInstance } from '@/lib/connections';
+const prisma = getPrismaInstance();
 import FormData from 'form-data';
 import axios from 'axios';
 

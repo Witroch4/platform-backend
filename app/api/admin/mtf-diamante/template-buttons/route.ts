@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { db } from "@/lib/db";
+import { getPrismaInstance } from "@/lib/connections"
 
 /**
  * Endpoint para analisar e listar os botões de um template
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     }
 
     // Buscar template no banco de dados
-    const template = await db.template.findFirst({
+    const template = await getPrismaInstance().template.findFirst({
       where: { name: templateName },
       include: {
         whatsappOfficialInfo: true

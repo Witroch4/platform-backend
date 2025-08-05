@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { getPrismaInstance } from '@/lib/connections';
+const prisma = getPrismaInstance();
 
 /**
  * Handler da rota POST para enviar manuscrito, espelho ou prova para processamento.

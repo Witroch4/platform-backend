@@ -3,7 +3,7 @@
  * Centralized management of queue configurations with caching, validation, and audit support
  */
 
-import { PrismaClient } from '@prisma/client'
+import { getPrismaInstance } from "@/lib/connections"
 import { getRedisInstance } from '../../../lib/connections'
 import { 
   QueueConfig, 
@@ -21,14 +21,14 @@ import {
 } from '../validation/config-validation'
 
 export class QueueConfigManager {
-  private prisma: PrismaClient
+  private prisma: any
   private redis?: ReturnType<typeof getRedisInstance>
   private options: Required<QueueConfigManagerOptions>
   private configCache = new Map<string, QueueConfig>()
   private systemConfigCache = new Map<string, any>()
 
   constructor(
-    prisma: PrismaClient,
+    prisma: any,
     redis?: ReturnType<typeof getRedisInstance>,
     options: QueueConfigManagerOptions = {}
   ) {
@@ -141,7 +141,7 @@ export class QueueConfigManager {
       ]
     })
 
-    return configs.map(config => this.mapPrismaToQueueConfig(config))
+    return configs.map((config: any) => this.mapPrismaToQueueConfig(config))
   }
 
   /**
@@ -338,7 +338,7 @@ export class QueueConfigManager {
       ]
     })
 
-    return configs.map(config => ({
+    return configs.map((config: any) => ({
       id: config.id,
       key: config.key,
       value: config.value,

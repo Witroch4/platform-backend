@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getPrismaInstance } from "@/lib/connections"
 import { auth } from "@/auth";
 
 // GET - Buscar detalhes de um template específico
@@ -17,7 +17,7 @@ export async function GET(
     const templateId = resolvedParams.id;
 
     // Buscar template no banco de dados
-    const template = await db.template.findUnique({
+    const template = await getPrismaInstance().template.findUnique({
       where: { id: templateId },
     });
 

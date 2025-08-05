@@ -1,7 +1,7 @@
 // app/api/admin/mtf-diamante/disparo/route.ts
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 import { z } from "zod";
 import { sendTemplateMessage } from "@/lib/whatsapp";
 
@@ -29,13 +29,13 @@ export async function POST(request: Request) {
       disparoSchema.parse(body);
 
     // Buscar o usuário Chatwit (opcional, pode não existir)
-    const usuarioChatwit = await prisma.usuarioChatwit.findFirst({
+    const usuarioChatwit = await getPrismaInstance().usuarioChatwit.findFirst({
       where: { appUserId: appUserId },
       select: { id: true },
     });
 
     // A busca de template já está correta
-    const template = await prisma.template.findFirst({
+    const template = await getPrismaInstance().template.findFirst({
       where: {
         id: templateId,
         createdById: session.user.id,
@@ -80,7 +80,7 @@ export async function POST(request: Request) {
       }
     });
 
-    const leadsRaw = await prisma.lead.findMany({
+    const leadsRaw = await getPrismaInstance().lead.findMany({
       where: {
         AND: [
           { userId: session.user.id }, // Garante que o lead é do usuário
@@ -124,7 +124,7 @@ export async function POST(request: Request) {
       userId: appUserId,
     }));
 
-    await prisma.disparoMtfDiamante.createMany({
+    await getPrismaInstance().disparoMtfDiamante.createMany({
       data: disparosData,
       skipDuplicates: true,
     });
@@ -134,7 +134,7 @@ export async function POST(request: Request) {
         leads.map(async (lead) => {
           try {
             // Buscar o template completo para analisar variáveis
-            const templateCompleto = await prisma.template.findFirst({
+            const templateCompleto = await getPrismaInstance().template.findFirst({
               where: {
                 id: templateId,
                 createdById: session.user.id,
@@ -222,7 +222,7 @@ export async function POST(request: Request) {
               template.name,
               sendOpts
             );
-            await prisma.disparoMtfDiamante.updateMany({
+            await getPrismaInstance().disparoMtfDiamante.updateMany({
               where: {
                 leadId: lead.id,
                 templateName: template.name,
@@ -236,7 +236,7 @@ export async function POST(request: Request) {
             });
             return { success };
           } catch (error) {
-            await prisma.disparoMtfDiamante.updateMany({
+            await getPrismaInstance().disparoMtfDiamante.updateMany({
               where: {
                 leadId: lead.id,
                 templateName: template.name,
@@ -307,7 +307,7 @@ export async function GET(request: Request) {
     }
 
     const [disparos, total] = await Promise.all([
-      prisma.disparoMtfDiamante.findMany({
+      getPrismaInstance().disparoMtfDiamante.findMany({
         where: whereClause,
         orderBy: {
           createdAt: "desc",
@@ -315,7 +315,7 @@ export async function GET(request: Request) {
         skip: (page - 1) * limit,
         take: limit,
       }),
-      prisma.disparoMtfDiamante.count({
+      getPrismaInstance().disparoMtfDiamante.count({
         where: whereClause,
       }),
     ]);

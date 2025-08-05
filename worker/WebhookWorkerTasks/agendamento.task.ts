@@ -1,6 +1,6 @@
 import type { Job } from 'bullmq';
 import axios from 'axios';
-import { prisma } from '@/lib/prisma';
+import { getPrismaInstance } from '@/lib/connections';
 import { prepareWebhookData } from '@/lib/agendamento.service';
 import { scheduleAgendamentoJob } from '@/lib/queue/agendamento.queue';
 import type { IAgendamentoJobData } from '@/lib/queue/agendamento.queue';
@@ -14,7 +14,7 @@ export async function processAgendamentoTask(job: Job<IAgendamentoJobData>) {
   const agendamentoId = job.data.agendamentoId;
 
   try {
-    const agendamento = await prisma.agendamento.findUnique({
+    const agendamento = await getPrismaInstance().agendamento.findUnique({
       where: { id: agendamentoId },
     });
 

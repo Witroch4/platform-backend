@@ -4,10 +4,10 @@
  * Functions to populate the database with initial configuration and sample data
  */
 
-import { PrismaClient } from '@prisma/client'
+import { getPrismaInstance } from "@/lib/connections"
 import { DEFAULTS, PERMISSIONS, ROLE_PERMISSIONS } from '../constants'
 
-const prisma = new PrismaClient()
+const prisma = getPrismaInstance()
 
 /**
  * Seed system configurations

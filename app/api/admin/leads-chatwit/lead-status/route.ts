@@ -1,6 +1,6 @@
 // app/api/admin/leads-chatwit/lead-status/route.ts
 import { type NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { getPrismaInstance } from '@/lib/connections';
 import { auth } from '@/auth';
 
 export async function GET(req: NextRequest) {
@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     }
 
     /* 2 ─ Verifica role no banco */
-    const user = await db.user.findUnique({
+    const user = await getPrismaInstance().user.findUnique({
       where: { id: session.user.id },
       select: { role: true },
     });
@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     }
 
     /* 4 ─ Busca lead */
-    const lead = await db.leadOabData.findUnique({
+    const lead = await getPrismaInstance().leadOabData.findUnique({
       where:  { id: leadId },
       select: {
         id: true,

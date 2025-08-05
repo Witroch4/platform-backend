@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { getPrismaInstance } from '@/lib/connections';
 import { addFinalAnalysisJob } from '@/lib/queue/leads-chatwit.queue'; // Importa a função correta
 
 // Define a estrutura do payload esperado
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
     for (const leadData of leadsToProcess) {
       
       // Atualiza o BD com os dados do manuscrito e espelho
-      await db.leadOabData.update({
+      await getPrismaInstance().leadOabData.update({
           where: { id: leadData.leadId },
           data: {
               // Salve os dados do manuscrito e espelho aqui, se necessário

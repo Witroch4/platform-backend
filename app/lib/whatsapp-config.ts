@@ -1,4 +1,5 @@
-import prisma from '@/lib/prisma';
+import { getPrismaInstance } from '@/lib/connections';
+const prisma = getPrismaInstance();
 
 /**
  * Obtém as configurações ativas do WhatsApp para um usuário

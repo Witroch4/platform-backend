@@ -2,7 +2,10 @@
 services:
   socialwise_app:
     image: witrocha/socialwise:latest
-    command: sh -c "npx prisma generate && (node /app/scripts/init-db.js || node /app/scripts/init-db-simple.js) && node /app/server.js"
+    command: sh -c "
+        node /app/scripts/db-prepare.js --mode=deploy &&
+        node /app/server.js
+      "
     networks:
       - minha_rede
     environment:
@@ -97,7 +100,7 @@ services:
 
   worker_automacao:
     image: witrocha/socialwise:latest
-    command: sh -c "npx prisma generate && (node /app/scripts/init-db.js || node /app/scripts/init-db-simple.js) && node /app/dist/worker/automacao.worker.js"
+    command: sh -c "node /app/scripts/db-prepare.js --mode=deploy && node /app/dist/worker/automacao.worker.js"
     networks:
       - minha_rede
     environment:
@@ -176,7 +179,10 @@ services:
 
   worker_webhook:
     image: witrocha/socialwise:latest
-    command: sh -c "npx prisma generate && (node /app/scripts/init-db.js || node /app/scripts/init-db-simple.js) && node /app/dist/worker/webhook.worker.js"
+    command: sh -c "
+        node /app/scripts/db-prepare.js --mode=deploy &&
+        node /app/dist/worker/webhook.worker.js
+      "
     networks:
       - minha_rede
     environment:

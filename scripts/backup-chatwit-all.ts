@@ -21,7 +21,7 @@ const path = require('path');
 require('dotenv').config({ path: path.resolve(process.cwd(), '.env.development') });
 
 // Inicializa o Prisma Client
-const prisma = new PrismaClient();
+const prisma = getPrismaInstance();
 
 async function criarBackup() {
   console.log('🚀 Iniciando o processo de backup do banco de dados...');

@@ -4,7 +4,8 @@ import { PrismaClient } from "@prisma/client";
 import { unifyFilesToPdf, savePdfToMinIO, type Environment } from "./utils";
 import './config';
 
-const prisma = new PrismaClient();
+import { getPrismaInstance } from '@/lib/connections';
+const prisma = getPrismaInstance();
 
 // Tipos para uso com Prisma
 interface ArquivoLeadChatwit {

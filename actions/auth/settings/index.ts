@@ -2,7 +2,7 @@
 
 import { auth } from "@/auth";
 import { useCurrentUser } from "@/components/hooks/use-current-user";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 import { UserSettingsSchema } from "@/schemas/auth";
 import { findUserbyEmail, findUserbyId } from "@/services";
 import bcryptjs from "bcryptjs";
@@ -53,7 +53,7 @@ if (!validPassword) {
 	settings.email = undefined;
 	
 	try {
-		const updatedUser = await prisma.user.update({
+		const updatedUser = await getPrismaInstance().user.update({
 			data: {
 				...settings,
 			},

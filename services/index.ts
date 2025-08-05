@@ -1,7 +1,15 @@
-import { db as prisma } from "@/lib/db";
+// Função para obter Prisma compatível com Edge Runtime
+function getPrismaForServices() {
+  if (typeof (globalThis as any).EdgeRuntime !== 'undefined') {
+    const { getPrismaInstanceEdge } = require("@/lib/edge-connections");
+    return getPrismaInstanceEdge();
+  }
+  const { getPrismaInstance } = require("@/lib/connections");
+  return getPrismaInstance();
+}
 
 export const findUserbyEmail = async (email: string) => {
-	const user = await prisma.user.findUnique({
+	const user = await getPrismaForServices().user.findUnique({
 		where: {
 			email,
 		},
@@ -10,7 +18,7 @@ export const findUserbyEmail = async (email: string) => {
 };
 
 export const findUserbyId = async (id: string) => {
-	const user = await prisma.user.findUnique({
+	const user = await getPrismaForServices().user.findUnique({
 		where: {
 			id,
 		},

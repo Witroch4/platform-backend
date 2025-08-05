@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 import mail from "@/lib/mail";
 import { findUserbyEmail } from "@/services";
 import { findVerificationTokenbyToken } from "@/services/auth";
@@ -72,14 +72,14 @@ export const verifyToken = async (token: string) => {
 	}
 
 	try {
-		await prisma.user.update({
+		await getPrismaInstance().user.update({
 			where: { id: user.id },
 			data: {
 				emailVerified: new Date(),
 			},
 		});
 
-		await prisma.verificationToken.delete({
+		await getPrismaInstance().verificationToken.delete({
 			where: {
 				id: existingToken.id,
 			},

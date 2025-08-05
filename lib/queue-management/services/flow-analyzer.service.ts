@@ -7,7 +7,7 @@
 
 import { EventEmitter } from 'events'
 import { Job } from 'bullmq'
-import { PrismaClient } from '@prisma/client'
+import { getPrismaInstance } from "@/lib/connections"
 import { 
   FlowTree, 
   FlowNode, 
@@ -77,12 +77,12 @@ export interface SimulationResult {
 export class FlowAnalyzerService extends EventEmitter {
   private logger: Logger
   private permissionManager = getPermissionManager()
-  private prisma: PrismaClient
+  private prisma: any
   private analysisCache = new Map<string, FlowAnalysis>()
   private orphanedJobsCache = new Map<string, OrphanedJob[]>()
   private circularDependenciesCache = new Map<string, CircularDependency[]>()
 
-  constructor(prisma: PrismaClient) {
+  constructor(prisma: any) {
     super()
     this.logger = new Logger('FlowAnalyzerService')
     this.prisma = prisma
@@ -272,7 +272,7 @@ export class FlowAnalyzerService extends EventEmitter {
       // Calculate efficiency
       const efficiency = totalDuration > 0 
         ? (criticalPath.reduce((sum, jobId) => {
-            const job = jobMetrics.find(j => j.jobId === jobId)
+            const job = jobMetrics.find((j: any) => j.jobId === jobId)
             return sum + (job?.processingTime || 0)
           }, 0) / totalDuration) * 100
         : 0
@@ -515,7 +515,7 @@ export class FlowAnalyzerService extends EventEmitter {
             parentJobId: {
               in: await this.prisma.jobMetrics.findMany({
                 select: { jobId: true }
-              }).then(jobs => jobs.map(j => j.jobId))
+              }).then((jobs: any) => jobs.map((j: any) => j.jobId))
             }
           }
         }
@@ -540,7 +540,7 @@ export class FlowAnalyzerService extends EventEmitter {
             flowId: {
               in: await this.prisma.jobFlow.findMany({
                 select: { flowId: true }
-              }).then(flows => flows.map(f => f.flowId))
+              }).then((flows: any) => flows.map((f: any) => f.flowId))
             }
           }
         }
@@ -1099,7 +1099,7 @@ const FLOW_ANALYZER_EVENTS = {
 // Export singleton instance
 let flowAnalyzerServiceInstance: FlowAnalyzerService | null = null
 
-export function getFlowAnalyzerService(prisma: PrismaClient): FlowAnalyzerService {
+export function getFlowAnalyzerService(prisma: any): FlowAnalyzerService {
   if (!flowAnalyzerServiceInstance) {
     flowAnalyzerServiceInstance = new FlowAnalyzerService(prisma)
   }

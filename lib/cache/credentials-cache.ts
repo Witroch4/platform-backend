@@ -239,8 +239,8 @@ export class CredentialsCache {
       }
       
       console.log(`[CredentialsCache] Batch get completed for ${inboxIds.length} inboxes`, {
-        hits: values.filter(v => v !== null).length,
-        misses: values.filter(v => v === null).length,
+        hits: values.filter((v: any) => v !== null).length,
+        misses: values.filter((v: any) => v === null).length,
       });
       
       return results;
@@ -468,7 +468,8 @@ export class CacheInvalidationManager {
   // Find inboxes that depend on this inbox for fallback
   private async findDependentInboxes(inboxId: string): Promise<string[]> {
     try {
-      const { prisma } = await import('../prisma');
+      const { getPrismaInstance } = await import('../connections');
+      const prisma = getPrismaInstance();
       
       const dependentInboxes = await prisma.chatwitInbox.findMany({
         where: { fallbackParaInboxId: inboxId },
@@ -507,7 +508,8 @@ export class CacheWarmingManager {
     try {
       console.log('[CacheWarmingManager] Starting cache warming for frequently accessed credentials');
       
-      const { prisma } = await import('../prisma');
+      const { getPrismaInstance } = await import('../connections');
+      const prisma = getPrismaInstance();
       
       // Get active inboxes (those with recent activity)
       const activeInboxes = await prisma.chatwitInbox.findMany({

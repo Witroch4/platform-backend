@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { POST, PUT, GET } from "../route";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections";
+const prisma = getPrismaInstance();
 
 // Mock dependencies
 jest.mock("@/auth");

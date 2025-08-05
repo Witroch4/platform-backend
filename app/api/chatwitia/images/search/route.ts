@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from "@/auth";
-import { db } from "@/lib/db";
+import { getPrismaInstance } from "@/lib/connections"
 
 export async function GET(req: Request) {
   try {
@@ -83,7 +83,7 @@ export async function GET(req: Request) {
       sessionId: sessionId || 'qualquer'
     });
 
-    const image = await db.generatedImage.findFirst({
+    const image = await getPrismaInstance().generatedImage.findFirst({
       where: baseWhere,
       select: {
         id: true,

@@ -1,4 +1,4 @@
-import { db } from "@/lib/db";
+import { getPrismaInstance } from "@/lib/connections"
 
 /**
  * Popula automaticamente as variáveis padrão do MTF Diamante para um usuário
@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 export async function populateUserMtfVariaveis(userId: string): Promise<boolean> {
   try {
     // Verifica se o usuário já teve as variáveis populadas
-    const user = await db.user.findUnique({
+    const user = await getPrismaInstance().user.findUnique({
       where: { id: userId },
       select: { mtfVariaveisPopuladas: true }
     });
@@ -22,13 +22,13 @@ export async function populateUserMtfVariaveis(userId: string): Promise<boolean>
     }
 
     // Busca ou cria a configuração do MTF Diamante
-    let config = await db.mtfDiamanteConfig.findFirst({
+    let config = await getPrismaInstance().mtfDiamanteConfig.findFirst({
       where: { userId }
     });
 
     if (!config) {
       // Cria configuração com variáveis padrão
-      config = await db.mtfDiamanteConfig.upsert({
+      config = await getPrismaInstance().mtfDiamanteConfig.upsert({
         where: { userId },
         update: {},
         create: {
@@ -44,12 +44,12 @@ export async function populateUserMtfVariaveis(userId: string): Promise<boolean>
       });
     } else {
       // Se a configuração existe mas não tem variáveis, cria as padrão
-      const variaveisExistentes = await db.mtfDiamanteVariavel.count({
+      const variaveisExistentes = await getPrismaInstance().mtfDiamanteVariavel.count({
         where: { configId: config.id }
       });
 
       if (variaveisExistentes === 0) {
-        await db.mtfDiamanteVariavel.createMany({
+        await getPrismaInstance().mtfDiamanteVariavel.createMany({
           data: [
             { configId: config.id, chave: "chave_pix", valor: "57944155000101" },
             { configId: config.id, chave: "nome_do_escritorio_rodape", valor: "Dra. Amanda Sousa Advocacia e Consultoria Jurídica™" },
@@ -60,7 +60,7 @@ export async function populateUserMtfVariaveis(userId: string): Promise<boolean>
     }
 
     // Marca o usuário como tendo as variáveis populadas
-    await db.user.update({
+    await getPrismaInstance().user.update({
       where: { id: userId },
       data: { mtfVariaveisPopuladas: true }
     });

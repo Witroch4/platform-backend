@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 
 // Esta rota é apenas para administradores
 // Ela permite sincronizar os cookies de assinatura para todos os usuários
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
 
     // Se userId for fornecido, sincronizar apenas para esse usuário
     if (userId) {
-      const user = await prisma.user.findUnique({
+      const user = await getPrismaInstance().user.findUnique({
         where: { id: userId },
         include: { subscriptions: { orderBy: { createdAt: "desc" }, take: 1 } }
       });
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     } else {
       // Sincronizar para todos os usuários
       // Buscar todos os usuários com suas assinaturas mais recentes
-      const users = await prisma.user.findMany({
+      const users = await getPrismaInstance().user.findMany({
         include: { subscriptions: { orderBy: { createdAt: "desc" }, take: 1 } }
       });
 

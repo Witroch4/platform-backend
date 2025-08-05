@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { uploadToMinIO } from '@/lib/minio';
 import { auth } from '@/auth';
-import { db } from '@/lib/db';
+import { getPrismaInstance } from '@/lib/connections';
 import type { UploadPurpose } from '@/app/components/ChatInputForm';
 import { randomUUID } from 'crypto';
 import * as fs from 'fs';
@@ -292,7 +292,7 @@ export async function POST(request: Request) {
             
             // Não salvar na tabela GeneratedImage se for um upload de espelho
             if (!sessionId.startsWith('espelho-')) {
-            const savedImage = await db.generatedImage.create({
+            const savedImage = await getPrismaInstance().generatedImage.create({
               data: {
                 userId: session.user.id!,
                 sessionId: sessionId,
@@ -329,7 +329,7 @@ export async function POST(request: Request) {
           
           // Salvar PDF no banco se necessário
           if (sessionId && !sessionId.startsWith('espelho-')) {
-            const savedFile = await db.generatedImage.create({
+            const savedFile = await getPrismaInstance().generatedImage.create({
               data: {
                 userId: session.user.id!,
                 sessionId: sessionId,
@@ -366,7 +366,7 @@ export async function POST(request: Request) {
       if (sessionId) {
         // Não salvar na tabela GeneratedImage se for um upload de espelho
         if (!sessionId.startsWith('espelho-')) {
-        const savedImage = await db.generatedImage.create({
+        const savedImage = await getPrismaInstance().generatedImage.create({
           data: {
             userId: session.user.id!,
             sessionId: sessionId,

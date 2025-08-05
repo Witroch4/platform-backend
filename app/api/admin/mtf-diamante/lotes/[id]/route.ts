@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { db as prisma } from '@/lib/db';
+import { getPrismaInstance } from '@/lib/connections';
+const prisma = getPrismaInstance();
 import { auth } from '@/auth';
 
 // PATCH - Atualizar lote

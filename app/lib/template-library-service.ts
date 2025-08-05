@@ -1,4 +1,4 @@
-import { db } from '@/lib/db';
+import { getPrismaInstance } from '@/lib/connections';
 import type { Template, TemplateApprovalRequest, User } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 
@@ -58,7 +58,7 @@ export class TemplateLibraryService {
       whereClause.scope = scope;
     }
 
-    return await db.template.findMany({
+    return await getPrismaInstance().template.findMany({
       where: whereClause,
       include: {
         createdBy: {
@@ -89,7 +89,7 @@ export class TemplateLibraryService {
    * Save template to library
    */
   static async saveToLibrary(data: CreateTemplateLibraryData): Promise<Template> {
-    return await db.template.create({
+    return await getPrismaInstance().template.create({
       data: {
         name: data.name,
         description: data.description,
@@ -112,7 +112,7 @@ export class TemplateLibraryService {
     customVariables?: Record<string, string>
   ): Promise<TemplateApprovalRequest> {
     // Check if template exists and requires approval
-    const template = await db.template.findUnique({
+    const template = await getPrismaInstance().template.findUnique({
       where: { id: templateId }
     });
 
@@ -124,7 +124,7 @@ export class TemplateLibraryService {
     // This can be enhanced later based on template type or other criteria
 
     // Check if user already has a pending request for this template
-    const existingRequest = await db.templateApprovalRequest.findFirst({
+    const existingRequest = await getPrismaInstance().templateApprovalRequest.findFirst({
       where: {
         templateId: templateId,
         requestedById: userId,
@@ -136,7 +136,7 @@ export class TemplateLibraryService {
       throw new Error('You already have a pending approval request for this template');
     }
 
-    return await db.templateApprovalRequest.create({
+    return await getPrismaInstance().templateApprovalRequest.create({
       data: {
         templateId: templateId,
         requestedById: userId,
@@ -155,7 +155,7 @@ export class TemplateLibraryService {
     status: 'approved' | 'rejected',
     responseMessage?: string
   ): Promise<TemplateApprovalRequest> {
-    return await db.templateApprovalRequest.update({
+    return await getPrismaInstance().templateApprovalRequest.update({
       where: { id: requestId },
       data: {
         status,
@@ -173,7 +173,7 @@ export class TemplateLibraryService {
     messageId: string,
     variables: Record<string, string>
   ): Promise<{ success: boolean; processedContent: TemplateLibraryContent }> {
-    const message = await db.template.findUnique({
+    const message = await getPrismaInstance().template.findUnique({
       where: { id: messageId }
     });
 
@@ -187,7 +187,7 @@ export class TemplateLibraryService {
     }
 
     // Increment usage count
-    await db.template.update({
+    await getPrismaInstance().template.update({
       where: { id: messageId },
       data: {
         usageCount: {
@@ -214,7 +214,7 @@ export class TemplateLibraryService {
    * Get template by ID with full details
    */
   static async getTemplateById(templateId: string): Promise<TemplateLibraryWithCreator | null> {
-    return await db.template.findUnique({
+    return await getPrismaInstance().template.findUnique({
       where: { id: templateId },
       include: {
         createdBy: {
@@ -264,7 +264,7 @@ export class TemplateLibraryService {
       whereClause.status = status;
     }
 
-    return await db.templateApprovalRequest.findMany({
+    return await getPrismaInstance().templateApprovalRequest.findMany({
       where: whereClause,
       include: {
         template: true,
@@ -298,7 +298,7 @@ export class TemplateLibraryService {
     updates: Partial<CreateTemplateLibraryData>
   ): Promise<Template> {
     // Check if user has permission to update (creator or admin)
-    const template = await db.template.findUnique({
+    const template = await getPrismaInstance().template.findUnique({
       where: { id: templateId }
     });
 
@@ -307,7 +307,7 @@ export class TemplateLibraryService {
     }
 
     // Check if user is creator or admin
-    const user = await db.user.findUnique({
+    const user = await getPrismaInstance().user.findUnique({
       where: { id: userId }
     });
 
@@ -323,7 +323,7 @@ export class TemplateLibraryService {
       throw new Error('You do not have permission to update this template');
     }
 
-    return await db.template.update({
+    return await getPrismaInstance().template.update({
       where: { id: templateId },
       data: {
         ...(updates.name && { name: updates.name }),
@@ -339,7 +339,7 @@ export class TemplateLibraryService {
    */
   static async deleteTemplate(templateId: string, userId: string): Promise<void> {
     // Check permissions same as update
-    const template = await db.template.findUnique({
+    const template = await getPrismaInstance().template.findUnique({
       where: { id: templateId }
     });
 
@@ -347,7 +347,7 @@ export class TemplateLibraryService {
       throw new Error('Template not found');
     }
 
-    const user = await db.user.findUnique({
+    const user = await getPrismaInstance().user.findUnique({
       where: { id: userId }
     });
 
@@ -364,7 +364,7 @@ export class TemplateLibraryService {
     }
 
     // Soft delete by setting isActive to false
-    await db.template.update({
+    await getPrismaInstance().template.update({
       where: { id: templateId },
       data: {
         isActive: false,
@@ -406,7 +406,7 @@ export class TemplateLibraryService {
     category: string,
     userId: string
   ): Promise<TemplateLibraryWithCreator[]> {
-    return await db.template.findMany({
+    return await getPrismaInstance().template.findMany({
       where: {
         tags: {
           has: category
@@ -458,7 +458,7 @@ export class TemplateLibraryService {
       whereClause.type = type;
     }
 
-    return await db.template.findMany({
+    return await getPrismaInstance().template.findMany({
       where: whereClause,
       include: {
         createdBy: {

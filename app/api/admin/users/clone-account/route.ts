@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 import { randomUUID } from "crypto";
 
 export async function POST(req: Request) {
@@ -13,7 +13,7 @@ export async function POST(req: Request) {
     }
 
     // Verificar se o usuário é SUPERADMIN
-    const adminUser = await prisma.user.findUnique({
+    const adminUser = await getPrismaInstance().user.findUnique({
       where: {
         id: session.user.id
       },
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     }
 
     // Verificar se a conta de origem existe
-    const sourceAccount = await prisma.account.findUnique({
+    const sourceAccount = await getPrismaInstance().account.findUnique({
       where: {
         id: sourceAccountId
       }
@@ -46,7 +46,7 @@ export async function POST(req: Request) {
     }
 
     // Verificar se o usuário de destino existe
-    const targetUser = await prisma.user.findUnique({
+    const targetUser = await getPrismaInstance().user.findUnique({
       where: {
         id: targetUserId
       }
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
     console.log(`Clonando conta: Original=${sourceAccount.providerAccountId}, Nova=${clonedProviderAccountId}`);
 
     // Criar uma cópia da conta para o usuário de destino
-    const newAccount = await prisma.account.create({
+    const newAccount = await getPrismaInstance().account.create({
       data: {
         userId: targetUserId,
         type: sourceAccount.type,

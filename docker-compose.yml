@@ -3,7 +3,7 @@ services:
     image: pgvector/pgvector:pg17
     container_name: chatwit_postgres
     environment:
-      POSTGRES_DB: socialWise
+      POSTGRES_DB: socialwise
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
@@ -41,8 +41,8 @@ services:
       context: .
       dockerfile: Dockerfile.prod
       args:
-        # ► DURANTE O BUILD (SSG/ISR) use o host da máquina
-        DATABASE_URL: postgresql://postgres:postgres@host.docker.internal:5432/socialWise?schema=public
+        # ► DURANTE O BUILD (SSG/ISR) use o postgres local
+        DATABASE_URL: postgresql://postgres:postgres@host.docker.internal:5432/socialwise?schema=public
         REDIS_HOST: host.docker.internal
         REDIS_PORT: 6379
         REDIS_URL: redis://host.docker.internal:6379
@@ -59,7 +59,7 @@ services:
     environment:
       NODE_ENV: production
       # ► Em runtime, use os nomes dos serviços na rede do Compose
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/socialWise?schema=public
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/socialwise?schema=public
       REDIS_HOST: redis
       REDIS_PORT: 6379
     ports:

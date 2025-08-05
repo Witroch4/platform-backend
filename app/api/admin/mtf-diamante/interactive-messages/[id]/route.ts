@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 import { invalidateTemplateMappingCache } from "@/lib/cache/instagram-template-cache";
 
 // DELETE - Deletar mensagem interativa
@@ -24,7 +24,7 @@ export async function DELETE(
     }
 
     // Verificar se a mensagem existe
-    const existingMessage = await prisma.template.findUnique({
+    const existingMessage = await getPrismaInstance().template.findUnique({
       where: {
         id,
         type: "INTERACTIVE_MESSAGE",
@@ -39,13 +39,13 @@ export async function DELETE(
     }
 
     // Verificar se a mensagem está sendo usada em mapeamentos
-    const mappings = await prisma.mapeamentoIntencao.findMany({
+    const mappings = await getPrismaInstance().mapeamentoIntencao.findMany({
       where: { templateId: id },
       select: { intentName: true, inboxId: true },
     });
 
     // Deletar a mensagem (cascade irá deletar o interactiveContent automaticamente)
-    await prisma.template.delete({
+    await getPrismaInstance().template.delete({
       where: { id },
     });
 
@@ -54,7 +54,7 @@ export async function DELETE(
       try {
         for (const mapping of mappings) {
           // Find the ChatwitInbox to get the correct inboxId for cache invalidation
-          const chatwitInbox = await prisma.chatwitInbox.findUnique({
+          const chatwitInbox = await getPrismaInstance().chatwitInbox.findUnique({
             where: { id: mapping.inboxId },
             select: { inboxId: true, usuarioChatwitId: true },
           });
@@ -139,7 +139,7 @@ export async function GET(
       );
     }
 
-    const template = await prisma.template.findUnique({
+    const template = await getPrismaInstance().template.findUnique({
       where: {
         id,
         type: "INTERACTIVE_MESSAGE",
@@ -275,7 +275,7 @@ export async function PUT(
     }
 
     // Verificar se a mensagem existe
-    const existingTemplate = await prisma.template.findUnique({
+    const existingTemplate = await getPrismaInstance().template.findUnique({
       where: {
         id,
         type: "INTERACTIVE_MESSAGE",
@@ -301,7 +301,7 @@ export async function PUT(
     }
 
     // Atualizar template
-    const updatedTemplate = await prisma.template.update({
+    const updatedTemplate = await getPrismaInstance().template.update({
       where: { id },
       data: {
         name: message.name,
@@ -327,7 +327,7 @@ export async function PUT(
 
     // Update body
     if (message.body?.text) {
-      await prisma.body.update({
+      await getPrismaInstance().body.update({
         where: { id: updatedTemplate.interactiveContent!.bodyId },
         data: { text: message.body.text },
       });
@@ -336,7 +336,7 @@ export async function PUT(
     // Update header
     if (message.header) {
       if (updatedTemplate.interactiveContent!.header) {
-        await prisma.header.update({
+        await getPrismaInstance().header.update({
           where: { id: updatedTemplate.interactiveContent!.header.id },
           data: {
             type: message.header.type,
@@ -344,7 +344,7 @@ export async function PUT(
           },
         });
       } else {
-        await prisma.header.create({
+        await getPrismaInstance().header.create({
           data: {
             type: message.header.type,
             content: message.header.media_url || message.header.text || "",
@@ -357,12 +357,12 @@ export async function PUT(
     // Update footer
     if (message.footer) {
       if (updatedTemplate.interactiveContent!.footer) {
-        await prisma.footer.update({
+        await getPrismaInstance().footer.update({
           where: { id: updatedTemplate.interactiveContent!.footer.id },
           data: { text: message.footer.text },
         });
       } else {
-        await prisma.footer.create({
+        await getPrismaInstance().footer.create({
           data: {
             text: message.footer.text,
             interactiveContentId,
@@ -375,29 +375,29 @@ export async function PUT(
     if (message.action && message.type) {
       // Delete existing actions
       if (updatedTemplate.interactiveContent!.actionCtaUrl) {
-        await prisma.actionCtaUrl.delete({
+        await getPrismaInstance().actionCtaUrl.delete({
           where: { id: updatedTemplate.interactiveContent!.actionCtaUrl.id },
         });
       }
       if (updatedTemplate.interactiveContent!.actionReplyButton) {
-        await prisma.actionReplyButton.delete({
+        await getPrismaInstance().actionReplyButton.delete({
           where: {
             id: updatedTemplate.interactiveContent!.actionReplyButton.id,
           },
         });
       }
       if (updatedTemplate.interactiveContent!.actionList) {
-        await prisma.actionList.delete({
+        await getPrismaInstance().actionList.delete({
           where: { id: updatedTemplate.interactiveContent!.actionList.id },
         });
       }
       if (updatedTemplate.interactiveContent!.actionFlow) {
-        await prisma.actionFlow.delete({
+        await getPrismaInstance().actionFlow.delete({
           where: { id: updatedTemplate.interactiveContent!.actionFlow.id },
         });
       }
       if (updatedTemplate.interactiveContent!.actionLocationRequest) {
-        await prisma.actionLocationRequest.delete({
+        await getPrismaInstance().actionLocationRequest.delete({
           where: {
             id: updatedTemplate.interactiveContent!.actionLocationRequest.id,
           },
@@ -406,7 +406,7 @@ export async function PUT(
 
       // Create new action based on type
       if (message.type === "cta_url") {
-        await prisma.actionCtaUrl.create({
+        await getPrismaInstance().actionCtaUrl.create({
           data: {
             displayText: message.action.displayText || "Clique aqui",
             url: message.action.url || "",
@@ -414,14 +414,14 @@ export async function PUT(
           },
         });
       } else if (message.type === "button") {
-        await prisma.actionReplyButton.create({
+        await getPrismaInstance().actionReplyButton.create({
           data: {
             buttons: message.action.buttons || [],
             interactiveContentId,
           },
         });
       } else if (message.type === "list") {
-        await prisma.actionList.create({
+        await getPrismaInstance().actionList.create({
           data: {
             buttonText: message.action.buttonText || "Ver opções",
             sections: message.action.sections || [],
@@ -429,7 +429,7 @@ export async function PUT(
           },
         });
       } else if (message.type === "flow") {
-        await prisma.actionFlow.create({
+        await getPrismaInstance().actionFlow.create({
           data: {
             flowId: message.action.flowId || "",
             flowCta: message.action.flowCta || "Iniciar",
@@ -439,7 +439,7 @@ export async function PUT(
           },
         });
       } else if (message.type === "location_request") {
-        await prisma.actionLocationRequest.create({
+        await getPrismaInstance().actionLocationRequest.create({
           data: {
             requestText:
               message.action.requestText || "Compartilhar localização",
@@ -450,7 +450,7 @@ export async function PUT(
     }
 
     // Fetch updated template with all relations
-    const updatedMessage = await prisma.template.findUnique({
+    const updatedMessage = await getPrismaInstance().template.findUnique({
       where: { id },
       include: {
         interactiveContent: {
@@ -500,14 +500,14 @@ export async function PUT(
 
     // Invalidate Instagram template cache for all mappings using this template
     try {
-      const mappings = await prisma.mapeamentoIntencao.findMany({
+      const mappings = await getPrismaInstance().mapeamentoIntencao.findMany({
         where: { templateId: id },
         select: { intentName: true, inboxId: true },
       });
 
       for (const mapping of mappings) {
         // Find the ChatwitInbox to get the correct inboxId for cache invalidation
-        const chatwitInbox = await prisma.chatwitInbox.findUnique({
+        const chatwitInbox = await getPrismaInstance().chatwitInbox.findUnique({
           where: { id: mapping.inboxId },
           select: { inboxId: true, usuarioChatwitId: true },
         });

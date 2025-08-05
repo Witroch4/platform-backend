@@ -4,7 +4,7 @@
  * Service for sending notifications through multiple channels and handling escalation
  */
 
-import { db } from '../../db'
+import { getPrismaInstance } from '@/lib/connections'
 import { getRedisInstance } from '../../connections'
 import log from '../../log'
 import {

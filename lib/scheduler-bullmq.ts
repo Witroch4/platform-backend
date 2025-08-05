@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma';
+import { getPrismaInstance } from '@/lib/connections';
 import { scheduleAgendamentoJob, cancelAgendamentoJob } from '@/lib/queue/agendamento.queue';
 
 // Variável para controlar se já inicializamos os agendamentos
@@ -67,7 +67,7 @@ export async function initializeExistingAgendamentos() {
 
   try {
     // Busca todos os agendamentos futuros
-    const agendamentos = await prisma.agendamento.findMany({
+    const agendamentos = await getPrismaInstance().agendamento.findMany({
       where: {
         data: {
           gte: new Date(), // Apenas agendamentos futuros

@@ -3,7 +3,7 @@
  * Tests configuration management, validation, and caching functionality
  */
 
-import { PrismaClient } from '@prisma/client'
+import { getPrismaInstance } from "@/lib/connections"
 import { getRedisInstance } from '../../lib/connections'
 import { QueueConfigManager } from '../../lib/queue-management/services/QueueConfigManager'
 import { 

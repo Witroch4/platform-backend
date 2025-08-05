@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { getPrismaInstance } from '@/lib/connections'
 
 export interface ButtonReactionData {
   id: string
@@ -37,7 +37,7 @@ export async function getReactionsByMessageId(
 ): Promise<ButtonReactionData[]> {
   const { includeInactive = false, includeMessage = false } = options
 
-  const reactions = await prisma.mapeamentoBotao.findMany({
+  const reactions = await getPrismaInstance().mapeamentoBotao.findMany({
     where: {
       inbox: {
         usuarioChatwit: {
@@ -72,7 +72,7 @@ export async function getReactionByButtonId(
 ): Promise<ButtonReactionData | null> {
   const { includeInactive = false, includeMessage = false } = options
 
-  const reaction = await prisma.mapeamentoBotao.findFirst({
+  const reaction = await getPrismaInstance().mapeamentoBotao.findFirst({
     where: {
       buttonId,
       inbox: {
@@ -107,7 +107,7 @@ export async function getReactionById(
 ): Promise<ButtonReactionData | null> {
   const { includeMessage = false } = options
 
-  const reaction = await prisma.mapeamentoBotao.findFirst({
+  const reaction = await getPrismaInstance().mapeamentoBotao.findFirst({
     where: {
       id: reactionId,
       inbox: {
@@ -157,7 +157,7 @@ export async function getUserReactions(
   const offset = (page - 1) * limit
 
   const [reactions, total] = await Promise.all([
-    prisma.mapeamentoBotao.findMany({
+    getPrismaInstance().mapeamentoBotao.findMany({
       where: {
         inbox: {
           usuarioChatwit: {
@@ -180,7 +180,7 @@ export async function getUserReactions(
       skip: offset,
       take: limit,
     }),
-    prisma.mapeamentoBotao.count({
+    getPrismaInstance().mapeamentoBotao.count({
       where: {
         inbox: {
           usuarioChatwit: {
@@ -216,7 +216,7 @@ export async function getReactionsByButtonIds(
     return []
   }
 
-  const reactions = await prisma.mapeamentoBotao.findMany({
+  const reactions = await getPrismaInstance().mapeamentoBotao.findMany({
     where: {
       buttonId: {
         in: buttonIds,
@@ -252,7 +252,7 @@ export async function hasButtonReaction(
   userId: string,
   includeInactive = false
 ): Promise<boolean> {
-  const count = await prisma.mapeamentoBotao.count({
+  const count = await getPrismaInstance().mapeamentoBotao.count({
     where: {
       buttonId,
       inbox: {
@@ -279,7 +279,7 @@ export async function getReactionStats(userId: string): Promise<{
   }
 }> {
   const [total, emojiReactions, textReactions] = await Promise.all([
-    prisma.mapeamentoBotao.count({
+    getPrismaInstance().mapeamentoBotao.count({
       where: {
         inbox: {
           usuarioChatwit: {
@@ -288,7 +288,7 @@ export async function getReactionStats(userId: string): Promise<{
         },
       },
     }),
-    prisma.mapeamentoBotao.count({
+    getPrismaInstance().mapeamentoBotao.count({
       where: {
         inbox: {
           usuarioChatwit: {
@@ -298,7 +298,7 @@ export async function getReactionStats(userId: string): Promise<{
         actionType: 'SEND_TEMPLATE', // Emoji reactions typically use SEND_TEMPLATE
       },
     }),
-    prisma.mapeamentoBotao.count({
+    getPrismaInstance().mapeamentoBotao.count({
       where: {
         inbox: {
           usuarioChatwit: {
@@ -334,7 +334,7 @@ export async function deleteReactionsByButtonIds(
   }
 
   // First, verify user has access to all reactions
-  const reactions = await prisma.mapeamentoBotao.findMany({
+  const reactions = await getPrismaInstance().mapeamentoBotao.findMany({
     where: {
       buttonId: {
         in: buttonIds,
@@ -360,7 +360,7 @@ export async function deleteReactionsByButtonIds(
 
   if (softDelete) {
     // MapeamentoBotao doesn't have isActive field, so we'll just delete
-    await prisma.mapeamentoBotao.deleteMany({
+    await getPrismaInstance().mapeamentoBotao.deleteMany({
       where: {
         buttonId: {
           in: accessibleButtonIds,
@@ -368,7 +368,7 @@ export async function deleteReactionsByButtonIds(
       },
     })
   } else {
-    await prisma.mapeamentoBotao.deleteMany({
+    await getPrismaInstance().mapeamentoBotao.deleteMany({
       where: {
         buttonId: {
           in: accessibleButtonIds,

@@ -1,7 +1,8 @@
 // Local: /api/admin/dialogflow/agentes/[id]/toggle
 
 import { type NextRequest, NextResponse } from "next/server";
-import { db as prisma } from "@/lib/db";
+import { getPrismaInstance } from "@/lib/connections"
+const prisma = getPrismaInstance();
 import { auth } from "@/auth";
 import axios, { AxiosError } from "axios";
 

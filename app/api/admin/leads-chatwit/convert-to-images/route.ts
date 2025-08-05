@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import prisma from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections";
+const prisma = getPrismaInstance();
 import { uploadToMinIO } from "@/lib/minio";
 import axios from "axios";
 import type { Readable } from "stream";

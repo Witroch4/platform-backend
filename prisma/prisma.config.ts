@@ -1,7 +1,9 @@
-import { defineConfig } from 'prisma/config';
+// prisma.config.ts
+import type { PrismaConfig } from 'prisma'
 
-export default defineConfig({
-  seed: 'tsx prisma/seed.ts',
-  // Reduzir logs em produção
-  log: process.env.NODE_ENV === 'production' ? ['error'] : ['info', 'warn', 'error']
-});
+const config: PrismaConfig = {
+  // aponte para o arquivo schema.prisma
+  schema: './schema.prisma',
+}
+
+export default config

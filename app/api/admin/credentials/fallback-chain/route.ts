@@ -1,7 +1,7 @@
 // app/api/admin/credentials/fallback-chain/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { prisma } from '@/lib/prisma';
+import { getPrismaInstance } from '@/lib/connections';
 
 /**
  * GET - Visualiza a cadeia de fallback de credenciais
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     const inboxId = searchParams.get('inboxId'); // Visualizar cadeia específica
 
     // Buscar usuário Chatwit
-    const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
+    const usuarioChatwit = await getPrismaInstance().usuarioChatwit.findUnique({
       where: { appUserId: session.user.id },
       include: {
         configuracaoGlobalWhatsApp: {
@@ -220,7 +220,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     const { action, inboxId, optimizations } = body; // action: 'validate' | 'optimize'
 
     // Buscar usuário Chatwit
-    const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
+    const usuarioChatwit = await getPrismaInstance().usuarioChatwit.findUnique({
       where: { appUserId: session.user.id },
       include: {
         inboxes: {

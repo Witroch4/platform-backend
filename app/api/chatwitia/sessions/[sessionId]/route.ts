@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { db } from "@/lib/db";
+import { getPrismaInstance } from "@/lib/connections"
 
 // Node.js runtime to support Prisma
 export const runtime = 'nodejs';
@@ -19,7 +19,7 @@ export async function GET(
       return new NextResponse("Não autorizado", { status: 401 });
     }
     
-    const chatSession = await db.chatSession.findUnique({
+    const chatSession = await getPrismaInstance().chatSession.findUnique({
       where: {
         id: sessionId,
         userId: session.user.id
@@ -63,7 +63,7 @@ export async function PATCH(
     console.log(`🔧 PATCH sessão ${sessionId}:`, { title, model });
     
     // Verificar se a sessão pertence ao usuário
-    const chatSession = await db.chatSession.findUnique({
+    const chatSession = await getPrismaInstance().chatSession.findUnique({
       where: {
         id: sessionId,
         userId: session.user.id
@@ -74,7 +74,7 @@ export async function PATCH(
       return new NextResponse("Sessão não encontrada", { status: 404 });
     }
     
-    const updatedSession = await db.chatSession.update({
+    const updatedSession = await getPrismaInstance().chatSession.update({
       where: {
         id: sessionId
       },
@@ -111,7 +111,7 @@ export async function DELETE(
     }
     
     // Verificar se a sessão pertence ao usuário
-    const chatSession = await db.chatSession.findUnique({
+    const chatSession = await getPrismaInstance().chatSession.findUnique({
       where: {
         id: sessionId,
         userId: session.user.id
@@ -123,7 +123,7 @@ export async function DELETE(
     }
     
     // Excluir a sessão
-    await db.chatSession.delete({
+    await getPrismaInstance().chatSession.delete({
       where: {
         id: sessionId
       }

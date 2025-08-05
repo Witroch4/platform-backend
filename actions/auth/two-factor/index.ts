@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 import mail from "@/lib/mail";
 import { findUserbyEmail } from "@/services";
 import { findTwoFactorAuthTokeByToken } from "@/services/auth";
@@ -79,14 +79,14 @@ export const verifyTwoFactorToken = async (token: string) => {
 	}
 
 	try {
-		await prisma.user.update({
+		await getPrismaInstance().user.update({
 			where: { id: user.id },
 			data: {
 				twoFactorAuthVerified: new Date(),
 			},
 		});
 
-		await prisma.twoFactorToken.delete({
+		await getPrismaInstance().twoFactorToken.delete({
 			where: {
 				id: existingToken.id,
 			},

@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { sseManager } from '@/lib/sse-manager';
+// Lazy import to avoid Edge Runtime issues
+const getSseManager = () => import('@/lib/sse-manager').then(m => m.sseManager);
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,6 +12,7 @@ export async function POST(request: NextRequest) {
     
     console.log(`[SSE Send] Enviando notificação via HTTP para ${leadId}:`, data);
     
+    const sseManager = await getSseManager();
     const sent = await sseManager.sendNotification(leadId, data);
     
     return NextResponse.json({

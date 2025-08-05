@@ -1,6 +1,7 @@
 // Local: /api/admin/dialogflow/agentes
 import { type NextRequest, NextResponse } from 'next/server';
-import { db as prisma } from '@/lib/db';
+import { getPrismaInstance } from '@/lib/connections';
+const prisma = getPrismaInstance();
 import { auth } from '@/auth';
 
 export async function POST(request: NextRequest) {

@@ -1,6 +1,6 @@
 // app/api/admin/leads/route.ts
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 import { LeadSource, Prisma } from "@prisma/client";
 import { type NextRequest, NextResponse } from "next/server";
 
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest): Promise<Response> {
 
 		// Buscar leads com dados relacionados
 		const [leadsData, total] = await Promise.all([
-			prisma.lead.findMany({
+			getPrismaInstance().lead.findMany({
 				where: whereConditions,
 				include: {
 					user: {
@@ -102,7 +102,7 @@ export async function GET(request: NextRequest): Promise<Response> {
 				skip,
 				take: limit,
 			}),
-			prisma.lead.count({ where: whereConditions }),
+			getPrismaInstance().lead.count({ where: whereConditions }),
 		]);
 
 		// Formatar resposta
@@ -194,7 +194,7 @@ export async function POST(request: NextRequest): Promise<Response> {
 		}
 
 		// Verificar se já existe um lead com o mesmo source e sourceIdentifier
-		const existingLead = await prisma.lead.findFirst({
+		const existingLead = await getPrismaInstance().lead.findFirst({
 			where: {
 				source,
 				sourceIdentifier,
@@ -247,7 +247,7 @@ export async function POST(request: NextRequest): Promise<Response> {
 			};
 		}
 
-		const newLead = await prisma.lead.create({
+		const newLead = await getPrismaInstance().lead.create({
 			data: leadData,
 			include: {
 				user: {

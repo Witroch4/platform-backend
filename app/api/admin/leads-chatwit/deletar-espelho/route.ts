@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { getPrismaInstance } from '@/lib/connections';
 import { Prisma } from '@prisma/client';
-
+const prisma = getPrismaInstance();
 /**
  * Handler da rota DELETE para excluir completamente o espelho de correção.
  */

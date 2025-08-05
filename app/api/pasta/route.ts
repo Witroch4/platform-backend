@@ -1,7 +1,8 @@
 // app/api/pasta/route.ts
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
-import { prisma } from "@/lib/prisma"
+import { getPrismaInstance } from "@/lib/connections"
+const prisma = getPrismaInstance();
 
 export async function GET() {
   try {

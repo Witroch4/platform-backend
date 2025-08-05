@@ -5,7 +5,7 @@
  * and performance monitoring specifically for Instagram message translation.
  */
 
-import { PrismaClient } from '@prisma/client';
+import { getPrismaInstance } from "@/lib/connections";
 import { CompleteMessageMapping } from '../dialogflow-database-queries';
 import {
   instagramTemplateCache,
@@ -34,17 +34,8 @@ const PERFORMANCE_THRESHOLDS = {
 };
 
 // Prisma client with optimized configuration
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: process.env.DATABASE_URL,
-    },
-  },
-  log: [
-    { level: 'warn', emit: 'event' },
-    { level: 'error', emit: 'event' },
-  ],
-});
+import { PrismaClient } from '@prisma/client';
+const prisma = getPrismaInstance();
 
 // Query performance monitoring
 interface QueryMetrics {

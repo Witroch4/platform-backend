@@ -1,7 +1,7 @@
 // app/api/admin/templates/analytics/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { prisma } from '@/lib/prisma';
+import { getPrismaInstance } from '@/lib/connections';
 import { Prisma, TemplateType, TemplateScope, TemplateStatus } from '@prisma/client';
 
 /**
@@ -48,36 +48,36 @@ export async function GET(request: NextRequest): Promise<Response> {
       templatesWithMappings,
     ] = await Promise.all([
       // Total de templates
-      prisma.template.count({ where: whereConditions }),
+      getPrismaInstance().template.count({ where: whereConditions }),
       
       // Templates ativos
-      prisma.template.count({ 
+      getPrismaInstance().template.count({ 
         where: { ...whereConditions, isActive: true } 
       }),
       
       // Templates por tipo
-      prisma.template.groupBy({
+      getPrismaInstance().template.groupBy({
         by: ['type'],
         where: whereConditions,
         _count: true,
       }),
       
       // Templates por status
-      prisma.template.groupBy({
+      getPrismaInstance().template.groupBy({
         by: ['status'],
         where: whereConditions,
         _count: true,
       }),
       
       // Templates por escopo
-      prisma.template.groupBy({
+      getPrismaInstance().template.groupBy({
         by: ['scope'],
         where: whereConditions,
         _count: true,
       }),
       
       // Templates mais usados
-      prisma.template.findMany({
+      getPrismaInstance().template.findMany({
         where: whereConditions,
         select: {
           id: true,
@@ -94,7 +94,7 @@ export async function GET(request: NextRequest): Promise<Response> {
       }),
       
       // Templates criados recentemente
-      prisma.template.findMany({
+      getPrismaInstance().template.findMany({
         where: {
           ...whereConditions,
           createdAt: { gte: startDate },
@@ -113,7 +113,7 @@ export async function GET(request: NextRequest): Promise<Response> {
       }),
       
       // Templates com mapeamentos
-      prisma.template.findMany({
+      getPrismaInstance().template.findMany({
         where: {
           ...whereConditions,
           mapeamentos: { some: {} },
@@ -138,7 +138,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     ]);
 
     // Calcular estatísticas de uso por período
-    const usageByPeriod = await prisma.template.findMany({
+    const usageByPeriod = await getPrismaInstance().template.findMany({
       where: {
         ...whereConditions,
         updatedAt: { gte: startDate },
@@ -163,7 +163,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     }, {});
 
     // Calcular taxa de aprovação
-    const approvalStats = await prisma.templateApprovalRequest.groupBy({
+    const approvalStats = await getPrismaInstance().templateApprovalRequest.groupBy({
       by: ['status'],
       where: {
         template: whereConditions,
@@ -211,13 +211,13 @@ export async function GET(request: NextRequest): Promise<Response> {
     previousPeriodStart.setDate(previousPeriodStart.getDate() - parseInt(period));
 
     const [currentPeriodCount, previousPeriodCount] = await Promise.all([
-      prisma.template.count({
+      getPrismaInstance().template.count({
         where: {
           ...whereConditions,
           createdAt: { gte: startDate },
         },
       }),
-      prisma.template.count({
+      getPrismaInstance().template.count({
         where: {
           ...whereConditions,
           createdAt: { 

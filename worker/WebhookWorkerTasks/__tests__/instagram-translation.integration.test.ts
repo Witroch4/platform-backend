@@ -67,7 +67,7 @@ describe('Instagram Translation Worker Integration', () => {
       INSTAGRAM_TRANSLATION_QUEUE_NAME,
       processInstagramTranslationTask,
       {
-        connection,
+        connection: connection(),
         concurrency: 1,
         lockDuration: 5000,
       }

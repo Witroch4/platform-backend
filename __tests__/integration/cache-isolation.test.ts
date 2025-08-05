@@ -6,7 +6,7 @@
  * they share the same inboxId.
  */
 
-import { PrismaClient } from '@prisma/client';
+import { getPrismaInstance } from "@/lib/connections";
 import { InstagramTemplateCache } from '@/lib/cache/instagram-template-cache';
 import { findOptimizedCompleteMessageMapping } from '@/lib/instagram/optimized-database-queries';
 import { CompleteMessageMapping } from '@/lib/dialogflow-database-queries';

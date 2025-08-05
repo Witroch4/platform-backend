@@ -3,13 +3,13 @@
  * Shows how to use the configuration manager and templates
  */
 
-import { PrismaClient } from '@prisma/client'
+import { getPrismaInstance } from "@/lib/connections"
 import * as QueueConfig from '../lib/queue-management/config'
 
 async function demonstrateQueueConfig() {
   console.log('🚀 Queue Configuration System Demo\n')
 
-  const prisma = new PrismaClient()
+  const prisma = getPrismaInstance()
   
   try {
     // Initialize the configuration manager

@@ -1,0 +1,329 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "ChatWit AI Integration Dashboard",
+    "tags": ["chatwit", "ai", "integration"],
+    "style": "dark",
+    "timezone": "browser",
+    "refresh": "30s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "AI Job Latency (P95/P99)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(ai_job_latency_ms_bucket[5m]))",
+            "legendFormat": "P95 Latency",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(ai_job_latency_ms_bucket[5m]))",
+            "legendFormat": "P99 Latency",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms",
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 2500},
+                {"color": "red", "value": 5000}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Fallback Rate",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "rate(ai_fallback_total[5m]) / rate(ai_jobs_total[5m]) * 100",
+            "legendFormat": "Fallback Rate %",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 10},
+                {"color": "red", "value": 20}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Dead Letter Queue",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(ai_jobs_dlq_total)",
+            "legendFormat": "Total DLQ Jobs",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(ai_jobs_dlq_total[5m])",
+            "legendFormat": "DLQ Rate",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 10},
+                {"color": "red", "value": 50}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "Rate Limit Hits",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(rate(ai_ratelimit_hits_total[5m])) by (scope)",
+            "legendFormat": "{{scope}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 1},
+                {"color": "red", "value": 5}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "LLM Token Usage",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(rate(ai_llm_tokens_total_sum[5m])) by (model)",
+            "legendFormat": "{{model}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 1000},
+                {"color": "red", "value": 5000}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8}
+      },
+      {
+        "id": 6,
+        "title": "Job Processing Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate(ai_jobs_total[5m])) by (stage, status)",
+            "legendFormat": "{{stage}} - {{status}}",
+            "refId": "A"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Jobs/sec",
+            "min": 0
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+      },
+      {
+        "id": 7,
+        "title": "Queue Backlog",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "ai_jobs_in_queue",
+            "legendFormat": "{{queue_name}}",
+            "refId": "A"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Jobs",
+            "min": 0
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+      },
+      {
+        "id": 8,
+        "title": "LLM Response Time",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(ai_llm_response_time_ms_bucket[5m])) by (model, operation)",
+            "legendFormat": "{{model}} - {{operation}} (P95)",
+            "refId": "A"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Milliseconds",
+            "min": 0
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24}
+      },
+      {
+        "id": 9,
+        "title": "Intent Classification Confidence",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(ai_intent_confidence_score_bucket[5m])) by (intent_name)",
+            "legendFormat": "{{intent_name}} (P50)",
+            "refId": "A"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Confidence Score",
+            "min": 0,
+            "max": 1
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24}
+      },
+      {
+        "id": 10,
+        "title": "Circuit Breaker States",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "ai_circuit_breaker_state",
+            "legendFormat": "{{service}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {"options": {"0": {"text": "CLOSED", "color": "green"}}},
+              {"options": {"0.5": {"text": "HALF-OPEN", "color": "yellow"}}},
+              {"options": {"1": {"text": "OPEN", "color": "red"}}}
+            ]
+          }
+        },
+        "gridPos": {"h": 4, "w": 8, "x": 0, "y": 32}
+      },
+      {
+        "id": 11,
+        "title": "Active Workers",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "ai_active_workers",
+            "legendFormat": "{{worker_type}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": null},
+                {"color": "yellow", "value": 1},
+                {"color": "green", "value": 2}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 4, "w": 8, "x": 8, "y": 32}
+      },
+      {
+        "id": 12,
+        "title": "Budget Exceeded Events",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(rate(ai_budget_exceeded_total[1h])) by (account_id)",
+            "legendFormat": "Account {{account_id}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "events/h",
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 1},
+                {"color": "red", "value": 5}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 4, "w": 8, "x": 16, "y": 32}
+      }
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "account_id",
+          "type": "query",
+          "query": "label_values(ai_jobs_total, account_id)",
+          "refresh": 1,
+          "includeAll": true,
+          "allValue": ".*"
+        },
+        {
+          "name": "stage",
+          "type": "query",
+          "query": "label_values(ai_jobs_total, stage)",
+          "refresh": 1,
+          "includeAll": true,
+          "allValue": ".*"
+        }
+      ]
+    },
+    "annotations": {
+      "list": [
+        {
+          "name": "Deployments",
+          "datasource": "prometheus",
+          "expr": "changes(ai_jobs_total[1m]) > 0",
+          "titleFormat": "Deployment",
+          "textFormat": "New deployment detected"
+        }
+      ]
+    }
+  }
+}

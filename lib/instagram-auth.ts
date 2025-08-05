@@ -1,5 +1,5 @@
 // lib/instagram-auth.ts
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 
 /**
  * Retorna o access_token da conta do Instagram
@@ -15,7 +15,7 @@ export async function getInstagramUserToken(igUserId: string): Promise<string | 
     }
 
     // Busca a conta mais recente com o igUserId fornecido
-    const account = await prisma.account.findFirst({
+    const account = await getPrismaInstance().account.findFirst({
       where: {
         provider: "instagram",
         igUserId: igUserId,

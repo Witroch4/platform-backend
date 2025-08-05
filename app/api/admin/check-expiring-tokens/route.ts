@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 import { addCheckExpiringTokensJob } from "@/lib/queue/instagram-webhook.queue";
 
 // POST: Verificar manualmente tokens expirando
@@ -13,7 +13,7 @@ export async function POST(req: Request) {
     }
 
     // Verificar se o usuário é administrador
-    const adminUser = await prisma.user.findUnique({
+    const adminUser = await getPrismaInstance().user.findUnique({
       where: {
         id: session.user.id
       }

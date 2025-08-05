@@ -1,7 +1,8 @@
 //app\auth\instagram\connect\route.ts
 import { type NextRequest, NextResponse } from "next/server";
 import { auth, update } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections";
+const prisma = getPrismaInstance();
 
 export async function POST(req: NextRequest) {
   try {

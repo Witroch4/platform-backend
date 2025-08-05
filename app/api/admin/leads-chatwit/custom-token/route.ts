@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { getPrismaInstance } from '@/lib/connections';
 
 // GET para recuperar o token personalizado
 export async function GET(request: Request): Promise<Response> {

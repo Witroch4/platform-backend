@@ -1,6 +1,7 @@
 // app/api/instagram/webhook/route.ts
 import { type NextRequest, NextResponse } from "next/server";
-import { instagramWebhookQueue } from "@/lib/queue/instagram-webhook.queue";
+// Lazy import to avoid Edge Runtime issues
+const getInstagramWebhookQueue = () => import("@/lib/queue/instagram-webhook.queue").then(m => m.instagramWebhookQueue);
 import crypto from "crypto";
 import dotenv from "dotenv";
 
@@ -79,6 +80,7 @@ export async function POST(request: NextRequest) {
       )
     );
 
+    const instagramWebhookQueue = await getInstagramWebhookQueue();
     await instagramWebhookQueue.add("instagram-event", jsonBody, {
       removeOnComplete: true,
       removeOnFail: false,

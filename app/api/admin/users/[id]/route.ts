@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 
 // PATCH: Atualizar um usuário específico (apenas para SUPERADMIN)
 export async function PATCH(
@@ -16,7 +16,7 @@ export async function PATCH(
     }
 
     // Verificar se o usuário é SUPERADMIN
-    const adminUser = await prisma.user.findUnique({
+    const adminUser = await getPrismaInstance().user.findUnique({
       where: {
         id: session.user.id
       },
@@ -36,7 +36,7 @@ export async function PATCH(
     }
 
     // Verificar se o usuário existe
-    const userExists = await prisma.user.findUnique({
+    const userExists = await getPrismaInstance().user.findUnique({
       where: {
         id: userId
       }
@@ -60,7 +60,7 @@ export async function PATCH(
     }
 
     // Atualizar o usuário
-    const updatedUser = await prisma.user.update({
+    const updatedUser = await getPrismaInstance().user.update({
       where: {
         id: userId
       },
@@ -101,7 +101,7 @@ export async function GET(
     }
 
     // Verificar se o usuário é SUPERADMIN
-    const adminUser = await prisma.user.findUnique({
+    const adminUser = await getPrismaInstance().user.findUnique({
       where: {
         id: session.user.id
       },
@@ -121,7 +121,7 @@ export async function GET(
     const includeAccounts = url.searchParams.get('includeAccounts') !== 'false';
 
     // Buscar o usuário
-    const user = await prisma.user.findUnique({
+    const user = await getPrismaInstance().user.findUnique({
       where: {
         id: userId
       },

@@ -1,4 +1,5 @@
-import { sseManager } from '@/lib/sse-manager';
+// Lazy import to avoid Edge Runtime issues
+const getSseManager = () => import('@/lib/sse-manager').then(m => m.sseManager);
 import { type NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 
@@ -9,6 +10,7 @@ export async function GET(request: NextRequest) {
   
   // Endpoint para verificar status das conexões (retorna JSON)
   if (action === 'status') {
+    const sseManager = await getSseManager();
     const status = sseManager.getStatus();
     console.log(`[SSE API] 📊 Status solicitado:`, status);
     
@@ -17,6 +19,7 @@ export async function GET(request: NextRequest) {
   
   // Endpoint para verificar conexões ativas de um lead específico (retorna JSON)
   if (action === 'check' && leadId) {
+    const sseManager = await getSseManager();
     const activeConnections = sseManager.getConnectionsForLead(leadId);
     console.log(`[SSE API] 🔍 Verificação de conexões para ${leadId}: ${activeConnections} ativas`);
     
@@ -34,7 +37,7 @@ export async function GET(request: NextRequest) {
   let connectionId: string | null = null;
 
   const stream = new ReadableStream({
-    start(controller) {
+    async start(controller) {
       if (!leadId) {
         // Enviar erro via SSE em vez de retornar JSON
         console.log(`[SSE API] ❌ leadId não fornecido, enviando erro via SSE`);
@@ -48,6 +51,7 @@ export async function GET(request: NextRequest) {
       }
 
       // Adicionar conexão ao manager
+      const sseManager = await getSseManager();
       connectionId = sseManager.addConnection(leadId, controller);
       
       console.log(`[SSE API] ✅ Stream iniciado para leadId: ${leadId}, connectionId: ${connectionId}`);
@@ -61,11 +65,12 @@ export async function GET(request: NextRequest) {
         timestamp: new Date().toISOString()
       })}\n\n`);
     },
-    cancel() {
+    async cancel() {
       console.log(`[SSE API] 🔌 Stream cancelado pelo cliente para leadId: ${leadId}, connectionId: ${connectionId}`);
       
       // Remover conexão do manager usando a nova assinatura
       if (leadId && connectionId) {
+        const sseManager = await getSseManager();
         sseManager.removeConnection(leadId, connectionId);
       }
     }
@@ -94,6 +99,7 @@ export async function POST(request: NextRequest) {
     
     console.log(`[SSE API] 📤 Enviando notificação via HTTP para ${leadId}:`, data);
     
+    const sseManager = await getSseManager();
     const sent = await sseManager.sendNotification(leadId, data);
     
     return NextResponse.json({

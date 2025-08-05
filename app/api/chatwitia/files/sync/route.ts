@@ -1,7 +1,7 @@
 // app/api/chatwitia/files/sync/route.ts
 import { type NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { db } from '@/lib/db';
+import { getPrismaInstance } from '@/lib/connections';
 import { openaiService, type FilePurpose } from '@/services/openai';
 
 // Importações de módulos Node.js somente usados no servidor
@@ -62,12 +62,12 @@ export async function POST(req: NextRequest) {
   /* 3. Obter informações do arquivo */
   if (body.fileId) {
     // Primeiro tentar buscar no ChatFile
-    chatFile = await db.chatFile.findUnique({ where: { id: body.fileId } });
+    chatFile = await getPrismaInstance().chatFile.findUnique({ where: { id: body.fileId } });
     
     // Se não encontrar no ChatFile e parece ser uma imagem, buscar no GeneratedImage
     let generatedImage;
     if (!chatFile) {
-      generatedImage = await db.generatedImage.findUnique({ where: { id: body.fileId } });
+      generatedImage = await getPrismaInstance().generatedImage.findUnique({ where: { id: body.fileId } });
       
       if (!generatedImage) {
         return NextResponse.json({ error: 'Arquivo não encontrado' }, { status: 404 });
@@ -108,11 +108,11 @@ export async function POST(req: NextRequest) {
     initialPurpose = body.purpose || 'user_data';
     
     // Verificar se já existe no banco por storageUrl (primeiro ChatFile, depois GeneratedImage)
-    chatFile = await db.chatFile.findFirst({ where: { storageUrl: body.storageUrl } });
+    chatFile = await getPrismaInstance().chatFile.findFirst({ where: { storageUrl: body.storageUrl } });
     
     let generatedImage;
     if (!chatFile) {
-      generatedImage = await db.generatedImage.findFirst({ where: { imageUrl: body.storageUrl } });
+      generatedImage = await getPrismaInstance().generatedImage.findFirst({ where: { imageUrl: body.storageUrl } });
       
       if (generatedImage) {
         if (generatedImage.openaiFileId?.startsWith('file-'))
@@ -171,13 +171,13 @@ export async function POST(req: NextRequest) {
   /* 7. Atualiza ou cria registro no banco */
   if (chatFile) {
     // Atualiza registro existente no ChatFile
-    await db.chatFile.update({
+    await getPrismaInstance().chatFile.update({
       where: { id: chatFile.id },
       data: { openaiFileId: openaiFile.id, status: 'synced', syncedAt: new Date() },
     });
   } else {
     // Verificar se existe um GeneratedImage para atualizar
-    const generatedImage = await db.generatedImage.findFirst({
+    const generatedImage = await getPrismaInstance().generatedImage.findFirst({
       where: {
         OR: [
           { id: body.fileId || '' },
@@ -188,7 +188,7 @@ export async function POST(req: NextRequest) {
 
     if (generatedImage) {
       // Atualizar o GeneratedImage com o openaiFileId
-      await db.generatedImage.update({
+      await getPrismaInstance().generatedImage.update({
         where: { id: generatedImage.id },
         data: { openaiFileId: openaiFile.id },
       });
@@ -198,7 +198,7 @@ export async function POST(req: NextRequest) {
       // Verifica se temos uma sessão ou precisamos criar uma
       if (!sessionId) {
         // Busca a sessão mais recente do usuário ou cria uma nova
-        const existingSession = await db.chatSession.findFirst({
+        const existingSession = await getPrismaInstance().chatSession.findFirst({
           where: { userId: session.user.id },
           orderBy: { createdAt: 'desc' }
         });
@@ -207,7 +207,7 @@ export async function POST(req: NextRequest) {
           sessionId = existingSession.id;
         } else {
           // Criar uma nova sessão para o usuário
-          const newSession = await db.chatSession.create({
+          const newSession = await getPrismaInstance().chatSession.create({
             data: {
               userId: session.user.id,
               title: `Sessão com ${filename}`,
@@ -219,7 +219,7 @@ export async function POST(req: NextRequest) {
       
       // Cria novo registro para arquivos enviados sem sessionId
       try {
-        chatFile = await db.chatFile.create({
+        chatFile = await getPrismaInstance().chatFile.create({
           data: {
             sessionId: sessionId,
             filename,

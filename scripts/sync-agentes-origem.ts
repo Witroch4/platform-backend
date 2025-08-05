@@ -3,7 +3,8 @@
  * que ainda não têm agentes configurados
  */
 
-import { db as prisma } from '../lib/db';
+import { getPrismaInstance } from '../lib/connections';
+const prisma = getPrismaInstance();
 import axios from 'axios';
 
 interface DialogflowHook {

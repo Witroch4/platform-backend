@@ -1,8 +1,8 @@
 // app/api/admin/credentials/inbox/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { prisma } from '@/lib/prisma';
-
+import { getPrismaInstance } from '@/lib/connections';
+const prisma = getPrismaInstance();
 /**
  * GET - Busca configuração específica de inbox
  */

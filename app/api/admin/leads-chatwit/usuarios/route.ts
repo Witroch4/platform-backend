@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { auth } from "@/auth";
 
-const prisma = new PrismaClient();
+import { getPrismaInstance } from '@/lib/connections';
+const prisma = getPrismaInstance();
 
 /**
  * GET - Lista usuários do Chatwit (filtrados por role e token de acesso)

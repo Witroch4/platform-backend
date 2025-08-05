@@ -86,7 +86,7 @@ export class InstagramTranslationCommunicationManager extends EventEmitter {
   private async setupSubscriber(): Promise<void> {
     try {
       this.subscriber.on('message', this.handleMessage.bind(this));
-      this.subscriber.on('error', (error) => {
+      this.subscriber.on('error', (error: any) => {
         console.error('[Instagram Translation Communication] Subscriber error:', error);
         this.emit('error', error);
       });

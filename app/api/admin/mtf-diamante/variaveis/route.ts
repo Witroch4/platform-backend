@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { db } from "@/lib/db";
+import { getPrismaInstance } from "@/lib/connections"
 
 // GET: Busca todas as variáveis do usuário
 export async function GET(request: NextRequest) {
@@ -11,14 +11,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Busca ou cria a configuração do MTF Diamante
-    let config = await db.mtfDiamanteConfig.findFirst({
+    let config = await getPrismaInstance().mtfDiamanteConfig.findFirst({
       where: { userId: session.user.id },
       include: { variaveis: true }
     });
 
     if (!config) {
       // Cria configuração padrão com variáveis iniciais
-      config = await db.mtfDiamanteConfig.create({
+      config = await getPrismaInstance().mtfDiamanteConfig.create({
         data: {
           userId: session.user.id,
           variaveis: {
@@ -56,23 +56,23 @@ export async function POST(request: NextRequest) {
     }
 
     // Busca ou cria a configuração do MTF Diamante
-    let config = await db.mtfDiamanteConfig.findFirst({
+    let config = await getPrismaInstance().mtfDiamanteConfig.findFirst({
       where: { userId: session.user.id }
     });
 
     if (!config) {
-      config = await db.mtfDiamanteConfig.create({
+      config = await getPrismaInstance().mtfDiamanteConfig.create({
         data: { userId: session.user.id }
       });
     }
 
     // Remove todas as variáveis existentes e cria as novas
-    await db.mtfDiamanteVariavel.deleteMany({
+    await getPrismaInstance().mtfDiamanteVariavel.deleteMany({
       where: { configId: config.id }
     });
 
     // Cria as novas variáveis
-    const novasVariaveis = await db.mtfDiamanteVariavel.createMany({
+    const novasVariaveis = await getPrismaInstance().mtfDiamanteVariavel.createMany({
       data: variaveis.map((v: any) => ({
         configId: config.id,
         chave: v.chave,
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Busca as variáveis criadas para retornar
-    const variaveisCriadas = await db.mtfDiamanteVariavel.findMany({
+    const variaveisCriadas = await getPrismaInstance().mtfDiamanteVariavel.findMany({
       where: { configId: config.id }
     });
 

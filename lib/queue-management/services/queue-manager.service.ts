@@ -1509,7 +1509,7 @@ export class QueueManagerService extends EventEmitter implements QueueManagerSer
   }
 
   private setupEventListeners(): void {
-    this.redis.on('error', (error) => {
+    this.redis.on('error', (error: any) => {
       this.logger.error('Redis connection error:', error)
       this.emit('redis:error', error)
     })

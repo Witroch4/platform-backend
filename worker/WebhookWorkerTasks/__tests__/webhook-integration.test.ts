@@ -43,7 +43,7 @@ jest.mock('@/lib/dialogflow-database-queries', () => ({
 }));
 
 // Import mocked modules
-import { prisma } from '@/lib/prisma';
+import { getPrismaInstance } from '@/lib/connections';
 import { sendReactionMessage, logReactionAttempt } from '@/lib/whatsapp-reactions';
 import { sendTextMessage } from '@/lib/whatsapp-messages';
 import { findReactionByButtonId } from '@/lib/dialogflow-database-queries';

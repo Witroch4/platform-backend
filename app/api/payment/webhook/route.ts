@@ -2,7 +2,8 @@
 
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
-import { prisma } from "@/lib/prisma"; // Certifique-se de que essa importação esteja correta
+import { getPrismaInstance } from "@/lib/connections";
+const prisma = getPrismaInstance(); // Certifique-se de que essa importação esteja correta
 import { cookies } from "next/headers";
 
 // Usa uma chave dummy se STRIPE_SECRET_KEY não estiver definida

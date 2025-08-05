@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 
 // POST: Marcar uma notificação específica como lida
 export async function POST(
@@ -22,7 +22,7 @@ export async function POST(
     }
 
     // Verificar se a notificação existe e pertence ao usuário
-    const notification = await prisma.notification.findUnique({
+    const notification = await getPrismaInstance().notification.findUnique({
       where: {
         id: notificationId,
         userId: session.user.id
@@ -34,7 +34,7 @@ export async function POST(
     }
 
     // Marcar a notificação como lida
-    await prisma.notification.update({
+    await getPrismaInstance().notification.update({
       where: {
         id: notificationId
       },

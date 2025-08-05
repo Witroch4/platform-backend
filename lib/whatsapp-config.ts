@@ -1,4 +1,4 @@
-import { db } from "@/lib/db";
+import { getPrismaInstance } from "@/lib/connections"
 
 /**
  * Busca configuração do WhatsApp para uma caixa de entrada específica
@@ -13,7 +13,7 @@ export async function getWhatsAppConfig(
 
     // Se foi especificada uma caixa de entrada, buscar configuração específica
     if (inboxId) {
-      const inboxConfig = await db.chatwitInbox.findFirst({
+      const inboxConfig = await getPrismaInstance().chatwitInbox.findFirst({
         where: {
           id: inboxId,
           usuarioChatwitId,
@@ -36,7 +36,7 @@ export async function getWhatsAppConfig(
 
     // Se não encontrou configuração específica, buscar a padrão
     if (!config) {
-      config = await db.whatsAppGlobalConfig.findFirst({
+      config = await getPrismaInstance().whatsAppGlobalConfig.findFirst({
         where: { 
           usuarioChatwitId
         }
@@ -56,14 +56,14 @@ export async function getWhatsAppConfig(
 export async function getAllWhatsAppConfigs(usuarioChatwitId: string) {
   try {
     // Buscar configuração global
-    const globalConfig = await db.whatsAppGlobalConfig.findFirst({
+    const globalConfig = await getPrismaInstance().whatsAppGlobalConfig.findFirst({
       where: { 
         usuarioChatwitId
       }
     });
 
     // Buscar caixas com configurações específicas
-    const inboxesWithConfig = await db.chatwitInbox.findMany({
+    const inboxesWithConfig = await getPrismaInstance().chatwitInbox.findMany({
       where: { 
         usuarioChatwitId,
         whatsappApiKey: { not: null }

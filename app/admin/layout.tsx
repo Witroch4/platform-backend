@@ -4,7 +4,7 @@ import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Loader2, Bell, Users, LayoutDashboard, ShieldAlert, MessageSquare, Headphones, HelpCircle, User } from 'lucide-react';
+import { Loader2, Bell, Users, LayoutDashboard, ShieldAlert, MessageSquare, Headphones, HelpCircle, User, Brain, Activity, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -134,6 +134,26 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
           <AdminNavLink href="/admin/templates" icon={<HelpCircle className="h-5 w-5 mr-3" />}>
             Templates WhatsApp
           </AdminNavLink>
+          
+          {/* Seção IA Integration */}
+          {isSuperAdmin && (
+            <>
+              <div className="px-6 py-2 mt-4">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  IA Integration
+                </h3>
+              </div>
+              <AdminNavLink href="/admin/ai-integration" icon={<Brain className="h-5 w-5 mr-3" />}>
+                IA Integration
+              </AdminNavLink>
+              <AdminNavLink href="/admin/ai-integration/intents" icon={<Settings className="h-5 w-5 mr-3" />}>
+                Gerenciar Intents
+              </AdminNavLink>
+              <AdminNavLink href="/admin/ai-integration/queues" icon={<Activity className="h-5 w-5 mr-3" />}>
+                Gerenciar Filas
+              </AdminNavLink>
+            </>
+          )}
           
           {/* Botão Minha Conta */}
           <div className="px-6 py-3">

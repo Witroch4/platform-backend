@@ -1,6 +1,7 @@
 import type { Job } from 'bullmq';
-import { prisma } from '../../lib/prisma';
-import { sseManager } from '../../lib/sse-manager';
+import { getPrismaInstance } from '../../lib/connections';
+// Lazy import to avoid Edge Runtime issues
+const getSseManager = () => import('../../lib/sse-manager').then(m => m.sseManager);
 
 // Interfaces para diferentes tipos de jobs
 interface IManuscritoJobData {
@@ -72,7 +73,7 @@ async function processManuscrito(job: Job<IManuscritoJobData>) {
     console.log(`[BullMQ] Atualizando lead ${leadID} com o manuscrito processado`);
 
     // Verificar se o lead existe
-    const leadExistente = await prisma.leadOabData.findUnique({
+    const leadExistente = await getPrismaInstance().leadOabData.findUnique({
       where: { id: leadID },
     });
 
@@ -81,7 +82,7 @@ async function processManuscrito(job: Job<IManuscritoJobData>) {
     }
 
     // Atualizar o lead com o conteúdo do manuscrito
-    const leadAtualizado = await prisma.leadOabData.update({
+    const leadAtualizado = await getPrismaInstance().leadOabData.update({
       where: { id: leadID },
       data: {
         provaManuscrita: conteudoUnificado,
@@ -91,7 +92,7 @@ async function processManuscrito(job: Job<IManuscritoJobData>) {
     });
 
     // Atualizar o modelo Lead pai com a data
-    await prisma.lead.update({
+    await getPrismaInstance().lead.update({
       where: { id: leadID },
       data: {
         updatedAt: new Date()
@@ -130,7 +131,7 @@ async function processEspelho(job: Job<IEspelhoJobData>) {
     console.log(`[BullMQ] Atualizando lead ${leadID} com o espelho processado`);
 
     // Verificar se o lead existe
-    const leadExistente = await prisma.leadOabData.findUnique({
+    const leadExistente = await getPrismaInstance().leadOabData.findUnique({
       where: { id: leadID },
     });
 
@@ -172,13 +173,13 @@ async function processEspelho(job: Job<IEspelhoJobData>) {
     if (inscricaoMatch) updateData.inscricao = inscricaoMatch[1].trim();
     if (nomeMatch && !leadExistente.nomeReal) updateData.nomeReal = nomeMatch[1].trim();
 
-    const leadAtualizado = await prisma.leadOabData.update({
+    const leadAtualizado = await getPrismaInstance().leadOabData.update({
       where: { id: leadID },
       data: updateData,
     });
 
     // Atualizar o modelo Lead pai com a data
-    await prisma.lead.update({
+    await getPrismaInstance().lead.update({
       where: { id: leadID },
       data: {
         updatedAt: new Date()
@@ -216,7 +217,7 @@ async function processAnalise(job: Job<IAnaliseJobData>) {
     console.log(`[BullMQ] Atualizando lead ${leadID} com a análise processada`);
 
     // Verificar se o lead existe
-    const leadExistente = await prisma.leadOabData.findUnique({
+    const leadExistente = await getPrismaInstance().leadOabData.findUnique({
       where: { id: leadID },
     });
 
@@ -258,13 +259,13 @@ async function processAnalise(job: Job<IAnaliseJobData>) {
     }
 
     // Atualizar o lead
-    const leadAtualizado = await prisma.leadOabData.update({
+    const leadAtualizado = await getPrismaInstance().leadOabData.update({
       where: { id: leadID },
       data: updateData,
     });
 
     // Atualizar o modelo Lead pai com a data
-    await prisma.lead.update({
+    await getPrismaInstance().lead.update({
       where: { id: leadID },
       data: {
         updatedAt: new Date()
@@ -297,6 +298,7 @@ async function sendSSENotification(leadID: string, payload: any, type: string) {
     const limitedPayload = limitNotificationPayloadForLog(payload);
     console.log(`[Worker ${type}] 📋 Payload da notificação:`, JSON.stringify(limitedPayload, null, 2));
     
+    const sseManager = await getSseManager();
     const success = await sseManager.sendNotification(leadID, payload);
     
     if (success) {
@@ -309,6 +311,7 @@ async function sendSSENotification(leadID: string, payload: any, type: string) {
     
     // Enviar notificação de erro
     try {
+      const sseManager = await getSseManager();
       await sseManager.sendNotification(leadID, {
         type: 'error',
         message: `Ocorreu um erro ao processar seu ${type.toLowerCase()}.`,

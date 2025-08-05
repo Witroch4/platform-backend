@@ -187,7 +187,7 @@ const prisma = getPrismaInstance();
 const redis = getRedisInstance();
 
 // ❌ Evitar criar novas instâncias
-// const prisma = new PrismaClient(); // INCORRETO
+// const prisma = getPrismaInstance(); // INCORRETO
 
 // ✅ Usar instâncias singleton
 // const prisma = getPrismaInstance(); // CORRETO

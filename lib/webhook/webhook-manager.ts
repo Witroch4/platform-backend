@@ -1,9 +1,10 @@
 import { v4 as uuidv4 } from "uuid";
 import * as crypto from "node:crypto";
 import { Prisma, WebhookEvent } from "@prisma/client";
-import { prisma } from "../prisma";
+import { getPrismaInstance } from "../connections";
+const prisma = getPrismaInstance();
 import { getRedisInstance } from "../connections";
-import { webhookQueue } from "./webhook-queue";
+import { getWebhookQueue } from "./webhook-queue";
 import { paginateArray, applySorting, applyFilters } from "../utils/api-helpers";
 
 const defaultEvent = Object.values(WebhookEvent)[0] as WebhookEvent;
@@ -556,7 +557,7 @@ export class WebhookManager {
       },
     });
 
-    await webhookQueue.add(
+    await getWebhookQueue().add(
       "deliver-webhook",
       {
         deliveryId: id,
@@ -687,7 +688,7 @@ export class WebhookManager {
 
       const deliveryId = await this.createDelivery(webhook.id!, event);
 
-      await webhookQueue.add(
+      await getWebhookQueue().add(
         "deliver-webhook",
         {
           deliveryId,

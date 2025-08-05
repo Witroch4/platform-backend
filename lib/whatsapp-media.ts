@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { getWhatsAppConfig, getWhatsAppApiUrl } from '@/app/lib';
 import { uploadToMinIO } from './minio';
-import { db } from '@/lib/db';
+import { getPrismaInstance } from '@/lib/connections';
 
 // Interface estendida para o WhatsAppTemplate com o campo publicMediaUrl
 interface WhatsAppTemplateWithMedia {
@@ -31,7 +31,7 @@ export async function downloadMetaMediaAndUploadToMinio(
     console.log(`[WhatsAppMedia] Iniciando download e upload para MinIO: ${mediaUrl}`);
     
     // Verificar se já existe uma URL pública no banco de dados
-    const template = await db.template.findFirst({
+    const template = await getPrismaInstance().template.findFirst({
       where: {
         whatsappOfficialInfo: {
           metaTemplateId: templateId
@@ -86,7 +86,7 @@ export async function downloadMetaMediaAndUploadToMinio(
           publicMediaUrl: uploadResult.url
         };
       
-      await db.template.update({
+      await getPrismaInstance().template.update({
         where: { id: template.id },
         data: {
           whatsappOfficialInfo: {
@@ -130,7 +130,7 @@ export async function getPublicMediaUrl(
 ): Promise<string | null> {
   try {
     // Verificar se existe URL pública no banco de dados
-    const template = await db.template.findFirst({
+    const template = await getPrismaInstance().template.findFirst({
       where: {
         whatsappOfficialInfo: {
           metaTemplateId: templateId

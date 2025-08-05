@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import axios from 'axios';
 import { auth } from '@/auth';
 import { mtfDiamanteConfig } from '@/app/config/mtf-diamante';
-import prisma from '@/lib/prisma';
+import { getPrismaInstance } from '@/lib/connections';
+const prisma = getPrismaInstance();
 
 /**
  * Função para atualizar um template do WhatsApp

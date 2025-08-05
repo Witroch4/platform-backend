@@ -542,7 +542,7 @@ export class InstagramErrorTracker {
     if (hoursBack > 1) {
       try {
         const keys = await this.redis.keys('chatwit:errors:instagram-translation:*');
-        const recentKeys = keys.filter(key => {
+        const recentKeys = keys.filter((key: any) => {
           const timestamp = key.split(':').pop();
           if (!timestamp) return false;
           
@@ -551,7 +551,7 @@ export class InstagramErrorTracker {
         });
 
         const errorBatches = await Promise.all(
-          recentKeys.map(key => this.redis.get(key))
+          recentKeys.map((key: any) => this.redis.get(key))
         );
 
         for (const batch of errorBatches) {

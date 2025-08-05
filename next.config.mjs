@@ -48,6 +48,7 @@ const nextConfig = {
         assert: false,
         os: false,
         path: false,
+        dns: false,
       }
     }
     

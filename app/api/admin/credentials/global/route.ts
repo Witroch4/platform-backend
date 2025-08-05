@@ -1,8 +1,8 @@
 // app/api/admin/credentials/global/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { prisma } from '@/lib/prisma';
-
+import { getPrismaInstance } from '@/lib/connections';
+const prisma = getPrismaInstance();
 /**
  * GET - Busca configuração global do WhatsApp
  */

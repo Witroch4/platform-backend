@@ -1,8 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 import { deleteAgendamento } from "@/lib/agendamento.service";
-
+const prisma = getPrismaInstance();
 /**
  * Handler para DELETE em /api/[accountid]/agendar/delete/[id]
  * Exclui um agendamento específico pelo ID.

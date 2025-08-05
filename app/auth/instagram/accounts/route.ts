@@ -1,7 +1,8 @@
 //app\auth\instagram\accounts\route.ts
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections";
+const prisma = getPrismaInstance();
 
 // Forçar ambiente Node
 export const runtime = "nodejs";

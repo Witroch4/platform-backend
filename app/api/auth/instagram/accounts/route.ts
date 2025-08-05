@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
 
     console.log("API de contas - Buscando contas para usuário:", session.user.id);
 
-    const accounts = await prisma.account.findMany({
+    const accounts = await getPrismaInstance().account.findMany({
       where: {
         userId: session.user.id,
         provider: "instagram",

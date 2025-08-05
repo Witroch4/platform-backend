@@ -1,44 +1,30 @@
-/* tsconfig.worker.json */
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    /* transpilação para CommonJS no Node 18+ */
     "module": "commonjs",
     "moduleResolution": "node",
     "target": "es2022",
-
-    /* onde joga o .js gerado */
     "outDir": "dist",
-
-    /* raiz lógica (apenas para cálculo de “common root”), mas 
-       o rootDirs é quem de fato decide como achatar as pastas */
     "rootDir": ".",
-
-    /* ordem importa: 
-       1) arquivos em “worker/…” → saída em dist/worker/<resto do caminho após “worker/”>  
-       2) qualquer outro (por ex. “lib/...”) → saída em dist/worker/lib/... */
-    "rootDirs": [
-      "worker",
-      "."
-    ],
-
-    /* desativa as regras rígidas herdadas do tsconfig.base */
-    "moduleDetection": "legacy",
-    "verbatimModuleSyntax": false,
-
-    /* conforto */
     "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
+    "allowJs": true,
+    "declaration": false,
+    "sourceMap": false,
+    "noEmit": false,
+    "skipLibCheck": true,
+    "noImplicitAny": false
   },
-
   "include": [
-    "worker/**/*.ts",    /* seu código de workers */
-    "lib/**/*.ts",       /* utilitários compartilhados */
-    "types/**/*.d.ts"    /* definições de tipo extras */
+    "worker/**/*.ts"
   ],
   "exclude": [
-    "**/__tests__/**",   /* excluir todos os arquivos de teste */
-    "**/*.test.ts",      /* excluir arquivos .test.ts */
-    "**/*.spec.ts"       /* excluir arquivos .spec.ts */
+    "node_modules",
+    "dist",
+    ".next",
+    "**/__tests__/**",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "**/__mocks__/**"
   ]
 }

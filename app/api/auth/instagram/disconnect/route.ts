@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     // Se não for fornecido um accountId, desconectar a conta principal
     if (!accountId) {
       // Buscar a conta principal do Instagram do usuário
-      const mainAccount = await prisma.account.findFirst({
+      const mainAccount = await getPrismaInstance().account.findFirst({
         where: {
           userId: session.user.id,
           provider: "instagram",
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Excluir a conta principal
-      await prisma.account.delete({
+      await getPrismaInstance().account.delete({
         where: {
           id: mainAccount.id
         }
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
       });
     } else {
       // Verificar se a conta pertence ao usuário usando o providerAccountId
-      const account = await prisma.account.findFirst({
+      const account = await getPrismaInstance().account.findFirst({
         where: {
           providerAccountId: accountId,
           userId: session.user.id,
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Excluir a conta específica
-      await prisma.account.delete({
+      await getPrismaInstance().account.delete({
         where: {
           id: account.id
         }

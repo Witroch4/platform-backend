@@ -1,8 +1,10 @@
 /**
  * Instagram Translation Worker Configuration
  * 
- * Defines resource limits, performance settings, and monitoring configuration
+ * Defines performance settings, processing time limits, and monitoring configuration
  * for the Instagram translation worker to ensure optimal performance and reliability.
+ * 
+ * Note: Resource limits (memory, CPU) are managed by Docker Swarm container configuration.
  */
 
 export interface InstagramTranslationWorkerConfig {
@@ -11,22 +13,10 @@ export interface InstagramTranslationWorkerConfig {
   lockDuration: number; // milliseconds
   maxRetries: number;
   
-  // Resource Limits
-  resourceLimits: {
-    memory: {
-      max: string;
-      warning: string;
-      critical: string;
-    };
-    cpu: {
-      max: number; // percentage
-      warning: number;
-      critical: number;
-    };
-    processing: {
-      maxProcessingTime: number; // milliseconds
-      warningThreshold: number; // milliseconds
-    };
+  // Processing Time Limits (for webhook timeout compliance)
+  processing: {
+    maxProcessingTime: number; // milliseconds
+    warningThreshold: number; // milliseconds
   };
   
   // Queue Configuration
@@ -51,8 +41,6 @@ export interface InstagramTranslationWorkerConfig {
       errorRate: number; // percentage
       queueDepth: number;
       processingTime: number; // milliseconds
-      memoryUsage: number; // percentage
-      cpuUsage: number; // percentage
     };
   };
   
@@ -78,22 +66,10 @@ export const INSTAGRAM_TRANSLATION_WORKER_CONFIG: InstagramTranslationWorkerConf
   // Maximum retry attempts
   maxRetries: 3,
   
-  // Resource limits for monitoring and alerting
-  resourceLimits: {
-    memory: {
-      max: "512MB",      // Maximum memory allocation
-      warning: "384MB",  // Warning threshold at 75%
-      critical: "460MB", // Critical threshold at 90%
-    },
-    cpu: {
-      max: 100,      // 1 CPU core equivalent (100%)
-      warning: 75,   // Warning at 75% CPU usage
-      critical: 90,  // Critical at 90% CPU usage
-    },
-    processing: {
-      maxProcessingTime: 4500,  // Must complete within 4.5s for webhook timeout
-      warningThreshold: 3000,   // Warning if processing takes > 3s
-    },
+  // Processing time limits for webhook timeout compliance
+  processing: {
+    maxProcessingTime: 4500,  // Must complete within 4.5s for webhook timeout
+    warningThreshold: 3000,   // Warning if processing takes > 3s
   },
   
   // Queue configuration optimized for high throughput
@@ -118,8 +94,8 @@ export const INSTAGRAM_TRANSLATION_WORKER_CONFIG: InstagramTranslationWorkerConf
       errorRate: 5,           // Alert if error rate > 5%
       queueDepth: 50,         // Alert if queue depth > 50 jobs
       processingTime: 4000,   // Alert if processing time > 4s
-      memoryUsage: 80,        // Alert if memory usage > 80%
-      cpuUsage: 85,           // Alert if CPU usage > 85%
+      // memoryUsage: 80,        // Alert if memory usage > 80% (not supported yet)
+      // cpuUsage: 85,           // Alert if CPU usage > 85% (not supported yet)
     },
   },
   
@@ -146,13 +122,8 @@ export function getInstagramTranslationWorkerConfig(environment?: string): Insta
           ...baseConfig.monitoring,
           metricsInterval: 60000, // Less frequent metrics collection
         },
-        resourceLimits: {
-          ...baseConfig.resourceLimits,
-          memory: {
-            max: "256MB",
-            warning: "192MB",
-            critical: "230MB",
-          },
+        processing: {
+          ...baseConfig.processing,
         },
       };
       
@@ -172,18 +143,8 @@ export function getInstagramTranslationWorkerConfig(environment?: string): Insta
         ...baseConfig,
         // Production uses default configuration
         // May be tuned based on actual performance metrics
-        resourceLimits: {
-          ...baseConfig.resourceLimits,
-          memory: {
-            max: "1GB",      // Higher memory limit in production
-            warning: "768MB",
-            critical: "920MB",
-          },
-          cpu: {
-            max: 200,      // Allow up to 2 CPU cores in production
-            warning: 150,
-            critical: 180,
-          },
+        processing: {
+          ...baseConfig.processing,
         },
       };
       
@@ -212,7 +173,7 @@ export function validateWorkerConfig(config: InstagramTranslationWorkerConfig): 
   }
   
   // Validate processing time limits
-  if (config.resourceLimits.processing.maxProcessingTime > config.lockDuration) {
+  if (config.processing.maxProcessingTime > config.lockDuration) {
     errors.push('Max processing time cannot exceed lock duration');
   }
   
@@ -252,10 +213,8 @@ export function logWorkerConfiguration(config: InstagramTranslationWorkerConfig)
     concurrency: config.concurrency,
     lockDuration: `${config.lockDuration}ms`,
     maxRetries: config.maxRetries,
-    resourceLimits: {
-      memory: config.resourceLimits.memory.max,
-      cpu: `${config.resourceLimits.cpu.max}%`,
-      maxProcessingTime: `${config.resourceLimits.processing.maxProcessingTime}ms`,
+    processing: {
+      maxProcessingTime: `${config.processing.maxProcessingTime}ms`,
     },
     monitoring: {
       enabled: config.monitoring.enabled,
@@ -274,10 +233,9 @@ export const WORKER_METRICS = {
   HIGH_PRIORITY: 10,
 } as const;
 
-export const RESOURCE_LIMITS = {
-  MEMORY_MAX: "512MB",
-  CPU_MAX: 100, // 1 core
-  PROCESSING_TIMEOUT: 4500,
+export const PROCESSING_LIMITS = {
+  MAX_PROCESSING_TIME: 4500,
+  WARNING_THRESHOLD: 3000,
 } as const;
 
 export const MONITORING_INTERVALS = {

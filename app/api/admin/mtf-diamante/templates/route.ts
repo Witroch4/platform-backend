@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import axios from 'axios';
 import { auth } from '@/auth';
 import { mtfDiamanteConfig } from '@/app/config/mtf-diamante';
-import { db } from '@/lib/db';
+import { getPrismaInstance } from '@/lib/connections';
 import { VariableConverter, type MtfDiamanteVariavel } from '@/app/lib/variable-converter';
 
 // Templates mockados para desenvolvimento (caso a API não retorne dados)
@@ -57,7 +57,7 @@ const mockTemplates = [
 async function getWhatsAppApiConfig(userId: string) {
   try {
     // Buscar configuração do usuário no banco
-    const usuarioChatwit = await db.usuarioChatwit.findUnique({
+    const usuarioChatwit = await getPrismaInstance().usuarioChatwit.findUnique({
       where: { appUserId: userId },
       include: {
         configuracaoGlobalWhatsApp: true
@@ -96,14 +96,14 @@ async function getWhatsAppApiConfig(userId: string) {
 async function getUserVariables(userId: string): Promise<MtfDiamanteVariavel[]> {
   try {
     // Busca ou cria a configuração do MTF Diamante
-    let config = await db.mtfDiamanteConfig.findFirst({
+    let config = await getPrismaInstance().mtfDiamanteConfig.findFirst({
       where: { userId },
       include: { variaveis: true }
     });
 
     if (!config) {
       // Cria configuração padrão com variáveis iniciais
-      config = await db.mtfDiamanteConfig.create({
+      config = await getPrismaInstance().mtfDiamanteConfig.create({
         data: {
           userId,
           variaveis: {
@@ -138,7 +138,7 @@ async function getUserVariables(userId: string): Promise<MtfDiamanteVariavel[]> 
 async function syncTemplateWithDatabase(template: any, userId: string) {
   try {
     // Verifica se já existe um template com o mesmo nome
-    const existingTemplate = await db.template.findFirst({
+    const existingTemplate = await getPrismaInstance().template.findFirst({
       where: { 
         name: template.name,
         createdById: userId
@@ -165,7 +165,7 @@ async function syncTemplateWithDatabase(template: any, userId: string) {
     };
 
     if (existingTemplate) {
-      await db.template.update({
+      await getPrismaInstance().template.update({
         where: { id: existingTemplate.id },
         data: {
           ...data,
@@ -189,7 +189,7 @@ async function syncTemplateWithDatabase(template: any, userId: string) {
       });
       console.log(`Template ${template.name} atualizado no banco de dados`);
     } else {
-      await db.template.create({
+      await getPrismaInstance().template.create({
         data,
       });
       console.log(`Template ${template.name} criado no banco de dados`);
@@ -335,7 +335,7 @@ export async function GET(request: Request) {
     const userId = session.user.id;
 
     // Buscar o UsuarioChatwit do usuário logado
-    const usuarioChatwit = await db.usuarioChatwit.findUnique({
+    const usuarioChatwit = await getPrismaInstance().usuarioChatwit.findUnique({
       where: { appUserId: userId },
       select: { id: true }
     });
@@ -411,7 +411,7 @@ export async function GET(request: Request) {
     }
 
     // Buscar os templates do banco de dados
-    const dbTemplates = await db.template.findMany({
+    const dbTemplates = await getPrismaInstance().template.findMany({
       where: filterCondition,
       include: {
         whatsappOfficialInfo: true
@@ -423,7 +423,7 @@ export async function GET(request: Request) {
 
     // Se não encontrou nenhum template e não temos filtros, verificamos se a tabela está vazia
     if (dbTemplates.length === 0 && !category && !language) {
-      const totalCount = await db.template.count({
+      const totalCount = await getPrismaInstance().template.count({
         where: { createdById: userId }
       });
 
@@ -636,7 +636,7 @@ export async function POST(request: Request) {
       console.log('Salvando template no banco de dados com URL pública:', publicMediaUrl);
       
       // Primeiro criamos o template no banco de dados
-      const createdTemplate = await db.template.create({
+      const createdTemplate = await getPrismaInstance().template.create({
         data: {
           name: body.name,
           status: templateResponse.status || 'PENDING',

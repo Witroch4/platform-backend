@@ -8,7 +8,7 @@ import { NextRequest } from 'next/server';
 import { POST } from '@/app/api/admin/mtf-diamante/dialogflow/webhook/route';
 import { respostaRapidaQueue } from '@/lib/queue/resposta-rapida.queue';
 import { persistenciaCredenciaisQueue } from '@/lib/queue/persistencia-credenciais.queue';
-import { prisma } from '@/lib/prisma';
+import { getPrismaInstance } from '@/lib/connections';
 import { credentialsCache } from '@/lib/cache/credentials-cache';
 
 // Mock external dependencies

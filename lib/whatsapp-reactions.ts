@@ -6,7 +6,7 @@
 import axios from 'axios';
 import { getWhatsAppConfig, getWhatsAppApiUrl } from '@/app/lib';
 import { auth } from '@/auth';
-import { db } from '@/lib/db';
+import { getPrismaInstance } from '@/lib/connections';
 
 export interface ReactionMessageData {
   recipientPhone: string;

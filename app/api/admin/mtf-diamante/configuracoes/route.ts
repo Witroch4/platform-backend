@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { db } from "@/lib/db";
+import { getPrismaInstance } from "@/lib/connections"
 
 // GET: Busca configurações de um usuário (geral ou específica)
 export async function GET(request: NextRequest) {
@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
 
-    const usuarioChatwit = await db.usuarioChatwit.findUnique({
+    const usuarioChatwit = await getPrismaInstance().usuarioChatwit.findUnique({
       where: { appUserId: session.user.id },
     });
 
@@ -32,12 +32,12 @@ export async function GET(request: NextRequest) {
     // Caso 1: Busca a configuração para UMA caixa específica (com fallback para a padrão)
     if (inboxId) {
       // Buscar configuração global primeiro
-      let config = await db.whatsAppGlobalConfig.findFirst({
+      let config = await getPrismaInstance().whatsAppGlobalConfig.findFirst({
         where: { usuarioChatwitId: usuarioChatwit.id },
       });
 
       // Buscar configuração específica da caixa
-      const inboxConfig = await db.chatwitInbox.findFirst({
+      const inboxConfig = await getPrismaInstance().chatwitInbox.findFirst({
         where: { id: inboxId, usuarioChatwitId: usuarioChatwit.id },
       });
 
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Caso 2: Busca TUDO para a tela principal de configurações
-    const configPadrao = await db.whatsAppGlobalConfig.findFirst({
+    const configPadrao = await getPrismaInstance().whatsAppGlobalConfig.findFirst({
       where: { usuarioChatwitId: usuarioChatwit.id },
     });
 
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
       fbGraphApiBase: configPadrao.graphApiBaseUrl // Mapear para o campo esperado pelo frontend
     } : null;
 
-    const caixas = await db.chatwitInbox.findMany({
+    const caixas = await getPrismaInstance().chatwitInbox.findMany({
       where: { usuarioChatwitId: usuarioChatwit.id },
       include: {
         templates: true,
@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "fbGraphApiBase é obrigatório" }, { status: 400 });
     }
 
-    const usuarioChatwit = await db.usuarioChatwit.findUnique({
+    const usuarioChatwit = await getPrismaInstance().usuarioChatwit.findUnique({
       where: { appUserId: session.user.id },
     });
 
@@ -148,7 +148,7 @@ export async function POST(request: NextRequest) {
 
     if (inboxId) {
       // Configuração específica para uma caixa - usar ChatwitInbox
-      const existingInbox = await db.chatwitInbox.findFirst({
+      const existingInbox = await getPrismaInstance().chatwitInbox.findFirst({
         where: {
           id: inboxId,
           usuarioChatwitId: usuarioChatwit.id,
@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Atualiza a caixa de entrada com as configurações
-      savedConfig = await db.chatwitInbox.update({
+      savedConfig = await getPrismaInstance().chatwitInbox.update({
         where: { id: inboxId },
         data: {
           phoneNumberId,
@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
       });
     } else {
       // Configuração padrão (global) - usar WhatsAppGlobalConfig
-      const existingConfig = await db.whatsAppGlobalConfig.findFirst({
+      const existingConfig = await getPrismaInstance().whatsAppGlobalConfig.findFirst({
         where: {
           usuarioChatwitId: usuarioChatwit.id,
         },
@@ -178,7 +178,7 @@ export async function POST(request: NextRequest) {
 
       if (existingConfig) {
         // Atualiza a configuração existente
-        savedConfig = await db.whatsAppGlobalConfig.update({
+        savedConfig = await getPrismaInstance().whatsAppGlobalConfig.update({
           where: { id: existingConfig.id },
           data: {
             phoneNumberId,
@@ -192,7 +192,7 @@ export async function POST(request: NextRequest) {
         if (!token) {
           return NextResponse.json({ error: "Token é obrigatório para criar nova configuração" }, { status: 400 });
         }
-        savedConfig = await db.whatsAppGlobalConfig.create({
+        savedConfig = await getPrismaInstance().whatsAppGlobalConfig.create({
           data: {
             phoneNumberId,
             whatsappApiKey: token,

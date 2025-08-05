@@ -232,7 +232,7 @@ export class RollbackManager {
   async getRollbackExecutions(limit: number = 50): Promise<RollbackExecution[]> {
     try {
       const executions = await this.redis.lrange('rollback_executions', 0, limit - 1);
-      return executions.map(exec => JSON.parse(exec));
+      return executions.map((exec: any) => JSON.parse(exec));
       } catch (error: unknown) {
         console.error('[Rollback] Error getting rollback executions:', error);
         return [];

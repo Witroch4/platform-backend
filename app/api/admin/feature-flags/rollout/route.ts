@@ -1,60 +1,86 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { FeatureFlagManager } from '@/lib/feature-flags/feature-flag-manager';
-import { getRedisInstance, getPrismaInstance } from '@/lib/connections';
+/**
+ * Feature Flag Gradual Rollout API
+ * Based on requirements 16.1, 16.2, 16.3, 16.4
+ */
 
+import { NextRequest, NextResponse } from 'next/server';
+import { getRedisInstance } from '@/lib/connections';
+import { FeatureFlagManager } from '@/lib/ai-integration/services/feature-flag-manager';
+import log from '@/lib/log';
+
+// POST /api/admin/feature-flags/rollout - Perform gradual rollout
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { 
-      flagName, 
-      targetPercentage, 
-      incrementPercentage = 10, 
-      intervalMinutes = 30 
-    } = body;
+    const { flagId, targetPercentage, incrementPercentage, userId } = body;
 
-    if (!flagName || targetPercentage === undefined) {
-      return NextResponse.json(
-        { error: 'Flag name and target percentage are required' },
-        { status: 400 }
-      );
+    if (!flagId || targetPercentage === undefined || !userId) {
+      return NextResponse.json({
+        success: false,
+        error: 'Missing required fields: flagId, targetPercentage, userId'
+      }, { status: 400 });
     }
 
     if (targetPercentage < 0 || targetPercentage > 100) {
-      return NextResponse.json(
-        { error: 'Target percentage must be between 0 and 100' },
-        { status: 400 }
-      );
+      return NextResponse.json({
+        success: false,
+        error: 'targetPercentage must be between 0 and 100'
+      }, { status: 400 });
     }
 
-    const prisma = getPrismaInstance();
     const redis = getRedisInstance();
-    const featureFlagManager = FeatureFlagManager.getInstance(prisma, redis);
-    
-    // Start gradual rollout (this will run asynchronously)
-    featureFlagManager.gradualRollout(
-      flagName,
+    const flagManager = new FeatureFlagManager(redis);
+
+    await flagManager.performGradualRollout(
+      flagId,
       targetPercentage,
-      incrementPercentage,
-      intervalMinutes
-    ).catch((error: unknown) => {
-      console.error(`[FeatureFlags API] Gradual rollout failed for ${flagName}:`, error);
-    });
+      incrementPercentage || 5
+    );
 
     return NextResponse.json({
       success: true,
-      message: `Gradual rollout started for ${flagName}`,
-      details: {
-        flagName,
-        targetPercentage,
-        incrementPercentage,
-        intervalMinutes,
-      },
+      message: 'Gradual rollout performed successfully'
     });
-  } catch (error: unknown) {
-    console.error('[FeatureFlags API] Error starting gradual rollout:', error);
-    return NextResponse.json(
-      { error: 'Failed to start gradual rollout' },
-      { status: 500 }
-    );
+
+  } catch (error) {
+    log.error('Error performing gradual rollout', { error });
+    
+    return NextResponse.json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error'
+    }, { status: 500 });
+  }
+}
+
+// POST /api/admin/feature-flags/rollout/emergency-disable - Emergency kill switch
+export async function DELETE(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { flagId, reason, userId } = body;
+
+    if (!flagId || !reason || !userId) {
+      return NextResponse.json({
+        success: false,
+        error: 'Missing required fields: flagId, reason, userId'
+      }, { status: 400 });
+    }
+
+    const redis = getRedisInstance();
+    const flagManager = new FeatureFlagManager(redis);
+
+    await flagManager.emergencyDisable(flagId, reason, userId);
+
+    return NextResponse.json({
+      success: true,
+      message: 'Emergency kill switch activated successfully'
+    });
+
+  } catch (error) {
+    log.error('Error activating emergency kill switch', { error });
+    
+    return NextResponse.json({
+      success: false,
+      error: 'Internal server error'
+    }, { status: 500 });
   }
 }

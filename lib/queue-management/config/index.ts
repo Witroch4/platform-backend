@@ -3,7 +3,7 @@
  * Provides factory functions and utilities for configuration management
  */
 
-import { PrismaClient } from '@prisma/client'
+import { getPrismaInstance } from "@/lib/connections"
 import { getRedisInstance } from '../../../lib/connections'
 import { QueueConfigManager } from '../services/QueueConfigManager'
 import { 
@@ -14,6 +14,8 @@ import {
   SYSTEM_CONFIG_KEYS,
   SystemConfigKey
 } from '../types/config'
+
+import type { PrismaClient } from "@prisma/client";
 
 // Global instances
 let globalConfigManager: QueueConfigManager | null = null

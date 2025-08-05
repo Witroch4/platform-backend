@@ -1,6 +1,6 @@
 //\app\api\automacao\route.ts
 import { type NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 import { auth } from "@/auth";
 import { v4 as uuidv4 } from "uuid";
 
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Buscar a conta usando o providerAccountId
-    const account = await prisma.account.findFirst({
+    const account = await getPrismaInstance().account.findFirst({
       where: {
         providerAccountId: providerAccountId,
         userId: session.user.id,
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Buscar automações filtradas por accountId
-    const automacoes = await prisma.automacao.findMany({
+    const automacoes = await getPrismaInstance().automacao.findMany({
       where: {
         userId: session.user.id,
         accountId: account.id,
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Buscar a conta usando o providerAccountId
-    const account = await prisma.account.findFirst({
+    const account = await getPrismaInstance().account.findFirst({
       where: {
         providerAccountId: providerAccountId,
         userId: session.user.id,
@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
     } = body;
 
     // Criar a automação com o accountId correto
-    const automacao = await prisma.automacao.create({
+    const automacao = await getPrismaInstance().automacao.create({
       data: {
         userId: session.user.id,
         accountId: account.id,

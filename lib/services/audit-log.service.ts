@@ -1,4 +1,4 @@
-import { getPrismaInstance } from "@/lib/connections";
+import { getPrismaInstance } from "@/lib/connections"
 import { Prisma } from "@prisma/client";
 
 export interface AuditLogEntry {

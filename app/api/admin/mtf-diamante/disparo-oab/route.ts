@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
-import prisma from '@/lib/prisma';
+import { getPrismaInstance } from '@/lib/connections';
+const prisma = getPrismaInstance();
 import { parse } from 'papaparse';
 import { auth } from '@/auth';
 import { getWhatsAppConfig, getWhatsAppApiUrl } from '@/app/lib';

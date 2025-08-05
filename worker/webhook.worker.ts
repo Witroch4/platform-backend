@@ -3,7 +3,7 @@
 import { Worker, Job } from 'bullmq';
 import dotenv from 'dotenv';
 import { getRedisInstance } from '@/lib/connections';
-import { prisma } from '@/lib/prisma';
+import { getPrismaInstance } from '@/lib/connections';
 import { processAgendamentoTask } from './WebhookWorkerTasks/agendamento.task';
 import { processLeadCellTask } from './WebhookWorkerTasks/leadcells.task';
 import { MANUSCRITO_QUEUE_NAME } from '@/lib/queue/manuscrito.queue';
@@ -16,7 +16,7 @@ import {
 } from '@/lib/queue/instagram-webhook.queue';
 import cron from 'node-cron';
 import { LEADS_QUEUE_NAME } from '@/lib/queue/leads-chatwit.queue';
-import { processLeadChatwitTask } from './WebhookWorkerTasks/leads-chatwit.task';
+import { processLeadChatwitTask } from './WebhookWorkerTasks/leads-chatwit-redis.task';
 import { processMtfDiamanteWebhookTask } from './WebhookWorkerTasks/mtf-diamante-webhook.task';
 import { MTF_DIAMANTE_WEBHOOK_QUEUE_NAME } from '@/lib/queue/mtf-diamante-webhook.queue';
 import { processInstagramTranslationTask } from './WebhookWorkerTasks/instagram-translation.task';
@@ -262,13 +262,13 @@ const leadCellsWorker = new Worker(
   }
 );
 
-// Worker de leads‑chatwit 🔥
+// Worker de leads‑chatwit 🔥 (Redis-safe para múltiplos workers)
 const leadsChatwitWorker = new Worker(
   LEADS_QUEUE_NAME,
   processLeadChatwitTask,
   { 
     connection: getRedisInstance(), 
-    concurrency: 10,  // Aumentamos a concorrência pois agora acumulamos jobs
+    concurrency: 10,  // Seguro com Redis - permite múltiplos workers
     lockDuration: 30000,  // Aumentamos o tempo de bloqueio para 30s para permitir acumulação
   }
 );
@@ -377,22 +377,11 @@ instagramTranslationWorker.on('completed', (job, result) => {
   });
   
   // Check for performance warnings
-  if (processingTime > instagramWorkerConfig.resourceLimits.processing.warningThreshold) {
+  if (processingTime > instagramWorkerConfig.processing.warningThreshold) {
     console.warn(`[Instagram Worker] Job ${job.id} processing time exceeded warning threshold`, {
       processingTime: `${processingTime}ms`,
-      threshold: `${instagramWorkerConfig.resourceLimits.processing.warningThreshold}ms`,
+      threshold: `${instagramWorkerConfig.processing.warningThreshold}ms`,
       correlationId: job.data.correlationId,
-    });
-  }
-  
-  // Check memory usage
-  const memoryUsageMB = memoryUsage.heapUsed / 1024 / 1024;
-  const memoryLimitMB = parseInt(instagramWorkerConfig.resourceLimits.memory.warning.replace('MB', ''));
-  if (memoryUsageMB > memoryLimitMB) {
-    console.warn(`[Instagram Worker] Memory usage exceeded warning threshold`, {
-      currentUsage: `${Math.round(memoryUsageMB)}MB`,
-      threshold: instagramWorkerConfig.resourceLimits.memory.warning,
-      jobId: job.id,
     });
   }
 });
@@ -448,17 +437,20 @@ if (instagramWorkerConfig.monitoring.enabled) {
       timestamp: new Date().toISOString(),
     });
     
-    // Check for resource limit violations
-    const memoryUsageMB = memoryUsage.heapUsed / 1024 / 1024;
-    const criticalMemoryMB = parseInt(instagramWorkerConfig.resourceLimits.memory.critical.replace('MB', ''));
-    
-    if (memoryUsageMB > criticalMemoryMB) {
-      console.error('[Instagram Worker] CRITICAL: Memory usage exceeded critical threshold', {
-        currentUsage: `${Math.round(memoryUsageMB)}MB`,
-        criticalThreshold: instagramWorkerConfig.resourceLimits.memory.critical,
-        recommendation: 'Consider reducing concurrency or restarting worker',
-      });
-    }
+    // Log resource usage for monitoring (Docker handles resource limits)
+    console.log('[Instagram Worker] Resource usage report:', {
+      memory: {
+        heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
+        heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`,
+        external: `${Math.round(memoryUsage.external / 1024 / 1024)}MB`,
+      },
+      cpu: {
+        user: `${Math.round(cpuUsage.user / 1000)}ms`,
+        system: `${Math.round(cpuUsage.system / 1000)}ms`,
+      },
+      uptime: `${Math.round(process.uptime())}s`,
+      timestamp: new Date().toISOString(),
+    });
   }, instagramWorkerConfig.monitoring.metricsInterval);
 }
 
@@ -480,7 +472,7 @@ async function handleExpiringTokensNotification(data: IAutoNotificationJobData) 
     const sevenDaysFromNow = new Date();
     sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
 
-    const expiringAccounts = await prisma.account.findMany({
+    const expiringAccounts = await getPrismaInstance().account.findMany({
       where: {
         expires_at: {
           not: null,
@@ -507,7 +499,7 @@ async function handleExpiringTokensNotification(data: IAutoNotificationJobData) 
 
       const daysRemaining = Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 
-      await prisma.notification.create({
+      await getPrismaInstance().notification.create({
         data: {
           userId: account.userId,
           title: 'Token de Acesso Expirando',
@@ -617,10 +609,8 @@ export async function initInstagramTranslationWorker() {
       concurrency: instagramWorkerConfig.concurrency,
       lockDuration: `${instagramWorkerConfig.lockDuration}ms`,
       maxRetries: instagramWorkerConfig.maxRetries,
-      resourceLimits: {
-        memory: instagramWorkerConfig.resourceLimits.memory.max,
-        cpu: `${instagramWorkerConfig.resourceLimits.cpu.max}%`,
-        maxProcessingTime: `${instagramWorkerConfig.resourceLimits.processing.maxProcessingTime}ms`,
+      processing: {
+        maxProcessingTime: `${instagramWorkerConfig.processing.maxProcessingTime}ms`,
       },
       monitoring: instagramWorkerConfig.monitoring.enabled,
       environment: process.env.NODE_ENV || 'development',
@@ -692,12 +682,9 @@ async function performInstagramWorkerHealthCheck(): Promise<{
       issues.push(`Configuration invalid: ${configValidation.errors.join(', ')}`);
     }
     
-    // Check memory usage
+    // Check memory usage (Docker handles resource limits, just log for monitoring)
     const memoryUsageMB = memoryUsage.heapUsed / 1024 / 1024;
-    const memoryLimitMB = parseInt(instagramWorkerConfig.resourceLimits.memory.critical.replace('MB', ''));
-    if (memoryUsageMB > memoryLimitMB) {
-      issues.push(`Memory usage critical: ${Math.round(memoryUsageMB)}MB > ${memoryLimitMB}MB`);
-    }
+    console.log(`[Instagram Worker] Memory usage: ${Math.round(memoryUsageMB)}MB`);
     
     // Check if worker is responsive
     const healthCheckTimeout = new Promise((_, reject) =>
@@ -794,7 +781,7 @@ const gracefulShutdown = async (signal: string) => {
     console.log('[Worker Shutdown] All workers closed successfully');
     
     // Disconnect from database
-    await prisma.$disconnect();
+    await getPrismaInstance().$disconnect();
     console.log('[Worker Shutdown] Database disconnected');
     
     // Clear shutdown timeout

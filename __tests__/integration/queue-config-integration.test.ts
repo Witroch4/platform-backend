@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals'
-import { PrismaClient } from '@prisma/client'
+import { getPrismaInstance } from "@/lib/connections"
 import { 
   initializeConfigManager,
   createQueueConfig,

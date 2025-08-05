@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 
 // PATCH: Atualizar o status de leitura de uma notificação (apenas para SUPERADMIN)
 export async function PATCH(req: Request) {
@@ -12,7 +12,7 @@ export async function PATCH(req: Request) {
     }
 
     // Verificar se o usuário é SUPERADMIN
-    const adminUser = await prisma.user.findUnique({
+    const adminUser = await getPrismaInstance().user.findUnique({
       where: {
         id: session.user.id
       }
@@ -34,7 +34,7 @@ export async function PATCH(req: Request) {
     }
 
     // Verificar se a notificação existe
-    const notification = await prisma.notification.findUnique({
+    const notification = await getPrismaInstance().notification.findUnique({
       where: {
         id: notificationId
       }
@@ -45,7 +45,7 @@ export async function PATCH(req: Request) {
     }
 
     // Atualizar o status de leitura
-    const updatedNotification = await prisma.notification.update({
+    const updatedNotification = await getPrismaInstance().notification.update({
       where: {
         id: notificationId
       },

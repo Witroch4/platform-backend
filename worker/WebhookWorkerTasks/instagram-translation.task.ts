@@ -1,5 +1,5 @@
 import { Job } from 'bullmq';
-import { PrismaClient } from '@prisma/client';
+import { getPrismaInstance } from "@/lib/connections";
 import {
   InstagramTranslationJobData,
   InstagramTranslationResult,
@@ -55,7 +55,7 @@ import {
   isRetryableError,
 } from '@/lib/error-handling/instagram-translation-errors';
 
-const prisma = new PrismaClient();
+const prisma = getPrismaInstance();
 
 /**
  * Instagram Translation Worker Task

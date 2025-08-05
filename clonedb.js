@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { PrismaClient } from '@prisma/client';
+import { getPrismaInstance } from "@/lib/connections";
 
 // Cliente para o banco de origem (faceApp)
 // Em faceApp a tabela é "Account" (singular, com A maiúsculo)

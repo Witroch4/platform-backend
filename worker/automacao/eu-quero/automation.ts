@@ -1,7 +1,7 @@
 //gpt/
 
 import axios from "axios";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 import { getInstagramUserToken } from "@/lib/instagram-auth";
 import { followUpQueue } from "@/worker/queues/followUpQueue";
 
@@ -66,7 +66,7 @@ async function handleCommentChange(value: any, igUserId: string) {
     }
 
     // Busca automações ativas para esse usuário
-    const automacoes = await prisma.automacao.findMany({
+    const automacoes = await getPrismaInstance().automacao.findMany({
       where: {
         user: { accounts: { some: { provider: "instagram", igUserId } } },
         live: true,
@@ -117,10 +117,10 @@ async function handleCommentChange(value: any, igUserId: string) {
     // Se contatoSemClique estiver ativo, agenda job para follow-up caso o usuário não clique
     if (automacao.anyword) {
       const senderId = from.id;
-      let lead = await prisma.lead.findUnique({ where: { id: senderId } });
+      let lead = await getPrismaInstance().lead.findUnique({ where: { id: senderId } });
       if (!lead) {
         // Primeiro buscamos a conta pelo igUserId
-        const account = await prisma.account.findFirst({
+        const account = await getPrismaInstance().account.findFirst({
           where: { 
             provider: "instagram",
             igUserId: igUserId
@@ -131,7 +131,7 @@ async function handleCommentChange(value: any, igUserId: string) {
           throw new Error(`Conta não encontrada para igUserId=${igUserId}`);
         }
         
-        lead = await prisma.lead.create({ 
+        lead = await getPrismaInstance().lead.create({ 
           data: { 
             sourceIdentifier: senderId, 
             source: "INSTAGRAM",
@@ -139,7 +139,7 @@ async function handleCommentChange(value: any, igUserId: string) {
           } 
         });
       }
-      let la = await prisma.leadAutomacao.findUnique({
+      let la = await getPrismaInstance().leadAutomacao.findUnique({
         where: {
           leadId_automacaoId: {
             leadId: lead.id,
@@ -148,7 +148,7 @@ async function handleCommentChange(value: any, igUserId: string) {
         },
       });
       if (!la) {
-        la = await prisma.leadAutomacao.create({
+        la = await getPrismaInstance().leadAutomacao.create({
           data: {
             leadId: lead.id,
             automacaoId: automacao.id,
@@ -203,7 +203,7 @@ async function handleMessageEvent(msgEvt: any, igUserId: string) {
     // Se for postback/quick_reply: identifica a automação via buttonPayload.
     if (msgEvt.postback?.payload) {
       const postbackPayload = msgEvt.postback.payload;
-      const automacao = await prisma.automacao.findFirst({
+      const automacao = await getPrismaInstance().automacao.findFirst({
         where: { 
           buttonPayload: postbackPayload 
         }
@@ -215,10 +215,10 @@ async function handleMessageEvent(msgEvt: any, igUserId: string) {
       }
 
       const senderId = msgEvt.sender?.id;
-      let lead = await prisma.lead.findUnique({ where: { id: senderId } });
+      let lead = await getPrismaInstance().lead.findUnique({ where: { id: senderId } });
       if (!lead) {
         // Primeiro buscamos a conta pelo igUserId
-        const account = await prisma.account.findFirst({
+        const account = await getPrismaInstance().account.findFirst({
           where: { 
             provider: "instagram",
             igUserId: igUserId
@@ -229,7 +229,7 @@ async function handleMessageEvent(msgEvt: any, igUserId: string) {
           throw new Error(`Conta não encontrada para igUserId=${igUserId}`);
         }
         
-        lead = await prisma.lead.create({ 
+        lead = await getPrismaInstance().lead.create({ 
           data: { 
             sourceIdentifier: senderId, 
             source: "INSTAGRAM",
@@ -237,7 +237,7 @@ async function handleMessageEvent(msgEvt: any, igUserId: string) {
           } 
         });
       }
-      let la = await prisma.leadAutomacao.findUnique({
+      let la = await getPrismaInstance().leadAutomacao.findUnique({
         where: {
           leadId_automacaoId: {
             leadId: lead.id,
@@ -246,7 +246,7 @@ async function handleMessageEvent(msgEvt: any, igUserId: string) {
         },
       });
       if (!la) {
-        la = await prisma.leadAutomacao.create({
+        la = await getPrismaInstance().leadAutomacao.create({
           data: {
             leadId: lead.id,
             automacaoId: automacao.id,
@@ -259,12 +259,12 @@ async function handleMessageEvent(msgEvt: any, igUserId: string) {
       // Se pedirParaSeguirPro estiver ativo, marca o lead como seguidor (validação automática).
       if (automacao.anyword && postbackPayload === automacao.buttonPayload) {
         // Verificar se o lead é seguidor através do perfil do Instagram
-        const instagramProfile = await prisma.leadInstagramProfile.findUnique({
+        const instagramProfile = await getPrismaInstance().leadInstagramProfile.findUnique({
           where: { leadId: lead.id }
         });
         
         if (!instagramProfile?.isFollower) {
-          await prisma.leadInstagramProfile.upsert({
+          await getPrismaInstance().leadInstagramProfile.upsert({
             where: { leadId: lead.id },
             update: { isFollower: true },
             create: { 
@@ -278,7 +278,7 @@ async function handleMessageEvent(msgEvt: any, igUserId: string) {
       // Se pedirEmailPro estiver ativo, verifica se há e-mail. Se não houver, marca como waitingForEmail e solicita o e-mail.
       if (automacao.anyword) {
         if (!lead.email) {
-          await prisma.leadAutomacao.update({
+          await getPrismaInstance().leadAutomacao.update({
             where: {
               leadId_automacaoId: {
                 leadId: lead.id,
@@ -311,20 +311,20 @@ async function handleMessageEvent(msgEvt: any, igUserId: string) {
       
       // Verifica se o texto é um e-mail válido
       if (isValidEmail(text)) {
-        const lead = await prisma.lead.findUnique({ where: { id: senderId } });
+        const lead = await getPrismaInstance().lead.findUnique({ where: { id: senderId } });
         if (!lead) {
           console.log("[handleMessageEvent] Lead não encontrado para senderId=", senderId);
           return;
         }
 
         // Atualiza o lead com o e-mail
-        await prisma.lead.update({
+        await getPrismaInstance().lead.update({
           where: { id: lead.id },
           data: { email: text },
         });
 
         // Busca automações aguardando e-mail para este lead
-        const automacoesAguardando = await prisma.leadAutomacao.findMany({
+        const automacoesAguardando = await getPrismaInstance().leadAutomacao.findMany({
           where: { leadId: lead.id, waitingForEmail: true },
           include: { automacao: true },
         });
@@ -337,13 +337,13 @@ async function handleMessageEvent(msgEvt: any, igUserId: string) {
         // Para cada automação aguardando e-mail
         for (const la of automacoesAguardando) {
           // Marca como não aguardando mais e-mail
-          await prisma.leadAutomacao.update({
+          await getPrismaInstance().leadAutomacao.update({
             where: { id: la.id },
             data: { waitingForEmail: false },
           });
 
           // Verifica se o lead é seguidor (quando exigido)
-          const instagramProfile = await prisma.leadInstagramProfile.findUnique({
+          const instagramProfile = await getPrismaInstance().leadInstagramProfile.findUnique({
             where: { leadId: lead.id }
           });
           
@@ -554,7 +554,7 @@ async function sendEmailRequestMessage({
 async function sendLinkForAutomacao(lead: any, automacao: any, accessToken: string, igUserId: string) {
   try {
     // Busca a LeadAutomacao para verificar se já foi enviado o link
-    const la = await prisma.leadAutomacao.findUnique({
+    const la = await getPrismaInstance().leadAutomacao.findUnique({
       where: {
         leadId_automacaoId: {
           leadId: lead.id,
@@ -574,7 +574,7 @@ async function sendLinkForAutomacao(lead: any, automacao: any, accessToken: stri
     }
 
     // Marca como link enviado
-    await prisma.leadAutomacao.update({
+    await getPrismaInstance().leadAutomacao.update({
       where: {
         leadId_automacaoId: {
           leadId: lead.id,

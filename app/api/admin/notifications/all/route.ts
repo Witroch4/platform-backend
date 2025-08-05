@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 
 // GET: Obter todas as notificações com informações dos usuários (apenas para SUPERADMIN)
 export async function GET() {
@@ -12,7 +12,7 @@ export async function GET() {
     }
 
     // Verificar se o usuário é SUPERADMIN
-    const adminUser = await prisma.user.findUnique({
+    const adminUser = await getPrismaInstance().user.findUnique({
       where: {
         id: session.user.id
       }
@@ -23,7 +23,7 @@ export async function GET() {
     }
 
     // Buscar todas as notificações com informações dos usuários
-    const notifications = await prisma.notification.findMany({
+    const notifications = await getPrismaInstance().notification.findMany({
       include: {
         user: {
           select: {

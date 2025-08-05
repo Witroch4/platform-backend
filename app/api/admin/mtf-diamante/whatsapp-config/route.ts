@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { prisma } from '@/lib/prisma';
+import { getPrismaInstance } from '@/lib/connections';
 import { z } from 'zod';
 
 const whatsappConfigSchema = z.object({
@@ -22,14 +22,14 @@ export async function GET(request: Request) {
     }
 
     // Buscar o usuário Chatwit
-    const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
+    const usuarioChatwit = await getPrismaInstance().usuarioChatwit.findUnique({
       where: { appUserId: session.user.id }
     });
 
     let config = null;
     if (usuarioChatwit) {
       // Buscar configuração ativa do WhatsApp do usuário
-      config = await prisma.whatsAppGlobalConfig.findFirst({
+      config = await getPrismaInstance().whatsAppGlobalConfig.findFirst({
         where: {
           usuarioChatwitId: usuarioChatwit.id
         }
@@ -83,7 +83,7 @@ export async function POST(request: Request) {
     const validatedData = whatsappConfigSchema.parse(body);
 
     // Buscar o usuário Chatwit
-    const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
+    const usuarioChatwit = await getPrismaInstance().usuarioChatwit.findUnique({
       where: { appUserId: session.user.id }
     });
 
@@ -92,7 +92,7 @@ export async function POST(request: Request) {
     }
 
     // Usar transação para garantir consistência
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await getPrismaInstance().$transaction(async (tx) => {
       // Verificar se já existe configuração
       const existingConfig = await tx.whatsAppGlobalConfig.findFirst({
         where: {

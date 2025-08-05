@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient, Prisma } from '@prisma/client';
 
-const prisma = new PrismaClient();
+import { getPrismaInstance } from '@/lib/connections';
+const prisma = getPrismaInstance();
 
 export async function PUT(request: Request) {
   try {

@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { db } from '@/lib/db';
+import { getPrismaInstance } from '@/lib/connections';
 
 // Use Node.js runtime instead of Edge to enable Prisma
 export const runtime = 'nodejs';
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     const offset = Number.parseInt(searchParams.get('offset') || '0');
 
     // Buscar todas as imagens do usuário, ordenadas por data de criação (mais recentes primeiro)
-    const images = await db.generatedImage.findMany({
+    const images = await getPrismaInstance().generatedImage.findMany({
       where: {
         userId: session.user.id
       },
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Contar total de imagens do usuário
-    const total = await db.generatedImage.count({
+    const total = await getPrismaInstance().generatedImage.count({
       where: {
         userId: session.user.id
       }

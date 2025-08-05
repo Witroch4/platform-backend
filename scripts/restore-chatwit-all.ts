@@ -4,8 +4,9 @@ import { PrismaClient, UserRole, LeadSource, EspecialidadeJuridica } from '@pris
 import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import * as bcryptjs from 'bcryptjs';
+import { getPrismaInstance } from '../lib/connections';
 
-const prisma = new PrismaClient();
+const prisma = getPrismaInstance();
 
 async function seedAdminUsers() {
   console.log('🌱 Executando seed de usuários administradores...');

@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { getPrismaInstance } from '@/lib/connections';
 import { auth } from '@/auth';
 import { invalidateTemplateMappingCache } from '@/lib/cache/instagram-template-cache';
 
@@ -17,12 +17,12 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     }
 
     // Get mapping details before deletion for cache invalidation
-    const existingMapping = await db.mapeamentoIntencao.findUnique({
+    const existingMapping = await getPrismaInstance().mapeamentoIntencao.findUnique({
       where: { id: mappingId },
       select: { intentName: true, inboxId: true }
     });
 
-    await db.mapeamentoIntencao.delete({
+    await getPrismaInstance().mapeamentoIntencao.delete({
       where: { id: mappingId },
     });
 
@@ -30,7 +30,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     if (existingMapping) {
       try {
         // Find the ChatwitInbox to get the correct inboxId for cache invalidation
-        const chatwitInbox = await db.chatwitInbox.findUnique({
+        const chatwitInbox = await getPrismaInstance().chatwitInbox.findUnique({
           where: { id: existingMapping.inboxId },
           select: { inboxId: true, usuarioChatwitId: true }
         });

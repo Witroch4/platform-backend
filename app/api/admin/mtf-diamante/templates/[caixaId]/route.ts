@@ -1,6 +1,6 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { getPrismaInstance } from '@/lib/connections';
 import { auth } from '@/auth';
 
 // GET: Lista todos os templates de uma caixa
@@ -12,7 +12,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    const templates = await db.template.findMany({
+    const templates = await getPrismaInstance().template.findMany({
       where: { inboxId: inboxId },
       select: {
         id: true,
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           ? 'INTERACTIVE_MESSAGE'
           : rawType as 'WHATSAPP_OFFICIAL' | 'INTERACTIVE_MESSAGE' | 'AUTOMATION_REPLY';
 
-    const savedTemplate = await db.template.upsert({
+    const savedTemplate = await getPrismaInstance().template.upsert({
       where: { id: id || '' },
       update: {
         name,

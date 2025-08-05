@@ -16,13 +16,8 @@ export {
   // Exclude AlertSeverity and AlertStatus to avoid conflicts
 } from './constants'
 
-// Export specific types to avoid conflicts
-export {
-  AlertAnomaly,
-  JobBatchResult,
-  MetricsExportResult,
-  // Exclude conflicting types
-} from './types'
+// Export specific types to avoid conflicts - using type exports for isolatedModules
+export type { AlertAnomaly, JobBatchResult, MetricsExportResult } from './types';
 
 // Services
 export * from './services'

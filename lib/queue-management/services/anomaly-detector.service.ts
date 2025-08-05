@@ -5,7 +5,7 @@
  * seasonal pattern detection, and automatic baseline establishment for queue metrics.
  */
 
-import { PrismaClient } from '@prisma/client'
+import { getPrismaInstance } from "@/lib/connections"
 import { getRedisInstance } from '../../connections'
 import { EventEmitter } from 'events'
 import { 
@@ -59,14 +59,14 @@ export class AnomalyDetectorService extends EventEmitter implements AnomalyDetec
   name = 'statistical-anomaly-detector'
   
   private static instance: AnomalyDetectorService | null = null
-  private prisma: PrismaClient
+  private prisma: any
   private redis: ReturnType<typeof getRedisInstance>
   private config: AnomalyDetectionConfig
   private baselines: Map<string, StatisticalBaseline> = new Map()
   private seasonalPatterns: Map<string, SeasonalPattern> = new Map()
   private detectionInterval: NodeJS.Timeout | null = null
 
-  constructor(prisma: PrismaClient, redis?: ReturnType<typeof getRedisInstance>) {
+  constructor(prisma: any, redis?: ReturnType<typeof getRedisInstance>) {
     super()
     this.prisma = prisma
     this.redis = redis || getRedisInstance()
@@ -86,7 +86,7 @@ export class AnomalyDetectorService extends EventEmitter implements AnomalyDetec
   /**
    * Get singleton instance
    */
-  static getInstance(prisma?: PrismaClient, redis?: ReturnType<typeof getRedisInstance>): AnomalyDetectorService {
+  static getInstance(prisma?: any, redis?: ReturnType<typeof getRedisInstance>): AnomalyDetectorService {
     if (!AnomalyDetectorService.instance) {
       if (!prisma) {
         throw new QueueManagementError(
@@ -704,7 +704,7 @@ export class AnomalyDetectorService extends EventEmitter implements AnomalyDetec
       orderBy: { timestamp: 'asc' }
     })
 
-    return data.map(item => ({
+    return data.map((item: any) => ({
       name: metricType,
       type: 'gauge' as const,
       value: this.getMetricValue(item, metricType),

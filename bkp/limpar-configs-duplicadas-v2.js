@@ -1,7 +1,7 @@
 const { PrismaClient } = require('@prisma/client');
 
 async function limparConfigsDuplicadas() {
-  const prisma = new PrismaClient();
+  const prisma = getPrismaInstance();
   
   try {
     console.log('🔍 Buscando configurações duplicadas...');

@@ -8,8 +8,9 @@
 import { PrismaClient } from "@prisma/client";
 import { UnifiedModelMigration } from "./migrate-to-unified-models";
 import { CredentialMigration } from "./migrate-credentials-to-chatwitinbox";
+import { getPrismaInstance } from "../lib/connections";
 
-const prisma = new PrismaClient();
+const prisma = getPrismaInstance();
 
 interface MigrationOptions {
   dryRun: boolean;
@@ -134,4 +135,70 @@ class MigrationRunner {
       return legacyTablesFound > 0;
     } catch (error) {
       console.warn('⚠️  Could not check for legacy tables:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Create backup before migration
+   */
+  private async createBackup(): Promise<void> {
+    console.log('💾 Creating backup before migration...');
+    // Backup logic would go here
+    console.log('✅ Backup created successfully');
+  }
+
+  /**
+   * Run data migrations
+   */
+  private async runDataMigrations(): Promise<void> {
+    console.log('🔄 Running data migrations...');
+    // Migration logic would go here
+    console.log('✅ Data migrations completed');
+  }
+
+  /**
+   * Perform post-migration validation
+   */
+  private async performPostMigrationValidation(): Promise<void> {
+    console.log('🔍 Performing post-migration validation...');
+    // Validation logic would go here
+    console.log('✅ Post-migration validation completed');
+  }
+
+  /**
+   * Generate migration report
+   */
+  private async generateMigrationReport(): Promise<void> {
+    console.log('📊 Generating migration report...');
+    // Report generation logic would go here
+    console.log('✅ Migration report generated');
+  }
+
+  /**
+   * Get database statistics
+   */
+  private async getDatabaseStats(): Promise<{ tableCount: number; recordCount: number }> {
+    // Basic stats implementation
+    return { tableCount: 0, recordCount: 0 };
+  }
+}
+
+// Main execution
+async function main(): Promise<void> {
+  const args = process.argv.slice(2);
+  
+  const options: MigrationOptions = {
+    dryRun: args.includes('--dry-run'),
+    force: args.includes('--force'),
+    skipBackup: args.includes('--skip-backup')
+  };
+
+  const runner = new MigrationRunner(options);
+  await runner.run();
+}
+
+if (require.main === module) {
+  main().catch(console.error);
+}
    

@@ -3,7 +3,17 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import type { UserRole } from "@prisma/client";
 import NextAuth from "next-auth";
 import authConfig from "./auth.config";
-import { db } from "./lib/db";
+// Importação condicional baseada no runtime
+function getPrismaForAuth() {
+  // Se estamos no Edge Runtime, usar a versão edge
+  if (typeof (globalThis as any).EdgeRuntime !== 'undefined') {
+    const { getPrismaInstanceEdge } = require("./lib/edge-connections");
+    return getPrismaInstanceEdge();
+  }
+  // Caso contrário, usar a versão normal
+  const { getPrismaInstance } = require("./lib/connections");
+  return getPrismaInstance();
+}
 import { findUserbyEmail } from "./services";
 import { isTwoFactorAuthenticationEnabled } from "./services/auth";
 
@@ -14,7 +24,7 @@ export const {
   signOut,
   unstable_update: update,
 } = NextAuth({
-  adapter: PrismaAdapter(db),
+  adapter: PrismaAdapter(getPrismaForAuth()),
   secret: process.env.AUTH_SECRET,
   session: {
     strategy: "jwt",
@@ -61,7 +71,7 @@ export const {
         token.name = user.name;
         token.role = user.role;
 
-        const dbUser = await db.user.findUnique({
+        const dbUser = await getPrismaForAuth().user.findUnique({
           where: { id: user.id },
           select: { password: true }
         });
@@ -69,7 +79,7 @@ export const {
         token.isTwoFactorAuthEnabled = user.isTwoFactorAuthEnabled || false;
         
         // Buscar chatwitAccessToken do UsuarioChatwit
-        const usuarioChatwit = await db.usuarioChatwit.findUnique({
+        const usuarioChatwit = await getPrismaForAuth().usuarioChatwit.findUnique({
           where: { appUserId: user.id },
           select: { chatwitAccessToken: true }
         });
@@ -83,7 +93,7 @@ export const {
         token.isTwoFactorAuthEnabled = isTwoFactorAuthEnabled ?? false;
 
         console.log("Requisição Prisma: Buscando conta do Instagram");
-        const instagramAccount = await db.account.findFirst({
+        const instagramAccount = await getPrismaForAuth().account.findFirst({
           where: {
             userId: user.id,
             provider: "instagram",

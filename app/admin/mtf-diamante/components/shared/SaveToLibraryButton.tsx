@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Library, Loader2 } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
-import { TemplateLibraryService, type CreateTemplateLibraryData } from '@/app/lib/template-library-service';
 
 interface SaveToLibraryButtonProps {
   templateData: {
@@ -53,48 +52,24 @@ export const SaveToLibraryButton: React.FC<SaveToLibraryButtonProps> = ({
     try {
       setSaving(true);
       
-      // Extract variables from all text fields
-      const allText = [
-        templateData.headerText,
-        templateData.bodyText,
-        templateData.footerText
-      ].filter(Boolean).join(' ');
-      
-      const variableMatches = allText.match(/\{\{([^}]+)\}\}/g) || [];
-      const extractedVariables = [...new Set(variableMatches.map(match => match.slice(2, -2)))];
+      const response = await fetch('/api/admin/templates/save-to-library', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          templateData,
+          messageType
+        }),
+      });
 
-      // Prepare content based on message type
-      const content = {
-        header: templateData.headerText || undefined,
-        body: templateData.bodyText,
-        footer: templateData.footerText || undefined,
-        variables: extractedVariables,
-        mediaUrl: templateData.headerMetaMedia?.[0]?.url,
-        mediaType: templateData.headerType !== 'TEXT' && templateData.headerType !== 'NONE' 
-          ? templateData.headerType.toLowerCase() 
-          : undefined,
-        buttons: templateData.buttons?.map(btn => ({
-          type: btn.type,
-          text: btn.text,
-          url: btn.url,
-          phone_number: btn.phone_number,
-          code_example: btn.code_example
-        }))
-      };
+      const result = await response.json();
 
-      const libraryData: CreateTemplateLibraryData = {
-        name: templateData.name,
-        description: `${messageType === 'template' ? 'Template' : 'Mensagem interativa'} criado via interface`,
-        type: messageType === 'template' ? 'WHATSAPP_OFFICIAL' : 'INTERACTIVE_MESSAGE',
-        scope: 'GLOBAL',
-        content,
-        language: templateData.language || 'pt_BR',
-        tags: [messageType, templateData.category?.toLowerCase() || 'utility'],
-        createdById: session.user.id,
-      };
+      if (!response.ok) {
+        throw new Error(result.error || 'Falha ao salvar na biblioteca');
+      }
 
-      await TemplateLibraryService.saveToLibrary(libraryData);
-      toast.success(`${messageType === 'template' ? 'Template' : 'Mensagem interativa'} salvo na biblioteca com sucesso!`);
+      toast.success(result.message);
     } catch (error) {
       console.error('Erro ao salvar na biblioteca:', error);
       toast.error('Falha ao salvar na biblioteca');

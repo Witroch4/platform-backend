@@ -4,10 +4,10 @@
  * Script to seed initial button reaction mappings
  */
 
-import { PrismaClient } from '@prisma/client';
+import { getPrismaInstance } from "@/lib/connections";
 import { DEFAULT_BUTTON_REACTIONS } from '../app/config/button-reaction-mapping';
 
-const prisma = new PrismaClient();
+const prisma = getPrismaInstance();
 
 async function seedButtonReactions() {
   console.log('🌱 Seeding button reaction mappings...');

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { db } from '@/lib/db';
+import { getPrismaInstance } from '@/lib/connections';
 
 export async function GET(
   request: Request,
@@ -17,7 +17,7 @@ export async function GET(
     console.log(`🔗 Buscando URL do storage para: ${fileId}`);
 
     // Primeiro tentar nos ChatFiles
-    const file = await db.chatFile.findFirst({
+    const file = await getPrismaInstance().chatFile.findFirst({
       where: {
         OR: [
           { id: fileId },
@@ -28,7 +28,7 @@ export async function GET(
 
     // Se não encontrou, tentar nas GeneratedImages
     if (!file) {
-      const image = await db.generatedImage.findFirst({
+      const image = await getPrismaInstance().generatedImage.findFirst({
         where: {
           OR: [
             { id: fileId },

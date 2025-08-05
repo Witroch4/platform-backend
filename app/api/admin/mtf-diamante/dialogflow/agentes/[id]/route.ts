@@ -1,6 +1,7 @@
 //app\api\admin\mtf-diamante\dialogflow\agentes\[id]\route.ts
 import { type NextRequest, NextResponse } from 'next/server';
-import { db as prisma } from '@/lib/db';
+import { getPrismaInstance } from '@/lib/connections';
+const prisma = getPrismaInstance();
 import { auth } from '@/auth';
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {

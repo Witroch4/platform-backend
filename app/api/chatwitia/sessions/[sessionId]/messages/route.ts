@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { db } from "@/lib/db";
+import { getPrismaInstance } from "@/lib/connections"
 
 // Use Node.js runtime instead of Edge to enable Prisma
 export const runtime = 'nodejs';
@@ -20,7 +20,7 @@ export async function GET(
     }
     
     // Verificar se a sessão pertence ao usuário
-    const chatSession = await db.chatSession.findUnique({
+    const chatSession = await getPrismaInstance().chatSession.findUnique({
       where: {
         id: sessionId,
         userId: session.user.id
@@ -31,7 +31,7 @@ export async function GET(
       return new NextResponse("Sessão não encontrada", { status: 404 });
     }
     
-    const messages = await db.chatMessage.findMany({
+    const messages = await getPrismaInstance().chatMessage.findMany({
       where: {
         sessionId
       },
@@ -67,7 +67,7 @@ export async function POST(
     const { role, content, contentType = "text", audioData, imageUrl } = body;
     
     // Verificar se a sessão pertence ao usuário
-    const chatSession = await db.chatSession.findUnique({
+    const chatSession = await getPrismaInstance().chatSession.findUnique({
       where: {
         id: sessionId,
         userId: session.user.id
@@ -78,7 +78,7 @@ export async function POST(
       return new NextResponse("Sessão não encontrada", { status: 404 });
     }
     
-    const message = await db.chatMessage.create({
+    const message = await getPrismaInstance().chatMessage.create({
       data: {
         sessionId,
         role,
@@ -90,7 +90,7 @@ export async function POST(
     });
     
     // Atualizar o timestamp da sessão
-    await db.chatSession.update({
+    await getPrismaInstance().chatSession.update({
       where: {
         id: sessionId
       },

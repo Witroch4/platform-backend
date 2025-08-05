@@ -19,7 +19,7 @@ const prisma = getPrismaInstance() // ✅ Correto
 const redis = getRedisInstance()   // ✅ Correto
 
 // Evita criar novas conexões
-// const prisma = new PrismaClient() // ❌ Incorreto
+// const prisma = getPrismaInstance() // ❌ Incorreto
 ```
 
 ### Configuração Redis

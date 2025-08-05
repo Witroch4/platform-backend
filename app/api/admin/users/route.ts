@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { getPrismaInstance } from "@/lib/connections"
 
 // GET: Listar todos os usuários (apenas para SUPERADMIN)
 export async function GET(req: Request) {
@@ -12,7 +12,7 @@ export async function GET(req: Request) {
     }
 
     // Verificar se o usuário é SUPERADMIN
-    const user = await prisma.user.findUnique({
+    const user = await getPrismaInstance().user.findUnique({
       where: {
         id: session.user.id
       }
@@ -27,7 +27,7 @@ export async function GET(req: Request) {
     const includeAccounts = url.searchParams.get('includeAccounts') !== 'false'; // Por padrão, incluir contas
 
     // Listar todos os usuários
-    const users = await prisma.user.findMany({
+    const users = await getPrismaInstance().user.findMany({
       select: {
         id: true,
         name: true,

@@ -1,5 +1,5 @@
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
-import { PrismaClient } from '@prisma/client';
+import { getPrismaInstance } from "@/lib/connections";
 
 // Mock Prisma
 jest.mock('@prisma/client');

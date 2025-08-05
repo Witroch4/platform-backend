@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { openaiService } from '@/services/openai';
 import { uploadFileWithAssistants } from '@/services/assistantsFileHandler';
 import type { FilePurpose } from '@/services/openai';
-import { db } from '@/lib/db';
+import { getPrismaInstance } from '@/lib/connections';
 import { uploadToMinIO } from '@/lib/minio';
 import { auth } from '@/auth';
 
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
     // Vamos buscar primeiro se já existe no banco
     
     // 1️⃣ Buscar arquivo existente no banco
-    let dbFile = await db.chatFile.findFirst({
+    let dbFile = await getPrismaInstance().chatFile.findFirst({
       where: { 
         sessionId: sessionId || undefined, 
         filename: file.name, 
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
         fileData.sessionId = sessionId;
       }
       
-      dbFile = await db.chatFile.create({
+      dbFile = await getPrismaInstance().chatFile.create({
         data: fileData
       });
       console.log(`Novo arquivo criado no banco: ${dbFile.id}`);
@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
             ? await uploadFileWithAssistants(file, purpose)
             : await openaiService.uploadFile(file, { purpose });
     
-          await db.chatFile.update({
+          await getPrismaInstance().chatFile.update({
             where: { id: dbFile.id },
             data: {
               openaiFileId: uploaded.id,
@@ -187,7 +187,7 @@ export async function GET(req: NextRequest) {
     const sessionId = url.searchParams.get('sessionId');
     const purpose   = url.searchParams.get('purpose') as FilePurpose | null;
 
-    const files = await db.chatFile.findMany({
+    const files = await getPrismaInstance().chatFile.findMany({
       where: {
         sessionId: sessionId ?? undefined,
         ...(purpose ? { purpose } : {}),

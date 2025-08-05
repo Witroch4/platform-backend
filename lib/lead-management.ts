@@ -1,4 +1,5 @@
-import { prisma } from './prisma';
+import { getPrismaInstance } from './connections';
+const prisma = getPrismaInstance();
 import { LeadSource, Lead, LeadInstagramProfile, LeadOabData } from '@prisma/client';
 
 // Extended lead interface with related data

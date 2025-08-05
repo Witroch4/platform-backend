@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { getPrismaInstance } from '@/lib/connections'
 import { auth } from '@/auth'
 import { z } from 'zod'
 import { ActionType } from '@prisma/client'
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
 
     // Get specific reaction by ID
     if (reactionId) {
-      const reaction = await prisma.mapeamentoBotao.findFirst({
+      const reaction = await getPrismaInstance().mapeamentoBotao.findFirst({
         where: { 
           id: reactionId,
           inbox: {
@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
 
     // Get specific button reaction
     if (buttonId) {
-      const reaction = await prisma.mapeamentoBotao.findFirst({
+      const reaction = await getPrismaInstance().mapeamentoBotao.findFirst({
         where: { 
           buttonId,
           inbox: {
@@ -123,7 +123,7 @@ export async function GET(request: NextRequest) {
 
     // Get all reactions for a message
     if (messageId) {
-      const reactions = await prisma.mapeamentoBotao.findMany({
+      const reactions = await getPrismaInstance().mapeamentoBotao.findMany({
         where: { 
           inboxId: messageId, // Use inboxId instead of messageId
           inbox: {
@@ -156,7 +156,7 @@ export async function GET(request: NextRequest) {
     const offset = (page - 1) * limit
 
     const [reactions, total] = await Promise.all([
-      prisma.mapeamentoBotao.findMany({
+      getPrismaInstance().mapeamentoBotao.findMany({
         where: {
           inbox: {
             usuarioChatwit: {
@@ -177,7 +177,7 @@ export async function GET(request: NextRequest) {
         skip: offset,
         take: limit,
       }),
-      prisma.mapeamentoBotao.count({
+      getPrismaInstance().mapeamentoBotao.count({
         where: {
           inbox: {
             usuarioChatwit: {
@@ -222,7 +222,7 @@ export async function POST(request: NextRequest) {
       const { messageId, reactions } = body
 
       // Verify message exists and user has access
-      const message = await prisma.template.findFirst({
+      const message = await getPrismaInstance().template.findFirst({
         where: {
           id: messageId,
           type: "INTERACTIVE_MESSAGE",
@@ -259,7 +259,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Execute transaction for bulk creation
-      const result = await prisma.$transaction(async (tx) => {
+      const result = await getPrismaInstance().$transaction(async (tx) => {
         // Remove existing reactions for this inbox
         await tx.mapeamentoBotao.deleteMany({
           where: { inboxId: messageId }
@@ -309,7 +309,7 @@ export async function POST(request: NextRequest) {
 
     // Verify message exists and user has access (if messageId provided)
     if (messageId) {
-      const message = await prisma.template.findFirst({
+      const message = await getPrismaInstance().template.findFirst({
         where: {
           id: messageId,
           type: "INTERACTIVE_MESSAGE",
@@ -330,7 +330,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if reaction already exists for this button
-    const existingReaction = await prisma.mapeamentoBotao.findUnique({
+    const existingReaction = await getPrismaInstance().mapeamentoBotao.findUnique({
       where: { buttonId },
     })
 
@@ -347,7 +347,7 @@ export async function POST(request: NextRequest) {
       textReaction: reaction?.type === 'text' ? reaction.value : null,
     } as any;
     
-    const createdReaction = await prisma.mapeamentoBotao.create({
+    const createdReaction = await getPrismaInstance().mapeamentoBotao.create({
       data: {
         buttonId,
         inboxId: messageId || '',
@@ -418,7 +418,7 @@ export async function PUT(request: NextRequest) {
     const { id, buttonId, messageId, reaction, description, isActive } = validation.data
 
     // Verify reaction exists and user has access
-    const existingReaction = await prisma.mapeamentoBotao.findFirst({
+    const existingReaction = await getPrismaInstance().mapeamentoBotao.findFirst({
       where: {
         id,
         inbox: {
@@ -438,7 +438,7 @@ export async function PUT(request: NextRequest) {
 
     // If updating buttonId, check for conflicts
     if (buttonId && buttonId !== existingReaction.buttonId) {
-      const conflictingReaction = await prisma.mapeamentoBotao.findUnique({
+      const conflictingReaction = await getPrismaInstance().mapeamentoBotao.findUnique({
         where: { buttonId },
       })
 
@@ -452,7 +452,7 @@ export async function PUT(request: NextRequest) {
 
     // If updating messageId, verify new message exists and user has access
     if (messageId && messageId !== existingReaction.inboxId) {
-      const message = await prisma.template.findFirst({
+      const message = await getPrismaInstance().template.findFirst({
         where: {
           id: messageId,
           type: "INTERACTIVE_MESSAGE",
@@ -478,7 +478,7 @@ export async function PUT(request: NextRequest) {
       textReaction: reaction?.type === 'text' ? reaction.value : null,
     };
     
-    const updatedReaction = await prisma.mapeamentoBotao.update({
+    const updatedReaction = await getPrismaInstance().mapeamentoBotao.update({
       where: { id },
       data: {
         ...(buttonId && { buttonId }),
@@ -545,7 +545,7 @@ export async function DELETE(request: NextRequest) {
     // Delete specific reaction by ID
     if (reactionId) {
       // Verify reaction exists and user has access
-      const reaction = await prisma.mapeamentoBotao.findFirst({
+      const reaction = await getPrismaInstance().mapeamentoBotao.findFirst({
         where: {
           id: reactionId,
           inbox: {
@@ -565,7 +565,7 @@ export async function DELETE(request: NextRequest) {
 
       if (softDelete) {
         // Soft delete - MapeamentoBotao doesn't have isActive field, so we'll just delete
-        await prisma.mapeamentoBotao.delete({
+        await getPrismaInstance().mapeamentoBotao.delete({
           where: { id: reactionId },
         })
         return NextResponse.json({ 
@@ -574,7 +574,7 @@ export async function DELETE(request: NextRequest) {
         })
       } else {
         // Hard delete
-        await prisma.mapeamentoBotao.delete({
+        await getPrismaInstance().mapeamentoBotao.delete({
           where: { id: reactionId },
         })
         return NextResponse.json({ 
@@ -587,7 +587,7 @@ export async function DELETE(request: NextRequest) {
     // Delete specific button reaction
     if (buttonId) {
       // Verify reaction exists and user has access
-      const reaction = await prisma.mapeamentoBotao.findFirst({
+      const reaction = await getPrismaInstance().mapeamentoBotao.findFirst({
         where: {
           buttonId,
           inbox: {
@@ -607,7 +607,7 @@ export async function DELETE(request: NextRequest) {
 
       if (softDelete) {
         // Soft delete - MapeamentoBotao doesn't have isActive field, so we'll just delete
-        await prisma.mapeamentoBotao.delete({
+        await getPrismaInstance().mapeamentoBotao.delete({
           where: { buttonId },
         })
         return NextResponse.json({ 
@@ -615,7 +615,7 @@ export async function DELETE(request: NextRequest) {
           message: 'Reação do botão removida' 
         })
       } else {
-        await prisma.mapeamentoBotao.delete({
+        await getPrismaInstance().mapeamentoBotao.delete({
           where: { buttonId },
         })
         return NextResponse.json({ 
@@ -628,7 +628,7 @@ export async function DELETE(request: NextRequest) {
     // Delete all reactions for a message (with cascade delete logic)
     if (messageId) {
       // Verify message exists and user has access
-      const message = await prisma.template.findFirst({
+      const message = await getPrismaInstance().template.findFirst({
         where: {
           id: messageId,
           type: "INTERACTIVE_MESSAGE",
@@ -649,7 +649,7 @@ export async function DELETE(request: NextRequest) {
 
       if (softDelete) {
         // Soft delete - MapeamentoBotao doesn't have isActive field, so we'll just delete
-        const result = await prisma.mapeamentoBotao.deleteMany({
+        const result = await getPrismaInstance().mapeamentoBotao.deleteMany({
           where: { inboxId: messageId },
         })
         return NextResponse.json({ 
@@ -658,7 +658,7 @@ export async function DELETE(request: NextRequest) {
           count: result.count,
         })
       } else {
-        const result = await prisma.mapeamentoBotao.deleteMany({
+        const result = await getPrismaInstance().mapeamentoBotao.deleteMany({
           where: { inboxId: messageId },
         })
         return NextResponse.json({ 

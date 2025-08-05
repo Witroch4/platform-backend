@@ -5,7 +5,7 @@ import {
   RespostaRapidaJobData,
   handleJobFailure,
 } from "../../lib/queue/resposta-rapida.queue";
-import { prisma } from "../../lib/prisma";
+import { getPrismaInstance } from "../../lib/connections";
 import { recordWorkerMetrics } from "../../lib/monitoring/application-performance-monitor";
 import { performance } from 'perf_hooks';
 
@@ -174,7 +174,7 @@ class IntentProcessor {
   ): Promise<TemplateMapping | null> {
     try {
       // Find the mapping using the unified model
-      const mapping = await prisma.mapeamentoIntencao.findFirst({
+      const mapping = await getPrismaInstance().mapeamentoIntencao.findFirst({
         where: {
           intentName,
           inbox: {
@@ -659,7 +659,7 @@ class ButtonProcessor {
   ): Promise<ButtonActionMapping | null> {
     try {
       // Find the mapping using the unified model
-      const mapping = await prisma.mapeamentoBotao.findFirst({
+      const mapping = await getPrismaInstance().mapeamentoBotao.findFirst({
         where: {
           buttonId,
           inbox: {
@@ -763,7 +763,7 @@ class ButtonProcessor {
 
       if (templateId) {
         // Find template by ID and process it
-        const template = await prisma.template.findUnique({
+        const template = await getPrismaInstance().template.findUnique({
           where: { id: templateId },
           include: {
             interactiveContent: {
@@ -845,7 +845,7 @@ class ButtonProcessor {
       }
 
       // Find lead by contact phone and source
-      const lead = await prisma.lead.findFirst({
+      const lead = await getPrismaInstance().lead.findFirst({
         where: {
           phone: contactPhone,
           source: leadSource || "CHATWIT_OAB",
@@ -856,7 +856,7 @@ class ButtonProcessor {
         // Add tags to existing lead
         const updatedTags = [...new Set([...lead.tags, ...tags])];
 
-        await prisma.lead.update({
+        await getPrismaInstance().lead.update({
           where: { id: lead.id },
           data: { tags: updatedTags },
         });
@@ -1191,7 +1191,7 @@ class ButtonProcessor {
   private async getEmojiForButton(buttonId: string): Promise<string | null> {
     try {
       // Try database first
-      const reaction = await prisma.mapeamentoBotao.findFirst({
+      const reaction = await getPrismaInstance().mapeamentoBotao.findFirst({
         where: {
           buttonId,
           actionType: "SEND_TEMPLATE",
@@ -1394,7 +1394,7 @@ class WhatsAppApiManager {
     inboxId: string
   ): Promise<WhatsAppCredentials | null> {
     try {
-      const inbox = await prisma.chatwitInbox.findFirst({
+      const inbox = await getPrismaInstance().chatwitInbox.findFirst({
         where: {
           inboxId: inboxId,
         },
@@ -1446,7 +1446,7 @@ class WhatsAppApiManager {
     visited.add(inboxId);
 
     try {
-      const inbox = await prisma.chatwitInbox.findFirst({
+      const inbox = await getPrismaInstance().chatwitInbox.findFirst({
         where: {
           inboxId: inboxId,
         },
@@ -1493,7 +1493,7 @@ class WhatsAppApiManager {
   ): Promise<WhatsAppCredentials | null> {
     try {
       // Find the ChatwitInbox to get the user
-      const inbox = await prisma.chatwitInbox.findFirst({
+      const inbox = await getPrismaInstance().chatwitInbox.findFirst({
         where: {
           inboxId: inboxId,
         },
@@ -1680,7 +1680,7 @@ class WhatsAppApiManager {
       );
 
       // Try to get from ChatwitInbox first
-      const inbox = await prisma.chatwitInbox.findFirst({
+      const inbox = await getPrismaInstance().chatwitInbox.findFirst({
         where: {
           inboxId: inboxId,
         },

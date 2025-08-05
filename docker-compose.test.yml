@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  redis-test:
+    image: redis:7-alpine
+    container_name: chatwit_redis_test
+    command: redis-server --appendonly no --save ""
+    ports:
+      - "6380:6379"  # Porta diferente para não conflitar
+    networks: [test_network]
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+networks:
+  test_network:
+    driver: bridge

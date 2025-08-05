@@ -21,36 +21,45 @@ class SseManager {
 
   constructor() {
     console.log('[SSE Manager] 🚀 Criando nova instância...');
-    this.initializeRedis();
+    // Don't initialize Redis in constructor to avoid Edge Runtime issues
   }
 
   private initializeRedis() {
-    // Usar singleton para publisher e subscriber
-    // Nota: Para pub/sub, precisamos de instâncias separadas
-    const baseRedis = getRedisInstance();
-    
-    console.log('[SSE Redis] ⚙️ Usando conexão singleton');
+    if (this.isInitialized || this.publisher) {
+      return; // Already initialized
+    }
 
-    // Clonar configuração para pub/sub
-    this.publisher = baseRedis.duplicate();
-    this.subscriber = baseRedis.duplicate();
+    try {
+      // Usar singleton para publisher e subscriber
+      // Nota: Para pub/sub, precisamos de instâncias separadas
+      const baseRedis = getRedisInstance();
+      
+      console.log('[SSE Redis] ⚙️ Usando conexão singleton');
 
-    this.subscriber.on('message', this.handleRedisMessage.bind(this));
-    
-    this.publisher.on('connect', () => {
-      console.log('[SSE Redis] ✅ Publisher conectado.');
-      this.isInitialized = true;
-    });
+      // Clonar configuração para pub/sub
+      this.publisher = baseRedis.duplicate();
+      this.subscriber = baseRedis.duplicate();
 
-    this.subscriber.on('connect', () => console.log('[SSE Redis] ✅ Subscriber conectado.'));
-    
-    const handleError = (client: string) => (error: Error) => {
-      console.error(`[SSE Redis] ❌ Erro no ${client}:`, error.message);
-      if (client === 'publisher') this.isInitialized = false;
-    };
+      this.subscriber.on('message', this.handleRedisMessage.bind(this));
+      
+      this.publisher.on('connect', () => {
+        console.log('[SSE Redis] ✅ Publisher conectado.');
+        this.isInitialized = true;
+      });
 
-    this.publisher.on('error', handleError('Publisher'));
-    this.subscriber.on('error', handleError('Subscriber'));
+      this.subscriber.on('connect', () => console.log('[SSE Redis] ✅ Subscriber conectado.'));
+      
+      const handleError = (client: string) => (error: Error) => {
+        console.error(`[SSE Redis] ❌ Erro no ${client}:`, error.message);
+        if (client === 'publisher') this.isInitialized = false;
+      };
+
+      this.publisher.on('error', handleError('Publisher'));
+      this.subscriber.on('error', handleError('Subscriber'));
+    } catch (error) {
+      console.error('[SSE Redis] ❌ Erro ao inicializar Redis:', error);
+      // Don't throw error, just log it
+    }
   }
 
   private handleRedisMessage(channel: string, message: string) {
@@ -83,22 +92,23 @@ class SseManager {
   }
 
   public addConnection(leadId: string, controller: ReadableStreamDefaultController<string>): string {
+    // Initialize Redis only when needed
+    this.initializeRedis();
+    
     const connectionId = `${leadId}-${Date.now()}`;
     
     if (!this.connectionsByLead.has(leadId)) {
       this.connectionsByLead.set(leadId, new Map());
       
-      // ====================================================================
-      // CORREÇÃO: Removida a condição 'if (this.isInitialized)'
-      // A biblioteca ioredis gerencia automaticamente a fila de comandos
-      // e executa o subscribe assim que a conexão estiver estabelecida
-      this.subscriber.subscribe(`sse:${leadId}`, (err, count) => {
-        if (err) {
-          return console.error(`[SSE Redis] ❌ Falha ao se inscrever no canal sse:${leadId}`, err);
-        }
-        console.log(`[SSE Redis] 📡 Inscrição no canal sse:${leadId} confirmada. Total de inscrições nesta instância: ${count}`);
-      });
-      // ====================================================================
+      // Only subscribe if Redis is properly initialized
+      if (this.subscriber) {
+        this.subscriber.subscribe(`sse:${leadId}`, (err: any, count: any) => {
+          if (err) {
+            return console.error(`[SSE Redis] ❌ Falha ao se inscrever no canal sse:${leadId}`, err);
+          }
+          console.log(`[SSE Redis] 📡 Inscrição no canal sse:${leadId} confirmada. Total de inscrições nesta instância: ${count}`);
+        });
+      }
     }
     
     this.connectionsByLead.get(leadId)!.set(connectionId, { controller, connectionId });
@@ -127,15 +137,20 @@ class SseManager {
       console.log(`[SSE Manager] ➖ Conexão ${connectionId} removida.`);
       if (leadConnections.size === 0) {
         this.connectionsByLead.delete(leadId);
-        // CORREÇÃO: Removida a condição 'if (this.isInitialized)' aqui também
-        this.subscriber.unsubscribe(`sse:${leadId}`);
-        console.log(`[SSE Redis] 🔌 Inscrição do canal sse:${leadId} cancelada.`);
+        // Only unsubscribe if Redis is properly initialized
+        if (this.subscriber) {
+          this.subscriber.unsubscribe(`sse:${leadId}`);
+          console.log(`[SSE Redis] 🔌 Inscrição do canal sse:${leadId} cancelada.`);
+        }
       }
     }
   }
 
   public async sendNotification(leadId: string, data: any): Promise<boolean> {
-    if (!this.isInitialized) {
+    // Initialize Redis if not already done
+    this.initializeRedis();
+    
+    if (!this.publisher || !this.isInitialized) {
       console.error('[SSE Manager] ‼️ ERRO CRÍTICO: Publisher Redis não conectado. A notificação não será enviada.');
       return false;
     }

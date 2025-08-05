@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getPrismaInstance } from "@/lib/connections"
 import { auth } from "@/auth";
 
 export async function POST(request: NextRequest) {
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verificar se o token já está sendo usado por outro usuário
-    const existingUsuario = await db.usuarioChatwit.findFirst({
+    const existingUsuario = await getPrismaInstance().usuarioChatwit.findFirst({
       where: {
         chatwitAccessToken,
         appUserId: {
@@ -44,13 +44,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Buscar ou criar o usuário Chatwit
-    let usuarioChatwit = await db.usuarioChatwit.findUnique({
+    let usuarioChatwit = await getPrismaInstance().usuarioChatwit.findUnique({
       where: { appUserId: session.user.id }
     });
 
     if (!usuarioChatwit) {
       // Criar novo usuário Chatwit se não existir
-      usuarioChatwit = await db.usuarioChatwit.create({
+      usuarioChatwit = await getPrismaInstance().usuarioChatwit.create({
         data: {
           appUserId: session.user.id,
           name: session.user.name || 'Usuário',
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       });
     } else {
       // Atualizar o usuário Chatwit existente
-      usuarioChatwit = await db.usuarioChatwit.update({
+      usuarioChatwit = await getPrismaInstance().usuarioChatwit.update({
         where: {
           id: usuarioChatwit.id
         },
@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Buscar o usuário atual
-    const user = await db.user.findUnique({
+    const user = await getPrismaInstance().user.findUnique({
       where: {
         id: session.user.id
       },
@@ -124,7 +124,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Buscar o usuário Chatwit
-    const usuarioChatwit = await db.usuarioChatwit.findUnique({
+    const usuarioChatwit = await getPrismaInstance().usuarioChatwit.findUnique({
       where: { appUserId: session.user.id },
       select: {
         chatwitAccessToken: true,

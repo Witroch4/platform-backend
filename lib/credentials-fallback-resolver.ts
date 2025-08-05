@@ -4,9 +4,9 @@
  * Follows the fallback chain: ChatwitInbox -> fallbackParaInbox -> WhatsAppGlobalConfig -> Environment
  */
 
-import { PrismaClient } from "@prisma/client";
+import { getPrismaInstance } from "@/lib/connections";
 
-const prisma = new PrismaClient();
+const prisma = getPrismaInstance();
 
 export interface WhatsAppCredentials {
   whatsappApiKey: string;
