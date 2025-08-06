@@ -40,34 +40,30 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
         return;
       }
 
-              try {
-          // Primeiro, verificar se é SUPERADMIN
-          const superAdminResponse = await fetch('/api/admin/notifications');
+      try {
+        // Verificar se o usuário tem role ADMIN ou SUPERADMIN
+        const userRole = session.user.role;
+        
+        if (userRole === 'ADMIN' || userRole === 'SUPERADMIN') {
+          setIsAdmin(true);
           
-          if (superAdminResponse.ok) {
+          if (userRole === 'SUPERADMIN') {
             setIsSuperAdmin(true);
-            setIsAdmin(true);
-          } else {
-            // Se não é SUPERADMIN, verificar se é ADMIN
-            const adminResponse = await fetch('/api/admin/leads-chatwit/stats');
-            
-            if (adminResponse.ok) {
-              setIsAdmin(true);
-            } else {
-              toast.error("Acesso negado", {
-                description: "Você não tem permissão para acessar esta área.",
-              });
-              router.push('/');
-              return;
-            }
           }
-        } catch (error) {
-          console.error('Erro ao verificar acesso de administrador:', error);
-          toast.error("Erro", {
-            description: "Erro ao verificar permissões. Tente novamente mais tarde.",
+        } else {
+          toast.error("Acesso negado", {
+            description: "Você não tem permissão para acessar esta área.",
           });
           router.push('/');
-        } finally {
+          return;
+        }
+      } catch (error) {
+        console.error('Erro ao verificar acesso de administrador:', error);
+        toast.error("Erro", {
+          description: "Erro ao verificar permissões. Tente novamente mais tarde.",
+        });
+        router.push('/');
+      } finally {
         setLoading(false);
       }
     };

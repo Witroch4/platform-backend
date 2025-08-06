@@ -62,6 +62,7 @@ describe('Webhook to Chatwit E2E Integration', () => {
           url: process.env.DATABASE_URL || 'postgresql://test:test@localhost:5432/test',
         },
       },
+      log: ['error', 'warn'], // Removido 'query' para reduzir logs
     });
 
     // Setup test Redis

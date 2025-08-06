@@ -1,10 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { PrismaClient } from "@prisma/client";
+// import { PrismaClient } from "@prisma/client"; // Comentado para usar singleton
 import { auth } from "@/auth";
 import { getPrismaInstance } from '@/lib/connections';
 import log from '@/lib/log';
 
-const prismaClient = new PrismaClient();
+// const prismaClient = new PrismaClient(); // Comentado para usar singleton
 
 // Constante para o nome do bucket do MinIO
 const BUCKET_NAME = process.env.S3Bucket || 'chatwit-social';
@@ -45,7 +45,7 @@ export async function GET(request: Request): Promise<Response> {
     
     if (leadId) {
       // Buscar arquivos de um lead específico
-      const results = await prismaClient.arquivoLeadOab.findMany({
+      const results = await getPrismaInstance().arquivoLeadOab.findMany({
         where: { leadOabDataId: leadId },
         orderBy: { createdAt: "desc" },
       });
@@ -55,7 +55,7 @@ export async function GET(request: Request): Promise<Response> {
       }));
     } else if (usuarioId) {
       // Buscar leads do usuário
-      const leads = await prismaClient.leadOabData.findMany({
+      const leads = await getPrismaInstance().leadOabData.findMany({
         where: { usuarioChatwitId: usuarioId },
         select: { id: true },
       });
@@ -63,7 +63,7 @@ export async function GET(request: Request): Promise<Response> {
       const leadIds = leads.map(lead => lead.id);
 
       // Buscar arquivos de todos os leads do usuário
-      const results = await prismaClient.arquivoLeadOab.findMany({
+      const results = await getPrismaInstance().arquivoLeadOab.findMany({
         where: { leadOabDataId: { in: leadIds } },
         orderBy: { createdAt: "desc" },
         include: {
@@ -110,7 +110,7 @@ export async function POST(request: Request): Promise<Response> {
     }
     
     // Verifique se o lead existe
-    const lead = await prismaClient.leadOabData.findUnique({
+    const lead = await getPrismaInstance().leadOabData.findUnique({
       where: { id: leadId },
     });
     
@@ -122,7 +122,7 @@ export async function POST(request: Request): Promise<Response> {
     }
     
     // Adicione o arquivo
-    const arquivo = await prismaClient.arquivoLeadOab.create({
+    const arquivo = await getPrismaInstance().arquivoLeadOab.create({
       data: {
         leadOabDataId: leadId,
         fileType,
@@ -165,7 +165,7 @@ export async function DELETE(request: NextRequest) {
 
     // Se for um arquivo específico
     if (arquivoId && type === 'arquivo') {
-      const arquivo = await prismaClient.arquivoLeadOab.findUnique({
+      const arquivo = await getPrismaInstance().arquivoLeadOab.findUnique({
         where: { id: arquivoId },
       });
 
@@ -196,7 +196,7 @@ export async function DELETE(request: NextRequest) {
       }
 
       // Delete do banco
-      await prismaClient.arquivoLeadOab.delete({
+      await getPrismaInstance().arquivoLeadOab.delete({
         where: { id: arquivoId },
       });
 
@@ -206,7 +206,7 @@ export async function DELETE(request: NextRequest) {
 
     // Se for um PDF unificado
     if (leadId && type === 'pdf') {
-      const lead = await prismaClient.leadOabData.findUnique({
+      const lead = await getPrismaInstance().leadOabData.findUnique({
         where: { id: leadId },
       });
 
@@ -236,7 +236,7 @@ export async function DELETE(request: NextRequest) {
       }
 
       // Atualiza o lead para remover a referência ao PDF
-      await prismaClient.leadOabData.update({
+      await getPrismaInstance().leadOabData.update({
         where: { id: leadId },
         data: { pdfUnificado: null },
       });
@@ -247,7 +247,7 @@ export async function DELETE(request: NextRequest) {
 
     // Se for imagens convertidas
     if (leadId && type === 'imagem') {
-      const lead = await prismaClient.leadOabData.findUnique({
+      const lead = await getPrismaInstance().leadOabData.findUnique({
         where: { id: leadId },
         include: {
           arquivos: true
@@ -283,7 +283,7 @@ export async function DELETE(request: NextRequest) {
       }
 
       // Atualiza os arquivos para remover as referências às imagens
-      await prismaClient.arquivoLeadOab.updateMany({
+      await getPrismaInstance().arquivoLeadOab.updateMany({
         where: { leadOabDataId: leadId },
         data: { pdfConvertido: null },
       });
@@ -315,7 +315,7 @@ export async function PATCH(request: Request): Promise<Response> {
     }
     
     // Atualize o arquivo
-    const arquivo = await prismaClient.arquivoLeadOab.update({
+    const arquivo = await getPrismaInstance().arquivoLeadOab.update({
       where: { id },
       data: {
         ...(pdfConvertido !== undefined && { pdfConvertido }),

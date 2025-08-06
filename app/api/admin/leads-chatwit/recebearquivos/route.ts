@@ -29,6 +29,20 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     console.log(`[Webhook] Recebido lead para token: ${payload.usuario.CHATWIT_ACCESS_TOKEN}`);
+    
+    // LOG DETALHADO dos dados recebidos
+    console.log(`[Webhook] === DADOS COMPLETOS DO USUARIO ===`);
+    console.log(`[Webhook] usuario.account.id:`, payload.usuario?.account?.id, `(tipo: ${typeof payload.usuario?.account?.id})`);
+    console.log(`[Webhook] usuario.account.name:`, payload.usuario?.account?.name);
+    console.log(`[Webhook] usuario.inbox.id:`, payload.usuario?.inbox?.id, `(tipo: ${typeof payload.usuario?.inbox?.id})`);
+    console.log(`[Webhook] usuario.inbox.name:`, payload.usuario?.inbox?.name);
+    console.log(`[Webhook] usuario.channel:`, payload.usuario?.channel);
+    console.log(`[Webhook] === DADOS DO LEAD ===`);
+    console.log(`[Webhook] origemLead.source_id:`, payload.origemLead?.source_id, `(tipo: ${typeof payload.origemLead?.source_id})`);
+    console.log(`[Webhook] origemLead.name:`, payload.origemLead?.name);
+    console.log(`[Webhook] origemLead.phone_number:`, payload.origemLead?.phone_number);
+    console.log(`[Webhook] === DADOS COMPLETOS ===`);
+    console.log(`[Webhook] Payload completo:`, JSON.stringify(payload, null, 2));
 
     // empurra pra fila e responde na hora
     await addLeadJob({ payload });

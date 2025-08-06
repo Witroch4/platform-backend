@@ -15,7 +15,7 @@ import { getDisplayName } from "./utils";
 import { DialogDetalheLead } from "@/app/admin/leads-chatwit/components/dialog-detalhe-lead";
 import { ImageGalleryDialog } from "@/app/admin/leads-chatwit/components/image-gallery-dialog";
 import { ProcessDialog, type ProcessType } from "@/app/admin/leads-chatwit/components/process-dialog";
-import { ManuscritoDialog } from "@/app/admin/leads-chatwit/components/manuscrito-dialog";
+import { ProvaDialog } from "@/app/admin/leads-chatwit/components/prova-dialog";
 import { EspelhoDialog } from "@/app/admin/leads-chatwit/components/espelho-dialog";
 import { AnaliseDialog } from "@/app/admin/leads-chatwit/components/analise-dialog";
 import { AnalisePreviewDrawer } from "@/app/admin/leads-chatwit/components/analise-preliminar-drawer";
@@ -37,8 +37,8 @@ interface LeadDialogsProps {
   setShowProcessDialog: (open: boolean) => void;
   processType: ProcessType;
   
-  showManuscritoDialog: boolean;
-  setShowManuscritoDialog: (open: boolean) => void;
+  showProvaDialog: boolean;
+  setShowProvaDialog: (open: boolean) => void;
   
   confirmDeleteManuscrito: boolean;
   setConfirmDeleteManuscrito: (open: boolean) => void;
@@ -94,9 +94,9 @@ interface LeadDialogsProps {
   onEdit: (lead: LeadChatwit) => void;
   onDelete: () => void;
   onSendSelectedImages: (images: string[]) => Promise<void>;
-  onEnviarManuscrito: (images: string[]) => Promise<void>;
-  onSaveManuscrito: (texto: string) => Promise<void>;
-  onCancelarManuscrito: () => Promise<void>;
+  onEnviarProva: (images: string[]) => Promise<void>;
+  onSaveProva: (texto: string) => Promise<void>;
+  onCancelarProva: () => Promise<void>;
   onEnviarEspelho: (images: string[]) => Promise<void>;
   onSaveEspelho: (texto: any, imagens: string[]) => Promise<void>;
   onCancelarEspelho: () => Promise<void>;
@@ -124,8 +124,8 @@ export function LeadDialogs({
   showProcessDialog,
   setShowProcessDialog,
   processType,
-  showManuscritoDialog,
-  setShowManuscritoDialog,
+  showProvaDialog,
+  setShowProvaDialog,
   confirmDeleteManuscrito,
   setConfirmDeleteManuscrito,
   manuscritoToDelete,
@@ -153,9 +153,9 @@ export function LeadDialogs({
   onEdit,
   onDelete,
   onSendSelectedImages,
-  onEnviarManuscrito,
-  onSaveManuscrito,
-  onCancelarManuscrito,
+  onEnviarProva,
+  onSaveProva,
+  onCancelarProva,
   onEnviarEspelho,
   onSaveEspelho,
   onCancelarEspelho,
@@ -171,10 +171,10 @@ export function LeadDialogs({
 }: LeadDialogsProps) {
   const displayName = getDisplayName(lead);
 
-  const handleCloseManuscritoDialog = () => {
+  const handleCloseProvaDialog = () => {
     setIsDigitando(false);
     setTimeout(() => {
-      setShowManuscritoDialog(false);
+      setShowProvaDialog(false);
     }, 50);
   };
 
@@ -238,15 +238,15 @@ export function LeadDialogs({
         numFiles={lead.arquivos.length}
       />
 
-      {/* Diálogo de Manuscrito */}
-      <ManuscritoDialog
-        isOpen={showManuscritoDialog}
-        onClose={handleCloseManuscritoDialog}
+      {/* Diálogo de Prova */}
+      <ProvaDialog
+        isOpen={showProvaDialog}
+        onClose={handleCloseProvaDialog}
         leadId={lead.id}
-        textoManuscrito={lead.provaManuscrita || ""}
-        aguardandoManuscrito={localManuscritoState.aguardandoManuscrito}
-        onSave={onSaveManuscrito}
-        onCancelarManuscrito={onCancelarManuscrito}
+        textoProva={lead.provaManuscrita || ""}
+        aguardandoProva={localManuscritoState.aguardandoManuscrito}
+        onSave={onSaveProva}
+        onCancelarProva={onCancelarProva}
       />
 
       {/* Confirmação de Exclusão de Manuscrito */}
@@ -255,7 +255,7 @@ export function LeadDialogs({
           <DialogHeader>
             <DialogTitle>Confirmar exclusão</DialogTitle>
             <DialogDescription>
-              Tem certeza que deseja excluir o manuscrito do lead "{displayName}"? Esta ação não pode ser desfeita.
+                             Tem certeza que deseja excluir a prova do lead "{displayName}"? Esta ação não pode ser desfeita.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -275,13 +275,13 @@ export function LeadDialogs({
         onClose={() => setShowManuscritoImageSeletor(false)}
         images={convertedImages}
         leadId={lead.id}
-        title="Selecionar Imagens para Manuscrito"
-        description="Selecione as imagens que serão usadas para o processo de digitação do manuscrito."
+        title="Selecionar Imagens para Prova"
+        description="Selecione as imagens que serão usadas para o processo de digitação da prova."
         selectionMode={true}
-        mode="manuscrito"
-        onSend={onEnviarManuscrito}
-        onCancelarManuscrito={onCancelarManuscrito}
-        aguardandoManuscrito={localManuscritoState.aguardandoManuscrito}
+        mode="prova"
+        onSend={onEnviarProva}
+        onCancelarProva={onCancelarProva}
+        aguardandoProva={localManuscritoState.aguardandoManuscrito}
       />
 
       {/* Seletor de Espelho de Correção */}
@@ -392,7 +392,7 @@ export function LeadDialogs({
                 <ul className="text-muted-foreground space-y-1 list-disc list-inside">
                   <li>{lead.arquivos.length} arquivo(s) individual(is)</li>
                   {lead.pdfUnificado && <li>PDF unificado</li>}
-                  {(lead.provaManuscrita || lead.manuscritoProcessado) && <li>Manuscrito digitado</li>}
+                                     {(lead.provaManuscrita || lead.manuscritoProcessado) && <li>Prova digitada</li>}
                   {((lead.espelhoCorrecao && lead.espelhoCorrecao !== '[]') || lead.textoDOEspelho) && <li>Espelho de correção individual</li>}
                   {(localAnaliseState.analiseUrl || localAnaliseState.analisePreliminar || localAnaliseState.aguardandoAnalise) && <li>Análise da prova</li>}
                 </ul>

@@ -4,6 +4,7 @@ const { parse } = require("url");
 const next = require("next");
 const { spawn } = require("child_process");
 const path = require("path");
+const { PrismaClient } = require("@prisma/client");
 
 // Função de fechamento de conexões simplificada
 async function closeConnections() {
@@ -26,8 +27,7 @@ const dev = process.env.NODE_ENV !== "production";
 async function checkDatabaseConnection() {
   if (process.env.NODE_ENV === 'production') {
     try {
-      const { PrismaClient } = require('@prisma/client');
-      const prisma = getPrismaInstance();
+      const prisma = new PrismaClient();
       await prisma.$connect();
       console.log('✅ Conexão com banco de dados verificada');
       await prisma.$disconnect();

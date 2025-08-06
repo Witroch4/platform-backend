@@ -44,11 +44,13 @@ export async function GET(request: Request) {
       await prisma.$transaction(async (tx) => {
         let configId = config?.id;
         
-        // Se não existe configuração, criar uma nova
+        // Se não existe configuração, criar uma nova usando upsert
         if (!config) {
           console.log('Criando configuração MTF Diamante inicial...');
-          const newConfig = await tx.mtfDiamanteConfig.create({
-            data: {
+          const newConfig = await tx.mtfDiamanteConfig.upsert({
+            where: { userId: session.user.id },
+            update: {},
+            create: {
               userId: session.user.id,
               isActive: true,
               variaveis: {
@@ -66,7 +68,6 @@ export async function GET(request: Request) {
             }
           });
           configId = newConfig.id;
-
         }
 
         // Marcar o seed como executado para este usuário

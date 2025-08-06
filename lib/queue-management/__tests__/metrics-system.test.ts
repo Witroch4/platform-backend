@@ -27,7 +27,8 @@ describe('Metrics System Integration', () => {
         db: {
           url: process.env.TEST_DATABASE_URL || process.env.DATABASE_URL
         }
-      }
+      },
+      log: ['error', 'warn'], // Removido 'query' para reduzir logs
     })
     
     redis = getRedisInstance()

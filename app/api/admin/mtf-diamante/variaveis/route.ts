@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getPrismaInstance } from "@/lib/connections"
+import { Prisma } from "@prisma/client"
 
 // GET: Busca todas as variáveis do usuário
 export async function GET(request: NextRequest) {
@@ -10,27 +11,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
 
-    // Busca ou cria a configuração do MTF Diamante
-    let config = await getPrismaInstance().mtfDiamanteConfig.findFirst({
+    // Busca ou cria a configuração do MTF Diamante usando upsert
+    let config = await getPrismaInstance().mtfDiamanteConfig.upsert({
       where: { userId: session.user.id },
+      update: {},
+      create: {
+        userId: session.user.id,
+        variaveis: {
+          create: [
+            { chave: "chave_pix", valor: "57944155000101" },
+            { chave: "nome_do_escritorio_rodape", valor: "Dra. Amanda Sousa Advocacia e Consultoria Jurídica™" },
+            { chave: "valor_analise", valor: "R$ 27,90" }
+          ]
+        }
+      },
       include: { variaveis: true }
     });
-
-    if (!config) {
-      // Cria configuração padrão com variáveis iniciais
-      config = await getPrismaInstance().mtfDiamanteConfig.create({
-        data: {
-          userId: session.user.id,
-          variaveis: {
-            create: [
-              { chave: "chave_pix", valor: "57944155000101" },
-              { chave: "nome_do_escritorio_rodape", valor: "Dra. Amanda Sousa Advocacia e Consultoria Jurídica™" }
-            ]
-          }
-        },
-        include: { variaveis: true }
-      });
-    }
 
     return NextResponse.json({ success: true, variaveis: config.variaveis });
 
@@ -55,16 +51,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Variáveis deve ser um array" }, { status: 400 });
     }
 
-    // Busca ou cria a configuração do MTF Diamante
-    let config = await getPrismaInstance().mtfDiamanteConfig.findFirst({
-      where: { userId: session.user.id }
+    // Busca ou cria a configuração do MTF Diamante usando upsert
+    let config = await getPrismaInstance().mtfDiamanteConfig.upsert({
+      where: { userId: session.user.id },
+      update: {},
+      create: { userId: session.user.id }
     });
-
-    if (!config) {
-      config = await getPrismaInstance().mtfDiamanteConfig.create({
-        data: { userId: session.user.id }
-      });
-    }
 
     // Remove todas as variáveis existentes e cria as novas
     await getPrismaInstance().mtfDiamanteVariavel.deleteMany({

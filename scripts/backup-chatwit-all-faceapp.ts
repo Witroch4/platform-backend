@@ -23,7 +23,9 @@ interface BackupData {
 require('dotenv').config({ path: path.resolve(process.cwd(), '.env.production'), override: true });
 
 // Inicializa o Prisma Client
-const prismaClient = new PrismaClient();
+const prismaClient = new PrismaClient({
+  log: ['error', 'warn'], // Removido 'query' para reduzir logs
+});
 
 async function criarBackup() {
   console.log('🚀 Iniciando backup auto-adaptável do banco de dados...');

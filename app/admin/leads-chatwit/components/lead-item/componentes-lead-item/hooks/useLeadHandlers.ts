@@ -10,7 +10,7 @@ interface UseLeadHandlersProps {
   onDelete: (id: string) => void;
   onUnificar: (id: string) => void;
   onConverter: (id: string) => void;
-  onDigitarManuscrito: (lead: LeadChatwit) => void;
+  onDigitarProva: (lead: LeadChatwit) => void;
   
   // Estados dos diálogos
   setDetailsOpen: (open: boolean) => void;
@@ -19,7 +19,7 @@ interface UseLeadHandlersProps {
   setShowProcessDialog: (open: boolean) => void;
   setProcessType: (type: "unify" | "convert") => void;
   setProcessStartTime: (time: number | null) => void;
-  setShowManuscritoDialog: (open: boolean) => void;
+  setShowProvaDialog: (open: boolean) => void;
   setShowManuscritoImageSeletor: (open: boolean) => void;
   setIsDigitando: (loading: boolean) => void;
   setShowEspelhoSeletor: (open: boolean) => void;
@@ -88,7 +88,7 @@ export function useLeadHandlers({
   setShowProcessDialog,
   setProcessType,
   setProcessStartTime,
-  setShowManuscritoDialog,
+  setShowProvaDialog,
   setShowManuscritoImageSeletor,
   setIsDigitando,
   setShowEspelhoSeletor,
@@ -267,7 +267,7 @@ export function useLeadHandlers({
 
   const handleDigitarClick = async () => {
     if (manuscritoProcessadoLocal) {
-      setShowManuscritoDialog(true);
+      setShowProvaDialog(true);
     } else {
       setShowManuscritoImageSeletor(true);
     }
@@ -675,23 +675,23 @@ export function useLeadHandlers({
       case 'excluirTodosArquivos':
         setConfirmDeleteAllFiles(true);
         break;
-      case 'editarManuscrito':
+      case 'editarProva':
         if (lead.manuscritoProcessado) {
-          setShowManuscritoDialog(true);
+          setShowProvaDialog(true);
         }
         break;
-      case 'reenviarManuscrito':
+      case 'reenviarProva':
         if (data && data.id) {
           setShowManuscritoImageSeletor(true);
         }
         break;
-      case 'excluirManuscrito':
+      case 'excluirProva':
         if (data && data.id) {
           setManuscritoToDelete(data.id);
           setConfirmDeleteManuscrito(true);
         }
         break;
-      case 'cancelarManuscrito':
+      case 'cancelarProva':
         handleCancelarManuscrito();
         break;
       case 'selecionarEspelho':

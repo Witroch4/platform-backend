@@ -61,13 +61,13 @@ export function SSEConnectionManager({ leads, onLeadUpdate, onForceRefresh }: SS
           
           // 🎯 Toasts com botão de atualizar ao invés de refresh automático
           const leadName = notificationData.leadData.name || notificationData.leadData.nome || 'Lead';
-          const isManuscritoComplete = notificationData.leadData.manuscritoProcessado && !notificationData.leadData.aguardandoManuscrito;
+          const isProvaComplete = notificationData.leadData.manuscritoProcessado && !notificationData.leadData.aguardandoManuscrito;
           const isEspelhoComplete = notificationData.leadData.espelhoProcessado && !notificationData.leadData.aguardandoEspelho;
           const isAnaliseComplete = notificationData.leadData.analiseProcessada && !notificationData.leadData.aguardandoAnalise;
           
           // 📢 Toast com botão de recarregar para atualizações importantes
-          if (isManuscritoComplete) {
-            toast.success(`Manuscrito processado`, {
+                if (isProvaComplete) {
+        toast.success(`Prova processada`, {
               description: `"${leadName}" está pronto para visualização`,
               duration: 8000,
               action: onForceRefresh ? {

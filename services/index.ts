@@ -1,9 +1,5 @@
-// Função para obter Prisma compatível com Edge Runtime
+// Função para obter Prisma (sempre usar versão normal)
 function getPrismaForServices() {
-  if (typeof (globalThis as any).EdgeRuntime !== 'undefined') {
-    const { getPrismaInstanceEdge } = require("@/lib/edge-connections");
-    return getPrismaInstanceEdge();
-  }
   const { getPrismaInstance } = require("@/lib/connections");
   return getPrismaInstance();
 }

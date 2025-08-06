@@ -1,19 +1,9 @@
 // auth.ts
 import { PrismaAdapter } from "@auth/prisma-adapter";
-import type { UserRole } from "@prisma/client";
+import { UserRole } from "@prisma/client";
 import NextAuth from "next-auth";
 import authConfig from "./auth.config";
-// Importação condicional baseada no runtime
-function getPrismaForAuth() {
-  // Se estamos no Edge Runtime, usar a versão edge
-  if (typeof (globalThis as any).EdgeRuntime !== 'undefined') {
-    const { getPrismaInstanceEdge } = require("./lib/edge-connections");
-    return getPrismaInstanceEdge();
-  }
-  // Caso contrário, usar a versão normal
-  const { getPrismaInstance } = require("./lib/connections");
-  return getPrismaInstance();
-}
+import { getPrismaInstance } from "./lib/connections";
 import { findUserbyEmail } from "./services";
 import { isTwoFactorAuthenticationEnabled } from "./services/auth";
 
@@ -24,7 +14,7 @@ export const {
   signOut,
   unstable_update: update,
 } = NextAuth({
-  adapter: PrismaAdapter(getPrismaForAuth()),
+  adapter: PrismaAdapter(getPrismaInstance()),
   secret: process.env.AUTH_SECRET,
   session: {
     strategy: "jwt",
@@ -71,15 +61,14 @@ export const {
         token.name = user.name;
         token.role = user.role;
 
-        const dbUser = await getPrismaForAuth().user.findUnique({
+        const dbUser = await getPrismaInstance().user.findUnique({
           where: { id: user.id },
           select: { password: true }
         });
         token.isOAuth = !dbUser?.password;
         token.isTwoFactorAuthEnabled = user.isTwoFactorAuthEnabled || false;
-        
-        // Buscar chatwitAccessToken do UsuarioChatwit
-        const usuarioChatwit = await getPrismaForAuth().usuarioChatwit.findUnique({
+         // Buscar chatwitAccessToken do UsuarioChatwit
+         const usuarioChatwit = await getPrismaInstance().usuarioChatwit.findUnique({
           where: { appUserId: user.id },
           select: { chatwitAccessToken: true }
         });
@@ -93,7 +82,7 @@ export const {
         token.isTwoFactorAuthEnabled = isTwoFactorAuthEnabled ?? false;
 
         console.log("Requisição Prisma: Buscando conta do Instagram");
-        const instagramAccount = await getPrismaForAuth().account.findFirst({
+        const instagramAccount = await getPrismaInstance().account.findFirst({
           where: {
             userId: user.id,
             provider: "instagram",

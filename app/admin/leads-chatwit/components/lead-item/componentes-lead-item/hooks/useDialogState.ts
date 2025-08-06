@@ -8,8 +8,8 @@ export function useDialogState() {
   const [showGallery, setShowGallery] = useState(false);
   const [showFullImage, setShowFullImage] = useState(false);
   
-  // Estados para manuscrito
-  const [showManuscritoDialog, setShowManuscritoDialog] = useState(false);
+  // Estados para prova
+  const [showProvaDialog, setShowProvaDialog] = useState(false);
   const [confirmDeleteManuscrito, setConfirmDeleteManuscrito] = useState(false);
   const [manuscritoToDelete, setManuscritoToDelete] = useState<string | null>(null);
   const [showManuscritoImageSeletor, setShowManuscritoImageSeletor] = useState(false);
@@ -54,7 +54,7 @@ export function useDialogState() {
     setConfirmDelete(false);
     setShowGallery(false);
     setShowFullImage(false);
-    setShowManuscritoDialog(false);
+    setShowProvaDialog(false);
     setConfirmDeleteManuscrito(false);
     setShowEspelhoSeletor(false);
     setShowEspelhoDialog(false);
@@ -71,7 +71,7 @@ export function useDialogState() {
     confirmDelete, setConfirmDelete,
     showGallery, setShowGallery,
     showFullImage, setShowFullImage,
-    showManuscritoDialog, setShowManuscritoDialog,
+    showProvaDialog, setShowProvaDialog,
     confirmDeleteManuscrito, setConfirmDeleteManuscrito,
     manuscritoToDelete, setManuscritoToDelete,
     showManuscritoImageSeletor, setShowManuscritoImageSeletor,

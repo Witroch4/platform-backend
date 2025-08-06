@@ -1,40 +1,40 @@
 import { TableCell } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Edit3 } from "lucide-react";
-import type { ManuscritoCellProps } from "../types";
+import type { ProvaCellProps } from "../types";
 import { LeadContextMenu, type ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
 
-interface ManuscritoCellExtendedProps extends ManuscritoCellProps {
-  manuscritoProcessadoLocal: boolean;
+interface ProvaCellExtendedProps extends ProvaCellProps {
+  provaProcessadaLocal: boolean;
   isDigitando: boolean;
   refreshKey: number;
-  localManuscritoState: {
-    manuscritoProcessado: boolean;
-    aguardandoManuscrito: boolean;
+  localProvaState: {
+    provaProcessada: boolean;
+    aguardandoProva: boolean;
     provaManuscrita: any;
   };
   onContextMenuAction: (action: ContextAction, data?: any) => void;
   onDigitarClick: () => void;
 }
 
-export function ManuscritoCell({ 
+export function ProvaCell({ 
   lead,
-  manuscritoProcessadoLocal,
+  provaProcessadaLocal,
   isDigitando,
   refreshKey,
-  localManuscritoState,
+  localProvaState,
   onContextMenuAction,
   onDigitarClick
-}: ManuscritoCellExtendedProps) {
+}: ProvaCellExtendedProps) {
   return (
     <TableCell className="min-w-[90px] max-w-[130px] p-2 align-middle">
       <LeadContextMenu
-        contextType="manuscrito"
+        contextType="prova"
         onAction={onContextMenuAction}
         data={{
           id: lead.id,
-          manuscritoProcessado: localManuscritoState.manuscritoProcessado,
-          aguardandoManuscrito: localManuscritoState.aguardandoManuscrito
+          provaProcessada: localProvaState.provaProcessada,
+          aguardandoProva: localProvaState.aguardandoProva
         }}
       >
         <Button
@@ -43,22 +43,22 @@ export function ManuscritoCell({
           onClick={onDigitarClick}
           disabled={isDigitando}
           className="w-full text-xs px-2 py-1 h-auto min-h-8"
-          key={`manuscrito-btn-${refreshKey}`}
+          key={`prova-btn-${refreshKey}`}
         >
-          {localManuscritoState.aguardandoManuscrito ? (
+          {localProvaState.aguardandoProva ? (
             <>
               <Edit3 className="h-4 w-4 mr-1 animate-spin" />
               Aguardando
             </>
-          ) : localManuscritoState.manuscritoProcessado ? (
+          ) : localProvaState.provaProcessada ? (
             <>
               <Edit3 className="h-4 w-4 mr-1" />
-              Editar Manuscrito
+              Editar Prova
             </>
           ) : (
             <>
               <Edit3 className={`h-4 w-4 mr-1 ${isDigitando ? "animate-spin" : ""}`} />
-              {isDigitando ? "Processando..." : "Digitar Manuscrito"}
+              {isDigitando ? "Processando..." : "Digitar Prova"}
             </>
           )}
         </Button>

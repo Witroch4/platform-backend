@@ -153,7 +153,7 @@ async function ensurePgVectorEnabled(prisma) {
 
 async function adjustEmbeddingColumnAndIndex(prisma, dims) {
   // 1) tabela existe?
-  const existsTable = await prisma.$queryRaw`SELECT to_regclass('public."Intent"') AS reg`;
+  const existsTable = await prisma.$queryRaw`SELECT to_regclass('public."Intent"')::text AS reg`;
   if (!existsTable || !existsTable[0] || !existsTable[0].reg) {
     console.log('ℹ️ Tabela "Intent" ainda não existe (migrações cuidarão disso).');
     return;

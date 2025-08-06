@@ -95,27 +95,22 @@ async function getWhatsAppApiConfig(userId: string) {
  */
 async function getUserVariables(userId: string): Promise<MtfDiamanteVariavel[]> {
   try {
-    // Busca ou cria a configuração do MTF Diamante
-    let config = await getPrismaInstance().mtfDiamanteConfig.findFirst({
+    // Busca ou cria a configuração do MTF Diamante usando upsert
+    const config = await getPrismaInstance().mtfDiamanteConfig.upsert({
       where: { userId },
+      update: {},
+      create: {
+        userId,
+        variaveis: {
+          create: [
+            { chave: "chave_pix", valor: "57944155000101" },
+            { chave: "nome_do_escritorio_rodape", valor: "Dra. Amanda Sousa Advocacia e Consultoria Jurídica™" },
+            { chave: "valor_analise", valor: "R$ 27,90" }
+          ]
+        }
+      },
       include: { variaveis: true }
     });
-
-    if (!config) {
-      // Cria configuração padrão com variáveis iniciais
-      config = await getPrismaInstance().mtfDiamanteConfig.create({
-        data: {
-          userId,
-          variaveis: {
-            create: [
-              { chave: "chave_pix", valor: "57944155000101" },
-              { chave: "nome_do_escritorio_rodape", valor: "Dra. Amanda Sousa Advocacia e Consultoria Jurídica™" }
-            ]
-          }
-        },
-        include: { variaveis: true }
-      });
-    }
 
     return config.variaveis.map(v => ({
       id: v.id,

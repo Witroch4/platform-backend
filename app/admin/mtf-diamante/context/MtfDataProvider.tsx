@@ -92,6 +92,9 @@ export function MtfDataProvider({ children }: MtfDataProviderProps) {
   const hasLoadedVariaveis = useRef(false);
   const hasLoadedLotes = useRef(false);
   const hasLoadedCaixas = useRef(false);
+  
+  // Ref para controlar se já foi inicializado
+  const hasInitialized = useRef(false);
 
   const CACHE_DURATION = 10 * 60 * 1000; // 10 minutos
 
@@ -104,9 +107,11 @@ export function MtfDataProvider({ children }: MtfDataProviderProps) {
 
       // Se já carregou e não é force refresh, não busca novamente
       if (!shouldFetch && hasLoadedVariaveis.current) {
+        console.log('🔍 [MtfDataProvider] Variáveis já carregadas, pulando fetch');
         return;
       }
 
+      console.log('🔄 [MtfDataProvider] Buscando variáveis...');
       setLoadingVariaveis(true);
       try {
         const response = await fetch("/api/admin/mtf-diamante/variaveis");
@@ -115,9 +120,10 @@ export function MtfDataProvider({ children }: MtfDataProviderProps) {
           setVariaveis(data.variaveis || []);
           setLastFetchTimes((prev) => ({ ...prev, variaveis: now }));
           hasLoadedVariaveis.current = true;
+          console.log('✅ [MtfDataProvider] Variáveis carregadas:', data.variaveis?.length || 0);
         }
       } catch (error) {
-        console.error("Erro ao buscar variáveis:", error);
+        console.error("❌ [MtfDataProvider] Erro ao buscar variáveis:", error);
       } finally {
         setLoadingVariaveis(false);
       }
@@ -134,9 +140,11 @@ export function MtfDataProvider({ children }: MtfDataProviderProps) {
 
       // Se já carregou e não é force refresh, não busca novamente
       if (!shouldFetch && hasLoadedLotes.current) {
+        console.log('🔍 [MtfDataProvider] Lotes já carregados, pulando fetch');
         return;
       }
 
+      console.log('🔄 [MtfDataProvider] Buscando lotes...');
       setLoadingLotes(true);
       try {
         const response = await fetch("/api/admin/mtf-diamante/lotes");
@@ -145,9 +153,10 @@ export function MtfDataProvider({ children }: MtfDataProviderProps) {
           setLotes(data.lotes || []);
           setLastFetchTimes((prev) => ({ ...prev, lotes: now }));
           hasLoadedLotes.current = true;
+          console.log('✅ [MtfDataProvider] Lotes carregados:', data.lotes?.length || 0);
         }
       } catch (error) {
-        console.error("Erro ao buscar lotes:", error);
+        console.error("❌ [MtfDataProvider] Erro ao buscar lotes:", error);
       } finally {
         setLoadingLotes(false);
       }
@@ -164,9 +173,11 @@ export function MtfDataProvider({ children }: MtfDataProviderProps) {
 
       // Se já carregou e não é force refresh, não busca novamente
       if (!shouldFetch && hasLoadedCaixas.current) {
+        console.log('🔍 [MtfDataProvider] Caixas já carregadas, pulando fetch');
         return;
       }
 
+      console.log('🔄 [MtfDataProvider] Buscando caixas...');
       setLoadingCaixas(true);
       try {
         const response = await fetch(
@@ -180,23 +191,13 @@ export function MtfDataProvider({ children }: MtfDataProviderProps) {
             agentes: Array.isArray(caixa.agentes) ? caixa.agentes : []
           }));
           
-          // Debug: Log dos dados recebidos
-          console.log('🔍 [MtfDataProvider] Caixas recebidas da API:', caixasProcessadas.length);
-          caixasProcessadas.forEach((caixa: any, index: number) => {
-            console.log(`📦 [MtfDataProvider] Caixa ${index + 1}: ${caixa.nome} - Agentes: ${caixa.agentes?.length || 0}`);
-            if (caixa.agentes && caixa.agentes.length > 0) {
-              caixa.agentes.forEach((agente: any, agenteIndex: number) => {
-                console.log(`  🤖 [MtfDataProvider] Agente ${agenteIndex + 1}: ${agente.nome} (${agente.ativo ? 'ATIVO' : 'INATIVO'})`);
-              });
-            }
-          });
-          
           setCaixas(caixasProcessadas);
           setLastFetchTimes((prev) => ({ ...prev, caixas: now }));
           hasLoadedCaixas.current = true;
+          console.log('✅ [MtfDataProvider] Caixas carregadas:', caixasProcessadas.length);
         }
       } catch (error) {
-        console.error("Erro ao buscar caixas:", error);
+        console.error("❌ [MtfDataProvider] Erro ao buscar caixas:", error);
       } finally {
         setLoadingCaixas(false);
       }
@@ -214,9 +215,23 @@ export function MtfDataProvider({ children }: MtfDataProviderProps) {
 
   // Inicialização dos dados - apenas uma vez
   useEffect(() => {
+    // Evitar inicialização múltipla
+    if (hasInitialized.current) {
+      console.log('🔍 [MtfDataProvider] Já inicializado, pulando...');
+      return;
+    }
+
+    console.log('🚀 [MtfDataProvider] Iniciando carregamento de dados...');
+    hasInitialized.current = true;
+
     const initializeData = async () => {
-      await Promise.all([fetchVariaveis(), fetchLotes(), fetchCaixas()]);
-      setIsInitialized(true);
+      try {
+        await Promise.all([fetchVariaveis(), fetchLotes(), fetchCaixas()]);
+        setIsInitialized(true);
+        console.log('✅ [MtfDataProvider] Inicialização concluída');
+      } catch (error) {
+        console.error('❌ [MtfDataProvider] Erro na inicialização:', error);
+      }
     };
 
     initializeData();

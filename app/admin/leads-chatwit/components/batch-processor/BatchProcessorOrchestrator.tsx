@@ -161,9 +161,9 @@ export function BatchProcessorOrchestrator({ leads, onClose, onUpdate }: BatchPr
           description="Selecione as imagens que serão enviadas para digitação do manuscrito deste lead. Selecione apenas as páginas que contêm texto manuscrito para digitação."
           leadId={currentLead.id}
           selectionMode={true}
-          mode="manuscrito"
+          mode="prova"
           batchMode={true}
-          onSendManuscrito={async (selectedImages: string[]) => {
+                      onSendProva={async (selectedImages: string[]) => {
             await handleManuscriptSubmit(currentLead.id, { selectedImages })
           }}
         />

@@ -8,7 +8,7 @@ export interface LeadItemProps {
   onEdit: (lead: LeadChatwit) => void;
   onUnificar: (id: string) => void;
   onConverter: (id: string) => void;
-  onDigitarManuscrito: (lead: LeadChatwit) => void;
+  onDigitarProva: (lead: LeadChatwit) => void;
   onRefresh?: () => void;
   isUnifying: boolean;
   isConverting: string | null;
@@ -41,8 +41,8 @@ export interface ImagesCellProps extends CellProps {
   isConverting: string | null;
 }
 
-export interface ManuscritoCellProps extends CellProps {
-  onDigitarManuscrito: (lead: LeadChatwit) => void;
+export interface ProvaCellProps extends CellProps {
+  onDigitarProva: (lead: LeadChatwit) => void;
 }
 
 

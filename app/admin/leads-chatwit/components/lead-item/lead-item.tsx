@@ -19,7 +19,7 @@ import {
   FilesCell,
   PdfCell,
   ImagesCell,
-  ManuscritoCell,
+  ProvaCell,
   EspelhoCell,
   EspelhoPadraoCell,
   AnaliseCell,
@@ -47,7 +47,7 @@ export function LeadItem({
   onEdit,
   onUnificar,
   onConverter,
-  onDigitarManuscrito,
+  onDigitarProva,
   onRefresh,
   isUnifying,
   isConverting,
@@ -81,7 +81,7 @@ export function LeadItem({
     onDelete,
     onUnificar,
     onConverter,
-    onDigitarManuscrito,
+    onDigitarProva,
     ...dialogState,
     ...leadState,
     forceServerRefresh: leadState.forceServerRefresh
@@ -173,15 +173,19 @@ export function LeadItem({
           onShowGallery={handlers.handleShowGallery}
         />
         
-        {/* Célula de Manuscrito */}
-        <ManuscritoCell
+        {/* Célula de Prova */}
+        <ProvaCell
           lead={lead}
           onEdit={onEdit}
-          onDigitarManuscrito={onDigitarManuscrito}
-          manuscritoProcessadoLocal={leadState.manuscritoProcessadoLocal}
+          onDigitarProva={onDigitarProva}
+          provaProcessadaLocal={leadState.manuscritoProcessadoLocal}
           isDigitando={dialogState.isDigitando}
           refreshKey={leadState.refreshKey}
-          localManuscritoState={leadState.localManuscritoState}
+          localProvaState={{
+            provaProcessada: leadState.localManuscritoState.manuscritoProcessado,
+            aguardandoProva: leadState.localManuscritoState.aguardandoManuscrito,
+            provaManuscrita: leadState.localManuscritoState.provaManuscrita
+          }}
           onContextMenuAction={handlers.handleContextMenuAction}
           onDigitarClick={handlers.handleDigitarClick}
         />
@@ -269,9 +273,9 @@ export function LeadItem({
         onEdit={handlers.handleEditLead}
         onDelete={handlers.handleDelete}
         onSendSelectedImages={handlers.handleSendSelectedImages}
-        onEnviarManuscrito={handlers.handleEnviarManuscrito}
-        onSaveManuscrito={handlers.handleSaveManuscrito}
-        onCancelarManuscrito={handlers.handleCancelarManuscrito}
+        onEnviarProva={handlers.handleEnviarManuscrito}
+        onSaveProva={handlers.handleSaveManuscrito}
+        onCancelarProva={handlers.handleCancelarManuscrito}
         onEnviarEspelho={handlers.handleEnviarEspelho}
         onSaveEspelho={handlers.handleSaveEspelho}
         onCancelarEspelho={handlers.handleCancelarEspelho}
@@ -310,7 +314,7 @@ export function LeadItem({
                 <li>O lead e todas as suas informações</li>
                 <li>Todos os arquivos associados</li>
                 <li>PDFs unificados e imagens convertidas</li>
-                <li>Manuscritos e espelhos de correção</li>
+                <li>Provas e espelhos de correção</li>
                 <li>Análises e recursos</li>
               </ul>
               <div className="text-destructive font-medium mt-2">

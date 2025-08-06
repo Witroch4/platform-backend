@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -551,8 +551,18 @@ function AdicionarCaixaDialog({
   const [nomesInternos, setNomesInternos] = useState<{ [key: string]: string }>(
     {}
   );
+  
+  // Ref para controlar se já foi carregado
+  const hasLoaded = useRef(false);
 
   const fetchCaixasExternas = async () => {
+    // Evitar carregamento múltiplo
+    if (hasLoaded.current && caixasExternas.length > 0) {
+      console.log('🔍 [AdicionarCaixaDialog] Caixas externas já carregadas, pulando fetch');
+      return;
+    }
+    
+    console.log('🔄 [AdicionarCaixaDialog] Buscando caixas externas...');
     setLoading(true);
     setError(null);
     try {
@@ -564,7 +574,10 @@ function AdicionarCaixaDialog({
         (inbox: Inbox) => !idsConfigurados.has(inbox.id.toString())
       );
       setCaixasExternas(disponiveis);
+      hasLoaded.current = true;
+      console.log(`✅ [AdicionarCaixaDialog] ${disponiveis.length} caixas externas disponíveis`);
     } catch (err) {
+      console.error('❌ [AdicionarCaixaDialog] Erro ao buscar caixas externas:', err);
       setError(
         "Falha ao buscar caixas do Chatwit. Verifique a configuração de acesso."
       );
@@ -595,6 +608,16 @@ function AdicionarCaixaDialog({
       error: "Erro ao adicionar a caixa.",
     });
   };
+
+  // Resetar estado quando o dialog abre/fecha
+  useEffect(() => {
+    if (open) {
+      // Resetar estado quando abrir
+      hasLoaded.current = false;
+      setCaixasExternas([]);
+      setError(null);
+    }
+  }, [open]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

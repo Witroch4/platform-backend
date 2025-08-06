@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/context-menu";
 import type { ReactNode } from "react";
 
-export type ContextType = 'geral' | 'pdf' | 'imagem' | 'arquivo' | 'manuscrito' | 'espelho' | 'analise' | 'recurso';
+export type ContextType = 'geral' | 'pdf' | 'imagem' | 'arquivo' | 'prova' | 'espelho' | 'analise' | 'recurso';
 export type ContextAction = 
   | 'atualizarLista' 
   | 'abrirLead' 
@@ -25,10 +25,10 @@ export type ContextAction =
   | 'reconverterImagem' 
   | 'excluirArquivo'
   | 'excluirTodosArquivos'
-  | 'reenviarManuscrito'
-  | 'excluirManuscrito'
-  | 'editarManuscrito'
-  | 'cancelarManuscrito'
+  | 'reenviarProva'
+  | 'excluirProva'
+  | 'editarProva'
+  | 'cancelarProva'
   | 'selecionarEspelho'
   | 'verEspelho'
   | 'excluirEspelho'
@@ -98,13 +98,13 @@ export function LeadContextMenu({ contextType, onAction, children, data }: LeadC
           </>
         )}
 
-        {/* Opções para manuscrito */}
-        {contextType === 'manuscrito' && (
+        {/* Opções para prova */}
+        {contextType === 'prova' && (
           <>
-            {data.aguardandoManuscrito ? (
+            {data.aguardandoProva ? (
               <>
                 <ContextMenuItem 
-                  onClick={() => onAction('cancelarManuscrito', data)}
+                  onClick={() => onAction('cancelarProva', data)}
                   className="text-orange-500 focus:text-orange-500 focus:bg-orange-50"
                 >
                   Cancelar Processamento
@@ -112,22 +112,22 @@ export function LeadContextMenu({ contextType, onAction, children, data }: LeadC
               </>
             ) : (
               <>
-                {data.manuscritoProcessado && (
-                  <ContextMenuItem onClick={() => onAction('editarManuscrito', data)}>
-                    Editar Manuscrito
+                {data.provaProcessada && (
+                  <ContextMenuItem onClick={() => onAction('editarProva', data)}>
+                    Editar Prova
                   </ContextMenuItem>
                 )}
-                <ContextMenuItem onClick={() => onAction('reenviarManuscrito', data)}>
-                  Reenviar Manuscrito
+                <ContextMenuItem onClick={() => onAction('reenviarProva', data)}>
+                  Reenviar Prova
                 </ContextMenuItem>
-                {data.manuscritoProcessado && (
+                {data.provaProcessada && (
                   <>
                     <ContextMenuSeparator />
                     <ContextMenuItem 
-                      onClick={() => onAction('excluirManuscrito', data)}
+                      onClick={() => onAction('excluirProva', data)}
                       className="text-red-500 focus:text-red-500 focus:bg-red-50"
                     >
-                      Excluir Manuscrito
+                      Excluir Prova
                     </ContextMenuItem>
                   </>
                 )}

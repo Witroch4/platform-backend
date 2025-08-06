@@ -4,7 +4,7 @@ export { UserCell } from './UserCell';
 export { FilesCell } from './FilesCell';
 export { PdfCell } from './PdfCell';
 export { ImagesCell } from './ImagesCell';
-export { ManuscritoCell } from './ManuscritoCell';
+export { ProvaCell } from './ProvaCell';
 export { EspelhoCell } from './EspelhoCell';
 export { EspelhoPadraoCell } from './EspelhoPadraoCell';
 export { AnaliseCell } from './AnaliseCell';

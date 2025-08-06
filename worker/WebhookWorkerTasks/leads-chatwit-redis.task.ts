@@ -149,10 +149,23 @@ async function processBatchFromRedis(sourceId: string, jobsArray: any[]) {
     const firstJobData = jobsArray[0];
     const { usuario, origemLead } = firstJobData.payload;
     
+    // Converter todos os IDs para string antes de usar
+    const chatwitAccountId = String(usuario.account.id);
+    const chatwitInboxId = String(usuario.inbox.id);
+    const leadSourceId = String(origemLead.source_id);
+    
+    console.log(`[BullMQ-Redis] IDs convertidos para string:`, {
+      chatwitAccountId,
+      chatwitInboxId, 
+      leadSourceId,
+      accountName: usuario.account.name,
+      inboxName: usuario.inbox.name
+    });
+    
     // 1) Find or create/update do usuário
     let usuarioDb = await getPrismaInstance().usuarioChatwit.findFirst({
       where: {
-        chatwitAccountId: usuario.account.id.toString(),
+        chatwitAccountId: chatwitAccountId,
         accountName: usuario.account.name
       }
     });
@@ -162,7 +175,7 @@ async function processBatchFromRedis(sourceId: string, jobsArray: any[]) {
         where: { id: usuarioDb.id },
         data: {
           channel: usuario.channel,
-          chatwitAccountId: usuario.account.id.toString() // Atualizar chatwitAccountId
+          chatwitAccountId: chatwitAccountId // Usar variável convertida
         }
       });
     } else {
@@ -171,14 +184,14 @@ async function processBatchFromRedis(sourceId: string, jobsArray: any[]) {
         where: {
           accounts: {
             some: {
-              providerAccountId: usuario.account.id.toString()
+              providerAccountId: chatwitAccountId
             }
           }
         }
       });
 
       if (!appUser) {
-        throw new Error(`Usuário do app não encontrado para accountId: ${usuario.account.id}`);
+        throw new Error(`Usuário do app não encontrado para accountId: ${chatwitAccountId}`);
       }
 
       usuarioDb = await getPrismaInstance().usuarioChatwit.create({
@@ -187,18 +200,39 @@ async function processBatchFromRedis(sourceId: string, jobsArray: any[]) {
           name: usuario.account.name,
           accountName: usuario.account.name,
           channel: usuario.channel,
-          chatwitAccountId: usuario.account.id.toString() // Salvar chatwitAccountId
+          chatwitAccountId: chatwitAccountId // Usar variável convertida
         }
       });
     }
 
-    // 2) Criar ou atualizar o Lead (nome do Chatwit)
+    // 2) Criar ou buscar Account específica para esta conta Chatwit
+    const CHATWIT_ACCOUNT_ID = `CHATWIT_${chatwitAccountId}`; // Ex: CHATWIT_3
+    
+    // Garantir que existe uma Account específica para esta conta Chatwit
+    let chatwitAccount = await getPrismaInstance().account.findUnique({
+      where: { id: CHATWIT_ACCOUNT_ID }
+    });
+    
+    if (!chatwitAccount) {
+      // Criar Account específica para esta conta Chatwit
+      chatwitAccount = await getPrismaInstance().account.create({
+        data: {
+          id: CHATWIT_ACCOUNT_ID,
+          userId: usuarioDb.appUserId, // Associar ao usuário
+          type: 'chatwit',
+          provider: 'chatwit',
+          providerAccountId: chatwitAccountId, // ID original da conta Chatwit
+        }
+      });
+      console.log(`[BullMQ-Redis] Account criada para Chatwit ${chatwitAccountId}:`, chatwitAccount.id);
+    }
+    
     const lead = await getPrismaInstance().lead.upsert({
       where: { 
         source_sourceIdentifier_accountId: {
           source: 'CHATWIT_OAB',
-          sourceIdentifier: origemLead.source_id,
-          accountId: '' // Para leads sem account específica
+          sourceIdentifier: leadSourceId, // ID único do lead na origem (Chatwit)
+          accountId: CHATWIT_ACCOUNT_ID // Account específica para esta conta Chatwit
         }
       },
       update: {
@@ -212,14 +246,22 @@ async function processBatchFromRedis(sourceId: string, jobsArray: any[]) {
         phone: origemLead.phone_number,
         avatarUrl: origemLead.thumbnail,
         source: 'CHATWIT_OAB',
-        sourceIdentifier: origemLead.source_id,
-        accountId: '',
+        sourceIdentifier: leadSourceId, // ID único do lead na origem (Chatwit)
+        accountId: CHATWIT_ACCOUNT_ID, // Account específica para esta conta Chatwit
         tags: [],
-        userId: usuarioDb.appUserId
+        userId: usuarioDb.appUserId // Pertence ao User, mas associação é via UsuarioChatwit->LeadOabData
       }
     });
 
-    // 3) Criar ou atualizar o LeadOabData (dados específicos da OAB)
+    console.log(`[BullMQ-Redis] Lead criado/atualizado:`, {
+      leadId: lead.id,
+      sourceIdentifier: leadSourceId,
+      accountId: CHATWIT_ACCOUNT_ID,
+      usuarioChatwitId: usuarioDb.id,
+      appUserId: usuarioDb.appUserId
+    });
+
+    // 4) Criar ou atualizar o LeadOabData (dados específicos da OAB)
     const leadOabData = await getPrismaInstance().leadOabData.upsert({
       where: { leadId: lead.id },
       update: {
@@ -252,7 +294,7 @@ async function processBatchFromRedis(sourceId: string, jobsArray: any[]) {
       }
     });
 
-    // 4) Coleta todos os arquivos de todos os jobs do Redis
+    // 5) Coleta todos os arquivos de todos os jobs do Redis
     const todosArquivos: any[] = [];
     
     for (const jobData of jobsArray) {
@@ -265,7 +307,7 @@ async function processBatchFromRedis(sourceId: string, jobsArray: any[]) {
 
     console.log(`[BullMQ-Redis] Total de arquivos coletados: ${todosArquivos.length}`);
 
-    // 5) Criar anexos em lote - sem nenhuma deduplicação
+    // 6) Criar anexos em lote - sem nenhuma deduplicação
     if (todosArquivos.length > 0) {
       // Insere em blocos para evitar problemas com muitos arquivos
       const batchSize = 10;

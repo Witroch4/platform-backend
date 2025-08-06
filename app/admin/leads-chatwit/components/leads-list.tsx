@@ -436,7 +436,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
     }
   };
 
-  const handleDigitarManuscrito = async (lead: any) => {
+  const handleDigitarProva = async (lead: any) => {
     try {
       // Obter as imagens convertidas
       let imagensConvertidas: string[] = [];
@@ -512,7 +512,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
       });
 
       if (response.ok) {
-                toast.success("Manuscrito enviado", { 
+                toast.success("Prova enviada", { 
           description: "Processamento iniciado",
           duration: 2000
         });
@@ -590,14 +590,14 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
             );
           }
           
-          // Excluir manuscrito
+          // Excluir prova
           if (lead.provaManuscrita || lead.manuscritoProcessado) {
             deletePromises.push(
               fetch(`/api/admin/leads-chatwit/manuscrito?leadId=${lead.id}`, {
                 method: "DELETE"
               }).then(response => {
                 if (!response.ok) {
-                  throw new Error(`Erro ao excluir manuscrito do lead ${lead.id}`);
+                  throw new Error(`Erro ao excluir prova do lead ${lead.id}`);
                 }
                 return response.json();
               })
@@ -862,7 +862,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
                 <TableHead className="min-w-[100px] align-middle text-card-foreground px-2 text-sm">Arquivos</TableHead>
                 <TableHead className="min-w-[70px] align-middle text-card-foreground px-1 text-sm">PDF</TableHead>
                 <TableHead className="min-w-[70px] align-middle text-card-foreground px-1 text-sm">Imagens</TableHead>
-                <TableHead className="min-w-[90px] align-middle text-card-foreground px-1 text-sm">Manuscrito</TableHead>
+                <TableHead className="min-w-[90px] align-middle text-card-foreground px-1 text-sm">Prova</TableHead>
                 <TableHead className="min-w-[110px] align-middle text-card-foreground px-1 text-sm">Espelho</TableHead>
                 <TableHead className="min-w-[120px] align-middle text-card-foreground px-1 text-sm">Padrão</TableHead>
                 <TableHead className="min-w-[100px] align-middle text-card-foreground px-1 text-sm">Análise</TableHead>
@@ -881,7 +881,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
                   onEdit={handleEditLead}
                   onUnificar={handleUnificarArquivos}
                   onConverter={handleConverterEmImagens}
-                  onDigitarManuscrito={handleDigitarManuscrito}
+                  onDigitarProva={handleDigitarProva}
                   onRefresh={fetchLeads}
                   isUnifying={isUnifying}
                   isConverting={isConverting}
@@ -947,7 +947,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
                   <li>Todos os arquivos individuais</li>
                   <li>PDFs unificados</li>
                   <li>Imagens convertidas</li>
-                  <li>Manuscritos digitados</li>
+                  <li>Provas digitadas</li>
                   <li>Espelhos de correção individuais</li>
                   <li>Análises das provas</li>
                 </ul>
@@ -999,7 +999,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
                   <li>Os leads e todas as suas informações</li>
                   <li>Todos os arquivos associados</li>
                   <li>PDFs unificados e imagens convertidas</li>
-                  <li>Manuscritos e espelhos de correção</li>
+                  <li>Provas e espelhos de correção</li>
                   <li>Análises e recursos</li>
                   <li>Histórico completo dos leads</li>
                 </ul>

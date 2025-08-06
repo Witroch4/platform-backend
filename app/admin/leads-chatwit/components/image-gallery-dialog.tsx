@@ -23,11 +23,11 @@ interface ImageGalleryDialogProps {
   leadId?: string;
   onSend?: (selectedImages: string[]) => Promise<void>;
   selectionMode?: boolean;
-  mode?: 'manuscrito' | 'espelho' | 'ambos';
-  onSendManuscrito?: (selectedImages: string[]) => Promise<void>;
+  mode?: 'prova' | 'espelho' | 'ambos';
+  onSendProva?: (selectedImages: string[]) => Promise<void>;
   onSendEspelho?: (selectedImages: string[]) => Promise<void>;
-  onCancelarManuscrito?: () => Promise<void>;
-  aguardandoManuscrito?: boolean;
+  onCancelarProva?: () => Promise<void>;
+  aguardandoProva?: boolean;
   batchMode?: boolean;
 }
 
@@ -41,10 +41,10 @@ export function ImageGalleryDialog({
   onSend,
   selectionMode = false,
   mode = 'ambos',
-  onSendManuscrito,
+  onSendProva,
   onSendEspelho,
-  onCancelarManuscrito,
-  aguardandoManuscrito,
+  onCancelarProva,
+  aguardandoProva,
   batchMode = false
 }: ImageGalleryDialogProps) {
   
@@ -58,7 +58,7 @@ export function ImageGalleryDialog({
   const [showDebug, setShowDebug] = useState(false);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [isSending, setIsSending] = useState(false);
-  const [isCancelingManuscrito, setIsCancelingManuscrito] = useState(false);
+  const [isCancelingProva, setIsCancelingProva] = useState(false);
   
   // Função para fazer download de todas as imagens como ZIP
   const handleDownloadAllImages = async () => {
@@ -118,17 +118,17 @@ export function ImageGalleryDialog({
     setIsSending(true);
     try {
       if (mode === 'ambos') {
-        // Dividir imagens entre manuscrito e espelho
+        // Dividir imagens entre prova e espelho
         const midPoint = Math.ceil(selectedImages.length / 2);
-        const manuscritoImages = selectedImages.slice(0, midPoint);
+        const provaImages = selectedImages.slice(0, midPoint);
         const espelhoImages = selectedImages.slice(midPoint);
 
-        if (onSendManuscrito && manuscritoImages.length > 0) {
-          await onSendManuscrito(manuscritoImages);
-                  toast("Manuscrito Enviado", {
-          description: `${manuscritoImages.length} imagem(ns) do manuscrito enviada(s) com sucesso!`,
-        });
-        }
+            if (onSendProva && provaImages.length > 0) {
+      await onSendProva(provaImages);
+      toast("Prova Enviada", {
+        description: `${provaImages.length} imagem(ns) da prova enviada(s) com sucesso!`,
+      });
+    }
 
         if (onSendEspelho && espelhoImages.length > 0) {
           await onSendEspelho(espelhoImages);
@@ -136,23 +136,23 @@ export function ImageGalleryDialog({
             description: `${espelhoImages.length} imagem(ns) do espelho enviada(s) com sucesso!`,
           });
         }
-      } else if (mode === 'manuscrito') {
-        // Promise para o toast do manuscrito
-        const manuscritoPromise = async () => {
+      } else if (mode === 'prova') {
+        // Promise para o toast da prova
+        const provaPromise = async () => {
           if (onSend) {
             await onSend(selectedImages);
-          } else if (onSendManuscrito) {
-            await onSendManuscrito(selectedImages);
+          } else if (onSendProva) {
+            await onSendProva(selectedImages);
           }
-          return { count: selectedImages.length, type: 'manuscrito' };
+          return { count: selectedImages.length, type: 'prova' };
         };
 
-        await toast.promise(manuscritoPromise, {
-          loading: '📝 Enviando manuscrito para processamento...',
+        await toast.promise(provaPromise, {
+          loading: '📝 Enviando prova para processamento...',
           success: (data) => {
-            return `🎉 ${data.count} imagem(ns) do manuscrito enviada(s) com sucesso!`;
+            return `🎉 ${data.count} imagem(ns) da prova enviada(s) com sucesso!`;
           },
-          error: 'Erro ao enviar manuscrito',
+          error: 'Erro ao enviar prova',
         });
       } else if (mode === 'espelho') {
         // Promise para o toast do espelho
@@ -190,20 +190,20 @@ export function ImageGalleryDialog({
     }
   };
 
-  // Função para cancelar processamento do manuscrito
-  const handleCancelarManuscrito = async () => {
-    if (!onCancelarManuscrito) return;
+  // Função para cancelar processamento da prova
+  const handleCancelarProva = async () => {
+    if (!onCancelarProva) return;
     
-    setIsCancelingManuscrito(true);
+    setIsCancelingProva(true);
     try {
-      await onCancelarManuscrito();
-      toast("Sucesso", { description: "Processamento do manuscrito cancelado com sucesso!" });
+      await onCancelarProva();
+      toast("Sucesso", { description: "Processamento da prova cancelado com sucesso!" });
       onClose();
     } catch (error: any) {
-      console.error("Erro ao cancelar manuscrito:", error);
+      console.error("Erro ao cancelar prova:", error);
       toast.error("Erro", { description: error.message || "Não foi possível cancelar o processamento." });
     } finally {
-      setIsCancelingManuscrito(false);
+      setIsCancelingProva(false);
     }
   };
   
@@ -325,7 +325,7 @@ export function ImageGalleryDialog({
             </DialogDescription>
             {mode === 'ambos' && (
               <div className="mt-2 text-sm text-muted-foreground">
-                💡 Selecione as imagens na ordem correta: primeiro as do manuscrito, depois as do espelho.
+                💡 Selecione as imagens na ordem correta: primeiro as da prova, depois as do espelho.
               </div>
             )}
           </DialogHeader>
@@ -470,19 +470,19 @@ export function ImageGalleryDialog({
                   ) : (
                     <Send className="h-4 w-4 mr-2" />
                   )}
-                  {mode === 'ambos' ? 'Enviar Manuscrito e Espelho' : 
-                   mode === 'manuscrito' ? 'Enviar para Digitação' :
+                          {mode === 'ambos' ? 'Enviar Prova e Espelho' :
+        mode === 'prova' ? 'Enviar para Digitação' :
                    mode === 'espelho' ? 'Enviar Espelho' : 
                    'Enviar Imagens'}
                 </Button>
               )}
-              {mode === 'manuscrito' && aguardandoManuscrito && onCancelarManuscrito && (
+              {mode === 'prova' && aguardandoProva && onCancelarProva && (
                 <Button
                   variant="destructive"
-                  onClick={handleCancelarManuscrito}
-                  disabled={isCancelingManuscrito}
+                  onClick={handleCancelarProva}
+                  disabled={isCancelingProva}
                 >
-                  {isCancelingManuscrito ? (
+                  {isCancelingProva ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   ) : (
                     "Cancelar Processamento"

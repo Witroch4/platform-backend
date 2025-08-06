@@ -18,7 +18,9 @@ describe('Queue Configuration Integration', () => {
   let testUserId: string
 
   beforeAll(async () => {
-    prisma = new PrismaClient()
+    prisma = new PrismaClient({
+      log: ['error', 'warn'], // Removido 'query' para reduzir logs
+    })
     testUserId = 'test-integration-user'
     
     // Initialize the configuration manager

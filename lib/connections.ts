@@ -19,76 +19,7 @@ const getRedisClass = () => {
 };
 import { getRedisConfig, getRedisConnectionOptions } from "./redis-config";
 
-/**
- * Cria um mock do Redis para uso no Edge Runtime
- */
-function createRedisMock(): any {
-  const mockMethods = {
-    // Métodos básicos
-    get: async () => null,
-    set: async () => "OK",
-    setex: async () => "OK",
-    del: async () => 1,
-    exists: async () => 0,
-    expire: async () => 1,
-    ttl: async () => -1,
 
-    // Métodos de hash
-    hget: async () => null,
-    hset: async () => 1,
-    hmget: async () => [],
-    hmset: async () => "OK",
-    hdel: async () => 1,
-
-    // Métodos de lista
-    lpush: async () => 1,
-    rpush: async () => 1,
-    lpop: async () => null,
-    rpop: async () => null,
-    llen: async () => 0,
-
-    // Métodos de conjunto
-    sadd: async () => 1,
-    srem: async () => 1,
-    smembers: async () => [],
-    sismember: async () => 0,
-
-    // Pub/Sub
-    publish: async () => 0,
-    subscribe: async () => {},
-    unsubscribe: async () => {},
-
-    // Conexão
-    ping: async () => "PONG",
-    info: async () => "",
-    connect: async () => {},
-    disconnect: async () => {},
-    duplicate: () => createRedisMock(),
-
-    // Event emitter
-    on: () => mockMethods,
-    off: () => mockMethods,
-    emit: () => false,
-
-    // Pipeline
-    pipeline: () => ({
-      exec: async () => [],
-      get: () => mockMethods,
-      set: () => mockMethods,
-      setex: () => mockMethods,
-      del: () => mockMethods,
-    }),
-
-    // Outros métodos comuns
-    keys: async () => [],
-    mget: async () => [],
-    mset: async () => "OK",
-    flushdb: async () => "OK",
-    flushall: async () => "OK",
-  };
-
-  return mockMethods;
-}
 
 // Tipos de ambiente suportados
 type Environment = "development" | "staging" | "production" | "test";
@@ -114,7 +45,7 @@ export function getPrismaInstance(): PrismaClient {
     const nodeEnv = getEnvironment();
     const logConfig =
       nodeEnv === "development"
-        ? ["query", "error", "warn"]
+        ? ["error", "warn"] // Removido "query" para reduzir logs
         : nodeEnv === "staging"
           ? ["error", "warn"] // Mais logs em staging para debug
           : ["error"]; // Apenas erros em produção
@@ -160,62 +91,8 @@ export function getPrismaInstance(): PrismaClient {
 /**
  * Obtém instância singleton do Redis
  * Persiste durante HMR usando globalThis
- * Retorna mock no Edge Runtime para evitar erros
  */
 export function getRedisInstance(): any {
-  // Verificação imediata para prevenir importação do ioredis no Edge Runtime
-  try {
-    if (typeof (globalThis as any).EdgeRuntime !== "undefined") {
-      console.warn(
-        "[Redis] Edge Runtime detectado imediatamente, retornando mock"
-      );
-      return createRedisMock();
-    }
-  } catch (e) {
-    // Ignorar erro e continuar com verificações mais detalhadas
-  }
-  // Verificar se estamos no Edge Runtime (middleware)
-  const isEdgeRuntime = (() => {
-    try {
-      // Verificações mais agressivas para detectar Edge Runtime
-      const checks = [
-        typeof (globalThis as any).EdgeRuntime !== "undefined",
-        typeof globalThis !== "undefined" && "EdgeRuntime" in globalThis,
-        typeof process !== "undefined" && process.env.NEXT_RUNTIME === "edge",
-        // Verificar se estamos no contexto do middleware
-        typeof process !== "undefined" &&
-          process.env.NODE_ENV &&
-          typeof window === "undefined" &&
-          typeof document === "undefined" &&
-          !process.versions?.node,
-        // Verificar se o stack trace contém middleware
-        new Error().stack?.includes("middleware"),
-        // Verificar se estamos em um contexto sem Node.js APIs completas
-        typeof require === "undefined" || typeof Buffer === "undefined",
-        // Verificar se estamos em um contexto que não tem fs
-        (() => {
-          try {
-            require("fs");
-            return false;
-          } catch {
-            return true;
-          }
-        })(),
-      ];
-
-      return checks.some((check) => check === true);
-    } catch (e) {
-      // Se houver erro ao verificar, assumir que é Edge Runtime
-      return true;
-    }
-  })();
-
-  if (isEdgeRuntime) {
-    console.warn("[Redis] Edge Runtime detectado, retornando mock Redis");
-    // Retornar um mock Redis que não faz nada
-    return createRedisMock();
-  }
-
   if (!globalThis.redis) {
     const nodeEnv = getEnvironment();
 
