@@ -10,8 +10,10 @@ const redis = getRedisInstance();
 const CACHE_PREFIX = 'leads_cache:';
 const TIMEOUT_PREFIX = 'leads_timeout:';
 const PROCESSING_PREFIX = 'leads_processing:';
+const EXPECTED_COUNT_PREFIX = 'leads_expected:';
+const BATCH_COUNTER_PREFIX = 'leads_batch_counter:';
 
-// Tempo de acumulação em ms (6 segundos)
+// Tempo de acumulação em ms (6 segundos para permitir todos os arquivos)
 const ACCUMULATION_DELAY = 6000;
 
 /**
@@ -24,6 +26,7 @@ export async function processLeadChatwitTask(job: Job<ILeadJobData>) {
   const cacheKey = `${CACHE_PREFIX}${sourceId}`;
   const timeoutKey = `${TIMEOUT_PREFIX}${sourceId}`;
   const processingKey = `${PROCESSING_PREFIX}${sourceId}`;
+  const expectedCountKey = `${EXPECTED_COUNT_PREFIX}${sourceId}`;
   
   // Log mais detalhado dos arquivos recebidos em cada job
   const arquivos = payload.origemLead.arquivos || [];
@@ -71,6 +74,14 @@ export async function processLeadChatwitTask(job: Job<ILeadJobData>) {
     } else {
       const newCacheSize = await redis.llen(cacheKey);
       console.log(`[BullMQ-Redis] Job ${job.id} - Adicionando ao cache existente para lead ${sourceId}. Total: ${newCacheSize} jobs`);
+      
+      // Verificar se podemos processar imediatamente baseado em padrões conhecidos
+      if (await shouldProcessImmediately(sourceId, newCacheSize)) {
+        console.log(`[BullMQ-Redis] Job ${job.id} - Disparando processamento imediato para lead ${sourceId}`);
+        // Cancelar timeout existente e processar imediatamente
+        await redis.del(timeoutKey);
+        setTimeout(() => processAccumulatedJobsRedis(sourceId), 100); // Pequeno delay para garantir consistência
+      }
     }
     
     return { status: 'acumulando', sourceId };
@@ -88,6 +99,7 @@ async function processAccumulatedJobsRedis(sourceId: string) {
   const cacheKey = `${CACHE_PREFIX}${sourceId}`;
   const timeoutKey = `${TIMEOUT_PREFIX}${sourceId}`;
   const processingKey = `${PROCESSING_PREFIX}${sourceId}`;
+  const batchCounterKey = `${BATCH_COUNTER_PREFIX}${sourceId}`;
   
   try {
     // Verificar se já está sendo processado por outro worker
@@ -97,14 +109,19 @@ async function processAccumulatedJobsRedis(sourceId: string) {
       return;
     }
     
+    // Incrementar contador de lotes e obter número do lote atual
+    const batchNumber = await redis.incr(batchCounterKey);
+    await redis.expire(batchCounterKey, 3600); // Expira em 1 hora
+    
     // Marcar como processando (TTL de 60s como segurança)
     await redis.setex(processingKey, 60, 'processing');
     
     // Buscar e remover todos os jobs do cache atomicamente
+    // IMPORTANTE: Não deletar o timeoutKey para permitir múltiplos lotes
     const pipeline = redis.pipeline();
     pipeline.lrange(cacheKey, 0, -1);
     pipeline.del(cacheKey);
-    pipeline.del(timeoutKey);
+    // NÃO deletar timeoutKey aqui - será deletado apenas quando expirar naturalmente
     
     const results = await pipeline.exec();
     if (!results || !results[0] || !results[0][1]) {
@@ -123,14 +140,15 @@ async function processAccumulatedJobsRedis(sourceId: string) {
     // Converter dados dos jobs (reverter ordem para FIFO)
     const jobsArray = jobsData.map(jobStr => JSON.parse(jobStr)).reverse();
     
-    console.log(`[BullMQ-Redis] ===== INICIANDO PROCESSAMENTO EM LOTE (REDIS) =====`);
+    console.log(`[BullMQ-Redis] ===== INICIANDO PROCESSAMENTO EM LOTE ${batchNumber} (REDIS) =====`);
     console.log(`[BullMQ-Redis] Lead: ${sourceId}`);
+    console.log(`[BullMQ-Redis] Lote número: ${batchNumber}`);
     console.log(`[BullMQ-Redis] Total de jobs no lote: ${jobsArray.length}`);
     console.log(`[BullMQ-Redis] IDs dos jobs: [${jobsArray.map(j => j.id).join(', ')}]`);
     console.log(`[BullMQ-Redis] ==================================================`);
     
     // Processar usando a mesma lógica, mas com dados do Redis
-    await processBatchFromRedis(sourceId, jobsArray);
+    await processBatchFromRedis(sourceId, jobsArray, batchNumber);
     
   } catch (error) {
     console.error(`[BullMQ-Redis] Erro ao processar lote para lead ${sourceId}:`, error);
@@ -144,7 +162,7 @@ async function processAccumulatedJobsRedis(sourceId: string) {
 /**
  * Processa um lote de jobs vindos do Redis
  */
-async function processBatchFromRedis(sourceId: string, jobsArray: any[]) {
+async function processBatchFromRedis(sourceId: string, jobsArray: any[], batchNumber: number = 1) {
   try {
     // Pega o primeiro job para dados do usuário e informações básicas do lead
     const firstJobData = jobsArray[0];
@@ -339,8 +357,9 @@ async function processBatchFromRedis(sourceId: string, jobsArray: any[]) {
     }
 
     // Log de conclusão (não podemos marcar jobs como processados pois vieram do Redis)
-    console.log(`[BullMQ-Redis] ===== PROCESSAMENTO EM LOTE CONCLUÍDO (REDIS) =====`);
+    console.log(`[BullMQ-Redis] ===== PROCESSAMENTO EM LOTE ${batchNumber} CONCLUÍDO (REDIS) =====`);
     console.log(`[BullMQ-Redis] Lead: ${sourceId}`);
+    console.log(`[BullMQ-Redis] Lote número: ${batchNumber}`);
     console.log(`[BullMQ-Redis] Jobs processados: ${jobsArray.length}`);
     console.log(`[BullMQ-Redis] Arquivos inseridos: ${todosArquivos.length}`);
     console.log(`[BullMQ-Redis] Lead ID: ${lead.id}`);
@@ -352,5 +371,36 @@ async function processBatchFromRedis(sourceId: string, jobsArray: any[]) {
   } catch (error) {
     console.error(`[BullMQ-Redis] Erro ao processar lote Redis para lead ${sourceId}:`, error);
     throw error;
+  }
+}
+
+/**
+ * Determina se deve processar imediatamente baseado em padrões conhecidos
+ */
+async function shouldProcessImmediately(sourceId: string, currentJobCount: number): Promise<boolean> {
+  try {
+    // Padrões comuns de quantidade de arquivos para processamento imediato
+    const commonPatterns = [6, 10, 12, 15, 20, 25, 30];
+    
+    // Se atingiu um padrão conhecido, processar imediatamente
+    if (commonPatterns.includes(currentJobCount)) {
+      console.log(`[BullMQ-Redis] Padrão detectado: ${currentJobCount} jobs para lead ${sourceId} - processando imediatamente`);
+      return true;
+    }
+    
+    // Se passou muito tempo desde o primeiro job (mais de 8 segundos), processar
+    const timeKey = `${TIMEOUT_PREFIX}${sourceId}`;
+    const timeoutTtl = await redis.ttl(timeKey);
+    const elapsedTime = Math.ceil(ACCUMULATION_DELAY / 1000) - timeoutTtl;
+    
+    if (elapsedTime > 8) { // Mais de 8 segundos desde o primeiro job
+      console.log(`[BullMQ-Redis] Tempo limite atingido: ${elapsedTime}s para lead ${sourceId} - processando imediatamente`);
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.error(`[BullMQ-Redis] Erro ao verificar processamento imediato para lead ${sourceId}:`, error);
+    return false;
   }
 }

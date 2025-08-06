@@ -10,9 +10,11 @@ const redis = getRedisInstance();
 const CACHE_PREFIX = 'leads_cache:';
 const TIMEOUT_PREFIX = 'leads_timeout:';
 const PROCESSING_PREFIX = 'leads_processing:';
+const EXPECTED_COUNT_PREFIX = 'leads_expected:';
+const BATCH_COUNTER_PREFIX = 'leads_batch_counter:';
 
 // Tempo de acumulação em ms (6 segundos)
-const ACCUMULATION_DELAY = 6000;
+const ACCUMULATION_DELAY = 12000;
 
 /**
  * Processa um job da fila "filaLeadsChatwit" usando cache Redis distribuído.
@@ -87,6 +89,7 @@ async function processAccumulatedJobsRedis(sourceId: string) {
   const cacheKey = `${CACHE_PREFIX}${sourceId}`;
   const timeoutKey = `${TIMEOUT_PREFIX}${sourceId}`;
   const processingKey = `${PROCESSING_PREFIX}${sourceId}`;
+  const batchCounterKey = `${BATCH_COUNTER_PREFIX}${sourceId}`;
   
   try {
     // Verificar se já está sendo processado por outro worker
@@ -96,14 +99,19 @@ async function processAccumulatedJobsRedis(sourceId: string) {
       return;
     }
     
+    // Incrementar contador de lotes e obter número do lote atual
+    const batchNumber = await redis.incr(batchCounterKey);
+    await redis.expire(batchCounterKey, 3600); // Expira em 1 hora
+    
     // Marcar como processando (TTL de 60s como segurança)
     await redis.setex(processingKey, 60, 'processing');
     
-    // Buscar e remover todos os jobs do cache atomicamente
+    // Buscar e remover todos os jobs do cache atomicamente  
+    // IMPORTANTE: Não deletar o timeoutKey para permitir múltiplos lotes
     const pipeline = redis.pipeline();
     pipeline.lrange(cacheKey, 0, -1);
     pipeline.del(cacheKey);
-    pipeline.del(timeoutKey);
+    // NÃO deletar timeoutKey aqui - será deletado apenas quando expirar naturalmente
     
     const results = await pipeline.exec();
     if (!results || !results[0] || !results[0][1]) {
@@ -122,14 +130,15 @@ async function processAccumulatedJobsRedis(sourceId: string) {
     // Converter dados dos jobs (reverter ordem para FIFO)
     const jobsArray = jobsData.map(jobStr => JSON.parse(jobStr)).reverse();
     
-    console.log(`[BullMQ-Redis] ===== INICIANDO PROCESSAMENTO EM LOTE (REDIS) =====`);
+    console.log(`[BullMQ-Redis] ===== INICIANDO PROCESSAMENTO EM LOTE ${batchNumber} (REDIS) =====`);
     console.log(`[BullMQ-Redis] Lead: ${sourceId}`);
+    console.log(`[BullMQ-Redis] Lote número: ${batchNumber}`);
     console.log(`[BullMQ-Redis] Total de jobs no lote: ${jobsArray.length}`);
     console.log(`[BullMQ-Redis] IDs dos jobs: [${jobsArray.map(j => j.id).join(', ')}]`);
     console.log(`[BullMQ-Redis] ==================================================`);
     
     // Processar usando a mesma lógica, mas com dados do Redis
-    await processBatchFromRedis(sourceId, jobsArray);
+    await processBatchFromRedis(sourceId, jobsArray, batchNumber);
     
   } catch (error) {
     console.error(`[BullMQ-Redis] Erro ao processar lote para lead ${sourceId}:`, error);
@@ -143,7 +152,7 @@ async function processAccumulatedJobsRedis(sourceId: string) {
 /**
  * Processa um lote de jobs vindos do Redis
  */
-async function processBatchFromRedis(sourceId: string, jobsArray: any[]) {
+async function processBatchFromRedis(sourceId: string, jobsArray: any[], batchNumber: number = 1) {
   try {
     // Pega o primeiro job para dados do usuário e informações básicas do lead
     const firstJobData = jobsArray[0];
@@ -338,8 +347,9 @@ async function processBatchFromRedis(sourceId: string, jobsArray: any[]) {
     }
 
     // Log de conclusão (não podemos marcar jobs como processados pois vieram do Redis)
-    console.log(`[BullMQ-Redis] ===== PROCESSAMENTO EM LOTE CONCLUÍDO (REDIS) =====`);
+    console.log(`[BullMQ-Redis] ===== PROCESSAMENTO EM LOTE ${batchNumber} CONCLUÍDO (REDIS) =====`);
     console.log(`[BullMQ-Redis] Lead: ${sourceId}`);
+    console.log(`[BullMQ-Redis] Lote número: ${batchNumber}`);
     console.log(`[BullMQ-Redis] Jobs processados: ${jobsArray.length}`);
     console.log(`[BullMQ-Redis] Arquivos inseridos: ${todosArquivos.length}`);
     console.log(`[BullMQ-Redis] Lead ID: ${lead.id}`);

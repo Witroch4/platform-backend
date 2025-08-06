@@ -2,7 +2,7 @@
 import type { PrismaConfig } from 'prisma'
 
 const config: PrismaConfig = {
-  // aponte para o arquivo schema.prisma
+  // Aponta para o arquivo schema.prisma
   schema: './schema.prisma',
 }
 
