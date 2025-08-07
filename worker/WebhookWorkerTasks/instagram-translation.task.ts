@@ -54,8 +54,37 @@ import {
   attemptRecovery,
   isRetryableError,
 } from '@/lib/error-handling/instagram-translation-errors';
+import {
+  getCachedVariablesForUser,
+  replaceVariablesInText
+} from '../../lib/mtf-diamante/variables-resolver';
 
 const prisma = getPrismaInstance();
+
+/**
+ * Busca o userId baseado no inboxId para aplicar variáveis 
+ */
+async function getUserIdFromMessageMapping(messageMapping: any): Promise<string | null> {
+  try {
+    // O messageMapping já contém o usuarioChatwitId
+    if (messageMapping.usuarioChatwitId) {
+      const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
+        where: { id: messageMapping.usuarioChatwitId }
+      });
+      
+      if (usuarioChatwit?.appUserId) {
+        console.log(`[Instagram Variables] UserId encontrado: ${usuarioChatwit.appUserId}`);
+        return usuarioChatwit.appUserId;
+      }
+    }
+    
+    console.warn(`[Instagram Variables] UserId não encontrado no messageMapping`);
+    return null;
+  } catch (error) {
+    console.error(`[Instagram Variables] Erro ao buscar userId:`, error);
+    return null;
+  }
+}
 
 /**
  * Instagram Translation Worker Task
@@ -222,7 +251,8 @@ export async function processInstagramTranslationTask(
             fulfillmentMessages = await convertInteractiveMessageToInstagram(
               messageMapping.interactiveMessage,
               correlationId,
-              updatedLogContext
+              updatedLogContext,
+              messageMapping
             );
           } else {
             throw createConversionFailedError('Interactive message data is missing', correlationId);
@@ -234,7 +264,8 @@ export async function processInstagramTranslationTask(
             fulfillmentMessages = await convertEnhancedInteractiveMessageToInstagram(
               messageMapping.enhancedInteractiveMessage,
               correlationId,
-              updatedLogContext
+              updatedLogContext,
+              messageMapping
             );
           } else {
             throw createConversionFailedError('Enhanced interactive message data is missing', correlationId);
@@ -918,7 +949,8 @@ function convertUnifiedButtonsToInstagram(buttons: any): any[] {
 async function convertInteractiveMessageToInstagram(
   interactiveMessage: any,
   correlationId: string,
-  logContext: any
+  logContext: any,
+  messageMapping?: any
 ): Promise<DialogflowFulfillmentMessage[]> {
   logWithCorrelationId('info', 'Converting interactive message to Instagram', correlationId);
 
@@ -939,8 +971,23 @@ async function convertInteractiveMessageToInstagram(
     });
   }
 
-  const bodyText = interactiveMessage.texto || '';
+  let bodyText = interactiveMessage.texto || '';
   const hasImage = interactiveMessage.headerTipo === 'image' && interactiveMessage.headerConteudo;
+  
+  // Aplicar variáveis no texto do corpo se tivermos messageMapping
+  if (messageMapping) {
+    try {
+      const userId = await getUserIdFromMessageMapping(messageMapping);
+      if (userId && bodyText) {
+        console.log(`[Instagram Variables] Aplicando variáveis para usuário ${userId} no Instagram`);
+        bodyText = await replaceVariablesInText(userId, bodyText);
+        console.log(`[Instagram Variables] Variáveis aplicadas com sucesso no Instagram`);
+      }
+    } catch (variableError) {
+      console.warn(`[Instagram Variables] Erro ao aplicar variáveis no Instagram:`, variableError);
+      // Continuar com texto original se falhar
+    }
+  }
   
   // Log detailed message info for debugging
   console.log(`[Instagram Worker] [${correlationId}] INTERACTIVE MESSAGE DETAILS:`, {
@@ -1103,7 +1150,8 @@ async function convertInteractiveMessageToInstagram(
 async function convertEnhancedInteractiveMessageToInstagram(
   enhancedMessage: any,
   correlationId: string,
-  logContext: any
+  logContext: any,
+  messageMapping?: any
 ): Promise<DialogflowFulfillmentMessage[]> {
   logWithCorrelationId('info', 'Converting enhanced interactive message to Instagram', correlationId);
 
@@ -1116,8 +1164,23 @@ async function convertEnhancedInteractiveMessageToInstagram(
     );
   }
 
-  const bodyText = enhancedMessage.bodyText;
+  let bodyText = enhancedMessage.bodyText;
   const hasImage = enhancedMessage.headerType === 'image' && enhancedMessage.headerContent;
+  
+  // Aplicar variáveis no texto do corpo se tivermos messageMapping
+  if (messageMapping) {
+    try {
+      const userId = await getUserIdFromMessageMapping(messageMapping);
+      if (userId && bodyText) {
+        console.log(`[Instagram Variables] Aplicando variáveis para usuário ${userId} no Instagram (enhanced)`);
+        bodyText = await replaceVariablesInText(userId, bodyText);
+        console.log(`[Instagram Variables] Variáveis aplicadas com sucesso no Instagram (enhanced)`);
+      }
+    } catch (variableError) {
+      console.warn(`[Instagram Variables] Erro ao aplicar variáveis no Instagram (enhanced):`, variableError);
+      // Continuar com texto original se falhar
+    }
+  }
   
   // Determine template type based on body length
   const templateType = determineInstagramTemplateType(bodyText, hasImage);

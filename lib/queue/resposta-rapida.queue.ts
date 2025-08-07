@@ -1,15 +1,15 @@
-import { Queue, Job } from 'bullmq';
-import { getRedisInstance } from '../connections';
+import { Queue, Job } from "bullmq";
+import { getRedisInstance } from "../connections";
 
-export const RESPOSTA_RAPIDA_QUEUE_NAME = 'resposta-rapida';
+export const RESPOSTA_RAPIDA_QUEUE_NAME = "resposta-rapida";
 
 // Job interfaces for high priority user response processing
 export interface RespostaRapidaJobData {
-  type: 'processarResposta';
+  type: "processarResposta";
   data: {
     inboxId: string;
     contactPhone: string;
-    interactionType: 'button_reply' | 'intent';
+    interactionType: "button_reply" | "intent";
     buttonId?: string;
     intentName?: string;
     wamid: string;
@@ -38,7 +38,7 @@ export const respostaRapidaQueue = new Queue<RespostaRapidaJobData>(
       // Aggressive retry policy for user-facing responses
       attempts: 3,
       backoff: {
-        type: 'exponential',
+        type: "exponential",
         delay: 1000, // Start with 1 second delay
       },
       // Keep fewer completed jobs to save memory
@@ -47,7 +47,7 @@ export const respostaRapidaQueue = new Queue<RespostaRapidaJobData>(
       // No initial delay for immediate processing
       delay: 0,
       // Job timeout handled by worker implementation
-    }
+    },
   }
 );
 
@@ -60,7 +60,7 @@ export const respostaRapidaDeadLetterQueue = new Queue<RespostaRapidaJobData>(
       // Keep failed jobs longer for analysis
       removeOnComplete: 10,
       removeOnFail: 100,
-    }
+    },
   }
 );
 
@@ -74,7 +74,7 @@ export async function addRespostaRapidaJob(
   }
 ): Promise<Job<RespostaRapidaJobData, any, string>> {
   const jobName = `resposta-${jobData.data.interactionType}-${jobData.data.correlationId}`;
-  
+
   try {
     const job = await respostaRapidaQueue.add(jobName, jobData, {
       // Override priority if specified
@@ -122,10 +122,10 @@ export function createIntentJob(data: {
   contactSource?: string;
 }): RespostaRapidaJobData {
   return {
-    type: 'processarResposta',
+    type: "processarResposta",
     data: {
       ...data,
-      interactionType: 'intent',
+      interactionType: "intent",
     },
   };
 }
@@ -148,10 +148,10 @@ export function createButtonJob(data: {
   contactSource?: string;
 }): RespostaRapidaJobData {
   return {
-    type: 'processarResposta',
+    type: "processarResposta",
     data: {
       ...data,
-      interactionType: 'button_reply',
+      interactionType: "button_reply",
     },
   };
 }
@@ -190,16 +190,22 @@ export async function handleJobFailure(
         }
       );
 
-      console.log(`[Resposta Rapida] Job moved to dead letter queue: ${job.name}`, {
-        jobId: job.id,
-        correlationId: job.data.data.correlationId,
-      });
+      console.log(
+        `[Resposta Rapida] Job moved to dead letter queue: ${job.name}`,
+        {
+          jobId: job.id,
+          correlationId: job.data.data.correlationId,
+        }
+      );
     } catch (dlqError) {
-      console.error(`[Resposta Rapida] Failed to move job to dead letter queue: ${job.name}`, {
-        jobId: job.id,
-        correlationId: job.data.data.correlationId,
-        error: dlqError instanceof Error ? dlqError.message : dlqError,
-      });
+      console.error(
+        `[Resposta Rapida] Failed to move job to dead letter queue: ${job.name}`,
+        {
+          jobId: job.id,
+          correlationId: job.data.data.correlationId,
+          error: dlqError instanceof Error ? dlqError.message : dlqError,
+        }
+      );
     }
   }
 }
@@ -233,13 +239,13 @@ export async function getQueueHealth(): Promise<{
 export async function cleanupOldJobs(): Promise<void> {
   try {
     // Clean completed jobs older than 1 hour
-    await respostaRapidaQueue.clean(60 * 60 * 1000, 50, 'completed');
-    
+    await respostaRapidaQueue.clean(60 * 60 * 1000, 50, "completed");
+
     // Clean failed jobs older than 24 hours
-    await respostaRapidaQueue.clean(24 * 60 * 60 * 1000, 25, 'failed');
-    
-    console.log('[Resposta Rapida] Old jobs cleaned up successfully');
+    await respostaRapidaQueue.clean(24 * 60 * 60 * 1000, 25, "failed");
+
+    console.log("[Resposta Rapida] Old jobs cleaned up successfully");
   } catch (error) {
-    console.error('[Resposta Rapida] Failed to clean up old jobs:', error);
+    console.error("[Resposta Rapida] Failed to clean up old jobs:", error);
   }
 }

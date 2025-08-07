@@ -49,14 +49,33 @@ export function getRedisConnectionOptions() {
   const redisPort = parseInt(process.env.REDIS_PORT || '6379');
   const redisPassword = process.env.REDIS_PASSWORD;
   
+  // Get timeout configurations from environment variables
+  const connectTimeout = parseInt(process.env.REDIS_CONNECT_TIMEOUT || '20000');
+  const commandTimeout = parseInt(process.env.REDIS_COMMAND_TIMEOUT || '60000');
+  const keepAlive = parseInt(process.env.REDIS_KEEP_ALIVE || '30000');
+  
   return {
     host: redisHost,
     port: redisPort,
     password: redisPassword || undefined,
     maxRetriesPerRequest: null, // BullMQ requer que seja null
     lazyConnect: true,
-    keepAlive: 30000,
-    connectTimeout: 10000,
+    keepAlive,
+    connectTimeout,
+    commandTimeout,
     family: 4, // IPv4
+    // Additional stability configurations
+    retryDelayOnFailover: 200,
+    enableReadyCheck: true,
+    maxLoadingTimeout: 10000,
+    // Connection pool settings
+    enableOfflineQueue: true,
+    // Configurações para evitar timeouts
+    enableAutoPipelining: false,
+    // Retry strategy for failed commands
+    retryStrategy: (times: number) => {
+      const delay = Math.min(times * 200, 5000);
+      return delay;
+    },
   };
 }

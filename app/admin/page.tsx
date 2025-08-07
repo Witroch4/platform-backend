@@ -106,6 +106,12 @@ export default function AdminPage() {
         <Button asChild variant="outline" className="border-border hover:bg-accent">
           <Link href="/admin/templates">Documentação de Templates</Link>
         </Button>
+        <Button asChild variant="default" className="bg-yellow-500 hover:bg-yellow-600 text-black">
+          <Link href="/admin/resposta-rapida">⚡ Respostas Rápidas</Link>
+        </Button>
+        <Button asChild variant="outline" className="border-blue-500 text-blue-500 hover:bg-blue-50">
+          <Link href="/admin/webhook-test">🧪 Teste de Webhook</Link>
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

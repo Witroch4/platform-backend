@@ -21,8 +21,8 @@ interface MtfDiamanteLote {
   numero: number;
   nome: string;
   valor: string;
-  dataInicio: Date;
-  dataFim: Date;
+  dataInicio: string;
+  dataFim: string;
   isActive: boolean;
 }
 

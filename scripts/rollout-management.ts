@@ -24,7 +24,7 @@ class RolloutManager {
     console.log('🚀 Initializing feature flags for gradual rollout...');
     
     const flags = [
-      { name: 'NEW_WEBHOOK_PROCESSING', enabled: false, rollout: 0, description: 'New optimized webhook processing' },
+      { name: 'NEW_WEBHOOK_PROCESSING', enabled: true, rollout: 100, description: 'New optimized webhook processing' },
       { name: 'HIGH_PRIORITY_QUEUE', enabled: true, rollout: 100, description: 'High priority queue for user responses' },
       { name: 'LOW_PRIORITY_QUEUE', enabled: true, rollout: 100, description: 'Low priority queue for data persistence' },
       { name: 'UNIFIED_LEAD_MODEL', enabled: true, rollout: 100, description: 'Unified lead model' },

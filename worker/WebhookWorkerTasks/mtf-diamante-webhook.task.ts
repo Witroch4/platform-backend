@@ -16,6 +16,11 @@ import {
   sendInteractiveMessage,
   sendTextMessage,
 } from "../../lib/whatsapp-messages";
+import {
+  getCachedVariablesForUser,
+  replaceVariablesInText,
+  invalidateVariablesCache
+} from "../../lib/mtf-diamante/variables-resolver";
 
 // --- Tipos para clareza e segurança ---
 interface ValidatedWebhookData {
@@ -305,6 +310,31 @@ async function storeWebhookMessage(data: ValidatedWebhookData) {
  * Busca a configuração real do WhatsApp do banco de dados
  * Esta função substitui a lógica incorreta que gerava IDs falsos baseados no token
  */
+async function getUserIdFromInboxId(chatwootInboxId: string): Promise<string | null> {
+  try {
+    console.log(`[MTF Variables] Buscando userId para inboxId: ${chatwootInboxId}`);
+    
+    const caixaEntrada = await getPrismaInstance().chatwitInbox.findFirst({
+      where: { inboxId: chatwootInboxId },
+      include: {
+        usuarioChatwit: true
+      }
+    });
+
+    if (caixaEntrada && caixaEntrada.usuarioChatwit) {
+      const userId = caixaEntrada.usuarioChatwit.appUserId;
+      console.log(`[MTF Variables] UserId encontrado: ${userId} para inboxId: ${chatwootInboxId}`);
+      return userId || null;
+    }
+
+    console.warn(`[MTF Variables] UserId não encontrado para inboxId: ${chatwootInboxId}`);
+    return null;
+  } catch (error) {
+    console.error(`[MTF Variables] Erro ao buscar userId para inboxId ${chatwootInboxId}:`, error);
+    return null;
+  }
+}
+
 async function getWhatsAppConfigFromDatabase(chatwootInboxId: string): Promise<{
   phoneNumberId: string;
   businessAccountId: string;
@@ -571,12 +601,29 @@ async function processSendMessage(taskData: SendMessageTask) {
         throw new Error("Text content is required for text messages");
       }
 
+      // Substituir variáveis no texto se tivermos userId
+      let processedTextContent = messageData.textContent;
+      
+      if (metadata?.inboxId) {
+        try {
+          const userId = await getUserIdFromInboxId(metadata.inboxId);
+          if (userId) {
+            console.log(`[MTF Variables] Aplicando variáveis para usuário ${userId} na mensagem de texto`);
+            processedTextContent = await replaceVariablesInText(userId, messageData.textContent);
+            console.log(`[MTF Variables] Variáveis aplicadas com sucesso na mensagem de texto`);
+          }
+        } catch (variableError) {
+          console.warn(`[MTF Variables] Erro ao aplicar variáveis na mensagem de texto:`, variableError);
+          // Continuar com conteúdo original se falhar
+        }
+      }
+
       // Send text message (can be a reply or standalone)
       result = await sendTextMessage({
         recipientPhone,
         whatsappApiKey,
         phoneNumberId, // Use phoneNumberId from database
-        text: messageData.textContent,
+        text: processedTextContent,
         replyToMessageId: messageData.replyToMessageId,
       });
     } else if (messageData.type === "interactive") {
@@ -606,6 +653,42 @@ async function processSendMessage(taskData: SendMessageTask) {
         throw new Error("Body text is required for interactive messages");
       }
 
+      // Substituir variáveis no conteúdo da mensagem interativa se tivermos userId
+      let processedInteractiveContent = { ...interactiveContent };
+      
+      if (metadata?.inboxId) {
+        try {
+          const userId = await getUserIdFromInboxId(metadata.inboxId);
+          if (userId) {
+            console.log(`[MTF Variables] Aplicando variáveis para usuário ${userId} na mensagem interativa`);
+            
+            // Substituir variáveis no body
+            if (processedInteractiveContent.body) {
+              processedInteractiveContent.body = await replaceVariablesInText(userId, processedInteractiveContent.body);
+            }
+            
+            // Substituir variáveis no footer
+            if (processedInteractiveContent.footer) {
+              processedInteractiveContent.footer = await replaceVariablesInText(userId, processedInteractiveContent.footer);
+            }
+            
+            // Substituir variáveis nos botões
+            if (processedInteractiveContent.buttons) {
+              for (const button of processedInteractiveContent.buttons) {
+                if (button.title) {
+                  button.title = await replaceVariablesInText(userId, button.title);
+                }
+              }
+            }
+            
+            console.log(`[MTF Variables] Variáveis aplicadas com sucesso na mensagem interativa`);
+          }
+        } catch (variableError) {
+          console.warn(`[MTF Variables] Erro ao aplicar variáveis na mensagem interativa:`, variableError);
+          // Continuar com conteúdo original se falhar
+        }
+      }
+
       // Determine interactive message action type
       let actionType:
         | "buttons"
@@ -615,28 +698,28 @@ async function processSendMessage(taskData: SendMessageTask) {
         | "location_request" = "buttons";
       let actionData: any = {};
 
-      if (interactiveContent.buttons && interactiveContent.buttons.length > 0) {
+      if (processedInteractiveContent.buttons && processedInteractiveContent.buttons.length > 0) {
         actionType = "buttons";
-        actionData = { buttons: interactiveContent.buttons };
+        actionData = { buttons: processedInteractiveContent.buttons };
 
         // Validate button structure
-        for (const button of interactiveContent.buttons) {
+        for (const button of processedInteractiveContent.buttons) {
           if (!button.id || !button.title) {
             throw new Error("Button ID and title are required for all buttons");
           }
         }
       } else if (
-        interactiveContent.listSections &&
-        interactiveContent.listSections.length > 0
+        processedInteractiveContent.listSections &&
+        processedInteractiveContent.listSections.length > 0
       ) {
         actionType = "list";
         actionData = {
-          buttonText: interactiveContent.buttonText || "Select",
-          sections: interactiveContent.listSections,
+          buttonText: processedInteractiveContent.buttonText || "Select",
+          sections: processedInteractiveContent.listSections,
         };
 
         // Validate list structure
-        for (const section of interactiveContent.listSections) {
+        for (const section of processedInteractiveContent.listSections) {
           if (!section.title || !section.rows || section.rows.length === 0) {
             throw new Error(
               "List sections must have title and at least one row"
@@ -659,9 +742,9 @@ async function processSendMessage(taskData: SendMessageTask) {
         recipientPhone,
         whatsappApiKey,
         phoneNumberId, // Use phoneNumberId from database
-        header: interactiveContent.header,
-        body: interactiveContent.body,
-        footer: interactiveContent.footer,
+        header: processedInteractiveContent.header,
+        body: processedInteractiveContent.body,
+        footer: processedInteractiveContent.footer,
         action: {
           type: actionType,
           data: actionData,

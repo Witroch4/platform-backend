@@ -17,7 +17,7 @@ import {
   Variable,
   AlertCircle,
 } from "lucide-react";
-import { VariableContextMenu } from "../VariableContextMenu";
+import { VariableContextMenu } from "./VariableContextMenu";
 
 interface MtfDiamanteVariavel {
   id?: string;
@@ -36,6 +36,7 @@ interface WhatsAppTextEditorProps {
   inline?: boolean;
   className?: string;
   onChange?: (text: string) => void;
+  accountId?: string;
 }
 
 export function WhatsAppTextEditor({
@@ -49,9 +50,12 @@ export function WhatsAppTextEditor({
   inline = false,
   className = "",
   onChange,
+  accountId = "mtf-diamante",
 }: WhatsAppTextEditorProps) {
   const [text, setText] = useState(initialText);
   const [errors, setErrors] = useState<string[]>([]);
+  const [showVariableMenu, setShowVariableMenu] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Character count and validation
@@ -87,25 +91,31 @@ export function WhatsAppTextEditor({
 
   // Variable insertion handler
   const handleVariableInsert = useCallback(
-    (variable: string) => {
+    (variable: string, position?: number) => {
       const textarea = textareaRef.current;
       if (!textarea) return;
 
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const newText = text.substring(0, start) + variable + text.substring(end);
+      const insertPosition = position !== undefined ? position : textarea.selectionStart;
+      const newText = text.substring(0, insertPosition) + variable + text.substring(insertPosition);
 
       updateText(newText);
 
       // Position cursor after inserted variable (respecting maxLength)
       setTimeout(() => {
         textarea.focus();
-        const finalLength = Math.min(start + variable.length, maxLength || Infinity);
+        const finalLength = Math.min(insertPosition + variable.length, maxLength || Infinity);
         textarea.setSelectionRange(finalLength, finalLength);
       }, 0);
     },
     [text, updateText, maxLength]
   );
+
+  // Handle right-click context menu
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setMenuPosition({ x: e.clientX, y: e.clientY });
+    setShowVariableMenu(true);
+  }, []);
 
   // WhatsApp formatting functions
   const applyFormatting = useCallback(
@@ -282,20 +292,24 @@ export function WhatsAppTextEditor({
     return (
       <div className={`space-y-2 ${className}`}>
         <div className="relative">
+          <Textarea
+            ref={textareaRef}
+            value={text}
+            onChange={(e) => updateText(e.target.value)}
+            onContextMenu={handleContextMenu}
+            placeholder={placeholder}
+            maxLength={maxLength}
+            className={`min-h-[100px] ${isOverLimit ? "border-red-500" : ""}`}
+            rows={4}
+          />
+          
           <VariableContextMenu
-            onVariableInsert={handleVariableInsert}
-            variables={variables}
-          >
-            <Textarea
-              ref={textareaRef}
-              value={text}
-              onChange={(e) => updateText(e.target.value)}
-              placeholder={placeholder}
-              maxLength={maxLength}
-              className={`min-h-[100px] ${isOverLimit ? "border-red-500" : ""}`}
-              rows={4}
-            />
-          </VariableContextMenu>
+            accountId={accountId}
+            isOpen={showVariableMenu}
+            onClose={() => setShowVariableMenu(false)}
+            onInsert={handleVariableInsert}
+            position={menuPosition}
+          />
 
           {/* Character counter */}
           <div className="absolute bottom-2 right-2 text-xs text-muted-foreground">
@@ -341,15 +355,14 @@ export function WhatsAppTextEditor({
           >
             <Strikethrough className="h-3 w-3" />
           </Button>
-          {variables.length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              title="Clique com botão direito no texto para inserir variáveis"
-            >
-              <Variable className="h-3 w-3" />
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowVariableMenu(true)}
+            title="Inserir variáveis"
+          >
+            <Variable className="h-3 w-3" />
+          </Button>
         </div>
 
         {/* Errors */}
@@ -441,18 +454,17 @@ export function WhatsAppTextEditor({
               <Quote className="h-4 w-4" />
             </Button>
 
-            {variables.length > 0 && (
-              <>
-                <div className="w-px h-6 bg-gray-300 mx-1" />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  title="Clique com botão direito no texto para inserir variáveis"
-                >
-                  <Variable className="h-4 w-4" />
-                </Button>
-              </>
-            )}
+            <>
+              <div className="w-px h-6 bg-gray-300 mx-1" />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowVariableMenu(true)}
+                title="Inserir variáveis"
+              >
+                <Variable className="h-4 w-4" />
+              </Button>
+            </>
           </div>
 
           {/* Character counter and validation */}
@@ -504,20 +516,24 @@ export function WhatsAppTextEditor({
               <label className="text-sm font-medium mb-2 block">
                 Texto (Editor)
               </label>
+              <Textarea
+                ref={textareaRef}
+                value={text}
+                onChange={(e) => updateText(e.target.value)}
+                onContextMenu={handleContextMenu}
+                placeholder={placeholder}
+                maxLength={maxLength}
+                className={`min-h-[300px] font-mono text-sm ${isOverLimit ? "border-red-500" : ""}`}
+                rows={15}
+              />
+              
               <VariableContextMenu
-                onVariableInsert={handleVariableInsert}
-                variables={variables}
-              >
-                <Textarea
-                  ref={textareaRef}
-                  value={text}
-                  onChange={(e) => updateText(e.target.value)}
-                  placeholder={placeholder}
-                  maxLength={maxLength}
-                  className={`min-h-[300px] font-mono text-sm ${isOverLimit ? "border-red-500" : ""}`}
-                  rows={15}
-                />
-              </VariableContextMenu>
+                accountId={accountId}
+                isOpen={showVariableMenu}
+                onClose={() => setShowVariableMenu(false)}
+                onInsert={handleVariableInsert}
+                position={menuPosition}
+              />
             </div>
 
             {showPreview && (

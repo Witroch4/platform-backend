@@ -47,8 +47,8 @@ interface MtfDiamanteLote {
   numero: number;
   nome: string;
   valor: string;
-  dataInicio: Date;
-  dataFim: Date;
+  dataInicio: string;
+  dataFim: string;
   isActive: boolean;
 }
 
@@ -112,9 +112,10 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
       }
     ];
 
-    // Get custom variables (excluding special ones)
+    // Get custom variables (excluding special ones and lote variables)
     const customVariables = variaveis.filter(v => 
-      !['chave_pix', 'nome_do_escritorio_rodape'].includes(v.chave)
+      !['chave_pix', 'nome_do_escritorio_rodape', 'lote_ativo'].includes(v.chave) &&
+      !v.chave.startsWith('lote_') // Filtrar qualquer variável que comece com 'lote_'
     ).map(v => ({
       ...v,
       tipo: 'custom' as const,
@@ -615,10 +616,17 @@ function AdicionarLoteDialog({ onLoteAdicionado }: { onLoteAdicionado: () => voi
     setLoading(true);
 
     try {
+      // Converter datas para string antes de enviar
+      const payload = {
+        ...formData,
+        dataInicio: formData.dataInicio.toISOString().split('T')[0],
+        dataFim: formData.dataFim.toISOString().split('T')[0],
+      };
+
       const response = await fetch('/api/admin/mtf-diamante/lotes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
@@ -769,10 +777,17 @@ function EditarLoteDialog({ lote, onLoteAtualizado }: { lote: MtfDiamanteLote, o
     setLoading(true);
 
     try {
+      // Converter datas para string antes de enviar
+      const payload = {
+        ...formData,
+        dataInicio: formData.dataInicio.toISOString().split('T')[0],
+        dataFim: formData.dataFim.toISOString().split('T')[0],
+      };
+
       const response = await fetch(`/api/admin/mtf-diamante/lotes/${lote.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {

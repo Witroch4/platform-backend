@@ -28,16 +28,22 @@ export const leadsQueue = new Queue<ILeadJobData | IFinalAnalysisJobData>(
 export async function addLeadJob(data: ILeadJobData) {
   const sourceId = data.payload.origemLead.source_id;
   
-  // Use o sourceId como nome do job para facilitar o rastreamento
-  await leadsQueue.add(
-    `lead-${sourceId}`,
-    data,
-    {
-      // Não define novas opções aqui para usar as padrões,
-      // evitando sobrescrever os valores definidos acima
-    }
-  );
-  console.log(`[BullMQ] Job enfileirado para lead ${sourceId}`);
+  try {
+    // Use o sourceId como nome do job para facilitar o rastreamento
+    const job = await leadsQueue.add(
+      `lead-${sourceId}`,
+      data,
+      {
+        // Não define novas opções aqui para usar as padrões,
+        // evitando sobrescrever os valores definidos acima
+      }
+    );
+    console.log(`[BullMQ] Job ${job.id} enfileirado para lead ${sourceId} com ${data.payload.origemLead.arquivos?.length || 0} arquivos`);
+    return job;
+  } catch (error) {
+    console.error(`[BullMQ] ERRO ao enfileirar job para lead ${sourceId}:`, error);
+    throw error;
+  }
 }
 
 export async function addFinalAnalysisJob(data: IFinalAnalysisJobData) {

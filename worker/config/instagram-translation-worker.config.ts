@@ -60,16 +60,16 @@ export const INSTAGRAM_TRANSLATION_WORKER_CONFIG: InstagramTranslationWorkerConf
   // High concurrency for IO-bound tasks as per requirement 8.2
   concurrency: 100,
   
-  // 5 second lock duration to ensure webhook response within limits
-  lockDuration: 5000,
+  // 30 second lock duration to prevent Redis timeouts
+  lockDuration: 30000,
   
   // Maximum retry attempts
   maxRetries: 3,
   
   // Processing time limits for webhook timeout compliance
   processing: {
-    maxProcessingTime: 4500,  // Must complete within 4.5s for webhook timeout
-    warningThreshold: 3000,   // Warning if processing takes > 3s
+    maxProcessingTime: 25000,  // Must complete within 25s to prevent Redis timeout
+    warningThreshold: 15000,   // Warning if processing takes > 15s
   },
   
   // Queue configuration optimized for high throughput
@@ -168,8 +168,8 @@ export function validateWorkerConfig(config: InstagramTranslationWorkerConfig): 
   }
   
   // Validate lock duration
-  if (config.lockDuration < 1000 || config.lockDuration > 60000) {
-    errors.push('Lock duration must be between 1 and 60 seconds');
+  if (config.lockDuration < 1000 || config.lockDuration > 120000) {
+    errors.push('Lock duration must be between 1 and 120 seconds');
   }
   
   // Validate processing time limits
@@ -228,14 +228,14 @@ export function logWorkerConfiguration(config: InstagramTranslationWorkerConfig)
 // Export configuration constants for easy access
 export const WORKER_METRICS = {
   CONCURRENCY_FACTOR: 100,
-  MAX_PROCESSING_TIME: 4500,
-  LOCK_DURATION: 5000,
+  MAX_PROCESSING_TIME: 25000,
+  LOCK_DURATION: 30000,
   HIGH_PRIORITY: 10,
 } as const;
 
 export const PROCESSING_LIMITS = {
-  MAX_PROCESSING_TIME: 4500,
-  WARNING_THRESHOLD: 3000,
+  MAX_PROCESSING_TIME: 25000,
+  WARNING_THRESHOLD: 15000,
 } as const;
 
 export const MONITORING_INTERVALS = {

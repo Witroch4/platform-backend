@@ -1,26 +1,17 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { getPrismaInstance } from '@/lib/connections';
-const prisma = getPrismaInstance();
 import { auth } from '@/auth';
-import type { PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 interface LoteOab {
   id: string;
+  numero: number;
   nome: string;
-  valor: number;
-  dataInicio: Date;
-  dataFim: Date;
-  ativo: boolean;
+  valor: string;
+  dataInicio: string;
+  dataFim: string;
+  isActive: boolean;
 }
-
-type PrismaWithLoteOab = PrismaClient & {
-  loteOab: {
-    findMany(args?: any): Promise<LoteOab[]>;
-    create(args: { data: any }): Promise<LoteOab>;
-  };
-};
-
-const prismaWithLoteOab = prisma as unknown as PrismaWithLoteOab;
 
 // GET - Listar lotes
 export async function GET() {
@@ -30,32 +21,25 @@ export async function GET() {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    // Buscar o usuário Chatwit
-    const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
-      where: { appUserId: session.user.id }
+    // Buscar a configuração do MTF Diamante
+    const config = await getPrismaInstance().mtfDiamanteConfig.findUnique({
+      where: { userId: session.user.id },
+      include: { variaveis: true }
     });
 
-    if (!usuarioChatwit) {
-      return NextResponse.json({ error: 'Usuário Chatwit não encontrado' }, { status: 404 });
+    if (!config) {
+      return NextResponse.json({ lotes: [] });
     }
 
-    // TODO: Modelo loteOab não existe no novo schema
-    // const lotesDb = await prismaWithLoteOab.loteOab.findMany({
-    //   where: { usuarioChatwitId: usuarioChatwit.id },
-    //   orderBy: { createdAt: 'desc' }
-    // });
-    const lotesDb: LoteOab[] = [];
+    // Buscar a variável que contém os lotes
+    const lotesVariavel = config.variaveis.find(v => v.chave === 'lotes_oab');
+    
+    if (!lotesVariavel || !lotesVariavel.valor) {
+      return NextResponse.json({ lotes: [] });
+    }
 
-    // Mapear para o formato esperado pelo componente
-    const lotes = lotesDb.map(lote => ({
-      id: lote.id,
-      numero: 1, // Você pode adicionar este campo no banco se necessário
-      nome: lote.nome,
-      valor: `R$ ${lote.valor.toFixed(2).replace('.', ',')}`,
-      dataInicio: lote.dataInicio,
-      dataFim: lote.dataFim,
-      isActive: lote.ativo
-    }));
+    // Converter o JSON para array de lotes
+    const lotes = Array.isArray(lotesVariavel.valor) ? (lotesVariavel.valor as unknown as any[]) : [];
 
     return NextResponse.json({ lotes });
   } catch (error) {
@@ -80,43 +64,191 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Campos obrigatórios não preenchidos' }, { status: 400 });
     }
 
-    // Buscar o usuário Chatwit
-    const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
-      where: { appUserId: session.user.id }
+    // Buscar ou criar a configuração do MTF Diamante
+    let config = await getPrismaInstance().mtfDiamanteConfig.upsert({
+      where: { userId: session.user.id },
+      update: {},
+      create: { userId: session.user.id },
+      include: { variaveis: true }
     });
 
-    if (!usuarioChatwit) {
-      return NextResponse.json({ error: 'Usuário Chatwit não encontrado' }, { status: 404 });
+    // Buscar a variável existente de lotes ou criar uma nova
+    let lotesVariavel = config.variaveis.find(v => v.chave === 'lotes_oab');
+    
+    // Obter lotes existentes
+    let lotes: any[] = [];
+    if (lotesVariavel && lotesVariavel.valor && Array.isArray(lotesVariavel.valor)) {
+      lotes = lotesVariavel.valor as unknown as any[];
     }
 
-    // Criar lote no banco
-    const lote = await prismaWithLoteOab.loteOab.create({
-      data: {
-        nome,
-        valor: Number.parseFloat(valor.replace(/[^\d,]/g, '').replace(',', '.')), // Converter valor para decimal
-        valorAnalise: 27.90, // Valor padrão da análise
-        chavePix: '57944155000101', // Chave PIX padrão
-        dataInicio: new Date(dataInicio),
-        dataFim: new Date(dataFim),
-        ativo: true, // Ativo por padrão
-        usuarioChatwitId: usuarioChatwit.id
-      }
-    });
+    // Criar novo lote
+    const novoLote: LoteOab = {
+      id: `lote_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      numero: parseInt(numero),
+      nome,
+      valor,
+      dataInicio,
+      dataFim,
+      isActive: true
+    };
+
+    // Adicionar o novo lote ao array
+    lotes.push(novoLote);
+
+    // Atualizar ou criar a variável de lotes
+    if (lotesVariavel) {
+      await getPrismaInstance().mtfDiamanteVariavel.update({
+        where: { id: lotesVariavel.id },
+        data: { valor: lotes as any }
+      });
+    } else {
+      await getPrismaInstance().mtfDiamanteVariavel.create({
+        data: {
+          configId: config.id,
+          chave: 'lotes_oab',
+          valor: lotes as any
+        }
+      });
+    }
+
+    // Invalidar cache das variáveis (incluindo lotes) - força reload das variáveis no frontend
+    try {
+      const { getRedisInstance } = await import('@/lib/connections');
+      const redis = getRedisInstance();
+      
+      // Invalidar cache de variáveis para este usuário
+      await redis.del(`mtf_variables:${session.user.id}`);
+      await redis.del(`mtf_lotes:${session.user.id}`);
+      
+      console.log(`[MTF Lotes] Cache invalidado para usuário ${session.user.id} após criação de lote`);
+    } catch (cacheError) {
+      console.warn('[MTF Lotes] Erro ao invalidar cache:', cacheError);
+      // Não falhar a operação por causa do cache
+    }
 
     return NextResponse.json({ 
       message: 'Lote criado com sucesso',
-      lote: {
-        id: lote.id,
-        numero: numero,
-        nome: lote.nome,
-        valor: valor,
-        dataInicio: lote.dataInicio,
-        dataFim: lote.dataFim,
-        isActive: lote.ativo
-      }
+      lote: novoLote
     });
   } catch (error) {
     console.error('Erro ao criar lote:', error);
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
+  }
+}
+
+// PUT - Atualizar lote
+export async function PUT(request: NextRequest) {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const { id, numero, nome, valor, dataInicio, dataFim, isActive } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: 'ID do lote é obrigatório' }, { status: 400 });
+    }
+
+    // Buscar a configuração do MTF Diamante
+    const config = await getPrismaInstance().mtfDiamanteConfig.findUnique({
+      where: { userId: session.user.id },
+      include: { variaveis: true }
+    });
+
+    if (!config) {
+      return NextResponse.json({ error: 'Configuração não encontrada' }, { status: 404 });
+    }
+
+    // Buscar a variável de lotes
+    const lotesVariavel = config.variaveis.find(v => v.chave === 'lotes_oab');
+    
+    if (!lotesVariavel || !lotesVariavel.valor || !Array.isArray(lotesVariavel.valor)) {
+      return NextResponse.json({ error: 'Lotes não encontrados' }, { status: 404 });
+    }
+
+    // Encontrar e atualizar o lote
+    const lotes: any[] = lotesVariavel.valor as unknown as any[];
+    const loteIndex = lotes.findIndex((l: any) => l.id === id);
+    
+    if (loteIndex === -1) {
+      return NextResponse.json({ error: 'Lote não encontrado' }, { status: 404 });
+    }
+
+    // Atualizar o lote
+    lotes[loteIndex] = {
+      ...lotes[loteIndex],
+      numero: numero !== undefined ? parseInt(numero) : lotes[loteIndex].numero,
+      nome: nome || lotes[loteIndex].nome,
+      valor: valor || lotes[loteIndex].valor,
+      dataInicio: dataInicio || lotes[loteIndex].dataInicio,
+      dataFim: dataFim || lotes[loteIndex].dataFim,
+      isActive: isActive !== undefined ? isActive : lotes[loteIndex].isActive
+    };
+
+    // Salvar as alterações
+    await getPrismaInstance().mtfDiamanteVariavel.update({
+      where: { id: lotesVariavel.id },
+      data: { valor: lotes as any }
+    });
+
+    return NextResponse.json({ 
+      message: 'Lote atualizado com sucesso',
+      lote: lotes[loteIndex]
+    });
+  } catch (error) {
+    console.error('Erro ao atualizar lote:', error);
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
+  }
+}
+
+// DELETE - Deletar lote
+export async function DELETE(request: NextRequest) {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: 'ID do lote é obrigatório' }, { status: 400 });
+    }
+
+    // Buscar a configuração do MTF Diamante
+    const config = await getPrismaInstance().mtfDiamanteConfig.findUnique({
+      where: { userId: session.user.id },
+      include: { variaveis: true }
+    });
+
+    if (!config) {
+      return NextResponse.json({ error: 'Configuração não encontrada' }, { status: 404 });
+    }
+
+    // Buscar a variável de lotes
+    const lotesVariavel = config.variaveis.find(v => v.chave === 'lotes_oab');
+    
+    if (!lotesVariavel || !lotesVariavel.valor || !Array.isArray(lotesVariavel.valor)) {
+      return NextResponse.json({ error: 'Lotes não encontrados' }, { status: 404 });
+    }
+
+    // Filtrar o lote a ser removido
+    const lotes: any[] = (lotesVariavel.valor as unknown as any[]).filter((l: any) => l.id !== id);
+
+    // Salvar as alterações
+    await getPrismaInstance().mtfDiamanteVariavel.update({
+      where: { id: lotesVariavel.id },
+      data: { valor: lotes as any }
+    });
+
+    return NextResponse.json({ 
+      message: 'Lote removido com sucesso'
+    });
+  } catch (error) {
+    console.error('Erro ao remover lote:', error);
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
   }
 } 

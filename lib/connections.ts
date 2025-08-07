@@ -19,8 +19,6 @@ const getRedisClass = () => {
 };
 import { getRedisConfig, getRedisConnectionOptions } from "./redis-config";
 
-
-
 // Tipos de ambiente suportados
 type Environment = "development" | "staging" | "production" | "test";
 
@@ -125,15 +123,25 @@ export function getRedisInstance(): any {
     const RedisClass = getRedisClass();
     globalThis.redis = new RedisClass({
       ...baseOptions,
-      // Configurações adicionais otimizadas para Docker/Container
-      enableOfflineQueue: false,
-      enableReadyCheck: false,
+      // Configurações ajustadas para funcionar com feature flags
+      enableOfflineQueue: true, // Permitir queue offline para feature flags
+      enableReadyCheck: true, // Verificar se está pronto antes de usar
+      lazyConnect: true, // Conectar apenas quando necessário
 
       // Configurações de reconexão mais agressivas para containers
       retryStrategy: (times: number) => {
-        const delay = Math.min(times * 50, 2000);
+        const delay = Math.min(times * 100, 3000);
         return delay;
       },
+
+      // Timeout mais generoso para conexão inicial e comandos
+      connectTimeout: 20000, // 20s para conectar
+      commandTimeout: 60000, // 60s para comandos (era 5s)
+
+      // Configurações adicionais para estabilidade
+      maxRetriesPerRequest: null, // BullMQ exige que seja null
+      retryDelayOnFailover: 200,
+      enableAutoPipelining: false, // Desabilitar para evitar problemas
     });
 
     // Event listeners apenas uma vez

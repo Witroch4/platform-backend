@@ -435,7 +435,7 @@ export async function initializeDefaultFeatureFlags(): Promise<void> {
 
     // Initialize system feature flags
     const defaultFlags = [
-      { name: 'NEW_WEBHOOK_PROCESSING', enabled: false, rollout: 0 },
+      { name: 'NEW_WEBHOOK_PROCESSING', enabled: true, rollout: 100 },
       { name: 'HIGH_PRIORITY_QUEUE', enabled: true, rollout: 100 },
       { name: 'LOW_PRIORITY_QUEUE', enabled: true, rollout: 100 },
       { name: 'UNIFIED_LEAD_MODEL', enabled: true, rollout: 100 },

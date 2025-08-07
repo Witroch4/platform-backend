@@ -4,7 +4,7 @@ import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Loader2, Bell, Users, LayoutDashboard, ShieldAlert, MessageSquare, Headphones, HelpCircle, User, Brain, Activity, Settings } from 'lucide-react';
+import { Loader2, Bell, Users, LayoutDashboard, ShieldAlert, MessageSquare, Headphones, HelpCircle, User, Brain, Activity, Settings, Zap, TestTube } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -129,6 +129,12 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
           </AdminNavLink>
           <AdminNavLink href="/admin/templates" icon={<HelpCircle className="h-5 w-5 mr-3" />}>
             Templates WhatsApp
+          </AdminNavLink>
+          <AdminNavLink href="/admin/resposta-rapida" icon={<Zap className="h-5 w-5 mr-3" />}>
+            Respostas Rápidas
+          </AdminNavLink>
+          <AdminNavLink href="/admin/webhook-test" icon={<TestTube className="h-5 w-5 mr-3" />}>
+            Teste de Webhook
           </AdminNavLink>
           
           {/* Seção IA Integration */}

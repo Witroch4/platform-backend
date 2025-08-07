@@ -21,8 +21,25 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Verify user has access to this ChatwitInbox
+    const chatwitInbox = await getPrismaInstance().chatwitInbox.findFirst({
+      where: {
+        id: caixaId, // caixaId is the internal ChatwitInbox id
+        usuarioChatwit: {
+          appUserId: session.user!.id,
+        },
+      },
+    });
+
+    if (!chatwitInbox) {
+      return NextResponse.json(
+        { error: "Inbox not found or access denied" },
+        { status: 404 }
+      );
+    }
+
     const whereClause: any = {
-      inboxId: caixaId,
+      inboxId: caixaId, // Use the internal ChatwitInbox id directly
     };
 
     if (type) {
@@ -173,6 +190,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Verify user has access to this ChatwitInbox
+    const chatwitInbox = await getPrismaInstance().chatwitInbox.findFirst({
+      where: {
+        id: caixaId, // caixaId is the internal ChatwitInbox id
+        usuarioChatwit: {
+          appUserId: session.user.id,
+        },
+      },
+    });
+
+    if (!chatwitInbox) {
+      return NextResponse.json(
+        { error: "Inbox not found or access denied" },
+        { status: 404 }
+      );
+    }
+
     // Criar template e conteúdo interativo
     const template = await getPrismaInstance().template.create({
       data: {
@@ -185,7 +219,7 @@ export async function POST(request: NextRequest) {
         tags: [],
         isActive: true,
         createdById: session.user.id,
-        inboxId: caixaId,
+        inboxId: caixaId, // Use the internal ChatwitInbox id directly
         interactiveContent: {
           create: {
             body: {

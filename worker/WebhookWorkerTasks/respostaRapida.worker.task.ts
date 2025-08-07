@@ -7,7 +7,13 @@ import {
 } from "../../lib/queue/resposta-rapida.queue";
 import { getPrismaInstance } from "../../lib/connections";
 import { recordWorkerMetrics } from "../../lib/monitoring/application-performance-monitor";
-import { performance } from 'perf_hooks';
+import { performance } from "perf_hooks";
+import {
+  validateRespostaRapidaJobData,
+  sanitizeTextContent,
+  sanitizePhoneNumber,
+  sanitizeApiKey
+} from "../../lib/webhook-utils";
 
 // ============================================================================
 // INTERFACES
@@ -66,33 +72,53 @@ class IntentProcessor {
     const startTime = Date.now();
 
     try {
-      console.log(`[Intent Processor] Processing intent: ${intentName}`, {
-        correlationId,
-        inboxId,
-        contactPhone,
+      // Validar e re-sanitizar dados críticos no worker como medida de segurança
+      const sanitizedData = {
+        intentName: sanitizeTextContent(intentName),
+        inboxId: String(inboxId).trim(),
+        contactPhone: sanitizePhoneNumber(contactPhone),
+        wamid: String(wamid).trim(),
+        correlationId: String(correlationId).trim(),
+        credentials: {
+          token: sanitizeApiKey(credentials.token),
+          phoneNumberId: String(credentials.phoneNumberId).trim(),
+          businessId: String(credentials.businessId).trim(),
+        }
+      };
+
+      // Validar dados sanitizados
+      if (!sanitizedData.intentName || !sanitizedData.contactPhone || !sanitizedData.credentials.token) {
+        throw new Error('Dados críticos inválidos após sanitização no worker');
+      }
+
+      console.log(`[Intent Processor] Processing intent: ${sanitizedData.intentName}`, {
+        correlationId: sanitizedData.correlationId,
+        inboxId: sanitizedData.inboxId,
+        contactPhone: `${sanitizedData.contactPhone.substring(0, 4)}****${sanitizedData.contactPhone.substring(sanitizedData.contactPhone.length - 4)}`,
+        hasValidCredentials: !!sanitizedData.credentials.token,
       });
 
       // 1. Query MapeamentoIntencao for template mapping
       const templateMapping = await this.findTemplateByIntent(
-        intentName,
-        inboxId
+        sanitizedData.intentName,
+        sanitizedData.inboxId
       );
 
       if (!templateMapping) {
         console.log(
-          `[Intent Processor] No mapping found for intent: ${intentName}`,
+          `[Intent Processor] No mapping found for intent: ${sanitizedData.intentName}`,
           {
-            correlationId,
-            inboxId,
+            correlationId: sanitizedData.correlationId,
+            inboxId: sanitizedData.inboxId,
           }
         );
 
         // Fallback handling when no mapping is found
         return await this.handleNoMappingFallback(
-          intentName,
-          contactPhone,
-          credentials,
-          correlationId,
+          sanitizedData.intentName,
+          sanitizedData.contactPhone,
+          sanitizedData.credentials,
+          sanitizedData.correlationId,
           startTime
         );
       }
@@ -410,35 +436,39 @@ class IntentProcessor {
     variables: Record<string, string>
   ): any {
     try {
-      const processedData = JSON.parse(JSON.stringify(data));
+      // Convert internal format to WhatsApp API format
+      const whatsappFormat = this.convertToWhatsAppInteractiveFormat(data);
 
       // Process body text
-      if (processedData.body?.text) {
-        processedData.body.text = this.substituteVariables(
-          processedData.body.text,
+      if (whatsappFormat.body?.text) {
+        whatsappFormat.body.text = this.substituteVariables(
+          whatsappFormat.body.text,
           variables
         );
       }
 
       // Process header content
-      if (processedData.header?.content) {
-        processedData.header.content = this.substituteVariables(
-          processedData.header.content,
+      if (whatsappFormat.header?.text) {
+        whatsappFormat.header.text = this.substituteVariables(
+          whatsappFormat.header.text,
           variables
         );
       }
 
       // Process footer text
-      if (processedData.footer?.text) {
-        processedData.footer.text = this.substituteVariables(
-          processedData.footer.text,
+      if (whatsappFormat.footer?.text) {
+        whatsappFormat.footer.text = this.substituteVariables(
+          whatsappFormat.footer.text,
           variables
         );
       }
 
+      // SANITIZATION: Remove invalid 'id' fields that cause WhatsApp API errors
+      this.sanitizeInteractiveMessage(whatsappFormat);
+
       return {
         type: "interactive",
-        interactive: processedData,
+        interactive: whatsappFormat,
       };
     } catch (error) {
       console.error(
@@ -447,6 +477,181 @@ class IntentProcessor {
       );
       throw error;
     }
+  }
+
+  /**
+   * Convert internal interactive format to WhatsApp API format
+   */
+  private convertToWhatsAppInteractiveFormat(data: any): any {
+    console.log(`[Intent Processor] Converting internal format to WhatsApp format`, {
+      originalData: JSON.stringify(data, null, 2)
+    });
+
+    const whatsappFormat: any = {
+      type: "button", // Default to button type
+    };
+
+    // Convert body
+    if (data.body?.text) {
+      whatsappFormat.body = {
+        text: data.body.text
+      };
+    }
+
+    // Convert header
+    if (data.header) {
+      if (data.header.type === 'text' && data.header.content) {
+        whatsappFormat.header = {
+          type: "text",
+          text: data.header.content
+        };
+      } else if (data.header.type === 'image' && data.header.content) {
+        whatsappFormat.header = {
+          type: "image",
+          image: {
+            link: data.header.content
+          }
+        };
+      }
+    }
+
+    // Convert footer
+    if (data.footer?.text) {
+      whatsappFormat.footer = {
+        text: data.footer.text
+      };
+    }
+
+    // Convert action buttons
+    if (data.actionReplyButton?.buttons && Array.isArray(data.actionReplyButton.buttons)) {
+      whatsappFormat.action = {
+        buttons: data.actionReplyButton.buttons.map((button: any) => ({
+          type: "reply",
+          reply: {
+            id: button.reply?.id || button.id || `btn_${Date.now()}`,
+            title: button.reply?.title || button.title || "Button"
+          }
+        }))
+      };
+    }
+
+    // Convert action list (for list messages)
+    if (data.actionList?.sections && Array.isArray(data.actionList.sections)) {
+      whatsappFormat.type = "list";
+      whatsappFormat.action = {
+        button: data.actionList.button || "Ver opções",
+        sections: data.actionList.sections.map((section: any) => ({
+          title: section.title || "",
+          rows: section.rows?.map((row: any) => ({
+            id: row.id || `row_${Date.now()}`,
+            title: row.title || "Option",
+            description: row.description || ""
+          })) || []
+        }))
+      };
+    }
+
+    console.log(`[Intent Processor] Converted internal format to WhatsApp format`, {
+      originalKeys: Object.keys(data),
+      convertedKeys: Object.keys(whatsappFormat),
+      type: whatsappFormat.type,
+      convertedData: JSON.stringify(whatsappFormat, null, 2)
+    });
+
+    return whatsappFormat;
+  }
+
+  /**
+   * Sanitizes interactive message data to remove invalid fields
+   */
+  private sanitizeInteractiveMessage(data: any): void {
+    console.log(`[Intent Processor] Sanitizing interactive message`, {
+      beforeSanitization: JSON.stringify(data, null, 2)
+    });
+
+    // Remove internal database fields that shouldn't be sent to WhatsApp API
+    const invalidFields = [
+      'templateId', 'bodyId', 'createdAt', 'updatedAt', 'id',
+      'interactiveContentId', 'actionCtaUrl', 'actionReplyButton', 
+      'actionList', 'actionFlow', 'actionLocationRequest'
+    ];
+
+    invalidFields.forEach(field => {
+      if (data[field] !== undefined) {
+        console.warn(`[Intent Processor] Removing invalid field '${field}' from interactive message: ${data[field]}`);
+        delete data[field];
+      }
+    });
+
+    // Remove any remaining invalid fields that might be nested
+    Object.keys(data).forEach(key => {
+      if (invalidFields.includes(key)) {
+        console.warn(`[Intent Processor] Removing remaining invalid field '${key}' from interactive message`);
+        delete data[key];
+      }
+    });
+
+    // Sanitize nested objects
+    if (data.body && typeof data.body === 'object') {
+      if (data.body.id) {
+        console.warn(`[Intent Processor] Removing invalid 'id' field from body: ${data.body.id}`);
+        delete data.body.id;
+      }
+    }
+
+    if (data.footer && typeof data.footer === 'object') {
+      if (data.footer.id) {
+        console.warn(`[Intent Processor] Removing invalid 'id' field from footer: ${data.footer.id}`);
+        delete data.footer.id;
+      }
+      if (data.footer.interactiveContentId) {
+        console.warn(`[Intent Processor] Removing invalid 'interactiveContentId' field from footer`);
+        delete data.footer.interactiveContentId;
+      }
+    }
+
+    // Sanitize buttons array
+    if (data.action?.buttons && Array.isArray(data.action.buttons)) {
+      data.action.buttons.forEach((button: any, index: number) => {
+        // Remove invalid fields from buttons
+        if (button.payload) {
+          console.warn(`[Intent Processor] Removing invalid 'payload' field from button[${index}]`);
+          delete button.payload;
+        }
+        if (button.title && !button.reply?.title) {
+          // Ensure button has proper reply structure
+          if (!button.reply) button.reply = {};
+          button.reply.title = button.title;
+          delete button.title;
+        }
+        
+        // Ensure button reply has valid id
+        if (button.reply && (!button.reply.id || button.reply.id.trim() === '')) {
+          button.reply.id = `btn_${index}_${Date.now()}`;
+        }
+      });
+    }
+
+    // Sanitize sections array (for list messages)
+    if (data.action?.sections && Array.isArray(data.action.sections)) {
+      data.action.sections.forEach((section: any, sectionIndex: number) => {
+        if (section.rows && Array.isArray(section.rows)) {
+          section.rows.forEach((row: any, rowIndex: number) => {
+            if (row.id && typeof row.id !== 'string') {
+              row.id = String(row.id);
+            }
+            // Ensure row id is not empty
+            if (!row.id || row.id.trim() === '') {
+              row.id = `row_${sectionIndex}_${rowIndex}_${Date.now()}`;
+            }
+          });
+        }
+      });
+    }
+
+    console.log(`[Intent Processor] Interactive message sanitized successfully`, {
+      afterSanitization: JSON.stringify(data, null, 2)
+    });
   }
 
   /**
@@ -571,10 +776,30 @@ class ButtonProcessor {
     const startTime = Date.now();
 
     try {
-      console.log(`[Button Processor] Processing button click: ${buttonId}`, {
-        correlationId,
-        inboxId,
-        contactPhone,
+      // Validar e re-sanitizar dados críticos no worker como medida de segurança
+      const sanitizedData = {
+        buttonId: String(buttonId).trim().replace(/[^a-zA-Z0-9_.-]/g, ''),
+        inboxId: String(inboxId).trim(),
+        contactPhone: sanitizePhoneNumber(contactPhone),
+        wamid: String(wamid).trim(),
+        correlationId: String(correlationId).trim(),
+        credentials: {
+          token: sanitizeApiKey(credentials.token),
+          phoneNumberId: String(credentials.phoneNumberId).trim(),
+          businessId: String(credentials.businessId).trim(),
+        }
+      };
+
+      // Validar dados sanitizados
+      if (!sanitizedData.buttonId || !sanitizedData.contactPhone || !sanitizedData.credentials.token) {
+        throw new Error('Dados críticos inválidos após sanitização no worker');
+      }
+
+      console.log(`[Button Processor] Processing button click: ${sanitizedData.buttonId}`, {
+        correlationId: sanitizedData.correlationId,
+        inboxId: sanitizedData.inboxId,
+        contactPhone: `${sanitizedData.contactPhone.substring(0, 4)}****${sanitizedData.contactPhone.substring(sanitizedData.contactPhone.length - 4)}`,
+        hasValidCredentials: !!sanitizedData.credentials.token,
       });
 
       // 1. Query MapeamentoBotao for action mapping
@@ -1198,7 +1423,12 @@ class ButtonProcessor {
         },
       });
 
-      if (reaction && reaction.actionPayload && typeof reaction.actionPayload === 'object' && 'emoji' in reaction.actionPayload) {
+      if (
+        reaction &&
+        reaction.actionPayload &&
+        typeof reaction.actionPayload === "object" &&
+        "emoji" in reaction.actionPayload
+      ) {
         return (reaction.actionPayload as any).emoji;
       }
 
@@ -1623,6 +1853,16 @@ class WhatsAppApiManager {
         ...messageContent,
       };
 
+      // DEBUG: Log the exact payload being sent to WhatsApp API
+      console.log(`[WhatsApp API] EXACT PAYLOAD BEING SENT:`, {
+        url,
+        payload: JSON.stringify(payload, null, 2),
+        messageContentType: messageContent.type,
+        hasInteractive: !!messageContent.interactive,
+        interactiveKeys: messageContent.interactive ? Object.keys(messageContent.interactive) : [],
+        interactiveStructure: messageContent.interactive,
+      });
+
       const response = await fetch(url, {
         method: "POST",
         headers: {
@@ -1855,7 +2095,9 @@ console.log(
  * Export the task processing function for Parent Worker delegation
  * This function will be called by the Parent Worker to process high priority jobs
  */
-export async function processRespostaRapidaTask(job: Job<RespostaRapidaJobData>): Promise<WorkerResponse> {
+export async function processRespostaRapidaTask(
+  job: Job<RespostaRapidaJobData>
+): Promise<WorkerResponse> {
   const startTime = performance.now();
   const { type, data } = job.data;
   let success = false;
@@ -1872,14 +2114,14 @@ export async function processRespostaRapidaTask(job: Job<RespostaRapidaJobData>)
 
   try {
     // Validate job type
-    if (type !== 'processarResposta') {
+    if (type !== "processarResposta") {
       throw new Error(`Invalid job type: ${type}`);
     }
 
     // Process based on interaction type
     let result: WorkerResponse;
-    
-    if (data.interactionType === 'intent' && data.intentName) {
+
+    if (data.interactionType === "intent" && data.intentName) {
       const intentProcessor = new IntentProcessor();
       result = await intentProcessor.processIntent(
         data.intentName,
@@ -1893,7 +2135,7 @@ export async function processRespostaRapidaTask(job: Job<RespostaRapidaJobData>)
         data.wamid,
         data.correlationId
       );
-    } else if (data.interactionType === 'button_reply' && data.buttonId) {
+    } else if (data.interactionType === "button_reply" && data.buttonId) {
       const buttonProcessor = new ButtonProcessor();
       result = await buttonProcessor.processButtonClick(
         data.buttonId,
@@ -1908,18 +2150,21 @@ export async function processRespostaRapidaTask(job: Job<RespostaRapidaJobData>)
         data.correlationId
       );
     } else {
-      throw new Error(`Invalid interaction type or missing required data: ${data.interactionType}`);
+      throw new Error(
+        `Invalid interaction type or missing required data: ${data.interactionType}`
+      );
     }
 
     // Record successful worker metrics
     success = result.success;
     error = result.error;
-    
+
     recordWorkerMetrics({
-      jobId: job.id || 'unknown',
+      jobId: job.id || "unknown",
       jobType: `resposta-rapida-${data.interactionType}`,
       processingTime: performance.now() - startTime,
-      queueWaitTime: job.processedOn && job.timestamp ? job.processedOn - job.timestamp : 0,
+      queueWaitTime:
+        job.processedOn && job.timestamp ? job.processedOn - job.timestamp : 0,
       success: result.success,
       error: result.error,
       timestamp: new Date(),
@@ -1930,8 +2175,9 @@ export async function processRespostaRapidaTask(job: Job<RespostaRapidaJobData>)
     return result;
   } catch (error) {
     const processingTime = performance.now() - startTime;
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+
     console.error(`[Resposta Rapida Task] Job processing failed: ${job.name}`, {
       jobId: job.id,
       correlationId: data.correlationId,
@@ -1941,10 +2187,11 @@ export async function processRespostaRapidaTask(job: Job<RespostaRapidaJobData>)
 
     // Record failed worker metrics
     recordWorkerMetrics({
-      jobId: job.id || 'unknown',
+      jobId: job.id || "unknown",
       jobType: `resposta-rapida-${data.interactionType}`,
       processingTime,
-      queueWaitTime: job.processedOn && job.timestamp ? job.processedOn - job.timestamp : 0,
+      queueWaitTime:
+        job.processedOn && job.timestamp ? job.processedOn - job.timestamp : 0,
       success: false,
       error: errorMessage,
       timestamp: new Date(),

@@ -46,6 +46,8 @@
 		"rollout": "tsx scripts/rollout-management.ts",
 		"init-monitoring": "tsx scripts/init-monitoring.ts",
 		"test-redis": "tsx scripts/test-redis.ts",
+		"flash-intent": "tsx scripts/manage-flash-intent.ts",
+		"setup-flash-intent-dev": "tsx scripts/setup-flash-intent-dev.ts",
 		"dev": "node server.js",
 		"dev:turbo": "next dev --turbo",
 		"dev:polling": "next dev --turbo",

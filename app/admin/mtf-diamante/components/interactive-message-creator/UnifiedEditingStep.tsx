@@ -357,19 +357,27 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
   // Instagram template type determination
   const getInstagramTemplateType = useCallback(() => {
     const bodyLength = message.body.text.length;
-    const hasImage = message.header?.type === 'image' && message.header?.content;
-    
+    const hasImage =
+      message.header?.type === "image" && message.header?.content;
+
     if (bodyLength > 640) {
-      const isOverQuickRepliesLimit = bodyLength > VALIDATION_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_LENGTH;
-      return { 
-        type: 'quick_replies', 
-        reason: `Quick Replies (${bodyLength} chars > 640)${isOverQuickRepliesLimit ? ' - EXCEDE LIMITE INSTAGRAM' : ''}`,
-        isOverLimit: isOverQuickRepliesLimit
+      const isOverQuickRepliesLimit =
+        bodyLength > VALIDATION_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_LENGTH;
+      return {
+        type: "quick_replies",
+        reason: `Quick Replies (${bodyLength} chars > 640)${isOverQuickRepliesLimit ? " - EXCEDE LIMITE INSTAGRAM" : ""}`,
+        isOverLimit: isOverQuickRepliesLimit,
       };
     } else if (bodyLength <= 80) {
-      return { type: 'generic', reason: `Generic Template (${bodyLength} chars ≤ 80)` };
+      return {
+        type: "generic",
+        reason: `Generic Template (${bodyLength} chars ≤ 80)`,
+      };
     } else {
-      return { type: 'button', reason: `Button Template (${bodyLength} chars: 81-640)` };
+      return {
+        type: "button",
+        reason: `Button Template (${bodyLength} chars: 81-640)`,
+      };
     }
   }, [message.body.text, message.header]);
 
@@ -602,6 +610,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
                   maxLength={VALIDATION_LIMITS.BODY_TEXT_MAX_LENGTH}
                   inline={true}
                   showPreview={false}
+                  accountId="mtf-diamante"
                   className={cn(
                     !isFieldValid("body.text") && "border-destructive"
                   )}
@@ -610,26 +619,31 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
                 {/* Character counters */}
                 <div className="flex justify-between items-center text-xs">
                   <div className="text-muted-foreground">
-                    {instagramTemplate.type === 'quick_replies' && (
+                    {instagramTemplate.type === "quick_replies" && (
                       <span className="font-medium">
-                        Instagram Quick Replies: {message.body.text.length}/{VALIDATION_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_LENGTH}
+                        Instagram Quick Replies: {message.body.text.length}/
+                        {VALIDATION_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_LENGTH}
                       </span>
                     )}
                   </div>
                   <div className="flex gap-2">
-                    {instagramTemplate.type === 'quick_replies' && message.body.text.length > VALIDATION_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_LENGTH && (
-                      <Badge variant="destructive" className="text-xs">
-                        EXCEDE LIMITE INSTAGRAM
-                      </Badge>
-                    )}
+                    {instagramTemplate.type === "quick_replies" &&
+                      message.body.text.length >
+                        VALIDATION_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_LENGTH && (
+                        <Badge variant="destructive" className="text-xs">
+                          EXCEDE LIMITE INSTAGRAM
+                        </Badge>
+                      )}
                     <Badge
                       variant={
-                        message.body.text.length > VALIDATION_LIMITS.BODY_TEXT_MAX_LENGTH * 0.9
+                        message.body.text.length >
+                        VALIDATION_LIMITS.BODY_TEXT_MAX_LENGTH * 0.9
                           ? "destructive"
                           : "outline"
                       }
                     >
-                      {message.body.text.length}/{VALIDATION_LIMITS.BODY_TEXT_MAX_LENGTH}
+                      {message.body.text.length}/
+                      {VALIDATION_LIMITS.BODY_TEXT_MAX_LENGTH}
                     </Badge>
                   </div>
                 </div>
@@ -642,54 +656,79 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
                 )}
 
                 {/* Instagram Template Info */}
-                <div className={cn(
-                  "mt-3 p-3 rounded-lg border",
-                  instagramTemplate.type === 'quick_replies' 
-                    ? instagramTemplate.isOverLimit
-                      ? "bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800"
-                      : "bg-yellow-50 border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-800"
-                    : instagramTemplate.type === 'generic'
-                    ? "bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800"
-                    : "bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800"
-                )}>
+                <div
+                  className={cn(
+                    "mt-3 p-3 rounded-lg border",
+                    instagramTemplate.type === "quick_replies"
+                      ? instagramTemplate.isOverLimit
+                        ? "bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800"
+                        : "bg-yellow-50 border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-800"
+                      : instagramTemplate.type === "generic"
+                        ? "bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800"
+                        : "bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800"
+                  )}
+                >
                   <div className="flex items-start gap-2">
-                    <Info className={cn(
-                      "h-4 w-4 mt-0.5 flex-shrink-0",
-                      instagramTemplate.type === 'quick_replies' 
-                        ? instagramTemplate.isOverLimit
-                          ? "text-red-600 dark:text-red-400"
-                          : "text-yellow-600 dark:text-yellow-400"
-                        : instagramTemplate.type === 'generic'
-                        ? "text-blue-600 dark:text-blue-400"
-                        : "text-green-600 dark:text-green-400"
-                    )} />
-                    <div className={cn(
-                      "text-xs",
-                      instagramTemplate.type === 'quick_replies' 
-                        ? instagramTemplate.isOverLimit
-                          ? "text-red-700 dark:text-red-300"
-                          : "text-yellow-700 dark:text-yellow-300"
-                        : instagramTemplate.type === 'generic'
-                        ? "text-blue-700 dark:text-blue-300"
-                        : "text-green-700 dark:text-green-300"
-                    )}>
-                      <p className="font-medium mb-1">Instagram Template: {instagramTemplate.type.toUpperCase().replace('_', ' ')}</p>
+                    <Info
+                      className={cn(
+                        "h-4 w-4 mt-0.5 flex-shrink-0",
+                        instagramTemplate.type === "quick_replies"
+                          ? instagramTemplate.isOverLimit
+                            ? "text-red-600 dark:text-red-400"
+                            : "text-yellow-600 dark:text-yellow-400"
+                          : instagramTemplate.type === "generic"
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-green-600 dark:text-green-400"
+                      )}
+                    />
+                    <div
+                      className={cn(
+                        "text-xs",
+                        instagramTemplate.type === "quick_replies"
+                          ? instagramTemplate.isOverLimit
+                            ? "text-red-700 dark:text-red-300"
+                            : "text-yellow-700 dark:text-yellow-300"
+                          : instagramTemplate.type === "generic"
+                            ? "text-blue-700 dark:text-blue-300"
+                            : "text-green-700 dark:text-green-300"
+                      )}
+                    >
+                      <p className="font-medium mb-1">
+                        Instagram Template:{" "}
+                        {instagramTemplate.type.toUpperCase().replace("_", " ")}
+                      </p>
                       <p>{instagramTemplate.reason}</p>
-                      {instagramTemplate.type === 'generic' && (
-                        <p className="mt-1">• Suporta imagem, título, subtítulo e botões</p>
+                      {instagramTemplate.type === "generic" && (
+                        <p className="mt-1">
+                          • Suporta imagem, título, subtítulo e botões
+                        </p>
                       )}
-                      {instagramTemplate.type === 'button' && (
-                        <p className="mt-1">• Apenas texto e botões (imagem e rodapé serão descartados)</p>
+                      {instagramTemplate.type === "button" && (
+                        <p className="mt-1">
+                          • Apenas texto e botões (imagem e rodapé serão
+                          descartados)
+                        </p>
                       )}
-                      {instagramTemplate.type === 'quick_replies' && (
+                      {instagramTemplate.type === "quick_replies" && (
                         <>
-                          <p className="mt-1">• Texto longo com respostas rápidas (imagem e rodapé serão descartados)</p>
+                          <p className="mt-1">
+                            • Texto longo com respostas rápidas (imagem e rodapé
+                            serão descartados)
+                          </p>
                           {instagramTemplate.isOverLimit && (
                             <div className="mt-2 p-2 bg-red-100 dark:bg-red-900/30 rounded border border-red-200 dark:border-red-800">
-                              <p className="font-semibold text-red-800 dark:text-red-200">⚠️ AVISO IMPORTANTE:</p>
+                              <p className="font-semibold text-red-800 dark:text-red-200">
+                                ⚠️ AVISO IMPORTANTE:
+                              </p>
                               <p className="text-red-700 dark:text-red-300">
-                                Esta mensagem excede o limite de {VALIDATION_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_LENGTH} caracteres para Quick Replies do Instagram. 
-                                <strong>Esta mensagem não será vinculada ao Instagram.</strong>
+                                Esta mensagem excede o limite de{" "}
+                                {
+                                  VALIDATION_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_LENGTH
+                                }{" "}
+                                caracteres para Quick Replies do Instagram.
+                                <strong>
+                                  Esta mensagem não será vinculada ao Instagram.
+                                </strong>
                               </p>
                             </div>
                           )}
@@ -819,10 +858,10 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
                     // Convert the reaction format to match the expected type
                     const reactionUpdate: Partial<CentralButtonReaction> = {
                       buttonId,
-                      type: reaction.emoji ? 'emoji' : 'text',
+                      type: reaction.emoji ? "emoji" : "text",
                       emoji: reaction.emoji,
                       textResponse: reaction.textResponse,
-                      isActive: true
+                      isActive: true,
                     };
                     onReactionUpdate(buttonId, reactionUpdate);
                   }}
@@ -895,6 +934,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
           placeholder="Enter your message content..."
           maxLength={VALIDATION_LIMITS.BODY_TEXT_MAX_LENGTH}
           showPreview={false}
+          accountId="mtf-diamante"
         />
       )}
 
@@ -909,6 +949,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
           placeholder="Enter footer text..."
           maxLength={VALIDATION_LIMITS.FOOTER_TEXT_MAX_LENGTH}
           showPreview={false}
+          accountId="mtf-diamante"
         />
       )}
 

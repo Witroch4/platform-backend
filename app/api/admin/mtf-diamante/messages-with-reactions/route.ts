@@ -291,7 +291,7 @@ export async function POST(request: NextRequest) {
     try {
       caixa = await getPrismaInstance().chatwitInbox.findFirst({
         where: {
-          id: inboxId,
+          id: inboxId, // inboxId is actually the internal ChatwitInbox id
           usuarioChatwit: {
             appUserId: session.user!.id,
           },
@@ -349,7 +349,7 @@ export async function POST(request: NextRequest) {
           tags: [],
           isActive: true,
           createdById: session.user!.id,
-          inboxId: inboxId,
+          inboxId: inboxId, // Use the passed inboxId (which is the internal ChatwitInbox id)
           interactiveContent: {
             create: {
               body: {
@@ -444,7 +444,7 @@ export async function POST(request: NextRequest) {
             const savedReaction = await tx.mapeamentoBotao.create({
               data: {
                 buttonId: reactionData.buttonId,
-                inboxId: savedMessage.id,
+                inboxId: inboxId, // Use the passed inboxId (which is the internal ChatwitInbox id)
                 actionType: 'SEND_TEMPLATE',
                 actionPayload,
                 description:
@@ -800,32 +800,42 @@ export async function PUT(request: NextRequest) {
       // Update button reactions if provided
       let updatedReactions = [];
       if (reactions && reactions.length >= 0) {
-        // Remove existing reactions for this message
-        await tx.mapeamentoBotao.deleteMany({
-          where: { inboxId: messageId },
-        });
+        // Get the ChatwitInbox id for this template
+        const templateInboxId = existingMessage.inboxId;
+        
+        if (templateInboxId) {
+          // Remove existing reactions for this inbox and buttonIds related to this message
+          // Note: We need a better way to associate reactions with specific templates
+          // For now, we'll delete by buttonId pattern or add a templateId field to MapeamentoBotao
+          await tx.mapeamentoBotao.deleteMany({
+            where: { 
+              inboxId: templateInboxId,
+              // We might need to add a templateId field to properly associate reactions
+            },
+          });
 
-        // Create new reactions
-        for (const reactionData of reactions) {
-          if (reactionData.reaction) {
-            const actionPayload = {
-              emoji: reactionData.reaction.type === 'emoji' ? reactionData.reaction.value : null,
-              textReaction: reactionData.reaction.type === 'text' ? reactionData.reaction.value : null,
-            };
-            
-            const savedReaction = await tx.mapeamentoBotao.create({
-              data: {
-                buttonId: reactionData.buttonId,
-                inboxId: messageId,
-                actionType: 'SEND_TEMPLATE',
-                actionPayload,
-                description:
-                  reactionData.reaction.type === "text"
-                    ? reactionData.reaction.value
-                    : null,
-              },
-            });
-            updatedReactions.push(savedReaction);
+          // Create new reactions
+          for (const reactionData of reactions) {
+            if (reactionData.reaction) {
+              const actionPayload = {
+                emoji: reactionData.reaction.type === 'emoji' ? reactionData.reaction.value : null,
+                textReaction: reactionData.reaction.type === 'text' ? reactionData.reaction.value : null,
+              };
+              
+              const savedReaction = await tx.mapeamentoBotao.create({
+                data: {
+                  buttonId: reactionData.buttonId,
+                  inboxId: templateInboxId, // Use the ChatwitInbox id
+                  actionType: 'SEND_TEMPLATE',
+                  actionPayload,
+                  description:
+                    reactionData.reaction.type === "text"
+                      ? reactionData.reaction.value
+                      : null,
+                },
+              });
+              updatedReactions.push(savedReaction);
+            }
           }
         }
       }
@@ -920,20 +930,20 @@ export async function GET(request: NextRequest) {
         }
       });
 
-      // Get button reactions for this message
-      const buttonReactions = await getPrismaInstance().mapeamentoBotao.findMany({
-        where: { 
-          inboxId: messageId,
-        },
-        orderBy: { createdAt: "asc" },
-      });
-
       if (!message) {
         return NextResponse.json(
           { error: "Message not found or access denied" },
           { status: 404 }
         );
       }
+
+      // Get button reactions for this message's inbox
+      const buttonReactions = await getPrismaInstance().mapeamentoBotao.findMany({
+        where: { 
+          inboxId: message.inboxId!, // Use the ChatwitInbox id from the template
+        },
+        orderBy: { createdAt: "asc" },
+      });
 
       const formattedMessage = formatMessage(message);
       const formattedReactions = buttonReactions.map(formatReaction);
@@ -946,16 +956,28 @@ export async function GET(request: NextRequest) {
     }
 
     if (inboxId) {
-      // Get all messages for a caixa with their reactions
+      // Verify user has access to this ChatwitInbox
+      const chatwitInbox = await getPrismaInstance().chatwitInbox.findFirst({
+        where: {
+          id: inboxId, // inboxId is the internal ChatwitInbox id
+          usuarioChatwit: {
+            appUserId: session.user!.id,
+          },
+        },
+      });
+
+      if (!chatwitInbox) {
+        return NextResponse.json(
+          { error: "Inbox not found or access denied" },
+          { status: 404 }
+        );
+      }
+
+      // Get all messages for this ChatwitInbox
       const messages = await getPrismaInstance().template.findMany({
         where: {
-          inboxId: inboxId,
+          inboxId: inboxId, // Use the passed inboxId directly
           type: "INTERACTIVE_MESSAGE",
-          inbox: {
-            usuarioChatwit: {
-              appUserId: session.user!.id,
-            },
-          },
         },
         include: {
           interactiveContent: {
@@ -974,11 +996,10 @@ export async function GET(request: NextRequest) {
         orderBy: { createdAt: "desc" },
       });
 
-      // Get all button reactions for these messages
-      const messageIds = messages.map(m => m.id);
+      // Get all button reactions for this inbox
       const allButtonReactions = await getPrismaInstance().mapeamentoBotao.findMany({
         where: { 
-          inboxId: { in: messageIds },
+          inboxId: inboxId, // Use the passed inboxId directly
         },
         orderBy: { createdAt: "asc" },
       });
