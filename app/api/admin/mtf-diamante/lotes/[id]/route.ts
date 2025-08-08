@@ -42,6 +42,17 @@ export async function PATCH(
       return NextResponse.json({ error: 'Lote não encontrado' }, { status: 404 });
     }
 
+    // LÓGICA PARA GARANTIR APENAS UM LOTE ATIVO
+    if (isActive === true) {
+      // Se estamos ativando este lote, desativar todos os outros
+      lotes.forEach((lote, index) => {
+        if (index !== loteIndex) {
+          lote.isActive = false;
+        }
+      });
+      console.log(`[MTF Lotes] Desativando outros lotes ao ativar lote ${id}`);
+    }
+
     // Atualizar o lote com os dados fornecidos
     lotes[loteIndex] = {
       ...lotes[loteIndex],

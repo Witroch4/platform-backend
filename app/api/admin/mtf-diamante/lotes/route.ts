@@ -81,15 +81,20 @@ export async function POST(request: NextRequest) {
       lotes = lotesVariavel.valor as unknown as any[];
     }
 
+    // Determinar se o novo lote deve ser ativo
+    // Se não há lotes existentes, o primeiro será ativo
+    // Se já existem lotes, o novo será inativo por padrão
+    const isFirstLote = lotes.length === 0;
+
     // Criar novo lote
     const novoLote: LoteOab = {
-      id: `lote_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: `lote_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
       numero: parseInt(numero),
       nome,
       valor,
       dataInicio,
       dataFim,
-      isActive: true
+      isActive: isFirstLote // Apenas o primeiro lote é ativo por padrão
     };
 
     // Adicionar o novo lote ao array

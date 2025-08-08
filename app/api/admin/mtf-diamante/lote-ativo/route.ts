@@ -66,8 +66,8 @@ export async function GET() {
     const loteAtivo = lotes.find((lote) => lote.isActive === true);
 
     if (loteAtivo) {
-      // Formatar data para exibição humanizada
-      const formatarData = (dataStr: string) => {
+      // Formatar data e hora para exibição humanizada
+      const formatarDataHora = (dataStr: string) => {
         if (!dataStr) return "";
         try {
           const data = new Date(dataStr);
@@ -83,11 +83,11 @@ export async function GET() {
         }
       };
 
-      const dataInicioFormatada = formatarData(loteAtivo.dataInicio);
-      const dataFimFormatada = formatarData(loteAtivo.dataFim);
+      const dataInicioFormatada = formatarDataHora(loteAtivo.dataInicio);
+      const dataFimFormatada = formatarDataHora(loteAtivo.dataFim);
 
       // Valor humanizado do lote ativo
-      const valorHumanizado = `${loteAtivo.nome || "Lote " + loteAtivo.numero}\nValor: ${loteAtivo.valor}\nPeríodo: ${dataInicioFormatada} às ${dataFimFormatada}`;
+      const valorHumanizado = `${loteAtivo.nome || "Lote " + loteAtivo.numero}\nValor: R$ ${loteAtivo.valor}\nPeríodo: de ${dataInicioFormatada} a ${dataFimFormatada}`;
 
       return NextResponse.json({
         success: true,

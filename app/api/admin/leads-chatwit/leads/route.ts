@@ -240,7 +240,8 @@ export async function GET(request: Request): Promise<Response> {
         },
         skip,
         take: limit,
-        orderBy: { lead: { createdAt: "desc" } },
+        // Ordenar por updatedAt para que leads recentemente atualizados (com novos arquivos, etc.) apareçam primeiro
+        orderBy: { lead: { updatedAt: "desc" } },
         include: {
           lead: true,
           usuarioChatwit: {

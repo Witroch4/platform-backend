@@ -44,22 +44,26 @@ export async function POST(request: Request): Promise<Response> {
       return NextResponse.json({ error: 'sourceId obrigatório' }, { status: 400 });
     }
 
-    // 1) Busca o lead + arquivos (novo schema: via relação lead -> sourceIdentifier)
+    // 1) Busca o lead + arquivos (sourceId é o leadId do LeadOabData)
+    console.log(`[enviar-pdf-analise-lead] Buscando lead com leadId: ${sourceId}`);
     const lead = await prisma.leadOabData.findFirst({
-      where: { lead: { sourceIdentifier: sourceId } },
+      where: { leadId: sourceId },
       include: { arquivos: true }
     });
 
     if (!lead || !lead.leadUrl) {
+      console.log(`[enviar-pdf-analise-lead] Lead não encontrado ou sem leadUrl para leadId: ${sourceId}`);
       throw new Error('Lead não encontrado ou sem leadUrl');
     }
+
+    console.log(`[enviar-pdf-analise-lead] Lead encontrado: ${lead.id}, leadUrl: ${lead.leadUrl}`);
 
     // 2) Token: prioriza token salvo para o usuário relacionado a este lead
     if (!accessToken) {
       const usuarioChatwit = await prisma.usuarioChatwit.findFirst({
         where: {
           leadsOabData: {
-            some: { lead: { sourceIdentifier: sourceId } }
+            some: { leadId: sourceId }
           }
         },
         select: { chatwitAccessToken: true }
@@ -122,7 +126,7 @@ export async function POST(request: Request): Promise<Response> {
       const usuarioChatwit = await prisma.usuarioChatwit.findFirst({
         where: {
           leadsOabData: {
-            some: { lead: { sourceIdentifier: sourceId } }
+            some: { leadId: sourceId }
           }
         }
       });
@@ -136,7 +140,7 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     await prisma.leadOabData.updateMany({
-      where: { lead: { sourceIdentifier: sourceId } },
+      where: { leadId: sourceId },
       data: updateData
     });
 

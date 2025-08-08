@@ -148,15 +148,80 @@ export async function getVariableByKey(userId: string, chave: string): Promise<s
 }
 
 /**
+ * Busca o lote ativo formatado para um usuário
+ */
+async function getLoteAtivoFormatado(userId: string): Promise<string> {
+  try {
+    const prisma = getPrismaInstance();
+
+    const config = await prisma.mtfDiamanteConfig.findUnique({
+      where: { userId },
+      include: { variaveis: { where: { chave: 'lotes_oab' } } }
+    });
+
+    if (!config || !config.variaveis[0]) {
+      return "Nenhum lote configurado";
+    }
+
+    const lotesVariavel = config.variaveis[0];
+    if (!Array.isArray(lotesVariavel.valor)) {
+      return "Formato de lotes inválido";
+    }
+
+    const lotes = lotesVariavel.valor as unknown as LoteOab[];
+    const loteAtivo = lotes.find(l => l.isActive === true);
+
+    if (!loteAtivo) {
+      return "Nenhum lote ativo no momento";
+    }
+
+    // Formatação humanizada do lote ativo com data e hora
+    const formatarDataHora = (dataStr: string) => {
+      if (!dataStr) return '';
+      try {
+        const data = new Date(dataStr);
+        return data.toLocaleDateString('pt-BR', {
+          day: '2-digit',
+          month: '2-digit', 
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      } catch {
+        return dataStr;
+      }
+    };
+
+    const dataInicio = formatarDataHora(loteAtivo.dataInicio);
+    const dataFim = formatarDataHora(loteAtivo.dataFim);
+    
+    return `${loteAtivo.nome}\nValor: R$ ${loteAtivo.valor}\nPeríodo: de ${dataInicio} a ${dataFim}`;
+
+  } catch (error) {
+    console.error(`[MTF Variables] Erro ao buscar lote ativo para usuário ${userId}:`, error);
+    return "Erro ao buscar lote ativo";
+  }
+}
+
+/**
  * Substitui variáveis em um texto usando a sintaxe {{variavel}}
  * Inclui processamento especial para lote ativo
  */
 export async function replaceVariablesInText(userId: string, texto: string): Promise<string> {
-  const variaveis = await getAllVariablesForUser(userId);
-  
+  if (!texto) return texto;
+
   let textoSubstituido = texto;
   
-  // Substituir cada variável encontrada
+  // Tratamento especial para {{lote_ativo}}
+  if (textoSubstituido.includes('{{lote_ativo}}')) {
+    const valorLoteAtivo = await getLoteAtivoFormatado(userId);
+    textoSubstituido = textoSubstituido.replace(/\{\{lote_ativo\}\}/g, valorLoteAtivo);
+    console.log(`[MTF Variables] Variável lote_ativo resolvida para usuário ${userId}: ${valorLoteAtivo}`);
+  }
+
+  // Buscar e substituir outras variáveis normais
+  const variaveis = await getAllVariablesForUser(userId);
+  
   for (const variavel of variaveis) {
     const regex = new RegExp(`\\{\\{${variavel.chave}\\}\\}`, 'g');
     textoSubstituido = textoSubstituido.replace(regex, variavel.valor);

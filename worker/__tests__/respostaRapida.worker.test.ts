@@ -63,7 +63,7 @@ describe('Resposta Rapida Worker', () => {
       } as Response);
 
       // Import worker after mocks are set up
-      const { respostaRapidaWorker } = await import('../respostaRapida.worker');
+      const { respostaRapidaWorker } = await import('../WebhookWorkerTasks/respostaRapida.worker.task');
 
       // Test data
       const jobData = {

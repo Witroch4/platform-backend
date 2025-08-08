@@ -51,9 +51,10 @@ export async function POST(request: Request): Promise<Response> {
       return NextResponse.json({ error: 'sourceId obrigatório' }, { status: 400 });
     }
 
-    // 1) Busca o lead + arquivos + usuário Chatwit (novo schema: via relação lead -> sourceIdentifier)
+    // 1) Busca o lead + arquivos + usuário Chatwit (sourceId é o leadId do LeadOabData)
+    console.log(`[enviar-pdf-recurso-lead] Buscando lead com leadId: ${sourceId}`);
     const lead = await prisma.leadOabData.findFirst({
-      where: { lead: { sourceIdentifier: sourceId } },
+      where: { leadId: sourceId },
       include: {
         arquivos: true,
         usuarioChatwit: {
@@ -68,14 +69,17 @@ export async function POST(request: Request): Promise<Response> {
     });
 
     if (!lead || !lead.leadUrl) {
+      console.log(`[enviar-pdf-recurso-lead] Lead não encontrado ou sem leadUrl para leadId: ${sourceId}`);
       throw new Error('Lead não encontrado ou sem leadUrl');
     }
+
+    console.log(`[enviar-pdf-recurso-lead] Lead encontrado: ${lead.id}, leadUrl: ${lead.leadUrl}`);
 
     // 2) Buscar o usuário Chatwit para obter accountId
     const usuarioChatwit = await prisma.usuarioChatwit.findFirst({
       where: {
         leadsOabData: {
-          some: { lead: { sourceIdentifier: sourceId } },
+          some: { leadId: sourceId },
         },
       },
       select: { chatwitAccountId: true },
@@ -140,7 +144,7 @@ export async function POST(request: Request): Promise<Response> {
     const updateData: any = { anotacoes: message };
 
     await prisma.leadOabData.updateMany({
-      where: { lead: { sourceIdentifier: sourceId } },
+      where: { leadId: sourceId },
       data: updateData,
     });
 

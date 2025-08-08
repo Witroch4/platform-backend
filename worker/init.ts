@@ -2,8 +2,7 @@ import {
   initAgendamentoWorker, 
   initManuscritoWorker, 
   initLeadsChatwitWorker, 
-  initMtfDiamanteWebhookWorker, 
-  initMtfDiamanteAsyncWorker,
+  // initMtfDiamanteAsyncWorker, // Temporariamente desabilitado
   initInstagramTranslationWorker,
   initParentWorker 
 } from './webhook.worker';
@@ -42,11 +41,10 @@ export async function initializeWorkers() {
     // Inicializa o worker de leads-chatwit
     await initLeadsChatwitWorker();
 
-    // Inicializa o worker de webhook MTF Diamante
-    await initMtfDiamanteWebhookWorker();
+
 
     // Inicializa o worker assíncrono MTF Diamante
-    await initMtfDiamanteAsyncWorker();
+    // await initMtfDiamanteAsyncWorker(); // Temporariamente desabilitado
 
     // Inicializa o worker de tradução Instagram
     await initInstagramTranslationWorker();

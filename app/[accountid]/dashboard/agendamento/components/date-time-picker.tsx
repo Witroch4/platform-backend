@@ -19,9 +19,15 @@ interface DateTimePickerProps {
   date: Date;
   setDate: (date: Date | undefined) => void;
   isPostagemDiaria?: boolean;
+  label?: string;
 }
 
-export function DateTimePicker({ date, setDate, isPostagemDiaria = false }: DateTimePickerProps) {
+export function DateTimePicker({
+  date,
+  setDate,
+  isPostagemDiaria = false,
+  label,
+}: DateTimePickerProps) {
   const handleSelect = (selectedDay: Date | undefined) => {
     if (!selectedDay) return;
 
@@ -49,7 +55,7 @@ export function DateTimePicker({ date, setDate, isPostagemDiaria = false }: Date
   return (
     <div className="space-y-2">
       <label className="block text-sm font-medium text-gray-700">
-        {isPostagemDiaria ? "Escolha a Hora" : "Escolha Data e Hora"}
+        {label || (isPostagemDiaria ? "Escolha a Hora" : "Escolha Data e Hora")}
       </label>
 
       <Popover>
@@ -64,16 +70,20 @@ export function DateTimePicker({ date, setDate, isPostagemDiaria = false }: Date
             {isPostagemDiaria ? (
               <>
                 <Clock className="mr-2 h-4 w-4" />
-                {date
-                  ? format(date, "HH:mm:ss", { locale: ptBR })
-                  : <span>Selecionar hora</span>}
+                {date ? (
+                  format(date, "HH:mm:ss", { locale: ptBR })
+                ) : (
+                  <span>Selecionar hora</span>
+                )}
               </>
             ) : (
               <>
                 <CalendarIcon className="mr-2 h-4 w-4" />
-                {date
-                  ? format(date, "dd/MM/yyyy HH:mm:ss", { locale: ptBR })
-                  : <span>Selecionar data e hora</span>}
+                {date ? (
+                  format(date, "dd/MM/yyyy HH:mm:ss", { locale: ptBR })
+                ) : (
+                  <span>Selecionar data e hora</span>
+                )}
               </>
             )}
           </Button>
@@ -93,7 +103,9 @@ export function DateTimePicker({ date, setDate, isPostagemDiaria = false }: Date
               className="border border-gray-300 rounded-md"
             />
           )}
-          <div className={cn("p-3", !isPostagemDiaria && "border-t border-border")}>
+          <div
+            className={cn("p-3", !isPostagemDiaria && "border-t border-border")}
+          >
             <TimePickerDemo setDate={setDate} date={date} />
           </div>
         </PopoverContent>

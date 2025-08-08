@@ -220,6 +220,7 @@ export const InteractiveMessageCreator: React.FC<
   const unifiedEditingProps = useMemo(() => ({
     message: state.message,
     reactions: state.reactions,
+    variables: variables,
     onMessageUpdate: updateMessage,
     onReactionUpdate: updateReaction,
     onNext: handleNextToReview,
@@ -228,6 +229,7 @@ export const InteractiveMessageCreator: React.FC<
   }), [
     state.message, 
     state.reactions, 
+    variables,
     updateMessage, 
     updateReaction, 
     handleNextToReview, 

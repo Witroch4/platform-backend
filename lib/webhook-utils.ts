@@ -20,31 +20,31 @@ export interface UnifiedWebhookPayload {
   inboxId: string;
   contactPhone: string;
   contactSource: string;
-  
+
   // WhatsApp credentials (source of truth from payload)
   credentials: {
     whatsappApiKey: string;
     phoneNumberId: string;
     businessId: string;
   };
-  
+
   // Message context
   messageId: string;
   wamid: string;
   conversationId: string;
-  
+
   // Interaction details
-  interactionType: 'intent' | 'button_reply';
+  interactionType: "intent" | "button_reply";
   intentName?: string;
   buttonId?: string;
-  
+
   // Lead data for persistence
   leadData: {
     messageId: number;
     accountId: number;
     accountName: string;
   };
-  
+
   // Original payload for debugging
   originalPayload: any;
 }
@@ -55,46 +55,50 @@ export interface UnifiedWebhookPayload {
  */
 export function extractWebhookData(payload: any): ExtractedWebhookData {
   // Handle null/undefined payloads
-  if (!payload || typeof payload !== 'object') {
+  if (!payload || typeof payload !== "object") {
     return {
-      whatsappApiKey: '',
+      whatsappApiKey: "",
       messageId: `msg_${Date.now()}`,
-      conversationId: '',
-      contactPhone: '',
-      inboxId: '',
-      intentName: 'Unknown'
+      conversationId: "",
+      contactPhone: "",
+      inboxId: "",
+      intentName: "Unknown",
     };
   }
 
   // Extract WhatsApp API key from originalDetectIntentRequest
-  const whatsappApiKey = payload.originalDetectIntentRequest?.payload?.whatsapp_api_key || 
-                        payload.originalDetectIntentRequest?.payload?.access_token ||
-                        '';
+  const whatsappApiKey =
+    payload.originalDetectIntentRequest?.payload?.whatsapp_api_key ||
+    payload.originalDetectIntentRequest?.payload?.access_token ||
+    "";
 
   // Extract message ID (wamid) from payload
-  const messageId = payload.originalDetectIntentRequest?.payload?.message_id ||
-                   payload.originalDetectIntentRequest?.payload?.wamid ||
-                   payload.originalDetectIntentRequest?.payload?.id ||
-                   `msg_${Date.now()}`;
+  const messageId =
+    payload.originalDetectIntentRequest?.payload?.message_id ||
+    payload.originalDetectIntentRequest?.payload?.wamid ||
+    payload.originalDetectIntentRequest?.payload?.id ||
+    `msg_${Date.now()}`;
 
   // Extract conversation ID and ensure it's a string
-  const rawConversationId = payload.originalDetectIntentRequest?.payload?.conversation_id ||
-                           payload.originalDetectIntentRequest?.payload?.from ||
-                           payload.session?.split('/').pop() ||
-                           '';
+  const rawConversationId =
+    payload.originalDetectIntentRequest?.payload?.conversation_id ||
+    payload.originalDetectIntentRequest?.payload?.from ||
+    payload.session?.split("/").pop() ||
+    "";
   const conversationId = String(rawConversationId);
 
   // Extract contact phone from session or payload
   const contactPhone = extractContactPhone(payload);
 
   // Extract inbox ID and convert to string
-  const rawInboxId = payload.originalDetectIntentRequest?.payload?.inbox_id ||
-                     payload.originalDetectIntentRequest?.payload?.source_id ||
-                     '';
+  const rawInboxId =
+    payload.originalDetectIntentRequest?.payload?.inbox_id ||
+    payload.originalDetectIntentRequest?.payload?.source_id ||
+    "";
   const inboxId = String(rawInboxId);
 
   // Extract intent name
-  const intentName = payload.queryResult?.intent?.displayName || 'Unknown';
+  const intentName = payload.queryResult?.intent?.displayName || "Unknown";
 
   return {
     whatsappApiKey,
@@ -102,7 +106,7 @@ export function extractWebhookData(payload: any): ExtractedWebhookData {
     conversationId,
     contactPhone,
     inboxId,
-    intentName
+    intentName,
   };
 }
 
@@ -112,65 +116,80 @@ export function extractWebhookData(payload: any): ExtractedWebhookData {
  */
 export function extractUnifiedWebhookData(payload: any): UnifiedWebhookPayload {
   // Handle null/undefined payloads with minimal processing
-  if (!payload || typeof payload !== 'object') {
-    throw new Error('Invalid payload: payload is null or not an object');
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Invalid payload: payload is null or not an object");
   }
 
   const originalDetectIntentRequest = payload.originalDetectIntentRequest;
   if (!originalDetectIntentRequest?.payload) {
-    throw new Error('Invalid payload: missing originalDetectIntentRequest.payload');
+    throw new Error(
+      "Invalid payload: missing originalDetectIntentRequest.payload"
+    );
   }
 
   const chatwootPayload = originalDetectIntentRequest.payload;
 
   // Extract required fields with validation
-  const inboxId = String(chatwootPayload.inbox_id || '');
+  const inboxId = String(chatwootPayload.inbox_id || "");
   if (!inboxId) {
-    throw new Error('Invalid payload: missing inbox_id');
+    throw new Error("Invalid payload: missing inbox_id");
   }
 
   const contactPhone = extractContactPhone(payload);
   if (!contactPhone) {
-    throw new Error('Invalid payload: missing or invalid contact_phone');
+    throw new Error("Invalid payload: missing or invalid contact_phone");
   }
 
   // Extract credentials (source of truth from payload)
-  const whatsappApiKey = chatwootPayload.whatsapp_api_key || chatwootPayload.access_token || '';
-  const phoneNumberId = chatwootPayload.phone_number_id || '';
-  const businessId = chatwootPayload.business_id || '';
+  const whatsappApiKey =
+    chatwootPayload.whatsapp_api_key || chatwootPayload.access_token || "";
+  const phoneNumberId = chatwootPayload.phone_number_id || "";
+  const businessId = chatwootPayload.business_id || "";
 
   if (!whatsappApiKey) {
-    throw new Error('Invalid payload: missing whatsapp_api_key');
+    throw new Error("Invalid payload: missing whatsapp_api_key");
   }
 
   // Extract message context
-  const messageId = chatwootPayload.message_id || chatwootPayload.wamid || chatwootPayload.id || `msg_${Date.now()}`;
+  const messageId =
+    chatwootPayload.message_id ||
+    chatwootPayload.wamid ||
+    chatwootPayload.id ||
+    `msg_${Date.now()}`;
   const wamid = chatwootPayload.wamid || messageId;
-  const rawConversationId = chatwootPayload.conversation_id || chatwootPayload.from || contactPhone;
+  const rawConversationId =
+    chatwootPayload.conversation_id || chatwootPayload.from || contactPhone;
   const conversationId = String(rawConversationId);
 
   // Extract contact source for lead identification
-  const contactSource = chatwootPayload.contact_source || 'chatwit_webhook';
+  const contactSource = chatwootPayload.contact_source || "chatwit_webhook";
 
   // Determine interaction type
   const interactive = chatwootPayload.interactive;
-  let interactionType: 'intent' | 'button_reply' = 'intent';
+  let interactionType: "intent" | "button_reply" = "intent";
   let intentName: string | undefined;
   let buttonId: string | undefined;
 
   // Check if it's a button interaction based on interaction_type field
-  if (chatwootPayload.interaction_type === 'button_reply' || interactive?.type === 'button_reply' || interactive?.type === 'list_reply') {
-    interactionType = 'button_reply';
-    buttonId = chatwootPayload.button_id || interactive?.button_reply?.id || interactive?.list_reply?.id;
+  if (
+    chatwootPayload.interaction_type === "button_reply" ||
+    interactive?.type === "button_reply" ||
+    interactive?.type === "list_reply"
+  ) {
+    interactionType = "button_reply";
+    buttonId =
+      chatwootPayload.button_id ||
+      interactive?.button_reply?.id ||
+      interactive?.list_reply?.id;
   } else {
-    intentName = payload.queryResult?.intent?.displayName || 'Unknown';
+    intentName = payload.queryResult?.intent?.displayName || "Unknown";
   }
 
   // Extract lead data for persistence
   const leadData = {
     messageId: Number(chatwootPayload.message_id) || 0,
     accountId: Number(chatwootPayload.account_id) || 0,
-    accountName: chatwootPayload.account_name || '',
+    accountName: chatwootPayload.account_name || "",
   };
 
   return {
@@ -198,8 +217,8 @@ export function extractUnifiedWebhookData(payload: any): UnifiedWebhookPayload {
  */
 export function extractContactPhone(payload: any): string {
   // Handle null/undefined payloads
-  if (!payload || typeof payload !== 'object') {
-    return '';
+  if (!payload || typeof payload !== "object") {
+    return "";
   }
 
   // Try different possible locations for phone number
@@ -207,15 +226,15 @@ export function extractContactPhone(payload: any): string {
     payload.originalDetectIntentRequest?.payload?.from,
     payload.originalDetectIntentRequest?.payload?.phone,
     payload.originalDetectIntentRequest?.payload?.contact?.phone,
-    payload.session?.split('/').pop(),
+    payload.session?.split("/").pop(),
     payload.originalDetectIntentRequest?.payload?.sender?.phone,
-    payload.originalDetectIntentRequest?.payload?.user?.phone
+    payload.originalDetectIntentRequest?.payload?.user?.phone,
   ];
 
   for (const phone of possiblePhones) {
-    if (phone && typeof phone === 'string') {
+    if (phone && typeof phone === "string") {
       // Clean phone number - remove non-numeric characters
-      const cleanPhone = phone.replace(/\D/g, '');
+      const cleanPhone = phone.replace(/\D/g, "");
       if (cleanPhone.length >= 10) {
         return cleanPhone;
       }
@@ -223,14 +242,14 @@ export function extractContactPhone(payload: any): string {
   }
 
   // Fallback: extract from session if it contains phone-like pattern
-  const session = payload.session || '';
-  const sessionParts = session.split('/');
+  const session = payload.session || "";
+  const sessionParts = session.split("/");
   const lastPart = sessionParts[sessionParts.length - 1];
-  if (lastPart && /^\d{10,}$/.test(lastPart.replace(/\D/g, ''))) {
-    return lastPart.replace(/\D/g, '');
+  if (lastPart && /^\d{10,}$/.test(lastPart.replace(/\D/g, ""))) {
+    return lastPart.replace(/\D/g, "");
   }
 
-  return '';
+  return "";
 }
 
 /**
@@ -238,11 +257,7 @@ export function extractContactPhone(payload: any): string {
  * Legacy function maintained for backward compatibility
  */
 export function validateWebhookData(data: ExtractedWebhookData): boolean {
-  return !!(
-    data.messageId &&
-    data.contactPhone &&
-    data.intentName
-  );
+  return !!(data.messageId && data.contactPhone && data.intentName);
 }
 
 /**
@@ -256,65 +271,74 @@ export function validateUnifiedWebhookData(data: UnifiedWebhookPayload): {
   const errors: string[] = [];
 
   // Validate core identification
-  if (!data.inboxId || typeof data.inboxId !== 'string') {
-    errors.push('Invalid or missing inboxId');
+  if (!data.inboxId || typeof data.inboxId !== "string") {
+    errors.push("Invalid or missing inboxId");
   }
 
-  if (!data.contactPhone || typeof data.contactPhone !== 'string') {
-    errors.push('Invalid or missing contactPhone');
+  if (!data.contactPhone || typeof data.contactPhone !== "string") {
+    errors.push("Invalid or missing contactPhone");
   } else if (!/^\d{10,15}$/.test(data.contactPhone)) {
-    errors.push('contactPhone must be 10-15 digits');
+    errors.push("contactPhone must be 10-15 digits");
   }
 
-  if (!data.contactSource || typeof data.contactSource !== 'string') {
-    errors.push('Invalid or missing contactSource');
+  if (!data.contactSource || typeof data.contactSource !== "string") {
+    errors.push("Invalid or missing contactSource");
   }
 
   // Validate credentials
-  if (!data.credentials.whatsappApiKey || typeof data.credentials.whatsappApiKey !== 'string') {
-    errors.push('Invalid or missing whatsappApiKey');
+  if (
+    !data.credentials.whatsappApiKey ||
+    typeof data.credentials.whatsappApiKey !== "string"
+  ) {
+    errors.push("Invalid or missing whatsappApiKey");
   } else if (data.credentials.whatsappApiKey.length < 10) {
-    errors.push('whatsappApiKey too short (minimum 10 characters)');
+    errors.push("whatsappApiKey too short (minimum 10 characters)");
   }
 
   // phoneNumberId and businessId are optional but should be strings if present
-  if (data.credentials.phoneNumberId && typeof data.credentials.phoneNumberId !== 'string') {
-    errors.push('phoneNumberId must be a string');
+  if (
+    data.credentials.phoneNumberId &&
+    typeof data.credentials.phoneNumberId !== "string"
+  ) {
+    errors.push("phoneNumberId must be a string");
   }
 
-  if (data.credentials.businessId && typeof data.credentials.businessId !== 'string') {
-    errors.push('businessId must be a string');
+  if (
+    data.credentials.businessId &&
+    typeof data.credentials.businessId !== "string"
+  ) {
+    errors.push("businessId must be a string");
   }
 
   // Validate message context
-  if (!data.messageId || typeof data.messageId !== 'string') {
-    errors.push('Invalid or missing messageId');
+  if (!data.messageId || typeof data.messageId !== "string") {
+    errors.push("Invalid or missing messageId");
   }
 
-  if (!data.wamid || typeof data.wamid !== 'string') {
-    errors.push('Invalid or missing wamid');
+  if (!data.wamid || typeof data.wamid !== "string") {
+    errors.push("Invalid or missing wamid");
   }
 
   // Validate interaction type specific fields
-  if (data.interactionType === 'intent') {
-    if (!data.intentName || typeof data.intentName !== 'string') {
-      errors.push('intentName is required for intent interactions');
+  if (data.interactionType === "intent") {
+    if (!data.intentName || typeof data.intentName !== "string") {
+      errors.push("intentName is required for intent interactions");
     }
-  } else if (data.interactionType === 'button_reply') {
-    if (!data.buttonId || typeof data.buttonId !== 'string') {
-      errors.push('buttonId is required for button_reply interactions');
+  } else if (data.interactionType === "button_reply") {
+    if (!data.buttonId || typeof data.buttonId !== "string") {
+      errors.push("buttonId is required for button_reply interactions");
     }
   } else {
     errors.push('interactionType must be either "intent" or "button_reply"');
   }
 
   // Validate lead data types
-  if (typeof data.leadData.messageId !== 'number') {
-    errors.push('leadData.messageId must be a number');
+  if (typeof data.leadData.messageId !== "number") {
+    errors.push("leadData.messageId must be a number");
   }
 
-  if (typeof data.leadData.accountId !== 'number') {
-    errors.push('leadData.accountId must be a number');
+  if (typeof data.leadData.accountId !== "number") {
+    errors.push("leadData.accountId must be a number");
   }
 
   return {
@@ -327,36 +351,38 @@ export function validateUnifiedWebhookData(data: UnifiedWebhookPayload): {
  * Sanitizes webhook payload data for security
  * Removes potentially dangerous fields and normalizes data
  */
-export function sanitizeWebhookPayload(data: UnifiedWebhookPayload): UnifiedWebhookPayload {
+export function sanitizeWebhookPayload(
+  data: UnifiedWebhookPayload
+): UnifiedWebhookPayload {
   return {
     ...data,
     // Sanitize phone number (remove non-digits)
-    contactPhone: data.contactPhone.replace(/\D/g, ''),
-    
+    contactPhone: data.contactPhone.replace(/\D/g, ""),
+
     // Sanitize credentials (trim whitespace)
     credentials: {
       whatsappApiKey: data.credentials.whatsappApiKey.trim(),
       phoneNumberId: data.credentials.phoneNumberId.trim(),
       businessId: data.credentials.businessId.trim(),
     },
-    
+
     // Sanitize string fields (convert to string first if needed)
     inboxId: String(data.inboxId).trim(),
     contactSource: String(data.contactSource).trim(),
     messageId: String(data.messageId).trim(),
     wamid: String(data.wamid).trim(),
     conversationId: String(data.conversationId).trim(),
-    
+
     // Sanitize optional fields
     intentName: data.intentName ? String(data.intentName).trim() : undefined,
     buttonId: data.buttonId ? String(data.buttonId).trim() : undefined,
-    
+
     // Sanitize lead data
     leadData: {
       ...data.leadData,
       accountName: String(data.leadData.accountName).trim(),
     },
-    
+
     // Keep original payload as-is for debugging (but could be removed in production)
     originalPayload: data.originalPayload,
   };
@@ -367,7 +393,7 @@ export function sanitizeWebhookPayload(data: UnifiedWebhookPayload): UnifiedWebh
  * Removes potentially dangerous fields and normalizes common data types
  */
 export function sanitizeGenericWebhookPayload(payload: any): any {
-  if (!payload || typeof payload !== 'object') {
+  if (!payload || typeof payload !== "object") {
     return payload;
   }
 
@@ -379,28 +405,35 @@ export function sanitizeGenericWebhookPayload(payload: any): any {
     if (Array.isArray(obj)) {
       return obj.map(sanitizeObject);
     }
-    
-    if (obj && typeof obj === 'object') {
+
+    if (obj && typeof obj === "object") {
       const sanitizedObj: any = {};
-      
+
       for (const [key, value] of Object.entries(obj)) {
         // Skip potentially dangerous fields
-        if (key.toLowerCase().includes('password') || 
-            key.toLowerCase().includes('secret') ||
-            key.toLowerCase().includes('token') && key !== 'whatsapp_api_key' && key !== 'access_token') {
+        if (
+          key.toLowerCase().includes("password") ||
+          key.toLowerCase().includes("secret") ||
+          (key.toLowerCase().includes("token") &&
+            key !== "whatsapp_api_key" &&
+            key !== "access_token")
+        ) {
           continue;
         }
-        
+
         // Sanitize string values
-        if (typeof value === 'string') {
+        if (typeof value === "string") {
           sanitizedObj[key] = value.trim();
         }
         // Sanitize phone numbers
-        else if (key.toLowerCase().includes('phone') && typeof value === 'string') {
-          sanitizedObj[key] = value.replace(/\D/g, '');
+        else if (
+          key.toLowerCase().includes("phone") &&
+          typeof value === "string"
+        ) {
+          sanitizedObj[key] = value.replace(/\D/g, "");
         }
         // Recursively sanitize nested objects
-        else if (typeof value === 'object') {
+        else if (typeof value === "object") {
           sanitizedObj[key] = sanitizeObject(value);
         }
         // Keep other types as-is
@@ -408,10 +441,10 @@ export function sanitizeGenericWebhookPayload(payload: any): any {
           sanitizedObj[key] = value;
         }
       }
-      
+
       return sanitizedObj;
     }
-    
+
     return obj;
   }
 
@@ -516,7 +549,7 @@ export function extractTemplateVariables(payload: any): Record<string, any> {
   const variables: Record<string, any> = {};
 
   // Handle null/undefined payloads
-  if (!payload || typeof payload !== 'object') {
+  if (!payload || typeof payload !== "object") {
     return variables;
   }
 
@@ -531,8 +564,8 @@ export function extractTemplateVariables(payload: any): Record<string, any> {
 
   if (parameters.phone) {
     // Sanitize phone number
-    variables.phone = String(parameters.phone).replace(/\D/g, '');
-    variables.telefone = String(parameters.phone).replace(/\D/g, '');
+    variables.phone = String(parameters.phone).replace(/\D/g, "");
+    variables.telefone = String(parameters.phone).replace(/\D/g, "");
   }
 
   if (parameters.email) {
@@ -542,11 +575,11 @@ export function extractTemplateVariables(payload: any): Record<string, any> {
   // Add all parameters as potential variables with sanitization
   Object.keys(parameters).forEach((key) => {
     if (parameters[key]) {
-      if (typeof parameters[key] === 'string') {
+      if (typeof parameters[key] === "string") {
         variables[key] = parameters[key].trim();
-      } else if (typeof parameters[key] === 'number') {
+      } else if (typeof parameters[key] === "number") {
         variables[key] = parameters[key];
-      } else if (typeof parameters[key] === 'boolean') {
+      } else if (typeof parameters[key] === "boolean") {
         variables[key] = parameters[key];
       } else {
         // For complex objects, convert to string
@@ -562,41 +595,46 @@ export function extractTemplateVariables(payload: any): Record<string, any> {
  * Extracts message content from Dialogflow payload
  */
 export function extractMessageContent(payload: any): string {
-  if (!payload || typeof payload !== 'object') {
-    return 'Mensagem sem conteúdo de texto';
+  if (!payload || typeof payload !== "object") {
+    return "Mensagem sem conteúdo de texto";
   }
-  
-  return payload.queryResult?.queryText ||
-         payload.originalDetectIntentRequest?.payload?.message?.text ||
-         payload.originalDetectIntentRequest?.payload?.text ||
-         'Mensagem sem conteúdo de texto';
+
+  return (
+    payload.queryResult?.queryText ||
+    payload.originalDetectIntentRequest?.payload?.message?.text ||
+    payload.originalDetectIntentRequest?.payload?.text ||
+    "Mensagem sem conteúdo de texto"
+  );
 }
 
 /**
  * Extracts message type from Dialogflow payload
  */
 export function extractMessageType(payload: any): string {
-  if (!payload || typeof payload !== 'object') {
-    return 'unknown';
+  if (!payload || typeof payload !== "object") {
+    return "unknown";
   }
-  
-  return payload.originalDetectIntentRequest?.payload?.message?.type ||
-         payload.originalDetectIntentRequest?.payload?.type ||
-         (payload.queryResult?.queryText ? 'text' : 'unknown');
+
+  return (
+    payload.originalDetectIntentRequest?.payload?.message?.type ||
+    payload.originalDetectIntentRequest?.payload?.type ||
+    (payload.queryResult?.queryText ? "text" : "unknown")
+  );
 }
 
 /**
  * Checks if the payload contains a valid WhatsApp API key
  */
 export function hasValidApiKey(payload: any): boolean {
-  if (!payload || typeof payload !== 'object') {
+  if (!payload || typeof payload !== "object") {
     return false;
   }
-  
-  const apiKey = payload.originalDetectIntentRequest?.payload?.whatsapp_api_key ||
-                payload.originalDetectIntentRequest?.payload?.access_token;
-  
-  return !!(apiKey && typeof apiKey === 'string' && apiKey.length > 10);
+
+  const apiKey =
+    payload.originalDetectIntentRequest?.payload?.whatsapp_api_key ||
+    payload.originalDetectIntentRequest?.payload?.access_token;
+
+  return !!(apiKey && typeof apiKey === "string" && apiKey.length > 10);
 }
 
 /**
@@ -604,8 +642,10 @@ export function hasValidApiKey(payload: any): boolean {
  * Legacy function maintained for backward compatibility
  */
 export function logWebhookData(data: ExtractedWebhookData, payload: any): void {
-  console.log('[MTF Diamante Webhook] Dados extraídos:', {
-    whatsappApiKey: data.whatsappApiKey ? `${data.whatsappApiKey.substring(0, 10)}...` : 'N/A',
+  console.log("[MTF Diamante Webhook] Dados extraídos:", {
+    whatsappApiKey: data.whatsappApiKey
+      ? `${data.whatsappApiKey.substring(0, 10)}...`
+      : "N/A",
     messageId: data.messageId,
     conversationId: data.conversationId,
     contactPhone: data.contactPhone,
@@ -613,11 +653,12 @@ export function logWebhookData(data: ExtractedWebhookData, payload: any): void {
     inboxIdType: typeof data.inboxId,
     intentName: data.intentName,
     hasApiKey: hasValidApiKey(payload),
-    payloadKeys: Object.keys(payload)
+    payloadKeys: Object.keys(payload),
   });
-  
+
   // Log detalhado do originalDetectIntentRequest.payload
-  console.log('[MTF Diamante Webhook] originalDetectIntentRequest.payload:', 
+  console.log(
+    "[MTF Diamante Webhook] originalDetectIntentRequest.payload:",
     JSON.stringify(payload.originalDetectIntentRequest?.payload, null, 2)
   );
 }
@@ -631,20 +672,21 @@ export function detectChannelType(payload: any): {
   originalPayload: any;
 } {
   // Handle null/undefined payloads
-  if (!payload || typeof payload !== 'object') {
+  if (!payload || typeof payload !== "object") {
     return {
       isInstagram: false,
-      channelType: 'unknown',
+      channelType: "unknown",
       originalPayload: payload,
     };
   }
 
   // Extract channel_type from originalDetectIntentRequest.payload
-  const channelType = payload.originalDetectIntentRequest?.payload?.channel_type || '';
-  
+  const channelType =
+    payload.originalDetectIntentRequest?.payload?.channel_type || "";
+
   // Check if it's Instagram channel
-  const isInstagram = channelType === 'Channel::Instagram';
-  
+  const isInstagram = channelType === "Channel::Instagram";
+
   return {
     isInstagram,
     channelType,
@@ -666,7 +708,9 @@ export function logUnifiedWebhookData(
     processingTimeMs,
     extractedData: {
       inboxId: data.inboxId,
-      contactPhone: data.contactPhone ? `${data.contactPhone.substring(0, 4)}****${data.contactPhone.substring(data.contactPhone.length - 4)}` : 'N/A',
+      contactPhone: data.contactPhone
+        ? `${data.contactPhone.substring(0, 4)}****${data.contactPhone.substring(data.contactPhone.length - 4)}`
+        : "N/A",
       contactSource: data.contactSource,
       interactionType: data.interactionType,
       intentName: data.intentName,
@@ -679,7 +723,9 @@ export function logUnifiedWebhookData(
       messageContext: {
         messageId: data.messageId,
         wamid: data.wamid,
-        conversationId: data.conversationId ? `${data.conversationId.substring(0, 8)}...` : 'N/A',
+        conversationId: data.conversationId
+          ? `${data.conversationId.substring(0, 8)}...`
+          : "N/A",
       },
       leadData: {
         messageId: data.leadData.messageId,
@@ -689,7 +735,10 @@ export function logUnifiedWebhookData(
     },
   };
 
-  console.log(`[MTF Diamante Webhook] [${correlationId}] Unified webhook data extracted:`, logData);
+  console.log(
+    `[MTF Diamante Webhook] [${correlationId}] Unified webhook data extracted:`,
+    logData
+  );
 }
 
 /**
@@ -730,7 +779,9 @@ export function logSanitizationResults(
       originalPayloadSize: originalSize,
       sanitizedPayloadSize: sanitizedSize,
       sizeReduction: originalSize - sanitizedSize,
-      sizeReductionPercent: ((originalSize - sanitizedSize) / originalSize * 100).toFixed(2) + '%',
+      sizeReductionPercent:
+        (((originalSize - sanitizedSize) / originalSize) * 100).toFixed(2) +
+        "%",
     },
     validation: {
       isValid: validation.isValid,
@@ -742,13 +793,22 @@ export function logSanitizationResults(
   };
 
   if (validation.isValid) {
-    console.log(`[MTF Diamante Webhook] [${correlationId}] Payload sanitized successfully:`, logData);
+    console.log(
+      `[MTF Diamante Webhook] [${correlationId}] Payload sanitized successfully:`,
+      logData
+    );
   } else {
-    console.error(`[MTF Diamante Webhook] [${correlationId}] Payload sanitization failed:`, logData);
+    console.error(
+      `[MTF Diamante Webhook] [${correlationId}] Payload sanitization failed:`,
+      logData
+    );
   }
-  
+
   if (validation.warnings.length > 0) {
-    console.warn(`[MTF Diamante Webhook] [${correlationId}] Sanitization warnings:`, validation.warnings);
+    console.warn(
+      `[MTF Diamante Webhook] [${correlationId}] Sanitization warnings:`,
+      validation.warnings
+    );
   }
 }
 
@@ -771,10 +831,10 @@ export function createWebhookErrorResponse(
   return new Response(JSON.stringify(errorResponse), {
     status,
     headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-      'X-Correlation-ID': correlationId,
-      'X-Error-Type': 'webhook-processing-error',
+      "Content-Type": "application/json",
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+      "X-Correlation-ID": correlationId,
+      "X-Error-Type": "webhook-processing-error",
     },
   });
 }
@@ -794,13 +854,13 @@ export function createWebhookSuccessResponse(
   };
 
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'Cache-Control': 'no-cache, no-store, must-revalidate',
-    'X-Correlation-ID': correlationId,
+    "Content-Type": "application/json",
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+    "X-Correlation-ID": correlationId,
   };
 
   if (processingTime !== undefined) {
-    headers['X-Processing-Time'] = processingTime.toString();
+    headers["X-Processing-Time"] = processingTime.toString();
   }
 
   return new Response(JSON.stringify(successResponse), {
@@ -853,27 +913,33 @@ export function sanitizeRespostaRapidaJobData(data: {
     inboxId: String(data.inboxId).trim(),
     contactPhone: sanitizePhoneNumber(data.contactPhone),
     interactionType: data.interactionType,
-    
+
     // Sanitize optional interaction data
     buttonId: data.buttonId ? sanitizeButtonId(data.buttonId) : undefined,
-    intentName: data.intentName ? sanitizeIntentName(data.intentName) : undefined,
-    
+    intentName: data.intentName
+      ? sanitizeIntentName(data.intentName)
+      : undefined,
+
     // Sanitize message identifiers
     wamid: String(data.wamid).trim(),
     correlationId: String(data.correlationId).trim(),
-    
+
     // Sanitize credentials
     credentials: {
       token: sanitizeApiKey(data.credentials.token),
       phoneNumberId: String(data.credentials.phoneNumberId).trim(),
       businessId: String(data.credentials.businessId).trim(),
     },
-    
+
     // Sanitize optional metadata
     messageId: data.messageId ? Number(data.messageId) : undefined,
     accountId: data.accountId ? Number(data.accountId) : undefined,
-    accountName: data.accountName ? sanitizeTextContent(data.accountName) : undefined,
-    contactSource: data.contactSource ? sanitizeTextContent(data.contactSource) : undefined,
+    accountName: data.accountName
+      ? sanitizeTextContent(data.accountName)
+      : undefined,
+    contactSource: data.contactSource
+      ? sanitizeTextContent(data.contactSource)
+      : undefined,
   };
 }
 
@@ -889,69 +955,86 @@ export function validateRespostaRapidaJobData(data: any): {
   const warnings: string[] = [];
 
   // Validate required fields
-  if (!data.inboxId || typeof data.inboxId !== 'string') {
-    errors.push('inboxId is required and must be a string');
+  if (!data.inboxId || typeof data.inboxId !== "string") {
+    errors.push("inboxId is required and must be a string");
   }
 
-  if (!data.contactPhone || typeof data.contactPhone !== 'string') {
-    errors.push('contactPhone is required and must be a string');
+  if (!data.contactPhone || typeof data.contactPhone !== "string") {
+    errors.push("contactPhone is required and must be a string");
   } else if (!/^\d{10,15}$/.test(data.contactPhone)) {
-    errors.push('contactPhone must be 10-15 digits after sanitization');
+    errors.push("contactPhone must be 10-15 digits after sanitization");
   }
 
-  if (!data.interactionType || !['button_reply', 'intent'].includes(data.interactionType)) {
+  if (
+    !data.interactionType ||
+    !["button_reply", "intent"].includes(data.interactionType)
+  ) {
     errors.push('interactionType must be either "button_reply" or "intent"');
   }
 
-  if (!data.wamid || typeof data.wamid !== 'string') {
-    errors.push('wamid is required and must be a string');
+  if (!data.wamid || typeof data.wamid !== "string") {
+    errors.push("wamid is required and must be a string");
   }
 
-  if (!data.correlationId || typeof data.correlationId !== 'string') {
-    errors.push('correlationId is required and must be a string');
+  if (!data.correlationId || typeof data.correlationId !== "string") {
+    errors.push("correlationId is required and must be a string");
   }
 
   // Validate credentials
-  if (!data.credentials || typeof data.credentials !== 'object') {
-    errors.push('credentials object is required');
+  if (!data.credentials || typeof data.credentials !== "object") {
+    errors.push("credentials object is required");
   } else {
-    if (!data.credentials.token || typeof data.credentials.token !== 'string') {
-      errors.push('credentials.token is required and must be a string');
+    if (!data.credentials.token || typeof data.credentials.token !== "string") {
+      errors.push("credentials.token is required and must be a string");
     } else if (data.credentials.token.length < 10) {
-      warnings.push('credentials.token appears to be too short after sanitization');
+      warnings.push(
+        "credentials.token appears to be too short after sanitization"
+      );
     }
 
-    if (!data.credentials.phoneNumberId || typeof data.credentials.phoneNumberId !== 'string') {
-      errors.push('credentials.phoneNumberId is required and must be a string');
+    if (
+      !data.credentials.phoneNumberId ||
+      typeof data.credentials.phoneNumberId !== "string"
+    ) {
+      errors.push("credentials.phoneNumberId is required and must be a string");
     }
 
-    if (!data.credentials.businessId || typeof data.credentials.businessId !== 'string') {
-      errors.push('credentials.businessId is required and must be a string');
+    if (
+      !data.credentials.businessId ||
+      typeof data.credentials.businessId !== "string"
+    ) {
+      errors.push("credentials.businessId is required and must be a string");
     }
   }
 
   // Validate interaction-specific fields
-  if (data.interactionType === 'intent') {
-    if (!data.intentName || typeof data.intentName !== 'string') {
-      errors.push('intentName is required for intent interactions');
-    } else if (data.intentName === 'Unknown') {
-      warnings.push('intentName was sanitized to Unknown');
+  if (data.interactionType === "intent") {
+    if (!data.intentName || typeof data.intentName !== "string") {
+      errors.push("intentName is required for intent interactions");
+    } else if (data.intentName === "Unknown") {
+      warnings.push("intentName was sanitized to Unknown");
     }
-  } else if (data.interactionType === 'button_reply') {
-    if (!data.buttonId || typeof data.buttonId !== 'string') {
-      errors.push('buttonId is required for button_reply interactions');
-    } else if (data.buttonId === '') {
-      errors.push('buttonId became empty after sanitization');
+  } else if (data.interactionType === "button_reply") {
+    if (!data.buttonId || typeof data.buttonId !== "string") {
+      errors.push("buttonId is required for button_reply interactions");
+    } else if (data.buttonId === "") {
+      errors.push("buttonId became empty after sanitization");
     }
   }
 
   // Validate optional numeric fields
-  if (data.messageId !== undefined && (typeof data.messageId !== 'number' || isNaN(data.messageId))) {
-    warnings.push('messageId should be a valid number');
+  if (
+    data.messageId !== undefined &&
+    (typeof data.messageId !== "number" || isNaN(data.messageId))
+  ) {
+    warnings.push("messageId should be a valid number");
   }
 
-  if (data.accountId !== undefined && (typeof data.accountId !== 'number' || isNaN(data.accountId))) {
-    warnings.push('accountId should be a valid number');
+  if (
+    data.accountId !== undefined &&
+    (typeof data.accountId !== "number" || isNaN(data.accountId))
+  ) {
+    warnings.push("accountId should be a valid number");
   }
 
   return {
@@ -973,27 +1056,37 @@ export function createSanitizedRespostaRapidaJob(
   validation: { isValid: boolean; errors: string[]; warnings: string[] };
 } {
   try {
-    console.log(`[Webhook Utils] [${correlationId}] Creating sanitized job data...`);
-    
+    console.log(
+      `[Webhook Utils] [${correlationId}] Creating sanitized job data...`
+    );
+
     // Extract flash intent data from payload
     const flashIntentData = extractFlashIntentData(payload, correlationId);
-    
-    console.log(`[Webhook Utils] [${correlationId}] Flash intent data extracted:`, {
-      type: flashIntentData.type,
-      intentName: flashIntentData.intentName,
-      buttonId: flashIntentData.buttonId,
-      recipientPhone: flashIntentData.recipientPhone ? `${flashIntentData.recipientPhone.substring(0, 4)}****${flashIntentData.recipientPhone.substring(flashIntentData.recipientPhone.length - 4)}` : 'N/A',
-      hasWhatsappApiKey: !!flashIntentData.whatsappApiKey,
-      whatsappApiKeyLength: flashIntentData.whatsappApiKey?.length || 0,
-      inboxId: flashIntentData.inboxId,
-      wamid: flashIntentData.wamid,
-    });
-    
+
+    console.log(
+      `[Webhook Utils] [${correlationId}] Flash intent data extracted:`,
+      {
+        type: flashIntentData.type,
+        intentName: flashIntentData.intentName,
+        buttonId: flashIntentData.buttonId,
+        recipientPhone: flashIntentData.recipientPhone
+          ? `${flashIntentData.recipientPhone.substring(0, 4)}****${flashIntentData.recipientPhone.substring(flashIntentData.recipientPhone.length - 4)}`
+          : "N/A",
+        hasWhatsappApiKey: !!flashIntentData.whatsappApiKey,
+        whatsappApiKeyLength: flashIntentData.whatsappApiKey?.length || 0,
+        inboxId: flashIntentData.inboxId,
+        wamid: flashIntentData.wamid,
+      }
+    );
+
     // Create job data structure
     const rawJobData = {
       inboxId: flashIntentData.inboxId,
       contactPhone: flashIntentData.recipientPhone,
-      interactionType: flashIntentData.type === 'button_click' ? 'button_reply' as const : 'intent' as const,
+      interactionType:
+        flashIntentData.type === "button_click"
+          ? ("button_reply" as const)
+          : ("intent" as const),
       buttonId: flashIntentData.buttonId,
       intentName: flashIntentData.intentName,
       wamid: flashIntentData.wamid,
@@ -1019,7 +1112,7 @@ export function createSanitizedRespostaRapidaJob(
 
     // Sanitize the job data
     const sanitizedJobData = sanitizeRespostaRapidaJobData(rawJobData);
-    
+
     console.log(`[Webhook Utils] [${correlationId}] Job data sanitized:`, {
       interactionType: sanitizedJobData.interactionType,
       hasIntentName: !!sanitizedJobData.intentName,
@@ -1028,10 +1121,10 @@ export function createSanitizedRespostaRapidaJob(
       credentialsTokenLength: sanitizedJobData.credentials.token?.length || 0,
       contactPhoneLength: sanitizedJobData.contactPhone?.length || 0,
     });
-    
+
     // Validate the sanitized data
     const validation = validateRespostaRapidaJobData(sanitizedJobData);
-    
+
     console.log(`[Webhook Utils] [${correlationId}] Job data validation:`, {
       isValid: validation.isValid,
       errorsCount: validation.errors.length,
@@ -1039,18 +1132,23 @@ export function createSanitizedRespostaRapidaJob(
       errors: validation.errors,
       warnings: validation.warnings,
     });
-    
+
     return {
       jobData: sanitizedJobData,
       validation,
     };
   } catch (error) {
-    console.error(`[Webhook Utils] [${correlationId}] Error creating sanitized job data:`, error);
+    console.error(
+      `[Webhook Utils] [${correlationId}] Error creating sanitized job data:`,
+      error
+    );
     return {
       jobData: null,
       validation: {
         isValid: false,
-        errors: [`Failed to create job data: ${error instanceof Error ? error.message : 'Unknown error'}`],
+        errors: [
+          `Failed to create job data: ${error instanceof Error ? error.message : "Unknown error"}`,
+        ],
         warnings: [],
       },
     };
@@ -1072,12 +1170,12 @@ export function extractUserIdentification(payload: any): {
 } {
   const chatwootPayload = payload.originalDetectIntentRequest?.payload;
   const contactPhone = extractContactPhone(payload);
-  
+
   // Priorizar contact_id se disponível, senão usar phone
-  const userId = chatwootPayload?.contact_id ? 
-    `contact_${chatwootPayload.contact_id}` : 
-    contactPhone || `unknown_${Date.now()}`;
-  
+  const userId = chatwootPayload?.contact_id
+    ? `contact_${chatwootPayload.contact_id}`
+    : contactPhone || `unknown_${Date.now()}`;
+
   return {
     userId,
     contactId: chatwootPayload?.contact_id,
@@ -1104,9 +1202,12 @@ export function extractConversationContext(payload: any): {
 } {
   const chatwootPayload = payload.originalDetectIntentRequest?.payload;
   const webhookData = extractWebhookData(payload);
-  
+
   return {
-    conversationId: chatwootPayload?.conversation_id || webhookData.conversationId || 'unknown',
+    conversationId:
+      chatwootPayload?.conversation_id ||
+      webhookData.conversationId ||
+      "unknown",
     conversationStatus: chatwootPayload?.conversation_status,
     conversationAssigneeId: chatwootPayload?.conversation_assignee_id,
     conversationCreatedAt: chatwootPayload?.conversation_created_at,
@@ -1122,12 +1223,12 @@ export function extractConversationContext(payload: any): {
 export function logDetailedWebhookPayload(
   correlationId: string,
   payload: any,
-  stage: 'raw' | 'sanitized' | 'processed'
+  stage: "raw" | "sanitized" | "processed"
 ): void {
   const userIdentification = extractUserIdentification(payload);
   const conversationContext = extractConversationContext(payload);
   const dialogflowRequest = parseDialogflowRequest(payload);
-  
+
   const logData = {
     correlationId,
     timestamp: new Date().toISOString(),
@@ -1136,9 +1237,9 @@ export function logDetailedWebhookPayload(
     userIdentification: {
       userId: userIdentification.userId,
       contactId: userIdentification.contactId,
-      contactPhone: userIdentification.contactPhone ? 
-        `${userIdentification.contactPhone.substring(0, 4)}****${userIdentification.contactPhone.substring(userIdentification.contactPhone.length - 4)}` : 
-        'N/A',
+      contactPhone: userIdentification.contactPhone
+        ? `${userIdentification.contactPhone.substring(0, 4)}****${userIdentification.contactPhone.substring(userIdentification.contactPhone.length - 4)}`
+        : "N/A",
       contactName: userIdentification.contactName,
       accountId: userIdentification.accountId,
       accountName: userIdentification.accountName,
@@ -1158,7 +1259,10 @@ export function logDetailedWebhookPayload(
     channelInfo: detectChannelType(payload),
   };
 
-  console.log(`[MTF Diamante Webhook] [${correlationId}] Detailed payload info (${stage}):`, logData);
+  console.log(
+    `[MTF Diamante Webhook] [${correlationId}] Detailed payload info (${stage}):`,
+    logData
+  );
 }
 
 /**
@@ -1179,32 +1283,33 @@ export function createSanitizationSummary(
 } {
   const originalSize = JSON.stringify(originalPayload).length;
   const sanitizedSize = JSON.stringify(sanitizedPayload).length;
-  
+
   // Esta é uma implementação básica - pode ser expandida para detectar mudanças específicas
   const fieldsModified: string[] = [];
   const fieldsRemoved: string[] = [];
-  
+
   // Comparar campos específicos que sabemos que são sanitizados
   const chatwootOriginal = originalPayload.originalDetectIntentRequest?.payload;
-  const chatwootSanitized = sanitizedPayload.originalDetectIntentRequest?.payload;
-  
+  const chatwootSanitized =
+    sanitizedPayload.originalDetectIntentRequest?.payload;
+
   if (chatwootOriginal && chatwootSanitized) {
     // Verificar se phone foi modificado
     if (chatwootOriginal.from !== chatwootSanitized.from) {
-      fieldsModified.push('originalDetectIntentRequest.payload.from');
+      fieldsModified.push("originalDetectIntentRequest.payload.from");
     }
-    
+
     // Verificar se text foi modificado
     if (chatwootOriginal.text !== chatwootSanitized.text) {
-      fieldsModified.push('originalDetectIntentRequest.payload.text');
+      fieldsModified.push("originalDetectIntentRequest.payload.text");
     }
-    
+
     // Verificar se button_id foi modificado
     if (chatwootOriginal.button_id !== chatwootSanitized.button_id) {
-      fieldsModified.push('originalDetectIntentRequest.payload.button_id');
+      fieldsModified.push("originalDetectIntentRequest.payload.button_id");
     }
   }
-  
+
   return {
     fieldsModified,
     fieldsRemoved,
@@ -1212,7 +1317,9 @@ export function createSanitizationSummary(
       original: originalSize,
       sanitized: sanitizedSize,
       reduction: originalSize - sanitizedSize,
-      reductionPercent: ((originalSize - sanitizedSize) / originalSize * 100).toFixed(2) + '%',
+      reductionPercent:
+        (((originalSize - sanitizedSize) / originalSize) * 100).toFixed(2) +
+        "%",
     },
   };
 }
@@ -1221,28 +1328,54 @@ export function createSanitizationSummary(
  * Analyzes and logs original Dialogflow request patterns for debugging
  * This function helps identify different payload structures and patterns
  */
+interface PatternAnalysis {
+  structure: {
+    hasResponseId: boolean;
+    hasQueryResult: boolean;
+    hasOriginalDetectIntentRequest: boolean;
+    hasSession: boolean;
+  };
+  queryResult: {
+    hasQueryText: boolean;
+    hasParameters: boolean;
+    hasIntent: boolean;
+    intentName?: string;
+    confidence?: number;
+    languageCode?: string;
+    outputContextsCount: number;
+  };
+  chatwootPayload: any;
+  payloadSize: number;
+  chatwootPayloadSize: number;
+  potentialIssues: string[];
+}
+
 export function analyzeOriginalDialogflowRequest(
   payload: any,
   correlationId: string
 ): {
-  payloadType: 'intent' | 'button_click' | 'unknown';
+  payloadType: "intent" | "button_click" | "unknown";
   channelType: string;
   hasRequiredFields: boolean;
-  patternAnalysis: any;
+  patternAnalysis: PatternAnalysis;
 } {
   const chatwootPayload = payload.originalDetectIntentRequest?.payload;
-  
+
   // Determine interaction type
-  const isButtonInteraction = chatwootPayload?.interaction_type === "button_reply" || 
-                             chatwootPayload?.interactive?.type === "button_reply" || 
-                             chatwootPayload?.interactive?.type === "list_reply";
-  
-  const payloadType = isButtonInteraction ? 'button_click' : 
-                     payload.queryResult?.intent?.displayName ? 'intent' : 'unknown';
-  
+  const isButtonInteraction =
+    chatwootPayload?.interaction_type === "button_reply" ||
+    chatwootPayload?.interactive?.type === "button_reply" ||
+    chatwootPayload?.interactive?.type === "list_reply";
+
+  const payloadType = isButtonInteraction
+    ? "button_click"
+    : payload.queryResult?.intent?.displayName
+      ? "intent"
+      : "unknown";
+
   // Extract channel type
-  const channelType = chatwootPayload?.channel_type || 'unknown';
-  
+  const channelType = chatwootPayload?.channel_type || "unknown";
+
   // Check for required fields
   const hasRequiredFields = !!(
     payload.responseId &&
@@ -1251,7 +1384,7 @@ export function analyzeOriginalDialogflowRequest(
     chatwootPayload?.whatsapp_api_key &&
     chatwootPayload?.contact_phone
   );
-  
+
   // Pattern analysis
   const patternAnalysis = {
     structure: {
@@ -1269,83 +1402,91 @@ export function analyzeOriginalDialogflowRequest(
       languageCode: payload.queryResult?.languageCode,
       outputContextsCount: payload.queryResult?.outputContexts?.length || 0,
     },
-    chatwootPayload: chatwootPayload ? {
-      // Core identifiers
-      hasInboxId: !!chatwootPayload.inbox_id,
-      hasConversationId: !!chatwootPayload.conversation_id,
-      hasMessageId: !!chatwootPayload.message_id,
-      hasContactId: !!chatwootPayload.contact_id,
-      hasAccountId: !!chatwootPayload.account_id,
-      
-      // Contact information
-      hasContactPhone: !!chatwootPayload.contact_phone,
-      hasContactName: !!chatwootPayload.contact_name,
-      hasContactEmail: !!chatwootPayload.contact_email,
-      contactSource: chatwootPayload.contact_source,
-      
-      // WhatsApp specific
-      hasWamid: !!chatwootPayload.wamid,
-      hasPhoneNumberId: !!chatwootPayload.phone_number_id,
-      hasBusinessId: !!chatwootPayload.business_id,
-      hasWhatsappApiKey: !!chatwootPayload.whatsapp_api_key,
-      whatsappApiKeyLength: chatwootPayload.whatsapp_api_key?.length || 0,
-      
-      // Message details
-      messageType: chatwootPayload.message_type,
-      messageContentType: chatwootPayload.message_content_type,
-      hasMessageContent: !!chatwootPayload.message_content,
-      
-      // Interaction details
-      interactionType: chatwootPayload.interaction_type,
-      hasButtonId: !!chatwootPayload.button_id,
-      hasButtonTitle: !!chatwootPayload.button_title,
-      hasListId: !!chatwootPayload.list_id,
-      hasInteractive: !!chatwootPayload.interactive,
-      interactiveType: chatwootPayload.interactive?.type,
-      
-      // Conversation details
-      conversationStatus: chatwootPayload.conversation_status,
-      hasConversationAssignee: !!chatwootPayload.conversation_assignee_id,
-      
-      // Flags and metadata
-      isWhatsappChannel: chatwootPayload.is_whatsapp_channel,
-      socialwiseActive: chatwootPayload.socialwise_active,
-      payloadVersion: chatwootPayload.payload_version,
-      
-      // All available keys for pattern analysis
-      allPayloadKeys: Object.keys(chatwootPayload).sort(),
-      payloadKeyCount: Object.keys(chatwootPayload).length,
-    } : null,
-    
+    chatwootPayload: chatwootPayload
+      ? {
+          // Core identifiers
+          hasInboxId: !!chatwootPayload.inbox_id,
+          hasConversationId: !!chatwootPayload.conversation_id,
+          hasMessageId: !!chatwootPayload.message_id,
+          hasContactId: !!chatwootPayload.contact_id,
+          hasAccountId: !!chatwootPayload.account_id,
+
+          // Contact information
+          hasContactPhone: !!chatwootPayload.contact_phone,
+          hasContactName: !!chatwootPayload.contact_name,
+          hasContactEmail: !!chatwootPayload.contact_email,
+          contactSource: chatwootPayload.contact_source,
+
+          // WhatsApp specific
+          hasWamid: !!chatwootPayload.wamid,
+          hasPhoneNumberId: !!chatwootPayload.phone_number_id,
+          hasBusinessId: !!chatwootPayload.business_id,
+          hasWhatsappApiKey: !!chatwootPayload.whatsapp_api_key,
+          whatsappApiKeyLength: chatwootPayload.whatsapp_api_key?.length || 0,
+
+          // Message details
+          messageType: chatwootPayload.message_type,
+          messageContentType: chatwootPayload.message_content_type,
+          hasMessageContent: !!chatwootPayload.message_content,
+
+          // Interaction details
+          interactionType: chatwootPayload.interaction_type,
+          hasButtonId: !!chatwootPayload.button_id,
+          hasButtonTitle: !!chatwootPayload.button_title,
+          hasListId: !!chatwootPayload.list_id,
+          hasInteractive: !!chatwootPayload.interactive,
+          interactiveType: chatwootPayload.interactive?.type,
+
+          // Conversation details
+          conversationStatus: chatwootPayload.conversation_status,
+          hasConversationAssignee: !!chatwootPayload.conversation_assignee_id,
+
+          // Flags and metadata
+          isWhatsappChannel: chatwootPayload.is_whatsapp_channel,
+          socialwiseActive: chatwootPayload.socialwise_active,
+          payloadVersion: chatwootPayload.payload_version,
+
+          // All available keys for pattern analysis
+          allPayloadKeys: Object.keys(chatwootPayload).sort(),
+          payloadKeyCount: Object.keys(chatwootPayload).length,
+        }
+      : null,
+
     // Size analysis
     payloadSize: JSON.stringify(payload).length,
-    chatwootPayloadSize: chatwootPayload ? JSON.stringify(chatwootPayload).length : 0,
-    
+    chatwootPayloadSize: chatwootPayload
+      ? JSON.stringify(chatwootPayload).length
+      : 0,
+
     // Potential issues
-    potentialIssues: [],
+    potentialIssues: [] as string[],
   };
-  
+
   // Identify potential issues
   if (!hasRequiredFields) {
-    patternAnalysis.potentialIssues.push('Missing required fields');
+    patternAnalysis.potentialIssues.push("Missing required fields");
   }
-  
-  if (payloadType === 'unknown') {
-    patternAnalysis.potentialIssues.push('Unknown interaction type');
+
+  if (payloadType === "unknown") {
+    patternAnalysis.potentialIssues.push("Unknown interaction type");
   }
-  
-  if (channelType === 'unknown') {
-    patternAnalysis.potentialIssues.push('Unknown channel type');
+
+  if (channelType === "unknown") {
+    patternAnalysis.potentialIssues.push("Unknown channel type");
   }
-  
-  if (patternAnalysis.payloadSize > 100000) { // 100KB
-    patternAnalysis.potentialIssues.push('Large payload size');
+
+  if (patternAnalysis.payloadSize > 100000) {
+    // 100KB
+    patternAnalysis.potentialIssues.push("Large payload size");
   }
-  
-  if (chatwootPayload && patternAnalysis.chatwootPayload?.whatsappApiKeyLength < 10) {
-    patternAnalysis.potentialIssues.push('Short WhatsApp API key');
+
+  if (
+    chatwootPayload &&
+    patternAnalysis.chatwootPayload?.whatsappApiKeyLength < 10
+  ) {
+    patternAnalysis.potentialIssues.push("Short WhatsApp API key");
   }
-  
+
   return {
     payloadType,
     channelType,
@@ -1363,27 +1504,34 @@ export function logOriginalRequestAnalysis(
   requestHeaders?: Record<string, string | null>
 ): void {
   const analysis = analyzeOriginalDialogflowRequest(payload, correlationId);
-  
-  console.log(`[OriginalRequestDialogflow] [${correlationId}] COMPREHENSIVE PATTERN ANALYSIS:`, {
-    correlationId,
-    timestamp: new Date().toISOString(),
-    analysis,
-    requestHeaders,
-    rawPayloadPreview: {
-      responseId: payload.responseId,
-      sessionPath: payload.session,
-      intentName: payload.queryResult?.intent?.displayName,
-      queryText: payload.queryResult?.queryText,
-      channelType: payload.originalDetectIntentRequest?.payload?.channel_type,
-      interactionType: payload.originalDetectIntentRequest?.payload?.interaction_type,
+
+  console.log(
+    `[OriginalRequestDialogflow] [${correlationId}] COMPREHENSIVE PATTERN ANALYSIS:`,
+    {
+      correlationId,
+      timestamp: new Date().toISOString(),
+      analysis,
+      requestHeaders,
+      rawPayloadPreview: {
+        responseId: payload.responseId,
+        sessionPath: payload.session,
+        intentName: payload.queryResult?.intent?.displayName,
+        queryText: payload.queryResult?.queryText,
+        channelType: payload.originalDetectIntentRequest?.payload?.channel_type,
+        interactionType:
+          payload.originalDetectIntentRequest?.payload?.interaction_type,
+      },
     }
-  });
+  );
 }
 
 /**
  * Extrai dados necessários para a Flash Intent do payload do webhook
  */
-export function extractFlashIntentData(req: any, correlationId: string): {
+export function extractFlashIntentData(
+  req: any,
+  correlationId: string
+): {
   type: "intent" | "button_click";
   intentName?: string;
   buttonId?: string;
@@ -1406,16 +1554,20 @@ export function extractFlashIntentData(req: any, correlationId: string): {
   const webhookData = extractWebhookData(req);
   const chatwootPayload = req.originalDetectIntentRequest?.payload;
   const userIdentification = extractUserIdentification(req);
-  
+
   // Detectar se é button click ou intent
-  const isButtonClick = chatwootPayload?.interaction_type === "button_reply" || 
-                       chatwootPayload?.interactive?.type === "button_reply" || 
-                       chatwootPayload?.interactive?.type === "list_reply";
-  
+  const isButtonClick =
+    chatwootPayload?.interaction_type === "button_reply" ||
+    chatwootPayload?.interactive?.type === "button_reply" ||
+    chatwootPayload?.interactive?.type === "list_reply";
+
   return {
     type: isButtonClick ? "button_click" : "intent",
     intentName: webhookData.intentName,
-    buttonId: chatwootPayload?.button_id || chatwootPayload?.interactive?.button_reply?.id || chatwootPayload?.interactive?.list_reply?.id,
+    buttonId:
+      chatwootPayload?.button_id ||
+      chatwootPayload?.interactive?.button_reply?.id ||
+      chatwootPayload?.interactive?.list_reply?.id,
     recipientPhone: webhookData.contactPhone,
     whatsappApiKey: webhookData.whatsappApiKey,
     phoneNumberId: chatwootPayload?.phone_number_id || "unknown",
@@ -1445,31 +1597,41 @@ export async function processWebhookWithFlashIntentFromUtils(
 ): Promise<Response> {
   try {
     // Importar dinamicamente para evitar dependências circulares
-    const { processWebhookWithFlashIntent } = await import('@/lib/resposta-rapida/webhook-integration');
-    const { recordWebhookMetrics } = await import('@/lib/monitoring/application-performance-monitor');
-    
+    const { processWebhookWithFlashIntent } = await import(
+      "@/lib/resposta-rapida/webhook-integration"
+    );
+    const { recordWebhookMetrics } = await import(
+      "@/lib/monitoring/application-performance-monitor"
+    );
+
     // Extrair dados para Flash Intent
     const flashIntentData = extractFlashIntentData(req, correlationId);
-    
-    console.log(`[MTF Diamante Dispatcher] [${correlationId}] Processando com Flash Intent`, {
-      type: flashIntentData.type,
-      intentName: flashIntentData.intentName,
-      buttonId: flashIntentData.buttonId,
-      recipientPhone: flashIntentData.recipientPhone,
-    });
+
+    console.log(
+      `[MTF Diamante Dispatcher] [${correlationId}] Processando com Flash Intent`,
+      {
+        type: flashIntentData.type,
+        intentName: flashIntentData.intentName,
+        buttonId: flashIntentData.buttonId,
+        recipientPhone: flashIntentData.recipientPhone,
+      }
+    );
 
     // Processar com Flash Intent
     const flashResult = await processWebhookWithFlashIntent(flashIntentData);
-    
-    console.log(`[MTF Diamante Dispatcher] [${correlationId}] Flash Intent processado`, {
-      success: flashResult.success,
-      processingMode: flashResult.processingMode,
-      queueUsed: flashResult.queueUsed,
-    });
+
+    console.log(
+      `[MTF Diamante Dispatcher] [${correlationId}] Flash Intent processado`,
+      {
+        success: flashResult.success,
+        processingMode: flashResult.processingMode,
+        queueUsed: flashResult.queueUsed,
+      }
+    );
 
     // Retornar resposta rápida
     const responseTime = performance.now() - startTime;
-    
+
     // Record webhook metrics
     recordWebhookMetrics({
       responseTime,
@@ -1477,32 +1639,43 @@ export async function processWebhookWithFlashIntentFromUtils(
       correlationId,
       success: flashResult.success,
       payloadSize,
-      interactionType: flashIntentData.type === "button_click" ? "button_reply" : "intent",
+      interactionType:
+        flashIntentData.type === "button_click" ? "button_reply" : "intent",
     });
 
-    return new Response(JSON.stringify({ 
-      correlationId,
-      processingMode: flashResult.processingMode,
-      queueUsed: flashResult.queueUsed,
-      responseTime: `${responseTime}ms`,
-      message: flashResult.message,
-    }), {
-      status: 202,
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'X-Correlation-ID': correlationId,
-        'X-Processing-Mode': flashResult.processingMode,
-        'X-Queue-Used': flashResult.queueUsed,
-        'X-Response-Time': responseTime.toString(),
-      },
-    });
-
+    return new Response(
+      JSON.stringify({
+        correlationId,
+        processingMode: flashResult.processingMode,
+        queueUsed: flashResult.queueUsed,
+        responseTime: `${responseTime}ms`,
+        message: flashResult.message,
+      }),
+      {
+        status: 202,
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          "X-Correlation-ID": correlationId,
+          "X-Processing-Mode": flashResult.processingMode,
+          "X-Queue-Used": flashResult.queueUsed,
+          "X-Response-Time": responseTime.toString(),
+        },
+      }
+    );
   } catch (flashIntentError) {
-    console.error(`[MTF Diamante Dispatcher] [${correlationId}] Erro na Flash Intent, usando fallback:`, flashIntentError);
-    
+    console.error(
+      `[MTF Diamante Dispatcher] [${correlationId}] Erro na Flash Intent, usando fallback:`,
+      flashIntentError
+    );
+
     // Fallback para processamento legacy
-    return await processLegacyWebhookFallback(req, correlationId, startTime, payloadSize);
+    return await processLegacyWebhookFallback(
+      req,
+      correlationId,
+      startTime,
+      payloadSize
+    );
   }
 }
 
@@ -1510,22 +1683,24 @@ export async function processWebhookWithFlashIntentFromUtils(
  * Sanitizes phone number to contain only digits
  */
 export function sanitizePhoneNumber(phone: string | number): string {
-  if (typeof phone === 'number') {
+  if (typeof phone === "number") {
     return String(phone);
   }
-  
-  if (typeof phone !== 'string') {
-    return '';
+
+  if (typeof phone !== "string") {
+    return "";
   }
-  
+
   // Remove all non-digit characters
-  const cleaned = phone.replace(/\D/g, '');
-  
+  const cleaned = phone.replace(/\D/g, "");
+
   // Validate phone number length (10-15 digits is typical for international numbers)
   if (cleaned.length < 10 || cleaned.length > 15) {
-    console.warn(`[Webhook Utils] Invalid phone number length: ${cleaned.length} digits`);
+    console.warn(
+      `[Webhook Utils] Invalid phone number length: ${cleaned.length} digits`
+    );
   }
-  
+
   return cleaned;
 }
 
@@ -1533,19 +1708,19 @@ export function sanitizePhoneNumber(phone: string | number): string {
  * Sanitizes email address
  */
 export function sanitizeEmail(email: string): string {
-  if (typeof email !== 'string') {
-    return '';
+  if (typeof email !== "string") {
+    return "";
   }
-  
+
   const cleaned = email.trim().toLowerCase();
-  
+
   // Basic email validation
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(cleaned)) {
     console.warn(`[Webhook Utils] Invalid email format: ${email}`);
-    return '';
+    return "";
   }
-  
+
   return cleaned;
 }
 
@@ -1553,28 +1728,34 @@ export function sanitizeEmail(email: string): string {
  * Sanitizes WhatsApp API key
  */
 export function sanitizeApiKey(apiKey: string): string {
-  if (typeof apiKey !== 'string') {
+  if (typeof apiKey !== "string") {
     console.warn(`[Webhook Utils] API key is not a string: ${typeof apiKey}`);
-    return '';
+    return "";
   }
-  
+
   const cleaned = apiKey.trim();
-  
+
   // Validate minimum length for API key
   if (cleaned.length < 10) {
-    console.warn(`[Webhook Utils] API key too short: ${cleaned.length} characters`);
-    return '';
+    console.warn(
+      `[Webhook Utils] API key too short: ${cleaned.length} characters`
+    );
+    return "";
   }
-  
+
   // Validate maximum length for API key (Facebook tokens are usually < 500 chars)
   if (cleaned.length > 500) {
-    console.warn(`[Webhook Utils] API key too long: ${cleaned.length} characters`);
+    console.warn(
+      `[Webhook Utils] API key too long: ${cleaned.length} characters`
+    );
     return cleaned.substring(0, 500);
   }
-  
+
   // Log successful sanitization for debugging
-  console.log(`[Webhook Utils] API key sanitized successfully: ${cleaned.length} characters`);
-  
+  console.log(
+    `[Webhook Utils] API key sanitized successfully: ${cleaned.length} characters`
+  );
+
   return cleaned;
 }
 
@@ -1582,16 +1763,16 @@ export function sanitizeApiKey(apiKey: string): string {
  * Sanitizes text content by removing potentially dangerous characters
  */
 export function sanitizeTextContent(text: string): string {
-  if (typeof text !== 'string') {
-    return '';
+  if (typeof text !== "string") {
+    return "";
   }
-  
+
   // Remove potentially dangerous characters but keep basic punctuation
   return text
     .trim()
-    .replace(/[<>]/g, '') // Remove HTML-like brackets
-    .replace(/javascript:/gi, '') // Remove javascript: protocol
-    .replace(/on\w+\s*=/gi, '') // Remove event handlers
+    .replace(/[<>]/g, "") // Remove HTML-like brackets
+    .replace(/javascript:/gi, "") // Remove javascript: protocol
+    .replace(/on\w+\s*=/gi, "") // Remove event handlers
     .substring(0, 4096); // Limit length to prevent abuse
 }
 
@@ -1599,14 +1780,14 @@ export function sanitizeTextContent(text: string): string {
  * Sanitizes button ID to ensure it's safe for database storage
  */
 export function sanitizeButtonId(buttonId: string): string {
-  if (typeof buttonId !== 'string') {
-    return '';
+  if (typeof buttonId !== "string") {
+    return "";
   }
-  
+
   // Allow alphanumeric, underscore, hyphen, and dot
   return buttonId
     .trim()
-    .replace(/[^a-zA-Z0-9_.-]/g, '')
+    .replace(/[^a-zA-Z0-9_.-]/g, "")
     .substring(0, 255); // Limit length
 }
 
@@ -1614,14 +1795,14 @@ export function sanitizeButtonId(buttonId: string): string {
  * Sanitizes intent name to ensure it's safe
  */
 export function sanitizeIntentName(intentName: string): string {
-  if (typeof intentName !== 'string') {
-    return 'Unknown';
+  if (typeof intentName !== "string") {
+    return "Unknown";
   }
-  
+
   // Allow alphanumeric, underscore, hyphen, dot, and space
   return intentName
     .trim()
-    .replace(/[^a-zA-Z0-9_.\- ]/g, '')
+    .replace(/[^a-zA-Z0-9_.\- ]/g, "")
     .substring(0, 255); // Limit length
 }
 
@@ -1630,7 +1811,7 @@ export function sanitizeIntentName(intentName: string): string {
  * Applies specific sanitization rules based on field types
  */
 export function sanitizeWebhookPayloadComprehensive(payload: any): any {
-  if (!payload || typeof payload !== 'object') {
+  if (!payload || typeof payload !== "object") {
     return payload;
   }
 
@@ -1639,7 +1820,7 @@ export function sanitizeWebhookPayloadComprehensive(payload: any): any {
   // Sanitize specific fields if they exist
   if (sanitized.originalDetectIntentRequest?.payload) {
     const chatwootPayload = sanitized.originalDetectIntentRequest.payload;
-    
+
     // Sanitize phone numbers
     if (chatwootPayload.from) {
       chatwootPayload.from = sanitizePhoneNumber(chatwootPayload.from);
@@ -1647,79 +1828,110 @@ export function sanitizeWebhookPayloadComprehensive(payload: any): any {
     if (chatwootPayload.phone) {
       chatwootPayload.phone = sanitizePhoneNumber(chatwootPayload.phone);
     }
-    
+
     // Sanitize API keys
     if (chatwootPayload.whatsapp_api_key) {
-      chatwootPayload.whatsapp_api_key = sanitizeApiKey(chatwootPayload.whatsapp_api_key);
+      chatwootPayload.whatsapp_api_key = sanitizeApiKey(
+        chatwootPayload.whatsapp_api_key
+      );
     }
     if (chatwootPayload.access_token) {
-      chatwootPayload.access_token = sanitizeApiKey(chatwootPayload.access_token);
+      chatwootPayload.access_token = sanitizeApiKey(
+        chatwootPayload.access_token
+      );
     }
-    
+
     // Sanitize text content
     if (chatwootPayload.text) {
       chatwootPayload.text = sanitizeTextContent(chatwootPayload.text);
     }
     if (chatwootPayload.message?.text) {
-      chatwootPayload.message.text = sanitizeTextContent(chatwootPayload.message.text);
+      chatwootPayload.message.text = sanitizeTextContent(
+        chatwootPayload.message.text
+      );
     }
-    
+
     // Sanitize button ID - only if not empty
-    if (chatwootPayload.button_id && chatwootPayload.button_id.trim() !== '') {
+    if (chatwootPayload.button_id && chatwootPayload.button_id.trim() !== "") {
       chatwootPayload.button_id = sanitizeButtonId(chatwootPayload.button_id);
     }
-    if (chatwootPayload.interactive?.button_reply?.id && chatwootPayload.interactive.button_reply.id.trim() !== '') {
-      chatwootPayload.interactive.button_reply.id = sanitizeButtonId(chatwootPayload.interactive.button_reply.id);
+    if (
+      chatwootPayload.interactive?.button_reply?.id &&
+      chatwootPayload.interactive.button_reply.id.trim() !== ""
+    ) {
+      chatwootPayload.interactive.button_reply.id = sanitizeButtonId(
+        chatwootPayload.interactive.button_reply.id
+      );
     }
-    if (chatwootPayload.interactive?.list_reply?.id && chatwootPayload.interactive.list_reply.id.trim() !== '') {
-      chatwootPayload.interactive.list_reply.id = sanitizeButtonId(chatwootPayload.interactive.list_reply.id);
+    if (
+      chatwootPayload.interactive?.list_reply?.id &&
+      chatwootPayload.interactive.list_reply.id.trim() !== ""
+    ) {
+      chatwootPayload.interactive.list_reply.id = sanitizeButtonId(
+        chatwootPayload.interactive.list_reply.id
+      );
     }
-    
+
     // Sanitize interaction_type - only if not empty
-    if (chatwootPayload.interaction_type && chatwootPayload.interaction_type.trim() !== '') {
-      chatwootPayload.interaction_type = sanitizeTextContent(chatwootPayload.interaction_type);
+    if (
+      chatwootPayload.interaction_type &&
+      chatwootPayload.interaction_type.trim() !== ""
+    ) {
+      chatwootPayload.interaction_type = sanitizeTextContent(
+        chatwootPayload.interaction_type
+      );
     }
-    
+
     // Sanitize contact_phone field specifically
     if (chatwootPayload.contact_phone) {
-      chatwootPayload.contact_phone = sanitizePhoneNumber(chatwootPayload.contact_phone);
+      chatwootPayload.contact_phone = sanitizePhoneNumber(
+        chatwootPayload.contact_phone
+      );
     }
-    
+
     // Sanitize account name
     if (chatwootPayload.account_name) {
-      chatwootPayload.account_name = sanitizeTextContent(chatwootPayload.account_name);
+      chatwootPayload.account_name = sanitizeTextContent(
+        chatwootPayload.account_name
+      );
     }
-    
+
     // Sanitize contact source
     if (chatwootPayload.contact_source) {
-      chatwootPayload.contact_source = sanitizeTextContent(chatwootPayload.contact_source);
+      chatwootPayload.contact_source = sanitizeTextContent(
+        chatwootPayload.contact_source
+      );
     }
   }
-  
+
   // Sanitize query result
   if (sanitized.queryResult) {
     // Sanitize intent name
     if (sanitized.queryResult.intent?.displayName) {
-      sanitized.queryResult.intent.displayName = sanitizeIntentName(sanitized.queryResult.intent.displayName);
+      sanitized.queryResult.intent.displayName = sanitizeIntentName(
+        sanitized.queryResult.intent.displayName
+      );
     }
-    
+
     // Sanitize query text
     if (sanitized.queryResult.queryText) {
-      sanitized.queryResult.queryText = sanitizeTextContent(sanitized.queryResult.queryText);
+      sanitized.queryResult.queryText = sanitizeTextContent(
+        sanitized.queryResult.queryText
+      );
     }
-    
+
     // Sanitize parameters
     if (sanitized.queryResult.parameters) {
       const params = sanitized.queryResult.parameters;
-      
+
       // Sanitize common parameter types
-      Object.keys(params).forEach(key => {
+      Object.keys(params).forEach((key) => {
         const value = params[key];
-        
-        if (typeof value === 'string') {
-          if (key.toLowerCase().includes('phone')) {
+
+        if (typeof value === "string") {
+          if (key.toLowerCase().includes("phone")) {
             params[key] = sanitizePhoneNumber(value);
-          } else if (key.toLowerCase().includes('email')) {
+          } else if (key.toLowerCase().includes("email")) {
             params[key] = sanitizeEmail(value);
           } else {
             params[key] = sanitizeTextContent(value);
@@ -1728,7 +1940,7 @@ export function sanitizeWebhookPayloadComprehensive(payload: any): any {
       });
     }
   }
-  
+
   return sanitized;
 }
 
@@ -1743,44 +1955,47 @@ export function validateSanitizedWebhookPayload(payload: any): {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  if (!payload || typeof payload !== 'object') {
-    errors.push('Payload is not a valid object');
+  if (!payload || typeof payload !== "object") {
+    errors.push("Payload is not a valid object");
     return { isValid: false, errors, warnings };
   }
 
   // Check for required structure
   if (!payload.originalDetectIntentRequest) {
-    errors.push('Missing originalDetectIntentRequest');
+    errors.push("Missing originalDetectIntentRequest");
   }
 
   if (!payload.queryResult) {
-    errors.push('Missing queryResult');
+    errors.push("Missing queryResult");
   }
 
   // Validate API key if present
   const chatwootPayload = payload.originalDetectIntentRequest?.payload;
   if (chatwootPayload) {
-    const apiKey = chatwootPayload.whatsapp_api_key || chatwootPayload.access_token;
+    const apiKey =
+      chatwootPayload.whatsapp_api_key || chatwootPayload.access_token;
     if (apiKey && apiKey.length < 10) {
-      warnings.push('API key appears to be too short after sanitization');
+      warnings.push("API key appears to be too short after sanitization");
     }
 
     // Validate phone number if present
     const phone = chatwootPayload.from || chatwootPayload.phone;
     if (phone && (phone.length < 10 || phone.length > 15)) {
-      warnings.push('Phone number length is outside normal range after sanitization');
+      warnings.push(
+        "Phone number length is outside normal range after sanitization"
+      );
     }
 
     // Check for empty critical fields after sanitization
-    if (chatwootPayload.button_id === '') {
-      warnings.push('Button ID became empty after sanitization');
+    if (chatwootPayload.button_id === "") {
+      warnings.push("Button ID became empty after sanitization");
     }
   }
 
   // Validate intent name if present
   const intentName = payload.queryResult?.intent?.displayName;
-  if (intentName && intentName === 'Unknown') {
-    warnings.push('Intent name was sanitized to Unknown');
+  if (intentName && intentName === "Unknown") {
+    warnings.push("Intent name was sanitized to Unknown");
   }
 
   return {
@@ -1800,64 +2015,78 @@ export async function processLegacyWebhookFallback(
   payloadSize: number
 ): Promise<Response> {
   try {
-    const { recordWebhookMetrics } = await import('@/lib/monitoring/application-performance-monitor');
-    
+    const { recordWebhookMetrics } = await import(
+      "@/lib/monitoring/application-performance-monitor"
+    );
+
     // Sanitizar payload antes do processamento
     const sanitizedReq = sanitizeWebhookPayloadComprehensive(req);
-    
+
     const webhookData = extractWebhookData(sanitizedReq);
     logWebhookData(webhookData, sanitizedReq);
-    
+
     // Processar usando as funções da própria lib
     const dialogflowRequest = parseDialogflowRequest(sanitizedReq);
-    
-    console.log(`[MTF Diamante Dispatcher] [${correlationId}] Processamento legacy fallback`, {
-      type: dialogflowRequest.type,
-      intentName: dialogflowRequest.intentName,
-      buttonId: dialogflowRequest.buttonId,
-    });
-    
+
+    console.log(
+      `[MTF Diamante Dispatcher] [${correlationId}] Processamento legacy fallback`,
+      {
+        type: dialogflowRequest.type,
+        intentName: dialogflowRequest.intentName,
+        buttonId: dialogflowRequest.buttonId,
+      }
+    );
+
     const responseTime = performance.now() - startTime;
-    
+
     recordWebhookMetrics({
       responseTime,
       timestamp: new Date(),
       correlationId,
       success: true,
       payloadSize,
-      interactionType: dialogflowRequest.type === 'button_click' ? 'button_reply' : 'intent',
+      interactionType:
+        dialogflowRequest.type === "button_click" ? "button_reply" : "intent",
     });
-    
-    return new Response(JSON.stringify({ 
-      correlationId,
-      processingMode: "legacy_fallback",
-      responseTime: `${responseTime}ms`,
-      requestType: dialogflowRequest.type,
-    }), {
-      status: 202,
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'X-Correlation-ID': correlationId,
-        'X-Processing-Mode': 'legacy_fallback',
-      },
-    });
-    
+
+    return new Response(
+      JSON.stringify({
+        correlationId,
+        processingMode: "legacy_fallback",
+        responseTime: `${responseTime}ms`,
+        requestType: dialogflowRequest.type,
+      }),
+      {
+        status: 202,
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          "X-Correlation-ID": correlationId,
+          "X-Processing-Mode": "legacy_fallback",
+        },
+      }
+    );
   } catch (error) {
-    console.error(`[MTF Diamante Dispatcher] [${correlationId}] Erro no fallback legacy:`, error);
-    
+    console.error(
+      `[MTF Diamante Dispatcher] [${correlationId}] Erro no fallback legacy:`,
+      error
+    );
+
     const responseTime = performance.now() - startTime;
-    
-    return new Response(JSON.stringify({ 
-      correlationId,
-      error: 'Processing failed',
-      responseTime: `${responseTime}ms`,
-    }), {
-      status: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Correlation-ID': correlationId,
-      },
-    });
+
+    return new Response(
+      JSON.stringify({
+        correlationId,
+        error: "Processing failed",
+        responseTime: `${responseTime}ms`,
+      }),
+      {
+        status: 500,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Correlation-ID": correlationId,
+        },
+      }
+    );
   }
 }

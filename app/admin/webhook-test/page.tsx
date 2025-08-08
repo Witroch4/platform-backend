@@ -6,8 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Send, TestTube, Zap, Copy, CheckCircle, XCircle } from "lucide-react";
+import { Loader2, Send, TestTube, Zap, Copy, CheckCircle, XCircle, Save, FolderOpen, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+
+interface SavedPayload {
+  id: string;
+  name: string;
+  payload: string;
+  createdAt: string;
+}
 
 export default function WebhookTestPage() {
   const [loading, setLoading] = useState(false);
@@ -15,6 +22,8 @@ export default function WebhookTestPage() {
   const [customPayload, setCustomPayload] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("+558597550136");
   const [flashIntentStatus, setFlashIntentStatus] = useState<any>(null);
+  const [savedPayloads, setSavedPayloads] = useState<SavedPayload[]>([]);
+  const [payloadName, setPayloadName] = useState("");
 
   useEffect(() => {
     // Carregar status da Flash Intent
@@ -31,7 +40,59 @@ export default function WebhookTestPage() {
     };
 
     loadFlashIntentStatus();
+    loadSavedPayloads();
   }, []);
+
+  const loadSavedPayloads = () => {
+    try {
+      const saved = localStorage.getItem('webhook-saved-payloads');
+      if (saved) {
+        setSavedPayloads(JSON.parse(saved));
+      }
+    } catch (error) {
+      console.error("Erro ao carregar payloads salvos:", error);
+    }
+  };
+
+  const savePayload = () => {
+    if (!customPayload.trim() || !payloadName.trim()) {
+      toast.error("Nome e payload são obrigatórios");
+      return;
+    }
+
+    try {
+      // Validar se é JSON válido
+      JSON.parse(customPayload);
+      
+      const newPayload: SavedPayload = {
+        id: Date.now().toString(),
+        name: payloadName.trim(),
+        payload: customPayload,
+        createdAt: new Date().toISOString()
+      };
+
+      const updatedPayloads = [...savedPayloads, newPayload];
+      setSavedPayloads(updatedPayloads);
+      localStorage.setItem('webhook-saved-payloads', JSON.stringify(updatedPayloads));
+      
+      setPayloadName("");
+      toast.success("Payload salvo com sucesso!");
+    } catch (error) {
+      toast.error("JSON inválido no payload");
+    }
+  };
+
+  const loadPayload = (payload: SavedPayload) => {
+    setCustomPayload(payload.payload);
+    toast.success(`Payload "${payload.name}" carregado`);
+  };
+
+  const deletePayload = (id: string) => {
+    const updatedPayloads = savedPayloads.filter(p => p.id !== id);
+    setSavedPayloads(updatedPayloads);
+    localStorage.setItem('webhook-saved-payloads', JSON.stringify(updatedPayloads));
+    toast.success("Payload removido");
+  };
 
   // Payload real do Dialogflow fornecido pelo usuário
   const realPayload = {
@@ -461,7 +522,7 @@ export default function WebhookTestPage() {
         <CardHeader>
           <CardTitle>Payload Customizado</CardTitle>
           <CardDescription>
-            Cole um payload JSON customizado para testar
+            Cole um payload JSON customizado para testar ou salve para uso posterior
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -471,16 +532,97 @@ export default function WebhookTestPage() {
             onChange={(e) => setCustomPayload(e.target.value)}
             className="min-h-[200px] font-mono text-sm"
           />
-          <Button 
-            onClick={sendCustomPayload} 
-            disabled={loading || !customPayload.trim()}
-            variant="outline"
-          >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-            Enviar Payload Customizado
-          </Button>
+          
+          {/* Controles do Payload */}
+          <div className="flex flex-wrap gap-2">
+            <Button 
+              onClick={sendCustomPayload} 
+              disabled={loading || !customPayload.trim()}
+              variant="outline"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+              Enviar Payload Customizado
+            </Button>
+            
+            <div className="flex gap-2">
+              <Input
+                placeholder="Nome do payload"
+                value={payloadName}
+                onChange={(e) => setPayloadName(e.target.value)}
+                className="w-48"
+              />
+              <Button 
+                onClick={savePayload}
+                disabled={!customPayload.trim() || !payloadName.trim()}
+                variant="secondary"
+                size="sm"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                Salvar
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
+
+      {/* Payloads Salvos */}
+      {savedPayloads.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FolderOpen className="h-5 w-5 text-blue-500" />
+              Payloads Salvos
+            </CardTitle>
+            <CardDescription>
+              Payloads salvos para uso rápido
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {savedPayloads.map((payload) => (
+                <div key={payload.id} className="border rounded-lg p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-medium text-sm truncate">{payload.name}</h4>
+                    <Button
+                      onClick={() => deletePayload(payload.id)}
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Criado em {new Date(payload.createdAt).toLocaleDateString()}
+                  </p>
+                  <div className="flex gap-1">
+                    <Button
+                      onClick={() => loadPayload(payload)}
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                    >
+                      <FolderOpen className="h-3 w-3 mr-1" />
+                      Carregar
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setCustomPayload(payload.payload);
+                        sendCustomPayload();
+                      }}
+                      variant="default"
+                      size="sm"
+                      disabled={loading}
+                    >
+                      {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Resposta */}
       {response && (

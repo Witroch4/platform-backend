@@ -188,8 +188,13 @@ export function InteractivePreview({
   const renderHeaderMedia = useCallback((header: MessageHeader) => {
     const mediaUrl = header.mediaUrl || header.content;
 
+    // Debug logs
+    console.log('[InteractivePreview] Header:', header);
+    console.log('[InteractivePreview] Media URL:', mediaUrl);
+
     // Não renderizar se não há URL válida
     if (!mediaUrl || mediaUrl.trim() === "") {
+      console.log('[InteractivePreview] No media URL found, not rendering');
       return null;
     }
 
@@ -310,8 +315,12 @@ export function InteractivePreview({
 
             {/* Header Media */}
             {debouncedMessage.header &&
-              debouncedMessage.header.type !== "text" &&
-              renderHeaderMedia(debouncedMessage.header)}
+              debouncedMessage.header.type !== "text" && (
+                <>
+                  {console.log('[InteractivePreview] Rendering header media for:', debouncedMessage.header)}
+                  {renderHeaderMedia(debouncedMessage.header)}
+                </>
+              )}
 
             {/* Body */}
             <div

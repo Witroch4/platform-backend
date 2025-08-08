@@ -18,10 +18,11 @@ import {
 import cron from "node-cron";
 import { LEADS_QUEUE_NAME } from "@/lib/queue/leads-chatwit.queue";
 import { processLeadChatwitTask } from "./WebhookWorkerTasks/leads-chatwit.task";
-import { processMtfDiamanteWebhookTask } from "./WebhookWorkerTasks/mtf-diamante-webhook.task";
-import { MTF_DIAMANTE_WEBHOOK_QUEUE_NAME } from "@/lib/queue/mtf-diamante-webhook.queue";
+
 import { processInstagramTranslationTask } from "./WebhookWorkerTasks/instagram-translation.task";
 import { INSTAGRAM_TRANSLATION_QUEUE_NAME } from "@/lib/queue/instagram-translation.queue";
+
+
 
 // Import new task modules
 import {
@@ -344,27 +345,19 @@ const autoNotificationsWorker = new Worker<IAutoNotificationJobData>(
   { connection: getRedisInstance() }
 );
 
-// Worker para processar webhooks do MTF Diamante (legacy tasks)
-const mtfDiamanteWebhookWorker = new Worker(
-  MTF_DIAMANTE_WEBHOOK_QUEUE_NAME,
-  processMtfDiamanteWebhookTask,
-  {
-    connection: getRedisInstance(),
-    concurrency: 5,
-    lockDuration: 30000,
-  }
-);
+
 
 // Worker para processar tasks assíncronas do MTF Diamante (sendMessage, sendReaction)
-const mtfDiamanteAsyncWorker = new Worker(
-  `${MTF_DIAMANTE_WEBHOOK_QUEUE_NAME}-async`,
-  processMtfDiamanteWebhookTask, // Usa a mesma função de processamento
-  {
-    connection: getRedisInstance(),
-    concurrency: 10, // Mais concorrência para tasks assíncronas
-    lockDuration: 60000, // Mais tempo para envio de mensagens
-  }
-);
+// Temporariamente desabilitado - arquivo de task foi removido
+// const mtfDiamanteAsyncWorker = new Worker(
+//   `${MTF_DIAMANTE_WEBHOOK_QUEUE_NAME}-async`,
+//   processMtfDiamanteWebhookTask, // Usa a mesma função de processamento
+//   {
+//     connection: getRedisInstance(),
+//     concurrency: 10, // Mais concorrência para tasks assíncronas
+//     lockDuration: 60000, // Mais tempo para envio de mensagens
+//   }
+// );
 
 // Import Instagram translation worker configuration
 import {
@@ -410,8 +403,7 @@ const instagramTranslationWorker = new Worker(
   leadCellsWorker,
   leadsChatwitWorker,
   autoNotificationsWorker,
-  mtfDiamanteWebhookWorker,
-  mtfDiamanteAsyncWorker,
+  // mtfDiamanteAsyncWorker, // Temporariamente desabilitado
 ].forEach((worker) => {
   worker.on("completed", (job) => {
     console.log(`[BullMQ] Job ${job.id} concluído com sucesso`);
@@ -684,39 +676,25 @@ export async function initLeadsChatwitWorker() {
   }
 }
 
-// Exportar a função de inicialização do worker de webhook MTF Diamante
-export async function initMtfDiamanteWebhookWorker() {
-  try {
-    console.log("[BullMQ] Inicializando worker de webhook MTF Diamante...");
-    await mtfDiamanteWebhookWorker.waitUntilReady();
-    console.log(
-      "[BullMQ] Worker de webhook MTF Diamante inicializado com sucesso"
-    );
-  } catch (error) {
-    console.error(
-      "[BullMQ] Erro ao inicializar worker de webhook MTF Diamante:",
-      error
-    );
-    throw error;
-  }
-}
+
 
 // Exportar a função de inicialização do worker assíncrono MTF Diamante
-export async function initMtfDiamanteAsyncWorker() {
-  try {
-    console.log("[BullMQ] Inicializando worker assíncrono MTF Diamante...");
-    await mtfDiamanteAsyncWorker.waitUntilReady();
-    console.log(
-      "[BullMQ] Worker assíncrono MTF Diamante inicializado com sucesso"
-    );
-  } catch (error) {
-    console.error(
-      "[BullMQ] Erro ao inicializar worker assíncrono MTF Diamante:",
-      error
-    );
-    throw error;
-  }
-}
+// Temporariamente desabilitado - arquivo de task foi removido
+// export async function initMtfDiamanteAsyncWorker() {
+//   try {
+//     console.log("[BullMQ] Inicializando worker assíncrono MTF Diamante...");
+//     await mtfDiamanteAsyncWorker.waitUntilReady();
+//     console.log(
+//       "[BullMQ] Worker assíncrono MTF Diamante inicializado com sucesso"
+//     );
+//   } catch (error) {
+//     console.error(
+//       "[BullMQ] Erro ao inicializar worker assíncrono MTF Diamante:",
+//       error
+//     );
+//     throw error;
+//   }
+// }
 
 // Exportar a função de inicialização do worker de tradução Instagram com validação completa
 export async function initInstagramTranslationWorker() {
@@ -912,8 +890,7 @@ const gracefulShutdown = async (signal: string) => {
         manuscritoWorker.close(),
         leadsChatwitWorker.close(),
         autoNotificationsWorker.close(),
-        mtfDiamanteWebhookWorker.close(),
-        mtfDiamanteAsyncWorker.close(),
+        // mtfDiamanteAsyncWorker.close(), // Temporariamente desabilitado
         instagramTranslationWorker.close(),
       ]),
       new Promise((_, reject) =>
@@ -961,6 +938,5 @@ export {
   manuscritoWorker,
   leadsChatwitWorker,
   autoNotificationsWorker,
-  mtfDiamanteWebhookWorker,
   instagramTranslationWorker,
 };

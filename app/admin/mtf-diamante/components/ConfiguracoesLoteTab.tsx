@@ -21,6 +21,7 @@ import { LoteCardSkeleton, VariavelSkeleton } from './LoadingSkeletons';
 import { useMtfData } from '../context/MtfDataProvider';
 import { validateVariable, ensureSpecialVariables, SPECIAL_VARIABLES } from '@/app/lib/variable-utils';
 import { useVariableManager } from '@/hooks/useVariableManager';
+import { DateTimePicker } from '@/app/[accountid]/dashboard/agendamento/components/date-time-picker';
 
 interface WhatsAppConfig {
   id?: string;
@@ -132,7 +133,11 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
   };
 
   const adicionarVariavel = () => {
-    setVariaveisEditaveis(prev => [...prev, { chave: '', valor: '' }]);
+    setVariaveisEditaveis(prev => [...prev, { 
+      chave: '', 
+      valor: '', 
+      id: `temp-${Date.now()}-${Math.random()}` // ID temporário único
+    }]);
   };
 
   const removerVariavel = (index: number) => {
@@ -362,11 +367,11 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
                       Variáveis Personalizadas
                     </h4>
                     {variaveisEditaveis
-                      .filter(v => !['chave_pix', 'nome_do_escritorio_rodape'].includes(v.chave))
-                      .map((variavel, originalIndex) => {
-                        const index = variaveisEditaveis.findIndex(v => v.id === variavel.id || (v.chave === variavel.chave && v.valor === variavel.valor));
+                      .map((variavel, index) => ({ variavel, index }))
+                      .filter(({ variavel }) => !['chave_pix', 'nome_do_escritorio_rodape'].includes(variavel.chave))
+                      .map(({ variavel, index }, displayIndex) => {
                         return (
-                          <div key={`${variavel.id || index}-${originalIndex}`} className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                          <div key={`${variavel.id || index}-${displayIndex}`} className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
                             <div>
                               <Label htmlFor={`chave-${index}`}>Nome da Variável (Chave)</Label>
                               <Input
@@ -616,11 +621,11 @@ function AdicionarLoteDialog({ onLoteAdicionado }: { onLoteAdicionado: () => voi
     setLoading(true);
 
     try {
-      // Converter datas para string antes de enviar
+      // Converter datas para string ISO completa (incluindo hora)
       const payload = {
         ...formData,
-        dataInicio: formData.dataInicio.toISOString().split('T')[0],
-        dataFim: formData.dataFim.toISOString().split('T')[0],
+        dataInicio: formData.dataInicio.toISOString(),
+        dataFim: formData.dataFim.toISOString(),
       };
 
       const response = await fetch('/api/admin/mtf-diamante/lotes', {
@@ -702,48 +707,18 @@ function AdicionarLoteDialog({ onLoteAdicionado }: { onLoteAdicionado: () => voi
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label>Data de Início</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn("w-full justify-start text-left font-normal", !formData.dataInicio && "text-muted-foreground")}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {formData.dataInicio ? format(formData.dataInicio, 'dd/MM/yyyy', { locale: ptBR }) : "Selecione a data"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={formData.dataInicio}
-                    onSelect={(date) => date && setFormData(prev => ({ ...prev, dataInicio: date }))}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+              <DateTimePicker
+                date={formData.dataInicio}
+                setDate={(date) => date && setFormData(prev => ({ ...prev, dataInicio: date }))}
+                label="Data e Hora de Início"
+              />
             </div>
             <div>
-              <Label>Data de Fim</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn("w-full justify-start text-left font-normal", !formData.dataFim && "text-muted-foreground")}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {formData.dataFim ? format(formData.dataFim, 'dd/MM/yyyy', { locale: ptBR }) : "Selecione a data"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={formData.dataFim}
-                    onSelect={(date) => date && setFormData(prev => ({ ...prev, dataFim: date }))}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+              <DateTimePicker
+                date={formData.dataFim}
+                setDate={(date) => date && setFormData(prev => ({ ...prev, dataFim: date }))}
+                label="Data e Hora de Fim"
+              />
             </div>
           </div>
           <DialogFooter>
@@ -777,11 +752,11 @@ function EditarLoteDialog({ lote, onLoteAtualizado }: { lote: MtfDiamanteLote, o
     setLoading(true);
 
     try {
-      // Converter datas para string antes de enviar
+      // Converter datas para string ISO completa (incluindo hora)
       const payload = {
         ...formData,
-        dataInicio: formData.dataInicio.toISOString().split('T')[0],
-        dataFim: formData.dataFim.toISOString().split('T')[0],
+        dataInicio: formData.dataInicio.toISOString(),
+        dataFim: formData.dataFim.toISOString(),
       };
 
       const response = await fetch(`/api/admin/mtf-diamante/lotes/${lote.id}`, {
@@ -855,48 +830,18 @@ function EditarLoteDialog({ lote, onLoteAtualizado }: { lote: MtfDiamanteLote, o
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label>Data de Início</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn("w-full justify-start text-left font-normal", !formData.dataInicio && "text-muted-foreground")}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {formData.dataInicio ? format(formData.dataInicio, 'dd/MM/yyyy', { locale: ptBR }) : "Selecione a data"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={formData.dataInicio}
-                    onSelect={(date) => date && setFormData(prev => ({ ...prev, dataInicio: date }))}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+              <DateTimePicker
+                date={formData.dataInicio}
+                setDate={(date) => date && setFormData(prev => ({ ...prev, dataInicio: date }))}
+                label="Data e Hora de Início"
+              />
             </div>
             <div>
-              <Label>Data de Fim</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn("w-full justify-start text-left font-normal", !formData.dataFim && "text-muted-foreground")}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {formData.dataFim ? format(formData.dataFim, 'dd/MM/yyyy', { locale: ptBR }) : "Selecione a data"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={formData.dataFim}
-                    onSelect={(date) => date && setFormData(prev => ({ ...prev, dataFim: date }))}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+              <DateTimePicker
+                date={formData.dataFim}
+                setDate={(date) => date && setFormData(prev => ({ ...prev, dataFim: date }))}
+                label="Data e Hora de Fim"
+              />
             </div>
           </div>
           <DialogFooter>

@@ -91,6 +91,7 @@ const convertCentralToLocal = (
 interface UnifiedEditingStepProps {
   message: InteractiveMessage;
   reactions: CentralButtonReaction[];
+  variables?: Array<{ chave: string; valor: string; }>;
   onMessageUpdate: (updates: Partial<InteractiveMessage>) => void;
   onReactionUpdate: (
     buttonId: string,
@@ -116,6 +117,7 @@ const VALIDATION_LIMITS = {
 export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
   message,
   reactions,
+  variables = [],
   onMessageUpdate,
   onReactionUpdate,
   onNext,
@@ -385,6 +387,38 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
 
   // Check if form has errors
   const hasErrors = validationState.hasErrors || !canProceed();
+
+  // Function to resolve variables in text
+  const resolveVariables = useCallback((text: string): string => {
+    if (!text || !variables.length) return text;
+    
+    let resolvedText = text;
+    variables.forEach(variable => {
+      const regex = new RegExp(`\\{\\{${variable.chave}\\}\\}`, 'g');
+      resolvedText = resolvedText.replace(regex, variable.valor);
+    });
+    
+    return resolvedText;
+  }, [variables]);
+
+  // Create a resolved version of the message for preview
+  const resolvedMessage = useMemo((): InteractiveMessage => {
+    return {
+      ...message,
+      header: message.header ? {
+        ...message.header,
+        content: message.header.type === 'text' ? resolveVariables(message.header.content || '') : message.header.content
+      } : undefined,
+      body: {
+        ...message.body,
+        text: resolveVariables(message.body.text)
+      },
+      footer: message.footer ? {
+        ...message.footer,
+        text: resolveVariables(message.footer.text)
+      } : undefined
+    };
+  }, [message, resolveVariables]);
 
   return (
     <div className={cn("space-y-6", className)}>
@@ -850,7 +884,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
               </CardHeader>
               <CardContent>
                 <InteractivePreview
-                  message={message}
+                  message={resolvedMessage}
                   reactions={reactions}
                   showReactionIndicators={true}
                   showReactionConfig={true}
