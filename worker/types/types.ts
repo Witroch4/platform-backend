@@ -19,6 +19,7 @@ export interface WhatsAppCredentials {
 
 export interface TemplateMapping {
   id: string;
+  customVariables?: any; // Variáveis customizadas do mapeamento
   template: {
     id: string;
     name: string;

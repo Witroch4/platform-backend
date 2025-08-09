@@ -177,10 +177,29 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Sem permissão' }, { status: 403 });
     }
     const url = new URL(req.url);
-    const templateId = url.searchParams.get('template');
+    const templateId = url.searchParams.get('templateId') || url.searchParams.get('template');
+    
     if (!templateId) {
       return NextResponse.json({ error: 'ID do template não fornecido' }, { status: 400 });
     }
+
+    // Primeiro, tentar buscar do banco de dados local
+    const localTemplate = await prisma.template.findUnique({
+      where: { id: templateId },
+      include: {
+        whatsappOfficialInfo: true
+      }
+    });
+
+    if (localTemplate) {
+      return NextResponse.json({
+        success: true,
+        ...localTemplate,
+        template: localTemplate // Para compatibilidade
+      });
+    }
+
+    // Se não encontrar localmente, buscar da API (comportamento original)
     const template = await getWhatsAppTemplateDetailsFromAPI(templateId, session.user.id);
     if (!template) {
       return NextResponse.json({ error: 'Template não encontrado' }, { status: 404 });

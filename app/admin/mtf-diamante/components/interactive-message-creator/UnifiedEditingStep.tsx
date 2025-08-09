@@ -252,7 +252,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
         const updatedHeader: MessageHeader = {
           ...message.header,
           content,
-          ...(message.header.type !== "text" && { mediaUrl: content }),
+          ...(message.header.type !== "text" && { media_url: content }),
         };
         onMessageUpdate({ header: updatedHeader });
 
@@ -401,24 +401,26 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
     return resolvedText;
   }, [variables]);
 
-  // Create a resolved version of the message for preview
+  // Create a resolved version of the message for preview (mantendo nomes)
   const resolvedMessage = useMemo((): InteractiveMessage => {
+    const resolvedVars: Record<string, string> = {};
+    variables.forEach(v => (resolvedVars[v.chave] = v.valor));
+
+    const headerContentSafe = message.header
+      ? message.header.type === 'text'
+        ? resolveVariables(message.header.content || '')
+        : (message.header.content || '')
+      : '';
+    const bodyText = resolveVariables(message.body.text);
+    const footerText = message.footer ? resolveVariables(message.footer.text) : undefined;
+
     return {
       ...message,
-      header: message.header ? {
-        ...message.header,
-        content: message.header.type === 'text' ? resolveVariables(message.header.content || '') : message.header.content
-      } : undefined,
-      body: {
-        ...message.body,
-        text: resolveVariables(message.body.text)
-      },
-      footer: message.footer ? {
-        ...message.footer,
-        text: resolveVariables(message.footer.text)
-      } : undefined
+      header: message.header ? { ...message.header, content: headerContentSafe } : undefined,
+      body: { ...message.body, text: bodyText },
+      footer: message.footer ? { ...message.footer, text: footerText || '' } : undefined,
     };
-  }, [message, resolveVariables]);
+  }, [message, variables, resolveVariables]);
 
   return (
     <div className={cn("space-y-6", className)}>

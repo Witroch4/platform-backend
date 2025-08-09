@@ -164,7 +164,7 @@ export async function sendTemplateMessage(
       template: {
         name: templateName,
         language: { code: tpl.language || 'pt_BR' },
-        components: comps,
+        components: (opts as any).whatsappComponents || comps, // Usar componentes customizados se fornecidos
       },
     };
     console.log('[sendTemplateMessage] Payload final enviado:', JSON.stringify(payload, null, 2));

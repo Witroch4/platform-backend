@@ -57,8 +57,8 @@ export const ConfigurationStep: React.FC<ConfigurationStepProps> = ({
     if (message.header) {
       if (message.header.type === "text" && message.header.content) {
         components.push({ type: "header", text: message.header.content });
-      } else if (message.header.mediaUrl) {
-        components.push({ type: "header", format: message.header.type, url: message.header.mediaUrl, filename: message.header.filename });
+      } else if (message.header.media_url) {
+        components.push({ type: "header", format: message.header.type, url: message.header.media_url, filename: message.header.filename });
       }
     }
 
@@ -189,7 +189,7 @@ export const ConfigurationStep: React.FC<ConfigurationStepProps> = ({
                     updateHeader({
                       type: value as any,
                       content: "",
-                      mediaUrl: "",
+                      media_url: "",
                     });
                   }
                 }}
@@ -247,7 +247,7 @@ export const ConfigurationStep: React.FC<ConfigurationStepProps> = ({
                       onUploadComplete={(file) => {
                         if (file.url) {
                           updateHeader({
-                            mediaUrl: file.url,
+                            media_url: file.url,
                             mediaId: undefined,
                           });
                         }

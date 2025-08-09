@@ -40,11 +40,11 @@ export const PreviewStep: React.FC<PreviewStepProps> = ({
     if (message.header) {
       if (message.header.type === "text" && message.header.content) {
         components.push({ type: "header", text: message.header.content });
-      } else if (message.header.mediaUrl) {
+      } else if (message.header.media_url) {
         components.push({
           type: "header",
           format: message.header.type,
-          url: message.header.mediaUrl,
+          url: message.header.media_url,
           filename: message.header.filename,
         });
       }
@@ -148,8 +148,8 @@ export const PreviewStep: React.FC<PreviewStepProps> = ({
                 bodyText: message.body.text,
                 footerText: message.footer?.text || "",
                 buttons: message.action?.type === "button" ? message.action.buttons : [],
-                headerMetaMedia: message.header?.mediaUrl
-                  ? [{ url: message.header.mediaUrl }]
+                headerMetaMedia: message.header?.media_url
+                  ? [{ url: message.header.media_url }]
                   : [],
               }}
               messageType="interactive_message"

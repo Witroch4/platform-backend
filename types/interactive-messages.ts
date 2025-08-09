@@ -75,6 +75,7 @@ export interface MessageHeader {
   type: HeaderType;
   content: string;
   mediaUrl?: string;
+  media_url?: string; // Suporte para snake_case também
   mediaId?: string;
   filename?: string;
 }

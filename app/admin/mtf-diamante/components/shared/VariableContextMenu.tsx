@@ -55,8 +55,26 @@ export const VariableContextMenu: React.FC<VariableContextMenuProps> = ({
     return matchesSearch && matchesType;
   });
 
+  // SEÇÃO 2: VARIÁVEIS DO MÉTODO - Variável especial para nome do lead
+  const specialVariables: UnifiedVariable[] = [
+    {
+      id: 'nome_lead_special',
+      chave: 'nome_lead',
+      valor: '{{nome_lead}}',
+      displayName: 'Nome do Lead',
+      descricao: 'Nome da pessoa que receberá a mensagem (substituído dinamicamente)',
+      tipo: 'normal',
+      isActive: true
+    }
+  ];
+
   // Agrupar variáveis por tipo
   const groupedVariables = {
+    special: specialVariables.filter(v => 
+      v.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      v.chave.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      v.descricao.toLowerCase().includes(searchTerm.toLowerCase())
+    ),
     normal: filteredVariables.filter(v => v.tipo === 'normal') as UnifiedVariable[],
     lote: filteredVariables.filter(v => v.tipo === 'lote') as UnifiedVariable[]
   };
@@ -90,6 +108,7 @@ export const VariableContextMenu: React.FC<VariableContextMenuProps> = ({
   }, [isOpen, onClose]);
 
   const handleVariableClick = (variable: UnifiedVariable) => {
+    // Insere diretamente o placeholder nomeado
     insertVariable(variable.chave);
     onClose();
   };
@@ -186,6 +205,46 @@ export const VariableContextMenu: React.FC<VariableContextMenuProps> = ({
               </div>
             ) : (
               <div className="space-y-1 p-2">
+                {/* Variáveis Especiais */}
+                {(selectedType === 'all' || selectedType === 'normal') && groupedVariables.special.length > 0 && (
+                  <>
+                    <div className="px-2 py-1 text-xs font-medium text-muted-foreground flex items-center gap-1">
+                      <Variable className="h-3 w-3" />
+                      Variáveis Especiais
+                    </div>
+                    {groupedVariables.special.map((variable) => (
+                      <Button
+                        key={variable.id}
+                        variant="ghost"
+                        className="w-full justify-start h-auto p-2 text-left border-l-2 border-l-orange-400"
+                        onClick={() => handleVariableClick(variable)}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-medium truncate">
+                              {variable.displayName}
+                            </span>
+                            <Badge variant="default" className="text-xs px-1 py-0 bg-orange-500">
+                              {variable.chave}
+                            </Badge>
+                          </div>
+                          <div className="text-xs text-muted-foreground truncate">
+                            {variable.descricao}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1 font-mono bg-orange-50 px-1 rounded">
+                            {variable.valor}
+                          </div>
+                        </div>
+                      </Button>
+                    ))}
+                  </>
+                )}
+
+                {/* Separador */}
+                {(selectedType === 'all') && groupedVariables.special.length > 0 && groupedVariables.normal.length > 0 && (
+                  <Separator className="my-2" />
+                )}
+
                 {/* Variáveis Normais */}
                 {(selectedType === 'all' || selectedType === 'normal') && groupedVariables.normal.length > 0 && (
                   <>
@@ -274,7 +333,7 @@ export const VariableContextMenu: React.FC<VariableContextMenuProps> = ({
                 )}
 
                 {/* Mensagem quando não há variáveis */}
-                {groupedVariables.normal.length === 0 && groupedVariables.lote.length === 0 && (
+                {groupedVariables.special.length === 0 && groupedVariables.normal.length === 0 && groupedVariables.lote.length === 0 && (
                   <div className="p-4 text-center text-sm text-muted-foreground">
                     Nenhuma variável encontrada
                   </div>

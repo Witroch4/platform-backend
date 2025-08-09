@@ -113,11 +113,16 @@ export async function GET(request: NextRequest) {
           content: {
             name: template.name,
             type: actionType,
-            header: interactive.header ? {
-              type: interactive.header.type,
-              text: interactive.header.content || "",
-              media_url: interactive.header.type !== 'text' ? interactive.header.content || "" : ""
-            } : undefined,
+            header: interactive.header
+              ? {
+                  type: interactive.header.type,
+                  text: interactive.header.content || "",
+                  media_url:
+                    interactive.header.type !== "text"
+                      ? ((interactive.header as any).media_url || interactive.header.content || "")
+                      : "",
+                }
+              : undefined,
             body: {
               text: interactive.body?.text || ''
             },
@@ -231,7 +236,7 @@ export async function POST(request: NextRequest) {
               header: {
                 create: {
                   type: message.header.type,
-                  content: message.header.media_url || message.header.text || ""
+                  content: message.header.content || message.header.media_url || ""
                 }
               }
             }),
@@ -342,7 +347,7 @@ export async function POST(request: NextRequest) {
           header: interactive.header ? {
             type: interactive.header.type,
             text: interactive.header.content || "",
-            media_url: interactive.header.type !== 'text' ? interactive.header.content || "" : ""
+            media_url: interactive.header.type !== 'text' ? (((interactive.header as any).media_url) || interactive.header.content || "") : ""
           } : undefined,
           body: {
             text: interactive.body?.text || ''

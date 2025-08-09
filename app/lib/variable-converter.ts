@@ -1,8 +1,9 @@
 /**
  * Variable Converter for MTF Diamante WhatsApp Templates
  * 
- * This class handles the conversion between custom variable names (e.g., {{pix}}, {{protocolo}})
- * and Meta API compatible sequential numeric format ({{1}}, {{2}}, etc.)
+  * This class previously converted custom variable names (e.g., {{pix}}, {{protocolo}})
+  * to Meta numeric format ({{1}}, {{2}}). A partir da nova regra, mantemos
+  * os nomes nos placeholders. Mantemos utilidades de extração/preview.
  */
 
 export interface MtfDiamanteVariavel {
@@ -48,62 +49,29 @@ export class VariableConverter {
     return variables;
   }
 
-  /**
-   * Converts custom variables to Meta API format
-   * @param templateText - Original template text with custom variables
-   * @param variables - Array of available variables with their values
-   * @returns Conversion result with Meta API compatible text and parameter array
-   */
+  // Nova política: manter o texto original, apenas gerar mapeamento e exemplos.
   convertToMetaFormat(templateText: string, variables: MtfDiamanteVariavel[]): ConversionResult {
     if (!templateText || typeof templateText !== 'string') {
-      return {
-        convertedText: templateText || '',
-        parameterArray: [],
-        mapping: []
-      };
+      return { convertedText: templateText || '', parameterArray: [], mapping: [] };
     }
 
-    // Extract variables from template text
     const extractedVariables = this.extractVariables(templateText);
-    
     if (extractedVariables.length === 0) {
-      return {
-        convertedText: templateText,
-        parameterArray: [],
-        mapping: []
-      };
+      return { convertedText: templateText, parameterArray: [], mapping: [] };
     }
 
-    // Create mapping and parameter array
     const mapping: VariableMapping[] = [];
     const parameterArray: string[] = [];
-    let convertedText = templateText;
 
     extractedVariables.forEach((variableName, index) => {
       const variable = variables.find(v => v.chave === variableName);
       const value = variable?.valor || `Example ${index + 1}`;
-      const numericPosition = index + 1;
-
-      // Create mapping
-      mapping.push({
-        customName: variableName,
-        numericPosition,
-        exampleValue: value
-      });
-
-      // Add to parameter array
+      mapping.push({ customName: variableName, numericPosition: index + 1, exampleValue: value });
       parameterArray.push(value);
-
-      // Replace custom variable with numeric format in text
-      const customVariableRegex = new RegExp(`\\{\\{${this.escapeRegExp(variableName)}\\}\\}`, 'g');
-      convertedText = convertedText.replace(customVariableRegex, `{{${numericPosition}}}`);
     });
 
-    return {
-      convertedText,
-      parameterArray,
-      mapping
-    };
+    // Mantém convertedText igual (sem renumerar)
+    return { convertedText: templateText, parameterArray, mapping };
   }
 
   /**
@@ -171,11 +139,12 @@ export class VariableConverter {
       errors.push('Template contains empty variables. Variable names cannot be empty.');
     }
 
-    // Check for invalid variable names (should contain only lowercase letters and underscores)
+    // Check for invalid variable names
     const variables = this.extractVariables(text);
     variables.forEach(variable => {
-      if (!/^[a-z_]+$/.test(variable)) {
-        errors.push(`Invalid variable name "${variable}". Use only lowercase letters and underscores.`);
+      // Allow both custom variable names (lowercase letters and underscores) and numeric variables (1, 2, 3, etc.)
+      if (!/^[a-z_]+$/.test(variable) && !/^\d+$/.test(variable)) {
+        errors.push(`Invalid variable name "${variable}". Use only lowercase letters and underscores, or numeric variables like 1, 2, 3.`);
       }
     });
 

@@ -1,7 +1,7 @@
 // app/api/admin/mtf-diamante/disparo/route.ts
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { getPrismaInstance } from "@/lib/connections"
+import { getPrismaInstance } from "@/lib/connections";
 import { z } from "zod";
 import { sendTemplateMessage } from "@/lib/whatsapp";
 
@@ -31,26 +31,126 @@ export async function POST(request: Request) {
     // Buscar o usuário Chatwit (opcional, pode não existir)
     const usuarioChatwit = await getPrismaInstance().usuarioChatwit.findFirst({
       where: { appUserId: appUserId },
-      select: { id: true },
+      select: { id: true, name: true },
     });
 
-    // A busca de template já está correta
+    console.log(
+      `[Disparo Debug] UsuarioChatwit encontrado:`,
+      usuarioChatwit
+        ? `${usuarioChatwit.id} (${usuarioChatwit.name})`
+        : "NÃO ENCONTRADO"
+    );
+
+    // Debug: Verificar se o template existe (pode ser ID do Prisma ou metaTemplateId)
+    console.log(`[Disparo Debug] Buscando template com ID: ${templateId}`);
+    console.log(
+      `[Disparo Debug] Usuário atual: ${session.user.id} (${session.user.email})`
+    );
+
+    // Primeiro, tentar buscar por ID direto do Prisma
+    let templateExists = await getPrismaInstance().template.findFirst({
+      where: { id: templateId },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        createdById: true,
+        scope: true,
+      },
+    });
+
+    // Se não encontrar, buscar por metaTemplateId
+    if (!templateExists) {
+      templateExists = await getPrismaInstance().template.findFirst({
+        where: {
+          whatsappOfficialInfo: {
+            metaTemplateId: templateId,
+          },
+        },
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          createdById: true,
+          scope: true,
+        },
+      });
+      console.log(
+        `[Disparo Debug] Buscando por metaTemplateId: ${templateExists ? "ENCONTRADO" : "NÃO ENCONTRADO"}`
+      );
+    }
+
+    console.log(
+      `[Disparo Debug] Template existe?`,
+      templateExists ? "SIM" : "NÃO"
+    );
+    if (templateExists) {
+      console.log(
+        `[Disparo Debug] Template: ${templateExists.name} (ID: ${templateExists.id})`
+      );
+      console.log(
+        `[Disparo Debug] Criado por: ${templateExists.createdById}, Escopo: ${templateExists.scope}`
+      );
+      console.log(
+        `[Disparo Debug] IDs coincidem?`,
+        templateExists.createdById === session.user.id ? "SIM" : "NÃO"
+      );
+    }
+
+    // Buscar template considerando escopo e permissões do usuário
+    // Pode ser ID do Prisma ou metaTemplateId do WhatsApp
     const template = await getPrismaInstance().template.findFirst({
       where: {
-        id: templateId,
-        createdById: session.user.id,
+        OR: [
+          // Busca por ID direto do Prisma
+          {
+            id: templateId,
+            OR: [
+              { createdById: session.user.id },
+              { scope: "GLOBAL" },
+              ...(session.user.role === "ADMIN" ||
+              session.user.role === "SUPERADMIN"
+                ? [{}]
+                : []),
+            ],
+          },
+          // Busca por metaTemplateId do WhatsApp
+          {
+            whatsappOfficialInfo: {
+              metaTemplateId: templateId,
+            },
+            OR: [
+              { createdById: session.user.id },
+              { scope: "GLOBAL" },
+              ...(session.user.role === "ADMIN" ||
+              session.user.role === "SUPERADMIN"
+                ? [{}]
+                : []),
+            ],
+          },
+        ],
       },
-      select: { id: true, name: true, status: true },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        scope: true,
+        createdById: true,
+      },
     });
 
     if (!template) {
       return NextResponse.json(
         {
-          error: `Template com ID ${templateId} não encontrado para este usuário.`,
+          error: `Template com ID/MetaID ${templateId} não encontrado ou sem acesso. ${templateExists ? `Template existe (ID: ${templateExists.id}, criado por: ${templateExists.createdById}, escopo: ${templateExists.scope || "PRIVATE"}) mas usuário não tem acesso.` : "Template não existe no banco de dados."}`,
         },
         { status: 404 }
       );
     }
+
+    console.log(
+      `[Disparo Debug] Template encontrado: ${template.name} (ID: ${template.id}, escopo: ${template.scope}, criado por: ${template.createdById})`
+    );
 
     if (template.status !== "APPROVED") {
       return NextResponse.json(
@@ -120,7 +220,7 @@ export async function POST(request: Request) {
       leadId: lead.id,
       status: "PENDING",
       scheduledAt: new Date(Date.now() + delayMinutes * 60 * 1000),
-      parameters: parameters || {} as any,
+      parameters: parameters || ({} as any),
       userId: appUserId,
     }));
 
@@ -133,13 +233,43 @@ export async function POST(request: Request) {
       const resultados = await Promise.allSettled(
         leads.map(async (lead) => {
           try {
-            // Buscar o template completo para analisar variáveis
-            const templateCompleto = await getPrismaInstance().template.findFirst({
-              where: {
-                id: templateId,
-                createdById: session.user.id,
-              },
-            });
+            // Buscar o template completo com informações do WhatsApp para analisar variáveis
+            const templateCompleto =
+              await getPrismaInstance().template.findFirst({
+                where: {
+                  OR: [
+                    // Busca por ID direto do Prisma
+                    {
+                      id: templateId,
+                      OR: [
+                        { createdById: session.user.id },
+                        { scope: "GLOBAL" },
+                        ...(session.user.role === "ADMIN" ||
+                        session.user.role === "SUPERADMIN"
+                          ? [{}]
+                          : []),
+                      ],
+                    },
+                    // Busca por metaTemplateId do WhatsApp
+                    {
+                      whatsappOfficialInfo: {
+                        metaTemplateId: templateId,
+                      },
+                      OR: [
+                        { createdById: session.user.id },
+                        { scope: "GLOBAL" },
+                        ...(session.user.role === "ADMIN" ||
+                        session.user.role === "SUPERADMIN"
+                          ? [{}]
+                          : []),
+                      ],
+                    },
+                  ],
+                },
+                include: {
+                  whatsappOfficialInfo: true, // Incluir informações do WhatsApp
+                },
+              });
 
             // Preparar nome do lead
             const nomeDoLead = lead.name || "Cliente";
@@ -148,14 +278,81 @@ export async function POST(request: Request) {
             const sendOpts: any = {};
 
             // Auto-preencher variáveis com dados do lead
-            if (templateCompleto?.simpleReplyText) {
+            let components: any[] = [];
+
+            // Para templates do WhatsApp oficial, usar os componentes do WhatsAppOfficialInfo
+            if (templateCompleto?.whatsappOfficialInfo?.components) {
               try {
-                const components = JSON.parse(templateCompleto.simpleReplyText) as any[];
-                const bodyComponent = components.find((c: any) => c.type === "BODY");
+                const rawComponents =
+                  templateCompleto.whatsappOfficialInfo.components;
+                console.log(`[Disparo] Componentes brutos:`, rawComponents);
+
+                if (Array.isArray(rawComponents)) {
+                  components = rawComponents;
+                } else if (
+                  typeof rawComponents === "object" &&
+                  rawComponents !== null
+                ) {
+                  // Converter objeto com chaves numéricas para array
+                  const keys = Object.keys(rawComponents).sort(
+                    (a, b) => parseInt(a) - parseInt(b)
+                  );
+                  components = keys.map((key) => (rawComponents as any)[key]);
+                  console.log(
+                    `[Disparo] Convertido objeto para array com ${components.length} componentes`
+                  );
+                } else {
+                  components = JSON.parse(JSON.stringify(rawComponents));
+                }
+
+                console.log(
+                  `[Disparo] Usando componentes do WhatsApp oficial:`,
+                  components.length
+                );
+              } catch (error) {
+                console.error(
+                  "[Disparo] Erro ao processar componentes do WhatsApp oficial:",
+                  error
+                );
+              }
+            }
+            // Fallback para templates simples
+            else if (templateCompleto?.simpleReplyText) {
+              try {
+                components = JSON.parse(
+                  templateCompleto.simpleReplyText
+                ) as any[];
+                console.log(
+                  `[Disparo] Usando componentes do simpleReplyText:`,
+                  components.length
+                );
+              } catch (error) {
+                console.error(
+                  "[Disparo] Erro ao processar simpleReplyText:",
+                  error
+                );
+              }
+            }
+
+            // Processar componentes para encontrar variáveis
+            if (components.length > 0) {
+              console.log(
+                `[Disparo] Componentes encontrados:`,
+                JSON.stringify(components, null, 2)
+              );
+
+              const bodyComponent = components.find(
+                (c: any) => c.type === "BODY"
+              );
+              console.log(`[Disparo] Body component:`, bodyComponent);
 
               if (bodyComponent?.text) {
                 const placeholders =
                   bodyComponent.text.match(/\{\{(\d+)\}\}/g) || [];
+                console.log(
+                  `[Disparo] Placeholders encontrados:`,
+                  placeholders
+                );
 
                 if (placeholders.length > 0) {
                   // Criar array de variáveis preenchidas automaticamente
@@ -172,9 +369,10 @@ export async function POST(request: Request) {
                   sendOpts.bodyVars = autoVars;
                 }
               }
-            } catch (error) {
-              console.error('[Disparo] Erro ao processar componentes do template:', error);
-            }
+            } else {
+              console.log(
+                `[Disparo] Nenhum componente encontrado para o template ${templateCompleto?.name}`
+              );
             }
 
             // Processar parâmetros manuais (sobrescreve auto-preenchimento se fornecido)
@@ -191,7 +389,9 @@ export async function POST(request: Request) {
                 paramKeys.length > 0 &&
                 paramKeys.every((key) => /^\d+$/.test(key))
               ) {
-                sendOpts.bodyVars = paramKeys.map((key) => (parameters as any)[key]);
+                sendOpts.bodyVars = paramKeys.map(
+                  (key) => (parameters as any)[key]
+                );
                 console.log(
                   `[Disparo] Usando parâmetros manuais: [${sendOpts.bodyVars.join(", ")}]`
                 );
@@ -212,15 +412,116 @@ export async function POST(request: Request) {
                 if ((parameters as any).headerMedia)
                   sendOpts.headerMedia = (parameters as any).headerMedia;
                 if ((parameters as any).buttonOverrides)
-                  sendOpts.buttonOverrides = (parameters as any).buttonOverrides;
+                  sendOpts.buttonOverrides = (
+                    parameters as any
+                  ).buttonOverrides;
                 if ((parameters as any).couponCode)
                   sendOpts.couponCode = (parameters as any).couponCode;
               }
             }
+            console.log(
+              `[Disparo] Enviando template: nome="${template.name}", telefone="${lead.phone}", opts:`,
+              sendOpts
+            );
+
+            // Construir payload correto para WhatsApp baseado nos componentes
+            const whatsappComponents: any[] = [];
+
+            // Processar cada componente
+            for (const component of components) {
+              if (typeof component === "string") continue; // Pular URLs que foram misturadas no array
+
+              switch (component.type) {
+                case "HEADER":
+                  if (component.format === "IMAGE") {
+                    // Buscar a URL pública da imagem no array de componentes
+                    const imageUrl = (components as any).find(
+                      (c: any) =>
+                        typeof c === "string" && c.startsWith("https://")
+                    );
+                    if (imageUrl) {
+                      whatsappComponents.push({
+                        type: "header",
+                        parameters: [
+                          {
+                            type: "image",
+                            image: {
+                              link: imageUrl,
+                            },
+                          },
+                        ],
+                      });
+                      console.log(
+                        `[Disparo] Adicionado header com imagem: ${imageUrl}`
+                      );
+                    }
+                  }
+                  break;
+                case "BODY":
+                  // Para templates sem variáveis, não precisa enviar parâmetros
+                  if (sendOpts.bodyVars && sendOpts.bodyVars.length > 0) {
+                    whatsappComponents.push({
+                      type: "body",
+                      parameters: sendOpts.bodyVars.map((text: string) => ({
+                        type: "text",
+                        text: text,
+                      })),
+                    });
+                    console.log(
+                      `[Disparo] Adicionado body com ${sendOpts.bodyVars.length} variáveis`
+                    );
+                  }
+                  break;
+                case "BUTTONS":
+                  // Processar botões que precisam de parâmetros
+                  if (component.buttons && Array.isArray(component.buttons)) {
+                    component.buttons.forEach((button: any, index: number) => {
+                      if (
+                        button.type === "COPY_CODE" &&
+                        button.example &&
+                        button.example.length > 0
+                      ) {
+                        whatsappComponents.push({
+                          type: "button",
+                          sub_type: "copy_code",
+                          index: String(index),
+                          parameters: [
+                            {
+                              type: "coupon_code",
+                              coupon_code: button.example[0], // Usar o primeiro exemplo: "57944155000101"
+                            },
+                          ],
+                        });
+                        console.log(
+                          `[Disparo] Adicionado botão COPY_CODE (índice ${index}) com código: ${button.example[0]}`
+                        );
+                      }
+                    });
+                  }
+                  break;
+                // FOOTER não precisa de parâmetros para templates aprovados
+              }
+            }
+
+            console.log(
+              `[Disparo] Componentes WhatsApp construídos:`,
+              JSON.stringify(whatsappComponents, null, 2)
+            );
+
+            // Usar sendTemplateMessage com componentes corretos
+            const customOpts = {
+              ...sendOpts,
+              whatsappComponents,
+            };
+
             const success = await sendTemplateMessage(
               lead.phone || "",
               template.name,
-              sendOpts
+              customOpts
+            );
+
+            console.log(
+              `[Disparo] Resultado do envio: ${success ? "SUCESSO" : "FALHA"}`
             );
             await getPrismaInstance().disparoMtfDiamante.updateMany({
               where: {
@@ -231,7 +532,7 @@ export async function POST(request: Request) {
               data: {
                 status: success ? "SENT" : "FAILED",
                 sentAt: new Date(),
-                errorMessage: success ? null : "Falha no envio" as any,
+                errorMessage: success ? null : ("Falha no envio" as any),
               },
             });
             return { success };
@@ -245,7 +546,9 @@ export async function POST(request: Request) {
               data: {
                 status: "FAILED",
                 errorMessage:
-                  error instanceof Error ? error.message : "Erro desconhecido" as any,
+                  error instanceof Error
+                    ? error.message
+                    : ("Erro desconhecido" as any),
               },
             });
             return { success: false };

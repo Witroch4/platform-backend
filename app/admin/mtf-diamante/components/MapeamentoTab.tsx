@@ -27,8 +27,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { TrashIcon, PencilIcon, Smile } from "lucide-react";
+import { TrashIcon, PencilIcon, Smile, Settings } from "lucide-react";
 import { ButtonEmojiMapper } from "./shared/ButtonEmojiMapper";
+import { TemplateVariablesDialog } from "./shared/TemplateVariablesDialog";
 
 interface MapeamentoTabProps {
   caixaId: string;
@@ -72,6 +73,11 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
   // Button reactions state
   const [showReactionConfig, setShowReactionConfig] = useState<string | null>(null);
   const [selectedTemplateDetails, setSelectedTemplateDetails] = useState<any>(null);
+  
+  // Template variables dialog state
+  const [showVariablesDialog, setShowVariablesDialog] = useState(false);
+  const [selectedTemplateForVariables, setSelectedTemplateForVariables] = useState<any>(null);
+  const [pendingMappingData, setPendingMappingData] = useState<any>(null);
 
   const fetchData = async () => {
     if (!caixaId) {
@@ -198,6 +204,43 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
     }
   };
 
+  // Função para verificar se template tem variáveis
+  const checkTemplateVariables = async (templateId: string) => {
+    try {
+      const response = await fetch(`/api/admin/mtf-diamante/template-info?templateId=${templateId}`);
+      if (response.ok) {
+        const templateInfo = await response.json();
+        
+        // Verificar se é template oficial do WhatsApp e tem variáveis
+        if (templateInfo.type === 'WHATSAPP_OFFICIAL' && templateInfo.whatsappOfficialInfo) {
+          const components = templateInfo.whatsappOfficialInfo.components;
+          
+          // Verificar se há variáveis nos componentes
+          const hasVariables = components.some((comp: any) => {
+            if (comp.type === 'BODY' && comp.text) {
+              return /\{\{\d+\}\}/.test(comp.text);
+            }
+            if (comp.type === 'HEADER' && comp.format === 'TEXT' && comp.text) {
+              return /\{\{\d+\}\}/.test(comp.text);
+            }
+            return false;
+          });
+
+          if (hasVariables) {
+            return {
+              hasVariables: true,
+              templateInfo
+            };
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao verificar variáveis do template:', error);
+    }
+    
+    return { hasVariables: false, templateInfo: null };
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -207,15 +250,43 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
       return;
     }
     
+    const templateId = selectedTemplate || selectedMensagem;
+    
+    // Se for template, verificar se tem variáveis
+    if (selectedTemplate) {
+      const { hasVariables, templateInfo } = await checkTemplateVariables(templateId!);
+      
+      if (hasVariables) {
+        // Mostrar diálogo de configuração de variáveis
+        setSelectedTemplateForVariables(templateInfo);
+        setPendingMappingData({
+          id,
+          intentName,
+          templateId,
+          caixaId,
+        });
+        setShowVariablesDialog(true);
+        return;
+      }
+    }
+    
+    // Salvar mapeamento diretamente se não tem variáveis
+    await saveMappingData({
+      id,
+      intentName,
+      templateId,
+      caixaId,
+    });
+  };
+
+  const saveMappingData = async (mappingData: any, customVariables?: Record<string, string>) => {
     try {
       const response = await fetch(`/api/admin/mtf-diamante/mapeamentos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id,
-          intentName,
-          templateId: selectedTemplate || selectedMensagem, // Usar o que foi selecionado como templateId
-          caixaId,
+          ...mappingData,
+          customVariables, // Adicionar variáveis customizadas se existirem
         }),
       });
 
@@ -229,6 +300,14 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
       fetchData();
     } catch (error) {
       toast.error((error as Error).message);
+    }
+  };
+
+  const handleVariablesSave = (customVariables: Record<string, string>) => {
+    if (pendingMappingData) {
+      saveMappingData(pendingMappingData, customVariables);
+      setPendingMappingData(null);
+      setSelectedTemplateForVariables(null);
     }
   };
 
@@ -506,6 +585,23 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Diálogo de Configuração de Variáveis */}
+        {showVariablesDialog && selectedTemplateForVariables && (
+          <TemplateVariablesDialog
+            isOpen={showVariablesDialog}
+            onClose={() => {
+              setShowVariablesDialog(false);
+              setSelectedTemplateForVariables(null);
+              setPendingMappingData(null);
+            }}
+            onSave={handleVariablesSave}
+            templateId={selectedTemplateForVariables.id}
+            templateName={selectedTemplateForVariables.name}
+            components={selectedTemplateForVariables.whatsappOfficialInfo?.components || []}
+            accountId={caixaId} // Usando caixaId como accountId por enquanto
+          />
         )}
       </CardContent>
     </Card>

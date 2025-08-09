@@ -129,9 +129,10 @@ export function LeadsSelectorDialog({
       const params = new URLSearchParams({
         page: "1",
         limit: "10000", // Carrega todos os leads de uma vez
+        marketing: "true", // Usar modo marketing da API consolidada
       });
 
-      const response = await fetch(`/api/admin/leads-chatwit/marketing-leads?${params.toString()}`);
+      const response = await fetch(`/api/admin/leads-chatwit/leads?${params.toString()}`);
       const data = await response.json();
 
       if (response.ok) {
@@ -159,6 +160,7 @@ export function LeadsSelectorDialog({
       const params = new URLSearchParams({
         page: "1",
         limit: "10000",
+        marketing: "true", // Usar modo marketing da API consolidada
       });
 
       if (searchTerm) {
@@ -171,7 +173,7 @@ export function LeadsSelectorDialog({
 
       console.log(`[LeadsSelector] Buscando no servidor: ${params.toString()}`);
 
-      const response = await fetch(`/api/admin/leads-chatwit/marketing-leads?${params.toString()}`);
+      const response = await fetch(`/api/admin/leads-chatwit/leads?${params.toString()}`);
       const data = await response.json();
 
       if (response.ok) {

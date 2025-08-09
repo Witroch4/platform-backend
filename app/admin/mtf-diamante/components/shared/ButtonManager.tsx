@@ -1,6 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
+import { DndContext, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
+import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { SortableItem } from './dnd/SortableItem';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -123,6 +126,7 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
   showReactionConfig = true
 }) => {
   const [validationErrors, setValidationErrors] = useState<Record<string, string[]>>({});
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   // Generate unique ID for new buttons
   const generateButtonId = (): string => {
@@ -157,6 +161,19 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
     const newErrors = { ...validationErrors };
     delete newErrors[buttonId];
     setValidationErrors(newErrors);
+  };
+
+  // Drag end -> reorder
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = buttons.findIndex((b) => b.id === active.id);
+    const newIndex = buttons.findIndex((b) => b.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const newOrder = arrayMove(buttons, oldIndex, newIndex);
+    onChange(newOrder);
   };
 
   // Update button
@@ -263,9 +280,12 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
         )}
       </div>
 
+      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+        <SortableContext items={buttons.map(b => b.id)} strategy={verticalListSortingStrategy}>
       <div className="space-y-3">
         {buttons.map((button, index) => (
-          <Card key={button.id} className="relative">
+          <SortableItem key={button.id} id={button.id}>
+          <Card className="relative">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -435,6 +455,7 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
               )}
             </CardContent>
           </Card>
+          </SortableItem>
         ))}
 
         {buttons.length === 0 && (
@@ -449,6 +470,8 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
           </Card>
         )}
       </div>
+        </SortableContext>
+      </DndContext>
     </div>
   );
 };

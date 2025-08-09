@@ -83,12 +83,12 @@ export const InteractiveMessageCreator: React.FC<
       if (
         latestFile.url &&
         latestFile.progress === 100 &&
-        (!state.message.header.mediaUrl || state.message.header.mediaUrl !== latestFile.url)
+        (!state.message.header.media_url || state.message.header.media_url !== latestFile.url)
       ) {
         updateMessage({ 
           header: { 
             ...state.message.header, 
-            mediaUrl: latestFile.url,
+            media_url: latestFile.url,
             content: latestFile.url 
           } 
         });

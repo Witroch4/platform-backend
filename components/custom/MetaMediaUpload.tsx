@@ -322,6 +322,15 @@ export default function MetaMediaUpload({
               ? {...updatedFile} // Garantir que é uma nova referência 
               : {...f} // Criar nova referência para outros arquivos também
           );
+
+          // Fallback: garantir que a UI não fique travada em "Aguardando upload..."
+          // Se algum arquivo permanecer com status 'waiting' mas já houver mediaHandle, ajustar para success
+          for (const f of newFiles) {
+            if (f.status !== 'success' && (f as any).mediaHandle) {
+              (f as any).status = 'success';
+              (f as any).progress = 100;
+            }
+          }
           
           // Propagar mudança para o componente pai imediatamente
           if (onUploadComplete) {

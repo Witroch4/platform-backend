@@ -7,6 +7,7 @@
 
 import { getPrismaInstance } from "../connections";
 import { replaceVariablesInText } from "../mtf-diamante/variables-resolver";
+import { resolveTextWithVariables } from "./variables-shared";
 
 export interface WhatsAppVariableContext {
   userId?: string;
@@ -93,7 +94,16 @@ export class WhatsAppVariablesResolver {
     // 1. Resolver variáveis do sistema primeiro
     resolvedText = this.resolveSystemVariables(resolvedText);
 
-    // 2. Resolver variáveis do MTF Diamante se userId estiver disponível
+    // 2. Resolver placeholders nomeados localmente (permite preview/worker)
+    try {
+      resolvedText = resolveTextWithVariables(resolvedText, {}, {
+        defaultLeadExampleName: "João",
+      });
+    } catch (e) {
+      console.warn("[WhatsApp Variables] Named placeholder quick pass falhou:", e);
+    }
+
+    // 3. Resolver variáveis do MTF Diamante se userId estiver disponível
     // Isso inclui variáveis normais e a variável especial {{lote_ativo}}
     if (this.userId) {
       try {

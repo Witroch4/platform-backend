@@ -531,13 +531,27 @@ export async function POST(request: Request) {
       for (const component of body.components) {
         const convertedComponent = { ...component };
 
-        // Converter variáveis em componentes de texto
+        // Converter variáveis em componentes de texto (manter nomes)
         if (component.text) {
-          const conversion = variableConverter.convertToMetaFormat(component.text, userVariables);
-          convertedComponent.text = conversion.convertedText;
+          const conversion = variableConverter.convertToMetaFormat(
+            component.text,
+            userVariables
+          );
+          convertedComponent.text = conversion.convertedText; // mantém placeholders nomeados
           
-          // Adicionar parâmetros ao array geral
-          allParameterArrays = [...allParameterArrays, ...conversion.parameterArray];
+          // Se o componente já tem exemplos (como body_text), usar esses exemplos
+          if (component.example && component.example.body_text) {
+            // Para componentes BODY com exemplos fornecidos pelo frontend
+            convertedComponent.example = component.example;
+            allParameterArrays = [...allParameterArrays, ...component.example.body_text];
+          } else if (component.example && component.example.header_text) {
+            // Para componentes HEADER com exemplos fornecidos pelo frontend
+            convertedComponent.example = component.example;
+            allParameterArrays = [...allParameterArrays, ...component.example.header_text];
+          } else {
+            // Usar os parâmetros da conversão se não houver exemplos específicos
+            allParameterArrays = [...allParameterArrays, ...conversion.parameterArray];
+          }
           
           // Verificar se contém variável PIX
           if (conversion.mapping.some(m => m.customName === 'chave_pix')) {
@@ -548,7 +562,8 @@ export async function POST(request: Request) {
             original: component.text,
             converted: conversion.convertedText,
             parameters: conversion.parameterArray,
-            mapping: conversion.mapping
+            mapping: conversion.mapping,
+            hasExamples: !!component.example
           });
         }
 

@@ -63,16 +63,11 @@ export const useUnifiedVariables = (
   }, []);
 
   const insertVariable = useCallback((chave: string, position?: number) => {
-    const variable = variables.find(v => v.chave === chave);
-    if (variable && onInsert) {
-      // Para lotes, usar o valor humanizado
-      const textToInsert = variable.tipo === 'lote' 
-        ? `{{${chave}}}` // Placeholder que será substituído pelo worker
-        : `{{${chave}}}`;
-      
-      onInsert(textToInsert, position);
-    }
-  }, [variables, onInsert]);
+    // Sempre insere o placeholder nomeado, mesmo que não esteja na lista remota
+    // (ex.: variável especial {{nome_lead}})
+    const textToInsert = `{{${chave}}}`;
+    if (onInsert) onInsert(textToInsert, position);
+  }, [onInsert]);
 
   const refreshVariables = useCallback(async () => {
     await fetchVariables();

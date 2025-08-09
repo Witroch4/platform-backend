@@ -186,7 +186,8 @@ export function InteractivePreview({
 
   // Render header media component
   const renderHeaderMedia = useCallback((header: MessageHeader) => {
-    const mediaUrl = header.mediaUrl || header.content;
+    // Suporte para ambos os formatos: media_url (snake_case) e mediaUrl (camelCase)
+    const mediaUrl = header.media_url || header.mediaUrl || header.content;
 
     // Debug logs
     console.log('[InteractivePreview] Header:', header);
@@ -326,7 +327,7 @@ export function InteractivePreview({
             <div
               className="text-sm mb-2 text-gray-900 dark:text-gray-100 break-words overflow-wrap-anywhere"
               dangerouslySetInnerHTML={{
-                __html: processWhatsAppFormatting(debouncedMessage.body.text),
+                __html: processWhatsAppFormatting(debouncedMessage.body?.text ?? ""),
               }}
             />
 
@@ -440,7 +441,7 @@ export function InteractivePreview({
             )}
 
             {/* Empty state */}
-            {!debouncedMessage.body.text && (
+            {!(debouncedMessage.body?.text) && (
               <div className="text-center py-8 text-gray-400">
                 <div className="text-2xl mb-2">💬</div>
                 <p className="text-sm">Sua mensagem aparecerá aqui</p>

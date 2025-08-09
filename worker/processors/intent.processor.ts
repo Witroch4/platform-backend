@@ -98,7 +98,8 @@ export class IntentProcessor {
           wamid,
           correlationId,
         },
-        inboxId
+        inboxId,
+        templateMapping.customVariables // Passar variáveis customizadas
       );
 
       // 4. Send message via WhatsApp API with credential management
@@ -151,13 +152,110 @@ export class IntentProcessor {
   }
 
   /**
+   * Aplica variáveis customizadas aos componentes do template
+   */
+  private applyCustomVariablesToComponents(
+    components: any[],
+    customVariables: Record<string, string>,
+    contactPhone: string
+  ): any[] {
+    console.log('[Intent Processor] Applying custom variables to template components', {
+      customVariables,
+      componentsCount: components.length
+    });
+
+    return components.map(component => {
+      const processedComponent = { ...component };
+
+      // Processar componente BODY
+      if (component.type === 'BODY' && component.text) {
+        processedComponent.text = this.replaceVariablesInTemplateText(
+          component.text,
+          component.example?.body_text?.[0] || [],
+          customVariables,
+          contactPhone
+        );
+      }
+
+      // Processar componente HEADER (se for texto)
+      if (component.type === 'HEADER' && component.format === 'TEXT' && component.text) {
+        processedComponent.text = this.replaceVariablesInTemplateText(
+          component.text,
+          component.example?.header_text?.[0] || [],
+          customVariables,
+          contactPhone
+        );
+      }
+
+      return processedComponent;
+    });
+  }
+
+  /**
+   * Substitui variáveis em texto de template usando valores customizados ou exemplos
+   */
+  private replaceVariablesInTemplateText(
+    text: string,
+    exampleValues: string[],
+    customVariables: Record<string, string>,
+    contactPhone: string
+  ): string {
+    // Novo padrão: aceitar nomes nos placeholders e manter compatibilidade numérica
+    // 1) construir mapa de variáveis disponíveis
+    const variablesMap: Record<string, string> = { ...customVariables };
+
+    // 2) fallback para exemplos por ordem de aparição
+    const allMatches = text.match(/\{\{([^}]+)\}\}/g) || [];
+    allMatches.forEach((m, i) => {
+      const raw = m.replace(/[{}]/g, '').trim();
+      const keyCandidates = [raw, `variavel_${raw}`];
+      const hasValue = keyCandidates.some((k) => variablesMap[k] !== undefined);
+      if (!hasValue && exampleValues[i] !== undefined) {
+        variablesMap[raw] = exampleValues[i];
+      }
+    });
+
+    // 3) variável especial nome_lead
+    if (!variablesMap["nome_lead"]) {
+      variablesMap["nome_lead"] = this.extractLeadNameFromPhone(contactPhone);
+    }
+
+    // 4) aplicar
+    return text.replace(/\{\{([^}]+)\}\}/g, (_m, rawKey: string) => {
+      const key = String(rawKey).trim();
+      const candidates = [key, `variavel_${key}`];
+      for (const k of candidates) {
+        if (variablesMap[k] !== undefined) {
+          let v = String(variablesMap[k] as any);
+          if (v.includes('{{nome_lead}}')) {
+            v = v.replace(/\{\{nome_lead\}\}/g, variablesMap["nome_lead"] || "Cliente");
+          }
+          return v;
+        }
+      }
+      return `{{${key}}}`; // mantém placeholder se não houver valor
+    });
+  }
+
+  /**
+   * Extrai um nome do lead a partir do telefone (implementação simplificada)
+   * Em uma implementação real, isso poderia consultar um banco de dados de contatos
+   */
+  private extractLeadNameFromPhone(phone: string): string {
+    // Por enquanto, retorna uma versão formatada do telefone
+    // Em produção, isso deveria consultar uma base de contatos
+    const cleanPhone = phone.replace(/\D/g, '');
+    return `Lead ${cleanPhone.slice(-4)}`; // Últimos 4 dígitos
+  }
+
+  /**
    * Query MapeamentoIntencao for template mapping
    * Requirement: 4.2
    */
   private async findTemplateByIntent(
     intentName: string,
     inboxId: string
-  ): Promise<TemplateMapping | null> {
+  ): Promise<any> {
     try {
       // Find the mapping using the unified model
       const mapping = await getPrismaInstance().mapeamentoIntencao.findFirst({
@@ -194,6 +292,7 @@ export class IntentProcessor {
 
       return {
         id: mapping.id,
+        customVariables: (mapping as any).customVariables, // Incluir variáveis customizadas
         template: {
           id: mapping.template.id,
           name: mapping.template.name,
@@ -289,7 +388,8 @@ export class IntentProcessor {
       wamid: string;
       correlationId: string;
     },
-    inboxId?: string
+    inboxId?: string,
+    customVariables?: any
   ): Promise<any> {
     try {
       const { type, data, name } = resolvedTemplate;
@@ -324,10 +424,21 @@ export class IntentProcessor {
       // Build message using PayloadBuilder with integrated variable resolution
       switch (type) {
         case "whatsapp_official":
+          // Processar componentes com variáveis customizadas se existirem
+          let processedComponents = data.components || [];
+          
+          if (customVariables && typeof customVariables === 'object') {
+            processedComponents = this.applyCustomVariablesToComponents(
+              processedComponents, 
+              customVariables,
+              variables.contactPhone // Passar nome do lead para substituição
+            );
+          }
+          
           return await payloadBuilder.buildTemplatePayload(
             data.metaTemplateId || "default",
             data.language || "pt_BR",
-            data.components || []
+            processedComponents
           );
 
         case "interactive_message":
