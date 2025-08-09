@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2, Send, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,10 @@ import { TemplateBasicInfo } from "./components/TemplateBasicInfo";
 import { TemplateContentEditor } from "./components/TemplateContentEditor";
 import { TemplatePreview } from "./components/TemplatePreview";
 import { Stepper } from "@/components/custom"; // Stepper barrel export
+import { InteractivePreview } from "@/app/admin/mtf-diamante/components/shared/InteractivePreview";
+import { resolveInteractiveMessagePreview } from "@/lib/whatsapp/variables-shared";
+import { extractVariables } from "@/lib/whatsapp/variable-utils";
+import type { InteractiveMessage, QuickReplyButton } from "@/types/interactive-messages";
 
 const initialFormState: TemplateFormState = {
   name: "",
@@ -48,6 +52,79 @@ export default function CreateTemplatePage() {
   } = useTemplateForm(initialFormState);
 
   const steps = ["Configurar", "Editar", "Analisar"];
+
+  // Prévia consolidada para a etapa 3
+  const reviewPreviewMessage = useMemo(() => {
+    const buildVariablesMap = (): Record<string, string> => {
+      const map: Record<string, string> = {};
+      // Header variables
+      const headerVars = extractVariables(state.headerText).map((v) => v.replace(/\{|\}/g, ""));
+      if (headerVars.length > 0 && state.headerExample) headerVars.forEach((k) => (map[k] = state.headerExample));
+      // Body variables
+      const bodyVars = extractVariables(state.bodyText).map((v) => v.replace(/\{|\}/g, ""));
+      if (state.bodyNamedExamples && Object.keys(state.bodyNamedExamples).length > 0) {
+        for (const k of bodyVars) {
+          if (state.bodyNamedExamples[k]) map[k] = state.bodyNamedExamples[k];
+        }
+      } else {
+        bodyVars.forEach((k, i) => {
+          const ex = state.bodyExamples?.[i];
+          if (ex) map[k] = ex;
+        });
+      }
+      if (!map["nome_lead"]) map["nome_lead"] = "João";
+      return map;
+    };
+
+    const buildPreviewMessage = (): InteractiveMessage => {
+      const headerType = state.headerType;
+      const mediaFile = Array.isArray(state.headerMetaMedia) && state.headerMetaMedia.length > 0 ? state.headerMetaMedia[0] : null;
+
+      const header = (() => {
+        if (headerType === "TEXT" && state.headerText) {
+          return { type: "text", content: state.headerText } as const;
+        }
+        if (headerType === "IMAGE" && mediaFile?.url) {
+          return { type: "image", content: "", mediaUrl: mediaFile.url } as const;
+        }
+        if (headerType === "VIDEO" && mediaFile?.url) {
+          return { type: "video", content: "", mediaUrl: mediaFile.url } as const;
+        }
+        if (headerType === "DOCUMENT" && mediaFile?.url) {
+          return { type: "document", content: mediaFile.file?.name || "Documento", mediaUrl: mediaFile.url, filename: mediaFile.file?.name } as const;
+        }
+        return undefined;
+      })();
+
+      const body = { text: state.bodyText || "" } as const;
+      const footer = state.footerText ? { text: state.footerText } : undefined;
+
+      const buttons: QuickReplyButton[] = Array.isArray(state.buttons)
+        ? state.buttons.map((b: any, index: number) => ({
+            id: b.id || `btn_${index}`,
+            title: b.text || `Botão ${index + 1}`,
+            type: "reply",
+            reply: { id: b.id || `btn_${index}`, title: b.text || `Botão ${index + 1}` },
+          }))
+        : [];
+
+      const action = buttons.length > 0 ? ({ type: "button", buttons } as const) : undefined;
+
+      return {
+        name: state.name || "preview-template",
+        type: buttons.length > 0 ? "button" : "list",
+        header: header as any,
+        body: body as any,
+        footer: footer as any,
+        action: action as any,
+        isActive: true,
+      };
+    };
+
+    const vars = buildVariablesMap();
+    const msg = buildPreviewMessage();
+    return resolveInteractiveMessagePreview(msg as any, vars, { defaultLeadExampleName: "João" });
+  }, [state]);
 
   return (
     <div className="container mx-auto py-10 max-w-6xl">
@@ -107,8 +184,10 @@ export default function CreateTemplatePage() {
       )}
 
       {currentStep === 2 && (
-         <div>
-            {/* Componente de revisão e submissão */}
+         <div className="flex justify-center">
+            <div className="w-full max-w-md">
+              <InteractivePreview message={reviewPreviewMessage as any} debounceMs={150} />
+            </div>
          </div>
       )}
 

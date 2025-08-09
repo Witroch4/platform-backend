@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { DndContext, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
 import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { SortableItem } from "@/app/admin/mtf-diamante/components/shared/dnd/SortableItem";
@@ -32,9 +32,10 @@ interface ButtonEditorProps {
 
 export const ButtonEditor = ({ buttons, setButtons }: ButtonEditorProps) => {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const [isDragging, setIsDragging] = useState(false);
 
   const limits: Record<ButtonType, number> = useMemo(() => ({
-    QUICK_REPLY: 3,
+    QUICK_REPLY: 10,
     URL: 2,
     PHONE_NUMBER: 1,
     COPY_CODE: 1,
@@ -52,6 +53,8 @@ export const ButtonEditor = ({ buttons, setButtons }: ButtonEditorProps) => {
   const totalLimit = 10;
 
   const countByType = (type: ButtonType) => buttons.filter(b => b.type === type).length;
+
+  const canAdd = (type: ButtonType) => buttons.length < totalLimit && countByType(type) < limits[type];
 
   const addButton = (type: ButtonType, opts?: Partial<TemplateButton>) => {
     if (buttons.length >= totalLimit) return;
@@ -89,6 +92,14 @@ export const ButtonEditor = ({ buttons, setButtons }: ButtonEditorProps) => {
     const oldIndex = buttons.findIndex(b => b.id === active.id);
     const newIndex = buttons.findIndex(b => b.id === over.id);
     if (oldIndex !== -1 && newIndex !== -1) setButtons(arrayMove(buttons, oldIndex, newIndex));
+    setIsDragging(false);
+  };
+  const onDragStart = () => setIsDragging(true);
+  const onDragCancel = () => setIsDragging(false);
+
+  // Evita iniciar arraste quando interagir com inputs, mas só enquanto o ponteiro está sobre o input
+  const stopDrag = (e: React.PointerEvent<HTMLInputElement>) => {
+    e.stopPropagation();
   };
 
   return (
@@ -105,49 +116,54 @@ export const ButtonEditor = ({ buttons, setButtons }: ButtonEditorProps) => {
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm"><Plus className="h-3 w-3 mr-1" />Adicionar botão <span className="ml-2 text-xs text-muted-foreground">({buttons.length}/{totalLimit})</span></Button>
+            <Button variant="outline" size="sm" disabled={buttons.length >= totalLimit}>
+              <Plus className="h-3 w-3 mr-1" />
+              Adicionar botão
+              <span className="ml-2 text-xs text-muted-foreground">({buttons.length}/{totalLimit})</span>
+            </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-72">
             <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
               Botões de resposta rápida
             </div>
-            <DropdownMenuItem onClick={() => addButton("QUICK_REPLY")}>
+            <DropdownMenuItem onClick={() => addButton("QUICK_REPLY")} disabled={!canAdd("QUICK_REPLY")}>
               <div className="flex flex-col gap-0.5">
                 <span>Personalizado</span>
+                <span className="text-[10px] text-muted-foreground">{countByType("QUICK_REPLY")}/{limits["QUICK_REPLY"]}</span>
               </div>
             </DropdownMenuItem>
             <div className="my-1 h-px bg-muted" />
             <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
               Botões de chamada para ação
             </div>
-            <DropdownMenuItem onClick={() => addButton("URL")}>
+            <DropdownMenuItem onClick={() => addButton("URL")} disabled={!canAdd("URL")}>
               <div className="flex flex-col gap-0.5">
                 <span>Acessar o site</span>
-                <span className="text-[10px] text-muted-foreground">2 botões no máximo</span>
+                <span className="text-[10px] text-muted-foreground">{countByType("URL")}/{limits["URL"]}</span>
               </div>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => addButton("PHONE_NUMBER", { callVariant: "whatsapp" })}>
+            <DropdownMenuItem onClick={() => addButton("PHONE_NUMBER", { callVariant: "whatsapp" })} disabled={!canAdd("PHONE_NUMBER")}>
               <div className="flex flex-col gap-0.5">
                 <span>Ligar no WhatsApp</span>
-                <span className="text-[10px] text-muted-foreground">1 botão no máximo</span>
+                <span className="text-[10px] text-muted-foreground">{countByType("PHONE_NUMBER")}/{limits["PHONE_NUMBER"]}</span>
               </div>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => addButton("PHONE_NUMBER", { callVariant: "phone" })}>
+            <DropdownMenuItem onClick={() => addButton("PHONE_NUMBER", { callVariant: "phone" })} disabled={!canAdd("PHONE_NUMBER")}>
               <div className="flex flex-col gap-0.5">
                 <span>Ligar</span>
-                <span className="text-[10px] text-muted-foreground">1 botão no máximo</span>
+                <span className="text-[10px] text-muted-foreground">{countByType("PHONE_NUMBER")}/{limits["PHONE_NUMBER"]}</span>
               </div>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => addButton("FLOW")}>
+            <DropdownMenuItem onClick={() => addButton("FLOW")} disabled={!canAdd("FLOW")}>
               <div className="flex flex-col gap-0.5">
                 <span>Concluir flow</span>
-                <span className="text-[10px] text-muted-foreground">1 botão no máximo</span>
+                <span className="text-[10px] text-muted-foreground">{countByType("FLOW")}/{limits["FLOW"]}</span>
               </div>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => addButton("COPY_CODE")}>
+            <DropdownMenuItem onClick={() => addButton("COPY_CODE")} disabled={!canAdd("COPY_CODE")}>
               <div className="flex flex-col gap-0.5">
                 <span>Copiar código da oferta</span>
-                <span className="text-[10px] text-muted-foreground">1 botão no máximo</span>
+                <span className="text-[10px] text-muted-foreground">{countByType("COPY_CODE")}/{limits["COPY_CODE"]}</span>
               </div>
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -159,7 +175,7 @@ export const ButtonEditor = ({ buttons, setButtons }: ButtonEditorProps) => {
           Adicione botões ao template.
         </div>
       ) : (
-        <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+        <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={onDragCancel}>
           <SortableContext items={buttons.map(b => b.id)} strategy={verticalListSortingStrategy}>
             <div className="space-y-2">
               {buttons.map((button, index) => {
@@ -182,7 +198,9 @@ export const ButtonEditor = ({ buttons, setButtons }: ButtonEditorProps) => {
                             <Input 
                               value={button.text} 
                               onChange={(e) => updateButtonText(index, e.target.value)} 
-                              maxLength={20}
+                              maxLength={25}
+                              onPointerDown={stopDrag}
+                              className={cn(isDragging && "pointer-events-none")}
                               disabled={button.type === "COPY_CODE"}
                             />
                             {button.type === "COPY_CODE" && (
@@ -192,13 +210,13 @@ export const ButtonEditor = ({ buttons, setButtons }: ButtonEditorProps) => {
                           {button.type === "URL" && (
                             <div>
                               <Label className="text-xs">URL</Label>
-                              <Input value={button.url || ""} onChange={(e) => updateButtonField(index, "url", e.target.value)} placeholder="https://exemplo.com" />
+                              <Input value={button.url || ""} onChange={(e) => updateButtonField(index, "url", e.target.value)} placeholder="https://exemplo.com" maxLength={2000} onPointerDown={stopDrag} className={cn(isDragging && "pointer-events-none")} />
                             </div>
                           )}
                           {button.type === "PHONE_NUMBER" && (
                             <div>
                               <Label className="text-xs">Telefone</Label>
-                              <Input value={button.phone_number || ""} onChange={(e) => updateButtonField(index, "phone_number", e.target.value)} placeholder="+5511999999999" />
+                              <Input value={button.phone_number || ""} onChange={(e) => updateButtonField(index, "phone_number", e.target.value)} placeholder="+5511999999999" onPointerDown={stopDrag} className={cn(isDragging && "pointer-events-none")} />
                               <Alert className="mt-2">
                                 <Info className="h-3 w-3 mr-2" />
                                 <AlertDescription className="text-[11px]">
@@ -210,7 +228,7 @@ export const ButtonEditor = ({ buttons, setButtons }: ButtonEditorProps) => {
                           {button.type === "COPY_CODE" && (
                             <div>
                               <Label className="text-xs">Código</Label>
-                              <Input value={(button.example?.[0]) || ""} onChange={(e) => updateButtonField(index, "example", [e.target.value] as any)} placeholder="CUPOM123" />
+                              <Input value={(button.example?.[0]) || ""} onChange={(e) => updateButtonField(index, "example", [e.target.value] as any)} placeholder="CUPOM123" maxLength={15} onPointerDown={stopDrag} className={cn(isDragging && "pointer-events-none")} />
                             </div>
                           )}
                         </div>

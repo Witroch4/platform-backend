@@ -539,15 +539,20 @@ export async function POST(request: Request) {
           );
           convertedComponent.text = conversion.convertedText; // mantém placeholders nomeados
           
-          // Se o componente já tem exemplos (como body_text), usar esses exemplos
-          if (component.example && component.example.body_text) {
+          // Se o componente já tem exemplos (posicionais ou nomeados), usar esses exemplos
+          if (component.example && (component.example.body_text || component.example.body_text_named_params)) {
             // Para componentes BODY com exemplos fornecidos pelo frontend
             convertedComponent.example = component.example;
-            allParameterArrays = [...allParameterArrays, ...component.example.body_text];
+            if (component.example.body_text) {
+              allParameterArrays = [...allParameterArrays, ...component.example.body_text];
+            }
           } else if (component.example && component.example.header_text) {
             // Para componentes HEADER com exemplos fornecidos pelo frontend
             convertedComponent.example = component.example;
             allParameterArrays = [...allParameterArrays, ...component.example.header_text];
+          } else if (component.example && component.example.header_text_named_params) {
+            // HEADER com parâmetros nomeados
+            convertedComponent.example = component.example;
           } else {
             // Usar os parâmetros da conversão se não houver exemplos específicos
             allParameterArrays = [...allParameterArrays, ...conversion.parameterArray];
@@ -618,6 +623,7 @@ export async function POST(request: Request) {
       category: body.category,
       language: body.language,
       components: convertedComponents,
+      parameter_format: 'NAMED',
     };
 
     // Se o template contém variável PIX, garantir que o PIX code está incluído no payload

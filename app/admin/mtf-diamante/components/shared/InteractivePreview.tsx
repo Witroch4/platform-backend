@@ -4,7 +4,7 @@ import type React from "react";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Smile, Settings, Zap, FileText, Download, Info } from "lucide-react";
+import { Smile, Settings, Zap, FileText, Download, Info, List, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "next-themes";
 import { EmojiPicker } from "./EmojiPicker";
@@ -85,6 +85,7 @@ export function InteractivePreview({
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
   const [showTextEditor, setShowTextEditor] = useState<string | null>(null);
   const [configMode, setConfigMode] = useState(false);
+  const [showAllButtons, setShowAllButtons] = useState(false);
 
   // Debounce the message to prevent excessive re-renders during real-time updates
   const debouncedMessage = useDebounce(message, debounceMs);
@@ -346,64 +347,206 @@ export function InteractivePreview({
             {/* Buttons */}
             {buttons.length > 0 && (
               <div className="mt-3 space-y-1">
-                {buttons.map((button) => {
-                  const reaction = getButtonReaction(button.id);
-                  const hasReaction = reaction?.emoji || reaction?.textResponse;
+                {/* Quando houver mais de 3 botões, exibir 2 + "Ver todas as opções" */}
+                {buttons.length > 3 ? (
+                  <>
+                    {buttons.slice(0, 2).map((button) => {
+                      const reaction = getButtonReaction(button.id);
+                      const hasReaction = reaction?.emoji || reaction?.textResponse;
 
-                  return (
-                    <div key={button.id} className="relative">
-                      <button
-                        onClick={() => handleButtonClick(button)}
-                        className={cn(
-                          "w-full p-2 text-sm border rounded transition-colors text-left",
-                          "text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800",
-                          "hover:bg-blue-50 dark:hover:bg-blue-900/20",
-                          configMode &&
-                            showReactionConfig &&
-                            "ring-2 ring-blue-300 dark:ring-blue-600",
-                          hasReaction &&
-                            "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700"
-                        )}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span>{button.title}</span>
-                          <div className="flex items-center gap-1">
-                            {/* Reaction indicator (⚡️ icon) */}
-                            {showReactionIndicators && hasReaction && (
-                              <Zap className="h-3 w-3 text-yellow-500" />
+                      return (
+                        <div key={button.id} className="relative">
+                          <button
+                            onClick={() => handleButtonClick(button)}
+                            className={cn(
+                              "w-full p-2 text-sm border rounded transition-colors text-left",
+                              "text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800",
+                              "hover:bg-blue-50 dark:hover:bg-blue-900/20",
+                              configMode &&
+                                showReactionConfig &&
+                                "ring-2 ring-blue-300 dark:ring-blue-600",
+                              hasReaction &&
+                                "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700"
                             )}
-                            {reaction?.emoji && (
-                              <span className="text-lg">{reaction.emoji}</span>
+                          >
+                            <div className="flex items-center justify-between">
+                              <span>{button.title}</span>
+                              <div className="flex items-center gap-1">
+                                {showReactionIndicators && hasReaction && (
+                                  <Zap className="h-3 w-3 text-yellow-500" />
+                                )}
+                                {reaction?.emoji && (
+                                  <span className="text-lg">{reaction.emoji}</span>
+                                )}
+                                {hasReaction && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    {reaction?.emoji ? "Emoji" : "Texto"}
+                                  </Badge>
+                                )}
+                                {configMode && showReactionConfig && (
+                                  <Smile className="h-3 w-3 opacity-50" />
+                                )}
+                              </div>
+                            </div>
+                            {reaction?.textResponse && (
+                              <div className="text-xs text-gray-600 dark:text-gray-400 mt-1 truncate">
+                                "{reaction.textResponse}"
+                              </div>
                             )}
-                            {hasReaction && (
-                              <Badge variant="secondary" className="text-xs">
-                                {reaction?.emoji ? "Emoji" : "Texto"}
-                              </Badge>
-                            )}
-                            {configMode && showReactionConfig && (
-                              <Smile className="h-3 w-3 opacity-50" />
-                            )}
-                          </div>
+                          </button>
+
+                          {hasReaction && configMode && (
+                            <button
+                              onClick={(e) => removeReaction(button.id, e)}
+                              className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+                            >
+                              ×
+                            </button>
+                          )}
                         </div>
-                        {reaction?.textResponse && (
-                          <div className="text-xs text-gray-600 dark:text-gray-400 mt-1 truncate">
-                            "{reaction.textResponse}"
-                          </div>
-                        )}
-                      </button>
+                      );
+                    })}
 
-                      {/* Remove reaction button */}
-                      {hasReaction && configMode && (
-                        <button
-                          onClick={(e) => removeReaction(button.id, e)}
-                          className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
-                        >
-                          ×
-                        </button>
+                    {/* Linha "Ver todas as opções" */}
+                    <button
+                      onClick={() => setShowAllButtons((v) => !v)}
+                      className={cn(
+                        "w-full p-2 text-sm border rounded flex items-center gap-2 justify-center",
+                        "text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800",
+                        "hover:bg-blue-50 dark:hover:bg-blue-900/20"
                       )}
-                    </div>
-                  );
-                })}
+                    >
+                      <List className="h-4 w-4" />
+                      <span>{showAllButtons ? "Ocultar opções" : "Ver todas as opções"}</span>
+                      {showAllButtons ? (
+                        <ChevronUp className="h-4 w-4" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4" />
+                      )}
+                    </button>
+
+                    {showAllButtons && (
+                      <div className="mt-1 border rounded p-1 max-h-60 overflow-y-auto bg-white/50 dark:bg-gray-900/30">
+                        {buttons.map((button) => {
+                          const reaction = getButtonReaction(button.id);
+                          const hasReaction = reaction?.emoji || reaction?.textResponse;
+
+                          return (
+                            <div key={button.id} className="relative mb-1 last:mb-0">
+                              <button
+                                onClick={() => handleButtonClick(button)}
+                                className={cn(
+                                  "w-full p-2 text-sm border rounded transition-colors text-left",
+                                  "text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800",
+                                  "hover:bg-blue-50 dark:hover:bg-blue-900/20",
+                                  configMode &&
+                                    showReactionConfig &&
+                                    "ring-2 ring-blue-300 dark:ring-blue-600",
+                                  hasReaction &&
+                                    "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700"
+                                )}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span>{button.title}</span>
+                                  <div className="flex items-center gap-1">
+                                    {showReactionIndicators && hasReaction && (
+                                      <Zap className="h-3 w-3 text-yellow-500" />
+                                    )}
+                                    {reaction?.emoji && (
+                                      <span className="text-lg">{reaction.emoji}</span>
+                                    )}
+                                    {hasReaction && (
+                                      <Badge variant="secondary" className="text-xs">
+                                        {reaction?.emoji ? "Emoji" : "Texto"}
+                                      </Badge>
+                                    )}
+                                    {configMode && showReactionConfig && (
+                                      <Smile className="h-3 w-3 opacity-50" />
+                                    )}
+                                  </div>
+                                </div>
+                                {reaction?.textResponse && (
+                                  <div className="text-xs text-gray-600 dark:text-gray-400 mt-1 truncate">
+                                    "{reaction.textResponse}"
+                                  </div>
+                                )}
+                              </button>
+
+                              {hasReaction && configMode && (
+                                <button
+                                  onClick={(e) => removeReaction(button.id, e)}
+                                  className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+                                >
+                                  ×
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  // Até 3 botões: renderizar normalmente
+                  <>
+                    {buttons.map((button) => {
+                      const reaction = getButtonReaction(button.id);
+                      const hasReaction = reaction?.emoji || reaction?.textResponse;
+
+                      return (
+                        <div key={button.id} className="relative">
+                          <button
+                            onClick={() => handleButtonClick(button)}
+                            className={cn(
+                              "w-full p-2 text-sm border rounded transition-colors text-left",
+                              "text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800",
+                              "hover:bg-blue-50 dark:hover:bg-blue-900/20",
+                              configMode &&
+                                showReactionConfig &&
+                                "ring-2 ring-blue-300 dark:ring-blue-600",
+                              hasReaction &&
+                                "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700"
+                            )}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span>{button.title}</span>
+                              <div className="flex items-center gap-1">
+                                {showReactionIndicators && hasReaction && (
+                                  <Zap className="h-3 w-3 text-yellow-500" />
+                                )}
+                                {reaction?.emoji && (
+                                  <span className="text-lg">{reaction.emoji}</span>
+                                )}
+                                {hasReaction && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    {reaction?.emoji ? "Emoji" : "Texto"}
+                                  </Badge>
+                                )}
+                                {configMode && showReactionConfig && (
+                                  <Smile className="h-3 w-3 opacity-50" />
+                                )}
+                              </div>
+                            </div>
+                            {reaction?.textResponse && (
+                              <div className="text-xs text-gray-600 dark:text-gray-400 mt-1 truncate">
+                                "{reaction.textResponse}"
+                              </div>
+                            )}
+                          </button>
+
+                          {hasReaction && configMode && (
+                            <button
+                              onClick={(e) => removeReaction(button.id, e)}
+                              className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
               </div>
             )}
 
@@ -440,13 +583,7 @@ export function InteractivePreview({
               </div>
             )}
 
-            {/* Empty state */}
-            {!(debouncedMessage.body?.text) && (
-              <div className="text-center py-8 text-gray-400">
-                <div className="text-2xl mb-2">💬</div>
-                <p className="text-sm">Sua mensagem aparecerá aqui</p>
-              </div>
-            )}
+            {/* Empty state removido para evitar mensagens redundantes */}
           </div>
         </div>
       </div>

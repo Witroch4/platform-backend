@@ -17,7 +17,8 @@ export interface TemplateFormState {
   headerExample: string;
   headerMetaMedia: MetaMediaFile[];
   bodyText: string;
-  bodyExamples: string[];
+    bodyExamples: string[];
+    bodyNamedExamples?: Record<string, string>;
   footerText: string;
   buttons: any[];
 }
@@ -73,8 +74,8 @@ export const useTemplateForm = (initialState: TemplateFormState) => {
     let buttonToAdd;
     switch (type) {
       case 'QUICK_REPLY':
-        if (countType('QUICK_REPLY') >= 3) {
-          toast.error('Limite de botões', { description: 'Máximo de 3 botões de resposta rápida.' });
+        if (countType('QUICK_REPLY') >= 10) {
+          toast.error('Limite de botões', { description: 'Máximo de 10 botões de resposta rápida em templates.' });
           return;
         }
         buttonToAdd = { id: generateButtonId(), type: 'QUICK_REPLY', text: `Botão ${countType('QUICK_REPLY') + 1}` };
@@ -192,18 +193,20 @@ export const useTemplateForm = (initialState: TemplateFormState) => {
       }
 
       // BODY (obrigatório)
-      const bodyVars = extractVariables(state.bodyText);
-      const bodyExampleRow = bodyVars.length > 0
-        ? [
-            bodyVars.map((_, idx) => state.bodyExamples?.[idx] || `exemplo_${idx + 1}`),
-          ]
+      const rawBodyVars = extractVariables(state.bodyText);
+      const bodyVars = rawBodyVars.map(v => v.replace(/\{\{|\}\}/g, ''));
+      const bodyNamedParams = bodyVars.length > 0
+        ? bodyVars.map((name) => ({
+            param_name: name,
+            example: (state.bodyNamedExamples && state.bodyNamedExamples[name]) || '',
+          }))
         : undefined;
       const bodyComponent: any = {
         type: 'BODY',
         text: state.bodyText,
       };
-      if (bodyExampleRow) {
-        bodyComponent.example = { body_text: bodyExampleRow };
+      if (bodyNamedParams) {
+        bodyComponent.example = { body_text_named_params: bodyNamedParams };
       }
       components.push(bodyComponent);
 
@@ -225,7 +228,7 @@ export const useTemplateForm = (initialState: TemplateFormState) => {
             case 'PHONE_NUMBER':
               return { type: 'PHONE_NUMBER', text: b.text, phone_number: b.phone_number };
             case 'COPY_CODE':
-              return { type: 'COPY_CODE', example: b.example?.[0] || '' };
+              return { type: 'COPY_CODE', text: b.text || 'Copiar código da oferta', example: [b.example?.[0] || ''] };
             case 'FLOW': {
               const btn: any = { type: 'FLOW', text: b.text };
               if (b.flow_id) btn.flow_id = b.flow_id;
