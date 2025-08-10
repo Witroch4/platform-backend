@@ -30,6 +30,14 @@ import { toast } from "sonner";
 import { TrashIcon, PencilIcon, Smile, Settings } from "lucide-react";
 import { ButtonEmojiMapper } from "./shared/ButtonEmojiMapper";
 import { TemplateVariablesDialog } from "./shared/TemplateVariablesDialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface MapeamentoTabProps {
   caixaId: string;
@@ -78,6 +86,10 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
   const [showVariablesDialog, setShowVariablesDialog] = useState(false);
   const [selectedTemplateForVariables, setSelectedTemplateForVariables] = useState<any>(null);
   const [pendingMappingData, setPendingMappingData] = useState<any>(null);
+
+  // Delete confirmation dialog state
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
   const fetchData = async () => {
     if (!caixaId) {
@@ -187,7 +199,6 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
   };
 
   const handleDelete = async (mappingId: string) => {
-    if (!confirm("Tem certeza que deseja excluir este mapeamento?")) return;
     try {
       const response = await fetch(
         `/api/admin/mtf-diamante/mapeamentos?id=${mappingId}`,
@@ -202,6 +213,18 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
     } catch (error) {
       toast.error((error as Error).message);
     }
+  };
+
+  const requestDelete = (mappingId: string) => {
+    setDeleteTargetId(mappingId);
+    setIsDeleteOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTargetId) return;
+    await handleDelete(deleteTargetId);
+    setIsDeleteOpen(false);
+    setDeleteTargetId(null);
   };
 
   // Função para verificar se template tem variáveis (BODY/HEADER) ou botões COPY_CODE
@@ -547,11 +570,11 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
                     >
                       <PencilIcon className="h-4 w-4" />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDelete(map.id)}
-                    >
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => requestDelete(map.id)}
+                      >
                       <TrashIcon className="h-4 w-4 text-red-500" />
                     </Button>
                   </div>
@@ -647,6 +670,26 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
             
           />
         )}
+
+        {/* Diálogo de confirmação de exclusão */}
+        <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Excluir mapeamento</DialogTitle>
+              <DialogDescription>
+                Tem certeza que deseja excluir este mapeamento? Esta ação não pode ser desfeita.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsDeleteOpen(false)}>
+                Cancelar
+              </Button>
+              <Button variant="destructive" onClick={confirmDelete}>
+                Excluir
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );

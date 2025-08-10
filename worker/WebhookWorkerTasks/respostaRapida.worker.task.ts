@@ -52,7 +52,8 @@ export async function processRespostaRapidaTask(
         data.credentials,
         data.contactPhone,
         data.wamid,
-        data.correlationId
+        data.correlationId,
+        { personName: data.personName }
       );
     } else if (data.interactionType === "button_reply") {
       if (!data.buttonId) {

@@ -26,7 +26,8 @@ export class IntentProcessor {
     credentials: WhatsAppCredentials,
     contactPhone: string,
     wamid: string,
-    correlationId: string
+    correlationId: string,
+    extraContext?: { personName?: string }
   ): Promise<WorkerResponse> {
     const startTime = Date.now();
 
@@ -99,7 +100,8 @@ export class IntentProcessor {
           correlationId,
         },
         inboxId,
-        templateMapping.customVariables // Passar variáveis customizadas
+        templateMapping.customVariables, // Passar variáveis customizadas
+        extraContext
       );
 
       // 4. Send message via WhatsApp API with credential management
@@ -487,7 +489,8 @@ export class IntentProcessor {
       correlationId: string;
     },
     inboxId?: string,
-    customVariables?: any
+    customVariables?: any,
+    extraContext?: { personName?: string }
   ): Promise<any> {
     try {
       const { type, data, name } = resolvedTemplate;
@@ -515,7 +518,15 @@ export class IntentProcessor {
         await payloadBuilder.setVariablesFromInboxId(inboxId, {
           contactPhone: variables.contactPhone,
           wamid: variables.wamid,
-          correlationId: variables.correlationId
+          correlationId: variables.correlationId,
+          // Passar o nome do person do Dialogflow quando disponível via customVariables
+          personName:
+            extraContext?.personName ||
+            (customVariables && typeof customVariables === 'object' &&
+              (customVariables.person_name ||
+               (customVariables.person && customVariables.person.name) ||
+               customVariables.nome ||
+               customVariables.name)) || undefined,
         });
       }
 

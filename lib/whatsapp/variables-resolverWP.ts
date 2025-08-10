@@ -15,11 +15,13 @@ export interface WhatsAppVariableContext {
   contactPhone?: string;
   wamid?: string;
   correlationId?: string;
+  personName?: string; // nome vindo do Dialogflow (parameters.person.name)
 }
 
 export class WhatsAppVariablesResolver {
   private userId: string | null = null;
   private context: WhatsAppVariableContext = {};
+  private cachedLeadName: string | null = null;
 
   constructor(context: WhatsAppVariableContext = {}) {
     this.context = context;
@@ -101,6 +103,18 @@ export class WhatsAppVariablesResolver {
     // 1. Resolver variáveis do sistema primeiro
     resolvedText = this.resolveSystemVariables(resolvedText);
 
+    // 1.1 Resolver variável especial nome_lead com prioridade de produção
+    if (resolvedText.includes("{{nome_lead}}")) {
+      try {
+        const nomeLead = await this.resolveNomeLead();
+        resolvedText = resolvedText.replace(/\{\{nome_lead\}\}/g, nomeLead);
+      } catch (e) {
+        console.warn("[WhatsApp Variables] Failed to resolve {{nome_lead}}:", e);
+        // fallback silencioso para manter placeholder ou substituir por Cliente
+        resolvedText = resolvedText.replace(/\{\{nome_lead\}\}/g, "Cliente");
+      }
+    }
+
     // 2. Resolver placeholders nomeados localmente (permite preview/worker)
     try {
       resolvedText = resolveTextWithVariables(resolvedText, {}, {
@@ -145,6 +159,57 @@ export class WhatsAppVariablesResolver {
     }
 
     return resolvedText;
+  }
+
+  /**
+   * Resolve o nome do lead seguindo prioridades:
+   * 1) LeadOabData.nomeReal (quando houver lead associado ao telefone)
+   * 2) Lead.name (nome salvo no lead)
+   * 3) "Cliente" (fallback)
+   */
+  private async resolveNomeLead(): Promise<string> {
+    if (this.cachedLeadName) return this.cachedLeadName;
+
+    // Prioridade 1: nome vindo do webhook (Dialogflow person.name), quando fornecido no contexto
+    const personName = (this.context as any).personName as string | undefined;
+    if (personName && typeof personName === 'string' && personName.trim()) {
+      this.cachedLeadName = personName.trim();
+      return this.cachedLeadName;
+    }
+
+    const contactPhoneRaw = this.context.contactPhone || "";
+    const contactPhone = String(contactPhoneRaw).replace(/\D/g, "");
+    if (!contactPhone) {
+      this.cachedLeadName = "Cliente";
+      return this.cachedLeadName;
+    }
+
+    try {
+      const prisma = getPrismaInstance();
+      const lead = await prisma.lead.findFirst({
+        where: { phone: contactPhone },
+        include: { oabData: true },
+      });
+
+      const nomeFromOab = lead?.oabData?.nomeReal?.trim();
+      if (nomeFromOab) {
+        this.cachedLeadName = nomeFromOab;
+        return this.cachedLeadName;
+      }
+
+      const nomeFromLead = lead?.name?.trim();
+      if (nomeFromLead) {
+        this.cachedLeadName = nomeFromLead;
+        return this.cachedLeadName;
+      }
+
+      this.cachedLeadName = "Cliente";
+      return this.cachedLeadName;
+    } catch (error) {
+      console.error("[WhatsApp Variables] Error resolving lead name:", error);
+      this.cachedLeadName = "Cliente";
+      return this.cachedLeadName;
+    }
   }
 
   /**

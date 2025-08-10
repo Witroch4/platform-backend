@@ -188,6 +188,13 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
     }
   }, [message.header?.content, message.header?.type]);
 
+  // Garantir que o header exista como texto na primeira renderização
+  useEffect(() => {
+    if (!message.header) {
+      onMessageUpdate({ header: { type: "text", content: "" } });
+    }
+  }, [message.header, onMessageUpdate]);
+
   // Extract buttons from message action and convert to InteractiveButton format
   const buttons = useMemo(() => {
     if (message.action?.type === "button") {
@@ -540,11 +547,11 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
                 </Select>
               </div>
 
-              {message.header?.type === "text" ? (
+              {(message.header?.type || "text") === "text" ? (
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">Header Text</Label>
                   <Input
-                    value={message.header.content}
+                    value={message.header?.content ?? ""}
                     onChange={(e) => handleHeaderContentChange(e.target.value)}
                     placeholder="Enter header text..."
                     disabled={disabled}
@@ -560,13 +567,13 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
                     </div>
                     <Badge
                       variant={
-                        message.header.content.length >
+                        (message.header?.content?.length || 0) >
                         VALIDATION_LIMITS.HEADER_TEXT_MAX_LENGTH * 0.8
                           ? "destructive"
                           : "outline"
                       }
                     >
-                      {message.header.content.length}/
+                      {(message.header?.content?.length || 0)}/
                       {VALIDATION_LIMITS.HEADER_TEXT_MAX_LENGTH}
                     </Badge>
                   </div>

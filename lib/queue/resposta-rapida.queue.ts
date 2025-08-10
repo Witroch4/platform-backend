@@ -24,6 +24,8 @@ export interface RespostaRapidaJobData {
     accountId?: number;
     accountName?: string;
     contactSource?: string;
+    // Dialogflow person.name (nome do lead vindo do webhook)
+    personName?: string;
   };
 }
 

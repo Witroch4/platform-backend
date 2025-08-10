@@ -489,7 +489,7 @@ export class ButtonProcessor {
       // Create PayloadBuilder with variables resolver
       const payloadBuilder = new WhatsAppPayloadBuilder();
       if (inboxId) {
-        await payloadBuilder.setVariablesFromInboxId(inboxId);
+        await payloadBuilder.setVariablesFromInboxId(inboxId, {});
       }
       switch (template.type) {
         case "WHATSAPP_OFFICIAL":
@@ -643,7 +643,7 @@ export class ButtonProcessor {
       // Create PayloadBuilder with variables resolver and build payload
       const payloadBuilder = new WhatsAppPayloadBuilder();
       if (inboxId) {
-        await payloadBuilder.setVariablesFromInboxId(inboxId);
+        await payloadBuilder.setVariablesFromInboxId(inboxId, {});
       }
 
       const messageContent = await payloadBuilder.buildTextReplyPayload(

@@ -560,6 +560,8 @@ export function extractTemplateVariables(payload: any): Record<string, any> {
   if (parameters.person?.name) {
     variables.name = String(parameters.person.name).trim();
     variables.nome = String(parameters.person.name).trim();
+    variables.person_name = String(parameters.person.name).trim();
+    variables.person = { name: String(parameters.person.name).trim() };
   }
 
   if (parameters.phone) {
@@ -890,6 +892,7 @@ export function sanitizeRespostaRapidaJobData(data: {
   accountId?: number;
   accountName?: string;
   contactSource?: string;
+  personName?: string;
 }): {
   inboxId: string;
   contactPhone: string;
@@ -907,6 +910,7 @@ export function sanitizeRespostaRapidaJobData(data: {
   accountId?: number;
   accountName?: string;
   contactSource?: string;
+  personName?: string;
 } {
   return {
     // Sanitize core identifiers
@@ -940,6 +944,10 @@ export function sanitizeRespostaRapidaJobData(data: {
     contactSource: data.contactSource
       ? sanitizeTextContent(data.contactSource)
       : undefined,
+    personName:
+      data.personName && typeof data.personName === 'string'
+        ? sanitizeTextContent(data.personName)
+        : undefined,
   };
 }
 
@@ -1100,6 +1108,11 @@ export function createSanitizedRespostaRapidaJob(
       accountId: flashIntentData.accountId,
       accountName: flashIntentData.accountName,
       contactSource: flashIntentData.contactSource,
+    // Extrair nome do person (Dialogflow) para resolver {{nome_lead}}
+    personName:
+      payload?.queryResult?.parameters?.person?.name ||
+      payload?.originalDetectIntentRequest?.payload?.contact_name ||
+      undefined,
     };
 
     console.log(`[Webhook Utils] [${correlationId}] Raw job data created:`, {

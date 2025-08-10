@@ -82,12 +82,18 @@ export function WhatsAppTextEditor({
     [onChange, maxLength]
   );
 
-  // Initialize text from props
+  // Initialize/sync text only when initialText changes.
+  // Importante: não chamar onChange aqui para evitar loops com o pai.
   useEffect(() => {
-    if (initialText !== text) {
-      updateText(initialText);
+    const truncated = maxLength ? initialText.slice(0, maxLength) : initialText;
+    setText(truncated);
+    const newErrors: string[] = [];
+    if (maxLength && initialText.length > maxLength) {
+      newErrors.push(`Texto excede o limite de ${maxLength} caracteres`);
     }
-  }, [initialText, text, updateText]);
+    setErrors(newErrors);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialText, maxLength]);
 
   // Auto-close placeholder when typing "{{" → inserts "}}" and places cursor in the middle
   const handleCurlyBraces = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
