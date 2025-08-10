@@ -1,4 +1,5 @@
 import { WhatsAppVariablesResolver, WhatsAppVariableContext } from './variables-resolverWP';
+import { getPublicMediaUrl, isMetaMediaUrl } from '../whatsapp-media';
 
 /**
  * WhatsAppPayloadBuilder
@@ -214,27 +215,24 @@ export class WhatsAppPayloadBuilder {
   public async buildTemplatePayload(
     templateName: string,
     languageCode: string = "pt_BR",
-    components: any[] = []
+    components: any[] = [],
+    metaTemplateId?: string
   ): Promise<any> {
     console.log(`[WhatsApp PayloadBuilder] Building template payload: ${templateName}`);
-    console.log(`[WhatsApp PayloadBuilder] Original components:`, JSON.stringify(components, null, 2));
+    console.log(`[WhatsApp PayloadBuilder] Input components:`, JSON.stringify(components, null, 2));
 
-    let resolvedComponents = components;
-    if (this.variablesResolver && components.length > 0) {
-      console.log('[WhatsApp PayloadBuilder] Resolving variables in template components');
-      resolvedComponents = await this.variablesResolver.resolveTemplateComponents(components);
-    } else {
-      console.log('[WhatsApp PayloadBuilder] No variables resolver configured or no components for template');
-    }
+    // Transformar componentes salvos (definição do template) no formato de envio aceito pela Meta
+    const metaComponents = await this._transformOfficialTemplateComponents(
+      metaTemplateId,
+      components
+    );
 
     const payload = {
       type: "template",
       template: {
         name: templateName,
-        language: {
-          code: languageCode,
-        },
-        components: resolvedComponents,
+        language: { code: languageCode },
+        components: metaComponents,
       },
     };
 
@@ -351,5 +349,207 @@ export class WhatsAppPayloadBuilder {
         mode: dbAction.flowMode || "published", // Usa flowMode do schema
       },
     };
+  }
+
+  /**
+   * Converte o JSON salvo em `WhatsAppOfficialInfo.components` no formato aceito pela Cloud API:
+   * - HEADER com parameters (image/video/document/text)
+   * - BODY com parameters (quando aplicável). Neste ajuste, mantemos sem parameters se não houver variáveis.
+   * - BUTTON com sub_type (ex.: copy_code) + parameters
+   */
+  private async _transformOfficialTemplateComponents(
+    metaTemplateId: string | undefined,
+    rawComponents: any
+  ): Promise<any[]> {
+    try {
+      // Normalizar entrada: pode vir como array, objeto indexado ("0","1",...) ou objeto com campos auxiliares
+      const list: any[] = this._normalizeComponentsToArray(rawComponents);
+
+      // Opcional: resolver textos (apenas para uso em parâmetros text quando necessário)
+      let resolvedList = list;
+      if (this.variablesResolver && Array.isArray(list) && list.length > 0) {
+        resolvedList = await this.variablesResolver.resolveTemplateComponents(list);
+      }
+
+      const resultComponents: any[] = [];
+
+      // HEADER
+      const headerIndex = resolvedList.findIndex((c) =>
+        String(c?.type || '').toUpperCase() === 'HEADER'
+      );
+      if (headerIndex >= 0) {
+        const header = resolvedList[headerIndex];
+        const format = String(header.format || header.headerFormat || '').toUpperCase();
+
+        if (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(format)) {
+          let publicUrl: string | null = null;
+
+          // 1) Tentar publicMediaUrl no objeto bruto (top-level) ou no próprio header
+          const embeddedPublicUrl = this._extractPublicMediaUrl(rawComponents) || header.publicMediaUrl;
+          if (embeddedPublicUrl && !isMetaMediaUrl(embeddedPublicUrl)) {
+            publicUrl = embeddedPublicUrl;
+          }
+
+          // 2) Se não houver publicUrl, tentar baixar da Meta e subir no MinIO
+          if (!publicUrl) {
+            const exampleUrl = header?.example?.header_handle?.[0];
+            const userId = this.variablesResolver?.getUserId() || '';
+            if (userId && exampleUrl) {
+              try {
+                // metaTemplateId é preferido; como fallback, usa o próprio link (hash) para chavear o upload
+                publicUrl = await getPublicMediaUrl(metaTemplateId || exampleUrl, userId, exampleUrl);
+              } catch (e) {
+                console.warn('[WhatsApp PayloadBuilder] Falha ao obter public media URL do MinIO:', e);
+              }
+            }
+          }
+
+          if (publicUrl) {
+            const mediaType = format.toLowerCase(); // image|video|document
+            resultComponents.push({
+              type: 'header',
+              parameters: [
+                {
+                  type: mediaType,
+                  [mediaType]: { link: publicUrl },
+                },
+              ],
+            });
+          } else if (format === 'TEXT' && header.text) {
+            // fallback para texto, se for o caso, mas permite parâmetros resolvidos
+            const rawHeaderParams = Array.isArray((header as any).__resolvedHeaderParams)
+              ? (header as any).__resolvedHeaderParams
+              : [
+                  {
+                    type: 'text',
+                    text: String(header.text),
+                  },
+                ];
+            // Suportar named parameters no HEADER quando o template foi criado com NAMED
+            const headerParams = rawHeaderParams.map((p: any) => {
+              const param: any = {
+                type: 'text',
+                text: String(p?.text ?? ''),
+              };
+              if (typeof p?.parameter_name === 'string' && p.parameter_name) {
+                // manter parameter_name conforme definido no template (minúsculas/underscore)
+                param.parameter_name = String(p.parameter_name).trim();
+              }
+              return param;
+            });
+            resultComponents.push({
+              type: 'header',
+              parameters: headerParams,
+            });
+          }
+        } else if (format === 'TEXT' && header.text) {
+          const rawHeaderParams = Array.isArray((header as any).__resolvedHeaderParams)
+            ? (header as any).__resolvedHeaderParams
+            : [
+                {
+                  type: 'text',
+                  text: String(header.text),
+                },
+              ];
+          // Suportar named parameters no HEADER quando presente
+          const headerParams = rawHeaderParams.map((p: any) => {
+            const param: any = {
+              type: 'text',
+              text: String(p?.text ?? ''),
+            };
+            if (typeof p?.parameter_name === 'string' && p.parameter_name) {
+              param.parameter_name = String(p.parameter_name).trim();
+            }
+            return param;
+          });
+          resultComponents.push({
+            type: 'header',
+            parameters: headerParams,
+          });
+        }
+      }
+
+      // BODY com parameters (se fornecidos pelo processor)
+      const body = resolvedList.find((c) => String(c?.type || '').toUpperCase() === 'BODY');
+      if (body) {
+        const bodyComponent: any = { type: 'body' };
+        if (Array.isArray((body as any).__resolvedBodyParams) && (body as any).__resolvedBodyParams.length > 0) {
+          // BODY aceita named parameters quando o template usa named placeholders
+          bodyComponent.parameters = (body as any).__resolvedBodyParams.map((p: any) => {
+            const param: any = {
+              type: 'text',
+              text: String(p?.text ?? ''),
+            };
+            if (typeof p?.parameter_name === 'string' && p.parameter_name) {
+              // garantir lowercase e underscores
+              param.parameter_name = String(p.parameter_name).trim();
+            }
+            return param;
+          });
+        }
+        resultComponents.push(bodyComponent);
+      }
+
+      // BUTTONS
+      const buttonsComp = resolvedList.find(
+        (c) => String(c?.type || '').toUpperCase() === 'BUTTONS'
+      );
+      if (buttonsComp && Array.isArray(buttonsComp.buttons)) {
+        const buttons = buttonsComp.buttons as any[];
+        let buttonIndex = 0;
+        for (const btn of buttons) {
+          const btnType = String(btn.type || '').toUpperCase();
+          if (btnType === 'COPY_CODE') {
+            // Preferir valor customizado (btn.coupon_code) e usar example[0] como fallback
+            const couponCode = (btn.coupon_code && String(btn.coupon_code)) || (Array.isArray(btn.example) && btn.example[0]) || '';
+            resultComponents.push({
+              type: 'button',
+              sub_type: 'copy_code',
+              index: Number(buttonIndex),
+              parameters: [
+                {
+                  type: 'coupon_code',
+                  coupon_code: String(couponCode || ''),
+                },
+              ],
+            });
+          } else {
+            // Não enviar componentes de botão que não exigem parâmetros (ex.: QUICK_REPLY)
+          }
+          buttonIndex += 1;
+        }
+      }
+
+      return resultComponents;
+    } catch (error) {
+      console.error('[WhatsApp PayloadBuilder] Error transforming official components:', error);
+      // Em caso de erro, retornar payload mínimo para evitar chaves inválidas
+      return [{ type: 'body' }];
+    }
+  }
+
+  private _normalizeComponentsToArray(raw: any): any[] {
+    if (Array.isArray(raw)) return raw;
+    if (raw && typeof raw === 'object') {
+      // Se possuir chaves numéricas ("0","1",...), ordenar e extrair
+      const numericKeys = Object.keys(raw).filter((k) => /^\d+$/.test(k));
+      if (numericKeys.length > 0) {
+        return numericKeys
+          .sort((a, b) => Number(a) - Number(b))
+          .map((k) => raw[k]);
+      }
+    }
+    return [];
+  }
+
+  private _extractPublicMediaUrl(raw: any): string | null {
+    if (!raw || typeof raw !== 'object') return null;
+    if (typeof raw.publicMediaUrl === 'string') return raw.publicMediaUrl;
+    // às vezes salvo dentro de components.root
+    if (raw.components && typeof raw.components === 'object') {
+      const candidate = (raw.components as any).publicMediaUrl;
+      if (typeof candidate === 'string') return candidate;
+    }
+    return null;
   }
 }

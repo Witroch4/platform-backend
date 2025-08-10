@@ -4,6 +4,7 @@ import { Megaphone, Wrench, ShieldCheck } from "lucide-react";
 interface CategorySelectorProps {
   selectedCategory: string;
   onSelectCategory: (category: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION') => void;
+  onCancel?: () => void;
 }
 
 const categories = [
@@ -12,10 +13,15 @@ const categories = [
   { id: 'AUTHENTICATION', name: 'Autenticação', icon: <ShieldCheck className="h-6 w-6" /> },
 ];
 
-export const TemplateCategorySelector = ({ selectedCategory, onSelectCategory }: CategorySelectorProps) => (
+export const TemplateCategorySelector = ({ selectedCategory, onSelectCategory, onCancel }: CategorySelectorProps) => (
   <Card>
     <CardHeader>
-      <CardTitle>Configurar seu modelo</CardTitle>
+      <div className="flex items-center justify-between gap-2">
+        <CardTitle>Configurar seu modelo</CardTitle>
+        {onCancel && (
+          <button className="text-xs underline text-muted-foreground" onClick={onCancel}>Cancelar</button>
+        )}
+      </div>
       <CardDescription>Escolha a categoria que melhor descreve seu modelo.</CardDescription>
     </CardHeader>
     <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">

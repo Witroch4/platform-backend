@@ -167,11 +167,43 @@ export async function sendTemplateMessage(
         components: (opts as any).whatsappComponents || comps, // Usar componentes customizados se fornecidos
       },
     };
-    console.log('[sendTemplateMessage] Payload final enviado:', JSON.stringify(payload, null, 2));
-    await axios.post(api, payload, { headers: { Authorization: `Bearer ${cfg.whatsappToken}` } });
+    // Log detalhado antes do envio para a API do WhatsApp
+    const maskedToken = (cfg.whatsappToken || '').length
+      ? `${(cfg.whatsappToken as string).slice(0, 8)}...(${(cfg.whatsappToken as string).length})`
+      : 'N/A';
+    // Log curto em uma linha para garantir visualização no console
+    console.log(`[Disparo] WhatsApp API Enviando -> url: ${api}, to: ${to}`);
+    console.log('[Disparo][WhatsApp API] Enviando requisição', {
+      url: api,
+      headers: {
+        Authorization: `Bearer ${maskedToken}`,
+        'Content-Type': 'application/json',
+      },
+      toRaw,
+      toFormatE164: to,
+      payload: JSON.parse(JSON.stringify(payload)),
+    });
+    const resp = await axios.post(api, payload, {
+      headers: { Authorization: `Bearer ${cfg.whatsappToken}`, 'Content-Type': 'application/json' },
+    });
+    try {
+      console.log('[Disparo][WhatsApp API] Resposta', {
+        status: resp.status,
+        messageId: resp.data?.messages?.[0]?.id,
+        to,
+      });
+    } catch {}
     return true;
   } catch (e: any) {
-    console.error('[sendTemplateMessage]', e.response?.data || e.message);
+    const errData = e?.response?.data;
+    if (errData) {
+      console.error('[sendTemplateMessage][WhatsApp API ERROR]', {
+        status: e.response?.status,
+        error: errData?.error || errData,
+      });
+    } else {
+      console.error('[sendTemplateMessage][ERROR]', e.message);
+    }
     return false;
   }
 }

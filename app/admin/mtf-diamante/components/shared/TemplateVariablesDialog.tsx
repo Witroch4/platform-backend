@@ -50,12 +50,12 @@ export const TemplateVariablesDialog: React.FC<TemplateVariablesDialogProps> = (
   templateId,
   templateName,
   components,
-  accountId
+  accountId,
 }) => {
   const [variables, setVariables] = useState<TemplateVariable[]>([]);
   const [showVariableMenu, setShowVariableMenu] = useState(false);
   const [variableMenuPosition, setVariableMenuPosition] = useState({ x: 0, y: 0 });
-  const [activeInputIndex, setActiveInputIndex] = useState<number | null>(null);
+  const [activeInputIndex, setActiveInputIndex] = useState<number | null>(null); // posição no array
 
   // Extrair variáveis do template
   useEffect(() => {
@@ -63,18 +63,53 @@ export const TemplateVariablesDialog: React.FC<TemplateVariablesDialogProps> = (
 
     const extractedVariables: TemplateVariable[] = [];
 
+    // Normalizar components (array ou objeto indexado)
+    const list: any[] = Array.isArray(components)
+      ? components
+      : (components && typeof components === 'object')
+        ? Object.keys(components)
+            .filter((k) => /^\d+$/.test(k))
+            .sort((a, b) => Number(a) - Number(b))
+            .map((k) => components[k])
+        : [];
+
+    // Procurar por botão COPY_CODE para permitir configuração do cupom/código
+    const buttonsComponent = list.find((comp: any) => comp.type === 'BUTTONS');
+    if (buttonsComponent && Array.isArray(buttonsComponent.buttons)) {
+      const copyBtn = buttonsComponent.buttons.find((b: any) => String(b?.type || '').toUpperCase() === 'COPY_CODE');
+      if (copyBtn) {
+        const exampleCoupon = Array.isArray(copyBtn.example) ? copyBtn.example[0] : '';
+        extractedVariables.push({
+          index: 0, // índice simbólico (não usado pela Meta), usamos chave dedicada abaixo
+          placeholder: '{{coupon_code}}',
+          exampleValue: exampleCoupon || '',
+          customValue: exampleCoupon || ''
+        });
+      }
+    }
+
     // Procurar por variáveis no componente BODY
-    const bodyComponent = components.find((comp: any) => comp.type === 'BODY');
+    const bodyComponent = list.find((comp: any) => comp.type === 'BODY');
     if (bodyComponent && bodyComponent.text) {
-      const variableMatches = bodyComponent.text.match(/\{\{(\d+)\}\}/g);
+      // Suporta placeholders numéricos e nomeados
+      const variableMatches = bodyComponent.text.match(/\{\{([^}]+)\}\}/g);
       if (variableMatches) {
         variableMatches.forEach((match: string, index: number) => {
-          const variableIndex = parseInt(match.replace(/[{}]/g, ''));
+          const raw = match.replace(/[{}]/g, '').trim();
+          const isNumber = /^\d+$/.test(raw);
+          const variableIndex = isNumber ? parseInt(raw) : index; // usa índice sequencial para nomeadas
           
           // Buscar valor de exemplo
           let exampleValue = '';
-          if (bodyComponent.example && bodyComponent.example.body_text && bodyComponent.example.body_text[0]) {
-            exampleValue = bodyComponent.example.body_text[0][index] || '';
+          if (bodyComponent.example) {
+            if (Array.isArray(bodyComponent.example.body_text?.[0])) {
+              exampleValue = bodyComponent.example.body_text[0][index] || '';
+            }
+            // Named params
+            if (!exampleValue && Array.isArray(bodyComponent.example.body_text_named_params)) {
+              const named = bodyComponent.example.body_text_named_params.find((p: any) => p?.param_name === raw);
+              exampleValue = named?.example || '';
+            }
           }
 
           extractedVariables.push({
@@ -88,21 +123,29 @@ export const TemplateVariablesDialog: React.FC<TemplateVariablesDialogProps> = (
     }
 
     // Procurar por variáveis no componente HEADER (se for texto)
-    const headerComponent = components.find((comp: any) => comp.type === 'HEADER' && comp.format === 'TEXT');
+    const headerComponent = list.find((comp: any) => comp.type === 'HEADER' && comp.format === 'TEXT');
     if (headerComponent && headerComponent.text) {
-      const variableMatches = headerComponent.text.match(/\{\{(\d+)\}\}/g);
+      const variableMatches = headerComponent.text.match(/\{\{([^}]+)\}\}/g);
       if (variableMatches) {
         variableMatches.forEach((match: string, index: number) => {
-          const variableIndex = parseInt(match.replace(/[{}]/g, ''));
+          const raw = match.replace(/[{}]/g, '').trim();
+          const isNumber = /^\d+$/.test(raw);
+          const variableIndex = isNumber ? parseInt(raw) : index;
           
           // Buscar valor de exemplo
           let exampleValue = '';
-          if (headerComponent.example && headerComponent.example.header_text && headerComponent.example.header_text[0]) {
-            exampleValue = headerComponent.example.header_text[0][index] || '';
+          if (headerComponent.example) {
+            if (Array.isArray(headerComponent.example.header_text?.[0])) {
+              exampleValue = headerComponent.example.header_text[0][index] || '';
+            }
+            if (!exampleValue && Array.isArray(headerComponent.example.header_text_named_params)) {
+              const named = headerComponent.example.header_text_named_params.find((p: any) => p?.param_name === raw);
+              exampleValue = named?.example || '';
+            }
           }
 
-          // Verificar se já não existe uma variável com esse índice
-          if (!extractedVariables.find(v => v.index === variableIndex)) {
+          // Verificar se já não existe uma variável com o mesmo placeholder
+          if (!extractedVariables.find(v => v.placeholder === match)) {
             extractedVariables.push({
               index: variableIndex,
               placeholder: match,
@@ -119,9 +162,9 @@ export const TemplateVariablesDialog: React.FC<TemplateVariablesDialogProps> = (
     setVariables(extractedVariables);
   }, [components, isOpen]);
 
-  const handleVariableChange = (index: number, value: string) => {
-    setVariables(prev => prev.map(variable => 
-      variable.index === index 
+  const handleVariableChangeAt = (position: number, value: string) => {
+    setVariables(prev => prev.map((variable, i) => 
+      i === position
         ? { ...variable, customValue: value }
         : variable
     ));
@@ -131,9 +174,26 @@ export const TemplateVariablesDialog: React.FC<TemplateVariablesDialogProps> = (
     // Criar objeto com as variáveis customizadas
     const customVariables: Record<string, string> = {};
     
-    variables.forEach(variable => {
-      if (variable.customValue && variable.customValue !== variable.exampleValue) {
-        customVariables[`variavel_${variable.index}`] = variable.customValue;
+    // Tratar campo especial de cupom quando presente
+    const couponVar = variables.find(v => v.placeholder === '{{coupon_code}}');
+    if (couponVar && typeof couponVar.customValue === 'string' && couponVar.customValue.trim().length > 0) {
+      customVariables['coupon_code'] = couponVar.customValue.trim();
+    }
+
+    variables.forEach((variable, position) => {
+      // Ignorar a pseudo-variável de cupom aqui (já tratada acima)
+      if (variable.placeholder === '{{coupon_code}}') return;
+      const raw = variable.placeholder.replace(/[{}]/g, '').trim();
+      const isNumeric = /^\d+$/.test(raw);
+      const value = (variable.customValue ?? '').trim();
+      if (!value) return;
+
+      // Sempre salvar por segurança a chave sequencial anterior
+      customVariables[`variavel_${position}`] = value;
+
+      // Se for named param, salvar também pela chave com nome
+      if (!isNumeric) {
+        customVariables[raw] = value;
       }
     });
 
@@ -142,21 +202,18 @@ export const TemplateVariablesDialog: React.FC<TemplateVariablesDialogProps> = (
     toast.success('Variáveis do template configuradas com sucesso!');
   };
 
-  const handleVariableMenuOpen = (event: React.MouseEvent, inputIndex: number) => {
+  const handleVariableMenuOpen = (event: React.MouseEvent, position: number) => {
     event.preventDefault();
     setVariableMenuPosition({ x: event.clientX, y: event.clientY });
-    setActiveInputIndex(inputIndex);
+    setActiveInputIndex(position);
     setShowVariableMenu(true);
   };
 
   const handleVariableInsert = (text: string) => {
     if (activeInputIndex !== null) {
-      const variable = variables.find(v => v.index === activeInputIndex);
-      if (variable) {
-        const currentValue = variable.customValue || '';
-        const newValue = currentValue + text;
-        handleVariableChange(activeInputIndex, newValue);
-      }
+      setVariables(prev => prev.map((v, i) => (
+        i === activeInputIndex ? { ...v, customValue: (v.customValue || '') + text } : v
+      )));
     }
     setShowVariableMenu(false);
     setActiveInputIndex(null);
@@ -167,7 +224,7 @@ export const TemplateVariablesDialog: React.FC<TemplateVariablesDialogProps> = (
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden">
+        <DialogContent className="w-[96vw] sm:max-w-2xl max-h-[85vh] overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Variable className="h-5 w-5" />
@@ -179,7 +236,7 @@ export const TemplateVariablesDialog: React.FC<TemplateVariablesDialogProps> = (
             </DialogDescription>
           </DialogHeader>
 
-          <ScrollArea className="flex-1 pr-4">
+          <ScrollArea className="flex-1 pr-4 h-[58vh] sm:h-[62vh]">
             <div className="space-y-4">
               {variables.length === 0 ? (
                 <Card>
@@ -197,12 +254,14 @@ export const TemplateVariablesDialog: React.FC<TemplateVariablesDialogProps> = (
                     <span>Clique com o botão direito nos campos para inserir variáveis do sistema</span>
                   </div>
 
-                  {variables.map((variable) => (
-                    <Card key={variable.index}>
+                  {/* Removido: checkbox Resolver Dinamicamente */}
+
+                  {variables.map((variable, position) => (
+                    <Card key={`${variable.placeholder}-${position}`}>
                       <CardHeader className="pb-3">
                         <CardTitle className="text-sm flex items-center gap-2">
                           <Badge variant="outline">
-                            Variável {variable.index + 1}
+                            Variável {position + 1}
                           </Badge>
                           <code className="text-xs bg-muted px-2 py-1 rounded">
                             {variable.placeholder}
@@ -223,14 +282,33 @@ export const TemplateVariablesDialog: React.FC<TemplateVariablesDialogProps> = (
                           <Label htmlFor={`variable-${variable.index}`} className="text-sm">
                             Valor Customizado
                           </Label>
-                          <Textarea
-                            id={`variable-${variable.index}`}
-                            value={variable.customValue || ''}
-                            onChange={(e) => handleVariableChange(variable.index, e.target.value)}
-                            onContextMenu={(e) => handleVariableMenuOpen(e, variable.index)}
-                            placeholder="Digite o valor customizado ou clique com botão direito para inserir variáveis"
-                            className="mt-1 min-h-[60px]"
-                          />
+                          {(() => {
+                            const isCoupon = variable.placeholder === '{{coupon_code}}';
+                            const currentValue = variable.customValue || '';
+                            const maxLen = isCoupon ? 15 : undefined;
+                            return (
+                              <div>
+                                <Textarea
+                                  id={`variable-${position}`}
+                                  value={currentValue}
+                                  onChange={(e) => {
+                                    const next = isCoupon ? e.target.value.slice(0, 15) : e.target.value;
+                                    handleVariableChangeAt(position, next);
+                                  }}
+                                  onContextMenu={(e) => handleVariableMenuOpen(e, position)}
+                                  placeholder="Digite o valor customizado ou clique com botão direito para inserir variáveis"
+                                  className="mt-1 min-h-[60px]"
+                                  maxLength={maxLen as number | undefined}
+                                />
+                                {isCoupon && (
+                                  <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+                                    <span>Máx. 15 caracteres</span>
+                                    <span>{currentValue.length}/15</span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                           <p className="text-xs text-muted-foreground mt-1">
                             Se vazio, será usado o valor de exemplo da Meta
                           </p>

@@ -15,7 +15,13 @@ export const TemplatePreview = ({ formState }: TemplatePreviewProps) => {
   const buildVariablesMap = (): Record<string, string> => {
     const map: Record<string, string> = {};
     const headerVars = extractVariables(formState.headerText).map(v => v.replace(/\{|\}/g, ""));
-    if (headerVars.length > 0 && formState.headerExample) headerVars.forEach(k => map[k] = formState.headerExample);
+    if (formState.headerNamedExamples && Object.keys(formState.headerNamedExamples).length > 0) {
+      for (const k of headerVars) {
+        if (formState.headerNamedExamples[k]) map[k] = formState.headerNamedExamples[k];
+      }
+    } else if (headerVars.length > 0 && formState.headerExample) {
+      headerVars.forEach(k => map[k] = formState.headerExample);
+    }
     const bodyVars = extractVariables(formState.bodyText).map(v => v.replace(/\{|\}/g, ""));
     if (formState.bodyNamedExamples && Object.keys(formState.bodyNamedExamples).length > 0) {
       for (const k of bodyVars) {

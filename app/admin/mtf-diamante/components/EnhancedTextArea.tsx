@@ -102,13 +102,31 @@ export const EnhancedTextArea = forwardRef<EnhancedTextAreaRef, EnhancedTextArea
   }, [value, onChange, multiline]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    // Allow Ctrl+Space or Alt+Space to trigger variable insertion
+    // Atalho para abrir menu de variáveis
     if ((e.ctrlKey || e.altKey) && e.code === 'Space') {
       e.preventDefault();
-      // This could trigger a variable selection dialog in the future
-      // For now, we rely on right-click context menu
     }
-  }, []);
+
+    // Auto-completar placeholder: quando digitar "{{" inserir "}}" e posicionar cursor no meio
+    if (e.key === '{') {
+      const element = multiline ? textAreaRef.current : inputRef.current;
+      if (!element) return;
+      const start = element.selectionStart || 0;
+      const end = element.selectionEnd || 0;
+      const prevChar = value.substring(0, start).slice(-1);
+      if (prevChar === '{') {
+        e.preventDefault();
+        const insert = '{}}';
+        const newValue = value.substring(0, start) + insert + value.substring(end);
+        onChange(newValue);
+        setTimeout(() => {
+          const pos = start + 1; // entre as chaves
+          element.setSelectionRange(pos, pos);
+          element.focus();
+        }, 0);
+      }
+    }
+  }, [multiline, value, onChange]);
 
   // Expose methods to parent component
   useImperativeHandle(ref, () => ({

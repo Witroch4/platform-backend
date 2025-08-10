@@ -66,6 +66,7 @@ export const TemplateContentEditor = ({ formState, onStateChange, onButtonChange
           headerText={formState.headerText}
           headerExample={formState.headerExample}
           headerMetaMedia={formState.headerMetaMedia}
+          headerNamedExamples={formState.headerNamedExamples}
           onStateChange={onStateChange}
           variaveis={variaveis}
           loadingVariaveis={loadingVariaveis}

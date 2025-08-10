@@ -31,18 +31,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Normalizar variáveis customizadas: preservar nomeadas e sequenciais
+    const normalizedCustom: any = {};
+    if (customVariables && typeof customVariables === 'object') {
+      try {
+        const entries = Object.entries(customVariables as Record<string, any>);
+        for (const [key, rawVal] of entries) {
+          if (rawVal === undefined || rawVal === null) continue;
+          const val = String(rawVal);
+          normalizedCustom[key] = val;
+          // Se for uma chave sequencial variavel_X e existir um placeholder com nome no mesmo índice,
+          // manteremos o que veio do frontend (já enviamos ambos). Não inferir nomes aqui.
+        }
+        console.log('[Mapeamentos][Debug] Normalized customVariables:', normalizedCustom);
+      } catch (e) {
+        console.warn('[Mapeamentos][Warn] Failed to normalize customVariables:', e);
+      }
+    }
+
     const data = {
       intentName,
       inboxId: caixaId,
       templateId,
-      customVariables: customVariables || null, // Salvar variáveis customizadas se fornecidas
+      customVariables: Object.keys(normalizedCustom).length > 0 ? normalizedCustom : null,
     };
+
+    console.log('[Mapeamentos][Debug] Upsert payload', data);
 
     const savedMapping = await getPrismaInstance().mapeamentoIntencao.upsert({
       where: { id: mappingId || "" },
       update: data,
       create: data,
     });
+
+    console.log('[Mapeamentos][Debug] Upsert result', savedMapping);
 
     // Invalidate Instagram template cache for this mapping
     try {

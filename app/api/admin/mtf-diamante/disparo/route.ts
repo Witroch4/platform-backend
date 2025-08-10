@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getPrismaInstance } from "@/lib/connections";
 import { z } from "zod";
-import { sendTemplateMessage } from "@/lib/whatsapp";
+import { sendTemplateMessage, sanitizeCoupon, formatE164, getWhatsAppConfig, getWhatsAppApiUrl } from "@/lib/whatsapp";
 
 const disparoSchema = z.object({
   templateId: z.string().min(1, "Template é obrigatório"),
@@ -285,7 +285,7 @@ export async function POST(request: Request) {
               try {
                 const rawComponents =
                   templateCompleto.whatsappOfficialInfo.components;
-                console.log(`[Disparo] Componentes brutos:`, rawComponents);
+                console.log(`[Disparo] Componentes brutos mudei pra ver se o arquivo é atualizado:`, rawComponents);
 
                 if (Array.isArray(rawComponents)) {
                   components = rawComponents;
@@ -337,7 +337,7 @@ export async function POST(request: Request) {
             // Processar componentes para encontrar variáveis
             if (components.length > 0) {
               console.log(
-                `[Disparo] Componentes encontrados:`,
+                `[Disparo] Componentes encontrados atualizado mudei pra ver se o arquivo é atualizado:`,
                 JSON.stringify(components, null, 2)
               );
 
@@ -455,6 +455,21 @@ export async function POST(request: Request) {
                         `[Disparo] Adicionado header com imagem: ${imageUrl}`
                       );
                     }
+                  } else if (component.format === "TEXT" && typeof component.text === "string") {
+                    // Enviar parâmetro de texto para HEADER somente se houver placeholder no header
+                    const hasPlaceholder = /\{\{[^}]+\}\}/.test(component.text);
+                    if (hasPlaceholder) {
+                      const headerValue = (parameters as any)?.headerVar || nomeDoLead;
+                      if (headerValue) {
+                        whatsappComponents.push({
+                          type: "header",
+                          parameters: [
+                            { type: "text", text: String(headerValue) },
+                          ],
+                        });
+                        console.log("[Disparo] Adicionado header TEXT com variável");
+                      }
+                    }
                   }
                   break;
                 case "BODY":
@@ -476,25 +491,27 @@ export async function POST(request: Request) {
                   // Processar botões que precisam de parâmetros
                   if (component.buttons && Array.isArray(component.buttons)) {
                     component.buttons.forEach((button: any, index: number) => {
-                      if (
-                        button.type === "COPY_CODE" &&
-                        button.example &&
-                        button.example.length > 0
-                      ) {
-                        whatsappComponents.push({
-                          type: "button",
-                          sub_type: "copy_code",
-                          index: String(index),
-                          parameters: [
-                            {
-                              type: "coupon_code",
-                              coupon_code: button.example[0], // Usar o primeiro exemplo: "57944155000101"
-                            },
-                          ],
-                        });
-                        console.log(
-                          `[Disparo] Adicionado botão COPY_CODE (índice ${index}) com código: ${button.example[0]}`
-                        );
+                      if (button.type === "COPY_CODE") {
+                        const fallback = Array.isArray(button.example)
+                          ? button.example[0]
+                          : "";
+                        const chosenCoupon = (parameters as any)?.couponCode || fallback;
+                        if (chosenCoupon) {
+                          whatsappComponents.push({
+                            type: "button",
+                            sub_type: "copy_code",
+                            index: String(index),
+                            parameters: [
+                              {
+                                type: "coupon_code",
+                                coupon_code: sanitizeCoupon(String(chosenCoupon)),
+                              },
+                            ],
+                          });
+                          console.log(
+                            `[Disparo] Adicionado botão COPY_CODE (índice ${index}) com código: ${chosenCoupon} (fallback: ${fallback ? "sim" : "não"})`
+                          );
+                        }
                       }
                     });
                   }
@@ -513,6 +530,39 @@ export async function POST(request: Request) {
               ...sendOpts,
               whatsappComponents,
             };
+
+            // LOG: Payload exato e URL antes do envio (debug local na rota)
+            try {
+              const cfg = await getWhatsAppConfig(session.user.id);
+              const apiUrl = getWhatsAppApiUrl(cfg);
+              const toSanitized = formatE164(lead.phone || "");
+              const previewPayload = {
+                messaging_product: "whatsapp",
+                recipient_type: "individual",
+                to: toSanitized,
+                type: "template",
+                template: {
+                  name: template.name,
+                  language: { code: "pt_BR" }, // mesma default do sender
+                  components: customOpts.whatsappComponents,
+                },
+              };
+              const maskedToken = (cfg.whatsappToken || "").length
+                ? `${(cfg.whatsappToken as string).slice(0, 8)}...(${(cfg.whatsappToken as string).length})`
+                : "N/A";
+              console.log("[Disparo] Preview Payload mudei pra ver se o arquivo é atualizado", {
+                url: apiUrl,
+                headers: {
+                  Authorization: `Bearer ${maskedToken}`,
+                  "Content-Type": "application/json",
+                },
+                toRaw: lead.phone,
+                toFormatE164: toSanitized,
+                payload: JSON.parse(JSON.stringify(previewPayload)),
+              });
+            } catch (e) {
+              console.warn("[Disparo] Preview Payload - Falha ao montar preview:", e);
+            }
 
             const success = await sendTemplateMessage(
               lead.phone || "",

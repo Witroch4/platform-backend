@@ -24,6 +24,7 @@ const initialFormState: TemplateFormState = {
   headerType: "NONE",
   headerText: "",
   headerExample: "",
+  headerNamedExamples: {},
   headerMetaMedia: [],
   bodyText: "",
   bodyExamples: [],
@@ -31,7 +32,7 @@ const initialFormState: TemplateFormState = {
   buttons: [],
 };
 
-export default function CreateTemplatePage() {
+export default function CreateTemplatePage({ onCancel }: { onCancel?: () => void }) {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(0);
   const {
@@ -59,7 +60,13 @@ export default function CreateTemplatePage() {
       const map: Record<string, string> = {};
       // Header variables
       const headerVars = extractVariables(state.headerText).map((v) => v.replace(/\{|\}/g, ""));
-      if (headerVars.length > 0 && state.headerExample) headerVars.forEach((k) => (map[k] = state.headerExample));
+      if (state.headerNamedExamples && Object.keys(state.headerNamedExamples).length > 0) {
+        for (const k of headerVars) {
+          if (state.headerNamedExamples[k]) map[k] = state.headerNamedExamples[k];
+        }
+      } else if (headerVars.length > 0 && state.headerExample) {
+        headerVars.forEach((k) => (map[k] = state.headerExample));
+      }
       // Body variables
       const bodyVars = extractVariables(state.bodyText).map((v) => v.replace(/\{|\}/g, ""));
       if (state.bodyNamedExamples && Object.keys(state.bodyNamedExamples).length > 0) {
@@ -129,7 +136,7 @@ export default function CreateTemplatePage() {
   return (
     <div className="container mx-auto py-10 max-w-6xl">
       <div className="flex items-center gap-2 mb-6">
-        <Button variant="ghost" size="icon" onClick={() => router.push("/admin/mtf-diamante")}>
+        <Button variant="ghost" size="icon" onClick={() => (onCancel ? onCancel() : router.push("/admin/mtf-diamante"))}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <h1 className="text-2xl font-bold">Criar Novo Template</h1>
@@ -151,6 +158,7 @@ export default function CreateTemplatePage() {
             <TemplateCategorySelector 
               selectedCategory={state.category}
               onSelectCategory={(cat) => handleStateChange('category', cat)}
+              onCancel={() => (onCancel ? onCancel() : router.push('/admin/mtf-diamante'))}
             />
             <TemplateBasicInfo 
               name={state.name}
@@ -192,8 +200,8 @@ export default function CreateTemplatePage() {
       )}
 
       <div className="flex justify-between mt-8 relative z-50">
-        <Button type="button" variant="outline" onClick={() => currentStep > 0 ? setCurrentStep(currentStep - 1) : router.push("/admin/mtf-diamante")}>
-          {currentStep === 0 ? "Cancelar" : "Voltar"}
+        <Button type="button" variant="outline" onClick={() => (onCancel ? onCancel() : router.push("/admin/mtf-diamante"))}>
+          Cancelar
         </Button>
         {currentStep < 2 ? (
           <Button type="button" onClick={() => setCurrentStep(currentStep + 1)} disabled={currentStep === 0 ? !isValidName : false}>

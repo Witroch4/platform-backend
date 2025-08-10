@@ -27,6 +27,13 @@ export class WhatsAppVariablesResolver {
   }
 
   /**
+   * Retorna o userId associado (quando disponível)
+   */
+  getUserId(): string | null {
+    return this.userId;
+  }
+
+  /**
    * Inicializa o resolvedor obtendo o userId do inboxId
    */
   async initialize(): Promise<void> {

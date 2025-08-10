@@ -89,6 +89,27 @@ export function WhatsAppTextEditor({
     }
   }, [initialText, text, updateText]);
 
+  // Auto-close placeholder when typing "{{" → inserts "}}" and places cursor in the middle
+  const handleCurlyBraces = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== '{') return;
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const prevChar = text.substring(0, start).slice(-1);
+    if (prevChar === '{') {
+      e.preventDefault();
+      const insert = '{}}';
+      const newText = text.substring(0, start) + insert + text.substring(end);
+      updateText(newText);
+      setTimeout(() => {
+        textarea.focus();
+        const caret = Math.min(start + 1, (maxLength || Infinity) as number);
+        textarea.setSelectionRange(caret, caret);
+      }, 0);
+    }
+  }, [text, updateText, maxLength]);
+
   // Variable insertion handler
   const handleVariableInsert = useCallback(
     (variable: string, position?: number) => {
@@ -296,6 +317,7 @@ export function WhatsAppTextEditor({
             ref={textareaRef}
             value={text}
             onChange={(e) => updateText(e.target.value)}
+            onKeyDown={handleCurlyBraces}
             onContextMenu={handleContextMenu}
             placeholder={placeholder}
             maxLength={maxLength}
@@ -520,6 +542,7 @@ export function WhatsAppTextEditor({
                 ref={textareaRef}
                 value={text}
                 onChange={(e) => updateText(e.target.value)}
+                onKeyDown={handleCurlyBraces}
                 onContextMenu={handleContextMenu}
                 placeholder={placeholder}
                 maxLength={maxLength}

@@ -204,7 +204,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
     }
   };
 
-  // Função para verificar se template tem variáveis
+  // Função para verificar se template tem variáveis (BODY/HEADER) ou botões COPY_CODE
   const checkTemplateVariables = async (templateId: string) => {
     try {
       const response = await fetch(`/api/admin/mtf-diamante/template-info?templateId=${templateId}`);
@@ -213,22 +213,47 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
         
         // Verificar se é template oficial do WhatsApp e tem variáveis
         if (templateInfo.type === 'WHATSAPP_OFFICIAL' && templateInfo.whatsappOfficialInfo) {
-          const components = templateInfo.whatsappOfficialInfo.components;
+          const rawComponents = templateInfo.whatsappOfficialInfo.components;
+          const components: any[] = Array.isArray(rawComponents)
+            ? rawComponents
+            : (rawComponents && typeof rawComponents === 'object')
+              ? Object.keys(rawComponents)
+                  .filter((k) => /^\d+$/.test(k))
+                  .sort((a, b) => Number(a) - Number(b))
+                  .map((k) => rawComponents[k])
+              : [];
           
           // Verificar se há variáveis nos componentes
-          const hasVariables = components.some((comp: any) => {
+          const hasVariablesInTexts = components.some((comp: any) => {
+            // Detectar placeholders numéricos ou nomeados: {{...}}
+            const pattern = /\{\{[^}]+\}\}/;
             if (comp.type === 'BODY' && comp.text) {
-              return /\{\{\d+\}\}/.test(comp.text);
+              return pattern.test(comp.text);
             }
             if (comp.type === 'HEADER' && comp.format === 'TEXT' && comp.text) {
-              return /\{\{\d+\}\}/.test(comp.text);
+              return pattern.test(comp.text);
+            }
+            // Alternativamente, considerar presence de *_named_params
+            if (comp.type === 'BODY' && comp.example?.body_text_named_params) {
+              return Array.isArray(comp.example.body_text_named_params) && comp.example.body_text_named_params.length > 0;
+            }
+            if (comp.type === 'HEADER' && comp.example?.header_text_named_params) {
+              return Array.isArray(comp.example.header_text_named_params) && comp.example.header_text_named_params.length > 0;
             }
             return false;
           });
 
-          if (hasVariables) {
+          // Verificar se há botões COPY_CODE configuráveis
+          const hasCopyCodeButton = components.some((comp: any) => {
+            if (comp.type === 'BUTTONS' && Array.isArray(comp.buttons)) {
+              return comp.buttons.some((b: any) => String(b?.type || '').toUpperCase() === 'COPY_CODE');
+            }
+            return false;
+          });
+
+          if (hasVariablesInTexts || hasCopyCodeButton) {
             return {
-              hasVariables: true,
+              hasVariables: true, // abre diálogo
               templateInfo
             };
           }
@@ -244,6 +269,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    
     // Validar que pelo menos uma opção foi selecionada
     if (!selectedTemplate && !selectedMensagem) {
       toast.error("Selecione um template ou mensagem interativa");
@@ -254,6 +280,21 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
     
     // Se for template, verificar se tem variáveis
     if (selectedTemplate) {
+      // Garantir mídia pública do HEADER (quando aplicável)
+      try {
+        const ensureRes = await fetch('/api/admin/mtf-diamante/templates/ensure-media', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ templateId }),
+        });
+        if (!ensureRes.ok) {
+          const err = await ensureRes.json().catch(() => ({}));
+          console.warn('Falha ao garantir mídia pública:', err?.error || ensureRes.statusText);
+        }
+      } catch (err) {
+        console.warn('Erro ao chamar ensure-media:', err);
+      }
+
       const { hasVariables, templateInfo } = await checkTemplateVariables(templateId!);
       
       if (hasVariables) {
@@ -294,6 +335,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
         const errorData = await response.json();
         throw new Error(errorData.error || `Falha ao salvar mapeamento.`);
       }
+      const saved = await response.json();
       
       toast.success("Mapeamento salvo com sucesso!");
       resetForm();
@@ -304,6 +346,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
   };
 
   const handleVariablesSave = (customVariables: Record<string, string>) => {
+    
     if (pendingMappingData) {
       saveMappingData(pendingMappingData, customVariables);
       setPendingMappingData(null);
@@ -601,6 +644,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
             templateName={selectedTemplateForVariables.name}
             components={selectedTemplateForVariables.whatsappOfficialInfo?.components || []}
             accountId={caixaId} // Usando caixaId como accountId por enquanto
+            
           />
         )}
       </CardContent>

@@ -494,10 +494,12 @@ export class ButtonProcessor {
       switch (template.type) {
         case "WHATSAPP_OFFICIAL":
           if (template.whatsappOfficialInfo) {
+            // IMPORTANTE: enviar o NOME do template (template.name) e NÃO o ID/metaTemplateId
             return await payloadBuilder.buildTemplatePayload(
-              template.whatsappOfficialInfo.metaTemplateId,
+              template.name || "default",
               template.language || "pt_BR",
-              parameters || template.whatsappOfficialInfo.components || []
+              parameters || template.whatsappOfficialInfo.components || [],
+              template.whatsappOfficialInfo.metaTemplateId // apenas para resolver mídia
             );
           }
           break;

@@ -155,40 +155,138 @@ export class IntentProcessor {
    * Aplica variáveis customizadas aos componentes do template
    */
   private applyCustomVariablesToComponents(
-    components: any[],
+    components: any,
     customVariables: Record<string, string>,
     contactPhone: string
   ): any[] {
+    const list = this.normalizeComponentsToArray(components);
     console.log('[Intent Processor] Applying custom variables to template components', {
       customVariables,
-      componentsCount: components.length
+      componentsCount: Array.isArray(list) ? list.length : 0
     });
 
-    return components.map(component => {
-      const processedComponent = { ...component };
+    return list.map(component => {
+      const processedComponent: any = { ...component };
 
-      // Processar componente BODY
+      // Resolver parâmetros nomeados/posicionais para BODY
       if (component.type === 'BODY' && component.text) {
-        processedComponent.text = this.replaceVariablesInTemplateText(
+        const params = this.buildTemplateParameters(
           component.text,
-          component.example?.body_text?.[0] || [],
           customVariables,
-          contactPhone
+          component.example
         );
+        if (params.length > 0) {
+          processedComponent.__resolvedBodyParams = params.map((p) => ({ ...p }));
+        }
       }
 
-      // Processar componente HEADER (se for texto)
+      // Resolver parâmetros do HEADER texto (apenas um permitido)
       if (component.type === 'HEADER' && component.format === 'TEXT' && component.text) {
-        processedComponent.text = this.replaceVariablesInTemplateText(
+        const params = this.buildTemplateParameters(
           component.text,
-          component.example?.header_text?.[0] || [],
           customVariables,
-          contactPhone
+          component.example,
+          true // header
         );
+        if (params.length > 0) {
+          // Cloud API espera apenas os valores, não o texto completo
+          processedComponent.__resolvedHeaderParams = [{ ...params[0] }];
+        }
+      }
+
+      // Processar botão COPY_CODE para injetar coupon_code customizado
+      if (component.type === 'BUTTONS' && Array.isArray(component.buttons)) {
+        const buttons = component.buttons as any[];
+        processedComponent.buttons = buttons.map((btn: any) => {
+          const b = { ...btn };
+          if (String(b?.type || '').toUpperCase() === 'COPY_CODE' && customVariables?.coupon_code) {
+            b.coupon_code = String(customVariables.coupon_code);
+            // mantém example como fallback; não é obrigatório alterar
+          }
+          return b;
+        });
       }
 
       return processedComponent;
     });
+  }
+
+  /**
+   * Constrói a lista de parâmetros (named/positional) para Cloud API a partir do texto e exemplos
+   */
+  private buildTemplateParameters(
+    text: string,
+    customVariables: Record<string, string>,
+    example: any,
+    isHeader: boolean = false
+  ): Array<{ type: 'text'; text: string; parameter_name?: string }> {
+    if (!text) return [];
+
+    // Extrair placeholders na ordem
+    const matches = text.match(/\{\{([^}]+)\}\}/g) || [];
+    if (matches.length === 0) return [];
+
+    const namedParamsExample: Record<string, string> = {};
+    if (example) {
+      const namedArray =
+        (example.body_text_named_params as any[]) ||
+        (example.header_text_named_params as any[]) ||
+        [];
+      for (const item of namedArray) {
+        if (item?.param_name && typeof item.example === 'string') {
+          namedParamsExample[item.param_name] = item.example;
+        }
+      }
+    }
+
+    const positionalExamples: string[] =
+      (example?.body_text?.[0] as string[]) ||
+      (example?.header_text?.[0] as string[]) ||
+      [];
+
+    const params: Array<{ type: 'text'; text: string; parameter_name?: string }> = [];
+
+    matches.forEach((match, i) => {
+      const raw = match.replace(/[{}]/g, '').trim();
+      const isNumeric = /^\d+$/.test(raw);
+      let value = '';
+
+      // Preferir variáveis customizadas
+      if (!isNumeric && customVariables[raw] !== undefined) {
+        value = String(customVariables[raw]);
+      }
+
+      if (!value && customVariables[`variavel_${i}`] !== undefined) {
+        value = String(customVariables[`variavel_${i}`]);
+      }
+
+      // Fallback em exemplos
+      if (!value && !isNumeric && namedParamsExample[raw] !== undefined) {
+        value = String(namedParamsExample[raw]);
+      }
+      if (!value && positionalExamples[i] !== undefined) {
+        value = String(positionalExamples[i]);
+      }
+
+      // Último fallback: vazio
+      const param: any = { type: 'text', text: value };
+      if (!isNumeric && !isHeader) {
+        // Para BODY, enviar parameter_name quando for named
+        param.parameter_name = raw;
+      }
+      if (!isNumeric && isHeader) {
+        // Para HEADER texto com named param, alguns apps aceitam sem parameter_name; manter por consistência do BODY
+        param.parameter_name = raw;
+      }
+      params.push(param);
+    });
+
+    // Para HEADER texto, garantir no máximo 1 parâmetro
+    if (isHeader && params.length > 1) {
+      return [params[0]];
+    }
+
+    return params;
   }
 
   /**
@@ -424,8 +522,8 @@ export class IntentProcessor {
       // Build message using PayloadBuilder with integrated variable resolution
       switch (type) {
         case "whatsapp_official":
-          // Processar componentes com variáveis customizadas se existirem
-          let processedComponents = data.components || [];
+          // Normalizar componentes (podem vir como objeto indexado) e aplicar variáveis customizadas
+          let processedComponents = this.normalizeComponentsToArray(data.components || []);
           
           if (customVariables && typeof customVariables === 'object') {
             processedComponents = this.applyCustomVariablesToComponents(
@@ -435,10 +533,13 @@ export class IntentProcessor {
             );
           }
           
+          // IMPORTANTE: Enviar o NOME do template (ex.: "pix") e NÃO o ID/metaTemplateId
+          // Usar metaTemplateId apenas para resolver mídia quando necessário
           return await payloadBuilder.buildTemplatePayload(
-            data.metaTemplateId || "default",
+            name || "default",
             data.language || "pt_BR",
-            processedComponents
+            processedComponents,
+            data.metaTemplateId // usado somente para media resolution no builder
           );
 
         case "interactive_message":
@@ -460,6 +561,20 @@ export class IntentProcessor {
       );
       throw error;
     }
+  }
+
+  /**
+   * Normaliza a estrutura de componentes (array ou objeto com chaves numéricas) para array ordenado
+   */
+  private normalizeComponentsToArray(raw: any): any[] {
+    if (Array.isArray(raw)) return raw;
+    if (raw && typeof raw === 'object') {
+      const numericKeys = Object.keys(raw).filter((k) => /^\d+$/.test(k));
+      if (numericKeys.length > 0) {
+        return numericKeys.sort((a, b) => Number(a) - Number(b)).map((k) => raw[k]);
+      }
+    }
+    return [];
   }
 
   /**

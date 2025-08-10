@@ -194,11 +194,14 @@ export const ButtonEditor = ({ buttons, setButtons }: ButtonEditorProps) => {
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                           <div>
-                            <Label className="text-xs">Texto</Label>
+                            <div className="flex items-center justify-between">
+                              <Label className="text-xs">Texto</Label>
+                              <span className="text-[10px] text-muted-foreground">{(button.text || "").length}/20</span>
+                            </div>
                             <Input 
                               value={button.text} 
                               onChange={(e) => updateButtonText(index, e.target.value)} 
-                              maxLength={25}
+                              maxLength={20}
                               onPointerDown={stopDrag}
                               className={cn(isDragging && "pointer-events-none")}
                               disabled={button.type === "COPY_CODE"}
@@ -209,7 +212,10 @@ export const ButtonEditor = ({ buttons, setButtons }: ButtonEditorProps) => {
                           </div>
                           {button.type === "URL" && (
                             <div>
-                              <Label className="text-xs">URL</Label>
+                              <div className="flex items-center justify-between">
+                                <Label className="text-xs">URL</Label>
+                                <span className="text-[10px] text-muted-foreground">{(button.url || "").length}/2000</span>
+                              </div>
                               <Input value={button.url || ""} onChange={(e) => updateButtonField(index, "url", e.target.value)} placeholder="https://exemplo.com" maxLength={2000} onPointerDown={stopDrag} className={cn(isDragging && "pointer-events-none")} />
                             </div>
                           )}
@@ -227,7 +233,10 @@ export const ButtonEditor = ({ buttons, setButtons }: ButtonEditorProps) => {
                           )}
                           {button.type === "COPY_CODE" && (
                             <div>
-                              <Label className="text-xs">Código</Label>
+                              <div className="flex items-center justify-between">
+                                <Label className="text-xs">Código</Label>
+                                <span className="text-[10px] text-muted-foreground">{((button.example?.[0]) || "").length}/15</span>
+                              </div>
                               <Input value={(button.example?.[0]) || ""} onChange={(e) => updateButtonField(index, "example", [e.target.value] as any)} placeholder="CUPOM123" maxLength={15} onPointerDown={stopDrag} className={cn(isDragging && "pointer-events-none")} />
                             </div>
                           )}

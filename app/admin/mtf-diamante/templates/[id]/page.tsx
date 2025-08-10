@@ -270,6 +270,9 @@ function TemplateDetailsClient({ templateId }: { templateId: string }) {
       const payload = {
         templateId: template.id,
         selectedLeads: [phone],
+        parameters: {
+          couponCode,
+        },
       };
 
       const res = await axios.post("/api/admin/mtf-diamante/disparo", payload);
@@ -401,6 +404,9 @@ function TemplateDetailsClient({ templateId }: { templateId: string }) {
       const payload = {
         templateId: template.id,
         selectedLeads,
+        parameters: {
+          couponCode,
+        },
       };
       console.log(
         `Enviando mensagem para ${selectedLeads.length} leads:`,

@@ -67,7 +67,7 @@ export default function TemplatesTab() {
             <p className="text-muted-foreground">Crie um novo template para envio de mensagens via WhatsApp</p>
           </div>
         </div>
-        <CreateTemplatePage />
+        <CreateTemplatePage onCancel={handleBackToList} />
       </div>
     );
   }

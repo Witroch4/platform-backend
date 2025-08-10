@@ -538,6 +538,16 @@ export async function POST(request: Request) {
             userVariables
           );
           convertedComponent.text = conversion.convertedText; // mantém placeholders nomeados
+          // Validação: HEADER TEXT pode ter no máximo 1 variável
+          if (component.type === 'HEADER') {
+            const headerVarCount = (convertedComponent.text.match(/\{\{[^}]+\}\}/g) || []).length;
+            if (headerVarCount > 1) {
+              return NextResponse.json({
+                success: false,
+                error: 'O cabeçalho de texto suporta no máximo 1 variável.',
+              }, { status: 400 });
+            }
+          }
           
           // Se o componente já tem exemplos (posicionais ou nomeados), usar esses exemplos
           if (component.example && (component.example.body_text || component.example.body_text_named_params)) {

@@ -16,6 +16,7 @@ export interface TemplateFormState {
   headerText: string;
   headerExample: string;
   headerMetaMedia: MetaMediaFile[];
+  headerNamedExamples?: Record<string, string>;
   bodyText: string;
     bodyExamples: string[];
     bodyNamedExamples?: Record<string, string>;
@@ -34,7 +35,13 @@ export const useTemplateForm = (initialState: TemplateFormState) => {
 
   // Lógica de validação
   const isValidName = useMemo(() => /^[a-z0-9_]{1,512}$/.test(state.name), [state.name]);
-  const isValidHeaderText = useMemo(() => state.headerType !== 'TEXT' || (state.headerText.length > 0 && state.headerText.length <= 60), [state.headerType, state.headerText]);
+  const isValidHeaderText = useMemo(() => {
+    if (state.headerType !== 'TEXT') return true;
+    const lenOk = state.headerText.length > 0 && state.headerText.length <= 60;
+    const varCount = extractVariables(state.headerText).length;
+    const metaLimitOk = varCount <= 1; // Meta permite apenas 1 variável no HEADER de texto
+    return lenOk && metaLimitOk;
+  }, [state.headerType, state.headerText]);
   const isValidBodyText = useMemo(() => state.bodyText.length > 0 && state.bodyText.length <= 1024, [state.bodyText]);
   const isValidFooterText = useMemo(() => state.footerText.length <= 60, [state.footerText]);
   const isValidHeaderMedia = useMemo(() => {
@@ -162,19 +169,24 @@ export const useTemplateForm = (initialState: TemplateFormState) => {
       // HEADER
       if (state.headerType && state.headerType !== 'NONE') {
         if (state.headerType === 'TEXT') {
-          const headerVars = extractVariables(state.headerText);
-          const exampleValues = headerVars.length > 0 && state.headerExample
-            ? [state.headerExample]
-            : undefined;
+          const rawHeaderVars = extractVariables(state.headerText);
+          const headerVars = rawHeaderVars.map(v => v.replace(/\{\{|\}\}/g, ''));
 
           const headerComponent: any = {
             type: 'HEADER',
             format: 'TEXT',
             text: state.headerText,
           };
-          if (exampleValues) {
-            headerComponent.example = { header_text: exampleValues };
+
+          if (headerVars.length > 0) {
+            // Sempre usar NAMED_PARAMS no cabeçalho
+            const headerNamedParams = headerVars.map((name) => ({
+              param_name: name,
+              example: (state.headerNamedExamples && state.headerNamedExamples[name]) || state.headerExample || '',
+            }));
+            headerComponent.example = { header_text_named_params: headerNamedParams };
           }
+
           components.push(headerComponent);
         } else {
           const media = state.headerMetaMedia?.[0];
