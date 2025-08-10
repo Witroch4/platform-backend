@@ -132,7 +132,17 @@ function TemplateDetailsClient({ templateId }: { templateId: string }) {
   const [error, setError] = useState<string | null>(null);
 
   const [testPhoneNumber, setTestPhoneNumber] = useState("");
-  const [testVariables, setTestVariables] = useState<string[]>([]);
+  // Variáveis do template para preenchimento na página (HEADER/BODY/CUPOM)
+  type PageVar = {
+    key: string; // chave para envio em parameters (ex: nome, id_pedido)
+    placeholder: string; // ex: {{nome}} ou {{1}}
+    scope: "body" | "header" | "coupon";
+    name?: string; // quando nomeada (ex: nome)
+    index?: number; // ordem quando numérica
+    example: string;
+    value: string;
+  };
+  const [pageVariables, setPageVariables] = useState<PageVar[]>([]);
   const [couponCode, setCouponCode] = useState("");
   const [headerMedia, setHeaderMedia] = useState("");
   const [hasHeaderMedia, setHasHeaderMedia] = useState(false);
@@ -208,13 +218,89 @@ function TemplateDetailsClient({ templateId }: { templateId: string }) {
           componentes: t.components || [],
         });
 
-        // variáveis do BODY
-        const bodyComp = t.components?.find((c: any) => c.type === "BODY");
-        if (bodyComp && Array.isArray(bodyComp.parameters)) {
-          setTestVariables(
-            bodyComp.parameters.map((v: any) => v.example || "")
-          );
-        }
+        // Extrair variáveis (HEADER TEXT, BODY e CUPOM)
+        const extracted: PageVar[] = [];
+
+        // CUPOM via COPY_CODE
+        try {
+          const btns = t.components?.find((c: any) => c.type === "BUTTONS");
+          const copyBtn = btns?.buttons?.find((b: any) => String(b?.type || "").toUpperCase() === "COPY_CODE");
+          const exampleCoupon = Array.isArray(copyBtn?.example) ? copyBtn.example[0] : "";
+          if (copyBtn) {
+            extracted.push({
+              key: "couponCode",
+              placeholder: "{{coupon_code}}",
+              scope: "coupon",
+              example: exampleCoupon || "",
+              value: exampleCoupon || "",
+            });
+          }
+        } catch {}
+
+        // BODY: suporta nomeadas e numéricas
+        try {
+          const bodyComponent = t.components?.find((c: any) => c.type === "BODY");
+          if (bodyComponent?.text) {
+            const matches = bodyComponent.text.match(/\{\{([^}]+)\}\}/g) || [];
+            matches.forEach((match: string, pos: number) => {
+              const raw = match.replace(/[{}]/g, "").trim();
+              const isNumeric = /^\d+$/.test(raw);
+              // exemplo
+              let exampleValue = "";
+              if (bodyComponent.example) {
+                if (Array.isArray(bodyComponent.example?.body_text?.[0])) {
+                  exampleValue = bodyComponent.example.body_text[0][pos] || "";
+                }
+                if (!exampleValue && Array.isArray(bodyComponent.example?.body_text_named_params)) {
+                  const named = bodyComponent.example.body_text_named_params.find((p: any) => p?.param_name === raw);
+                  exampleValue = named?.example || "";
+                }
+              }
+              extracted.push({
+                key: isNumeric ? `body_${pos}` : raw,
+                placeholder: match,
+                scope: "body",
+                name: isNumeric ? undefined : raw,
+                index: isNumeric ? pos : undefined,
+                example: exampleValue,
+                value: exampleValue,
+              });
+            });
+          }
+        } catch {}
+
+        // HEADER TEXT: suporta nomeada e numérica
+        try {
+          const headerComponent = t.components?.find((c: any) => c.type === "HEADER" && c.format === "TEXT");
+          if (headerComponent?.text) {
+            const matches = headerComponent.text.match(/\{\{([^}]+)\}\}/g) || [];
+            matches.forEach((match: string, pos: number) => {
+              const raw = match.replace(/[{}]/g, "").trim();
+              const isNumeric = /^\d+$/.test(raw);
+              let exampleValue = "";
+              if (headerComponent.example) {
+                if (Array.isArray(headerComponent.example?.header_text?.[0])) {
+                  exampleValue = headerComponent.example.header_text[0][pos] || "";
+                }
+                if (!exampleValue && Array.isArray(headerComponent.example?.header_text_named_params)) {
+                  const named = headerComponent.example.header_text_named_params.find((p: any) => p?.param_name === raw);
+                  exampleValue = named?.example || "";
+                }
+              }
+              extracted.push({
+                key: isNumeric ? `header_${pos}` : raw,
+                placeholder: match,
+                scope: "header",
+                name: isNumeric ? undefined : raw,
+                index: isNumeric ? pos : undefined,
+                example: exampleValue,
+                value: exampleValue,
+              });
+            });
+          }
+        } catch {}
+
+        setPageVariables(extracted);
 
         // HEADER media
         const hdr = t.components?.find(
@@ -239,16 +325,9 @@ function TemplateDetailsClient({ templateId }: { templateId: string }) {
           setHeaderMedia(mediaUrl);
         }
 
-        // pré‑preenche cupom do COPY_CODE
-        const btnComp = t.components?.find((c: any) => c.type === "BUTTONS");
-        if (btnComp?.buttons) {
-          const copyBtn = btnComp.buttons.find(
-            (b: any) => b.type === "COPY_CODE"
-          );
-          if (copyBtn?.example?.length) {
-            setCouponCode(copyBtn.example[0]);
-          }
-        }
+        // pré‑preenche cupom do COPY_CODE (sincronizar estado legado)
+        const copyVar = extracted.find((v) => v.scope === "coupon");
+        if (copyVar) setCouponCode(copyVar.value || "");
       } catch (err) {
         console.error(err);
         setError("Erro ao carregar informações do template");
@@ -267,12 +346,36 @@ function TemplateDetailsClient({ templateId }: { templateId: string }) {
       let phone = testPhoneNumber.replace(/\D/g, "");
       if (!phone.startsWith("55")) phone = "55" + phone;
 
+      // Montar parâmetros a partir das variáveis
+      const params: Record<string, any> = {};
+      // CUPOM
+      const couponVar = pageVariables.find((v) => v.scope === "coupon");
+      params.couponCode = (couponVar?.value ?? couponCode) || "";
+      // HEADER nomeado
+      const headerNamed = pageVariables.filter((v) => v.scope === "header" && v.name);
+      if (headerNamed.length > 0) {
+        const headerVal = headerNamed[0].value || headerNamed[0].example || "";
+        params.headerVar = headerVal;
+        // também mandar pela chave nomeada
+        params[headerNamed[0].name as string] = headerVal;
+      }
+      // BODY nomeadas -> mandar por nome
+      const bodyNamed = pageVariables.filter((v) => v.scope === "body" && v.name);
+      for (const v of bodyNamed) {
+        params[v.name as string] = v.value || v.example || "";
+      }
+      // BODY numéricas -> montar bodyVars em ordem
+      const bodyNumeric = pageVariables
+        .filter((v) => v.scope === "body" && typeof v.index === "number")
+        .sort((a, b) => (a.index! - b.index!));
+      if (bodyNumeric.length > 0) {
+        params.bodyVars = bodyNumeric.map((v) => v.value || v.example || "");
+      }
+
       const payload = {
         templateId: template.id,
         selectedLeads: [phone],
-        parameters: {
-          couponCode,
-        },
+        parameters: params,
       };
 
       const res = await axios.post("/api/admin/mtf-diamante/disparo", payload);
@@ -401,12 +504,31 @@ function TemplateDetailsClient({ templateId }: { templateId: string }) {
         if (!numero.startsWith("55")) numero = "55" + numero;
         return numero;
       });
+      // Montar parâmetros a partir das variáveis (mesma regra do individual)
+      const params: Record<string, any> = {};
+      const couponVar = pageVariables.find((v) => v.scope === "coupon");
+      params.couponCode = (couponVar?.value ?? couponCode) || "";
+      const headerNamed = pageVariables.filter((v) => v.scope === "header" && v.name);
+      if (headerNamed.length > 0) {
+        const headerVal = headerNamed[0].value || headerNamed[0].example || "";
+        params.headerVar = headerVal;
+        params[headerNamed[0].name as string] = headerVal;
+      }
+      const bodyNamed = pageVariables.filter((v) => v.scope === "body" && v.name);
+      for (const v of bodyNamed) {
+        params[v.name as string] = v.value || v.example || "";
+      }
+      const bodyNumeric = pageVariables
+        .filter((v) => v.scope === "body" && typeof v.index === "number")
+        .sort((a, b) => (a.index! - b.index!));
+      if (bodyNumeric.length > 0) {
+        params.bodyVars = bodyNumeric.map((v) => v.value || v.example || "");
+      }
+
       const payload = {
         templateId: template.id,
         selectedLeads,
-        parameters: {
-          couponCode,
-        },
+        parameters: params,
       };
       console.log(
         `Enviando mensagem para ${selectedLeads.length} leads:`,
@@ -657,42 +779,30 @@ function TemplateDetailsClient({ templateId }: { templateId: string }) {
                     />
                   </div>
 
-                  {template.componentes.some((c) =>
-                    Array.isArray(c.parameters)
-                  ) && (
+                  {pageVariables.length > 0 && (
                     <div>
                       <p className="font-medium mb-2">Variáveis</p>
-                      <div className="space-y-2">
-                        {testVariables.map((val, idx) => (
-                          <div
-                            key={idx}
-                            className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-center"
-                          >
+                      <div className="space-y-3">
+                        {pageVariables.map((v, idx) => (
+                          <div key={`${v.placeholder}-${idx}`} className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-start">
                             <Label className="text-xs sm:text-sm truncate">
-                              {"{{" +
-                                template.componentes.flatMap((c) =>
-                                  Array.isArray(c.parameters)
-                                    ? c.parameters
-                                    : []
-                                )[idx]?.type +
-                                "}}"}
+                              <code className="bg-muted px-1 py-0.5 rounded">{v.placeholder}</code>
+                              {v.scope === 'header' ? ' (HEADER)' : v.scope === 'body' ? ' (BODY)' : ' (CUPOM)'}
                             </Label>
                             <div className="sm:col-span-3">
                               <Input
-                                placeholder={
-                                  template.componentes.flatMap((c) =>
-                                    Array.isArray(c.parameters)
-                                      ? c.parameters
-                                      : []
-                                  )[idx]?.example
-                                }
-                                value={testVariables[idx]}
+                                placeholder={v.example || 'Valor'}
+                                value={v.value}
                                 onChange={(e) => {
-                                  const arr = [...testVariables];
-                                  arr[idx] = e.target.value;
-                                  setTestVariables(arr);
+                                  const next = [...pageVariables];
+                                  next[idx] = { ...v, value: e.target.value };
+                                  setPageVariables(next);
+                                  if (v.scope === 'coupon') setCouponCode(e.target.value);
                                 }}
                               />
+                              {v.scope === 'coupon' ? (
+                                <p className="text-xs text-muted-foreground mt-1">Máx. 15 caracteres alfanuméricos</p>
+                              ) : null}
                             </div>
                           </div>
                         ))}
@@ -731,20 +841,7 @@ function TemplateDetailsClient({ templateId }: { templateId: string }) {
                     </div>
                   )}
 
-                  {template.componentes.some(
-                    (c) =>
-                      c.type === "BUTTONS" &&
-                      c.buttons?.some((b) => b.type === "COPY_CODE")
-                  ) && (
-                    <div>
-                      <Label>Cupom (copy_code)</Label>
-                      <Input
-                        placeholder="CODE123"
-                        value={couponCode}
-                        onChange={(e) => setCouponCode(e.target.value)}
-                      />
-                    </div>
-                  )}
+                  {/* Cupom já incluído nas variáveis acima quando existir COPY_CODE */}
 
                   <Button
                     onClick={handleTestSend}

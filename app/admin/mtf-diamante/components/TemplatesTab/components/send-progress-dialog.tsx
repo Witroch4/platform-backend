@@ -89,62 +89,37 @@ export function SendProgressDialog({
   
   // Efeito para simular o progresso
   useEffect(() => {
-    if (!isOpen) {
-      // Reiniciar estado quando o dialog fecha
-      setProgress(0);
-      setMessageIndex(0);
-      setSentCount(0);
-      setIsComplete(false);
-      return;
-    }
-    
-    // Começar com a primeira mensagem
+    // Só simular quando aberto e ainda não completo
+    if (!(isOpen && !isComplete && !propIsComplete)) return;
+
     setMessageIndex(0);
-    
-    let timer: NodeJS.Timeout;
-    const totalTime = Math.min(25000, 5000 + numContacts * 500); // Tempo total estimado baseado no número de contatos
-    const interval = 200; // Intervalo de atualização em ms
+
+    let cancelled = false;
+    let timer: NodeJS.Timeout | null = null;
+    const totalTime = Math.min(25000, 5000 + numContacts * 500);
+    const interval = 200;
     const totalSteps = totalTime / interval;
     let currentStep = 0;
-    
-    // Simular progresso de forma incremental
+
     const updateProgress = () => {
+      if (cancelled) return;
       currentStep++;
-      
-      // Calcular progresso baseado em quantos passos já foram executados
       const progressPercent = Math.min(99, Math.floor((currentStep / totalSteps) * 100));
-      
-      // Atualizar o número estimado de mensagens enviadas
-      const estimatedSent = Math.floor((progressPercent / 100) * numContacts);
-      setSentCount(estimatedSent);
-      
-      // Atualizar progresso
+      setSentCount(Math.floor((progressPercent / 100) * numContacts));
       setProgress(progressPercent);
-      
-      // Atualizar mensagem baseado no progresso
-      const messageIdx = Math.min(
-        messages.length - 2, // Não usar a última mensagem até completar
-        Math.floor((progressPercent / 100) * (messages.length - 1))
-      );
+      const messageIdx = Math.min(messages.length - 2, Math.floor((progressPercent / 100) * (messages.length - 1)));
       setMessageIndex(messageIdx);
-      
-      // Se o progresso chegou a 99%, parar e aguardar confirmação externa
-      if (progressPercent >= 99 && !isComplete) {
-        // A simulação parou em 99%, aguardando sinal de que realmente completou
-        return;
-      }
-      
-      // Continuar atualizando
-      if (!isComplete && progressPercent < 99) {
+      if (progressPercent < 99) {
         timer = setTimeout(updateProgress, interval);
       }
     };
-    
-    // Iniciar simulação de progresso
+
     timer = setTimeout(updateProgress, interval);
-    
-    return () => clearTimeout(timer);
-  }, [isOpen, messages.length, numContacts, isComplete]);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [isOpen, numContacts, isComplete, propIsComplete]);
   
   // Efeito para finalizar o progresso quando isComplete for true
   useEffect(() => {
@@ -153,22 +128,27 @@ export function SendProgressDialog({
       setProgress(100);
       setSentCount(numContacts);
       setMessageIndex(messages.length - 1); // Última mensagem
-      
-      // Fechar o diálogo após um tempo
+
+      // Fechar o diálogo automaticamente após 1.5s
       const timer = setTimeout(() => {
-        if (onComplete) onComplete();
-      }, 2000);
-      
+        try { onComplete && onComplete(); } catch {}
+        try { onClose && onClose(); } catch {}
+      }, 1500);
+
       return () => clearTimeout(timer);
     }
-  }, [isComplete, messages.length, numContacts, onComplete]);
+  }, [isComplete, messages.length, numContacts, onComplete, onClose]);
   
   // Detectar quando o envio é concluído externamente
   useEffect(() => {
     if (propIsComplete && !isComplete) {
+      // Sinal externo de conclusão: finalize imediatamente UI
       setIsComplete(true);
+      setProgress(100);
+      setSentCount(numContacts);
+      setMessageIndex(messages.length - 1);
     }
-  }, [propIsComplete, isComplete]);
+  }, [propIsComplete, isComplete, numContacts, messages.length]);
   
   // Obter a mensagem atual
   const getCurrentMessage = () => {
@@ -181,13 +161,10 @@ export function SendProgressDialog({
   };
   
   return (
-    <Dialog 
-      open={isOpen} 
+    <Dialog
+      open={isOpen}
       onOpenChange={(open) => {
-        // Impedir que o usuário feche o diálogo durante o envio
-        if (!open && !isComplete) {
-          onClose();
-        }
+        if (!open) onClose();
       }}
     >
       <DialogContent className="max-w-md backdrop-blur-xl bg-background/95 shadow-xl border-primary/20 overflow-hidden">

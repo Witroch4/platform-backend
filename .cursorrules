@@ -100,4 +100,5 @@ Mantive o layout e o conteúdo; apenas melhorei a usabilidade em telas menores.
 Resultado
 O conteúdo do diálogo não fica cortado; há scroll interno para navegar por todos os campos.
 Comportamento melhor em notebooks (resoluções abaixo de Full HD).
-  
+  exemplo de dialog divertido e dinamico:
+  app\admin\mtf-diamante\components\TemplatesTab\components\send-progress-dialog.tsx

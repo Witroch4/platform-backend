@@ -347,26 +347,48 @@ export async function POST(request: Request) {
               console.log(`[Disparo] Body component:`, bodyComponent);
 
               if (bodyComponent?.text) {
-                const placeholders =
+                const numericPlaceholders =
                   bodyComponent.text.match(/\{\{(\d+)\}\}/g) || [];
+                const namedMatches: RegExpMatchArray[] = Array.from(
+                  bodyComponent.text.matchAll(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g)
+                );
+                const namedPlaceholders = namedMatches.map((m: RegExpMatchArray) => m[1] as string);
+
                 console.log(
                   `[Disparo] Placeholders encontrados:`,
-                  placeholders
+                  namedPlaceholders.length > 0 ? namedPlaceholders : numericPlaceholders
                 );
 
-                if (placeholders.length > 0) {
-                  // Criar array de variáveis preenchidas automaticamente
+                // Se houver placeholders nomeados, tentar preencher por nome (parameters -> example -> nomeDoLead)
+                if (namedPlaceholders.length > 0) {
+                  const vars: string[] = [];
+                  const examplesArr: Array<{ param_name?: string; example?: string }> =
+                    (bodyComponent.example?.body_text_named_params as any[]) || [];
+                  for (const varName of namedPlaceholders) {
+                    const provided = (parameters as any)?.[varName];
+                    const exampleVal = examplesArr.find((e) => e?.param_name === varName)?.example;
+                    vars.push(
+                      String(
+                        (typeof provided !== "undefined" && provided !== null && provided !== "")
+                          ? provided
+                          : (exampleVal || nomeDoLead)
+                      )
+                    );
+                  }
+                  sendOpts.bodyVars = vars;
+                  console.log(
+                    `[Disparo] Preenchendo BODY por nome: [${vars.join(", ")}], ordem: [${namedPlaceholders.join(", ")}].`
+                  );
+                } else if (numericPlaceholders.length > 0) {
+                  // Placeholder numérico -> manter fallback antigo (nomeDoLead x N)
                   const autoVars: string[] = [];
-
-                  // Para cada placeholder, usar o nome do lead
-                  for (let i = 0; i < placeholders.length; i++) {
+                  for (let i = 0; i < numericPlaceholders.length; i++) {
                     autoVars.push(nomeDoLead);
                   }
-
-                  console.log(
-                    `[Disparo] Auto-preenchendo ${placeholders.length} variáveis com: "${nomeDoLead}"`
-                  );
                   sendOpts.bodyVars = autoVars;
+                  console.log(
+                    `[Disparo] Auto-preenchendo ${numericPlaceholders.length} variáveis numéricas com: "${nomeDoLead}"`
+                  );
                 }
               }
             } else {
@@ -429,7 +451,9 @@ export async function POST(request: Request) {
 
             // Processar cada componente
             for (const component of components) {
-              if (typeof component === "string") continue; // Pular URLs que foram misturadas no array
+              // Ignorar entradas inválidas (strings, null, undefined, números)
+              if (!component || typeof component !== "object") continue;
+              if (typeof (component as any) === "string") continue;
 
               switch (component.type) {
                 case "HEADER":
@@ -459,15 +483,25 @@ export async function POST(request: Request) {
                     // Enviar parâmetro de texto para HEADER somente se houver placeholder no header
                     const hasPlaceholder = /\{\{[^}]+\}\}/.test(component.text);
                     if (hasPlaceholder) {
-                      const headerValue = (parameters as any)?.headerVar || nomeDoLead;
+                      // Suporte a variável nomeada no header (parameter_name)
+                      const headerNameMatch = component.text.match(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/);
+                      const headerParamName = headerNameMatch?.[1];
+                      let headerValue = (parameters as any)?.headerVar;
+                      if (!headerValue && headerParamName && typeof (parameters as any)?.[headerParamName] !== 'undefined') {
+                        headerValue = (parameters as any)[headerParamName];
+                      }
+                      if (!headerValue) {
+                        const headerExample = component.example?.header_text_named_params?.[0]?.example;
+                        headerValue = headerExample || nomeDoLead;
+                      }
                       if (headerValue) {
+                        const headerParam: any = { type: "text", text: String(headerValue) };
+                        if (headerParamName) headerParam.parameter_name = headerParamName;
                         whatsappComponents.push({
                           type: "header",
-                          parameters: [
-                            { type: "text", text: String(headerValue) },
-                          ],
+                          parameters: [headerParam],
                         });
-                        console.log("[Disparo] Adicionado header TEXT com variável");
+                        console.log("[Disparo] Adicionado header TEXT com variável (named compatível)");
                       }
                     }
                   }
@@ -475,15 +509,26 @@ export async function POST(request: Request) {
                 case "BODY":
                   // Para templates sem variáveis, não precisa enviar parâmetros
                   if (sendOpts.bodyVars && sendOpts.bodyVars.length > 0) {
+                    // Detectar placeholders nomeados no BODY para enviar parameter_name
+                    const namedMatches: RegExpMatchArray[] = Array.from(
+                      (component.text || "").matchAll(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g)
+                    );
+                    const namedPlaceholders = namedMatches.map((m) => m[1] as string);
+
+                    const parameters = sendOpts.bodyVars.map((value: string, index: number) => {
+                      const param: any = { type: "text", text: value };
+                      if (namedPlaceholders.length > 0 && namedPlaceholders[index]) {
+                        param.parameter_name = namedPlaceholders[index];
+                      }
+                      return param;
+                    });
+
                     whatsappComponents.push({
                       type: "body",
-                      parameters: sendOpts.bodyVars.map((text: string) => ({
-                        type: "text",
-                        text: text,
-                      })),
+                      parameters,
                     });
                     console.log(
-                      `[Disparo] Adicionado body com ${sendOpts.bodyVars.length} variáveis`
+                      `[Disparo] Adicionado body com ${sendOpts.bodyVars.length} variáveis${namedPlaceholders.length > 0 ? " (named)" : ""}`
                     );
                   }
                   break;
