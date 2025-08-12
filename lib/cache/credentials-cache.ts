@@ -128,7 +128,10 @@ export class CredentialsCache {
   }
 
   // Invalidate credentials cache
-  async invalidateCredentials(inboxId: string): Promise<void> {
+  async invalidateCredentials(
+    inboxId: string,
+    options?: { suppressQueue?: boolean }
+  ): Promise<void> {
     const keys = [
       this.getCacheKey(CACHE_PREFIXES.CREDENTIALS, inboxId),
       this.getCacheKey(CACHE_PREFIXES.CREDENTIALS_UPDATED, inboxId),
@@ -138,8 +141,10 @@ export class CredentialsCache {
       await this.redis.del(...keys);
       console.log(`[CredentialsCache] Invalidated cache for inbox ${inboxId}`);
       
-      // Queue related cache invalidation
-      cacheInvalidationManager.queueInvalidation(inboxId);
+      // Queue related cache invalidation unless explicitly suppressed
+      if (!options?.suppressQueue) {
+        cacheInvalidationManager.queueInvalidation(inboxId);
+      }
     } catch (error) {
       this.stats.errors++;
       cacheHealthMonitor.recordCacheOperation('error');
@@ -431,9 +436,9 @@ export class CacheInvalidationManager {
     try {
       console.log(`[CacheInvalidationManager] Processing batch invalidation for ${inboxIds.length} inboxes`);
       
-      // Invalidate credentials and fallback chains
+      // Invalidate credentials and fallback chains without re-queuing to avoid loops
       await Promise.all(inboxIds.map(async (inboxId) => {
-        await credentialsCache.invalidateCredentials(inboxId);
+        await credentialsCache.invalidateCredentials(inboxId, { suppressQueue: true });
         await credentialsCache.invalidateFallbackChain(inboxId);
       }));
 
@@ -446,14 +451,14 @@ export class CacheInvalidationManager {
   // Invalidate related caches when credentials are updated
   async invalidateRelatedCaches(inboxId: string): Promise<void> {
     try {
-      // Invalidate the inbox itself
-      await credentialsCache.invalidateCredentials(inboxId);
+      // Invalidate the inbox itself (do not re-queue here to avoid recursive loops)
+      await credentialsCache.invalidateCredentials(inboxId, { suppressQueue: true });
       await credentialsCache.invalidateFallbackChain(inboxId);
 
       // Find and invalidate inboxes that use this inbox as fallback
       const dependentInboxes = await this.findDependentInboxes(inboxId);
       for (const dependentInboxId of dependentInboxes) {
-        await credentialsCache.invalidateCredentials(dependentInboxId);
+        await credentialsCache.invalidateCredentials(dependentInboxId, { suppressQueue: true });
         await credentialsCache.invalidateFallbackChain(dependentInboxId);
       }
 

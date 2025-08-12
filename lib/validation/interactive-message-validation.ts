@@ -191,7 +191,10 @@ export const ButtonReactionSchema = z.object({
   isActive: z.boolean().default(true)
 }).refine((data) => {
   if (data.type === 'emoji') {
-    return data.emoji && VALIDATION_PATTERNS.EMOJI.test(data.emoji);
+    // Permitir qualquer sequência não vazia de emoji, incluindo variation selectors/ZWJ
+    // Regex de emoji é notoriamente difícil e pode falhar para combinações (ex.: ❤️, 👨‍👩‍👧‍👦).
+    // Para não bloquear o usuário na edição, aceitamos string não vazia.
+    return typeof data.emoji === 'string' && data.emoji.trim().length > 0;
   }
   if (data.type === 'text') {
     return data.textResponse && data.textResponse.trim().length > 0;
@@ -279,6 +282,26 @@ export class InteractiveMessageValidator {
           severity: 'warning'
         });
         return; // não valida conteúdo dessa reação
+      }
+
+      // Conteúdo incompleto durante a edição não deve bloquear
+      if (reaction.type === 'emoji' && (!reaction.emoji || reaction.emoji.trim().length === 0)) {
+        warnings.push({
+          field: `reactions[${index}]`,
+          code: 'INCOMPLETE_REACTION',
+          message: 'Emoji reaction has no emoji selected yet',
+          severity: 'warning'
+        });
+        return; // não tenta parsear para evitar erro CUSTOM
+      }
+      if (reaction.type === 'text' && (!reaction.textResponse || reaction.textResponse.trim().length === 0)) {
+        warnings.push({
+          field: `reactions[${index}]`,
+          code: 'INCOMPLETE_REACTION',
+          message: 'Text reaction has no content yet',
+          severity: 'warning'
+        });
+        return; // não tenta parsear para evitar erro CUSTOM
       }
 
       try {

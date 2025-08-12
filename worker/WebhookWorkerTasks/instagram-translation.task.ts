@@ -232,7 +232,38 @@ export async function processInstagramTranslationTask(
     instagramTranslationLogger.workerConversionStarted(updatedLogContext, messageMapping.messageType, bodyLength);
 
     // Try to get cached conversion result first
-    const cachedResult = await getCachedConversionResult(intentName, usuarioChatwitId, inboxId, bodyLength, hasImage);
+    // Detectar se o template usa variável de lead (ex.: {{nome_lead}}) para isolar cache por lead
+    const usesLeadVariable = (() => {
+      try {
+        const needle = /\{\{\s*nome_lead\s*\}\}/;
+        // unified
+        const ic = messageMapping?.unifiedTemplate?.interactiveContent;
+        const uHeader = ic?.header?.content || '';
+        const uBody = ic?.body?.text || '';
+        const uFooter = ic?.footer?.text || '';
+        if (needle.test(`${uHeader} ${uBody} ${uFooter}`)) return true;
+
+        // legacy interactive
+        const lHeader = messageMapping?.interactiveMessage?.headerConteudo || '';
+        const lBody = messageMapping?.interactiveMessage?.texto || '';
+        const lFooter = messageMapping?.interactiveMessage?.rodape || '';
+        if (needle.test(`${lHeader} ${lBody} ${lFooter}`)) return true;
+
+        // enhanced interactive
+        const eHeader = messageMapping?.enhancedInteractiveMessage?.headerContent || '';
+        const eBody = messageMapping?.enhancedInteractiveMessage?.bodyText || '';
+        const eFooter = messageMapping?.enhancedInteractiveMessage?.footerText || '';
+        if (needle.test(`${eHeader} ${eBody} ${eFooter}`)) return true;
+
+        return false;
+      } catch {
+        return false;
+      }
+    })();
+
+    const uniqueUserKey = usesLeadVariable ? (job.data.originalPayload?.originalDetectIntentRequest?.payload?.psid || job.data.contactPhone || undefined) : undefined;
+
+    const cachedResult = await getCachedConversionResult(intentName, usuarioChatwitId, inboxId, bodyLength, hasImage, uniqueUserKey);
     if (cachedResult && cachedResult.templateType !== 'incompatible') {
       fulfillmentMessages = cachedResult.fulfillmentMessages;
       conversionTime = cachedResult.processingTime;
@@ -351,7 +382,7 @@ export async function processInstagramTranslationTask(
             templateType: templateType as 'generic' | 'button' | 'incompatible',
             processingTime: conversionTime,
             buttonsCount,
-          });
+          }, undefined, uniqueUserKey);
           
           logWithCorrelationId('info', 'Instagram conversion result cached successfully', correlationId, {
             userContext: { usuarioChatwitId, inboxId },

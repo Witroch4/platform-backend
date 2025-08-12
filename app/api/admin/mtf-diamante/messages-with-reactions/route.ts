@@ -439,29 +439,35 @@ export async function POST(request: NextRequest) {
       });
 
       // Create button reactions if any
-      const savedReactions = [];
+      const savedReactions = [] as any[];
       if (reactions.length > 0) {
-        for (const reactionData of reactions) {
-          if (reactionData.reaction) {
-            const actionPayload = {
-              emoji: reactionData.reaction.type === 'emoji' ? reactionData.reaction.value : null,
-              textReaction: reactionData.reaction.type === 'text' ? reactionData.reaction.value : null,
-            };
-            
-            const savedReaction = await tx.mapeamentoBotao.create({
-              data: {
-                buttonId: reactionData.buttonId,
-                inboxId: inboxId, // Use the passed inboxId (which is the internal ChatwitInbox id)
-                actionType: 'SEND_TEMPLATE',
-                actionPayload,
-                description:
-                  reactionData.reaction.type === "text"
-                    ? reactionData.reaction.value
-                    : null,
-              },
-            });
-            savedReactions.push(savedReaction);
-          }
+        // Group by buttonId to support emoji + text coexistindo em um único registro
+        const grouped = new Map<string, { emoji?: string | null; textReaction?: string | null }>();
+        for (const r of reactions) {
+          if (!r?.reaction) continue;
+          const current = grouped.get(r.buttonId) || { emoji: null, textReaction: null };
+          if (r.reaction.type === 'emoji') current.emoji = r.reaction.value;
+          if (r.reaction.type === 'text') current.textReaction = r.reaction.value;
+          grouped.set(r.buttonId, current);
+        }
+
+        const buttonIds = Array.from(grouped.keys());
+        if (buttonIds.length > 0) {
+          // Evita violação de unique (MapeamentoBotao_buttonId_key)
+          await tx.mapeamentoBotao.deleteMany({ where: { buttonId: { in: buttonIds } } });
+        }
+
+        for (const [buttonId, payload] of grouped.entries()) {
+          const savedReaction = await tx.mapeamentoBotao.create({
+            data: {
+              buttonId,
+              inboxId: inboxId, // ChatwitInbox id
+              actionType: 'SEND_TEMPLATE',
+              actionPayload: payload,
+              description: payload.textReaction || null,
+            },
+          });
+          savedReactions.push(savedReaction);
         }
       }
 
@@ -815,9 +821,9 @@ export async function PUT(request: NextRequest) {
         
         if (templateInboxId) {
       // Limpar apenas reações dos botões presentes no payload de reactions
-      const incomingButtonIds = Array.from(new Set(
-        (reactions || []).map((r: any) => r?.buttonId).filter(Boolean)
-      ));
+      const incomingButtonIds: string[] = Array.from(
+        new Set(reactionsValidation.data.map((r) => r.buttonId))
+      );
 
       if (incomingButtonIds.length > 0) {
         await tx.mapeamentoBotao.deleteMany({

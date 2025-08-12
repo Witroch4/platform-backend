@@ -269,7 +269,8 @@ export class InstagramTemplateCache {
     usuarioChatwitId: string,
     inboxId: string,
     bodyLength: number,
-    hasImage: boolean
+    hasImage: boolean,
+    uniqueUserKey?: string
   ): Promise<CachedConversionResult | null> {
     const cacheKeyComponents = {
       intentName,
@@ -278,7 +279,7 @@ export class InstagramTemplateCache {
       bodyLength,
       hasImage,
     };
-    const cacheKey = `${intentName}:${usuarioChatwitId}:${inboxId}:${bodyLength}:${hasImage}`;
+    const cacheKey = `${intentName}:${usuarioChatwitId}:${inboxId}:${bodyLength}:${hasImage}${uniqueUserKey ? `:u:${uniqueUserKey}` : ''}`;
     const key = this.getCacheKey(CACHE_PREFIXES.CONVERSION_RESULT, cacheKey);
 
     // Log cache key generation for debugging
@@ -288,10 +289,10 @@ export class InstagramTemplateCache {
       intentName,
       "getConversionResult"
     );
-    logCacheKeyGeneration(
+      logCacheKeyGeneration(
       logContext,
       cacheKeyComponents,
-      "chatwit:instagram_conversion_result:intentName:usuarioChatwitId:inboxId:bodyLength:hasImage",
+        "chatwit:instagram_conversion_result:intentName:usuarioChatwitId:inboxId:bodyLength:hasImage[:u:uniqueUserKey]",
       { generatedKey: key }
     );
 
@@ -353,7 +354,8 @@ export class InstagramTemplateCache {
       processingTime: number;
       buttonsCount: number;
     },
-    ttl: number = TTL.CONVERSION_RESULT
+    ttl: number = TTL.CONVERSION_RESULT,
+    uniqueUserKey?: string
   ): Promise<void> {
     const cacheKeyComponents = {
       intentName,
@@ -362,7 +364,7 @@ export class InstagramTemplateCache {
       bodyLength,
       hasImage,
     };
-    const cacheKey = `${intentName}:${usuarioChatwitId}:${inboxId}:${bodyLength}:${hasImage}`;
+    const cacheKey = `${intentName}:${usuarioChatwitId}:${inboxId}:${bodyLength}:${hasImage}${uniqueUserKey ? `:u:${uniqueUserKey}` : ''}`;
     const key = this.getCacheKey(CACHE_PREFIXES.CONVERSION_RESULT, cacheKey);
 
     // Log cache key generation for debugging
@@ -372,11 +374,11 @@ export class InstagramTemplateCache {
       intentName,
       "setConversionResult"
     );
-    logCacheKeyGeneration(
+      logCacheKeyGeneration(
       logContext,
       cacheKeyComponents,
-      "chatwit:instagram_conversion_result:intentName:usuarioChatwitId:inboxId:bodyLength:hasImage",
-      { generatedKey: key, ttl }
+        "chatwit:instagram_conversion_result:intentName:usuarioChatwitId:inboxId:bodyLength:hasImage[:u:uniqueUserKey]",
+        { generatedKey: key, ttl, uniqueUserKey }
     );
 
     try {
@@ -835,14 +837,16 @@ export async function getCachedConversionResult(
   usuarioChatwitId: string,
   inboxId: string,
   bodyLength: number,
-  hasImage: boolean
+  hasImage: boolean,
+  uniqueUserKey?: string
 ): Promise<CachedConversionResult | null> {
   return instagramTemplateCache.getConversionResult(
     intentName,
     usuarioChatwitId,
     inboxId,
     bodyLength,
-    hasImage
+    hasImage,
+    uniqueUserKey
   );
 }
 
@@ -858,7 +862,8 @@ export async function setCachedConversionResult(
     processingTime: number;
     buttonsCount: number;
   },
-  ttl?: number
+  ttl?: number,
+  uniqueUserKey?: string
 ): Promise<void> {
   return instagramTemplateCache.setConversionResult(
     intentName,
@@ -867,7 +872,8 @@ export async function setCachedConversionResult(
     bodyLength,
     hasImage,
     result,
-    ttl
+    ttl,
+    uniqueUserKey
   );
 }
 

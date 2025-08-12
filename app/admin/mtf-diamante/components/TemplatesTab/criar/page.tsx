@@ -32,7 +32,7 @@ const initialFormState: TemplateFormState = {
   buttons: [],
 };
 
-export default function CreateTemplatePage({ onCancel }: { onCancel?: () => void }) {
+export default function CreateTemplatePage() {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(0);
   const {
@@ -136,7 +136,7 @@ export default function CreateTemplatePage({ onCancel }: { onCancel?: () => void
   return (
     <div className="container mx-auto py-10 max-w-6xl">
       <div className="flex items-center gap-2 mb-6">
-        <Button variant="ghost" size="icon" onClick={() => (onCancel ? onCancel() : router.push("/admin/mtf-diamante"))}>
+        <Button variant="ghost" size="icon" onClick={() => router.push("/admin/mtf-diamante") }>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <h1 className="text-2xl font-bold">Criar Novo Template</h1>
@@ -158,7 +158,7 @@ export default function CreateTemplatePage({ onCancel }: { onCancel?: () => void
             <TemplateCategorySelector 
               selectedCategory={state.category}
               onSelectCategory={(cat) => handleStateChange('category', cat)}
-              onCancel={() => (onCancel ? onCancel() : router.push('/admin/mtf-diamante'))}
+              onCancel={() => router.push('/admin/mtf-diamante')}
             />
             <TemplateBasicInfo 
               name={state.name}
@@ -200,7 +200,7 @@ export default function CreateTemplatePage({ onCancel }: { onCancel?: () => void
       )}
 
       <div className="flex justify-between mt-8 relative z-50">
-        <Button type="button" variant="outline" onClick={() => (onCancel ? onCancel() : router.push("/admin/mtf-diamante"))}>
+        <Button type="button" variant="outline" onClick={() => router.push("/admin/mtf-diamante") }>
           Cancelar
         </Button>
         {currentStep < 2 ? (

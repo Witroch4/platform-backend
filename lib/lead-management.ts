@@ -79,35 +79,110 @@ export interface LeadSearchResult {
 
 export class UnifiedLeadManager {
   /**
+   * Resolve or create legacy Chatwit Account.id pattern: 'CHATWIT_{chatwitAccountId}' using inboxId.
+   * Ensures an Account row exists with that id, linked to the same app user.
+   */
+  private static async resolveOrCreateChatwitAccountIdFromInbox(inboxId: string, fallbackNumericAccountId?: number): Promise<string | null> {
+    try {
+      // Find ChatwitInbox by external inboxId (e.g., '4') and include usuarioChatwit
+      const inbox = await prisma.chatwitInbox.findFirst({
+        where: { inboxId: inboxId },
+        include: { usuarioChatwit: true },
+      });
+
+      if (!inbox || !inbox.usuarioChatwit?.appUserId) {
+        return null;
+      }
+
+      const chatwitAccountId = inbox.usuarioChatwit.chatwitAccountId || (fallbackNumericAccountId !== undefined ? String(fallbackNumericAccountId) : null);
+      if (!chatwitAccountId) return null;
+
+      const chatwitAccountPk = `CHATWIT_${chatwitAccountId}`;
+
+      // Ensure Account exists with this id
+      let account = await prisma.account.findUnique({ where: { id: chatwitAccountPk } });
+      if (!account) {
+        account = await prisma.account.create({
+          data: {
+            id: chatwitAccountPk,
+            userId: inbox.usuarioChatwit.appUserId,
+            type: 'chatwit',
+            provider: 'chatwit',
+            providerAccountId: chatwitAccountId,
+          },
+        });
+      }
+
+      return account.id;
+    } catch (error) {
+      console.error('[UnifiedLeadManager] Failed to resolve Chatwit Account.id from inbox', {
+        inboxId,
+        error: error instanceof Error ? error.message : error,
+      });
+      return null;
+    }
+  }
+  /**
    * Find lead using contact_source for identification
    */
   static async findLeadByContactSource(
     contactSource: string,
-    accountId: number
+    accountId: number,
+    inboxId?: string
   ): Promise<ExtendedLead | null> {
     try {
       const leadSource = this.mapContactSourceToLeadSource(contactSource);
       const sourceIdentifier = contactSource;
 
-      const lead = await prisma.lead.findFirst({
-        where: {
-          source: leadSource,
-          sourceIdentifier,
-          accountId: accountId.toString(),
-        },
-        include: {
-          instagramProfile: true,
-          oabData: {
-            include: {
-              usuarioChatwit: true,
-              arquivos: true,
-              espelhoBiblioteca: true,
-            },
+      // Resolve legacy Chatwit account id (CHATWIT_{id}) if possible
+      const chatwitAccountPk = inboxId
+        ? await this.resolveOrCreateChatwitAccountIdFromInbox(inboxId, accountId)
+        : null;
+
+      let lead: ExtendedLead | null = null;
+      if (chatwitAccountPk) {
+        lead = await prisma.lead.findFirst({
+          where: {
+            source: leadSource,
+            sourceIdentifier,
+            accountId: chatwitAccountPk,
           },
-          user: true,
-          account: true,
-        },
-      });
+          include: {
+            instagramProfile: true,
+            oabData: {
+              include: {
+                usuarioChatwit: true,
+                arquivos: true,
+                espelhoBiblioteca: true,
+              },
+            },
+            user: true,
+            account: true,
+          },
+        });
+      }
+
+      // If not found with real account id, try without filtering by account (to catch legacy/null account leads)
+      if (!lead) {
+        lead = await prisma.lead.findFirst({
+          where: {
+            source: leadSource,
+            sourceIdentifier,
+          },
+          include: {
+            instagramProfile: true,
+            oabData: {
+              include: {
+                usuarioChatwit: true,
+                arquivos: true,
+                espelhoBiblioteca: true,
+              },
+            },
+            user: true,
+            account: true,
+          },
+        });
+      }
 
       if (lead) {
         console.log(`[UnifiedLeadManager] Found lead by contact source: ${contactSource}`, {
@@ -135,6 +210,9 @@ export class UnifiedLeadManager {
       const leadSource = this.mapContactSourceToLeadSource(data.contactSource);
       const sourceIdentifier = data.contactSource;
 
+      // Resolve or create Chatwit account id (CHATWIT_{id}) from inbox
+      const chatwitAccountPk = await this.resolveOrCreateChatwitAccountIdFromInbox(data.inboxId, data.accountId);
+
       // Prepare lead creation data
       const leadData: any = {
         name: data.name,
@@ -144,7 +222,8 @@ export class UnifiedLeadManager {
         source: leadSource,
         sourceIdentifier,
         tags: data.tags || [],
-        accountId: data.accountId.toString(),
+        // Only set accountId if we resolved or created a valid Chatwit account id
+        ...(chatwitAccountPk ? { accountId: chatwitAccountPk } : {}),
       };
 
       // Add source-specific data
@@ -158,11 +237,15 @@ export class UnifiedLeadManager {
         };
       } else if (leadSource === LeadSource.CHATWIT_OAB) {
         // For OAB leads, we need to find the UsuarioChatwit
-        const usuarioChatwit = await prisma.usuarioChatwit.findFirst({
-          where: {
-            chatwitAccountId: data.accountId.toString(),
-          },
+        // Prefer resolver via inboxId
+        let usuarioChatwit = await prisma.usuarioChatwit.findFirst({
+          where: { inboxes: { some: { inboxId: data.inboxId } } },
         });
+        if (!usuarioChatwit) {
+          usuarioChatwit = await prisma.usuarioChatwit.findFirst({
+            where: { chatwitAccountId: data.accountId.toString() },
+          });
+        }
 
         if (usuarioChatwit) {
           leadData.oabData = {
