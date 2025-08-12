@@ -1569,7 +1569,14 @@ export function extractFlashIntentData(
   const userIdentification = extractUserIdentification(req);
 
   // Detectar se é button click ou intent
+  // Priorizar botão quando houver qualquer evidência de clique (mesmo que interaction_type venha vazio)
+  const hasButtonId = Boolean(
+    chatwootPayload?.button_id ||
+      chatwootPayload?.interactive?.button_reply?.id ||
+      chatwootPayload?.interactive?.list_reply?.id
+  );
   const isButtonClick =
+    hasButtonId ||
     chatwootPayload?.interaction_type === "button_reply" ||
     chatwootPayload?.interactive?.type === "button_reply" ||
     chatwootPayload?.interactive?.type === "list_reply";

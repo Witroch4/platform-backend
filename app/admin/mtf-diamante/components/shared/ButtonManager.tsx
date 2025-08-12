@@ -10,8 +10,14 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Trash2, Plus, MessageSquare, ExternalLink, Phone, Zap } from 'lucide-react';
+import { Trash2, Plus, MessageSquare, ExternalLink, Phone, Zap, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 // Types based on the design specification
 export interface InteractiveButton {
@@ -39,6 +45,7 @@ interface ButtonManagerProps {
   disabled?: boolean;
   className?: string;
   showReactionConfig?: boolean;
+  idPrefix?: string; // optional prefix for generated ids (e.g., ig_)
 }
 
 // Button type configurations
@@ -123,24 +130,26 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
   maxButtons = 3,
   disabled = false,
   className,
-  showReactionConfig = true
+  showReactionConfig = true,
+  idPrefix,
 }) => {
   const [validationErrors, setValidationErrors] = useState<Record<string, string[]>>({});
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   // Generate unique ID for new buttons
   const generateButtonId = (): string => {
-    return `btn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const base = `btn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `${idPrefix ?? ''}${base}`;
   };
 
   // Add new button
-  const addButton = () => {
+  const addButton = (type: InteractiveButton['type'] = 'reply') => {
     if (buttons.length >= maxButtons) return;
     
     const newButton: InteractiveButton = {
       id: generateButtonId(),
       text: '',
-      type: 'reply'
+      type
     };
     
     onChange([...buttons, newButton]);
@@ -266,17 +275,32 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
         </div>
         
         {buttons.length < maxButtons && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={addButton}
-            disabled={disabled}
-            className="h-8"
-          >
-            <Plus className="h-3 w-3 mr-1" />
-            Add Button
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={disabled}
+                className="h-8"
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                Add Button
+                <ChevronDown className="h-3 w-3 ml-2" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onClick={() => addButton('reply')}>
+                <MessageSquare className="h-3 w-3 mr-2" /> Quick Reply
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => addButton('url')}>
+                <ExternalLink className="h-3 w-3 mr-2" /> URL Button
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => addButton('phone_number')}>
+                <Phone className="h-3 w-3 mr-2" /> Phone Button
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
 

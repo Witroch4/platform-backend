@@ -39,6 +39,7 @@ import {
   validateInstagramTemplate,
   DialogflowFulfillmentMessage,
 } from '@/lib/instagram/payload-builder';
+import { buildInstagramFromInteractiveContent } from '@/lib/instagram/instagra-translate-payload-builder';
 import {
   validateJobData,
   validateForInstagramConversion,
@@ -58,6 +59,7 @@ import {
   getCachedVariablesForUser,
   replaceVariablesInText
 } from '../../lib/mtf-diamante/variables-resolver';
+import { WhatsAppVariablesResolver } from '@/lib/whatsapp/variables-resolverWP';
 
 const prisma = getPrismaInstance();
 
@@ -84,6 +86,25 @@ async function getUserIdFromMessageMapping(messageMapping: any): Promise<string 
     console.error(`[Instagram Variables] Erro ao buscar userId:`, error);
     return null;
   }
+}
+
+/**
+ * Extrai o nome do lead do payload original (Dialogflow/Chatwoot)
+ */
+function extractPersonNameFromPayload(originalPayload: any): string | undefined {
+  try {
+    const nameFromParams = originalPayload?.queryResult?.parameters?.person?.name;
+    if (nameFromParams && typeof nameFromParams === 'string' && nameFromParams.trim()) {
+      return nameFromParams.trim();
+    }
+    const nameFromPayload = originalPayload?.originalDetectIntentRequest?.payload?.contact_name;
+    if (nameFromPayload && typeof nameFromPayload === 'string' && nameFromPayload.trim()) {
+      return nameFromPayload.trim();
+    }
+  } catch {
+    // ignore
+  }
+  return undefined;
 }
 
 /**
@@ -239,7 +260,13 @@ export async function processInstagramTranslationTask(
             fulfillmentMessages = await convertUnifiedTemplateToInstagram(
               messageMapping.unifiedTemplate,
               correlationId,
-              updatedLogContext
+              updatedLogContext,
+              messageMapping,
+              {
+                inboxId,
+                contactPhone,
+                originalPayload: job.data.originalPayload,
+              }
             );
           } else {
             throw createConversionFailedError('Unified template data is missing', correlationId);
@@ -644,7 +671,9 @@ export async function processInstagramTranslationTask(
 async function convertUnifiedTemplateToInstagram(
   unifiedTemplate: any,
   correlationId: string,
-  logContext: any
+  logContext: any,
+  messageMapping?: any,
+  context?: { inboxId?: string; contactPhone?: string; originalPayload?: any }
 ): Promise<DialogflowFulfillmentMessage[]> {
   logWithCorrelationId('info', 'Converting unified template to Instagram', correlationId, {
     templateType: unifiedTemplate.type,
@@ -658,7 +687,9 @@ async function convertUnifiedTemplateToInstagram(
         return await convertInteractiveContentToInstagram(
           unifiedTemplate.interactiveContent,
           correlationId,
-          logContext
+          logContext,
+          messageMapping,
+          context
         );
       } else {
         throw createConversionFailedError('Interactive content is missing from unified template', correlationId);
@@ -702,7 +733,9 @@ async function convertUnifiedTemplateToInstagram(
 async function convertInteractiveContentToInstagram(
   interactiveContent: any,
   correlationId: string,
-  logContext: any
+  logContext: any,
+  messageMapping?: any,
+  context?: { inboxId?: string; contactPhone?: string; originalPayload?: any }
 ): Promise<DialogflowFulfillmentMessage[]> {
   logWithCorrelationId('info', 'Converting interactive content to Instagram', correlationId);
 
@@ -723,101 +756,103 @@ async function convertInteractiveContentToInstagram(
   // Extract footer text
   const footerText = interactiveContent.footer?.text;
 
-  // Determine template type based on body length
-  const templateType = determineInstagramTemplateType(bodyText, hasImage);
-  
-  // Log template type detection
-  instagramTranslationLogger.workerTemplateTypeDetected(logContext, templateType, 
-    `Body length: ${bodyText.length}, Has image: ${hasImage}`);
-  
-  // Note: No longer throwing error for long messages - Quick Replies will handle them
-
-  // Convert buttons to Instagram format
-  let instagramButtons: any[] = [];
-  try {
-    const originalButtonCount = interactiveContent.actionReplyButton?.buttons?.length || 0;
-    
-    if (interactiveContent.actionReplyButton?.buttons) {
-      instagramButtons = convertUnifiedButtonsToInstagram(interactiveContent.actionReplyButton.buttons);
-    }
-    
-    // Log button conversion
-    instagramTranslationLogger.workerButtonsConverted(logContext, originalButtonCount, instagramButtons.length);
-  } catch (buttonError) {
-    logWithCorrelationId('warn', 'Error converting unified buttons, using empty array', correlationId, {
-      error: sanitizeErrorMessage(buttonError),
-    });
-    instagramButtons = [];
-  }
-
-  let fulfillmentMessages: DialogflowFulfillmentMessage[];
+  // Resolve variables (globais) antes de montar o payload
+  let resolvedInteractiveContent = JSON.parse(JSON.stringify(interactiveContent));
 
   try {
-    if (templateType === 'generic') {
-      // Use Generic Template for messages ≤80 characters
-      fulfillmentMessages = createInstagramGenericTemplate(
-        bodyText,
-        footerText, // subtitle
-        imageUrl, // image URL
-        instagramButtons
-      );
-    } else if (templateType === 'button') {
-      // Use Button Template for messages 81-640 characters
-      fulfillmentMessages = createInstagramButtonTemplate(
-        bodyText,
-        instagramButtons
-      );
-    } else {
-      // Use Quick Replies for messages >640 characters
-      fulfillmentMessages = createInstagramQuickReplies(
-        bodyText,
-        instagramButtons
-      );
+    // Tentar obter appUserId a partir do mapping
+    let appUserId: string | null = null;
+    if (messageMapping) {
+      appUserId = await getUserIdFromMessageMapping(messageMapping);
     }
-  } catch (templateError) {
-    throw createConversionFailedError(
-      `Failed to create Instagram template from interactive content: ${sanitizeErrorMessage(templateError)}`,
-      correlationId,
-      { templateType, bodyLength: bodyText.length }
-    );
-  }
 
-  // Validate the generated template
-  if (fulfillmentMessages.length > 0) {
-    const socialwiseResponse = fulfillmentMessages[0].payload?.socialwiseResponse;
-    const template = socialwiseResponse?.payload;
-    
-    if (template) {
-      const templateValidation = validateInstagramTemplate(template);
-      
-      // Log validation result
-      instagramTranslationLogger.workerValidationPerformed(logContext, 'unified_instagram_template', 
-        templateValidation.isValid, templateValidation.errors);
-      
-      if (!templateValidation.isValid) {
-        logWithCorrelationId('error', 'Generated Instagram template validation failed', correlationId, {
-          errors: templateValidation.errors,
-          template,
-          messageFormat: socialwiseResponse.message_format,
-        });
-        
-        throw createConversionFailedError(
-          `Generated unified template validation failed: ${templateValidation.errors.join(', ')}`,
-          correlationId,
-          { validationErrors: templateValidation.errors }
+    // Extrair personName do payload original (Dialogflow) se disponível
+    const personName = extractPersonNameFromPayload(context?.originalPayload);
+
+    // Instanciar resolvedor de variáveis
+    let resolver: WhatsAppVariablesResolver | null = null;
+    if (appUserId) {
+      resolver = WhatsAppVariablesResolver.fromUserId(appUserId, {
+        userId: appUserId,
+        inboxId: context?.inboxId,
+        contactPhone: context?.contactPhone,
+        correlationId,
+        personName,
+      });
+    } else if (context?.inboxId) {
+      resolver = await WhatsAppVariablesResolver.fromInboxId(context.inboxId, {
+        inboxId: context.inboxId,
+        contactPhone: context.contactPhone,
+        correlationId,
+        personName,
+      });
+    }
+
+    if (resolver) {
+      // Header (texto ou media URL)
+      if (resolvedInteractiveContent.header?.content) {
+        const resolvedHeader = await resolver.resolveText(
+          String(resolvedInteractiveContent.header.content)
+        );
+        resolvedInteractiveContent.header.content = resolvedHeader;
+      }
+
+      // Body
+      if (resolvedInteractiveContent.body?.text) {
+        resolvedInteractiveContent.body.text = await resolver.resolveText(
+          String(resolvedInteractiveContent.body.text)
         );
       }
+
+      // Footer
+      if (resolvedInteractiveContent.footer?.text) {
+        resolvedInteractiveContent.footer.text = await resolver.resolveText(
+          String(resolvedInteractiveContent.footer.text)
+        );
+      }
+
+      // Buttons (Reply Buttons)
+      const replyButtons = resolvedInteractiveContent?.actionReplyButton?.buttons;
+      if (Array.isArray(replyButtons)) {
+        resolvedInteractiveContent.actionReplyButton.buttons = await Promise.all(
+          replyButtons.map(async (btn: any) => {
+            const newBtn = { ...btn };
+            if (newBtn.title) {
+              newBtn.title = await resolver!.resolveText(String(newBtn.title));
+            } else if (newBtn.reply?.title) {
+              newBtn.reply = {
+                ...newBtn.reply,
+                title: await resolver!.resolveText(String(newBtn.reply.title)),
+              };
+            }
+            // Resolve URLs when variables are present
+            if (newBtn.url) {
+              newBtn.url = await resolver!.resolveText(String(newBtn.url));
+            }
+            return newBtn;
+          })
+        );
+      }
+
+      // CTA URL
+      if (resolvedInteractiveContent?.actionCtaUrl) {
+        const cta = resolvedInteractiveContent.actionCtaUrl;
+        if (cta.displayText) {
+          cta.displayText = await resolver.resolveText(String(cta.displayText));
+        }
+        if (cta.url) {
+          cta.url = await resolver.resolveText(String(cta.url));
+        }
+      }
     }
+  } catch (varError) {
+    console.warn('[Instagram Variables] Falha ao resolver variáveis para Instagram:', varError);
+    // Segue com conteúdo original se algo falhar
+    resolvedInteractiveContent = JSON.parse(JSON.stringify(interactiveContent));
   }
 
-  logWithCorrelationId('info', 'Interactive content converted successfully', correlationId, {
-    templateType,
-    bodyLength: bodyText.length,
-    buttonsCount: instagramButtons.length,
-    hasImage,
-  });
-
-  return fulfillmentMessages;
+  // Delegate to builder com conteúdo já resolvido
+  return await buildInstagramFromInteractiveContent(resolvedInteractiveContent, correlationId, logContext);
 }
 
 /**

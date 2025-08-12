@@ -27,7 +27,8 @@ export class IntentProcessor {
     contactPhone: string,
     wamid: string,
     correlationId: string,
-    extraContext?: { personName?: string }
+    extraContext?: { personName?: string },
+    options?: { disableFallback?: boolean }
   ): Promise<WorkerResponse> {
     const startTime = Date.now();
 
@@ -72,6 +73,20 @@ export class IntentProcessor {
             inboxId: sanitizedData.inboxId,
           }
         );
+
+        // Se chamado a partir de clique de botão com reações, podemos desabilitar o fallback
+        if (options?.disableFallback) {
+          const processingTime = Date.now() - startTime;
+          console.log(
+            `[Intent Processor] Fallback disabled by caller; skipping automatic reply for unmapped intent`,
+            { correlationId: sanitizedData.correlationId }
+          );
+          return {
+            success: true,
+            processingTime,
+            correlationId: sanitizedData.correlationId,
+          };
+        }
 
         // Fallback handling when no mapping is found
         return await this.handleNoMappingFallback(

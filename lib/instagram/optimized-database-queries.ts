@@ -296,7 +296,7 @@ export async function findOptimizedCompleteMessageMapping(
     }
 
     // Optimized mapping query with selective includes
-    const mapping = await prisma.mapeamentoIntencao.findUnique({
+    let mapping = await prisma.mapeamentoIntencao.findUnique({
       where: {
         intentName_inboxId: {
           intentName,
@@ -381,6 +381,61 @@ export async function findOptimizedCompleteMessageMapping(
         },
       },
     });
+
+    // Fallback: tentar busca case-insensitive se não encontrado (ex.: 'OAB' vs 'oab')
+    if (!mapping) {
+      console.log(`[Instagram DB] [DEBUG] No exact mapping found, trying case-insensitive match`, {
+        intentName,
+        inboxId: inboxIdString,
+      });
+      mapping = await prisma.mapeamentoIntencao.findFirst({
+        where: {
+          inboxId: chatwitInbox.id,
+          intentName: { equals: intentName, mode: 'insensitive' },
+        },
+        select: {
+          id: true,
+          intentName: true,
+          inboxId: true,
+          template: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              scope: true,
+              description: true,
+              language: true,
+              simpleReplyText: true,
+              interactiveContent: {
+                select: {
+                  id: true,
+                  header: { select: { type: true, content: true } },
+                  body: { select: { text: true } },
+                  footer: { select: { text: true } },
+                  actionCtaUrl: { select: { displayText: true, url: true } },
+                  actionReplyButton: { select: { buttons: true } },
+                  actionList: { select: { buttonText: true, sections: true } },
+                  actionFlow: { select: { flowId: true, flowCta: true, flowMode: true, flowData: true } },
+                  actionLocationRequest: { select: { requestText: true } },
+                },
+              },
+              whatsappOfficialInfo: {
+                select: {
+                  templateId: true,
+                  metaTemplateId: true,
+                  status: true,
+                  category: true,
+                  components: true,
+                  qualityScore: true,
+                },
+              },
+            },
+          },
+        },
+      });
+    }
+
+    // Importante: NÃO usar aproximação por prefixo para não confundir intents distintas (ex.: 'oab' ≠ 'oab - pix')
 
     const executionTime = Date.now() - startTime;
 

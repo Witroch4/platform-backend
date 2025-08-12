@@ -43,7 +43,6 @@ import type {
   InteractiveMessage,
   MessageHeader,
   HeaderType,
-  QuickReplyButton,
   ButtonReaction as CentralButtonReaction,
 } from "@/types/interactive-messages";
 import type {
@@ -51,42 +50,69 @@ import type {
   ButtonReaction as LocalButtonReaction,
 } from "../shared/ButtonManager";
 
-// Conversion functions between button types
-const convertQuickReplyToInteractive = (
-  button: QuickReplyButton
-): InteractiveButton => ({
-  id: button.id,
-  text: button.title,
-  type: "reply" as const,
-});
+// Conversion helpers between backend-stored buttons and UI InteractiveButton
+const convertBackendToInteractive = (button: any): InteractiveButton => {
+  const detectedType = (button?.type as any) || (button?.reply ? 'reply' : 'reply');
+  const id = button?.id || button?.reply?.id || `btn_${Math.random().toString(36).slice(2, 11)}`;
+  const title = button?.title || button?.reply?.title || button?.text || '';
+  if (detectedType === 'url') {
+    return { id, text: title, type: 'url', url: button?.url };
+  }
+  if (detectedType === 'phone_number') {
+    return { id, text: title, type: 'phone_number', phone_number: button?.phone_number };
+  }
+  return { id, text: title, type: 'reply' };
+};
 
-const convertInteractiveToQuickReply = (
-  button: InteractiveButton
-): QuickReplyButton => ({
-  id: button.id,
-  title: button.text,
-  payload: button.id,
-  // Include WhatsApp API structure for future compatibility
-  type: "reply",
-  reply: {
+const convertInteractiveToBackend = (button: InteractiveButton): any => {
+  if (button.type === 'url') {
+    return {
+      id: button.id,
+      type: 'url',
+      title: button.text,
+      url: button.url || '',
+    };
+  }
+  if (button.type === 'phone_number') {
+    return {
+      id: button.id,
+      type: 'phone_number',
+      title: button.text,
+      phone_number: button.phone_number || '',
+    };
+  }
+  // reply default
+  return {
     id: button.id,
     title: button.text,
-  },
-});
+    payload: button.id,
+    type: 'reply',
+    reply: {
+      id: button.id,
+      title: button.text,
+    },
+  };
+};
 
 // Conversion functions for ButtonReaction types
 const convertCentralToLocal = (
   reaction: CentralButtonReaction
-): LocalButtonReaction => ({
-  buttonId: reaction.buttonId,
-  reaction:
-    reaction.type === "emoji" || reaction.type === "text"
-      ? {
-          type: reaction.type,
-          value: reaction.type === "emoji" ? "😊" : "Default text", // Default values
-        }
-      : undefined,
-});
+): LocalButtonReaction => {
+  // Preferir valores reais quando vierem do backend
+  const value = reaction.type === 'emoji' 
+    ? (reaction.emoji || (reaction as any).emoji || '') 
+    : (reaction.textResponse || (reaction as any).textReaction || '');
+  return {
+    buttonId: reaction.buttonId,
+    reaction:
+      reaction.type === 'emoji' || reaction.type === 'text'
+        ? {
+            type: reaction.type,
+            value: value,
+          }
+        : undefined,
+  };
+};
 
 interface UnifiedEditingStepProps {
   message: InteractiveMessage;
@@ -101,6 +127,7 @@ interface UnifiedEditingStepProps {
   onBack: () => void;
   disabled?: boolean;
   className?: string;
+  inboxId?: string;
 }
 
 // Validation constants
@@ -124,6 +151,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
   onBack,
   disabled = false,
   className,
+  inboxId,
 }) => {
   const [reactionConfigButton, setReactionConfigButton] = useState<
     string | null
@@ -133,60 +161,88 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
   >(null);
 
   // State for managing uploaded media files
-  const [headerMediaFiles, setHeaderMediaFiles] = useState<MinIOMediaFile[]>(
-    message.header?.content
-      ? [
-          {
-            id: "header-media",
-            progress: 100,
-            status: "success",
-            url: message.header.content,
-            mime_type:
-              message.header?.type === "image"
-                ? "image/jpeg"
-                : message.header?.type === "video"
-                  ? "video/mp4"
-                  : "application/pdf",
-          },
-        ]
-      : []
-  );
+  const [headerMediaFiles, setHeaderMediaFiles] = useState<MinIOMediaFile[]>(() => {
+    const mediaUrl = message.header?.media_url || message.header?.mediaUrl || message.header?.content;
+    if (message.header && message.header.type !== "text" && mediaUrl) {
+      return [
+        {
+          id: "header-media",
+          progress: 100,
+          status: "success",
+          url: mediaUrl,
+          mime_type:
+            message.header.type === "image"
+              ? "image/jpeg"
+              : message.header.type === "video"
+                ? "video/mp4"
+                : "application/pdf",
+        },
+      ];
+    }
+    return [];
+  });
 
   // Use the new validation hook
   const {
     validationState,
+    validateMessage,
     validateField,
     isFieldValid,
     getFieldErrors,
     canProceed,
     handleValidationError,
+    clearValidation,
   } = useInteractiveMessageValidation(message, reactions, {
     enableRealTimeValidation: true,
     debounceMs: 300,
     validateOnMount: false,
   });
 
+  // Detect channel type of current inbox to decide button id prefix
+  const [channelType, setChannelType] = useState<string | null>(null);
+  useEffect(() => {
+    const fetchChannelType = async () => {
+      if (!inboxId) return;
+      try {
+        const resp = await fetch(`/api/admin/mtf-diamante/dialogflow/caixas`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const caixa = (data?.caixas || []).find((c: any) => c.id === inboxId);
+        if (caixa?.channelType) setChannelType(caixa.channelType);
+      } catch {
+        // ignore errors; fallback to no prefix
+      }
+    };
+    fetchChannelType();
+  }, [inboxId]);
+
+  const generatePrefixedId = useCallback((fallbackSuffix: string) => {
+    const prefix = channelType === 'Channel::Instagram' ? 'ig_' : '';
+    return `${prefix}btn_${fallbackSuffix}`;
+  }, [channelType]);
+
   // Update header media files when message header changes
   useEffect(() => {
-    if (message.header?.content && message.header.type !== "text") {
+    const mediaUrl = message.header?.media_url || message.header?.mediaUrl || message.header?.content;
+    if (message.header && message.header.type !== "text" && mediaUrl) {
       setHeaderMediaFiles([
         {
           id: "header-media",
           progress: 100,
           status: "success",
-          url: message.header.content,
+          url: mediaUrl,
           mime_type:
-            message.header?.type === "image"
+            message.header.type === "image"
               ? "image/jpeg"
-              : message.header?.type === "video"
+              : message.header.type === "video"
                 ? "video/mp4"
                 : "application/pdf",
         },
       ]);
-    } else if (!message.header?.content || message.header.type === "text") {
+    } else if (!mediaUrl || message.header?.type === "text") {
       setHeaderMediaFiles([]);
     }
-  }, [message.header?.content, message.header?.type]);
+  }, [message.header?.content, message.header?.media_url, message.header?.mediaUrl, message.header?.type]);
 
   // Garantir que o header exista como texto na primeira renderização
   useEffect(() => {
@@ -197,11 +253,41 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
 
   // Extract buttons from message action and convert to InteractiveButton format
   const buttons = useMemo(() => {
-    if (message.action?.type === "button") {
-      return (message.action.buttons || []).map(convertQuickReplyToInteractive);
+    // Coleta possíveis fontes de botões (compatibilidade com várias formas)
+    const candidates: any[] = [];
+    const fromAction = (message.action as any)?.buttons;
+    if (Array.isArray(fromAction)) candidates.push(...fromAction);
+
+    const fromContentAction = (message as any)?.content?.action?.buttons;
+    if (Array.isArray(fromContentAction)) candidates.push(...fromContentAction);
+
+    const fromReplyModel = (message as any)?.actionReplyButton?.buttons; // quando vier direto do Prisma include
+    if (Array.isArray(fromReplyModel)) candidates.push(...fromReplyModel);
+
+    const fromInteractiveContent = (message as any)?.interactiveContent?.actionReplyButton?.buttons;
+    if (Array.isArray(fromInteractiveContent)) candidates.push(...fromInteractiveContent);
+
+    const fromContentReplyModel = (message as any)?.content?.interactiveContent?.actionReplyButton?.buttons;
+    if (Array.isArray(fromContentReplyModel)) candidates.push(...fromContentReplyModel);
+
+    // Evitar duplicatas por id/title
+    const unique = new Map<string, any>();
+    for (const btn of candidates) {
+      const key = btn?.id || btn?.reply?.id || JSON.stringify(btn);
+      if (!unique.has(key)) unique.set(key, btn);
     }
-    return [];
-  }, [message.action]);
+
+    return Array.from(unique.values()).map((btn, idx) => {
+      const base: InteractiveButton = convertBackendToInteractive(btn);
+      if (!base.id) {
+        const uniqueSuffix = `${Date.now()}_${idx}_${Math.random()
+          .toString(36)
+          .slice(2, 6)}`;
+        return { ...base, id: generatePrefixedId(uniqueSuffix) };
+      }
+      return base;
+    });
+  }, [message.action, (message as any)?.content?.action, (message as any)?.actionReplyButton, (message as any)?.interactiveContent, generatePrefixedId]);
 
   // Helper function to get error messages from validation errors
   const getErrorMessages = useCallback(
@@ -256,9 +342,16 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
       try {
         if (!message.header) return;
 
+        // Se header é de texto e o conteúdo está vazio, remover header (opcional)
+        if (message.header.type === "text" && !content.trim()) {
+          onMessageUpdate({ header: undefined });
+          return;
+        }
+
         const updatedHeader: MessageHeader = {
           ...message.header,
           content,
+          // Sempre persistir também em media_url para compatibilidade
           ...(message.header.type !== "text" && { media_url: content }),
         };
         onMessageUpdate({ header: updatedHeader });
@@ -308,25 +401,119 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
     [onMessageUpdate, validateField, message, handleValidationError]
   );
 
+  // --- CTA URL handlers and flags ---
+  const isCtaUrl = useMemo(() => {
+    const a: any = message.action || {};
+    return message.type === 'cta_url' || a?.type === 'cta_url' || a?.name === 'cta_url';
+  }, [message.type, message.action]);
+
+  const currentCtaDisplay = useMemo(() => {
+    const a: any = message.action || {};
+    return a.action?.displayText || a.displayText || a.parameters?.display_text || '';
+  }, [message.action]);
+
+  const currentCtaUrl = useMemo(() => {
+    const a: any = message.action || {};
+    return a.action?.url || a.url || a.parameters?.url || '';
+  }, [message.action]);
+
+  const handleCtaDisplayChange = useCallback(
+    (value: string) => {
+      const url = currentCtaUrl || '';
+      const action: any = {
+        type: 'cta_url',
+        action: { displayText: value, url },
+        displayText: value,
+        url
+      };
+      onMessageUpdate({ type: 'cta_url' as any, action });
+      // Evita travar com erro antigo de action.buttons
+      clearValidation();
+    },
+    [onMessageUpdate, currentCtaUrl, clearValidation]
+  );
+
+  const handleCtaUrlChange = useCallback(
+    (value: string) => {
+      const text = currentCtaDisplay || '';
+      const action: any = {
+        type: 'cta_url',
+        action: { displayText: text, url: value },
+        displayText: text,
+        url: value
+      };
+      onMessageUpdate({ type: 'cta_url' as any, action });
+      // Evita travar com erro antigo de action.buttons
+      clearValidation();
+    },
+    [onMessageUpdate, currentCtaDisplay, clearValidation]
+  );
+
   const handleButtonsChange = useCallback(
     (newButtons: InteractiveButton[]) => {
       try {
-        // Convert InteractiveButton back to QuickReplyButton
-        const quickReplyButtons = newButtons.map(
-          convertInteractiveToQuickReply
-        );
+        const prefix = channelType === 'Channel::Instagram' ? 'ig_' : '';
+        const backendButtons = newButtons.map((btn, idx) => {
+          const needsPrefix = prefix && (!btn.id || !String(btn.id).startsWith(prefix));
+          const uniqueSuffix = `${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 6)}`;
+          const newId = needsPrefix ? `${prefix}${btn.id || `btn_${uniqueSuffix}`}` : btn.id || `btn_${uniqueSuffix}`;
+          const normalized: InteractiveButton = { ...btn, id: newId };
+          return convertInteractiveToBackend(normalized);
+        });
 
-        onMessageUpdate({
-          action: {
-            type: "button",
-            buttons: quickReplyButtons,
-          },
-        });
-        // Validate buttons immediately
-        validateField("action.buttons", quickReplyButtons, {
-          ...message,
-          action: { type: "button", buttons: quickReplyButtons },
-        });
+        // Determine if we should persist as CTA URL instead of Reply Buttons
+        const urlButtons = newButtons.filter((b) => b.type === 'url');
+        const phoneButtons = newButtons.filter((b) => b.type === 'phone_number');
+        const replyButtons = newButtons.filter((b) => b.type === 'reply');
+
+        if (urlButtons.length === 1 && phoneButtons.length === 0 && replyButtons.length === 0) {
+          const urlBtn = urlButtons[0];
+          const actionPayload: any = {
+            type: 'cta_url',
+            action: { displayText: urlBtn.text, url: urlBtn.url || '' },
+            displayText: urlBtn.text,
+            url: urlBtn.url || ''
+          };
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('[UnifiedEditingStep] Switching to CTA URL', actionPayload);
+          }
+          onMessageUpdate({
+            type: 'cta_url' as any,
+            action: actionPayload,
+          });
+          clearValidation();
+          // No field-level validation needed; full validation will run debounced
+        } else if (phoneButtons.length === 1 && urlButtons.length === 0 && replyButtons.length === 0) {
+          const phoneBtn = phoneButtons[0];
+          const telUrl = phoneBtn.phone_number ? `tel:${phoneBtn.phone_number}` : '';
+          const actionPayload: any = {
+            type: 'cta_url',
+            action: { displayText: phoneBtn.text, url: telUrl },
+            displayText: phoneBtn.text,
+            url: telUrl
+          };
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('[UnifiedEditingStep] Switching to CTA TEL', actionPayload);
+          }
+          onMessageUpdate({ type: 'cta_url' as any, action: actionPayload });
+          clearValidation();
+        } else {
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('[UnifiedEditingStep] Using Reply Buttons', backendButtons);
+          }
+          onMessageUpdate({
+            type: 'button' as any,
+            action: {
+              type: 'button',
+              buttons: backendButtons,
+            } as any,
+          });
+          // Validate buttons immediately
+          validateField('action.buttons', backendButtons, {
+            ...message,
+            action: { type: 'button', buttons: backendButtons },
+          });
+        }
       } catch (error) {
         handleValidationError(error);
       }
@@ -336,12 +523,20 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
 
   const handleReactionChange = useCallback(
     (reaction: LocalButtonReaction) => {
-      // Convert the local ButtonReaction to the central format
+      // Permitir coexistência: sempre enviar os dois campos conforme presentes
       const centralReaction: Partial<CentralButtonReaction> = {
         buttonId: reaction.buttonId,
-        type: (reaction.reaction?.type as any) || "emoji",
+        type: (reaction.reaction?.type as any) || 'emoji',
         isActive: true,
       };
+
+      if (reaction.reaction?.type === 'emoji') {
+        centralReaction.emoji = reaction.reaction.value;
+      }
+      if (reaction.reaction?.type === 'text') {
+        centralReaction.textResponse = reaction.reaction.value;
+      }
+
       onReactionUpdate(reaction.buttonId, centralReaction);
     },
     [onReactionUpdate]
@@ -355,13 +550,20 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
   );
 
   // Handle next step
-  const handleNext = useCallback(() => {
-    if (canProceed()) {
+  const handleNext = useCallback(async () => {
+    // Sanitizar header vazio (opcional) antes de validar
+    if (message.header?.type === "text" && !message.header.content?.trim()) {
+      onMessageUpdate({ header: undefined });
+    }
+
+    // Forçar uma validação síncrona imediata para evitar estado obsoleto do debounce
+    const immediate = await validateMessage({ ...message });
+    if (immediate.isValid && canProceed()) {
       onNext();
     } else {
       toast.error("Please fix validation errors before proceeding");
     }
-  }, [canProceed, onNext]);
+  }, [validateMessage, message, canProceed, onNext, onMessageUpdate]);
 
   // Instagram template type determination
   const getInstagramTemplateType = useCallback(() => {
@@ -394,6 +596,14 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
 
   // Check if form has errors
   const hasErrors = validationState.hasErrors || !canProceed();
+
+  // Normalize reactions from backend to always expose textResponse
+  const normalizedReactions = useMemo(() => {
+    return (reactions || []).map((r) => ({
+      ...r,
+      textResponse: (r as any).textResponse ?? (r as any).textReaction ?? undefined,
+    }));
+  }, [reactions]);
 
   // Function to resolve variables in text
   const resolveVariables = useCallback((text: string): string => {
@@ -847,7 +1057,13 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
           </Card>
 
           {/* Buttons Section - Only for button type messages */}
-          {message.type === "button" && (
+  {(
+    message.type === "button" ||
+    message.action?.type === "button" ||
+    Array.isArray((message.action as any)?.buttons) ||
+    Array.isArray((message as any)?.content?.action?.buttons) ||
+    buttons.length > 0
+  ) && (
             <Card>
               <CardHeader className="pb-4">
                 <CardTitle className="text-base">Interactive Buttons</CardTitle>
@@ -868,6 +1084,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
                   maxButtons={VALIDATION_LIMITS.BUTTON_MAX_COUNT}
                   disabled={disabled}
                   showReactionConfig={false} // We'll handle this separately
+                  idPrefix={channelType === 'Channel::Instagram' ? 'ig_' : undefined}
                 />
 
                 {!isFieldValid("action.buttons") && (
@@ -876,6 +1093,39 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
                     <span>{getErrorMessages("action.buttons")[0]}</span>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* CTA URL Section */}
+          {isCtaUrl && (
+            <Card>
+              <CardHeader className="pb-4">
+                <CardTitle className="text-base">CTA URL</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Configure o texto do botão e a URL do CTA
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium text-muted-foreground">Button Label</Label>
+                  <Input
+                    value={currentCtaDisplay}
+                    onChange={(e) => handleCtaDisplayChange(e.target.value)}
+                    placeholder="Ex.: Abrir link"
+                    disabled={disabled}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium text-muted-foreground">URL</Label>
+                  <Input
+                    value={currentCtaUrl}
+                    onChange={(e) => handleCtaUrlChange(e.target.value)}
+                    placeholder="https://exemplo.com ou tel:+5511999999999"
+                    disabled={disabled}
+                  />
+                </div>
               </CardContent>
             </Card>
           )}
@@ -894,18 +1144,23 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
               <CardContent>
                 <InteractivePreview
                   message={resolvedMessage}
-                  reactions={reactions}
+                  reactions={normalizedReactions}
                   showReactionIndicators={true}
                   showReactionConfig={true}
                   onButtonReactionChange={(buttonId, reaction) => {
-                    // Convert the reaction format to match the expected type
+                    // Permitir coexistência: atualizar seletivamente sem apagar o outro campo
                     const reactionUpdate: Partial<CentralButtonReaction> = {
                       buttonId,
-                      type: reaction.emoji ? "emoji" : "text",
-                      emoji: reaction.emoji,
-                      textResponse: reaction.textResponse,
                       isActive: true,
                     };
+                    if (typeof reaction.emoji === 'string') {
+                      reactionUpdate.type = 'emoji' as any;
+                      reactionUpdate.emoji = reaction.emoji;
+                    }
+                    if (typeof reaction.textResponse === 'string') {
+                      reactionUpdate.type = 'text' as any;
+                      reactionUpdate.textResponse = reaction.textResponse;
+                    }
                     onReactionUpdate(buttonId, reactionUpdate);
                   }}
                   debounceMs={300}

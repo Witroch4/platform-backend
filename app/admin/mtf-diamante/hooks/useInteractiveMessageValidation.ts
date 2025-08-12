@@ -110,6 +110,25 @@ export const useInteractiveMessageValidation = (
           errors: [...result.errors, ...reactionResult.errors],
           warnings: [...result.warnings, ...reactionResult.warnings]
         };
+        if (process.env.NODE_ENV !== 'production') {
+          // Log detalhado para depuração em desenvolvimento
+          // Não inclui conteúdo sensível, apenas estrutura básica
+          console.log('[Validation][debounced] result', {
+            isValid: combinedResult.isValid,
+            errors: combinedResult.errors,
+            warnings: combinedResult.warnings,
+            messageSummary: {
+              id: (messageToValidate as any)?.id,
+              name: messageToValidate.name,
+              type: messageToValidate.type,
+              bodyLen: messageToValidate.body?.text?.length ?? 0,
+              headerType: messageToValidate.header?.type,
+              hasHeader: !!messageToValidate.header,
+              hasFooter: !!messageToValidate.footer,
+              buttonsCount: Array.isArray((messageToValidate as any)?.action?.buttons) ? (messageToValidate as any).action.buttons.length : 0,
+            }
+          });
+        }
         
         setValidationState(prev => ({
           ...prev,
@@ -152,6 +171,23 @@ export const useInteractiveMessageValidation = (
         errors: [...result.errors, ...reactionResult.errors],
         warnings: [...result.warnings, ...reactionResult.warnings]
       };
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[Validation][immediate] result', {
+          isValid: combinedResult.isValid,
+          errors: combinedResult.errors,
+          warnings: combinedResult.warnings,
+          messageSummary: {
+            id: (messageToValidate as any)?.id,
+            name: messageToValidate.name,
+            type: messageToValidate.type,
+            bodyLen: messageToValidate.body?.text?.length ?? 0,
+            headerType: messageToValidate.header?.type,
+            hasHeader: !!messageToValidate.header,
+            hasFooter: !!messageToValidate.footer,
+            buttonsCount: Array.isArray((messageToValidate as any)?.action?.buttons) ? (messageToValidate as any).action.buttons.length : 0,
+          }
+        });
+      }
       
       setValidationState(prev => ({
         ...prev,
@@ -184,6 +220,9 @@ export const useInteractiveMessageValidation = (
   const validateField = useCallback((fieldName: string, value: any, messageToValidate: InteractiveMessage): FieldValidationResult => {
     try {
       const result = InteractiveMessageValidator.validateField(fieldName, value, messageToValidate, finalConfig.context);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[Validation][field]', { field: fieldName, isValid: result.isValid, errors: result.errors, warnings: result.warnings, valueSnapshot: value });
+      }
       
       setValidationState(prev => ({
         ...prev,
@@ -276,12 +315,20 @@ export const useInteractiveMessageValidation = (
 
   const canProceed = useCallback((): boolean => {
     // Check if there are any validation errors
-    if (validationState.hasErrors) return false;
+    if (validationState.hasErrors) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[Validation][canProceed] blocked by validationState.hasErrors', validationState);
+      }
+      return false;
+    }
     
     // Check field validations
     const hasFieldErrors = Object.values(validationState.fieldValidations).some(
       validation => !validation.isValid
     );
+    if (hasFieldErrors && process.env.NODE_ENV !== 'production') {
+      console.log('[Validation][canProceed] blocked by field validations', validationState.fieldValidations);
+    }
     
     return !hasFieldErrors;
   }, [validationState.hasErrors, validationState.fieldValidations]);

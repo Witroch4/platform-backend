@@ -91,6 +91,7 @@ rules:
   - rule: "voce já esta na pasta raiz do projeto"
   - rule: "voce deve usar os comandos em powershell do windows"
   - rule: "usar dialog do shadcn/ui no lugar de confirm()/alert() nativo do navegador para confirmação"
+  - rule: "erros de camino com "@" fora do escopo do next nao precisa corrigir"
 Exemplo de conteudo responsivo:
   Largura responsiva:
 Container do diálogo agora usa w-[96vw] sm:max-w-2xl, ocupando quase toda a largura em notebooks menores e respeitando um máximo em telas maiores.

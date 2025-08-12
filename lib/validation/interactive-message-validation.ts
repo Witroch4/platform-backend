@@ -264,8 +264,23 @@ export class InteractiveMessageValidator {
     const errors: ValidationError[] = [];
     const warnings: ValidationError[] = [];
 
+    // Set de IDs válidos de botões atualmente configurados
+    const validButtonIds = new Set(buttons.map(b => b.id));
+
     // Validate each reaction
     reactions.forEach((reaction, index) => {
+      // Se o botão não existe mais (usuário editou/remov eu), não bloquear a edição
+      if (!validButtonIds.has(reaction.buttonId)) {
+        warnings.push({
+          field: `reactions[${index}].buttonId`,
+          code: 'INVALID_BUTTON_REFERENCE',
+          message: `Reaction references non-existent button: ${reaction.buttonId}`,
+          value: reaction.buttonId,
+          severity: 'warning'
+        });
+        return; // não valida conteúdo dessa reação
+      }
+
       try {
         ButtonReactionSchema.parse(reaction);
       } catch (error) {
@@ -273,22 +288,11 @@ export class InteractiveMessageValidator {
           errors.push(...this.convertZodErrors(error, `reactions[${index}]`));
         }
       }
-
-      // Check if button exists
-      const buttonExists = buttons.some(b => b.id === reaction.buttonId);
-      if (!buttonExists) {
-        errors.push({
-          field: `reactions[${index}].buttonId`,
-          code: 'INVALID_BUTTON_REFERENCE',
-          message: `Reaction references non-existent button: ${reaction.buttonId}`,
-          value: reaction.buttonId,
-          severity: 'error'
-        });
-      }
     });
 
-    // Check for duplicate button reactions
-    const buttonIds = reactions.map(r => r.buttonId);
+    // Check for duplicate button reactions apenas entre reações que apontam para botões válidos
+    const filtered = reactions.filter(r => validButtonIds.has(r.buttonId));
+    const buttonIds = filtered.map(r => r.buttonId);
     const duplicates = buttonIds.filter((id, index) => buttonIds.indexOf(id) !== index);
     if (duplicates.length > 0) {
       errors.push({

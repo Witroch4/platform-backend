@@ -13,6 +13,7 @@ import {
   ErrorCategory,
   ErrorSeverity
 } from "@/lib/error-handling/interactive-message-errors";
+import { invalidateTemplateMappingCache } from "@/lib/cache/instagram-template-cache";
 
 // API-specific validation schemas (extending the base schemas)
 const ApiReactionSchema = z.object({
@@ -361,9 +362,15 @@ export async function POST(request: NextRequest) {
                 header: {
                   create: {
                     type: message.header.type,
-                    content: message.header.media_url || message.header.text || ""
-                  }
-                }
+                    // Suporta ambos formatos: content (texto) e media_url (mídia)
+                    content:
+                      message.header.content ||
+                      message.header.media_url ||
+                      (message as any).header?.mediaUrl ||
+                      message.header.text ||
+                      "",
+                  },
+                },
               }),
               ...(message.footer && {
                 footer: {
@@ -597,8 +604,10 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    // Reações no fluxo unificado vêm como { buttonId, reaction: { type, value } }
+    // Usamos o mesmo schema do POST para evitar 400 indevido
     const reactionsValidation = z
-      .array(ButtonReactionSchema)
+      .array(ApiButtonReactionSchema)
       .safeParse(reactions || []);
     if (!reactionsValidation.success) {
       return NextResponse.json(
@@ -618,6 +627,7 @@ export async function PUT(request: NextRequest) {
         type: "INTERACTIVE_MESSAGE",
       },
       include: {
+        inbox: { select: { usuarioChatwitId: true } },
         interactiveContent: {
           include: {
             header: true,
@@ -804,38 +814,42 @@ export async function PUT(request: NextRequest) {
         const templateInboxId = existingMessage.inboxId;
         
         if (templateInboxId) {
-          // Remove existing reactions for this inbox and buttonIds related to this message
-          // Note: We need a better way to associate reactions with specific templates
-          // For now, we'll delete by buttonId pattern or add a templateId field to MapeamentoBotao
-          await tx.mapeamentoBotao.deleteMany({
-            where: { 
-              inboxId: templateInboxId,
-              // We might need to add a templateId field to properly associate reactions
-            },
-          });
+      // Limpar apenas reações dos botões presentes no payload de reactions
+      const incomingButtonIds = Array.from(new Set(
+        (reactions || []).map((r: any) => r?.buttonId).filter(Boolean)
+      ));
 
-          // Create new reactions
-          for (const reactionData of reactions) {
-            if (reactionData.reaction) {
-              const actionPayload = {
-                emoji: reactionData.reaction.type === 'emoji' ? reactionData.reaction.value : null,
-                textReaction: reactionData.reaction.type === 'text' ? reactionData.reaction.value : null,
-              };
-              
-              const savedReaction = await tx.mapeamentoBotao.create({
-                data: {
-                  buttonId: reactionData.buttonId,
-                  inboxId: templateInboxId, // Use the ChatwitInbox id
-                  actionType: 'SEND_TEMPLATE',
-                  actionPayload,
-                  description:
-                    reactionData.reaction.type === "text"
-                      ? reactionData.reaction.value
-                      : null,
-                },
-              });
-              updatedReactions.push(savedReaction);
-            }
+      if (incomingButtonIds.length > 0) {
+        await tx.mapeamentoBotao.deleteMany({
+          where: {
+            inboxId: templateInboxId,
+            buttonId: { in: incomingButtonIds },
+          },
+        });
+      }
+
+          // Group incoming reactions by buttonId to support emoji + text coexistence
+          const grouped = new Map<string, { emoji?: string | null; textReaction?: string | null }>();
+          for (const r of reactions) {
+            if (!r?.reaction) continue;
+            const current = grouped.get(r.buttonId) || { emoji: null, textReaction: null };
+            if (r.reaction.type === 'emoji') current.emoji = r.reaction.value;
+            if (r.reaction.type === 'text') current.textReaction = r.reaction.value;
+            grouped.set(r.buttonId, current);
+          }
+
+          // Create one mapping per buttonId with merged payload
+          for (const [buttonId, payload] of grouped.entries()) {
+            const savedReaction = await tx.mapeamentoBotao.create({
+              data: {
+                buttonId,
+                inboxId: templateInboxId, // Use the ChatwitInbox id
+                actionType: 'SEND_TEMPLATE',
+                actionPayload: payload,
+                description: payload.textReaction || null,
+              },
+            });
+            updatedReactions.push(savedReaction);
           }
         }
       }
@@ -845,6 +859,27 @@ export async function PUT(request: NextRequest) {
         reactions: updatedReactions,
       };
     });
+
+    // Invalidação de cache do Instagram para intents vinculadas a este template/inbox
+    try {
+      const inboxId = existingMessage.inboxId;
+      const usuarioChatwitId = existingMessage.inbox?.usuarioChatwitId;
+
+      if (inboxId && usuarioChatwitId) {
+        // Buscar intents que apontam para este template nesta inbox
+        const mappedIntents = await getPrismaInstance().mapeamentoIntencao.findMany({
+          where: { templateId: messageId, inboxId },
+          select: { intentName: true },
+        });
+
+        for (const mi of mappedIntents) {
+          await invalidateTemplateMappingCache(mi.intentName, usuarioChatwitId, inboxId);
+        }
+      }
+    } catch (cacheError) {
+      console.warn("[MessagesWithReactions][PUT] Cache invalidation failed", cacheError);
+      // Não falhar a requisição por causa de cache
+    }
 
     // Format response
     const formattedMessage = formatMessage(result.message);

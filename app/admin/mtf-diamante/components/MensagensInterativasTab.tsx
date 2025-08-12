@@ -22,6 +22,7 @@ import {
   TrashIcon,
   PencilIcon,
   Upload,
+    Download,
   Eye,
   Save,
   Plus,
@@ -39,6 +40,17 @@ import { ButtonManager } from "./shared/ButtonManager";
 import InteractiveMessageCreator from "./InteractiveMessageCreator";
 import type { InteractiveMessageType } from "./interactive-message-creator/types";
 import { InteractiveMessageTypeSelector } from "./InteractiveMessageTypeSelector";
+  import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+  } from "@/components/ui/dialog";
+  import { ScrollArea } from "@/components/ui/scroll-area";
+  import { Label } from "@/components/ui/label";
+  import { Checkbox } from "@/components/ui/checkbox";
 
 interface MensagensInterativasTabProps {
   caixaId: string;
@@ -67,6 +79,19 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Import/Export state
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [parsedMessages, setParsedMessages] = useState<any[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [selectAll, setSelectAll] = useState(false);
+  const [selectedIndexes, setSelectedIndexes] = useState<Set<number>>(new Set());
+
+  // Delete confirmation dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [inboxChannelType, setInboxChannelType] = useState<string | null>(null);
+
   const fetchMensagens = async () => {
     if (!caixaId) return;
     try {
@@ -88,39 +113,63 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
     fetchMensagens();
   }, [caixaId]);
 
-  const handleEdit = (msg: Mensagem) => {
-    // Convert old format to new format
-    const convertedMessage = {
+  const handleEdit = (msg: any) => {
+    // Detect type from msg (API provides msg.type and msg.content?.type)
+    const detectedType = (msg?.type || msg?.content?.type || 'button') as InteractiveMessageType;
+
+    // Base fields
+    const base: any = {
       id: msg.id,
       name: msg.nome,
-      type: "button" as InteractiveMessageType,
+      type: detectedType,
       body: { text: msg.texto },
       header: msg.headerTipo
         ? {
-            type: msg.headerTipo === "text" ? "text" : msg.headerTipo,
-            text: msg.headerTipo === "text" ? msg.headerConteudo : undefined,
-            media_url:
-              msg.headerTipo !== "text" ? msg.headerConteudo : undefined,
+            type: msg.headerTipo === 'text' ? 'text' : msg.headerTipo,
+            // Para header de texto, usamos 'content' (padrão do editor)
+            content: msg.headerTipo === 'text' ? (msg.headerConteudo || '') : undefined,
+            // Para header de mídia, mantemos media_url
+            media_url: msg.headerTipo !== 'text' ? (msg.headerConteudo || '') : undefined,
           }
         : undefined,
       footer: msg.rodape ? { text: msg.rodape } : undefined,
-      action:
-        msg.botoes.length > 0
-          ? {
-              buttons: msg.botoes.map((b) => ({
-                id: b.id || `btn_${Date.now()}`,
-                title: b.titulo,
-              })),
-            }
-          : undefined,
     };
+
+    // Map action depending on type
+    if (detectedType === 'cta_url') {
+      const actionData = msg?.content?.action || {};
+      base.action = {
+        type: 'cta_url',
+        action: {
+          displayText: actionData.displayText || actionData.display_text || actionData.cta_text || '',
+          url: actionData.url || actionData.cta_url || '',
+        },
+        displayText: actionData.displayText || actionData.display_text || actionData.cta_text || '',
+        url: actionData.url || actionData.cta_url || '',
+      };
+    } else if ((msg.botoes && msg.botoes.length > 0) || Array.isArray(msg?.content?.action?.buttons)) {
+      const buttonsSrc = Array.isArray(msg?.content?.action?.buttons) ? msg.content.action.buttons : msg.botoes;
+      base.action = {
+        type: 'button' as const,
+        buttons: (buttonsSrc || []).map((b: any) => ({
+          id: b.id || b?.reply?.id || `btn_${Date.now()}`,
+          title: b.title || b?.reply?.title || b.titulo || '',
+          type: (b.type as any) || 'reply',
+          reply:
+            b.reply || (b.title || b.titulo ? { id: b.id || `btn_${Date.now()}`, title: b.title || b.titulo } : undefined),
+          payload: b.payload || (b.id || b?.reply?.id),
+          url: b.url,
+        })),
+      };
+    }
+
+    const convertedMessage = base;
 
     setEditingMessage(convertedMessage);
     setCurrentView("edit");
   };
 
   const handleDelete = async (mensagemId: string) => {
-    if (!confirm("Tem certeza que deseja excluir esta mensagem?")) return;
     try {
       const response = await fetch(
         `/api/admin/mtf-diamante/interactive-messages/${mensagemId}`,
@@ -134,6 +183,226 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
       fetchMensagens();
     } catch (error) {
       toast.error((error as Error).message);
+    }
+  };
+
+  const openDeleteDialog = (mensagemId: string) => {
+    setPendingDeleteId(mensagemId);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDeleteId) return;
+    await handleDelete(pendingDeleteId);
+    setDeleteDialogOpen(false);
+    setPendingDeleteId(null);
+  };
+
+  // -------- Export / Import --------
+  const mapMensagemToPayload = (msg: Mensagem) => {
+    const header = msg.headerTipo
+      ? {
+          type: msg.headerTipo === "text" ? "text" : msg.headerTipo,
+          content:
+            msg.headerTipo === "text" ? (msg.headerConteudo || "") : (msg.headerConteudo || ""),
+          media_url:
+            msg.headerTipo !== "text" ? (msg.headerConteudo || "") : undefined,
+        }
+      : undefined;
+
+    const action = (msg.botoes && msg.botoes.length > 0)
+      ? { buttons: msg.botoes.map((b) => ({ id: b.id || `btn_${Date.now()}`, title: (b as any).title || b.titulo || "" })) }
+      : undefined;
+
+    return {
+      name: msg.nome,
+      type: action ? "button" : "button", // mantemos como button na exportação atual
+      header,
+      body: { text: msg.texto || "" },
+      footer: msg.rodape ? { text: msg.rodape } : undefined,
+      action,
+      originalId: msg.id,
+    };
+  };
+
+  const handleExportAll = () => {
+    try {
+      const payload = mensagens.map(mapMensagemToPayload);
+      const data = { inboxId: caixaId, messages: payload };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const date = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+      a.download = `interactive-messages_${caixaId}_${date}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Exportação concluída.");
+    } catch (e) {
+      toast.error("Falha ao exportar mensagens.");
+    }
+  };
+
+  const handleImportFileChange = async (file: File | null) => {
+    setImportError(null);
+    setParsedMessages([]);
+    setSelectedIndexes(new Set());
+    setSelectAll(false);
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      const messages = Array.isArray(json)
+        ? json
+        : Array.isArray(json.messages)
+          ? json.messages
+          : [];
+      if (!Array.isArray(messages) || messages.length === 0) {
+        setImportError("Arquivo não contém mensagens válidas.");
+        return;
+      }
+      // validações mínimas
+      const valid = messages.filter((m: any) => m && typeof m.name === "string" && m.body && typeof m.body.text === "string");
+      if (valid.length === 0) {
+        setImportError("Nenhuma mensagem válida encontrada no arquivo.");
+        return;
+      }
+      setParsedMessages(valid);
+      setSelectedIndexes(new Set(valid.map((_, i) => i)));
+      setSelectAll(true);
+    } catch (err: any) {
+      setImportError("Falha ao ler/parsear o arquivo JSON.");
+    }
+  };
+
+  const handleToggleSelectAll = (checked: boolean) => {
+    setSelectAll(checked);
+    if (checked) {
+      setSelectedIndexes(new Set(parsedMessages.map((_, i) => i)));
+    } else {
+      setSelectedIndexes(new Set());
+    }
+  };
+
+  const handleToggleIndex = (index: number, checked: boolean) => {
+    setSelectedIndexes((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(index);
+      else next.delete(index);
+      setSelectAll(next.size === parsedMessages.length && parsedMessages.length > 0);
+      return next;
+    });
+  };
+
+  const normalizeImportedMessage = (m: any) => {
+    // Garante compatibilidade com o POST /interactive-messages
+    const header = m.header || m.content?.header;
+    const body = m.body || m.content?.body;
+    const footer = m.footer || m.content?.footer;
+    const action = m.action || m.content?.action;
+    const type = m.type || m.content?.type || (action?.buttons ? "button" : "button");
+    return {
+      name: m.name || m.nome || "",
+      type,
+      header: header
+        ? {
+            type: header.type,
+            content: header.text || header.content || header.media_url || "",
+            media_url: header.media_url,
+          }
+        : undefined,
+      body: { text: body?.text || "" },
+      footer: footer ? { text: footer.text || "" } : undefined,
+      action: action ? { ...action } : undefined,
+    };
+  };
+
+  const regenerateButtonIds = (action: any, prefix: string) => {
+    if (!action || !Array.isArray(action.buttons)) return action;
+    const now = Date.now();
+    const newButtons = action.buttons.map((btn: any, idx: number) => {
+      const base = `${prefix}btn_${now}_${idx}_${Math.random().toString(36).slice(2, 6)}`;
+      const newId = base;
+      return {
+        ...btn,
+        id: newId,
+        reply: btn.reply ? { ...btn.reply, id: newId, title: btn.reply.title || btn.title || btn.titulo || "" } : undefined,
+        payload: newId,
+      };
+    });
+    return { ...action, buttons: newButtons };
+  };
+
+  const fetchInboxChannelType = async (): Promise<string | null> => {
+    try {
+      // Busca todas as caixas do usuário e encontra a atual
+      const resp = await fetch(`/api/admin/mtf-diamante/dialogflow/caixas`);
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      const caixa = (data?.caixas || []).find((c: any) => c.id === caixaId);
+      return caixa?.channelType || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const handleImportNow = async () => {
+    if (!caixaId) {
+      toast.error("Caixa inválida para importação.");
+      return;
+    }
+    if (parsedMessages.length === 0) {
+      toast.error("Selecione um arquivo com mensagens válidas.");
+      return;
+    }
+    const selected = parsedMessages.filter((_, idx) => selectedIndexes.has(idx));
+    if (selected.length === 0) {
+      toast.error("Nenhuma mensagem selecionada para importação.");
+      return;
+    }
+    setImporting(true);
+    try {
+      // Descobrir o channelType da inbox alvo
+      const channelType = inboxChannelType || (await fetchInboxChannelType());
+      if (channelType && channelType !== inboxChannelType) setInboxChannelType(channelType);
+      const prefix = channelType === 'Channel::Instagram' ? 'ig_' : '';
+
+      const results = await Promise.allSettled(
+        selected.map(async (m) => {
+          const message = normalizeImportedMessage(m);
+          // Regenerar IDs dos botões quando tipo for button
+          if (message.type === 'button' && message.action?.buttons?.length) {
+            message.action = regenerateButtonIds(message.action, prefix);
+          }
+          const resp = await fetch(`/api/admin/mtf-diamante/interactive-messages`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ caixaId, message }),
+          });
+          if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.error || `Falha ao importar: ${message.name}`);
+          }
+          return resp.json();
+        })
+      );
+
+      const successes = results.filter((r) => r.status === "fulfilled").length;
+      const failures = results.filter((r) => r.status === "rejected").length;
+      if (failures === 0) {
+        toast.success(`Importação concluída (${successes}).`);
+      } else {
+        toast.error(`Importação parcial: ${successes} sucesso(s), ${failures} falha(s).`);
+      }
+      setImportDialogOpen(false);
+      setParsedMessages([]);
+      await fetchMensagens();
+    } catch (e: any) {
+      toast.error(e.message || "Erro na importação.");
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -201,12 +470,28 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
             </p>
           </div>
         </div>
-        <Button
-          onClick={() => setCurrentView("create")}
-          className="bg-primary text-primary-foreground hover:bg-primary/90"
-        >
-          <Plus className="h-4 w-4 mr-2" /> Nova Mensagem Interativa
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={handleExportAll}
+            variant="outline"
+            className="gap-2"
+          >
+            <Download className="h-4 w-4" /> Exportar JSON
+          </Button>
+          <Button
+            onClick={() => setImportDialogOpen(true)}
+            variant="outline"
+            className="gap-2"
+          >
+            <Upload className="h-4 w-4" /> Importar JSON
+          </Button>
+          <Button
+            onClick={() => setCurrentView("create")}
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            <Plus className="h-4 w-4 mr-2" /> Nova Mensagem Interativa
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -273,7 +558,7 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => handleDelete(msg.id)}
+                    onClick={() => openDeleteDialog(msg.id)}
                     title="Excluir mensagem"
                     className="hover:bg-destructive/10 hover:text-destructive"
                   >
@@ -305,6 +590,95 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Import Dialog */}
+      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <DialogContent className="w-[96vw] sm:max-w-2xl max-h-[85vh]">
+          <DialogHeader>
+            <DialogTitle>Importar mensagens interativas</DialogTitle>
+            <DialogDescription>
+              Selecione um arquivo JSON exportado anteriormente para importar as mensagens neste inbox.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="jsonFile">Arquivo JSON</Label>
+              <Input
+                id="jsonFile"
+                type="file"
+                accept="application/json"
+                onChange={(e) => handleImportFileChange(e.target.files?.[0] || null)}
+                disabled={importing}
+              />
+            </div>
+            {importError && (
+              <div className="text-sm text-destructive">{importError}</div>
+            )}
+            {parsedMessages.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-sm text-muted-foreground">
+                    {selectedIndexes.size}/{parsedMessages.length} selecionada(s)
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Checkbox id="selectAll"
+                      checked={selectAll}
+                      onCheckedChange={(c) => handleToggleSelectAll(Boolean(c))}
+                    />
+                    <Label htmlFor="selectAll" className="text-sm">Selecionar todas</Label>
+                  </div>
+                </div>
+                <ScrollArea className="h-[58vh] sm:h-[62vh] border rounded-md p-3">
+                  <div className="space-y-2">
+                    {parsedMessages.map((m, idx) => {
+                      const checked = selectedIndexes.has(idx);
+                      return (
+                        <div key={idx} className="border border-border rounded p-2 flex gap-3">
+                          <div className="pt-1">
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={(c) => handleToggleIndex(idx, Boolean(c))}
+                              aria-label={`Selecionar mensagem ${idx + 1}`}
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium truncate">{m.name || m.nome || `Mensagem ${idx + 1}`}</div>
+                            <div className="text-xs text-muted-foreground line-clamp-2">
+                              {(m.body?.text || m.content?.body?.text || "").slice(0, 220)}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setImportDialogOpen(false)} disabled={importing}>Cancelar</Button>
+            <Button onClick={handleImportNow} disabled={importing || parsedMessages.length === 0 || selectedIndexes.size === 0} className="gap-2">
+              <Upload className="h-4 w-4" /> {importing ? "Importando..." : "Importar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirmar exclusão</DialogTitle>
+            <DialogDescription>
+              Esta ação não pode ser desfeita. Tem certeza que deseja excluir a mensagem selecionada?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Cancelar</Button>
+            <Button variant="destructive" onClick={confirmDelete}>Excluir</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

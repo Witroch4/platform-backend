@@ -65,7 +65,8 @@ export async function processRespostaRapidaTask(
         data.credentials,
         data.contactPhone,
         data.wamid,
-        data.correlationId
+        data.correlationId,
+        data.intentName // optional: allow template dispatch when mapped
       );
     } else {
       throw new Error(`Unknown interaction type: ${data.interactionType}`);

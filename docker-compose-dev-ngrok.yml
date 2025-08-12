@@ -18,8 +18,7 @@ services:
       REDIS_HOST: "redis"
       REDIS_PORT: "6379"
 
-      # Ngrok (se ainda quiser no app)
-      NGROK_AUTHTOKEN: "2q8n28IDz0mMwNr02MlHnLGsbKE_6ohF5ifRMgFBW867Mk5Zi"
+      # Ngrok (não iniciar dentro do app; token vem via env_file se necessário)
     ports:
       - "3000:3000"
       - "3005:3005" # Bull Board
@@ -121,9 +120,9 @@ services:
   ngrok:
     image: ngrok/ngrok:latest
     container_name: chatwit_ngrok
-    environment:
-      NGROK_AUTHTOKEN: "2q8n28IDz0mMwNr02MlHnLGsbKE_6ohF5ifRMgFBW867Mk5Zi"
-    command: http app:3000 --url=beagle-great-awfully.ngrok-free.app
+    env_file:
+      - .env.development.ngrok
+    command: http app:3000 --url=moved-chigger-randomly.ngrok-free.app
     ports:
       - "4040:4040"  # Interface web do ngrok
     networks:

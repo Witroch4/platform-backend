@@ -1,7 +1,11 @@
 "use client";
 
 import type React from "react";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+
+// Simple in-flight and data cache to avoid duplicate fetches (StrictMode dev mounts)
+const reactionsRequestCache = new Map<string, Promise<any[]>>();
+const reactionsDataCache = new Map<string, any[]>();
 
 import { toast } from "sonner";
 import { useVariableManager } from "@/hooks/useVariableManager";
@@ -36,6 +40,7 @@ export const InteractiveMessageCreator: React.FC<
 > = ({ inboxId, onSave, editingMessage }) => {
 
   const { variables, loading: variablesLoading } = useVariableManager();
+  const reactionsLoadedRef = useRef(false);
 
   // Initialize state with proper defaults
   const [state, setState] = useState<InteractiveMessageState>({
@@ -52,6 +57,47 @@ export const InteractiveMessageCreator: React.FC<
     errors: {},
   });
 
+  // Load existing reactions for editing mode (API espera inboxId no parâmetro messageId)
+  const loadExistingReactions = useCallback(async (messageId?: string) => {
+    const targetId = inboxId || messageId;
+    if (!targetId) return;
+
+    try {
+      // Use cached data if available
+      if (reactionsDataCache.has(targetId)) {
+        const cached = reactionsDataCache.get(targetId)!;
+        setState(prev => ({ ...prev, reactions: cached }));
+        reactionsLoadedRef.current = true;
+        return;
+      }
+
+      // Deduplicate concurrent/in-flight requests
+      let request = reactionsRequestCache.get(targetId);
+      if (!request) {
+        request = (async () => {
+          const resp = await fetch(`/api/admin/mtf-diamante/button-reactions?messageId=${targetId}`);
+          if (!resp.ok) return [] as any[];
+          const data = await resp.json();
+          const list = data.reactions || [];
+          // Normalizar para sempre expor textResponse (compat com API que retorna textReaction)
+          const normalized = list.map((r: any) => ({
+            ...r,
+            textResponse: r?.textResponse ?? r?.textReaction ?? undefined,
+          }));
+          reactionsDataCache.set(targetId, normalized);
+          return normalized;
+        })();
+        reactionsRequestCache.set(targetId, request);
+      }
+
+      const list = await request;
+      setState(prev => ({ ...prev, reactions: list }));
+      reactionsLoadedRef.current = true;
+    } catch (error) {
+      console.error('Failed to load existing reactions:', error);
+    }
+  }, [inboxId]);
+
   // Load existing message data when editing
   useEffect(() => {
     if (editingMessage) {
@@ -61,10 +107,10 @@ export const InteractiveMessageCreator: React.FC<
         message: { ...editingMessage },
       }));
       
-      // Load existing reactions if available
+      // Load existing reactions if available (prefer inboxId/caixaId)
       loadExistingReactions(editingMessage.id);
     }
-  }, [editingMessage]);
+  }, [editingMessage, loadExistingReactions]);
 
   // Auto-populate footer with company name if available
   useEffect(() => {
@@ -96,22 +142,7 @@ export const InteractiveMessageCreator: React.FC<
     }
   }, [state.uploadedFiles, state.message.header?.type]);
 
-  // Load existing reactions for editing mode
-  const loadExistingReactions = useCallback(async (messageId?: string) => {
-    if (!messageId) return;
-
-    try {
-      const response = await fetch(`/api/admin/mtf-diamante/button-reactions?messageId=${messageId}`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.reactions) {
-          setState(prev => ({ ...prev, reactions: data.reactions }));
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load existing reactions:', error);
-    }
-  }, []);
+  
 
   // Unified state update functions
   const updateMessage = useCallback((updates: Partial<InteractiveMessage>) => {
@@ -239,12 +270,19 @@ export const InteractiveMessageCreator: React.FC<
 
   const reviewProps = useMemo(() => ({
     message: state.message,
-    reactions: state.reactions.map(r => ({
-      buttonId: r.buttonId,
-      reaction: r.type === 'emoji'
-        ? { type: 'emoji' as const, value: r.emoji || '' }
-        : { type: 'text' as const, value: r.textResponse || '' }
-    })),
+    reactions: state.reactions.flatMap(r => {
+      const out: Array<{ buttonId: string; reaction: { type: 'emoji' | 'text'; value: string } }> = []
+      if (r.emoji) out.push({ buttonId: r.buttonId, reaction: { type: 'emoji', value: r.emoji } })
+      // Considerar tanto textResponse (modelo interno) quanto textReaction (retorno da API)
+      const textVal: any = (r as any).textResponse ?? (r as any).textReaction
+      if (typeof textVal === 'string' && textVal.length > 0) {
+        out.push({ buttonId: r.buttonId, reaction: { type: 'text', value: textVal } })
+      }
+      if (out.length === 0 && r.type) {
+        out.push({ buttonId: r.buttonId, reaction: { type: r.type, value: r.type === 'emoji' ? (r.emoji || '') : ((r as any).textResponse ?? (r as any).textReaction ?? '') } })
+      }
+      return out
+    }),
     inboxId,
     onSave: handleSave,
     onBack: handleBackToConfiguration,
@@ -269,7 +307,7 @@ export const InteractiveMessageCreator: React.FC<
       )}
       
       {state.currentStep === "configuration" && (
-        <UnifiedEditingStep {...unifiedEditingProps} />
+        <UnifiedEditingStep {...unifiedEditingProps} inboxId={inboxId} />
       )}
       
       {state.currentStep === "preview" && (

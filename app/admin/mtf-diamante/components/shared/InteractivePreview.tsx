@@ -97,10 +97,17 @@ export function InteractivePreview({
       : "/fundo_whatsapp.jpg";
   }, [theme]);
 
-  // Get reaction for a button
+  // Get reaction for a button (merge multiple entries per buttonId)
   const getButtonReaction = useCallback(
     (buttonId: string) => {
-      return reactions.find((r) => r.buttonId === buttonId);
+      const entries = reactions.filter((r) => r.buttonId === buttonId);
+      if (entries.length === 0) return undefined as any;
+      const merged: any = { buttonId };
+      for (const r of entries) {
+        if (r.emoji) merged.emoji = r.emoji;
+        if (r.textResponse) merged.textResponse = r.textResponse;
+      }
+      return merged as any;
     },
     [reactions]
   );
@@ -112,6 +119,19 @@ export function InteractivePreview({
     }
     return debouncedMessage.action.buttons || [];
   }, [debouncedMessage.action]);
+
+  // CTA URL preview support
+  const ctaUrl = useMemo(() => {
+    const action: any = debouncedMessage.action || {};
+    const isCta = debouncedMessage.type === 'cta_url' || action?.type === 'cta_url' || action?.name === 'cta_url';
+    if (!isCta) return null as any;
+    const displayText = action.action?.displayText || action.displayText || action.parameters?.display_text || action?.cta_text || 'Abrir link';
+    const url = action.action?.url || action.url || action.parameters?.url || action?.cta_url || '';
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[InteractivePreview] CTA detected', { messageType: debouncedMessage.type, action });
+    }
+    return { displayText, url } as { displayText: string; url: string };
+  }, [debouncedMessage.type, debouncedMessage.action]);
 
   // Handle button click in preview mode
   const handleButtonClick = useCallback(
@@ -156,8 +176,8 @@ export function InteractivePreview({
         setShowEmojiPicker(null);
         setShowTextEditor(buttonId);
       } else {
-        // Configure emoji
-        onButtonReactionChange?.(buttonId, { emoji, textResponse: "" });
+        // Configure emoji (não apaga texto existente)
+        onButtonReactionChange?.(buttonId, { emoji });
         setShowEmojiPicker(null);
         toast.success(`Emoji ${emoji} configurado para o botão`);
       }
@@ -168,7 +188,8 @@ export function InteractivePreview({
   // Handle text response save
   const handleTextResponseSave = useCallback(
     (buttonId: string, text: string) => {
-      onButtonReactionChange?.(buttonId, { emoji: "", textResponse: text });
+      // Configure texto (não apaga emoji existente)
+      onButtonReactionChange?.(buttonId, { textResponse: text });
       setShowTextEditor(null);
       toast.success("Resposta de texto configurada para o botão");
     },
@@ -344,8 +365,27 @@ export function InteractivePreview({
               />
             )}
 
+            {/* CTA URL */}
+            {ctaUrl && (
+              <div className="mt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (ctaUrl.url) window.open(ctaUrl.url, '_blank', 'noopener');
+                  }}
+                  className={cn(
+                    "w-full p-2 text-sm border rounded transition-colors text-left",
+                    "text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800",
+                    "hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                  )}
+                >
+                  <span>{ctaUrl.displayText || 'Abrir link'}</span>
+                </button>
+              </div>
+            )}
+
             {/* Buttons */}
-            {buttons.length > 0 && (
+            {!ctaUrl && buttons.length > 0 && (
               <div className="mt-3 space-y-1">
                 {/* Quando houver mais de 3 botões, exibir 2 + "Ver todas as opções" */}
                 {buttons.length > 3 ? (
@@ -378,9 +418,14 @@ export function InteractivePreview({
                                 {reaction?.emoji && (
                                   <span className="text-lg">{reaction.emoji}</span>
                                 )}
-                                {hasReaction && (
+                                {reaction?.emoji && (
                                   <Badge variant="secondary" className="text-xs">
-                                    {reaction?.emoji ? "Emoji" : "Texto"}
+                                    Emoji
+                                  </Badge>
+                                )}
+                                {reaction?.textResponse && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    Texto
                                   </Badge>
                                 )}
                                 {configMode && showReactionConfig && (
@@ -455,9 +500,14 @@ export function InteractivePreview({
                                     {reaction?.emoji && (
                                       <span className="text-lg">{reaction.emoji}</span>
                                     )}
-                                    {hasReaction && (
+                                    {reaction?.emoji && (
                                       <Badge variant="secondary" className="text-xs">
-                                        {reaction?.emoji ? "Emoji" : "Texto"}
+                                        Emoji
+                                      </Badge>
+                                    )}
+                                    {reaction?.textResponse && (
+                                      <Badge variant="secondary" className="text-xs">
+                                        Texto
                                       </Badge>
                                     )}
                                     {configMode && showReactionConfig && (
@@ -517,9 +567,14 @@ export function InteractivePreview({
                                 {reaction?.emoji && (
                                   <span className="text-lg">{reaction.emoji}</span>
                                 )}
-                                {hasReaction && (
+                                {reaction?.emoji && (
                                   <Badge variant="secondary" className="text-xs">
-                                    {reaction?.emoji ? "Emoji" : "Texto"}
+                                    Emoji
+                                  </Badge>
+                                )}
+                                {reaction?.textResponse && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    Texto
                                   </Badge>
                                 )}
                                 {configMode && showReactionConfig && (

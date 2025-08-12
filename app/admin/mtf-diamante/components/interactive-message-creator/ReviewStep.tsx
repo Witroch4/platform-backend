@@ -142,6 +142,21 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
     })
 
     try {
+      // Normalize action for API expectations (flatten CTA URL)
+      let normalizedAction: any = message.action
+      if (message.type === 'cta_url') {
+        const a: any = message.action || {}
+        const inner = a.action || a
+        const displayText = inner?.displayText || ''
+        const url = inner?.url || ''
+        normalizedAction = {
+          type: 'cta_url',
+          action: { displayText, url },
+          displayText,
+          url
+        }
+      }
+
       // Prepare the unified save payload
       const savePayload = {
         inboxId,
@@ -160,15 +175,19 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
           footer: message.footer ? {
             text: message.footer.text
           } : undefined,
-          action: message.action
+          action: normalizedAction
         },
-        reactions: reactions.map(reaction => ({
-          buttonId: reaction.buttonId,
-          reaction: reaction.reaction ? {
-            type: reaction.reaction.type,
-            value: reaction.reaction.value
-          } : undefined
-        })).filter(r => r.reaction) // Only include reactions that are configured
+        // Coexistência: permitir enviar emoji e texto para o mesmo botão
+        reactions: reactions.flatMap(r => {
+          const out: Array<{ buttonId: string; reaction: { type: 'emoji' | 'text'; value: string } }> = []
+          if (r.reaction?.type === 'emoji') {
+            out.push({ buttonId: r.buttonId, reaction: { type: 'emoji', value: r.reaction.value } })
+          }
+          if (r.reaction?.type === 'text') {
+            out.push({ buttonId: r.buttonId, reaction: { type: 'text', value: r.reaction.value } })
+          }
+          return out
+        })
       }
 
       // Determine API endpoint and method

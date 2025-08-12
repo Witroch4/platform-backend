@@ -7,6 +7,7 @@ import {
 } from "../types/types";
 import { WhatsAppApiManager } from "../services/whatsapp.service";
 import { WhatsAppPayloadBuilder } from "../../lib/whatsapp/whatsapp-payload-builder";
+import { IntentProcessor } from "./intent.processor";
 
 const whatsappApiManager = new WhatsAppApiManager();
 
@@ -25,7 +26,8 @@ export class ButtonProcessor {
     credentials: WhatsAppCredentials,
     contactPhone: string,
     wamid: string,
-    correlationId: string
+    correlationId: string,
+    intentName?: string
   ): Promise<WorkerResponse> {
     const startTime = Date.now();
 
@@ -89,15 +91,113 @@ export class ButtonProcessor {
         );
       }
 
-      // 2. Execute action based on action type
-      const result = await this.executeAction(
-        actionMapping,
-        contactPhone,
-        wamid,
-        credentials,
-        correlationId,
-        sanitizedData.inboxId
-      );
+      // 2. Execute reaction combo (emoji + texto) quando existir mapping com payload
+      //    e em seguida qualquer ação extra mapeada (SEND_TEMPLATE etc.)
+      let comboMessageId: string | undefined;
+      try {
+        const payload: any = actionMapping.actionPayload || {};
+        const hasEmoji = typeof payload.emoji === 'string' && payload.emoji.trim() !== '';
+        const hasText = typeof payload.textReaction === 'string' && payload.textReaction.trim() !== '';
+
+        if (hasEmoji) {
+          const builder = new WhatsAppPayloadBuilder();
+          const reactionPayload = builder.buildReactionPayload(wamid, payload.emoji);
+          comboMessageId = await whatsappApiManager.sendMessage(
+            contactPhone,
+            reactionPayload,
+            credentials,
+            'button-reaction-emoji',
+            correlationId
+          );
+        }
+
+        if (hasText) {
+          const builder = new WhatsAppPayloadBuilder();
+          const textPayload = await builder.buildTextReplyPayload(wamid, payload.textReaction);
+          comboMessageId = await whatsappApiManager.sendMessage(
+            contactPhone,
+            textPayload,
+            credentials,
+            'button-reaction-text',
+            correlationId
+          );
+        }
+      } catch (comboError) {
+        console.warn('[Button Processor] Reaction combo failed, continuing to mapped action if any', {
+          correlationId,
+          error: comboError instanceof Error ? comboError.message : comboError,
+        });
+      }
+
+      // 3. Execute mapped action somente se houver dados mínimos para aquela ação
+      let result: { messageId?: string } = {};
+      const payload: any = actionMapping.actionPayload || {};
+      let shouldExecute = false;
+      switch (actionMapping.actionType) {
+        case 'SEND_TEMPLATE':
+          // Se não houver templateId/templateName no mapeamento do botão,
+          // mas houver uma intentName, podemos delegar para IntentProcessor (quando mapeada)
+          shouldExecute = Boolean(payload.templateId || payload.templateName);
+          break;
+        case 'START_FLOW':
+          shouldExecute = Boolean(payload.flowId);
+          break;
+        case 'ADD_TAG':
+          shouldExecute = Array.isArray(payload.tags) && payload.tags.length > 0;
+          break;
+        case 'ASSIGN_TO_AGENT':
+          shouldExecute = true;
+          break;
+        default:
+          shouldExecute = false;
+      }
+
+      if (shouldExecute) {
+        result = await this.executeAction(
+          actionMapping,
+          contactPhone,
+          wamid,
+          credentials,
+          correlationId,
+          sanitizedData.inboxId
+        );
+      } else {
+        console.log('[Button Processor] Skipping mapped action due to insufficient payload; delivered reactions only', {
+          correlationId,
+          actionType: actionMapping.actionType,
+        });
+      }
+
+      // 4. Se existe uma intentName vinda do webhook e o sistema possui mapeamento dessa intent,
+      //    dispare o envio do template pela IntentProcessor após reações (sem bloquear o fluxo de reações)
+      if (intentName && intentName.trim()) {
+        try {
+          const intentProc = new IntentProcessor();
+          const followup = await intentProc.processIntent(
+            intentName,
+            sanitizedData.inboxId,
+            credentials,
+            contactPhone,
+            wamid,
+            correlationId,
+            undefined,
+            { disableFallback: true }
+          );
+          if (!followup.success) {
+            console.log('[Button Processor] Intent mapping not executed or failed (non-blocking).', {
+              correlationId,
+              intentName,
+              error: followup.error,
+            });
+          }
+        } catch (e) {
+          console.log('[Button Processor] Intent mapping skipped or failed (non-blocking).', {
+            correlationId,
+            intentName,
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
 
       const processingTime = Date.now() - startTime;
 
@@ -112,7 +212,7 @@ export class ButtonProcessor {
 
       return {
         success: true,
-        messageId: result.messageId,
+        messageId: result.messageId || comboMessageId,
         processingTime,
         correlationId,
       };

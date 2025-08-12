@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import { 
   validateVariable, 
@@ -48,20 +48,31 @@ export function useVariableManager(): UseVariableManagerReturn {
   const [variables, setVariables] = useState<MtfDiamanteVariavel[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const loadedRef = useRef(false);
+  const inflightRef = useRef<Promise<void> | null>(null);
 
   // Load variables from API
   const refreshVariables = useCallback(async () => {
     try {
-      setLoading(true);
-      const response = await fetch('/api/admin/mtf-diamante/variaveis');
-      
-      if (!response.ok) {
-        throw new Error('Failed to load variables');
+      if (loadedRef.current) return; // avoid duplicate loads in StrictMode
+      if (inflightRef.current) {
+        await inflightRef.current; // await ongoing request
+        return;
       }
+      setLoading(true);
+      inflightRef.current = (async () => {
+        const response = await fetch('/api/admin/mtf-diamante/variaveis');
       
-      const data = await response.json();
-      const loadedVariables = ensureSpecialVariables(data.variaveis || []);
-      setVariables(loadedVariables);
+        if (!response.ok) {
+          throw new Error('Failed to load variables');
+        }
+        
+        const data = await response.json();
+        const loadedVariables = ensureSpecialVariables(data.variaveis || []);
+        setVariables(loadedVariables);
+        loadedRef.current = true;
+      })();
+      await inflightRef.current;
     } catch (error: unknown) {
       console.error('Error loading variables:', error);
       toast.error('Failed to load variables');
@@ -69,6 +80,7 @@ export function useVariableManager(): UseVariableManagerReturn {
       setVariables(ensureSpecialVariables([]));
     } finally {
       setLoading(false);
+      inflightRef.current = null;
     }
   }, []);
 
