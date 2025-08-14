@@ -40,8 +40,8 @@ if (!sql.startsWith(header)) {
 console.log('🚀 Aplicando migrações (prisma migrate deploy)…')
 execSync('npx prisma migrate deploy', { stdio: 'inherit' })
 
-// 6. EXECUTA o seed explicitamente, pois 'migrate deploy' não faz isso.
+// 6. EXECUTA o seed explicitamente com tsx (garante .env e tsconfig)
 console.log('🌱 Executando seed…')
-execSync('npx prisma db seed', { stdio: 'inherit' })
+execSync('npx tsx prisma/seed.ts', { stdio: 'inherit' })
 
 console.log('🎉 Banco pronto e populado!')

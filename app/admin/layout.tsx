@@ -3,18 +3,12 @@
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter, usePathname } from 'next/navigation';
-import { Loader2, Bell, Users, LayoutDashboard, ShieldAlert, MessageSquare, Headphones, HelpCircle, User, Brain, Activity, Settings, Zap, TestTube } from 'lucide-react';
-import Link from 'next/link';
-import { cn } from '@/lib/utils';
+import { useRouter } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import LoginBadge from '@/components/auth/login-badge';
 import NavbarAdmin from '@/components/admin/navbar-admin';
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-} from '@/components/ui/dropdown-menu';
+import { SidebarProvider, SidebarTrigger, SidebarInset } from '@/components/ui/sidebar';
+import AppAdminDashboard from '@/components/app-admin-dashboard';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -23,44 +17,36 @@ interface AdminLayoutProps {
 const AdminLayout = ({ children }: AdminLayoutProps) => {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const pathname = usePathname();
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   useEffect(() => {
     const checkAdminAccess = async () => {
       if (status === 'loading') return;
 
       if (!session?.user) {
-        toast.error("Acesso negado", {
-          description: "Você precisa estar logado para acessar esta página",
+        toast.error('Acesso negado', {
+          description: 'Você precisa estar logado para acessar esta página',
         });
         router.push('/auth/login');
         return;
       }
 
       try {
-        // Verificar se o usuário tem role ADMIN ou SUPERADMIN
         const userRole = session.user.role;
-        
         if (userRole === 'ADMIN' || userRole === 'SUPERADMIN') {
           setIsAdmin(true);
-          
-          if (userRole === 'SUPERADMIN') {
-            setIsSuperAdmin(true);
-          }
         } else {
-          toast.error("Acesso negado", {
-            description: "Você não tem permissão para acessar esta área.",
+          toast.error('Acesso negado', {
+            description: 'Você não tem permissão para acessar esta área.',
           });
           router.push('/');
           return;
         }
       } catch (error) {
         console.error('Erro ao verificar acesso de administrador:', error);
-        toast.error("Erro", {
-          description: "Erro ao verificar permissões. Tente novamente mais tarde.",
+        toast.error('Erro', {
+          description: 'Erro ao verificar permissões. Tente novamente mais tarde.',
         });
         router.push('/');
       } finally {
@@ -69,9 +55,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
     };
 
     checkAdminAccess();
-  }, [session, status, router, toast]);
-
-  // Removido toast de navegação entre páginas para reduzir poluição visual
+  }, [session, status, router]);
 
   if (loading) {
     return (
@@ -81,146 +65,18 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
     );
   }
 
-  if (!isAdmin) {
-    return null;
-  }
+  if (!isAdmin) return null;
 
   return (
-    <div className="flex min-h-screen bg-background">
-      {/* Sidebar */}
-      <aside className="w-64 bg-background border-r border-border">
-        <div className="p-6">
-          <h1 className="text-2xl font-bold text-foreground">Admin</h1>
-        </div>
-        <nav className="mt-6">
-          <AdminNavLink href="/admin" icon={<LayoutDashboard className="h-5 w-5 mr-3" />} exact>
-            Dashboard
-          </AdminNavLink>
-          <AdminNavLink href="/" icon={<LayoutDashboard className="h-5 w-5 mr-3" />} exact>
-            Home
-          </AdminNavLink>
-          {isSuperAdmin && (
-            <>
-              <AdminNavLink href="/admin/monitoring/test" icon={<ShieldAlert className="h-5 w-5 mr-3" />}>
-                Sistema de Monitoramento (TESTE)
-              </AdminNavLink>
-              <AdminNavLink href="/admin/monitoring/dashboard" icon={<ShieldAlert className="h-5 w-5 mr-3" />}>
-                Sistema de Monitoramento (COMPLETO)
-              </AdminNavLink>
-              <AdminNavLink href="/admin/notifications" icon={<Bell className="h-5 w-5 mr-3" />}>
-                Notificações
-              </AdminNavLink>
-              <AdminNavLink href="/admin/users" icon={<Users className="h-5 w-5 mr-3" />}>
-                Usuários
-              </AdminNavLink>
-            </>
-          )}
-          <AdminNavLink href="/admin/leads-chatwit" icon={<MessageSquare className="h-5 w-5 mr-3" />}>
-            Leads Chatwit
-          </AdminNavLink>
-          <AdminNavLink href="/admin/mtf-diamante" icon={<Headphones className="h-5 w-5 mr-3" />}>
-            MTF Diamante
-          </AdminNavLink>
-          <AdminNavLink href="/admin/disparo-oab" icon={<Users className="h-5 w-5 mr-3" />}>
-            Disparo OAB
-          </AdminNavLink>
-          <AdminNavLink href="/chatwitia" icon={<Users className="h-5 w-5 mr-3" />}>
-            ChatwitIA
-          </AdminNavLink>
-          <AdminNavLink href="/admin/templates" icon={<HelpCircle className="h-5 w-5 mr-3" />}>
-            Templates WhatsApp
-          </AdminNavLink>
-          <AdminNavLink href="/admin/resposta-rapida" icon={<Zap className="h-5 w-5 mr-3" />}>
-            Respostas Rápidas
-          </AdminNavLink>
-          <AdminNavLink href="/admin/webhook-test" icon={<TestTube className="h-5 w-5 mr-3" />}>
-            Teste de Webhook
-          </AdminNavLink>
-          
-          {/* Seção IA Integration */}
-          {isSuperAdmin && (
-            <>
-              <div className="px-6 py-2 mt-4">
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  IA Integration
-                </h3>
-              </div>
-              <AdminNavLink href="/admin/ai-integration" icon={<Brain className="h-5 w-5 mr-3" />}>
-                IA Integration
-              </AdminNavLink>
-              <AdminNavLink href="/admin/ai-integration/intents" icon={<Settings className="h-5 w-5 mr-3" />}>
-                Gerenciar Intents
-              </AdminNavLink>
-              <AdminNavLink href="/admin/ai-integration/queues" icon={<Activity className="h-5 w-5 mr-3" />}>
-                Gerenciar Filas
-              </AdminNavLink>
-            </>
-          )}
-          
-          {/* Botão Minha Conta */}
-          <div className="px-6 py-3">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <div
-                  className={cn(
-                    "flex items-center text-sm font-medium transition-colors cursor-pointer w-full",
-                    "text-muted-foreground hover:text-foreground hover:bg-accent px-0 py-0 rounded"
-                  )}
-                >
-                  <User className="h-5 w-5 mr-3" />
-                  Minha Conta
-                </div>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent side="right" className="w-64 bg-popover border-border">
-                <LoginBadge user={session?.user} />
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </nav>
-      </aside>
-
-      {/* Main content com navbar */}
-      <div className="flex-1 flex flex-col min-h-screen bg-background">
-        {/* Navbar Admin */}
+    <SidebarProvider>
+      <AppAdminDashboard />
+      <SidebarInset className="flex flex-col min-h-screen bg-background">
         <NavbarAdmin />
-        
-        {/* Conteúdo principal com padding para não ser cortado pelo navbar */}
-        <main className="flex-1 overflow-y-auto bg-background pt-4">
+        <main className="flex-1 overflow-y-auto bg-background p-4 md:p-6">
           {children}
         </main>
-      </div>
-    </div>
-  );
-};
-
-interface AdminNavLinkProps {
-  href: string;
-  children: React.ReactNode;
-  icon?: React.ReactNode;
-  exact?: boolean;
-}
-
-const AdminNavLink = ({ href, children, icon, exact }: AdminNavLinkProps) => {
-  const router = useRouter();
-  const pathname = usePathname();
-  const isActive = exact
-    ? pathname === href
-    : pathname ? pathname.startsWith(href) : false;
-
-  return (
-    <Link href={href}>
-      <div
-        className={cn(
-          "flex items-center px-6 py-3 text-sm font-medium transition-colors",
-          isActive
-            ? "bg-primary/10 text-primary border-r-2 border-primary"
-            : "text-muted-foreground hover:text-foreground hover:bg-accent"
-        )}
-      >
-        {icon}
-        {children}
-      </div>
-    </Link>
+      </SidebarInset>
+    </SidebarProvider>
   );
 };
 

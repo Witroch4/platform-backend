@@ -147,6 +147,9 @@ export async function processInstagramTranslationTask(
 
     const { intentName, inboxId, contactPhone } = validation.sanitizedData!;
 
+    // Se for clique de botão (instagram via Chatwoot), apenas sinalizar reação e reply em contexto no payload final
+    const buttonContextMeta = await getInstagramReactionAndReplyMeta(job).catch(() => undefined);
+
     // Query database for complete message mapping with optimized caching
     let messageMapping;
     let databaseQueryTime = 0;
@@ -370,19 +373,19 @@ export async function processInstagramTranslationTask(
           throw unsupportedError;
       }
         
-        conversionTime = Date.now() - conversionStart;
+         conversionTime = Date.now() - conversionStart;
         
         // Cache the conversion result for future use
         if (fulfillmentMessages.length > 0) {
           const templateType = determineTemplateTypeFromMessages(fulfillmentMessages);
           const buttonsCount = countButtonsInMessages(fulfillmentMessages);
           
-          await setCachedConversionResult(intentName, usuarioChatwitId, inboxId, bodyLength, hasImage, {
+           await setCachedConversionResult(intentName, usuarioChatwitId, inboxId, bodyLength, hasImage, {
             fulfillmentMessages,
             templateType: templateType as 'generic' | 'button' | 'incompatible',
             processingTime: conversionTime,
             buttonsCount,
-          }, undefined, uniqueUserKey);
+           }, undefined, uniqueUserKey);
           
           logWithCorrelationId('info', 'Instagram conversion result cached successfully', correlationId, {
             userContext: { usuarioChatwitId, inboxId },
@@ -492,6 +495,18 @@ export async function processInstagramTranslationTask(
       memoryUsage: finalMemoryUsage,
       cpuUsage: finalCpuUsage,
     });
+
+    // Se houver meta de reação/contexto, anexe aos fulfillmentMessages[0]
+    if (buttonContextMeta && fulfillmentMessages.length > 0) {
+      const first = fulfillmentMessages[0] as any;
+      first.payload = first.payload || {};
+      first.payload.meta = first.payload.meta || {};
+      first.payload.meta.instagram = {
+        ...first.payload.meta.instagram,
+        reply_to_message_id: buttonContextMeta.replyToMessageId,
+        sender_action: buttonContextMeta.reaction ? { type: 'react', reaction: buttonContextMeta.reaction, emoji: buttonContextMeta.reactionEmoji } : undefined,
+      };
+    }
 
     // Log the exact fulfillment messages being returned
     console.log(`[Instagram Worker] [${correlationId}] FULFILLMENT MESSAGES GENERATED:`, JSON.stringify(fulfillmentMessages, null, 2));
@@ -693,6 +708,71 @@ export async function processInstagramTranslationTask(
         attemptsMade: job.attemptsMade,
       },
     };
+  }
+}
+
+/**
+ * Apenas calcula os metadados de reação e de resposta em contexto para Instagram.
+ * Esses metadados serão incorporados ao payload retornado ao Dialogflow,
+ * para que o sender do canal aplique as ações ao enviar a mensagem.
+ */
+async function getInstagramReactionAndReplyMeta(job: Job<InstagramTranslationJobData>): Promise<{
+  replyToMessageId?: string;
+  reaction?: 'love' | 'like' | 'haha' | 'wow' | 'sad' | 'angry';
+  reactionEmoji?: string;
+} | undefined> {
+  const payload = job.data.originalPayload?.originalDetectIntentRequest?.payload;
+  if (!payload) return undefined;
+  const isButton = payload.interaction_type === 'button_reply' || payload.interactive?.type === 'button_reply' || payload.interactive?.type === 'list_reply';
+  if (!isButton) return undefined;
+
+  const buttonId: string | undefined = payload.button_id || payload.interactive?.button_reply?.id || payload.interactive?.list_reply?.id;
+  const inboxId: string | undefined = job.data.inboxId;
+  const replyToMessageId: string | undefined = payload.context?.id || payload.id || payload.message_id;
+  if (!buttonId || !inboxId) return undefined;
+
+  const mapping = await prisma.mapeamentoBotao.findFirst({
+    where: { buttonId, inbox: { inboxId } },
+  });
+  if (!mapping || !mapping.actionPayload) return { replyToMessageId };
+
+  const actionPayload: any = mapping.actionPayload || {};
+  const emoji = typeof actionPayload.emoji === 'string' ? actionPayload.emoji.trim() : '';
+  const textReaction = typeof actionPayload.textReaction === 'string' ? actionPayload.textReaction.trim() : '';
+
+  const reaction = mapEmojiToReactionName(emoji);
+  return {
+    replyToMessageId,
+    reaction: reaction || undefined,
+    reactionEmoji: emoji || undefined,
+  };
+}
+
+function mapEmojiToReactionName(emoji: string): 'love' | 'like' | 'haha' | 'wow' | 'sad' | 'angry' | null {
+  const e = (emoji || '').trim();
+  switch (e) {
+    case '❤️':
+    case '❤':
+    case '♥️':
+      return 'love';
+    case '👍':
+    case '👌':
+    case '✅':
+      return 'like';
+    case '😂':
+    case '😹':
+      return 'haha';
+    case '😮':
+    case '😯':
+      return 'wow';
+    case '😢':
+    case '😭':
+      return 'sad';
+    case '😡':
+    case '😠':
+      return 'angry';
+    default:
+      return null;
   }
 }
 

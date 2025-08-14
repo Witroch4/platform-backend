@@ -14,17 +14,26 @@ export async function GET(request: Request): Promise<Response> {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
 
-    // Buscar informações do usuário atual
-    const currentUser = await prisma.user.findUnique({
+    // Garantir que o usuário exista no banco (após reset pode não existir)
+    let currentUser = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { role: true },
+      select: { role: true, id: true },
     });
-
     if (!currentUser) {
-      return NextResponse.json(
-        { error: "Usuário não encontrado" },
-        { status: 404 }
-      );
+      const email = (session.user as any)?.email as string | undefined;
+      const name = session.user.name || undefined;
+      const syntheticEmail = `${session.user.id}@local.invalid`;
+      await prisma.user.create({
+        data: {
+          id: session.user.id,
+          email: email || syntheticEmail,
+          name,
+        },
+      });
+      currentUser = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { role: true, id: true },
+      });
     }
 
     // Buscar o usuário Chatwit
@@ -37,7 +46,7 @@ export async function GET(request: Request): Promise<Response> {
     let leadFilter: any = {};
     let arquivoFilter: any = {};
 
-    if (currentUser.role !== "SUPERADMIN") {
+    if (currentUser && currentUser.role !== "SUPERADMIN") {
       // Para ADMIN, filtrar apenas leads relacionados ao token do usuário
       if (!usuarioChatwit?.chatwitAccessToken) {
         return NextResponse.json({
@@ -105,7 +114,7 @@ export async function GET(request: Request): Promise<Response> {
     };
 
     // Adicionar totalUsuarios apenas para SUPERADMIN
-    if (currentUser.role === "SUPERADMIN") {
+    if (currentUser && currentUser.role === "SUPERADMIN") {
       stats.totalUsuarios = await prisma.usuarioChatwit.count();
     }
 
@@ -162,7 +171,7 @@ export async function GET(request: Request): Promise<Response> {
     // Dados para gráfico de leads por canal (filtrados)
     const leadsPorCanalDb = await prisma.usuarioChatwit.findMany({
       where:
-        currentUser.role !== "SUPERADMIN" ? { appUserId: session.user.id } : {},
+        currentUser && currentUser.role !== "SUPERADMIN" ? { appUserId: session.user.id } : {},
       select: {
         channel: true,
         leadsOabData: {

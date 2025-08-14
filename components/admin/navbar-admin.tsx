@@ -15,6 +15,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { NotificationDropdown } from "@/components/notifications/notification-dropdown";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import LoginBadge from "@/components/auth/login-badge";
 
@@ -37,6 +38,7 @@ const NavbarAdmin = () => {
     <header className="sticky top-0 left-0 right-0 h-16 border-b border-border bg-background z-40">
       <div className="flex items-center justify-between h-full px-4">
         <div className="flex items-center space-x-2">
+          <SidebarTrigger className="h-8 w-8 mr-1" />
           <Link href="/admin" className="flex items-center">
             <Button variant="ghost" size="icon" className="h-8 w-8 mr-2 hover:bg-accent">
               <Home className="h-5 w-5" />

@@ -23,8 +23,8 @@ export class AiMessageQueueService {
   constructor() {
     this.redis = getRedisInstance();
     
-    // Initialize the ai:incoming-message queue
-    this.queue = new Queue<AiMessageJobData>('ai:incoming-message', {
+    // Initialize the ai-incoming-message queue (avoid ':' which some backends reject)
+    this.queue = new Queue<AiMessageJobData>('ai-incoming-message', {
       connection: this.redis,
       defaultJobOptions: {
         removeOnComplete: 100, // Keep last 100 completed jobs

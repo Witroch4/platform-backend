@@ -60,6 +60,10 @@ type Inbox = InboxExterna;
 
 interface DialogflowCaixasAgentesProps {
   onCaixaSelected: (id: string | null) => void;
+  /** Opcional: quando informado, renderiza somente esta caixa */
+  filterCaixaId?: string;
+  /** Oculta a barra de ações superior (debug/sincronizar/adicionar) */
+  hideToolbar?: boolean;
 }
 
 // Botão para debug de agentes
@@ -145,6 +149,8 @@ function SincronizarAgentesButton({ onSincronizacao }: { onSincronizacao: () => 
 
 export function DialogflowCaixasAgentes({
   onCaixaSelected,
+  filterCaixaId,
+  hideToolbar,
 }: DialogflowCaixasAgentesProps) {
   const [selectedCaixaId, setSelectedCaixaId] = useState<string | null>(null);
 
@@ -153,12 +159,19 @@ export function DialogflowCaixasAgentes({
 
   // Seleção automática apenas se não houver seleção
   useEffect(() => {
+    // Se um filtro foi informado, prioriza ele
+    if (filterCaixaId) {
+      setSelectedCaixaId(filterCaixaId);
+      onCaixaSelected(filterCaixaId);
+      return;
+    }
+
     if (!selectedCaixaId && caixas.length > 0) {
       const firstCaixaId = caixas[0].id;
       setSelectedCaixaId(firstCaixaId);
       onCaixaSelected(firstCaixaId);
     }
-  }, [caixas.length, selectedCaixaId, onCaixaSelected]);
+  }, [filterCaixaId, caixas.length, selectedCaixaId, onCaixaSelected]);
 
   const handleSelectCaixa = (id: string | null) => {
     setSelectedCaixaId(id);
@@ -182,18 +195,19 @@ export function DialogflowCaixasAgentes({
     );
   }
 
+  const caixasParaExibir = filterCaixaId ? caixas.filter((c) => c.id === filterCaixaId) : caixas;
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-end gap-2">
-        <DebugAgentesButton />
-        <SincronizarAgentesButton onSincronizacao={refreshCaixas} />
-        <AdicionarCaixaDialog
-          onCaixaAdicionada={refreshCaixas}
-          caixasConfiguradas={caixas}
-        />
-      </div>
+      {!hideToolbar && (
+        <div className="flex justify-end gap-2">
+          <DebugAgentesButton />
+          <SincronizarAgentesButton onSincronizacao={refreshCaixas} />
+          {/* Botão de adicionar caixa removido desta tela quando toolbar está visível */}
+        </div>
+      )}
 
-      {caixas.length === 0 ? (
+      {caixasParaExibir.length === 0 ? (
         <div className="text-center text-gray-500 py-12 border-2 border-dashed rounded-lg">
           <p className="font-semibold">Nenhuma caixa de entrada configurada.</p>
           <p className="text-sm">
@@ -202,7 +216,7 @@ export function DialogflowCaixasAgentes({
         </div>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {caixas.map((caixa) => (
+          {caixasParaExibir.map((caixa) => (
             <CaixaCard
               key={caixa.id}
               caixa={caixa}
@@ -212,6 +226,7 @@ export function DialogflowCaixasAgentes({
               refreshCaixas={refreshCaixas}
             />
           ))}
+          {/* Card de adicionar caixa removido nesta tela */}
         </div>
       )}
     </div>
@@ -537,12 +552,15 @@ function AgenteItem({
 }
 
 // Dialogs (Modais)
-function AdicionarCaixaDialog({
+export function AdicionarCaixaDialog({
   onCaixaAdicionada,
   caixasConfiguradas,
+  trigger,
 }: {
   onCaixaAdicionada: () => void;
   caixasConfiguradas: CaixaEntrada[];
+  /** Componente para acionar o diálogo. Se não informado, usa um botão padrão */
+  trigger?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -622,9 +640,13 @@ function AdicionarCaixaDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button onClick={fetchCaixasExternas}>
-          <Plus className="w-4 h-4 mr-2" /> Adicionar Caixa
-        </Button>
+        {trigger ? (
+          <div onClick={fetchCaixasExternas}>{trigger}</div>
+        ) : (
+          <Button onClick={fetchCaixasExternas}>
+            <Plus className="w-4 h-4 mr-2" /> Adicionar Caixa
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
@@ -740,7 +762,7 @@ function AdicionarAgenteDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" className="w-full">
-          <Plus className="w-4 h-4 mr-2" /> Novo Agente
+          <Plus className="w-4 h-4 mr-2" /> Novo Agente Dialogflow
         </Button>
       </DialogTrigger>
       <DialogContent>

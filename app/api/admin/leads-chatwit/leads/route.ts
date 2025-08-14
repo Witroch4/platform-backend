@@ -93,17 +93,26 @@ export async function GET(request: Request): Promise<Response> {
     // Construir a cláusula where baseada nos parâmetros
     const where: any = marketingMode ? { AND: [] } : {};
 
-    // Buscar informações do usuário atual
-    const currentUser = await prisma.user.findUnique({
+    // Garantir que o usuário exista no banco (após reset pode não existir)
+    let currentUser = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { role: true },
+      select: { role: true, id: true },
     });
-
     if (!currentUser) {
-      return NextResponse.json(
-        { error: "Usuário não encontrado" },
-        { status: 404 }
-      );
+      const email = (session.user as any)?.email as string | undefined;
+      const name = session.user.name || undefined;
+      const syntheticEmail = `${session.user.id}@local.invalid`;
+      await prisma.user.create({
+        data: {
+          id: session.user.id,
+          email: email || syntheticEmail,
+          name,
+        },
+      });
+      currentUser = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { role: true, id: true },
+      });
     }
 
     // Buscar o usuário Chatwit

@@ -1,4 +1,5 @@
 // prisma/seed.ts
+import "dotenv/config";
 import { getPrismaInstance } from "@/lib/connections";
 
 // Definindo os tipos manualmente baseado no schema

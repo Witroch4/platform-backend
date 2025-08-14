@@ -22,6 +22,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
 
+    // Garantir existência do User após reset de banco
+    try {
+      const prisma = getPrismaInstance();
+      const appUserId = session.user.id;
+      const existing = await prisma.user.findUnique({ where: { id: appUserId } });
+      if (!existing) {
+        const syntheticEmail = ((session.user as any)?.email as string) || `${appUserId}@local.invalid`;
+        await prisma.user.create({
+          data: {
+            id: appUserId,
+            email: syntheticEmail,
+            name: session.user.name || undefined,
+          }
+        });
+      }
+    } catch {}
+
     // Busca ou cria a configuração do MTF Diamante usando upsert
     let config = await getPrismaInstance().mtfDiamanteConfig.upsert({
       where: { userId: session.user.id },
@@ -137,6 +154,23 @@ export async function POST(request: NextRequest) {
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
+
+    // Garantir existência do User após reset de banco
+    try {
+      const prisma = getPrismaInstance();
+      const appUserId = session.user.id;
+      const existing = await prisma.user.findUnique({ where: { id: appUserId } });
+      if (!existing) {
+        const syntheticEmail = ((session.user as any)?.email as string) || `${appUserId}@local.invalid`;
+        await prisma.user.create({
+          data: {
+            id: appUserId,
+            email: syntheticEmail,
+            name: session.user.name || undefined,
+          }
+        });
+      }
+    } catch {}
 
     const body = await request.json();
     const { variaveis } = body;

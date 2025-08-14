@@ -7,7 +7,7 @@ import { auth } from "@/auth";
 import { getPrismaInstance } from "@/lib/connections"
 import { uploadToMinIO } from '@/lib/minio';
 // @ts-ignore - Adding Anthropic SDK
-import Anthropic from '@anthropic-ai/sdk';
+// Removido Anthropic (focar somente OpenAI)
 
 // Declare the global latestOSeriesModels variable type
 declare global {
@@ -21,13 +21,12 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+// Anthropic removido
 
 export async function POST(req: Request) {
   try {
-    const { messages, model = 'gpt-4o-latest', sessionId, generateSummary = false, document, stream = false, fileIds = [], previousResponseId, webSearchActive = false } = await req.json();
+    const bodyData: any = await req.json();
+    const { messages, model = 'gpt-4o-latest', sessionId, generateSummary = false, document, stream = false, fileIds = [], previousResponseId, webSearchActive = false } = bodyData;
 
     console.log(`Recebida requisição para o modelo: ${model}`);
     console.log(`Sessão ID: ${sessionId || 'nova sessão'}`);
@@ -49,8 +48,8 @@ export async function POST(req: Request) {
     // 🔗 Determinar o responseId a ser usado (se fornecido)
     let finalPreviousResponseId = previousResponseId || null;
 
-    // Verifica se é um modelo Anthropic/Claude
-    const isClaudeModel = model.includes('claude');
+    // Removido suporte a Anthropic/Claude
+    const isClaudeModel = false;
 
     // Verifica se há conteúdo de áudio nas mensagens
     const hasAudioContent = messages.some((msg: any) => {
@@ -98,12 +97,16 @@ export async function POST(req: Request) {
 
     // Determinar qual handler usar com base no modelo
     let aiResponse;
-    if (isClaudeModel) {
-      aiResponse = await handleAnthropicRequest(messages, modelToUse);
-    } else {
-      // Passar fileIds para o handler da OpenAI quando presentes
-      aiResponse = await handleOpenAIRequest(messages, modelToUse, sessionId, fileIds, finalPreviousResponseId, webSearchActive);
-    }
+    // Passar fileIds para o handler da OpenAI quando presentes
+    aiResponse = await handleOpenAIRequest(
+      messages,
+      modelToUse,
+      sessionId,
+      fileIds,
+      finalPreviousResponseId,
+      webSearchActive,
+      !!bodyData?.captainPlayground
+    );
     
     // Se o streaming estiver habilitado, retorne diretamente a resposta
     if (stream) {
@@ -252,20 +255,7 @@ export async function GET() {
       }
     });
     
-    // Buscar modelos da Anthropic
-    let anthropicModels: any[] = [];
-    try {
-      const anthropicModelsList = await anthropic.models.list();
-      //console.log('Total de modelos encontrados na API da Anthropic:', anthropicModelsList.data.length);
-      //console.log('Modelos Anthropic disponíveis:', anthropicModelsList.data.map((m: any) => m.id));
-      
-      anthropicModels = anthropicModelsList.data;
-      
-      // Adicionar modelos Anthropic às categorias
-      categorizedModels.claude = anthropicModels;
-    } catch (anthropicError) {
-      console.error('Erro ao buscar modelos da Anthropic:', anthropicError);
-    }
+    // Removido: busca de modelos da Anthropic
     
     // Imprimir todos os modelos para debug
    // console.log('Todos os modelos disponíveis:', modelsList.data.map(m => m.id));
@@ -274,7 +264,7 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       models: categorizedModels,
-      allModels: [...modelsList.data, ...anthropicModels]
+      allModels: [...modelsList.data]
     });
   } catch (error) {
     console.error('Error fetching models:', error);
@@ -312,7 +302,15 @@ async function testImageUrl(url: string): Promise<boolean> {
 }
 
 // Função para processar requisições para a API do OpenAI, agora usando exclusivamente Responses API
-async function handleOpenAIRequest(messages: Message[], model: string, sessionId?: string, fileIds: string[] = [], previousResponseId?: string, webSearchActive = false) {
+async function handleOpenAIRequest(
+  messages: Message[],
+  model: string,
+  sessionId?: string,
+  fileIds: string[] = [],
+  previousResponseId?: string,
+  webSearchActive = false,
+  captainPlayground: boolean = false
+) {
   try {
     // Verificar se é um modelo Claude (não deveria chegar aqui, mas por segurança)
     if (model.includes('claude')) {
@@ -595,10 +593,27 @@ async function handleOpenAIRequest(messages: Message[], model: string, sessionId
       }
     }
     
+    // Extrair mensagem de sistema (instruções) se existir
+    let systemText = '';
+    const playgroundScope = !!captainPlayground; // só injeta system quando vier do Playground do Capitão
+    if (playgroundScope) {
+      const firstSystem = messages.find((m: any) => m.role === 'system');
+      if (firstSystem) {
+        if (typeof firstSystem.content === 'string') {
+          systemText = firstSystem.content.trim();
+        } else if (Array.isArray(firstSystem.content)) {
+          const txt = firstSystem.content.find((it: any) => it?.type === 'text' && typeof it?.text === 'string');
+          if (txt?.text) systemText = txt.text.trim();
+        }
+      }
+    }
+
     // Preparar conteúdo de entrada para a Responses API
-    const inputContent: any[] = [
-      { type: "input_text", text: userContent || "Analise o conteúdo fornecido." }
-    ];
+    const inputContent: any[] = [];
+    if (systemText) {
+      inputContent.push({ type: 'input_text', text: systemText });
+    }
+    inputContent.push({ type: "input_text", text: userContent || "Analise o conteúdo fornecido." });
     
     // Adicionar imagens extraídas como input_image APENAS se não há referência específica
     if (imageUrls.length > 0) {
@@ -1478,130 +1493,7 @@ async function handleOpenAIRequest(messages: Message[], model: string, sessionId
   }
 }
 
-// Função para processar requisições para a API da Anthropic/Claude
-async function handleAnthropicRequest(messages: Message[], model: string) {
-  try {
-    console.log(`Enviando requisição para Anthropic, modelo: ${model}`);
-    
-    // Converter mensagens para o formato Anthropic
-    const formattedMessages = messages.map(message => {
-      // Anthropic não suporta mensagens de sistema da mesma forma que OpenAI
-      // Vamos tratar mensagens do sistema como instruções de contexto do usuário
-      if (message.role === "system") {
-        return {
-          role: "user" as const,
-          content: `[System instruction]: ${message.content}`
-        };
-      }
-      
-      // Verificar conteúdo complexo (imagens, áudio, etc.)
-      if (Array.isArray(message.content)) {
-        // Claude não suporta áudio ou formatos complexos da mesma forma que OpenAI
-        // Extrair apenas o conteúdo de texto
-        const textContent = message.content.find(item => item.type === 'text' && item.text);
-        return {
-          role: message.role === "assistant" ? "assistant" as const : "user" as const,
-          content: textContent ? textContent.text : "[Conteúdo não suportado]"
-        };
-      }
-      
-      return {
-        role: message.role === "assistant" ? "assistant" as const : "user" as const,
-        content: message.content || "[Conteúdo vazio]" // Garantir que o conteúdo nunca seja undefined
-      };
-    });
-    
-    // Remover mensagens duplicadas que possam surgir da conversão
-    const uniqueMessages: { role: "user" | "assistant"; content: string }[] = [];
-    let lastRole: string | null = null;
-    for (const msg of formattedMessages) {
-      if (msg.role !== lastRole) {
-        uniqueMessages.push({
-          role: msg.role,
-          content: msg.content as string // Garantir que seja string
-        });
-        lastRole = msg.role;
-      } else if (uniqueMessages.length > 0) {
-        // Se há mensagens consecutivas do mesmo role, combinar o conteúdo
-        const lastMsg = uniqueMessages[uniqueMessages.length - 1];
-        lastMsg.content = `${lastMsg.content}\n\n${msg.content}`;
-      }
-    }
-
-    // For Anthropic, we'll use a non-streaming request and simulate streaming on the client side
-    // This avoids complex type issues with the Anthropic SDK
-    const response = await anthropic.messages.create({
-      model: model,
-      messages: uniqueMessages,
-      max_tokens: 42000,
-      temperature: 0.8,
-    });
-    
-    // Get the response content
-    const content = response.content[0].type === 'text' ? response.content[0].text : "[Conteúdo não disponível]";
-    
-    // Create a simulated streaming response
-    const encoder = new TextEncoder();
-    const streamResponse = new ReadableStream({
-      async start(controller) {
-        try {
-          // Break the content into chunks to simulate streaming
-          const chunkSize = 5; // Characters per chunk
-          let position = 0;
-          
-          while (position < content.length) {
-            // Get the next chunk of text
-            const chunk = content.substring(position, position + chunkSize);
-            position += chunkSize;
-            
-            // Create a streaming chunk object
-            const streamData = {
-              type: 'chunk',
-              content: chunk,
-              done: false
-            };
-            
-            // Encode and send the chunk
-            controller.enqueue(encoder.encode(JSON.stringify(streamData) + '\n'));
-            
-            // Add a small delay to simulate real streaming
-            await new Promise(resolve => setTimeout(resolve, 10));
-          }
-          
-          // Send the final message
-          const finalMessage = {
-            type: 'done',
-            response: {
-              role: "assistant",
-              content: content
-            },
-            done: true
-          };
-          
-          controller.enqueue(encoder.encode(JSON.stringify(finalMessage) + '\n'));
-          controller.close();
-        } catch (error) {
-          console.error('Error streaming response from Anthropic:', error);
-          controller.error(error);
-        }
-      }
-    });
-    
-    return new NextResponse(streamResponse, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive'
-      }
-    });
-  } catch (error) {
-    console.error('Anthropic error:', error);
-    return NextResponse.json(
-      { error: 'Erro ao processar requisição com Anthropic' },
-      { status: 500 }
-    );
-  }
-}
+// Removido handler da Anthropic
 
 // Helper function to save a message to the database
 async function saveMessageToDatabase(

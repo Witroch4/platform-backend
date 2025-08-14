@@ -14,6 +14,7 @@ import {
   MessageCircle,
   HelpCircle,
   Atom,
+  Brain,
   Plus,
   Check,
   Shield,
@@ -687,7 +688,7 @@ export function AppSidebar() {
                         >
                           <span className="hover-span relative flex items-center">
                             <Headphones className="mr-2" />
-                            {state !== "collapsed" && <span>MTF Diamante</span>}
+                            {state !== "collapsed" && <span>MTF Diamante Global</span>}
                           </span>
                         </Link>
                       </SidebarMenuButton>
@@ -902,6 +903,21 @@ export function AppSidebar() {
                     <span className="hover-span relative flex items-center">
                       <Atom className="mr-2" />
                       {state !== "collapsed" && <span>ChatwitIA</span>}
+                    </span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <Link
+                    href="/admin/capitao"
+                    className={`flex items-center hover-effect-9 ${
+                      state === "collapsed" ? "justify-center" : "justify-start"
+                    }`}
+                  >
+                    <span className="hover-span relative flex items-center">
+                      <Brain className="mr-2" />
+                      {state !== "collapsed" && <span>Capitão (IA)</span>}
                     </span>
                   </Link>
                 </SidebarMenuButton>

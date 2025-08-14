@@ -26,8 +26,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Garantir que o usuário base exista (após reset pode não existir)
+    const prisma = getPrismaInstance();
+    let dbUser = await prisma.user.findUnique({ where: { id: session.user.id } });
+    if (!dbUser) {
+      const email = (session.user as any)?.email as string | undefined;
+      const name = session.user.name || undefined;
+      const syntheticEmail = `${session.user.id}@local.invalid`;
+      dbUser = await prisma.user.create({
+        data: { id: session.user.id, email: email || syntheticEmail, name },
+      });
+    }
+
     // Verificar se o token já está sendo usado por outro usuário
-    const existingUsuario = await getPrismaInstance().usuarioChatwit.findFirst({
+    const existingUsuario = await prisma.usuarioChatwit.findFirst({
       where: {
         chatwitAccessToken,
         appUserId: {
@@ -44,13 +56,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Buscar ou criar o usuário Chatwit
-    let usuarioChatwit = await getPrismaInstance().usuarioChatwit.findUnique({
+    let usuarioChatwit = await prisma.usuarioChatwit.findUnique({
       where: { appUserId: session.user.id }
     });
 
     if (!usuarioChatwit) {
       // Criar novo usuário Chatwit se não existir
-      usuarioChatwit = await getPrismaInstance().usuarioChatwit.create({
+      usuarioChatwit = await prisma.usuarioChatwit.create({
         data: {
           appUserId: session.user.id,
           name: session.user.name || 'Usuário',
@@ -62,7 +74,7 @@ export async function POST(request: NextRequest) {
       });
     } else {
       // Atualizar o usuário Chatwit existente
-      usuarioChatwit = await getPrismaInstance().usuarioChatwit.update({
+      usuarioChatwit = await prisma.usuarioChatwit.update({
         where: {
           id: usuarioChatwit.id
         },
@@ -107,7 +119,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Buscar o usuário atual
-    const user = await getPrismaInstance().user.findUnique({
+    const prisma = getPrismaInstance();
+    let user = await prisma.user.findUnique({
       where: {
         id: session.user.id
       },
@@ -120,11 +133,21 @@ export async function GET(request: NextRequest) {
     });
 
     if (!user) {
-      return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
+      // Criar usuário automaticamente se não existir (após reset)
+      const email = (session.user as any)?.email as string | undefined;
+      const name = session.user.name || undefined;
+      const syntheticEmail = `${session.user.id}@local.invalid`;
+      await prisma.user.create({
+        data: { id: session.user.id, email: email || syntheticEmail, name },
+      });
+      user = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { id: true, name: true, email: true, role: true },
+      });
     }
 
     // Buscar o usuário Chatwit
-    const usuarioChatwit = await getPrismaInstance().usuarioChatwit.findUnique({
+    const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
       where: { appUserId: session.user.id },
       select: {
         chatwitAccessToken: true,

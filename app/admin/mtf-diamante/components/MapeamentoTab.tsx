@@ -27,7 +27,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { TrashIcon, PencilIcon, Smile, Settings } from "lucide-react";
+import { TrashIcon, PencilIcon, Smile, Settings, Brain } from "lucide-react";
 import { ButtonEmojiMapper } from "./shared/ButtonEmojiMapper";
 import { TemplateVariablesDialog } from "./shared/TemplateVariablesDialog";
 import {
@@ -71,6 +71,11 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [usingGlobalTemplates, setUsingGlobalTemplates] = useState(false);
+  // IA intents (novo)
+  const [aiIntents, setAiIntents] = useState<any[]>([]);
+  const [aiName, setAiName] = useState("");
+  const [aiSelectedTemplate, setAiSelectedTemplate] = useState<string | null>(null);
+  const [aiSelectedMensagem, setAiSelectedMensagem] = useState<string | null>(null);
 
   // Form state
   const [id, setId] = useState<string | null>(null);
@@ -90,6 +95,8 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
   // Delete confirmation dialog state
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+
+  // Ações para lista IA: usaremos os mesmos handlers de mapeamento (editar/excluir)
 
   const fetchData = async () => {
     if (!caixaId) {
@@ -175,6 +182,20 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
 
   useEffect(() => {
     fetchData();
+  }, [caixaId]);
+
+  // Carregar intents de IA
+  const loadAiIntents = async () => {
+    try {
+      const r = await fetch('/api/admin/ai-integration/intents', { cache: 'no-store' });
+      if (r.ok) {
+        const j = await r.json();
+        setAiIntents(Array.isArray(j?.intents) ? j.intents : []);
+      }
+    } catch {}
+  };
+  useEffect(() => {
+    if (caixaId) loadAiIntents();
   }, [caixaId]);
 
   const resetForm = () => {
@@ -343,13 +364,46 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
     });
   };
 
+  // Salvar mapeamento IA (associação por caixaId)
+  const handleAiIntentSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!aiName.trim()) { toast.error('Selecione uma intenção'); return; }
+    if (!aiSelectedTemplate && !aiSelectedMensagem) { toast.error('Selecione um template ou mensagem interativa'); return; }
+
+    const templateId = aiSelectedTemplate || aiSelectedMensagem;
+
+    // Se for template oficial, garantir mídia e checar variáveis como no Dialogflow
+    if (aiSelectedTemplate) {
+      try {
+        const ensureRes = await fetch('/api/admin/mtf-diamante/templates/ensure-media', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ templateId })
+        });
+        if (!ensureRes.ok) { await ensureRes.json().catch(() => ({})); }
+      } catch {}
+
+      const { hasVariables, templateInfo } = await checkTemplateVariables(templateId!);
+      if (hasVariables) {
+        setSelectedTemplateForVariables(templateInfo);
+        setPendingMappingData({ id: null, intentName: aiName.trim(), templateId, caixaId });
+        setShowVariablesDialog(true);
+        return;
+      }
+    }
+
+    await saveMappingData({ id: null, intentName: aiName.trim(), templateId, caixaId });
+    setAiName(""); setAiSelectedTemplate(null); setAiSelectedMensagem(null);
+    await fetchData();
+  };
+
   const saveMappingData = async (mappingData: any, customVariables?: Record<string, string>) => {
     try {
-      const response = await fetch(`/api/admin/mtf-diamante/mapeamentos`, {
+      const response = await fetch(`/api/admin/mtf-diamante/mapeamentos/${encodeURIComponent(mappingData.caixaId)}` , {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...mappingData,
+          id: mappingData.id,
+          intentName: mappingData.intentName,
+          templateId: mappingData.templateId,
           customVariables, // Adicionar variáveis customizadas se existirem
         }),
       });
@@ -427,10 +481,12 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>
-          {id ? "Editar Mapeamento" : "Novo Mapeamento de Intenção"}
-        </CardTitle>
+      <CardHeader className="space-y-1">
+        <div className="flex items-center justify-between">
+          <CardTitle>
+            {id ? "Editar Mapeamento" : "Mapeamento Dialogflow"}
+          </CardTitle>
+        </div>
         <CardDescription>
           Associe uma intenção do Dialogflow a uma resposta automática (template
           ou mensagem interativa).
@@ -517,72 +573,191 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
             )}
           </div>
         </form>
-
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Intenção</TableHead>
-              <TableHead>Resposta Associada</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {mapeamentos.map((map) => (
-              <TableRow key={map.id}>
-                <TableCell className="font-medium">{map.intentName}</TableCell>
-                <TableCell>
-                  {map.template ? (
-                    <span className="text-xs font-semibold bg-blue-100 text-blue-800 p-1 rounded">
-                      TEMPLATE: {map.template.name}
-                    </span>
-                  ) : (
-                    ""
-                  )}
-                  {map.mensagemInterativa ? (
-                    <span className="text-xs font-semibold bg-green-100 text-green-800 p-1 rounded">
-                      MENSAGEM: {map.mensagemInterativa.nome}
-                    </span>
-                  ) : (
-                    ""
-                  )}
-                  {map.interactiveMessage ? (
-                    <span className="text-xs font-semibold bg-purple-100 text-purple-800 p-1 rounded">
-                      INTERATIVA: {map.interactiveMessage.name}
-                    </span>
-                  ) : (
-                    ""
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleConfigureReactions(map)}
-                      title="Configurar reações dos botões"
-                    >
-                      <Smile className="h-4 w-4 text-yellow-500" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleEdit(map)}
-                    >
-                      <PencilIcon className="h-4 w-4" />
-                    </Button>
+        {/* Lista de mapeamentos do Dialogflow (mantendo hierarquia visual) */}
+        <div>
+          <div className="text-sm text-muted-foreground mb-2">Mapeamentos (Dialogflow) desta caixa</div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Intenção</TableHead>
+                <TableHead>Resposta Associada</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {mapeamentos.map((map) => (
+                <TableRow key={map.id}>
+                  <TableCell className="font-medium">{map.intentName}</TableCell>
+                  <TableCell>
+                    {map.template ? (
+                      <span className="text-xs font-semibold bg-blue-100 text-blue-800 p-1 rounded">
+                        TEMPLATE: {map.template.name}
+                      </span>
+                    ) : (
+                      ""
+                    )}
+                    {map.mensagemInterativa ? (
+                      <span className="text-xs font-semibold bg-green-100 text-green-800 p-1 rounded">
+                        MENSAGEM: {map.mensagemInterativa.nome}
+                      </span>
+                    ) : (
+                      ""
+                    )}
+                    {map.interactiveMessage ? (
+                      <span className="text-xs font-semibold bg-purple-100 text-purple-800 p-1 rounded">
+                        INTERATIVA: {map.interactiveMessage.name}
+                      </span>
+                    ) : (
+                      ""
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center gap-1">
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => requestDelete(map.id)}
+                        onClick={() => handleConfigureReactions(map)}
+                        title="Configurar reações dos botões"
                       >
-                      <TrashIcon className="h-4 w-4 text-red-500" />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+                        <Smile className="h-4 w-4 text-yellow-500" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEdit(map)}
+                      >
+                        <PencilIcon className="h-4 w-4" />
+                      </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => requestDelete(map.id)}
+                        >
+                        <TrashIcon className="h-4 w-4 text-red-500" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* Seção: IA (novo) */}
+        <div className="p-4 border rounded-lg space-y-4">
+          <div className="flex items-center gap-3">
+            <Brain className="h-4 w-4" />
+            <div className="font-semibold">Mapeamento IA - Intenções</div>
+            <span className="rotate-12 bg-green-600 text-white text-[10px] px-2 py-0.5 rounded-sm">NEW</span>
+          </div>
+          <form onSubmit={handleAiIntentSave} className="space-y-3">
+            {/* Seletor de intenções internas */}
+            <div>
+              <Label>Intenção (IA)</Label>
+              <Select onValueChange={(val) => { setAiName(val); }} value={aiName}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione uma intenção" />
+                </SelectTrigger>
+                <SelectContent>
+                  {aiIntents?.map?.((g: any) => (
+                    <SelectItem key={g.id} value={g.name}>{g.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center space-x-4">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <Label>Responder com Template</Label>
+                </div>
+                <Select
+                  onValueChange={(value) => { setAiSelectedTemplate(value); setAiSelectedMensagem(null); }}
+                  value={aiSelectedTemplate || ""}
+                  disabled={!!aiSelectedMensagem}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um Template" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {templates.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <span className="text-sm font-medium self-end pb-2">OU</span>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <Label>Responder com Mensagem Interativa</Label>
+                </div>
+                <Select
+                  onValueChange={(value) => { setAiSelectedMensagem(value); setAiSelectedTemplate(null); }}
+                  value={aiSelectedMensagem || ""}
+                  disabled={!!aiSelectedTemplate}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione uma Mensagem" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {mensagens.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>{m.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button type="submit">Salvar Intenção (IA)</Button>
+            </div>
+          </form>
+
+          {/* Lista de intenções IA cadastradas (apenas mapeamentos desta caixa que são intenções internas) */}
+          <div>
+            <div className="text-sm text-muted-foreground mb-2">Intenções (IA) desta caixa</div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Intenção</TableHead>
+                  <TableHead>Resposta</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {mapeamentos.filter(m => aiIntents.some((g: any) => g.name === m.intentName)).map((map) => (
+                  <TableRow key={map.id}>
+                    <TableCell className="font-medium">{map.intentName}</TableCell>
+                    <TableCell>
+                      {map.template ? (
+                        <span className="text-xs font-semibold bg-blue-100 text-blue-800 p-1 rounded">TEMPLATE: {map.template.name}</span>
+                      ) : map.mensagemInterativa ? (
+                        <span className="text-xs font-semibold bg-green-100 text-green-800 p-1 rounded">MENSAGEM: {map.mensagemInterativa.nome}</span>
+                      ) : map.interactiveMessage ? (
+                        <span className="text-xs font-semibold bg-purple-100 text-purple-800 p-1 rounded">INTERATIVA: {map.interactiveMessage.name}</span>
+                      ) : ''}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center gap-1 justify-end">
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(map)}>
+                          <PencilIcon className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => requestDelete(map.id)}>
+                          <TrashIcon className="h-4 w-4 text-red-500" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {mapeamentos.filter(m => aiIntents.some((g: any) => g.name === m.intentName)).length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={3} className="text-sm text-muted-foreground">Nenhuma intenção mapeada nesta caixa.</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+
+        {/* Tabela duplicada removida: agora a lista do Dialogflow fica logo abaixo do formulário acima */}
 
         {/* Modal de Configuração de Reações */}
         {showReactionConfig && (
