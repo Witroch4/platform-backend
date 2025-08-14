@@ -57,7 +57,7 @@ async function embedText(text: string): Promise<number[] | null> {
   const r = await fetch('https://api.openai.com/v1/embeddings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
-    body: JSON.stringify({ model: 'text-embedding-3-large', input: text })
+    body: JSON.stringify({ model: 'text-embedding-3-small', input: text })
   });
   if (!r.ok) return null;
   const j: any = await r.json();

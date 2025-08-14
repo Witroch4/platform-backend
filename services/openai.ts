@@ -539,7 +539,7 @@ class ServerOpenAIService implements IOpenAIService {
   async getEmbeddings(input: string | string[]) {
     try {
       const response = await this.client.embeddings.create({
-        model: "text-embedding-ada-002",
+        model: "text-embedding-3-small",
         input,
       });
 
