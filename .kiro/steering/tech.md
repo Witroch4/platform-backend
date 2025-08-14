@@ -25,6 +25,16 @@
 - **Build**: Next.js build system, Docker multi-stage builds
 - **Package Manager**: npm with lock file
 
+## Development Guidelines
+- All new code must be written in TypeScript.
+- User-facing strings are written in Brazilian Portuguese while identifiers remain in English.
+- Prefer optimistic UI updates on the frontend.
+- Use Shadcn/UI `Dialog` components instead of native `confirm()` or `alert()` dialogs.
+- All database interactions should use Prisma, and `Prisma.JsonNull` when clearing JSON fields.
+- Authentication is handled by NextAuth.js v5; API routes should call `const session = await auth();` and verify `session?.user?.id`, returning `NextResponse.json({ error: "Usuário não autenticado." }, { status: 401 })` when absent.
+- In the App Router, route `params` are Promises and must be awaited.
+- Styling is managed with Tailwind CSS.
+
 ## Common Commands
 
 ### Development
