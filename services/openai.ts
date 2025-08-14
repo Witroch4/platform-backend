@@ -125,7 +125,7 @@ class ServerOpenAIService implements IOpenAIService {
     const defaultOptions: ChatOptions = {
       model: "gpt-4o-latest",
       temperature: 0.7,
-      max_tokens: 42000,
+      max_tokens: 420000,
       top_p: 1,
       frequency_penalty: 0,
       presence_penalty: 0,
@@ -232,6 +232,18 @@ class ServerOpenAIService implements IOpenAIService {
         );
       }
 
+      // Extrair mensagem de sistema (instruções)
+      const firstSystem = cleanedMessages.find((m: any) => m.role === 'system');
+      const systemText = (() => {
+        if (!firstSystem) return '';
+        if (typeof firstSystem.content === 'string') return firstSystem.content.trim();
+        if (Array.isArray(firstSystem.content)) {
+          const txt = firstSystem.content.find((it: any) => it?.type === 'text' && typeof it?.text === 'string');
+          return txt?.text?.trim() || '';
+        }
+        return '';
+      })();
+
       // Converter mensagens para o formato da Responses API
       const lastUserMessage = [...cleanedMessages]
         .reverse()
@@ -254,7 +266,7 @@ class ServerOpenAIService implements IOpenAIService {
       // Se não tiver conteúdo, usar uma instrução genérica
       const promptText = userContent || "Analise o conteúdo fornecido.";
 
-      // Preparar o input para a Responses API
+      // Preparar o input para a Responses API (apenas conteúdo do usuário)
       const inputContent: any[] = [{ type: "input_text", text: promptText }];
 
       // Adicionar imagens como input_image
@@ -318,6 +330,7 @@ class ServerOpenAIService implements IOpenAIService {
             content: inputContent,
           },
         ],
+        ...(systemText ? { instructions: systemText } : {}), // ✅ System prompt vai no campo correto
         stream: false,
         store: true,
         parallel_tool_calls: true,
@@ -1033,7 +1046,7 @@ class ServerOpenAIService implements IOpenAIService {
       const defaultOptions: ChatOptions = {
         model: "gpt-4o",
         temperature: 0.7,
-        max_tokens: 42000,
+        max_tokens: 420000,
       };
 
       const mergedOptions = { ...defaultOptions, ...options };

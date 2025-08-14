@@ -13,23 +13,7 @@ import ChatInputForm from "../ChatInputForm";
 import type { UploadPurpose } from "../ChatInputForm";
 import { toast } from "sonner";
 
-const defaultSystemPrompt = /* …mesmo texto gigante… */ `Você é um assistente útil e amigável. Use um tom conversacional, cordial e educado. 
-
-Você tem a capacidade de renderizar equações matemáticas usando KaTeX. Use a sintaxe correta:
-
-1. Para equações inline: $E = mc^2$
-2. Para blocos de equação: $$\frac{1}{\sqrt{2\pi\sigma^2}} e^{-\frac{(x-\mu)^2}{2\sigma^2}}$$
-3. Para blocos de código com linguagem "math": 
-\`\`\`math
-\frac{d}{dx}[\sin(x)] = \cos(x)
-\`\`\`
-
-IMPORTANTE: Sempre use a sintaxe $$...$$, nunca use colchetes [ ] para envolver equações matemáticas. 
-A sintaxe correta é:
-- $$\frac{d}{dx}[\sin(x)] = \cos(x)$$
-- $$\lim_{h \to 0} \frac{\sin(x+h) - \sin(x)}{h} = \cos(x)$$
-
-Responda às perguntas do usuário de forma precisa e útil. Quando necessário, inclua equações matemáticas formatadas adequadamente.`;
+const defaultSystemPrompt = '';
 
 interface Props {
   modelId?: string;
@@ -39,7 +23,7 @@ interface Props {
 }
 
 export default function ChatwitIA({
-  modelId = "chatgpt-4o-latest",
+  modelId = "gpt-5-chat-latest",
   chatId = null,
   initialMessage = null,
   onTitleChange,

@@ -91,7 +91,7 @@ export default function EditAssistantPage() {
             </div>
             <div>
               <label className="text-sm font-medium">Modelo (OpenAI)</label>
-              <ModelSelector value={assistant.model || 'gpt-4o-mini'} onChange={async (m) => { console.log('[Capitão] Modelo selecionado', m); setAssistant({ ...assistant, model: m }); await update({ model: m }); }} />
+              <ModelSelector value={assistant.model || 'gpt-5-nano'} onChange={async (m) => { console.log('[Capitão] Modelo selecionado', m); setAssistant({ ...assistant, model: m }); await update({ model: m }); }} />
             </div>
             <Button disabled={savingBasic} onClick={async () => { setSavingBasic(true); await update({ name: assistant.name, description: assistant.description || null, productName: assistant.productName || null }); setSavingBasic(false); }}>Atualizar</Button>
           </div>
@@ -133,7 +133,7 @@ export default function EditAssistantPage() {
         </div>
       </div>
 
-      <Playground assistantId={assistant.id} model={assistant.model || 'gpt-4o-mini'} instructions={assistant.instructions || ''} />
+             <Playground assistantId={assistant.id} model={assistant.model || 'gpt-5-nano'} instructions={assistant.instructions || ''} />
       </div>
     </div>
   );
@@ -237,10 +237,17 @@ function ModelSelector({ value, onChange }: { value: string; onChange: (m: strin
         const push = (arr: any[]) => arr?.forEach((m: any) => { if (m?.id) ids.push(m.id); });
         push(j?.models?.gpt4o || []);
         push(j?.models?.gpt4 || []);
+        push(j?.models?.gpt5 || []); // ✅ Adicionar GPT-5
         push(j?.models?.oSeries || []);
         const unique = Array.from(new Set(ids)).filter(Boolean);
         setModels(unique);
         console.log('[Capitão] Modelos carregados', unique);
+        console.log('[Capitão] Categorias disponíveis:', {
+          gpt4o: j?.models?.gpt4o?.length || 0,
+          gpt4: j?.models?.gpt4?.length || 0,
+          gpt5: j?.models?.gpt5?.length || 0,
+          oSeries: j?.models?.oSeries?.length || 0
+        });
       } finally {
         setLoading(false);
       }

@@ -195,7 +195,7 @@ export type FileWithContent = {
   content?: any;
 };
 
-export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-latest') {
+export function useChatwitIA(chatId?: string | null, initialModel = 'gpt-5-chat-latest') {
   const { data: authSession } = useSession();
   const [messages, setMessages] = useState<Message[]>([]);
   const [model, setModel] = useState(initialModel);
@@ -498,7 +498,7 @@ export function useChatwitIA(chatId?: string | null, initialModel = 'chatgpt-4o-
     
     try {
       // Use o modelo especificado ou o padrão
-      const modelToUse = modelParam || model || 'gpt-4o-latest';
+      const modelToUse = modelParam || model || 'gpt-5-chat-latest';
       
       // Adicionar mensagem do usuário ao estado
       const userMessage: Message = {

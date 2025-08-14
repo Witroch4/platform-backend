@@ -20,6 +20,7 @@ interface ChatHistory {
 
 // Main models
 const defaultMainModels = [
+  { id: "gpt-5-chat-latest", name: "GPT-5", description: "Modelo mais avançado da OpenAI" },
   { id: "chatgpt-4o-latest", name: "ChatGPT 4o", description: "Excelente para a maioria das perguntas" },
   { id: "o3", name: "o3", description: "Usa reflexão avançada (baseado no gpt-4o-2024-05-13)" },
   { id: "o4-mini", name: "o4-mini", description: "Mais rápido em reflexão avançada" },
@@ -39,8 +40,8 @@ const defaultAdditionalModels = [
 export default function ChatPage() {
   const router = useRouter();
   
-  const [selectedModel, setSelectedModel] = useState('chatgpt-4o-latest');
-  const [selectedModelName, setSelectedModelName] = useState('ChatGPT 4o');
+  const [selectedModel, setSelectedModel] = useState('gpt-5-chat-latest');
+  const [selectedModelName, setSelectedModelName] = useState('GPT-5');
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [showMoreModels, setShowMoreModels] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -231,6 +232,18 @@ export default function ChatPage() {
               name: model.id.replace('gpt-', 'GPT-').replace(/-/g, ' '),
               description: `Modelo ${model.id} (${model.created})`,
               category: 'GPT-3'
+            });
+          });
+        }
+        
+        // Processar GPT-5
+        if (data.models?.gpt5?.length) {
+          data.models.gpt5.forEach((model: any) => {
+            newAdditionalModels.push({
+              id: model.id,
+              name: model.id.replace('gpt-', 'GPT-').replace(/-/g, ' '),
+              description: `Modelo ${model.id} (${model.created})`,
+              category: 'GPT-5'
             });
           });
         }

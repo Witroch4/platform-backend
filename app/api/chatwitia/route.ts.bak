@@ -1,4 +1,4 @@
-﻿//app\api\chatwitia\route.ts
+﻿//revidado por min
 
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
@@ -12,7 +12,6 @@ import { uploadToMinIO } from '@/lib/minio';
 // Declare the global latestOSeriesModels variable type
 declare global {
   var latestOSeriesModels: Record<string, string>;
-  var modelIdCache: { [key: string]: { id: string, ts: number } } | undefined;
 }
 
 // Change to Node.js runtime to support Prisma
@@ -23,83 +22,6 @@ const openai = new OpenAI({
 });
 
 // Anthropic removido
-
-// ====== [NOVO] Classificação de intenção + capacidades por modelo ======
-type Intent = "chat" | "image_generate" | "image_edit" | "image_analyze" | "web_search" | "other";
-
-const MODEL_CAPS: Record<string, { tools: { image_generation?: boolean; web_search_preview?: boolean } }> = {
-  // Seu padrão de chat: não anexe hosted tools aqui
-  "gpt-5-chat-latest": { tools: {} },
-
-  // Modelos com hosted tool de geração de imagem na Responses API
-  "gpt-5":                 { tools: { image_generation: true } },
-  "gpt-4o-2024-11-20":     { tools: { image_generation: true, web_search_preview: true } },
-  "gpt-4o-2024-08-06":     { tools: { image_generation: true, web_search_preview: true } },
-  "gpt-4o-2024-05-13":     { tools: { image_generation: true } },
-  "gpt-4.1-2025-04-14":    { tools: { image_generation: true, web_search_preview: true } },
-  "gpt-4.1-mini-2025-04-14": { tools: { image_generation: true, web_search_preview: true } },
-  "gpt-4.1-nano-2025-04-14": { tools: { image_generation: true } },
-  "o4-mini":               { tools: { image_generation: true, web_search_preview: true } },
-  "o3":                    { tools: { image_generation: true } },
-  "o3-mini":               { tools: { image_generation: true } },
-};
-
-function hasToolSupport(modelId: string, tool: keyof (typeof MODEL_CAPS)["gpt-5-chat-latest"]["tools"]): boolean {
-  if (MODEL_CAPS[modelId]?.tools?.[tool]) return true;
-  const base = modelId.replace(/-\d{4}-\d{2}-\d{2}$/, "");
-  return !!MODEL_CAPS[base]?.tools?.[tool];
-}
-
-function pickImageCapableFallback(requested: string): string {
-  // Preferências: manter família se possível → cair para 4o estável → 4.1-mini
-  const order = [requested, "gpt-4o-2024-11-20", "o4-mini", "gpt-4.1-mini-2025-04-14"];
-  return order.find(m => hasToolSupport(m, "image_generation")) || "gpt-4o-2024-11-20";
-}
-
-async function classifyTurn(messages: Message[]): Promise<{ intent: Intent; reasons: string[] }> {
-  // Extrai o último texto do usuário (PT/EN).
-  const lastUser = [...messages].reverse().find(m => m.role === "user");
-  let text = "";
-  if (lastUser) {
-    if (typeof lastUser.content === "string") text = lastUser.content;
-    else if (Array.isArray(lastUser.content)) {
-      text = lastUser.content.map((c: any) => (typeof c?.text === "string" ? c.text : "")).join(" ").trim();
-    }
-  }
-  
-  try {
-    // Use the regular chat completions API for intent classification
-    const res = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // Use a reliable model for classification
-      temperature: 0,
-      max_tokens: 150,
-      response_format: { type: "json_object" },
-      messages: [{
-        role: "user",
-        content: `Classifique a intenção do usuário (pt/en).
-Categorias:
-- chat: conversa normal
-- image_generate: quer GERAR uma imagem nova
-- image_edit: quer EDITAR imagem fornecida (arquivo/URL)
-- image_analyze: quer ANALISAR imagem fornecida (arquivo/URL)
-- web_search: quer buscar informação atualizada na web
-- other: qualquer outra
-
-Retorne SOMENTE um JSON com formato: {"intent": "categoria", "reasons": ["motivo1", "motivo2"]}
-
-Texto do usuário:
-"""${text}"""`
-      }]
-    });
-    
-    const out = JSON.parse(res.choices[0]?.message?.content || "{}");
-    return { intent: out.intent || "chat", reasons: out.reasons || [] };
-  } catch (e) {
-    console.warn("⚠️ Falha ao classificar intenção; assumindo 'chat'.", e);
-    return { intent: "chat", reasons: [] };
-  }
-}
-// ====== [FIM] Classificação / capacidades ======
 
 export async function POST(req: Request) {
   try {
@@ -148,12 +70,10 @@ export async function POST(req: Request) {
     
     // Para modelos da família GPT-4o ou modelos com sufixo -o, garantir que usamos a responses.create API
     // quando temos arquivos anexados
-    const isFileCompatibleModel =
-      modelToUse === 'gpt-4o' ||
-      modelToUse.includes('gpt-4o') ||
-      modelToUse.startsWith('gpt-5') ||   // ✅ gpt-5 suporta arquivos
-      modelToUse.includes('-o') ||
-      modelToUse.startsWith('o');
+    const isFileCompatibleModel = modelToUse === 'gpt-4o' || 
+                                modelToUse.includes('gpt-4o') || 
+                                modelToUse.includes('-o') ||
+                                modelToUse.startsWith('o');
                                 
     if (fileIds.length > 0 && !isFileCompatibleModel) {
       console.log('Arquivos detectados, forçando upgrade para modelo gpt-4o que suporta arquivos');
@@ -264,53 +184,37 @@ export async function GET() {
     // Buscar lista de modelos disponíveis na API da OpenAI
     const modelsList = await openai.models.list();
     
-    console.log('📊 Total de modelos encontrados na API da OpenAI:', modelsList.data.length);
-    console.log('🔍 Lista completa de modelos:');
-    modelsList.data.forEach((model, index) => {
-      console.log(`  ${index + 1}. ${model.id}`);
-    });
-
-    // 🔧 Categorização dinâmica — reconhece gpt-5, gpt-6… automaticamente
-    const buildDynamicCategories = (list: any[]) => {
-      const cats: Record<string, any[]> = {
-        gpt4o: [],
-        oSeries: [],
-        embedding: [],
-        audio: [],
-        image: [],
-        other: []
-      };
-      for (const m of list) {
-        const id: string = m.id || '';
-        if (/^o\d/.test(id)) { cats.oSeries.push(m); continue; }
-        if (/embedding/.test(id)) { cats.embedding.push(m); continue; }
-        if (/whisper/.test(id)) { cats.audio.push(m); continue; }
-        if (/dall-e|^image-/.test(id)) { cats.image.push(m); continue; }
-        if (/^gpt-4o/.test(id)) { cats.gpt4o.push(m); continue; }
-        // gpt-N (pega 5,6,7…); mantém buckets separados: gpt5, gpt6, etc.
-        const gptMajor = id.match(/^gpt-(\d)(?:[.-]|$)/);
-        if (gptMajor) {
-          const key = `gpt${gptMajor[1]}`;
-          (cats as any)[key] ||= [];
-          (cats as any)[key].push(m);
-          continue;
-        }
-        cats.other.push(m);
-      }
-      return cats;
-    };
-    const categorizedModels = buildDynamicCategories(modelsList.data);
+    //console.log('Total de modelos encontrados na API da OpenAI:', modelsList.data.length);
     
-    // Log das categorias criadas
-    console.log('📂 Categorias de modelos criadas:');
-    Object.entries(categorizedModels).forEach(([category, models]) => {
-      console.log(`  📁 ${category}: ${models.length} modelo(s)`);
-      if (models.length > 0) {
-        models.forEach(model => {
-          console.log(`    - ${model.id}`);
-        });
-      }
-    });
+    // Organizar modelos por categoria, sem filtrar nenhum
+    const categorizedModels: {
+      gpt4o: any[];
+      gpt4: any[];
+      gpt3: any[];
+      oSeries: any[];
+      embedding: any[];
+      audio: any[];
+      image: any[];
+      other: any[];
+      claude?: any[];
+    } = {
+      gpt4o: modelsList.data.filter(m => m.id.includes('gpt-4o')),
+      gpt4: modelsList.data.filter(m => m.id.includes('gpt-4') && !m.id.includes('gpt-4o')),
+      gpt3: modelsList.data.filter(m => m.id.includes('gpt-3')),
+      oSeries: modelsList.data.filter(m => /^o[1-9]/.test(m.id)),
+      embedding: modelsList.data.filter(m => m.id.includes('text-embedding')),
+      audio: modelsList.data.filter(m => m.id.includes('whisper')),
+      image: modelsList.data.filter(m => m.id.includes('dall-e')),
+      other: modelsList.data.filter(m => {
+        return !m.id.includes('gpt') && 
+               !m.id.startsWith('o1') && 
+               !m.id.startsWith('o3') && 
+               !m.id.startsWith('o4') && 
+               !m.id.includes('text-embedding') &&
+               !m.id.includes('whisper') &&
+               !m.id.includes('dall-e');
+      })
+    };
     
     // Criar um mapa para armazenar as versões mais recentes dos modelos da série O
     global.latestOSeriesModels = {};
@@ -345,16 +249,10 @@ export async function GET() {
         
         // Armazenar o modelo mais recente no mapa global
         global.latestOSeriesModels[baseModel] = modelsOfType[0].id;
-        console.log(`✅ Modelo mais recente para ${baseModel}: ${modelsOfType[0].id}`);
+        //console.log(`Modelo mais recente para ${baseModel}: ${modelsOfType[0].id}`);
       } else {
-        console.log(`⚠️ Nenhum modelo disponível para ${baseModel}`);
+        //console.log(`Nenhum modelo disponível para ${baseModel}`);
       }
-    });
-    
-    // Log do mapa final de modelos O series
-    console.log('🧠 Mapa de modelos O Series mais recentes:');
-    Object.entries(global.latestOSeriesModels).forEach(([base, latest]) => {
-      console.log(`  ${base} → ${latest}`);
     });
     
     // Removido: busca de modelos da Anthropic
@@ -362,19 +260,6 @@ export async function GET() {
     // Imprimir todos os modelos para debug
    // console.log('Todos os modelos disponíveis:', modelsList.data.map(m => m.id));
     //console.log('Modelos O Series:', modelsList.data.filter(m => /^o[1-9]/.test(m.id)).map(m => m.id));
-    
-    // Log do cache de modelos (se existir)
-    if (global.modelIdCache) {
-      console.log('💾 Cache de modelos ativo:');
-      Object.entries(global.modelIdCache).forEach(([base, cache]) => {
-        const age = Math.round((Date.now() - cache.ts) / 1000);
-        console.log(`  ${base} → ${cache.id} (cacheado há ${age}s)`);
-      });
-    } else {
-      console.log('💾 Cache de modelos: vazio');
-    }
-    
-    console.log('✅ Listagem de modelos concluída com sucesso');
     
     return NextResponse.json({
       success: true,
@@ -387,48 +272,6 @@ export async function GET() {
       { error: 'Falha ao obter modelos disponíveis', success: false },
       { status: 500 }
     );
-  }
-}
-
-// Cache simples para resolver qualquer "*-latest" → ID mais novo (TTL 10 min)
-const CACHE_TTL_MS = 10 * 60 * 1000;
-async function getLatest(base: string): Promise<string> {
-  try {
-    const now = Date.now();
-    global.modelIdCache ||= {};
-    const cached = global.modelIdCache[base];
-    if (cached && (now - cached.ts) < CACHE_TTL_MS) {
-      console.log(`💾 Cache hit para ${base}: ${cached.id} (válido por mais ${Math.round((CACHE_TTL_MS - (now - cached.ts)) / 1000)}s)`);
-      return cached.id;
-    } else if (cached) {
-      console.log(`⏰ Cache expirado para ${base}: ${cached.id} (expirou há ${Math.round((now - cached.ts - CACHE_TTL_MS) / 1000)}s)`);
-    }
-    
-    console.log(`🔍 Buscando modelo mais recente para ${base}...`);
-    const list = await openai.models.list();
-    const candidates = list.data.filter(m => m.id === base || m.id.startsWith(`${base}-`));
-    console.log(`📋 Candidatos encontrados para ${base}: ${candidates.length}`);
-    candidates.forEach(c => console.log(`  - ${c.id}`));
-    
-    if (candidates.length === 0) {
-      console.log(`⚠️ Nenhum candidato encontrado para ${base}, usando base como fallback`);
-      global.modelIdCache[base] = { id: base, ts: now };
-      return base;
-    }
-    
-    const withDate = candidates.map(m => {
-      const d = m.id.match(/\d{4}-\d{2}-\d{2}/)?.[0] ?? '0000-00-00';
-      return { id: m.id, date: d };
-    });
-    withDate.sort((a, b) => b.date.localeCompare(a.date));
-    const resolved = withDate[0].id;
-    
-    console.log(`✅ Modelo mais recente para ${base}: ${resolved} (de ${candidates.length} candidatos)`);
-    global.modelIdCache[base] = { id: resolved, ts: now };
-    return resolved;
-  } catch (error) {
-    console.error(`❌ Erro ao buscar modelo mais recente para ${base}:`, error);
-    return base;
   }
 }
 
@@ -503,10 +346,6 @@ async function handleOpenAIRequest(
     if (model === 'gpt-4o-mini-realtime-preview-latest') openaiModel = 'gpt-4o-mini-realtime-preview-2024-12-17';
     if (model === 'gpt-4o-search-preview-latest') openaiModel = 'gpt-4o-search-preview-2025-03-11';
     if (model === 'gpt-4o-mini-search-preview-latest') openaiModel = 'gpt-4o-mini-search-preview-2025-03-11';
-    
-    // GPT-5 Series (aliases e latest)
-    if (model === 'gpt-5-latest' || model === 'GPT-5-latest') openaiModel = await getLatest('gpt-5');
-    if (model === 'gpt-5' || model === 'GPT-5') openaiModel = 'gpt-5';
     
     // Mapeamento especial para o4-mini-high (usa o4-mini com reasoning effort high)
     let reasoningEffort: string | undefined;
@@ -587,12 +426,6 @@ async function handleOpenAIRequest(
       }
     }
     
-    // Genérico: qualquer "*-latest" cai na resolução dinâmica
-    if (/-latest$/.test(model) && !openaiModel.includes('-')) {
-      const base = model.replace(/-latest$/, '');
-      openaiModel = await getLatest(base);
-    }
-    
     // Aliases para garantir compatibilidade com diferentes nomes de exibição
     if (model.startsWith('GPT-')) openaiModel = model.replace('GPT-', 'gpt-');
     if (model === 'ChatGPT 4o') openaiModel = 'gpt-4o-2024-11-20';
@@ -605,7 +438,6 @@ async function handleOpenAIRequest(
     // Verificar se o modelo suporta geração de imagem
     // Lista específica de modelos que suportam a ferramenta image_generation na Responses API
     const imageCompatibleModels = [
-      'gpt-5',              // ✅ compatível com image_generation
       'gpt-4o-2024-11-20',
       'gpt-4o',
       'gpt-4o-2024-05-13',
@@ -653,7 +485,7 @@ async function handleOpenAIRequest(
     }
     
     // Verificar se o modelo é da família O (reasoning models)
-    const isOSeriesModel = openaiModel.startsWith('o') || model.startsWith('o'); // gpt-5 não é 'o-series'; reasoning padrão via Responses
+    const isOSeriesModel = openaiModel.startsWith('o') || model.startsWith('o');
     
     // 🔍 Verificar compatibilidade entre modelo atual e previous_response_id
     // Se temos um previous_response_id, verificar se há incompatibilidade entre reasoning/non-reasoning models
@@ -663,9 +495,9 @@ async function handleOpenAIRequest(
     console.log(`🚀 Usando Responses API exclusivamente para modelo original: ${model}, modelo mapeado: ${openaiModel}`);
     console.log(`📊 É modelo da série O (reasoning): ${isOSeriesModel}`);
     
-    // Por padrão, usamos o modelo mapeado de chat (sem supor tools).
-    let apiModel = openaiModel;
-    console.log(`Modelo para API (pré-intenção): ${apiModel} (original: ${openaiModel})`);
+    // Usar o modelo mapeado para geração de imagem se disponível
+    const apiModel = supportsImageGeneration ? modelForImageGeneration : openaiModel;
+    console.log(`Modelo para API: ${apiModel} (original: ${openaiModel})`);
     
     // Extrair a última mensagem do usuário para usar como prompt
     const lastUserMessage = [...messages].reverse().find(m => m.role === 'user');
@@ -761,20 +593,26 @@ async function handleOpenAIRequest(
       }
     }
     
-    // Extrair mensagem de sistema (instruções) - SEMPRE, não só no captainPlayground
-    const firstSystem = messages.find((m: any) => m.role === 'system');
-    const systemText = (() => {
-      if (!firstSystem) return '';
-      if (typeof firstSystem.content === 'string') return firstSystem.content.trim();
-      if (Array.isArray(firstSystem.content)) {
-        const txt = firstSystem.content.find((it: any) => it?.type === 'text' && typeof it?.text === 'string');
-        return txt?.text?.trim() || '';
+    // Extrair mensagem de sistema (instruções) se existir
+    let systemText = '';
+    const playgroundScope = !!captainPlayground; // só injeta system quando vier do Playground do Capitão
+    if (playgroundScope) {
+      const firstSystem = messages.find((m: any) => m.role === 'system');
+      if (firstSystem) {
+        if (typeof firstSystem.content === 'string') {
+          systemText = firstSystem.content.trim();
+        } else if (Array.isArray(firstSystem.content)) {
+          const txt = firstSystem.content.find((it: any) => it?.type === 'text' && typeof it?.text === 'string');
+          if (txt?.text) systemText = txt.text.trim();
+        }
       }
-      return '';
-    })();
+    }
 
-    // Preparar conteúdo de entrada para a Responses API (apenas conteúdo do usuário)
+    // Preparar conteúdo de entrada para a Responses API
     const inputContent: any[] = [];
+    if (systemText) {
+      inputContent.push({ type: 'input_text', text: systemText });
+    }
     inputContent.push({ type: "input_text", text: userContent || "Analise o conteúdo fornecido." });
     
     // Adicionar imagens extraídas como input_image APENAS se não há referência específica
@@ -917,64 +755,44 @@ async function handleOpenAIRequest(
     
     // Preparar ferramentas para Responses API
     const tools: any[] = [];
-
-    // 🔎 Classifica a intenção do turno com gpt-5-nano
-    const { intent } = await classifyTurn(messages);
-    console.log(`🧭 Intenção classificada: ${intent}`);
-
-    // 🔧 Não adicionar image_generation quando há URLs diretas ou input_image
-    const hasInputImages = imageUrls.length > 0 || hasDirectImageUrls;
-
-    // 1) WEB SEARCH: só adicionar se usuário ativou E modelo suporta
+    
+    // Adicionar ferramenta de pesquisa web se ativada
     if (webSearchActive) {
-      if (hasToolSupport(apiModel, "web_search_preview")) {
-        tools.push({
-          type: "web_search_preview",
-          search_context_size: "medium",
-          user_location: { type: "approximate", country: "BR", timezone: "America/Sao_Paulo" }
-        });
-        console.log('🔍 web_search_preview adicionado');
-      } else {
-        console.log(`ℹ️ ${apiModel} não suporta web_search_preview — não anexando tool`);
-      }
-    }
-
-    // 2) IMAGE GENERATION: rotear por turno quando intenção for gerar imagem
-    if (intent === "image_generate" && !hasInputImages) {
-      if (!hasToolSupport(apiModel, "image_generation")) {
-        const routed = pickImageCapableFallback(apiModel);
-        if (routed !== apiModel) {
-          console.log(`↪️ Roteando ${apiModel} → ${routed} para image_generation`);
-          apiModel = routed;
-          // evitar conflitos de multi-turn cross-model
-          if (compatiblePreviousResponseId) {
-            console.log('🔧 Limpando previous_response_id por troca de modelo (image_generation)');
-            compatiblePreviousResponseId = undefined;
-          }
+      tools.push({
+        type: "web_search_preview",
+        search_context_size: "medium",
+        user_location: {
+          type: "approximate",
+          country: "BR",
+          timezone: "America/Sao_Paulo"
         }
-      }
-      if (hasToolSupport(apiModel, "image_generation")) {
-        tools.push({
-          type: "image_generation",
-          quality: "auto",
-          size: "auto",
-          background: "auto",
-          partial_images: 2
-        });
-        console.log('🎨 image_generation anexado');
-      } else {
-        console.log('🚫 Nenhum modelo compatível com image_generation encontrado — seguirá sem imagem');
-      }
-    } else if (intent === "image_edit" || intent === "image_analyze") {
-      // edição/análise usam apenas input_image/input_file — nada de hosted tool
-      console.log(`🖼️ Intenção ${intent}: sem image_generation (apenas input_image/input_file)`);
-    } else {
-      // chat / other → sem image_generation
-      console.log('💬 Intenção de chat/other: sem image_generation');
+      });
+      console.log('🔍 Ferramenta de pesquisa web adicionada (web_search_preview)');
     }
-
-    // Log final do modelo escolhido
-    console.log(`🧩 Modelo final para API: ${apiModel}`);
+    
+    // 🔧 CORREÇÃO: Não adicionar image_generation quando há URLs diretas ou input_image 
+    // (mas permitir quando há apenas file_ids via Files API)
+    const hasInputImages = imageUrls.length > 0 || hasDirectImageUrls;
+    const hasOnlyFileIds = extractedFileIds.length > 0 && !hasInputImages;
+    
+    // Adicionar ferramenta de geração de imagem APENAS se:
+    // 1. O modelo suporta geração de imagem E
+    // 2. NÃO há URLs diretas de imagem (input_image) E
+    // 3. OU há apenas file_ids via Files API (que são compatíveis)
+    if (supportsImageGeneration && !hasInputImages) {
+      tools.push({
+        type: "image_generation",
+        quality: "auto",
+        size: "auto",
+        background: "auto",
+        partial_images: 2 // Receber 2 imagens parciais durante a geração para melhor UX
+      });
+      console.log('🎨 Ferramenta de geração de imagem adicionada com partial_images: 2');
+    } else if (hasInputImages) {
+      console.log('🚫 Ferramenta de geração de imagem removida - incompatível com input_image/URLs diretas');
+    } else if (!supportsImageGeneration) {
+      console.log('🚫 Modelo não suporta geração de imagem');
+    }
         
     // Configurar opções para a requisição da Responses API
     const requestOptions: any = {
@@ -985,7 +803,6 @@ async function handleOpenAIRequest(
           content: inputContent
         }
       ],
-      ...(systemText ? { instructions: systemText } : {}), // ✅ System prompt vai no campo correto
       stream: true,
       store: true,
       parallel_tool_calls: true,
@@ -1011,32 +828,17 @@ async function handleOpenAIRequest(
     }
     
     // Adicionar temperatura baseada no tipo de modelo
-    // GPT-5 não suporta temperature, então só adicionar para outros modelos
-    const isGpt5 = openaiModel.includes('gpt-5');
-    if (!isGpt5) {
-      if (isOSeriesModel) {
-        requestOptions.temperature = 1;
-      } else {
-        requestOptions.temperature = 0.7;
-      }
+    if (isOSeriesModel) {
+      requestOptions.temperature = 1;
     } else {
-      console.log(`🔧 Modelo GPT-5 detectado (${openaiModel}), removendo parâmetro temperature`);
+      requestOptions.temperature = 0.7;
     }
     
-    // Adicionar top_p (GPT-5 não suporta, então só adicionar para outros modelos)
-    if (!isGpt5) {
-      requestOptions.top_p = 1.0;
-    } else {
-      console.log(`🔧 Modelo GPT-5 detectado (${openaiModel}), removendo parâmetro top_p`);
-    }
+    // Adicionar top_p
+    requestOptions.top_p = 1.0;
     
-    // Adicionar max_output_tokens (ajustar para GPT-5 se necessário)
-    if (isGpt5) {
-      requestOptions.max_output_tokens = 409600; // limite infinito pra testes
-      console.log(`🔧 Modelo GPT-5 detectado (${openaiModel}), usando max_output_tokens: 409600`);
-    } else {
-      requestOptions.max_output_tokens = 4096000;
-    }
+    // Adicionar max_output_tokens
+    requestOptions.max_output_tokens = 148000;
     
     // Usar a Responses API exclusivamente
     const API_URL = "https://api.openai.com/v1/responses";
@@ -1127,73 +929,47 @@ async function handleOpenAIRequest(
 
     // Função para fazer a requisição com retry automático
     const makeRequestWithRetry = async (requestOptions: any) => {
-      const send = async (opts: any) => fetch(API_URL, {
+      const response = await fetch(API_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
         },
-        body: JSON.stringify(opts),
+        body: JSON.stringify(requestOptions),
       });
 
-      let response = await send(requestOptions);
-      if (response.ok) return { response, usedPreviousResponseId: !!requestOptions.previous_response_id };
-
-      // tenta ler erro como JSON
-      let errorObject: any = null;
-      try { errorObject = await response.json(); } catch { /* ignore */ }
-
-      // (A) caso clássico: previous_response_id causando 400
+      // Se não deu certo e temos previous_response_id, tentar retry
       if (!response.ok && requestOptions.previous_response_id) {
         try {
+          const errorBody = await response.text();
+          const errorObject = JSON.parse(errorBody);
+          
+          // Se é erro 400 com invalid_request_error, tentar sem previous_response_id
           if (response.status === 400 && errorObject?.error?.type === 'invalid_request_error') {
-            console.log('🔄 400 com previous_response_id — tentando sem previous_response_id');
+            console.log('🔄 Erro 400 com previous_response_id detectado, tentando retry sem previous_response_id...');
+            
             const retryOptions = { ...requestOptions };
             delete retryOptions.previous_response_id;
-            const retryResponse = await send(retryOptions);
+            
+            const retryResponse = await fetch(API_URL, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+              },
+              body: JSON.stringify(retryOptions),
+            });
+            
             if (retryResponse.ok) {
-              console.log('✅ Retry sem previous_response_id OK');
+              console.log('✅ Retry sem previous_response_id foi bem-sucedido');
               return { response: retryResponse, usedPreviousResponseId: false };
             }
-            // atualiza response/erro para próximas estratégias
-            response = retryResponse;
-            try { errorObject = await retryResponse.json(); } catch { /* ignore */ }
           }
         } catch (retryError) {
-          console.error('❌ Erro durante retry (sem previous_response_id):', retryError);
+          console.error('❌ Erro durante retry:', retryError);
         }
       }
-
-      // (B) erro específico de tool não suportada → rotear modelo e repetir
-      const msg = errorObject?.error?.message || '';
-      const isToolNotSupported = response.status === 400 &&
-        errorObject?.error?.type === 'invalid_request_error' &&
-        /Hosted tool 'image_generation' is not supported/i.test(msg);
-
-      if (isToolNotSupported) {
-        console.log("🔁 Fallback: 'image_generation' não suportada — roteando e repetindo");
-        const opts2 = { ...requestOptions };
-        delete opts2.previous_response_id;
-        const routed = pickImageCapableFallback(opts2.model);
-        if (routed !== opts2.model) {
-          console.log(`↪️ ${opts2.model} → ${routed}`);
-          opts2.model = routed;
-        } else {
-          // se não achou, ao menos tenta sem a tool
-          opts2.tools = (opts2.tools || []).filter((t: any) => t.type !== 'image_generation');
-          console.log('🧹 Removendo image_generation para concluir sem imagem');
-        }
-        // garante que a tool existe quando modelo suporta
-        if (hasToolSupport(opts2.model, "image_generation")) {
-          const hasImageTool = (opts2.tools || []).some((t: any) => t.type === "image_generation");
-          if (!hasImageTool) {
-            opts2.tools = [...(opts2.tools || []), { type: "image_generation", quality: "auto", size: "auto", background: "auto", partial_images: 2 }];
-          }
-        }
-        const retry2 = await send(opts2);
-        return { response: retry2, usedPreviousResponseId: false };
-      }
-
+      
       return { response, usedPreviousResponseId: !!requestOptions.previous_response_id };
     };
 

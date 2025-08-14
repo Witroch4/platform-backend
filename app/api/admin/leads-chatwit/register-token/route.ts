@@ -155,6 +155,14 @@ export async function GET(request: NextRequest) {
       }
     });
 
+    // Garantir que user não seja null
+    if (!user) {
+      return NextResponse.json(
+        { error: "Erro ao criar/buscar usuário" },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({
       user: {
         id: user.id,
