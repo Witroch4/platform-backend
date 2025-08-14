@@ -77,6 +77,12 @@ worker/
 
 ## Key Conventions
 
+### General Rules
+- All new code must be written in TypeScript.
+- Use Brazilian Portuguese for user-facing text while keeping variable, function and file names in English.
+- Prefer optimistic UI updates.
+- Use Shadcn/UI `Dialog` components instead of the browser's native `confirm()` or `alert()` dialogs.
+
 ### File Naming
 - **Components**: PascalCase (e.g., `UserProfile.tsx`)
 - **Pages**: kebab-case (e.g., `user-settings/page.tsx`)
@@ -109,6 +115,10 @@ app/api/[feature]/
 └── [id]/[action]/
     └── route.ts         # Custom actions
 ```
+
+### API Route Conventions
+- Route `params` are Promises in Next.js 15 and must be awaited.
+- Protected endpoints should obtain the session with `const session = await auth();` and verify `session?.user?.id`, returning `NextResponse.json({ error: "Usuário não autenticado." }, { status: 401 })` when absent.
 
 ### Testing Structure
 ```
