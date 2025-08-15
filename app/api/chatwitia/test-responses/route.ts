@@ -16,7 +16,7 @@ export async function POST(req: Request) {
         {
           role: "user",
           content: [
-            { type: "input_text", text: prompt }
+            { type: "text", text: prompt }
           ]
         }
       ],
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     // Adicionar imagem se fornecida
     if (imageUrl) {
       testPayload.input[0].content.push({
-        type: "input_image",
+        type: "image_url",
         image_url: imageUrl
       } as any);
     }

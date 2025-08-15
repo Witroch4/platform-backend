@@ -83,7 +83,7 @@ export default function AuditLogsViewer() {
         page: pagination.page.toString(),
         limit: pagination.limit.toString(),
         ...Object.fromEntries(
-          Object.entries(filters).filter(([_, value]) => value !== "")
+          Object.entries(filters).filter(([_, value]) => value !== "" && value !== "all")
         ),
       });
 
@@ -152,7 +152,7 @@ export default function AuditLogsViewer() {
                 <SelectValue placeholder="Ação" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Todas as ações</SelectItem>
+                <SelectItem value="all">Todas as ações</SelectItem>
                 <SelectItem value="QUEUE_PAUSED">Fila Pausada</SelectItem>
                 <SelectItem value="QUEUE_RESUMED">Fila Retomada</SelectItem>
                 <SelectItem value="QUEUE_RETRY_FAILED">Retry de Jobs</SelectItem>
@@ -165,7 +165,7 @@ export default function AuditLogsViewer() {
                 <SelectValue placeholder="Recurso" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Todos os recursos</SelectItem>
+                <SelectItem value="all">Todos os recursos</SelectItem>
                 <SelectItem value="queue">Fila</SelectItem>
                 <SelectItem value="job">Job</SelectItem>
                 <SelectItem value="system">Sistema</SelectItem>

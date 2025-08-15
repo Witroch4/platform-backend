@@ -178,7 +178,7 @@ export function UnifiedTemplateCreator({ onSuccess, initialData }: UnifiedTempla
         scope: formData.scope,
         language: formData.language,
         tags: formData.tags,
-        inboxId: formData.inboxId || null,
+        inboxId: formData.inboxId && formData.inboxId !== 'global' ? formData.inboxId : null,
       };
 
       // Add type-specific data
@@ -548,7 +548,7 @@ export function UnifiedTemplateCreator({ onSuccess, initialData }: UnifiedTempla
                       <SelectValue placeholder="Selecione um inbox" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Global (todos os inboxes)</SelectItem>
+                      <SelectItem value="global">Global (todos os inboxes)</SelectItem>
                       {inboxes.map((inbox) => (
                         <SelectItem key={inbox.id} value={inbox.id}>
                           {inbox.nome} ({inbox.inboxId})
@@ -628,7 +628,7 @@ export function UnifiedTemplateCreator({ onSuccess, initialData }: UnifiedTempla
                             ...prev,
                             interactiveContent: {
                               ...prev.interactiveContent,
-                              header: value ? { type: value, content: prev.interactiveContent.header?.content || "" } : undefined
+                              header: value && value !== 'none' ? { type: value, content: prev.interactiveContent.header?.content || "" } : undefined
                             }
                           }))}
                         >
@@ -636,7 +636,7 @@ export function UnifiedTemplateCreator({ onSuccess, initialData }: UnifiedTempla
                             <SelectValue placeholder="Tipo do header" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">Sem header</SelectItem>
+                            <SelectItem value="none">Sem header</SelectItem>
                             <SelectItem value="text">Texto</SelectItem>
                             <SelectItem value="image">Imagem</SelectItem>
                             <SelectItem value="video">Vídeo</SelectItem>
@@ -702,7 +702,7 @@ export function UnifiedTemplateCreator({ onSuccess, initialData }: UnifiedTempla
                           ...prev,
                           interactiveContent: {
                             ...prev.interactiveContent,
-                            actionType: value as any
+                            actionType: value === 'none' ? null : value as any
                           }
                         }))}
                       >
@@ -710,7 +710,7 @@ export function UnifiedTemplateCreator({ onSuccess, initialData }: UnifiedTempla
                           <SelectValue placeholder="Selecione o tipo de ação" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">Nenhuma ação</SelectItem>
+                          <SelectItem value="none">Nenhuma ação</SelectItem>
                           <SelectItem value="cta_url">
                             <div className="flex items-center gap-2">
                               <LinkIcon className="h-4 w-4" />

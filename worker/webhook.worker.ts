@@ -253,42 +253,95 @@ class ParentWorker {
 // Create the Parent Worker instance
 const parentWorker = new ParentWorker();
 
-// Start Redis health monitoring
-startRedisHealthMonitoring(60000); // Check every minute
+// ============================================================================
+// REDIS CONNECTION INITIALIZATION
+// ============================================================================
 
-// Initial Redis health check
-checkRedisHealth().then(health => {
-  if (health.healthy) {
-    console.log(`[Redis Health] ✅ Initial health check passed (latency: ${health.latency}ms)`);
-  } else {
-    console.error(`[Redis Health] ❌ Initial health check failed: ${health.error}`);
+/**
+ * Wait for Redis to be ready before initializing workers
+ */
+async function waitForRedisConnection(maxAttempts: number = 30, delayMs: number = 2000): Promise<void> {
+  console.log('[Redis Health] 🔄 Waiting for Redis connection...');
+  
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const health = await checkRedisHealth();
+      
+      if (health.healthy) {
+        console.log(`[Redis Health] ✅ Redis connected successfully (latency: ${health.latency}ms)`);
+        return;
+      }
+      
+      console.log(`[Redis Health] ⏳ Attempt ${attempt}/${maxAttempts}: Redis not ready (status: ${health.connectionStatus})`);
+      
+      if (attempt < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    } catch (error) {
+      console.log(`[Redis Health] ⏳ Attempt ${attempt}/${maxAttempts}: Redis connection error - ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      if (attempt < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
   }
-}).catch(error => {
-  console.error('[Redis Health] ❌ Initial health check error:', error);
-});
+  
+  throw new Error(`Redis connection failed after ${maxAttempts} attempts`);
+}
+
+/**
+ * Initialize all workers and components in the correct order
+ */
+async function initializeAllWorkers(): Promise<void> {
+  try {
+    console.log('[Worker Initialization] 🚀 Starting worker initialization...');
+    
+    // Step 1: Wait for Redis connection
+    await waitForRedisConnection();
+    console.log('[Worker Initialization] ✅ Redis connection established');
+    
+    // Step 2: Start Redis health monitoring
+    startRedisHealthMonitoring(60000); // Check every minute
+    console.log('[Worker Initialization] ✅ Redis health monitoring started');
+    
+    // Step 3: Initialize all workers
+    await Promise.all([
+      initializeLegacyWorkers(),
+      initializeAutoNotificationsWorker(),
+      initializeInstagramTranslationWorker(),
+    ]);
+    console.log('[Worker Initialization] ✅ All workers initialized');
+    
+    // Step 4: Setup event handlers
+    setupWorkerEventHandlers();
+    setupInstagramWorkerEventHandlers();
+    setupLeadsWorkerEventHandlers();
+    console.log('[Worker Initialization] ✅ All event handlers configured');
+    
+    // Step 5: Start resource monitoring
+    startInstagramResourceMonitoring();
+    console.log('[Worker Initialization] ✅ Resource monitoring started');
+    
+    console.log('[Worker Initialization] 🎉 All components initialized successfully!');
+    
+  } catch (error) {
+    console.error('[Worker Initialization] ❌ Failed to initialize workers:', error);
+    process.exit(1);
+  }
+}
+
+// Initialize all workers after Redis is ready
+initializeAllWorkers();
 
 // ============================================================================
 // LEGACY WORKERS (maintained for backward compatibility)
 // ============================================================================
 
-// Worker de agendamento
-const agendamentoWorker = new Worker("agendamento", processAgendamentoTask, {
-  connection: getRedisInstance(),
-});
-
-// Worker de manuscrito (mantido para compatibilidade)
-const manuscritoWorker = new Worker(
-  MANUSCRITO_QUEUE_NAME,
-  processLeadCellTask,
-  { connection: getRedisInstance() }
-);
-
-// Worker unificado para lead cells (manuscrito, espelho, análise)
-const leadCellsWorker = new Worker("leadCells", processLeadCellTask, {
-  connection: getRedisInstance(),
-  concurrency: 5,
-  lockDuration: 30000,
-});
+// Initialize workers after Redis connection is established
+let agendamentoWorker: Worker;
+let manuscritoWorker: Worker;
+let leadCellsWorker: Worker;
+let leadsChatwitWorker: Worker;
 
 // Worker de leads‑chatwit 🔥 (concorrência ajustável baseada no ambiente)
 const leadsChatwitConcurrency = parseInt(
@@ -297,53 +350,115 @@ const leadsChatwitConcurrency = parseInt(
 const leadsChatwitLockDuration = parseInt(
   process.env.LEADS_CHATWIT_LOCK_DURATION || "60000" // Increased from 30s to 60s
 );
-const leadsChatwitWorker = new Worker(
-  LEADS_QUEUE_NAME,
-  processLeadChatwitTask,
-  {
-    connection: getRedisInstance(),
-    concurrency: leadsChatwitConcurrency, // Concorrência configurável via env
-    lockDuration: leadsChatwitLockDuration, // Lock duration configurável
-    stalledInterval: 60000, // Increased from 30s to 60s
-    maxStalledCount: 2, // Increased from 1 to 2 to handle temporary timeouts
-  }
-);
 
-console.log(`[BullMQ] Worker de leads-chatwit inicializado:`, {
-  concurrency: leadsChatwitConcurrency,
-  lockDuration: `${leadsChatwitLockDuration}ms`,
-  stalledInterval: "30000ms",
-});
+/**
+ * Initialize all legacy workers after Redis is ready
+ */
+async function initializeLegacyWorkers(): Promise<void> {
+  console.log('[BullMQ] 🔄 Initializing legacy workers...');
+  
+  try {
+    // Worker de agendamento
+    agendamentoWorker = new Worker("agendamento", processAgendamentoTask, {
+      connection: getRedisInstance(),
+    });
 
-// Worker para processar notificações automáticas
-const autoNotificationsWorker = new Worker<IAutoNotificationJobData>(
-  AUTO_NOTIFICATIONS_QUEUE_NAME,
-  async (job) => {
-    console.log(
-      `[BullMQ] Processando job de notificação automática: ${job.id}`
+    // Worker de manuscrito (mantido para compatibilidade)
+    manuscritoWorker = new Worker(
+      MANUSCRITO_QUEUE_NAME,
+      processLeadCellTask,
+      { connection: getRedisInstance() }
     );
 
-    try {
-      const { type } = job.data;
+    // Worker unificado para lead cells (manuscrito, espelho, análise)
+    leadCellsWorker = new Worker("leadCells", processLeadCellTask, {
+      connection: getRedisInstance(),
+      concurrency: 5,
+      lockDuration: 30000,
+    });
 
-      switch (type) {
-        case AutoNotificationType.EXPIRING_TOKENS:
-          await handleExpiringTokensNotification(job.data);
-          break;
-        default:
-          console.warn(`[BullMQ] Tipo de notificação desconhecido: ${type}`);
+    // Worker de leads‑chatwit 🔥
+    leadsChatwitWorker = new Worker(
+      LEADS_QUEUE_NAME,
+      processLeadChatwitTask,
+      {
+        connection: getRedisInstance(),
+        concurrency: leadsChatwitConcurrency, // Concorrência configurável via env
+        lockDuration: leadsChatwitLockDuration, // Lock duration configurável
+        stalledInterval: 60000, // Increased from 30s to 60s
+        maxStalledCount: 2, // Increased from 1 to 2 to handle temporary timeouts
       }
+    );
 
-      return { success: true };
-    } catch (error: any) {
-      console.error(
-        `[BullMQ] Erro ao processar notificação automática: ${error.message}`
-      );
-      throw error;
-    }
-  },
-  { connection: getRedisInstance() }
-);
+    // Wait for all workers to be ready
+    await Promise.all([
+      agendamentoWorker.waitUntilReady(),
+      manuscritoWorker.waitUntilReady(),
+      leadCellsWorker.waitUntilReady(),
+      leadsChatwitWorker.waitUntilReady(),
+    ]);
+
+    console.log(`[BullMQ] ✅ Worker de leads-chatwit inicializado:`, {
+      concurrency: leadsChatwitConcurrency,
+      lockDuration: `${leadsChatwitLockDuration}ms`,
+      stalledInterval: "30000ms",
+    });
+
+    console.log('[BullMQ] ✅ All legacy workers initialized successfully');
+  } catch (error) {
+    console.error('[BullMQ] ❌ Failed to initialize legacy workers:', error);
+    throw error;
+  }
+}
+
+// Initialize auto notifications worker after Redis is ready
+let autoNotificationsWorker: Worker<IAutoNotificationJobData>;
+
+/**
+ * Initialize auto notifications worker after Redis is ready
+ */
+async function initializeAutoNotificationsWorker(): Promise<void> {
+  console.log('[BullMQ] 🔄 Initializing auto notifications worker...');
+  
+  try {
+    autoNotificationsWorker = new Worker<IAutoNotificationJobData>(
+      AUTO_NOTIFICATIONS_QUEUE_NAME,
+      async (job) => {
+        console.log(
+          `[BullMQ] Processando job de notificação automática: ${job.id}`
+        );
+
+        try {
+          const { type } = job.data;
+
+          switch (type) {
+            case AutoNotificationType.EXPIRING_TOKENS:
+              await handleExpiringTokensNotification(job.data);
+              break;
+            default:
+              console.warn(`[BullMQ] Tipo de notificação desconhecido: ${type}`);
+          }
+
+          return { success: true };
+        } catch (error: any) {
+          console.error(
+            `[BullMQ] Erro ao processar notificação automática: ${error.message}`
+          );
+          throw error;
+        }
+      },
+      { connection: getRedisInstance() }
+    );
+
+    // Wait for worker to be ready
+    await autoNotificationsWorker.waitUntilReady();
+
+    console.log('[BullMQ] ✅ Auto notifications worker initialized successfully');
+  } catch (error) {
+    console.error('[BullMQ] ❌ Failed to initialize auto notifications worker:', error);
+    throw error;
+  }
+}
 
 
 
@@ -383,169 +498,209 @@ if (!configValidation.valid) {
 // Log worker configuration for monitoring
 logWorkerConfiguration(instagramWorkerConfig);
 
-// Worker para processar tradução de mensagens para Instagram
-const instagramTranslationWorker = new Worker(
-  INSTAGRAM_TRANSLATION_QUEUE_NAME,
-  processInstagramTranslationTask,
-  {
-    connection: getRedisInstance(),
-    concurrency: instagramWorkerConfig.concurrency, // Configurable concurrency for IO-bound translation tasks
-    lockDuration: instagramWorkerConfig.lockDuration, // Configurable timeout to ensure webhook response within limits
-    stalledInterval: 30000, // Check for stalled jobs every 30 seconds
-    maxStalledCount: 1, // Mark job as failed after 1 stalled occurrence
-  }
-);
+// Initialize Instagram translation worker after Redis is ready
+let instagramTranslationWorker: Worker;
 
-// Tratamento de eventos dos workers legados
-[
-  agendamentoWorker,
-  manuscritoWorker,
-  leadCellsWorker,
-  leadsChatwitWorker,
-  autoNotificationsWorker,
-  // mtfDiamanteAsyncWorker, // Temporariamente desabilitado
-].forEach((worker) => {
-  worker.on("completed", (job) => {
-    console.log(`[BullMQ] Job ${job.id} concluído com sucesso`);
-  });
-
-  worker.on("failed", (job, error) => {
-    console.error(`[BullMQ] Job ${job?.id} falhou: ${error.message}`);
-  });
-});
-
-// Enhanced event handling for Instagram Translation Worker with performance monitoring
-instagramTranslationWorker.on("completed", (job, result) => {
-  const processingTime = result?.processingTime || 0;
-  const memoryUsage = process.memoryUsage();
-
-  console.log(`[Instagram Worker] Job ${job.id} completed successfully`, {
-    processingTime: `${processingTime}ms`,
-    memoryUsage: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
-    correlationId: job.data.correlationId,
-    success: result?.success,
-  });
-
-  // Check for performance warnings
-  if (processingTime > instagramWorkerConfig.processing.warningThreshold) {
-    console.warn(
-      `[Instagram Worker] Job ${job.id} processing time exceeded warning threshold`,
+/**
+ * Initialize Instagram translation worker after Redis is ready
+ */
+async function initializeInstagramTranslationWorker(): Promise<void> {
+  console.log('[Instagram Worker] 🔄 Initializing Instagram translation worker...');
+  
+  try {
+    instagramTranslationWorker = new Worker(
+      INSTAGRAM_TRANSLATION_QUEUE_NAME,
+      processInstagramTranslationTask,
       {
-        processingTime: `${processingTime}ms`,
-        threshold: `${instagramWorkerConfig.processing.warningThreshold}ms`,
-        correlationId: job.data.correlationId,
+        connection: getRedisInstance(),
+        concurrency: instagramWorkerConfig.concurrency, // Configurable concurrency for IO-bound translation tasks
+        lockDuration: instagramWorkerConfig.lockDuration, // Configurable timeout to ensure webhook response within limits
+        stalledInterval: 30000, // Check for stalled jobs every 30 seconds
+        maxStalledCount: 1, // Mark job as failed after 1 stalled occurrence
       }
     );
+
+    // Wait for worker to be ready
+    await instagramTranslationWorker.waitUntilReady();
+
+    console.log('[Instagram Worker] ✅ Instagram translation worker initialized successfully');
+  } catch (error) {
+    console.error('[Instagram Worker] ❌ Failed to initialize Instagram translation worker:', error);
+    throw error;
   }
-});
+}
 
-instagramTranslationWorker.on("failed", (job, error) => {
-  const memoryUsage = process.memoryUsage();
+/**
+ * Setup event handlers for all workers
+ */
+function setupWorkerEventHandlers(): void {
+  console.log('[BullMQ] 🔄 Setting up worker event handlers...');
+  
+  // Tratamento de eventos dos workers legados
+  [
+    agendamentoWorker,
+    manuscritoWorker,
+    leadCellsWorker,
+    leadsChatwitWorker,
+    autoNotificationsWorker,
+    // mtfDiamanteAsyncWorker, // Temporariamente desabilitado
+  ].forEach((worker) => {
+    worker.on("completed", (job) => {
+      console.log(`[BullMQ] Job ${job.id} concluído com sucesso`);
+    });
 
-  console.error(`[Instagram Worker] Job ${job?.id} failed: ${error.message}`, {
-    correlationId: job?.data?.correlationId,
-    attemptsMade: job?.attemptsMade,
-    maxAttempts: job?.opts?.attempts,
-    memoryUsage: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
-    error: error.message,
+    worker.on("failed", (job, error) => {
+      console.error(`[BullMQ] Job ${job?.id} falhou: ${error.message}`);
+    });
   });
-});
 
-instagramTranslationWorker.on("stalled", (job: any) => {
-  console.warn(`[Instagram Worker] Job ${job.id} stalled`, {
-    correlationId: job.data?.correlationId,
-    stalledCount: job.opts?.stalledCount || 0,
-    lockDuration: `${instagramWorkerConfig.lockDuration}ms`,
-  });
-});
+  console.log('[BullMQ] ✅ Worker event handlers setup completed');
+}
 
-instagramTranslationWorker.on("error", (error) => {
-  console.error("[Instagram Worker] Worker error:", {
-    error: error.message,
-    stack: error.stack,
-    timestamp: new Date().toISOString(),
+/**
+ * Setup Instagram worker event handlers
+ */
+function setupInstagramWorkerEventHandlers(): void {
+  console.log('[Instagram Worker] 🔄 Setting up Instagram worker event handlers...');
+  
+  // Enhanced event handling for Instagram Translation Worker with performance monitoring
+  instagramTranslationWorker.on("completed", (job, result) => {
+    const processingTime = result?.processingTime || 0;
+    const memoryUsage = process.memoryUsage();
+
+    console.log(`[Instagram Worker] Job ${job.id} completed successfully`, {
+      processingTime: `${processingTime}ms`,
+      memoryUsage: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
+      correlationId: job.data.correlationId,
+      success: result?.success,
+    });
+
+    // Check for performance warnings
+    if (processingTime > instagramWorkerConfig.processing.warningThreshold) {
+      console.warn(
+        `[Instagram Worker] Job ${job.id} processing time exceeded warning threshold`,
+        {
+          processingTime: `${processingTime}ms`,
+          threshold: `${instagramWorkerConfig.processing.warningThreshold}ms`,
+          correlationId: job.data.correlationId,
+        }
+      );
+    }
   });
-});
+
+  instagramTranslationWorker.on("failed", (job, error) => {
+    const memoryUsage = process.memoryUsage();
+
+    console.error(`[Instagram Worker] Job ${job?.id} failed: ${error.message}`, {
+      correlationId: job?.data?.correlationId,
+      attemptsMade: job?.attemptsMade,
+      maxAttempts: job?.opts?.attempts,
+      memoryUsage: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
+      error: error.message,
+    });
+  });
+
+  instagramTranslationWorker.on("stalled", (job: any) => {
+    console.warn(`[Instagram Worker] Job ${job.id} stalled`, {
+      correlationId: job.data?.correlationId,
+      stalledCount: job.opts?.stalledCount || 0,
+      lockDuration: `${instagramWorkerConfig.lockDuration}ms`,
+    });
+  });
+
+  instagramTranslationWorker.on("error", (error) => {
+    console.error("[Instagram Worker] Worker error:", {
+      error: error.message,
+      stack: error.stack,
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  console.log('[Instagram Worker] ✅ Instagram worker event handlers setup completed');
+}
 
 // Add periodic resource monitoring for the Instagram worker
 let resourceMonitoringInterval: NodeJS.Timeout;
 
-if (instagramWorkerConfig.monitoring.enabled) {
-  resourceMonitoringInterval = setInterval(() => {
-    const memoryUsage = process.memoryUsage();
-    const cpuUsage = process.cpuUsage();
+/**
+ * Start resource monitoring for Instagram worker
+ */
+function startInstagramResourceMonitoring(): void {
+  if (instagramWorkerConfig.monitoring.enabled) {
+    console.log('[Instagram Worker] 🔄 Starting resource monitoring...');
+    
+    resourceMonitoringInterval = setInterval(() => {
+      const memoryUsage = process.memoryUsage();
+      const cpuUsage = process.cpuUsage();
 
-    // Log resource usage periodically
-    console.log("[Instagram Worker] Resource usage report:", {
-      memory: {
-        heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
-        heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`,
-        external: `${Math.round(memoryUsage.external / 1024 / 1024)}MB`,
-      },
-      cpu: {
-        user: `${Math.round(cpuUsage.user / 1000)}ms`,
-        system: `${Math.round(cpuUsage.system / 1000)}ms`,
-      },
-      uptime: `${Math.round(process.uptime())}s`,
-      timestamp: new Date().toISOString(),
-    });
+      // Log resource usage periodically
+      console.log("[Instagram Worker] Resource usage report:", {
+        memory: {
+          heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
+          heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`,
+          external: `${Math.round(memoryUsage.external / 1024 / 1024)}MB`,
+        },
+        cpu: {
+          user: `${Math.round(cpuUsage.user / 1000)}ms`,
+          system: `${Math.round(cpuUsage.system / 1000)}ms`,
+        },
+        uptime: `${Math.round(process.uptime())}s`,
+        timestamp: new Date().toISOString(),
+      });
+    }, instagramWorkerConfig.monitoring.metricsInterval);
 
-    // Log resource usage for monitoring (Docker handles resource limits)
-    console.log("[Instagram Worker] Resource usage report:", {
-      memory: {
-        heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
-        heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`,
-        external: `${Math.round(memoryUsage.external / 1024 / 1024)}MB`,
-      },
-      cpu: {
-        user: `${Math.round(cpuUsage.user / 1000)}ms`,
-        system: `${Math.round(cpuUsage.system / 1000)}ms`,
-      },
-      uptime: `${Math.round(process.uptime())}s`,
-      timestamp: new Date().toISOString(),
-    });
-  }, instagramWorkerConfig.monitoring.metricsInterval);
+    console.log('[Instagram Worker] ✅ Resource monitoring started');
+  }
 }
 
-// Eventos específicos para o worker de leads (com logs detalhados para debug)
-leadsChatwitWorker.on("progress", (job, progress) => {
-  const leadProgress = progress as unknown as LeadJobProgress;
-  console.log(`[BullMQ-Debug] Job ${job.id} - progresso:`, progress);
-  if (leadProgress.processed) {
-    console.log(
-      `[BullMQ] Job ${job.id} processado em lote para leadId: ${leadProgress.leadId}`
-    );
-  }
-});
-
-leadsChatwitWorker.on("active", (job) => {
-  console.log(`[BullMQ-Debug] Job ${job.id} INICIADO - sourceId: ${job.data.payload?.origemLead?.source_id}, arquivos: ${job.data.payload?.origemLead?.arquivos?.length || 0}`);
-});
-
-leadsChatwitWorker.on("completed", (job, result) => {
-  console.log(`[BullMQ-Debug] Job ${job.id} CONCLUÍDO - sourceId: ${job.data.payload?.origemLead?.source_id}, resultado:`, result);
-});
-
-leadsChatwitWorker.on("failed", (job, err) => {
-  console.error(`[BullMQ-Debug] Job ${job?.id} FALHOU - sourceId: ${job?.data?.payload?.origemLead?.source_id}:`, {
-    error: err.message,
-    stack: err.stack,
-    jobData: job?.data
+/**
+ * Setup leads worker event handlers
+ */
+function setupLeadsWorkerEventHandlers(): void {
+  console.log('[BullMQ] 🔄 Setting up leads worker event handlers...');
+  
+  // Eventos específicos para o worker de leads (com logs detalhados para debug)
+  leadsChatwitWorker.on("progress", (job, progress) => {
+    const leadProgress = progress as unknown as LeadJobProgress;
+    console.log(`[BullMQ-Debug] Job ${job.id} - progresso:`, progress);
+    if (leadProgress.processed) {
+      console.log(
+        `[BullMQ] Job ${job.id} processado em lote para leadId: ${leadProgress.leadId}`
+      );
+    }
   });
-});
 
-leadsChatwitWorker.on("stalled", (jobId) => {
-  console.warn(`[BullMQ-Debug] Job ${jobId} TRAVADO (stalled) - pode indicar timeout ou sobrecarga`);
-});
-
-leadsChatwitWorker.on("error", (err) => {
-  console.error(`[BullMQ-Debug] ERRO NO WORKER:`, {
-    error: err.message,
-    stack: err.stack,
-    concurrency: leadsChatwitConcurrency,
-    lockDuration: leadsChatwitLockDuration
+  leadsChatwitWorker.on("active", (job) => {
+    console.log(`[BullMQ-Debug] Job ${job.id} INICIADO - sourceId: ${job.data.payload?.origemLead?.source_id}, arquivos: ${job.data.payload?.origemLead?.arquivos?.length || 0}`);
   });
-});
+
+  leadsChatwitWorker.on("completed", (job, result) => {
+    console.log(`[BullMQ-Debug] Job ${job.id} CONCLUÍDO - sourceId: ${job.data.payload?.origemLead?.source_id}, resultado:`, result);
+  });
+
+  leadsChatwitWorker.on("failed", (job, err) => {
+    console.error(`[BullMQ-Debug] Job ${job?.id} FALHOU - sourceId: ${job?.data?.payload?.origemLead?.source_id}:`, {
+      error: err.message,
+      stack: err.stack,
+      jobData: job?.data
+    });
+  });
+
+  leadsChatwitWorker.on("stalled", (jobId) => {
+    console.warn(`[BullMQ-Debug] Job ${jobId} TRAVADO (stalled) - pode indicar timeout ou sobrecarga`);
+  });
+
+  leadsChatwitWorker.on("error", (err) => {
+    console.error(`[BullMQ-Debug] ERRO NO WORKER:`, {
+      error: err.message,
+      stack: err.stack,
+      concurrency: leadsChatwitConcurrency,
+      lockDuration: leadsChatwitLockDuration
+    });
+  });
+
+  console.log('[BullMQ] ✅ Leads worker event handlers setup completed');
+}
 
 /**
  * Processa notificações de tokens expirando
@@ -644,6 +799,9 @@ export async function initJobs() {
 export async function initAgendamentoWorker() {
   try {
     console.log("[BullMQ] Inicializando worker de agendamento...");
+    if (!agendamentoWorker) {
+      throw new Error("Agendamento worker not initialized yet");
+    }
     await agendamentoWorker.waitUntilReady();
     console.log("[BullMQ] Worker de agendamento inicializado com sucesso");
   } catch (error) {
@@ -656,6 +814,9 @@ export async function initAgendamentoWorker() {
 export async function initManuscritoWorker() {
   try {
     console.log("[BullMQ] Inicializando worker de manuscrito...");
+    if (!manuscritoWorker) {
+      throw new Error("Manuscrito worker not initialized yet");
+    }
     await manuscritoWorker.waitUntilReady();
     console.log("[BullMQ] Worker de manuscrito inicializado com sucesso");
   } catch (error) {
@@ -668,6 +829,9 @@ export async function initManuscritoWorker() {
 export async function initLeadsChatwitWorker() {
   try {
     console.log("[BullMQ] Inicializando worker de leads...");
+    if (!leadsChatwitWorker) {
+      throw new Error("Leads worker not initialized yet");
+    }
     await leadsChatwitWorker.waitUntilReady();
     console.log("[BullMQ] Worker de leads inicializado com sucesso");
   } catch (error) {
@@ -702,6 +866,10 @@ export async function initInstagramTranslationWorker() {
     console.log(
       "[Instagram Worker] Initializing Instagram translation worker..."
     );
+
+    if (!instagramTranslationWorker) {
+      throw new Error("Instagram translation worker not initialized yet");
+    }
 
     // Log configuration details
     console.log("[Instagram Worker] Configuration:", {
@@ -785,6 +953,20 @@ async function performInstagramWorkerHealthCheck(): Promise<{
   const memoryUsage = process.memoryUsage();
 
   try {
+    // Check if worker exists
+    if (!instagramTranslationWorker) {
+      issues.push("Instagram translation worker not initialized");
+      return {
+        healthy: false,
+        issues,
+        metrics: {
+          memoryUsage: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
+          uptime: `${Math.round(process.uptime())}s`,
+          configValid: false,
+        },
+      };
+    }
+
     // Check worker configuration
     const configValidation = validateWorkerConfig(instagramWorkerConfig);
     if (!configValidation.valid) {
@@ -883,16 +1065,21 @@ const gracefulShutdown = async (signal: string) => {
     console.log("[Worker Shutdown] Closing all workers...");
 
     // Close all workers with timeout handling
+    const workersToClose = [
+      parentWorker.shutdown(),
+    ];
+
+    // Add legacy workers if they exist
+    if (agendamentoWorker) workersToClose.push(agendamentoWorker.close());
+    if (manuscritoWorker) workersToClose.push(manuscritoWorker.close());
+    if (leadCellsWorker) workersToClose.push(leadCellsWorker.close());
+    if (leadsChatwitWorker) workersToClose.push(leadsChatwitWorker.close());
+    if (autoNotificationsWorker) workersToClose.push(autoNotificationsWorker.close());
+    if (instagramTranslationWorker) workersToClose.push(instagramTranslationWorker.close());
+    // mtfDiamanteAsyncWorker.close(), // Temporariamente desabilitado
+
     await Promise.race([
-      Promise.all([
-        parentWorker.shutdown(),
-        agendamentoWorker.close(),
-        manuscritoWorker.close(),
-        leadsChatwitWorker.close(),
-        autoNotificationsWorker.close(),
-        // mtfDiamanteAsyncWorker.close(), // Temporariamente desabilitado
-        instagramTranslationWorker.close(),
-      ]),
+      Promise.all(workersToClose),
       new Promise((_, reject) =>
         setTimeout(() => reject(new Error("Worker shutdown timeout")), 25000)
       ),
@@ -939,4 +1126,9 @@ export {
   leadsChatwitWorker,
   autoNotificationsWorker,
   instagramTranslationWorker,
+  // Export initialization functions
+  initializeAllWorkers,
+  initializeLegacyWorkers,
+  initializeAutoNotificationsWorker,
+  initializeInstagramTranslationWorker,
 };

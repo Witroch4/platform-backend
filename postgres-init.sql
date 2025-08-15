@@ -7,4 +7,8 @@ CREATE USER postgres WITH PASSWORD 'postgres' SUPERUSER;
 CREATE DATABASE socialWise OWNER postgres;
 
 -- Configurar permissões
-GRANT ALL PRIVILEGES ON DATABASE socialWise TO postgres; 
+GRANT ALL PRIVILEGES ON DATABASE socialWise TO postgres;
+
+-- Conectar ao banco socialWise e criar extensão pgvector
+\c socialwise;
+CREATE EXTENSION IF NOT EXISTS vector; 

@@ -325,7 +325,10 @@ export function EnhancedCredentialsManager() {
       const response = await fetch(`/api/admin/credentials/inbox/${selectedInbox.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(inboxForm),
+        body: JSON.stringify({
+          ...inboxForm,
+          fallbackParaInboxId: inboxForm.fallbackParaInboxId === 'none' ? null : inboxForm.fallbackParaInboxId
+        }),
       });
 
       if (response.ok) {
@@ -808,7 +811,7 @@ export function EnhancedCredentialsManager() {
                             <SelectValue placeholder="Selecione um inbox para fallback (opcional)" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">Sem fallback (usar global)</SelectItem>
+                            <SelectItem value="none">Sem fallback (usar global)</SelectItem>
                             {inboxes
                               .filter(inbox => inbox.id !== selectedInbox.id)
                               .map((inbox) => (

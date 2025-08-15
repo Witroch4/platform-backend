@@ -26,6 +26,7 @@
 - **Package Manager**: npm with lock file
 
 ## Development Guidelines
+- npx tsc --noEmit sempre rodar apos qualquer edição ou criação de arquivos.
 - All new code must be written in TypeScript.
 - User-facing strings are written in Brazilian Portuguese while identifiers remain in English.
 - Prefer optimistic UI updates on the frontend.
@@ -39,14 +40,15 @@
 
 ### Development
 ```bash
+docker-compose -f docker-compose-dev.yml up # conteiner de desenvolvimento com os workes conteiner pricipal e banco de dados
 npm run dev          # Start development server
-npm run dev:turbo    # Start with Turbo mode
 npm run build        # Production build
-npm run start        # Start production server
+
 ```
 
 ### Database
 ```bash
+npm run db:push # super script faz o reset ativa o pgvector faz a migração e o seed em dev usar esse comamndo precisa de docker-compose -f docker-compose-dev.yml up
 npm run db:migrate   # Run Prisma migrations
 npm run db:generate  # Generate Prisma client
 npm run db:seed      # Seed database
@@ -72,6 +74,8 @@ npm run build:workers          # Build worker files
 
 ### Code Quality
 ```bash
+npx tsc --noEmit # sempre rodar apos qualquer edição ou criação de arquivos
+npx tsc --project tsconfig.worker.json --noEmit  
 npm run lint           # Check linting with Biome
 npm run lint-apply     # Auto-fix linting issues
 npm run format         # Check formatting

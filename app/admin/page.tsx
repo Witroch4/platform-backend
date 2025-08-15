@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { CostMonitoringDashboard } from "@/components/admin/cost-monitoring-dashboard";
 import Link from "next/link";
 
 export default function AdminPage() {
@@ -113,6 +114,13 @@ export default function AdminPage() {
           <Link href="/admin/webhook-test">🧪 Teste de Webhook</Link>
         </Button>
       </div>
+
+      {/* Seção de Monitoramento de Custos de IA */}
+      <div className="mb-8">
+        <CostMonitoringDashboard />
+      </div>
+
+      <Separator className="my-8" />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card className="border-border bg-card">

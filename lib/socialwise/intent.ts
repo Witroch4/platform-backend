@@ -85,7 +85,7 @@ Saída: retorne apenas o rótulo final.`;
     const body = {
       model: usedModel,
       instructions: sys,
-      input: [ { role: 'user', content: [ { type: 'input_text', text: user } ] } ],
+      input: [ { role: 'user', content: [ { type: 'text', text: user } ] } ],
       stream: false,
       store: false,
     } as any;
@@ -122,7 +122,7 @@ Saída: retorne apenas o rótulo final.`;
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY || ''}`,
         },
-        body: JSON.stringify({ model: 'gpt-4o-mini', instructions: sys, input: [ { role: 'user', content: [ { type: 'input_text', text: user } ] } ], stream: false, store: false }),
+        body: JSON.stringify({ model: 'gpt-4o-mini', instructions: sys, input: [ { role: 'user', content: [ { type: 'text', text: user } ] } ], stream: false, store: false }),
       });
       if (!r2.ok) return null;
       const j2: any = await r2.json();
@@ -224,7 +224,7 @@ export async function classifyIntentWithAssistant(
       body: JSON.stringify({
         model: model || 'gpt-4o-mini',
         input: [
-          { role: 'user', content: [{ type: 'input_text', text: input }] }
+          { role: 'user', content: [{ type: 'text', text: input }] }
         ],
         stream: false,
         store: false,

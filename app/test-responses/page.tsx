@@ -1,6 +1,12 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+
+interface Model {
+  id: string;
+  name: string;
+  description?: string;
+}
 
 export default function TestResponsesPage() {
   const [imageUrl, setImageUrl] = useState('https://objstoreapi.witdev.com.br/chatwit-social/4325d304-dc0a-4d63-8a1e-68c68a43235a-1.jpg');
@@ -8,6 +14,90 @@ export default function TestResponsesPage() {
   const [model, setModel] = useState('gpt-4o-2024-11-20');
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [availableModels, setAvailableModels] = useState<Model[]>([]);
+  const [loadingModels, setLoadingModels] = useState(true);
+
+  // Carregar modelos disponíveis da API
+  useEffect(() => {
+    const loadModels = async () => {
+      try {
+        setLoadingModels(true);
+        const response = await fetch('/api/chatwitia');
+        if (response.ok) {
+          const data = await response.json();
+          
+          // Extrair modelos de chat das categorias
+          const chatModels: Model[] = [];
+          
+          // Adicionar modelos GPT-4o
+          if (data.models?.gpt4o) {
+            data.models.gpt4o.forEach((m: any) => {
+              chatModels.push({
+                id: m.id,
+                name: m.id.replace('gpt-', 'GPT-').replace(/-/g, ' '),
+                description: `Modelo ${m.id}`
+              });
+            });
+          }
+          
+          // Adicionar modelos O Series
+          if (data.models?.oSeries) {
+            data.models.oSeries.forEach((m: any) => {
+              chatModels.push({
+                id: m.id,
+                name: m.id.toUpperCase(),
+                description: `Modelo ${m.id}`
+              });
+            });
+          }
+          
+          // Adicionar modelos GPT-5
+          if (data.models?.gpt5) {
+            data.models.gpt5.forEach((m: any) => {
+              chatModels.push({
+                id: m.id,
+                name: m.id.replace('gpt-', 'GPT-').replace(/-/g, ' '),
+                description: `Modelo ${m.id}`
+              });
+            });
+          }
+          
+          // Adicionar modelos GPT-4.1
+          if (data.models?.gpt4) {
+            data.models.gpt4.forEach((m: any) => {
+              if (m.id.includes('gpt-4.1')) {
+                chatModels.push({
+                  id: m.id,
+                  name: m.id.replace('gpt-', 'GPT-').replace(/-/g, ' '),
+                  description: `Modelo ${m.id}`
+                });
+              }
+            });
+          }
+          
+          setAvailableModels(chatModels);
+          
+          // Definir modelo padrão se disponível
+          if (chatModels.length > 0) {
+            setModel(chatModels[0].id);
+          }
+        }
+      } catch (error) {
+        console.error('Erro ao carregar modelos:', error);
+        // Fallback para modelos padrão
+        setAvailableModels([
+          { id: 'gpt-4o-2024-11-20', name: 'GPT-4o 2024-11-20' },
+          { id: 'gpt-4o', name: 'GPT-4o' },
+          { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini' },
+          { id: 'chatgpt-4o-latest', name: 'ChatGPT 4o Latest' }
+        ]);
+      } finally {
+        setLoadingModels(false);
+      }
+    };
+    
+    loadModels();
+  }, []);
 
   const testResponsesAPI = async () => {
     setLoading(true);
@@ -71,17 +161,23 @@ export default function TestResponsesPage() {
             value={model}
             onChange={(e) => setModel(e.target.value)}
             className="w-full p-2 border border-gray-300 rounded-md"
+            disabled={loadingModels}
           >
-            <option value="gpt-4o-2024-11-20">gpt-4o-2024-11-20</option>
-            <option value="gpt-4o">gpt-4o</option>
-            <option value="gpt-4.1-mini">gpt-4.1-mini</option>
-            <option value="chatgpt-4o-latest">chatgpt-4o-latest</option>
+            {loadingModels ? (
+              <option>Carregando modelos...</option>
+            ) : (
+              availableModels.map((modelOption) => (
+                <option key={modelOption.id} value={modelOption.id}>
+                  {modelOption.name}
+                </option>
+              ))
+            )}
           </select>
         </div>
         
         <button
           onClick={testResponsesAPI}
-          disabled={loading}
+          disabled={loading || loadingModels}
           className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 disabled:opacity-50"
         >
           {loading ? 'Testando...' : 'Testar Responses API'}
@@ -99,13 +195,12 @@ export default function TestResponsesPage() {
       
       {imageUrl && (
         <div className="mt-6">
-          <h3 className="text-lg font-semibold mb-2">Prévia da Imagem:</h3>
+          <h2 className="text-lg font-semibold mb-2">Preview da Imagem:</h2>
           <img 
             src={imageUrl} 
-            alt="Teste" 
-            className="max-w-md max-h-64 object-contain border rounded"
+            alt="Preview" 
+            className="max-w-full h-auto rounded-md border"
             onError={(e) => {
-              console.error('Erro ao carregar imagem:', imageUrl);
               e.currentTarget.style.display = 'none';
             }}
           />

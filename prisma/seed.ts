@@ -49,14 +49,14 @@ async function seedPadrao() {
     update: {
       name: 'Amanda',
       emailVerified: dataAtual,
-      role: UserRole.ADMIN,
+      role: UserRole.SUPERADMIN,
       password: hashedPassword,
     },
     create: {
       email: 'amandasousa22.adv@gmail.com',
       name: 'Amanda',
       emailVerified: dataAtual,
-      role: UserRole.ADMIN,
+      role: UserRole.SUPERADMIN,
       password: hashedPassword,
       createdAt: dataAtual,
     },
@@ -68,14 +68,14 @@ async function seedPadrao() {
     update: {
       name: 'Witalo',
       emailVerified: dataAtual,
-      role: UserRole.ADMIN,
+      role: UserRole.SUPERADMIN,
       password: hashedPassword,
     },
     create: {
       email: 'witalo_rocha@hotmail.com',
       name: 'Witalo',
       emailVerified: dataAtual,
-      role: UserRole.ADMIN,
+      role: UserRole.SUPERADMIN,
       password: hashedPassword,
       createdAt: dataAtual,
     },

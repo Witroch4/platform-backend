@@ -5,6 +5,7 @@
 
 import OpenAI from 'openai';
 import { z } from 'zod';
+import { openaiChatWithCost } from '@/lib/cost/openai-wrapper';
 import { 
   LlmConfig, 
   LlmResponse, 
@@ -130,9 +131,10 @@ export class OpenAIStructuredClient {
           await this.sleep(delay);
         }
 
-        const response = await this.client.chat.completions.create({
-          model: this.config.model,
-          messages: [
+        const response = await openaiChatWithCost(
+          this.client,
+          this.config.model,
+          [
             {
               role: 'system',
               content: options.systemPrompt,
@@ -142,19 +144,12 @@ export class OpenAIStructuredClient {
               content: options.userPrompt,
             },
           ],
-          max_tokens: options.economicMode ? 
-            Math.min(this.config.maxTokens, 200) : 
-            this.config.maxTokens,
-          temperature: this.config.temperature,
-          response_format: {
-            type: 'json_schema',
-            json_schema: {
-              name: 'structured_response',
-              schema: this.zodToJsonSchema(options.schema),
-              strict: true,
-            },
-          },
-        });
+          {
+            traceId: `structured-output-${Date.now()}`,
+            intent: 'structured_output',
+            ...options.context
+          }
+        );
 
         const content = response.choices[0]?.message?.content;
         if (!content) {
@@ -344,11 +339,15 @@ export class OpenAIStructuredClient {
   async healthCheck(): Promise<boolean> {
     try {
       // Simple test call to check if API is reachable
-      const response = await this.client.chat.completions.create({
-        model: this.config.model,
-        messages: [{ role: 'user', content: 'test' }],
-        max_tokens: 1,
-      });
+      const response = await openaiChatWithCost(
+        this.client,
+        this.config.model,
+        [{ role: 'user', content: 'test' }],
+        {
+          traceId: `health-check-${Date.now()}`,
+          intent: 'health_check'
+        }
+      );
       
       return !!response.choices[0];
     } catch {

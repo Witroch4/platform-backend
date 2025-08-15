@@ -41,9 +41,9 @@ export type ResponsesAPIParams = {
   input: string | Array<{
     role: 'user' | 'assistant' | 'system';
     content: string | Array<{
-      type: 'input_text' | 'input_image' | 'input_file' | 'output_text';
+      type: 'text' | 'image_url' | 'file' | 'output_text';
       text?: string;
-      image_url?: string;
+      image_url?: { url: string; detail?: 'low' | 'high' | 'auto' };
       file_id?: string;
       detail?: 'low' | 'high' | 'auto';
     }>;

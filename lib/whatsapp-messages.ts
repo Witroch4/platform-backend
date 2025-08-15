@@ -5,6 +5,7 @@
  */
 
 import axios from "axios";
+import { whatsappWithCost } from './cost/whatsapp-wrapper';
 
 // ============================================================================
 // INTERFACES
@@ -285,16 +286,33 @@ export async function sendTemplateMessage(
     }
     const apiUrl = getMessagesApiUrl(phoneNumberId);
 
-    // Send the message
-    const response = await axios.post(apiUrl, payload, {
-      headers: {
-        Authorization: `Bearer ${data.whatsappApiKey}`,
-        "Content-Type": "application/json",
-      },
+    // Send the message with cost tracking
+    const sendFunction = async (templateName: string, to: string) => {
+      const response = await axios.post(apiUrl, payload, {
+        headers: {
+          Authorization: `Bearer ${data.whatsappApiKey}`,
+          "Content-Type": "application/json",
+        },
+      });
+      return {
+        messageId: response.data.messages?.[0]?.id || `template-${Date.now()}`,
+        status: response.status === 200 ? 'sent' : 'failed'
+      };
+    };
+
+    const result = await whatsappWithCost(sendFunction, {
+      templateName: data.templateName,
+      to: data.recipientPhone,
+      meta: {
+        traceId: `whatsapp-template-${Date.now()}`,
+        intent: 'template_send'
+      }
     });
 
+    const response = { data: { messages: [{ id: result.messageId }] } };
+
     console.log(
-      `[WhatsApp Messages] Template message sent successfully: ${response.data.messages?.[0]?.id}`
+      `[WhatsApp Messages] Template message sent successfully: ${result.messageId}`
     );
 
     return {
@@ -448,16 +466,33 @@ export async function sendInteractiveMessage(
     }
     const apiUrl = getMessagesApiUrl(phoneNumberId);
 
-    // Send the message
-    const response = await axios.post(apiUrl, payload, {
-      headers: {
-        Authorization: `Bearer ${data.whatsappApiKey}`,
-        "Content-Type": "application/json",
-      },
+    // Send the message with cost tracking
+    const sendFunction = async (templateName: string, to: string) => {
+      const response = await axios.post(apiUrl, payload, {
+        headers: {
+          Authorization: `Bearer ${data.whatsappApiKey}`,
+          "Content-Type": "application/json",
+        },
+      });
+      return {
+        messageId: response.data.messages?.[0]?.id || `interactive-${Date.now()}`,
+        status: response.status === 200 ? 'sent' : 'failed'
+      };
+    };
+
+    const result = await whatsappWithCost(sendFunction, {
+      templateName: 'interactive_message',
+      to: data.recipientPhone,
+      meta: {
+        traceId: `whatsapp-interactive-${Date.now()}`,
+        intent: 'interactive_send'
+      }
     });
 
+    const response = { data: { messages: [{ id: result.messageId }] } };
+
     console.log(
-      `[WhatsApp Messages] Interactive message sent successfully: ${response.data.messages?.[0]?.id}`
+      `[WhatsApp Messages] Interactive message sent successfully: ${result.messageId}`
     );
 
     return {
@@ -529,16 +564,33 @@ export async function sendTextMessage(
     }
     const apiUrl = getMessagesApiUrl(phoneNumberId);
 
-    // Send the message
-    const response = await axios.post(apiUrl, payload, {
-      headers: {
-        Authorization: `Bearer ${data.whatsappApiKey}`,
-        "Content-Type": "application/json",
-      },
+    // Send the message with cost tracking
+    const sendFunction = async (templateName: string, to: string) => {
+      const response = await axios.post(apiUrl, payload, {
+        headers: {
+          Authorization: `Bearer ${data.whatsappApiKey}`,
+          "Content-Type": "application/json",
+        },
+      });
+      return {
+        messageId: response.data.messages?.[0]?.id || `text-${Date.now()}`,
+        status: response.status === 200 ? 'sent' : 'failed'
+      };
+    };
+
+    const result = await whatsappWithCost(sendFunction, {
+      templateName: 'text_message',
+      to: data.recipientPhone,
+      meta: {
+        traceId: `whatsapp-text-${Date.now()}`,
+        intent: 'text_send'
+      }
     });
 
+    const response = { data: { messages: [{ id: result.messageId }] } };
+
     console.log(
-      `[WhatsApp Messages] Text message sent successfully: ${response.data.messages?.[0]?.id}`
+      `[WhatsApp Messages] Text message sent successfully: ${result.messageId}`
     );
 
     return {

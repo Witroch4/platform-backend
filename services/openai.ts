@@ -1,6 +1,12 @@
 // services/openai.ts
 import OpenAI, { toFile } from "openai";
 import { Message } from "@/hooks/useChatwitIA";
+import {
+  openaiWithCost,
+  openaiChatWithCost,
+  openaiEmbeddingWithCost,
+  responsesCall,
+} from "@/lib/cost/openai-wrapper";
 
 // Importações condicionais para evitar problemas com o bundler no navegador
 // Isso é necessário porque o código pode ser importado durante o build pelo Webpack/Next.js,
@@ -10,12 +16,8 @@ const isServer = typeof window === "undefined";
 
 // Código que pode ser carregado pelo bundler (webpack/vite) mas nunca é executado no navegador
 // Tipos para os modelos disponíveis da OpenAI
-export type GPTModel =
-  | "gpt-4o-latest"
-  | "chatgpt-4o-latest"
-  | "gpt-3.5-turbo"
-  | "gpt-3.5-turbo-16k"
-  | "gpt-4o";
+// 🔧 REFATORAÇÃO: Removida lista estática - modelos são obtidos dinamicamente via API
+export type GPTModel = string; // Aceita qualquer string, já que os modelos são dinâmicos
 
 export type ImageModel = "dall-e-3" | "dall-e-2";
 
@@ -46,6 +48,59 @@ export type FilePurpose =
   | "fine-tune-results"
   | "vision"
   | "user_data";
+
+// 🔧 CONSTANTES DINÂMICAS: Valores padrão que podem ser substituídos por modelos da API
+export const DEFAULT_MODELS = {
+  // Modelos padrão que serão substituídos dinamicamente quando possível
+  CHAT: process.env.DEFAULT_CHAT_MODEL || "gpt-4o-latest",
+  CHAT_ADVANCED: process.env.DEFAULT_CHAT_ADVANCED_MODEL || "gpt-5-chat-latest", 
+  CHAT_FAST: process.env.DEFAULT_CHAT_FAST_MODEL || "gpt-4.1-mini",
+  CHAT_NANO: process.env.DEFAULT_CHAT_NANO_MODEL || "gpt-4.1-nano",
+  IMAGE: process.env.DEFAULT_IMAGE_MODEL || "gpt-image-1",
+  EMBEDDING: process.env.DEFAULT_EMBEDDING_MODEL || "text-embedding-3-small",
+  AUDIO: process.env.DEFAULT_AUDIO_MODEL || "whisper-1",
+} as const;
+
+// SocialWise Flow structured output types
+export interface IntentCandidate {
+  slug: string;
+  name?: string;
+  desc?: string;
+  score?: number;
+  threshold?: number;
+}
+
+export interface WarmupButtonsResponse {
+  introduction_text: string;
+  buttons: Array<{
+    title: string;
+    payload: string;
+  }>;
+}
+
+export interface RouterDecision {
+  mode: "intent" | "chat";
+  intent_payload?: string;
+  introduction_text?: string;
+  buttons?: Array<{
+    title: string;
+    payload: string;
+  }>;
+  text?: string;
+}
+
+export interface AgentConfig {
+  model: string;
+  developer?: string;
+  instructions?: string;
+  reasoningEffort?: "minimal" | "low" | "medium" | "high";
+  verbosity?: "low" | "medium" | "high";
+  toolChoice?: "none" | "auto";
+  tempSchema?: number;
+  tempCopy?: number;
+  warmupDeadlineMs?: number;
+  embedipreview?: boolean;
+}
 
 // Interface para as opções de configuração de chat
 export interface ChatOptions {
@@ -108,6 +163,59 @@ export interface IOpenAIService {
     question: string,
     options?: ChatOptions
   ): Promise<string>;
+
+  // SocialWise Flow structured output methods
+  generateShortTitlesBatch(
+    intents: IntentCandidate[],
+    agent: AgentConfig
+  ): Promise<string[] | null>;
+
+  generateWarmupButtons(
+    userText: string,
+    candidates: IntentCandidate[],
+    agent: AgentConfig
+  ): Promise<WarmupButtonsResponse | null>;
+
+  routerLLM(
+    userText: string,
+    agent: AgentConfig
+  ): Promise<RouterDecision | null>;
+
+  // Enhanced deadline management
+  withDeadlineAbort<T>(
+    fn: (signal: AbortSignal) => Promise<T>,
+    ms?: number
+  ): Promise<T | null>;
+}
+
+/**
+ * Executes an operation with a real AbortController and deadline management
+ * @param fn Function to execute with abort signal
+ * @param ms Deadline in milliseconds (default: 250ms)
+ * @returns Result of the operation or null if aborted
+ */
+async function withDeadlineAbort<T>(
+  fn: (signal: AbortSignal) => Promise<T>,
+  ms = 250
+): Promise<T | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => {
+    console.warn(`⏰ Operation aborted after ${ms}ms deadline`);
+    controller.abort();
+  }, ms);
+
+  try {
+    const result = await fn(controller.signal);
+    clearTimeout(timeout);
+    return result;
+  } catch (error: any) {
+    clearTimeout(timeout);
+    if (error.name === "AbortError" || controller.signal.aborted) {
+      console.warn(`🚫 LLM call aborted after ${ms}ms`);
+      return null;
+    }
+    throw error;
+  }
 }
 
 // Implementação para servidor que usa a SDK OpenAI diretamente
@@ -123,7 +231,7 @@ class ServerOpenAIService implements IOpenAIService {
 
   async createChatCompletion(messages: any[], options: ChatOptions = {}) {
     const defaultOptions: ChatOptions = {
-      model: "gpt-4o-latest",
+      model: DEFAULT_MODELS.CHAT,
       temperature: 0.7,
       max_tokens: 420000,
       top_p: 1,
@@ -160,13 +268,13 @@ class ServerOpenAIService implements IOpenAIService {
               .trim();
           }
 
-          // 🚨 CORREÇÃO: Detectar file_id com URL (erro comum) e converter para input_image
+          // 🚨 CORREÇÃO: Detectar file_id com URL (erro comum) e converter para image_url
           const invalidFileIdMatches = message.content.match(
             /\[.*?\]\(file_id:(https?:\/\/[^)]+)\)/g
           );
           if (invalidFileIdMatches && invalidFileIdMatches.length > 0) {
             console.log(
-              `⚠️ Detectados ${invalidFileIdMatches.length} file_id inválidos com URLs - convertendo para input_image`
+              `⚠️ Detectados ${invalidFileIdMatches.length} file_id inválidos com URLs - convertendo para image_url`
             );
             invalidFileIdMatches.forEach((match: string) => {
               const invalidUrl = match.match(
@@ -175,7 +283,7 @@ class ServerOpenAIService implements IOpenAIService {
               if (invalidUrl) {
                 imageUrls.push(invalidUrl);
                 console.log(
-                  `🔄 Convertendo file_id inválido para input_image: ${invalidUrl.substring(0, 50)}...`
+                  `🔄 Convertendo file_id inválido para image_url: ${invalidUrl.substring(0, 50)}...`
                 );
               }
             });
@@ -233,15 +341,18 @@ class ServerOpenAIService implements IOpenAIService {
       }
 
       // Extrair mensagem de sistema (instruções)
-      const firstSystem = cleanedMessages.find((m: any) => m.role === 'system');
+      const firstSystem = cleanedMessages.find((m: any) => m.role === "system");
       const systemText = (() => {
-        if (!firstSystem) return '';
-        if (typeof firstSystem.content === 'string') return firstSystem.content.trim();
+        if (!firstSystem) return "";
+        if (typeof firstSystem.content === "string")
+          return firstSystem.content.trim();
         if (Array.isArray(firstSystem.content)) {
-          const txt = firstSystem.content.find((it: any) => it?.type === 'text' && typeof it?.text === 'string');
-          return txt?.text?.trim() || '';
+          const txt = firstSystem.content.find(
+            (it: any) => it?.type === "text" && typeof it?.text === "string"
+          );
+          return txt?.text?.trim() || "";
         }
-        return '';
+        return "";
       })();
 
       // Converter mensagens para o formato da Responses API
@@ -267,23 +378,23 @@ class ServerOpenAIService implements IOpenAIService {
       const promptText = userContent || "Analise o conteúdo fornecido.";
 
       // Preparar o input para a Responses API (apenas conteúdo do usuário)
-      const inputContent: any[] = [{ type: "input_text", text: promptText }];
+      const inputContent: any[] = [{ type: "text", text: promptText }];
 
-      // Adicionar imagens como input_image
+      // Adicionar imagens como image_url
       imageUrls.forEach((imageUrl, index) => {
         inputContent.push({
-          type: "input_image",
-          image_url: imageUrl, // 🔧 CORREÇÃO: Responses API usa string direta, não objeto
+          type: "image_url",
+          image_url: { url: imageUrl }, // 🔧 CORREÇÃO: Responses API usa objeto com url
         });
         console.log(
-          `🖼️ Adicionada imagem ${index + 1} como input_image: ${imageUrl.substring(0, 50)}...`
+          `🖼️ Adicionada imagem ${index + 1} como image_url: ${imageUrl.substring(0, 50)}...`
         );
       });
 
       // Adicionar cada arquivo como um item separado no content
       fileIdReferences.forEach((fileId) => {
-        inputContent.push({ type: "input_file", file_id: fileId });
-        console.log(`📁 Adicionado arquivo como input_file: ${fileId}`);
+        inputContent.push({ type: "file", file_id: fileId });
+        console.log(`📁 Adicionado arquivo como file: ${fileId}`);
       });
 
       // Processar mensagens com conteúdo complexo (imagens, etc.)
@@ -310,11 +421,11 @@ class ServerOpenAIService implements IOpenAIService {
               }
 
               inputContent.push({
-                type: "input_image",
-                image_url: imageUrl, // 🔧 CORREÇÃO: Responses API usa string direta
+                type: "image_url",
+                image_url: { url: imageUrl }, // 🔧 CORREÇÃO: Responses API usa objeto com url
               });
               console.log(
-                `🖼️ Adicionada imagem do conteúdo complexo como input_image`
+                `🖼️ Adicionada imagem do conteúdo complexo como image_url`
               );
             }
           });
@@ -322,7 +433,12 @@ class ServerOpenAIService implements IOpenAIService {
       });
 
       // Configurar opções para a requisição da Responses API
-      const requestOptions: any = {
+      // Helper para clamp seguro
+      const clamp = (n: number | undefined, min: number, max: number) =>
+        typeof n === "number" ? Math.max(min, Math.min(max, n)) : undefined;
+
+      // Configurar parâmetros da Responses API (sem campos inválidos)
+      const requestParams: any = {
         model: actualModel,
         input: [
           {
@@ -330,35 +446,42 @@ class ServerOpenAIService implements IOpenAIService {
             content: inputContent,
           },
         ],
-        ...(systemText ? { instructions: systemText } : {}), // ✅ System prompt vai no campo correto
-        stream: false,
+        ...(systemText ? { instructions: systemText } : {}),
         store: true,
-        parallel_tool_calls: true,
-        truncation: "disabled",
         temperature: mergedOptions.temperature,
         top_p: mergedOptions.top_p,
-        max_output_tokens: mergedOptions.max_tokens,
+        // Evita 400 por excesso de tokens de saída; ajuste se precisar
+        max_output_tokens: clamp(mergedOptions.max_tokens, 1, 8192) ?? 1024,
       };
 
-      // Adicionar parâmetro reasoning para modelos da série O
-      if (isOSeriesModel) {
+      // Adicionar parâmetro reasoning (O-series e GPT-5)
+      const isReasoningModel =
+        isOSeriesModel || actualModel.startsWith("gpt-5");
+      if (isReasoningModel) {
         const effort = reasoningEffort || "medium";
-        requestOptions.reasoning = { effort };
-        console.log(
-          `🧠 Adicionando reasoning effort: ${effort} para modelo da série O`
-        );
+        requestParams.reasoning = { effort };
+        console.log(`🧠 Reasoning effort: ${effort} (${actualModel})`);
       }
 
       console.log("📤 Enviando requisição para Responses API:", {
-        model: requestOptions.model,
+        model: requestParams.model,
         inputItems: inputContent.length,
         hasFiles: fileIdReferences.length > 0,
       });
 
-      // Usar a Responses API
-      const response = await this.client.responses.create(
-        requestOptions as any
-      );
+      // Usar a Responses API (passando params completos e options com signal)
+      const response = await withDeadlineAbort(async (signal) => {
+        return responsesCall(
+          this.client,
+          requestParams,
+          { traceId: `chat-completion-${Date.now()}`, intent: "chat_completion" },
+          { signal, timeout: 5000 }
+        );
+      }, 5000);
+
+      if (!response) {
+        throw new Error("Chat completion aborted due to timeout");
+      }
 
       console.log("✅ Resposta recebida da Responses API");
 
@@ -456,7 +579,7 @@ class ServerOpenAIService implements IOpenAIService {
       );
 
       const defaultOptions = {
-        model: "gpt-4.1-mini",
+        model: DEFAULT_MODELS.CHAT_FAST,
         quality: "auto",
         size: "auto",
         background: "auto",
@@ -465,19 +588,14 @@ class ServerOpenAIService implements IOpenAIService {
 
       const mergedOptions = { ...defaultOptions, ...options };
 
-      const response = await this.client.responses.create({
+      const response = await openaiWithCost(this.client, {
         model: mergedOptions.model,
         input: prompt,
-        tools: [
-          {
-            type: "image_generation",
-            quality: mergedOptions.quality,
-            size: mergedOptions.size,
-            background: mergedOptions.background,
-          },
-        ],
-        stream: mergedOptions.stream,
-      } as any);
+        meta: {
+          traceId: `image-generation-${Date.now()}`,
+          intent: "image_generation",
+        },
+      });
 
       if (mergedOptions.stream) {
         // Retornar stream diretamente
@@ -538,10 +656,15 @@ class ServerOpenAIService implements IOpenAIService {
 
   async getEmbeddings(input: string | string[]) {
     try {
-      const response = await this.client.embeddings.create({
-        model: "text-embedding-3-small",
+      const response = await openaiEmbeddingWithCost(
+        this.client,
+        DEFAULT_MODELS.EMBEDDING,
         input,
-      });
+        {
+          traceId: `embedding-${Date.now()}`,
+          intent: "embedding",
+        }
+      );
 
       return response;
     } catch (error) {
@@ -1044,34 +1167,333 @@ class ServerOpenAIService implements IOpenAIService {
       console.log(`Perguntando ao PDF ${fileId}: "${question}"`);
 
       const defaultOptions: ChatOptions = {
-        model: "gpt-4o",
+        model: DEFAULT_MODELS.CHAT,
         temperature: 0.7,
         max_tokens: 420000,
       };
 
       const mergedOptions = { ...defaultOptions, ...options };
 
-      // Usar a API responses.create ao invés de chat.completions.create
-      const response = await this.client.responses.create({
-        model: mergedOptions.model!,
-        input: [
+      // Usar a API responses.create com cost tracking with deadline management
+      const response = await withDeadlineAbort(async (signal) => {
+        return responsesCall(
+          this.client,
           {
-            role: "user",
-            content: [
-              { type: "input_file", file_id: fileId },
-              { type: "input_text", text: question },
-            ],
+            model: mergedOptions.model!,
+            input: [{
+              role: "user",
+              content: [
+                { type: "file", file_id: fileId },
+                { type: "text", text: question },
+              ],
+            }],
+            store: true,
+            temperature: mergedOptions.temperature,
+            max_output_tokens: 1024,
           },
-        ],
-        temperature: mergedOptions.temperature,
-        max_tokens: mergedOptions.max_tokens,
-      } as any); // Usar any por enquanto para contornar possíveis restrições de tipo
+          { traceId: `pdf-question-${Date.now()}`, intent: "pdf_analysis" },
+          { signal, timeout: 10_000 }
+        );
+      }, 10_000);
+
+      if (!response) {
+        throw new Error("PDF analysis aborted due to timeout");
+      }
 
       return response.output_text || "";
     } catch (error) {
       console.error("Erro ao perguntar sobre PDF:", error);
       throw error;
     }
+  }
+
+  /**
+   * Generates short titles for multiple intent candidates in a single batch call
+   * Optimized for SOFT band processing in SocialWise Flow
+   */
+  async generateShortTitlesBatch(
+    intents: IntentCandidate[],
+    agent: AgentConfig
+  ): Promise<string[] | null> {
+    if (!intents.length) return [];
+
+    const prompt = `# INSTRUÇÃO
+Você é um especialista em UX Writing para chatbots jurídicos.
+Gere títulos curtos e acionáveis para os seguintes serviços jurídicos.
+
+# REGRAS
+- Máximo 4 palavras por título
+- Máximo 20 caracteres por título
+- Foque na ação do usuário (ex: "Recorrer Multa", "Ação Judicial")
+- Use linguagem direta e profissional
+- Retorne apenas um array JSON de strings
+
+# SERVIÇOS
+${intents.map((intent, i) => `${i + 1}. ${intent.slug}: ${intent.desc || intent.name || intent.slug}`).join("\n")}
+
+# FORMATO DE RESPOSTA
+Retorne apenas um array JSON com os títulos na mesma ordem:
+["Título 1", "Título 2", "Título 3"]`;
+
+    return withDeadlineAbort(
+      async (signal) => {
+        try {
+          const response = await responsesCall(
+            this.client,
+            {
+              model: agent.model,
+              input: [{ role: "user", content: [{ type: "text", text: prompt }] }],
+              store: false,
+              temperature: agent.tempSchema ?? 0.2,
+              max_output_tokens: 512,
+            },
+            { traceId: `short-titles-batch-${Date.now()}`, intent: "short_titles_generation" },
+            { signal, timeout: agent.tempSchema ? 300 : 250 }
+          );
+
+          const content = response.output_text?.trim();
+          if (!content) return null;
+
+          // Parse JSON response
+          const titles = JSON.parse(content);
+          if (!Array.isArray(titles)) return null;
+
+          // Clamp each title to 20 characters and 4 words
+          return titles.map((title: string) => {
+            const clean = String(title || "")
+              .replace(/\s+/g, " ")
+              .trim();
+            const words = clean.split(" ");
+            const clamped = words.slice(0, 4).join(" ");
+            return clamped.length <= 20 ? clamped : clamped.slice(0, 20).trim();
+          });
+        } catch (error) {
+          console.error("Erro ao gerar títulos curtos em lote:", error);
+          return null;
+        }
+      },
+      agent.tempSchema ? 300 : 250
+    );
+  }
+
+  /**
+   * Generates warmup buttons with contextual introduction for uncertain intents
+   * Used in SOFT band processing (0.65-0.79 similarity score)
+   */
+  async generateWarmupButtons(
+    userText: string,
+    candidates: IntentCandidate[],
+    agent: AgentConfig
+  ): Promise<WarmupButtonsResponse | null> {
+    if (!candidates.length) return null;
+
+    const candidatesText = candidates
+      .map((c, i) => `${i + 1}. @${c.slug}: ${c.desc || c.name || c.slug}`)
+      .join("\n");
+
+    const prompt = `# INSTRUÇÃO
+Você é um especialista em UX Writing e Microcopy para chatbots jurídicos.
+Sua tarefa é gerar um conjunto de opções de botões para um usuário que fez uma pergunta ambígua.
+
+# CONTEXTO
+O sistema de IA identificou as seguintes intenções como as mais prováveis, mas não tem certeza suficiente para agir.
+
+# INTENÇÕES CANDIDATAS
+${candidatesText}
+
+# MENSAGEM ORIGINAL DO USUÁRIO
+"${userText}"
+
+# SUA TAREFA
+Gere uma resposta no formato JSON com:
+1. "introduction_text": frase curta e amigável (≤ 180 chars) que reconhece a situação do usuário
+2. "buttons": até 3 objetos com "title" (≤ 20 chars, ação do usuário) e "payload" (@intent_name)
+
+# REGRAS
+- Títulos dos botões devem ser ações claras (ex: "Recorrer Multa", "Ação Judicial")
+- Payloads devem usar o formato @slug das intenções
+- Texto de introdução deve ser empático e direcionador
+- Use linguagem jurídica acessível
+
+# FORMATO DE RESPOSTA
+{
+  "introduction_text": "Posso ajudar com sua questão. Qual dessas opções se aproxima mais do que você precisa?",
+  "buttons": [
+    {"title": "Recorrer Multa", "payload": "@recurso_multa_transito"},
+    {"title": "Ação Judicial", "payload": "@mandado_seguranca"},
+    {"title": "Consulta Geral", "payload": "@consulta_juridica"}
+  ]
+}`;
+
+    return withDeadlineAbort(async (signal) => {
+      try {
+        const response = await responsesCall(
+          this.client,
+          {
+            model: agent.model,
+            input: [{ role: "user", content: [{ type: "text", text: prompt }] }],
+            store: false,
+            temperature: agent.tempCopy ?? 0.5,
+            max_output_tokens: 768,
+          },
+          { traceId: `warmup-buttons-${Date.now()}`, intent: "warmup_buttons_generation" },
+          { signal, timeout: 300 }
+        );
+
+        const content = response.output_text?.trim();
+        if (!content) return null;
+
+        const result = JSON.parse(content) as WarmupButtonsResponse;
+
+        // Validate and clamp the response
+        if (!result.introduction_text || !Array.isArray(result.buttons)) {
+          return null;
+        }
+
+        // Clamp introduction text to 180 characters
+        result.introduction_text =
+          result.introduction_text.length <= 180
+            ? result.introduction_text
+            : result.introduction_text.slice(0, 180).trim();
+
+        // Clamp button titles and validate payloads
+        result.buttons = result.buttons
+          .slice(0, 3) // Max 3 buttons
+          .map((button) => ({
+            title:
+              button.title.length <= 20
+                ? button.title
+                : button.title.slice(0, 20).trim(),
+            payload: button.payload.match(/^@[a-z0-9_]+$/)
+              ? button.payload
+              : `@${button.payload.replace(/[^a-z0-9_]/g, "_").toLowerCase()}`,
+          }));
+
+        return result;
+      } catch (error) {
+        console.error("Erro ao gerar botões de aquecimento:", error);
+        return null;
+      }
+    }, 300); // Slightly longer deadline for complex generation
+  }
+
+  /**
+   * Router LLM for embedipreview=false mode
+   * Decides between intent classification and open chat
+   */
+  async routerLLM(
+    userText: string,
+    agent: AgentConfig
+  ): Promise<RouterDecision | null> {
+    const prompt = `# INSTRUÇÃO
+Você é um roteador inteligente para um chatbot jurídico.
+Analise a mensagem do usuário e decida se deve:
+1. Classificar como intenção específica (mode: "intent")
+2. Engajar em conversa aberta (mode: "chat")
+
+# MENSAGEM DO USUÁRIO
+"${userText}"
+
+# CRITÉRIOS DE DECISÃO
+- Use "intent" se a mensagem indica uma necessidade jurídica específica
+- Use "chat" se a mensagem é vaga, conversacional, ou precisa de esclarecimento
+- Para "intent": forneça payload específico e botões opcionais
+- Para "chat": forneça texto de resposta engajante
+
+# FORMATO DE RESPOSTA
+Para intenção específica:
+{
+  "mode": "intent",
+  "intent_payload": "@nome_da_intencao",
+  "introduction_text": "Texto opcional de confirmação",
+  "buttons": [{"title": "Confirmar", "payload": "@intencao"}]
+}
+
+Para conversa aberta:
+{
+  "mode": "chat",
+  "text": "Resposta conversacional que esclarece ou engaja o usuário"
+}`;
+
+    return withDeadlineAbort(async (signal) => {
+      try {
+        const response = await responsesCall(
+          this.client,
+          {
+            model: agent.model,
+            input: [{ role: "user", content: [{ type: "text", text: prompt }] }],
+            store: false,
+            temperature: agent.tempCopy ?? 0.3,
+            max_output_tokens: 768,
+          },
+          { traceId: `router-llm-${Date.now()}`, intent: "routing_decision" },
+          { signal, timeout: 300 }
+        );
+
+        const content = response.output_text?.trim();
+        if (!content) return null;
+
+        const result = JSON.parse(content) as RouterDecision;
+
+        // Validate the response structure
+        if (!result.mode || !["intent", "chat"].includes(result.mode)) {
+          return null;
+        }
+
+        // Validate intent mode requirements
+        if (result.mode === "intent" && !result.intent_payload) {
+          return null;
+        }
+
+        // Validate chat mode requirements
+        if (result.mode === "chat" && !result.text) {
+          return null;
+        }
+
+        // Clamp text fields if present
+        if (result.introduction_text) {
+          result.introduction_text =
+            result.introduction_text.length <= 180
+              ? result.introduction_text
+              : result.introduction_text.slice(0, 180).trim();
+        }
+
+        if (result.text) {
+          result.text =
+            result.text.length <= 1024
+              ? result.text
+              : result.text.slice(0, 1024).trim();
+        }
+
+        // Validate and clamp buttons if present
+        if (result.buttons) {
+          result.buttons = result.buttons.slice(0, 3).map((button) => ({
+            title:
+              button.title.length <= 20
+                ? button.title
+                : button.title.slice(0, 20).trim(),
+            payload: button.payload.match(/^@[a-z0-9_]+$/)
+              ? button.payload
+              : `@${button.payload.replace(/[^a-z0-9_]/g, "_").toLowerCase()}`,
+          }));
+        }
+
+        return result;
+      } catch (error) {
+        console.error("Erro no Router LLM:", error);
+        return null;
+      }
+    }, 300);
+  }
+
+  /**
+   * Enhanced deadline management with real AbortController
+   */
+  async withDeadlineAbort<T>(
+    fn: (signal: AbortSignal) => Promise<T>,
+    ms = 250
+  ): Promise<T | null> {
+    return withDeadlineAbort(fn, ms);
   }
 }
 
@@ -1174,7 +1596,7 @@ class ClientOpenAIService implements IOpenAIService {
               content: prompt,
             },
           ],
-          model: options.model || "gpt-4.1-mini",
+          model: options.model || DEFAULT_MODELS.CHAT_FAST,
           generateImage: true,
           imageOptions: {
             quality: options.quality || "high",
@@ -1602,6 +2024,114 @@ class ClientOpenAIService implements IOpenAIService {
       return data.text;
     } catch (error) {
       console.error("Cliente: Erro ao perguntar sobre PDF:", error);
+      throw error;
+    }
+  }
+
+  async generateShortTitlesBatch(
+    intents: IntentCandidate[],
+    agent: AgentConfig
+  ): Promise<string[] | null> {
+    try {
+      const response = await fetch("/api/chatwitia/socialwise/short-titles", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ intents, agent }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        throw new Error(
+          `Erro ao gerar títulos curtos: ${response.status} - ${errorData}`
+        );
+      }
+
+      const data = await response.json();
+      return data.titles;
+    } catch (error) {
+      console.error("Cliente: Erro ao gerar títulos curtos:", error);
+      return null;
+    }
+  }
+
+  async generateWarmupButtons(
+    userText: string,
+    candidates: IntentCandidate[],
+    agent: AgentConfig
+  ): Promise<WarmupButtonsResponse | null> {
+    try {
+      const response = await fetch("/api/chatwitia/socialwise/warmup-buttons", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ userText, candidates, agent }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        throw new Error(
+          `Erro ao gerar botões de aquecimento: ${response.status} - ${errorData}`
+        );
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error("Cliente: Erro ao gerar botões de aquecimento:", error);
+      return null;
+    }
+  }
+
+  async routerLLM(
+    userText: string,
+    agent: AgentConfig
+  ): Promise<RouterDecision | null> {
+    try {
+      const response = await fetch("/api/chatwitia/socialwise/router", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ userText, agent }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        throw new Error(
+          `Erro no Router LLM: ${response.status} - ${errorData}`
+        );
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error("Cliente: Erro no Router LLM:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Enhanced deadline management with real AbortController (client-side stub)
+   */
+  async withDeadlineAbort<T>(
+    fn: (signal: AbortSignal) => Promise<T>,
+    ms = 250
+  ): Promise<T | null> {
+    // Client-side implementation - delegate to server
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), ms);
+
+      const result = await fn(controller.signal);
+      clearTimeout(timeout);
+      return result;
+    } catch (error: any) {
+      if (error.name === "AbortError") {
+        return null;
+      }
       throw error;
     }
   }

@@ -23,7 +23,7 @@ interface Props {
 }
 
 export default function ChatwitIA({
-  modelId = "gpt-5-chat-latest",
+  modelId = "gpt-4o-latest", // Valor padrão mais conservador
   chatId = null,
   initialMessage = null,
   onTitleChange,

@@ -1,6 +1,15 @@
 CREATE EXTENSION IF NOT EXISTS vector;
 
 -- CreateEnum
+CREATE TYPE "public"."Provider" AS ENUM ('OPENAI', 'META_WHATSAPP', 'INFRA', 'OTHER');
+
+-- CreateEnum
+CREATE TYPE "public"."Unit" AS ENUM ('TOKENS_IN', 'TOKENS_OUT', 'TOKENS_CACHED', 'IMAGE_LOW', 'IMAGE_MEDIUM', 'IMAGE_HIGH', 'WHATSAPP_TEMPLATE', 'AUTH_TEMPLATE', 'UTILITY_TEMPLATE', 'MARKETING_TEMPLATE', 'TOOL_CALL', 'VECTOR_GB_DAY', 'OTHER');
+
+-- CreateEnum
+CREATE TYPE "public"."EventStatus" AS ENUM ('PENDING_PRICING', 'PRICED', 'ERROR');
+
+-- CreateEnum
 CREATE TYPE "public"."IntentActionType" AS ENUM ('TEMPLATE', 'INTERACTIVE', 'TEXT', 'HUMAN_FALLBACK');
 
 -- CreateEnum
@@ -53,6 +62,9 @@ CREATE TYPE "public"."WebhookEvent" AS ENUM ('QUEUE_HEALTH_CHANGED', 'JOB_COMPLE
 
 -- CreateEnum
 CREATE TYPE "public"."QueueUserRole" AS ENUM ('viewer', 'operator', 'admin', 'superadmin');
+
+-- CreateEnum
+CREATE TYPE "public"."PromptType" AS ENUM ('INTENT_CLASSIFICATION', 'WARMUP_BUTTONS', 'MICROCOPY', 'ROUTER_LLM', 'SHORT_TITLES', 'DOMAIN_TOPICS');
 
 -- CreateEnum
 CREATE TYPE "public"."AiFaqStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED');
@@ -829,6 +841,73 @@ CREATE TABLE "public"."UserFeedback" (
 );
 
 -- CreateTable
+CREATE TABLE "public"."PriceCard" (
+    "id" TEXT NOT NULL,
+    "provider" "public"."Provider" NOT NULL,
+    "product" TEXT NOT NULL,
+    "unit" "public"."Unit" NOT NULL,
+    "region" TEXT,
+    "currency" TEXT NOT NULL DEFAULT 'USD',
+    "pricePerUnit" DECIMAL(18,8) NOT NULL,
+    "effectiveFrom" TIMESTAMP(3) NOT NULL,
+    "effectiveTo" TIMESTAMP(3),
+    "metadata" JSONB,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "PriceCard_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."CostEvent" (
+    "id" TEXT NOT NULL,
+    "ts" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "traceId" TEXT,
+    "externalId" TEXT,
+    "provider" "public"."Provider" NOT NULL,
+    "product" TEXT NOT NULL,
+    "unit" "public"."Unit" NOT NULL,
+    "units" DECIMAL(18,6) NOT NULL,
+    "currency" TEXT NOT NULL DEFAULT 'USD',
+    "unitPrice" DECIMAL(18,8),
+    "cost" DECIMAL(18,8),
+    "status" "public"."EventStatus" NOT NULL DEFAULT 'PENDING_PRICING',
+    "sessionId" TEXT,
+    "inboxId" TEXT,
+    "userId" TEXT,
+    "intent" TEXT,
+    "raw" JSONB NOT NULL,
+
+    CONSTRAINT "CostEvent_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."FxRate" (
+    "date" TIMESTAMP(3) NOT NULL,
+    "base" TEXT NOT NULL DEFAULT 'USD',
+    "quote" TEXT NOT NULL,
+    "rate" DECIMAL(18,8) NOT NULL,
+
+    CONSTRAINT "FxRate_pkey" PRIMARY KEY ("date","base","quote")
+);
+
+-- CreateTable
+CREATE TABLE "public"."CostBudget" (
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "inboxId" TEXT,
+    "userId" TEXT,
+    "period" TEXT NOT NULL,
+    "limitUSD" DECIMAL(18,2) NOT NULL,
+    "alertAt" DECIMAL(3,2) NOT NULL DEFAULT 0.80,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "CostBudget_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "public"."NegativeExample" (
     "id" TEXT NOT NULL,
     "intentId" TEXT NOT NULL,
@@ -1108,10 +1187,66 @@ CREATE TABLE "public"."LlmAudit" (
     "modelUsed" TEXT,
     "latencyMs" INTEGER,
     "traceId" TEXT,
+    "promptVersionId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "expiresAt" TIMESTAMP(3) NOT NULL DEFAULT NOW() + INTERVAL '90 days',
 
     CONSTRAINT "LlmAudit_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."PromptVersion" (
+    "id" TEXT NOT NULL,
+    "assistantId" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "version" TEXT NOT NULL,
+    "promptType" "public"."PromptType" NOT NULL,
+    "content" TEXT NOT NULL,
+    "systemPrompt" TEXT,
+    "temperature" DOUBLE PRECISION,
+    "maxTokens" INTEGER,
+    "isActive" BOOLEAN NOT NULL DEFAULT false,
+    "isDefault" BOOLEAN NOT NULL DEFAULT false,
+    "abTestWeight" DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "createdById" TEXT NOT NULL,
+
+    CONSTRAINT "PromptVersion_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."PromptMetrics" (
+    "id" TEXT NOT NULL,
+    "promptVersionId" TEXT NOT NULL,
+    "date" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "totalUsage" INTEGER NOT NULL DEFAULT 0,
+    "successRate" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "averageLatency" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "averageScore" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "tokenUsage" INTEGER NOT NULL DEFAULT 0,
+    "errorRate" DOUBLE PRECISION NOT NULL DEFAULT 0,
+
+    CONSTRAINT "PromptMetrics_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."PromptABTest" (
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "description" TEXT,
+    "assistantId" TEXT NOT NULL,
+    "promptVersions" TEXT[],
+    "trafficSplit" JSONB NOT NULL,
+    "isActive" BOOLEAN NOT NULL DEFAULT false,
+    "startDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "endDate" TIMESTAMP(3),
+    "winnerVersionId" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "createdById" TEXT NOT NULL,
+
+    CONSTRAINT "PromptABTest_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -1157,7 +1292,19 @@ CREATE TABLE "public"."AiAssistant" (
     "captureMemories" BOOLEAN NOT NULL DEFAULT false,
     "instructions" TEXT,
     "intentOutputFormat" "public"."AiIntentOutputFormat" NOT NULL DEFAULT 'JSON',
-    "model" TEXT NOT NULL DEFAULT 'gpt-4o-mini',
+    "model" TEXT NOT NULL DEFAULT 'gpt-5-nano',
+    "embedipreview" BOOLEAN NOT NULL DEFAULT true,
+    "reasoningEffort" TEXT NOT NULL DEFAULT 'minimal',
+    "verbosity" TEXT NOT NULL DEFAULT 'low',
+    "temperature" DOUBLE PRECISION DEFAULT 0.7,
+    "topP" DOUBLE PRECISION DEFAULT 0.7,
+    "tempSchema" DOUBLE PRECISION NOT NULL DEFAULT 0.1,
+    "tempCopy" DOUBLE PRECISION NOT NULL DEFAULT 0.4,
+    "warmupDeadlineMs" INTEGER NOT NULL DEFAULT 250,
+    "hardDeadlineMs" INTEGER NOT NULL DEFAULT 120,
+    "softDeadlineMs" INTEGER NOT NULL DEFAULT 300,
+    "shortTitleLLM" BOOLEAN NOT NULL DEFAULT true,
+    "toolChoice" TEXT NOT NULL DEFAULT 'auto',
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -1394,6 +1541,21 @@ CREATE INDEX "UserFeedback_type_severity_status_idx" ON "public"."UserFeedback"(
 CREATE INDEX "UserFeedback_createdAt_idx" ON "public"."UserFeedback"("createdAt");
 
 -- CreateIndex
+CREATE INDEX "PriceCard_provider_product_unit_region_effectiveFrom_effect_idx" ON "public"."PriceCard"("provider", "product", "unit", "region", "effectiveFrom", "effectiveTo");
+
+-- CreateIndex
+CREATE INDEX "CostEvent_provider_product_unit_ts_idx" ON "public"."CostEvent"("provider", "product", "unit", "ts");
+
+-- CreateIndex
+CREATE INDEX "CostEvent_sessionId_inboxId_userId_idx" ON "public"."CostEvent"("sessionId", "inboxId", "userId");
+
+-- CreateIndex
+CREATE INDEX "CostEvent_status_idx" ON "public"."CostEvent"("status");
+
+-- CreateIndex
+CREATE INDEX "CostBudget_inboxId_userId_isActive_idx" ON "public"."CostBudget"("inboxId", "userId", "isActive");
+
+-- CreateIndex
 CREATE INDEX "NegativeExample_intentId_idx" ON "public"."NegativeExample"("intentId");
 
 -- CreateIndex
@@ -1497,6 +1659,30 @@ CREATE INDEX "LlmAudit_accountId_createdAt_idx" ON "public"."LlmAudit"("accountI
 
 -- CreateIndex
 CREATE INDEX "LlmAudit_expiresAt_idx" ON "public"."LlmAudit"("expiresAt");
+
+-- CreateIndex
+CREATE INDEX "LlmAudit_promptVersionId_idx" ON "public"."LlmAudit"("promptVersionId");
+
+-- CreateIndex
+CREATE INDEX "PromptVersion_assistantId_isActive_idx" ON "public"."PromptVersion"("assistantId", "isActive");
+
+-- CreateIndex
+CREATE INDEX "PromptVersion_promptType_isActive_idx" ON "public"."PromptVersion"("promptType", "isActive");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "PromptVersion_assistantId_name_version_key" ON "public"."PromptVersion"("assistantId", "name", "version");
+
+-- CreateIndex
+CREATE INDEX "PromptMetrics_date_idx" ON "public"."PromptMetrics"("date");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "PromptMetrics_promptVersionId_date_key" ON "public"."PromptMetrics"("promptVersionId", "date");
+
+-- CreateIndex
+CREATE INDEX "PromptABTest_assistantId_isActive_idx" ON "public"."PromptABTest"("assistantId", "isActive");
+
+-- CreateIndex
+CREATE INDEX "PromptABTest_startDate_endDate_idx" ON "public"."PromptABTest"("startDate", "endDate");
 
 -- CreateIndex
 CREATE INDEX "IntentHitLog_conversationId_createdAt_idx" ON "public"."IntentHitLog"("conversationId", "createdAt");
@@ -1719,6 +1905,24 @@ ALTER TABLE "public"."Intent" ADD CONSTRAINT "Intent_createdById_fkey" FOREIGN K
 
 -- AddForeignKey
 ALTER TABLE "public"."Intent" ADD CONSTRAINT "Intent_templateId_fkey" FOREIGN KEY ("templateId") REFERENCES "public"."Template"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."LlmAudit" ADD CONSTRAINT "LlmAudit_promptVersionId_fkey" FOREIGN KEY ("promptVersionId") REFERENCES "public"."PromptVersion"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."PromptVersion" ADD CONSTRAINT "PromptVersion_assistantId_fkey" FOREIGN KEY ("assistantId") REFERENCES "public"."AiAssistant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."PromptVersion" ADD CONSTRAINT "PromptVersion_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."PromptMetrics" ADD CONSTRAINT "PromptMetrics_promptVersionId_fkey" FOREIGN KEY ("promptVersionId") REFERENCES "public"."PromptVersion"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."PromptABTest" ADD CONSTRAINT "PromptABTest_assistantId_fkey" FOREIGN KEY ("assistantId") REFERENCES "public"."AiAssistant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."PromptABTest" ADD CONSTRAINT "PromptABTest_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."IntentHitLog" ADD CONSTRAINT "IntentHitLog_intentId_fkey" FOREIGN KEY ("intentId") REFERENCES "public"."Intent"("id") ON DELETE CASCADE ON UPDATE CASCADE;

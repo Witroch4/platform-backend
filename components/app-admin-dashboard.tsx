@@ -236,6 +236,64 @@ export function AppAdminDashboard() {
                 </Collapsible>
 
                 {isAdmin && (
+                  <>
+                    {/* Capitão (pai) com lista de sub-itens */}
+                    <Collapsible defaultOpen className="group/collapsible">
+                      <SidebarMenuItem>
+                        <CollapsibleTrigger asChild>
+                          <SidebarMenuButton className="text-base py-3">
+                            <Bot className="mr-3 h-5 w-5" />
+                            {state !== "collapsed" && <span className="font-semibold">Capitão</span>}
+                          </SidebarMenuButton>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="pl-2 py-1 space-y-1">
+                            <SidebarMenuSub>
+                              <SidebarMenuSubItem>
+                                <SidebarMenuSubButton
+                                  href="/admin/capitao"
+                                  className="text-[0.95rem] py-2"
+                                >
+                                  <Bot className="text-blue-500" />
+                                  <span className="font-medium">Assistentes</span>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                              <SidebarMenuSubItem>
+                                <SidebarMenuSubButton
+                                  href="/admin/capitao/documentos"
+                                  className="text-[0.95rem] py-2"
+                                >
+                                  <FileText className="text-gray-600" />
+                                  <span className="font-medium">Documentos</span>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                              <SidebarMenuSubItem>
+                                <SidebarMenuSubButton
+                                  href="/admin/capitao/faqs"
+                                  className="text-[0.95rem] py-2"
+                                >
+                                  <HelpCircle className="text-gray-600" />
+                                  <span className="font-medium">FAQs</span>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                              <SidebarMenuSubItem>
+                                <SidebarMenuSubButton
+                                  href="/admin/capitao/intents"
+                                  className="text-[0.95rem] py-2"
+                                >
+                                  <Settings className="text-gray-600" />
+                                  <span className="font-medium">Intenções (IA)</span>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            </SidebarMenuSub>
+                          </div>
+                        </CollapsibleContent>
+                      </SidebarMenuItem>
+                    </Collapsible>
+                  </>
+                )}
+
+                {isAdmin && (
                   <SidebarMenuItem>
                     <SidebarMenuButton asChild>
                       <Dialog>
@@ -297,43 +355,6 @@ export function AppAdminDashboard() {
                       </Dialog>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
-                )}
-
-                {isAdmin && (
-                  <>
-                    <SidebarMenuItem>
-                      <SidebarMenuButton asChild>
-                        <Link href="/admin/capitao" className="flex items-center">
-                          <Bot className="mr-2" />
-                          {state !== "collapsed" && <span>Capitão / Assistentes</span>}
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                    <SidebarMenuItem>
-                      <SidebarMenuButton asChild>
-                        <Link href="/admin/capitao/intents" className="flex items-center">
-                          <Settings className="mr-2" />
-                          {state !== "collapsed" && <span>Capitão / Intenções (IA)</span>}
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                    <SidebarMenuItem>
-                      <SidebarMenuButton asChild>
-                        <Link href="/admin/capitao/faqs" className="flex items-center">
-                          <HelpCircle className="mr-2" />
-                          {state !== "collapsed" && <span>Capitão / FAQs</span>}
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                    <SidebarMenuItem>
-                      <SidebarMenuButton asChild>
-                        <Link href="/admin/capitao/documentos" className="flex items-center">
-                          <FileText className="mr-2" />
-                          {state !== "collapsed" && <span>Capitão / Documentos</span>}
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  </>
                 )}
 
                 {isSuperAdmin && (

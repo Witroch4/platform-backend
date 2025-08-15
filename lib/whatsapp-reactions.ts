@@ -7,6 +7,7 @@ import axios from 'axios';
 import { getWhatsAppConfig, getWhatsAppApiUrl } from '@/app/lib';
 import { auth } from '@/auth';
 import { getPrismaInstance } from '@/lib/connections';
+import { whatsappWithCost } from './cost/whatsapp-wrapper';
 
 export interface ReactionMessageData {
   recipientPhone: string;
@@ -81,13 +82,30 @@ export async function sendReactionMessage(data: ReactionMessageData): Promise<Re
 
     console.log('[WhatsApp Reactions] Payload da reação:', JSON.stringify(payload, null, 2));
 
-    // Send reaction via WhatsApp API
-    const response = await axios.post(apiUrl, payload, {
-      headers: {
-        'Authorization': `Bearer ${config.whatsappToken}`,
-        'Content-Type': 'application/json'
+    // Send reaction via WhatsApp API with cost tracking
+    const sendFunction = async (templateName: string, to: string) => {
+      const response = await axios.post(apiUrl, payload, {
+        headers: {
+          'Authorization': `Bearer ${config.whatsappToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      return {
+        messageId: response.data.messages?.[0]?.id || `reaction-${Date.now()}`,
+        status: response.status === 200 ? 'sent' : 'failed'
+      };
+    };
+
+    const result = await whatsappWithCost(sendFunction, {
+      templateName: 'reaction_message',
+      to: data.recipientPhone,
+      meta: {
+        traceId: `whatsapp-reaction-${Date.now()}`,
+        intent: 'reaction_send'
       }
     });
+
+    const response = { data: { messages: [{ id: result.messageId }] } };
 
     console.log('[WhatsApp Reactions] Reação enviada com sucesso:', response.data);
 

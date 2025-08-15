@@ -42,6 +42,19 @@ export async function GET(request: NextRequest) {
         instructions: true,
         intentOutputFormat: true,
         model: true,
+        // SocialWise Flow optimization settings
+        embedipreview: true,
+        reasoningEffort: true,
+        verbosity: true,
+        temperature: true,
+        topP: true,
+        tempSchema: true,
+        tempCopy: true,
+        warmupDeadlineMs: true,
+        hardDeadlineMs: true,
+        softDeadlineMs: true,
+        shortTitleLLM: true,
+        toolChoice: true,
         userId: true,
         createdAt: true,
       },
@@ -64,6 +77,9 @@ export async function GET(request: NextRequest) {
       generateFaqs: true,
       captureMemories: true,
       model: true,
+      embedipreview: true,
+      reasoningEffort: true,
+      verbosity: true,
       createdAt: true,
     },
   });
@@ -103,7 +119,20 @@ export async function POST(request: NextRequest) {
         captureMemories,
         instructions: body?.instructions ? String(body.instructions) : null,
         intentOutputFormat: body?.intentOutputFormat === 'AT_SYMBOL' ? 'AT_SYMBOL' : 'JSON',
-        model: typeof body?.model === 'string' && body.model.trim() ? String(body.model) : 'gpt-4o-mini',
+        model: typeof body?.model === 'string' && body.model.trim() ? String(body.model) : 'gpt-5-nano',
+        // SocialWise Flow optimization settings with defaults
+        embedipreview: body?.embedipreview !== undefined ? !!body.embedipreview : true,
+        reasoningEffort: ['minimal', 'low', 'medium', 'high'].includes(body?.reasoningEffort) ? body.reasoningEffort : 'minimal',
+        verbosity: ['low', 'medium', 'high'].includes(body?.verbosity) ? body.verbosity : 'low',
+        temperature: typeof body?.temperature === 'number' && body.temperature >= 0 && body.temperature <= 2 ? body.temperature : 0.7,
+        topP: typeof body?.topP === 'number' && body.topP >= 0 && body.topP <= 1 ? body.topP : 0.7,
+        tempSchema: typeof body?.tempSchema === 'number' && body.tempSchema >= 0 && body.tempSchema <= 0.2 ? body.tempSchema : 0.1,
+        tempCopy: typeof body?.tempCopy === 'number' && body.tempCopy >= 0.3 && body.tempCopy <= 0.5 ? body.tempCopy : 0.4,
+        warmupDeadlineMs: typeof body?.warmupDeadlineMs === 'number' && body.warmupDeadlineMs > 0 ? body.warmupDeadlineMs : 250,
+        hardDeadlineMs: typeof body?.hardDeadlineMs === 'number' && body.hardDeadlineMs > 0 ? body.hardDeadlineMs : 120,
+        softDeadlineMs: typeof body?.softDeadlineMs === 'number' && body.softDeadlineMs > 0 ? body.softDeadlineMs : 300,
+        shortTitleLLM: body?.shortTitleLLM !== undefined ? !!body.shortTitleLLM : true,
+        toolChoice: ['none', 'auto'].includes(body?.toolChoice) ? body.toolChoice : 'auto',
       },
       select: {
         id: true,
@@ -113,6 +142,9 @@ export async function POST(request: NextRequest) {
         generateFaqs: true,
         captureMemories: true,
         model: true,
+        embedipreview: true,
+        reasoningEffort: true,
+        verbosity: true,
         createdAt: true,
       },
     });
@@ -162,6 +194,20 @@ export async function PATCH(request: NextRequest) {
   if (typeof body?.instructions === 'string') updateData.instructions = body.instructions;
   if (typeof body?.intentOutputFormat === 'string') updateData.intentOutputFormat = body.intentOutputFormat === 'AT_SYMBOL' ? 'AT_SYMBOL' : 'JSON';
   if (typeof body?.model === 'string') updateData.model = String(body.model).trim();
+  
+  // SocialWise Flow optimization settings
+  if (typeof body?.embedipreview === 'boolean') updateData.embedipreview = body.embedipreview;
+  if (['minimal', 'low', 'medium', 'high'].includes(body?.reasoningEffort)) updateData.reasoningEffort = body.reasoningEffort;
+  if (['low', 'medium', 'high'].includes(body?.verbosity)) updateData.verbosity = body.verbosity;
+  if (typeof body?.temperature === 'number' && body.temperature >= 0 && body.temperature <= 2) updateData.temperature = body.temperature;
+  if (typeof body?.topP === 'number' && body.topP >= 0 && body.topP <= 1) updateData.topP = body.topP;
+  if (typeof body?.tempSchema === 'number' && body.tempSchema >= 0 && body.tempSchema <= 0.2) updateData.tempSchema = body.tempSchema;
+  if (typeof body?.tempCopy === 'number' && body.tempCopy >= 0.3 && body.tempCopy <= 0.5) updateData.tempCopy = body.tempCopy;
+  if (typeof body?.warmupDeadlineMs === 'number' && body.warmupDeadlineMs > 0) updateData.warmupDeadlineMs = body.warmupDeadlineMs;
+  if (typeof body?.hardDeadlineMs === 'number' && body.hardDeadlineMs > 0) updateData.hardDeadlineMs = body.hardDeadlineMs;
+  if (typeof body?.softDeadlineMs === 'number' && body.softDeadlineMs > 0) updateData.softDeadlineMs = body.softDeadlineMs;
+  if (typeof body?.shortTitleLLM === 'boolean') updateData.shortTitleLLM = body.shortTitleLLM;
+  if (['none', 'auto'].includes(body?.toolChoice)) updateData.toolChoice = body.toolChoice;
 
   const updated = await prisma.aiAssistant.update({ where: { id }, data: updateData, select: { id: true } });
   return NextResponse.json({ ok: true, id: updated.id });

@@ -45,6 +45,11 @@ export async function initializeMonitoring(): Promise<void> {
     await initializeInstagramErrorTracking();
     console.log("[Monitoring] ✓ Instagram Error Tracking initialized");
 
+    // 2.4. Initialize Cost Monitoring
+    const { costMonitor } = await import('../cost/cost-monitor');
+    // Cost monitor initializes automatically when imported
+    console.log("[Monitoring] ✓ Cost Monitor initialized");
+
     // 3. Database Monitor is automatically initialized when imported
     console.log("[Monitoring] ✓ Database Monitor initialized");
 
@@ -211,6 +216,21 @@ export async function performHealthCheck(): Promise<{
       status: cacheHealth.isConnected ? "healthy" : "unhealthy",
       message: `Connected: ${cacheHealth.isConnected}, Latency: ${cacheHealth.latency}ms`,
       latency: cacheLatency,
+    };
+
+    // Check Cost System Health
+    const { getCostSystemHealth } = await import("../cost/cost-monitor");
+    const costStart = Date.now();
+    const costHealth = getCostSystemHealth();
+    const costLatency = Date.now() - costStart;
+
+    const costStatus = costHealth.status === 'HEALTHY' ? 'healthy' : 
+                      costHealth.status === 'DEGRADED' ? 'degraded' : 'unhealthy';
+    
+    healthCheck.components.costSystem = {
+      status: costStatus,
+      message: `Error Rate: ${costHealth.errorRate}%, Pending: ${costHealth.pendingEvents}`,
+      latency: costLatency,
     };
 
     // Determine overall status

@@ -6,6 +6,7 @@ import type { Message } from '@/hooks/useChatwitIA';
 import { auth } from "@/auth";
 import { getPrismaInstance } from "@/lib/connections"
 import { uploadToMinIO } from '@/lib/minio';
+import { openaiChatWithCost, responsesCall } from '@/lib/cost/openai-wrapper';
 // @ts-ignore - Adding Anthropic SDK
 // Removido Anthropic (focar somente OpenAI)
 
@@ -68,13 +69,11 @@ async function classifyTurn(messages: Message[]): Promise<{ intent: Intent; reas
   }
   
   try {
-    // Use the regular chat completions API for intent classification
-    const res = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // Use a reliable model for classification
-      temperature: 0,
-      max_tokens: 150,
-      response_format: { type: "json_object" },
-      messages: [{
+    // Use the regular chat completions API for intent classification with cost tracking
+    const res = await openaiChatWithCost(
+      openai,
+      "gpt-4o-mini", // Use a reliable model for classification
+      [{
         role: "user",
         content: `Classifique a intenção do usuário (pt/en).
 Categorias:
@@ -89,8 +88,12 @@ Retorne SOMENTE um JSON com formato: {"intent": "categoria", "reasons": ["motivo
 
 Texto do usuário:
 """${text}"""`
-      }]
-    });
+      }],
+      {
+        traceId: `intent-classification-${Date.now()}`,
+        intent: 'intent_classification'
+      }
+    );
     
     const out = JSON.parse(res.choices[0]?.message?.content || "{}");
     return { intent: out.intent || "chat", reasons: out.reasons || [] };
@@ -711,17 +714,17 @@ async function handleOpenAIRequest(
           console.log(`📁 Extraídos ${extractedFileIds.length} file IDs válidos (mantém image_generation):`, extractedFileIds);
         }
         
-        // 🚨 CORREÇÃO: Detectar file_id com URL (erro comum) e converter para input_image
+        // 🚨 CORREÇÃO: Detectar file_id com URL (erro comum) e converter para image_url
         const invalidFileIdRegex = /\[.*?\]\(file_id:(https?:\/\/[^)]+)\)/g;
         const invalidFileIdMatches = [...userContent.matchAll(invalidFileIdRegex)];
         
         if (invalidFileIdMatches.length > 0) {
-          console.log(`⚠️ Detectados ${invalidFileIdMatches.length} file_id inválidos com URLs - convertendo para input_image`);
+          console.log(`⚠️ Detectados ${invalidFileIdMatches.length} file_id inválidos com URLs - convertendo para image_url`);
           invalidFileIdMatches.forEach(match => {
             const invalidUrl = match[1];
             imageUrls.push(invalidUrl);
             hasDirectImageUrls = true; // URLs diretas removem image_generation tool
-            console.log(`🔄 Convertendo file_id inválido para input_image: ${invalidUrl.substring(0, 50)}...`);
+            console.log(`🔄 Convertendo file_id inválido para image_url: ${invalidUrl.substring(0, 50)}...`);
           });
           // Remover as referências inválidas do texto
           userContent = userContent.replace(invalidFileIdRegex, '').trim();
@@ -740,7 +743,7 @@ async function handleOpenAIRequest(
           if (contentItem.type === 'text' && contentItem.text) {
             userContent += contentItem.text + ' ';
           } else if (contentItem.type === 'image' && contentItem.image_url) {
-            // Só adicionar como input_image se não há referência específica
+            // Só adicionar como image_url se não há referência específica
             if (!compatiblePreviousResponseId) {
               // Garantir que o formato esteja correto para Responses API
               let imageUrl: string;
@@ -775,20 +778,20 @@ async function handleOpenAIRequest(
 
     // Preparar conteúdo de entrada para a Responses API (apenas conteúdo do usuário)
     const inputContent: any[] = [];
-    inputContent.push({ type: "input_text", text: userContent || "Analise o conteúdo fornecido." });
+    inputContent.push({ type: "text", text: userContent || "Analise o conteúdo fornecido." });
     
-    // Adicionar imagens extraídas como input_image APENAS se não há referência específica
+    // Adicionar imagens extraídas como image_url APENAS se não há referência específica
     if (imageUrls.length > 0) {
       imageUrls.forEach((imageUrl, index) => {
         inputContent.push({
-          type: "input_image",
-          image_url: imageUrl // 🔧 CORREÇÃO: Responses API usa string direta, não objeto
+          type: "image_url",
+          image_url: { url: imageUrl } // 🔧 CORREÇÃO: Responses API usa objeto com url
         });
-        console.log(`🖼️ Adicionada imagem ${index + 1} como input_image: ${imageUrl.substring(0, 50)}...`);
+        console.log(`🖼️ Adicionada imagem ${index + 1} como image_url: ${imageUrl.substring(0, 50)}...`);
       });
     }
     
-    // Adicionar cada arquivo como input_file (para PDFs) ou input_image (para imagens)
+    // Adicionar cada arquivo como file (para PDFs) ou image_url (para imagens)
     for (const fileId of extractedFileIds) {
       // 🔧 NOVA LÓGICA: Determinar tipo do arquivo baseado no banco de dados
       try {
@@ -826,22 +829,22 @@ async function handleOpenAIRequest(
                          fileName.toLowerCase().includes(ext));
         
         if (isPdf) {
-          inputContent.push({ type: "input_file", file_id: fileId });
-          console.log(`📄 Adicionado PDF como input_file (file_id): ${fileId} - ${fileName}`);
+          inputContent.push({ type: "file", file_id: fileId });
+          console.log(`📄 Adicionado PDF como file (file_id): ${fileId} - ${fileName}`);
         } else if (isImage) {
-          inputContent.push({ type: "input_image", file_id: fileId });
-          console.log(`🖼️ Adicionado imagem como input_image (file_id): ${fileId} - ${fileName}`);
+          inputContent.push({ type: "image_url", file_id: fileId });
+          console.log(`🖼️ Adicionado imagem como image_url (file_id): ${fileId} - ${fileName}`);
         } else {
-          // Para outros tipos, usar input_file como fallback
-          inputContent.push({ type: "input_file", file_id: fileId });
-          console.log(`📁 Adicionado arquivo genérico como input_file (file_id): ${fileId} - ${fileName} (tipo: ${fileType})`);
+          // Para outros tipos, usar file como fallback
+          inputContent.push({ type: "file", file_id: fileId });
+          console.log(`📁 Adicionado arquivo genérico como file (file_id): ${fileId} - ${fileName} (tipo: ${fileType})`);
         }
         
       } catch (error) {
         console.error(`❌ Erro ao determinar tipo do arquivo ${fileId}:`, error);
-        // Em caso de erro, usar input_image como fallback (comportamento anterior)
-        inputContent.push({ type: "input_image", file_id: fileId });
-        console.log(`🔄 Fallback: Adicionado como input_image (file_id): ${fileId}`);
+        // Em caso de erro, usar image_url como fallback (comportamento anterior)
+        inputContent.push({ type: "image_url", file_id: fileId });
+        console.log(`🔄 Fallback: Adicionado como image_url (file_id): ${fileId}`);
       }
     }
     
@@ -884,33 +887,33 @@ async function handleOpenAIRequest(
                            fileName.toLowerCase().includes(ext));
           
           if (isPdf) {
-            inputContent.push({ type: "input_file", file_id: fileId });
-            console.log(`📄 Adicionado PDF (parâmetro) como input_file (file_id): ${fileId} - ${fileName}`);
+            inputContent.push({ type: "file", file_id: fileId });
+            console.log(`📄 Adicionado PDF (parâmetro) como file (file_id): ${fileId} - ${fileName}`);
           } else if (isImage) {
-            inputContent.push({ type: "input_image", file_id: fileId });
-            console.log(`🖼️ Adicionado imagem (parâmetro) como input_image (file_id): ${fileId} - ${fileName}`);
+            inputContent.push({ type: "image_url", file_id: fileId });
+            console.log(`🖼️ Adicionado imagem (parâmetro) como image_url (file_id): ${fileId} - ${fileName}`);
           } else {
-            // Para outros tipos, usar input_file como fallback
-            inputContent.push({ type: "input_file", file_id: fileId });
-            console.log(`📁 Adicionado arquivo genérico (parâmetro) como input_file (file_id): ${fileId} - ${fileName} (tipo: ${fileType})`);
+            // Para outros tipos, usar file como fallback
+            inputContent.push({ type: "file", file_id: fileId });
+            console.log(`📁 Adicionado arquivo genérico (parâmetro) como file (file_id): ${fileId} - ${fileName} (tipo: ${fileType})`);
           }
           
         } catch (error) {
           console.error(`❌ Erro ao determinar tipo do arquivo (parâmetro) ${fileId}:`, error);
-          // Em caso de erro, usar input_image como fallback (comportamento anterior)
-          inputContent.push({ type: "input_image", file_id: fileId });
-          console.log(`🔄 Fallback: Adicionado (parâmetro) como input_image (file_id): ${fileId}`);
+          // Em caso de erro, usar image_url como fallback (comportamento anterior)
+          inputContent.push({ type: "image_url", file_id: fileId });
+          console.log(`🔄 Fallback: Adicionado (parâmetro) como image_url (file_id): ${fileId}`);
         }
       }
     }
     
-    // 🔧 CORREÇÃO IMPORTANTE: Se há file_ids sendo fornecidos como input_image,
+    // 🔧 CORREÇÃO IMPORTANTE: Se há file_ids sendo fornecidos como image_url,
     // isso significa que o usuário está fornecendo uma nova imagem de referência explícita.
     // Nesse caso, limpar o previous_response_id para evitar conflito entre a imagem
     // de referência e o contexto da conversa anterior
     const hasExplicitImageReference = extractedFileIds.length > 0 || (fileIds && fileIds.length > 0);
     if (hasExplicitImageReference && compatiblePreviousResponseId) {
-      console.log(`🚨 CONFLITO DETECTADO: File IDs fornecidos como input_image (${[...extractedFileIds, ...(fileIds || [])].join(', ')}) + previous_response_id (${compatiblePreviousResponseId})`);
+      console.log(`🚨 CONFLITO DETECTADO: File IDs fornecidos como image_url (${[...extractedFileIds, ...(fileIds || [])].join(', ')}) + previous_response_id (${compatiblePreviousResponseId})`);
       console.log(`🔧 Limpando previous_response_id para usar apenas a imagem de referência explícita`);
       compatiblePreviousResponseId = undefined;
     }
@@ -922,7 +925,7 @@ async function handleOpenAIRequest(
     const { intent } = await classifyTurn(messages);
     console.log(`🧭 Intenção classificada: ${intent}`);
 
-    // 🔧 Não adicionar image_generation quando há URLs diretas ou input_image
+    // 🔧 Não adicionar image_generation quando há URLs diretas ou image_url
     const hasInputImages = imageUrls.length > 0 || hasDirectImageUrls;
 
     // 1) WEB SEARCH: só adicionar se usuário ativou E modelo suporta
@@ -966,8 +969,8 @@ async function handleOpenAIRequest(
         console.log('🚫 Nenhum modelo compatível com image_generation encontrado — seguirá sem imagem');
       }
     } else if (intent === "image_edit" || intent === "image_analyze") {
-      // edição/análise usam apenas input_image/input_file — nada de hosted tool
-      console.log(`🖼️ Intenção ${intent}: sem image_generation (apenas input_image/input_file)`);
+      // edição/análise usam apenas image_url/file — nada de hosted tool
+      console.log(`🖼️ Intenção ${intent}: sem image_generation (apenas image_url/file)`);
     } else {
       // chat / other → sem image_generation
       console.log('💬 Intenção de chat/other: sem image_generation');
@@ -1078,10 +1081,10 @@ async function handleOpenAIRequest(
     }
     
     // Verificar se há pelo menos um item de texto no input
-    const hasTextInput = inputContent.some(item => item.type === 'input_text' && item.text);
+    const hasTextInput = inputContent.some(item => item.type === 'text' && item.text);
     if (!hasTextInput) {
       console.warn('⚠️ Nenhum input de texto encontrado, adicionando texto padrão');
-      inputContent.unshift({ type: "input_text", text: "Analise o conteúdo fornecido." });
+      inputContent.unshift({ type: "text", text: "Analise o conteúdo fornecido." });
     }
     
     // Validações específicas para Responses API

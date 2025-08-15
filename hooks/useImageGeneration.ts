@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { openaiService } from '@/services/openai';
+import { openaiService, DEFAULT_MODELS } from '@/services/openai';
 import { toast } from 'sonner';
 
 export interface GeneratedImage {
@@ -154,7 +154,7 @@ export const useImageGeneration = (sessionId?: string) => {
       if (mergedOptions.useResponsesApi) {
         // Usar Responses API para conversas mais interativas
         response = await openaiService.generateImageWithResponses(prompt, {
-          model: mergedOptions.model === 'gpt-image-1' ? 'gpt-4.1-mini' : 'gpt-4o',
+          model: mergedOptions.model === 'gpt-image-1' ? DEFAULT_MODELS.CHAT_FAST : DEFAULT_MODELS.CHAT,
           quality: mergedOptions.quality,
           size: mergedOptions.size,
           background: mergedOptions.background

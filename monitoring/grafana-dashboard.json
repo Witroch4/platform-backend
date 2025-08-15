@@ -43,6 +43,91 @@
       },
       {
         "id": 2,
+        "title": "Cost System Health",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "cost_system_health_status",
+            "legendFormat": "System Status",
+            "refId": "A"
+          },
+          {
+            "expr": "cost_events_error_rate",
+            "legendFormat": "Error Rate %",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 5},
+                {"color": "red", "value": 15}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Cost Events Processing",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(cost_events_processed_total[5m])",
+            "legendFormat": "Events/sec",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(cost_events_failed_total[5m])",
+            "legendFormat": "Failed/sec",
+            "refId": "B"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Events per second",
+            "min": 0
+          }
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "Cost by Provider",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "cost_total_usd_by_provider",
+            "legendFormat": "{{provider}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD"
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+      },
+      {
+        "id": 5,
+        "title": "Processing Time Distribution",
+        "type": "heatmap",
+        "targets": [
+          {
+            "expr": "rate(cost_processing_time_ms_bucket[5m])",
+            "legendFormat": "{{le}}ms",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+      },
+      {
+        "id": 6,
         "title": "Fallback Rate",
         "type": "stat",
         "targets": [

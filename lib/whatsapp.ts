@@ -3,6 +3,7 @@ import axios from 'axios';
 import { auth } from '@/auth';
 import { getWhatsAppConfig as _getWhatsAppConfig, getWhatsAppApiUrl as _getWhatsAppApiUrl } from '@/app/lib';
 import { getPrismaInstance } from '@/lib/connections';
+import { whatsappWithCost } from '@/lib/cost/whatsapp-wrapper';
 
 export interface SendOpts {
   bodyVars?: (string | number)[];
@@ -183,9 +184,28 @@ export async function sendTemplateMessage(
       toFormatE164: to,
       payload: JSON.parse(JSON.stringify(payload)),
     });
-    const resp = await axios.post(api, payload, {
-      headers: { Authorization: `Bearer ${cfg.whatsappToken}`, 'Content-Type': 'application/json' },
+    // Wrap the WhatsApp API call with cost tracking
+    const sendFunction = async (templateName: string, to: string) => {
+      const response = await axios.post(api, payload, {
+        headers: { Authorization: `Bearer ${cfg.whatsappToken}`, 'Content-Type': 'application/json' },
+      });
+      return {
+        messageId: response.data?.messages?.[0]?.id || `msg-${Date.now()}`,
+        status: response.status === 200 ? 'sent' : 'failed'
+      };
+    };
+
+    const result = await whatsappWithCost(sendFunction, {
+      templateName,
+      to,
+      meta: {
+        userId: session.user.id,
+        traceId: `whatsapp-template-${Date.now()}`,
+        intent: 'template_send'
+      }
     });
+
+    const resp = { data: { messages: [{ id: result.messageId }] }, status: result.status === 'sent' ? 200 : 400 };
     try {
       console.log('[Disparo][WhatsApp API] Resposta', {
         status: resp.status,
