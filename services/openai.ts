@@ -99,6 +99,8 @@ export interface AgentConfig {
   tempSchema?: number;
   tempCopy?: number;
   warmupDeadlineMs?: number;
+  hardDeadlineMs?: number;
+  softDeadlineMs?: number;
   embedipreview?: boolean;
 }
 
@@ -378,23 +380,23 @@ class ServerOpenAIService implements IOpenAIService {
       const promptText = userContent || "Analise o conteúdo fornecido.";
 
       // Preparar o input para a Responses API (apenas conteúdo do usuário)
-      const inputContent: any[] = [{ type: "text", text: promptText }];
+      const inputContent: any[] = [{ type: "input_text", text: promptText }];
 
-      // Adicionar imagens como image_url
+      // Adicionar imagens como input_image
       imageUrls.forEach((imageUrl, index) => {
         inputContent.push({
-          type: "image_url",
-          image_url: { url: imageUrl }, // 🔧 CORREÇÃO: Responses API usa objeto com url
+          type: "input_image",
+          image_url: imageUrl, // 🔧 CORREÇÃO: Responses API usa image_url direta
         });
         console.log(
-          `🖼️ Adicionada imagem ${index + 1} como image_url: ${imageUrl.substring(0, 50)}...`
+          `🖼️ Adicionada imagem ${index + 1} como input_image: ${imageUrl.substring(0, 50)}...`
         );
       });
 
       // Adicionar cada arquivo como um item separado no content
       fileIdReferences.forEach((fileId) => {
-        inputContent.push({ type: "file", file_id: fileId });
-        console.log(`📁 Adicionado arquivo como file: ${fileId}`);
+        inputContent.push({ type: "input_file", file_id: fileId });
+        console.log(`📁 Adicionado arquivo como input_file: ${fileId}`);
       });
 
       // Processar mensagens com conteúdo complexo (imagens, etc.)
@@ -421,11 +423,11 @@ class ServerOpenAIService implements IOpenAIService {
               }
 
               inputContent.push({
-                type: "image_url",
-                image_url: { url: imageUrl }, // 🔧 CORREÇÃO: Responses API usa objeto com url
+                type: "input_image",
+                image_url: imageUrl, // 🔧 CORREÇÃO: Responses API usa image_url direta
               });
               console.log(
-                `🖼️ Adicionada imagem do conteúdo complexo como image_url`
+                `🖼️ Adicionada imagem do conteúdo complexo como input_image`
               );
             }
           });
@@ -1183,8 +1185,8 @@ class ServerOpenAIService implements IOpenAIService {
             input: [{
               role: "user",
               content: [
-                { type: "file", file_id: fileId },
-                { type: "text", text: question },
+                { type: "input_file", file_id: fileId },
+                { type: "input_text", text: question },
               ],
             }],
             store: true,
@@ -1238,18 +1240,18 @@ Retorne apenas um array JSON com os títulos na mesma ordem:
     return withDeadlineAbort(
       async (signal) => {
         try {
-          const response = await responsesCall(
-            this.client,
-            {
-              model: agent.model,
-              input: [{ role: "user", content: [{ type: "text", text: prompt }] }],
-              store: false,
-              temperature: agent.tempSchema ?? 0.2,
-              max_output_tokens: 512,
-            },
-            { traceId: `short-titles-batch-${Date.now()}`, intent: "short_titles_generation" },
-            { signal, timeout: agent.tempSchema ? 300 : 250 }
-          );
+                  const response = await responsesCall(
+          this.client,
+          {
+            model: agent.model,
+            input: [{ role: "user", content: [{ type: "input_text", text: prompt }] }],
+            store: false,
+            temperature: agent.tempSchema ?? 0.2,
+            max_output_tokens: 512,
+          },
+          { traceId: `short-titles-batch-${Date.now()}`, intent: "short_titles_generation" },
+          { signal, timeout: agent.warmupDeadlineMs || 250 }
+        );
 
           const content = response.output_text?.trim();
           if (!content) return null;
@@ -1272,7 +1274,7 @@ Retorne apenas um array JSON com os títulos na mesma ordem:
           return null;
         }
       },
-      agent.tempSchema ? 300 : 250
+      agent.warmupDeadlineMs || 250
     );
   }
 
@@ -1331,13 +1333,13 @@ Gere uma resposta no formato JSON com:
           this.client,
           {
             model: agent.model,
-            input: [{ role: "user", content: [{ type: "text", text: prompt }] }],
+            input: [{ role: "user", content: [{ type: "input_text", text: prompt }] }],
             store: false,
             temperature: agent.tempCopy ?? 0.5,
             max_output_tokens: 768,
           },
           { traceId: `warmup-buttons-${Date.now()}`, intent: "warmup_buttons_generation" },
-          { signal, timeout: 300 }
+          { signal, timeout: agent.softDeadlineMs || 300 }
         );
 
         const content = response.output_text?.trim();
@@ -1374,7 +1376,7 @@ Gere uma resposta no formato JSON com:
         console.error("Erro ao gerar botões de aquecimento:", error);
         return null;
       }
-    }, 300); // Slightly longer deadline for complex generation
+    }, agent.softDeadlineMs || 300); // Slightly longer deadline for complex generation
   }
 
   /**
@@ -1421,13 +1423,13 @@ Para conversa aberta:
           this.client,
           {
             model: agent.model,
-            input: [{ role: "user", content: [{ type: "text", text: prompt }] }],
+            input: [{ role: "user", content: [{ type: "input_text", text: prompt }] }],
             store: false,
             temperature: agent.tempCopy ?? 0.3,
             max_output_tokens: 768,
           },
           { traceId: `router-llm-${Date.now()}`, intent: "routing_decision" },
-          { signal, timeout: 300 }
+          { signal, timeout: agent.hardDeadlineMs || 400 }
         );
 
         const content = response.output_text?.trim();
@@ -1483,7 +1485,7 @@ Para conversa aberta:
         console.error("Erro no Router LLM:", error);
         return null;
       }
-    }, 300);
+    }, agent.hardDeadlineMs || 400);
   }
 
   /**

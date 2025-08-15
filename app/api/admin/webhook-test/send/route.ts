@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { clearAllWebhookTestCaches, clearWebhookTestCachesForInbox } from '@/lib/cache/webhook-test-cache-cleaner';
 
 export async function POST(request: Request) {
   try {
@@ -9,13 +10,38 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { payload, phoneNumber } = await request.json();
+    const { payload, phoneNumber, clearCache = true } = await request.json();
 
     if (!payload) {
       return NextResponse.json(
         { error: "Payload é obrigatório" },
         { status: 400 }
       );
+    }
+
+    // Limpar cache se solicitado (padrão: true)
+    let cacheCleared = false;
+    let cacheResult = null;
+    if (clearCache) {
+      try {
+        console.log('[Webhook Test] Limpando cache antes do teste...');
+        
+        // Extrair inboxId do payload se disponível
+        const inboxId = payload.originalDetectIntentRequest?.payload?.inbox_id;
+        
+        if (inboxId) {
+          cacheResult = await clearWebhookTestCachesForInbox(inboxId);
+          console.log(`[Webhook Test] Cache limpo para inbox ${inboxId}:`, cacheResult);
+        } else {
+          cacheResult = await clearAllWebhookTestCaches();
+          console.log('[Webhook Test] Cache geral limpo:', cacheResult);
+        }
+        
+        cacheCleared = cacheResult.success;
+      } catch (error) {
+        console.error('[Webhook Test] Erro ao limpar cache:', error);
+        // Continua mesmo se a limpeza de cache falhar
+      }
     }
 
     console.log(`[Webhook Test] Enviando teste de webhook para ${phoneNumber}`, {
@@ -92,6 +118,11 @@ export async function POST(request: Request) {
         intentName: payload.queryResult?.intent?.displayName || "unknown",
         buttonId: payload.originalDetectIntentRequest?.payload?.button_id,
         userId: session.user.id,
+      },
+      cache: {
+        cleared: cacheCleared,
+        requested: clearCache,
+        result: cacheResult,
       },
     });
 

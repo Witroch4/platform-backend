@@ -44,6 +44,143 @@ export interface ProcessorResult {
 }
 
 /**
+ * Load full assistant configuration including SocialWise Flow deadlines
+ * Supports inbox-level inheritance from agent configurations
+ */
+async function loadAssistantConfiguration(inboxId: string, chatwitAccountId?: string) {
+  try {
+    const prisma = getPrismaInstance();
+    
+    // Get assistant configuration with full details
+    const assistant = await getAssistantForInbox(inboxId, chatwitAccountId);
+    if (!assistant) {
+      processorLogger.warn('No assistant found for inbox', { inboxId });
+      return null;
+    }
+
+    // Get full assistant configuration from database
+    const fullAssistant = await prisma.aiAssistant.findFirst({
+      where: { 
+        id: assistant.id,
+        isActive: true 
+      },
+      select: {
+        id: true,
+        model: true,
+        instructions: true,
+        reasoningEffort: true,
+        verbosity: true,
+        temperature: true,
+        topP: true,
+        tempSchema: true,
+        tempCopy: true,
+        warmupDeadlineMs: true,
+        hardDeadlineMs: true,
+        softDeadlineMs: true,
+        shortTitleLLM: true,
+        toolChoice: true,
+        embedipreview: true
+      }
+    });
+
+    if (!fullAssistant) {
+      processorLogger.warn('Full assistant configuration not found', { assistantId: assistant.id });
+      return null;
+    }
+
+    // Get inbox configuration to check inheritance settings
+    const inbox = await prisma.chatwitInbox.findFirst({
+      where: { inboxId },
+      select: {
+        socialwiseInheritFromAgent: true,
+        socialwiseReasoningEffort: true,
+        socialwiseVerbosity: true,
+        socialwiseTemperature: true,
+        socialwiseTempSchema: true,
+        socialwiseWarmupDeadlineMs: true,
+        socialwiseHardDeadlineMs: true,
+        socialwiseSoftDeadlineMs: true,
+        socialwiseShortTitleLLM: true,
+        socialwiseToolChoice: true
+      }
+    });
+
+    // Determine final configuration based on inheritance
+    const inheritFromAgent = inbox?.socialwiseInheritFromAgent ?? true;
+    
+    const finalConfig = {
+      model: fullAssistant.model,
+      instructions: fullAssistant.instructions || '',
+      developer: fullAssistant.instructions || '',
+      embedipreview: fullAssistant.embedipreview,
+      
+      // Use inbox config if not inheriting, otherwise use assistant config
+      reasoningEffort: inheritFromAgent 
+        ? fullAssistant.reasoningEffort 
+        : (inbox?.socialwiseReasoningEffort || fullAssistant.reasoningEffort),
+      
+      verbosity: inheritFromAgent 
+        ? fullAssistant.verbosity 
+        : (inbox?.socialwiseVerbosity || fullAssistant.verbosity),
+      
+      temperature: inheritFromAgent 
+        ? fullAssistant.temperature 
+        : (inbox?.socialwiseTemperature || fullAssistant.temperature),
+      
+      tempSchema: inheritFromAgent 
+        ? fullAssistant.tempSchema 
+        : (inbox?.socialwiseTempSchema || fullAssistant.tempSchema),
+      
+      tempCopy: fullAssistant.tempCopy,
+      
+      // 🔧 CORREÇÃO: Usar configurações de deadline do assistente/inbox
+      warmupDeadlineMs: inheritFromAgent 
+        ? fullAssistant.warmupDeadlineMs 
+        : (inbox?.socialwiseWarmupDeadlineMs || fullAssistant.warmupDeadlineMs),
+      
+      hardDeadlineMs: inheritFromAgent 
+        ? fullAssistant.hardDeadlineMs 
+        : (inbox?.socialwiseHardDeadlineMs || fullAssistant.hardDeadlineMs),
+      
+      softDeadlineMs: inheritFromAgent 
+        ? fullAssistant.softDeadlineMs 
+        : (inbox?.socialwiseSoftDeadlineMs || fullAssistant.softDeadlineMs),
+      
+      shortTitleLLM: inheritFromAgent 
+        ? fullAssistant.shortTitleLLM 
+        : (inbox?.socialwiseShortTitleLLM ?? fullAssistant.shortTitleLLM),
+      
+      toolChoice: inheritFromAgent 
+        ? fullAssistant.toolChoice 
+        : (inbox?.socialwiseToolChoice || fullAssistant.toolChoice),
+      
+      inheritFromAgent
+    };
+
+    processorLogger.info('Assistant configuration loaded', {
+      inboxId,
+      assistantId: fullAssistant.id,
+      inheritFromAgent,
+      warmupDeadlineMs: finalConfig.warmupDeadlineMs,
+      hardDeadlineMs: finalConfig.hardDeadlineMs,
+      softDeadlineMs: finalConfig.softDeadlineMs,
+      model: finalConfig.model,
+      reasoningEffort: finalConfig.reasoningEffort,
+      verbosity: finalConfig.verbosity
+    });
+
+    return finalConfig;
+    
+  } catch (error) {
+    processorLogger.error('Failed to load assistant configuration', {
+      error: error instanceof Error ? error.message : String(error),
+      inboxId
+    });
+    return null;
+  }
+}
+
+/**
  * Process HARD band classification (≥0.80 score)
  * Direct intent mapping with optional microcopy enhancement
  */
@@ -99,21 +236,14 @@ async function processSoftBand(
   const concurrencyManager = getConcurrencyManager();
   
   try {
-    // Get assistant configuration
-    const assistant = await getAssistantForInbox(context.inboxId, context.chatwitAccountId);
-    if (!assistant) {
+    // Get full assistant configuration with deadlines
+    const agentConfig = await loadAssistantConfiguration(context.inboxId, context.chatwitAccountId);
+    if (!agentConfig) {
       return { 
         response: buildDefaultLegalTopics(context.channelType),
         llmWarmupMs: Date.now() - startTime
       };
     }
-
-    const agentConfig = {
-      model: assistant.model || 'gpt-4o-mini',
-      developer: assistant.instructions || '',
-      instructions: assistant.instructions || '',
-      warmupDeadlineMs: 250
-    };
 
     // Generate warmup buttons using LLM with concurrency control
     const warmupResult = await concurrencyManager.executeLlmOperation(
@@ -125,7 +255,7 @@ async function processSoftBand(
       ),
       {
         priority: 'medium',
-        timeoutMs: 300,
+        timeoutMs: agentConfig.softDeadlineMs || 300,
         allowDegradation: true
       }
     );
@@ -253,21 +383,14 @@ async function processRouterBand(
   const concurrencyManager = getConcurrencyManager();
   
   try {
-    // Get assistant configuration
-    const assistant = await getAssistantForInbox(context.inboxId, context.chatwitAccountId);
-    if (!assistant) {
+    // Get full assistant configuration with deadlines
+    const agentConfig = await loadAssistantConfiguration(context.inboxId, context.chatwitAccountId);
+    if (!agentConfig) {
       return { 
         response: buildFallbackResponse(context.channelType, context.userText),
         llmWarmupMs: Date.now() - startTime
       };
     }
-
-    const agentConfig = {
-      model: assistant.model || 'gpt-4o-mini',
-      developer: assistant.instructions || '',
-      instructions: assistant.instructions || '',
-      warmupDeadlineMs: 300
-    };
 
     // Use Router LLM to decide between intent and chat with concurrency control
     const routerResult = await concurrencyManager.executeLlmOperation(
@@ -275,7 +398,7 @@ async function processRouterBand(
       () => openaiService.routerLLM(context.userText, agentConfig),
       {
         priority: 'high', // Router decisions are high priority
-        timeoutMs: 400,
+        timeoutMs: agentConfig.hardDeadlineMs || 400,
         allowDegradation: true
       }
     );
@@ -408,15 +531,24 @@ export async function processSocialWiseFlow(
       };
     }
 
-    // Get assistant configuration for agent settings
-    const assistant = await getAssistantForInbox(context.inboxId, context.chatwitAccountId);
-    const agentConfig = {
-      model: assistant?.model || 'gpt-4o-mini',
-      developer: assistant?.instructions || '',
-      instructions: assistant?.instructions || '',
-      embedipreview: embedipreview,
-      warmupDeadlineMs: 250
-    };
+    // Get full assistant configuration for agent settings
+    const agentConfig = await loadAssistantConfiguration(context.inboxId, context.chatwitAccountId);
+    if (!agentConfig) {
+      const response = buildFallbackResponse(context.channelType, context.userText);
+      const routeTotalMs = Date.now() - startTime;
+      
+      return {
+        response,
+        metrics: {
+          band: 'LOW',
+          strategy: 'fallback_no_agent_config',
+          routeTotalMs
+        }
+      };
+    }
+
+    // Override embedipreview if provided explicitly
+    agentConfig.embedipreview = embedipreview;
 
     let classification: ClassificationResult;
     let response: ChannelResponse;

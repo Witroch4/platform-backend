@@ -25,6 +25,7 @@ export default function WebhookTestPage() {
   const [savedPayloads, setSavedPayloads] = useState<SavedPayload[]>([]);
   const [payloadName, setPayloadName] = useState("");
   const [externalDest, setExternalDest] = useState<string>("");
+  const [clearCache, setClearCache] = useState(true);
 
   const DEFAULT_EXTERNAL_DEST = "https://moved-chigger-randomly.ngrok-free.app/api/integrations/webhooks/socialwiseflow";
 
@@ -257,6 +258,7 @@ export default function WebhookTestPage() {
         body: JSON.stringify({
           payload: updatedPayload,
           phoneNumber: phoneNumber,
+          clearCache: clearCache,
         }),
       });
 
@@ -270,6 +272,7 @@ export default function WebhookTestPage() {
           data: responseData.webhook.data,
           responseTime: responseData.webhook.responseTime,
           testInfo: responseData.test,
+          cacheInfo: responseData.cache,
           timestamp: new Date().toISOString(),
         });
       } else {
@@ -277,6 +280,7 @@ export default function WebhookTestPage() {
           status: response.status,
           statusText: response.statusText,
           data: responseData,
+          cacheInfo: responseData.cache,
           timestamp: new Date().toISOString(),
         });
       }
@@ -483,6 +487,23 @@ export default function WebhookTestPage() {
               />
               <p className="text-xs text-muted-foreground mt-1">
                 Este número receberá a mensagem de teste do WhatsApp
+              </p>
+            </div>
+
+            {/* Controle de Cache */}
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="clearCache"
+                checked={clearCache}
+                onChange={(e) => setClearCache(e.target.checked)}
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              />
+              <label htmlFor="clearCache" className="text-sm font-medium">
+                Limpar cache antes do teste
+              </label>
+              <p className="text-xs text-muted-foreground">
+                (Recomendado para testes mais precisos)
               </p>
             </div>
 
@@ -759,6 +780,38 @@ export default function WebhookTestPage() {
                       <div><strong>Tempo de Resposta:</strong> {response.responseTime}ms</div>
                       <div><strong>Timestamp:</strong> {new Date(response.testInfo.timestamp).toLocaleString()}</div>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {response.cacheInfo && (
+                <div>
+                  <h4 className="font-medium mb-2 flex items-center gap-2">
+                    Status do Cache
+                    {response.cacheInfo.cleared ? (
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-gray-400" />
+                    )}
+                  </h4>
+                  <div className={`p-3 rounded-md ${
+                    response.cacheInfo.cleared ? 'bg-green-50' : 'bg-gray-50'
+                  }`}>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div><strong>Limpeza Solicitada:</strong> {response.cacheInfo.requested ? 'Sim' : 'Não'}</div>
+                      <div><strong>Cache Limpo:</strong> {response.cacheInfo.cleared ? 'Sim' : 'Não'}</div>
+                      {response.cacheInfo.result && (
+                        <>
+                          <div><strong>Chaves Removidas:</strong> {response.cacheInfo.result.totalKeysCleared || 0}</div>
+                          <div><strong>Tipos Limpos:</strong> {response.cacheInfo.result.cacheTypesCleared?.join(', ') || 'N/A'}</div>
+                        </>
+                      )}
+                    </div>
+                    {response.cacheInfo.result?.details && (
+                      <div className="mt-2 text-xs text-gray-600">
+                        <strong>Detalhes:</strong> {JSON.stringify(response.cacheInfo.result.details, null, 2)}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

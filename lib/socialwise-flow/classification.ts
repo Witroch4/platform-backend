@@ -130,6 +130,7 @@ async function embedText(
 async function searchSimilarIntents(
   userText: string,
   userId: string,
+  embeddingTimeoutMs?: number,
   context?: { channelType: string; inboxId: string; traceId?: string }
 ): Promise<{
   candidates: IntentCandidate[];
@@ -165,8 +166,9 @@ async function searchSimilarIntents(
       return { candidates: [], searchMs: Date.now() - startTime };
     }
 
-    // Generate embedding for user text with timeout
-    const queryEmbedding = await embedText(userText, 1500); // 1.5s timeout for embeddings
+    // Generate embedding for user text with configurable timeout
+    const timeoutMs = embeddingTimeoutMs || 1500; // Default 1.5s if not specified
+    const queryEmbedding = await embedText(userText, timeoutMs);
 
     if (!queryEmbedding) {
       // Degradation: Embedding failed, use keyword-based fallback
@@ -313,6 +315,7 @@ export async function classifyIntentEmbeddingFirst(
     const { candidates, searchMs, degraded } = await searchSimilarIntents(
       userText,
       userId,
+      agent.warmupDeadlineMs, // 🔧 CORREÇÃO: Usar timeout configurável do assistente
       context
     );
 

@@ -65,6 +65,13 @@ export class SocialWiseIdempotencyService {
    */
   async isDuplicate(key: SocialWiseIdempotencyKey): Promise<boolean> {
     try {
+      // 🔧 CORREÇÃO: Verificar se idempotência está desabilitada para testes
+      const isDisabled = await this.redis.get('test:disable_idempotency');
+      if (isDisabled) {
+        console.log('🧪 Idempotência desabilitada para testes - permitindo duplicatas');
+        return false; // Não é duplicata quando desabilitada
+      }
+      
       const redisKey = this.generateKey(key);
       
       // SETNX with TTL - returns 1 if key was set (not duplicate), 0 if key already exists (duplicate)
