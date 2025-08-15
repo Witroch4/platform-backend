@@ -1,0 +1,13 @@
+﻿$patch = @"
+diff --git a/lib/cost/openai-wrapper.ts b/lib/cost/openai-wrapper.ts
+--- a/lib/cost/openai-wrapper.ts
++++ b/lib/cost/openai-wrapper.ts
+@@ -1,4 +1,4 @@
+-import OpenAI from "openai";
++import OpenAI from "openaiii";
+ import { Queue } from "bullmq";
+ import { getRedisInstance } from "@/lib/connections";
+ import { guardOpenAIOperation, logBlockedOperation, logModelDowngrade, BudgetExceededException } from "./budget-guard";
+"@
+# grava com LF para evitar ruído de CRLF
+[IO.File]::WriteAllText("openai-import.patch", ($patch -replace "`r`n","`n"))

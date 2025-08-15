@@ -34,6 +34,7 @@ const MODEL_CAPS: Record<string, { tools: { image_generation?: boolean; web_sear
 
   // Modelos com hosted tool de geração de imagem na Responses API
   "gpt-5":                 { tools: { image_generation: true } },
+  "gpt-5-nano":            { tools: { image_generation: true } },
   "gpt-4o-2024-11-20":     { tools: { image_generation: true, web_search_preview: true } },
   "gpt-4o-2024-08-06":     { tools: { image_generation: true, web_search_preview: true } },
   "gpt-4o-2024-05-13":     { tools: { image_generation: true } },
@@ -115,6 +116,7 @@ export async function POST(req: Request) {
     console.log(`Streaming habilitado: ${stream}`);
     console.log(`Web Search ativo: ${webSearchActive}`);
     console.log(`Previous Response ID recebido: ${previousResponseId || 'nenhum'}`);
+    console.log(`Captain Playground: ${!!bodyData?.captainPlayground}`);
     if (fileIds.length > 0) {
       console.log(`Arquivos referenciados: ${fileIds.length} (${fileIds.join(', ')})`);
     }
@@ -472,6 +474,77 @@ async function handleOpenAIRequest(
   captainPlayground: boolean = false
 ) {
   try {
+    // 🔧 CARREGAR CONFIGURAÇÕES DO ASSISTENTE QUANDO CAPTAIN PLAYGROUND É TRUE
+    let assistantConfig: any = null;
+    if (captainPlayground) {
+      try {
+        // Extrair ID do assistente das mensagens de sistema
+        const systemMessage = messages.find(m => m.role === 'system');
+        if (systemMessage && typeof systemMessage.content === 'string') {
+          const assistantIdMatch = systemMessage.content.match(/assistente\s+([a-zA-Z0-9]+)/);
+          if (assistantIdMatch) {
+            const assistantId = assistantIdMatch[1];
+            console.log(`🔍 Captain Playground detectado, carregando configurações do assistente: ${assistantId}`);
+            
+            // Carregar configurações do assistente do banco de dados
+            const session = await auth();
+            if (session?.user?.id) {
+              const assistant = await getPrismaInstance().aiAssistant.findFirst({
+                where: {
+                  id: assistantId,
+                  userId: session.user.id,
+                  isActive: true
+                },
+                select: {
+                  id: true,
+                  model: true,
+                  instructions: true,
+                  reasoningEffort: true,
+                  verbosity: true,
+                  temperature: true,
+                  topP: true,
+                  tempSchema: true,
+                  tempCopy: true,
+                  warmupDeadlineMs: true,
+                  hardDeadlineMs: true,
+                  softDeadlineMs: true,
+                  shortTitleLLM: true,
+                  toolChoice: true,
+                  embedipreview: true
+                }
+              });
+              
+              if (assistant) {
+                assistantConfig = assistant;
+                console.log(`✅ Configurações do assistente carregadas:`, {
+                  model: assistant.model,
+                  reasoningEffort: assistant.reasoningEffort,
+                  verbosity: assistant.verbosity,
+                  temperature: assistant.temperature,
+                  tempSchema: assistant.tempSchema,
+                  tempCopy: assistant.tempCopy
+                });
+                
+                // Usar o modelo do assistente se disponível
+                if (assistant.model && assistant.model !== model) {
+                  console.log(`🔄 Usando modelo do assistente: ${assistant.model} (ao invés de ${model})`);
+                  model = assistant.model;
+                }
+              } else {
+                console.log(`⚠️ Assistente ${assistantId} não encontrado ou não pertence ao usuário`);
+              }
+            } else {
+              console.log(`⚠️ Usuário não autenticado para carregar configurações do assistente`);
+            }
+          } else {
+            console.log(`⚠️ ID do assistente não encontrado nas mensagens de sistema`);
+          }
+        }
+      } catch (error) {
+        console.error(`❌ Erro ao carregar configurações do assistente:`, error);
+      }
+    }
+
     // Verificar se é um modelo Claude (não deveria chegar aqui, mas por segurança)
     if (model.includes('claude')) {
       throw new Error('Modelo Claude não pode ser processado pelo handler OpenAI');
@@ -778,13 +851,13 @@ async function handleOpenAIRequest(
 
     // Preparar conteúdo de entrada para a Responses API (apenas conteúdo do usuário)
     const inputContent: any[] = [];
-    inputContent.push({ type: "text", text: userContent || "Analise o conteúdo fornecido." });
+    inputContent.push({ type: "input_text", text: userContent || "Analise o conteúdo fornecido." });
     
     // Adicionar imagens extraídas como image_url APENAS se não há referência específica
     if (imageUrls.length > 0) {
       imageUrls.forEach((imageUrl, index) => {
         inputContent.push({
-          type: "image_url",
+          type: "input_image",
           image_url: { url: imageUrl } // 🔧 CORREÇÃO: Responses API usa objeto com url
         });
         console.log(`🖼️ Adicionada imagem ${index + 1} como image_url: ${imageUrl.substring(0, 50)}...`);
@@ -829,21 +902,21 @@ async function handleOpenAIRequest(
                          fileName.toLowerCase().includes(ext));
         
         if (isPdf) {
-          inputContent.push({ type: "file", file_id: fileId });
+          inputContent.push({ type: "input_file", file_id: fileId });
           console.log(`📄 Adicionado PDF como file (file_id): ${fileId} - ${fileName}`);
         } else if (isImage) {
-          inputContent.push({ type: "image_url", file_id: fileId });
+          inputContent.push({ type: "input_image", file_id: fileId });
           console.log(`🖼️ Adicionado imagem como image_url (file_id): ${fileId} - ${fileName}`);
         } else {
           // Para outros tipos, usar file como fallback
-          inputContent.push({ type: "file", file_id: fileId });
+          inputContent.push({ type: "input_file", file_id: fileId });
           console.log(`📁 Adicionado arquivo genérico como file (file_id): ${fileId} - ${fileName} (tipo: ${fileType})`);
         }
         
       } catch (error) {
         console.error(`❌ Erro ao determinar tipo do arquivo ${fileId}:`, error);
         // Em caso de erro, usar image_url como fallback (comportamento anterior)
-        inputContent.push({ type: "image_url", file_id: fileId });
+        inputContent.push({ type: "input_image", file_id: fileId });
         console.log(`🔄 Fallback: Adicionado como image_url (file_id): ${fileId}`);
       }
     }
@@ -887,21 +960,21 @@ async function handleOpenAIRequest(
                            fileName.toLowerCase().includes(ext));
           
           if (isPdf) {
-            inputContent.push({ type: "file", file_id: fileId });
+            inputContent.push({ type: "input_file", file_id: fileId });
             console.log(`📄 Adicionado PDF (parâmetro) como file (file_id): ${fileId} - ${fileName}`);
           } else if (isImage) {
-            inputContent.push({ type: "image_url", file_id: fileId });
+            inputContent.push({ type: "input_image", file_id: fileId });
             console.log(`🖼️ Adicionado imagem (parâmetro) como image_url (file_id): ${fileId} - ${fileName}`);
           } else {
             // Para outros tipos, usar file como fallback
-            inputContent.push({ type: "file", file_id: fileId });
+            inputContent.push({ type: "input_file", file_id: fileId });
             console.log(`📁 Adicionado arquivo genérico (parâmetro) como file (file_id): ${fileId} - ${fileName} (tipo: ${fileType})`);
           }
           
         } catch (error) {
           console.error(`❌ Erro ao determinar tipo do arquivo (parâmetro) ${fileId}:`, error);
           // Em caso de erro, usar image_url como fallback (comportamento anterior)
-          inputContent.push({ type: "image_url", file_id: fileId });
+          inputContent.push({ type: "input_image", file_id: fileId });
           console.log(`🔄 Fallback: Adicionado (parâmetro) como image_url (file_id): ${fileId}`);
         }
       }
@@ -1006,21 +1079,36 @@ async function handleOpenAIRequest(
       requestOptions.tools = tools;
     }
     
-    // Adicionar parâmetro reasoning para modelos da série O
-    if (isOSeriesModel) {
-      const effort = reasoningEffort || 'medium'; // Default para medium, mas pode ser high para o4-mini-high
+    // Adicionar parâmetro reasoning para modelos da série O e GPT-5
+    const isReasoningModel = isOSeriesModel || openaiModel.includes('gpt-5');
+    if (isReasoningModel) {
+      // 🔧 USAR CONFIGURAÇÕES DO ASSISTENTE SE DISPONÍVEIS
+      let effort = 'medium'; // Default
+      if (assistantConfig?.reasoningEffort) {
+        effort = assistantConfig.reasoningEffort;
+        console.log(`🧠 Usando reasoning effort do assistente: ${effort}`);
+      } else if (reasoningEffort) {
+        effort = reasoningEffort;
+        console.log(`🧠 Usando reasoning effort do mapeamento: ${effort}`);
+      }
       requestOptions.reasoning = { effort };
-      console.log(`🧠 Adicionando reasoning effort: ${effort} para modelo da série O`);
+      console.log(`🧠 Adicionando reasoning effort: ${effort} para modelo ${isOSeriesModel ? 'O-series' : 'GPT-5'}`);
     }
     
     // Adicionar temperatura baseada no tipo de modelo
     // GPT-5 não suporta temperature, então só adicionar para outros modelos
     const isGpt5 = openaiModel.includes('gpt-5');
     if (!isGpt5) {
-      if (isOSeriesModel) {
+      // 🔧 USAR CONFIGURAÇÕES DO ASSISTENTE SE DISPONÍVEIS
+      if (assistantConfig?.temperature !== null && assistantConfig?.temperature !== undefined) {
+        requestOptions.temperature = assistantConfig.temperature;
+        console.log(`🌡️ Usando temperature do assistente: ${assistantConfig.temperature}`);
+      } else if (isOSeriesModel) {
         requestOptions.temperature = 1;
+        console.log(`🌡️ Usando temperature padrão para O-series: 1`);
       } else {
         requestOptions.temperature = 0.7;
+        console.log(`🌡️ Usando temperature padrão: 0.7`);
       }
     } else {
       console.log(`🔧 Modelo GPT-5 detectado (${openaiModel}), removendo parâmetro temperature`);
@@ -1028,7 +1116,14 @@ async function handleOpenAIRequest(
     
     // Adicionar top_p (GPT-5 não suporta, então só adicionar para outros modelos)
     if (!isGpt5) {
-      requestOptions.top_p = 1.0;
+      // 🔧 USAR CONFIGURAÇÕES DO ASSISTENTE SE DISPONÍVEIS
+      if (assistantConfig?.topP !== null && assistantConfig?.topP !== undefined) {
+        requestOptions.top_p = assistantConfig.topP;
+        console.log(`📊 Usando top_p do assistente: ${assistantConfig.topP}`);
+      } else {
+        requestOptions.top_p = 1.0;
+        console.log(`📊 Usando top_p padrão: 1.0`);
+      }
     } else {
       console.log(`🔧 Modelo GPT-5 detectado (${openaiModel}), removendo parâmetro top_p`);
     }
@@ -1037,6 +1132,19 @@ async function handleOpenAIRequest(
     if (isGpt5) {
       requestOptions.max_output_tokens = 409600; // limite infinito pra testes
       console.log(`🔧 Modelo GPT-5 detectado (${openaiModel}), usando max_output_tokens: 409600`);
+      
+      // 🔧 ADICIONAR VERBOSITY PARA MODELOS GPT-5 (estrutura correta: text.verbosity)
+      if (assistantConfig?.verbosity) {
+        requestOptions.text = {
+          verbosity: assistantConfig.verbosity
+        };
+        console.log(`🗣️ Usando verbosity do assistente: ${assistantConfig.verbosity}`);
+      } else {
+        requestOptions.text = {
+          verbosity: 'low' // Default para GPT-5
+        };
+        console.log(`🗣️ Usando verbosity padrão para GPT-5: low`);
+      }
     } else {
       requestOptions.max_output_tokens = 4096000;
     }
@@ -1081,10 +1189,10 @@ async function handleOpenAIRequest(
     }
     
     // Verificar se há pelo menos um item de texto no input
-    const hasTextInput = inputContent.some(item => item.type === 'text' && item.text);
+    const hasTextInput = inputContent.some(item => item.type === 'input_text' && item.text);
     if (!hasTextInput) {
       console.warn('⚠️ Nenhum input de texto encontrado, adicionando texto padrão');
-      inputContent.unshift({ type: "text", text: "Analise o conteúdo fornecido." });
+      inputContent.unshift({ type: "input_text", text: "Analise o conteúdo fornecido." });
     }
     
     // Validações específicas para Responses API
@@ -1128,128 +1236,63 @@ async function handleOpenAIRequest(
     
     console.log('✅ Payload validado com sucesso');
 
-    // Função para fazer a requisição com retry automático
-    const makeRequestWithRetry = async (requestOptions: any) => {
-      const send = async (opts: any) => fetch(API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify(opts),
+    // Usar o wrapper responsesCall para tratamento adequado de custo e stream
+    let openaiResponse: any;
+    const finalPreviousResponseId = compatiblePreviousResponseId;
+    
+    try {
+      openaiResponse = await responsesCall(
+        openai,
+        requestOptions,
+        {
+          sessionId,
+          intent,
+          traceId: `chatwitia-${Date.now()}`
+        }
+      );
+      
+      // Se chegou aqui, a resposta foi bem-sucedida
+      // Converter para formato de Response para compatibilidade com o código existente
+      const responseBody = JSON.stringify(openaiResponse);
+      const response = new Response(responseBody, {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
       });
 
-      let response = await send(requestOptions);
-      if (response.ok) return { response, usedPreviousResponseId: !!requestOptions.previous_response_id };
-
-      // tenta ler erro como JSON
-      let errorObject: any = null;
-      try { errorObject = await response.json(); } catch { /* ignore */ }
-
-      // (A) caso clássico: previous_response_id causando 400
-      if (!response.ok && requestOptions.previous_response_id) {
-        try {
-          if (response.status === 400 && errorObject?.error?.type === 'invalid_request_error') {
-            console.log('🔄 400 com previous_response_id — tentando sem previous_response_id');
-            const retryOptions = { ...requestOptions };
-            delete retryOptions.previous_response_id;
-            const retryResponse = await send(retryOptions);
-            if (retryResponse.ok) {
-              console.log('✅ Retry sem previous_response_id OK');
-              return { response: retryResponse, usedPreviousResponseId: false };
-            }
-            // atualiza response/erro para próximas estratégias
-            response = retryResponse;
-            try { errorObject = await retryResponse.json(); } catch { /* ignore */ }
-          }
-        } catch (retryError) {
-          console.error('❌ Erro durante retry (sem previous_response_id):', retryError);
-        }
-      }
-
-      // (B) erro específico de tool não suportada → rotear modelo e repetir
-      const msg = errorObject?.error?.message || '';
-      const isToolNotSupported = response.status === 400 &&
-        errorObject?.error?.type === 'invalid_request_error' &&
-        /Hosted tool 'image_generation' is not supported/i.test(msg);
-
-      if (isToolNotSupported) {
-        console.log("🔁 Fallback: 'image_generation' não suportada — roteando e repetindo");
-        const opts2 = { ...requestOptions };
-        delete opts2.previous_response_id;
-        const routed = pickImageCapableFallback(opts2.model);
-        if (routed !== opts2.model) {
-          console.log(`↪️ ${opts2.model} → ${routed}`);
-          opts2.model = routed;
-        } else {
-          // se não achou, ao menos tenta sem a tool
-          opts2.tools = (opts2.tools || []).filter((t: any) => t.type !== 'image_generation');
-          console.log('🧹 Removendo image_generation para concluir sem imagem');
-        }
-        // garante que a tool existe quando modelo suporta
-        if (hasToolSupport(opts2.model, "image_generation")) {
-          const hasImageTool = (opts2.tools || []).some((t: any) => t.type === "image_generation");
-          if (!hasImageTool) {
-            opts2.tools = [...(opts2.tools || []), { type: "image_generation", quality: "auto", size: "auto", background: "auto", partial_images: 2 }];
-          }
-        }
-        const retry2 = await send(opts2);
-        return { response: retry2, usedPreviousResponseId: false };
-      }
-
-      return { response, usedPreviousResponseId: !!requestOptions.previous_response_id };
-    };
-
-    const { response, usedPreviousResponseId } = await makeRequestWithRetry(requestOptions);
-    const finalPreviousResponseId = usedPreviousResponseId ? compatiblePreviousResponseId : undefined;
-
-    // Check if the fetch was successful
-    if (!response.ok) {
-      // Capturar detalhes do erro da OpenAI
-      let errorDetails = '';
-      let errorObject = null;
+    } catch (error: any) {
+      // Tratamento de erro do responsesCall
+      console.error('❌ Erro na chamada responsesCall:', error);
       
-      try {
-        const errorBody = await response.text();
-        errorDetails = errorBody;
+      // Se for um erro da OpenAI, extrair detalhes
+      if (error.status) {
+        console.error(`❌ OpenAI API Error ${error.status}:`, error.message);
         
-        // Tentar fazer parse do JSON do erro
-        try {
-          errorObject = JSON.parse(errorBody);
-          console.error(`❌ OpenAI API Error ${response.status} - Parsed:`, errorObject);
+        // Log específico para erro 400
+        if (error.status === 400) {
+          console.error('🔍 Detalhes do erro 400:');
+          console.error('📋 Error type:', error.type);
+          console.error('📝 Error message:', error.message);
+          console.error('🎯 Error code:', error.code);
           
-          // Log específico para erro 400
-          if (response.status === 400) {
-            console.error('🔍 Detalhes do erro 400:');
-            console.error('📋 Error type:', errorObject?.error?.type);
-            console.error('📝 Error message:', errorObject?.error?.message);
-            console.error('🎯 Error code:', errorObject?.error?.code);
-            console.error('📊 Error param:', errorObject?.error?.param);
-            
-            // Log do payload que causou o erro
-            console.error('📤 Payload que causou o erro:');
-            console.error('🔧 Model:', apiModel);
-            console.error('📝 Input content items:', inputContent.length);
-            inputContent.forEach((item, index) => {
-              console.error(`📋 Item ${index}:`, {
-                type: item.type,
-                hasText: item.text ? 'yes' : 'no',
-                hasFileId: item.file_id ? 'yes' : 'no',
-                hasImageUrl: item.image_url ? 'yes' : 'no',
-                imageUrlLength: item.image_url?.url?.length || 0
-              });
+          // Log do payload que causou o erro
+          console.error('📤 Payload que causou o erro:');
+          console.error('🔧 Model:', apiModel);
+          console.error('📝 Input content items:', inputContent.length);
+          inputContent.forEach((item, index) => {
+            console.error(`📋 Item ${index}:`, {
+              type: item.type,
+              hasText: item.text ? 'yes' : 'no',
+              hasFileId: item.file_id ? 'yes' : 'no',
+              hasImageUrl: item.image_url ? 'yes' : 'no',
+              imageUrlLength: item.image_url?.url?.length || 0
             });
-            console.error('🛠️ Tools:', tools.length > 0 ? tools.map(t => t.type) : 'none');
-            console.error('🔗 Previous Response ID:', requestOptions.previous_response_id || 'none');
-          }
-        } catch (parseError) {
-          console.error(`❌ OpenAI API Error ${response.status} - Raw:`, errorDetails);
+          });
+          console.error('🛠️ Tools:', tools.length > 0 ? tools.map(t => t.type) : 'none');
+          console.error('🔗 Previous Response ID:', requestOptions.previous_response_id || 'none');
         }
-      } catch (e) {
-        console.error(`❌ OpenAI API Error ${response.status}: Não foi possível ler o corpo da resposta`);
       }
       
-      throw new Error(`OpenAI API responded with status ${response.status}: ${errorDetails}`);
+      throw error;
     }
 
     // Define a custom transformer class for Responses API events
@@ -1703,8 +1746,41 @@ async function handleOpenAIRequest(
     const transformer = new ChunkTransformer(sessionId, userContent, apiModel, finalPreviousResponseId);
     const transformStream = new TransformStream(transformer);
 
+    // O responsesCall retorna um stream que precisa ser processado
+    // Converter o openaiResponse para um ReadableStream seguindo a Responses API
+    let streamBody: ReadableStream<Uint8Array>;
+    
+    if (openaiResponse && typeof openaiResponse[Symbol.asyncIterator] === 'function') {
+      // Se é um stream iterável da Responses API, converter para ReadableStream
+      streamBody = new ReadableStream({
+        async start(controller) {
+          try {
+            for await (const event of openaiResponse) {
+              // Processar eventos semânticos da Responses API
+              const eventStr = JSON.stringify(event) + '\n';
+              controller.enqueue(new TextEncoder().encode(`data: ${eventStr}`));
+            }
+            controller.enqueue(new TextEncoder().encode('data: [DONE]\n'));
+            controller.close();
+          } catch (error) {
+            controller.error(error);
+          }
+        }
+      });
+    } else {
+      // Se não é um stream, criar um stream simples com a resposta
+      const responseStr = JSON.stringify(openaiResponse);
+      streamBody = new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(`data: ${responseStr}\n`));
+          controller.enqueue(new TextEncoder().encode('data: [DONE]\n'));
+          controller.close();
+        }
+      });
+    }
+
     // Return the transformed stream
-    return new NextResponse(response.body?.pipeThrough(transformStream), {
+    return new NextResponse(streamBody.pipeThrough(transformStream), {
       headers: {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
@@ -1835,4 +1911,4 @@ async function saveUploadedImageToDatabase(sessionId: string, imageUrl: string, 
     console.error('Error saving uploaded image to database:', error);
     return null;
   }
-} 
+}

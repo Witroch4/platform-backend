@@ -16,7 +16,7 @@ export async function POST(req: Request) {
         {
           role: "user",
           content: [
-            { type: "text", text: prompt }
+            { type: "input_text", text: prompt }
           ]
         }
       ],
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     // Adicionar imagem se fornecida
     if (imageUrl) {
       testPayload.input[0].content.push({
-        type: "image_url",
+        type: "input_image",
         image_url: imageUrl
       } as any);
     }
@@ -85,4 +85,4 @@ export async function POST(req: Request) {
       stack: error.stack
     }, { status: 500 });
   }
-} 
+}

@@ -47,6 +47,23 @@ model User {
   aiFaqs                    AiFaq[]
   promptVersions            PromptVersion[]
   abTests                   PromptABTest[]
+  inboxConfigHistory        InboxConfigHistory[]
+}
+
+model InboxConfigHistory {
+  id                     String       @id @default(cuid())
+  inboxId                String
+  userId                 String
+  changeType             String       // "create" | "update" | "rollback"
+  previousConfig         Json?        // Configuração anterior
+  newConfig              Json         // Nova configuração
+  description            String?      // Descrição da mudança
+  createdAt              DateTime     @default(now())
+  inbox                  ChatwitInbox @relation(fields: [inboxId], references: [id], onDelete: Cascade)
+  user                   User         @relation(fields: [userId], references: [id])
+
+  @@index([inboxId, createdAt(sort: Desc)])
+  @@index([userId])
 }
 
 model Account {
@@ -231,6 +248,17 @@ model ChatwitInbox {
   phoneNumberId             String?
   whatsappBusinessAccountId String?
   fallbackParaInboxId       String?
+  // SocialWise Flow configuration per inbox
+  socialwiseInheritFromAgent Boolean?            @default(true)
+  socialwiseReasoningEffort  String?             // "minimal" | "low" | "medium" | "high"
+  socialwiseVerbosity        String?             // "low" | "medium" | "high"
+  socialwiseTemperature      Float?              // Para família GPT-4 (0-2)
+  socialwiseTempSchema       Float?              // Temperatura para saídas estruturadas (0.0-0.2)
+  socialwiseWarmupDeadlineMs Int?
+  socialwiseHardDeadlineMs   Int?
+  socialwiseSoftDeadlineMs   Int?
+  socialwiseShortTitleLLM    Boolean?
+  socialwiseToolChoice       String?             // "none" | "auto"
   agentes                   AgenteDialogflow[]
   fallbackParaInbox         ChatwitInbox?        @relation("FallbackInbox", fields: [fallbackParaInboxId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   fallbackDeInboxes         ChatwitInbox[]       @relation("FallbackInbox")
@@ -239,6 +267,7 @@ model ChatwitInbox {
   mapeamentosIntencao       MapeamentoIntencao[]
   templates                 Template[]
   aiAssistantLinks          AiAssistantInbox[]
+  configHistory             InboxConfigHistory[]
 
   @@unique([usuarioChatwitId, inboxId])
 }

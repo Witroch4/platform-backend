@@ -97,57 +97,58 @@ export async function openaiWithCost(
     }
 
     // Executa a chamada OpenAI com o modelo apropriado
-    // Support both chat completions and responses API based on input format
+    // Suporta Chat Completions (quando content é string) e Responses API (multimodal/JSON)
     let resp: OpenAIResponse;
-    
-    if (Array.isArray(args.input) && args.input.length > 0 && args.input[0].role) {
-      // Traditional chat completions format
-      const requestOptions: any = {
+
+    // Só use Chat Completions quando TODAS as mensagens tiverem content string
+    const isChatCompletionsShape =
+      Array.isArray(args.input) &&
+      args.input.length > 0 &&
+      args.input.every(
+        (m: any) => typeof m?.role === "string" && typeof m?.content === "string"
+      );
+
+    if (isChatCompletionsShape) {
+      // Chat Completions — options (signal) no 2º argumento do SDK
+      const params: OpenAI.Chat.Completions.ChatCompletionCreateParams = {
         model: modelToUse,
         messages: args.input,
       };
-      
-      if (args.signal) {
-        requestOptions.signal = args.signal;
-      }
-      
-      resp = await client.chat.completions.create(requestOptions) as OpenAIResponse;
+      resp = await client.chat.completions.create(params, { signal: args.signal }) as OpenAIResponse;
     } else {
-      // Responses API format (used by enhanced methods)
-      // Support either a full requestParams object or a plain input array/object
-      const isFullParams = (
-        args.input && typeof args.input === 'object' && !Array.isArray(args.input) && (
-          'input' in args.input ||
-          'messages' in args.input ||
-          'tools' in args.input ||
-          'store' in args.input ||
-          'temperature' in args.input ||
-          'max_output_tokens' in args.input ||
-          'reasoning' in args.input ||
-          'metadata' in args.input
-        )
-      );
+      // Responses API — sempre via SDK (sem fetch manual)
+      const isFullParams =
+        args.input &&
+        typeof args.input === "object" &&
+        !Array.isArray(args.input) &&
+        ("input" in args.input ||
+          "tools" in args.input ||
+          "store" in args.input ||
+          "temperature" in args.input ||
+          "max_output_tokens" in args.input ||
+          "reasoning" in args.input ||
+          "metadata" in args.input);
 
-      const requestBody: any = isFullParams
-        ? { stream: false, ...(args.input as object), model: modelToUse, store: (args.input as any).store ?? true }
-        : { model: modelToUse, input: args.input, stream: false, store: true };
-      
-      // Use responses API through direct fetch with abort support
-      const response = await fetch('https://api.openai.com/v1/responses', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${client.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-        signal: args.signal,
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Responses API error: ${response.status}`);
+      const params: any = isFullParams
+        ? {
+            stream: (args.input as any).stream ?? false,
+            store: (args.input as any).store ?? true,
+            ...args.input,
+            model: modelToUse,
+          }
+        : {
+            model: modelToUse,
+            input: args.input,
+            stream: false,
+            store: true,
+          };
+
+      // Para streaming, usar client.responses.stream ao invés de create
+      if (params.stream) {
+        resp = await client.responses.stream(params, { signal: args.signal }) as any;
+      } else {
+        resp = await client.responses.create(params, { signal: args.signal }) as OpenAIResponse;
       }
-      
-      resp = await response.json() as OpenAIResponse;
     }
     
     const latencyMs = Date.now() - started;

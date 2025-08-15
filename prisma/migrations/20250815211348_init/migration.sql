@@ -93,6 +93,20 @@ CREATE TABLE "public"."User" (
 );
 
 -- CreateTable
+CREATE TABLE "public"."InboxConfigHistory" (
+    "id" TEXT NOT NULL,
+    "inboxId" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "changeType" TEXT NOT NULL,
+    "previousConfig" JSONB,
+    "newConfig" JSONB NOT NULL,
+    "description" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "InboxConfigHistory_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "public"."Account" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
@@ -259,6 +273,16 @@ CREATE TABLE "public"."ChatwitInbox" (
     "phoneNumberId" TEXT,
     "whatsappBusinessAccountId" TEXT,
     "fallbackParaInboxId" TEXT,
+    "socialwiseInheritFromAgent" BOOLEAN DEFAULT true,
+    "socialwiseReasoningEffort" TEXT,
+    "socialwiseVerbosity" TEXT,
+    "socialwiseTemperature" DOUBLE PRECISION,
+    "socialwiseTempSchema" DOUBLE PRECISION,
+    "socialwiseWarmupDeadlineMs" INTEGER,
+    "socialwiseHardDeadlineMs" INTEGER,
+    "socialwiseSoftDeadlineMs" INTEGER,
+    "socialwiseShortTitleLLM" BOOLEAN,
+    "socialwiseToolChoice" TEXT,
 
     CONSTRAINT "ChatwitInbox_pkey" PRIMARY KEY ("id")
 );
@@ -1358,6 +1382,12 @@ CREATE TABLE "public"."AiFaq" (
 CREATE UNIQUE INDEX "User_email_key" ON "public"."User"("email");
 
 -- CreateIndex
+CREATE INDEX "InboxConfigHistory_inboxId_createdAt_idx" ON "public"."InboxConfigHistory"("inboxId", "createdAt" DESC);
+
+-- CreateIndex
+CREATE INDEX "InboxConfigHistory_userId_idx" ON "public"."InboxConfigHistory"("userId");
+
+-- CreateIndex
 CREATE INDEX "Account_userId_idx" ON "public"."Account"("userId");
 
 -- CreateIndex
@@ -1713,6 +1743,12 @@ CREATE INDEX "AiDocument_userId_assistantId_isActive_idx" ON "public"."AiDocumen
 
 -- CreateIndex
 CREATE INDEX "AiFaq_userId_assistantId_status_isActive_idx" ON "public"."AiFaq"("userId", "assistantId", "status", "isActive");
+
+-- AddForeignKey
+ALTER TABLE "public"."InboxConfigHistory" ADD CONSTRAINT "InboxConfigHistory_inboxId_fkey" FOREIGN KEY ("inboxId") REFERENCES "public"."ChatwitInbox"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."InboxConfigHistory" ADD CONSTRAINT "InboxConfigHistory_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."Account" ADD CONSTRAINT "Account_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;

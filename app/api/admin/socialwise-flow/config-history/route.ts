@@ -12,32 +12,61 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
   }
 
-  const { searchParams } = new URL(request.url);
-  const inboxId = searchParams.get('inboxId');
-
-  if (!inboxId) {
-    return NextResponse.json({ error: 'inboxId é obrigatório' }, { status: 400 });
-  }
-
   try {
-    // In a real implementation, this would query a configuration history table
-    // For now, we'll return simulated history
-    const changes = [
-      {
-        id: 'hist_1',
-        timestamp: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
-        changes: { embedipreview: true, warmupDeadlineMs: 250 },
-        userId: session.user.id,
-        userName: session.user.name || 'Usuário'
-      },
-      {
-        id: 'hist_2',
-        timestamp: new Date(Date.now() - 7200000).toISOString(), // 2 hours ago
-        changes: { hardDeadlineMs: 120, softDeadlineMs: 300 },
-        userId: session.user.id,
-        userName: session.user.name || 'Usuário'
+    const { searchParams } = new URL(request.url);
+    const inboxId = searchParams.get('inboxId');
+
+    if (!inboxId) {
+      return NextResponse.json({ error: 'inboxId é obrigatório' }, { status: 400 });
+    }
+
+    // Find the ChatwitInbox by inboxId
+    const chatwitInbox = await prisma.chatwitInbox.findFirst({
+      where: { 
+        inboxId: inboxId,
+        usuarioChatwit: {
+          appUserId: session.user.id
+        }
       }
-    ];
+    });
+
+    if (!chatwitInbox) {
+      return NextResponse.json({ error: 'Inbox não encontrada' }, { status: 404 });
+    }
+
+    // Get config history for this inbox
+    const configHistory = await prisma.inboxConfigHistory.findMany({
+      where: {
+        inboxId: chatwitInbox.id
+      },
+      include: {
+        user: {
+          select: {
+            name: true,
+            email: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      take: 50 // Limit to last 50 changes
+    });
+
+    const changes = configHistory.map(entry => ({
+      id: entry.id,
+      timestamp: entry.createdAt.toISOString(),
+      changeType: entry.changeType,
+      description: entry.description || `Configuração ${entry.changeType}`,
+      user: {
+        name: entry.user.name || 'Usuário desconhecido',
+        email: entry.user.email
+      },
+      previousConfig: entry.previousConfig,
+      newConfig: entry.newConfig,
+      userId: entry.userId,
+      userName: entry.user.name || 'Usuário'
+    }));
 
     logger.info('Histórico de configuração carregado', { 
       userId: session.user.id, 

@@ -14,10 +14,12 @@ export async function GET(request: NextRequest) {
   const assistantId = String(searchParams.get('assistantId') || '');
   if (!assistantId) return NextResponse.json({ error: 'assistantId obrigatório' }, { status: 400 });
 
-  // Buscar associações atuais no banco
+  // Buscar associações atuais no banco com configurações SocialWise
   const links = await (prisma as any).aiAssistantInbox?.findMany?.({
     where: { assistantId },
-    include: { inbox: true },
+    include: { 
+      inbox: true
+    },
   }) || [];
 
   // Buscar inboxes/caixas da rota já existente (Dialogflow) – usamos como catálogo
@@ -45,13 +47,36 @@ export async function GET(request: NextRequest) {
   }
 
   // Mapear "anexada" por inboxId (id externo Chatwit), e usar campos das caixas locais
-  const attachedSet = new Set<string>(links.map((l: any) => l?.inbox?.inboxId));
-  const result = externals.map((x: any) => ({
-    inboxId: String(x?.inboxId || x?.inbox_id || ''), // id externo
-    name: x?.nome || x?.name || 'Inbox',
-    channelType: x?.channelType || x?.channel_type || '',
-    attached: attachedSet.has(String(x?.inboxId || x?.inbox_id || '')),
-  }));
+  const attachedMap = new Map<string, any>(
+    links.map((l: any) => [l?.inbox?.inboxId, l])
+  );
+  
+  const result = externals.map((x: any) => {
+    const inboxId = String(x?.inboxId || x?.inbox_id || '');
+    const link = attachedMap.get(inboxId);
+    const inbox = link?.inbox;
+    
+    return {
+      inboxId,
+      name: x?.nome || x?.name || 'Inbox',
+      channelType: x?.channelType || x?.channel_type || '',
+      attached: !!link,
+      socialwiseConfig: inbox ? {
+        inheritFromAgent: inbox.socialwiseInheritFromAgent ?? true,
+        reasoningEffort: inbox.socialwiseReasoningEffort,
+        verbosity: inbox.socialwiseVerbosity,
+        temperature: inbox.socialwiseTemperature,
+        tempSchema: inbox.socialwiseTempSchema,
+        warmupDeadlineMs: inbox.socialwiseWarmupDeadlineMs,
+        hardDeadlineMs: inbox.socialwiseHardDeadlineMs,
+        softDeadlineMs: inbox.socialwiseSoftDeadlineMs,
+        shortTitleLLM: inbox.socialwiseShortTitleLLM,
+        toolChoice: inbox.socialwiseToolChoice
+      } : {
+        inheritFromAgent: true // Default when no config exists
+      }
+    };
+  });
   logger.info('Resultado para UI de conexão', { total: result.length, attached: result.filter(r => r.attached).length });
 
   return NextResponse.json({ inboxes: result });
