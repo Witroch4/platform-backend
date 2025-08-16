@@ -444,6 +444,16 @@ export function AppAdminDashboard() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
 
+                {/* Teste OpenAI Responses API */}
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <Link href="/admin/openai-source-test" className="flex items-center">
+                      <Atom className="mr-2" />
+                      {state !== "collapsed" && <span>Teste OpenAI Responses</span>}
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+
                 {/* Respostas Rápidas (Flash Intent) */}
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild>

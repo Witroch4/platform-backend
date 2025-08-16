@@ -60,13 +60,13 @@ app.prepare().then(async () => {
     });
   });
 
-  // Inicia o servidor na porta 3000
-  server.listen(3000, (err) => {
+  // Inicia o servidor na porta 3002
+  server.listen(3002, (err) => {
     if (err) throw err;
     console.log(`🚀 Servidor iniciado com sucesso!`);
-    console.log(`📡 Porta: 3000`);
+    console.log(`📡 Porta: 3002`);
     console.log(`🌍 Ambiente: ${dev ? "desenvolvimento" : "produção"}`);
-    console.log(`🔗 URL: http://localhost:3000`);
+    console.log(`🔗 URL: http://localhost:3002`);
     console.log(`✅ Sistema pronto para uso!`);
   });
 

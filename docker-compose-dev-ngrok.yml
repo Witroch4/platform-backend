@@ -20,7 +20,7 @@ services:
 
       # Ngrok (não iniciar dentro do app; token vem via env_file se necessário)
     ports:
-      - "3002:3000"
+      - "3002:3002"
       - "3005:3005" # Bull Board
     volumes:
       - .:/src

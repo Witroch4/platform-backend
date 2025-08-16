@@ -1,3 +1,4 @@
+// app/admin/capitao/[id]/page.tsx
 "use client";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -281,7 +282,7 @@ export default function EditAssistantPage() {
 
         <Playground
           assistantId={assistant.id}
-          model={assistant.model || "gpt-4o-latest"}
+          model={assistant.model || "gpt-5-nano"}
           instructions={assistant.instructions || ""}
         />
       </div>

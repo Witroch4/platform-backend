@@ -24,7 +24,7 @@ services:
       # Ngrok (se ainda quiser no app)
       NGROK_AUTHTOKEN: "2q8n28IDz0mMwNr02MlHnLGsbKE_6ohF5ifRMgFBW867Mk5Zi"
     ports:
-      - "3002:3000"
+      - "3002:3002"
       - "3005:3005" # Bull Board
     volumes:
       - .:/src
