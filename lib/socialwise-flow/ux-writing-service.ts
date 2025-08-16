@@ -17,7 +17,7 @@ import {
   getHumanizedTitle,
   FALLBACK_TITLES,
 } from "./ux-writing";
-import { clampTitle, clampButton, validateButton } from "./clamps";
+import { clampTitle, clampButtonData, validateChannelLimits } from "@/lib/socialwise/clamps";
 import {
   buildChannelResponse,
   buildFallbackResponse,
@@ -126,7 +126,10 @@ export class UXWritingService {
           introduction_text:
             result.introduction_text ||
             "Posso ajudar com diversas questões jurídicas. Qual área se aproxima mais da sua necessidade?",
-          buttons: result.buttons.map((btn) => clampButton(btn, "whatsapp")),
+          buttons: result.buttons.map((btn) => {
+            const clamped = clampButtonData(btn, "whatsapp");
+            return { title: clamped.title, payload: clamped.payload };
+          }),
         };
       }
 
@@ -189,9 +192,9 @@ export class UXWritingService {
 
     // Validate and enhance buttons
     const enhancedButtons = result.buttons.map((button, index) => {
-      const validation = validateButton(button, "whatsapp");
+      const validation = validateChannelLimits({ buttons: [button] }, "whatsapp");
 
-      if (!validation.valid) {
+      if (!validation.isValid) {
         // Use candidate as fallback
         const candidate = candidates[index];
         if (candidate) {
@@ -207,7 +210,11 @@ export class UXWritingService {
         };
       }
 
-      return clampButton(button, "whatsapp");
+      const clamped = clampButtonData(button, "whatsapp");
+      return {
+        title: clamped.title,
+        payload: clamped.payload
+      };
     });
 
     return {
@@ -267,7 +274,10 @@ export class UXWritingService {
 
     return {
       introduction_text: introText,
-      buttons: buttons.map((btn) => clampButton(btn, "whatsapp")),
+      buttons: buttons.map((btn) => {
+        const clamped = clampButtonData(btn, "whatsapp");
+        return { title: clamped.title, payload: clamped.payload };
+      }),
     };
   }
 
@@ -317,7 +327,10 @@ export class UXWritingService {
     return {
       introduction_text:
         "Posso ajudar com diversas questões jurídicas. Qual área se aproxima mais da sua necessidade?",
-      buttons: buttons.map((btn) => clampButton(btn, "whatsapp")),
+      buttons: buttons.map((btn) => {
+        const clamped = clampButtonData(btn, "whatsapp");
+        return { title: clamped.title, payload: clamped.payload };
+      }),
     };
   }
 }

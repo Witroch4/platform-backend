@@ -1,9 +1,28 @@
 /**
  * Channel-Specific Response Formatting for SocialWise Flow
- * Implements centralized clamps and validation utilities
+ * Uses centralized specialized formatters from lib/socialwise for robust validation and fallbacks
+ * This file acts as an integration layer between the processor and the specialized formatters
  */
 
 import { createLogger } from '@/lib/utils/logger';
+import { 
+  buildInstagramButtons as buildInstagramButtonsSpecialized,
+  buildFacebookTextFallback,
+  validateInstagramMessage,
+  type InstagramButtonOptions,
+  type InstagramMessage
+} from '@/lib/socialwise/instagram-formatter';
+import { 
+  buildButtons as buildWhatsAppButtonsSpecialized,
+  buildNumberedTextFallback,
+  validateWhatsAppMessage,
+  type WhatsAppButtonOptions,
+  type WhatsAppMessage
+} from '@/lib/socialwise/whatsapp-formatter';
+import { 
+  clampBody as clampBodyCentralized,
+  CHANNEL_LIMITS 
+} from '@/lib/socialwise/clamps';
 
 const formattingLogger = createLogger('SocialWise-Formatting');
 
@@ -21,118 +40,101 @@ export interface ChannelResponse {
 }
 
 /**
- * Clamp title to maximum length with word boundary respect
+ * Platform-specific text limits for different channels
+ * Using centralized CHANNEL_LIMITS from socialwise/clamps
  */
-export function clampTitle(text: string, maxLength = 20): string {
-  const clean = String(text || '').replace(/\s+/g, ' ').trim();
-  if (clean.length <= maxLength) return clean;
-  
-  const cut = clean.slice(0, maxLength + 1);
-  const lastSpace = cut.lastIndexOf(' ');
-  
-  if (lastSpace > 0 && lastSpace >= maxLength - 8) {
-    return cut.slice(0, lastSpace).trim();
+export const PLATFORM_LIMITS = {
+  WHATSAPP_BODY: CHANNEL_LIMITS.whatsapp.bodyText,
+  WHATSAPP_BUTTON_TITLE: CHANNEL_LIMITS.whatsapp.buttonTitle,
+  INSTAGRAM_TEXT: CHANNEL_LIMITS.instagram.bodyText,
+  INSTAGRAM_BUTTON_TITLE: CHANNEL_LIMITS.instagram.buttonTitle,
+  FACEBOOK_TEXT: CHANNEL_LIMITS.facebook.bodyText,
+  FACEBOOK_BUTTON_TITLE: CHANNEL_LIMITS.facebook.buttonTitle,
+  DEFAULT_BUTTON_TITLE: 20,
+  DEFAULT_BODY: CHANNEL_LIMITS.instagram.bodyText // Instagram limit as default (most restrictive)
+} as const;
+
+/**
+ * Clamp body text to platform-specific limits using centralized function
+ */
+export function clampBody(text: string, maxLength: number = PLATFORM_LIMITS.DEFAULT_BODY): string {
+  // Use centralized clampBody function with appropriate channel type
+  if (maxLength === CHANNEL_LIMITS.whatsapp.bodyText) {
+    return clampBodyCentralized(text, 'whatsapp');
+  } else if (maxLength === CHANNEL_LIMITS.instagram.bodyText) {
+    return clampBodyCentralized(text, 'instagram');
+  } else if (maxLength === CHANNEL_LIMITS.facebook.bodyText) {
+    return clampBodyCentralized(text, 'facebook');
+  } else {
+    // Fallback to Instagram limits for custom lengths
+    return clampBodyCentralized(text, 'instagram');
   }
-  
-  return clean.slice(0, maxLength).trim();
 }
 
 /**
- * Clamp body text to maximum length
- */
-export function clampBody(text: string, maxLength = 1024): string {
-  const clean = String(text || '').trim();
-  return clean.length <= maxLength ? clean : clean.slice(0, maxLength).trimEnd();
-}
-
-/**
- * Validate payload format against regex pattern
- */
-export function validatePayload(payload: string): boolean {
-  const pattern = /^@[a-z0-9_]+$/;
-  return pattern.test(payload);
-}
-
-/**
- * Sanitize payload to match required format
- */
-export function sanitizePayload(payload: string): string {
-  let clean = String(payload || '').toLowerCase().trim();
-  
-  // Remove existing @ prefix if present
-  if (clean.startsWith('@')) {
-    clean = clean.slice(1);
-  }
-  
-  // Replace invalid characters with underscores
-  clean = clean.replace(/[^a-z0-9_]/g, '_');
-  
-  // Remove multiple consecutive underscores
-  clean = clean.replace(/_+/g, '_');
-  
-  // Remove leading/trailing underscores
-  clean = clean.replace(/^_+|_+$/g, '');
-  
-  // Ensure it's not empty
-  if (!clean) {
-    clean = 'unknown';
-  }
-  
-  return `@${clean}`;
-}
-
-/**
- * Build WhatsApp interactive message with buttons
+ * Build WhatsApp interactive message with buttons using centralized specialized formatter
+ * Integrates with lib/socialwise/whatsapp-formatter.ts for consistent formatting and validation
  */
 export function buildWhatsAppButtons(
   bodyText: string,
   buttons: ButtonOption[]
 ): any {
-  const clampedBody = clampBody(bodyText, 1024);
-  const validButtons = buttons.slice(0, 3).map(btn => ({
-    type: 'reply',
-    reply: {
-      id: clampTitle(sanitizePayload(btn.payload), 256),
-      title: clampTitle(btn.title, 20)
-    }
+  // Convert ButtonOption to WhatsAppButtonOptions
+  const whatsappButtons: WhatsAppButtonOptions[] = buttons.map(btn => ({
+    title: btn.title,
+    payload: btn.payload
   }));
 
-  return {
-    type: 'interactive',
-    interactive: {
-      type: 'button',
-      body: { text: clampedBody },
-      action: { buttons: validButtons }
+  try {
+    const result = buildWhatsAppButtonsSpecialized(bodyText, whatsappButtons);
+    
+    // Validate the result
+    const validation = validateWhatsAppMessage(result);
+    if (!validation.isValid) {
+      formattingLogger.warn('WhatsApp message validation failed, using fallback', {
+        violations: validation.violations
+      });
+      return buildNumberedTextFallback(bodyText, whatsappButtons);
     }
-  };
+
+    return result;
+  } catch (error) {
+    formattingLogger.error('WhatsApp formatter failed, using fallback', { error });
+    return buildNumberedTextFallback(bodyText, whatsappButtons);
+  }
 }
 
 /**
- * Build Instagram button template
+ * Build Instagram button template using centralized specialized formatter
+ * Integrates with lib/socialwise/instagram-formatter.ts for consistent formatting and validation
  */
 export function buildInstagramButtons(
   text: string,
   buttons: ButtonOption[]
 ): any {
-  const clampedText = clampBody(text, 640);
-  const validButtons = buttons.slice(0, 3).map(btn => ({
-    type: 'postback',
-    title: clampTitle(btn.title, 20),
-    payload: clampTitle(sanitizePayload(btn.payload), 1000)
+  // Convert ButtonOption to InstagramButtonOptions
+  const instagramButtons: InstagramButtonOptions[] = buttons.map(btn => ({
+    title: btn.title,
+    payload: btn.payload
   }));
 
-  return {
-    message: {
-      attachment: {
-        type: 'template',
-        payload: {
-          template_type: 'button',
-          text: clampedText,
-          buttons: validButtons
-        }
-      }
+  try {
+    const result = buildInstagramButtonsSpecialized(text, instagramButtons);
+    
+    // Validate the result
+    const validation = validateInstagramMessage(result);
+    if (!validation.isValid) {
+      formattingLogger.warn('Instagram message validation failed, using fallback', {
+        violations: validation.violations
+      });
+      return buildFacebookTextFallback(text, instagramButtons);
     }
-  };
+
+    return result;
+  } catch (error) {
+    formattingLogger.error('Instagram formatter failed, using fallback', { error });
+    return buildFacebookTextFallback(text, instagramButtons);
+  }
 }
 
 /**
@@ -154,31 +156,43 @@ export function buildChannelResponse(
   // If no buttons, return simple text response
   if (!buttons || buttons.length === 0) {
     if (lowerChannelType.includes('whatsapp')) {
-      return { whatsapp: { type: 'text', text: { body: clampBody(text, 1024) } } };
+      return { whatsapp: { type: 'text', text: { body: clampBodyCentralized(text, 'whatsapp') } } };
     } else if (lowerChannelType.includes('instagram')) {
-      return { instagram: { message: { text: clampBody(text, 640) } } };
+      return { instagram: { message: { text: clampBodyCentralized(text, 'instagram') } } };
     } else if (lowerChannelType.includes('facebook') || lowerChannelType.includes('messenger')) {
-      return { facebook: { message: { text: clampBody(text, 2000) } } };
+      return { facebook: { message: { text: clampBodyCentralized(text, 'facebook') } } };
     } else {
-      return { text: clampBody(text, 2000) };
+      return { text: clampBodyCentralized(text, 'facebook') }; // Use Facebook limits as default
     }
   }
 
-  // Build interactive responses with buttons
+  // Build interactive responses with buttons using specialized formatters
   if (lowerChannelType.includes('whatsapp')) {
-    return { whatsapp: buildWhatsAppButtons(text, buttons) };
+    const result = buildWhatsAppButtons(text, buttons);
+    formattingLogger.info('WhatsApp response built with specialized formatter', {
+      hasInteractive: !!result.interactive,
+      hasText: !!result.text,
+      buttonCount: result.interactive?.action?.buttons?.length || 0
+    });
+    return { whatsapp: result };
   } else if (lowerChannelType.includes('instagram')) {
-    return { instagram: buildInstagramButtons(text, buttons) };
+    const result = buildInstagramButtons(text, buttons);
+    formattingLogger.info('Instagram response built with specialized formatter', {
+      hasAttachment: !!result.message?.attachment,
+      hasText: !!result.message?.text,
+      buttonCount: result.message?.attachment?.payload?.buttons?.length || 0
+    });
+    return { instagram: result };
   } else if (lowerChannelType.includes('facebook') || lowerChannelType.includes('messenger')) {
     // Facebook Messenger fallback to plain text with options
     const optionsText = buttons.map(btn => `• ${btn.title}`).join('\n');
     const fullText = `${text}\n\n${optionsText}`;
-    return { facebook: { message: { text: clampBody(fullText, 2000) } } };
+    return { facebook: { message: { text: clampBodyCentralized(fullText, 'facebook') } } };
   } else {
     // Generic text fallback
     const optionsText = buttons.map(btn => `• ${btn.title}`).join('\n');
     const fullText = `${text}\n\n${optionsText}`;
-    return { text: clampBody(fullText, 2000) };
+    return { text: clampBodyCentralized(fullText, 'facebook') }; // Use Facebook limits as default
   }
 }
 
@@ -227,16 +241,27 @@ export function logChannelResponse(
   context: { channelType: string; strategy: string }
 ): void {
   try {
-    formattingLogger.info('Channel response formatted', {
+    formattingLogger.info('Channel response formatted with specialized formatters', {
       channelType: context.channelType,
       strategy: context.strategy,
       hasWhatsApp: !!response.whatsapp,
       hasInstagram: !!response.instagram,
       hasFacebook: !!response.facebook,
       hasText: !!response.text,
-      hasAction: !!response.action
+      hasAction: !!response.action,
+      formatterType: 'specialized'
     });
   } catch (error) {
     // Ignore logging errors
   }
 }
+
+// Re-export specialized formatter functions for direct access if needed
+export { 
+  buildInstagramButtons as buildInstagramButtonsDirect,
+  validateInstagramMessage
+} from '@/lib/socialwise/instagram-formatter';
+export { 
+  buildButtons as buildWhatsAppButtonsDirect,
+  validateWhatsAppMessage
+} from '@/lib/socialwise/whatsapp-formatter';

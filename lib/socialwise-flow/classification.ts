@@ -6,6 +6,24 @@
 import { getPrismaInstance } from "@/lib/connections";
 import { createLogger } from "@/lib/utils/logger";
 import { IntentCandidate, AgentConfig } from "@/services/openai";
+
+// Legal keywords that should force SOFT band even with low embedding scores
+const LEGAL_KEYWORDS = [
+  "mandado de segurança", "ms",
+  "habeas corpus", "habeas data",
+  "recurso", "recurso de multa", "multa de trânsito", "detran",
+  "indenização", "ação judicial", "processo", "petição", "liminar",
+  "direito", "advogado", "justiça", "tribunal", "juiz",
+  "código", "lei", "constituição", "estatuto"
+];
+
+/**
+ * Check if text contains legal keywords that should promote to SOFT band
+ */
+function checkLegalKeywords(text: string): boolean {
+  const t = (text || "").toLowerCase();
+  return LEGAL_KEYWORDS.some(k => t.includes(k));
+}
 import {
   selectDegradationStrategy,
   shouldDegrade,
@@ -74,7 +92,7 @@ function cosineSimilarity(a: number[], b: number[]): number {
  */
 async function embedText(
   text: string,
-  timeoutMs = 2000
+  timeoutMs = 1000 // Reduzido de 2000ms para 1000ms
 ): Promise<number[] | null> {
   if (!process.env.OPENAI_API_KEY) return null;
 
@@ -91,6 +109,7 @@ async function embedText(
       body: JSON.stringify({
         model: "text-embedding-3-small",
         input: text,
+        dimensions: 1536, // Reduzir dimensões para acelerar
       }),
       signal: controller.signal,
     });
@@ -367,6 +386,28 @@ export async function classifyIntentEmbeddingFirst(
         },
       };
     } else {
+      // Check for legal keywords promotion to SOFT band
+      const hasLegalKeywords = checkLegalKeywords(userText);
+      
+      if (hasLegalKeywords && score >= 0.4) { // Lower threshold for legal keywords
+        classificationLogger.info("Legal keywords detected - promoting to SOFT band", {
+          userText: userText.substring(0, 50),
+          score,
+          traceId: context?.traceId
+        });
+        
+        return {
+          band: "SOFT",
+          score: Math.max(score, 0.65), // Boost score for legal keywords
+          candidates: candidates.slice(0, 3),
+          strategy: degraded ? "warmup_buttons_degraded" : "warmup_buttons",
+          metrics: {
+            embedding_ms: searchMs,
+            route_total_ms: Date.now() - startTime,
+          },
+        };
+      }
+      
       // LOW band: Domain topics suggestion
       return {
         band: "LOW",

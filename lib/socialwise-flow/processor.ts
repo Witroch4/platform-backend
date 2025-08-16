@@ -43,6 +43,8 @@ export interface ProcessorResult {
   };
 }
 
+
+
 /**
  * Load full assistant configuration including SocialWise Flow deadlines
  * Supports inbox-level inheritance from agent configurations
@@ -89,7 +91,7 @@ async function loadAssistantConfiguration(inboxId: string, chatwitAccountId?: st
     }
 
     // Get inbox configuration to check inheritance settings
-    const inbox = await prisma.chatwitInbox.findFirst({
+    const inbox = await (prisma as any).chatwitInbox.findFirst({
       where: { inboxId },
       select: {
         socialwiseInheritFromAgent: true,
@@ -342,19 +344,62 @@ async function processSoftBand(
 
 /**
  * Process LOW band classification (<0.65 score)
- * Domain-specific legal topic suggestion
+ * 🎯 NOVO: Chat livre com IA gerando botões dinâmicos baseados no agente configurado
  */
 async function processLowBand(
   classification: ClassificationResult,
   context: ProcessorContext
 ): Promise<ChannelResponse> {
   const startTime = Date.now();
+  const concurrencyManager = getConcurrencyManager();
   
   try {
-    // For legal domain, provide common legal areas
+    // 🎯 CORRIGIDO: Usar configuração do agente para chat livre
+    const agentConfig = await loadAssistantConfiguration(context.inboxId, context.chatwitAccountId);
+    if (!agentConfig) {
+      return buildDefaultLegalTopics(context.channelType);
+    }
+
+    // 🎯 NOVA FUNCIONALIDADE: Chat livre com IA para banda LOW
+    const freechatResult = await concurrencyManager.executeLlmOperation(
+      context.inboxId,
+      () => openaiService.generateFreeChatButtons(
+        context.userText,
+        agentConfig // Usar instruções do agente configurado no Capitão
+      ),
+      {
+        priority: 'low',
+        timeoutMs: agentConfig.warmupDeadlineMs || 1000,
+        allowDegradation: true
+      }
+    );
+
+    if (freechatResult) {
+      const buttons = freechatResult.buttons.map(btn => ({
+        title: btn.title,
+        payload: btn.payload
+      }));
+
+      const response = buildChannelResponse(
+        context.channelType,
+        freechatResult.introduction_text,
+        buttons
+      );
+
+      processorLogger.info('LOW band free chat generated', {
+        score: classification.score,
+        buttonsGenerated: buttons.length,
+        processingMs: Date.now() - startTime,
+        traceId: context.traceId
+      });
+
+      return response;
+    }
+
+    // Fallback para tópicos padrão se IA falhar
     const response = buildDefaultLegalTopics(context.channelType);
     
-    processorLogger.info('LOW band domain topics provided', {
+    processorLogger.info('LOW band domain topics provided (fallback)', {
       score: classification.score,
       processingMs: Date.now() - startTime,
       traceId: context.traceId
@@ -391,6 +436,15 @@ async function processRouterBand(
         llmWarmupMs: Date.now() - startTime
       };
     }
+
+    // Debug: Log agent configuration for router LLM
+    processorLogger.info('Router LLM agent configuration', {
+      hardDeadlineMs: agentConfig.hardDeadlineMs,
+      model: agentConfig.model,
+      reasoningEffort: agentConfig.reasoningEffort,
+      verbosity: agentConfig.verbosity,
+      traceId: context.traceId
+    });
 
     // Use Router LLM to decide between intent and chat with concurrency control
     const routerResult = await concurrencyManager.executeLlmOperation(

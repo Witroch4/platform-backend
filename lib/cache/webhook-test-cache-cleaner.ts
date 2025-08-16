@@ -155,7 +155,11 @@ export class WebhookTestCacheCleaner {
         const config = {
           accountId,
           inboxId,
-          usuarioChatwitId: accountId // Using accountId as usuarioChatwitId for test context
+          agentId: 'test-agent',
+          model: 'gpt-4',
+          promptVersion: '1.0',
+          channelType: 'whatsapp' as const,
+          embedipreview: false
         };
         await socialWiseFlowCache.invalidateUserCache(config);
         console.log(`[WebhookTestCacheCleaner] Cleared SocialWise cache for account: ${accountId}, inbox: ${inboxId}`);

@@ -310,11 +310,14 @@ export class SocialWiseMonitoringDashboard {
     const startTime = Date.now();
     
     try {
-      // Test simple LLM call
+      // Test simple LLM call with proper deadline configuration
       const testAgent = {
         model: 'gpt-4o-mini',
         developer: 'Health check test',
-        instructions: 'Respond with "OK" only'
+        instructions: 'Respond with "OK" only',
+        hardDeadlineMs: 10000, // 10 seconds for health check
+        warmupDeadlineMs: 5000, // 5 seconds for health check
+        softDeadlineMs: 8000    // 8 seconds for health check
       };
       
       const response = await openaiService.routerLLM("Health check", testAgent);

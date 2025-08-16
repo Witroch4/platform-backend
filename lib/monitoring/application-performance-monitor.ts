@@ -44,9 +44,9 @@ export interface CacheMetrics {
   error?: string;
 }
 
-// Alert thresholds
+// Alert thresholds - Ajustados para valores realistas
 export const ALERT_THRESHOLDS = {
-  WEBHOOK_RESPONSE_TIME: 100, // ms
+  WEBHOOK_RESPONSE_TIME: 1500, // ms - Aumentado de 100ms para 1.5s (realista para LLM)
   WORKER_PROCESSING_TIME: 5000, // ms
   DATABASE_QUERY_TIME: 1000, // ms
   CACHE_HIT_RATE: 70, // percentage

@@ -20,17 +20,15 @@ export {
   FALLBACK_TITLES,
 } from "./ux-writing";
 
-// Text clamping and validation utilities
+// Text clamping and validation utilities (from centralized socialwise)
 export {
   clampTitle,
   clampBody,
-  validatePayload,
-  sanitizePayload,
-  validateIntentExists,
-  validateButton,
-  clampButton,
+  validatePayloadFormat as validatePayload,
   CHANNEL_LIMITS,
-} from "./clamps";
+  validateChannelLimits,
+  clampButtonData,
+} from "@/lib/socialwise/clamps";
 
 // Channel-specific formatting
 export {

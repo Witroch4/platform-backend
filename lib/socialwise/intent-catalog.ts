@@ -5,8 +5,6 @@
 
 import { getPrismaInstance } from '@/lib/connections';
 
-const prisma = getPrismaInstance();
-
 /**
  * Cache for intent existence checks to avoid repeated database queries
  */
@@ -78,6 +76,7 @@ async function checkIntentInDatabase(
 ): Promise<boolean> {
   // For now, we'll use a simple pattern-based validation
   // In a real implementation, this would query your intent catalog table
+  // const prisma = getPrismaInstance(); // Uncomment when needed for real DB queries
   
   // Common legal intent patterns that should exist
   const commonLegalIntents = [
