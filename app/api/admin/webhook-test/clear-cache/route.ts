@@ -21,11 +21,13 @@ export async function POST(request: NextRequest) {
     // Clear various cache patterns related to webhook testing
     const patterns = [
       'socialwise:*',
+      'sw:*',
       'chatwit:*',
       'webhook:*',
       'idempotency:*',
       'replay:*',
-      'rate_limit:*'
+      'rate_limit:*',
+      'test:*'
     ];
 
     let totalCleared = 0;

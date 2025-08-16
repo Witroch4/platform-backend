@@ -86,6 +86,8 @@ export interface AgentConfig {
   toolChoice?: "none" | "auto";
   tempSchema?: number;
   tempCopy?: number;
+  temperature?: number | null;
+  topP?: number | null;
   warmupDeadlineMs?: number;
   hardDeadlineMs?: number;
   softDeadlineMs?: number;

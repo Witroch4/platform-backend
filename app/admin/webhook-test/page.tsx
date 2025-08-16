@@ -25,6 +25,7 @@ import {
   Trash2,
   Link2,
   RefreshCw,
+  Shield,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
@@ -50,6 +51,12 @@ export default function WebhookTestPage() {
   const [buttonTitle, setButtonTitle] = useState("Falar com a Dra");
   const [userMessage, setUserMessage] = useState("Queria saber mais sobre o mandado de segurança da OAB");
   const [instagramButtonId, setInstagramButtonId] = useState("ig_btn_1755004696546_uekaa4clu");
+  const [testCount, setTestCount] = useState(0);
+  const [infiniteTestMode, setInfiniteTestMode] = useState(false);
+  const [infiniteTestInterval, setInfiniteTestInterval] = useState(2000);
+  const [infiniteTestRunning, setInfiniteTestRunning] = useState(false);
+  const [idempotencyDisabled, setIdempotencyDisabled] = useState(false);
+  const [idempotencyStatus, setIdempotencyStatus] = useState<any>(null);
 
   const DEFAULT_EXTERNAL_DEST =
     "https://moved-chigger-randomly.ngrok-free.app/api/integrations/webhooks/socialwiseflow";
@@ -72,6 +79,7 @@ export default function WebhookTestPage() {
 
     loadFlashIntentStatus();
     loadSavedPayloads();
+    loadIdempotencyStatus();
     try {
       const savedDest = localStorage.getItem("webhook-external-dest");
       if (savedDest) setExternalDest(savedDest);
@@ -150,16 +158,102 @@ export default function WebhookTestPage() {
 
       if (response.ok) {
         toast.success(data.message || "Cache limpo com sucesso!");
+        return true;
       } else {
         toast.error(data.error || "Erro ao limpar cache");
+        return false;
       }
     } catch (error) {
       console.error("Erro ao limpar cache:", error);
       toast.error("Erro ao limpar cache");
+      return false;
     } finally {
       setClearingCache(false);
     }
   };
+
+  const startInfiniteTest = async () => {
+    if (infiniteTestRunning) return;
+    
+    setInfiniteTestRunning(true);
+    setInfiniteTestMode(true);
+    
+    const runTest = async () => {
+      if (!infiniteTestRunning) return;
+      
+      try {
+        // Limpar cache antes de cada teste se habilitado
+        if (clearCache) {
+          await clearWebhookCache();
+        }
+        
+        // Executar o teste
+        await sendWebhookTest(realPayload);
+        setTestCount(prev => prev + 1);
+        
+        // Agendar próximo teste
+        setTimeout(runTest, infiniteTestInterval);
+      } catch (error) {
+        console.error("Erro no teste infinito:", error);
+        toast.error("Erro no teste infinito");
+        stopInfiniteTest();
+      }
+    };
+    
+    runTest();
+  };
+
+  const stopInfiniteTest = () => {
+    setInfiniteTestRunning(false);
+    setInfiniteTestMode(false);
+  };
+
+  const loadIdempotencyStatus = async () => {
+    try {
+      const response = await fetch("/api/admin/webhook-test/disable-idempotency");
+      if (response.ok) {
+        const data = await response.json();
+        setIdempotencyStatus(data);
+        setIdempotencyDisabled(data.disabled);
+      }
+    } catch (error) {
+      console.error("Erro ao carregar status da idempotência:", error);
+    }
+  };
+
+  const toggleIdempotency = async (disable: boolean) => {
+    try {
+      const response = await fetch("/api/admin/webhook-test/disable-idempotency", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          disable,
+          duration: disable ? 300 : 0 // 5 minutos quando desabilitar
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setIdempotencyStatus(data);
+        setIdempotencyDisabled(data.disabled);
+        toast.success(data.message);
+      } else {
+        toast.error("Erro ao controlar idempotência");
+      }
+    } catch (error) {
+      console.error("Erro ao controlar idempotência:", error);
+      toast.error("Erro ao controlar idempotência");
+    }
+  };
+
+  useEffect(() => {
+    // Parar teste infinito quando componente for desmontado
+    return () => {
+      stopInfiniteTest();
+    };
+  }, []);
 
   // Payload real do Dialogflow fornecido pelo usuário
   const realPayload = {
@@ -1288,13 +1382,39 @@ export default function WebhookTestPage() {
   return (
     <div className="container mx-auto py-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <TestTube className="h-8 w-8 text-blue-500" />
-        <div>
-          <h1 className="text-3xl font-bold">Teste de Webhook</h1>
-          <p className="text-muted-foreground">
-            Teste webhooks do Dialogflow e SocialWise Flow
-          </p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <TestTube className="h-8 w-8 text-blue-500" />
+          <div>
+            <h1 className="text-3xl font-bold">Teste de Webhook</h1>
+            <p className="text-muted-foreground">
+              Teste webhooks do Dialogflow e SocialWise Flow
+            </p>
+          </div>
+        </div>
+        
+        {/* Botão de limpeza rápida de cache */}
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={clearWebhookCache}
+            disabled={clearingCache}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2"
+          >
+            {clearingCache ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            {clearingCache ? "Limpando..." : "Limpar Cache"}
+          </Button>
+          
+          {infiniteTestRunning && (
+            <Badge variant="destructive" className="animate-pulse">
+              Teste Infinito Ativo
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -1395,6 +1515,121 @@ export default function WebhookTestPage() {
                   Remove cache de duplicatas, rate limiting e idempotência
                 </p>
               </div>
+            </div>
+
+            {/* Controle de Idempotência */}
+            <div className="space-y-3 border-t pt-4">
+              <h4 className="text-sm font-medium flex items-center gap-2">
+                <Shield className="h-4 w-4" /> Controle de Idempotência
+              </h4>
+              
+              <div className="flex items-center gap-4">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="disableIdempotency"
+                    checked={idempotencyDisabled}
+                    onChange={(e) => toggleIdempotency(e.target.checked)}
+                    className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="disableIdempotency" className="text-sm font-medium">
+                    Desabilitar detecção de duplicatas
+                  </label>
+                </div>
+                
+                {idempotencyStatus && (
+                  <div className="flex items-center gap-2">
+                    <Badge variant={idempotencyDisabled ? "destructive" : "secondary"}>
+                      {idempotencyDisabled ? "Desabilitada" : "Habilitada"}
+                    </Badge>
+                    {idempotencyStatus.ttl && (
+                      <span className="text-xs text-muted-foreground">
+                        Expira em {Math.ceil(idempotencyStatus.ttl / 60)}min
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+              
+              <p className="text-xs text-muted-foreground">
+                ⚠️ Desabilitar permite enviar mensagens duplicadas para testes. Reabilita automaticamente em 5 minutos.
+              </p>
+            </div>
+
+            {/* Modo de Teste Infinito */}
+            <div className="space-y-3 border-t pt-4">
+              <h4 className="text-sm font-medium flex items-center gap-2">
+                <Zap className="h-4 w-4" /> Modo de Teste Infinito
+              </h4>
+              
+              <div className="flex items-center gap-4">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="infiniteTestMode"
+                    checked={infiniteTestMode}
+                    onChange={(e) => setInfiniteTestMode(e.target.checked)}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="infiniteTestMode" className="text-sm font-medium">
+                    Ativar teste infinito
+                  </label>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <label htmlFor="testInterval" className="text-xs text-muted-foreground">
+                    Intervalo (ms):
+                  </label>
+                  <Input
+                    id="testInterval"
+                    type="number"
+                    value={infiniteTestInterval}
+                    onChange={(e) => setInfiniteTestInterval(Number(e.target.value))}
+                    min="500"
+                    max="30000"
+                    step="500"
+                    className="w-20 h-8 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <Button
+                  onClick={startInfiniteTest}
+                  disabled={infiniteTestRunning || !infiniteTestMode}
+                  variant="destructive"
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
+                  {infiniteTestRunning ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Zap className="h-4 w-4" />
+                  )}
+                  {infiniteTestRunning ? "Teste Infinito Ativo..." : "Iniciar Teste Infinito"}
+                </Button>
+                
+                <Button
+                  onClick={stopInfiniteTest}
+                  disabled={!infiniteTestRunning}
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
+                  <XCircle className="h-4 w-4" />
+                  Parar Teste
+                </Button>
+                
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary">
+                    Testes: {testCount}
+                  </Badge>
+                </div>
+              </div>
+              
+              <p className="text-xs text-muted-foreground">
+                ⚠️ Use com cuidado! O teste infinito enviará webhooks continuamente até ser parado.
+              </p>
             </div>
 
             {/* Destino customizado */}
