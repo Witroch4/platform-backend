@@ -380,8 +380,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
         trace_id: traceId!,
         user_input: textInput, // Will be hashed by the monitoring system
         classification_result: result.metrics.strategy,
-        generated_buttons: result.response.whatsapp?.interactive?.action?.buttons?.map((b: any) => b.reply.title) ||
-                          result.response.instagram?.message?.attachment?.payload?.buttons?.map((b: any) => b.title),
+        generated_buttons: (() => {
+          // Extract button titles safely from different message types
+          if (result.response.whatsapp && 'interactive' in result.response.whatsapp) {
+            return result.response.whatsapp.interactive?.action?.buttons?.map((b: any) => b.reply.title);
+          }
+          if (result.response.instagram && 'message' in result.response.instagram && 'attachment' in result.response.instagram.message) {
+            return result.response.instagram.message.attachment?.payload?.buttons?.map((b: any) => b.title);
+          }
+          return undefined;
+        })(),
         response_time_ms: routeTotalMs,
         band: result.metrics.band,
         strategy: result.metrics.strategy

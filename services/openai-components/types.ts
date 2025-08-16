@@ -74,6 +74,9 @@ export interface RouterDecision {
   text?: string;
 }
 
+// Canal do front (controla limites do schema)
+export type ChannelType = "whatsapp" | "instagram" | "facebook";
+
 export interface AgentConfig {
   model: string;
   developer?: string;
@@ -160,18 +163,21 @@ export interface IOpenAIService {
   generateWarmupButtons(
     userText: string,
     candidates: IntentCandidate[],
-    agent: AgentConfig
+    agent: AgentConfig,
+    opts?: { channelType?: ChannelType }
   ): Promise<WarmupButtonsResponse | null>;
 
   // 🎯 NOVA FUNCIONALIDADE: Chat livre com IA para banda LOW
   generateFreeChatButtons(
     userText: string,
-    agent: AgentConfig
+    agent: AgentConfig,
+    opts?: { channelType?: ChannelType }
   ): Promise<WarmupButtonsResponse | null>;
 
   routerLLM(
     userText: string,
-    agent: AgentConfig
+    agent: AgentConfig,
+    opts?: { channelType?: ChannelType }
   ): Promise<RouterDecision | null>;
 
   // Enhanced deadline management

@@ -1,5 +1,3 @@
-
-
 // services/openai-components/server-socialwise.ts
 import OpenAI from "openai";
 import {
@@ -7,9 +5,123 @@ import {
   AgentConfig,
   WarmupButtonsResponse,
   RouterDecision,
+  ChannelType,
 } from "./types";
 import { responsesCall } from "@/lib/cost/openai-wrapper";
 import { withDeadlineAbort } from "./utils";
+
+/** Limites por canal */
+function getConstraintsForChannel(channel: ChannelType) {
+  if (channel === "whatsapp") {
+    return {
+      bodyMax: 1024,
+      buttonTitleMax: 20,
+      payloadMax: 256,
+      maxButtons: 3,
+      titleWordMax: 4,
+      payloadPattern: "^@[a-z0-9_]+$",
+    };
+  }
+  if (channel === "instagram") {
+    return {
+      bodyMax: 640,
+      buttonTitleMax: 20,
+      payloadMax: 1000,
+      maxButtons: 3,
+      titleWordMax: 4,
+      payloadPattern: "^@[a-z0-9_]+$",
+    };
+  }
+  // facebook / genérico
+  return {
+    bodyMax: 2000,
+    buttonTitleMax: 20,
+    payloadMax: 1000,
+    maxButtons: 3,
+    titleWordMax: 4,
+    payloadPattern: "^@[a-z0-9_]+$",
+  };
+}
+
+// até 4 palavras (1 a 4 tokens separados por espaço)
+const FOUR_WORDS_REGEX = "^(?:\\S+)(?:\\s+\\S+){0,3}$";
+
+/** Schema p/ botões ({ introduction_text, buttons[] }) */
+function buildButtonsSchema(channel: ChannelType) {
+  const c = getConstraintsForChannel(channel);
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["introduction_text", "buttons"],
+    properties: {
+      introduction_text: { type: "string", maxLength: c.bodyMax },
+      buttons: {
+        type: "array",
+        minItems: 1,
+        maxItems: c.maxButtons,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["title", "payload"],
+          properties: {
+            title: {
+              type: "string",
+              maxLength: c.buttonTitleMax,
+              pattern: FOUR_WORDS_REGEX,
+            },
+            payload: {
+              type: "string",
+              maxLength: c.payloadMax,
+              pattern: "^@[a-z0-9_]+$",
+            },
+          },
+        },
+      },
+    },
+  };
+}
+
+/** Schema p/ router ({ mode, intent_payload?, text?, introduction_text?, buttons? }) */
+function buildRouterSchema(channel: ChannelType) {
+  const c = getConstraintsForChannel(channel);
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode"],
+    properties: {
+      mode: { type: "string", enum: ["intent", "chat"] },
+      intent_payload: {
+        type: "string",
+        maxLength: c.payloadMax,
+        pattern: "^@[a-z0-9_]+$",
+      },
+      introduction_text: { type: "string", maxLength: c.bodyMax },
+      text: { type: "string", maxLength: c.bodyMax },
+      buttons: {
+        type: "array",
+        minItems: 0,
+        maxItems: c.maxButtons,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["title", "payload"],
+          properties: {
+            title: {
+              type: "string",
+              maxLength: c.buttonTitleMax,
+              pattern: FOUR_WORDS_REGEX,
+            },
+            payload: {
+              type: "string",
+              maxLength: c.payloadMax,
+              pattern: "^@[a-z0-9_]+$",
+            },
+          },
+        },
+      },
+    },
+  };
+}
 
 /**
  * Generates short titles for multiple intent candidates in a single batch call
@@ -22,63 +134,66 @@ export async function generateShortTitlesBatch(
 ): Promise<string[] | null> {
   if (!intents.length) return [];
 
-  const prompt = `# INSTRUÇÃO
-Você é um especialista em UX Writing para chatbots jurídicos.
-Gere títulos curtos e acionáveis para os seguintes serviços jurídicos.
+  const items = intents
+    .map(
+      (intent, i) =>
+        `${i + 1}. ${intent.slug}: ${intent.desc || intent.name || intent.slug}`
+    )
+    .join("\n");
+  // Schema: array de strings, cada uma <=20 chars e <=4 palavras
+  const titlesSchema = {
+    type: "array",
+    minItems: intents.length,
+    maxItems: intents.length,
+    items: { type: "string", maxLength: 20, pattern: FOUR_WORDS_REGEX },
+    additionalItems: false,
+  };
+  const system =
+    "Você é um UX writer jurídico. Gere títulos curtos e acionáveis para cada serviço, respeitando: <=20 caracteres e <=4 palavras. Responda somente no JSON do schema.";
+  const user = `Serviços (na ordem):\n${items}`;
 
-# REGRAS
-- Máximo 4 palavras por título
-- Máximo 20 caracteres por título
-- Foque na ação do usuário (ex: "Recorrer Multa", "Ação Judicial")
-- Use linguagem direta e profissional
-- Retorne apenas um array JSON de strings
-
-# SERVIÇOS
-${intents.map((intent, i) => `${i + 1}. ${intent.slug}: ${intent.desc || intent.name || intent.slug}`).join("\n")}
-
-# FORMATO DE RESPOSTA
-Retorne apenas um array JSON com os títulos na mesma ordem:
-["Título 1", "Título 2", "Título 3"]`;
-
-  return withDeadlineAbort(
-    async (signal) => {
-      try {
-        const response = await responsesCall(
-          this.client,
-          {
-            model: agent.model,
-            input: [{ role: "user", content: [{ type: "input_text", text: prompt }] }],
-            store: false,
-            temperature: agent.tempSchema ?? 0.2,
-            max_output_tokens: 512,
+  return withDeadlineAbort(async (signal) => {
+    try {
+      const response = await responsesCall(
+        this.client,
+        {
+          model: agent.model,
+          input: [
+            {
+              role: "system",
+              content: agent.developer || agent.instructions || "",
+            },
+            { role: "system", content: system },
+            { role: "user", content: [{ type: "input_text", text: user }] },
+          ],
+          store: false,
+          temperature: agent.tempSchema ?? 0.2,
+          max_output_tokens: 256,
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "ShortTitles",
+              schema: titlesSchema,
+              strict: true,
+            },
           },
-          { traceId: `short-titles-batch-${Date.now()}`, intent: "short_titles_generation" },
-          { signal, timeout: agent.warmupDeadlineMs || 250 }
-        );
+        },
+        {
+          traceId: `short-titles-batch-${Date.now()}`,
+          intent: "short_titles_generation",
+        },
+        { signal, timeout: agent.warmupDeadlineMs || 250 }
+      );
 
-        const content = response.output_text?.trim();
-        if (!content) return null;
+      const titles = (response as any).output_parsed;
+      if (!Array.isArray(titles)) return null;
 
-        // Parse JSON response
-        const titles = JSON.parse(content);
-        if (!Array.isArray(titles)) return null;
-
-        // Clamp each title to 20 characters and 4 words
-        return titles.map((title: string) => {
-          const clean = String(title || "")
-            .replace(/\s+/g, " ")
-            .trim();
-          const words = clean.split(" ");
-          const clamped = words.slice(0, 4).join(" ");
-          return clamped.length <= 20 ? clamped : clamped.slice(0, 20).trim();
-        });
-      } catch (error) {
-        console.error("Erro ao gerar títulos curtos em lote:", error);
-        return null;
-      }
-    },
-    agent.warmupDeadlineMs || 250
-  );
+      return titles as string[];
+    } catch (error) {
+      console.error("Erro ao gerar títulos curtos em lote:", error);
+      return null;
+    }
+  }, agent.warmupDeadlineMs || 250);
 }
 
 /**
@@ -88,26 +203,25 @@ Retorne apenas um array JSON com os títulos na mesma ordem:
 export async function generateFreeChatButtons(
   this: { client: OpenAI },
   userText: string,
-  agent: AgentConfig
+  agent: AgentConfig,
+  opts?: { channelType?: ChannelType }
 ): Promise<WarmupButtonsResponse | null> {
   // 🎯 USAR INSTRUÇÕES DO AGENTE configurado no Capitão
-  const agentInstructions = agent.instructions || agent.developer || 'Você é um assistente especializado.';
-  
-  const prompt = `${agentInstructions}
+  const agentInstructions =
+    agent.instructions ||
+    agent.developer ||
+    "Você é um assistente especializado.";
 
-O cliente disse: "${userText}"
-
-Gere uma resposta natural (até 640 caracteres) e 3 botões para ajudar o cliente a continuar a conversa.
-
-RESPOSTA (JSON apenas):
-{
-  "introduction_text": "Resposta natural baseada na sua especialidade (máx 640 chars)",
-  "buttons": [
-    {"title": "Opção 1", "payload": "@opcao1"},
-    {"title": "Opção 2", "payload": "@opcao2"},
-    {"title": "Mais Info", "payload": "@mais_info"}
-  ]
-}`;
+  const channel: ChannelType = opts?.channelType || "whatsapp";
+  const schema = buildButtonsSchema(channel);
+  const c = getConstraintsForChannel(channel);
+  const sys = [
+    "Gere resposta natural e botões para avançar a conversa.",
+    `No máximo ${c.maxButtons} botões; cada título ≤20 caracteres e ≤4 palavras; payload ^@[a-z0-9_]+$.`,
+    `introduction_text ≤ ${c.bodyMax} caracteres.`,
+    "Responda APENAS no JSON do schema.",
+  ].join(" ");
+  const user = `Cliente: "${userText}"`;
 
   return withDeadlineAbort(async (signal) => {
     try {
@@ -115,50 +229,35 @@ RESPOSTA (JSON apenas):
         this.client,
         {
           model: agent.model,
-          input: [{ role: "user", content: [{ type: "input_text", text: prompt }] }],
+          input: [
+            { role: "system", content: agentInstructions },
+            { role: "system", content: sys },
+            { role: "user", content: [{ type: "input_text", text: user }] },
+          ],
           store: false,
-          temperature: agent.tempCopy ?? 0.7, // Mais criativo para chat livre
+          temperature: agent.tempCopy ?? 0.7,
           max_output_tokens: 256,
-          ...(agent.reasoningEffort && (agent.model.includes('o1') || agent.model.includes('gpt-5')) && {
-            reasoning: { effort: agent.reasoningEffort }
-          }),
-          ...(agent.verbosity && agent.model.includes('gpt-5') && {
-            text: { verbosity: agent.verbosity }
-          })
+          response_format: {
+            type: "json_schema",
+            json_schema: { name: "FreeChatButtons", schema, strict: true },
+          },
+          ...(agent.reasoningEffort &&
+            (agent.model.includes("o1") || agent.model.includes("gpt-5")) && {
+              reasoning: { effort: agent.reasoningEffort },
+            }),
+          ...(agent.verbosity &&
+            agent.model.includes("gpt-5") && {
+              text: { verbosity: agent.verbosity },
+            }),
         },
         { traceId: `freechat-${Date.now()}`, intent: "freechat_generation" },
         { signal, timeout: agent.warmupDeadlineMs || 1000 }
       );
 
-      const content = response.output_text?.trim();
-      if (!content) return null;
-
-      const result = JSON.parse(content) as WarmupButtonsResponse;
-
-      // Validate and clamp the response
-      if (!result.introduction_text || !Array.isArray(result.buttons)) {
-        return null;
-      }
-
-      // Clamp introduction text to platform limits (Instagram: 640, WhatsApp: 1024)
-      const maxLength = 640; // Usar limite do Instagram como padrão (mais restritivo)
-      result.introduction_text =
-        result.introduction_text.length <= maxLength
-          ? result.introduction_text
-          : result.introduction_text.slice(0, maxLength).trim();
-
-      // Clamp button titles to 20 chars
-      result.buttons = result.buttons
-        .slice(0, 3) // Max 3 buttons
-        .map((button, i) => ({
-          title:
-            button.title.length <= 20
-              ? button.title
-              : button.title.slice(0, 20).trim(),
-          payload: button.payload.startsWith('@') 
-            ? button.payload 
-            : `@freechat_${i + 1}`
-        }));
+      const result = (response as any).output_parsed as
+        | WarmupButtonsResponse
+        | undefined;
+      if (!result) return null;
 
       return result;
     } catch (error) {
@@ -176,7 +275,8 @@ export async function generateWarmupButtons(
   this: { client: OpenAI },
   userText: string,
   candidates: IntentCandidate[],
-  agent: AgentConfig
+  agent: AgentConfig,
+  opts?: { channelType?: ChannelType }
 ): Promise<WarmupButtonsResponse | null> {
   if (!candidates.length) return null;
 
@@ -185,25 +285,21 @@ export async function generateWarmupButtons(
     .join("\n");
 
   // 🎯 CORRIGIDO: Usar instruções do agente configurado no Capitão
-  const agentInstructions = agent.instructions || agent.developer || 'Você é um assistente especializado.';
-  
-  const prompt = `${agentInstructions}
+  const agentInstructions =
+    agent.instructions ||
+    agent.developer ||
+    "Você é um assistente especializado.";
 
-CONTEXTO: O usuário fez uma pergunta ambígua. Gere botões para ajudá-lo.
-
-INTENÇÕES CANDIDATAS:
-${candidatesText}
-
-MENSAGEM DO USUÁRIO: "${userText}"
-
-RESPOSTA (JSON apenas):
-{
-  "introduction_text": "Como posso ajudar?",
-  "buttons": [
-    {"title": "Opção 1", "payload": "@${candidates[0]?.slug || 'intent1'}"},
-    {"title": "Opção 2", "payload": "@${candidates[1]?.slug || 'intent2'}"}
-  ]
-}`;
+  const channel: ChannelType = opts?.channelType || "whatsapp";
+  const schema = buildButtonsSchema(channel);
+  const c = getConstraintsForChannel(channel);
+  const sys = [
+    "Gere uma pequena introdução e botões para desambiguar a intenção do usuário.",
+    `No máximo ${c.maxButtons} botões; cada título ≤20 caracteres e ≤4 palavras; payload ^@[a-z0-9_]+$.`,
+    `introduction_text ≤ ${c.bodyMax} caracteres.`,
+    "Responda APENAS no JSON do schema.",
+  ].join(" ");
+  const user = `Intenções candidatas:\n${candidatesText}\n\nMensagem do usuário: "${userText}"`;
 
   return withDeadlineAbort(async (signal) => {
     try {
@@ -211,44 +307,30 @@ RESPOSTA (JSON apenas):
         this.client,
         {
           model: agent.model,
-          input: [{ role: "user", content: [{ type: "input_text", text: prompt }] }],
+          input: [
+            { role: "system", content: agentInstructions },
+            { role: "system", content: sys },
+            { role: "user", content: [{ type: "input_text", text: user }] },
+          ],
           store: false,
           temperature: agent.tempCopy ?? 0.5,
-          max_output_tokens: 256, // Reduzido para acelerar geração
+          max_output_tokens: 256,
+          response_format: {
+            type: "json_schema",
+            json_schema: { name: "WarmupButtons", schema, strict: true },
+          },
         },
-        { traceId: `warmup-buttons-${Date.now()}`, intent: "warmup_buttons_generation" },
+        {
+          traceId: `warmup-buttons-${Date.now()}`,
+          intent: "warmup_buttons_generation",
+        },
         { signal, timeout: agent.softDeadlineMs || 300 }
       );
 
-      const content = response.output_text?.trim();
-      if (!content) return null;
-
-      const result = JSON.parse(content) as WarmupButtonsResponse;
-
-      // Validate and clamp the response
-      if (!result.introduction_text || !Array.isArray(result.buttons)) {
-        return null;
-      }
-
-      // Clamp introduction text to platform limits (Instagram: 640, WhatsApp: 1024)
-      const maxLength = 640; // Usar limite do Instagram como padrão (mais restritivo)
-      result.introduction_text =
-        result.introduction_text.length <= maxLength
-          ? result.introduction_text
-          : result.introduction_text.slice(0, maxLength).trim();
-
-      // Clamp button titles and validate payloads
-      result.buttons = result.buttons
-        .slice(0, 3) // Max 3 buttons
-        .map((button) => ({
-          title:
-            button.title.length <= 20
-              ? button.title
-              : button.title.slice(0, 20).trim(),
-          payload: button.payload.match(/^@[a-z0-9_]+$/)
-            ? button.payload
-            : `@${button.payload.replace(/[^a-z0-9_]/g, "_").toLowerCase()}`,
-        }));
+      const result = (response as any).output_parsed as
+        | WarmupButtonsResponse
+        | undefined;
+      if (!result) return null;
 
       return result;
     } catch (error) {
@@ -265,37 +347,19 @@ RESPOSTA (JSON apenas):
 export async function routerLLM(
   this: { client: OpenAI },
   userText: string,
-  agent: AgentConfig
+  agent: AgentConfig,
+  opts?: { channelType?: ChannelType }
 ): Promise<RouterDecision | null> {
-  const prompt = `# INSTRUÇÃO
-Você é um roteador inteligente para um chatbot jurídico.
-Analise a mensagem do usuário e decida se deve:
-1. Classificar como intenção específica (mode: "intent")
-2. Engajar em conversa aberta (mode: "chat")
-
-# MENSAGEM DO USUÁRIO
-"${userText}"
-
-# CRITÉRIOS DE DECISÃO
-- Use "intent" se a mensagem indica uma necessidade jurídica específica
-- Use "chat" se a mensagem é vaga, conversacional, ou precisa de esclarecimento
-- Para "intent": forneça payload específico e botões opcionais
-- Para "chat": forneça texto de resposta engajante
-
-# FORMATO DE RESPOSTA
-Para intenção específica:
-{
-  "mode": "intent",
-  "intent_payload": "@nome_da_intencao",
-  "introduction_text": "Texto opcional de confirmação",
-  "buttons": [{"title": "Confirmar", "payload": "@intencao"}]
-}
-
-Para conversa aberta:
-{
-  "mode": "chat",
-  "text": "Resposta conversacional que esclarece ou engaja o usuário"
-}`;
+  const channel: ChannelType = opts?.channelType || "whatsapp";
+  const schema = buildRouterSchema(channel);
+  const c = getConstraintsForChannel(channel);
+  const sys = [
+    "Você é um roteador.",
+    "mode='intent' quando houver uma intenção clara (payload ^@[a-z0-9_]+$).",
+    `Caso contrário, mode='chat' com texto ≤${c.bodyMax} e até ${c.maxButtons} botões.`,
+    "Responda APENAS no JSON do schema.",
+  ].join(" ");
+  const user = `Mensagem do usuário: "${userText}"`;
 
   return withDeadlineAbort(async (signal) => {
     try {
@@ -303,61 +367,34 @@ Para conversa aberta:
         this.client,
         {
           model: agent.model,
-          input: [{ role: "user", content: [{ type: "input_text", text: prompt }] }],
+          input: [
+            {
+              role: "system",
+              content: agent.developer || agent.instructions || "",
+            },
+            { role: "system", content: sys },
+            { role: "user", content: [{ type: "input_text", text: user }] },
+          ],
           store: false,
           temperature: agent.tempCopy ?? 0.3,
-          max_output_tokens: 768,
+          max_output_tokens: 512,
+          response_format: {
+            type: "json_schema",
+            json_schema: { name: "RouterDecision", schema, strict: true },
+          },
         },
         { traceId: `router-llm-${Date.now()}`, intent: "routing_decision" },
         { signal, timeout: agent.hardDeadlineMs || 400 }
       );
 
-      const content = response.output_text?.trim();
-      if (!content) return null;
-
-      const result = JSON.parse(content) as RouterDecision;
+      const result = (response as any).output_parsed as
+        | RouterDecision
+        | undefined;
+      if (!result) return null;
 
       // Validate the response structure
       if (!result.mode || !["intent", "chat"].includes(result.mode)) {
         return null;
-      }
-
-      // Validate intent mode requirements
-      if (result.mode === "intent" && !result.intent_payload) {
-        return null;
-      }
-
-      // Validate chat mode requirements
-      if (result.mode === "chat" && !result.text) {
-        return null;
-      }
-
-      // Clamp text fields if present
-      if (result.introduction_text) {
-        result.introduction_text =
-          result.introduction_text.length <= 180
-            ? result.introduction_text
-            : result.introduction_text.slice(0, 180).trim();
-      }
-
-      if (result.text) {
-        result.text =
-          result.text.length <= 1024
-            ? result.text
-            : result.text.slice(0, 1024).trim();
-      }
-
-      // Validate and clamp buttons if present
-      if (result.buttons) {
-        result.buttons = result.buttons.slice(0, 3).map((button) => ({
-          title:
-            button.title.length <= 20
-              ? button.title
-              : button.title.slice(0, 20).trim(),
-          payload: button.payload.match(/^@[a-z0-9_]+$/)
-            ? button.payload
-            : `@${button.payload.replace(/[^a-z0-9_]/g, "_").toLowerCase()}`,
-        }));
       }
 
       return result;

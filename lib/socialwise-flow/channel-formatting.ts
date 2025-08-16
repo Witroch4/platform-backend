@@ -1,27 +1,27 @@
 /**
  * Channel-Specific Response Formatting for SocialWise Flow
- * Uses centralized specialized formatters from lib/socialwise for robust validation and fallbacks
- * This file acts as an integration layer between the processor and the specialized formatters
+ * Usa formatadores especializados centralizados (lib/socialwise) com validação e fallbacks robustos.
+ * Este arquivo é a camada de integração entre o processador e os formatadores específicos por canal.
  */
 
 import { createLogger } from '@/lib/utils/logger';
-import { 
+import {
   buildInstagramButtons as buildInstagramButtonsSpecialized,
-  buildFacebookTextFallback,
+  buildInstagramTextFallback,
   validateInstagramMessage,
   type InstagramButtonOptions,
-  type InstagramMessage
+  type InstagramMessage,
 } from '@/lib/socialwise/instagram-formatter';
-import { 
+import {
   buildButtons as buildWhatsAppButtonsSpecialized,
   buildNumberedTextFallback,
   validateWhatsAppMessage,
   type WhatsAppButtonOptions,
-  type WhatsAppMessage
+  type WhatsAppMessage,
 } from '@/lib/socialwise/whatsapp-formatter';
-import { 
+import {
   clampBody as clampBodyCentralized,
-  CHANNEL_LIMITS 
+  CHANNEL_LIMITS,
 } from '@/lib/socialwise/clamps';
 
 const formattingLogger = createLogger('SocialWise-Formatting');
@@ -32,16 +32,15 @@ export interface ButtonOption {
 }
 
 export interface ChannelResponse {
-  whatsapp?: any;
-  instagram?: any;
+  whatsapp?: WhatsAppMessage;
+  instagram?: InstagramMessage;
   facebook?: { message: { text: string } };
   text?: string;
   action?: 'handoff';
 }
 
 /**
- * Platform-specific text limits for different channels
- * Using centralized CHANNEL_LIMITS from socialwise/clamps
+ * Limites específicos por plataforma (proxy de CHANNEL_LIMITS)
  */
 export const PLATFORM_LIMITS = {
   WHATSAPP_BODY: CHANNEL_LIMITS.whatsapp.bodyText,
@@ -51,14 +50,16 @@ export const PLATFORM_LIMITS = {
   FACEBOOK_TEXT: CHANNEL_LIMITS.facebook.bodyText,
   FACEBOOK_BUTTON_TITLE: CHANNEL_LIMITS.facebook.buttonTitle,
   DEFAULT_BUTTON_TITLE: 20,
-  DEFAULT_BODY: CHANNEL_LIMITS.instagram.bodyText // Instagram limit as default (most restrictive)
+  DEFAULT_BODY: CHANNEL_LIMITS.instagram.bodyText, // Instagram como padrão (mais restritivo)
 } as const;
 
 /**
- * Clamp body text to platform-specific limits using centralized function
+ * Clamp de body com canal apropriado
  */
-export function clampBody(text: string, maxLength: number = PLATFORM_LIMITS.DEFAULT_BODY): string {
-  // Use centralized clampBody function with appropriate channel type
+export function clampBody(
+  text: string,
+  maxLength: number = PLATFORM_LIMITS.DEFAULT_BODY
+): string {
   if (maxLength === CHANNEL_LIMITS.whatsapp.bodyText) {
     return clampBodyCentralized(text, 'whatsapp');
   } else if (maxLength === CHANNEL_LIMITS.instagram.bodyText) {
@@ -66,33 +67,31 @@ export function clampBody(text: string, maxLength: number = PLATFORM_LIMITS.DEFA
   } else if (maxLength === CHANNEL_LIMITS.facebook.bodyText) {
     return clampBodyCentralized(text, 'facebook');
   } else {
-    // Fallback to Instagram limits for custom lengths
+    // Fallback para Instagram (padrão mais restritivo)
     return clampBodyCentralized(text, 'instagram');
   }
 }
 
 /**
- * Build WhatsApp interactive message with buttons using centralized specialized formatter
- * Integrates with lib/socialwise/whatsapp-formatter.ts for consistent formatting and validation
+ * Monta mensagem interativa de WhatsApp usando o formatter especializado
  */
 export function buildWhatsAppButtons(
   bodyText: string,
   buttons: ButtonOption[]
-): any {
-  // Convert ButtonOption to WhatsAppButtonOptions
-  const whatsappButtons: WhatsAppButtonOptions[] = buttons.map(btn => ({
+): WhatsAppMessage {
+  const whatsappButtons: WhatsAppButtonOptions[] = buttons.map((btn) => ({
     title: btn.title,
-    payload: btn.payload
+    payload: btn.payload,
   }));
 
   try {
     const result = buildWhatsAppButtonsSpecialized(bodyText, whatsappButtons);
-    
-    // Validate the result
+
+    // Validação
     const validation = validateWhatsAppMessage(result);
     if (!validation.isValid) {
       formattingLogger.warn('WhatsApp message validation failed, using fallback', {
-        violations: validation.violations
+        violations: validation.violations,
       });
       return buildNumberedTextFallback(bodyText, whatsappButtons);
     }
@@ -105,40 +104,38 @@ export function buildWhatsAppButtons(
 }
 
 /**
- * Build Instagram button template using centralized specialized formatter
- * Integrates with lib/socialwise/instagram-formatter.ts for consistent formatting and validation
+ * Monta template de botões do Instagram usando o formatter especializado
  */
 export function buildInstagramButtons(
   text: string,
   buttons: ButtonOption[]
-): any {
-  // Convert ButtonOption to InstagramButtonOptions
-  const instagramButtons: InstagramButtonOptions[] = buttons.map(btn => ({
+): InstagramMessage {
+  const instagramButtons: InstagramButtonOptions[] = buttons.map((btn) => ({
     title: btn.title,
-    payload: btn.payload
+    payload: btn.payload,
   }));
 
   try {
     const result = buildInstagramButtonsSpecialized(text, instagramButtons);
-    
-    // Validate the result
+
+    // Validação
     const validation = validateInstagramMessage(result);
     if (!validation.isValid) {
       formattingLogger.warn('Instagram message validation failed, using fallback', {
-        violations: validation.violations
+        violations: validation.violations,
       });
-      return buildFacebookTextFallback(text, instagramButtons);
+      return buildInstagramTextFallback(text, instagramButtons);
     }
 
     return result;
   } catch (error) {
     formattingLogger.error('Instagram formatter failed, using fallback', { error });
-    return buildFacebookTextFallback(text, instagramButtons);
+    return buildInstagramTextFallback(text, instagramButtons);
   }
 }
 
 /**
- * Build channel-specific response based on channel type
+ * Constrói a resposta por canal (texto simples ou interativo com botões)
  */
 export function buildChannelResponse(
   channelType: string,
@@ -146,64 +143,83 @@ export function buildChannelResponse(
   buttons?: ButtonOption[]
 ): ChannelResponse {
   const lowerChannelType = (channelType || '').toLowerCase();
-  
-  // Handle handoff keywords
+
+  // Palavras-chave para handoff
   const lowerText = (text || '').toLowerCase();
-  if (lowerText.includes('atendente') || lowerText.includes('humano') || lowerText.includes('falar')) {
+  if (
+    lowerText.includes('atendente') ||
+    lowerText.includes('humano') ||
+    lowerText.includes('falar')
+  ) {
     return { action: 'handoff' };
   }
 
-  // If no buttons, return simple text response
+  // Sem botões → texto simples do canal
   if (!buttons || buttons.length === 0) {
     if (lowerChannelType.includes('whatsapp')) {
-      return { whatsapp: { type: 'text', text: { body: clampBodyCentralized(text, 'whatsapp') } } };
+      return {
+        whatsapp: {
+          type: 'text',
+          text: { body: clampBodyCentralized(text, 'whatsapp') },
+        },
+      };
     } else if (lowerChannelType.includes('instagram')) {
-      return { instagram: { message: { text: clampBodyCentralized(text, 'instagram') } } };
-    } else if (lowerChannelType.includes('facebook') || lowerChannelType.includes('messenger')) {
+      return {
+        instagram: { message: { text: clampBodyCentralized(text, 'instagram') } },
+      };
+    } else if (
+      lowerChannelType.includes('facebook') ||
+      lowerChannelType.includes('messenger')
+    ) {
       return { facebook: { message: { text: clampBodyCentralized(text, 'facebook') } } };
     } else {
-      return { text: clampBodyCentralized(text, 'facebook') }; // Use Facebook limits as default
+      // Genérico (usa limite do Facebook por ser mais permissivo)
+      return { text: clampBodyCentralized(text, 'facebook') };
     }
   }
 
-  // Build interactive responses with buttons using specialized formatters
+  // Com botões → usar formatters especializados
   if (lowerChannelType.includes('whatsapp')) {
     const result = buildWhatsAppButtons(text, buttons);
     formattingLogger.info('WhatsApp response built with specialized formatter', {
-      hasInteractive: !!result.interactive,
-      hasText: !!result.text,
-      buttonCount: result.interactive?.action?.buttons?.length || 0
+      hasInteractive: (result as any)?.interactive != null,
+      hasText: (result as any)?.text != null,
+      buttonCount: (result as any)?.interactive?.action?.buttons?.length || 0,
     });
     return { whatsapp: result };
   } else if (lowerChannelType.includes('instagram')) {
     const result = buildInstagramButtons(text, buttons);
     formattingLogger.info('Instagram response built with specialized formatter', {
-      hasAttachment: !!result.message?.attachment,
-      hasText: !!result.message?.text,
-      buttonCount: result.message?.attachment?.payload?.buttons?.length || 0
+      hasAttachment: (result as any)?.message?.attachment != null,
+      hasText: (result as any)?.message?.text != null,
+      buttonCount:
+        (result as any)?.message?.attachment?.payload?.buttons?.length || 0,
     });
     return { instagram: result };
-  } else if (lowerChannelType.includes('facebook') || lowerChannelType.includes('messenger')) {
-    // Facebook Messenger fallback to plain text with options
-    const optionsText = buttons.map(btn => `• ${btn.title}`).join('\n');
+  } else if (
+    lowerChannelType.includes('facebook') ||
+    lowerChannelType.includes('messenger')
+  ) {
+    // Messenger: fallback de texto com opções numeradas (sem formatter dedicado)
+    const optionsText = buttons.map((btn) => `• ${btn.title}`).join('\n');
     const fullText = `${text}\n\n${optionsText}`;
     return { facebook: { message: { text: clampBodyCentralized(fullText, 'facebook') } } };
   } else {
-    // Generic text fallback
-    const optionsText = buttons.map(btn => `• ${btn.title}`).join('\n');
+    // Genérico (texto com opções)
+    const optionsText = buttons.map((btn) => `• ${btn.title}`).join('\n');
     const fullText = `${text}\n\n${optionsText}`;
-    return { text: clampBodyCentralized(fullText, 'facebook') }; // Use Facebook limits as default
+    return { text: clampBodyCentralized(fullText, 'facebook') };
   }
 }
 
 /**
- * Build default legal domain topics for LOW band
+ * Tópicos padrão (LOW band) para domínio jurídico
  */
 export function buildDefaultLegalTopics(channelType: string): ChannelResponse {
   const defaultButtons: ButtonOption[] = [
     { title: 'Direito Civil', payload: '@direito_civil' },
     { title: 'Direito Trabalhista', payload: '@direito_trabalhista' },
-    { title: 'Outros assuntos', payload: '@outros_assuntos' }
+    { title: 'Outros assuntos', payload: '@outros_assuntos' },
   ];
 
   return buildChannelResponse(
@@ -214,7 +230,7 @@ export function buildDefaultLegalTopics(channelType: string): ChannelResponse {
 }
 
 /**
- * Build graceful degradation response when LLM fails
+ * Degradação graciosa quando a LLM falha
  */
 export function buildFallbackResponse(
   channelType: string,
@@ -223,7 +239,7 @@ export function buildFallbackResponse(
   const fallbackButtons: ButtonOption[] = [
     { title: 'Consulta jurídica', payload: '@consulta_juridica' },
     { title: 'Documentos', payload: '@documentos' },
-    { title: 'Falar com atendente', payload: '@handoff_human' }
+    { title: 'Falar com atendente', payload: '@handoff_human' },
   ];
 
   return buildChannelResponse(
@@ -234,7 +250,7 @@ export function buildFallbackResponse(
 }
 
 /**
- * Log response formatting for debugging
+ * Log estruturado da resposta por canal
  */
 export function logChannelResponse(
   response: ChannelResponse,
@@ -249,19 +265,19 @@ export function logChannelResponse(
       hasFacebook: !!response.facebook,
       hasText: !!response.text,
       hasAction: !!response.action,
-      formatterType: 'specialized'
+      formatterType: 'specialized',
     });
-  } catch (error) {
-    // Ignore logging errors
+  } catch {
+    // Ignora erros de logging
   }
 }
 
-// Re-export specialized formatter functions for direct access if needed
-export { 
+// Re-export dos formatters especializados (caso precise acessar direto)
+export {
   buildInstagramButtons as buildInstagramButtonsDirect,
-  validateInstagramMessage
+  validateInstagramMessage,
 } from '@/lib/socialwise/instagram-formatter';
-export { 
+export {
   buildButtons as buildWhatsAppButtonsDirect,
-  validateWhatsAppMessage
+  validateWhatsAppMessage,
 } from '@/lib/socialwise/whatsapp-formatter';

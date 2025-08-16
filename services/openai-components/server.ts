@@ -94,9 +94,9 @@ export class ServerOpenAIService implements IOpenAIService {
 
   // SocialWise
   generateShortTitlesBatch: (intents: IntentCandidate[], agent: AgentConfig) => Promise<string[] | null>;
-  generateWarmupButtons: (userText: string, candidates: IntentCandidate[], agent: AgentConfig) => Promise<WarmupButtonsResponse | null>;
-  generateFreeChatButtons: (userText: string, agent: AgentConfig) => Promise<WarmupButtonsResponse | null>;
-  routerLLM: (userText: string, agent: AgentConfig) => Promise<RouterDecision | null>;
+  generateWarmupButtons: (userText: string, candidates: IntentCandidate[], agent: AgentConfig, opts?: { channelType?: import("./types").ChannelType }) => Promise<WarmupButtonsResponse | null>;
+  generateFreeChatButtons: (userText: string, agent: AgentConfig, opts?: { channelType?: import("./types").ChannelType }) => Promise<WarmupButtonsResponse | null>;
+  routerLLM: (userText: string, agent: AgentConfig, opts?: { channelType?: import("./types").ChannelType }) => Promise<RouterDecision | null>;
 
   async checkApiConnection() {
     try {

@@ -22,6 +22,17 @@ import {
 
 const processorLogger = createLogger('SocialWise-Processor');
 
+function isWhatsAppChannel(channelType?: string) {
+  return (channelType || '').toLowerCase().includes('whatsapp');
+}
+
+function normalizeChannelType(channelType: string): import('../../services/openai-components/types').ChannelType {
+  const normalized = channelType.toLowerCase();
+  if (normalized.includes('whatsapp')) return 'whatsapp';
+  if (normalized.includes('instagram')) return 'instagram';
+  return 'facebook'; // fallback
+}
+
 export interface ProcessorContext {
   userText: string;
   channelType: string;
@@ -198,20 +209,29 @@ async function processHardBand(
       return buildFallbackResponse(context.channelType, context.userText);
     }
 
-    // Try direct mapping first
-    let mapped = await buildWhatsAppByIntentRaw(topIntent.slug, context.inboxId, context.wamid);
-    if (!mapped) {
-      mapped = await buildWhatsAppByGlobalIntent(topIntent.slug, context.inboxId, context.wamid);
-    }
-
-    if (mapped) {
-      processorLogger.info('HARD band direct mapping successful', {
+    // Try direct mapping only for WhatsApp channel
+    if (isWhatsAppChannel(context.channelType)) {
+      let mapped = await buildWhatsAppByIntentRaw(topIntent.slug, context.inboxId, context.wamid);
+      if (!mapped) {
+        mapped = await buildWhatsAppByGlobalIntent(topIntent.slug, context.inboxId, context.wamid);
+      }
+      
+      if (mapped) {
+        processorLogger.info('HARD band direct mapping successful', {
+          intent: topIntent.slug,
+          score: topIntent.score,
+          processingMs: Date.now() - startTime,
+          traceId: context.traceId
+        });
+        return mapped;
+      }
+    } else {
+      processorLogger.info('HARD band skipping direct mapping for non-WhatsApp channel', {
+        channelType: context.channelType,
         intent: topIntent.slug,
         score: topIntent.score,
-        processingMs: Date.now() - startTime,
         traceId: context.traceId
       });
-      return mapped;
     }
 
     // Fallback to channel response if no mapping found
@@ -253,7 +273,8 @@ async function processSoftBand(
       () => openaiService.generateWarmupButtons(
         context.userText,
         classification.candidates,
-        agentConfig
+        agentConfig,
+        { channelType: normalizeChannelType(context.channelType) }
       ),
       {
         priority: 'medium',
@@ -365,7 +386,8 @@ async function processLowBand(
       context.inboxId,
       () => openaiService.generateFreeChatButtons(
         context.userText,
-        agentConfig // Usar instruções do agente configurado no Capitão
+        agentConfig, // Usar instruções do agente configurado no Capitão
+        { channelType: normalizeChannelType(context.channelType) }
       ),
       {
         priority: 'low',
@@ -449,7 +471,7 @@ async function processRouterBand(
     // Use Router LLM to decide between intent and chat with concurrency control
     const routerResult = await concurrencyManager.executeLlmOperation(
       context.inboxId,
-      () => openaiService.routerLLM(context.userText, agentConfig),
+      () => openaiService.routerLLM(context.userText, agentConfig, { channelType: normalizeChannelType(context.channelType) }),
       {
         priority: 'high', // Router decisions are high priority
         timeoutMs: agentConfig.hardDeadlineMs || 400,
@@ -461,15 +483,23 @@ async function processRouterBand(
 
     if (routerResult) {
       if (routerResult.mode === 'intent' && routerResult.intent_payload) {
-        // Try to map the intent
+        // Try to map the intent (only for WhatsApp)
         const intentName = routerResult.intent_payload.replace(/^@/, '');
-        let mapped = await buildWhatsAppByIntentRaw(intentName, context.inboxId, context.wamid);
-        if (!mapped) {
-          mapped = await buildWhatsAppByGlobalIntent(intentName, context.inboxId, context.wamid);
-        }
-        
-        if (mapped) {
-          return { response: mapped, llmWarmupMs };
+        if (isWhatsAppChannel(context.channelType)) {
+          let mapped = await buildWhatsAppByIntentRaw(intentName, context.inboxId, context.wamid);
+          if (!mapped) {
+            mapped = await buildWhatsAppByGlobalIntent(intentName, context.inboxId, context.wamid);
+          }
+          
+          if (mapped) {
+            return { response: mapped, llmWarmupMs };
+          }
+        } else {
+          processorLogger.info('ROUTER band skipping direct mapping for non-WhatsApp channel', {
+            channelType: context.channelType,
+            intent: intentName,
+            traceId: context.traceId
+          });
         }
       }
 
@@ -674,7 +704,7 @@ export async function processSocialWiseFlow(
         userId,
         inboxId: context.inboxId,
         traceId: context.traceId,
-        embeddingMs: classification.metrics.embedding_ms,
+        embeddingMs: classification.metrics?.embedding_ms,
         llmWarmupMs,
         jsonParseSuccess: true,
         timeoutOccurred: false,
@@ -692,7 +722,7 @@ export async function processSocialWiseFlow(
       strategy: classification.strategy,
       score: classification.score,
       routeTotalMs,
-      embeddingMs: classification.metrics.embedding_ms,
+      embeddingMs: classification.metrics?.embedding_ms,
       llmWarmupMs,
       traceId: context.traceId
     });
@@ -703,7 +733,7 @@ export async function processSocialWiseFlow(
         band: classification.band,
         strategy: classification.strategy,
         routeTotalMs,
-        embeddingMs: classification.metrics.embedding_ms,
+        embeddingMs: classification.metrics?.embedding_ms,
         llmWarmupMs
       }
     };

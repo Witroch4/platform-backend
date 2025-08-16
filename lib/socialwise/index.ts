@@ -41,16 +41,14 @@ export {
 // Instagram formatter utilities
 export {
   buildInstagramButtons,
-  buildFacebookTextFallback,
+  buildInstagramTextFallback,
   validateInstagramMessage,
   createInstagramButtonOptions,
   buildSimpleInstagramMessage,
-  buildInstagramGenericTemplate,
   type InstagramButtonOptions,
   type InstagramMessage,
   type InstagramButtonTemplate,
-  type FacebookTextMessage,
-  type InstagramGenericTemplate
+  type InstagramTextMessage
 } from './instagram-formatter';
 
 // Classification system utilities
