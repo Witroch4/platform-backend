@@ -88,6 +88,7 @@ export interface AgentConfig {
   tempCopy?: number;
   temperature?: number | null;
   topP?: number | null;
+  maxOutputTokens?: number;
   warmupDeadlineMs?: number;
   hardDeadlineMs?: number;
   softDeadlineMs?: number;

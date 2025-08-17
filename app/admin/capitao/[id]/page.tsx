@@ -32,6 +32,7 @@ type Assistant = {
   topP?: number | null;
   tempSchema: number;
   tempCopy: number;
+  maxOutputTokens: number;
   warmupDeadlineMs: number;
   hardDeadlineMs: number;
   softDeadlineMs: number;
@@ -99,11 +100,15 @@ export default function EditAssistantPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-6">
           <div className="border border-border rounded-md bg-card shadow-sm">
-            <div className="p-4 font-medium text-foreground">Informações Básicas</div>
+            <div className="p-4 font-medium text-foreground">
+              Informações Básicas
+            </div>
             <Separator />
             <div className="p-4 space-y-4">
               <div>
-                <label className="text-sm font-medium text-foreground">Nome</label>
+                <label className="text-sm font-medium text-foreground">
+                  Nome
+                </label>
                 <Input
                   value={assistant.name}
                   onChange={(e) =>
@@ -113,7 +118,9 @@ export default function EditAssistantPage() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-foreground">Descrição</label>
+                <label className="text-sm font-medium text-foreground">
+                  Descrição
+                </label>
                 <Textarea
                   value={assistant.description || ""}
                   onChange={(e) =>
@@ -124,7 +131,9 @@ export default function EditAssistantPage() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-foreground">Nome do Produto</label>
+                <label className="text-sm font-medium text-foreground">
+                  Nome do Produto
+                </label>
                 <Input
                   value={assistant.productName || ""}
                   onChange={(e) =>
@@ -134,7 +143,9 @@ export default function EditAssistantPage() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-foreground">Modelo (OpenAI)</label>
+                <label className="text-sm font-medium text-foreground">
+                  Modelo (OpenAI)
+                </label>
                 <ModelSelector
                   value={assistant.model || "gpt-5-nano"}
                   onChange={async (m) => {
@@ -162,7 +173,10 @@ export default function EditAssistantPage() {
             </div>
           </div>
 
-          <Collapsible defaultOpen={false} className="border border-border rounded-md bg-card shadow-sm">
+          <Collapsible
+            defaultOpen={false}
+            className="border border-border rounded-md bg-card shadow-sm"
+          >
             <div className="p-4 flex items-center justify-between">
               <div className="font-medium text-foreground">Instruções</div>
               <CollapsibleTrigger className="text-sm text-muted-foreground hover:text-foreground hover:underline transition-colors">
@@ -223,7 +237,9 @@ export default function EditAssistantPage() {
           </Collapsible>
 
           <div className="border border-border rounded-md bg-card shadow-sm">
-            <div className="p-4 font-medium text-foreground">Funcionalidades</div>
+            <div className="p-4 font-medium text-foreground">
+              Funcionalidades
+            </div>
             <Separator />
             <div className="p-4 space-y-3">
               <label className="flex items-center gap-2 text-sm text-foreground">
@@ -394,7 +410,9 @@ function Playground({
             <div className="text-xs font-medium mb-1 text-foreground">
               {m.role === "user" ? "Você" : "Capitão"}
             </div>
-            <div className="whitespace-pre-wrap text-sm text-foreground">{m.content}</div>
+            <div className="whitespace-pre-wrap text-sm text-foreground">
+              {m.content}
+            </div>
           </div>
         ))}
       </div>
@@ -408,8 +426,8 @@ function Playground({
           }}
           className="bg-background border-border text-foreground"
         />
-        <Button 
-          onClick={send} 
+        <Button
+          onClick={send}
           disabled={loading || !input.trim()}
           className="bg-primary hover:bg-primary/90"
         >
@@ -431,25 +449,27 @@ function PromptVersioningPanel({ assistantId }: { assistantId: string }) {
   const [showVersioning, setShowVersioning] = useState(false);
   const [creatingVersion, setCreatingVersion] = useState(false);
   const [newVersion, setNewVersion] = useState({
-    name: '',
-    promptType: 'INTENT_CLASSIFICATION',
-    content: '',
-    systemPrompt: '',
+    name: "",
+    promptType: "INTENT_CLASSIFICATION",
+    content: "",
+    systemPrompt: "",
     temperature: 0.7,
     maxTokens: 1000,
-    isDefault: false
+    isDefault: false,
   });
 
   const loadPromptVersions = async () => {
     setLoading(true);
     try {
-      const r = await fetch(`/api/admin/ai-integration/prompt-versions?assistantId=${assistantId}`);
+      const r = await fetch(
+        `/api/admin/ai-integration/prompt-versions?assistantId=${assistantId}`
+      );
       if (r.ok) {
         const data = await r.json();
         setPromptVersions(data.promptVersions || []);
       }
     } catch (error) {
-      console.error('Erro ao carregar versões de prompt:', error);
+      console.error("Erro ao carregar versões de prompt:", error);
     } finally {
       setLoading(false);
     }
@@ -457,71 +477,73 @@ function PromptVersioningPanel({ assistantId }: { assistantId: string }) {
 
   const loadAbTests = async () => {
     try {
-      const r = await fetch(`/api/admin/ai-integration/ab-tests?assistantId=${assistantId}`);
+      const r = await fetch(
+        `/api/admin/ai-integration/ab-tests?assistantId=${assistantId}`
+      );
       if (r.ok) {
         const data = await r.json();
         setAbTests(data.abTests || []);
       }
     } catch (error) {
-      console.error('Erro ao carregar testes A/B:', error);
+      console.error("Erro ao carregar testes A/B:", error);
     }
   };
 
   const createPromptVersion = async () => {
     try {
-      const r = await fetch('/api/admin/ai-integration/prompt-versions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assistantId, ...newVersion })
+      const r = await fetch("/api/admin/ai-integration/prompt-versions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assistantId, ...newVersion }),
       });
-      
+
       if (r.ok) {
         setCreatingVersion(false);
         setNewVersion({
-          name: '',
-          promptType: 'INTENT_CLASSIFICATION',
-          content: '',
-          systemPrompt: '',
+          name: "",
+          promptType: "INTENT_CLASSIFICATION",
+          content: "",
+          systemPrompt: "",
           temperature: 0.7,
           maxTokens: 1000,
-          isDefault: false
+          isDefault: false,
         });
         await loadPromptVersions();
       }
     } catch (error) {
-      console.error('Erro ao criar versão de prompt:', error);
+      console.error("Erro ao criar versão de prompt:", error);
     }
   };
 
   const toggleVersionActive = async (versionId: string, isActive: boolean) => {
     try {
-      const r = await fetch('/api/admin/ai-integration/prompt-versions', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: versionId, isActive })
+      const r = await fetch("/api/admin/ai-integration/prompt-versions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: versionId, isActive }),
       });
-      
+
       if (r.ok) {
         await loadPromptVersions();
       }
     } catch (error) {
-      console.error('Erro ao atualizar versão de prompt:', error);
+      console.error("Erro ao atualizar versão de prompt:", error);
     }
   };
 
   const setAsDefault = async (versionId: string) => {
     try {
-      const r = await fetch('/api/admin/ai-integration/prompt-versions', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: versionId, isDefault: true })
+      const r = await fetch("/api/admin/ai-integration/prompt-versions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: versionId, isDefault: true }),
       });
-      
+
       if (r.ok) {
         await loadPromptVersions();
       }
     } catch (error) {
-      console.error('Erro ao definir versão padrão:', error);
+      console.error("Erro ao definir versão padrão:", error);
     }
   };
 
@@ -533,11 +555,17 @@ function PromptVersioningPanel({ assistantId }: { assistantId: string }) {
   }, [showVersioning, assistantId]);
 
   return (
-    <Collapsible open={showVersioning} onOpenChange={setShowVersioning} className="border border-border rounded-md bg-card shadow-sm">
+    <Collapsible
+      open={showVersioning}
+      onOpenChange={setShowVersioning}
+      className="border border-border rounded-md bg-card shadow-sm"
+    >
       <div className="p-4 flex items-center justify-between">
-        <div className="font-medium text-foreground">Versionamento de Prompts</div>
+        <div className="font-medium text-foreground">
+          Versionamento de Prompts
+        </div>
         <CollapsibleTrigger className="text-sm text-muted-foreground hover:text-foreground hover:underline transition-colors">
-          {showVersioning ? 'Ocultar' : 'Mostrar'} Versões
+          {showVersioning ? "Ocultar" : "Mostrar"} Versões
         </CollapsibleTrigger>
       </div>
       <Separator />
@@ -546,8 +574,8 @@ function PromptVersioningPanel({ assistantId }: { assistantId: string }) {
           <div className="text-sm text-muted-foreground">
             Gerencie diferentes versões de prompts e execute testes A/B
           </div>
-          <Button 
-            size="sm" 
+          <Button
+            size="sm"
             onClick={() => setCreatingVersion(true)}
             disabled={loading}
             className="bg-primary hover:bg-primary/90"
@@ -559,25 +587,40 @@ function PromptVersioningPanel({ assistantId }: { assistantId: string }) {
         {/* Create Version Dialog */}
         {creatingVersion && (
           <div className="border border-border rounded-md p-4 bg-muted/20">
-            <div className="text-sm font-medium mb-3 text-foreground">Criar Nova Versão de Prompt</div>
+            <div className="text-sm font-medium mb-3 text-foreground">
+              Criar Nova Versão de Prompt
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-medium text-foreground">Nome</label>
+                <label className="text-xs font-medium text-foreground">
+                  Nome
+                </label>
                 <Input
                   value={newVersion.name}
-                  onChange={(e) => setNewVersion(prev => ({ ...prev, name: e.target.value }))}
+                  onChange={(e) =>
+                    setNewVersion((prev) => ({ ...prev, name: e.target.value }))
+                  }
                   placeholder="ex: Classificação Jurídica v2"
                   className="bg-background border-border text-foreground"
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-foreground">Tipo de Prompt</label>
+                <label className="text-xs font-medium text-foreground">
+                  Tipo de Prompt
+                </label>
                 <select
                   className="w-full h-9 border border-border rounded px-2 bg-background text-foreground"
                   value={newVersion.promptType}
-                  onChange={(e) => setNewVersion(prev => ({ ...prev, promptType: e.target.value }))}
+                  onChange={(e) =>
+                    setNewVersion((prev) => ({
+                      ...prev,
+                      promptType: e.target.value,
+                    }))
+                  }
                 >
-                  <option value="INTENT_CLASSIFICATION">Classificação de Intenções</option>
+                  <option value="INTENT_CLASSIFICATION">
+                    Classificação de Intenções
+                  </option>
                   <option value="WARMUP_BUTTONS">Botões de Aquecimento</option>
                   <option value="MICROCOPY">Microcopy</option>
                   <option value="ROUTER_LLM">Router LLM</option>
@@ -586,35 +629,56 @@ function PromptVersioningPanel({ assistantId }: { assistantId: string }) {
                 </select>
               </div>
               <div className="md:col-span-2">
-                <label className="text-xs font-medium text-foreground">Conteúdo do Prompt</label>
+                <label className="text-xs font-medium text-foreground">
+                  Conteúdo do Prompt
+                </label>
                 <Textarea
                   value={newVersion.content}
-                  onChange={(e) => setNewVersion(prev => ({ ...prev, content: e.target.value }))}
+                  onChange={(e) =>
+                    setNewVersion((prev) => ({
+                      ...prev,
+                      content: e.target.value,
+                    }))
+                  }
                   rows={4}
                   placeholder="Digite o prompt aqui..."
                   className="bg-background border-border text-foreground"
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-foreground">Temperature</label>
+                <label className="text-xs font-medium text-foreground">
+                  Temperature
+                </label>
                 <Input
                   type="number"
                   min="0"
                   max="2"
                   step="0.1"
                   value={newVersion.temperature}
-                  onChange={(e) => setNewVersion(prev => ({ ...prev, temperature: parseFloat(e.target.value) }))}
+                  onChange={(e) =>
+                    setNewVersion((prev) => ({
+                      ...prev,
+                      temperature: parseFloat(e.target.value),
+                    }))
+                  }
                   className="bg-background border-border text-foreground"
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-foreground">Max Tokens</label>
+                <label className="text-xs font-medium text-foreground">
+                  Max Tokens
+                </label>
                 <Input
                   type="number"
                   min="1"
                   max="4000"
                   value={newVersion.maxTokens}
-                  onChange={(e) => setNewVersion(prev => ({ ...prev, maxTokens: parseInt(e.target.value) }))}
+                  onChange={(e) =>
+                    setNewVersion((prev) => ({
+                      ...prev,
+                      maxTokens: parseInt(e.target.value),
+                    }))
+                  }
                   className="bg-background border-border text-foreground"
                 />
               </div>
@@ -623,7 +687,12 @@ function PromptVersioningPanel({ assistantId }: { assistantId: string }) {
                   <input
                     type="checkbox"
                     checked={newVersion.isDefault}
-                    onChange={(e) => setNewVersion(prev => ({ ...prev, isDefault: e.target.checked }))}
+                    onChange={(e) =>
+                      setNewVersion((prev) => ({
+                        ...prev,
+                        isDefault: e.target.checked,
+                      }))
+                    }
                     className="rounded border-border bg-background"
                   />
                   Definir como versão padrão
@@ -631,10 +700,19 @@ function PromptVersioningPanel({ assistantId }: { assistantId: string }) {
               </div>
             </div>
             <div className="flex items-center gap-2 mt-4">
-              <Button size="sm" onClick={createPromptVersion} className="bg-primary hover:bg-primary/90">
+              <Button
+                size="sm"
+                onClick={createPromptVersion}
+                className="bg-primary hover:bg-primary/90"
+              >
                 Criar Versão
               </Button>
-              <Button size="sm" variant="outline" onClick={() => setCreatingVersion(false)} className="border-border hover:bg-muted">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setCreatingVersion(false)}
+                className="border-border hover:bg-muted"
+              >
                 Cancelar
               </Button>
             </div>
@@ -644,32 +722,50 @@ function PromptVersioningPanel({ assistantId }: { assistantId: string }) {
         {/* Prompt Versions List */}
         <div className="space-y-3">
           {promptVersions.map((version) => (
-            <div key={version.id} className="border border-border rounded-md p-3 bg-card">
+            <div
+              key={version.id}
+              className="border border-border rounded-md p-3 bg-card"
+            >
               <div className="flex items-center justify-between mb-2">
                 <div>
-                  <div className="text-sm font-medium text-foreground">{version.name} {version.version}</div>
+                  <div className="text-sm font-medium text-foreground">
+                    {version.name} {version.version}
+                  </div>
                   <div className="text-xs text-muted-foreground">
-                    {version.promptType} • Criado em {new Date(version.createdAt).toLocaleDateString()}
+                    {version.promptType} • Criado em{" "}
+                    {new Date(version.createdAt).toLocaleDateString()}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   {version.isDefault && (
-                    <Badge variant="default" className="bg-primary/10 text-primary border-primary/20">Padrão</Badge>
+                    <Badge
+                      variant="default"
+                      className="bg-primary/10 text-primary border-primary/20"
+                    >
+                      Padrão
+                    </Badge>
                   )}
                   {version.isActive && (
-                    <Badge variant="secondary" className="bg-secondary/10 text-secondary border-secondary/20">Ativo</Badge>
+                    <Badge
+                      variant="secondary"
+                      className="bg-secondary/10 text-secondary border-secondary/20"
+                    >
+                      Ativo
+                    </Badge>
                   )}
-                  <Button 
-                    size="sm" 
+                  <Button
+                    size="sm"
                     variant="outline"
-                    onClick={() => toggleVersionActive(version.id, !version.isActive)}
+                    onClick={() =>
+                      toggleVersionActive(version.id, !version.isActive)
+                    }
                     className="border-border hover:bg-muted"
                   >
-                    {version.isActive ? 'Desativar' : 'Ativar'}
+                    {version.isActive ? "Desativar" : "Ativar"}
                   </Button>
                   {!version.isDefault && (
-                    <Button 
-                      size="sm" 
+                    <Button
+                      size="sm"
                       variant="outline"
                       onClick={() => setAsDefault(version.id)}
                       className="border-border hover:bg-muted"
@@ -679,31 +775,43 @@ function PromptVersioningPanel({ assistantId }: { assistantId: string }) {
                   )}
                 </div>
               </div>
-              
+
               {/* Performance Metrics */}
               {version.metrics && version.metrics.length > 0 && (
                 <div className="mt-2 p-2 bg-muted/30 rounded text-xs border border-border">
                   <div className="grid grid-cols-4 gap-2">
                     <div>
                       <div className="text-muted-foreground">Uso Total</div>
-                      <div className="font-medium text-foreground">{version._count.auditLogs}</div>
-                    </div>
-                    <div>
-                      <div className="text-muted-foreground">Taxa de Sucesso</div>
                       <div className="font-medium text-foreground">
-                        {version.metrics[0] ? `${Math.round(version.metrics[0].successRate * 100)}%` : 'N/A'}
+                        {version._count.auditLogs}
                       </div>
                     </div>
                     <div>
-                      <div className="text-muted-foreground">Latência Média</div>
+                      <div className="text-muted-foreground">
+                        Taxa de Sucesso
+                      </div>
                       <div className="font-medium text-foreground">
-                        {version.metrics[0] ? `${Math.round(version.metrics[0].averageLatency)}ms` : 'N/A'}
+                        {version.metrics[0]
+                          ? `${Math.round(version.metrics[0].successRate * 100)}%`
+                          : "N/A"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">
+                        Latência Média
+                      </div>
+                      <div className="font-medium text-foreground">
+                        {version.metrics[0]
+                          ? `${Math.round(version.metrics[0].averageLatency)}ms`
+                          : "N/A"}
                       </div>
                     </div>
                     <div>
                       <div className="text-muted-foreground">Score Médio</div>
                       <div className="font-medium text-foreground">
-                        {version.metrics[0] ? `${Math.round(version.metrics[0].averageScore * 100)}%` : 'N/A'}
+                        {version.metrics[0]
+                          ? `${Math.round(version.metrics[0].averageScore * 100)}%`
+                          : "N/A"}
                       </div>
                     </div>
                   </div>
@@ -711,7 +819,7 @@ function PromptVersioningPanel({ assistantId }: { assistantId: string }) {
               )}
             </div>
           ))}
-          
+
           {promptVersions.length === 0 && !loading && (
             <div className="text-sm text-muted-foreground text-center py-4">
               Nenhuma versão de prompt criada ainda.
@@ -722,20 +830,30 @@ function PromptVersioningPanel({ assistantId }: { assistantId: string }) {
         {/* A/B Tests Section */}
         {abTests.length > 0 && (
           <div className="border-t border-border pt-4">
-            <div className="text-sm font-medium mb-3 text-foreground">Testes A/B Ativos</div>
+            <div className="text-sm font-medium mb-3 text-foreground">
+              Testes A/B Ativos
+            </div>
             <div className="space-y-2">
               {abTests.map((test) => (
-                <div key={test.id} className="border border-border rounded p-2 text-sm bg-card">
+                <div
+                  key={test.id}
+                  className="border border-border rounded p-2 text-sm bg-card"
+                >
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="font-medium text-foreground">{test.name}</div>
+                      <div className="font-medium text-foreground">
+                        {test.name}
+                      </div>
                       <div className="text-xs text-muted-foreground">
-                        {test.promptVersions.length} versões • 
-                        {test.isActive ? ' Ativo' : ' Inativo'}
+                        {test.promptVersions.length} versões •
+                        {test.isActive ? " Ativo" : " Inativo"}
                       </div>
                     </div>
-                    <Badge variant={test.isActive ? 'default' : 'secondary'} className="bg-primary/10 text-primary border-primary/20">
-                      {test.isActive ? 'Executando' : 'Pausado'}
+                    <Badge
+                      variant={test.isActive ? "default" : "secondary"}
+                      className="bg-primary/10 text-primary border-primary/20"
+                    >
+                      {test.isActive ? "Executando" : "Pausado"}
                     </Badge>
                   </div>
                 </div>
@@ -758,10 +876,40 @@ function SocialWiseFlowSettings({
   onUpdate: (patch: Partial<Assistant>) => Promise<void>;
 }) {
   const [saving, setSaving] = useState(false);
+  const [userRole, setUserRole] = useState<string>("DEFAULT");
 
   // Determine if model is GPT-5 family or GPT-4 family
-  const isGPT5Family = assistant.model.toLowerCase().includes('gpt-5');
-  const isGPT4Family = assistant.model.toLowerCase().includes('gpt-4');
+  const isGPT5Family = assistant.model.toLowerCase().includes("gpt-5");
+  const isGPT4Family = assistant.model.toLowerCase().includes("gpt-4");
+
+  // Get user role from session
+  useEffect(() => {
+    fetch('/api/auth/session')
+      .then(res => res.json())
+      .then(data => {
+        if (data?.user?.role) {
+          setUserRole(data.user.role);
+        }
+      })
+      .catch(() => {
+        // Fallback to DEFAULT if can't get role
+        setUserRole("DEFAULT");
+      });
+  }, []);
+
+  // Determine max tokens based on user role
+  const getMaxTokensLimit = () => {
+    switch (userRole) {
+      case "SUPERADMIN":
+        return 48000; // SUPERADMIN can use up to 48k tokens
+      case "ADMIN":
+        return 4096;  // ADMIN can use up to 4k tokens
+      default:
+        return 1024;  // DEFAULT users limited to 1k tokens
+    }
+  };
+
+  const maxTokensLimit = getMaxTokensLimit();
 
   const saveSettings = async () => {
     setSaving(true);
@@ -773,6 +921,7 @@ function SocialWiseFlowSettings({
       topP: assistant.topP,
       tempSchema: assistant.tempSchema,
       tempCopy: assistant.tempCopy,
+      maxOutputTokens: assistant.maxOutputTokens,
       warmupDeadlineMs: assistant.warmupDeadlineMs,
       hardDeadlineMs: assistant.hardDeadlineMs,
       softDeadlineMs: assistant.softDeadlineMs,
@@ -783,9 +932,14 @@ function SocialWiseFlowSettings({
   };
 
   return (
-    <Collapsible defaultOpen={false} className="border border-border rounded-md bg-card shadow-sm">
+    <Collapsible
+      defaultOpen={false}
+      className="border border-border rounded-md bg-card shadow-sm"
+    >
       <div className="p-4 flex items-center justify-between">
-        <div className="font-medium text-foreground">SocialWise Flow - Otimizações</div>
+        <div className="font-medium text-foreground">
+          SocialWise Flow - Otimizações
+        </div>
         <CollapsibleTrigger className="text-sm text-muted-foreground hover:text-foreground hover:underline transition-colors">
           Mostrar/Ocultar
         </CollapsibleTrigger>
@@ -795,7 +949,9 @@ function SocialWiseFlowSettings({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Routing Strategy */}
           <div>
-            <label className="text-sm font-medium text-foreground">Estratégia de Roteamento</label>
+            <label className="text-sm font-medium text-foreground">
+              Estratégia de Roteamento
+            </label>
             <select
               className="w-full h-9 border border-border rounded px-2 mt-1 bg-background text-foreground"
               value={assistant.embedipreview ? "embedding-first" : "llm-first"}
@@ -806,11 +962,14 @@ function SocialWiseFlowSettings({
                 })
               }
             >
-              <option value="embedding-first">Embedding-First (Modo Rápido)</option>
+              <option value="embedding-first">
+                Embedding-First (Modo Rápido)
+              </option>
               <option value="llm-first">LLM-First (Modo Inteligente)</option>
             </select>
             <p className="text-xs text-muted-foreground mt-1">
-              Embedding-first usa embeddings para classificação rápida. LLM-first prioriza conversação.
+              Embedding-first usa embeddings para classificação rápida.
+              LLM-first prioriza conversação.
             </p>
           </div>
 
@@ -818,7 +977,9 @@ function SocialWiseFlowSettings({
           {isGPT5Family && (
             <>
               <div>
-                <label className="text-sm font-medium text-foreground">Esforço de Raciocínio (GPT-5)</label>
+                <label className="text-sm font-medium text-foreground">
+                  Esforço de Raciocínio (GPT-5)
+                </label>
                 <select
                   className="w-full h-9 border border-border rounded px-2 mt-1 bg-background text-foreground"
                   value={assistant.reasoningEffort}
@@ -837,7 +998,9 @@ function SocialWiseFlowSettings({
               </div>
 
               <div>
-                <label className="text-sm font-medium text-foreground">Verbosidade (GPT-5)</label>
+                <label className="text-sm font-medium text-foreground">
+                  Verbosidade (GPT-5)
+                </label>
                 <select
                   className="w-full h-9 border border-border rounded px-2 mt-1 bg-background text-foreground"
                   value={assistant.verbosity}
@@ -859,7 +1022,9 @@ function SocialWiseFlowSettings({
           {isGPT4Family && (
             <>
               <div>
-                <label className="text-sm font-medium text-foreground">Temperature (GPT-4)</label>
+                <label className="text-sm font-medium text-foreground">
+                  Temperature (GPT-4)
+                </label>
                 <Input
                   type="number"
                   min="0"
@@ -875,12 +1040,15 @@ function SocialWiseFlowSettings({
                   className="bg-background border-border text-foreground"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Controla a criatividade (0.0 = determinístico, 2.0 = muito criativo)
+                  Controla a criatividade (0.0 = determinístico, 2.0 = muito
+                  criativo)
                 </p>
               </div>
 
               <div>
-                <label className="text-sm font-medium text-foreground">Top P (GPT-4)</label>
+                <label className="text-sm font-medium text-foreground">
+                  Top P (GPT-4)
+                </label>
                 <Input
                   type="number"
                   min="0"
@@ -904,7 +1072,9 @@ function SocialWiseFlowSettings({
 
           {/* Temperature settings for structured outputs */}
           <div>
-            <label className="text-sm font-medium text-foreground">Temperature - Saídas Estruturadas</label>
+            <label className="text-sm font-medium text-foreground">
+              Temperature - Saídas Estruturadas
+            </label>
             <Input
               type="number"
               min="0"
@@ -925,7 +1095,9 @@ function SocialWiseFlowSettings({
           </div>
 
           <div>
-            <label className="text-sm font-medium text-foreground">Temperature - Microcopy</label>
+            <label className="text-sm font-medium text-foreground">
+              Temperature - Microcopy
+            </label>
             <Input
               type="number"
               min="0.3"
@@ -945,9 +1117,48 @@ function SocialWiseFlowSettings({
             </p>
           </div>
 
+          {/* Max Output Tokens */}
+          <div>
+            <label className="text-sm font-medium text-foreground">
+              Max Output Tokens
+              {userRole === "SUPERADMIN" && (
+                <span className="ml-2 text-xs bg-red-100 text-red-800 px-2 py-1 rounded">
+                  SUPERADMIN
+                </span>
+              )}
+              {userRole === "ADMIN" && (
+                <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                  ADMIN
+                </span>
+              )}
+            </label>
+            <Input
+              type="number"
+              min="64"
+              max={maxTokensLimit}
+              step="1"
+              value={assistant.maxOutputTokens}
+              onChange={(e) =>
+                setAssistant({
+                  ...assistant,
+                  maxOutputTokens: Math.min(parseInt(e.target.value) || 256, maxTokensLimit),
+                })
+              }
+              className="bg-background border-border text-foreground"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Limite de tokens de saída (64-{maxTokensLimit.toLocaleString()}). 
+              {userRole === "SUPERADMIN" && " SUPERADMIN: até 48k tokens para validação de prompts."}
+              {userRole === "ADMIN" && " ADMIN: até 4k tokens."}
+              {userRole === "DEFAULT" && " Se ver \"incomplete:max_output_tokens\", aumente para 384-512."}
+            </p>
+          </div>
+
           {/* Deadline settings */}
           <div>
-            <label className="text-sm font-medium text-foreground">Deadline - Warmup (ms)</label>
+            <label className="text-sm font-medium text-foreground">
+              Deadline - Warmup (ms)
+            </label>
             <Input
               type="number"
               min="100"
@@ -967,7 +1178,9 @@ function SocialWiseFlowSettings({
           </div>
 
           <div>
-            <label className="text-sm font-medium text-foreground">Deadline - HARD Band (ms)</label>
+            <label className="text-sm font-medium text-foreground">
+              Deadline - HARD Band (ms)
+            </label>
             <Input
               type="number"
               min="50"
@@ -987,7 +1200,9 @@ function SocialWiseFlowSettings({
           </div>
 
           <div>
-            <label className="text-sm font-medium text-foreground">Deadline - SOFT Band (ms)</label>
+            <label className="text-sm font-medium text-foreground">
+              Deadline - SOFT Band (ms)
+            </label>
             <Input
               type="number"
               min="100"
@@ -1008,7 +1223,9 @@ function SocialWiseFlowSettings({
 
           {/* Additional settings */}
           <div>
-            <label className="text-sm font-medium text-foreground">Escolha de Ferramentas</label>
+            <label className="text-sm font-medium text-foreground">
+              Escolha de Ferramentas
+            </label>
             <select
               className="w-full h-9 border border-border rounded px-2 mt-1 bg-background text-foreground"
               value={assistant.toolChoice}
@@ -1043,7 +1260,11 @@ function SocialWiseFlowSettings({
           </label>
         </div>
 
-        <Button disabled={saving} onClick={saveSettings} className="bg-primary hover:bg-primary/90">
+        <Button
+          disabled={saving}
+          onClick={saveSettings}
+          className="bg-primary hover:bg-primary/90"
+        >
           {saving ? "Salvando..." : "Salvar Configurações SocialWise"}
         </Button>
       </CollapsibleContent>

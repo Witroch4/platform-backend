@@ -1531,6 +1531,7 @@ model AiAssistant {
   topP              Float?   @default(0.7) // For GPT-4 family (0-1)
   tempSchema        Float    @default(0.1) // Temperature for structured outputs (0.0-0.2)
   tempCopy          Float    @default(0.4) // Temperature for microcopy (0.3-0.5)
+  maxOutputTokens   Int      @default(384) // Maximum output tokens (64-48000, role-based limits)
   warmupDeadlineMs  Int      @default(250)
   hardDeadlineMs    Int      @default(120)
   softDeadlineMs    Int      @default(300)

@@ -504,13 +504,13 @@ ${JSON.stringify(openaiDbg?.raw_response_snippet ?? {}, null, 2)}
                     id="maxOutputTokens"
                     type="number"
                     min={64}
-                    max={1024}
+                    max={48000}
                     step={1}
                     value={maxOutputTokens}
                     onChange={(e) => setMaxOutputTokens(e.target.value)}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Dica: se ver <code>incomplete:max_output_tokens</code>, aumente para 384–512.
+                    Dica: se ver <code>incomplete:max_output_tokens</code>, aumente o valor. Limite baseado na role do usuário.
                   </p>
                 </div>
               </div>
@@ -622,7 +622,7 @@ Você é um assistente técnico conciso...`}
                         id="captainMaxOutputTokens"
                         type="number"
                         min={64}
-                        max={1024}
+                        max={48000}
                         step={1}
                         value={captainMaxOutputTokens}
                         onChange={(e) => setCaptainMaxOutputTokens(e.target.value)}

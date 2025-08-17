@@ -22,28 +22,39 @@ export async function GET(request: NextRequest) {
     },
   }) || [];
 
-  // Buscar inboxes/caixas da rota já existente (Dialogflow) – usamos como catálogo
-  // IMPORTANTE: usar caminho relativo e encaminhar cookies para manter sessão
+  // Buscar caixas diretamente do banco de dados
   let externals: any[] = [];
   try {
-    // Preferir as caixas salvas localmente (tabela ChatwitInbox)
-    const url = new URL('/api/admin/mtf-diamante/dialogflow/caixas', (request as any).nextUrl?.origin || `http://${request.headers.get('host')}`);
-    const r = await fetch(url, {
-      cache: 'no-store',
-      headers: {
-        // Encaminha cookie de sessão para a chamada interna
-        cookie: request.headers.get('cookie') || '',
-      },
+    // Buscar o usuário Chatwit para obter as caixas
+    const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
+      where: { appUserId: session.user.id },
+      include: {
+        inboxes: {
+          include: {
+            agentes: {
+              orderBy: { createdAt: 'desc' }
+            }
+          },
+          orderBy: { createdAt: 'desc' }
+        }
+      }
     });
-    if (!r.ok) {
-      logger.warn('Falha ao consultar caixas internas', { status: r.status });
+
+    if (usuarioChatwit?.inboxes) {
+      externals = usuarioChatwit.inboxes.map(inbox => ({
+        inboxId: inbox.inboxId,
+        nome: inbox.nome,
+        name: inbox.nome, // Alias for compatibility
+        channelType: inbox.channelType,
+        channel_type: inbox.channelType, // Alias for compatibility
+        agentes: inbox.agentes
+      }));
+      logger.info('Caixas carregadas diretamente do banco', { total: externals.length });
     } else {
-      const j = await r.json();
-      externals = Array.isArray(j?.caixas) ? j.caixas : (Array.isArray(j) ? j : []);
-      logger.info('Caixas carregadas', { total: externals.length });
+      logger.warn('Nenhuma caixa encontrada para o usuário');
     }
   } catch (err: any) {
-    logger.error('Erro ao buscar caixas internas', err?.message || err);
+    logger.error('Erro ao buscar caixas do banco', err?.message || err);
   }
 
   // Mapear "anexada" por inboxId (id externo Chatwit), e usar campos das caixas locais

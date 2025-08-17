@@ -50,6 +50,7 @@ export async function GET(request: NextRequest) {
         topP: true,
         tempSchema: true,
         tempCopy: true,
+        maxOutputTokens: true,
         warmupDeadlineMs: true,
         hardDeadlineMs: true,
         softDeadlineMs: true,
@@ -203,6 +204,21 @@ export async function PATCH(request: NextRequest) {
   if (typeof body?.topP === 'number' && body.topP >= 0 && body.topP <= 1) updateData.topP = body.topP;
   if (typeof body?.tempSchema === 'number' && body.tempSchema >= 0 && body.tempSchema <= 0.2) updateData.tempSchema = body.tempSchema;
   if (typeof body?.tempCopy === 'number' && body.tempCopy >= 0.3 && body.tempCopy <= 0.5) updateData.tempCopy = body.tempCopy;
+  // Max output tokens validation based on user role
+  if (typeof body?.maxOutputTokens === 'number' && body.maxOutputTokens >= 64) {
+    const userRole = session.user.role;
+    let maxLimit = 1024; // DEFAULT users
+    
+    if (userRole === 'SUPERADMIN') {
+      maxLimit = 48000; // SUPERADMIN can use up to 48k tokens
+    } else if (userRole === 'ADMIN') {
+      maxLimit = 4096; // ADMIN can use up to 4k tokens
+    }
+    
+    if (body.maxOutputTokens <= maxLimit) {
+      updateData.maxOutputTokens = body.maxOutputTokens;
+    }
+  }
   if (typeof body?.warmupDeadlineMs === 'number' && body.warmupDeadlineMs > 0) updateData.warmupDeadlineMs = body.warmupDeadlineMs;
   if (typeof body?.hardDeadlineMs === 'number' && body.hardDeadlineMs > 0) updateData.hardDeadlineMs = body.hardDeadlineMs;
   if (typeof body?.softDeadlineMs === 'number' && body.softDeadlineMs > 0) updateData.softDeadlineMs = body.softDeadlineMs;

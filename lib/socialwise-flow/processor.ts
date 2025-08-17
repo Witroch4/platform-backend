@@ -87,6 +87,7 @@ async function loadAssistantConfiguration(inboxId: string, chatwitAccountId?: st
         topP: true,
         tempSchema: true,
         tempCopy: true,
+        maxOutputTokens: true,
         warmupDeadlineMs: true,
         hardDeadlineMs: true,
         softDeadlineMs: true,
@@ -145,6 +146,8 @@ async function loadAssistantConfiguration(inboxId: string, chatwitAccountId?: st
         : (inbox?.socialwiseTempSchema || fullAssistant.tempSchema),
       
       tempCopy: fullAssistant.tempCopy,
+      
+      maxOutputTokens: fullAssistant.maxOutputTokens,
       
       // 🔧 CORREÇÃO: Usar configurações de deadline do assistente/inbox
       warmupDeadlineMs: inheritFromAgent 
