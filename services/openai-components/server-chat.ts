@@ -5,6 +5,30 @@ import { ChatOptions, DEFAULT_MODELS } from "./types";
 import { responsesCall } from "@/lib/cost/openai-wrapper";
 import { withDeadlineAbort } from "./utils";
 
+// Importar funções de capacidades do modelo
+interface ModelCapabilities {
+  reasoning: boolean;    // Supports reasoning.effort
+  structured: boolean;   // Supports Structured Outputs
+  sampling: boolean;     // Supports temperature/top_p
+  label: string;
+}
+
+const MODEL_CAPS: Record<string, ModelCapabilities> = {
+  "gpt-5": { reasoning: true, structured: true, sampling: true, label: "GPT-5" },
+  "gpt-5-nano": { reasoning: true, structured: true, sampling: false, label: "GPT-5 Nano" }, // Não suporta temperature com reasoning
+  "gpt-4.1-nano": { reasoning: false, structured: true, sampling: true, label: "GPT-4.1 Nano" },
+};
+
+// Get model capabilities with fallback
+function getModelCaps(model: string): ModelCapabilities {
+  return MODEL_CAPS[model] ?? { 
+    reasoning: false, 
+    structured: true, 
+    sampling: true, // Default para modelos não listados
+    label: model 
+  };
+}
+
 export async function createChatCompletion(
   this: { client: OpenAI },
   messages: any[],
@@ -217,6 +241,9 @@ export async function createChatCompletion(
     const clamp = (n: number | undefined, min: number, max: number) =>
       typeof n === "number" ? Math.max(min, Math.min(max, n)) : undefined;
 
+    // Verificar capacidades do modelo
+    const modelCaps = getModelCaps(actualModel);
+    
     // Configurar parâmetros da Responses API (sem campos inválidos)
     const requestParams: any = {
       model: actualModel,
@@ -228,11 +255,21 @@ export async function createChatCompletion(
       ],
       ...(systemText ? { instructions: systemText } : {}),
       store: true,
-      temperature: mergedOptions.temperature,
-      top_p: mergedOptions.top_p,
       // Evita 400 por excesso de tokens de saída; ajuste se precisar
       max_output_tokens: clamp(mergedOptions.max_tokens, 1, 8192) ?? 1024,
     };
+    
+    // Adicionar parâmetros de sampling apenas se o modelo suportar
+    if (modelCaps.sampling) {
+      if (mergedOptions.temperature !== undefined) {
+        requestParams.temperature = mergedOptions.temperature;
+      }
+      if (mergedOptions.top_p !== undefined) {
+        requestParams.top_p = mergedOptions.top_p;
+      }
+    } else {
+      console.log(`⚠️ Modelo ${actualModel} não suporta parâmetros de sampling (temperature/top_p)`);
+    }
 
     // Adicionar parâmetro reasoning (O-series e GPT-5)
     const isReasoningModel =

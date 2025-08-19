@@ -36,18 +36,17 @@ export class SocialWiseIdempotencyService {
    * Extract idempotency key from SocialWise payload
    */
   extractIdempotencyKey(payload: SocialWiseFlowPayloadType): SocialWiseIdempotencyKey {
-    const context = payload.context['socialwise-chatwit'];
+    const socialwiseContext = payload.context['socialwise-chatwit'];
     
-    // Try multiple locations for wamid (new and legacy structure)
-    const wamid = context.wamid || context.whatsapp_identifiers?.wamid;
+    // Primary identifier: context.message.source_id (wamid)
+    const wamid = payload.context.message?.source_id;
     
-    // Try multiple locations for message ID (new and legacy structure)
-    const messageId = context.message_data?.id ? String(context.message_data.id) : 
-                     context.message_id ? String(context.message_id) : undefined;
+    // Fallback identifier: context.message.id
+    const messageId = payload.context.message?.id ? String(payload.context.message.id) : undefined;
     
     // Account and inbox IDs (convert to string for consistency)
-    const accountId = String(context.account_data.id);
-    const inboxId = String(context.inbox_data.id);
+    const accountId = String(socialwiseContext.account_data.id);
+    const inboxId = String(socialwiseContext.inbox_data.id);
     const sessionId = payload.session_id;
 
     return {

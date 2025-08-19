@@ -1,14 +1,16 @@
 'use client';
 
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import NavbarAdmin from '@/components/admin/navbar-admin';
 import { SidebarProvider, SidebarTrigger, SidebarInset } from '@/components/ui/sidebar';
 import AppAdminDashboard from '@/components/app-admin-dashboard';
+import { MtfDataProvider } from '@/app/admin/mtf-diamante/context/MtfDataProvider';
+import { AdminLoadingIndicator } from './components/AdminLoadingIndicator';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -69,13 +71,16 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
 
   return (
     <SidebarProvider>
-      <AppAdminDashboard />
-      <SidebarInset className="flex flex-col min-h-screen bg-background">
-        <NavbarAdmin />
-        <main className="flex-1 overflow-y-auto bg-background p-4 md:p-6">
-          {children}
-        </main>
-      </SidebarInset>
+      <MtfDataProvider>
+        <AppAdminDashboard />
+        <SidebarInset className="flex flex-col min-h-screen bg-background">
+          <NavbarAdmin />
+          <main className="flex-1 overflow-y-auto bg-background p-4 md:p-6 relative">
+            <AdminLoadingIndicator />
+            {children}
+          </main>
+        </SidebarInset>
+      </MtfDataProvider>
     </SidebarProvider>
   );
 };

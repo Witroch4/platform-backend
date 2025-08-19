@@ -5,6 +5,7 @@ import "./globals.css";
 import "katex/dist/katex.min.css";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { SessionProvider } from "@/components/providers/session-provider";
+import { SWRProvider } from "@/components/providers/swr-provider";
 import ErrorBoundary from "@/components/providers/error-boundary";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
@@ -44,12 +45,15 @@ export default function RootLayout({
               enableSystem
               disableTransitionOnChange
             >
-              {/* 👇 Envolvendo a árvore de componentes com TooltipProvider */}
-              <TooltipProvider>
-                <div className="min-h-screen w-full bg-background">
-                  {children}
-                </div>
-              </TooltipProvider>
+              {/* 👇 SWR Provider para otimização global */}
+              <SWRProvider>
+                {/* 👇 Envolvendo a árvore de componentes com TooltipProvider */}
+                <TooltipProvider>
+                  <div className="min-h-screen w-full bg-background">
+                    {children}
+                  </div>
+                </TooltipProvider>
+              </SWRProvider>
             </ThemeProvider>
           </SessionProvider>
         </ErrorBoundary>

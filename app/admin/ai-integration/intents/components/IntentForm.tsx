@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { X } from "lucide-react";
+import { toast } from "sonner";
 
 interface Intent {
   id: string;
@@ -138,14 +139,20 @@ export default function IntentForm({ intent, onSubmit, onCancel }: IntentFormPro
       });
 
       if (response.ok) {
+        const isCreating = !intent;
+        toast.success(
+          isCreating 
+            ? "Intenção criada com sucesso!" 
+            : "Intenção atualizada com sucesso!"
+        );
         onSubmit();
       } else {
         const errorData = await response.json();
-        alert(errorData.error || "Failed to save intent");
+        toast.error(errorData.error || "Erro ao salvar intenção");
       }
     } catch (error) {
       console.error("Error saving intent:", error);
-      alert("Error saving intent");
+      toast.error("Erro ao salvar intenção");
     } finally {
       setLoading(false);
     }

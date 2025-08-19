@@ -15,6 +15,27 @@ function slugify(value: string): string {
     .replace(/(^-|-$)+/g, '');
 }
 
+async function generateUniqueSlug(baseSlug: string, userId: string): Promise<string> {
+  let slug = baseSlug;
+  let counter = 1;
+  
+  // Verifica se o slug já existe
+  while (true) {
+    const existing = await prisma.intent.findFirst({
+      where: { slug, createdById: userId }
+    });
+    
+    if (!existing) {
+      break;
+    }
+    
+    slug = `${baseSlug}-${counter}`;
+    counter++;
+  }
+  
+  return slug;
+}
+
 async function ensureUserExists(userId: string, fallbackEmail?: string, name?: string) {
   const existing = await prisma.user.findUnique({ where: { id: userId } });
   if (existing) return existing;
@@ -65,7 +86,8 @@ export async function POST(request: NextRequest) {
   const templateId: string | null = body?.templateId || null;
   if (!name) return NextResponse.json({ error: 'Nome é obrigatório' }, { status: 400 });
 
-  const slug = slugify(name);
+  const baseSlug = slugify(name);
+  const slug = await generateUniqueSlug(baseSlug, session.user.id);
 
   try {
     // Verifica se já existe para este usuário
@@ -167,8 +189,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ intent: created, created: true }, { status: 201 });
   } catch (e: any) {
     if (e?.code === 'P2002') {
+      // Verifica se é conflito de nome ou slug
+      if (e?.meta?.target?.includes('slug')) {
+        return NextResponse.json({ error: 'Erro interno: slug duplicado detectado. Tente novamente.' }, { status: 409 });
+      }
       return NextResponse.json({ error: 'Já existe uma intenção com este nome' }, { status: 409 });
     }
+    logger.error('Erro ao criar intent', { error: e?.message || e, code: e?.code });
     return NextResponse.json({ error: 'Falha ao criar intenção' }, { status: 500 });
   }
 }
@@ -187,7 +214,9 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
   }
 
-  await prisma.intent.update({ where: { id }, data: { isActive: false } });
+  // Deleta realmente o registro para liberar o slug
+  await prisma.intent.delete({ where: { id } });
+  logger.info('Intent deletada', { id, name: intent.name, slug: intent.slug });
   return NextResponse.json({ ok: true });
 }
 

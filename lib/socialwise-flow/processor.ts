@@ -41,6 +41,7 @@ export interface ProcessorContext {
   userId?: string;
   wamid?: string;
   traceId?: string;
+  assistantId?: string; // Para playground e casos específicos
 }
 
 export interface ProcessorResult {
@@ -60,21 +61,35 @@ export interface ProcessorResult {
  * Load full assistant configuration including SocialWise Flow deadlines
  * Supports inbox-level inheritance from agent configurations
  */
-async function loadAssistantConfiguration(inboxId: string, chatwitAccountId?: string) {
+async function loadAssistantConfiguration(inboxId: string, chatwitAccountId?: string, assistantId?: string) {
   try {
     const prisma = getPrismaInstance();
     
     // Get assistant configuration with full details
-    const assistant = await getAssistantForInbox(inboxId, chatwitAccountId);
+    let assistant;
+    if (assistantId) {
+      // Para playground: usar assistantId diretamente
+      assistant = await prisma.aiAssistant.findFirst({
+        where: { 
+          id: assistantId,
+          isActive: true 
+        },
+        select: { id: true }
+      });
+    } else {
+      // Para produção: usar getAssistantForInbox
+      assistant = await getAssistantForInbox(inboxId, chatwitAccountId);
+    }
+    
     if (!assistant) {
-      processorLogger.warn('No assistant found for inbox', { inboxId });
+      processorLogger.warn('No assistant found', { inboxId, assistantId });
       return null;
     }
 
     // Get full assistant configuration from database
     const fullAssistant = await prisma.aiAssistant.findFirst({
       where: { 
-        id: assistant.id,
+        id: assistantId || assistant.id,
         isActive: true 
       },
       select: {
@@ -619,7 +634,7 @@ export async function processSocialWiseFlow(
     }
 
     // Get full assistant configuration for agent settings
-    const agentConfig = await loadAssistantConfiguration(context.inboxId, context.chatwitAccountId);
+    const agentConfig = await loadAssistantConfiguration(context.inboxId, context.chatwitAccountId, context.assistantId);
     if (!agentConfig) {
       const response = buildFallbackResponse(context.channelType, context.userText);
       const routeTotalMs = Date.now() - startTime;

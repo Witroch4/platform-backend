@@ -1,8 +1,9 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import React, { useEffect, useState } from "react";
+import React, { useState, useTransition } from "react";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Sidebar,
   SidebarContent,
@@ -53,37 +54,30 @@ import { AdicionarCaixaDialog } from "@/app/admin/mtf-diamante/components/Dialog
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { useMtfData } from "@/app/admin/mtf-diamante/context/MtfDataProvider";
 
 export function AppAdminDashboard() {
   const { data: session } = useSession();
   const { state } = useSidebar();
-  const [inboxes, setInboxes] = useState<any[]>([]);
-  const [apiKeys, setApiKeys] = useState<any[]>([]);
+  const pathname = usePathname();
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  
+  // Consome do Provider (BFF + SWR)
+  const { caixas: inboxes, apiKeys, refreshCaixas, prefetchInbox } = useMtfData();
   const [creating, setCreating] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [newToken, setNewToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const refreshInboxes = async () => {
-    try {
-      const resp = await fetch('/api/admin/mtf-diamante/dialogflow/caixas', { cache: 'no-store' });
-      if (resp.ok) {
-        const data = await resp.json();
-        const caixas = Array.isArray(data?.caixas) ? data.caixas : [];
-        setInboxes(caixas);
-      }
-    } catch {}
+  // Função para verificar se uma inbox está ativa (suporta subpaths)
+  const isInboxActive = (inboxId: string) => {
+    return pathname?.startsWith(`/admin/mtf-diamante/inbox/${inboxId}`);
   };
 
-  const loadApiKeys = async () => {
-    try {
-      const r = await fetch('/api/admin/ai-integration/api-keys', { cache: 'no-store' });
-      if (r.ok) {
-        const j = await r.json();
-        setApiKeys(Array.isArray(j?.keys) ? j.keys : []);
-      }
-    } catch {}
-  };
+  // Observação: o Provider já carrega inboxes/apiKeys do BFF e mantém cache.
+  // Quando precisar atualizar (ex.: criou/removou chave), chame refreshCaixas()
+  // que dispara mutate() e recarrega TODO o bundle do BFF.
 
   const createApiKey = async () => {
     try {
@@ -97,7 +91,7 @@ export function AppAdminDashboard() {
         const j = await r.json();
         setNewToken(j?.token || null);
         setNewLabel("");
-        await loadApiKeys();
+        await refreshCaixas(); // revalida o BFF (traz apiKeys atualizadas)
       }
     } finally {
       setCreating(false);
@@ -106,7 +100,7 @@ export function AppAdminDashboard() {
 
   const revokeApiKey = async (id: string) => {
     await fetch(`/api/admin/ai-integration/api-keys?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
-    await loadApiKeys();
+    await refreshCaixas();
   };
 
   const copyNewToken = async () => {
@@ -118,10 +112,7 @@ export function AppAdminDashboard() {
     } catch {}
   };
 
-  useEffect(() => {
-    refreshInboxes();
-    loadApiKeys();
-  }, []);
+  // Sem useEffect: dados já vêm do contexto com fallback + keepPreviousData (sem flicker)
 
   const isAdmin = session?.user?.role === "ADMIN" || session?.user?.role === "SUPERADMIN";
   const isSuperAdmin = session?.user?.role === "SUPERADMIN";
@@ -203,25 +194,51 @@ export function AppAdminDashboard() {
                     <CollapsibleContent>
                       <div className="pl-2 py-1 space-y-1">
                         <SidebarMenuSub>
-                          {inboxes.map((cx: any) => {
-                            const channel = (cx.channelType || '').toLowerCase();
-                            const isInstagram = channel.includes('instagram');
-                            const Icon = isInstagram ? Instagram : MessageCircle; // WhatsApp/Outros
-                            return (
-                              <SidebarMenuSubItem key={cx.id}>
-                                <SidebarMenuSubButton
-                                  href={`/admin/mtf-diamante/inbox/${cx.id}`}
-                                  className="text-[0.95rem] py-2"
-                                >
-                                  <Icon className={isInstagram ? 'text-pink-500' : 'text-green-500'} />
-                                  <span className="font-medium">{cx.nome || cx.inboxName || 'Inbox'}</span>
-                                </SidebarMenuSubButton>
-                              </SidebarMenuSubItem>
-                            );
-                          })}
+                          {!inboxes ? (
+                            // Skeleton para evitar "sumir e reaparecer"
+                            <div className="space-y-2 px-3 py-2">
+                              <div className="h-6 rounded bg-muted animate-pulse" />
+                              <div className="h-6 rounded bg-muted animate-pulse" />
+                              <div className="h-6 rounded bg-muted animate-pulse" />
+                            </div>
+                          ) : (
+                            inboxes.map((cx: any) => {
+                              const channel = (cx.channelType || '').toLowerCase();
+                              const isInstagram = channel.includes('instagram');
+                              const Icon = isInstagram ? Instagram : MessageCircle; // WhatsApp/Outros
+                              const isActive = isInboxActive(cx.id);
+                              const targetHref = `/admin/mtf-diamante/inbox/${cx.id}`;
+                              const handleClick = (e: React.MouseEvent) => {
+                                e.preventDefault();
+                                startTransition(() => {
+                                  router.push(targetHref);
+                                });
+                              };
+                              
+                              const handleMouseEnter = () => {
+                                prefetchInbox(cx.id).catch(() => {});
+                                try { router.prefetch(targetHref); } catch {}
+                              };
+                              return (
+                                <SidebarMenuSubItem key={cx.id}>
+                                  <SidebarMenuSubButton
+                                    href={targetHref}
+                                    onClick={handleClick}
+                                    onMouseEnter={handleMouseEnter}
+                                    className={`text-[0.95rem] py-2 transition-colors ${
+                                      isActive ? 'bg-accent' : 'hover:bg-accent'
+                                    } ${isPending ? 'opacity-75' : ''}`}
+                                  >
+                                    <Icon className={isInstagram ? 'text-pink-500' : 'text-green-500'} />
+                                    <span className="font-medium">{cx.nome || cx.inboxName || 'Inbox'}</span>
+                                  </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                              );
+                            })
+                          )}
                         </SidebarMenuSub>
                         <AdicionarCaixaDialog
-                          onCaixaAdicionada={refreshInboxes}
+                          onCaixaAdicionada={refreshCaixas}
                           caixasConfiguradas={inboxes}
                           trigger={
                             <SidebarMenuButton className="mt-2 text-base py-3">
@@ -252,7 +269,16 @@ export function AppAdminDashboard() {
                               <SidebarMenuSubItem>
                                 <SidebarMenuSubButton
                                   href="/admin/capitao"
-                                  className="text-[0.95rem] py-2"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    startTransition(() => {
+                                      router.push('/admin/capitao');
+                                    });
+                                  }}
+                                  onMouseEnter={() => {
+                                    try { router.prefetch('/admin/capitao'); } catch {}
+                                  }}
+                                  className={`text-[0.95rem] py-2 transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
                                 >
                                   <Bot className="text-blue-500" />
                                   <span className="font-medium">Assistentes</span>
@@ -261,7 +287,16 @@ export function AppAdminDashboard() {
                               <SidebarMenuSubItem>
                                 <SidebarMenuSubButton
                                   href="/admin/capitao/documentos"
-                                  className="text-[0.95rem] py-2"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    startTransition(() => {
+                                      router.push('/admin/capitao/documentos');
+                                    });
+                                  }}
+                                  onMouseEnter={() => {
+                                    try { router.prefetch('/admin/capitao/documentos'); } catch {}
+                                  }}
+                                  className={`text-[0.95rem] py-2 transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
                                 >
                                   <FileText className="text-gray-600" />
                                   <span className="font-medium">Documentos</span>
@@ -270,7 +305,16 @@ export function AppAdminDashboard() {
                               <SidebarMenuSubItem>
                                 <SidebarMenuSubButton
                                   href="/admin/capitao/faqs"
-                                  className="text-[0.95rem] py-2"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    startTransition(() => {
+                                      router.push('/admin/capitao/faqs');
+                                    });
+                                  }}
+                                  onMouseEnter={() => {
+                                    try { router.prefetch('/admin/capitao/faqs'); } catch {}
+                                  }}
+                                  className={`text-[0.95rem] py-2 transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
                                 >
                                   <HelpCircle className="text-gray-600" />
                                   <span className="font-medium">FAQs</span>
@@ -279,7 +323,16 @@ export function AppAdminDashboard() {
                               <SidebarMenuSubItem>
                                 <SidebarMenuSubButton
                                   href="/admin/capitao/intents"
-                                  className="text-[0.95rem] py-2"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    startTransition(() => {
+                                      router.push('/admin/capitao/intents');
+                                    });
+                                  }}
+                                  onMouseEnter={() => {
+                                    try { router.prefetch('/admin/capitao/intents'); } catch {}
+                                  }}
+                                  className={`text-[0.95rem] py-2 transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
                                 >
                                   <Settings className="text-gray-600" />
                                   <span className="font-medium">Intenções (IA)</span>
@@ -360,145 +413,280 @@ export function AppAdminDashboard() {
                 {isSuperAdmin && (
                   <>
                     <SidebarMenuItem>
-                      <SidebarMenuButton asChild>
-                        <Link href="/admin/notifications" className="flex items-center">
-                          <Bell className="mr-2" />
-                          {state !== "collapsed" && <span>Notificações</span>}
-                        </Link>
+                      <SidebarMenuButton
+                        onClick={(e) => {
+                          e.preventDefault();
+                          startTransition(() => {
+                            router.push('/admin/notifications');
+                          });
+                        }}
+                        onMouseEnter={() => {
+                          try { router.prefetch('/admin/notifications'); } catch {}
+                        }}
+                        className={`flex items-center transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
+                      >
+                        <Bell className="mr-2" />
+                        {state !== "collapsed" && <span>Notificações</span>}
                       </SidebarMenuButton>
                     </SidebarMenuItem>
 
                     <SidebarMenuItem>
-                      <SidebarMenuButton asChild>
-                        <Link href="/admin/users" className="flex items-center">
-                          <Users className="mr-2" />
-                          {state !== "collapsed" && <span>Usuários</span>}
-                        </Link>
+                      <SidebarMenuButton
+                        onClick={(e) => {
+                          e.preventDefault();
+                          startTransition(() => {
+                            router.push('/admin/users');
+                          });
+                        }}
+                        onMouseEnter={() => {
+                          try { router.prefetch('/admin/users'); } catch {}
+                        }}
+                        className={`flex items-center transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
+                      >
+                        <Users className="mr-2" />
+                        {state !== "collapsed" && <span>Usuários</span>}
                       </SidebarMenuButton>
                     </SidebarMenuItem>
 
                     <SidebarMenuItem>
-                      <SidebarMenuButton asChild>
-                        <Link href="/admin/monitoring/dashboard" className="flex items-center">
-                          <Shield className="mr-2" />
-                          {state !== "collapsed" && <span>Monitoramento</span>}
-                        </Link>
+                      <SidebarMenuButton
+                        onClick={(e) => {
+                          e.preventDefault();
+                          startTransition(() => {
+                            router.push('/admin/monitoring/dashboard');
+                          });
+                        }}
+                        onMouseEnter={() => {
+                          try { router.prefetch('/admin/monitoring/dashboard'); } catch {}
+                        }}
+                        className={`flex items-center transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
+                      >
+                        <Shield className="mr-2" />
+                        {state !== "collapsed" && <span>Monitoramento</span>}
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   </>
                 )}
 
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <Link href="/admin/leads-chatwit" className="flex items-center">
-                      <MessageCircle className="mr-2" />
-                      {state !== "collapsed" && <span>Leads Chatwit</span>}
-                    </Link>
+                  <SidebarMenuButton
+                    onClick={(e) => {
+                      e.preventDefault();
+                      startTransition(() => {
+                        router.push('/admin/leads-chatwit');
+                      });
+                    }}
+                    onMouseEnter={() => {
+                      try { router.prefetch('/admin/leads-chatwit'); } catch {}
+                    }}
+                    className={`flex items-center transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
+                  >
+                    <MessageCircle className="mr-2" />
+                    {state !== "collapsed" && <span>Leads Chatwit</span>}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
 
                 {/* ChatwitIA */}
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <Link href="/chatwitia" className="flex items-center">
-                      <Atom className="mr-2" />
-                      {state !== "collapsed" && <span>ChatwitIA</span>}
-                    </Link>
+                  <SidebarMenuButton
+                    onClick={(e) => {
+                      e.preventDefault();
+                      startTransition(() => {
+                        router.push('/chatwitia');
+                      });
+                    }}
+                    onMouseEnter={() => {
+                      try { router.prefetch('/chatwitia'); } catch {}
+                    }}
+                    className={`flex items-center transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
+                  >
+                    <Atom className="mr-2" />
+                    {state !== "collapsed" && <span>ChatwitIA</span>}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
 
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <Link href="/admin/disparo-oab" className="flex items-center">
-                      <Users className="mr-2" />
-                      {state !== "collapsed" && <span>Disparo OAB</span>}
-                    </Link>
+                  <SidebarMenuButton
+                    onClick={(e) => {
+                      e.preventDefault();
+                      startTransition(() => {
+                        router.push('/admin/disparo-oab');
+                      });
+                    }}
+                    onMouseEnter={() => {
+                      try { router.prefetch('/admin/disparo-oab'); } catch {}
+                    }}
+                    className={`flex items-center transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
+                  >
+                    <Users className="mr-2" />
+                    {state !== "collapsed" && <span>Disparo OAB</span>}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
 
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <Link href="/admin/templates" className="flex items-center">
-                      <HelpCircle className="mr-2" />
-                      {state !== "collapsed" && <span>Templates WhatsApp</span>}
-                    </Link>
+                  <SidebarMenuButton
+                    onClick={(e) => {
+                      e.preventDefault();
+                      startTransition(() => {
+                        router.push('/admin/templates');
+                      });
+                    }}
+                    onMouseEnter={() => {
+                      try { router.prefetch('/admin/templates'); } catch {}
+                    }}
+                    className={`flex items-center transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
+                  >
+                    <HelpCircle className="mr-2" />
+                    {state !== "collapsed" && <span>Templates WhatsApp</span>}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
 
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <Link href="/admin/disparo-em-massa" className="flex items-center">
-                      <Zap className="mr-2" />
-                      {state !== "collapsed" && <span>Disparo em Massa</span>}
-                    </Link>
+                  <SidebarMenuButton
+                    onClick={(e) => {
+                      e.preventDefault();
+                      startTransition(() => {
+                        router.push('/admin/disparo-em-massa');
+                      });
+                    }}
+                    onMouseEnter={() => {
+                      try { router.prefetch('/admin/disparo-em-massa'); } catch {}
+                    }}
+                    className={`flex items-center transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
+                  >
+                    <Zap className="mr-2" />
+                    {state !== "collapsed" && <span>Disparo em Massa</span>}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
 
                 {/* Teste de Webhook */}
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <Link href="/admin/webhook-test" className="flex items-center">
-                      <FlaskConical className="mr-2" />
-                      {state !== "collapsed" && <span>Teste de Webhook</span>}
-                    </Link>
+                  <SidebarMenuButton
+                    onClick={(e) => {
+                      e.preventDefault();
+                      startTransition(() => {
+                        router.push('/admin/webhook-test');
+                      });
+                    }}
+                    onMouseEnter={() => {
+                      try { router.prefetch('/admin/webhook-test'); } catch {}
+                    }}
+                    className={`flex items-center transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
+                  >
+                    <FlaskConical className="mr-2" />
+                    {state !== "collapsed" && <span>Teste de Webhook</span>}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
 
                 {/* Teste OpenAI Responses API */}
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <Link href="/admin/openai-source-test" className="flex items-center">
-                      <Atom className="mr-2" />
-                      {state !== "collapsed" && <span>Teste OpenAI Responses</span>}
-                    </Link>
+                  <SidebarMenuButton
+                    onClick={(e) => {
+                      e.preventDefault();
+                      startTransition(() => {
+                        router.push('/admin/openai-source-test');
+                      });
+                    }}
+                    onMouseEnter={() => {
+                      try { router.prefetch('/admin/openai-source-test'); } catch {}
+                    }}
+                    className={`flex items-center transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
+                  >
+                    <Atom className="mr-2" />
+                    {state !== "collapsed" && <span>Teste OpenAI Responses</span>}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
 
                 {/* Respostas Rápidas (Flash Intent) */}
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <Link href="/admin/resposta-rapida" className="flex items-center">
-                      <Zap className="mr-2" />
-                      {state !== "collapsed" && <span>Respostas Rápidas</span>}
-                    </Link>
+                  <SidebarMenuButton
+                    onClick={(e) => {
+                      e.preventDefault();
+                      startTransition(() => {
+                        router.push('/admin/resposta-rapida');
+                      });
+                    }}
+                    onMouseEnter={() => {
+                      try { router.prefetch('/admin/resposta-rapida'); } catch {}
+                    }}
+                    className={`flex items-center transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
+                  >
+                    <Zap className="mr-2" />
+                    {state !== "collapsed" && <span>Respostas Rápidas</span>}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
 
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <Link href="/admin/queue" className="flex items-center">
-                      <Calendar className="mr-2" />
-                      {state !== "collapsed" && <span>Fila de Processamento</span>}
-                    </Link>
+                  <SidebarMenuButton
+                    onClick={(e) => {
+                      e.preventDefault();
+                      startTransition(() => {
+                        router.push('/admin/queue');
+                      });
+                    }}
+                    onMouseEnter={() => {
+                      try { router.prefetch('/admin/queue'); } catch {}
+                    }}
+                    className={`flex items-center transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
+                  >
+                    <Calendar className="mr-2" />
+                    {state !== "collapsed" && <span>Fila de Processamento</span>}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
 
                 {isSuperAdmin && (
                   <>
                     <SidebarMenuItem>
-                      <SidebarMenuButton asChild>
-                        <Link href="/admin/ai-integration" className="flex items-center">
-                          <Brain className="mr-2" />
-                          {state !== "collapsed" && <span>IA Integration</span>}
-                        </Link>
+                      <SidebarMenuButton
+                        onClick={(e) => {
+                          e.preventDefault();
+                          startTransition(() => {
+                            router.push('/admin/ai-integration');
+                          });
+                        }}
+                        onMouseEnter={() => {
+                          try { router.prefetch('/admin/ai-integration'); } catch {}
+                        }}
+                        className={`flex items-center transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
+                      >
+                        <Brain className="mr-2" />
+                        {state !== "collapsed" && <span>IA Integration</span>}
                       </SidebarMenuButton>
                     </SidebarMenuItem>
 
                     <SidebarMenuItem>
-                      <SidebarMenuButton asChild>
-                        <Link href="/admin/ai-integration/intents" className="flex items-center">
-                          <Settings className="mr-2" />
-                          {state !== "collapsed" && <span>Gerenciar Intents</span>}
-                        </Link>
+                      <SidebarMenuButton
+                        onClick={(e) => {
+                          e.preventDefault();
+                          startTransition(() => {
+                            router.push('/admin/ai-integration/intents');
+                          });
+                        }}
+                        onMouseEnter={() => {
+                          try { router.prefetch('/admin/ai-integration/intents'); } catch {}
+                        }}
+                        className={`flex items-center transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
+                      >
+                        <Settings className="mr-2" />
+                        {state !== "collapsed" && <span>Gerenciar Intents</span>}
                       </SidebarMenuButton>
                     </SidebarMenuItem>
 
                     <SidebarMenuItem>
-                      <SidebarMenuButton asChild>
-                        <Link href="/admin/ai-integration/queues" className="flex items-center">
-                          <Activity className="mr-2" />
-                          {state !== "collapsed" && <span>Gerenciar Filas</span>}
-                        </Link>
+                      <SidebarMenuButton
+                        onClick={(e) => {
+                          e.preventDefault();
+                          startTransition(() => {
+                            router.push('/admin/ai-integration/queues');
+                          });
+                        }}
+                        onMouseEnter={() => {
+                          try { router.prefetch('/admin/ai-integration/queues'); } catch {}
+                        }}
+                        className={`flex items-center transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
+                      >
+                        <Activity className="mr-2" />
+                        {state !== "collapsed" && <span>Gerenciar Filas</span>}
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   </>

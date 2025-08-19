@@ -8,6 +8,7 @@ import { ArrowLeft, RefreshCw, BarChart3, Zap } from 'lucide-react';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
+import { toast } from 'sonner';
 import {
   Collapsible,
   CollapsibleContent,
@@ -189,17 +190,36 @@ export default function GlobalIntentsPage() {
         body: JSON.stringify({ name, description, similarityThreshold })
       });
       if (r.ok) {
+        toast.success("Intenção criada com sucesso!");
         setName('');
         setDescription('');
         setThreshold(0.8);
         await load();
+      } else {
+        const errorData = await r.json().catch(() => ({}));
+        toast.error(errorData.error || "Erro ao criar intenção");
       }
-    } finally { setSaving(false); }
+    } catch (error) {
+      console.error("Error creating intent:", error);
+      toast.error("Erro ao criar intenção");
+    } finally { 
+      setSaving(false); 
+    }
   };
 
   const remove = async (id: string) => {
-    await fetch(`/api/admin/ai-integration/intents?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
-    await load();
+    try {
+      const r = await fetch(`/api/admin/ai-integration/intents?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (r.ok) {
+        toast.success("Intenção removida com sucesso!");
+        await load();
+      } else {
+        toast.error("Erro ao remover intenção");
+      }
+    } catch (error) {
+      console.error("Error removing intent:", error);
+      toast.error("Erro ao remover intenção");
+    }
   };
 
   const openEdit = (i: Intent) => {
@@ -222,10 +242,15 @@ export default function GlobalIntentsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, name: editName, description: editDescription, similarityThreshold: editThreshold })
       });
-      if (!r.ok) {
+      if (r.ok) {
+        toast.success("Intenção atualizada com sucesso!");
+      } else {
+        toast.error("Erro ao atualizar intenção");
         await load();
       }
-    } catch {
+    } catch (error) {
+      console.error("Error updating intent:", error);
+      toast.error("Erro ao atualizar intenção");
       await load();
     } finally {
       setEditTarget(null);

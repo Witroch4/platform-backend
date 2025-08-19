@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -29,17 +29,12 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { toast } from "sonner";
-import { EnhancedTextArea } from "./EnhancedTextArea";
-import { TemplatePreview } from "./TemplatesTab/components/template-preview";
-import { useVariableManager } from "@/hooks/useVariableManager";
 import { useSession } from "next-auth/react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import MinIOMediaUpload from "./shared/MinIOMediaUpload";
-import { ButtonManager } from "./shared/ButtonManager";
 import InteractiveMessageCreator from "./InteractiveMessageCreator";
 import type { InteractiveMessageType } from "./interactive-message-creator/types";
-import { InteractiveMessageTypeSelector } from "./InteractiveMessageTypeSelector";
+import { useMtfData } from "@/app/admin/mtf-diamante/context/MtfDataProvider";
   import {
     Dialog,
     DialogContent,
@@ -71,13 +66,121 @@ interface Mensagem {
   botoes: Botao[];
 }
 
+type AnyMsg = any;
+
+const pick = (...vals: any[]) =>
+  vals.find(v => typeof v === "string" && v.trim().length > 0);
+
+// 🛠️ Versão mais agressiva que cobre todos os caminhos possíveis
+const normalizeMessage = (m: AnyMsg): Mensagem => {
+  // header/footer/action em múltiplos caminhos
+  const header =
+    m.header ??
+    m.content?.header ??
+    m.interactiveContent?.header ??
+    null;
+
+  const footer =
+    m.footer ??
+    m.content?.footer ??
+    m.interactiveContent?.footer ??
+    null;
+
+  const action =
+    m.action ??
+    m.content?.action ??
+    m.interactiveContent?.action ??
+    null;
+
+  // coleciona possíveis fontes de botões
+  const candidates: any[] = [];
+  if (Array.isArray(action?.buttons)) candidates.push(...action.buttons);
+  if (Array.isArray(m.botoes)) candidates.push(...m.botoes);
+  if (Array.isArray(m.content?.action?.buttons))
+    candidates.push(...m.content.action.buttons);
+  if (Array.isArray(m.actionReplyButton?.buttons))
+    candidates.push(...m.actionReplyButton.buttons);
+  if (Array.isArray(m.interactiveContent?.actionReplyButton?.buttons))
+    candidates.push(...m.interactiveContent.actionReplyButton.buttons);
+  if (Array.isArray(m.content?.interactiveContent?.actionReplyButton?.buttons))
+    candidates.push(...m.content.interactiveContent.actionReplyButton.buttons);
+
+  // remove duplicados por id
+  const seen = new Map<string, any>();
+  for (const b of candidates) {
+    const key = b?.id || b?.reply?.id || JSON.stringify(b);
+    if (!seen.has(key)) seen.set(key, b);
+  }
+  const botoes: Botao[] = Array.from(seen.values()).map((b: any) => ({
+    id: b?.id || b?.reply?.id,
+    titulo: b?.title || b?.reply?.title || b?.text || b?.titulo || "",
+  }));
+
+  // nome e texto vindos de vários lugares
+  const nome =
+    pick(
+      m.name,
+      m.nome,
+      m.title,
+      m.titulo,
+      m.displayName,
+      m.content?.name,
+      m.content?.titulo
+    ) || "";
+
+  const texto =
+    pick(
+      m.body?.text,
+      m.texto,
+      m.content?.body?.text,
+      m.interactiveContent?.body?.text,
+      m.message,
+      m.description
+    ) || "";
+
+  const headerTipo =
+    header?.type ?? m.headerTipo ?? null;
+
+  const headerConteudo =
+    pick(
+      header?.content,
+      (header as any)?.text,
+      (header as any)?.media_url,
+      m.headerConteudo
+    ) ?? null;
+
+  const rodape = pick(footer?.text, m.rodape) ?? null;
+
+  return {
+    id: m.id,
+    nome,
+    texto,
+    headerTipo,
+    headerConteudo,
+    rodape,
+    botoes,
+  };
+};
+
 const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
+  const { interactiveMessages, caixas, refreshCaixas } = useMtfData();
   const [currentView, setCurrentView] = useState<"list" | "create" | "edit">(
     "list"
   );
   const [editingMessage, setEditingMessage] = useState<any>(null);
-  const [mensagens, setMensagens] = useState<Mensagem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const mensagens = useMemo<Mensagem[]>(
+    () => (interactiveMessages ?? []).map(normalizeMessage),
+    [interactiveMessages]
+  );
+
+  // Debug temporário para verificar o shape dos dados
+  useEffect(() => {
+    if (interactiveMessages) {
+      console.log("[DEBUG] interactiveMessages sample:", interactiveMessages[0]);
+      console.log("[DEBUG] mensagens normalizadas:", mensagens[0]);
+    }
+  }, [interactiveMessages, mensagens]);
+  const loading = !interactiveMessages; // opcional; ou use um Skeleton quando vazio
 
   // Import/Export state
   const [importDialogOpen, setImportDialogOpen] = useState(false);
@@ -90,28 +193,12 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
   // Delete confirmation dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [inboxChannelType, setInboxChannelType] = useState<string | null>(null);
+  const channelType = useMemo(
+    () => caixas?.find((c: any) => c.id === caixaId)?.channelType ?? null,
+    [caixas, caixaId]
+  );
 
-  const fetchMensagens = async () => {
-    if (!caixaId) return;
-    try {
-      setLoading(true);
-      const response = await fetch(
-        `/api/admin/mtf-diamante/interactive-messages?caixaId=${caixaId}`
-      );
-      if (!response.ok) throw new Error("Falha ao buscar mensagens.");
-      const data = await response.json();
-      setMensagens(data);
-    } catch (err: any) {
-      toast.error(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchMensagens();
-  }, [caixaId]);
+  // Dados já vêm do contexto via useMemo - não precisa espelhar estado
 
   const handleEdit = (msg: any) => {
     // Detect type from msg (API provides msg.type and msg.content?.type)
@@ -147,8 +234,8 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
         displayText: actionData.displayText || actionData.display_text || actionData.cta_text || '',
         url: actionData.url || actionData.cta_url || '',
       };
-    } else if ((msg.botoes && msg.botoes.length > 0) || Array.isArray(msg?.content?.action?.buttons)) {
-      const buttonsSrc = Array.isArray(msg?.content?.action?.buttons) ? msg.content.action.buttons : msg.botoes;
+    } else if ((msg.botoes?.length || 0) > 0 || Array.isArray(msg?.content?.action?.buttons)) {
+      const buttonsSrc = Array.isArray(msg?.content?.action?.buttons) ? msg.content.action.buttons : msg.botoes || [];
       base.action = {
         type: 'button' as const,
         buttons: (buttonsSrc || []).map((b: any) => ({
@@ -180,7 +267,7 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
         throw new Error(errorData.error || "Falha ao excluir mensagem.");
       }
       toast.success("Mensagem excluída com sucesso!");
-      fetchMensagens();
+      await refreshCaixas(); // força revalidação imediata
     } catch (error) {
       toast.error((error as Error).message);
     }
@@ -210,13 +297,14 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
         }
       : undefined;
 
-    const action = (msg.botoes && msg.botoes.length > 0)
-      ? { buttons: msg.botoes.map((b) => ({ id: b.id || `btn_${Date.now()}`, title: (b as any).title || b.titulo || "" })) }
-      : undefined;
+          const hasButtons = (msg.botoes?.length || 0) > 0;
+      const action = hasButtons
+        ? { buttons: msg.botoes?.map((b) => ({ id: b.id || `btn_${Date.now()}`, title: (b as any).title || b.titulo || "" })) }
+        : undefined;
 
     return {
       name: msg.nome,
-      type: action ? "button" : "button", // mantemos como button na exportação atual
+      type: hasButtons ? "button" : "text",
       header,
       body: { text: msg.texto || "" },
       footer: msg.rodape ? { text: msg.rodape } : undefined,
@@ -335,18 +423,7 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
     return { ...action, buttons: newButtons };
   };
 
-  const fetchInboxChannelType = async (): Promise<string | null> => {
-    try {
-      // Busca todas as caixas do usuário e encontra a atual
-      const resp = await fetch(`/api/admin/mtf-diamante/dialogflow/caixas`);
-      if (!resp.ok) return null;
-      const data = await resp.json();
-      const caixa = (data?.caixas || []).find((c: any) => c.id === caixaId);
-      return caixa?.channelType || null;
-    } catch {
-      return null;
-    }
-  };
+  // channelType já vem do contexto via useMemo - não precisa fetch separado
 
   const handleImportNow = async () => {
     if (!caixaId) {
@@ -364,9 +441,7 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
     }
     setImporting(true);
     try {
-      // Descobrir o channelType da inbox alvo
-      const channelType = inboxChannelType || (await fetchInboxChannelType());
-      if (channelType && channelType !== inboxChannelType) setInboxChannelType(channelType);
+      // Usa o channelType do contexto
       const prefix = channelType === 'Channel::Instagram' ? 'ig_' : '';
 
       const results = await Promise.allSettled(
@@ -398,7 +473,7 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
       }
       setImportDialogOpen(false);
       setParsedMessages([]);
-      await fetchMensagens();
+      await refreshCaixas();
     } catch (e: any) {
       toast.error(e.message || "Erro na importação.");
     } finally {
@@ -410,7 +485,7 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
     toast.success("Mensagem salva com sucesso!");
     setCurrentView("list");
     setEditingMessage(null);
-    fetchMensagens();
+    // Dados serão atualizados automaticamente via SWR
   };
 
   const handleBackToList = () => {
@@ -509,31 +584,33 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
           )}
 
           <div className="space-y-3">
-            {mensagens.map((msg) => (
-              <div
-                key={msg.id}
-                className="border border-border p-4 rounded-lg flex justify-between items-start hover:bg-accent/50 transition-colors"
-              >
+            {(mensagens ?? []).map((msg) => {
+              if (!msg) return null;
+              return (
+                <div
+                  key={msg.id}
+                  className="border border-border p-4 rounded-lg flex justify-between items-start hover:bg-accent/50 transition-colors"
+                >
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="font-medium text-foreground">
-                      {msg.nome}
+                      {(msg.nome || "").trim() || "(sem nome)"}
                     </span>
                     <Badge variant="outline" className="text-xs">
                       {msg.headerTipo
                         ? `${msg.headerTipo.toUpperCase()} + `
                         : ""}
-                      {msg.botoes.length > 0
-                        ? `${msg.botoes.length} BOTÕES`
+                      {((msg.botoes ?? []).length || 0) > 0
+                        ? `${(msg.botoes ?? []).length || 0} BOTÕES`
                         : "TEXTO"}
                     </Badge>
                   </div>
                   <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
-                    {msg.texto}
+                    {(msg.texto || "").trim() || "—"}
                   </p>
-                  {msg.botoes.length > 0 && (
+                  {((msg.botoes ?? []).length || 0) > 0 && (
                     <div className="flex gap-1 flex-wrap">
-                      {msg.botoes.map((botao, idx) => (
+                      {(msg.botoes ?? []).map((botao, idx) => (
                         <Badge
                           key={idx}
                           variant="secondary"
@@ -566,9 +643,10 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
                   </Button>
                 </div>
               </div>
-            ))}
+            );
+            })}
 
-            {!loading && mensagens.length === 0 && (
+            {!loading && ((mensagens ?? []).length || 0) === 0 && (
               <div className="text-center text-muted-foreground py-12">
                 <MessageSquare className="h-16 w-16 mx-auto mb-4 opacity-50" />
                 <p className="text-lg font-medium">

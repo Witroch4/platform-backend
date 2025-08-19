@@ -317,8 +317,15 @@ function Playground({
 }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [channelType, setChannelType] = useState<'whatsapp' | 'instagram' | 'facebook'>('whatsapp');
+  const [embedipreview, setEmbedipreview] = useState(true);
   const [history, setHistory] = useState<
-    { role: "user" | "assistant"; content: string }[]
+    { 
+      role: "user" | "assistant"; 
+      content: string;
+      response?: any;
+      metrics?: any;
+    }[]
   >([]);
 
   const send = async () => {
@@ -328,73 +335,122 @@ function Playground({
     setHistory((h) => [...h, { role: "user", content: text }]);
     setLoading(true);
     try {
-      const r = await fetch("/api/chatwitia", {
+      const r = await fetch("/api/admin/playground/socialwise-flow", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: [
-            {
-              role: "system",
-              content: [
-                `Você é o Capitão do assistente ${assistantId}.`,
-                (instructions || "").trim(),
-              ]
-                .filter(Boolean)
-                .join("\n\n"),
-            },
-            ...history.map((m) => ({ role: m.role, content: m.content })),
-            { role: "user", content: text },
-          ],
-          model,
-          stream: true,
-          captainPlayground: true,
+          userText: text,
+          channelType,
+          assistantId,
+          embedipreview
         }),
       });
-      if (!r.ok || !r.body) throw new Error("sem corpo");
-      const reader = r.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let assembled = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
-          try {
-            const evt = JSON.parse(trimmed);
-            if (evt.type === "chunk" && typeof evt.content === "string") {
-              assembled += evt.content;
-            } else if (evt.type === "done") {
-              if (!assembled && evt.response?.content)
-                assembled = evt.response.content;
-            }
-          } catch {}
-        }
+      
+      if (!r.ok) {
+        const errorData = await r.json();
+        throw new Error(errorData.error || 'Erro na requisição');
       }
-      setHistory((h) => [
-        ...h,
-        { role: "assistant", content: assembled || "(sem conteúdo)" },
-      ]);
+      
+      const result = await r.json();
+      
+      if (result.success) {
+        setHistory((h) => [
+          ...h,
+          { 
+            role: "assistant", 
+            content: formatResponseForDisplay(result.response, channelType),
+            response: result.response,
+            metrics: result.metrics
+          },
+        ]);
+      } else {
+        throw new Error(result.error || 'Resposta inválida');
+      }
     } catch (e: any) {
       setHistory((h) => [
         ...h,
-        { role: "assistant", content: "Erro ao consultar o modelo." },
+        { role: "assistant", content: `Erro: ${e.message}` },
       ]);
     } finally {
       setLoading(false);
     }
   };
 
+  const formatResponseForDisplay = (response: any, channel: string) => {
+    if (response.action === 'handoff') {
+      return '🔄 **Transferindo para atendente humano**';
+    }
+
+    let text = '';
+    let buttons: any[] = [];
+
+    // Extrair texto e botões baseado no canal
+    if (channel === 'whatsapp' && response.whatsapp) {
+      if (response.whatsapp.type === 'text') {
+        text = response.whatsapp.text?.body || '';
+      } else if (response.whatsapp.type === 'interactive') {
+        text = response.whatsapp.interactive?.body?.text || '';
+        buttons = response.whatsapp.interactive?.action?.buttons || [];
+      }
+    } else if (channel === 'instagram' && response.instagram) {
+      text = response.instagram.message?.text || '';
+      if (response.instagram.message?.attachment?.payload?.buttons) {
+        buttons = response.instagram.message.attachment.payload.buttons;
+      }
+    } else if (channel === 'facebook' && response.facebook) {
+      text = response.facebook.message?.text || '';
+    } else if (response.text) {
+      text = response.text;
+    }
+
+    // Formatar para exibição
+    let display = text;
+    
+    if (buttons.length > 0) {
+      display += '\n\n**Botões:**';
+      buttons.forEach((btn: any, index: number) => {
+        const title = btn.title || btn.text || `Botão ${index + 1}`;
+        display += `\n🔘 ${title}`;
+      });
+    }
+
+    return display;
+  };
+
   return (
     <div className="border border-border rounded-md p-4 flex flex-col h-[70vh] bg-card shadow-sm">
-      <div className="font-medium mb-2 text-foreground">Playground</div>
+      <div className="font-medium mb-2 text-foreground">Playground SocialWise Flow</div>
       <p className="text-sm text-muted-foreground mb-3">
-        Converse com o assistente e verifique tom e precisão.
+        Teste o fluxo de produção completo com validações de canal e botões.
       </p>
+      
+      {/* Controles de configuração */}
+      <div className="flex gap-4 mb-3 text-sm">
+        <div className="flex items-center gap-2">
+          <label className="text-muted-foreground">Canal:</label>
+          <select 
+            value={channelType} 
+            onChange={(e) => setChannelType(e.target.value as any)}
+            className="px-2 py-1 border border-border rounded bg-background text-foreground"
+          >
+            <option value="whatsapp">WhatsApp</option>
+            <option value="instagram">Instagram</option>
+            <option value="facebook">Facebook</option>
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-muted-foreground">Modo:</label>
+          <select 
+            value={embedipreview ? 'embedding' : 'router'} 
+            onChange={(e) => setEmbedipreview(e.target.value === 'embedding')}
+            className="px-2 py-1 border border-border rounded bg-background text-foreground"
+          >
+            <option value="embedding">Embedding + Bands</option>
+            <option value="router">Router LLM</option>
+          </select>
+        </div>
+      </div>
+      
       <Separator className="mb-3" />
       <div className="flex-1 overflow-auto space-y-2 pr-2">
         {history.length === 0 && (
@@ -405,14 +461,35 @@ function Playground({
         {history.map((m, i) => (
           <div
             key={i}
-            className={`p-2 rounded-md ${m.role === "user" ? "bg-muted/50" : "bg-accent/50"}`}
+            className={`p-3 rounded-md ${m.role === "user" ? "bg-muted/50" : "bg-accent/50"}`}
           >
-            <div className="text-xs font-medium mb-1 text-foreground">
-              {m.role === "user" ? "Você" : "Capitão"}
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-xs font-medium text-foreground">
+                {m.role === "user" ? "Você" : "Capitão"}
+              </div>
+              {m.role === "assistant" && m.metrics && (
+                <div className="flex gap-2 text-xs">
+                  <Badge variant="outline" className="text-xs">
+                    {m.metrics.band}
+                  </Badge>
+                  <Badge variant="secondary" className="text-xs">
+                    {m.metrics.routeTotalMs}ms
+                  </Badge>
+                </div>
+              )}
             </div>
             <div className="whitespace-pre-wrap text-sm text-foreground">
               {m.content}
             </div>
+            {m.role === "assistant" && m.metrics && (
+              <div className="mt-2 pt-2 border-t border-border/50 text-xs text-muted-foreground">
+                <div className="flex gap-4">
+                  <span>Estratégia: {m.metrics.strategy}</span>
+                  {m.metrics.embeddingMs && <span>Embedding: {m.metrics.embeddingMs}ms</span>}
+                  {m.metrics.llmWarmupMs && <span>LLM: {m.metrics.llmWarmupMs}ms</span>}
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -436,7 +513,7 @@ function Playground({
         </Button>
       </div>
       <div className="text-xs text-muted-foreground mt-1">
-        As mensagens enviadas aqui usam os créditos do seu Capitão.
+        ⚡ Usando o motor de produção SocialWise Flow com todas as validações e formatações de canal.
       </div>
     </div>
   );

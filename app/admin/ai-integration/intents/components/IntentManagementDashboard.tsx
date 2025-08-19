@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Plus, Edit, Trash2, RefreshCw, BarChart3, TestTube } from "lucide-react";
+import { toast } from "sonner";
 import IntentForm from "./IntentForm";
 import IntentTestingTool from "./IntentTestingTool";
 import IntentAnalytics from "./IntentAnalytics";
@@ -33,6 +35,8 @@ export default function IntentManagementDashboard() {
   const [showForm, setShowForm] = useState(false);
   const [editingIntent, setEditingIntent] = useState<Intent | null>(null);
   const [activeTab, setActiveTab] = useState("list");
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [intentToDelete, setIntentToDelete] = useState<Intent | null>(null);
 
   useEffect(() => {
     fetchIntents();
@@ -64,21 +68,33 @@ export default function IntentManagementDashboard() {
   };
 
   const handleDeleteIntent = async (intentId: string) => {
-    if (!confirm("Are you sure you want to delete this intent?")) return;
+    const intent = intents.find(i => i.id === intentId);
+    if (intent) {
+      setIntentToDelete(intent);
+      setShowDeleteDialog(true);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!intentToDelete) return;
 
     try {
-      const response = await fetch(`/api/admin/ai-integration/intents/${intentId}`, {
+      const response = await fetch(`/api/admin/ai-integration/intents/${intentToDelete.id}`, {
         method: "DELETE",
       });
 
       if (response.ok) {
+        toast.success("Intenção deletada com sucesso!");
         await fetchIntents();
       } else {
-        alert("Failed to delete intent");
+        toast.error("Erro ao deletar intenção");
       }
     } catch (error) {
       console.error("Error deleting intent:", error);
-      alert("Error deleting intent");
+      toast.error("Erro ao deletar intenção");
+    } finally {
+      setShowDeleteDialog(false);
+      setIntentToDelete(null);
     }
   };
 
@@ -89,14 +105,14 @@ export default function IntentManagementDashboard() {
       });
 
       if (response.ok) {
-        alert("Embedding regeneration queued successfully");
+        toast.success("Regeneração de embedding iniciada com sucesso!");
         await fetchIntents();
       } else {
-        alert("Failed to queue embedding regeneration");
+        toast.error("Erro ao iniciar regeneração de embedding");
       }
     } catch (error) {
       console.error("Error regenerating embedding:", error);
-      alert("Error regenerating embedding");
+      toast.error("Erro ao regenerar embedding");
     }
   };
 
@@ -248,6 +264,27 @@ export default function IntentManagementDashboard() {
           }}
         />
       )}
+
+      {/* Dialog de confirmação de exclusão */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar exclusão</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja deletar a intenção "{intentToDelete?.name}"? 
+              Esta ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete}>
+              Deletar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useMtfData } from "../../context/MtfDataProvider";
 
 // Import existing components
 import { InteractivePreview } from "../shared/InteractivePreview";
@@ -198,23 +199,12 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
     validateOnMount: false,
   });
 
-  // Detect channel type of current inbox to decide button id prefix
-  const [channelType, setChannelType] = useState<string | null>(null);
-  useEffect(() => {
-    const fetchChannelType = async () => {
-      if (!inboxId) return;
-      try {
-        const resp = await fetch(`/api/admin/mtf-diamante/dialogflow/caixas`);
-        if (!resp.ok) return;
-        const data = await resp.json();
-        const caixa = (data?.caixas || []).find((c: any) => c.id === inboxId);
-        if (caixa?.channelType) setChannelType(caixa.channelType);
-      } catch {
-        // ignore errors; fallback to no prefix
-      }
-    };
-    fetchChannelType();
-  }, [inboxId]);
+  // Get channel type from context instead of fetch
+  const { caixas } = useMtfData();
+  const channelType = useMemo(
+    () => caixas?.find((c: any) => c.id === inboxId)?.channelType ?? null,
+    [caixas, inboxId]
+  );
 
   const generatePrefixedId = useCallback((fallbackSuffix: string) => {
     const prefix = channelType === 'Channel::Instagram' ? 'ig_' : '';
@@ -567,7 +557,9 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
 
   // Instagram template type determination
   const getInstagramTemplateType = useCallback(() => {
-    const bodyLength = message.body.text.length;
+    // Safe access to message.body.text with fallback
+    const bodyText = message.body?.text || "";
+    const bodyLength = bodyText.length;
     const hasImage =
       message.header?.type === "image" && message.header?.content;
 
@@ -590,7 +582,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
         reason: `Button Template (${bodyLength} chars: 81-640)`,
       };
     }
-  }, [message.body.text, message.header]);
+  }, [message.body?.text, message.header]);
 
   const instagramTemplate = getInstagramTemplateType();
 
@@ -673,7 +665,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
                 </Label>
                 <Input
                   id="message-name"
-                  value={message.name}
+                  value={message.name || ""}
                   onChange={(e) => handleNameChange(e.target.value)}
                   placeholder="Enter a descriptive name for this message"
                   disabled={disabled}
@@ -688,13 +680,13 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
                   </div>
                   <Badge
                     variant={
-                      message.name.length >
+                      (message.name || "").length >
                       VALIDATION_LIMITS.NAME_MAX_LENGTH * 0.8
                         ? "destructive"
                         : "outline"
                     }
                   >
-                    {message.name.length}/{VALIDATION_LIMITS.NAME_MAX_LENGTH}
+                    {(message.name || "").length}/{VALIDATION_LIMITS.NAME_MAX_LENGTH}
                   </Badge>
                 </div>
                 {!isFieldValid("name") && (

@@ -33,6 +33,9 @@ declare global {
   var redis: any | undefined;
 }
 
+// Flag para controlar se já foi inicializado
+let prismaInitialized = false;
+
 /**
  * Obtém instância singleton do Prisma
  * Persiste durante HMR usando globalThis
@@ -72,7 +75,11 @@ export function getPrismaInstance(): PrismaClient {
       }
     });
 
-    console.log(`🔗 Prisma Client inicializado (${nodeEnv})`);
+    // Log apenas na primeira inicialização real
+    if (!prismaInitialized) {
+      console.log(`🔗 Prisma Client inicializado (${nodeEnv})`);
+      prismaInitialized = true;
+    }
 
     // Log de configuração apenas em staging/desenvolvimento
     /*    if (nodeEnv !== "production") {

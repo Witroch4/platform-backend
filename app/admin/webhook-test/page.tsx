@@ -57,6 +57,8 @@ export default function WebhookTestPage() {
   const [infiniteTestRunning, setInfiniteTestRunning] = useState(false);
   const [idempotencyDisabled, setIdempotencyDisabled] = useState(false);
   const [idempotencyStatus, setIdempotencyStatus] = useState<any>(null);
+  const [sourceId, setSourceId] = useState("wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgUM0FCNDNFNUMzMTJGQjc5RjcyOEQA");
+  const [randomizeSourceId, setRandomizeSourceId] = useState(false);
 
   const DEFAULT_EXTERNAL_DEST =
     "https://moved-chigger-randomly.ngrok-free.app/api/integrations/webhooks/socialwiseflow";
@@ -332,7 +334,12 @@ export default function WebhookTestPage() {
       setLoading(true);
       setResponse(null);
 
-      // Atualizar o número de telefone no payload se foi modificado
+      // Gerar source_id aleatório se habilitado
+      const finalSourceId = randomizeSourceId 
+        ? `wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgU${Math.random().toString(36).substring(2, 15).toUpperCase()}${Math.random().toString(36).substring(2, 15).toUpperCase()}A`
+        : sourceId;
+
+      // Atualizar o número de telefone e source_id no payload se foi modificado
       const updatedPayload = {
         ...payload,
         originalDetectIntentRequest: {
@@ -341,6 +348,7 @@ export default function WebhookTestPage() {
             ...payload.originalDetectIntentRequest.payload,
             contact_phone: phoneNumber,
             contact_source: phoneNumber.replace("+", ""),
+            wamid: finalSourceId,
           },
         },
         session: `projects/msjudicialoab-rxtd/agent/sessions/${phoneNumber.replace("+", "")}`,
@@ -453,6 +461,10 @@ export default function WebhookTestPage() {
   // Funções para criar payloads personalizados
   const createCustomWhatsappPayload = () => {
     const payload = JSON.parse(JSON.stringify(socialwiseWhatsappPayload));
+    const finalSourceId = randomizeSourceId 
+      ? `wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgU${Math.random().toString(36).substring(2, 15).toUpperCase()}${Math.random().toString(36).substring(2, 15).toUpperCase()}A`
+      : sourceId;
+    
     payload.message = userMessage;
     payload.context.message.content = userMessage;
     payload.context.message.processed_message_content = userMessage;
@@ -460,6 +472,7 @@ export default function WebhookTestPage() {
     payload.context.contact_phone = phoneNumber;
     payload.context.contact_source = phoneNumber.replace("+", "");
     payload.session_id = phoneNumber.replace("+", "");
+    payload.context.message.source_id = finalSourceId;
     payload.context["socialwise-chatwit"].contact_data.phone_number = phoneNumber;
     payload.context["socialwise-chatwit"].whatsapp_identifiers.contact_source = phoneNumber.replace("+", "");
     return payload;
@@ -467,6 +480,10 @@ export default function WebhookTestPage() {
 
   const createCustomWhatsappButtonPayload = () => {
     const payload = JSON.parse(JSON.stringify(socialwiseWhatsappButtonPayload));
+    const finalSourceId = randomizeSourceId 
+      ? `wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgU${Math.random().toString(36).substring(2, 15).toUpperCase()}${Math.random().toString(36).substring(2, 15).toUpperCase()}A`
+      : sourceId;
+    
     payload.message = buttonTitle;
     payload.context.message.content = buttonTitle;
     payload.context.message.processed_message_content = buttonTitle;
@@ -481,6 +498,7 @@ export default function WebhookTestPage() {
     payload.context.contact_phone = phoneNumber;
     payload.context.contact_source = phoneNumber.replace("+", "");
     payload.session_id = phoneNumber.replace("+", "");
+    payload.context.message.source_id = finalSourceId;
     payload.context["socialwise-chatwit"].contact_data.phone_number = phoneNumber;
     payload.context["socialwise-chatwit"].whatsapp_identifiers.contact_source = phoneNumber.replace("+", "");
     return payload;
@@ -1718,6 +1736,35 @@ export default function WebhookTestPage() {
                   />
                   <p className="text-xs text-muted-foreground mt-1">
                     ID único do botão Instagram
+                  </p>
+                </div>
+
+                <div>
+                  <label htmlFor="sourceId" className="text-sm font-medium">
+                    Source ID (wamid)
+                  </label>
+                  <Input
+                    id="sourceId"
+                    value={sourceId}
+                    onChange={(e) => setSourceId(e.target.value)}
+                    placeholder="wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgU..."
+                    className="max-w-md"
+                    disabled={randomizeSourceId}
+                  />
+                  <div className="flex items-center space-x-2 mt-2">
+                    <input
+                      type="checkbox"
+                      id="randomizeSourceId"
+                      checked={randomizeSourceId}
+                      onChange={(e) => setRandomizeSourceId(e.target.checked)}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="randomizeSourceId" className="text-sm">
+                      Randomizar Source ID (evita dedup)
+                    </label>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    ID único da mensagem para detecção de duplicatas
                   </p>
                 </div>
               </div>

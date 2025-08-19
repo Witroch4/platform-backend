@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { useMtfData } from '@/app/admin/mtf-diamante/context/MtfDataProvider'
 
 // Import existing components
 import { InteractivePreview } from '../shared/InteractivePreview'
@@ -96,6 +97,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
   disabled = false,
   className
 }) => {
+  const { optimisticUpdateMessage, refreshCaixas } = useMtfData();
   const [saveState, setSaveState] = useState<SaveState>({
     saving: false,
     success: false,
@@ -204,6 +206,37 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
 
       console.log('[ReviewStep] Saving with payload:', JSON.stringify(savePayload, null, 2))
 
+      // 🚀 OPTIMISTIC UPDATE: Atualizar UI imediatamente
+      const optimisticData = {
+        id: editingMessage?.id || `temp-${Date.now()}`,
+        name: message.name,
+        type: message.type,
+        header: message.header,
+        body: message.body,
+        footer: message.footer,
+        action: normalizedAction,
+        interactiveContent: {
+          header: message.header,
+          body: message.body,
+          footer: message.footer,
+          action: normalizedAction
+        },
+        // Compatibilidade v1
+        nome: message.name,
+        texto: message.body.text,
+        headerTipo: message.header?.type,
+        headerConteudo: message.header?.content,
+        rodape: message.footer?.text,
+        botoes: normalizedAction?.buttons?.map((btn: any) => ({
+          id: btn.id,
+          titulo: btn.title
+        })) || []
+      };
+      
+      optimisticUpdateMessage(optimisticData, !!editingMessage);
+      
+      console.log('🚀 [ReviewStep] Optimistic update applied, making API call...');
+
       const response = await fetch(url, {
         method,
         headers: {
@@ -214,14 +247,24 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
 
       if (!response.ok) {
         const errorData = await response.json()
+        // 🔄 REVERT OPTIMISTIC UPDATE: Reverter em caso de erro
+        console.log('❌ [ReviewStep] API failed, reverting optimistic update...');
+        await refreshCaixas(); // Recarregar dados do servidor
         throw new Error(errorData.error || `Failed to ${editingMessage ? 'update' : 'save'} message`)
       }
 
       const result = await response.json()
       
       if (!result.success) {
+        // 🔄 REVERT OPTIMISTIC UPDATE: Reverter em caso de erro
+        console.log('❌ [ReviewStep] Save failed, reverting optimistic update...');
+        await refreshCaixas(); // Recarregar dados do servidor
         throw new Error(result.error || 'Save operation failed')
       }
+
+      // ✅ SUCCESS: Sincronizar com dados reais do servidor
+      console.log('✅ [ReviewStep] Save successful, syncing with server data...');
+      await refreshCaixas(); // Garantir sincronização com dados reais
 
       // Success!
       setSaveState({
@@ -249,6 +292,14 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
     } catch (error) {
       console.error('[ReviewStep] Save error:', error)
       
+      // 🔄 REVERT OPTIMISTIC UPDATE: Reverter em caso de erro
+      console.log('❌ [ReviewStep] Unexpected error, reverting optimistic update...');
+      try {
+        await refreshCaixas(); // Recarregar dados do servidor
+      } catch (refreshError) {
+        console.error('Failed to refresh data after error:', refreshError);
+      }
+      
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred'
       
       setSaveState({
@@ -259,7 +310,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
 
       toast.error(errorMessage)
     }
-  }, [message, reactions, inboxId, editingMessage, onSave, saveState.saving])
+  }, [message, reactions, inboxId, editingMessage, onSave, saveState.saving, optimisticUpdateMessage, refreshCaixas])
 
   // Validation check
   const canSave = useMemo(() => {

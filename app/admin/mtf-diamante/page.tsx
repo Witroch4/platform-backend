@@ -21,7 +21,6 @@ import IntegracoesTab from './components/IntegracoesTab';
 import TemplatesTab from './components/TemplatesTab/index';
 import ConfiguracoesLoteTab from './components/ConfiguracoesLoteTab';
 import { TemplateLibraryTab } from './components/TemplateLibraryTab';
-import { MtfDataProvider } from './context/MtfDataProvider';
  
 
 const MtfDiamanteAtendimentoPage = () => {
@@ -69,33 +68,31 @@ const MtfDiamanteAtendimentoPage = () => {
   }, [tabParam]); // Removida dependência fetchConfig para evitar re-renders
 
   return (
-    <MtfDataProvider>
-      <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-3xl font-bold tracking-tight">MTF Diamante</h2>
-        </div>
-
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="lote">Configurações Globais</TabsTrigger>
-            <TabsTrigger value="templates">Templates Oficiais</TabsTrigger>
-            <TabsTrigger value="library">Template Library</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="lote">
-              {loadingConfig ? <Loader2 className="animate-spin" /> : <ConfiguracoesLoteTab configPadrao={configPadrao} onUpdate={fetchConfig} />}
-          </TabsContent>
-          
-          <TabsContent value="templates">
-              <TemplatesTab />
-          </TabsContent>
-          
-          <TabsContent value="library">
-              <TemplateLibraryTab />
-          </TabsContent>
-        </Tabs>
+    <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-3xl font-bold tracking-tight">MTF Diamante</h2>
       </div>
-    </MtfDataProvider>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="lote">Configurações Globais</TabsTrigger>
+          <TabsTrigger value="templates">Templates Oficiais</TabsTrigger>
+          <TabsTrigger value="library">Template Library</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="lote">
+            {loadingConfig ? <Loader2 className="animate-spin" /> : <ConfiguracoesLoteTab configPadrao={configPadrao} onUpdate={fetchConfig} />}
+        </TabsContent>
+        
+        <TabsContent value="templates">
+            <TemplatesTab />
+        </TabsContent>
+        
+        <TabsContent value="library">
+            <TemplateLibraryTab />
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 };
 
