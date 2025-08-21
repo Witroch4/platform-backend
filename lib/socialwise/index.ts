@@ -53,18 +53,15 @@ export {
 
 // Classification system utilities
 export {
-  classifyWithEmbeddings,
-  routerLLM,
   classifyIntent,
-  prewarmEmbeddings,
-  clearClassificationCache,
-  getClassificationCacheStats,
+  classifyIntentEmbeddingFirst,
+  classifyIntentRouterLLM,
   type ClassificationResult,
-  type RouterDecision,
-  type ClassificationConfig,
-  type AgentClassificationConfig,
-  type IntentCandidate
-} from './classification';
+  type EmbeddingSearchResult
+} from '../socialwise-flow/classification';
+
+// Re-export IntentCandidate from the correct location
+export type { IntentCandidate, AgentConfig } from '@/services/openai';
 
 // Re-export existing utilities
 export * from './assistant';

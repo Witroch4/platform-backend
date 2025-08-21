@@ -1,6 +1,6 @@
-// __tests__/unit/socialwise-flow/low-band-processing.test.ts
+// __tests__/unit/socialwise-flow/router-band-processing.test.ts
 
-import { LowBandProcessor } from '@/lib/socialwise-flow/performance-bands';
+import { RouterBandProcessor } from '@/lib/socialwise-flow/performance-bands';
 import { AgentConfig } from '@/services/openai';
 
 // Mock the OpenAI service
@@ -10,8 +10,8 @@ jest.mock('@/services/openai', () => ({
   }
 }));
 
-describe('LowBandProcessor Unit Tests', () => {
-  let processor: LowBandProcessor;
+describe('RouterBandProcessor Unit Tests', () => {
+  let processor: RouterBandProcessor;
   let mockAgent: AgentConfig;
 
   beforeEach(() => {
@@ -21,7 +21,7 @@ describe('LowBandProcessor Unit Tests', () => {
       tempCopy: 0.3
     };
 
-    processor = new LowBandProcessor(mockAgent);
+    processor = new RouterBandProcessor(mockAgent);
   });
 
   describe('Domain Topic Generation', () => {
@@ -290,7 +290,7 @@ describe('LowBandProcessor Unit Tests', () => {
       expect(averageTime).toBeLessThan(100);
       expect(p95Time).toBeLessThan(200);
       
-      console.log(`LOW band performance - Average: ${averageTime.toFixed(2)}ms, P95: ${p95Time}ms`);
+      console.log(`ROUTER band performance - Average: ${averageTime.toFixed(2)}ms, P95: ${p95Time}ms`);
     });
 
     test('should handle concurrent requests efficiently', async () => {
@@ -503,7 +503,7 @@ describe('LowBandProcessor Unit Tests', () => {
       // Fallback should be very fast
       expect(averageTime).toBeLessThan(50);
       
-      console.log(`LOW band fallback performance - Average: ${averageTime.toFixed(2)}ms`);
+      console.log(`ROUTER band fallback performance - Average: ${averageTime.toFixed(2)}ms`);
     });
   });
 });

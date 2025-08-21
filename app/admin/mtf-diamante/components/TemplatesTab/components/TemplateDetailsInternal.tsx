@@ -1,4 +1,3 @@
-// app/admin/mtf-diamante/templates/[id]/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -37,11 +36,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { SendProgressDialog } from "../../components/TemplatesTab/components/send-progress-dialog";
-import { LeadsSelectorDialog } from "../../components/TemplatesTab/components/leads-selector-dialog";
-import { InteractivePreview } from "../../components/shared/InteractivePreview";
-import { EmojiPicker } from "../../components/shared/EmojiPicker";
-import { WhatsAppTextEditor } from "../../components/shared/WhatsAppTextEditor";
+import { SendProgressDialog } from "./send-progress-dialog";
+import { LeadsSelectorDialog } from "./leads-selector-dialog";
+import { InteractivePreview } from "../../shared/InteractivePreview";
+import { EmojiPicker } from "../../shared/EmojiPicker";
+import { WhatsAppTextEditor } from "../../shared/WhatsAppTextEditor";
 import type {
   InteractiveMessage,
   HeaderType,
@@ -83,76 +82,21 @@ interface TemplateDetail {
   }>;
 }
 
-interface TemplateDetailsPageProps {
-  params: Promise<{
-    id: string;
-  }>;
-  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+interface TemplateDetailsInternalProps {
+  templateId: string;
+  onBackToList?: () => void;
 }
 
-// Server Component para resolver os params
-export default function TemplateDetailsPage({
-  params,
-}: TemplateDetailsPageProps) {
-  return <TemplateDetailsWrapper params={params} />;
-}
-
-// Wrapper para lidar com a Promise dos params
-function TemplateDetailsWrapper({ 
-  params
-}: { 
-  params: Promise<{ id: string }>; 
-}) {
-  const [templateId, setTemplateId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    params.then((resolvedParams) => {
-      console.log("Resolved params:", resolvedParams);
-      setTemplateId(resolvedParams.id);
-    }).catch((err) => {
-      console.error("Error resolving params:", err);
-      setError("Erro ao carregar parâmetros da página");
-    });
-  }, [params]);
-
-  if (error) {
-    return (
-      <div className="flex flex-col justify-center items-center h-[60vh]">
-        <p className="mt-4 text-red-500">{error}</p>
-      </div>
-    );
-  }
-
-  if (!templateId) {
-    return (
-      <div className="flex flex-col justify-center items-center h-[60vh]">
-        <DotLottieReact
-          src="/animations/loading.lottie"
-          autoplay
-          loop
-          style={{ width: 150, height: 150 }}
-          aria-label="Carregando..."
-        />
-        <p className="mt-4 text-muted-foreground">Carregando parâmetros...</p>
-      </div>
-    );
-  }
-
-  return <TemplateDetailsClient templateId={templateId} />;
-}
-
-function TemplateDetailsClient({ 
-  templateId
-}: { 
-  templateId: string; 
-}) {
+export default function TemplateDetailsInternal({ 
+  templateId, 
+  onBackToList 
+}: TemplateDetailsInternalProps) {
   const router = useRouter();
   const [template, setTemplate] = useState<TemplateDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  console.log("TemplateDetailsClient mounted with templateId:", templateId);
+  console.log("TemplateDetailsInternal mounted with templateId:", templateId);
 
   const [testPhoneNumber, setTestPhoneNumber] = useState("");
   // Variáveis do template para preenchimento na página (HEADER/BODY/CUPOM)
@@ -423,7 +367,11 @@ function TemplateDetailsClient({
       });
       if (res.data.success) {
         toast.success("Template excluído");
-        router.push("/admin/mtf-diamante?tab=templates");
+        if (onBackToList) {
+          onBackToList();
+        } else {
+          router.push("/admin/mtf-diamante?tab=templates");
+        }
       } else {
         toast.error(res.data.error);
       }
@@ -703,31 +651,6 @@ function TemplateDetailsClient({
 
   return (
     <div className="max-w-6xl mx-auto py-10 space-y-6">
-      {/* Cabeçalho */}
-      <div className="flex items-center justify-between">
-        <Link href="/admin/mtf-diamante?tab=templates">
-          <Button variant="ghost" size="icon">
-            <ArrowLeft />
-          </Button>
-        </Link>
-        <h1 className="text-2xl font-bold truncate">{template.name}</h1>
-        <div className="space-x-2">
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => setShowDeleteDialog(true)}
-            disabled={isDeleting}
-          >
-            {isDeleting ? (
-              <Loader2 className="animate-spin h-4 w-4 mr-1" />
-            ) : (
-              <Trash2 className="mr-1 h-4 w-4" />
-            )}
-            Excluir
-          </Button>
-        </div>
-      </div>
-
       {/* Conteúdo e envio */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-6">
@@ -864,8 +787,6 @@ function TemplateDetailsClient({
                     </div>
                   )}
 
-                  {/* Cupom já incluído nas variáveis acima quando existir COPY_CODE */}
-
                   <Button
                     onClick={handleTestSend}
                     disabled={isSending || !testPhoneNumber}
@@ -909,6 +830,32 @@ function TemplateDetailsClient({
                 </TabsContent>
               </Tabs>
             </CardContent>
+          </Card>
+        </div>
+        
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span>{template.name}</span>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setShowDeleteDialog(true)}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? (
+                    <Loader2 className="animate-spin h-4 w-4 mr-1" />
+                  ) : (
+                    <Trash2 className="mr-1 h-4 w-4" />
+                  )}
+                  Excluir
+                </Button>
+              </CardTitle>
+              <CardDescription>
+                Categoria: {template.category} | Status: {template.status}
+              </CardDescription>
+            </CardHeader>
           </Card>
         </div>
       </div>

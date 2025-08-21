@@ -1,11 +1,47 @@
+/**
+ * app/api/admin/ai-integration/intents/route.ts
+ *
+ * API de Gerenciamento de Intenções para Integração com IA
+ *
+ * Ciclo completo:
+ * - ✅ Criação de intenções com geração automática de embeddings
+ * - ✅ Atualização com regeneração de embeddings quando descrição mudar
+ * - ✅ Exclusão com limpeza de cache
+ * - ✅ Listagem (GET) com filtros básicos
+ * - ✅ OpenAI Embeddings (text-embedding-3-small, 1536d)
+ * - ✅ Cache: pacote (centroide + aliases) salvo no Redis
+ * - ✅ Fallback: funciona sem OPENAI_API_KEY (sem embeddings)
+ *
+ * Convenção de descrição com aliases (opcional):
+ *
+ *  Descrição livre...
+ *
+ *  ---
+ *  ALIASES:
+ *  quero fazer recurso da prova oab
+ *  recurso oab
+ *  impugnar gabarito oab fgv
+ *  ...
+ *
+ * Observação: a consulta (similaridade) deve ler o pacote do Redis:
+ *   HGETALL ai:intent:{id}:emb  => { model, centroid, aliases, updatedAt }
+ * e usar score = max(cos(q, centroid), ...cos(q, alias_i)).
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { getPrismaInstance } from '@/lib/connections';
+import { getPrismaInstance, getRedisInstance } from '@/lib/connections';
+import { embeddingGenerator } from '@/lib/ai-integration/services/embedding-generator';
 import { createLogger } from '@/lib/utils/logger';
 
 const prisma = getPrismaInstance();
 const logger = createLogger('AI-Intents');
 
+const OPENAI_EMBED_MODEL = 'text-embedding-3-small'; // 1536 dims
+
+// ---------------------------------------------------------------------
+// Helpers de texto/vetores
+// ---------------------------------------------------------------------
 function slugify(value: string): string {
   return value
     .normalize('NFD')
@@ -18,21 +54,12 @@ function slugify(value: string): string {
 async function generateUniqueSlug(baseSlug: string, userId: string): Promise<string> {
   let slug = baseSlug;
   let counter = 1;
-  
-  // Verifica se o slug já existe
   while (true) {
-    const existing = await prisma.intent.findFirst({
-      where: { slug, createdById: userId }
-    });
-    
-    if (!existing) {
-      break;
-    }
-    
+    const existing = await prisma.intent.findFirst({ where: { slug, createdById: userId } });
+    if (!existing) break;
     slug = `${baseSlug}-${counter}`;
     counter++;
   }
-  
   return slug;
 }
 
@@ -48,6 +75,153 @@ async function ensureUserExists(userId: string, fallbackEmail?: string, name?: s
   });
 }
 
+function normalizeText(t: string) {
+  return (t || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/\p{Diacritic}/gu, '')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+function l2norm(v: number[]) { return Math.sqrt(v.reduce((s, x) => s + x * x, 0)) || 1; }
+function l2normalize(v: number[]) { const n = l2norm(v); return v.map(x => x / n); }
+function avg(vs: number[][]) {
+  const out = new Array(vs[0].length).fill(0);
+  for (const v of vs) for (let i = 0; i < v.length; i++) out[i] += v[i];
+  return out.map(x => x / vs.length);
+}
+
+/**
+ * Extrai a descrição base e a lista de aliases (um por linha) de um texto
+ * com a convenção:
+ *
+ *  <descrição>
+ *  ---
+ *  ALIASES:
+ *  alias 1
+ *  alias 2
+ *  ...
+ */
+function extractDescAndAliases(raw: string) {
+  if (!raw) return { base: '', aliases: [] as string[] };
+  const parts = raw.split('\n---\n');
+  const base = (parts[0] || '').trim();
+  const aliases: string[] = [];
+  if (parts[1]) {
+    const lines = parts[1].split(/\n/);
+    let on = false;
+    for (const line of lines) {
+      if (/^\s*aliases\s*:\s*$/i.test(line)) { on = true; continue; }
+      if (on && line.trim()) aliases.push(line.trim());
+    }
+  }
+  return { base, aliases };
+}
+
+/**
+ * Gera pacote de embeddings (centroide + aliases) a partir do name/description.
+ * - Normaliza textos
+ * - Gera embeddings em lote (1 chamada OpenAI)
+ * - L2-normaliza e calcula centroide
+ * - Se não houver aliases, inclui alguns curtos automáticos
+ */
+async function buildEmbeddingsPackage(name: string, description: string | null) {
+  const { base, aliases } = extractDescAndAliases(description || '');
+  const seeds: string[] = [];
+
+  const baseText = base || name || '';
+  if (baseText) seeds.push(normalizeText(baseText));
+
+  for (const a of aliases) {
+    const n = normalizeText(a);
+    if (n && !seeds.includes(n)) seeds.push(n);
+  }
+
+  if (seeds.length === 1) {
+    // Falha de robustez quando só há 1 seed → adiciona curtos automáticos
+    for (const a of ['recurso oab', 'recurso exame da oab', 'recurso fgv']) {
+      if (!seeds.includes(a)) seeds.push(a);
+    }
+  }
+
+  const seedsFinal = Array.from(new Set(seeds)).slice(0, 32); // dedup + limite
+  if (!seedsFinal.length || !process.env.OPENAI_API_KEY) {
+    return { centroid: null as any, aliases: [] as number[][], model: OPENAI_EMBED_MODEL, seedsCount: 0, seedsText: [] as string[] };
+  }
+
+  const r = await fetch('https://api.openai.com/v1/embeddings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
+    body: JSON.stringify({ model: OPENAI_EMBED_MODEL, input: seedsFinal })
+  });
+
+  if (!r.ok) {
+    logger.error('Falha ao obter embeddings (batch)', { status: r.status });
+    return {
+      centroid: null as any,
+      aliases: [] as number[][],
+      model: OPENAI_EMBED_MODEL,
+      seedsCount: 0,
+      seedsText: seedsFinal, // ← mantém consistência e permite prewarm opcional
+    };
+  }
+
+  const j: any = await r.json();
+  const vecsRaw: number[][] = (j?.data || []).map((d: any) => d?.embedding).filter(Array.isArray);
+
+  if (!vecsRaw.length) {
+    logger.warn('Resposta de embedding vazia/inesperada');
+    return {
+      centroid: null as any,
+      aliases: [] as number[][],
+      model: OPENAI_EMBED_MODEL,
+      seedsCount: seedsFinal.length,   // mantém o total real de seeds
+      seedsText: seedsFinal,           // habilita prewarm/observabilidade mesmo sem vetor
+    };
+  }
+
+  const vecs = vecsRaw.map(l2normalize);
+  const centroid = l2normalize(avg(vecs));
+
+  logger.info('Embeddings gerados (batch)', {
+    model: OPENAI_EMBED_MODEL,
+    seeds: seedsFinal.length,
+    dims: centroid.length,
+  });
+
+  return { centroid, aliases: vecs, model: OPENAI_EMBED_MODEL, seedsCount: seedsFinal.length, seedsText: seedsFinal };
+}
+
+/** Salva pacote (centroide + aliases) no Redis */
+async function saveEmbeddingsToRedis(intentId: string, pkg: { centroid: number[], aliases: number[][], model: string, seedsText?: string[] }) {
+  try {
+    const redis = getRedisInstance();
+    await redis.hset(`ai:intent:${intentId}:emb`, {
+      model: pkg.model,
+      centroid: JSON.stringify(pkg.centroid),
+      aliases: JSON.stringify(pkg.aliases),
+      aliases_text: JSON.stringify(pkg.seedsText || []), // ← novo para observabilidade
+      updatedAt: Date.now().toString(),
+    });
+    logger.info('Pacote de embeddings salvo no Redis', { intentId, aliases: pkg.aliases.length });
+  } catch (e: any) {
+    logger.error('Falha ao salvar embeddings no Redis', { intentId, err: e?.message || e });
+  }
+}
+
+/** Remove o pacote do Redis (usado no DELETE) */
+async function deleteEmbeddingsFromRedis(intentId: string) {
+  try {
+    const redis = getRedisInstance();
+    await redis.del(`ai:intent:${intentId}:emb`);
+  } catch (e: any) {
+    logger.error('Falha ao remover embeddings do Redis', { intentId, err: e?.message || e });
+  }
+}
+
+// ---------------------------------------------------------------------
+// Handlers
+// ---------------------------------------------------------------------
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id) {
@@ -82,7 +256,9 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const name = (body?.name || '').trim();
   const description = (body?.description || '').trim();
-  const similarityThreshold = typeof body?.similarityThreshold === 'number' ? Number(body.similarityThreshold) : 0.8;
+  const similarityThreshold = Math.min(1, Math.max(0,
+    typeof body?.similarityThreshold === 'number' ? Number(body.similarityThreshold) : 0.8
+  ));
   const templateId: string | null = body?.templateId || null;
   if (!name) return NextResponse.json({ error: 'Nome é obrigatório' }, { status: 400 });
 
@@ -90,37 +266,34 @@ export async function POST(request: NextRequest) {
   const slug = await generateUniqueSlug(baseSlug, session.user.id);
 
   try {
-    // Verifica se já existe para este usuário
+    // Se já existe do mesmo usuário → atualiza (com re-embed se descrição mudou)
     const existingForUser = await prisma.intent.findFirst({ where: { name, createdById: session.user.id } });
     if (existingForUser) {
-      // opcional: atualizar embedding quando description mudar
       let embedding: any = existingForUser.embedding;
       const shouldReembed = (description && description !== (existingForUser.description || ''));
-      if (shouldReembed && process.env.OPENAI_API_KEY) {
-        try {
-          logger.info('Regerando embedding para intent existente', { id: existingForUser.id, name, hasDescription: Boolean(description) });
-          const r = await fetch('https://api.openai.com/v1/embeddings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
-            body: JSON.stringify({ model: 'text-embedding-3-small', input: `${name}\n\n${description}`.trim() })
-          });
-          if (r.ok) {
-            const j: any = await r.json();
-            embedding = j?.data?.[0]?.embedding || embedding;
-            if (Array.isArray(embedding)) {
-              logger.info('Embedding atualizado', { dimensions: embedding.length });
-              logger.debug('Embedding preview (primeiros 8 valores)', embedding.slice(0, 8));
-            } else {
-              logger.warn('Resposta de embedding não retornou vetor válido');
+
+      if (shouldReembed) {
+        logger.info('Regerando embedding para intent existente', { id: existingForUser.id, name, hasDescription: Boolean(description) });
+        const pkg = await buildEmbeddingsPackage(name, description);
+        if (pkg.centroid) {
+          embedding = pkg.centroid; // DB guarda centroide para compat
+          await saveEmbeddingsToRedis(existingForUser.id, pkg);
+          logger.info('Embedding atualizado (centroide + aliases)', { id: existingForUser.id, dims: embedding.length });
+          logger.debug('Embedding preview (primeiros 8 valores)', (embedding as number[]).slice(0, 8));
+          // 🔥 PREWARM também no caminho de update via POST
+          if (pkg.seedsText && pkg.seedsText.length) {
+            try {
+              await embeddingGenerator.generateEmbeddings(pkg.seedsText, {
+                normalize: true, trim: true, lowercase: true, removeExtraSpaces: true,
+              });
+              logger.info('Prewarm de query embeddings (POST-update) concluído', { count: pkg.seedsText.length });
+            } catch (e: any) {
+              logger.warn('Falha no prewarm de query embeddings (POST-update)', { err: e?.message || e });
             }
           }
-          else {
-            logger.error('Falha ao obter embedding (update)', { status: r.status });
-          }
-        } catch (err: any) {
-          logger.error('Erro ao gerar embedding (update)', err?.message || err);
         }
       }
+
       const updated = await prisma.intent.update({
         where: { id: existingForUser.id },
         data: {
@@ -137,37 +310,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ intent: updated, updated: true }, { status: 200 });
     }
 
-    // Se o nome estiver em uso por outro usuário, retorna 409
+    // Nome usado por outro usuário?
     const anyWithSameName = await prisma.intent.findUnique({ where: { name } }).catch(() => null);
     if (anyWithSameName && anyWithSameName.createdById !== session.user.id) {
       return NextResponse.json({ error: 'Já existe uma intenção global com este nome' }, { status: 409 });
     }
 
-    // criar embedding inicial se houver descrição
+    // Gerar embedding inicial (centroide + aliases)
     let embedding: any = null;
+    let pkgForCache: { centroid: number[]; aliases: number[][]; model: string; seedsText?: string[] } | null = null;
+
     if (description && process.env.OPENAI_API_KEY) {
-      try {
-        logger.info('Gerando embedding inicial para intent', { name, hasDescription: true });
-        const r = await fetch('https://api.openai.com/v1/embeddings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
-          body: JSON.stringify({ model: 'text-embedding-3-small', input: `${name}\n\n${description}`.trim() })
-        });
-        if (r.ok) {
-          const j: any = await r.json();
-          embedding = j?.data?.[0]?.embedding || null;
-          if (Array.isArray(embedding)) {
-            logger.info('Embedding criado', { dimensions: embedding.length });
-            logger.debug('Embedding preview (primeiros 8 valores)', embedding.slice(0, 8));
-          } else {
-            logger.warn('Embedding retornou valor inválido');
-          }
-        }
-        else {
-          logger.error('Falha ao obter embedding (create)', { status: r.status });
-        }
-      } catch (err: any) {
-        logger.error('Erro ao gerar embedding (create)', err?.message || err);
+      const pkg = await buildEmbeddingsPackage(name, description);
+      if (pkg.centroid) {
+        embedding = pkg.centroid;
+        pkgForCache = { centroid: pkg.centroid, aliases: pkg.aliases, model: pkg.model, seedsText: pkg.seedsText };
+        logger.info('Embedding criado (centroide + aliases)', { dimensions: embedding.length, model: pkg.model });
+        logger.debug('Embedding preview (primeiros 8 valores)', (embedding as number[]).slice(0, 8));
+      } else {
+        logger.warn('Embedding não gerado (sem OPENAI ou sem seeds)');
       }
     }
 
@@ -185,11 +346,26 @@ export async function POST(request: NextRequest) {
       },
       select: { id: true, name: true, description: true, similarityThreshold: true, actionType: true, templateId: true, createdAt: true },
     });
+
+    if (pkgForCache) {
+      await saveEmbeddingsToRedis(created.id, pkgForCache);
+      // 🔥 PREWARM: grava embeddings de consulta (frases/aliases) no cache do Redis
+      if (pkgForCache.seedsText && pkgForCache.seedsText.length) {
+        try {
+          await embeddingGenerator.generateEmbeddings(pkgForCache.seedsText, {
+            normalize: true, trim: true, lowercase: true, removeExtraSpaces: true,
+          });
+          logger.info('Prewarm de query embeddings concluído', { count: pkgForCache.seedsText.length });
+        } catch (e: any) {
+          logger.warn('Falha no prewarm de query embeddings', { err: e?.message || e });
+        }
+      }
+    }
+
     logger.info('Intent criada', { id: created.id, hasEmbedding: Array.isArray(embedding) });
     return NextResponse.json({ intent: created, created: true }, { status: 201 });
   } catch (e: any) {
     if (e?.code === 'P2002') {
-      // Verifica se é conflito de nome ou slug
       if (e?.meta?.target?.includes('slug')) {
         return NextResponse.json({ error: 'Erro interno: slug duplicado detectado. Tente novamente.' }, { status: 409 });
       }
@@ -214,8 +390,9 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
   }
 
-  // Deleta realmente o registro para liberar o slug
   await prisma.intent.delete({ where: { id } });
+  await deleteEmbeddingsFromRedis(id);
+
   logger.info('Intent deletada', { id, name: intent.name, slug: intent.slug });
   return NextResponse.json({ ok: true });
 }
@@ -237,14 +414,17 @@ export async function PATCH(request: NextRequest) {
 
   const nextNameRaw: string | undefined = typeof body?.name === 'string' ? body.name.trim() : undefined;
   const nextDescription: string | null | undefined = typeof body?.description === 'string' ? body.description.trim() : undefined;
-  const nextThreshold: number | undefined = typeof body?.similarityThreshold === 'number' ? Number(body.similarityThreshold) : undefined;
+  const nextThreshold: number | undefined =
+    typeof body?.similarityThreshold === 'number'
+      ? Math.min(1, Math.max(0, Number(body.similarityThreshold)))
+      : undefined;
   const nextTemplateId: string | null | undefined = body?.templateId === null ? null : (typeof body?.templateId === 'string' ? body.templateId : undefined);
 
   if (!nextNameRaw && nextDescription === undefined && nextThreshold === undefined && nextTemplateId === undefined) {
     return NextResponse.json({ error: 'Nada para atualizar' }, { status: 400 });
   }
 
-  // Enforce unique name if it changes
+  // Enforce unique name se mudou
   if (nextNameRaw && nextNameRaw !== intent.name) {
     const conflict = await prisma.intent.findUnique({ where: { name: nextNameRaw } }).catch(() => null);
     if (conflict && conflict.id !== id) {
@@ -264,35 +444,31 @@ export async function PATCH(request: NextRequest) {
     data.actionType = nextTemplateId ? 'TEMPLATE' : 'TEXT';
   }
 
-  // Se a descrição mudou, regerar embedding
+  // Se a descrição mudou, regera pacote e atualiza DB + Redis
   const descriptionChanged = nextDescription !== undefined && (nextDescription || null) !== (intent.description || null);
   if (descriptionChanged && process.env.OPENAI_API_KEY) {
-    try {
-      const textForEmbedding = (nextDescription || '') as string;
-      logger.info('Regerando embedding via PATCH', { id, hasDescription: Boolean(textForEmbedding) });
-      if (textForEmbedding) {
-        const r = await fetch('https://api.openai.com/v1/embeddings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
-          body: JSON.stringify({ model: 'text-embedding-3-small', input: textForEmbedding })
-        });
-        if (r.ok) {
-          const j: any = await r.json();
-          const emb = j?.data?.[0]?.embedding || null;
-          if (Array.isArray(emb)) {
-            data.embedding = emb;
-            logger.info('Embedding (PATCH) atualizado', { dimensions: emb.length });
-            logger.debug('Embedding (PATCH) preview (primeiros 8 valores)', emb.slice(0, 8));
-          } else {
-            logger.warn('Embedding (PATCH) retornou valor inválido');
-          }
-        } else {
-          logger.error('Falha ao obter embedding (PATCH)', { status: r.status });
+    const pkg = await buildEmbeddingsPackage(nextNameRaw || intent.name, nextDescription || '');
+    if (pkg.centroid) {
+      data.embedding = pkg.centroid; // DB guarda centroide
+      await saveEmbeddingsToRedis(id, pkg);
+      logger.info('Embedding (PATCH) atualizado', { id, dims: (data.embedding as number[]).length });
+      logger.debug('Embedding (PATCH) preview (primeiros 8 valores)', (data.embedding as number[]).slice(0, 8));
+      // 🔥 PREWARM após atualização
+      if (pkg.seedsText && pkg.seedsText.length) {
+        try {
+          await embeddingGenerator.generateEmbeddings(pkg.seedsText, {
+            normalize: true, trim: true, lowercase: true, removeExtraSpaces: true,
+          });
+          logger.info('Prewarm de query embeddings (PATCH) concluído', { count: pkg.seedsText.length });
+        } catch (e: any) {
+          logger.warn('Falha no prewarm de query embeddings (PATCH)', { err: e?.message || e });
         }
       }
-    } catch (err: any) {
-      logger.error('Erro ao gerar embedding (PATCH)', err?.message || err);
+    } else {
+      logger.warn('Embedding (PATCH) não gerado (sem OPENAI ou sem seeds)');
     }
+  } else if (descriptionChanged) {
+    logger.warn('Descrição mudou mas OPENAI_API_KEY não está setada — sem re-embedding');
   }
 
   const updated = await prisma.intent.update({

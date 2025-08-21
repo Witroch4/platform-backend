@@ -1,4 +1,5 @@
 /**
+ * lib/ai-integration/services/embedding-generator.ts
  * OpenAI Embedding Generation Service
  * Requirements: 3.1, 3.2, 8.1
  */

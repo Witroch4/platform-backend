@@ -114,9 +114,26 @@ export async function GET(request: NextRequest) {
             agentes: {
               select: {
                 id: true,
+                nome: true,
                 ativo: true,
                 projectId: true,
+                region: true,
                 hookId: true,
+              },
+            },
+            aiAssistantLinks: {
+              select: {
+                id: true,
+                assistantId: true,
+                assistant: {
+                  select: {
+                    id: true,
+                    name: true,
+                    isActive: true,
+                    model: true,
+                    description: true,
+                  },
+                },
               },
             },
           },
@@ -220,6 +237,17 @@ export async function GET(request: NextRequest) {
     const caixasProcessadas = caixasData.map((caixa: any) => ({
       ...caixa,
       agentes: Array.isArray(caixa.agentes) ? caixa.agentes : [],
+      assistentes: Array.isArray(caixa.aiAssistantLinks) 
+        ? caixa.aiAssistantLinks.map((link: any) => ({
+            id: link.assistant.id,
+            linkId: link.id,
+            nome: link.assistant.name,
+            ativo: link.assistant.isActive,
+            model: link.assistant.model,
+            description: link.assistant.description,
+            tipo: 'capitao' // Identificador para distinguir dos agentes Dialogflow
+          }))
+        : [],
     }));
 
     // Processar lotes da variável especial

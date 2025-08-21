@@ -27,11 +27,13 @@ import {
   Save,
   Plus,
   MessageSquare,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "next-auth/react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import InteractiveMessageCreator from "./InteractiveMessageCreator";
 import type { InteractiveMessageType } from "./interactive-message-creator/types";
 import { useMtfData } from "@/app/admin/mtf-diamante/context/MtfDataProvider";
@@ -578,8 +580,26 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
         </CardHeader>
         <CardContent>
           {loading && (
-            <div className="flex justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="border border-border p-4 rounded-lg flex justify-between items-start">
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Skeleton className="h-5 w-32" />
+                      <Skeleton className="h-5 w-20 rounded-full" />
+                    </div>
+                    <Skeleton className="h-4 w-full max-w-md" />
+                    <div className="flex gap-1 flex-wrap">
+                      <Skeleton className="h-5 w-16 rounded-full" />
+                      <Skeleton className="h-5 w-20 rounded-full" />
+                    </div>
+                  </div>
+                  <div className="flex gap-1 ml-4">
+                    <Skeleton className="h-8 w-8 rounded-md" />
+                    <Skeleton className="h-8 w-8 rounded-md" />
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 

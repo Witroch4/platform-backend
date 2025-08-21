@@ -22,7 +22,7 @@ export interface ClassificationResult {
     desc?: string;
   }>;
   ts: number;
-  band: 'HARD' | 'SOFT' | 'LOW';
+  band: 'HARD' | 'SOFT' | 'ROUTER';
   strategy: string;
 }
 

@@ -9,6 +9,7 @@ import {
   useState,
   useCallback,
   useRef,
+  useMemo,
 } from "react";
 import useSWR, { useSWRConfig } from 'swr';
 import { swrFetcher } from '@/lib/swr-config';
@@ -142,12 +143,27 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
     }
   );
 
-  // Estados derivados do BFF com fallback seguro
-  const variaveis = bffData?.variaveis ?? prevRef.current?.variaveis ?? [];
-  const lotes = bffData?.lotes ?? prevRef.current?.lotes ?? [];
-  const caixas = bffData?.caixas ?? prevRef.current?.caixas ?? [];
-  const interactiveMessages = bffData?.interactiveMessages ?? prevRef.current?.interactiveMessages ?? [];
-  const apiKeys = bffData?.apiKeys ?? prevRef.current?.apiKeys ?? [];
+  // Estados derivados do BFF com fallback seguro e memo para evitar re-renders
+  const variaveis = useMemo(() => 
+    bffData?.variaveis ?? prevRef.current?.variaveis ?? [],
+    [bffData?.variaveis]
+  );
+  const lotes = useMemo(() => 
+    bffData?.lotes ?? prevRef.current?.lotes ?? [],
+    [bffData?.lotes]
+  );
+  const caixas = useMemo(() => 
+    bffData?.caixas ?? prevRef.current?.caixas ?? [],
+    [bffData?.caixas]
+  );
+  const interactiveMessages = useMemo(() => 
+    bffData?.interactiveMessages ?? prevRef.current?.interactiveMessages ?? [],
+    [bffData?.interactiveMessages]
+  );
+  const apiKeys = useMemo(() => 
+    bffData?.apiKeys ?? prevRef.current?.apiKeys ?? [],
+    [bffData?.apiKeys]
+  );
   
   // Estados de loading individuais baseados no SWR
   const loadingVariaveis = isLoading;
@@ -155,21 +171,24 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
   const loadingCaixas = isLoading;
   const isInitialized = !isLoading && !error;
   
-  // Debug log para verificar se está funcionando
+  // Debug log para verificar se está funcionando - só quando dados mudam efetivamente
   useEffect(() => {
-    console.log('📊 [MtfDataProvider] Estado atual:', {
-      inboxId,
-      hasData: !!bffData,
-      hasPrevData: !!prevRef.current,
-      isLoading,
-      error: error?.message,
-      variaveis: variaveis.length,
-      lotes: lotes.length,
-      caixas: caixas.length,
-      interactiveMessages: interactiveMessages.length,
-      apiKeys: apiKeys.length,
-    });
-  }, [inboxId, bffData, isLoading, error, variaveis, lotes, caixas, interactiveMessages, apiKeys]);
+    if (bffData || error) {
+      console.log('📊 [MtfDataProvider] Estado atualizado:', {
+        inboxId,
+        hasData: !!bffData,
+        isLoading,
+        error: error?.message,
+        totalData: {
+          variaveis: variaveis.length,
+          lotes: lotes.length,
+          caixas: caixas.length,
+          interactiveMessages: interactiveMessages.length,
+          apiKeys: apiKeys.length,
+        }
+      });
+    }
+  }, [bffData, error, inboxId]);
 
   // Funções de refresh usando SWR mutate
   const refreshVariaveis = useCallback(() => {
@@ -239,7 +258,7 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
     }
   }, [caixas, bffData, mutate]);
 
-  const contextValue: MtfDataContextType = {
+  const contextValue: MtfDataContextType = useMemo(() => ({
     variaveis,
     loadingVariaveis,
     refreshVariaveis,
@@ -255,7 +274,23 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
     optimisticUpdateMessage,
     apiKeys,
     isInitialized,
-  };
+  }), [
+    variaveis,
+    loadingVariaveis,
+    refreshVariaveis,
+    lotes,
+    loadingLotes,
+    refreshLotes,
+    caixas,
+    setCaixas,
+    loadingCaixas,
+    refreshCaixas,
+    prefetchInbox,
+    interactiveMessages,
+    optimisticUpdateMessage,
+    apiKeys,
+    isInitialized,
+  ]);
 
   return (
     <MtfDataContext.Provider value={contextValue}>

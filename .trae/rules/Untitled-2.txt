@@ -1,0 +1,175 @@
+perfeito — abaixo vai **só o DIFF mínimo** (dois arquivos) pra:
+
+1. **Pré-aquecer no salvamento da intent** (POST/PATCH): gera e salva **centroide+aliases** no Redis **e** já **preenche o cache** de *query embeddings* das frases (seeds/aliases) no Redis.
+2. **Bater no cache ao receber mensagem**: o classificador passa a usar o `EmbeddingGenerator` (com Redis) no lugar do `fetch` direto — a **primeira** vez grava no cache, as **demais** viram HIT (latência \~0ms).
+
+---
+
+### 1) `app/api/admin/ai-integration/intents/route.ts` — **pré-aquecer no salvamento**
+
+```diff
+@@
+-import { getPrismaInstance, getRedisInstance } from '@/lib/connections';
++import { getPrismaInstance, getRedisInstance } from '@/lib/connections';
++import { embeddingGenerator } from '@/lib/ai-integration/services/embedding-generator';
+@@
+-async function buildEmbeddingsPackage(name: string, description: string | null) {
++async function buildEmbeddingsPackage(name: string, description: string | null) {
+@@
+-  if (!seeds.length || !process.env.OPENAI_API_KEY) {
+-    return { centroid: null as any, aliases: [] as number[][], model: OPENAI_EMBED_MODEL, seedsCount: 0 };
++  if (!seeds.length || !process.env.OPENAI_API_KEY) {
++    return { centroid: null as any, aliases: [] as number[][], model: OPENAI_EMBED_MODEL, seedsCount: 0, seedsText: [] as string[] };
+   }
+@@
+-  return { centroid, aliases: vecs, model: OPENAI_EMBED_MODEL, seedsCount: seeds.length };
++  return { centroid, aliases: vecs, model: OPENAI_EMBED_MODEL, seedsCount: seeds.length, seedsText: seeds };
+ }
+@@
+ export async function POST(request: NextRequest) {
+@@
+-    let embedding: any = null;
+-    let pkgForCache: { centroid: number[]; aliases: number[][]; model: string } | null = null;
++    let embedding: any = null;
++    let pkgForCache: { centroid: number[]; aliases: number[][]; model: string; seedsText?: string[] } | null = null;
+@@
+-      const pkg = await buildEmbeddingsPackage(name, description);
++      const pkg = await buildEmbeddingsPackage(name, description);
+       if (pkg.centroid) {
+         embedding = pkg.centroid;
+-        pkgForCache = { centroid: pkg.centroid, aliases: pkg.aliases, model: pkg.model };
++        pkgForCache = { centroid: pkg.centroid, aliases: pkg.aliases, model: pkg.model, seedsText: pkg.seedsText };
+         logger.info('Embedding criado (centroide + aliases)', { dimensions: embedding.length, model: pkg.model });
+         logger.debug('Embedding preview (primeiros 8 valores)', (embedding as number[]).slice(0, 8));
+       }
+@@
+-    if (pkgForCache) {
++    if (pkgForCache) {
+       await saveEmbeddingsToRedis(created.id, pkgForCache);
++      // 🔥 PREWARM: grava embeddings de consulta (frases/aliases) no cache do Redis
++      if (pkgForCache.seedsText && pkgForCache.seedsText.length) {
++        try {
++          await embeddingGenerator.generateEmbeddings(pkgForCache.seedsText, {
++            normalize: true, trim: true, lowercase: true, removeExtraSpaces: true,
++          });
++          logger.info('Prewarm de query embeddings concluído', { count: pkgForCache.seedsText.length });
++        } catch (e: any) {
++          logger.warn('Falha no prewarm de query embeddings', { err: e?.message || e });
++        }
++      }
+     }
+@@
+ export async function PATCH(request: NextRequest) {
+@@
+-  if (descriptionChanged && process.env.OPENAI_API_KEY) {
+-    const pkg = await buildEmbeddingsPackage(nextNameRaw || intent.name, nextDescription || '');
++  if (descriptionChanged && process.env.OPENAI_API_KEY) {
++    const pkg = await buildEmbeddingsPackage(nextNameRaw || intent.name, nextDescription || '');
+     if (pkg.centroid) {
+       data.embedding = pkg.centroid; // DB guarda centroide
+       await saveEmbeddingsToRedis(id, pkg);
+       logger.info('Embedding (PATCH) atualizado', { id, dims: (data.embedding as number[]).length });
+       logger.debug('Embedding (PATCH) preview (primeiros 8 valores)', (data.embedding as number[]).slice(0, 8));
++      // 🔥 PREWARM após atualização
++      if (pkg.seedsText && pkg.seedsText.length) {
++        try {
++          await embeddingGenerator.generateEmbeddings(pkg.seedsText, {
++            normalize: true, trim: true, lowercase: true, removeExtraSpaces: true,
++          });
++          logger.info('Prewarm de query embeddings (PATCH) concluído', { count: pkg.seedsText.length });
++        } catch (e: any) {
++          logger.warn('Falha no prewarm de query embeddings (PATCH)', { err: e?.message || e });
++        }
++      }
+     } else {
+       logger.warn('Embedding (PATCH) não gerado (sem OPENAI ou sem seeds)');
+     }
+   } else if (descriptionChanged) {
+```
+
+---
+
+### 2) `lib/ai-integration/classification.ts` — **usar cache no recebimento (embed da query)**
+
+```diff
+@@
+-import { getPrismaInstance, getRedisInstance } from "@/lib/connections";
++import { getPrismaInstance, getRedisInstance } from "@/lib/connections";
++import { embeddingGenerator } from "@/lib/ai-integration/services/embedding-generator";
+@@
+-async function embedText(
+-  text: string,
+-  timeoutMs = 1000 // padrão: 1s
+-): Promise<number[] | null> {
+-  if (!process.env.OPENAI_API_KEY) return null;
+-
+-  const normalized = normalizeText(text);
+-  const controller = new AbortController();
+-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+-
+-  try {
+-    const response = await fetch("https://api.openai.com/v1/embeddings", {
+-      method: "POST",
+-      headers: {
+-        "Content-Type": "application/json",
+-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+-      },
+-      body: JSON.stringify({
+-        model: OPENAI_EMBED_MODEL,
+-        input: normalized
+-      }),
+-      signal: controller.signal,
+-    });
+-
+-    clearTimeout(timer);
+-
+-    if (!response.ok) {
+-      classificationLogger.warn("Embedding API error", {
+-        status: response.status,
+-        statusText: response.statusText,
+-      });
+-      return null;
+-    }
+-
+-    const data: any = await response.json();
+-    const embedding: any = data?.data?.[0]?.embedding;
+-    return Array.isArray(embedding) ? l2normalize(embedding as number[]) : null;
+-  } catch (error: any) {
+-    clearTimeout(timer);
+-    if (error?.name === "AbortError") {
+-      classificationLogger.warn("Embedding generation timed out", { timeoutMs });
+-    } else {
+-      classificationLogger.warn("Embedding generation failed", {
+-        error: error instanceof Error ? error.message : String(error),
+-      });
+-    }
+-    return null;
+-  }
+-}
++async function embedText(
++  text: string,
++  _timeoutMs = 1000 // mantemos a assinatura; o generator já tem timeout próprio
++): Promise<number[] | null> {
++  if (!process.env.OPENAI_API_KEY) return null;
++  try {
++    const emb = await embeddingGenerator.generateEmbedding(text, {
++      normalize: true, trim: true, lowercase: true, removeExtraSpaces: true,
++    });
++    return l2normalize(emb.values); // ← HIT/MISS automaticamente cacheado no Redis
++  } catch (error: any) {
++    classificationLogger.warn("Embedding generation failed (cached path)", {
++      error: error instanceof Error ? error.message : String(error),
++    });
++    return null;
++  }
++}
+```
+
+---
+
+## Por que assim (rápido e direto)
+
+* **Salvamento (POST/PATCH)** agora também **preenche o cache** das frases/aliases — quando o cliente digitar algo igual ou parecido, o classificador **não** vai bater no OpenAI.
+* **Classificação** passa a usar o **mesmo cache** (via `EmbeddingGenerator`).
+  Resultado: **primeira** ocorrência grava no Redis; **repetidas** viram HIT (ms), reduzindo seu p95.
+* Mudanças **mínimas**: um import, um `seedsText` retornado, e 2 blocos `generateEmbeddings(...)`; no classificador, só trocamos o corpo de `embedText` para usar o gerador cacheado.

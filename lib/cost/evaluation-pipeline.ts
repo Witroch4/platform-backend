@@ -159,7 +159,7 @@ export class EvaluationPipeline {
 
       // Generate content for SOFT and LOW bands to evaluate UX quality
       let generatedContent: any = undefined;
-      if (classification.band === 'SOFT' || classification.band === 'LOW') {
+      if (classification.band === 'SOFT' || classification.band === 'ROUTER') {
         try {
           // Convert classification result to match performance bands interface
           const compatibleClassification = {

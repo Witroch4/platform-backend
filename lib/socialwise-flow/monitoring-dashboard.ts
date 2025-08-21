@@ -23,7 +23,6 @@ export const SLA_THRESHOLDS = {
   // Latency SLAs (ms)
   HARD_BAND_MAX_MS: 120,
   SOFT_BAND_MAX_MS: 300,
-  LOW_BAND_MAX_MS: 200,
   ROUTER_BAND_MAX_MS: 400,
   OVERALL_P95_MAX_MS: 400,
   
@@ -35,7 +34,7 @@ export const SLA_THRESHOLDS = {
   // Quality SLAs
   MIN_HARD_ACCURACY: 90,      // % accuracy for HARD band
   MIN_SOFT_CTR: 35,           // % click-through rate for SOFT band
-  MIN_LOW_VALID_TOPICS: 95,   // % valid topics for LOW band
+  MIN_ROUTER_VALID_TOPICS: 95,   // % valid topics for ROUTER band
   
   // Health Check SLAs
   MAX_EMBEDDING_LATENCY_MS: 2000,
@@ -81,7 +80,7 @@ export interface DashboardMetrics {
   qualityMetrics: {
     hard_accuracy: number;
     soft_ctr: number;
-    low_valid_topics: number;
+    router_valid_topics: number;
     sample_size: number;
   };
   
@@ -103,7 +102,7 @@ export interface QualitySample {
   response_time_ms: number;
   user_satisfaction_score?: number;
   timestamp: Date;
-  band: 'HARD' | 'SOFT' | 'LOW' | 'ROUTER';
+  band: 'HARD' | 'SOFT' | 'ROUTER';
   strategy: string;
 }
 
@@ -558,7 +557,7 @@ export class SocialWiseMonitoringDashboard {
   private async calculateQualityMetrics(): Promise<{
     hard_accuracy: number;
     soft_ctr: number;
-    low_valid_topics: number;
+    router_valid_topics: number;
     sample_size: number;
   }> {
     try {
@@ -571,7 +570,7 @@ export class SocialWiseMonitoringDashboard {
         return {
           hard_accuracy: 0,
           soft_ctr: 0,
-          low_valid_topics: 0,
+          router_valid_topics: 0,
           sample_size: 0
         };
       }
@@ -588,14 +587,14 @@ export class SocialWiseMonitoringDashboard {
         (softSamples.filter(s => s.generated_buttons && s.generated_buttons.length > 0).length / softSamples.length) * 100 : 
         0;
 
-      // Calculate LOW band valid topics (simplified - would need validation in real implementation)
-      const lowSamples = recentSamples.filter(s => s.band === 'LOW');
-      const lowValidTopics = lowSamples.length > 0 ? 95 : 0; // Placeholder - assume 95% valid
+      // Calculate ROUTER band valid topics (simplified - would need validation in real implementation)
+    const routerSamples = recentSamples.filter(s => s.band === 'ROUTER');
+       const routerValidTopics = routerSamples.length > 0 ? 95 : 0; // Placeholder - assume 95% valid
 
       return {
         hard_accuracy: hardAccuracy,
         soft_ctr: softCtr,
-        low_valid_topics: lowValidTopics,
+        router_valid_topics: routerValidTopics,
         sample_size: recentSamples.length
       };
 
@@ -607,7 +606,7 @@ export class SocialWiseMonitoringDashboard {
       return {
         hard_accuracy: 0,
         soft_ctr: 0,
-        low_valid_topics: 0,
+        router_valid_topics: 0,
         sample_size: 0
       };
     }
@@ -694,7 +693,7 @@ export class SocialWiseMonitoringDashboard {
           qualityMetrics.value : {
             hard_accuracy: 0,
             soft_ctr: 0,
-            low_valid_topics: 0,
+            router_valid_topics: 0,
             sample_size: 0
           },
         activeAlerts
@@ -711,7 +710,7 @@ export class SocialWiseMonitoringDashboard {
         classificationRates: { direct_map_rate: 0, warmup_rate: 0, vague_rate: 0, router_rate: 0 },
         errorRates: { timeout_rate: 0, json_parse_fail_rate: 0, abort_rate: 0, overall_error_rate: 0 },
         healthStatus: { embedding_index: 'unavailable', llm_availability: 'unavailable', overall_status: 'critical' },
-        qualityMetrics: { hard_accuracy: 0, soft_ctr: 0, low_valid_topics: 0, sample_size: 0 },
+        qualityMetrics: { hard_accuracy: 0, soft_ctr: 0, router_valid_topics: 0, sample_size: 0 },
         activeAlerts: []
       };
     }

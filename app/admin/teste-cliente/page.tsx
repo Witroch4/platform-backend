@@ -110,7 +110,7 @@ export default function ClientSideUnifyTestPage() {
             // 4. Salvar o PDF final e criar um link para download
             log("Salvando o PDF final...");
             const pdfBytes = await pdfDoc.save();
-            const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+            const blob = new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' });
             const objectUrl = URL.createObjectURL(blob);
             setMergedPdfUrl(objectUrl);
             log("Processo concluído!");

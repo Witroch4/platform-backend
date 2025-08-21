@@ -7,7 +7,7 @@
 
 import { getPrismaInstance } from "@/lib/connections";
 import { getRedisInstance } from '../connections';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 
 // Connection pool configuration
 export interface ConnectionPoolConfig {
@@ -522,8 +522,8 @@ export class MonitoredPrismaClient extends PrismaClient {
       return;
     }
     
-    // Add query logging middleware
-    this.$use(async (params, next) => {
+    // Add query logging middleware using proper Prisma middleware syntax
+    (this as any).$use(async (params: any, next: any) => {
       const start = Date.now();
       let success = true;
       let error: Error | undefined;

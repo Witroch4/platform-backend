@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import axios from "axios";
 import { toast } from "sonner";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -17,6 +17,7 @@ import { DisparoMensagemDialog } from "../DisparoMensagemDialog";
 
 // Importar os componentes das páginas
 import CreateTemplatePage from "./criar/page";
+import TemplateDetailsInternal from "./components/TemplateDetailsInternal";
 
 interface Template {
   id: string;
@@ -30,7 +31,23 @@ type ViewType = 'list' | 'create' | 'details' | 'edit';
 
 export default function TemplatesTab() {
   const router = useRouter();
+  const pathname = usePathname();
   const [currentView, setCurrentView] = useState<ViewType>('list');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+
+  // Detectar se estamos em uma rota de template e ajustar o estado
+  useEffect(() => {
+    const templateMatch = pathname?.match(/\/admin\/mtf-diamante\/templates\/([^\/]+)/);
+    if (templateMatch) {
+      const templateId = templateMatch[1];
+      setSelectedTemplateId(templateId);
+      setCurrentView('details');
+    } else if (pathname?.includes('/admin/mtf-diamante') && currentView === 'details') {
+      // Se saiu da rota de template, voltar para lista
+      setCurrentView('list');
+      setSelectedTemplateId(null);
+    }
+  }, [pathname, currentView]);
 
   const handleNavigateToCreate = () => {
     setCurrentView('create');
@@ -41,12 +58,13 @@ export default function TemplatesTab() {
   };
 
   const handleNavigateToEdit = (templateId: string) => {
-    // For now, just show the edit view with a message
+    setSelectedTemplateId(templateId);
     setCurrentView('edit');
   };
 
   const handleBackToList = () => {
     setCurrentView('list');
+    setSelectedTemplateId(null);
   };
 
   // Renderizar a view de criar template
@@ -57,7 +75,10 @@ export default function TemplatesTab() {
           <Button 
             variant="ghost" 
             size="icon" 
-            onClick={handleBackToList}
+            onClick={() => {
+              console.log('Botão voltar clicado - voltando para lista');
+              handleBackToList();
+            }}
             className="hover:bg-accent hover:text-accent-foreground"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -67,7 +88,36 @@ export default function TemplatesTab() {
             <p className="text-muted-foreground">Crie um novo template para envio de mensagens via WhatsApp</p>
           </div>
         </div>
-        <CreateTemplatePage />
+        <CreateTemplatePage onSuccess={handleBackToList} />
+      </div>
+    );
+  }
+
+  // Renderizar a view de detalhes do template
+  if (currentView === 'details' && selectedTemplateId) {
+    return (
+      <div className="w-full">
+        <div className="flex items-center gap-4 mb-6">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={() => {
+              console.log('Botão voltar clicado - voltando para lista');
+              handleBackToList();
+            }}
+            className="hover:bg-accent hover:text-accent-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div>
+            <h2 className="text-2xl font-bold text-foreground">Detalhes do Template</h2>
+            <p className="text-muted-foreground">Visualize e gerencie o template</p>
+          </div>
+        </div>
+        <TemplateDetailsInternal 
+          templateId={selectedTemplateId} 
+          onBackToList={handleBackToList}
+        />
       </div>
     );
   }
@@ -80,7 +130,10 @@ export default function TemplatesTab() {
           <Button 
             variant="ghost" 
             size="icon" 
-            onClick={handleBackToList}
+            onClick={() => {
+              console.log('Botão voltar clicado - voltando para lista');
+              handleBackToList();
+            }}
             className="hover:bg-accent hover:text-accent-foreground"
           >
             <ArrowLeft className="h-4 w-4" />

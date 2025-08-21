@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { MoreHorizontal, EllipsisVertical, Plus, Trash2, Settings2, Link2 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,11 +45,18 @@ export default function CaptainAssistantsPage() {
     intentOutputFormat: 'JSON' as 'JSON' | 'AT_SYMBOL',
   });
   const [loading, setLoading] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   async function loadAssistants() {
-    const res = await fetch('/api/admin/ai-integration/assistants', { cache: 'no-store' });
-    const data = await res.json();
-    setAssistants(data.assistants || []);
+    try {
+      const res = await fetch('/api/admin/ai-integration/assistants', { cache: 'no-store' });
+      const data = await res.json();
+      setAssistants(data.assistants || []);
+    } catch (error) {
+      console.error('Erro ao carregar assistentes:', error);
+    } finally {
+      setIsInitialLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -77,31 +85,68 @@ export default function CaptainAssistantsPage() {
     if (res.ok) loadAssistants();
   }
 
+  // Componente de skeleton para os assistentes
+  const AssistantsSkeleton = () => (
+    <div className="grid gap-3">
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="border rounded-md p-4 flex items-start justify-between">
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-4 w-full max-w-md" />
+            <Skeleton className="h-3 w-32" />
+          </div>
+          <Skeleton className="h-8 w-8 rounded-md" />
+        </div>
+      ))}
+    </div>
+  );
+
+  // Componente de skeleton para o cabeçalho
+  const HeaderSkeleton = () => (
+    <div className="flex items-center justify-between">
+      <div className="flex-1">
+        <div className="rounded-md border border-dashed p-4 bg-muted/30 flex items-center gap-4">
+          <Skeleton className="w-14 h-14 rounded-md" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-4 w-full max-w-2xl" />
+            <Skeleton className="h-4 w-full max-w-lg" />
+          </div>
+          <Skeleton className="h-8 w-24 rounded-md" />
+        </div>
+      </div>
+      <Skeleton className="h-9 w-48 rounded-md ml-4" />
+    </div>
+  );
+
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex-1">
-          <div className="rounded-md border border-dashed p-4 bg-muted/30 flex items-center gap-4">
-            <Image src="/captain.png" alt="Capitão" width={56} height={56} />
-            <div className="flex-1">
-              <h2 className="text-base font-semibold">Assistentes do Capitão</h2>
-              <p className="text-sm text-muted-foreground">
-                O Capitão atende seus clientes automaticamente, aprende com seus documentos e conversas anteriores,
-                responde rápido e com precisão, e faz handoff para um humano quando necessário.
-              </p>
+      {isInitialLoading ? (
+        <HeaderSkeleton />
+      ) : (
+        <div className="flex items-center justify-between">
+          <div className="flex-1">
+            <div className="rounded-md border border-dashed p-4 bg-muted/30 flex items-center gap-4">
+              <Image src="/captain.png" alt="Capitão" width={56} height={56} />
+              <div className="flex-1">
+                <h2 className="text-base font-semibold">Assistentes do Capitão</h2>
+                <p className="text-sm text-muted-foreground">
+                  O Capitão atende seus clientes automaticamente, aprende com seus documentos e conversas anteriores,
+                  responde rápido e com precisão, e faz handoff para um humano quando necessário.
+                </p>
+              </div>
+              <a
+                href="/admin/capitao/saiba-mais"
+                className="inline-flex items-center text-sm px-3 py-2 rounded-md border bg-background hover:bg-accent"
+              >
+                Saiba mais
+              </a>
             </div>
-            <a
-              href="#"
-              className="inline-flex items-center text-sm px-3 py-2 rounded-md border bg-background hover:bg-accent"
-            >
-              Saiba mais
-            </a>
           </div>
-        </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm"><Plus className="w-4 h-4 mr-2" /> Criar um novo assistente</Button>
-          </DialogTrigger>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm"><Plus className="w-4 h-4 mr-2" /> Criar um novo assistente</Button>
+            </DialogTrigger>
           <DialogContent className="sm:max-w-2xl w-[96vw] max-h-[85vh]">
             <DialogHeader>
               <DialogTitle>Criar um assistente</DialogTitle>
@@ -148,10 +193,13 @@ export default function CaptainAssistantsPage() {
             </div>
           </DialogContent>
         </Dialog>
-      </div>
+        </div>
+      )}
 
       <div className="grid gap-3">
-        {assistants.length === 0 ? (
+        {isInitialLoading ? (
+          <AssistantsSkeleton />
+        ) : assistants.length === 0 ? (
           <div className="text-center py-16 border rounded-md">
             <p className="mb-2 text-xl font-semibold">Não há assistentes disponíveis</p>
             <p className="text-sm text-muted-foreground mb-6">

@@ -1,4 +1,4 @@
-# .cursorrules
+# CLAUDE.md
 
 This file provides comprehensive guidance to Claude Code (claude.ai/code) and Cursor AI when working with the Socialwise Chatwit repository.
 

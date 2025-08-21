@@ -25,7 +25,7 @@ export interface TemplateFormState {
 }
 
 // Hook customizado para gerenciar o estado e a lógica do formulário de template
-export const useTemplateForm = (initialState: TemplateFormState) => {
+export const useTemplateForm = (initialState: TemplateFormState, onSuccessCallback?: () => void) => {
   const router = useRouter();
   const [state, setState] = useState<TemplateFormState>(initialState);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -266,7 +266,12 @@ export const useTemplateForm = (initialState: TemplateFormState) => {
         setTemplateId(response.data.templateId || response.data.id);
         toast.success('Template criado com sucesso!');
         await axios.get('/api/admin/mtf-diamante/templates?refresh=true');
-        setTimeout(() => router.push('/admin/mtf-diamante'), 1500);
+        
+        if (onSuccessCallback) {
+          setTimeout(() => onSuccessCallback(), 1500);
+        } else {
+          setTimeout(() => router.push('/admin/mtf-diamante?tab=templates'), 1500);
+        }
       } else {
         setError(response.data.error || 'Erro ao criar template');
       }

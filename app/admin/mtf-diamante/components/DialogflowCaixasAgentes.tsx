@@ -48,6 +48,7 @@ import { useMtfData } from "../context/MtfDataProvider";
 
 import type { 
   AgenteDialogflow, 
+  AssistenteCaptiao, 
   ChatwitInbox, 
   InboxExterna
 } from "@/types/dialogflow";
@@ -208,7 +209,7 @@ export function DialogflowCaixasAgentes({
       )}
 
       {caixasParaExibir.length === 0 ? (
-        <div className="text-center text-gray-500 py-12 border-2 border-dashed rounded-lg">
+        <div className="text-center text-muted-foreground py-12 border-2 border-dashed rounded-lg border-border">
           <p className="font-semibold">Nenhuma caixa de entrada configurada.</p>
           <p className="text-sm">
             Clique em "Adicionar Caixa" para sincronizar com sua conta Chatwit.
@@ -278,7 +279,7 @@ function CaixaCard({
           "cursor-pointer transition-all",
           isSelected
             ? "border-primary ring-2 ring-primary"
-            : "hover:border-gray-400"
+            : "hover:border-muted-foreground/50"
         )}
         onClick={() => onSelect(caixa.id)}
       >
@@ -304,8 +305,9 @@ function CaixaCard({
           </div>
         </CardHeader>
         <CardContent>
+          {/* Agentes Dialogflow */}
           <h4 className="font-semibold mb-2 text-sm">Agentes Dialogflow</h4>
-          <div className="space-y-2">
+          <div className="space-y-2 mb-4">
             {(!caixa.agentes || caixa.agentes.length === 0) ? (
               <p className="text-muted-foreground text-xs">
                 Nenhum agente configurado.
@@ -321,7 +323,27 @@ function CaixaCard({
               ))
             )}
           </div>
-          <div className="mt-4">
+          
+          {/* Assistentes do Capitão */}
+          <h4 className="font-semibold mb-2 text-sm">Assistentes do Capitão (IA)</h4>
+          <div className="space-y-2 mb-4">
+            {(!caixa.assistentes || caixa.assistentes.length === 0) ? (
+              <p className="text-muted-foreground text-xs">
+                Nenhum assistente conectado.
+              </p>
+            ) : (
+              (caixa.assistentes || []).map((assistente) => (
+                <AssistenteItem
+                  key={assistente.id}
+                  assistente={assistente}
+                  onUpdate={onUpdate}
+                  refreshCaixas={refreshCaixas}
+                />
+              ))
+            )}
+          </div>
+          
+          <div className="space-y-2">
             <AdicionarAgenteDialog
               caixaId={caixa.id}
               onAgenteAdicionado={onUpdate}
@@ -551,6 +573,137 @@ function AgenteItem({
   );
 }
 
+// Item de Assistente do Capitão
+function AssistenteItem({
+  assistente,
+  onUpdate,
+  refreshCaixas,
+}: {
+  assistente: AssistenteCaptiao;
+  onUpdate: () => void;
+  refreshCaixas: () => Promise<void>;
+}) {
+  const { caixas, setCaixas } = useMtfData();
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
+  // Função para toggle do assistente do Capitão
+  const handleToggleAssistente = async () => {
+    const togglePromise = async () => {
+      try {
+        // Chama a API para ativar/desativar o assistente
+        const response = await axios.patch(
+          `/api/admin/ai-integration/assistants/${assistente.id}`,
+          { isActive: !assistente.ativo }
+        );
+
+        // Atualiza o estado local imediatamente
+        setCaixas((currentCaixas) => {
+          return currentCaixas.map((c) => ({
+            ...c,
+            assistentes: (c.assistentes || []).map((a) => 
+              a.id === assistente.id 
+                ? { ...a, ativo: !assistente.ativo }
+                : a
+            ),
+          }));
+        });
+
+        return response.data;
+      } catch (error) {
+        throw error;
+      }
+    };
+
+    toast.promise(togglePromise(), {
+      loading: assistente.ativo ? "Desativando assistente..." : "Ativando assistente...",
+      success: () => `Assistente ${assistente.ativo ? 'desativado' : 'ativado'} com sucesso!`,
+      error: (err) => err.response?.data?.error || "Erro ao alterar status do assistente",
+    });
+  };
+
+  // Função para remover o link do assistente (não deletar o assistente, apenas desconectar)
+  const handleDesconectarAssistente = async () => {
+    const deletePromise = axios.delete(
+      `/api/admin/ai-integration/assistants/inboxes`,
+      {
+        data: {
+          assistantId: assistente.id,
+          inboxId: assistente.linkId,
+          attach: false
+        }
+      }
+    );
+
+    toast.promise(deletePromise, {
+      loading: "Desconectando assistente...",
+      success: () => {
+        onUpdate();
+        setShowDeleteDialog(false);
+        return "Assistente desconectado com sucesso!";
+      },
+      error: "Erro ao desconectar assistente",
+    });
+  };
+
+  return (
+    <>
+      <div className="flex items-center justify-between p-2 border rounded-lg text-sm bg-blue-50 dark:bg-blue-950">
+        <div className="flex items-center gap-2">
+          <Bot className="w-4 h-4 text-purple-500" />
+          <span className="font-medium">{assistente.nome}</span>
+          <Badge variant="outline" className="text-xs">
+            Capitão
+          </Badge>
+          {assistente.ativo && (
+            <Badge variant="default" className="bg-green-500 h-5">
+              Ativo
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Switch
+            id={`switch-assistente-${assistente.id}`}
+            checked={assistente.ativo}
+            onCheckedChange={handleToggleAssistente}
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowDeleteDialog(true)}
+            className="text-destructive hover:text-destructive"
+            title="Desconectar assistente"
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar Desconexão</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja desconectar o assistente "{assistente.nome}" desta caixa? 
+              O assistente não será excluído, apenas desconectado.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteDialog(false)}
+            >
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={handleDesconectarAssistente}>
+              Desconectar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 // Dialogs (Modais)
 export function AdicionarCaixaDialog({
   onCaixaAdicionada,
@@ -664,7 +817,7 @@ export function AdicionarCaixaDialog({
           )}
           {error && <div className="text-red-500 text-center">{error}</div>}
           {!loading && !error && caixasExternas.length === 0 && (
-            <div className="text-center text-gray-500">
+            <div className="text-center text-muted-foreground">
               <p>
                 Todas as caixas de entrada disponíveis já foram configuradas.
               </p>
@@ -679,7 +832,7 @@ export function AdicionarCaixaDialog({
               >
                 <div>
                   <h4 className="font-medium">{caixa.name}</h4>
-                  <p className="text-sm text-gray-500">{caixa.channel_type}</p>
+                  <p className="text-sm text-muted-foreground">{caixa.channel_type}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Input

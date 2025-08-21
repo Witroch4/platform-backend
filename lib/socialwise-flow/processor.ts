@@ -47,11 +47,12 @@ export interface ProcessorContext {
 export interface ProcessorResult {
   response: ChannelResponse;
   metrics: {
-    band: 'HARD' | 'SOFT' | 'LOW' | 'ROUTER';
+    band: 'HARD' | 'SOFT' | 'ROUTER';
     strategy: string;
     routeTotalMs: number;
     embeddingMs?: number;
     llmWarmupMs?: number;
+    score?: number;
   };
 }
 
@@ -381,81 +382,7 @@ async function processSoftBand(
   }
 }
 
-/**
- * Process LOW band classification (<0.65 score)
- * 🎯 NOVO: Chat livre com IA gerando botões dinâmicos baseados no agente configurado
- */
-async function processLowBand(
-  classification: ClassificationResult,
-  context: ProcessorContext
-): Promise<ChannelResponse> {
-  const startTime = Date.now();
-  const concurrencyManager = getConcurrencyManager();
-  
-  try {
-    // 🎯 CORRIGIDO: Usar configuração do agente para chat livre
-    const agentConfig = await loadAssistantConfiguration(context.inboxId, context.chatwitAccountId);
-    if (!agentConfig) {
-      return buildDefaultLegalTopics(context.channelType);
-    }
 
-    // 🎯 NOVA FUNCIONALIDADE: Chat livre com IA para banda LOW
-    const freechatResult = await concurrencyManager.executeLlmOperation(
-      context.inboxId,
-      () => openaiService.generateFreeChatButtons(
-        context.userText,
-        agentConfig, // Usar instruções do agente configurado no Capitão
-        { channelType: normalizeChannelType(context.channelType) }
-      ),
-      {
-        priority: 'low',
-        timeoutMs: agentConfig.warmupDeadlineMs || 1000,
-        allowDegradation: true
-      }
-    );
-
-    if (freechatResult) {
-      const buttons = freechatResult.buttons.map(btn => ({
-        title: btn.title,
-        payload: btn.payload
-      }));
-
-      const response = buildChannelResponse(
-        context.channelType,
-        freechatResult.introduction_text,
-        buttons
-      );
-
-      processorLogger.info('LOW band free chat generated', {
-        score: classification.score,
-        buttonsGenerated: buttons.length,
-        processingMs: Date.now() - startTime,
-        traceId: context.traceId
-      });
-
-      return response;
-    }
-
-    // Fallback para tópicos padrão se IA falhar
-    const response = buildDefaultLegalTopics(context.channelType);
-    
-    processorLogger.info('LOW band domain topics provided (fallback)', {
-      score: classification.score,
-      processingMs: Date.now() - startTime,
-      traceId: context.traceId
-    });
-    
-    return response;
-    
-  } catch (error) {
-    processorLogger.error('LOW band processing failed', {
-      error: error instanceof Error ? error.message : String(error),
-      traceId: context.traceId
-    });
-    
-    return buildFallbackResponse(context.channelType, context.userText);
-  }
-}
 
 /**
  * Process ROUTER band classification (embedipreview=false)
@@ -626,9 +553,10 @@ export async function processSocialWiseFlow(
       return {
         response,
         metrics: {
-          band: 'LOW',
+          band: 'ROUTER',
           strategy: 'fallback_no_user',
-          routeTotalMs
+          routeTotalMs,
+          score: 0
         }
       };
     }
@@ -640,13 +568,14 @@ export async function processSocialWiseFlow(
       const routeTotalMs = Date.now() - startTime;
       
       return {
-        response,
-        metrics: {
-          band: 'LOW',
-          strategy: 'fallback_no_agent_config',
-          routeTotalMs
-        }
-      };
+         response,
+         metrics: {
+           band: 'ROUTER',
+           strategy: 'fallback_no_config',
+           routeTotalMs,
+           score: 0
+         }
+       };
     }
 
     // Override embedipreview if provided explicitly
@@ -681,9 +610,7 @@ export async function processSocialWiseFlow(
           response = softResult.response;
           llmWarmupMs = softResult.llmWarmupMs;
           break;
-        case 'LOW':
-          response = await processLowBand(classification, context);
-          break;
+
         default:
           response = buildFallbackResponse(context.channelType, context.userText);
       }
@@ -752,7 +679,8 @@ export async function processSocialWiseFlow(
         strategy: classification.strategy,
         routeTotalMs,
         embeddingMs: classification.metrics?.embedding_ms,
-        llmWarmupMs
+        llmWarmupMs,
+        score: classification.score
       }
     };
     
@@ -767,7 +695,7 @@ export async function processSocialWiseFlow(
 
     // Collect error metrics
     const errorMetrics = createPerformanceMetrics(
-      'LOW',
+      'SOFT',
       'error_fallback',
       routeTotalMs,
       {
@@ -788,9 +716,10 @@ export async function processSocialWiseFlow(
     return {
       response: buildFallbackResponse(context.channelType, context.userText),
       metrics: {
-        band: 'LOW',
+        band: 'ROUTER',
         strategy: 'error_fallback',
-        routeTotalMs
+        routeTotalMs,
+        score: 0
       }
     };
   }

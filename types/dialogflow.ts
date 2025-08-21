@@ -14,6 +14,16 @@ export interface AgenteDialogflow {
   inboxId: string;
 }
 
+export interface AssistenteCaptiao {
+  id: string;
+  linkId: string;
+  nome: string;
+  ativo: boolean;
+  model: string;
+  description?: string | null;
+  tipo: 'capitao';
+}
+
 export interface ChatwitInbox {
   id: string;
   nome: string;
@@ -27,6 +37,7 @@ export interface ChatwitInbox {
   whatsappBusinessAccountId: string | null;
   fallbackParaInboxId: string | null;
   agentes?: AgenteDialogflow[];
+  assistentes?: AssistenteCaptiao[];
 }
 
 // Tipos para APIs

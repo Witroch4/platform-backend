@@ -15,7 +15,7 @@ export function CaixaCardSkeleton() {
             </div>
             <Skeleton className="h-4 w-48" />
           </div>
-          <Skeleton className="w-8 h-8 rounded" />
+          <Skeleton className="w-8 h-8 rounded-md" />
         </div>
       </CardHeader>
       <CardContent>
@@ -25,7 +25,7 @@ export function CaixaCardSkeleton() {
             <Skeleton className="h-8 w-full rounded-lg" />
             <Skeleton className="h-8 w-full rounded-lg" />
           </div>
-          <Skeleton className="h-9 w-full rounded" />
+          <Skeleton className="h-9 w-full rounded-md" />
         </div>
       </CardContent>
     </Card>
@@ -55,8 +55,8 @@ export function LoteCardSkeleton() {
               <Skeleton className="h-4 w-10" />
               <Skeleton className="h-5 w-10 rounded-full" />
             </div>
-            <Skeleton className="w-8 h-8 rounded" />
-            <Skeleton className="w-8 h-8 rounded" />
+            <Skeleton className="w-8 h-8 rounded-md" />
+            <Skeleton className="w-8 h-8 rounded-md" />
           </div>
         </div>
       </CardContent>
@@ -75,7 +75,7 @@ export function VariavelSkeleton() {
         <Skeleton className="h-4 w-24" />
         <Skeleton className="h-9 w-full" />
       </div>
-      <Skeleton className="w-8 h-8 rounded" />
+      <Skeleton className="w-8 h-8 rounded-md" />
     </div>
   );
 }

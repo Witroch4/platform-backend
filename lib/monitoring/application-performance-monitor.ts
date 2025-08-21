@@ -10,6 +10,12 @@ export interface WebhookMetrics {
   error?: string;
   payloadSize: number;
   interactionType: 'intent' | 'button_reply';
+  // Novos campos para segmentação e filtragem P95
+  ts?: number;                    // timestamp em ms para janela deslizante
+  coldStart?: boolean;            // true se processo < 2min pós-boot/deploy
+  aliasHit?: boolean;             // true se foi alias direct hit (ultra-rápido)
+  band?: 'HARD' | 'SOFT' | 'ROUTER'; // banda de classificação
+  strategy?: string;              // estratégia usada (direct_map, router_llm, etc)
 }
 
 export interface WorkerMetrics {
@@ -392,6 +398,7 @@ export class ApplicationPerformanceMonitor {
       await this.checkErrorRates();
       await this.checkQueueDepths();
       await this.checkSystemHealth();
+      await this.checkSocialWiseLatencyP95();
     } catch (error) {
       console.error('[APM] Error checking alerts:', error);
     }
@@ -439,6 +446,102 @@ export class ApplicationPerformanceMonitor {
         });
       }
     }
+  }
+
+  // Check SocialWise Flow P95 latency with sliding window and filters
+  private async checkSocialWiseLatencyP95(): Promise<void> {
+    const WINDOW_MS = 5 * 60 * 1000;  // 5 min
+    const MIN_SAMPLES = 30;
+    const THRESHOLD = 2500; // 2.5s
+    const now = Date.now();
+
+    // Filter webhook metrics for SocialWise Flow with sliding window
+    const recentSocialWiseMetrics = this.metricsBuffer.webhook.filter(m => {
+      const metricTs = m.ts || m.timestamp.getTime();
+      return (
+        m.success &&                           // only successful requests
+        !m.coldStart &&                       // exclude cold starts
+        (now - metricTs) <= WINDOW_MS &&      // within 5-minute window
+        m.correlationId                       // ensure it's a SocialWise request
+      );
+    });
+
+    if (recentSocialWiseMetrics.length >= MIN_SAMPLES) {
+      // Calculate P95
+      const responseTimes = recentSocialWiseMetrics
+        .map(m => m.responseTime)
+        .sort((a, b) => a - b);
+      
+      const p95Index = Math.ceil(responseTimes.length * 0.95) - 1;
+      const p95 = responseTimes[p95Index];
+
+      if (p95 > THRESHOLD) {
+        this.createAlert({
+          level: p95 > 5000 ? 'critical' : 'warning',
+          component: 'socialwise-latency',
+          message: `SocialWise P95 latency exceeded: ${p95}ms (threshold: ${THRESHOLD}ms)`,
+          metrics: {
+            p95,
+            threshold: THRESHOLD,
+            windowMs: WINDOW_MS,
+            sampleCount: recentSocialWiseMetrics.length,
+            minSamples: MIN_SAMPLES,
+            // Optional: segment by band/strategy
+            bandBreakdown: this.calculateBandBreakdown(recentSocialWiseMetrics),
+          },
+        });
+      }
+    }
+
+    // Optional: Evict old metrics to prevent memory bloat
+    this.evictOldMetrics(now);
+  }
+
+  // Helper: Calculate breakdown by band/strategy for debugging
+  private calculateBandBreakdown(metrics: WebhookMetrics[]): Record<string, { count: number; avgLatency: number }> {
+    const breakdown: Record<string, { total: number; count: number }> = {};
+    
+    metrics.forEach(m => {
+      if (m.band && m.strategy) {
+        const key = `${m.band}:${m.strategy}`;
+        if (!breakdown[key]) {
+          breakdown[key] = { total: 0, count: 0 };
+        }
+        breakdown[key].total += m.responseTime;
+        breakdown[key].count += 1;
+      }
+    });
+
+    const result: Record<string, { count: number; avgLatency: number }> = {};
+    Object.entries(breakdown).forEach(([key, data]) => {
+      result[key] = {
+        count: data.count,
+        avgLatency: Math.round(data.total / data.count),
+      };
+    });
+
+    return result;
+  }
+
+  // Helper: Evict metrics older than 10 minutes to prevent memory bloat
+  private evictOldMetrics(now: number): void {
+    const EVICTION_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+    
+    this.metricsBuffer.webhook = this.metricsBuffer.webhook.filter(m => {
+      const metricTs = m.ts || m.timestamp.getTime();
+      return (now - metricTs) <= EVICTION_WINDOW_MS;
+    });
+    
+    // Also evict other metric types
+    this.metricsBuffer.worker = this.metricsBuffer.worker.filter(m => 
+      (now - m.timestamp.getTime()) <= EVICTION_WINDOW_MS
+    );
+    this.metricsBuffer.database = this.metricsBuffer.database.filter(m => 
+      (now - m.timestamp.getTime()) <= EVICTION_WINDOW_MS
+    );
+    this.metricsBuffer.cache = this.metricsBuffer.cache.filter(m => 
+      (now - m.timestamp.getTime()) <= EVICTION_WINDOW_MS
+    );
   }
 
   // Check queue depths

@@ -366,13 +366,25 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
       const routeTotalMs = Date.now() - startTime;
 
       // Record performance metrics
+      const coldStart = process.uptime() < 120; // 2 min pós-boot/deploy
+        const aliasHit = result.metrics.band === 'HARD'
+          && result.metrics.strategy === 'direct_map'
+          && (result.metrics.embeddingMs ?? 0) <= 15
+          && (result.metrics.score ?? 0) >= 0.95;
+
       recordWebhookMetrics({
         responseTime: routeTotalMs,
         timestamp: new Date(),
         correlationId: correlationId!,
         success: true,
         payloadSize: payloadSizeKB * 1024,
-        interactionType: interactionType === 'button_reply' ? 'button_reply' : 'intent'
+        interactionType: interactionType === 'button_reply' ? 'button_reply' : 'intent',
+        // ↓ novos campos p/ filtragem e segmentação
+        ts: Date.now(),
+        coldStart,
+        aliasHit,
+        band: result.metrics.band,          // 'HARD' | 'SOFT' | 'ROUTER'
+        strategy: result.metrics.strategy,  // 'direct_map' | 'router_llm' | ...
       });
 
       // Record quality sample (without PII)

@@ -1,144 +1,467 @@
-Contexto do Projeto para o Gemini Code Assist
-Visão Geral do Projeto: Socialwise Chatwit
-Socialwise Chatwit é uma plataforma avançada de atendimento ao cliente com inteligência artificial, especializada em automação de redes sociais e apoio jurídico para advogados. Desenvolvida para micro, pequenas e médias empresas, oferece soluções completas para gestão digital e atendimento automatizado.
+# GEMINI.md
 
-🎯 Funcionalidades Principais
-🤖 ChatWit IA: Assistente inteligente com integração OpenAI (GPT-4, GPT-4o, Claude), DALL-E e Whisper.
+This file provides comprehensive guidance to Claude Code (claude.ai/code) and Cursor AI when working with the Socialwise Chatwit repository.
 
-📱 Automação de Redes Sociais: Gestão completa de Instagram Business (DMs, comentários).
+## 🚀 Project Overview
 
-⚖️ Sistema Jurídico Especializado: Gestão de leads OAB e processamento automatizado de documentos.
+**Socialwise Chatwit** is a comprehensive AI-powered customer service platform specializing in social media automation and legal support for lawyers. Built with Next.js 15, TypeScript, and Prisma, this full-stack application integrates OpenAI APIs (GPT-5, GPT-5-mini, GPT-5-nano, GPT-4.1-nano, DALL-E, Whisper), Instagram/WhatsApp Business APIs, and provides advanced document processing capabilities.
 
-💬 Integração WhatsApp Business: API oficial da Meta para fluxos de atendimento.
+### Target Audience
+- **Lawyers**: Complete client management, automated proof correction, legal specialization support
+- **Businesses**: 24/7 automated customer service, lead generation, sales automation
+- **Agencies**: Multi-client management, white-label solutions, scalable automation
 
-📊 Painel Administrativo Avançado: Dashboard completo, gestão de usuários e monitoramento em tempo real.
+### Value Propositions
+- AI-powered automation reducing manual work by 80%
+- Specialized legal document processing and analysis
+- Multi-platform social media management
+- Real-time monitoring and analytics
+- Scalable architecture supporting thousands of simultaneous interactions
 
-🧠 Ambiente Técnico e Configurações
-Esta seção detalha a stack técnica, configurações de ambiente e scripts do projeto.
+## 💻 Technology Stack
 
-🛠️ Stack Principal e Dependências Chave
-O projeto é construído com as seguintes tecnologias, conforme definido no package.json:
+### Core Technologies
+- **Frontend**: Next.js 15+ (App Router), React 18+, TypeScript
+- **Backend**: Node.js with Next.js API routes, Express.js, Prisma ORM
+- **Database**: PostgreSQL 17 with pgvector extension
+- **Cache/Queue**: Redis 7+ with BullMQ for job processing
+- **UI Framework**: Tailwind CSS, Shadcn/UI components, Framer Motion
+- **Authentication**: NextAuth.js v5 with Prisma adapter
+- **File Storage**: MinIO (S3-compatible) for document management
 
-Frontend: Next.js 15+ (App Router), React 18, TypeScript.
+### AI & External Integrations
+- **AI Services**: OpenAI (GPT-5, DALL-E, Whisper), Anthropic Claude
+- **Social Media**: Instagram Graph API, WhatsApp Business API
+- **Payments**: Stripe for subscriptions and billing
+- **Email**: Resend for transactional emails
+- **Monitoring**: Prometheus metrics, Grafana dashboards
 
-Backend: Node.js, Express (para servidores customizados como Bull Board).
+### Development Tools
+- **Code Quality**: Biome (linting/formatting), TypeScript strict mode
+- **Testing**: Jest with React Testing Library, Supertest for API testing
+- **Build**: Next.js build system, Docker multi-stage builds
+- **Package Manager**: npm with lock file
 
-UI/UX: Tailwind CSS, Shadcn/UI, Framer Motion.
+## 📋 Critical Development Rules
 
-Banco de Dados: PostgreSQL com Prisma ORM.
+### Mandatory Rules
+```typescript
+// 1. ALWAYS run after any file edit or creation
+npx tsc --noEmit
 
-Autenticação: NextAuth.js v5.
+// 2. All new code MUST be TypeScript
+// 3. User-facing strings in Brazilian Portuguese
+// 4. Identifiers (variables, functions, files) in English
+// 5. You are already in the project root directory
+// 6. Use PowerShell commands on Windows
+```
 
-Filas e Jobs em Background: bullmq com redis.
+### Authentication Pattern (NextAuth.js v5)
+```typescript
+// REQUIRED pattern for protected routes
+import { auth } from "@/auth";
+import { NextResponse } from "next/server";
 
-Armazenamento de Arquivos: S3-compatible (MinIO).
+export async function POST(request: Request) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json(
+      { error: "Usuário não autenticado." },
+      { status: 401 }
+    );
+  }
+  // ... rest of logic
+}
+```
 
-IA e Serviços Externos: openai, @anthropic-ai/sdk, resend, stripe.
-
-Qualidade de Código: @biomejs/biome para linting e formatação.
-
-📜 Scripts (package.json)
-Desenvolvimento: npm run dev (inicia o server.js customizado), npm run dev:turbo (usa o modo turbo do Next.js).
-
-Build: npm run build (compila o Next.js e os workers TypeScript).
-
-Workers: npm run worker (inicia o webhook.worker.ts), npm run start:worker (inicia o automacao.worker.ts).
-
-Banco de Dados: npm run db:push (aplica schema e executa o seed), npm run db:seed (apenas seed), npm run db:studio (abre o Prisma Studio).
-
-Backup/Restore: Scripts customizados como npm run backup e npm run restore.
-
-Ambiente de Desenvolvimento Principal: Windows com PowerShell.
-
-🐳 Ambiente Docker
-O projeto utiliza Docker e Docker Compose para padronizar os ambientes.
-
-Desenvolvimento (docker-compose.dev.yml)
-app: Container principal que executa a aplicação Next.js com hot-reloading (CHOKIDAR_USEPOLLING: "true"). Monta o código-fonte local como um volume para refletir as alterações em tempo real.
-
-automacao_worker: Worker dedicado para o processamento de automações (automacao.worker.ts).
-
-webhook_worker: Worker dedicado para processar webhooks (webhook.worker.ts).
-
-redis: Serviço do Redis para ser usado pelo BullMQ.
-
-Rede: Todos os serviços se comunicam através de uma rede customizada (minha_rede).
-
-Produção (docker-compose.yml e Dockerfile.prod)
-Build Multi-stage: O Dockerfile.prod usa uma abordagem multi-stage.
-
-builder: Instala todas as dependências (dependencies e devDependencies), gera o cliente Prisma e executa npm run build.
-
-Imagem final: Copia apenas os artefatos de build (.next, public, dist), o server.js e as node_modules de produção (usando npm ci --omit=dev).
-
-Variáveis de Ambiente: As variáveis de ambiente são passadas durante o build (ARG) e em tempo de execução (env_file), garantindo que segredos não fiquem na imagem Docker.
-
-Serviços: O compose de produção orquestra o container da app e do redis. Os workers são executados dentro do container principal app ou como serviços separados, dependendo da configuração de deploy.
-
-🔐 Autenticação (NextAuth.js v5 - auth.ts)
-Estratégia: jwt (JSON Web Tokens).
-
-Adaptador: @auth/prisma-adapter para sincronizar usuários e contas com o banco de dados.
-
-Callbacks:
-
-signIn: Bloqueia o login de usuários com credenciais se o e-mail não estiver verificado (!registeredUser?.emailVerified). Permite login direto para provedores OAuth (Google, GitHub).
-
-jwt: Enriquece o token com dados customizados.
-
-No login (user existe): Adiciona id, role, isOAuth, isTwoFactorAuthEnabled e busca tokens de serviços (Instagram, Chatwit) no banco.
-
-No update (trigger === "update"): Permite a atualização do token em tempo real, por exemplo, ao habilitar 2FA.
-
-session: Expõe os dados do token para o cliente (sessão do React), garantindo que o frontend tenha acesso a role, isTwoFactorAuthEnabled, etc.
-
-⚙️ Configuração TypeScript (tsconfig.json)
-Moderno: Configurado para um ambiente Next.js 15 com module: "esnext" e moduleResolution: "bundler".
-
-Paths: Usa alias de path (@/*) para importações mais limpas.
-
-Inclusão: Inclui os arquivos do app, components, middleware.ts e as definições de tipo (.d.ts).
-
-Contexto Específico: Seed de Usuários Administradores
-Uma parte crucial da configuração inicial é popular (fazer o "seed") o banco de dados com usuários administradores pré-definidos. A lógica está em prisma/seed.ts e é executada com npm run db:seed ou automaticamente com npm run db:push.
-
-Usuários Administradores Padrão:
-Nome: Amanda
-
-Email: amandasousa22.adv@gmail.com
-
-Senha: 123456 (senha em texto plano antes do hash)
-
-Nome: Witalo
-
-Email: witalo_rocha@hotmail.com
-
-Senha: 123456 (senha em texto plano antes do hash)
-
-Instruções para o Gemini
-O projeto é uma plataforma completa chamada Socialwise Chatwit. O contexto principal está na seção de Visão Geral e Ambiente Técnico.
-
-Meu ambiente de desenvolvimento é Windows com PowerShell. Por favor, forneça comandos compatíveis.
-
-Ao analisar o arquivo prisma/seed.ts, lembre-se que o objetivo é criar usuários administradores de forma idempotente.
-
-Se eu pedir para adicionar um novo usuário administrador, a melhor abordagem é adicioná-lo à lista de usuários no arquivo prisma/seed.ts.
-
-O projeto usa NextAuth.js v5, então a lógica de autenticação está centralizada nos arquivos auth.ts e auth.config.ts.
-
-O deploy é feito com Docker, então as sugestões devem ser compatíveis com um ambiente containerizado, especialmente em relação a variáveis de ambiente e acesso a serviços como Redis e S3.
-
-exemplo de parasm que funciona:
+### Dynamic Routes (Next.js 15)
+```typescript
+// IMPORTANT: params is a Promise in Next.js 15
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ accountid: string }> }
 ): Promise<NextResponse> {
-  const { accountid } = await params;
-  try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: "Usuário não autenticado." },
-        { status: 401 }
-      );
-    }
+  const { accountid } = await params; // AWAIT is mandatory
+  // ...
+}
+```
+
+### Database Operations (Prisma)
+```typescript
+// All database interactions through Prisma ORM
+import { getPrismaInstance } from '@/lib/connections';
+import { Prisma } from '@prisma/client';
+
+// To set JSON field as null
+await prisma.someModel.update({
+  where: { id: 1 },
+  data: {
+    someJsonField: Prisma.JsonNull, // Use Prisma.JsonNull
+  },
+});
+```
+
+### UI/UX Standards
+- **Optimistic Updates**: Update UI state immediately, revert only on API failure
+- **Dialogs**: Use Shadcn/UI Dialog instead of native `confirm()`/`alert()`
+- **Responsive Design**: Use Tailwind responsive classes (w-[96vw] sm:max-w-2xl)
+- **Scroll Areas**: For extensive content, use ScrollArea with defined height
+
+## 🛠️ Development Commands
+
+### Database Operations
+```bash
+# Development database setup
+npm run db:push              # Push schema changes to dev database
+npm run db:prepare           # Prepare database for deployment
+npm run db:reset:dev         # Reset development database
+npm run db:migrate           # Run Prisma migrations
+npm run db:generate          # Generate Prisma client
+npm run db:studio            # Open Prisma Studio
+
+# Seeding
+npm run db:seed              # Populate initial data
+npm run db:seed-prices       # Seed subscription price cards
+
+# Prisma CLI commands
+npx prisma migrate dev       # Create migration in development
+npx prisma migrate deploy    # Apply migrations in production
+npx prisma studio           # Visual database editor
+```
+
+### Testing
+```bash
+npm test                     # Run all tests
+npm run test:unit            # Run unit tests only
+npm run test:integration     # Run integration tests only
+npm run test:e2e             # Run end-to-end tests
+npm run test:performance     # Run performance tests
+npm run test:comprehensive   # Run comprehensive test suite
+npm run test:targeted        # Run targeted tests
+```
+
+### Background Workers
+```bash
+npm run start:worker         # Start webhook worker
+npm run worker               # Start webhook worker (alternative)
+npm run start:ai-worker      # Start AI integration worker
+npm run build:workers        # Build workers for production
+```
+
+### Development
+```bash
+npm run dev                  # Start development server
+npm run build                # Build for production
+npm run start                # Start production server
+npm run lint                 # Run Biome linter
+npm run lint-apply           # Apply lint fixes
+npm run format-apply         # Apply formatting fixes
+npx tsc --noEmit            # Check TypeScript types
+```
+
+### Specialized Commands
+```bash
+npm run flash-intent         # Manage flash intent system
+npm run rollout              # Manage feature rollouts
+npm run init-monitoring      # Initialize monitoring
+npm run fx-rates:init        # Initialize FX rate system
+```
+
+### Git Workflow
+```bash
+git add .
+git commit -m 'feat: description'  # Use conventional commits
+git push origin <branch-name>
+```
+
+### Docker
+```bash
+docker compose build         # Build services
+docker compose up           # Start services
+docker compose down         # Stop services
+```
+
+## 📁 Project Structure
+
+### Root Directory
+```
+/
+├── app/                    # Next.js App Router (main application)
+├── components/             # Reusable React components
+├── lib/                   # Core libraries and utilities
+├── worker/                # Background job processors
+├── scripts/               # Database and deployment scripts
+├── prisma/                # Database schema and migrations
+├── types/                 # TypeScript type definitions
+├── hooks/                 # Custom React hooks
+├── public/                # Static assets
+├── docs/                  # Documentation
+└── __tests__/             # Test files
+```
+
+### App Directory (Next.js App Router)
+```
+app/
+├── api/                   # API routes
+│   ├── admin/            # Admin-only endpoints
+│   ├── chatwitia/        # AI chat endpoints
+│   ├── integrations/     # Third-party integrations
+│   │   └── webhooks/     # Webhook endpoints
+│   │       └── socialwiseflow/ # SocialWise Flow webhook
+│   └── [feature]/        # Feature-specific APIs
+├── admin/                # Admin dashboard pages
+│   ├── capitao/          # IA Capitão - AI Assistant Management
+│   ├── ai-integration/   # AI Integration Management
+│   ├── mtf-diamante/     # MTF Diamante - Advanced Messaging
+│   ├── queue-management/ # Queue Management System
+│   ├── monitoring/       # System Monitoring
+│   ├── leads/            # Lead Management
+│   ├── leads-chatwit/    # Chatwit Lead Integration
+│   ├── credentials/      # Credential Management
+│   ├── notifications/    # Notification System
+│   ├── disparo-em-massa/ # Bulk Message Dispatch
+│   ├── disparo-oab/      # OAB Message Dispatch
+│   └── users/            # User Management
+├── [accountid]/          # Dynamic account routes
+│   └── dashboard/        # User dashboard
+├── auth/                 # Authentication pages
+└── layout.tsx           # Root layout
+```
+
+### Library Organization
+```
+lib/
+├── ai-integration/       # AI service integrations
+│   ├── services/         # Core AI services
+│   ├── types/            # AI integration types
+│   ├── jobs/             # Background jobs
+│   ├── bootstrap/        # Initialization
+│   ├── middleware/       # Middleware
+│   ├── utils/            # Utilities
+│   ├── docs/             # Documentation
+│   ├── schemas/          # Data schemas
+│   ├── workers/          # Worker processes
+│   └── queues/           # Queue management
+├── socialwise-flow/      # SocialWise Flow Processing System
+│   ├── processor.ts      # Main flow processor
+│   ├── classification.ts # Intent classification
+│   ├── channel-formatting.ts # Channel-specific formatting
+│   ├── performance-bands.ts  # Performance band processing
+│   ├── cache-manager.ts      # Cache management
+│   ├── metrics.ts            # Performance metrics
+│   └── services/             # SocialWise services
+├── cost/                 # Cost Management System
+│   ├── cost-worker.ts    # Main cost processing worker
+│   ├── budget-system.ts  # Budget management system
+│   ├── pricing-service.ts # Dynamic pricing resolution
+│   └── fx-rate-service.ts # Foreign exchange rates
+├── monitoring/           # System Monitoring & Observability
+│   ├── application-performance-monitor.ts # APM
+│   ├── queue-monitor.ts  # Queue health monitoring
+│   └── database-monitor.ts # Database performance
+├── queue/                # Queue Definitions & Configuration
+├── queue-management/     # Advanced Queue Management System
+├── auth/                # Authentication utilities
+├── cache/               # Caching mechanisms
+├── webhook/             # Webhook processing
+├── whatsapp/            # WhatsApp API integration
+├── instagram/           # Instagram API integration
+├── connections.ts       # Database connections
+├── redis.ts            # Redis configuration
+└── utils.ts            # General utilities
+```
+
+### Worker Architecture
+```
+worker/
+├── webhook.worker.ts     # Main webhook processor (Parent Worker)
+├── automacao.worker.ts   # Automation worker
+├── ai-integration.worker.ts # AI processing worker
+├── processors/           # Individual job processors
+├── WebhookWorkerTasks/  # Webhook-specific tasks
+├── services/            # Worker services
+└── queues/              # Queue definitions
+```
+
+## 🔄 SocialWise Flow Processing Pipeline
+
+### Processing Chain
+```
+1. Webhook Entry → Authentication & Security
+2. Payload Processing → Validation & Sanitization
+3. Idempotency & Rate Limiting → Duplicate Detection
+4. Classification Engine → Embedding Generation & Classification
+5. Performance Bands → Confidence-based Processing
+6. Response Generation → Channel-specific Formatting
+```
+
+### Performance Bands System
+- **HARD (≥0.80)**: Direct mapping, <120ms response
+- **SOFT (0.65-0.79)**: Warmup buttons, intent candidates
+- **LOW (0.50-0.64)**: Domain topics, educational content
+- **ROUTER (<0.50)**: LLM routing, handoff detection
+
+## 🎯 Key Business Logic Areas
+
+### 1. MTF Diamante System
+Advanced template management for WhatsApp automation:
+- Interactive message creation with variable substitution
+- Button reaction mapping with dynamic routing
+- Bulk processing capabilities with progress tracking
+- Template library with version control
+
+### 2. IA Capitão (AI Captain)
+Complete AI assistant management:
+- Intent management with configurable responses
+- FAQ automation with context awareness
+- Document processing with OCR capabilities
+- Dynamic routing based on conversation context
+
+### 3. Lead Management (Legal)
+Specialized system for lawyers:
+- Document unification and PDF processing
+- Automated legal analysis using specialized AI
+- Batch processing workflows for multiple cases
+- LGPD compliance tracking and audit logs
+
+### 4. Queue Management System
+Enterprise-grade queue system:
+- Job prioritization with dynamic routing
+- Dead letter queue handling with retry logic
+- Performance monitoring with real-time metrics
+- Alert management with configurable thresholds
+
+## 💰 Cost Management System
+
+### Components
+- **Cost Worker**: Event processing and calculation
+- **Budget System**: Allocation and enforcement
+- **Pricing Service**: Dynamic pricing with caching
+- **FX Rate Service**: Currency conversion
+
+### Processing Flow
+```
+Cost Event → Idempotency Check → Price Resolution 
+→ Cost Calculation → Database Storage → Audit Logging
+```
+
+## 📊 Monitoring & Observability
+
+### Application Performance Monitor (APM)
+- Real-time metrics (webhook, worker, database, cache)
+- Performance tracking (response times, throughput, error rates)
+- Configurable alert system
+- Historical data retention and analysis
+
+### Queue Monitoring
+- Queue health (waiting, active, completed, failed)
+- Performance statistics
+- Automatic anomaly detection
+- Configurable monitoring thresholds
+
+## 🔒 Security & Validation
+
+### Input Validation
+- Maximum payload size: 256KB
+- XSS and injection sanitization
+- Schema validation with Zod
+
+### Rate Limiting
+- Per-session limits
+- Per-account limits
+- Burst protection
+- Rate limit headers
+
+### Replay Protection
+- Nonce validation
+- Timestamp verification
+- Duplicate prevention
+
+## 📝 Code Conventions
+
+### File Naming
+- **Components**: PascalCase (`UserProfile.tsx`)
+- **Pages**: kebab-case (`user-settings/page.tsx`)
+- **Utilities**: camelCase (`formatDate.ts`)
+- **API Routes**: Always `route.ts`
+- **Types**: PascalCase with `.ts` extension
+
+### Import Patterns
+```typescript
+// 1. External libraries
+import { useState } from 'react';
+
+// 2. Internal modules with @/ alias
+import { auth } from '@/auth';
+
+// 3. Relative imports
+import { Button } from './components';
+```
+
+### API Route Structure
+```
+app/api/[feature]/
+├── route.ts              # GET, POST for collection
+├── [id]/
+│   └── route.ts         # GET, PUT, DELETE for item
+└── [id]/[action]/
+    └── route.ts         # Custom actions
+```
+
+## 🎨 Responsive Dialog Example
+```tsx
+// Dialog with scroll and responsiveness
+<Dialog>
+  <DialogContent className="w-[96vw] sm:max-w-2xl max-h-[85vh]">
+    <DialogHeader>
+      <DialogTitle>Título</DialogTitle>
+    </DialogHeader>
+    <ScrollArea className="h-[58vh] sm:h-[62vh]">
+      {/* Scrollable content */}
+    </ScrollArea>
+    <DialogFooter>
+      {/* Actions */}
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+```
+
+## ⚠️ Critical Notes
+
+1. **You are in the project root directory**
+2. **Use PowerShell commands on Windows**
+3. **Path errors with "@" outside Next.js scope don't need fixing**
+4. **In Next.js 15, route params are Promises - always use await**
+5. **Always run `npx tsc --noEmit` after edits**
+6. **Use Shadcn/UI Dialog instead of native confirm()/alert()**
+7. **Optimistic UI updates are preferred**
+8. **User-facing strings in Portuguese BR, code in English**
+
+## 🚦 Environment Variables
+
+```bash
+# Configuration by environment
+.env.development    # Development
+.env.production     # Production
+.env.local         # Local (gitignored)
+.env.docker.example # Docker example
+
+# Required variables
+DATABASE_URL        # PostgreSQL connection
+REDIS_URL          # Redis connection
+NEXTAUTH_SECRET    # NextAuth secret
+OPENAI_API_KEY     # OpenAI API key
+```
+
+## 🧪 Testing Strategy
+
+- **Unit Tests**: Business logic components
+- **Integration Tests**: API endpoints and workflows
+- **E2E Tests**: Critical user journeys
+- **Performance Tests**: Queue and AI systems
+- **Comprehensive Coverage**: Legal compliance requirements
+
+
+---
+
+*This document is the single source of truth for Socialwise Chatwit development. Keep it updated as the project evolves.*

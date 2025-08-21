@@ -9,7 +9,8 @@ import {
   X,
   Check,
   Loader2,
-  ExternalLink
+  ExternalLink,
+  File
 } from "lucide-react";
 import { useCallback, useState, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
@@ -49,31 +50,30 @@ interface MetaMediaUploadProps {
 export default function MetaMediaUpload({
   uploadedFiles,
   setUploadedFiles,
-  allowedTypes = ['video/mp4', 'video/webm', 'image/jpeg', 'image/png', 'image/jpg'],
+  allowedTypes = ['video/mp4', 'video/webm', 'image/jpeg', 'image/png', 'image/jpg', 'application/pdf'],
   maxSizeMB = 16,
   title = "Upload para API Meta",
-  description = "Faça upload de mídia para a API Meta (vídeos, imagens)",
+  description = "Faça upload de mídia para a API Meta (vídeos, imagens, documentos)",
   maxFiles = 1,
   onUploadComplete,
 }: MetaMediaUploadProps) {
   const [isUploading, setIsUploading] = useState(false);
+  const [dropzoneKey, setDropzoneKey] = useState(() => Math.random().toString(36));
   
-  // Log mudanças nos arquivos para debug
+  // Reset dropzone key when component is reset
   useEffect(() => {
-    console.log('[MetaMediaUpload] Estado dos arquivos atualizado:', uploadedFiles);
-    
-    // Verificar se algum arquivo tem URL e mediaHandle válidos
-    const validFiles = uploadedFiles.filter(f => f.url && f.mediaHandle);
-    console.log('[MetaMediaUpload] Arquivos válidos para template:', validFiles);
-    
-    // Log de estado para depuração
-    if (uploadedFiles.length > 0) {
-      localStorage.setItem('debug_uploadedFiles', JSON.stringify(uploadedFiles));
+    if (uploadedFiles.length === 0) {
+      setDropzoneKey(Math.random().toString(36));
     }
-  }, [uploadedFiles]);
+  }, [uploadedFiles.length]);
 
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
+      // Verificar se há arquivos para processar
+      if (!acceptedFiles || acceptedFiles.length === 0) {
+        return;
+      }
+
       // Verificar se já temos arquivos suficientes
       if (uploadedFiles.length >= maxFiles) {
         toast.error(`Máximo de ${maxFiles} arquivos permitidos`);
@@ -101,12 +101,17 @@ export default function MetaMediaUpload({
       if (validFiles.length === 0) return;
 
       // Se há limites, verificar quantos arquivos ainda podemos adicionar
-      const remainingSlots = maxFiles - uploadedFiles.length;
+      const remainingSlots = Math.max(0, maxFiles - uploadedFiles.length);
+      if (remainingSlots <= 0) {
+        toast.error(`Máximo de ${maxFiles} arquivos permitidos`);
+        return;
+      }
+
       const filesToAdd = validFiles.slice(0, remainingSlots);
 
       // Adicionar arquivos à lista
       const newFiles: MetaMediaFile[] = filesToAdd.map(file => ({
-        id: Math.random().toString(36).substring(2, 11),
+        id: `file-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
         file,
         progress: 0,
         status: 'waiting',
@@ -120,7 +125,7 @@ export default function MetaMediaUpload({
         uploadFileToMetaApi(fileData);
       }
     },
-    [uploadedFiles, maxFiles, maxSizeMB, allowedTypes, setUploadedFiles]
+    [uploadedFiles.length, maxFiles, maxSizeMB, allowedTypes, setUploadedFiles]
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -130,10 +135,13 @@ export default function MetaMediaUpload({
       'video/webm': ['.webm'],
       'image/jpeg': ['.jpg', '.jpeg'],
       'image/png': ['.png'],
+      'application/pdf': ['.pdf'],
     },
-    maxFiles: maxFiles - uploadedFiles.length,
+    maxFiles: maxFiles,
     maxSize: maxSizeMB * 1024 * 1024,
     disabled: isUploading || uploadedFiles.length >= maxFiles,
+    multiple: maxFiles > 1,
+    noClick: isUploading || uploadedFiles.length >= maxFiles,
   });
 
   // Função para fazer upload de uma URL existente do MinIO para a API Meta
@@ -389,7 +397,7 @@ export default function MetaMediaUpload({
 
   return (
     <TooltipProvider>
-      <div className="space-y-4">
+      <div key={dropzoneKey} className="space-y-4">
         <div>
           <h3 className="text-sm font-medium mb-1">{title}</h3>
           <p className="text-xs text-muted-foreground mb-2">{description}</p>
@@ -424,6 +432,7 @@ export default function MetaMediaUpload({
                   <option value="video/mp4">Vídeo (MP4)</option>
                   <option value="image/jpeg">Imagem (JPEG)</option>
                   <option value="image/png">Imagem (PNG)</option>
+                  <option value="application/pdf">Documento (PDF)</option>
                 </select>
               </div>
               <Button
@@ -466,10 +475,19 @@ export default function MetaMediaUpload({
               <UploadCloud size={24} className="text-muted-foreground" />
             </div>
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-              <span className="font-semibold">Arraste arquivos para a API Meta</span>
+              <span className="font-semibold">
+                {isUploading 
+                  ? "Upload em andamento..." 
+                  : uploadedFiles.length >= maxFiles
+                    ? "Limite de arquivos atingido"
+                    : "Arraste arquivos para a API Meta"
+                }
+              </span>
             </p>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Clique para selecionar arquivos &#40;máximo {maxSizeMB}MB&#41;
+              {!(isUploading || uploadedFiles.length >= maxFiles) && (
+                <>Clique para selecionar arquivos &#40;máximo {maxSizeMB}MB&#41;</>
+              )}
             </p>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               Formatos aceitos: {allowedTypes.map(type => type.split('/')[1].toUpperCase()).join(', ')}
@@ -500,6 +518,8 @@ export default function MetaMediaUpload({
                           />
                         ) : file.mime_type?.includes("video") ? (
                           <Video className="h-10 w-10 text-blue-500" />
+                        ) : file.mime_type?.includes("pdf") ? (
+                          <File className="h-10 w-10 text-red-500" />
                         ) : file.mime_type?.includes("image") ? (
                           <FileImage className="h-10 w-10 text-green-500" />
                         ) : (
@@ -553,7 +573,11 @@ export default function MetaMediaUpload({
                                 rel="noopener noreferrer"
                                 className="text-[10px] text-blue-500 hover:underline flex items-center"
                               >
-                                <span>Visualizar {file.mime_type?.includes("video") ? "vídeo" : "imagem"}</span>
+                                <span>Visualizar {
+                                  file.mime_type?.includes("video") ? "vídeo" : 
+                                  file.mime_type?.includes("pdf") ? "documento" : 
+                                  "imagem"
+                                }</span>
                                 <ExternalLink className="h-2 w-2 ml-1" />
                               </a>
                             </div>

@@ -12,6 +12,14 @@ import {
 // import { responsesCall } from "@/lib/cost/openai-wrapper"; // (opcional) não usado aqui
 import { withDeadlineAbort } from "./utils";
 
+// ==== MASTER_PROMPT - Lógica de negócio imutável ====
+const MASTER_PROMPT = `
+# MASTER
+Você é um assistente especializado em geração de respostas estruturadas para chatbots.
+Sempre retorne EXATAMENTE no schema especificado, sem texto fora do JSON.
+Foque em respostas concisas, profissionais e acionáveis.
+`;
+
 // ==== Structured Outputs with Fallback Pattern ====
 interface StructuredOrJsonResult<T> {
   mode: "structured" | "json_mode_fallback";
@@ -456,7 +464,8 @@ export async function generateShortTitlesBatch(
     )
     .join("\n");
 
-  const devRules = `
+  // ✅ HIERARQUIA MODERNA: Instructions para identidade + 1 developer para regras específicas
+  const taskRules = `
 # OBJETIVO
 Gerar títulos curtos e acionáveis para cada serviço jurídico.
 
@@ -486,14 +495,11 @@ Gerar títulos curtos e acionáveis para cada serviço jurídico.
         client: this.client,
         model: agent.model,
         messages: [
-          {
-            role: "developer",
-            content: agent.developer || agent.instructions || "",
-          },
-          { role: "developer", content: devRules },
+          { role: "developer", content: MASTER_PROMPT },
+          { role: "developer", content: taskRules },
           { role: "user", content: user },
         ],
-        instructions: "Você é um UX writer jurídico. Siga o schema estritamente.",
+        instructions: agent.instructions || "Você é um UX writer jurídico. Siga o schema estritamente.",
         max_output_tokens: agent.maxOutputTokens || 256,
         verbosity: caps.reasoning && isGPT5(agent.model) ? normVerb(agent.verbosity) : undefined,
         reasoning: caps.reasoning ? { effort: normEffort(agent.reasoningEffort) } : undefined,
@@ -525,7 +531,8 @@ export async function generateFreeChatButtons(
   const schema = createButtonsSchema(channel);
   const c = getConstraintsForChannel(channel);
 
-  const devRules = `
+  // ✅ HIERARQUIA MODERNA: Instructions para identidade + 1 developer para regras específicas
+  const taskRules = `
 # OBJETIVO
 Gerar uma resposta curta (introduction_text) e 2–3 botões objetivos para avançar a conversa.
 
@@ -546,15 +553,11 @@ Gerar uma resposta curta (introduction_text) e 2–3 botões objetivos para avan
         client: this.client,
         model: agent.model,
         messages: [
-          {
-            role: "developer",
-            content: agent.developer || agent.instructions || "",
-          },
-          { role: "developer", content: devRules },
-          { role: "developer", content: `Canal alvo: ${channel}` },
+          { role: "developer", content: MASTER_PROMPT },
+          { role: "developer", content: taskRules },
           { role: "user", content: user },
         ],
-        instructions: "Você é um UX writer jurídico. Siga o schema estritamente.",
+        instructions: agent.instructions || "Você é um UX writer jurídico. Siga o schema estritamente.",
         max_output_tokens: agent.maxOutputTokens || 256,
         verbosity: caps.reasoning && isGPT5(agent.model) ? normVerb(agent.verbosity) : undefined,
         reasoning: caps.reasoning ? { effort: normEffort(agent.reasoningEffort) } : undefined,
@@ -593,7 +596,8 @@ export async function generateWarmupButtons(
   const schema = createButtonsSchema(channel);
   const c = getConstraintsForChannel(channel);
 
-  const devRules = `
+  // ✅ HIERARQUIA MODERNA: Instructions para identidade + 1 developer para regras específicas
+  const taskRules = `
 # OBJETIVO
 Gerar uma pequena introdução e botões para desambiguar a intenção do usuário.
 
@@ -614,15 +618,11 @@ Gerar uma pequena introdução e botões para desambiguar a intenção do usuár
         client: this.client,
         model: agent.model,
         messages: [
-          {
-            role: "developer",
-            content: agent.developer || agent.instructions || "",
-          },
-          { role: "developer", content: devRules },
-          { role: "developer", content: `Canal alvo: ${channel}` },
+          { role: "developer", content: MASTER_PROMPT },
+          { role: "developer", content: taskRules },
           { role: "user", content: user },
         ],
-        instructions: "Você é um UX writer jurídico. Siga o schema estritamente.",
+        instructions: agent.instructions || "Você é um UX writer jurídico. Siga o schema estritamente.",
         max_output_tokens: agent.maxOutputTokens || 256,
         verbosity: caps.reasoning && isGPT5(agent.model) ? normVerb(agent.verbosity) : undefined,
         reasoning: caps.reasoning ? { effort: normEffort(agent.reasoningEffort) } : undefined,
@@ -654,7 +654,8 @@ export async function routerLLM(
   const schema = createRouterSchema(channel);
   const c = getConstraintsForChannel(channel);
 
-  const devRules = `
+  // ✅ HIERARQUIA MODERNA: Instructions para identidade + 1 developer para regras específicas
+  const taskRules = `
 # OBJETIVO
 Decida entre roteamento para intenção específica ou chat livre.
 
@@ -676,15 +677,11 @@ Decida entre roteamento para intenção específica ou chat livre.
         client: this.client,
         model: agent.model,
         messages: [
-          {
-            role: "developer",
-            content: agent.developer || agent.instructions || "",
-          },
-          { role: "developer", content: devRules },
-          { role: "developer", content: `Canal alvo: ${channel}` },
+          { role: "developer", content: MASTER_PROMPT },
+          { role: "developer", content: taskRules },
           { role: "user", content: user },
         ],
-        instructions: "Você é um roteador inteligente. Siga o schema estritamente.",
+        instructions: agent.instructions || "Você é um roteador inteligente. Siga o schema estritamente.",
         max_output_tokens: agent.maxOutputTokens || 512,
         verbosity: caps.reasoning && isGPT5(agent.model) ? normVerb(agent.verbosity) : undefined,
         reasoning: caps.reasoning ? { effort: normEffort(agent.reasoningEffort) } : undefined,

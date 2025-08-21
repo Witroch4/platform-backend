@@ -32,7 +32,11 @@ const initialFormState: TemplateFormState = {
   buttons: [],
 };
 
-export default function CreateTemplatePage() {
+interface CreateTemplatePageProps {
+  onSuccess?: () => void;
+}
+
+export default function CreateTemplatePage({ onSuccess }: CreateTemplatePageProps) {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(0);
   const {
@@ -50,9 +54,46 @@ export default function CreateTemplatePage() {
     updateButton,
     onDragEndButtons,
     createTemplate,
-  } = useTemplateForm(initialFormState);
+  } = useTemplateForm(initialFormState, onSuccess);
 
   const steps = ["Configurar", "Editar", "Analisar"];
+
+  // Função robusta para cancelamento
+  const handleCancel = () => {
+    console.log('Função handleCancel executada');
+    
+    // Estratégia 1: Tentar usar o callback onSuccess se disponível
+    if (onSuccess) {
+      console.log('Usando callback onSuccess');
+      onSuccess();
+      return;
+    }
+    
+    // Estratégia 2: Tentar usar router.push
+    try {
+      console.log('Tentando router.push');
+      router.push("/admin/mtf-diamante");
+    } catch (error) {
+      console.error('Erro no router.push:', error);
+      
+      // Estratégia 3: Fallback para window.location
+      try {
+        console.log('Usando window.location como fallback');
+        window.location.href = "/admin/mtf-diamante";
+      } catch (fallbackError) {
+        console.error('Erro no fallback:', fallbackError);
+        
+        // Estratégia 4: Último recurso - voltar na história
+        try {
+          console.log('Usando window.history.back');
+          window.history.back();
+        } catch (historyError) {
+          console.error('Erro no history.back:', historyError);
+          alert('Erro na navegação. Por favor, use o botão voltar do navegador.');
+        }
+      }
+    }
+  };
 
   // Prévia consolidada para a etapa 3
   const reviewPreviewMessage = useMemo(() => {
@@ -136,7 +177,11 @@ export default function CreateTemplatePage() {
   return (
     <div className="container mx-auto py-10 max-w-6xl">
       <div className="flex items-center gap-2 mb-6">
-        <Button variant="ghost" size="icon" onClick={() => router.push("/admin/mtf-diamante") }>
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={handleCancel}
+        >
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <h1 className="text-2xl font-bold">Criar Novo Template</h1>
@@ -200,7 +245,11 @@ export default function CreateTemplatePage() {
       )}
 
       <div className="flex justify-between mt-8 relative z-50">
-        <Button type="button" variant="outline" onClick={() => router.push("/admin/mtf-diamante") }>
+        <Button 
+          type="button" 
+          variant="outline" 
+          onClick={handleCancel}
+        >
           Cancelar
         </Button>
         {currentStep < 2 ? (

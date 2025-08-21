@@ -3,7 +3,7 @@
 import { openaiService, AgentConfig, IntentCandidate, WarmupButtonsResponse } from "@/services/openai";
 
 export interface ClassificationResult {
-  band: 'HARD' | 'SOFT' | 'LOW' | 'ROUTER';
+  band: 'HARD' | 'SOFT' | 'ROUTER';
   score: number;
   candidates: IntentCandidate[];
   strategy: 'direct_map' | 'warmup_buttons' | 'domain_topics' | 'router_llm';
@@ -32,17 +32,9 @@ export interface SoftBandResult {
   response_time_ms: number;
 }
 
-export interface LowBandResult {
-  type: 'domain_topics';
-  introduction_text: string;
-  buttons: Array<{
-    title: string;
-    payload: string;
-  }>;
-  response_time_ms: number;
-}
 
-export type BandProcessingResult = HardBandResult | SoftBandResult | LowBandResult;
+
+export type BandProcessingResult = HardBandResult | SoftBandResult;
 
 /**
  * HARD Band Processing (≥0.80 score)
@@ -344,161 +336,7 @@ export class SoftBandProcessor {
   }
 }
 
-/**
- * LOW Band Processing (<0.65 score)
- * Domain-specific legal topic suggestion
- * Target: sub-200ms response time with deterministic fallbacks
- */
-export class LowBandProcessor {
-  private agent: AgentConfig;
 
-  constructor(agent: AgentConfig) {
-    this.agent = agent;
-  }
-
-  /**
-   * Process LOW band classification with domain topics
-   * @param userText Original user message
-   * @returns Domain topics result
-   */
-  async process(userText: string): Promise<LowBandResult> {
-    const startTime = Date.now();
-
-    console.log(`📚 LOW band processing for vague query`);
-
-    try {
-      // Attempt LLM-based legal topic suggestion
-      const llmResult = await this.generateLegalTopics(userText);
-      
-      if (llmResult) {
-        const totalTime = Date.now() - startTime;
-        console.log(`📚 LOW band completed with LLM in ${totalTime}ms (target: <200ms)`);
-        
-        return {
-          type: 'domain_topics',
-          introduction_text: llmResult.introduction_text,
-          buttons: llmResult.buttons,
-          response_time_ms: totalTime
-        };
-      }
-    } catch (error) {
-      console.error("Erro na geração de tópicos jurídicos:", error);
-    }
-
-    // Fallback to deterministic legal topics
-    const totalTime = Date.now() - startTime;
-    console.log(`📚 LOW band completed with fallback in ${totalTime}ms`);
-    
-    return this.createFallbackTopics(totalTime);
-  }
-
-  /**
-   * Generate legal topics using LLM
-   * @param userText Original user message
-   * @returns LLM-generated topics or null if failed
-   */
-  private async generateLegalTopics(
-    userText: string
-  ): Promise<{ introduction_text: string; buttons: Array<{ title: string; payload: string }> } | null> {
-    const prompt = `# INSTRUÇÃO
-Você é um especialista em direito brasileiro.
-Analise a mensagem do usuário e sugira as 3 áreas jurídicas mais relevantes.
-
-# MENSAGEM DO USUÁRIO
-"${userText}"
-
-# SUA TAREFA
-Gere uma resposta no formato JSON com:
-1. "introduction_text": frase empática reconhecendo a situação (≤ 180 chars)
-2. "buttons": 3 áreas jurídicas relevantes com títulos claros (≤ 20 chars cada)
-
-# ÁREAS JURÍDICAS COMUNS
-- Direito do Consumidor
-- Direito Trabalhista
-- Direito de Família
-- Direito Previdenciário
-- Direito Civil
-- Direito Criminal
-- Direito de Trânsito
-- Direito Tributário
-- Direito Imobiliário
-
-# FORMATO DE RESPOSTA
-{
-  "introduction_text": "Posso ajudar com sua questão. Qual área jurídica melhor se relaciona com sua situação?",
-  "buttons": [
-    {"title": "Direito Civil", "payload": "@consulta_direito_civil"},
-    {"title": "Direito Consumidor", "payload": "@consulta_direito_consumidor"},
-    {"title": "Direito Família", "payload": "@consulta_direito_familia"}
-  ]
-}`;
-
-    try {
-      const response = await openaiService.createChatCompletion([
-        {
-          role: "user",
-          content: prompt
-        }
-      ], {
-        model: this.agent.model as any,
-        temperature: this.agent.tempSchema || 0.1,
-        max_tokens: 300
-      });
-
-      const content = response.choices[0]?.message?.content?.trim();
-      if (!content) return null;
-
-      const result = JSON.parse(content);
-      
-      // Validate and clamp the response
-      if (!result.introduction_text || !Array.isArray(result.buttons)) {
-        return null;
-      }
-
-      // Clamp introduction text
-      result.introduction_text = result.introduction_text.length <= 180 
-        ? result.introduction_text 
-        : result.introduction_text.slice(0, 180).trim();
-
-      // Validate and clamp buttons
-      result.buttons = result.buttons
-        .slice(0, 3)
-        .map((button: any) => ({
-          title: button.title?.length <= 20 
-            ? button.title 
-            : button.title?.slice(0, 20).trim() || "Consulta",
-          payload: button.payload?.match(/^@[a-z0-9_]+$/) 
-            ? button.payload 
-            : `@${button.payload?.replace(/^@/, '').replace(/[^a-z0-9_]/gi, '_').toLowerCase().replace(/_+/g, '_').replace(/^_|_$/g, '') || 'consulta_juridica_geral'}`
-        }));
-
-      return result;
-    } catch (error) {
-      console.error("Erro ao gerar tópicos jurídicos:", error);
-      return null;
-    }
-  }
-
-  /**
-   * Create deterministic fallback legal topics
-   * @param elapsedTime Time already elapsed
-   * @returns Fallback topics result
-   */
-  private createFallbackTopics(elapsedTime: number): LowBandResult {
-    console.log("🔄 Using deterministic legal topics fallback");
-
-    return {
-      type: 'domain_topics',
-      introduction_text: "Posso ajudar com sua questão jurídica. Qual área melhor se relaciona com sua situação?",
-      buttons: [
-        { title: "Direito Civil", payload: "@consulta_direito_civil" },
-        { title: "Direito Consumidor", payload: "@consulta_direito_consumidor" },
-        { title: "Direito Família", payload: "@consulta_direito_familia" }
-      ],
-      response_time_ms: elapsedTime
-    };
-  }
-}
 
 /**
  * Performance Band Processing Factory
@@ -507,12 +345,10 @@ Gere uma resposta no formato JSON com:
 export class PerformanceBandProcessor {
   private hardProcessor: HardBandProcessor;
   private softProcessor: SoftBandProcessor;
-  private lowProcessor: LowBandProcessor;
 
   constructor(agent: AgentConfig) {
     this.hardProcessor = new HardBandProcessor(agent);
     this.softProcessor = new SoftBandProcessor(agent);
-    this.lowProcessor = new LowBandProcessor(agent);
   }
 
   /**
@@ -544,9 +380,6 @@ export class PerformanceBandProcessor {
             classification.candidates.slice(0, 3) // Top 3 candidates
           );
 
-        case 'LOW':
-          return await this.lowProcessor.process(userText);
-
         default:
           throw new Error(`Unsupported band: ${classification.band}`);
       }
@@ -556,7 +389,7 @@ export class PerformanceBandProcessor {
       
       // Ultimate fallback
       return {
-        type: 'domain_topics',
+        type: 'warmup_buttons',
         introduction_text: "Desculpe, houve um problema. Como posso ajudar com sua questão jurídica?",
         buttons: [
           { title: "Falar com Humano", payload: "@handoff_human" },

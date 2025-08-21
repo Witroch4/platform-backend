@@ -16,7 +16,7 @@ export interface PerformanceMetrics {
   route_total_ms: number;
   
   // Classification metrics
-  band: 'HARD' | 'SOFT' | 'LOW' | 'ROUTER';
+  band: 'HARD' | 'SOFT' | 'ROUTER';
   strategy_used: string;
   
   // Quality metrics
@@ -34,7 +34,7 @@ export interface PerformanceMetrics {
 export interface ClassificationRates {
   direct_map_rate: number;    // % of HARD band classifications
   warmup_rate: number;        // % of SOFT band classifications  
-  vague_rate: number;         // % of LOW band classifications
+  vague_rate: number;         // % of ROUTER band classifications
   router_rate: number;        // % of ROUTER band classifications
   total_requests: number;
 }
@@ -150,9 +150,8 @@ export async function getClassificationRates(
       
       totalRequests += parseInt(counters.total_requests || '0');
       hardCount += parseInt(counters.band_hard || '0');
-      softCount += parseInt(counters.band_soft || '0');
-      lowCount += parseInt(counters.band_low || '0');
-      routerCount += parseInt(counters.band_router || '0');
+       softCount += parseInt(counters.band_soft || '0');
+       routerCount += parseInt(counters.band_router || '0');
     }
     
     return {
@@ -307,7 +306,7 @@ function getDateRange(startDate: string, endDate: string): string[] {
  * Create performance metrics object
  */
 export function createPerformanceMetrics(
-  band: 'HARD' | 'SOFT' | 'LOW' | 'ROUTER',
+  band: 'HARD' | 'SOFT' | 'ROUTER',
   strategy: string,
   routeTotalMs: number,
   context: {

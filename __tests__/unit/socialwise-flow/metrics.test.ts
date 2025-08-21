@@ -85,7 +85,7 @@ describe('SocialWise Flow Metrics', () => {
 
     it('should handle optional fields correctly', () => {
       const metrics = createPerformanceMetrics(
-        'LOW',
+        'ROUTER',
         'domain_topics',
         200,
         {
@@ -93,7 +93,7 @@ describe('SocialWise Flow Metrics', () => {
         }
       );
 
-      expect(metrics.band).toBe('LOW');
+      expect(metrics.band).toBe('ROUTER');
       expect(metrics.strategy_used).toBe('domain_topics');
       expect(metrics.route_total_ms).toBe(200);
       expect(metrics.channel_type).toBe('instagram');
@@ -175,7 +175,7 @@ describe('SocialWise Flow Metrics', () => {
         total_requests: '100',
         band_hard: '40',
         band_soft: '35',
-        band_low: '20',
+        band_router: '20',
         band_router: '5'
       });
 

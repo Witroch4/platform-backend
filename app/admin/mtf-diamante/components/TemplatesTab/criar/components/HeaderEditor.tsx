@@ -45,7 +45,7 @@ export const HeaderEditor = ({
   };
 
   // Estado local para preservar as atualizações funcionais do MetaMediaUpload
-  const [localFiles, setLocalFiles] = useState<MetaMediaFile[]>(ensureArray(headerMetaMedia));
+  const [localFiles, setLocalFiles] = useState<MetaMediaFile[]>(() => ensureArray(headerMetaMedia));
 
   // Quando o pai mudar (ex.: reset), sincronizar local se houver diferença
   useEffect(() => {
@@ -53,7 +53,6 @@ export const HeaderEditor = ({
     if (!arraysEqualShallow(localFiles, incoming)) {
       setLocalFiles(incoming);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [headerMetaMedia]);
 
   // Propagar alterações locais para o pai apenas quando houver diferença
@@ -62,7 +61,6 @@ export const HeaderEditor = ({
     if (!arraysEqualShallow(localFiles, parent)) {
       onStateChange('headerMetaMedia', localFiles as any);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localFiles]);
 
   // Quantidade de variáveis no header
@@ -133,17 +131,50 @@ export const HeaderEditor = ({
         <div className="mt-4">
           <Label>Imagem do Cabeçalho</Label>
           <MetaMediaUpload
+            key={`header-upload-${headerType}`}
             uploadedFiles={localFiles}
             setUploadedFiles={setLocalFiles}
             allowedTypes={["image/jpeg", "image/png"]}
             maxSizeMB={5}
             maxFiles={1}
-            onUploadComplete={(handle, file) => { /* ... */ }}
           />
           {localFiles.length === 0 && <Alert variant="destructive" className="mt-2"><AlertCircle className="h-4 w-4" /><AlertTitle>Imagem obrigatória</AlertTitle></Alert>}
         </div>
       )}
-       {/* Lógica para VIDEO e DOCUMENT */}
+
+      {headerType === 'VIDEO' && (
+        <div className="mt-4">
+          <Label>Vídeo do Cabeçalho</Label>
+          <MetaMediaUpload
+            key={`header-upload-${headerType}`}
+            uploadedFiles={localFiles}
+            setUploadedFiles={setLocalFiles}
+            allowedTypes={["video/mp4"]}
+            maxSizeMB={16}
+            maxFiles={1}
+            title="Upload de Vídeo para API Meta"
+            description="Faça upload de vídeos (MP4) para usar como cabeçalho do template"
+          />
+          {localFiles.length === 0 && <Alert variant="destructive" className="mt-2"><AlertCircle className="h-4 w-4" /><AlertTitle>Vídeo obrigatório</AlertTitle></Alert>}
+        </div>
+      )}
+
+      {headerType === 'DOCUMENT' && (
+        <div className="mt-4">
+          <Label>Documento do Cabeçalho</Label>
+          <MetaMediaUpload
+            key={`header-upload-${headerType}`}
+            uploadedFiles={localFiles}
+            setUploadedFiles={setLocalFiles}
+            allowedTypes={["application/pdf"]}
+            maxSizeMB={16}
+            maxFiles={1}
+            title="Upload de Documento para API Meta"
+            description="Faça upload de documentos (PDF) para usar como cabeçalho do template"
+          />
+          {localFiles.length === 0 && <Alert variant="destructive" className="mt-2"><AlertCircle className="h-4 w-4" /><AlertTitle>Documento obrigatório</AlertTitle></Alert>}
+        </div>
+      )}
     </div>
   );
 };
