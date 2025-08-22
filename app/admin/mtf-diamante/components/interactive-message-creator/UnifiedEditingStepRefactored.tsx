@@ -364,25 +364,6 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
             message={message}
             variables={variables}
             channelType={channelType || undefined}
-            reactions={normalizedReactions}
-            onReactionChange={(buttonId, reaction) => {
-              const centralReaction: Partial<CentralButtonReaction> = {
-                buttonId,
-                type: reaction.emoji ? 'emoji' : 'text',
-                isActive: true,
-              };
-
-              if (reaction.emoji) {
-                centralReaction.emoji = reaction.emoji;
-                centralReaction.textResponse = undefined;
-              }
-              if (reaction.textResponse) {
-                centralReaction.textResponse = reaction.textResponse;
-                centralReaction.emoji = undefined;
-              }
-
-              onReactionUpdate(buttonId, centralReaction);
-            }}
           />
         </div>
       </div>
