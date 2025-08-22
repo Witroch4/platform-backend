@@ -18,7 +18,7 @@ import { SocialWiseReplayProtectionService } from '@/lib/socialwise-flow/service
 import { recordSocialWiseQualitySample } from '@/lib/socialwise-flow/monitoring-dashboard';
 import { recordWebhookMetrics } from '@/lib/monitoring/application-performance-monitor';
 import { getAssistantForInbox } from '@/lib/socialwise/assistant';
-import { buildWhatsAppByIntentRaw, buildWhatsAppByGlobalIntent } from '@/lib/socialwise/templates';
+import { buildWhatsAppByIntentRaw, buildWhatsAppByGlobalIntent, buildInstagramByIntentRaw, buildInstagramByGlobalIntent } from '@/lib/socialwise/templates';
 
 // Constants
 const MAX_PAYLOAD_SIZE_KB = 256;
@@ -319,14 +319,25 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
       if (idLower.startsWith('intent:') || idLower.startsWith('@')) {
         const norm = normalizeIntentId(String(derivedButtonId));
         const rawIntent = norm.plain;
-        let mapped = await buildWhatsAppByIntentRaw(rawIntent, inboxId, wamid);
-        if (!mapped) {
-          mapped = await buildWhatsAppByGlobalIntent(rawIntent, inboxId, wamid);
+        let mapped: any = null;
+        
+        // Try mapping based on channel type
+        if (channelType.toLowerCase().includes('whatsapp')) {
+          mapped = await buildWhatsAppByIntentRaw(rawIntent, inboxId, wamid);
+          if (!mapped) {
+            mapped = await buildWhatsAppByGlobalIntent(rawIntent, inboxId, wamid);
+          }
+        } else if (channelType.toLowerCase().includes('instagram')) {
+          mapped = await buildInstagramByIntentRaw(rawIntent, inboxId);
+          if (!mapped) {
+            mapped = await buildInstagramByGlobalIntent(rawIntent, inboxId);
+          }
         }
         
         webhookLogger.info('Button intent mapping', { 
           intent: norm.standardId, 
           found: !!mapped,
+          channelType,
           traceId 
         });
         
@@ -353,7 +364,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
         chatwitAccountId,
         userId,
         wamid,
-        traceId
+        traceId,
+        originalPayload: payload // For button reaction detection
       };
 
       // Get agent configuration for embedipreview setting
@@ -420,6 +432,25 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
       if (result.response.action === 'handoff') {
         return NextResponse.json({ action: 'handoff' }, { status: 200 });
       }
+
+      // Log da resposta final exata que será retornada
+      let finalResponse: any;
+      if (result.response.whatsapp) {
+        finalResponse = { whatsapp: result.response.whatsapp };
+      } else if (result.response.instagram) {
+        finalResponse = { instagram: result.response.instagram };
+      } else {
+        finalResponse = result.response;
+      }
+
+      webhookLogger.info('🎯 FINAL WEBHOOK RESPONSE', {
+        finalResponse: JSON.stringify(finalResponse, null, 2),
+        responseType: typeof finalResponse,
+        hasWhatsApp: !!finalResponse.whatsapp,
+        hasInstagram: !!finalResponse.instagram,
+        messageFormat: finalResponse.instagram?.message_format,
+        traceId
+      });
 
       // Return channel-specific response
       if (result.response.whatsapp) {

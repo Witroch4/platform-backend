@@ -57,6 +57,9 @@ interface MtfDataContextType {
   interactiveMessages: any[];
   optimisticUpdateMessage: (messageData: any, isEdit?: boolean) => void;
   
+  // Reações de botões (nova)
+  buttonReactions: any[];
+  
   // API Keys (nova)
   apiKeys: any[];
 
@@ -160,6 +163,10 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
     bffData?.interactiveMessages ?? prevRef.current?.interactiveMessages ?? [],
     [bffData?.interactiveMessages]
   );
+  const buttonReactions = useMemo(() => 
+    bffData?.buttonReactions ?? prevRef.current?.buttonReactions ?? [],
+    [bffData?.buttonReactions]
+  );
   const apiKeys = useMemo(() => 
     bffData?.apiKeys ?? prevRef.current?.apiKeys ?? [],
     [bffData?.apiKeys]
@@ -184,6 +191,7 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
           lotes: lotes.length,
           caixas: caixas.length,
           interactiveMessages: interactiveMessages.length,
+          buttonReactions: buttonReactions.length,
           apiKeys: apiKeys.length,
         }
       });
@@ -272,6 +280,7 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
     prefetchInbox,
     interactiveMessages,
     optimisticUpdateMessage,
+    buttonReactions,
     apiKeys,
     isInitialized,
   }), [
@@ -288,6 +297,7 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
     prefetchInbox,
     interactiveMessages,
     optimisticUpdateMessage,
+    buttonReactions,
     apiKeys,
     isInitialized,
   ]);

@@ -689,6 +689,24 @@ export function AppAdminDashboard() {
                         {state !== "collapsed" && <span>Gerenciar Filas</span>}
                       </SidebarMenuButton>
                     </SidebarMenuItem>
+
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        onClick={(e) => {
+                          e.preventDefault();
+                          startTransition(() => {
+                            router.push('/admin/iframe-config');
+                          });
+                        }}
+                        onMouseEnter={() => {
+                          try { router.prefetch('/admin/iframe-config'); } catch {}
+                        }}
+                        className={`flex items-center transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
+                      >
+                        <Settings className="mr-2" />
+                        {state !== "collapsed" && <span>Config. Iframe</span>}
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
                   </>
                 )}
               </SidebarMenu>

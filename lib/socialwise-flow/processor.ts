@@ -11,7 +11,7 @@ import { classifyIntent, ClassificationResult } from './classification';
 import { buildChannelResponse, buildDefaultLegalTopics, buildFallbackResponse, logChannelResponse, ChannelResponse } from './channel-formatting';
 import { collectPerformanceMetrics, createPerformanceMetrics } from './metrics';
 import { getAssistantForInbox } from '@/lib/socialwise/assistant';
-import { buildWhatsAppByIntentRaw, buildWhatsAppByGlobalIntent } from '@/lib/socialwise/templates';
+import { buildWhatsAppByIntentRaw, buildWhatsAppByGlobalIntent, buildInstagramByIntentRaw, buildInstagramByGlobalIntent } from '@/lib/socialwise/templates';
 import { getConcurrencyManager } from './concurrency-manager';
 import { 
   selectDegradationStrategy, 
@@ -24,6 +24,10 @@ const processorLogger = createLogger('SocialWise-Processor');
 
 function isWhatsAppChannel(channelType?: string) {
   return (channelType || '').toLowerCase().includes('whatsapp');
+}
+
+function isInstagramChannel(channelType?: string) {
+  return (channelType || '').toLowerCase().includes('instagram');
 }
 
 function normalizeChannelType(channelType: string): import('../../services/openai-components/types').ChannelType {
@@ -42,6 +46,14 @@ export interface ProcessorContext {
   wamid?: string;
   traceId?: string;
   assistantId?: string; // Para playground e casos específicos
+  originalPayload?: any; // Para detectar cliques de botão
+}
+
+export interface ButtonReactionMeta {
+  replyToMessageId?: string;
+  reaction?: 'love' | 'like' | 'haha' | 'wow' | 'sad' | 'angry';
+  reactionEmoji?: string;
+  textReaction?: string;
 }
 
 export interface ProcessorResult {
@@ -228,7 +240,7 @@ async function processHardBand(
       return buildFallbackResponse(context.channelType, context.userText);
     }
 
-    // Try direct mapping only for WhatsApp channel
+    // Try direct mapping for WhatsApp and Instagram channels
     if (isWhatsAppChannel(context.channelType)) {
       let mapped = await buildWhatsAppByIntentRaw(topIntent.slug, context.inboxId, context.wamid);
       if (!mapped) {
@@ -236,7 +248,7 @@ async function processHardBand(
       }
       
       if (mapped) {
-        processorLogger.info('HARD band direct mapping successful', {
+        processorLogger.info('HARD band WhatsApp direct mapping successful', {
           intent: topIntent.slug,
           score: topIntent.score,
           processingMs: Date.now() - startTime,
@@ -244,8 +256,46 @@ async function processHardBand(
         });
         return mapped;
       }
+    } else if (isInstagramChannel(context.channelType)) {
+      processorLogger.info('HARD band attempting Instagram mapping', {
+        intent: topIntent.slug,
+        score: topIntent.score,
+        traceId: context.traceId
+      });
+      
+      let mapped = await buildInstagramByIntentRaw(topIntent.slug, context.inboxId);
+      processorLogger.info('HARD band Instagram intent raw result', {
+        intent: topIntent.slug,
+        found: !!mapped,
+        traceId: context.traceId
+      });
+      
+      if (!mapped) {
+        mapped = await buildInstagramByGlobalIntent(topIntent.slug, context.inboxId);
+        processorLogger.info('HARD band Instagram global intent result', {
+          intent: topIntent.slug,
+          found: !!mapped,
+          traceId: context.traceId
+        });
+      }
+      
+      if (mapped) {
+        processorLogger.info('HARD band Instagram direct mapping successful', {
+          intent: topIntent.slug,
+          score: topIntent.score,
+          processingMs: Date.now() - startTime,
+          traceId: context.traceId
+        });
+        return mapped;
+      } else {
+        processorLogger.info('HARD band Instagram mapping failed - falling back to channel response', {
+          intent: topIntent.slug,
+          score: topIntent.score,
+          traceId: context.traceId
+        });
+      }
     } else {
-      processorLogger.info('HARD band skipping direct mapping for non-WhatsApp channel', {
+      processorLogger.info('HARD band skipping direct mapping for unsupported channel', {
         channelType: context.channelType,
         intent: topIntent.slug,
         score: topIntent.score,
@@ -523,6 +573,263 @@ async function processRouterBand(
 /**
  * Main SocialWise Flow processor
  */
+/**
+ * Detect and process button reactions for Instagram
+ * Based on legacy WhatsApp button processor logic
+ */
+async function processButtonReaction(context: ProcessorContext): Promise<ButtonReactionMeta | undefined> {
+  if (!context.originalPayload) return undefined;
+  
+  const payload = context.originalPayload;
+  
+  // Detecta se é clique de botão baseado na estrutura real do Chatwit
+  let isButton = false;
+  let buttonId: string | undefined;
+  
+  if (isWhatsAppChannel(context.channelType)) {
+    // WhatsApp: verifica button_reply em content_attributes ou na raiz
+    isButton = !!(payload.context?.message?.content_attributes?.button_reply?.id || 
+                  payload.button_id);
+    buttonId = payload.context?.message?.content_attributes?.button_reply?.id || 
+               payload.button_id;
+  } else if (isInstagramChannel(context.channelType)) {
+    // Instagram: verifica postback_payload em content_attributes ou na raiz
+    isButton = !!(payload.context?.message?.content_attributes?.postback_payload || 
+                  payload.postback_payload) && 
+               (payload.interaction_type === 'postback');
+    buttonId = payload.context?.message?.content_attributes?.postback_payload || 
+               payload.postback_payload;
+  }
+  
+  if (!isButton || !buttonId) return undefined;
+
+  // Para reply context, usar source_id da mensagem original
+  const replyToMessageId = payload.context?.message?.source_id || 
+                          payload.context?.wamid || 
+                          payload.wamid;
+  
+  if (!context.inboxId) return { replyToMessageId };
+
+  try {
+    const prisma = getPrismaInstance();
+    
+    // Busca mapeamento do botão no banco (usando inboxId interno do ChatwitInbox)
+    const mapping = await prisma.mapeamentoBotao.findFirst({
+      where: { 
+        buttonId, 
+        inbox: { 
+          inboxId: context.inboxId // inboxId é o campo externo (105, etc)
+        } 
+      },
+    });
+
+    if (!mapping || !mapping.actionPayload) return { replyToMessageId };
+
+    // Extrai dados de reação do actionPayload
+    const actionPayload: any = mapping.actionPayload || {};
+    const emoji = typeof actionPayload.emoji === 'string' ? actionPayload.emoji.trim() : '';
+    const textReaction = typeof actionPayload.textReaction === 'string' ? actionPayload.textReaction.trim() : '';
+
+    // Mapeia emoji para reação Instagram
+    const reaction = mapEmojiToInstagramReaction(emoji);
+    
+    processorLogger.info('Button reaction detected', {
+      buttonId,
+      inboxId: context.inboxId,
+      channelType: context.channelType,
+      emoji,
+      textReaction,
+      reaction,
+      replyToMessageId,
+      traceId: context.traceId
+    });
+
+    return {
+      replyToMessageId,
+      reaction: reaction || undefined,
+      reactionEmoji: emoji || undefined,
+      textReaction: textReaction || undefined,
+    };
+    
+  } catch (error) {
+    processorLogger.error('Error processing button reaction', {
+      error: error instanceof Error ? error.message : String(error),
+      buttonId,
+      inboxId: context.inboxId,
+      traceId: context.traceId
+    });
+    
+    return { replyToMessageId };
+  }
+}
+
+/**
+ * Map emoji to Instagram reaction name
+ * Based on Instagram's supported reaction types
+ */
+function mapEmojiToInstagramReaction(emoji: string): 'love' | 'like' | 'haha' | 'wow' | 'sad' | 'angry' | null {
+  const e = (emoji || '').trim();
+  switch (e) {
+    case '❤️':
+    case '❤':
+    case '♥️':
+      return 'love';
+    case '👍':
+    case '👌':
+    case '✅':
+      return 'like';
+    case '😂':
+    case '😹':
+      return 'haha';
+    case '😮':
+    case '😯':
+      return 'wow';
+    case '😢':
+    case '😭':
+      return 'sad';
+    case '😡':
+    case '😠':
+      return 'angry';
+    default:
+      return null;
+  }
+}
+
+/**
+ * Apply WhatsApp reaction metadata to the response
+ * Creates a modified response for WhatsApp reactions (emoji reactions + text responses)
+ */
+function applyWhatsAppReactionMeta(response: ChannelResponse, reactionMeta: ButtonReactionMeta): any {
+  // For text reactions, return a simple text response
+  if (reactionMeta.textReaction && reactionMeta.textReaction.trim()) {
+    processorLogger.info('Applied text reaction to WhatsApp response', {
+      textReaction: reactionMeta.textReaction,
+      originalText: response.text
+    });
+    
+    // Return a simple text response for WhatsApp
+    return {
+      fulfillmentMessages: [
+        {
+          text: {
+            text: [reactionMeta.textReaction]
+          }
+        }
+      ]
+    };
+  }
+  
+  // For emoji reactions, return the standard response format with WhatsApp metadata
+  if (reactionMeta.reaction && reactionMeta.replyToMessageId) {
+    processorLogger.info('Applied WhatsApp reaction meta to response', {
+      reaction: reactionMeta.reaction,
+      emoji: reactionMeta.reactionEmoji,
+      replyToMessageId: reactionMeta.replyToMessageId
+    });
+
+    // Create response with WhatsApp reaction metadata
+    const responseText = response.text || 
+                        ((response.whatsapp as any)?.interactive?.body?.text) || 
+                        '👍';
+    
+    return {
+      fulfillmentMessages: [
+        {
+          payload: {
+            socialwiseResponse: {
+              message_format: 'REACTION',
+              payload: {
+                text: responseText,
+                emoji: reactionMeta.reactionEmoji,
+                message_id: reactionMeta.replyToMessageId
+              }
+            },
+            meta: {
+              whatsapp: {
+                reply_to_message_id: reactionMeta.replyToMessageId,
+                sender_action: {
+                  type: 'react',
+                  emoji: reactionMeta.reactionEmoji
+                }
+              }
+            }
+          }
+        }
+      ]
+    };
+  }
+  
+  // If no reaction metadata, return the original response
+  return response;
+}
+
+/**
+ * Apply Instagram reaction metadata to the response
+ * Creates a modified response for Instagram reactions (emoji reactions + text responses)
+ */
+function applyInstagramReactionMeta(response: ChannelResponse, reactionMeta: ButtonReactionMeta): any {
+  // For text reactions, return a simple text response
+  if (reactionMeta.textReaction && reactionMeta.textReaction.trim()) {
+    processorLogger.info('Applied text reaction to Instagram response', {
+      textReaction: reactionMeta.textReaction,
+      originalText: response.text
+    });
+    
+    // Return a simple text response for Instagram
+    return {
+      fulfillmentMessages: [
+        {
+          text: {
+            text: [reactionMeta.textReaction]
+          }
+        }
+      ]
+    };
+  }
+  
+  // For emoji reactions, return the standard response format with Instagram metadata
+  if (reactionMeta.reaction && reactionMeta.replyToMessageId) {
+    processorLogger.info('Applied Instagram reaction meta to response', {
+      reaction: reactionMeta.reaction,
+      emoji: reactionMeta.reactionEmoji,
+      replyToMessageId: reactionMeta.replyToMessageId
+    });
+
+    // Create response with Instagram reaction metadata
+    const responseText = response.text || 
+                        ((response.instagram?.message as any)?.text) || 
+                        '👍';
+    
+    return {
+      fulfillmentMessages: [
+        {
+          payload: {
+            socialwiseResponse: {
+              message_format: 'TEXT',
+              payload: {
+                text: responseText
+              }
+            },
+            meta: {
+              instagram: {
+                reply_to_message_id: reactionMeta.replyToMessageId,
+                sender_action: {
+                  type: 'react',
+                  reaction: reactionMeta.reaction,
+                  emoji: reactionMeta.reactionEmoji
+                }
+              }
+            }
+          }
+        }
+      ]
+    };
+  }
+  
+  // If no reaction metadata, return the original response
+  return response;
+}
+
 export async function processSocialWiseFlow(
   context: ProcessorContext,
   embedipreview = true
@@ -530,6 +837,21 @@ export async function processSocialWiseFlow(
   const startTime = Date.now();
   
   try {
+    // 1. Check for button reactions first (for both WhatsApp and Instagram)
+    let buttonReactionMeta: ButtonReactionMeta | undefined;
+    if (isInstagramChannel(context.channelType) || isWhatsAppChannel(context.channelType)) {
+      buttonReactionMeta = await processButtonReaction(context);
+      
+      if (buttonReactionMeta) {
+        processorLogger.info('Button reaction processing enabled', {
+          channelType: context.channelType,
+          hasReaction: !!buttonReactionMeta.reaction,
+          hasTextReaction: !!buttonReactionMeta.textReaction,
+          traceId: context.traceId
+        });
+      }
+    }
+
     // Resolve user ID from inbox if not provided
     let userId = context.userId;
     if (!userId && context.inboxId) {
@@ -632,6 +954,16 @@ export async function processSocialWiseFlow(
     }
 
     const routeTotalMs = Date.now() - startTime;
+
+    // Apply button reaction metadata for Instagram and WhatsApp
+    if (buttonReactionMeta && (isInstagramChannel(context.channelType) || isWhatsAppChannel(context.channelType))) {
+      if (isInstagramChannel(context.channelType)) {
+        response = applyInstagramReactionMeta(response, buttonReactionMeta);
+      } else if (isWhatsAppChannel(context.channelType)) {
+        // For WhatsApp, we can apply similar logic or extend for WhatsApp-specific format
+        response = applyWhatsAppReactionMeta(response, buttonReactionMeta);
+      }
+    }
 
     // Log the response for debugging
     logChannelResponse(response, {

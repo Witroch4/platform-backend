@@ -102,8 +102,57 @@ await prisma.someModel.update({
 ```
 
 ### UI/UX Standards
-- **Optimistic Updates**: Update UI state immediately, revert only on API failure
-- **Dialogs**: Use Shadcn/UI Dialog instead of native `confirm()`/`alert()`
+
+* **Optimistic updates**
+
+  * Atualize o estado da UI **antes** da resposta da API e reverta só em caso de erro.
+  * Prefira `startTransition` (UI local) e/ou React Query/Server Actions para conciliar cache e rollback.
+  * Combine com `toast.promise` para feedback transparente da operação. ([strapi.io][1], [Medium][2])
+
+* **Toasts (sonner)**
+
+  * Use **sonner** (o toast do shadcn foi **depreciado**). Renderize `<Toaster />` no layout raiz e chame `toast` em clientes.
+  * Para chamadas de API, padronize **`toast.promise`** (loading → success/error).
+
+  ```tsx
+  // app/layout.tsx
+  import { Toaster } from "sonner";
+  export default function RootLayout({ children }: { children: React.ReactNode }) {
+    return (
+      <html lang="pt-BR">
+        <body>
+          {children}
+          <Toaster richColors closeButton />
+        </body>
+      </html>
+    );
+  }
+  ```
+  ```tsx
+  "use client";
+  import { toast } from "sonner";
+
+  async function save(data: FormData) {
+    // sua chamada de API/Server Action aqui
+  }
+
+  export function SaveButton() {
+    const onClick = () => {
+      const promise = save(new FormData());
+      toast.promise(promise, {
+        loading: "Salvando...",
+        success: (result) => `Salvo com sucesso`,
+        error: (err) => err?.message ?? "Erro ao salvar",
+      });
+    };
+    return <button onClick={onClick}>Salvar</button>;
+  }
+  ```
+
+* **Dialogs**
+
+  * Use **`Dialog`** para modais gerais e **`AlertDialog`** para ações destrutivas (confirm/deny). Evite `confirm()/alert()`. Garanta foco inicial e fechamento por `Esc`.
+
 - **Responsive Design**: Use Tailwind responsive classes (w-[96vw] sm:max-w-2xl)
 - **Scroll Areas**: For extensive content, use ScrollArea with defined height
 

@@ -12,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { MoreHorizontal, EllipsisVertical, Plus, Trash2, Settings2, Link2 } from 'lucide-react';
+import { MoreHorizontal, EllipsisVertical, Plus, Trash2, Settings2, Link2, Download, Upload, FileText, AlertCircle, CheckCircle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   DropdownMenu,
@@ -20,6 +20,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Progress } from '@/components/ui/progress';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
+import { toast } from 'sonner';
 
 type Assistant = {
   id: string;
@@ -29,6 +35,36 @@ type Assistant = {
   generateFaqs: boolean;
   captureMemories: boolean;
   createdAt: string;
+};
+
+type ImportResult = {
+  success: boolean;
+  summary: {
+    totalAssistants: number;
+    importedAssistants: number;
+    skippedAssistants: number;
+    updatedAssistants: number;
+    totalDocuments: number;
+    importedDocuments: number;
+    skippedDocuments: number;
+    totalFaqs: number;
+    importedFaqs: number;
+    skippedFaqs: number;
+    totalPromptVersions: number;
+    importedPromptVersions: number;
+    skippedPromptVersions: number;
+    errors: string[];
+    warnings: string[];
+  };
+  details: {
+    processedAssistants: Array<{
+      originalId: string;
+      newId?: string;
+      name: string;
+      action: 'imported' | 'skipped' | 'updated' | 'error';
+      reason?: string;
+    }>;
+  };
 };
 
 export default function CaptainAssistantsPage() {
@@ -46,6 +82,28 @@ export default function CaptainAssistantsPage() {
   });
   const [loading, setLoading] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+
+  // Export/Import state
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [exportOptions, setExportOptions] = useState({
+    includeInactive: false,
+    compress: false,
+    includeMetrics: false
+  });
+  const [importOptions, setImportOptions] = useState({
+    conflictResolution: 'skip',
+    importDocuments: true,
+    importFaqs: true,
+    importPromptVersions: true,
+    importInboxLinks: false,
+    importABTests: false,
+    preserveIds: false
+  });
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   async function loadAssistants() {
     try {
@@ -84,6 +142,113 @@ export default function CaptainAssistantsPage() {
     const res = await fetch(`/api/admin/ai-integration/assistants?id=${id}`, { method: 'DELETE' });
     if (res.ok) loadAssistants();
   }
+
+  // Export functionality
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (exportOptions.includeInactive) params.set('includeInactive', 'true');
+      if (exportOptions.compress) params.set('compress', 'true');
+      if (exportOptions.includeMetrics) params.set('includeMetrics', 'true');
+      
+      const response = await fetch(`/api/admin/ai-integration/assistants/export?${params}`);
+      
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        
+        // Get filename from Content-Disposition header or use default
+        const contentDisposition = response.headers.get('Content-Disposition');
+        const filename = contentDisposition?.match(/filename="(.+)"/)?.[1] || 
+                        `assistants-export-${new Date().toISOString().split('T')[0]}.json`;
+        
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        const totalAssistants = response.headers.get('X-Total-Assistants') || '0';
+        const totalDocuments = response.headers.get('X-Total-Documents') || '0';
+        const totalFaqs = response.headers.get('X-Total-Faqs') || '0';
+        
+        toast.success(`Exportação concluída! ${totalAssistants} assistentes, ${totalDocuments} documentos e ${totalFaqs} FAQs exportados.`);
+        setShowExportDialog(false);
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        toast.error(errorData.error || 'Erro durante exportação');
+      }
+    } catch (error) {
+      console.error('Erro na exportação:', error);
+      toast.error('Erro durante exportação');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // Import functionality
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.type !== 'application/json') {
+        toast.error('Por favor, selecione um arquivo JSON válido');
+        return;
+      }
+      setImportFile(file);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!importFile) {
+      toast.error('Selecione um arquivo para importar');
+      return;
+    }
+
+    setImporting(true);
+    setImportResult(null);
+
+    try {
+      const fileContent = await importFile.text();
+      const importData = JSON.parse(fileContent);
+
+      const response = await fetch('/api/admin/ai-integration/assistants/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: importData,
+          options: importOptions
+        })
+      });
+
+      const result = await response.json();
+      setImportResult(result);
+
+      if (result.success) {
+        toast.success(`Importação concluída! ${result.summary.importedAssistants} assistentes importados, ${result.summary.skippedAssistants} ignorados.`);
+        await loadAssistants(); // Reload assistants list
+      } else if (response.status === 207) { // Multi-Status (partial success)
+        toast.warning(`Importação parcial. ${result.summary.importedAssistants} importados, ${result.summary.errors.length} erros.`);
+      } else {
+        toast.error(result.error || 'Erro durante importação');
+      }
+
+    } catch (error) {
+      console.error('Erro na importação:', error);
+      toast.error('Arquivo inválido ou erro durante importação');
+      setImportResult(null);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const resetImport = () => {
+    setImportFile(null);
+    setImportResult(null);
+  };
 
   // Componente de skeleton para os assistentes
   const AssistantsSkeleton = () => (
@@ -143,10 +308,27 @@ export default function CaptainAssistantsPage() {
               </a>
             </div>
           </div>
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm"><Plus className="w-4 h-4 mr-2" /> Criar um novo assistente</Button>
-            </DialogTrigger>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => setShowExportDialog(true)}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Exportar
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => setShowImportDialog(true)}
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              Importar
+            </Button>
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm"><Plus className="w-4 h-4 mr-2" /> Criar um novo assistente</Button>
+              </DialogTrigger>
           <DialogContent className="sm:max-w-2xl w-[96vw] max-h-[85vh]">
             <DialogHeader>
               <DialogTitle>Criar um assistente</DialogTitle>
@@ -193,6 +375,7 @@ export default function CaptainAssistantsPage() {
             </div>
           </DialogContent>
         </Dialog>
+          </div>
         </div>
       )}
 
@@ -236,6 +419,274 @@ export default function CaptainAssistantsPage() {
           ))
         )}
       </div>
+
+      {/* Dialog de Exportação */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent className="w-[96vw] sm:max-w-lg max-h-[85vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Download className="w-5 h-5" />
+              Exportar Assistentes
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Exporte todos os seus assistentes IA com documentos, FAQs, prompts e configurações em um arquivo JSON.
+            </p>
+            
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="includeInactive"
+                  checked={exportOptions.includeInactive}
+                  onChange={(e) => setExportOptions(prev => ({ ...prev, includeInactive: e.target.checked }))}
+                />
+                <label htmlFor="includeInactive" className="text-sm">
+                  Incluir assistentes inativos
+                </label>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="includeMetrics"
+                  checked={exportOptions.includeMetrics}
+                  onChange={(e) => setExportOptions(prev => ({ ...prev, includeMetrics: e.target.checked }))}
+                />
+                <label htmlFor="includeMetrics" className="text-sm">
+                  Incluir métricas de performance dos prompts
+                </label>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="compress"
+                  checked={exportOptions.compress}
+                  onChange={(e) => setExportOptions(prev => ({ ...prev, compress: e.target.checked }))}
+                />
+                <label htmlFor="compress" className="text-sm">
+                  Comprimir arquivo JSON (menor tamanho)
+                </label>
+              </div>
+            </div>
+
+            <Alert>
+              <FileText className="h-4 w-4" />
+              <AlertDescription>
+                O arquivo exportado incluirá todos os assistentes com documentos, FAQs, versões de prompt, configurações SocialWise Flow e metadados.
+              </AlertDescription>
+            </Alert>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setShowExportDialog(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleExport} disabled={exporting}>
+              {exporting ? 'Exportando...' : 'Exportar'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Importação */}
+      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+        <DialogContent className="w-[96vw] sm:max-w-2xl max-h-[85vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="w-5 h-5" />
+              Importar Assistentes
+            </DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="h-[60vh] pr-4">
+            <div className="space-y-6">
+              {!importResult && (
+                <>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Arquivo de Exportação</label>
+                    <input
+                      type="file"
+                      accept=".json"
+                      onChange={handleFileSelect}
+                      className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/80"
+                    />
+                    {importFile && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Arquivo selecionado: {importFile.name} ({Math.round(importFile.size / 1024)}KB)
+                      </p>
+                    )}
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-medium">Opções de Importação</h4>
+                    
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Resolução de Conflitos</label>
+                      <Select 
+                        value={importOptions.conflictResolution} 
+                        onValueChange={(value) => setImportOptions(prev => ({ ...prev, conflictResolution: value as any }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="skip">Pular (manter existentes)</SelectItem>
+                          <SelectItem value="replace">Substituir existentes</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Como tratar assistentes com nomes que já existem
+                      </p>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="importDocuments"
+                          checked={importOptions.importDocuments}
+                          onChange={(e) => setImportOptions(prev => ({ ...prev, importDocuments: e.target.checked }))}
+                        />
+                        <label htmlFor="importDocuments" className="text-sm">
+                          Importar documentos dos assistentes
+                        </label>
+                      </div>
+                      
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="importFaqs"
+                          checked={importOptions.importFaqs}
+                          onChange={(e) => setImportOptions(prev => ({ ...prev, importFaqs: e.target.checked }))}
+                        />
+                        <label htmlFor="importFaqs" className="text-sm">
+                          Importar FAQs dos assistentes
+                        </label>
+                      </div>
+                      
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="importPromptVersions"
+                          checked={importOptions.importPromptVersions}
+                          onChange={(e) => setImportOptions(prev => ({ ...prev, importPromptVersions: e.target.checked }))}
+                        />
+                        <label htmlFor="importPromptVersions" className="text-sm">
+                          Importar versões de prompt e configurações
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {importing && (
+                <div className="text-center py-8">
+                  <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+                  <p className="text-sm text-muted-foreground">Importando assistentes...</p>
+                </div>
+              )}
+
+              {importResult && (
+                <div className="space-y-4">
+                  <div className="flex items-start gap-2">
+                    {importResult.success ? (
+                      <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="w-5 h-5 text-yellow-500 mt-0.5" />
+                    )}
+                    <div>
+                      <h4 className="font-medium">
+                        {importResult.success ? 'Importação Concluída' : 'Importação Parcial'}
+                      </h4>
+                      <p className="text-sm text-muted-foreground">
+                        Resultado do processamento dos assistentes
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="border rounded-lg p-3">
+                      <div className="text-2xl font-bold text-green-600">{importResult.summary.importedAssistants}</div>
+                      <div className="text-xs text-muted-foreground">Importados</div>
+                    </div>
+                    <div className="border rounded-lg p-3">
+                      <div className="text-2xl font-bold text-yellow-600">{importResult.summary.skippedAssistants}</div>
+                      <div className="text-xs text-muted-foreground">Ignorados</div>
+                    </div>
+                    <div className="border rounded-lg p-3">
+                      <div className="text-2xl font-bold text-blue-600">{importResult.summary.updatedAssistants}</div>
+                      <div className="text-xs text-muted-foreground">Atualizados</div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="border rounded-lg p-3">
+                      <div className="text-lg font-bold text-green-600">{importResult.summary.importedDocuments}</div>
+                      <div className="text-xs text-muted-foreground">Documentos importados</div>
+                    </div>
+                    <div className="border rounded-lg p-3">
+                      <div className="text-lg font-bold text-green-600">{importResult.summary.importedFaqs}</div>
+                      <div className="text-xs text-muted-foreground">FAQs importadas</div>
+                    </div>
+                  </div>
+
+                  {importResult.summary.errors.length > 0 && (
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        <div className="text-sm font-medium mb-2">Erros encontrados:</div>
+                        <ul className="text-xs space-y-1">
+                          {importResult.summary.errors.slice(0, 5).map((error, i) => (
+                            <li key={i} className="text-destructive">• {error}</li>
+                          ))}
+                          {importResult.summary.errors.length > 5 && (
+                            <li className="text-muted-foreground">... e mais {importResult.summary.errors.length - 5} erros</li>
+                          )}
+                        </ul>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  {importResult.summary.warnings.length > 0 && (
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        <div className="text-sm font-medium mb-2">Avisos:</div>
+                        <ul className="text-xs space-y-1">
+                          {importResult.summary.warnings.map((warning, i) => (
+                            <li key={i} className="text-yellow-600">• {warning}</li>
+                          ))}
+                        </ul>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setShowImportDialog(false)}>
+              {importResult ? 'Fechar' : 'Cancelar'}
+            </Button>
+            {importResult ? (
+              <Button onClick={() => { resetImport(); setShowImportDialog(false); }}>
+                Nova Importação
+              </Button>
+            ) : (
+              <Button 
+                onClick={handleImport} 
+                disabled={importing || !importFile}
+              >
+                {importing ? 'Importando...' : 'Importar'}
+              </Button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

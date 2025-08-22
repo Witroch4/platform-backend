@@ -4,12 +4,16 @@ import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, RefreshCw, BarChart3, Zap, Plus } from 'lucide-react';
+import { ArrowLeft, RefreshCw, BarChart3, Zap, Plus, Download, Upload, FileText, AlertCircle, CheckCircle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Progress } from '@/components/ui/progress';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Collapsible,
   CollapsibleContent,
@@ -43,6 +47,37 @@ type BulkOperation = {
   total: number;
 };
 
+type ImportResult = {
+  success: boolean;
+  summary: {
+    totalIntents: number;
+    importedIntents: number;
+    skippedIntents: number;
+    updatedIntents: number;
+    totalTemplates: number;
+    importedTemplates: number;
+    skippedTemplates: number;
+    errors: string[];
+    warnings: string[];
+  };
+  details: {
+    processedIntents: Array<{
+      originalId: string;
+      newId?: string;
+      name: string;
+      action: 'imported' | 'skipped' | 'updated' | 'error';
+      reason?: string;
+    }>;
+    processedTemplates: Array<{
+      originalId: string;
+      newId?: string;
+      name: string;
+      action: 'imported' | 'skipped' | 'updated' | 'error';
+      reason?: string;
+    }>;
+  };
+};
+
 export default function GlobalIntentsPage() {
   const router = useRouter();
   const [name, setName] = useState('');
@@ -64,6 +99,24 @@ export default function GlobalIntentsPage() {
   const [selectedIntents, setSelectedIntents] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  
+  // Export/Import state
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [exportOptions, setExportOptions] = useState({
+    includeInactive: false,
+    compress: false
+  });
+  const [importOptions, setImportOptions] = useState({
+    conflictResolution: 'skip',
+    regenerateEmbeddings: true,
+    importTemplates: true,
+    preserveIds: false
+  });
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const load = async () => {
     try {
@@ -181,6 +234,113 @@ export default function GlobalIntentsPage() {
     } catch (error) {
       console.error('Erro ao pré-aquecer embeddings:', error);
     }
+  };
+
+  // Export functionality
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (exportOptions.includeInactive) params.set('includeInactive', 'true');
+      if (exportOptions.compress) params.set('compress', 'true');
+      
+      const response = await fetch(`/api/admin/ai-integration/intents/export?${params}`);
+      
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        
+        // Get filename from Content-Disposition header or use default
+        const contentDisposition = response.headers.get('Content-Disposition');
+        const filename = contentDisposition?.match(/filename="(.+)"/)?.[1] || 
+                        `intents-export-${new Date().toISOString().split('T')[0]}.json`;
+        
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        const totalIntents = response.headers.get('X-Total-Intents') || '0';
+        const totalTemplates = response.headers.get('X-Total-Templates') || '0';
+        const hasEmbeddings = response.headers.get('X-Has-Embeddings') === 'true';
+        
+        toast.success(`Exportação concluída! ${totalIntents} intenções e ${totalTemplates} templates exportados.${hasEmbeddings ? ' Inclui embeddings.' : ''}`);
+        setShowExportDialog(false);
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        toast.error(errorData.error || 'Erro durante exportação');
+      }
+    } catch (error) {
+      console.error('Erro na exportação:', error);
+      toast.error('Erro durante exportação');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // Import functionality
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.type !== 'application/json') {
+        toast.error('Por favor, selecione um arquivo JSON válido');
+        return;
+      }
+      setImportFile(file);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!importFile) {
+      toast.error('Selecione um arquivo para importar');
+      return;
+    }
+
+    setImporting(true);
+    setImportResult(null);
+
+    try {
+      const fileContent = await importFile.text();
+      const importData = JSON.parse(fileContent);
+
+      const response = await fetch('/api/admin/ai-integration/intents/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: importData,
+          options: importOptions
+        })
+      });
+
+      const result = await response.json();
+      setImportResult(result);
+
+      if (result.success) {
+        toast.success(`Importação concluída! ${result.summary.importedIntents} intenções importadas, ${result.summary.skippedIntents} ignoradas.`);
+        await load(); // Reload intents list
+        if (showMetrics) await loadMetrics(); // Reload metrics if visible
+      } else if (response.status === 207) { // Multi-Status (partial success)
+        toast.warning(`Importação parcial. ${result.summary.importedIntents} importadas, ${result.summary.errors.length} erros.`);
+      } else {
+        toast.error(result.error || 'Erro durante importação');
+      }
+
+    } catch (error) {
+      console.error('Erro na importação:', error);
+      toast.error('Arquivo inválido ou erro durante importação');
+      setImportResult(null);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const resetImport = () => {
+    setImportFile(null);
+    setImportResult(null);
   };
 
   useEffect(() => { 
@@ -369,6 +529,22 @@ export default function GlobalIntentsPage() {
               >
                 <BarChart3 className="w-4 h-4" />
                 {showMetrics ? 'Ocultar' : 'Mostrar'} Métricas
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => setShowExportDialog(true)}
+                className="gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Exportar
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => setShowImportDialog(true)}
+                className="gap-2"
+              >
+                <Upload className="w-4 h-4" />
+                Importar
               </Button>
               <Button onClick={() => setShowCreateDialog(true)} className="gap-2">
                 <Plus className="w-4 h-4" />
@@ -677,6 +853,235 @@ export default function GlobalIntentsPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditing(false)}>Cancelar</Button>
             <Button onClick={saveEdit} disabled={!editName.trim()}>Salvar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Exportação */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent className="w-[96vw] sm:max-w-lg max-h-[85vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Download className="w-5 h-5" />
+              Exportar Intenções
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Exporte todas as suas intenções com embeddings, templates e configurações em um arquivo JSON.
+            </p>
+            
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="includeInactive"
+                  checked={exportOptions.includeInactive}
+                  onChange={(e) => setExportOptions(prev => ({ ...prev, includeInactive: e.target.checked }))}
+                />
+                <label htmlFor="includeInactive" className="text-sm">
+                  Incluir intenções inativas
+                </label>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="compress"
+                  checked={exportOptions.compress}
+                  onChange={(e) => setExportOptions(prev => ({ ...prev, compress: e.target.checked }))}
+                />
+                <label htmlFor="compress" className="text-sm">
+                  Comprimir arquivo JSON (menor tamanho)
+                </label>
+              </div>
+            </div>
+
+            <Alert>
+              <FileText className="h-4 w-4" />
+              <AlertDescription>
+                O arquivo exportado incluirá todas as intenções com seus embeddings, templates associados e metadados.
+              </AlertDescription>
+            </Alert>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowExportDialog(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleExport} disabled={exporting}>
+              {exporting ? 'Exportando...' : 'Exportar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Importação */}
+      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+        <DialogContent className="w-[96vw] sm:max-w-2xl max-h-[85vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="w-5 h-5" />
+              Importar Intenções
+            </DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="h-[60vh] pr-4">
+            <div className="space-y-6">
+              {!importResult && (
+                <>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Arquivo de Exportação</label>
+                    <input
+                      type="file"
+                      accept=".json"
+                      onChange={handleFileSelect}
+                      className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/80"
+                    />
+                    {importFile && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Arquivo selecionado: {importFile.name} ({Math.round(importFile.size / 1024)}KB)
+                      </p>
+                    )}
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-medium">Opções de Importação</h4>
+                    
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Resolução de Conflitos</label>
+                      <Select 
+                        value={importOptions.conflictResolution} 
+                        onValueChange={(value) => setImportOptions(prev => ({ ...prev, conflictResolution: value as any }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="skip">Pular (manter existentes)</SelectItem>
+                          <SelectItem value="replace">Substituir existentes</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Como tratar intenções com nomes que já existem
+                      </p>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="regenerateEmbeddings"
+                          checked={importOptions.regenerateEmbeddings}
+                          onChange={(e) => setImportOptions(prev => ({ ...prev, regenerateEmbeddings: e.target.checked }))}
+                        />
+                        <label htmlFor="regenerateEmbeddings" className="text-sm">
+                          Regenerar embeddings automaticamente
+                        </label>
+                      </div>
+                      
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="importTemplates"
+                          checked={importOptions.importTemplates}
+                          onChange={(e) => setImportOptions(prev => ({ ...prev, importTemplates: e.target.checked }))}
+                        />
+                        <label htmlFor="importTemplates" className="text-sm">
+                          Importar templates associados
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {importing && (
+                <div className="text-center py-8">
+                  <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+                  <p className="text-sm text-muted-foreground">Importando intenções...</p>
+                </div>
+              )}
+
+              {importResult && (
+                <div className="space-y-4">
+                  <div className="flex items-start gap-2">
+                    {importResult.success ? (
+                      <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="w-5 h-5 text-yellow-500 mt-0.5" />
+                    )}
+                    <div>
+                      <h4 className="font-medium">
+                        {importResult.success ? 'Importação Concluída' : 'Importação Parcial'}
+                      </h4>
+                      <p className="text-sm text-muted-foreground">
+                        Resultado do processamento das intenções
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="border rounded-lg p-3">
+                      <div className="text-2xl font-bold text-green-600">{importResult.summary.importedIntents}</div>
+                      <div className="text-xs text-muted-foreground">Importadas</div>
+                    </div>
+                    <div className="border rounded-lg p-3">
+                      <div className="text-2xl font-bold text-yellow-600">{importResult.summary.skippedIntents}</div>
+                      <div className="text-xs text-muted-foreground">Ignoradas</div>
+                    </div>
+                  </div>
+
+                  {importResult.summary.errors.length > 0 && (
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        <div className="text-sm font-medium mb-2">Erros encontrados:</div>
+                        <ul className="text-xs space-y-1">
+                          {importResult.summary.errors.slice(0, 5).map((error, i) => (
+                            <li key={i} className="text-destructive">• {error}</li>
+                          ))}
+                          {importResult.summary.errors.length > 5 && (
+                            <li className="text-muted-foreground">... e mais {importResult.summary.errors.length - 5} erros</li>
+                          )}
+                        </ul>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  {importResult.summary.warnings.length > 0 && (
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        <div className="text-sm font-medium mb-2">Avisos:</div>
+                        <ul className="text-xs space-y-1">
+                          {importResult.summary.warnings.map((warning, i) => (
+                            <li key={i} className="text-yellow-600">• {warning}</li>
+                          ))}
+                        </ul>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowImportDialog(false)}>
+              {importResult ? 'Fechar' : 'Cancelar'}
+            </Button>
+            {importResult ? (
+              <Button onClick={() => { resetImport(); setShowImportDialog(false); }}>
+                Nova Importação
+              </Button>
+            ) : (
+              <Button 
+                onClick={handleImport} 
+                disabled={importing || !importFile}
+              >
+                {importing ? 'Importando...' : 'Importar'}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -529,7 +529,7 @@ export function WhatsAppTextEditor({
               </span>
               <span>
                 `código` →{" "}
-                <code className="bg-gray-200 px-1 rounded">código</code>
+                <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">código</code>
               </span>
               <span>• lista → • lista</span>
               <span>&gt; citação → citação</span>

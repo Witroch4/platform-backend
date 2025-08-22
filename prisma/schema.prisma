@@ -48,6 +48,7 @@ model User {
   promptVersions            PromptVersion[]
   abTests                   PromptABTest[]
   inboxConfigHistory        InboxConfigHistory[]
+  iframeAuthorizedDomains   IframeAuthorizedDomain[]
 }
 
 model InboxConfigHistory {
@@ -1599,6 +1600,20 @@ model AiFaq {
   assistant     AiAssistant? @relation(fields: [assistantId], references: [id])
 
   @@index([userId, assistantId, status, isActive])
+}
+
+model IframeAuthorizedDomain {
+  id          String   @id @default(cuid())
+  domain      String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String
+  user        User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@index([isActive])
+  @@index([createdBy])
 }
 
 enum AiIntentOutputFormat {

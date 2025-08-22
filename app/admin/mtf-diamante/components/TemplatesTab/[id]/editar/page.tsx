@@ -510,11 +510,11 @@ export default function EditTemplateDetailsPage() {
               <CardTitle>Prévia do modelo</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="bg-gray-100 rounded-lg p-4 text-black">
-                <div className="bg-white rounded-lg shadow-md w-full max-w-sm overflow-hidden mx-auto">
+              <div className="bg-gray-100 dark:bg-gray-900 rounded-lg p-4 text-black dark:text-white">
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md w-full max-w-sm overflow-hidden mx-auto">
                   {/* Header com imagem (se houver) */}
                   {hasHeaderImage && formData.headerUrl && (
-                    <div className="w-full h-40 bg-gray-200 overflow-hidden">
+                    <div className="w-full h-40 bg-gray-200 dark:bg-gray-700 overflow-hidden">
                       <img 
                         src={formData.headerUrl} 
                         alt="Header" 
@@ -534,14 +534,14 @@ export default function EditTemplateDetailsPage() {
                         dangerouslySetInnerHTML={{
                           __html: formData.bodyText
                             .replace(/\*([^*]+)\*/g, '<strong>$1</strong>')
-                            .replace(/{{(\d+)}}/g, '<span class="bg-blue-100 px-1 rounded">$1</span>')
+                            .replace(/{{(\d+)}}/g, '<span class="bg-blue-100 dark:bg-blue-900 px-1 rounded">$1</span>')
                         }}
                       />
                     )}
                     
                     {/* Footer */}
                     {hasFooter && formData.footerText && (
-                      <div className="text-xs text-gray-500 mt-4 border-t pt-2">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-4 border-t pt-2">
                         {formData.footerText}
                       </div>
                     )}
@@ -552,7 +552,7 @@ export default function EditTemplateDetailsPage() {
                         {formData.buttons.map((button: any, index: number) => (
                           <div key={index} className="w-full">
                             <button
-                              className="w-full py-2 px-3 bg-gray-100 hover:bg-gray-200 text-center rounded-md text-sm transition"
+                              className="w-full py-2 px-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-center rounded-md text-sm transition"
                             >
                               {button.texto || "Botão"}
                             </button>

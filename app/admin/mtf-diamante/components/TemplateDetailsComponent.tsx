@@ -341,7 +341,7 @@ export default function TemplateDetailsComponent({
                   }}
                 >
                   {/* Mensagem de template */}
-                  <div className="max-w-[85%] bg-white rounded-lg shadow-sm p-3 ml-auto mr-3 mb-3">
+                  <div className="max-w-[85%] bg-white dark:bg-gray-800 rounded-lg shadow-sm p-3 ml-auto mr-3 mb-3">
                     {/* Header */}
                     {template.componentes.map(
                       (c, i) =>
@@ -365,11 +365,11 @@ export default function TemplateDetailsComponent({
                                   />
                                 ) : (
                                   <div
-                                    className="w-full bg-gray-200 flex items-center justify-center"
+                                    className="w-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center"
                                     style={{ height: "140px" }}
                                   >
                                     <svg
-                                      className="w-12 h-12 text-gray-400"
+                                      className="w-12 h-12 text-gray-400 dark:text-gray-500"
                                       fill="none"
                                       stroke="currentColor"
                                       viewBox="0 0 24 24"
@@ -408,13 +408,13 @@ export default function TemplateDetailsComponent({
                       (c, i) =>
                         c.type === "FOOTER" &&
                         c.text && (
-                          <div key={i} className="text-xs text-gray-500 mb-2">
+                          <div key={i} className="text-xs text-gray-500 dark:text-gray-400 mb-2">
                             {c.text}
                           </div>
                         )
                     )}
 
-                    <div className="text-right text-xs text-gray-500 flex justify-end items-center">
+                    <div className="text-right text-xs text-gray-500 dark:text-gray-400 flex justify-end items-center">
                       <span>17:12</span>
                     </div>
                   </div>
@@ -427,13 +427,13 @@ export default function TemplateDetailsComponent({
                       c.buttons.length > 0 && (
                         <div
                           key={i}
-                          className="bg-white rounded-lg shadow-sm max-w-[85%] ml-auto mr-3 mt-1 overflow-hidden"
+                          className="bg-white dark:bg-gray-800 rounded-lg shadow-sm max-w-[85%] ml-auto mr-3 mt-1 overflow-hidden"
                         >
-                          <div className="divide-y divide-gray-100">
+                          <div className="divide-y divide-gray-100 dark:divide-gray-700">
                             {c.buttons.map((button, index) => (
                               <button
                                 key={index}
-                                className="w-full py-3 px-4 text-sm text-cyan-500 font-medium text-center flex justify-center items-center"
+                                className="w-full py-3 px-4 text-sm text-cyan-500 dark:text-cyan-400 font-medium text-center flex justify-center items-center"
                               >
                                 {button.type === "URL" && (
                                   <ExternalLink className="h-4 w-4 mr-2" />

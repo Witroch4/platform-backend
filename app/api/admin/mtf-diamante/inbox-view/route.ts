@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
 
     // 2) DB em paralelo (SELECT minimal + paginação)
     const dbStart = performance.now();
-    const [variaveisData, caixasData, interactiveMessages, apiKeys] = await Promise.all([
+    const [variaveisData, caixasData, interactiveMessages, apiKeys, buttonReactions] = await Promise.all([
       // Variáveis
       prisma.mtfDiamanteVariavel.findMany({
         select: { id: true, chave: true, valor: true },
@@ -229,6 +229,29 @@ export async function GET(request: NextRequest) {
             take: 50,
           })
         : [],
+
+      // Reações de botões (se temos inboxId)
+      inboxId ? prisma.mapeamentoBotao.findMany({
+        where: {
+          inboxId: inboxId,
+          inbox: {
+            usuarioChatwit: {
+              appUserId: session.user.id,
+            },
+          },
+        },
+        select: {
+          id: true,
+          buttonId: true,
+          inboxId: true,
+          actionType: true,
+          actionPayload: true,
+          description: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        orderBy: { createdAt: "asc" },
+      }) : [],
     ]);
     const dbEnd = performance.now();
     serverTiming.push(`db;dur=${(dbEnd - dbStart).toFixed(0)}`);
@@ -257,11 +280,31 @@ export async function GET(request: NextRequest) {
     // Filtrar variáveis que não são lotes
     const variaveisSemLotes = variaveisData.filter((v: any) => v.chave !== 'lotes_oab');
 
+    // Formatar reações no mesmo padrão do endpoint messages-with-reactions
+    const formattedReactions = buttonReactions.map((reaction: any) => {
+      const actionPayload = reaction.actionPayload as any;
+      const emoji = actionPayload?.emoji;
+      const textReaction = actionPayload?.textReaction;
+      
+      return {
+        id: reaction.id,
+        buttonId: reaction.buttonId,
+        messageId: reaction.inboxId,
+        type: textReaction ? "text" : "emoji",
+        emoji: emoji || null,
+        textReaction: textReaction || null,
+        isActive: true,
+        createdAt: reaction.createdAt,
+        updatedAt: reaction.updatedAt,
+      };
+    });
+
     const responseData = {
       variaveis: variaveisSemLotes,
       lotes: lotes,
       caixas: caixasProcessadas,
       interactiveMessages,
+      buttonReactions: formattedReactions,
       apiKeys,
       timestamp: new Date().toISOString(),
       inboxId,

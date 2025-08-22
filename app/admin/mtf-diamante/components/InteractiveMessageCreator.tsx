@@ -9,6 +9,7 @@ const reactionsDataCache = new Map<string, any[]>();
 
 import { toast } from "sonner";
 import { useVariableManager } from "@/hooks/useVariableManager";
+import { useMtfData } from "../context/MtfDataProvider";
 import type {
   InteractiveMessage,
   InteractiveMessageCreatorProps,
@@ -40,6 +41,7 @@ export const InteractiveMessageCreator: React.FC<
 > = ({ inboxId, onSave, editingMessage }) => {
 
   const { variables, loading: variablesLoading } = useVariableManager();
+  const { buttonReactions } = useMtfData();
   const reactionsLoadedRef = useRef(false);
 
   // Initialize state with proper defaults
@@ -57,46 +59,19 @@ export const InteractiveMessageCreator: React.FC<
     errors: {},
   });
 
-  // Load existing reactions for editing mode (API espera inboxId no parâmetro messageId)
-  const loadExistingReactions = useCallback(async (messageId?: string) => {
-    const targetId = inboxId || messageId;
-    if (!targetId) return;
+  // Load existing reactions from context for editing mode
+  const loadExistingReactions = useCallback(() => {
+    if (!buttonReactions || buttonReactions.length === 0) return;
 
-    try {
-      // Use cached data if available
-      if (reactionsDataCache.has(targetId)) {
-        const cached = reactionsDataCache.get(targetId)!;
-        setState(prev => ({ ...prev, reactions: cached }));
-        reactionsLoadedRef.current = true;
-        return;
-      }
+    // Normalizar para sempre expor textResponse (compat com API que retorna textReaction)
+    const normalized = buttonReactions.map((r: any) => ({
+      ...r,
+      textResponse: r?.textResponse ?? r?.textReaction ?? undefined,
+    }));
 
-      // Deduplicate concurrent/in-flight requests
-      let request = reactionsRequestCache.get(targetId);
-      if (!request) {
-        request = (async () => {
-          const resp = await fetch(`/api/admin/mtf-diamante/button-reactions?messageId=${targetId}`);
-          if (!resp.ok) return [] as any[];
-          const data = await resp.json();
-          const list = data.reactions || [];
-          // Normalizar para sempre expor textResponse (compat com API que retorna textReaction)
-          const normalized = list.map((r: any) => ({
-            ...r,
-            textResponse: r?.textResponse ?? r?.textReaction ?? undefined,
-          }));
-          reactionsDataCache.set(targetId, normalized);
-          return normalized;
-        })();
-        reactionsRequestCache.set(targetId, request);
-      }
-
-      const list = await request;
-      setState(prev => ({ ...prev, reactions: list }));
-      reactionsLoadedRef.current = true;
-    } catch (error) {
-      console.error('Failed to load existing reactions:', error);
-    }
-  }, [inboxId]);
+    setState(prev => ({ ...prev, reactions: normalized }));
+    reactionsLoadedRef.current = true;
+  }, [buttonReactions]);
 
   // Load existing message data when editing
   useEffect(() => {
@@ -107,8 +82,8 @@ export const InteractiveMessageCreator: React.FC<
         message: { ...editingMessage },
       }));
       
-      // Load existing reactions if available (prefer inboxId/caixaId)
-      loadExistingReactions(editingMessage.id);
+      // Load existing reactions from context
+      loadExistingReactions();
     }
   }, [editingMessage, loadExistingReactions]);
 

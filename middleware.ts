@@ -11,6 +11,7 @@ export default async function middleware(req: any) {
     const publicRoutes = configRoutes.publicRoutes || [];
     const adminRoutes = configRoutes.adminRoutes || [];
     const superAdminRoutes = configRoutes.superAdminRoutes || [];
+    const iframeRoutes = configRoutes.iframeRoutes || [];
     
     // Verificações simples
     const isPublicRoute = publicRoutes.some(route => 
@@ -24,9 +25,20 @@ export default async function middleware(req: any) {
     const isSuperAdminRoute = superAdminRoutes.some(route => 
       route === pathName || (route.endsWith('/*') && pathName.startsWith(route.slice(0, -2)))
     );
+    
+    const isIframeRoute = iframeRoutes.some(route => 
+      route === pathName || (route.endsWith('/*') && pathName.startsWith(route.slice(0, -2)))
+    );
 
     // Para rotas públicas, permitir acesso
     if (isPublicRoute) {
+      return NextResponse.next();
+    }
+
+    // Para rotas iframe, usar autenticação especial baseada em referrer
+    if (isIframeRoute) {
+      // Rotas iframe têm sua própria verificação de autorização
+      // Permitir acesso para que a verificação seja feita na página
       return NextResponse.next();
     }
 
