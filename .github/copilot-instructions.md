@@ -1,3 +1,21 @@
+# CLAUDE.md
+
+This file provides comprehensive guidance to Claude Code (claude.ai/code) and Cursor AI when working with the Socialwise Chatwit repository.
+
+## ⚠️ Critical Notes
+
+1. **You are in the project root directory**
+2. **Use PowerShell commands on Windows**
+3. **Path errors with "@" outside Next.js scope don't need fixing**
+4. **In Next.js 15, route params are Promises - always use await**
+5. **Always run `npx tsc --noEmit` after edits**
+6. **Use Shadcn/UI Dialog instead of native confirm()/alert()**
+7. **Optimistic UI updates are preferred**
+8. **User-facing strings in Portuguese BR, code in English**
+9. **Front linguagem clara e direta sem termos tecnicos**
+10. **Tudo deve ser compativel com thema dark e light do shadcn**
+11. **Edição no front deve ser olhar com a tool de navegação o resutado**
+
 ## 🚀 Project Overview
 
 **Socialwise Chatwit** is a comprehensive AI-powered customer service platform specializing in social media automation and legal support for lawyers. Built with Next.js 15, TypeScript, and Prisma, this full-stack application integrates OpenAI APIs (GPT-5, GPT-5-mini, GPT-5-nano, GPT-4.1-nano, DALL-E, Whisper), Instagram/WhatsApp Business APIs, and provides advanced document processing capabilities.
@@ -279,20 +297,13 @@ lib/
 ├── ai-integration/       # AI service integrations
 │   ├── services/         # Core AI services
 │   ├── types/            # AI integration types
-│   ├── jobs/             # Background jobs
-│   ├── bootstrap/        # Initialization
-│   ├── middleware/       # Middleware
-│   ├── utils/            # Utilities
-│   ├── docs/             # Documentation
+
 │   ├── schemas/          # Data schemas
 │   ├── workers/          # Worker processes
 │   └── queues/           # Queue management
 ├── socialwise-flow/      # SocialWise Flow Processing System
 │   ├── processor.ts      # Main flow processor
-│   ├── classification.ts # Intent classification
-│   ├── channel-formatting.ts # Channel-specific formatting
-│   ├── performance-bands.ts  # Performance band processing
-│   ├── cache-manager.ts      # Cache management
+
 │   ├── metrics.ts            # Performance metrics
 │   └── services/             # SocialWise services
 ├── cost/                 # Cost Management System
@@ -471,16 +482,7 @@ app/api/[feature]/
 </Dialog>
 ```
 
-## ⚠️ Critical Notes
 
-1. **You are in the project root directory**
-2. **Use PowerShell commands on Windows**
-3. **Path errors with "@" outside Next.js scope don't need fixing**
-4. **In Next.js 15, route params are Promises - always use await**
-5. **Always run `npx tsc --noEmit` after edits**
-6. **Use Shadcn/UI Dialog instead of native confirm()/alert()**
-7. **Optimistic UI updates are preferred**
-8. **User-facing strings in Portuguese BR, code in English**
 
 ## 🚦 Environment Variables
 

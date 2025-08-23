@@ -14,6 +14,7 @@ This file provides comprehensive guidance to Claude Code (claude.ai/code) and Cu
 8. **User-facing strings in Portuguese BR, code in English**
 9. **Front linguagem clara e direta sem termos tecnicos**
 10. **Tudo deve ser compativel com thema dark e light do shadcn**
+11. **Edição no front deve ser olhar com a tool de navegação o resutado**
 
 ## 🚀 Project Overview
 

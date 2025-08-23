@@ -48,6 +48,7 @@ import { useMtfData } from "@/app/admin/mtf-diamante/context/MtfDataProvider";
   import { ScrollArea } from "@/components/ui/scroll-area";
   import { Label } from "@/components/ui/label";
   import { Checkbox } from "@/components/ui/checkbox";
+  import { GlowEffect } from "@/components/ui/glow-effect";
 
 interface MensagensInterativasTabProps {
   caixaId: string;
@@ -609,8 +610,20 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
               return (
                 <div
                   key={msg.id}
-                  className="border border-border p-4 rounded-lg flex justify-between items-start hover:bg-accent/50 transition-colors"
+                  className="relative group h-auto"
                 >
+                  {/* Glow effect sutil e um pouco maior por trás do card */}
+                  <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-25 transition-opacity duration-500 ease-out">
+                    <GlowEffect
+                      colors={['#0894FF', '#C959DD', '#FF2E54', '#FF9004']}
+                      mode="colorShift"
+                      blur="strongest"
+                      duration={4}
+                      //
+                    />
+                  </div>
+                  {/* Card com conteúdo na frente */}
+                  <div className="relative border border-border p-4 rounded-lg flex justify-between items-start hover:bg-accent/20 transition-all duration-300 bg-background dark:bg-background">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="font-medium text-foreground">
@@ -663,6 +676,7 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
                   </Button>
                 </div>
               </div>
+                </div>
             );
             })}
 

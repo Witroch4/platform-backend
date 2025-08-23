@@ -60,4 +60,19 @@ export const MESSAGE_TYPES = {
     icon: List,
     description: "Lista de produtos do catálogo",
   },
+  quick_replies: {
+    label: "Respostas Rápidas",
+    icon: MousePointer,
+    description: "Respostas rápidas do Instagram",
+  },
+  generic: {
+    label: "Template Genérico",
+    icon: ImageIcon,
+    description: "Template genérico do Instagram (Carousel)",
+  },
+  button_template: {
+    label: "Template de Botões",
+    icon: MousePointer,
+    description: "Template de botões do Instagram",
+  },
 };

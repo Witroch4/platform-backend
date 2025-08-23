@@ -161,6 +161,7 @@
 		"lottie-react": "^2.4.0",
 		"lru-cache": "^9.0.0",
 		"lucide-react": "^0.468.0",
+		"motion": "^12.23.12",
 		"next": "^15.1.0",
 		"next-auth": "^5.0.0-beta.25",
 		"next-connect": "^1.0.0",

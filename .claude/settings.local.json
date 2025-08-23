@@ -21,7 +21,8 @@
       "Bash(npx prisma:*)",
       "Bash(mkdir:*)",
       "Bash(cp:*)",
-      "mcp__playwright__browser_wait_for"
+      "mcp__playwright__browser_wait_for",
+      "mcp__playwright__browser_hover"
     ],
     "deny": [],
     "ask": []
