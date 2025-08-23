@@ -13,6 +13,7 @@ export interface UnifiedEditingStepProps {
   message: InteractiveMessage;
   reactions: CentralButtonReaction[];
   variables?: Array<{ chave: string; valor: string; }>;
+  channelType?: string;
   onMessageUpdate: (updates: Partial<InteractiveMessage>) => void;
   onReactionUpdate: (
     buttonId: string,
@@ -44,6 +45,7 @@ export interface HeaderSectionProps {
   setHeaderMediaFiles: React.Dispatch<React.SetStateAction<any[]>>;
   handleValidationError: (error: any) => void;
   validateField: (field: string, value: any, context: any) => void;
+  channelType?: string;
 }
 
 export interface BodySectionProps {
@@ -52,6 +54,7 @@ export interface BodySectionProps {
   disabled?: boolean;
   isFieldValid: (field: string) => boolean;
   validationLimits: typeof VALIDATION_LIMITS;
+  channelType?: string;
 }
 
 export interface FooterSectionProps {
@@ -60,6 +63,7 @@ export interface FooterSectionProps {
   disabled?: boolean;
   isFieldValid: (field: string) => boolean;
   validationLimits: typeof VALIDATION_LIMITS;
+  channelType?: string;
 }
 
 export interface ButtonsSectionProps {

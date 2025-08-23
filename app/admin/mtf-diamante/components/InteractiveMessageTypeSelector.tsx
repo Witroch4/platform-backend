@@ -13,10 +13,14 @@ import {
   Navigation, 
   Smile, 
   Image as ImageIcon,
-  Check
+  Check,
+  MessageCircle,
+  Grid3x3,
+  SquarePlay
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { InteractiveMessageType } from './interactive-message-creator/types';
+import { isInstagramChannel } from '@/types/interactive-messages';
 
 interface MessageTypeConfig {
   id: InteractiveMessageType;
@@ -26,10 +30,63 @@ interface MessageTypeConfig {
   features: string[];
   examples: string[];
   complexity: 'Simples' | 'Médio' | 'Avançado';
-  whatsappApiExample: string;
+  supportedChannels: ('whatsapp' | 'instagram')[];
+  instagramLimits?: {
+    maxText?: number;
+    maxButtons?: number;
+    maxElements?: number;
+    maxOptions?: number;
+  };
 }
 
-const MESSAGE_TYPES: MessageTypeConfig[] = [
+// Instagram Message Types
+const INSTAGRAM_TYPES: MessageTypeConfig[] = [
+  {
+    id: 'quick_replies',
+    label: 'Respostas Rápidas',
+    description: 'Botões de resposta rápida com até 13 opções',
+    icon: MessageCircle,
+    features: ['Até 13 opções', 'Título de 20 caracteres', 'Prompt de 1000 caracteres'],
+    examples: ['Menu de opções', 'Pesquisa de satisfação', 'Seleção de categoria'],
+    complexity: 'Simples',
+    supportedChannels: ['instagram'],
+    instagramLimits: {
+      maxText: 1000,
+      maxOptions: 13
+    }
+  },
+  {
+    id: 'generic',
+    label: 'Template Genérico (Carrossel)',
+    description: 'Carrossel com até 10 elementos, cada um com título e subtítulo de 80 caracteres',
+    icon: Grid3x3,
+    features: ['Até 10 elementos', 'Título de 80 caracteres', 'Subtítulo de 80 caracteres', 'Máximo 3 botões por elemento'],
+    examples: ['Catálogo de produtos', 'Galeria de serviços', 'Portfólio de projetos'],
+    complexity: 'Médio',
+    supportedChannels: ['instagram'],
+    instagramLimits: {
+      maxElements: 10,
+      maxButtons: 3
+    }
+  },
+  {
+    id: 'button_template',
+    label: 'Template de Botões',
+    description: 'Mensagem de texto com 1-3 botões (texto máximo de 640 caracteres)',
+    icon: SquarePlay,
+    features: ['Texto de 640 caracteres', '1-3 botões', 'Botões web_url ou postback'],
+    examples: ['Chamada para ação', 'Menu de navegação', 'Opções de contato'],
+    complexity: 'Simples',
+    supportedChannels: ['instagram'],
+    instagramLimits: {
+      maxText: 640,
+      maxButtons: 3
+    }
+  }
+];
+
+// WhatsApp Message Types
+const WHATSAPP_TYPES: MessageTypeConfig[] = [
   {
     id: 'button',
     label: 'Botões de Resposta Rápida',
@@ -38,19 +95,7 @@ const MESSAGE_TYPES: MessageTypeConfig[] = [
     features: ['Até 3 botões', 'Respostas instantâneas', 'Fácil de usar'],
     examples: ['Menu principal', 'Confirmação de agendamento', 'Opções de atendimento'],
     complexity: 'Simples',
-    whatsappApiExample: `{
-  "type": "interactive",
-  "interactive": {
-    "type": "button",
-    "body": { "text": "Como posso ajudar?" },
-    "action": {
-      "buttons": [
-        { "type": "reply", "reply": { "id": "info", "title": "Informações" } },
-        { "type": "reply", "reply": { "id": "support", "title": "Suporte" } }
-      ]
-    }
-  }
-}`
+    supportedChannels: ['whatsapp']
   },
   {
     id: 'list',
@@ -60,24 +105,7 @@ const MESSAGE_TYPES: MessageTypeConfig[] = [
     features: ['Múltiplas seções', 'Até 10 itens por seção', 'Descrições detalhadas'],
     examples: ['Catálogo de produtos', 'Menu de serviços', 'Opções de entrega'],
     complexity: 'Médio',
-    whatsappApiExample: `{
-  "type": "interactive",
-  "interactive": {
-    "type": "list",
-    "body": { "text": "Escolha uma opção:" },
-    "action": {
-      "button": "Ver Opções",
-      "sections": [
-        {
-          "title": "Serviços",
-          "rows": [
-            { "id": "service1", "title": "Consultoria", "description": "Consultoria jurídica" }
-          ]
-        }
-      ]
-    }
-  }
-}`
+    supportedChannels: ['whatsapp']
   },
   {
     id: 'cta_url',
@@ -87,20 +115,7 @@ const MESSAGE_TYPES: MessageTypeConfig[] = [
     features: ['Link externo', 'Rastreamento de cliques', 'Personalização de texto'],
     examples: ['Agendar consulta', 'Ver site', 'Baixar documento'],
     complexity: 'Simples',
-    whatsappApiExample: `{
-  "type": "interactive",
-  "interactive": {
-    "type": "cta_url",
-    "body": { "text": "Acesse nosso site para mais informações" },
-    "action": {
-      "name": "cta_url",
-      "parameters": {
-        "display_text": "Acessar Site",
-        "url": "https://exemplo.com"
-      }
-    }
-  }
-}`
+    supportedChannels: ['whatsapp']
   },
   {
     id: 'flow',
@@ -110,20 +125,7 @@ const MESSAGE_TYPES: MessageTypeConfig[] = [
     features: ['Fluxos personalizados', 'Coleta de dados', 'Experiência rica'],
     examples: ['Agendamento completo', 'Cadastro de cliente', 'Pesquisa de satisfação'],
     complexity: 'Avançado',
-    whatsappApiExample: `{
-  "type": "interactive",
-  "interactive": {
-    "type": "flow",
-    "body": { "text": "Vamos agendar sua consulta" },
-    "action": {
-      "name": "flow",
-      "parameters": {
-        "flow_id": "YOUR_FLOW_ID",
-        "flow_cta": "Iniciar Agendamento"
-      }
-    }
-  }
-}`
+    supportedChannels: ['whatsapp']
   },
   {
     id: 'location',
@@ -133,15 +135,7 @@ const MESSAGE_TYPES: MessageTypeConfig[] = [
     features: ['Coordenadas GPS', 'Nome do local', 'Endereço completo'],
     examples: ['Localização do escritório', 'Ponto de encontro', 'Endereço de entrega'],
     complexity: 'Simples',
-    whatsappApiExample: `{
-  "type": "location",
-  "location": {
-    "latitude": "-23.5505",
-    "longitude": "-46.6333",
-    "name": "Escritório Central",
-    "address": "Av. Paulista, 1000 - São Paulo, SP"
-  }
-}`
+    supportedChannels: ['whatsapp']
   },
   {
     id: 'location_request',
@@ -151,14 +145,7 @@ const MESSAGE_TYPES: MessageTypeConfig[] = [
     features: ['Solicitação de GPS', 'Localização em tempo real', 'Fácil compartilhamento'],
     examples: ['Localização para entrega', 'Encontrar cliente', 'Serviço no local'],
     complexity: 'Simples',
-    whatsappApiExample: `{
-  "type": "interactive",
-  "interactive": {
-    "type": "location_request_message",
-    "body": { "text": "Compartilhe sua localização para continuarmos" },
-    "action": { "name": "send_location" }
-  }
-}`
+    supportedChannels: ['whatsapp']
   },
   {
     id: 'reaction',
@@ -168,13 +155,7 @@ const MESSAGE_TYPES: MessageTypeConfig[] = [
     features: ['Emojis diversos', 'Resposta rápida', 'Feedback instantâneo'],
     examples: ['Confirmação com ❤️', 'Aprovação com 👍', 'Celebração com 🎉'],
     complexity: 'Simples',
-    whatsappApiExample: `{
-  "type": "reaction",
-  "reaction": {
-    "message_id": "wamid.xxx",
-    "emoji": "❤️"
-  }
-}`
+    supportedChannels: ['whatsapp']
   },
   {
     id: 'sticker',
@@ -184,12 +165,7 @@ const MESSAGE_TYPES: MessageTypeConfig[] = [
     features: ['Stickers personalizados', 'Expressão visual', 'Engajamento alto'],
     examples: ['Sticker de boas-vindas', 'Figurinha de agradecimento', 'Emoji personalizado'],
     complexity: 'Médio',
-    whatsappApiExample: `{
-  "type": "sticker",
-  "sticker": {
-    "id": "YOUR_STICKER_MEDIA_ID"
-  }
-}`
+    supportedChannels: ['whatsapp']
   }
 ];
 
@@ -197,13 +173,20 @@ interface InteractiveMessageTypeSelectorProps {
   selectedType?: InteractiveMessageType;
   onTypeSelect: (type: InteractiveMessageType) => void;
   showExamples?: boolean;
+  channelType?: string;
 }
 
 export const InteractiveMessageTypeSelector: React.FC<InteractiveMessageTypeSelectorProps> = ({
   selectedType,
   onTypeSelect,
-  showExamples = false
+  showExamples = false,
+  channelType = 'Channel::WhatsApp'
 }) => {
+  const isInstagram = isInstagramChannel(channelType);
+  
+  // Get available types based on channel
+  const availableTypes = isInstagram ? INSTAGRAM_TYPES : WHATSAPP_TYPES;
+
   const getComplexityColor = (complexity: string) => {
     switch (complexity) {
       case 'Simples':
@@ -217,19 +200,41 @@ export const InteractiveMessageTypeSelector: React.FC<InteractiveMessageTypeSele
     }
   };
 
+  const getChannelBadge = () => {
+    if (isInstagram) {
+      return (
+        <Badge variant="outline" className="bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400">
+          Instagram
+        </Badge>
+      );
+    } else {
+      return (
+        <Badge variant="outline" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+          WhatsApp
+        </Badge>
+      );
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="text-center">
-        <h3 className="text-lg font-semibold text-foreground mb-2">
-          Escolha o Tipo de Mensagem Interativa
-        </h3>
+        <div className="flex items-center justify-center gap-2 mb-2">
+          <h3 className="text-lg font-semibold text-foreground">
+            Escolha o Tipo de Mensagem Interativa
+          </h3>
+          {getChannelBadge()}
+        </div>
         <p className="text-sm text-muted-foreground">
-          Selecione o tipo de mensagem que melhor atende às suas necessidades
+          {isInstagram 
+            ? 'Selecione o tipo de mensagem para Instagram (com limites específicos)'
+            : 'Selecione o tipo de mensagem que melhor atende às suas necessidades'
+          }
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {MESSAGE_TYPES.map((type) => {
+        {availableTypes.map((type) => {
           const IconComponent = type.icon;
           const isSelected = selectedType === type.id;
 
@@ -273,6 +278,11 @@ export const InteractiveMessageTypeSelector: React.FC<InteractiveMessageTypeSele
                   >
                     {type.complexity}
                   </Badge>
+                  {isInstagram && type.instagramLimits && (
+                    <Badge variant="outline" className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
+                      Limites IG
+                    </Badge>
+                  )}
                 </div>
               </CardHeader>
 
@@ -293,6 +303,38 @@ export const InteractiveMessageTypeSelector: React.FC<InteractiveMessageTypeSele
                       ))}
                     </ul>
                   </div>
+
+                  {isInstagram && type.instagramLimits && (
+                    <div>
+                      <h4 className="text-xs font-medium text-foreground mb-1">Limites Instagram:</h4>
+                      <ul className="text-xs text-muted-foreground space-y-1">
+                        {type.instagramLimits.maxText && (
+                          <li className="flex items-center gap-1">
+                            <div className="w-1 h-1 bg-purple-500 rounded-full" />
+                            Texto: máx {type.instagramLimits.maxText} chars
+                          </li>
+                        )}
+                        {type.instagramLimits.maxButtons && (
+                          <li className="flex items-center gap-1">
+                            <div className="w-1 h-1 bg-purple-500 rounded-full" />
+                            Botões: máx {type.instagramLimits.maxButtons}
+                          </li>
+                        )}
+                        {type.instagramLimits.maxElements && (
+                          <li className="flex items-center gap-1">
+                            <div className="w-1 h-1 bg-purple-500 rounded-full" />
+                            Elementos: máx {type.instagramLimits.maxElements}
+                          </li>
+                        )}
+                        {type.instagramLimits.maxOptions && (
+                          <li className="flex items-center gap-1">
+                            <div className="w-1 h-1 bg-purple-500 rounded-full" />
+                            Opções: máx {type.instagramLimits.maxOptions}
+                          </li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
 
                   {showExamples && (
                     <div>
@@ -333,16 +375,19 @@ export const InteractiveMessageTypeSelector: React.FC<InteractiveMessageTypeSele
               <div className="p-1 rounded bg-primary text-primary-foreground">
                 <Check className="h-3 w-3" />
               </div>
-              Tipo Selecionado: {MESSAGE_TYPES.find(t => t.id === selectedType)?.label}
+              Tipo Selecionado: {availableTypes.find(t => t.id === selectedType)?.label}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-xs text-muted-foreground">
               <p className="mb-2">
-                {MESSAGE_TYPES.find(t => t.id === selectedType)?.description}
+                {availableTypes.find(t => t.id === selectedType)?.description}
               </p>
               <p>
-                Você pode prosseguir para configurar os detalhes desta mensagem interativa.
+                {isInstagram 
+                  ? 'Configure os detalhes respeitando os limites específicos do Instagram.'
+                  : 'Você pode prosseguir para configurar os detalhes desta mensagem interativa.'
+                }
               </p>
             </div>
           </CardContent>

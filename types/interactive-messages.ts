@@ -51,8 +51,30 @@ export interface PrismaFooter {
   updatedAt: Date;
 }
 
-// Base message types supported by WhatsApp Business API
+// Base message types supported by WhatsApp Business API and Instagram API
 export type InteractiveMessageType =
+  | "button" // Quick reply buttons (WhatsApp) / Button Template (Instagram)
+  | "list" // List picker (WhatsApp)
+  | "cta_url" // Call-to-action URL (WhatsApp)
+  | "flow" // WhatsApp Flow
+  | "location_request" // Request user location
+  | "location" // Send location
+  | "reaction" // React to message
+  | "sticker" // Send sticker
+  | "product" // Product message
+  | "product_list" // Product list message
+  | "quick_replies" // Instagram Quick Replies
+  | "generic" // Instagram Generic Template (Carousel)
+  | "button_template"; // Instagram Button Template
+
+// Instagram-specific message types
+export type InstagramMessageType =
+  | "quick_replies" // Instagram Quick Replies (max 13 options)
+  | "generic" // Instagram Generic Template (Carousel, max 10 elements)
+  | "button_template"; // Instagram Button Template (1-3 buttons)
+
+// WhatsApp-specific message types
+export type WhatsAppMessageType =
   | "button" // Quick reply buttons
   | "list" // List picker
   | "cta_url" // Call-to-action URL
@@ -344,7 +366,78 @@ export const MESSAGE_LIMITS = {
   LIST_DESCRIPTION_MAX_LENGTH: 72,
   // Instagram specific limits
   INSTAGRAM_QUICK_REPLIES_MAX_LENGTH: 1000,
+  INSTAGRAM_QUICK_REPLIES_MAX_COUNT: 13,
+  INSTAGRAM_QUICK_REPLY_TITLE_MAX_LENGTH: 20,
+  INSTAGRAM_GENERIC_MAX_ELEMENTS: 10,
+  INSTAGRAM_GENERIC_TITLE_MAX_LENGTH: 80,
+  INSTAGRAM_GENERIC_SUBTITLE_MAX_LENGTH: 80,
+  INSTAGRAM_BUTTON_TEMPLATE_TEXT_MAX_LENGTH: 640,
+  INSTAGRAM_BUTTON_TEMPLATE_MAX_BUTTONS: 3,
 } as const;
+
+// Instagram specific interfaces
+export interface InstagramQuickReply {
+  content_type: 'text';
+  title: string; // Max 20 characters
+  payload: string;
+}
+
+export interface InstagramQuickRepliesMessage {
+  text: string; // Max 1000 bytes UTF-8 (prompt text)
+  quick_replies: InstagramQuickReply[]; // Max 13 quick replies
+}
+
+export interface InstagramGenericElement {
+  title: string; // Max 80 characters
+  subtitle?: string; // Max 80 characters
+  image_url?: string;
+  default_action?: {
+    type: 'web_url';
+    url: string;
+  };
+  buttons?: Array<{
+    type: 'web_url' | 'postback';
+    title: string;
+    url?: string; // For web_url
+    payload?: string; // For postback
+  }>; // Max 3 buttons per element
+}
+
+export interface InstagramGenericTemplate {
+  template_type: 'generic';
+  elements: InstagramGenericElement[]; // Max 10 elements
+}
+
+export interface InstagramButtonTemplate {
+  template_type: 'button';
+  text: string; // Max 640 characters UTF-8
+  buttons: Array<{
+    type: 'web_url' | 'postback';
+    title: string;
+    url?: string; // For web_url
+    payload?: string; // For postback
+  }>; // 1-3 buttons
+}
+
+// Instagram template type determination helper
+export interface InstagramTemplateTypeResult {
+  type: 'quick_replies' | 'generic' | 'button_template';
+  reason: string;
+  isOverLimit?: boolean;
+}
+
+// Channel type detection
+export type ChannelType = 'Channel::WhatsApp' | 'Channel::Instagram' | string;
+
+// Helper to determine if channel is Instagram
+export const isInstagramChannel = (channelType: string): boolean => {
+  return channelType === 'Channel::Instagram';
+};
+
+// Helper to determine if channel is WhatsApp
+export const isWhatsAppChannel = (channelType: string): boolean => {
+  return channelType === 'Channel::WhatsApp';
+};
 
 // Utility functions for WhatsApp API conversion
 export const convertToWhatsAppAPI = {

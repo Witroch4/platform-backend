@@ -39,6 +39,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
   message,
   reactions,
   variables = [],
+  channelType = 'Channel::WhatsApp',
   onMessageUpdate,
   onReactionUpdate,
   onNext,
@@ -88,12 +89,8 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
     validateOnMount: false,
   });
 
-  // Get channel type from context
+  // Get MtfData context for reactions management
   const { caixas } = useMtfData();
-  const channelType = useMemo(
-    () => caixas?.find((c: any) => c.id === inboxId)?.channelType ?? null,
-    [caixas, inboxId]
-  );
 
   // Update header media files when message header changes
   useEffect(() => {
@@ -270,7 +267,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
     if (immediate.isValid && canProceed()) {
       onNext();
     } else {
-      toast.error("Please fix validation errors before proceeding");
+      toast.error("Por favor, corrija os erros de validação antes de continuar");
     }
   }, [validateMessage, message, canProceed, onNext, onMessageUpdate]);
 
@@ -309,6 +306,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
             setHeaderMediaFiles={setHeaderMediaFiles}
             handleValidationError={handleValidationError}
             validateField={validateField}
+            channelType={channelType || undefined}
           />
 
           <BodySection
@@ -317,6 +315,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
             disabled={disabled}
             isFieldValid={isFieldValid}
             validationLimits={VALIDATION_LIMITS}
+            channelType={channelType || undefined}
           />
 
           <FooterSection
@@ -325,6 +324,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
             disabled={disabled}
             isFieldValid={isFieldValid}
             validationLimits={VALIDATION_LIMITS}
+            channelType={channelType || undefined}
           />
 
           <CtaUrlSection

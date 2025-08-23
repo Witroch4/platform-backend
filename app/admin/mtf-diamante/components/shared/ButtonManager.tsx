@@ -435,37 +435,6 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
                 </div>
               )}
 
-              {/* Reaction Configuration for Quick Reply buttons */}
-              {button.type === 'reply' && showReactionConfig && (
-                <div className="space-y-2">
-                  <Label className="text-xs font-medium text-muted-foreground">
-                    Automatic Reaction
-                  </Label>
-                  <Button
-                    type="button"
-                    variant={hasReaction(button.id) ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => handleReactionConfig(button.id)}
-                    disabled={disabled}
-                    className="w-full justify-start"
-                  >
-                    <Zap className="h-3 w-3 mr-2" />
-                    {hasReaction(button.id) ? (
-                      <span>
-                        Reaction: {getReaction(button.id)?.reaction?.type === 'emoji' 
-                          ? getReaction(button.id)?.reaction?.value 
-                          : `"${getReaction(button.id)?.reaction?.value}"`
-                        }
-                      </span>
-                    ) : (
-                      'Add Automatic Reaction'
-                    )}
-                  </Button>
-                  <p className="text-xs text-muted-foreground">
-                    Configure how the system responds when this button is clicked
-                  </p>
-                </div>
-              )}
 
               {/* Validation Errors */}
               {validationErrors[button.id] && validationErrors[button.id].length > 0 && (

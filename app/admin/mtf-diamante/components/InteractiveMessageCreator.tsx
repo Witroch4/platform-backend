@@ -41,7 +41,36 @@ export const InteractiveMessageCreator: React.FC<
 > = ({ inboxId, onSave, editingMessage }) => {
 
   const { variables, loading: variablesLoading } = useVariableManager();
-  const { buttonReactions } = useMtfData();
+  const { buttonReactions, caixas } = useMtfData();
+  
+  // Detectar o tipo de canal usando o contexto SWR (mesmo padrão dos outros componentes)
+  const channelType = useMemo(
+    () => caixas?.find((c: any) => c.id === inboxId)?.channelType ?? 'Channel::WhatsApp',
+    [caixas, inboxId]
+  );
+  
+  // Debug log para verificar detecção do canal
+  useEffect(() => {
+    if (caixas && inboxId) {
+      const inbox = caixas.find((c: any) => c.id === inboxId);
+      console.log('🔍 [InteractiveMessageCreator] Canal detectado:', {
+        inboxId,
+        channelType,
+        inboxData: inbox ? { 
+          id: inbox.id,
+          nome: inbox.nome, 
+          channelType: inbox.channelType,
+          inboxId: inbox.inboxId 
+        } : 'não encontrado',
+        totalCaixas: caixas.length,
+        todasCaixas: caixas.map((c: any) => ({ 
+          id: c.id, 
+          nome: c.nome, 
+          channelType: c.channelType 
+        }))
+      });
+    }
+  }, [channelType, inboxId, caixas]);
   const reactionsLoadedRef = useRef(false);
 
   // Initialize state with proper defaults
@@ -176,6 +205,10 @@ export const InteractiveMessageCreator: React.FC<
     setCurrentStep("configuration");
   }, [updateMessage, setCurrentStep]);
 
+  const handleNextToConfiguration = useCallback(() => {
+    setCurrentStep("configuration");
+  }, [setCurrentStep]);
+
   const handleNextToReview = useCallback(() => {
     // Validate before proceeding to review
     const errors: Record<string, string> = {};
@@ -190,7 +223,7 @@ export const InteractiveMessageCreator: React.FC<
 
     if (Object.keys(errors).length > 0) {
       setState(prev => ({ ...prev, errors }));
-      toast.error('Please fix validation errors before proceeding');
+      toast.error('Por favor, corrija os erros de validação antes de continuar');
       return;
     }
 
@@ -220,13 +253,17 @@ export const InteractiveMessageCreator: React.FC<
   // Memoized step component props
   const typeSelectionProps = useMemo(() => ({
     selectedType: state.message.type,
-    onTypeSelect: handleTypeSelection
-  }), [state.message.type, handleTypeSelection]);
+    onTypeSelect: handleTypeSelection,
+    inboxId: inboxId,
+    channelType: channelType,
+    onNext: handleNextToConfiguration
+  }), [state.message.type, handleTypeSelection, inboxId, channelType, handleNextToConfiguration]);
 
   const unifiedEditingProps = useMemo(() => ({
     message: state.message,
     reactions: state.reactions,
     variables: variables,
+    channelType: channelType,
     onMessageUpdate: updateMessage,
     onReactionUpdate: updateReaction,
     onNext: handleNextToReview,
@@ -236,6 +273,7 @@ export const InteractiveMessageCreator: React.FC<
     state.message, 
     state.reactions, 
     variables,
+    channelType,
     updateMessage, 
     updateReaction, 
     handleNextToReview, 

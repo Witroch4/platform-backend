@@ -111,6 +111,7 @@ export async function GET(request: NextRequest) {
             id: true,
             nome: true,
             inboxId: true,
+            channelType: true, // 🔥 Adicionando o channelType aqui
             agentes: {
               select: {
                 id: true,

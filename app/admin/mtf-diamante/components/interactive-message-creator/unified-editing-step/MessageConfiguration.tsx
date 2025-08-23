@@ -33,7 +33,7 @@ export const MessageConfiguration: React.FC<MessageConfigurationProps> = ({
       <CardHeader className="pb-4">
         <CardTitle className="text-base flex items-center gap-2">
           <Settings className="h-4 w-4" />
-          Message Configuration
+          Nome da Mensagem
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -42,7 +42,7 @@ export const MessageConfiguration: React.FC<MessageConfigurationProps> = ({
             id="message-name"
             value={message.name || ""}
             onChange={(e) => handleNameChange(e.target.value)}
-            placeholder="Enter a descriptive name for this message"
+            placeholder="Digite um nome descritivo para esta mensagem"
             disabled={disabled}
             className={cn(
               !isFieldValid("name") &&

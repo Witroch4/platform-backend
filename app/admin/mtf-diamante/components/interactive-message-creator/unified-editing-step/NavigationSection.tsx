@@ -22,14 +22,14 @@ export const NavigationSection: React.FC<NavigationSectionProps> = ({
           className="flex items-center gap-2"
         >
           <ChevronLeft className="h-4 w-4" />
-          Back to Type Selection
+Voltar à Seleção de Tipo
         </Button>
 
         <div className="flex items-center gap-4">
           {hasErrors && (
             <div className="flex items-center gap-2 text-sm text-destructive">
               <AlertCircle className="h-4 w-4" />
-              Please fix validation errors
+Por favor, corrija os erros de validação
             </div>
           )}
 
@@ -38,7 +38,7 @@ export const NavigationSection: React.FC<NavigationSectionProps> = ({
             disabled={disabled || hasErrors}
             className="flex items-center gap-2"
           >
-            Continue to Review
+Continuar para Revisão
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>

@@ -1,20 +1,6 @@
-# CLAUDE.md
-
-This file provides comprehensive guidance to Claude Code (claude.ai/code) and Cursor AI when working with the Socialwise Chatwit repository.
-
-## ⚠️ Critical Notes
-
-1. **You are in the project root directory**
-2. **Use PowerShell commands on Windows**
-3. **Path errors with "@" outside Next.js scope don't need fixing**
-4. **In Next.js 15, route params are Promises - always use await**
-5. **Always run `npx tsc --noEmit` after edits**
-6. **Use Shadcn/UI Dialog instead of native confirm()/alert()**
-7. **Optimistic UI updates are preferred**
-8. **User-facing strings in Portuguese BR, code in English**
-9. **Front linguagem clara e direta sem termos tecnicos**
-10. **Tudo deve ser compativel com thema dark e light do shadcn**
-
+---
+applyTo: '**'
+---
 ## 🚀 Project Overview
 
 **Socialwise Chatwit** is a comprehensive AI-powered customer service platform specializing in social media automation and legal support for lawyers. Built with Next.js 15, TypeScript, and Prisma, this full-stack application integrates OpenAI APIs (GPT-5, GPT-5-mini, GPT-5-nano, GPT-4.1-nano, DALL-E, Whisper), Instagram/WhatsApp Business APIs, and provides advanced document processing capabilities.
@@ -274,14 +260,6 @@ app/
 ├── admin/                # Admin dashboard pages
 │   ├── capitao/          # IA Capitão - AI Assistant Management
 │   ├── ai-integration/   # AI Integration Management
-│   ├── mtf-diamante/     # MTF Diamante - Advanced Messaging
-│   ├── queue-management/ # Queue Management System
-│   ├── monitoring/       # System Monitoring
-│   ├── leads/            # Lead Management
-│   ├── leads-chatwit/    # Chatwit Lead Integration
-│   ├── credentials/      # Credential Management
-│   ├── notifications/    # Notification System
-│   ├── disparo-em-massa/ # Bulk Message Dispatch
 │   ├── disparo-oab/      # OAB Message Dispatch
 │   └── users/            # User Management
 ├── [accountid]/          # Dynamic account routes
@@ -296,19 +274,18 @@ lib/
 ├── ai-integration/       # AI service integrations
 │   ├── services/         # Core AI services
 │   ├── types/            # AI integration types
-
-│   ├── schemas/          # Data schemas
 │   ├── workers/          # Worker processes
 │   └── queues/           # Queue management
 ├── socialwise-flow/      # SocialWise Flow Processing System
 │   ├── processor.ts      # Main flow processor
-
+│   ├── classification.ts # Intent classification
+│   ├── channel-formatting.ts # Channel-specific formatting
+│   ├── performance-bands.ts  # Performance band processing
+│   ├── cache-manager.ts      # Cache management
 │   ├── metrics.ts            # Performance metrics
 │   └── services/             # SocialWise services
 ├── cost/                 # Cost Management System
 │   ├── cost-worker.ts    # Main cost processing worker
-│   ├── budget-system.ts  # Budget management system
-│   ├── pricing-service.ts # Dynamic pricing resolution
 │   └── fx-rate-service.ts # Foreign exchange rates
 ├── monitoring/           # System Monitoring & Observability
 │   ├── application-performance-monitor.ts # APM
@@ -317,12 +294,10 @@ lib/
 ├── queue/                # Queue Definitions & Configuration
 ├── queue-management/     # Advanced Queue Management System
 ├── auth/                # Authentication utilities
-├── cache/               # Caching mechanisms
 ├── webhook/             # Webhook processing
 ├── whatsapp/            # WhatsApp API integration
 ├── instagram/           # Instagram API integration
-├── connections.ts       # Database connections
-├── redis.ts            # Redis configuration
+├── connections.ts       # Database connections AND REDIS SINGLETON
 └── utils.ts            # General utilities
 ```
 
@@ -353,7 +328,6 @@ worker/
 ### Performance Bands System
 - **HARD (≥0.80)**: Direct mapping, <120ms response
 - **SOFT (0.65-0.79)**: Warmup buttons, intent candidates
-- **LOW (0.50-0.64)**: Domain topics, educational content
 - **ROUTER (<0.50)**: LLM routing, handoff detection
 
 ## 🎯 Key Business Logic Areas
@@ -481,7 +455,17 @@ app/api/[feature]/
 </Dialog>
 ```
 
+## ⚠️ Critical Notes
 
+1. **You are in the project root directory**
+2. **Use PowerShell commands on Windows**
+3. **Path errors with "@" outside Next.js scope don't need fixing**
+4. **In Next.js 15, route params are Promises - always use await**
+5. **Always run `npx tsc --noEmit` after edits**
+6. **Use Shadcn/UI Dialog instead of native confirm()/alert()**
+7. **Optimistic UI updates are preferred**
+8. **User-facing strings in Portuguese BR, code in English**
+9. **TODO FRONT DEVE SER COMPATIVEL COM THEMA DARK SHADCN**
 
 ## 🚦 Environment Variables
 
@@ -510,4 +494,4 @@ OPENAI_API_KEY     # OpenAI API key
 
 ---
 
-*This document is the single source of truth for Socialwise Chatwit development. Keep it updated as the project evolves.*
+*This document is the single source of truth for Socialwise Chatwit development. Keep it updated as the project evolves.*Provide project context and coding guidelines that AI should follow when generating code, answering questions, or reviewing changes.

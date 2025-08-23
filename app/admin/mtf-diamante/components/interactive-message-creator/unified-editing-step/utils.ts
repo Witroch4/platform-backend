@@ -1,4 +1,5 @@
 import type { InteractiveButton, CentralButtonReaction, LocalButtonReaction } from "./types";
+import { MESSAGE_LIMITS, type InstagramTemplateTypeResult } from "@/types/interactive-messages";
 
 // Conversion helpers between backend-stored buttons and UI InteractiveButton
 export const convertBackendToInteractive = (button: any): InteractiveButton => {
@@ -83,27 +84,140 @@ export const resolveVariables = (text: string, variables: Array<{ chave: string;
   return resolvedText;
 };
 
-// Instagram template type determination
-export const getInstagramTemplateType = (bodyText: string, hasImage: boolean, validationLimits: any) => {
+// Instagram template type determination - Updated with proper limits
+export const getInstagramTemplateType = (
+  bodyText: string, 
+  hasImage: boolean, 
+  selectedType?: string
+): InstagramTemplateTypeResult => {
   const bodyLength = bodyText.length;
 
-  if (bodyLength > 640) {
-    const isOverQuickRepliesLimit =
-      bodyLength > validationLimits.INSTAGRAM_QUICK_REPLIES_MAX_LENGTH;
+  // Se o usuário selecionou explicitamente um tipo, use-o como base
+  // Mapear tipos do WhatsApp para Instagram equivalentes
+  if (selectedType === "button" || selectedType === "button_template") {
+    // Template de Botões: 1-640 caracteres (conforme guia Instagram linha 434+)
+    if (bodyLength > 640) {
+      return {
+        type: "button_template",
+        reason: `Template de Botões (${bodyLength} chars > 640) - EXCEDE LIMITE`,
+        isOverLimit: true,
+      };
+    }
+    return {
+      type: "button_template",
+      reason: `Template de Botões (${bodyLength} chars ≤ 640)`,
+    };
+  }
+
+  if (selectedType === "quick_replies") {
+    const isOverQuickRepliesLimit = bodyLength > MESSAGE_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_LENGTH;
     return {
       type: "quick_replies",
-      reason: `Quick Replies (${bodyLength} chars > 640)${isOverQuickRepliesLimit ? " - EXCEDE LIMITE INSTAGRAM" : ""}`,
+      reason: `Respostas Rápidas (${bodyLength} chars)${isOverQuickRepliesLimit ? " - EXCEDE LIMITE INSTAGRAM" : ""}`,
+      isOverLimit: isOverQuickRepliesLimit,
+    };
+  }
+
+  if (selectedType === "generic") {
+    return {
+      type: "generic",
+      reason: `Template Genérico (${bodyLength} chars)`,
+    };
+  }
+
+  // Fallback para detecção automática baseada no comprimento (comportamento anterior)
+  if (bodyLength > 640) {
+    const isOverQuickRepliesLimit = bodyLength > MESSAGE_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_LENGTH;
+    return {
+      type: "quick_replies",
+      reason: `Respostas Rápidas (${bodyLength} chars > 640)${isOverQuickRepliesLimit ? " - EXCEDE LIMITE INSTAGRAM" : ""}`,
       isOverLimit: isOverQuickRepliesLimit,
     };
   } else if (bodyLength <= 80) {
     return {
       type: "generic",
-      reason: `Generic Template (${bodyLength} chars ≤ 80)`,
+      reason: `Template Genérico (${bodyLength} chars ≤ 80)`,
     };
   } else {
     return {
-      type: "button",
-      reason: `Button Template (${bodyLength} chars: 81-640)`,
+      type: "button_template",
+      reason: `Template de Botões (${bodyLength} chars: 81-640)`,
     };
   }
+};
+
+// Helper to determine appropriate Instagram message format
+export const getInstagramMessageFormat = (
+  messageType: string,
+  bodyText: string,
+  hasImage: boolean,
+  selectedType?: string
+): string => {
+  switch (messageType) {
+    case 'quick_replies':
+      return 'QUICK_REPLIES';
+    case 'generic':
+      return 'GENERIC_TEMPLATE';
+    case 'button_template':
+      return 'BUTTON_TEMPLATE';
+    default:
+      // Auto-determine based on content
+      const templateType = getInstagramTemplateType(bodyText, hasImage, selectedType);
+      return templateType.type.toUpperCase();
+  }
+};
+
+// Helper to validate Instagram message limits
+export const validateInstagramMessage = (
+  messageType: string,
+  content: any
+): { isValid: boolean; errors: string[] } => {
+  const errors: string[] = [];
+
+  switch (messageType) {
+    case 'quick_replies':
+      if (content.text?.length > MESSAGE_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_LENGTH) {
+        errors.push(`Texto excede ${MESSAGE_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_LENGTH} caracteres`);
+      }
+      if (content.quick_replies?.length > MESSAGE_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_COUNT) {
+        errors.push(`Máximo ${MESSAGE_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_COUNT} quick replies permitido`);
+      }
+      content.quick_replies?.forEach((reply: any, index: number) => {
+        if (reply.title?.length > MESSAGE_LIMITS.INSTAGRAM_QUICK_REPLY_TITLE_MAX_LENGTH) {
+          errors.push(`Quick reply ${index + 1}: título excede ${MESSAGE_LIMITS.INSTAGRAM_QUICK_REPLY_TITLE_MAX_LENGTH} caracteres`);
+        }
+      });
+      break;
+
+    case 'generic':
+      if (content.elements?.length > MESSAGE_LIMITS.INSTAGRAM_GENERIC_MAX_ELEMENTS) {
+        errors.push(`Máximo ${MESSAGE_LIMITS.INSTAGRAM_GENERIC_MAX_ELEMENTS} elementos permitido`);
+      }
+      content.elements?.forEach((element: any, index: number) => {
+        if (element.title?.length > MESSAGE_LIMITS.INSTAGRAM_GENERIC_TITLE_MAX_LENGTH) {
+          errors.push(`Elemento ${index + 1}: título excede ${MESSAGE_LIMITS.INSTAGRAM_GENERIC_TITLE_MAX_LENGTH} caracteres`);
+        }
+        if (element.subtitle?.length > MESSAGE_LIMITS.INSTAGRAM_GENERIC_SUBTITLE_MAX_LENGTH) {
+          errors.push(`Elemento ${index + 1}: subtítulo excede ${MESSAGE_LIMITS.INSTAGRAM_GENERIC_SUBTITLE_MAX_LENGTH} caracteres`);
+        }
+        if (element.buttons?.length > MESSAGE_LIMITS.INSTAGRAM_BUTTON_TEMPLATE_MAX_BUTTONS) {
+          errors.push(`Elemento ${index + 1}: máximo ${MESSAGE_LIMITS.INSTAGRAM_BUTTON_TEMPLATE_MAX_BUTTONS} botões permitido`);
+        }
+      });
+      break;
+
+    case 'button_template':
+      if (content.text?.length > MESSAGE_LIMITS.INSTAGRAM_BUTTON_TEMPLATE_TEXT_MAX_LENGTH) {
+        errors.push(`Texto excede ${MESSAGE_LIMITS.INSTAGRAM_BUTTON_TEMPLATE_TEXT_MAX_LENGTH} caracteres`);
+      }
+      if (content.buttons?.length > MESSAGE_LIMITS.INSTAGRAM_BUTTON_TEMPLATE_MAX_BUTTONS) {
+        errors.push(`Máximo ${MESSAGE_LIMITS.INSTAGRAM_BUTTON_TEMPLATE_MAX_BUTTONS} botões permitido`);
+      }
+      break;
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
 };

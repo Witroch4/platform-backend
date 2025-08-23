@@ -25,8 +25,36 @@ export const ButtonsSection: React.FC<ButtonsSectionProps> = ({
   const instagramTemplate = React.useMemo(() => {
     const bodyText = message.body?.text || "";
     const hasImage = message.header?.type === "image" && !!message.header?.content;
-    return getInstagramTemplateType(bodyText, hasImage, validationLimits);
-  }, [message.body?.text, message.header, validationLimits]);
+    // Para Instagram, mapear 'button' para 'button_template'
+    const selectedType = message.type === 'button' ? 'button_template' : message.type;
+    return getInstagramTemplateType(bodyText, hasImage, selectedType);
+  }, [message.body?.text, message.header, message.type]);
+
+  // Check if this is Instagram Button Template
+  const isInstagramButtonTemplate = React.useMemo(() => {
+    return channelType === 'Channel::Instagram' && 
+           instagramTemplate.type === 'button_template';
+  }, [channelType, instagramTemplate.type]);
+
+  // Instagram Button Template validation
+  const instagramButtonValidation = React.useMemo(() => {
+    if (!isInstagramButtonTemplate) return null;
+
+    const bodyText = message.body?.text || "";
+    const bodyLength = new TextEncoder().encode(bodyText).length;
+    const hasHeader = message.header?.type && message.header?.type !== "text";
+    const buttonCount = buttons.length;
+
+    return {
+      textWithinLimit: bodyLength <= 640,
+      textLength: bodyLength,
+      maxTextLength: 640,
+      hasInvalidHeader: hasHeader,
+      buttonCountValid: buttonCount >= 1 && buttonCount <= 3,
+      buttonCount,
+      maxButtons: 3
+    };
+  }, [isInstagramButtonTemplate, message.body?.text, message.header, buttons.length]);
 
   const handleReactionConfigOpen = (buttonId: string) => {
     setReactionConfigButton(buttonId);
@@ -41,22 +69,22 @@ export const ButtonsSection: React.FC<ButtonsSectionProps> = ({
       <CardHeader className="pb-4">
         <CardTitle className="text-base">Interactive Buttons</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Add up to {validationLimits.BUTTON_MAX_COUNT} interactive buttons
+          Add up to {isInstagramButtonTemplate ? 3 : validationLimits.BUTTON_MAX_COUNT} interactive buttons
         </p>
-        {channelType === 'Channel::Instagram' && (
-          <div className="flex items-start gap-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
-            <Info className="h-4 w-4 text-blue-600 mt-0.5" />
+        
+        {/* Instagram Template Information */}
+        {channelType === 'Channel::Instagram' && isInstagramButtonTemplate && (
+          <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/50 rounded-lg border border-blue-200 dark:border-blue-800">
+            <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5" />
             <div className="text-sm">
-              <p className="font-medium text-blue-900">Instagram Template:</p>
-              <p className="text-blue-700">{instagramTemplate.reason}</p>
-              {instagramTemplate.isOverLimit && (
-                <Badge variant="destructive" className="mt-1">
-                  Exceeds Instagram Limit
-                </Badge>
-              )}
+              <p className="font-medium text-blue-900 dark:text-blue-100">Tipos de Botão Suportados:</p>
+              <p className="text-blue-700 dark:text-blue-300">
+                URL (links) e Respostas Rápidas. Pode usar uma mistura dos dois tipos.
+              </p>
             </div>
           </div>
         )}
+
       </CardHeader>
       <CardContent className="space-y-4">
         <ButtonManager
@@ -67,7 +95,7 @@ export const ButtonsSection: React.FC<ButtonsSectionProps> = ({
             // Convert array format to individual calls if needed
             reactionsArray.forEach(reaction => onReactionChange(reaction));
           }}
-          maxButtons={validationLimits.BUTTON_MAX_COUNT}
+          maxButtons={isInstagramButtonTemplate ? 3 : validationLimits.BUTTON_MAX_COUNT}
           disabled={disabled}
           idPrefix={channelType === 'Channel::Instagram' ? 'ig_' : ''}
         />
