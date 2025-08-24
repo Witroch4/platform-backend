@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { TrashIcon, PencilIcon, Smile, Settings, Brain } from "lucide-react";
 import { ButtonEmojiMapper } from "./shared/ButtonEmojiMapper";
@@ -477,7 +478,53 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
     );
   }
 
-  if (loading) return <div>Carregando...</div>;
+  if (loading) {
+    return (
+      <Card>
+        <CardHeader className="space-y-1">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <Skeleton className="h-6 w-72 mb-2" />
+              <Skeleton className="h-4 w-96" />
+            </div>
+            <Skeleton className="h-8 w-24" />
+          </div>
+          <div className="text-sm text-muted-foreground">
+            <Skeleton className="h-3 w-1/2" />
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="space-y-4 p-4 border rounded-lg">
+            <Skeleton className="h-10 w-full mb-3" />
+            <div className="flex gap-4">
+              <Skeleton className="h-10 w-1/2" />
+              <Skeleton className="h-10 w-1/2" />
+            </div>
+            <Skeleton className="h-40 w-full mt-4" />
+          </div>
+
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="border border-border p-4 rounded-lg flex justify-between items-start">
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-5 w-40" />
+                  <Skeleton className="h-4 w-80" />
+                  <div className="flex gap-2">
+                    <Skeleton className="h-6 w-16 rounded-full" />
+                    <Skeleton className="h-6 w-20 rounded-full" />
+                  </div>
+                </div>
+                <div className="flex gap-2 ml-4">
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>

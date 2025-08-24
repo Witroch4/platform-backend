@@ -54,7 +54,7 @@ export default function MinioTestPage() {
       <h1 className="text-3xl font-bold mb-6">Teste de Imagens do MinIO</h1>
 
       <Tabs defaultValue="upload">
-        <TabsList className="mb-4">
+        <TabsList variant="line" className="mb-4">
           <TabsTrigger value="upload">Upload de Arquivos</TabsTrigger>
           <TabsTrigger value="test">Testar URLs</TabsTrigger>
           <TabsTrigger value="gallery">Galeria</TabsTrigger>

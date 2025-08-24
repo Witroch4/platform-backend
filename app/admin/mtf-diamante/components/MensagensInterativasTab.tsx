@@ -10,28 +10,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+// ...existing code... (removed unused Textarea / Select imports)
 import {
   TrashIcon,
   PencilIcon,
   Upload,
     Download,
-  Eye,
-  Save,
   Plus,
   MessageSquare,
-  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useSession } from "next-auth/react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import InteractiveMessageCreator from "./InteractiveMessageCreator";
@@ -201,6 +189,18 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
     [caixas, caixaId]
   );
 
+  // local state to render glow only on hovered item and respect reduced-motion
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [prefersReduced, setPrefersReduced] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const handle = () => setPrefersReduced(Boolean(mq.matches));
+    handle();
+    try { mq.addEventListener?.("change", handle); } catch { mq.addListener?.(handle); }
+    return () => { try { mq.removeEventListener?.("change", handle); } catch { mq.removeListener?.(handle); } };
+  }, []);
+
   // Dados já vêm do contexto via useMemo - não precisa espelhar estado
 
   const handleEdit = (msg: any) => {
@@ -301,9 +301,9 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
       : undefined;
 
           const hasButtons = (msg.botoes?.length || 0) > 0;
-      const action = hasButtons
-        ? { buttons: msg.botoes?.map((b) => ({ id: b.id || `btn_${Date.now()}`, title: (b as any).title || b.titulo || "" })) }
-        : undefined;
+          const action = hasButtons
+            ? { buttons: msg.botoes?.map((b, i) => ({ id: b.id || `btn_${Date.now()}_${i}`, title: (b as any).title || b.titulo || "" })) }
+            : undefined;
 
     return {
       name: msg.nome,
@@ -393,7 +393,7 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
     const body = m.body || m.content?.body;
     const footer = m.footer || m.content?.footer;
     const action = m.action || m.content?.action;
-    const type = m.type || m.content?.type || (action?.buttons ? "button" : "button");
+  const type = m.type || m.content?.type || (action?.buttons ? "button" : "text");
     return {
       name: m.name || m.nome || "",
       type,
@@ -610,20 +610,28 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
               return (
                 <div
                   key={msg.id}
-                  className="relative group h-auto"
+                  onMouseEnter={() => setHoveredId(msg.id)}
+                  onMouseLeave={() => setHoveredId(null)}
+                  className="relative h-auto"
                 >
-                  {/* Glow effect sutil e um pouco maior por trás do card */}
-                  <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-25 transition-opacity duration-500 ease-out">
-                    <GlowEffect
-                      colors={['#0894FF', '#C959DD', '#FF2E54', '#FF9004']}
-                      mode="colorShift"
-                      blur="strongest"
-                      duration={4}
-                      //
-                    />
-                  </div>
+                  {/* Glow atrás do card — renderiza só quando hover e quando não há preferência por reduzir animação */}
+                  {!prefersReduced && hoveredId === msg.id && (
+                    <div
+                      className="pointer-events-none absolute inset-0 z-0 opacity-25 transition-opacity duration-300"
+                      aria-hidden
+                      role="presentation"
+                    >
+                      <GlowEffect
+                        colors={["#0894FF", "#C959DD", "#FF2E54", "#FF9004"]}
+                        mode="colorShift"
+                        blur="stronger"
+                        duration={4}
+                      />
+                    </div>
+                  )}
+
                   {/* Card com conteúdo na frente */}
-                  <div className="relative border border-border p-4 rounded-lg flex justify-between items-start hover:bg-accent/20 transition-all duration-300 bg-background dark:bg-background">
+                  <div className="relative z-10 border border-border p-4 rounded-lg flex justify-between items-start hover:bg-accent/20 transition-all duration-300 bg-background dark:bg-background">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="font-medium text-foreground">

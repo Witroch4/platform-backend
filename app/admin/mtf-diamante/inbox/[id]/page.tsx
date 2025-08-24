@@ -36,7 +36,7 @@ export default function InboxDashboardPage() {
     <SafeBoundary>
       <div className="p-4 md:p-6">
         <Tabs value={tab} onValueChange={setTab} className="space-y-4">
-          <TabsList>
+          <TabsList variant="line">
             <TabsTrigger value="interativas">Mensagens Interativas</TabsTrigger>
             <TabsTrigger value="mapeamento">Mapeamento</TabsTrigger>
             <TabsTrigger value="agentes">Agentes</TabsTrigger>

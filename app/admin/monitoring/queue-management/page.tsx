@@ -613,7 +613,7 @@ export default function QueueManagementDashboard() {
 
       {/* Main Dashboard Tabs */}
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList>
+        <TabsList variant="line">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="queues">Queues</TabsTrigger>
           <TabsTrigger value="metrics">Metrics</TabsTrigger>

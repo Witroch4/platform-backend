@@ -1,6 +1,7 @@
 'use client';
 
 import type React from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -19,6 +20,7 @@ import {
   SquarePlay
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { GlowEffect } from '@/components/ui/glow-effect';
 import type { InteractiveMessageType } from './interactive-message-creator/types';
 import { isInstagramChannel } from '@/types/interactive-messages';
 
@@ -184,6 +186,19 @@ export const InteractiveMessageTypeSelector: React.FC<InteractiveMessageTypeSele
 }) => {
   const isInstagram = isInstagramChannel(channelType);
   
+  // State para controlar glow effect
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [prefersReduced, setPrefersReduced] = useState(false);
+  
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const handle = () => setPrefersReduced(Boolean(mq.matches));
+    handle();
+    try { mq.addEventListener?.("change", handle); } catch { mq.addListener?.(handle); }
+    return () => { try { mq.removeEventListener?.("change", handle); } catch { mq.removeListener?.(handle); } };
+  }, []);
+  
   // Get available types based on channel
   const availableTypes = isInstagram ? INSTAGRAM_TYPES : WHATSAPP_TYPES;
 
@@ -239,14 +254,38 @@ export const InteractiveMessageTypeSelector: React.FC<InteractiveMessageTypeSele
           const isSelected = selectedType === type.id;
 
           return (
-            <Card
+            <div
               key={type.id}
-              className={cn(
-                "cursor-pointer transition-all duration-200 hover:shadow-md",
-                isSelected && "ring-2 ring-primary border-primary"
-              )}
-              onClick={() => onTypeSelect(type.id)}
+              className="relative"
+              onMouseEnter={() => setHoveredId(type.id)}
+              onMouseLeave={() => setHoveredId(null)}
             >
+              {/* Glow effect - renderiza só quando hover e sem preferência por reduzir animação */}
+              {!prefersReduced && hoveredId === type.id && (
+                <div
+                  className="pointer-events-none absolute inset-0 z-0 opacity-30 transition-opacity duration-300"
+                  aria-hidden
+                  role="presentation"
+                >
+                  <GlowEffect
+                    colors={isInstagram 
+                      ? ['#E4405F', '#833AB4', '#C13584', '#F56040'] 
+                      : ['#25D366', '#128C7E', '#075E54', '#DCF8C6']
+                    }
+                    mode="colorShift"
+                    blur="medium"
+                    duration={4}
+                  />
+                </div>
+              )}
+
+              <Card
+                className={cn(
+                  "relative z-10 cursor-pointer transition-all duration-200 hover:shadow-md h-full flex flex-col",
+                  isSelected && "ring-2 ring-primary border-primary"
+                )}
+                onClick={() => onTypeSelect(type.id)}
+              >
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
@@ -286,12 +325,12 @@ export const InteractiveMessageTypeSelector: React.FC<InteractiveMessageTypeSele
                 </div>
               </CardHeader>
 
-              <CardContent className="pt-0">
+              <CardContent className="pt-0 flex-1 flex flex-col">
                 <CardDescription className="text-xs mb-3">
                   {type.description}
                 </CardDescription>
 
-                <div className="space-y-3">
+                <div className="space-y-3 flex-1">
                   <div>
                     <h4 className="text-xs font-medium text-foreground mb-1">Recursos:</h4>
                     <ul className="text-xs text-muted-foreground space-y-1">
@@ -364,35 +403,10 @@ export const InteractiveMessageTypeSelector: React.FC<InteractiveMessageTypeSele
                 </Button>
               </CardContent>
             </Card>
+            </div>
           );
         })}
       </div>
-
-      {selectedType && (
-        <Card className="border-primary/20 bg-primary/5">
-          <CardHeader>
-            <CardTitle className="text-sm flex items-center gap-2">
-              <div className="p-1 rounded bg-primary text-primary-foreground">
-                <Check className="h-3 w-3" />
-              </div>
-              Tipo Selecionado: {availableTypes.find(t => t.id === selectedType)?.label}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xs text-muted-foreground">
-              <p className="mb-2">
-                {availableTypes.find(t => t.id === selectedType)?.description}
-              </p>
-              <p>
-                {isInstagram 
-                  ? 'Configure os detalhes respeitando os limites específicos do Instagram.'
-                  : 'Você pode prosseguir para configurar os detalhes desta mensagem interativa.'
-                }
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 };

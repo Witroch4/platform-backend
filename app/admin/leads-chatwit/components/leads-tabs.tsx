@@ -20,30 +20,29 @@ export function LeadsTabs({ activeTab, onChange, userRole }: LeadsTabsProps) {
   ];
 
   return (
-    <div className="border-b border-border bg-background">
-      <div className="flex overflow-x-auto">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => onChange(tab.id)}
-            className={`
-              px-4 py-2 text-sm font-medium transition-colors
-              ${activeTab === tab.id ? 
-                "border-b-2 border-primary text-primary" : 
-                "text-muted-foreground hover:text-foreground hover:border-b-2 hover:border-muted"
-              }
-            `}
-          >
-            {tab.label}
-          </button>
-        ))}
+    <div className="bg-background">
+      <div className="flex items-center justify-between border-b border-border">
+        <Tabs value={activeTab} onValueChange={onChange} className="flex-1">
+          <TabsList variant="line" className="h-auto p-0 bg-transparent justify-start">
+            {tabs.map((tab) => (
+              <TabsTrigger
+                key={tab.id}
+                value={tab.id}
+                className="data-[state=active]:bg-transparent"
+              >
+                {tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+        
         <Link 
           href="/admin/leads-chatwit/listagem"
-          className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:border-b-2 hover:border-muted transition-colors"
+          className="px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-blue-500 dark:hover:text-blue-600 transition-colors border-b-2 border-transparent hover:border-blue-500 dark:hover:border-blue-600"
         >
           Listagem Completa
         </Link>
       </div>
     </div>
   );
-} 
+}

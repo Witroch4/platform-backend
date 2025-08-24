@@ -171,7 +171,7 @@ export function TemplateLibraryTab() {
       </div>
 
       <Tabs defaultValue="library" className="space-y-4">
-        <TabsList>
+        <TabsList variant="line">
           <TabsTrigger value="library">
             <BookOpen className="h-4 w-4 mr-2" />
             Biblioteca

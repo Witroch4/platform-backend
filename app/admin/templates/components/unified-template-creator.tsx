@@ -613,7 +613,7 @@ export function UnifiedTemplateCreator({ onSuccess, initialData }: UnifiedTempla
 
               {formData.type === TemplateType.INTERACTIVE_MESSAGE && (
                 <Tabs defaultValue="content" className="space-y-4">
-                  <TabsList>
+                  <TabsList variant="line">
                     <TabsTrigger value="content">Conteúdo</TabsTrigger>
                     <TabsTrigger value="actions">Ações</TabsTrigger>
                   </TabsList>

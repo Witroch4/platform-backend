@@ -371,7 +371,7 @@ export default function ProductionMonitoringDashboard() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
+        <TabsList variant="line">
           <TabsTrigger value="overview">Visão Geral</TabsTrigger>
           <TabsTrigger value="alerts">Alertas</TabsTrigger>
           <TabsTrigger value="connections">Conexões</TabsTrigger>

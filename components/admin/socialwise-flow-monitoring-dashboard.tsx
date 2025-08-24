@@ -296,7 +296,7 @@ export function SocialWiseFlowMonitoringDashboard() {
 
       {/* Metrics Tabs */}
       <Tabs defaultValue="performance" className="space-y-4">
-        <TabsList>
+        <TabsList variant="line">
           <TabsTrigger value="performance">Performance</TabsTrigger>
           <TabsTrigger value="classification">Classificação</TabsTrigger>
           <TabsTrigger value="errors">Erros</TabsTrigger>

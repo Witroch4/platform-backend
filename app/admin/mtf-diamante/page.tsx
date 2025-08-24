@@ -74,7 +74,7 @@ const MtfDiamanteAtendimentoPage = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList>
+        <TabsList variant="line">
           <TabsTrigger value="lote">Configurações Globais</TabsTrigger>
           <TabsTrigger value="templates">Templates Oficiais</TabsTrigger>
           <TabsTrigger value="library">Template Library</TabsTrigger>
