@@ -12,12 +12,11 @@ import {
  */
 export class FlashIntentChecker {
   private static instance: FlashIntentChecker;
-  private flagManager: FeatureFlagManager;
+  private flagManager: FeatureFlagManager | null = null;
+  private initialized = false;
 
   constructor() {
-    const prisma = getPrismaInstance();
-    const redis = getRedisInstance();
-    this.flagManager = FeatureFlagManager.getInstance(prisma, redis);
+    // Inicialização lazy para evitar problemas de conexão
   }
 
   static getInstance(): FlashIntentChecker {
@@ -27,11 +26,33 @@ export class FlashIntentChecker {
     return FlashIntentChecker.instance;
   }
 
+  private async initialize() {
+    if (this.initialized) return;
+
+    try {
+      const prisma = getPrismaInstance();
+      const redis = getRedisInstance();
+      this.flagManager = FeatureFlagManager.getInstance(prisma, redis);
+      this.initialized = true;
+    } catch (error) {
+      console.error('[FlashIntentChecker] Erro ao inicializar FeatureFlagManager, usando fallback:', error);
+      this.flagManager = null;
+      this.initialized = true;
+    }
+  }
+
   /**
    * Verifica se a Flash Intent está ativa para um usuário específico
    */
   async isFlashIntentEnabledForUser(userId: string): Promise<boolean> {
     try {
+      await this.initialize();
+
+      // Se não conseguiu inicializar o FeatureFlagManager, usar fallback
+      if (!this.flagManager) {
+        return isFlashIntentEnabledForUserFallback(userId);
+      }
+
       // Primeiro, verificar se está ativo globalmente
       const globalEnabled = await this.isFlashIntentEnabledGlobally();
       if (globalEnabled) {
@@ -71,6 +92,13 @@ export class FlashIntentChecker {
    */
   async isFlashIntentEnabledGlobally(): Promise<boolean> {
     try {
+      await this.initialize();
+
+      // Se não conseguiu inicializar o FeatureFlagManager, usar fallback
+      if (!this.flagManager) {
+        return isFlashIntentGloballyEnabledFallback();
+      }
+
       const [
         globalFlag,
         newWebhookProcessing,
@@ -101,8 +129,7 @@ export class FlashIntentChecker {
       );
 
     } catch (error) {
-      console.error("[FlashIntent] Erro ao verificar Flash Intent global, usando fallback:", error);
-      // Usar sistema de fallback quando há erro de conexão
+      console.error('[FlashIntent] Erro ao verificar Flash Intent global, usando fallback:', error);
       return isFlashIntentGloballyEnabledFallback();
     }
   }
@@ -116,6 +143,13 @@ export class FlashIntentChecker {
     userId?: string
   ): Promise<boolean> {
     try {
+      await this.initialize();
+
+      // Se não conseguiu inicializar o FeatureFlagManager, usar fallback
+      if (!this.flagManager) {
+        return false; // Não há fallback para funcionalidades individuais
+      }
+
       // Mapear funcionalidades para flags globais
       const globalFlagMap = {
         'WEBHOOK': 'NEW_WEBHOOK_PROCESSING',
@@ -146,52 +180,63 @@ export class FlashIntentChecker {
   }
 
   /**
-   * Obtém o status detalhado da Flash Intent para um usuário
+   * Obtém status detalhado da Flash Intent
    */
   async getFlashIntentStatus(userId?: string): Promise<{
     globalEnabled: boolean;
     userEnabled: boolean;
-    features: {
-      webhook: boolean;
+    components: {
+      newWebhookProcessing: boolean;
       highPriorityQueue: boolean;
       lowPriorityQueue: boolean;
-      unifiedModel: boolean;
-      caching: boolean;
+      unifiedLeadModel: boolean;
+      intelligentCaching: boolean;
+      applicationMonitoring: boolean;
     };
   }> {
     try {
+      await this.initialize();
+
+      // Se não conseguiu inicializar o FeatureFlagManager, usar fallback
+      if (!this.flagManager) {
+        return getFlashIntentStatusFallback(userId);
+      }
+
       const globalEnabled = await this.isFlashIntentEnabledGlobally();
       const userEnabled = userId ? await this.isFlashIntentEnabledForUser(userId) : false;
 
-      const features = {
-        webhook: await this.isFeatureEnabledForUser('WEBHOOK', userId),
-        highPriorityQueue: await this.isFeatureEnabledForUser('HIGH_PRIORITY_QUEUE', userId),
-        lowPriorityQueue: await this.isFeatureEnabledForUser('LOW_PRIORITY_QUEUE', userId),
-        unifiedModel: await this.isFeatureEnabledForUser('UNIFIED_MODEL', userId),
-        caching: await this.isFeatureEnabledForUser('CACHING', userId),
-      };
+      const [
+        newWebhookProcessing,
+        highPriorityQueue,
+        lowPriorityQueue,
+        unifiedLeadModel,
+        intelligentCaching,
+        applicationMonitoring,
+      ] = await Promise.all([
+        this.flagManager.isEnabled("NEW_WEBHOOK_PROCESSING").catch(() => false),
+        this.flagManager.isEnabled("HIGH_PRIORITY_QUEUE").catch(() => false),
+        this.flagManager.isEnabled("LOW_PRIORITY_QUEUE").catch(() => false),
+        this.flagManager.isEnabled("UNIFIED_LEAD_MODEL").catch(() => false),
+        this.flagManager.isEnabled("INTELLIGENT_CACHING").catch(() => false),
+        this.flagManager.isEnabled("APPLICATION_MONITORING").catch(() => false),
+      ]);
 
       return {
         globalEnabled,
         userEnabled,
-        features,
+        components: {
+          newWebhookProcessing,
+          highPriorityQueue,
+          lowPriorityQueue,
+          unifiedLeadModel,
+          intelligentCaching,
+          applicationMonitoring,
+        },
       };
 
     } catch (error) {
-      console.error(`[FlashIntent] Erro ao obter status para usuário ${userId}, usando fallback:`, error);
-      // Usar sistema de fallback quando há erro
-      const fallbackStatus = getFlashIntentStatusFallback(userId);
-      return {
-        globalEnabled: fallbackStatus.globalEnabled,
-        userEnabled: fallbackStatus.userEnabled,
-        features: {
-          webhook: fallbackStatus.components.newWebhookProcessing,
-          highPriorityQueue: fallbackStatus.components.highPriorityQueue,
-          lowPriorityQueue: fallbackStatus.components.lowPriorityQueue,
-          unifiedModel: fallbackStatus.components.unifiedLeadModel,
-          caching: fallbackStatus.components.intelligentCaching,
-        },
-      };
+      console.error('[FlashIntent] Erro ao obter status, usando fallback:', error);
+      return getFlashIntentStatusFallback(userId);
     }
   }
 }

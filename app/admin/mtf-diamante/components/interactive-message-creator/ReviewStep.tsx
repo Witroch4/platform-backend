@@ -37,7 +37,7 @@ import type {
 interface UnifiedButtonReaction {
   buttonId: string;
   reaction?: {
-    type: 'emoji' | 'text';
+    type: 'emoji' | 'text' | 'action';
     value: string;
   };
 }
@@ -65,9 +65,12 @@ const formatReactionDisplay = (reaction: UnifiedButtonReaction): string => {
   
   if (reaction.reaction.type === 'emoji') {
     return `React with ${reaction.reaction.value}`
-  } else {
+  } else if (reaction.reaction.type === 'text') {
     return `Reply: "${reaction.reaction.value}"`
+  } else if (reaction.reaction.type === 'action') {
+    return reaction.reaction.value === 'handoff' ? '🚨 Transfer to agent' : `Action: ${reaction.reaction.value}`
   }
+  return 'Unknown reaction'
 }
 
 // Helper function to get message type display name
@@ -179,14 +182,17 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
           } : undefined,
           action: normalizedAction
         },
-        // Coexistência: permitir enviar emoji e texto para o mesmo botão
+        // Coexistência: permitir enviar emoji, texto e action para o mesmo botão
         reactions: reactions.flatMap(r => {
-          const out: Array<{ buttonId: string; reaction: { type: 'emoji' | 'text'; value: string } }> = []
+          const out: Array<{ buttonId: string; reaction: { type: 'emoji' | 'text' | 'action'; value: string } }> = []
           if (r.reaction?.type === 'emoji') {
             out.push({ buttonId: r.buttonId, reaction: { type: 'emoji', value: r.reaction.value } })
           }
           if (r.reaction?.type === 'text') {
             out.push({ buttonId: r.buttonId, reaction: { type: 'text', value: r.reaction.value } })
+          }
+          if (r.reaction?.type === 'action') {
+            out.push({ buttonId: r.buttonId, reaction: { type: 'action', value: r.reaction.value } })
           }
           return out
         })
@@ -246,14 +252,49 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
+        console.error('❌ [ReviewStep] Response not ok:', {
+          status: response.status,
+          statusText: response.statusText,
+          headers: Object.fromEntries(response.headers.entries())
+        });
+        
+        let errorData: any = {};
+        try {
+          const responseText = await response.text();
+          console.error('❌ [ReviewStep] Raw error response:', responseText);
+          
+          if (responseText) {
+            errorData = JSON.parse(responseText);
+          }
+        } catch (parseError) {
+          console.error('❌ [ReviewStep] Failed to parse error response:', parseError);
+          errorData = { error: `Server error: ${response.status} ${response.statusText}` };
+        }
+        
         // 🔄 REVERT OPTIMISTIC UPDATE: Reverter em caso de erro
         console.log('❌ [ReviewStep] API failed, reverting optimistic update...');
         await refreshCaixas(); // Recarregar dados do servidor
         throw new Error(errorData.error || `Failed to ${editingMessage ? 'update' : 'save'} message`)
       }
 
-      const result = await response.json()
+      // Parse successful response
+      let result: any;
+      try {
+        const responseText = await response.text();
+        console.log('✅ [ReviewStep] Raw success response:', responseText);
+        
+        if (!responseText) {
+          throw new Error('Empty response from server');
+        }
+        
+        result = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('❌ [ReviewStep] Failed to parse success response:', parseError);
+        // 🔄 REVERT OPTIMISTIC UPDATE: Reverter em caso de erro
+        console.log('❌ [ReviewStep] Parse failed, reverting optimistic update...');
+        await refreshCaixas(); // Recarregar dados do servidor
+        throw new Error('Invalid response format from server');
+      }
       
       if (!result.success) {
         // 🔄 REVERT OPTIMISTIC UPDATE: Reverter em caso de erro
@@ -564,6 +605,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                     type: r.reaction?.type || 'emoji',
                     emoji: r.reaction?.type === 'emoji' ? r.reaction.value : undefined,
                     textResponse: r.reaction?.type === 'text' ? r.reaction.value : undefined,
+                    action: r.reaction?.type === 'action' ? r.reaction.value : undefined,
                     isActive: true
                   }))}
                   showReactionIndicators={true}

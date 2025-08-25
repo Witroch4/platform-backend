@@ -154,7 +154,7 @@ const normalizeMessage = (m: AnyMsg): Mensagem => {
 };
 
 const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
-  const { interactiveMessages, caixas, refreshCaixas } = useMtfData();
+  const { interactiveMessages, caixas, refreshCaixas, buttonReactions } = useMtfData();
   const [currentView, setCurrentView] = useState<"list" | "create" | "edit">(
     "list"
   );
@@ -651,15 +651,31 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
                   </p>
                   {((msg.botoes ?? []).length || 0) > 0 && (
                     <div className="flex gap-1 flex-wrap">
-                      {(msg.botoes ?? []).map((botao, idx) => (
-                        <Badge
-                          key={idx}
-                          variant="secondary"
-                          className="text-xs"
-                        >
-                          {botao.titulo}
-                        </Badge>
-                      ))}
+                      {(msg.botoes ?? []).map((botao, idx) => {
+                        // Verificar se este botão tem ação de handoff
+                        const botaoReaction = buttonReactions.find(reaction => 
+                          reaction.buttonId === botao.id && reaction.action === 'handoff'
+                        );
+                        
+                        return (
+                          <div key={idx} className="flex items-center gap-1">
+                            <Badge
+                              variant="secondary"
+                              className="text-xs"
+                            >
+                              {botao.titulo}
+                            </Badge>
+                            {botaoReaction && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800"
+                              >
+                                👤 Atendimento Humano
+                              </Badge>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

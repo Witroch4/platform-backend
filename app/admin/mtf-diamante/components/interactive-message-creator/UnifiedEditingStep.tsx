@@ -259,20 +259,64 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
 
   // Handle next step
   const handleNext = useCallback(async () => {
+    console.log('🔄 [Next] Iniciando validação...');
+    
     if (message.header?.type === "text" && !message.header.content?.trim()) {
+      console.log('🔧 [Next] Removendo header de texto vazio');
       onMessageUpdate({ header: undefined });
     }
 
+    const messageState = {
+      name: message.name,
+      type: message.type,
+      bodyLength: message.body?.text?.length || 0,
+      hasHeader: !!message.header?.content,
+      buttonsCount: buttons.length,
+      footerLength: message.footer?.text?.length || 0
+    };
+    console.log('� [Next] Estado da mensagem:', messageState);
+
     const immediate = await validateMessage({ ...message });
-    if (immediate.isValid && canProceed()) {
+    const canProceedResult = canProceed();
+    
+    if (immediate.isValid && canProceedResult) {
+      console.log('✅ [Next] Validação OK - avançando para próxima etapa');
       onNext();
     } else {
+      console.warn('⚠️ [Next] Validação pendente:', {
+        validationValid: immediate.isValid,
+        canProceed: canProceedResult,
+        errorsCount: immediate.errors.length
+      });
       toast.error("Por favor, corrija os erros de validação antes de continuar");
     }
-  }, [validateMessage, message, canProceed, onNext, onMessageUpdate]);
+  }, [validateMessage, message, canProceed, onNext, onMessageUpdate, buttons]);
 
   // Check if form has errors
   const hasErrors = validationState.hasErrors || !canProceed();
+
+  // Get all error messages for display
+  const allErrorMessages = useMemo(() => {
+    const messages: string[] = [];
+    
+    // Get errors from message validation if available
+    if (validationState.messageValidation?.errors) {
+      validationState.messageValidation.errors.forEach(error => {
+        messages.push(error.message);
+      });
+    }
+    
+    // Get field-specific errors
+    Object.values(validationState.fieldValidations).forEach(fieldValidation => {
+      if (fieldValidation.errors) {
+        fieldValidation.errors.forEach(error => {
+          messages.push(error.message);
+        });
+      }
+    });
+    
+    return messages;
+  }, [validationState.messageValidation, validationState.fieldValidations]);
 
   // Normalize reactions from backend
   const normalizedReactions = useMemo(() => {
@@ -355,6 +399,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
             onNext={handleNext}
             disabled={disabled}
             hasErrors={hasErrors}
+            errorMessages={allErrorMessages}
           />
         </div>
 
@@ -366,19 +411,36 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
             channelType={channelType || undefined}
             reactions={normalizedReactions}
             onReactionChange={(buttonId, reaction) => {
+              // Buscar reação existente para manter valores não alterados
+              const existingReaction = normalizedReactions.find(r => r.buttonId === buttonId);
+              
               const centralReaction: Partial<CentralButtonReaction> = {
                 buttonId,
-                type: reaction.emoji ? 'emoji' : 'text',
+                type: reaction.action ? 'action' : (reaction.emoji ? 'emoji' : 'text'),
                 isActive: true,
               };
 
-              if (reaction.emoji) {
-                centralReaction.emoji = reaction.emoji;
-                centralReaction.textResponse = undefined;
+              // Manter valores existentes e aplicar novas mudanças
+              if (existingReaction?.emoji) centralReaction.emoji = existingReaction.emoji;
+              if (existingReaction?.textResponse) centralReaction.textResponse = existingReaction.textResponse;
+              if (existingReaction?.action) centralReaction.action = existingReaction.action;
+
+              // Aplicar novas mudanças
+              if (reaction.action !== undefined) {
+                centralReaction.action = reaction.action;
+                centralReaction.type = reaction.action ? 'action' : (centralReaction.emoji ? 'emoji' : 'text');
               }
-              if (reaction.textResponse) {
+              if (reaction.emoji !== undefined) {
+                centralReaction.emoji = reaction.emoji;
+                if (!reaction.action) {
+                  centralReaction.type = reaction.emoji ? 'emoji' : (centralReaction.textResponse ? 'text' : 'emoji');
+                }
+              }
+              if (reaction.textResponse !== undefined) {
                 centralReaction.textResponse = reaction.textResponse;
-                centralReaction.emoji = undefined;
+                if (!reaction.action && !reaction.emoji) {
+                  centralReaction.type = reaction.textResponse ? 'text' : 'emoji';
+                }
               }
 
               onReactionUpdate(buttonId, centralReaction);

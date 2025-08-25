@@ -50,7 +50,7 @@ export const sendResetPasswordEmail = async (email: string, token: string) => {
 	}
 
 	const resetUrl = `${NEXT_PUBLIC_URL}${RESET_PASSWORD_URL}?token=${token}`;
-	const { data, error } = await mail.emails.send({
+	const { data, error } = await mail().emails.send({
 		from: RESEND_EMAIL_FROM,
 		to: email,
 		subject: RESET_PASSWORD_SUBJECT,

@@ -1,149 +1,173 @@
-/**
- * Feature Flag Admin API
- * Based on requirements 16.1, 16.2, 16.3, 16.4
- */
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/auth";
+import { getPrismaInstance } from "@/lib/connections";
+import logger from "@/lib/utils/logger";
 
-import { NextRequest, NextResponse } from 'next/server';
-import { getRedisInstance } from '@/lib/connections';
-import { FeatureFlagManager } from '@/lib/ai-integration/services/feature-flag-manager';
-import { AI_FEATURE_FLAGS } from '@/lib/ai-integration/types/feature-flags';
-import log from '@/lib/log';
-
-// GET /api/admin/feature-flags - List all feature flags
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url);
-    const accountId = searchParams.get('accountId');
-    const inboxId = searchParams.get('inboxId');
-
-    const redis = getRedisInstance();
-    const flagManager = new FeatureFlagManager(redis);
-
-    if (accountId) {
-      // Get feature flag status for specific account
-      const status = await flagManager.getAccountFeatureFlagStatus(
-        parseInt(accountId),
-        inboxId ? parseInt(inboxId) : undefined
+    const session = await auth();
+    
+    if (!session?.user?.id || (session.user.role !== "ADMIN" && session.user.role !== "SUPERADMIN")) {
+      return NextResponse.json(
+        { error: "Acesso negado. Apenas administradores podem acessar feature flags." },
+        { status: 403 }
       );
-
-      return NextResponse.json({
-        success: true,
-        data: {
-          accountId: parseInt(accountId),
-          inboxId: inboxId ? parseInt(inboxId) : undefined,
-          flags: status
-        }
-      });
     }
 
-    // List all available AI feature flags
-    const flags = Object.entries(AI_FEATURE_FLAGS).map(([key, flagId]) => ({
-      key,
-      flagId,
-      name: flagId.replace(/\./g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-      description: `AI Integration: ${key.replace(/_/g, ' ').toLowerCase()}`
-    }));
+    const prisma = getPrismaInstance();
+    
+    const flags = await prisma.featureFlag.findMany({
+      orderBy: [
+        { category: "asc" },
+        { name: "asc" }
+      ],
+      include: {
+        metrics: {
+          where: {
+            date: {
+              gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) // Last 7 days
+            }
+          },
+          orderBy: { date: "desc" },
+          take: 7
+        },
+        userOverrides: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    logger.info("Feature flags retrieved successfully", {
+      userId: session.user.id,
+      flagCount: flags.length
+    });
 
     return NextResponse.json({
-      success: true,
-      data: { flags }
+      flags: flags.map(flag => ({
+        id: flag.id,
+        name: flag.name,
+        description: flag.description,
+        category: flag.category,
+        enabled: flag.enabled,
+        rolloutPercentage: flag.rolloutPercentage,
+        userSpecific: flag.userSpecific,
+        systemCritical: flag.systemCritical,
+        metadata: flag.metadata,
+        createdAt: flag.createdAt.toISOString(),
+        updatedAt: flag.updatedAt.toISOString(),
+        metrics: flag.metrics,
+        userOverrides: flag.userOverrides
+      }))
     });
 
   } catch (error) {
-    log.error('Error in feature flags API', { error });
-    
-    return NextResponse.json({
-      success: false,
-      error: 'Internal server error'
-    }, { status: 500 });
+    logger.error("Error retrieving feature flags", {
+      error: error instanceof Error ? error.message : "Unknown error"
+    });
+
+    return NextResponse.json(
+      { error: "Erro interno do servidor" },
+      { status: 500 }
+    );
   }
 }
 
-// POST /api/admin/feature-flags - Create or update feature flag override
 export async function POST(request: NextRequest) {
   try {
+    const session = await auth();
+    
+    if (!session?.user?.id || (session.user.role !== "ADMIN" && session.user.role !== "SUPERADMIN")) {
+      return NextResponse.json(
+        { error: "Acesso negado. Apenas administradores podem criar feature flags." },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
-    const { flagId, accountId, inboxId, enabled, reason, userId } = body;
+    const {
+      name,
+      description,
+      category = "system",
+      enabled = false,
+      rolloutPercentage = 100,
+      userSpecific = false,
+      systemCritical = false,
+      metadata = {}
+    } = body;
 
-    if (!flagId || !reason || !userId) {
-      return NextResponse.json({
-        success: false,
-        error: 'Missing required fields: flagId, reason, userId'
-      }, { status: 400 });
+    if (!name || !description) {
+      return NextResponse.json(
+        { error: "Nome e descrição são obrigatórios" },
+        { status: 400 }
+      );
     }
 
-    const redis = getRedisInstance();
-    const flagManager = new FeatureFlagManager(redis);
+    const prisma = getPrismaInstance();
+    
+    // Check if flag with same name already exists
+    const existingFlag = await prisma.featureFlag.findUnique({
+      where: { name }
+    });
 
-    if (inboxId) {
-      if (enabled) {
-        await flagManager.enableForInbox(flagId, accountId, inboxId, reason, userId);
-      } else {
-        await flagManager.disableForInbox(flagId, accountId, inboxId, reason, userId);
-      }
-    } else if (accountId) {
-      if (enabled) {
-        await flagManager.enableForAccount(flagId, accountId, reason, userId);
-      } else {
-        await flagManager.disableForAccount(flagId, accountId, reason, userId);
-      }
-    } else {
-      return NextResponse.json({
-        success: false,
-        error: 'Either accountId or inboxId must be provided'
-      }, { status: 400 });
+    if (existingFlag) {
+      return NextResponse.json(
+        { error: "Já existe uma feature flag com este nome" },
+        { status: 409 }
+      );
     }
+
+    const flag = await prisma.featureFlag.create({
+      data: {
+        name,
+        description,
+        category,
+        enabled,
+        rolloutPercentage,
+        userSpecific,
+        systemCritical,
+        metadata,
+        createdBy: session.user.id
+      }
+    });
+
+    logger.info("Feature flag created successfully", {
+      userId: session.user.id,
+      flagId: flag.id,
+      flagName: flag.name
+    });
 
     return NextResponse.json({
-      success: true,
-      message: `Feature flag ${enabled ? 'enabled' : 'disabled'} successfully`
+      flag: {
+        id: flag.id,
+        name: flag.name,
+        description: flag.description,
+        category: flag.category,
+        enabled: flag.enabled,
+        rolloutPercentage: flag.rolloutPercentage,
+        userSpecific: flag.userSpecific,
+        systemCritical: flag.systemCritical,
+        metadata: flag.metadata,
+        createdAt: flag.createdAt.toISOString(),
+        updatedAt: flag.updatedAt.toISOString()
+      }
     });
 
   } catch (error) {
-    log.error('Error updating feature flag', { error });
-    
-    return NextResponse.json({
-      success: false,
-      error: 'Internal server error'
-    }, { status: 500 });
-  }
-}
+    logger.error("Error creating feature flag", {
+      error: error instanceof Error ? error.message : "Unknown error"
+    });
 
-// DELETE /api/admin/feature-flags - Remove feature flag override
-export async function DELETE(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const flagId = searchParams.get('flagId');
-    const accountId = searchParams.get('accountId');
-    const inboxId = searchParams.get('inboxId');
-
-    if (!flagId) {
-      return NextResponse.json({
-        success: false,
-        error: 'flagId is required'
-      }, { status: 400 });
-    }
-
-    const redis = getRedisInstance();
-    const flagManager = new FeatureFlagManager(redis);
-
-    await flagManager.removeOverride(
-      flagId,
-      accountId ? parseInt(accountId) : undefined,
-      inboxId ? parseInt(inboxId) : undefined
+    return NextResponse.json(
+      { error: "Erro interno do servidor" },
+      { status: 500 }
     );
-
-    return NextResponse.json({
-      success: true,
-      message: 'Feature flag override removed successfully'
-    });
-
-  } catch (error) {
-    log.error('Error removing feature flag override', { error });
-    
-    return NextResponse.json({
-      success: false,
-      error: 'Internal server error'
-    }, { status: 500 });
   }
 }

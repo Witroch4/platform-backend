@@ -2,7 +2,6 @@
 // services/openai-components/server-images.ts
 import OpenAI from "openai";
 import { ImageGenerationOptions, DEFAULT_MODELS } from "./types";
-import { openaiWithCost } from "@/lib/cost/openai-wrapper";
 
 export async function generateImage(
   this: { client: OpenAI },
@@ -89,6 +88,7 @@ export async function generateImageWithResponses(
 
     const mergedOptions = { ...defaultOptions, ...options };
 
+    const { openaiWithCost } = await import("@/lib/cost/openai-wrapper");
     const response = await openaiWithCost(this.client, {
       model: mergedOptions.model,
       input: prompt,

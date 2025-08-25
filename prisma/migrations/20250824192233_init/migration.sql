@@ -88,6 +88,7 @@ CREATE TABLE "public"."User" (
     "isNew" BOOLEAN NOT NULL DEFAULT true,
     "mtfDiamanteSeedExecuted" BOOLEAN NOT NULL DEFAULT false,
     "mtfVariaveisPopuladas" BOOLEAN NOT NULL DEFAULT false,
+    "turboModeEnabled" BOOLEAN NOT NULL DEFAULT false,
 
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
 );
@@ -837,11 +838,43 @@ CREATE TABLE "public"."FeatureFlag" (
     "enabled" BOOLEAN NOT NULL DEFAULT false,
     "rolloutPercentage" INTEGER NOT NULL DEFAULT 0,
     "conditions" JSONB NOT NULL DEFAULT '{}',
+    "category" TEXT NOT NULL DEFAULT 'system',
+    "userSpecific" BOOLEAN NOT NULL DEFAULT false,
+    "systemCritical" BOOLEAN NOT NULL DEFAULT false,
+    "metadata" JSONB NOT NULL DEFAULT '{}',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "createdBy" TEXT NOT NULL,
 
     CONSTRAINT "FeatureFlag_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."UserFeatureFlagOverride" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "flagId" TEXT NOT NULL,
+    "enabled" BOOLEAN NOT NULL,
+    "expiresAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "createdBy" TEXT NOT NULL,
+
+    CONSTRAINT "UserFeatureFlagOverride_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."FeatureFlagMetrics" (
+    "id" TEXT NOT NULL,
+    "flagId" TEXT NOT NULL,
+    "evaluations" INTEGER NOT NULL DEFAULT 0,
+    "enabledCount" INTEGER NOT NULL DEFAULT 0,
+    "disabledCount" INTEGER NOT NULL DEFAULT 0,
+    "lastEvaluatedAt" TIMESTAMP(3),
+    "averageLatencyMs" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "date" DATE NOT NULL,
+
+    CONSTRAINT "FeatureFlagMetrics_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -1324,6 +1357,7 @@ CREATE TABLE "public"."AiAssistant" (
     "topP" DOUBLE PRECISION DEFAULT 0.7,
     "tempSchema" DOUBLE PRECISION NOT NULL DEFAULT 0.1,
     "tempCopy" DOUBLE PRECISION NOT NULL DEFAULT 0.4,
+    "maxOutputTokens" INTEGER NOT NULL DEFAULT 384,
     "warmupDeadlineMs" INTEGER NOT NULL DEFAULT 250,
     "hardDeadlineMs" INTEGER NOT NULL DEFAULT 120,
     "softDeadlineMs" INTEGER NOT NULL DEFAULT 300,
@@ -1376,6 +1410,19 @@ CREATE TABLE "public"."AiFaq" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "AiFaq_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."IframeAuthorizedDomain" (
+    "id" TEXT NOT NULL,
+    "domain" TEXT NOT NULL,
+    "description" TEXT,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "createdBy" TEXT NOT NULL,
+
+    CONSTRAINT "IframeAuthorizedDomain_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
@@ -1565,6 +1612,42 @@ CREATE INDEX "ConversationThread_contactPhone_lastMessageAt_idx" ON "public"."Co
 CREATE UNIQUE INDEX "FeatureFlag_name_key" ON "public"."FeatureFlag"("name");
 
 -- CreateIndex
+CREATE INDEX "FeatureFlag_category_idx" ON "public"."FeatureFlag"("category");
+
+-- CreateIndex
+CREATE INDEX "FeatureFlag_userSpecific_idx" ON "public"."FeatureFlag"("userSpecific");
+
+-- CreateIndex
+CREATE INDEX "FeatureFlag_systemCritical_idx" ON "public"."FeatureFlag"("systemCritical");
+
+-- CreateIndex
+CREATE INDEX "UserFeatureFlagOverride_userId_idx" ON "public"."UserFeatureFlagOverride"("userId");
+
+-- CreateIndex
+CREATE INDEX "UserFeatureFlagOverride_flagId_idx" ON "public"."UserFeatureFlagOverride"("flagId");
+
+-- CreateIndex
+CREATE INDEX "UserFeatureFlagOverride_createdBy_idx" ON "public"."UserFeatureFlagOverride"("createdBy");
+
+-- CreateIndex
+CREATE INDEX "UserFeatureFlagOverride_expiresAt_idx" ON "public"."UserFeatureFlagOverride"("expiresAt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "UserFeatureFlagOverride_userId_flagId_key" ON "public"."UserFeatureFlagOverride"("userId", "flagId");
+
+-- CreateIndex
+CREATE INDEX "FeatureFlagMetrics_flagId_idx" ON "public"."FeatureFlagMetrics"("flagId");
+
+-- CreateIndex
+CREATE INDEX "FeatureFlagMetrics_date_idx" ON "public"."FeatureFlagMetrics"("date");
+
+-- CreateIndex
+CREATE INDEX "FeatureFlagMetrics_lastEvaluatedAt_idx" ON "public"."FeatureFlagMetrics"("lastEvaluatedAt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "FeatureFlagMetrics_flagId_date_key" ON "public"."FeatureFlagMetrics"("flagId", "date");
+
+-- CreateIndex
 CREATE INDEX "UserFeedback_type_severity_status_idx" ON "public"."UserFeedback"("type", "severity", "status");
 
 -- CreateIndex
@@ -1743,6 +1826,15 @@ CREATE INDEX "AiDocument_userId_assistantId_isActive_idx" ON "public"."AiDocumen
 
 -- CreateIndex
 CREATE INDEX "AiFaq_userId_assistantId_status_isActive_idx" ON "public"."AiFaq"("userId", "assistantId", "status", "isActive");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "IframeAuthorizedDomain_domain_key" ON "public"."IframeAuthorizedDomain"("domain");
+
+-- CreateIndex
+CREATE INDEX "IframeAuthorizedDomain_isActive_idx" ON "public"."IframeAuthorizedDomain"("isActive");
+
+-- CreateIndex
+CREATE INDEX "IframeAuthorizedDomain_createdBy_idx" ON "public"."IframeAuthorizedDomain"("createdBy");
 
 -- AddForeignKey
 ALTER TABLE "public"."InboxConfigHistory" ADD CONSTRAINT "InboxConfigHistory_inboxId_fkey" FOREIGN KEY ("inboxId") REFERENCES "public"."ChatwitInbox"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -1925,6 +2017,18 @@ ALTER TABLE "public"."EspelhoBiblioteca" ADD CONSTRAINT "EspelhoBiblioteca_criad
 ALTER TABLE "public"."EspelhoPadrao" ADD CONSTRAINT "EspelhoPadrao_atualizadoPorId_fkey" FOREIGN KEY ("atualizadoPorId") REFERENCES "public"."UsuarioChatwit"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "public"."UserFeatureFlagOverride" ADD CONSTRAINT "UserFeatureFlagOverride_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."UserFeatureFlagOverride" ADD CONSTRAINT "UserFeatureFlagOverride_flagId_fkey" FOREIGN KEY ("flagId") REFERENCES "public"."FeatureFlag"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."UserFeatureFlagOverride" ADD CONSTRAINT "UserFeatureFlagOverride_createdBy_fkey" FOREIGN KEY ("createdBy") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."FeatureFlagMetrics" ADD CONSTRAINT "FeatureFlagMetrics_flagId_fkey" FOREIGN KEY ("flagId") REFERENCES "public"."FeatureFlag"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "public"."Alert" ADD CONSTRAINT "Alert_ruleId_fkey" FOREIGN KEY ("ruleId") REFERENCES "public"."AlertRule"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -1986,3 +2090,6 @@ ALTER TABLE "public"."AiFaq" ADD CONSTRAINT "AiFaq_userId_fkey" FOREIGN KEY ("us
 
 -- AddForeignKey
 ALTER TABLE "public"."AiFaq" ADD CONSTRAINT "AiFaq_assistantId_fkey" FOREIGN KEY ("assistantId") REFERENCES "public"."AiAssistant"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."IframeAuthorizedDomain" ADD CONSTRAINT "IframeAuthorizedDomain_createdBy_fkey" FOREIGN KEY ("createdBy") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;

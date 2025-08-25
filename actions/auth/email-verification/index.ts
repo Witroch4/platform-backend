@@ -24,7 +24,7 @@ export const sendAccountVerificationEmail = async (user: User, token: string) =>
 	const verificationUrl = `${NEXT_PUBLIC_URL}${VERIFICATION_URL}?token=${token}`;
 	const { email } = user;
 	try {
-		const { data, error } = await mail.emails.send({
+		const { data, error } = await mail().emails.send({
 			from: RESEND_EMAIL_FROM,
 			to: email,
 			subject: VERIFICATION_SUBJECT,

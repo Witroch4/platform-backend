@@ -1,172 +1,86 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
-import { getPrismaInstance } from "@/lib/connections"
+import { NextRequest, NextResponse } from 'next/server'
+import { auth } from '@/auth'
+import { getPrismaInstance } from '@/lib/connections'
+import { TurboModeAccessService } from '@/lib/turbo-mode/user-access-service'
+import { FlashIntentChecker } from '@/lib/resposta-rapida/flash-intent-checker'
 
-// PATCH: Atualizar um usuário específico (apenas para SUPERADMIN)
-export async function PATCH(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const session = await auth();
-    const resolvedParams = await params;
+const prisma = getPrismaInstance()
 
-    if (!session?.user?.id) {
-      return new NextResponse("Não autorizado", { status: 401 });
-    }
-
-    // Verificar se o usuário é SUPERADMIN
-    const adminUser = await getPrismaInstance().user.findUnique({
-      where: {
-        id: session.user.id
-      },
-      select: {
-        role: true
-      }
-    });
-
-    if (adminUser?.role !== "SUPERADMIN") {
-      return new NextResponse("Acesso negado. Apenas SUPERADMIN pode acessar.", { status: 403 });
-    }
-
-    const userId = resolvedParams.id;
-
-    if (!userId) {
-      return new NextResponse("ID do usuário não fornecido", { status: 400 });
-    }
-
-    // Verificar se o usuário existe
-    const userExists = await getPrismaInstance().user.findUnique({
-      where: {
-        id: userId
-      }
-    });
-
-    if (!userExists) {
-      return new NextResponse("Usuário não encontrado", { status: 404 });
-    }
-
-    // Obter dados do corpo da requisição
-    const body = await req.json();
-    const { name, email, role } = body;
-
-    // Validar dados
-    if (email && !email.includes('@')) {
-      return new NextResponse("Email inválido", { status: 400 });
-    }
-
-    if (role && !['DEFAULT', 'ADMIN'].includes(role)) {
-      return new NextResponse("Função inválida", { status: 400 });
-    }
-
-    // Atualizar o usuário
-    const updatedUser = await getPrismaInstance().user.update({
-      where: {
-        id: userId
-      },
-      data: {
-        ...(name !== undefined && { name }),
-        ...(email !== undefined && { email }),
-        ...(role !== undefined && { role })
-      }
-    });
-
-    return NextResponse.json({
-      success: true,
-      message: "Usuário atualizado com sucesso",
-      user: {
-        id: updatedUser.id,
-        name: updatedUser.name,
-        email: updatedUser.email,
-        role: updatedUser.role
-      }
-    });
-  } catch (error) {
-    console.error("[ADMIN_USER_UPDATE]", error);
-    return new NextResponse("Erro interno", { status: 500 });
-  }
-}
-
-// GET: Obter detalhes de um usuário específico (apenas para SUPERADMIN)
 export async function GET(
-  req: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth();
-    const resolvedParams = await params;
-
+    const session = await auth()
+    
     if (!session?.user?.id) {
-      return new NextResponse("Não autorizado", { status: 401 });
+      return NextResponse.json(
+        { error: 'Usuário não autenticado.' },
+        { status: 401 }
+      )
     }
 
-    // Verificar se o usuário é SUPERADMIN
-    const adminUser = await getPrismaInstance().user.findUnique({
-      where: {
-        id: session.user.id
-      },
-      select: {
-        role: true
-      }
-    });
+    // Verificar se é SUPERADMIN
+    const currentUser = await prisma.user.findUnique({
+      where: { id: session.user.id }
+    })
 
-    if (adminUser?.role !== "SUPERADMIN") {
-      return new NextResponse("Acesso negado. Apenas SUPERADMIN pode acessar.", { status: 403 });
+    if (currentUser?.role !== 'SUPERADMIN') {
+      return NextResponse.json(
+        { error: 'Acesso negado. Apenas SUPERADMIN pode visualizar dados de usuários.' },
+        { status: 403 }
+      )
     }
 
-    const userId = resolvedParams.id;
-
-    // Verificar se deve incluir as contas
-    const url = new URL(req.url);
-    const includeAccounts = url.searchParams.get('includeAccounts') !== 'false';
+    const { id } = await params
 
     // Buscar o usuário
-    const user = await getPrismaInstance().user.findUnique({
-      where: {
-        id: userId
-      },
+    const user = await prisma.user.findUnique({
+      where: { id },
       select: {
         id: true,
         name: true,
         email: true,
         role: true,
-        isTwoFactorAuthEnabled: true,
+        turboModeEnabled: true,
         createdAt: true,
-        emailVerified: true,
-        image: true,
-        accounts: includeAccounts ? {
-          select: {
-            id: true,
-            provider: true,
-            providerAccountId: true,
-            type: true,
-            access_token: true,
-            refresh_token: true,
-            expires_at: true,
-            token_type: true,
-            scope: true,
-            id_token: true,
-            session_state: true,
-            igUserId: true,
-            igUsername: true,
-            isMain: true,
-            createdAt: true,
-            updatedAt: true
-          }
-        } : false
+        updatedAt: true
       }
-    });
+    })
 
     if (!user) {
-      return new NextResponse("Usuário não encontrado", { status: 404 });
+      return NextResponse.json(
+        { error: 'Usuário não encontrado.' },
+        { status: 404 }
+      )
     }
 
+    // Usar o TurboModeAccessService (mesmo padrão da página principal)
+    const turboModeEnabled = await TurboModeAccessService.hasAccess(id)
+    const turboModeActivatedAt = null // Não temos mais registro de quando foi ativado
+    const turboModeUpdatedAt = user.updatedAt
+
+    // Usar o FlashIntentChecker (mesmo padrão da página principal)
+    const flashIntentChecker = FlashIntentChecker.getInstance()
+    const flashIntentEnabled = await flashIntentChecker.isFlashIntentEnabledForUser(id)
+
     return NextResponse.json({
-      success: true,
-      user
-    });
+      user: {
+        ...user,
+        turboModeEnabled,
+        flashIntentEnabled,
+        turboModeActivatedAt,
+        turboModeUpdatedAt,
+        createdAt: user.createdAt.toISOString(),
+        updatedAt: user.updatedAt.toISOString(),
+      }
+    })
+
   } catch (error) {
-    console.error("[ADMIN_GET_USER]", error);
-    return new NextResponse("Erro interno", { status: 500 });
+    console.error('Erro ao buscar dados do usuário:', error)
+    return NextResponse.json(
+      { error: 'Erro interno do servidor.' },
+      { status: 500 }
+    )
   }
 }

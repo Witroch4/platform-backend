@@ -41,6 +41,7 @@ import {
   Atom,
   Copy,
   FlaskConical,
+  Flag,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -597,22 +598,22 @@ export function AppAdminDashboard() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
 
-                {/* Respostas Rápidas (Flash Intent) */}
+                {/* Features & Feature Flags */}
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     onClick={(e) => {
                       e.preventDefault();
                       startTransition(() => {
-                        router.push('/admin/resposta-rapida');
+                        router.push('/admin/features');
                       });
                     }}
                     onMouseEnter={() => {
-                      try { router.prefetch('/admin/resposta-rapida'); } catch {}
+                      try { router.prefetch('/admin/features'); } catch {}
                     }}
                     className={`flex items-center transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
                   >
-                    <Zap className="mr-2" />
-                    {state !== "collapsed" && <span>Respostas Rápidas</span>}
+                    <Flag className="mr-2" />
+                    {state !== "collapsed" && <span>Features</span>}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
 

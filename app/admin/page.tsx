@@ -108,7 +108,7 @@ export default function AdminPage() {
           <Link href="/admin/templates">Documentação de Templates</Link>
         </Button>
         <Button asChild variant="default" className="bg-yellow-500 hover:bg-yellow-600 text-black">
-          <Link href="/admin/resposta-rapida">⚡ Respostas Rápidas</Link>
+          <Link href="/admin/features">⚡ Features Flags</Link>
         </Button>
         <Button asChild variant="outline" className="border-blue-500 text-blue-500 hover:bg-blue-50">
           <Link href="/admin/webhook-test">🧪 Teste de Webhook</Link>

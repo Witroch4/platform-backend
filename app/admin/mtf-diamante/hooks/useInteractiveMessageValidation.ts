@@ -111,23 +111,26 @@ export const useInteractiveMessageValidation = (
           warnings: [...result.warnings, ...reactionResult.warnings]
         };
         if (process.env.NODE_ENV !== 'production') {
-          // Log detalhado para depuração em desenvolvimento
-          // Não inclui conteúdo sensível, apenas estrutura básica
-          console.log('[Validation][debounced] result', {
-            isValid: combinedResult.isValid,
-            errors: combinedResult.errors,
-            warnings: combinedResult.warnings,
-            messageSummary: {
-              id: (messageToValidate as any)?.id,
-              name: messageToValidate.name,
-              type: messageToValidate.type,
-              bodyLen: messageToValidate.body?.text?.length ?? 0,
-              headerType: messageToValidate.header?.type,
-              hasHeader: !!messageToValidate.header,
-              hasFooter: !!messageToValidate.footer,
-              buttonsCount: Array.isArray((messageToValidate as any)?.action?.buttons) ? (messageToValidate as any).action.buttons.length : 0,
-            }
-          });
+          // Log inteligente para validação
+          const summary = {
+            status: combinedResult.isValid ? '✅ VÁLIDO' : '❌ INVÁLIDO',
+            type: messageToValidate.type,
+            name: messageToValidate.name?.slice(0, 20) + (messageToValidate.name?.length > 20 ? '...' : ''),
+            body: `${messageToValidate.body?.text?.length || 0} chars`,
+            buttons: Array.isArray((messageToValidate as any)?.action?.buttons) ? (messageToValidate as any).action.buttons.length : 0,
+            errors: combinedResult.errors.length,
+            warnings: combinedResult.warnings.length
+          };
+          console.log('🔍 [Validation] Resultado:', summary);
+          
+          // Log específico para erros detalhados
+          if (combinedResult.errors.length > 0) {
+            console.group('🚨 [Validation] Erros encontrados:');
+            combinedResult.errors.forEach(err => {
+              console.warn(`❌ ${err.field}: ${err.message}`);
+            });
+            console.groupEnd();
+          }
         }
         
         setValidationState(prev => ({
@@ -221,7 +224,15 @@ export const useInteractiveMessageValidation = (
     try {
       const result = InteractiveMessageValidator.validateField(fieldName, value, messageToValidate, finalConfig.context);
       if (process.env.NODE_ENV !== 'production') {
-        console.log('[Validation][field]', { field: fieldName, isValid: result.isValid, errors: result.errors, warnings: result.warnings, valueSnapshot: value });
+        const summary = {
+          campo: fieldName,
+          valido: result.isValid ? '✅' : '❌',
+          erros: result.errors.length,
+          warnings: result.warnings.length
+        };
+        if (!result.isValid) {
+          console.log('🔍 [Field]', summary, result.errors.map(e => e.message));
+        }
       }
       
       setValidationState(prev => ({
@@ -317,21 +328,30 @@ export const useInteractiveMessageValidation = (
     // Check if there are any validation errors
     if (validationState.hasErrors) {
       if (process.env.NODE_ENV !== 'production') {
-        console.log('[Validation][canProceed] blocked by validationState.hasErrors', validationState);
+        console.log('🔴 [canProceed] Bloqueado por erros de validação', {
+          hasErrors: validationState.hasErrors,
+          totalErrors: validationState.messageValidation?.errors?.length || 0
+        });
       }
       return false;
     }
     
     // Check field validations
-    const hasFieldErrors = Object.values(validationState.fieldValidations).some(
-      validation => !validation.isValid
-    );
+    const fieldValidationsWithErrors = Object.entries(validationState.fieldValidations)
+      .filter(([, validation]) => !validation.isValid)
+      .map(([field, validation]) => ({ field, errorsCount: validation.errors.length }));
+    
+    const hasFieldErrors = fieldValidationsWithErrors.length > 0;
     if (hasFieldErrors && process.env.NODE_ENV !== 'production') {
-      console.log('[Validation][canProceed] blocked by field validations', validationState.fieldValidations);
+      console.log('🔴 [canProceed] Bloqueado por erros de campo:', fieldValidationsWithErrors);
+    }
+    
+    if (process.env.NODE_ENV !== 'production' && !hasFieldErrors && !validationState.hasErrors) {
+      console.log('✅ [canProceed] Todas validações OK - pode prosseguir');
     }
     
     return !hasFieldErrors;
-  }, [validationState.hasErrors, validationState.fieldValidations]);
+  }, [validationState.hasErrors, validationState.fieldValidations, validationState.messageValidation]);
 
   const handleValidationError = useCallback((error: any): StructuredError => {
     return errorHandler.handleValidationError(error, {

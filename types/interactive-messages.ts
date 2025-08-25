@@ -90,7 +90,7 @@ export type WhatsAppMessageType =
 export type HeaderType = "text" | "image" | "video" | "document";
 
 // Button reaction types
-export type ReactionType = "emoji" | "text";
+export type ReactionType = "emoji" | "text" | "action";
 
 // Core interfaces for message components
 export interface MessageHeader {
@@ -130,6 +130,7 @@ export interface ButtonReaction {
   type: ReactionType;
   emoji?: string;
   textResponse?: string;
+  action?: string; // "handoff", "end_conversation", etc.
   isActive: boolean;
 }
 

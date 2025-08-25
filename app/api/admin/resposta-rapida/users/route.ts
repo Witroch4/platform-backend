@@ -32,16 +32,28 @@ export async function GET() {
     
     const usersWithFlashIntent = await Promise.all(
       users.map(async (user) => {
-        // Verificar se o usuário tem Flash Intent ativa através do sistema de feature flags
-        const flashIntentEnabled = await flashIntentChecker.isFlashIntentEnabledForUser(user.id);
-        
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          flashIntentEnabled,
-        };
+        try {
+          // Verificar se o usuário tem Flash Intent ativa através do sistema de feature flags
+          const flashIntentEnabled = await flashIntentChecker.isFlashIntentEnabledForUser(user.id);
+          
+          return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            flashIntentEnabled,
+          };
+        } catch (error) {
+          console.error(`Erro ao verificar Flash Intent para usuário ${user.id}:`, error);
+          // Em caso de erro, retornar usuário com Flash Intent desabilitada
+          return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            flashIntentEnabled: false,
+          };
+        }
       })
     );
 

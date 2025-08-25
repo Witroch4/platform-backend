@@ -1,7 +1,30 @@
 // Comprehensive error handling system for Interactive Messages
 // Provides structured error handling, logging, and user-friendly error messages
 
-import { toast } from 'sonner';
+// Conditional import - only import toast on client side
+let toast: any;
+if (typeof window !== 'undefined') {
+  try {
+    const sonner = require('sonner');
+    toast = sonner.toast;
+  } catch (e) {
+    // Fallback if sonner is not available
+    toast = {
+      error: () => {},
+      warning: () => {},
+      info: () => {},
+      success: () => {}
+    };
+  }
+} else {
+  // Server-side fallback (no toast functionality)
+  toast = {
+    error: () => {},
+    warning: () => {},
+    info: () => {},
+    success: () => {}
+  };
+}
 
 // Error types and categories
 export enum ErrorCategory {
@@ -483,6 +506,12 @@ export class InteractiveMessageErrorHandler {
 
   // Show user-friendly toast notification
   private showErrorToast(error: StructuredError) {
+    // Only show toast on client side
+    if (typeof window === 'undefined') {
+      console.warn('[ErrorHandler] Attempted to show toast on server side:', error.userMessage);
+      return;
+    }
+
     const toastOptions = {
       duration: this.getToastDuration(error.severity),
       action: error.recoveryActions && error.recoveryActions.length > 0 ? {

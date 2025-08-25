@@ -6,7 +6,7 @@ import { ActionType } from '@prisma/client'
 
 // Validation schemas
 const ReactionSchema = z.object({
-  type: z.enum(['emoji', 'text']),
+  type: z.enum(['emoji', 'text', 'action']),
   value: z.string().min(1),
 })
 
@@ -24,18 +24,29 @@ const UpdateButtonReactionSchema = ButtonReactionSchema.partial().extend({
 
 // Helper function to format reaction response
 function formatReaction(reaction: any) {
-  // Parse actionPayload to extract emoji and textReaction
+  // Parse actionPayload to extract emoji, textReaction, and action
   const actionPayload = reaction.actionPayload as any;
   const emoji = actionPayload?.emoji;
   const textReaction = actionPayload?.textReaction;
+  const action = actionPayload?.action;
+  
+  // Determine type based on what's present
+  let type: 'emoji' | 'text' | 'action' = 'emoji';
+  if (action) {
+    type = 'action';
+  } else if (textReaction) {
+    type = 'text';
+  }
   
   return {
     id: reaction.id,
     buttonId: reaction.buttonId,
     messageId: reaction.inboxId, // Use inboxId instead of messageId
-    type: textReaction ? 'text' : 'emoji',
+    type,
     emoji: emoji || null,
     textReaction: textReaction || null,
+    textResponse: textReaction || null, // Alias for compatibility
+    action: action || null,
     description: reaction.description || null,
     isActive: true, // MapeamentoBotao doesn't have isActive field, assume active
     createdAt: reaction.createdAt,
@@ -272,6 +283,7 @@ export async function POST(request: NextRequest) {
             const actionPayload = {
               emoji: reactionData.reaction.type === 'emoji' ? reactionData.reaction.value : null,
               textReaction: reactionData.reaction.type === 'text' ? reactionData.reaction.value : null,
+              action: reactionData.reaction.type === 'action' ? reactionData.reaction.value : null,
             } as any;
             
             const created = await tx.mapeamentoBotao.create({
@@ -280,7 +292,7 @@ export async function POST(request: NextRequest) {
                 inboxId: messageId,
                 actionType: ActionType.SEND_TEMPLATE,
                 actionPayload,
-                description: reactionData.reaction.type === 'text' ? reactionData.reaction.value : null as any,
+                description: reactionData.reaction.type === 'text' ? reactionData.reaction.value : (reactionData.reaction.type === 'action' ? reactionData.reaction.value : null) as any,
               },
             })
             createdReactions.push(created)
@@ -345,6 +357,7 @@ export async function POST(request: NextRequest) {
     const actionPayload = {
       emoji: reaction?.type === 'emoji' ? reaction.value : null,
       textReaction: reaction?.type === 'text' ? reaction.value : null,
+      action: reaction?.type === 'action' ? reaction.value : null,
     } as any;
     
     const createdReaction = await getPrismaInstance().mapeamentoBotao.create({
@@ -353,7 +366,7 @@ export async function POST(request: NextRequest) {
         inboxId: messageId || '',
         actionType: ActionType.SEND_TEMPLATE,
         actionPayload,
-        description: reaction?.type === 'text' ? reaction.value : description || null as any,
+        description: reaction?.type === 'text' ? reaction.value : (reaction?.type === 'action' ? reaction.value : description) || null as any,
       },
       include: {
         inbox: {
@@ -476,6 +489,7 @@ export async function PUT(request: NextRequest) {
     const actionPayload = {
       emoji: reaction?.type === 'emoji' ? reaction.value : null,
       textReaction: reaction?.type === 'text' ? reaction.value : null,
+      action: reaction?.type === 'action' ? reaction.value : null,
     };
     
     const updatedReaction = await getPrismaInstance().mapeamentoBotao.update({

@@ -7,17 +7,24 @@ type StepperProps = {
   steps: string[];
   currentStep: number;
   className?: string;
+  onStepClick?: (index: number) => void;
 };
 
-export function Stepper({ steps, currentStep, className }: StepperProps) {
+export function Stepper({ steps, currentStep, className, onStepClick }: StepperProps) {
   return (
     <div className={cn("flex items-center w-full", className)}>
       {steps.map((label, index) => {
         const isActive = index === currentStep;
         const isCompleted = index < currentStep;
+        const clickable = typeof onStepClick === "function";
         return (
           <div key={`${index}-${label}`} className="flex items-center w-full">
-            <div className="flex items-center">
+            <div className={cn("flex items-center", clickable && "cursor-pointer")}
+                 onClick={clickable ? () => onStepClick(index) : undefined}
+                 role={clickable ? "button" : undefined}
+                 tabIndex={clickable ? 0 : -1}
+                 onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onStepClick(index); } } : undefined}
+            >
               <div
                 className={cn(
                   "flex h-8 w-8 items-center justify-center rounded-full border text-sm font-medium",

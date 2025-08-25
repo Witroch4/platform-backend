@@ -35,6 +35,7 @@ x-common-environment: &common-environment
   BASEROW_TABLE_ID: ${BASEROW_TABLE_ID}
   REDIS_HOST: redis
   REDIS_PORT: 6379
+  REDIS_URL: redis://redis:6379
   REDIS_PASSWORD: ${REDIS_PASSWORD}
   REDIS_USE_TLS: ${REDIS_USE_TLS}
   WEBHOOK_URL: ${WEBHOOK_URL}
@@ -86,7 +87,7 @@ services:
         - traefik.http.routers.socialwise_app.entrypoints=websecure
         - traefik.http.routers.socialwise_app.tls.certresolver=letsencryptresolver
         - traefik.http.routers.socialwise_app.priority=1
-        - traefik.http.services.socialwise_app.loadbalancer.server.port=3000
+        - traefik.http.services.socialwise_app.loadbalancer.server.port=3002
         - traefik.http.services.socialwise_app.loadbalancer.passHostHeader=true
         - traefik.http.middlewares.socialwise_app_secure.headers.stsSeconds=31536000
         - traefik.http.middlewares.socialwise_app_secure.headers.stsIncludeSubdomains=true
@@ -102,13 +103,13 @@ services:
         max-size: 10m
         max-file: "3"
 
-  worker_automacao:
+  # ============================================================================
+  # WORKER UNIFICADO - TODOS OS WORKERS EM UM ÚNICO CONTAINER
+  # ============================================================================
+  worker:
     image: witrocha/socialwise:latest
-    # Comando corrigido: inicia diretamente o processo do worker
-    command: node /app/dist/worker/automacao.worker.js
-    # Garante que este serviço só inicie depois do serviço principal
-    depends_on:
-      - socialwise_app
+    # Comando para iniciar TODOS os workers usando o init.ts
+    command: node /app/dist/worker/init.js
     networks:
       - minha_rede
     volumes:
@@ -123,32 +124,8 @@ services:
           - node.role == manager
       resources:
         limits:
-          cpus: "1"
-          memory: 512M
-    logging: *common-logging
-
-  worker_webhook:
-    image: witrocha/socialwise:latest
-    # Comando corrigido: inicia diretamente o processo do worker
-    command: node /app/dist/worker/webhook.worker.js
-    depends_on:
-      - socialwise_app
-    networks:
-      - minha_rede
-    volumes:
-      - chatwit_temp:/app/temp
-    environment:
-      <<: *common-environment
-    deploy:
-      mode: replicated
-      replicas: 1
-      placement:
-        constraints:
-          - node.role == manager
-      resources:
-        limits:
-          cpus: "1"
-          memory: 2024M
+          cpus: "3.0"  # Aumentado para acomodar todos os workers
+          memory: 6G   # Aumentado para acomodar todos os workers
     logging: *common-logging
 
 volumes:

@@ -15,6 +15,9 @@ This file provides comprehensive guidance to Claude Code (claude.ai/code) and Cu
 9. **Front linguagem clara e direta sem termos tecnicos**
 10. **Tudo deve ser compativel com thema dark e light do shadcn**
 11. **Edição no front deve ser olhar com a tool de navegação o resutado**
+12. ** Sempre que adicionar uma feture adicione sem necessiade de controle global só controle de acesso pagina que controla acesso as features admin/features OU SEJA 
+❌ Antes: FeatureFlag Global → UserOverride → Funcionalidade
+✅ Agora: Controle de Acesso → Funcionalidade (sempre disponível)**
 
 ## 🚀 Project Overview
 

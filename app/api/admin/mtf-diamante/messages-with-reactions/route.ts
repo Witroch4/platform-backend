@@ -17,13 +17,14 @@ import { invalidateTemplateMappingCache } from "@/lib/cache/instagram-template-c
 
 // API-specific validation schemas (extending the base schemas)
 const ApiReactionSchema = z.object({
-  type: z.enum(["emoji", "text"]),
+  type: z.enum(["emoji", "text", "action"]),
   value: z.string().min(1),
 });
 
 const ApiButtonReactionSchema = z.object({
   buttonId: z.string().min(1),
   reaction: ApiReactionSchema.optional(),
+  action: z.string().optional(), // Para suportar handoff e outras ações
 });
 
 const ApiInteractiveMessageSchema = z.object({
@@ -37,6 +38,10 @@ const ApiInteractiveMessageSchema = z.object({
     "location_request",
     "reaction",
     "sticker",
+    // Instagram specific types
+    "generic",
+    "quick_replies", 
+    "button_template"
   ]),
   header: z
     .object({
@@ -49,7 +54,7 @@ const ApiInteractiveMessageSchema = z.object({
     })
     .optional(),
   body: z.object({
-    text: z.string().min(1, "Body text is required").max(1024, "Body text too long"),
+    text: z.string().min(1, "Body text is required"),
   }),
   footer: z
     .object({
@@ -78,18 +83,29 @@ const SaveMessageWithReactionsSchema = z.object({
 
 // Helper function to format reaction response
 function formatReaction(reaction: any) {
-  // Parse actionPayload to extract emoji and textReaction
+  // Parse actionPayload to extract emoji, textReaction, and action
   const actionPayload = reaction.actionPayload as any;
   const emoji = actionPayload?.emoji;
   const textReaction = actionPayload?.textReaction;
+  const action = actionPayload?.action;
+  
+  // Determine type based on what's present (prioritize action > text > emoji)
+  let type: 'emoji' | 'text' | 'action' = 'emoji';
+  if (action) {
+    type = 'action';
+  } else if (textReaction) {
+    type = 'text';
+  }
   
   return {
     id: reaction.id,
     buttonId: reaction.buttonId,
     messageId: reaction.inboxId, // Use inboxId instead of messageId
-    type: textReaction ? "text" : "emoji",
+    type,
     emoji: emoji || null,
     textReaction: textReaction || null,
+    textResponse: textReaction || null, // Alias for compatibility
+    action: action || null,
     isActive: true, // MapeamentoBotao doesn't have isActive field, assume active
     createdAt: reaction.createdAt,
   };
@@ -100,7 +116,7 @@ function formatMessage(template: any) {
   const interactive = template.interactiveContent;
   if (!interactive) return null;
 
-  // Determinar o tipo de ação
+  // Determinar o tipo de ação (para WhatsApp)
   let actionType = null;
   let actionData = null;
   
@@ -121,6 +137,24 @@ function formatMessage(template: any) {
     actionData = interactive.actionLocationRequest;
   }
 
+  // Para templates Instagram, usar os tipos específicos baseados no conteúdo
+  if (!actionType) {
+    const bodyText = interactive.body?.text || '';
+    const hasHeader = !!interactive.header;
+    const hasFooter = !!interactive.footer;
+    
+    // Instagram type detection based on content
+    if (hasHeader && hasFooter) {
+      actionType = 'generic'; // Carousel/Generic template
+    } else if (bodyText.length <= 640) {
+      actionType = 'button_template'; // Button template
+    } else if (bodyText.length <= 1000) {
+      actionType = 'quick_replies'; // Quick replies
+    } else {
+      actionType = 'generic'; // Default fallback
+    }
+  }
+
   return {
     id: template.id,
     name: template.name,
@@ -131,7 +165,8 @@ function formatMessage(template: any) {
       header: interactive.header ? {
         type: interactive.header.type,
         text: interactive.header.content || "",
-        media_url: interactive.header.type !== 'text' ? interactive.header.content || "" : ""
+        media_url: interactive.header.type !== 'text' ? interactive.header.content || "" : "",
+        content: interactive.header.content || ""
       } : undefined,
       body: {
         text: interactive.body?.text || ''
@@ -231,6 +266,47 @@ export async function POST(request: NextRequest) {
     }
 
     const { inboxId, message, reactions } = validationResult.data;
+
+    // Instagram specific validation
+    if (message.type === 'generic' || message.type === 'quick_replies' || message.type === 'button_template') {
+      const bodyTextLength = message.body.text.length;
+      
+      if (message.type === 'generic' && bodyTextLength > 80) {
+        return NextResponse.json(
+          {
+            error: "Generic template title too long",
+            code: "INSTAGRAM_VALIDATION_FAILED",
+            details: [{ field: "body.text", message: "Generic template title must be 80 characters or less" }],
+            requestId
+          },
+          { status: 400 }
+        );
+      }
+      
+      if (message.type === 'button_template' && bodyTextLength > 640) {
+        return NextResponse.json(
+          {
+            error: "Button template text too long", 
+            code: "INSTAGRAM_VALIDATION_FAILED",
+            details: [{ field: "body.text", message: "Button template text must be 640 characters or less" }],
+            requestId
+          },
+          { status: 400 }
+        );
+      }
+      
+      if (message.type === 'quick_replies' && bodyTextLength > 1000) {
+        return NextResponse.json(
+          {
+            error: "Quick replies text too long",
+            code: "INSTAGRAM_VALIDATION_FAILED", 
+            details: [{ field: "body.text", message: "Quick replies text must be 1000 characters or less" }],
+            requestId
+          },
+          { status: 400 }
+        );
+      }
+    }
 
     // Additional business logic validation
     try {
@@ -387,7 +463,7 @@ export async function POST(request: NextRequest) {
                   }
                 }
               }),
-              ...(message.type === 'button' && message.action && {
+              ...((message.type === 'button' || message.type === 'generic' || message.type === 'button_template') && message.action && {
                 actionReplyButton: {
                   create: {
                     buttons: message.action.buttons || []
@@ -441,13 +517,17 @@ export async function POST(request: NextRequest) {
       // Create button reactions if any
       const savedReactions = [] as any[];
       if (reactions.length > 0) {
-        // Group by buttonId to support emoji + text coexistindo em um único registro
-        const grouped = new Map<string, { emoji?: string | null; textReaction?: string | null }>();
+        // Group by buttonId to support emoji + text + action coexistindo em um único registro
+        const grouped = new Map<string, { emoji?: string | null; textReaction?: string | null; action?: string | null }>();
         for (const r of reactions) {
-          if (!r?.reaction) continue;
-          const current = grouped.get(r.buttonId) || { emoji: null, textReaction: null };
-          if (r.reaction.type === 'emoji') current.emoji = r.reaction.value;
-          if (r.reaction.type === 'text') current.textReaction = r.reaction.value;
+          if (!r?.reaction && !r?.action) continue;
+          const current = grouped.get(r.buttonId) || { emoji: null, textReaction: null, action: null };
+          
+          if (r.reaction?.type === 'emoji') current.emoji = r.reaction.value;
+          if (r.reaction?.type === 'text') current.textReaction = r.reaction.value;
+          if (r.reaction?.type === 'action') current.action = r.reaction.value;
+          if (r.action) current.action = r.action; // Fallback para formato alternativo
+          
           grouped.set(r.buttonId, current);
         }
 
@@ -462,9 +542,9 @@ export async function POST(request: NextRequest) {
             data: {
               buttonId,
               inboxId: inboxId, // ChatwitInbox id
-              actionType: 'SEND_TEMPLATE',
+              actionType: 'BUTTON_REACTION',
               actionPayload: payload,
-              description: payload.textReaction || null,
+              description: payload.action ? `Ação: ${payload.action}` : (payload.textReaction || payload.emoji || null),
             },
           });
           savedReactions.push(savedReaction);
@@ -539,20 +619,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Format response
+    // Format response with enhanced debugging
     const formattedMessage = formatMessage(result.message);
     const formattedReactions = result.reactions.map(formatReaction);
 
-    console.log(`[${requestId}] Response formatted successfully`);
+    console.log(`[${requestId}] Response formatting completed:`, {
+      hasMessage: !!formattedMessage,
+      messageId: result.message?.id,
+      reactionsCount: formattedReactions.length,
+      messageType: formattedMessage?.type
+    });
 
-    return NextResponse.json({
+    const responseData = {
       success: true,
       messageId: result.message?.id || null,
-      reactionIds: result.reactions.map((r) => r.id),
+      reactionIds: result.reactions.map((r: any) => r.id),
       message: formattedMessage,
       reactions: formattedReactions,
       requestId
-    });
+    };
+
+    console.log(`[${requestId}] Final response data:`, JSON.stringify(responseData, null, 2));
+
+    return NextResponse.json(responseData);
     
   } catch (error) {
     // Catch-all error handler for unexpected errors
@@ -758,7 +847,7 @@ export async function PUT(request: NextRequest) {
                 interactiveContentId
               }
             });
-          } else if (message.type === 'button') {
+          } else if (message.type === 'button' || message.type === 'generic' || message.type === 'button_template') {
             await tx.actionReplyButton.create({
               data: {
                 buttons: message.action.buttons || [],
@@ -834,13 +923,17 @@ export async function PUT(request: NextRequest) {
         });
       }
 
-          // Group incoming reactions by buttonId to support emoji + text coexistence
-          const grouped = new Map<string, { emoji?: string | null; textReaction?: string | null }>();
+          // Group incoming reactions by buttonId to support emoji + text + action coexistence
+          const grouped = new Map<string, { emoji?: string | null; textReaction?: string | null; action?: string | null }>();
           for (const r of reactions) {
-            if (!r?.reaction) continue;
-            const current = grouped.get(r.buttonId) || { emoji: null, textReaction: null };
-            if (r.reaction.type === 'emoji') current.emoji = r.reaction.value;
-            if (r.reaction.type === 'text') current.textReaction = r.reaction.value;
+            if (!r?.reaction && !r?.action) continue;
+            const current = grouped.get(r.buttonId) || { emoji: null, textReaction: null, action: null };
+            
+            if (r.reaction?.type === 'emoji') current.emoji = r.reaction.value;
+            if (r.reaction?.type === 'text') current.textReaction = r.reaction.value;
+            if (r.reaction?.type === 'action') current.action = r.reaction.value;
+            if (r.action) current.action = r.action; // Fallback para formato alternativo
+            
             grouped.set(r.buttonId, current);
           }
 
@@ -850,9 +943,9 @@ export async function PUT(request: NextRequest) {
               data: {
                 buttonId,
                 inboxId: templateInboxId, // Use the ChatwitInbox id
-                actionType: 'SEND_TEMPLATE',
+                actionType: 'BUTTON_REACTION',
                 actionPayload: payload,
-                description: payload.textReaction || null,
+                description: payload.action ? `Ação: ${payload.action}` : (payload.textReaction || payload.emoji || null),
               },
             });
             updatedReactions.push(savedReaction);

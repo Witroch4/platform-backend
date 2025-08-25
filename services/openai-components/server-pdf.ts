@@ -2,7 +2,6 @@
 // services/openai-components/server-pdf.ts
 import OpenAI from "openai";
 import { ChatOptions, DEFAULT_MODELS } from "./types";
-import { responsesCall } from "@/lib/cost/openai-wrapper";
 import { withDeadlineAbort } from "./utils";
 
 /**
@@ -91,6 +90,7 @@ export async function askAboutPdf(
 
     // Usar a API responses.create com cost tracking with deadline management
     const response = await withDeadlineAbort(async (signal) => {
+      const { responsesCall } = await import("@/lib/cost/openai-wrapper");
       return responsesCall(
         this.client,
         {

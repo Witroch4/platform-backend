@@ -155,12 +155,39 @@ export const LocationRequestActionSchema = z.object({
   })
 });
 
+// Instagram specific schemas
+export const InstagramGenericActionSchema = z.object({
+  type: z.literal('generic'),
+  buttons: z.array(QuickReplyButtonSchema)
+    .min(0, 'No minimum buttons required for generic template')
+    .max(MESSAGE_LIMITS.INSTAGRAM_BUTTON_TEMPLATE_MAX_BUTTONS, 'Too many buttons for Instagram generic template')
+    .optional()
+});
+
+export const InstagramQuickRepliesActionSchema = z.object({
+  type: z.literal('quick_replies'), 
+  buttons: z.array(QuickReplyButtonSchema)
+    .min(1, 'At least one quick reply is required')
+    .max(MESSAGE_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_COUNT, 'Too many quick replies for Instagram')
+});
+
+export const InstagramButtonTemplateActionSchema = z.object({
+  type: z.literal('button_template'),
+  buttons: z.array(QuickReplyButtonSchema)
+    .min(1, 'At least one button is required')
+    .max(MESSAGE_LIMITS.INSTAGRAM_BUTTON_TEMPLATE_MAX_BUTTONS, 'Too many buttons for Instagram button template')
+});
+
 export const MessageActionSchema = z.discriminatedUnion('type', [
   ButtonActionSchema,
   ListActionSchema,
   CtaUrlActionSchema,
   FlowActionSchema,
-  LocationRequestActionSchema
+  LocationRequestActionSchema,
+  // Instagram actions
+  InstagramGenericActionSchema,
+  InstagramQuickRepliesActionSchema,
+  InstagramButtonTemplateActionSchema
 ]);
 
 export const InteractiveMessageSchema = z.object({
@@ -170,7 +197,9 @@ export const InteractiveMessageSchema = z.object({
     .max(255, VALIDATION_MESSAGES.NAME_TOO_LONG),
   type: z.enum([
     'button', 'list', 'cta_url', 'flow', 'location_request', 
-    'location', 'reaction', 'sticker', 'product', 'product_list'
+    'location', 'reaction', 'sticker', 'product', 'product_list',
+    // Instagram specific types
+    'quick_replies', 'generic', 'button_template'
   ]),
   header: HeaderSchema.optional(),
   body: BodySchema,
@@ -185,19 +214,23 @@ export const ButtonReactionSchema = z.object({
   id: z.string().optional(),
   buttonId: z.string().min(1, 'Button ID is required'),
   messageId: z.string().optional(),
-  type: z.enum(['emoji', 'text']),
-  emoji: z.string().optional(),
-  textResponse: z.string().optional(),
+  type: z.enum(['emoji', 'text', 'action']),
+  emoji: z.string().nullable().optional(),
+  textResponse: z.string().nullable().optional(),
+  action: z.string().nullable().optional(),
   isActive: z.boolean().default(true)
 }).refine((data) => {
   if (data.type === 'emoji') {
     // Permitir qualquer sequência não vazia de emoji, incluindo variation selectors/ZWJ
     // Regex de emoji é notoriamente difícil e pode falhar para combinações (ex.: ❤️, 👨‍👩‍👧‍👦).
     // Para não bloquear o usuário na edição, aceitamos string não vazia.
-    return typeof data.emoji === 'string' && data.emoji.trim().length > 0;
+    return data.emoji && typeof data.emoji === 'string' && data.emoji.trim().length > 0;
   }
   if (data.type === 'text') {
-    return data.textResponse && data.textResponse.trim().length > 0;
+    return data.textResponse && typeof data.textResponse === 'string' && data.textResponse.trim().length > 0;
+  }
+  if (data.type === 'action') {
+    return data.action && typeof data.action === 'string' && data.action.trim().length > 0;
   }
   return false;
 }, {
@@ -239,7 +272,7 @@ export class InteractiveMessageValidator {
         this.validateName(value, errors, warnings);
         break;
       case 'body.text':
-        this.validateBodyText(value, errors, warnings);
+        this.validateBodyText(value, errors, warnings, message.type);
         break;
       case 'header.content':
         this.validateHeaderContent(value, errors, warnings, message.header?.type);
@@ -248,7 +281,7 @@ export class InteractiveMessageValidator {
         this.validateFooterText(value, errors, warnings);
         break;
       case 'action.buttons':
-        this.validateButtons(value, errors, warnings);
+        this.validateButtons(value, errors, warnings, message.type);
         break;
       default:
         // Generic validation for unknown fields
@@ -270,45 +303,36 @@ export class InteractiveMessageValidator {
     // Set de IDs válidos de botões atualmente configurados
     const validButtonIds = new Set(buttons.map(b => b.id));
 
-    // Validate each reaction
-    reactions.forEach((reaction, index) => {
-      // Se o botão não existe mais (usuário editou/remov eu), não bloquear a edição
+    // Filter out reactions with null/empty values before validation
+    const validReactions = reactions.filter(reaction => {
+      // Skip reactions for non-existent buttons
       if (!validButtonIds.has(reaction.buttonId)) {
-        warnings.push({
-          field: `reactions[${index}].buttonId`,
-          code: 'INVALID_BUTTON_REFERENCE',
-          message: `Reaction references non-existent button: ${reaction.buttonId}`,
-          value: reaction.buttonId,
-          severity: 'warning'
-        });
-        return; // não valida conteúdo dessa reação
+        return false;
       }
+      
+      // Skip reactions with no meaningful content
+      if (reaction.type === 'emoji' && (!reaction.emoji || (typeof reaction.emoji === 'string' && reaction.emoji.trim().length === 0))) {
+        return false;
+      }
+      if (reaction.type === 'text' && (!reaction.textResponse || (typeof reaction.textResponse === 'string' && reaction.textResponse.trim().length === 0))) {
+        return false;
+      }
+      if (reaction.type === 'action' && (!reaction.action || (typeof reaction.action === 'string' && reaction.action.trim().length === 0))) {
+        return false;
+      }
+      
+      return true;
+    });
 
-      // Conteúdo incompleto durante a edição não deve bloquear
-      if (reaction.type === 'emoji' && (!reaction.emoji || reaction.emoji.trim().length === 0)) {
-        warnings.push({
-          field: `reactions[${index}]`,
-          code: 'INCOMPLETE_REACTION',
-          message: 'Emoji reaction has no emoji selected yet',
-          severity: 'warning'
-        });
-        return; // não tenta parsear para evitar erro CUSTOM
-      }
-      if (reaction.type === 'text' && (!reaction.textResponse || reaction.textResponse.trim().length === 0)) {
-        warnings.push({
-          field: `reactions[${index}]`,
-          code: 'INCOMPLETE_REACTION',
-          message: 'Text reaction has no content yet',
-          severity: 'warning'
-        });
-        return; // não tenta parsear para evitar erro CUSTOM
-      }
-
+    // Validate each remaining reaction
+    validReactions.forEach((reaction, index) => {
       try {
         ButtonReactionSchema.parse(reaction);
       } catch (error) {
         if (error instanceof z.ZodError) {
-          errors.push(...this.convertZodErrors(error, `reactions[${index}]`));
+          // Find original index for error reporting
+          const originalIndex = reactions.findIndex(r => r.buttonId === reaction.buttonId);
+          errors.push(...this.convertZodErrors(error, `reactions[${originalIndex}]`));
         }
       }
     });
@@ -364,7 +388,7 @@ export class InteractiveMessageValidator {
     }
   }
 
-  private static validateBodyText(text: string, errors: ValidationError[], warnings: ValidationError[]) {
+  private static validateBodyText(text: string, errors: ValidationError[], warnings: ValidationError[], messageType?: InteractiveMessageType) {
     if (!text || !text.trim()) {
       errors.push({
         field: 'body.text',
@@ -372,36 +396,67 @@ export class InteractiveMessageValidator {
         message: VALIDATION_MESSAGES.BODY_TEXT_REQUIRED,
         severity: 'error'
       });
-    } else if (text.length > MESSAGE_LIMITS.BODY_TEXT_MAX_LENGTH) {
-      errors.push({
-        field: 'body.text',
-        code: 'INVALID_LENGTH',
-        message: VALIDATION_MESSAGES.BODY_TOO_LONG,
-        value: text.length,
-        limit: MESSAGE_LIMITS.BODY_TEXT_MAX_LENGTH,
-        severity: 'error'
-      });
-    } else if (text.length > MESSAGE_LIMITS.BODY_TEXT_MAX_LENGTH * 0.9) {
-      warnings.push({
-        field: 'body.text',
-        code: 'LENGTH_WARNING',
-        message: 'Body text is approaching the character limit',
-        value: text.length,
-        limit: MESSAGE_LIMITS.BODY_TEXT_MAX_LENGTH,
-        severity: 'warning'
-      });
+      return;
     }
-    
-    // Instagram Quick Replies specific validation
-    if (text.length > MESSAGE_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_LENGTH) {
-      warnings.push({
-        field: 'body.text',
-        code: 'INSTAGRAM_QUICK_REPLIES_LIMIT',
-        message: VALIDATION_MESSAGES.INSTAGRAM_QUICK_REPLIES_TOO_LONG,
-        value: text.length,
-        limit: MESSAGE_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_LENGTH,
-        severity: 'warning'
-      });
+
+    // Instagram specific validation based on message type
+    if (messageType === 'generic') {
+      // For Instagram Generic Template (Carousel), validate title length
+      if (text.length > MESSAGE_LIMITS.INSTAGRAM_GENERIC_TITLE_MAX_LENGTH) {
+        errors.push({
+          field: 'body.text',
+          code: 'INVALID_LENGTH',
+          message: `Título do carrossel deve ter no máximo ${MESSAGE_LIMITS.INSTAGRAM_GENERIC_TITLE_MAX_LENGTH} caracteres`,
+          value: text.length,
+          limit: MESSAGE_LIMITS.INSTAGRAM_GENERIC_TITLE_MAX_LENGTH,
+          severity: 'error'
+        });
+      }
+    } else if (messageType === 'button_template') {
+      // For Instagram Button Template
+      if (text.length > MESSAGE_LIMITS.INSTAGRAM_BUTTON_TEMPLATE_TEXT_MAX_LENGTH) {
+        errors.push({
+          field: 'body.text',
+          code: 'INVALID_LENGTH',
+          message: `Texto do template de botões deve ter no máximo ${MESSAGE_LIMITS.INSTAGRAM_BUTTON_TEMPLATE_TEXT_MAX_LENGTH} caracteres`,
+          value: text.length,
+          limit: MESSAGE_LIMITS.INSTAGRAM_BUTTON_TEMPLATE_TEXT_MAX_LENGTH,
+          severity: 'error'
+        });
+      }
+    } else if (messageType === 'quick_replies') {
+      // For Instagram Quick Replies
+      if (text.length > MESSAGE_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_LENGTH) {
+        errors.push({
+          field: 'body.text',
+          code: 'INVALID_LENGTH',
+          message: `Texto de respostas rápidas deve ter no máximo ${MESSAGE_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_LENGTH} caracteres`,
+          value: text.length,
+          limit: MESSAGE_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_LENGTH,
+          severity: 'error'
+        });
+      }
+    } else {
+      // Standard WhatsApp validation
+      if (text.length > MESSAGE_LIMITS.BODY_TEXT_MAX_LENGTH) {
+        errors.push({
+          field: 'body.text',
+          code: 'INVALID_LENGTH',
+          message: VALIDATION_MESSAGES.BODY_TOO_LONG,
+          value: text.length,
+          limit: MESSAGE_LIMITS.BODY_TEXT_MAX_LENGTH,
+          severity: 'error'
+        });
+      } else if (text.length > MESSAGE_LIMITS.BODY_TEXT_MAX_LENGTH * 0.9) {
+        warnings.push({
+          field: 'body.text',
+          code: 'LENGTH_WARNING',
+          message: 'Body text is approaching the character limit',
+          value: text.length,
+          limit: MESSAGE_LIMITS.BODY_TEXT_MAX_LENGTH,
+          severity: 'warning'
+        });
+      }
     }
   }
 
@@ -444,16 +499,71 @@ export class InteractiveMessageValidator {
     }
   }
 
-  private static validateButtons(buttons: QuickReplyButton[], errors: ValidationError[], warnings: ValidationError[]) {
-    if (buttons.length > MESSAGE_LIMITS.BUTTON_MAX_COUNT) {
-      errors.push({
-        field: 'action.buttons',
-        code: 'INVALID_COUNT',
-        message: VALIDATION_MESSAGES.TOO_MANY_BUTTONS,
-        value: buttons.length,
-        limit: MESSAGE_LIMITS.BUTTON_MAX_COUNT,
-        severity: 'error'
-      });
+  private static validateButtons(buttons: QuickReplyButton[], errors: ValidationError[], warnings: ValidationError[], messageType?: InteractiveMessageType) {
+    // Instagram Generic Template can have 0 buttons
+    if (messageType === 'generic') {
+      if (buttons.length > MESSAGE_LIMITS.INSTAGRAM_BUTTON_TEMPLATE_MAX_BUTTONS) {
+        errors.push({
+          field: 'action.buttons',
+          code: 'INVALID_COUNT',
+          message: `Máximo de ${MESSAGE_LIMITS.INSTAGRAM_BUTTON_TEMPLATE_MAX_BUTTONS} botões permitidos para carrossel Instagram`,
+          value: buttons.length,
+          limit: MESSAGE_LIMITS.INSTAGRAM_BUTTON_TEMPLATE_MAX_BUTTONS,
+          severity: 'error'
+        });
+      }
+    } else if (messageType === 'button_template') {
+      // Instagram Button Template requires 1-3 buttons
+      if (buttons.length === 0) {
+        errors.push({
+          field: 'action.buttons',
+          code: 'INVALID_COUNT',
+          message: 'Template de botões Instagram requer pelo menos 1 botão',
+          value: buttons.length,
+          severity: 'error'
+        });
+      } else if (buttons.length > MESSAGE_LIMITS.INSTAGRAM_BUTTON_TEMPLATE_MAX_BUTTONS) {
+        errors.push({
+          field: 'action.buttons',
+          code: 'INVALID_COUNT',
+          message: `Máximo de ${MESSAGE_LIMITS.INSTAGRAM_BUTTON_TEMPLATE_MAX_BUTTONS} botões permitidos para template de botões Instagram`,
+          value: buttons.length,
+          limit: MESSAGE_LIMITS.INSTAGRAM_BUTTON_TEMPLATE_MAX_BUTTONS,
+          severity: 'error'
+        });
+      }
+    } else if (messageType === 'quick_replies') {
+      // Instagram Quick Replies requires 1-13 buttons
+      if (buttons.length === 0) {
+        errors.push({
+          field: 'action.buttons',
+          code: 'INVALID_COUNT',
+          message: 'Respostas rápidas Instagram requer pelo menos 1 opção',
+          value: buttons.length,
+          severity: 'error'
+        });
+      } else if (buttons.length > MESSAGE_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_COUNT) {
+        errors.push({
+          field: 'action.buttons',
+          code: 'INVALID_COUNT',
+          message: `Máximo de ${MESSAGE_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_COUNT} respostas rápidas permitidas para Instagram`,
+          value: buttons.length,
+          limit: MESSAGE_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_COUNT,
+          severity: 'error'
+        });
+      }
+    } else {
+      // Standard WhatsApp validation
+      if (buttons.length > MESSAGE_LIMITS.BUTTON_MAX_COUNT) {
+        errors.push({
+          field: 'action.buttons',
+          code: 'INVALID_COUNT',
+          message: VALIDATION_MESSAGES.TOO_MANY_BUTTONS,
+          value: buttons.length,
+          limit: MESSAGE_LIMITS.BUTTON_MAX_COUNT,
+          severity: 'error'
+        });
+      }
     }
 
     // Check for duplicate IDs and titles
@@ -477,6 +587,36 @@ export class InteractiveMessageValidator {
         severity: 'error'
       });
     }
+
+    // Validate individual button properties
+    buttons.forEach((button, index) => {
+      if (!button.title || !button.title.trim()) {
+        errors.push({
+          field: `action.buttons[${index}].title`,
+          code: 'REQUIRED_FIELD',
+          message: VALIDATION_MESSAGES.BUTTON_TITLE_REQUIRED,
+          severity: 'error'
+        });
+      } else if (button.title.length > MESSAGE_LIMITS.BUTTON_TITLE_MAX_LENGTH) {
+        errors.push({
+          field: `action.buttons[${index}].title`,
+          code: 'INVALID_LENGTH',
+          message: VALIDATION_MESSAGES.BUTTON_TITLE_TOO_LONG,
+          value: button.title.length,
+          limit: MESSAGE_LIMITS.BUTTON_TITLE_MAX_LENGTH,
+          severity: 'error'
+        });
+      }
+
+      if (!button.id || !button.id.trim()) {
+        errors.push({
+          field: `action.buttons[${index}].id`,
+          code: 'REQUIRED_FIELD',
+          message: VALIDATION_MESSAGES.BUTTON_ID_REQUIRED,
+          severity: 'error'
+        });
+      }
+    });
   }
 
   private static validateBusinessRules(message: InteractiveMessage, context: ValidationContext | undefined, errors: ValidationError[], warnings: ValidationError[]) {

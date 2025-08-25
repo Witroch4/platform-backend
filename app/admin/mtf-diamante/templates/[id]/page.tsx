@@ -600,11 +600,19 @@ function TemplateDetailsClient({
   // Funções para gerenciar reações de botões
   const handleButtonReactionChange = (
     buttonId: string,
-    reaction: { emoji?: string; textResponse?: string }
+    reaction: { emoji?: string; textResponse?: string; action?: string }
   ) => {
     setTemplateReactions((prev) => {
       const existing = prev.find((r) => r.buttonId === buttonId);
-      const reactionType: "emoji" | "text" = reaction.emoji ? "emoji" : "text";
+      let reactionType: "emoji" | "text" | "action" = "emoji";
+      
+      if (reaction.action) {
+        reactionType = "action";
+      } else if (reaction.textResponse) {
+        reactionType = "text";
+      } else if (reaction.emoji) {
+        reactionType = "emoji";
+      }
 
       if (existing) {
         return prev.map((r) =>
@@ -613,7 +621,7 @@ function TemplateDetailsClient({
                 ...r,
                 ...reaction,
                 type: reactionType,
-                isActive: !!(reaction.emoji || reaction.textResponse),
+                isActive: !!(reaction.emoji || reaction.textResponse || reaction.action),
               }
             : r
         );

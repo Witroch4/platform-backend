@@ -3,78 +3,44 @@ import { getPrismaInstance } from '@/lib/connections'
 export interface ButtonReactionData {
   id: string
   buttonId: string
-  messageId: string | null
-  type: 'emoji' | 'text'
-  emoji: string | null
-  textReaction: string | null
+  actionType: string
+  actionPayload: {
+    emoji?: string
+    textReaction?: string
+    action?: string // "handoff", "end_conversation", etc.
+    [key: string]: any
+  }
   description: string | null
-  isActive: boolean
+  inboxId: string
   createdAt: Date
   updatedAt: Date
-  createdBy: string
-  message?: {
+  inbox?: {
     id: string
-    name: string
-    type: string
+    nome: string
+    inboxId: string
   }
 }
 
 export interface ReactionQueryOptions {
-  includeInactive?: boolean
-  includeMessage?: boolean
+  includeInbox?: boolean
   userId?: string
   page?: number
   limit?: number
 }
 
 /**
- * Get all button reactions for a specific message
- */
-export async function getReactionsByMessageId(
-  messageId: string,
-  userId: string,
-  options: ReactionQueryOptions = {}
-): Promise<ButtonReactionData[]> {
-  const { includeInactive = false, includeMessage = false } = options
-
-  const reactions = await getPrismaInstance().mapeamentoBotao.findMany({
-    where: {
-      inbox: {
-        usuarioChatwit: {
-          appUserId: userId,
-        },
-      },
-    },
-    include: {
-      inbox: includeMessage
-        ? {
-            select: {
-              id: true,
-              nome: true,
-              channelType: true,
-            },
-          }
-        : false,
-    },
-    orderBy: { createdAt: 'asc' },
-  })
-
-  return reactions.map(formatReactionData)
-}
-
-/**
- * Get a specific button reaction by button ID
+ * Get button reaction by buttonId
  */
 export async function getReactionByButtonId(
   buttonId: string,
-  userId: string,
-  options: ReactionQueryOptions = {}
+  userId: string
 ): Promise<ButtonReactionData | null> {
-  const { includeInactive = false, includeMessage = false } = options
-
-  const reaction = await getPrismaInstance().mapeamentoBotao.findFirst({
+  const prisma = getPrismaInstance()
+  
+  const reaction = await prisma.mapeamentoBotao.findFirst({
     where: {
-      buttonId,
+      buttonId: buttonId,
+      actionType: 'BUTTON_REACTION' as any,
       inbox: {
         usuarioChatwit: {
           appUserId: userId,
@@ -82,145 +48,46 @@ export async function getReactionByButtonId(
       },
     },
     include: {
-      inbox: includeMessage
-        ? {
-            select: {
-              id: true,
-              nome: true,
-              channelType: true,
-            },
-          }
-        : false,
-    },
-  })
-
-  return reaction ? formatReactionData(reaction) : null
-}
-
-/**
- * Get a specific button reaction by reaction ID
- */
-export async function getReactionById(
-  reactionId: string,
-  userId: string,
-  options: ReactionQueryOptions = {}
-): Promise<ButtonReactionData | null> {
-  const { includeMessage = false } = options
-
-  const reaction = await getPrismaInstance().mapeamentoBotao.findFirst({
-    where: {
-      id: reactionId,
       inbox: {
-        usuarioChatwit: {
-          appUserId: userId,
+        select: {
+          id: true,
+          nome: true,
+          inboxId: true,
         },
       },
     },
-    include: {
-      inbox: includeMessage
-        ? {
-            select: {
-              id: true,
-              nome: true,
-              channelType: true,
-            },
-          }
-        : false,
-    },
   })
 
-  return reaction ? formatReactionData(reaction) : null
+  if (!reaction) {
+    return null
+  }
+
+  return {
+    id: reaction.id,
+    buttonId: reaction.buttonId,
+    actionType: reaction.actionType,
+    actionPayload: reaction.actionPayload as any,
+    description: reaction.description,
+    inboxId: reaction.inboxId,
+    createdAt: reaction.createdAt,
+    updatedAt: reaction.updatedAt,
+    inbox: reaction.inbox,
+  }
 }
 
 /**
- * Get all button reactions for a user with pagination
+ * Get all button reactions for a user
  */
 export async function getUserReactions(
   userId: string,
   options: ReactionQueryOptions = {}
-): Promise<{
-  reactions: ButtonReactionData[]
-  pagination: {
-    page: number
-    limit: number
-    total: number
-    totalPages: number
-  }
-}> {
-  const {
-    includeInactive = false,
-    includeMessage = true,
-    page = 1,
-    limit = 50,
-  } = options
-
-  const offset = (page - 1) * limit
-
-  const [reactions, total] = await Promise.all([
-    getPrismaInstance().mapeamentoBotao.findMany({
-      where: {
-        inbox: {
-          usuarioChatwit: {
-            appUserId: userId,
-          },
-        },
-      },
-      include: {
-        inbox: includeMessage
-          ? {
-              select: {
-                id: true,
-                nome: true,
-                channelType: true,
-              },
-            }
-          : false,
-      },
-      orderBy: { createdAt: 'desc' },
-      skip: offset,
-      take: limit,
-    }),
-    getPrismaInstance().mapeamentoBotao.count({
-      where: {
-        inbox: {
-          usuarioChatwit: {
-            appUserId: userId,
-          },
-        },
-      },
-    }),
-  ])
-
-  return {
-    reactions: reactions.map(formatReactionData),
-    pagination: {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    },
-  }
-}
-
-/**
- * Get reactions by multiple button IDs (bulk query)
- */
-export async function getReactionsByButtonIds(
-  buttonIds: string[],
-  userId: string,
-  options: ReactionQueryOptions = {}
 ): Promise<ButtonReactionData[]> {
-  const { includeInactive = false, includeMessage = false } = options
+  const { includeInbox = false, page = 1, limit = 50 } = options
+  const prisma = getPrismaInstance()
 
-  if (buttonIds.length === 0) {
-    return []
-  }
-
-  const reactions = await getPrismaInstance().mapeamentoBotao.findMany({
+  const reactions = await prisma.mapeamentoBotao.findMany({
     where: {
-      buttonId: {
-        in: buttonIds,
-      },
+      actionType: 'BUTTON_REACTION' as any,
       inbox: {
         usuarioChatwit: {
           appUserId: userId,
@@ -228,182 +95,294 @@ export async function getReactionsByButtonIds(
       },
     },
     include: {
-      inbox: includeMessage
+      inbox: includeInbox
         ? {
             select: {
               id: true,
               nome: true,
-              channelType: true,
+              inboxId: true,
             },
           }
         : false,
     },
-    orderBy: { createdAt: 'asc' },
+    orderBy: {
+      updatedAt: 'desc',
+    },
+    skip: (page - 1) * limit,
+    take: limit,
   })
 
-  return reactions.map(formatReactionData)
+  return reactions.map((reaction: any) => ({
+    id: reaction.id,
+    buttonId: reaction.buttonId,
+    actionType: reaction.actionType,
+    actionPayload: reaction.actionPayload as any,
+    description: reaction.description,
+    inboxId: reaction.inboxId,
+    createdAt: reaction.createdAt,
+    updatedAt: reaction.updatedAt,
+    inbox: reaction.inbox || undefined,
+  }))
 }
 
 /**
- * Check if a button has an existing reaction
+ * Create or update button reaction
  */
-export async function hasButtonReaction(
-  buttonId: string,
-  userId: string,
-  includeInactive = false
-): Promise<boolean> {
-  const count = await getPrismaInstance().mapeamentoBotao.count({
+export async function upsertButtonReaction(
+  data: {
+    buttonId: string
+    emoji?: string
+    textReaction?: string
+    action?: string
+    description?: string
+    inboxId: string
+  }
+): Promise<ButtonReactionData> {
+  const prisma = getPrismaInstance()
+
+  const actionPayload = {
+    ...(data.emoji && { emoji: data.emoji }),
+    ...(data.textReaction && { textReaction: data.textReaction }),
+    ...(data.action && { action: data.action }),
+  }
+
+  const reaction = await prisma.mapeamentoBotao.upsert({
     where: {
-      buttonId,
+      buttonId: data.buttonId,
+    },
+    create: {
+      buttonId: data.buttonId,
+      actionType: 'BUTTON_REACTION' as any,
+      actionPayload: actionPayload,
+      description: data.description,
+      inboxId: data.inboxId,
+    },
+    update: {
+      actionPayload: actionPayload,
+      description: data.description,
+      updatedAt: new Date(),
+    },
+    include: {
       inbox: {
-        usuarioChatwit: {
-          appUserId: userId,
+        select: {
+          id: true,
+          nome: true,
+          inboxId: true,
         },
       },
     },
   })
 
-  return count > 0
-}
-
-/**
- * Get reaction statistics for a user
- */
-export async function getReactionStats(userId: string): Promise<{
-  total: number
-  active: number
-  inactive: number
-  byType: {
-    emoji: number
-    text: number
-  }
-}> {
-  const [total, emojiReactions, textReactions] = await Promise.all([
-    getPrismaInstance().mapeamentoBotao.count({
-      where: {
-        inbox: {
-          usuarioChatwit: {
-            appUserId: userId,
-          },
-        },
-      },
-    }),
-    getPrismaInstance().mapeamentoBotao.count({
-      where: {
-        inbox: {
-          usuarioChatwit: {
-            appUserId: userId,
-          },
-        },
-        actionType: 'SEND_TEMPLATE', // Emoji reactions typically use SEND_TEMPLATE
-      },
-    }),
-    getPrismaInstance().mapeamentoBotao.count({
-      where: {
-        inbox: {
-          usuarioChatwit: {
-            appUserId: userId,
-          },
-        },
-        actionType: 'ADD_TAG', // Text reactions typically use ADD_TAG
-      },
-    }),
-  ])
-
-  return {
-    total,
-    active: total, // MapeamentoBotao doesn't have isActive field, assume all are active
-    inactive: 0,
-    byType: {
-      emoji: emojiReactions,
-      text: textReactions,
-    },
-  }
-}
-
-/**
- * Bulk delete reactions for multiple button IDs (cascade delete logic)
- */
-export async function deleteReactionsByButtonIds(
-  buttonIds: string[],
-  userId: string,
-  softDelete = false
-): Promise<{ count: number; deletedIds: string[] }> {
-  if (buttonIds.length === 0) {
-    return { count: 0, deletedIds: [] }
-  }
-
-  // First, verify user has access to all reactions
-  const reactions = await getPrismaInstance().mapeamentoBotao.findMany({
-    where: {
-      buttonId: {
-        in: buttonIds,
-      },
-      inbox: {
-        usuarioChatwit: {
-          appUserId: userId,
-        },
-      },
-    },
-    select: {
-      id: true,
-      buttonId: true,
-    },
-  })
-
-  const accessibleButtonIds = reactions.map((r) => r.buttonId)
-  const reactionIds = reactions.map((r) => r.id)
-
-  if (accessibleButtonIds.length === 0) {
-    return { count: 0, deletedIds: [] }
-  }
-
-  if (softDelete) {
-    // MapeamentoBotao doesn't have isActive field, so we'll just delete
-    await getPrismaInstance().mapeamentoBotao.deleteMany({
-      where: {
-        buttonId: {
-          in: accessibleButtonIds,
-        },
-      },
-    })
-  } else {
-    await getPrismaInstance().mapeamentoBotao.deleteMany({
-      where: {
-        buttonId: {
-          in: accessibleButtonIds,
-        },
-      },
-    })
-  }
-
-  return {
-    count: accessibleButtonIds.length,
-    deletedIds: reactionIds,
-  }
-}
-
-/**
- * Helper function to format reaction data consistently
- */
-function formatReactionData(reaction: any): ButtonReactionData {
-  // Parse actionPayload to extract emoji and textReaction
-  const actionPayload = reaction.actionPayload as any;
-  const emoji = actionPayload?.emoji;
-  const textReaction = actionPayload?.textReaction;
-  
   return {
     id: reaction.id,
     buttonId: reaction.buttonId,
-    messageId: reaction.inboxId, // Use inboxId instead of messageId
-    type: textReaction ? 'text' : 'emoji',
-    emoji: emoji || null,
-    textReaction: textReaction || null,
-    description: reaction.description || null,
-    isActive: true, // MapeamentoBotao doesn't have isActive field, assume active
+    actionType: reaction.actionType,
+    actionPayload: reaction.actionPayload as any,
+    description: reaction.description,
+    inboxId: reaction.inboxId,
     createdAt: reaction.createdAt,
     updatedAt: reaction.updatedAt,
-    createdBy: reaction.createdBy || 'system',
-    ...(reaction.inbox && { message: reaction.inbox }),
+    inbox: reaction.inbox,
+  }
+}
+
+/**
+ * Delete button reaction
+ */
+export async function deleteButtonReaction(
+  buttonId: string,
+  userId: string
+): Promise<boolean> {
+  const prisma = getPrismaInstance()
+
+  try {
+    await prisma.mapeamentoBotao.delete({
+      where: {
+        buttonId: buttonId,
+        inbox: {
+          usuarioChatwit: {
+            appUserId: userId,
+          },
+        },
+      },
+    })
+    return true
+  } catch (error) {
+    return false
+  }
+}
+
+/**
+ * Format reaction data for webhook response
+ */
+export function formatReactionData(
+  reaction: ButtonReactionData,
+  channelType: string,
+  wamid: string
+): any {
+  const actionPayload = reaction.actionPayload
+  
+  const response: any = {
+    action_type: 'button_reaction',
+    buttonId: reaction.buttonId,
+    processed: true,
+    mappingFound: true,
+  }
+
+  // Adicionar emoji se disponível
+  if (actionPayload.emoji) {
+    response.emoji = actionPayload.emoji
+  }
+
+  // Adicionar texto de reação se disponível
+  if (actionPayload.textReaction) {
+    response.text = actionPayload.textReaction
+  }
+
+  // 🔧 CRÍTICO: Adicionar ação se disponível (handoff, etc.)
+  if (actionPayload.action) {
+    response.action = actionPayload.action
+  }
+
+  // Metadados específicos por canal
+  if (channelType.toLowerCase().includes('whatsapp')) {
+    response.whatsapp = {
+      message_id: wamid,
+      reaction_emoji: actionPayload.emoji || undefined,
+      response_text: actionPayload.textReaction || undefined,
+    }
+  }
+
+  if (channelType.toLowerCase().includes('instagram')) {
+    response.instagram = {
+      message_id: wamid,
+      reaction_emoji: actionPayload.emoji || undefined,
+      response_text: actionPayload.textReaction || undefined,
+    }
+  }
+
+  return response
+}
+
+// Legacy compatibility functions
+export async function getReactionsByMessageId(messageId: string, userId: string, options: any = {}): Promise<ButtonReactionData[]> {
+  return getUserReactions(userId, options)
+}
+
+export async function createReaction(data: any): Promise<ButtonReactionData> {
+  return upsertButtonReaction(data)
+}
+
+export async function updateReaction(id: string, data: any): Promise<ButtonReactionData> {
+  return upsertButtonReaction(data)
+}
+
+export async function deleteReaction(id: string, userId: string): Promise<boolean> {
+  const prisma = getPrismaInstance()
+  
+  try {
+    await prisma.mapeamentoBotao.delete({
+      where: {
+        id: id,
+        inbox: {
+          usuarioChatwit: {
+            appUserId: userId,
+          },
+        },
+      },
+    })
+    return true
+  } catch (error) {
+    return false
+  }
+}
+
+export async function updateReactionConfig(
+  buttonId: string,
+  config: { emoji?: string; textResponse?: string },
+  userId: string
+): Promise<ButtonReactionData | null> {
+  const prisma = getPrismaInstance()
+
+  const buttonReaction = await prisma.mapeamentoBotao.findFirst({
+    where: {
+      buttonId: buttonId,
+      actionType: 'BUTTON_REACTION',
+      inbox: {
+        usuarioChatwit: {
+          appUserId: userId,
+        },
+      },
+    },
+  })
+
+  if (!buttonReaction) {
+    return null
+  }
+
+  const currentPayload = buttonReaction.actionPayload as any
+  const updatedPayload = {
+    ...currentPayload,
+    ...(config.emoji !== undefined && { emoji: config.emoji }),
+    ...(config.textResponse !== undefined && { textReaction: config.textResponse }),
+  }
+
+  const updatedReaction = await prisma.mapeamentoBotao.update({
+    where: {
+      id: buttonReaction.id,
+    },
+    data: {
+      actionPayload: updatedPayload,
+      updatedAt: new Date(),
+    },
+    include: {
+      inbox: {
+        select: {
+          id: true,
+          nome: true,
+          inboxId: true,
+        },
+      },
+    },
+  })
+
+  return {
+    id: updatedReaction.id,
+    buttonId: updatedReaction.buttonId,
+    actionType: updatedReaction.actionType,
+    actionPayload: updatedReaction.actionPayload as any,
+    description: updatedReaction.description,
+    inboxId: updatedReaction.inboxId,
+    createdAt: updatedReaction.createdAt,
+    updatedAt: updatedReaction.updatedAt,
+    inbox: updatedReaction.inbox,
+  }
+}
+
+export async function getReactionForReactionsModal(buttonId: string, userId: string) {
+  const reaction = await getReactionByButtonId(buttonId, userId)
+  
+  if (!reaction) {
+    return null
+  }
+
+  const payload = reaction.actionPayload
+
+  return {
+    id: reaction.id,
+    buttonId: reaction.buttonId,
+    type: 'emoji' as const,
+    emoji: payload.emoji || null,
+    textReaction: payload.textReaction || null,
+    description: reaction.description,
+    isActive: true,
+    createdAt: reaction.createdAt,
+    updatedAt: reaction.updatedAt,
+    createdBy: userId,
+    message: reaction.inbox ? {
+      id: reaction.inbox.id,
+      name: reaction.inbox.nome,
+      type: 'interactive',
+    } : undefined,
   }
 }

@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { getPrismaInstance } from "@/lib/connections"
+import { getPrismaInstance, getRedisInstance } from "@/lib/connections"
 const prisma = getPrismaInstance();
 import { auth } from "@/auth";
 import axios from "axios";
@@ -278,6 +278,30 @@ export async function POST(request: NextRequest) {
       console.log(
         "⚠️ [CaixasEntrada] Configure CHATWIT_BASE_URL no .env e verifique o token de acesso."
       );
+    }
+
+    // 🔄 INVALIDAR CACHE após criar a caixa
+    try {
+      const redis = getRedisInstance();
+      const cachePattern = `inbox:view:v1:${session.user.id}:*`;
+      console.log("🗑️ [CaixasEntrada] Invalidando cache:", cachePattern);
+      
+      // Buscar todas as chaves que correspondem ao padrão
+      const keys = await redis.keys(cachePattern);
+      if (keys.length > 0) {
+        await redis.del(...keys);
+        console.log(`✅ [CaixasEntrada] ${keys.length} chaves de cache invalidadas:`, keys);
+      } else {
+        console.log("ℹ️ [CaixasEntrada] Nenhuma chave de cache encontrada para invalidar");
+      }
+      
+      // Força invalidação adicional para ter certeza
+      await redis.del(`inbox:view:v1:${session.user.id}:all`);
+      console.log("🔄 [CaixasEntrada] Cache 'all' também invalidado");
+      
+    } catch (cacheError) {
+      console.error("❌ [CaixasEntrada] Erro ao invalidar cache:", cacheError);
+      // Não falha a operação por erro de cache
     }
 
     return NextResponse.json({

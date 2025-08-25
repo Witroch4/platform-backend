@@ -204,13 +204,14 @@ COPY --from=builder /app/scripts ./scripts
 # Tornar scripts executáveis
 RUN chmod +x /app/scripts/start-prod.sh && \
     chmod +x /app/scripts/start-worker-automacao.sh && \
-    chmod +x /app/scripts/start-worker-webhook.sh
+    chmod +x /app/scripts/start-worker-webhook.sh && \
+    chmod +x /app/scripts/start-unified-worker.sh
 
 # Ambiente de runtime
 ENV NODE_ENV=production
 
-# Portas expostas (apenas 3000 — sem Bull Board)
-EXPOSE 3000
+# Portas expostas (3002 para o server.js)
+EXPOSE 3002
 
 # Entrypoint
 CMD ["node", "server.js"]

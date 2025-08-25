@@ -1,4 +1,20 @@
 # Technology Stack
+## ⚠️ Critical Notes
+
+1. **You are in the project root directory**
+2. **Use PowerShell commands on Windows**
+3. **Path errors with "@" outside Next.js scope don't need fixing**
+4. **In Next.js 15, route params are Promises - always use await**
+5. **Always run `npx tsc --noEmit` after edits**
+6. **Use Shadcn/UI Dialog instead of native confirm()/alert()**
+7. **Optimistic UI updates are preferred**
+8. **User-facing strings in Portuguese BR, code in English**
+9. **Front linguagem clara e direta sem termos tecnicos**
+10. **Tudo deve ser compativel com thema dark e light do shadcn**
+11. **Edição no front deve ser olhar com a tool de navegação o resutado**
+12. ** Sempre que adicionar uma feture adicione sem necessiade de controle global só controle de acesso pagina que controla acesso as features admin/features OU SEJA 
+❌ Antes: FeatureFlag Global → UserOverride → Funcionalidade
+✅ Agora: Controle de Acesso → Funcionalidade (sempre disponível)**
 
 ## Core Technologies
 
@@ -26,6 +42,7 @@
 - **Package Manager**: npm with lock file
 
 ## Development Guidelines
+
 - npx tsc --noEmit sempre rodar apos qualquer edição ou criação de arquivos.
 - All new code must be written in TypeScript.
 - User-facing strings are written in Brazilian Portuguese while identifiers remain in English.
@@ -39,6 +56,7 @@
 ## Common Commands
 
 ### Development
+
 ```bash
 docker-compose -f docker-compose-dev.yml up # conteiner de desenvolvimento com os workes conteiner pricipal e banco de dados
 npm run dev          # Start development server
@@ -47,6 +65,7 @@ npm run build        # Production build
 ```
 
 ### Database
+
 ```bash
 npm run db:push # super script faz o reset ativa o pgvector faz a migração e o seed em dev usar esse comamndo precisa de docker-compose -f docker-compose-dev.yml up
 npm run db:migrate   # Run Prisma migrations
@@ -57,6 +76,7 @@ npm run db:push      # Push schema changes (dev)
 ```
 
 ### Testing
+
 ```bash
 npm run test                    # Run all tests
 npm run test:unit              # Unit tests only
@@ -66,6 +86,7 @@ npm run test:coverage          # With coverage report
 ```
 
 ### Workers & Background Jobs
+
 ```bash
 npm run start:worker           # Start webhook worker
 npm run start:ai-worker        # Start AI integration worker
@@ -73,9 +94,10 @@ npm run build:workers          # Build worker files
 ```
 
 ### Code Quality
+
 ```bash
 npx tsc --noEmit # sempre rodar apos qualquer edição ou criação de arquivos
-npx tsc --project tsconfig.worker.json --noEmit  
+npx tsc --project tsconfig.worker.json --noEmit
 npm run lint           # Check linting with Biome
 npm run lint-apply     # Auto-fix linting issues
 npm run format         # Check formatting
@@ -85,6 +107,7 @@ npm run check-apply    # Auto-fix both
 ```
 
 ### Database Management
+
 ```bash
 npm run backup         # Create database backup
 npm run backup:simple  # Simple backup format

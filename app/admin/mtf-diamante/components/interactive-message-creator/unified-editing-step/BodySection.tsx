@@ -27,7 +27,18 @@ export const BodySection: React.FC<BodySectionProps> = ({
     const hasImage = message.header?.type === 'image';
     // Para Instagram, mapear 'button' para 'button_template'
     const selectedType = message.type === 'button' ? 'button_template' : message.type;
-    return getInstagramTemplateType(bodyText, hasImage, selectedType);
+    const result = getInstagramTemplateType(bodyText, hasImage, selectedType);
+    
+    console.log('� [Instagram] Template detectado:', {
+      tipo: result.type,
+      motivo: result.reason,
+      textoLength: bodyText.length,
+      tipoMensagem: message.type,
+      temImagem: hasImage,
+      dentroLimite: !result.isOverLimit
+    });
+    
+    return result;
   }, [isInstagram, message.body?.text, message.header?.type, message.type]);
 
   const handleBodyTextChange = React.useCallback(
@@ -45,7 +56,7 @@ export const BodySection: React.FC<BodySectionProps> = ({
     } else if (instagramTemplate?.type === 'button_template') {
       return MESSAGE_LIMITS.INSTAGRAM_BUTTON_TEMPLATE_TEXT_MAX_LENGTH;
     } else if (instagramTemplate?.type === 'generic') {
-      return 80; // Generic Template title limit
+      return MESSAGE_LIMITS.INSTAGRAM_GENERIC_TITLE_MAX_LENGTH; // 80 caracteres para título do carrossel
     }
     
     return validationLimits.BODY_TEXT_MAX_LENGTH;
@@ -159,6 +170,7 @@ export const BodySection: React.FC<BodySectionProps> = ({
                   {message.body.text.length}/{
                     instagramTemplate?.type === 'quick_replies' ? MESSAGE_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_LENGTH :
                     instagramTemplate?.type === 'button_template' ? MESSAGE_LIMITS.INSTAGRAM_BUTTON_TEMPLATE_TEXT_MAX_LENGTH :
+                    instagramTemplate?.type === 'generic' ? MESSAGE_LIMITS.INSTAGRAM_GENERIC_TITLE_MAX_LENGTH :
                     'N/A'
                   } caracteres
                 </span>

@@ -63,8 +63,14 @@ export class SocialWiseCacheKeyBuilder {
       process.env.NEXTAUTH_SECRET || 
       'fallback-secret-for-development-only';
     
+    // Skip validation during build process or when NEXTAUTH_SECRET is available
+    const isBuildProcess = process.env.NEXT_PHASE === 'phase-production-build' || 
+                           process.env.CI === 'true' ||
+                           !process.env.DATABASE_URL;
+    
     if (this.hmacSecret === 'fallback-secret-for-development-only' && 
-        getEnvironment() === 'production') {
+        getEnvironment() === 'production' && 
+        !isBuildProcess) {
       throw new Error('SOCIALWISE_CACHE_HMAC_SECRET must be set in production');
     }
 

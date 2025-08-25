@@ -63,7 +63,7 @@ interface InteractivePreviewProps {
   showReactionConfig?: boolean;
   onButtonReactionChange?: (
     buttonId: string,
-    reaction: { emoji?: string; textResponse?: string }
+    reaction: { emoji?: string; textResponse?: string; action?: string }
   ) => void;
   className?: string;
   title?: string;
@@ -106,6 +106,7 @@ export function InteractivePreview({
       for (const r of entries) {
         if (r.emoji) merged.emoji = r.emoji;
         if (r.textResponse) merged.textResponse = r.textResponse;
+        if (r.action) merged.action = r.action;
       }
       return merged as any;
     },
@@ -175,6 +176,11 @@ export function InteractivePreview({
         // Open text editor
         setShowEmojiPicker(null);
         setShowTextEditor(buttonId);
+      } else if (emoji === "HANDOFF_ACTION") {
+        // Configure handoff action
+        onButtonReactionChange?.(buttonId, { action: "handoff" });
+        setShowEmojiPicker(null);
+        toast.success(`🚨 Transferência para atendente configurada para o botão`);
       } else {
         // Configure emoji (não apaga texto existente)
         onButtonReactionChange?.(buttonId, { emoji });
@@ -200,7 +206,7 @@ export function InteractivePreview({
   const removeReaction = useCallback(
     (buttonId: string, e: React.MouseEvent) => {
       e.stopPropagation();
-      onButtonReactionChange?.(buttonId, { emoji: "", textResponse: "" });
+      onButtonReactionChange?.(buttonId, { emoji: "", textResponse: "", action: "" });
       toast.success("Reação removida");
     },
     [onButtonReactionChange]
@@ -392,7 +398,7 @@ export function InteractivePreview({
                   <>
                     {buttons.slice(0, 2).map((button) => {
                       const reaction = getButtonReaction(button.id);
-                      const hasReaction = reaction?.emoji || reaction?.textResponse;
+                      const hasReaction = reaction?.emoji || reaction?.textResponse || reaction?.action;
 
                       return (
                         <div key={button.id} className="relative">
@@ -474,7 +480,7 @@ export function InteractivePreview({
                       <div className="mt-1 border rounded p-1 max-h-60 overflow-y-auto bg-white/50 dark:bg-gray-900/30">
                         {buttons.map((button) => {
                           const reaction = getButtonReaction(button.id);
-                          const hasReaction = reaction?.emoji || reaction?.textResponse;
+                          const hasReaction = reaction?.emoji || reaction?.textResponse || reaction?.action;
 
                           return (
                             <div key={button.id} className="relative mb-1 last:mb-0">
@@ -510,6 +516,11 @@ export function InteractivePreview({
                                         Texto
                                       </Badge>
                                     )}
+                                    {reaction?.action && (
+                                      <Badge variant="destructive" className="text-xs">
+                                        {reaction.action === 'handoff' ? 'Atendente' : reaction.action}
+                                      </Badge>
+                                    )}
                                     {configMode && showReactionConfig && (
                                       <Smile className="h-3 w-3 opacity-50" />
                                     )}
@@ -541,7 +552,7 @@ export function InteractivePreview({
                   <>
                     {buttons.map((button) => {
                       const reaction = getButtonReaction(button.id);
-                      const hasReaction = reaction?.emoji || reaction?.textResponse;
+                      const hasReaction = reaction?.emoji || reaction?.textResponse || reaction?.action;
 
                       return (
                         <div key={button.id} className="relative">
@@ -575,6 +586,11 @@ export function InteractivePreview({
                                 {reaction?.textResponse && (
                                   <Badge variant="secondary" className="text-xs">
                                     Texto
+                                  </Badge>
+                                )}
+                                {reaction?.action && (
+                                  <Badge variant="destructive" className="text-xs">
+                                    {reaction.action === 'handoff' ? 'Atendente' : reaction.action}
                                   </Badge>
                                 )}
                                 {configMode && showReactionConfig && (

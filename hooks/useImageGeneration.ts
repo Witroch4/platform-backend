@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { openaiService, DEFAULT_MODELS } from '@/services/openai';
+import { openaiService } from '@/services/openai-client-only';
+import { DEFAULT_MODELS } from '@/services/openai-components/types';
 import { toast } from 'sonner';
 
 export interface GeneratedImage {

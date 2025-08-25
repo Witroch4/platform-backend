@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import { DisparoMensagemDialog } from "../DisparoMensagemDialog";
 
 // Importar os componentes das páginas
-import CreateTemplatePage from "./criar/page";
+import { CreateTemplateComponent } from "../CreateTemplateComponent";
 import TemplateDetailsInternal from "./components/TemplateDetailsInternal";
 
 interface Template {
@@ -88,7 +88,7 @@ export default function TemplatesTab() {
             <p className="text-muted-foreground">Crie um novo template para envio de mensagens via WhatsApp</p>
           </div>
         </div>
-        <CreateTemplatePage onSuccess={handleBackToList} />
+        <CreateTemplateComponent onSuccess={handleBackToList} />
       </div>
     );
   }

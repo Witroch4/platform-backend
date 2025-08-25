@@ -1,6 +1,16 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.AUTH_RESEND_KEY);
+let resend: Resend | null = null;
+
+function getResendInstance(): Resend {
+  if (!resend) {
+    if (!process.env.AUTH_RESEND_KEY) {
+      throw new Error("AUTH_RESEND_KEY environment variable is required");
+    }
+    resend = new Resend(process.env.AUTH_RESEND_KEY);
+  }
+  return resend;
+}
 
 export interface SendEmailOptions {
   to: string | string[];
@@ -19,7 +29,8 @@ export async function sendEmail(options: SendEmailOptions): Promise<void> {
     
     const fromAddress = from || process.env.FROM_EMAIL || 'noreply@socialwise.com.br';
     
-    await resend.emails.send({
+    const resendInstance = getResendInstance();
+    await resendInstance.emails.send({
       from: fromAddress,
       to: Array.isArray(to) ? to : [to],
       subject,

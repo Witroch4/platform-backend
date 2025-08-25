@@ -512,41 +512,30 @@ export function recordConnectionAcquisition(acquisitionTime: number): void {
   connectionPoolMonitor.recordConnectionAcquisition(acquisitionTime);
 }
 
-// Enhanced Prisma client wrapper with monitoring
-export class MonitoredPrismaClient extends PrismaClient {
-  constructor(options?: any) {
-    super(options);
-    
-    // Skip middleware in test environment
-    if (process.env.NODE_ENV === 'test') {
-      return;
+// Utility function to wrap Prisma queries with monitoring
+export function withQueryMonitoring<T>(
+  queryName: string,
+  queryPromise: Prisma.PrismaPromise<T>
+): Prisma.PrismaPromise<T> {
+  const start = Date.now();
+  let success = true;
+  let error: Error | undefined;
+  
+  return queryPromise.then(
+    (result) => {
+      success = true;
+      return result;
+    },
+    (e) => {
+      success = false;
+      error = e instanceof Error ? e : new Error('Unknown error');
+      throw e;
     }
-    
-    // Add query logging middleware using proper Prisma middleware syntax
-    (this as any).$use(async (params: any, next: any) => {
-      const start = Date.now();
-      let success = true;
-      let error: Error | undefined;
-      
-      try {
-        const result = await next(params);
-        return result;
-      } catch (e) {
-        success = false;
-        error = e instanceof Error ? e : new Error('Unknown error');
-        throw e;
-      } finally {
-        const executionTime = Date.now() - start;
-        const queryType = `${params.model || 'unknown'}.${params.action}`;
-        
-        connectionPoolMonitor.recordQuery(queryType, executionTime, success, error);
-      }
-    });
-  }
+  ).finally(() => {
+    const executionTime = Date.now() - start;
+    connectionPoolMonitor.recordQuery(queryName, executionTime, success, error);
+  }) as Prisma.PrismaPromise<T>;
 }
-
-// Export monitored Prisma client for use in Instagram translation
-export const monitoredPrisma = new MonitoredPrismaClient();
 
 // Automatic monitoring startup
 console.log('[ConnectionPoolMonitor] Connection pool monitoring initialized');

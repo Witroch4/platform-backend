@@ -2,7 +2,6 @@
 // services/openai-components/server-chat.ts
 import OpenAI from "openai";
 import { ChatOptions, DEFAULT_MODELS } from "./types";
-import { responsesCall } from "@/lib/cost/openai-wrapper";
 import { withDeadlineAbort } from "./utils";
 
 // Importar funções de capacidades do modelo
@@ -288,6 +287,7 @@ export async function createChatCompletion(
 
     // Usar a Responses API (passando params completos e options com signal)
     const response = await withDeadlineAbort(async (signal) => {
+      const { responsesCall } = await import("@/lib/cost/openai-wrapper");
       return responsesCall(
         this.client,
         requestParams,

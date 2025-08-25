@@ -13,7 +13,7 @@ interface PreviewSectionProps {
   variables: Array<{ chave: string; valor: string; }>;
   channelType?: string;
   reactions?: CentralButtonReaction[];
-  onReactionChange?: (buttonId: string, reaction: { emoji?: string; textResponse?: string }) => void;
+  onReactionChange?: (buttonId: string, reaction: { emoji?: string; textResponse?: string; action?: string }) => void;
 }
 
 export const PreviewSection: React.FC<PreviewSectionProps> = ({
@@ -50,6 +50,7 @@ export const PreviewSection: React.FC<PreviewSectionProps> = ({
       type: reaction.type || 'emoji',
       emoji: reaction.emoji || (reaction as any).emoji,
       textResponse: reaction.textResponse || (reaction as any).textReaction,
+      action: reaction.action || (reaction as any).action,
       isActive: reaction.isActive ?? true,
     }));
   }, [reactions]);

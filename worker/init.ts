@@ -8,17 +8,37 @@ import {
 } from './webhook.worker';
 import { initializeExistingAgendamentos } from '../lib/scheduler-bullmq';
 import { initJobs } from './webhook.worker';
+import { startWorkers as startAIIntegrationWorkers } from './ai-integration.worker';
+import { instagramWebhookWorker } from './automacao.worker';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 /**
+ * Inicializa o worker de automação Instagram
+ */
+async function initAutomacaoWorker() {
+  try {
+    console.log('[Worker] Inicializando worker de automação Instagram...');
+    
+    // O worker já foi criado no automacao.worker.ts, só precisamos aguardar ele estar pronto
+    await instagramWebhookWorker.waitUntilReady();
+    
+    console.log('[Worker] Worker de automação Instagram inicializado com sucesso');
+    return { success: true };
+  } catch (error) {
+    console.error('[Worker] Erro ao inicializar worker de automação:', error);
+    throw error;
+  }
+}
+
+/**
  * Inicializa todos os workers e agendamentos existentes
- * Updated to use the new Parent Worker architecture
+ * Updated to use the new unified worker architecture
  */
 export async function initializeWorkers() {
   try {
-    console.log('[Worker] Inicializando workers...');
+    console.log('[Worker] 🚀 Inicializando TODOS os workers em um único container...');
 
     // ============================================================================
     // PARENT WORKER INITIALIZATION (NEW ARCHITECTURE)
@@ -26,7 +46,23 @@ export async function initializeWorkers() {
     
     // Initialize the Parent Worker for both high and low priority queues
     await initParentWorker();
-    console.log('[Worker] Parent Worker (High & Low Priority) inicializado com sucesso');
+    console.log('[Worker] ✅ Parent Worker (High & Low Priority) inicializado com sucesso');
+
+    // ============================================================================
+    // AUTOMATION WORKER (Instagram Webhook Processing)
+    // ============================================================================
+    
+    // Inicializa o worker de automação Instagram ("eu-quero")
+    await initAutomacaoWorker();
+    console.log('[Worker] ✅ Worker de Automação Instagram inicializado com sucesso');
+
+    // ============================================================================
+    // AI INTEGRATION WORKERS
+    // ============================================================================
+    
+    // Inicializa todos os workers de AI Integration
+    await startAIIntegrationWorkers();
+    console.log('[Worker] ✅ AI Integration Workers inicializados com sucesso');
 
     // ============================================================================
     // LEGACY WORKERS (BACKWARD COMPATIBILITY)
@@ -37,17 +73,18 @@ export async function initializeWorkers() {
 
     // Inicializa o worker de manuscrito
     await initManuscritoWorker();
+    console.log('[Worker] ✅ Worker de Manuscrito inicializado');
     
     // Inicializa o worker de leads-chatwit
     await initLeadsChatwitWorker();
-
-
+    console.log('[Worker] ✅ Worker de Leads Chatwit inicializado');
 
     // Inicializa o worker assíncrono MTF Diamante
     // await initMtfDiamanteAsyncWorker(); // Temporariamente desabilitado
 
     // Inicializa o worker de tradução Instagram
     await initInstagramTranslationWorker();
+    console.log('[Worker] ✅ Worker de Tradução Instagram inicializado');
 
     // ============================================================================
     // SHARED INITIALIZATION
@@ -55,28 +92,76 @@ export async function initializeWorkers() {
 
     // Inicializa os jobs recorrentes (apenas uma vez)
     await initJobs();
+    console.log('[Worker] ✅ Jobs recorrentes inicializados');
 
     // Inicializa os agendamentos existentes
     const result = await initializeExistingAgendamentos();
+    console.log('[Worker] ✅ Agendamentos existentes carregados');
 
-    console.log(`[Worker] Todos os workers inicializados com sucesso. ${result.count} agendamentos carregados.`);
-    console.log('[Worker] Parent Worker está processando filas de alta e baixa prioridade');
+    console.log('');
+    console.log('🎉 ========================================');
+    console.log('🎉 TODOS OS WORKERS INICIADOS COM SUCESSO!');
+    console.log('🎉 ========================================');
+    console.log(`📊 ${result.count} agendamentos carregados`);
+    console.log('🔥 Parent Worker processando filas de alta e baixa prioridade');
+    console.log('🤖 AI Integration Workers ativos');
+    console.log('📱 Worker de Automação Instagram ativo');
+    console.log('📝 Workers legados (manuscrito, leads, tradução) ativos');
+    console.log('⏰ Jobs recorrentes configurados');
+    console.log('');
 
     return { success: true, count: result.count };
   } catch (error) {
-    console.error('[Worker] Erro ao inicializar workers:', error);
+    console.error('[Worker] ❌ Erro ao inicializar workers:', error);
     return { success: false, error };
   }
 }
 
+// Setup graceful shutdown para todos os workers
+async function gracefulShutdown(signal: string) {
+  console.log(`[Worker] 🛑 Recebido sinal ${signal}, iniciando shutdown graceful...`);
+  
+  try {
+    // Parar o worker de automação
+    if (instagramWebhookWorker) {
+      console.log('[Worker] Parando worker de automação...');
+      await instagramWebhookWorker.close();
+    }
+    
+    console.log('[Worker] 👋 Shutdown concluído com sucesso');
+    process.exit(0);
+  } catch (error) {
+    console.error('[Worker] ❌ Erro durante shutdown:', error);
+    process.exit(1);
+  }
+}
+
+// Registrar handlers para shutdown graceful
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGUSR2', () => gracefulShutdown('SIGUSR2')); // Para nodemon
+
 // Se este arquivo for executado diretamente (não importado)
 if (require.main === module) {
+  console.log('🚀 Iniciando container unificado de workers...');
+  
   initializeWorkers()
-    .then(() => {
-      console.log('[Worker] Inicialização concluída.');
+    .then((result) => {
+      if (result.success) {
+        console.log('[Worker] 🎉 Inicialização concluída com sucesso!');
+        console.log('[Worker] 🔄 Container de workers rodando e aguardando jobs...');
+        
+        // Manter o processo vivo
+        setInterval(() => {
+          console.log('[Worker] 💓 Heartbeat - Todos os workers ativos');
+        }, 60000); // Log a cada minuto
+      } else {
+        console.error('[Worker] ❌ Falha na inicialização:', result.error);
+        process.exit(1);
+      }
     })
     .catch((error) => {
-      console.error('[Worker] Erro na inicialização:', error);
+      console.error('[Worker] ❌ Erro na inicialização:', error);
       process.exit(1);
     });
 }

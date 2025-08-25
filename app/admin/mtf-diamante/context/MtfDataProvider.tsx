@@ -65,6 +65,11 @@ interface MtfDataContextType {
 
   // Controle geral
   isInitialized: boolean;
+  
+  // Controle de pausar atualizações para edição
+  pauseUpdates: () => void;
+  resumeUpdates: () => void;
+  isUpdatesPaused: boolean;
 }
 
 const MtfDataContext = createContext<MtfDataContextType | undefined>(undefined);
@@ -85,6 +90,10 @@ interface MtfDataProviderProps {
 export function MtfDataProvider({ children, initialData }: MtfDataProviderProps) {
   const pathname = usePathname();
   const { mutate: globalMutate } = useSWRConfig();
+  
+  // Estado para controlar pausar atualizações durante edição
+  const [isPaused, setIsPaused] = useState(false);
+  const pausedDataRef = useRef<any>(null);
   
   // Extrair inboxId da URL se estiver em uma página de inbox específica
   const inboxId = pathname?.match(/\/inbox\/([^\/]+)/)?.[1];
@@ -126,50 +135,56 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
   
   // Usar SWR para gerenciar o estado e cache automaticamente
   const { data: bffData, error, isLoading, mutate } = useSWR(
-    swrKey,
+    isPaused ? null : swrKey, // Pausar fetches quando isPaused é true
     ([base, id]) =>
       fetchInboxView(id && id !== "all" ? `${base}?inboxId=${id}` : base),
     {
       keepPreviousData: true, // Mantém dados anteriores durante navegação
-      revalidateOnFocus: false,
-      revalidateOnReconnect: true,
-      dedupingInterval: 1500,
+      revalidateOnFocus: !isPaused, // Não revalidar quando pausado
+      revalidateOnReconnect: !isPaused, // Não revalidar quando pausado
+      dedupingInterval: 500, // 🔄 Reduzido de 1500ms para 500ms
       shouldRetryOnError: (err: any) => Number(err?.status) >= 500, // sem retry para 404
       fallbackData: prevRef.current ?? initialData,
       onSuccess: (d) => { 
-        if (d) prevRef.current = d; 
+        if (d && !isPaused) {
+          prevRef.current = d; 
+        }
       },
-      // Otimizações para navegação fluida
-      revalidateIfStale: false, // Não revalida automaticamente dados stale
+      // Otimizações para atualização mais responsiva
+      revalidateIfStale: !isPaused, // Não revalidar quando pausado
       revalidateOnMount: true, // Revalida apenas no mount inicial
-      focusThrottleInterval: 5000, // Throttle de focus para evitar requests excessivos
+      focusThrottleInterval: 2000, // 🔄 Reduzido de 5000ms para 2000ms
+      refreshInterval: isPaused ? 0 : 30000, // Parar polling quando pausado
     }
   );
 
   // Estados derivados do BFF com fallback seguro e memo para evitar re-renders
+  // Quando pausado, usar dados pausados preservados
+  const currentData = isPaused && pausedDataRef.current ? pausedDataRef.current : bffData;
+  
   const variaveis = useMemo(() => 
-    bffData?.variaveis ?? prevRef.current?.variaveis ?? [],
-    [bffData?.variaveis]
+    currentData?.variaveis ?? prevRef.current?.variaveis ?? [],
+    [currentData?.variaveis, isPaused]
   );
   const lotes = useMemo(() => 
-    bffData?.lotes ?? prevRef.current?.lotes ?? [],
-    [bffData?.lotes]
+    currentData?.lotes ?? prevRef.current?.lotes ?? [],
+    [currentData?.lotes, isPaused]
   );
   const caixas = useMemo(() => 
-    bffData?.caixas ?? prevRef.current?.caixas ?? [],
-    [bffData?.caixas]
+    currentData?.caixas ?? prevRef.current?.caixas ?? [],
+    [currentData?.caixas, isPaused]
   );
   const interactiveMessages = useMemo(() => 
-    bffData?.interactiveMessages ?? prevRef.current?.interactiveMessages ?? [],
-    [bffData?.interactiveMessages]
+    currentData?.interactiveMessages ?? prevRef.current?.interactiveMessages ?? [],
+    [currentData?.interactiveMessages, isPaused]
   );
   const buttonReactions = useMemo(() => 
-    bffData?.buttonReactions ?? prevRef.current?.buttonReactions ?? [],
-    [bffData?.buttonReactions]
+    currentData?.buttonReactions ?? prevRef.current?.buttonReactions ?? [],
+    [currentData?.buttonReactions, isPaused]
   );
   const apiKeys = useMemo(() => 
-    bffData?.apiKeys ?? prevRef.current?.apiKeys ?? [],
-    [bffData?.apiKeys]
+    currentData?.apiKeys ?? prevRef.current?.apiKeys ?? [],
+    [currentData?.apiKeys, isPaused]
   );
   
   // Estados de loading individuais baseados no SWR
@@ -200,13 +215,38 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
 
   // Funções de refresh usando SWR mutate
   const refreshVariaveis = useCallback(() => {
-    console.log('🔄 [MtfDataProvider] Refreshing via SWR mutate...');
+    console.log('🔄 [MtfDataProvider] Refreshing variaveis via SWR mutate...');
     return mutate();
   }, [mutate]);
 
-  const refreshLotes = useCallback(() => mutate(), [mutate]);
+  const refreshLotes = useCallback(() => {
+    console.log('🔄 [MtfDataProvider] Refreshing lotes via SWR mutate...');
+    return mutate();
+  }, [mutate]);
 
-  const refreshCaixas = useCallback(() => mutate(), [mutate]);
+  const refreshCaixas = useCallback(() => {
+    console.log('🔄 [MtfDataProvider] Refreshing caixas via SWR mutate...');
+    // Force immediate revalidation with multiple strategies
+    const [base, id] = swrKey;
+    
+    // 1. Invalidate current cache
+    mutate(undefined, false);
+    
+    // 2. Force fresh fetch with cache-busting
+    const bustingUrl = id && id !== "all" 
+      ? `${base}?inboxId=${id}&t=${Date.now()}`
+      : `${base}?t=${Date.now()}`;
+    
+    // 3. Fetch fresh data and update cache
+    return mutate(
+      fetchInboxView(bustingUrl),
+      { 
+        revalidate: true,
+        populateCache: true,
+        rollbackOnError: false 
+      }
+    );
+  }, [mutate, swrKey, fetchInboxView]);
 
   // Prefetch de uma inbox específica para navegação fluida
   const prefetchInbox = useCallback(async (id: string) => {
@@ -221,11 +261,32 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
     );
   }, [globalMutate, fetchInboxView]);
 
+  // Funções de controle de pausa
+  const pauseUpdates = useCallback(() => {
+    if (!isPaused && (bffData || prevRef.current)) {
+      // Preservar estado atual antes de pausar
+      pausedDataRef.current = bffData || prevRef.current;
+      setIsPaused(true);
+      console.log('⏸️ [MtfDataProvider] Updates paused - preserving current data');
+    }
+  }, [isPaused, bffData]);
+
+  const resumeUpdates = useCallback(() => {
+    if (isPaused) {
+      setIsPaused(false);
+      pausedDataRef.current = null;
+      // Trigger fresh fetch when resuming
+      mutate();
+      console.log('▶️ [MtfDataProvider] Updates resumed - fetching fresh data');
+    }
+  }, [isPaused, mutate]);
+
   // Optimistic Updates para mensagens interativas
   const optimisticUpdateMessage = useCallback((messageData: any, isEdit: boolean = false) => {
-    if (!bffData) return;
+    const dataToUpdate = isPaused && pausedDataRef.current ? pausedDataRef.current : bffData;
+    if (!dataToUpdate) return;
     
-    const currentMessages = bffData.interactiveMessages || [];
+    const currentMessages = dataToUpdate.interactiveMessages || [];
     let updatedMessages;
     
     if (isEdit) {
@@ -245,7 +306,12 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
     }
     
     // Atualizar cache local imediatamente (optimistic)
-    mutate({ ...bffData, interactiveMessages: updatedMessages }, false);
+    const newData = { ...dataToUpdate, interactiveMessages: updatedMessages };
+    if (isPaused) {
+      pausedDataRef.current = newData;
+    } else {
+      mutate(newData, false);
+    }
     
     console.log('🚀 [MtfDataProvider] Optimistic update applied:', {
       isEdit,
@@ -256,15 +322,26 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
 
   // Estado setter para compatibilidade
   const setCaixas = useCallback((newCaixas: MtfCaixa[] | ((prev: MtfCaixa[]) => MtfCaixa[])) => {
-    // Como agora o estado vem do SWR, precisamos atualizar via mutate
+    const dataToUpdate = isPaused && pausedDataRef.current ? pausedDataRef.current : bffData;
     console.log('⚠️ [MtfDataProvider] setCaixas called - consider using mutate instead');
+    
     if (typeof newCaixas === 'function') {
       const updated = newCaixas(caixas);
-      mutate({ ...bffData, caixas: updated }, false);
+      const newData = { ...dataToUpdate, caixas: updated };
+      if (isPaused) {
+        pausedDataRef.current = newData;
+      } else {
+        mutate(newData, false);
+      }
     } else {
-      mutate({ ...bffData, caixas: newCaixas }, false);
+      const newData = { ...dataToUpdate, caixas: newCaixas };
+      if (isPaused) {
+        pausedDataRef.current = newData;
+      } else {
+        mutate(newData, false);
+      }
     }
-  }, [caixas, bffData, mutate]);
+  }, [caixas, bffData, isPaused, mutate]);
 
   const contextValue: MtfDataContextType = useMemo(() => ({
     variaveis,
@@ -283,6 +360,9 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
     buttonReactions,
     apiKeys,
     isInitialized,
+    pauseUpdates,
+    resumeUpdates,
+    isUpdatesPaused: isPaused,
   }), [
     variaveis,
     loadingVariaveis,
@@ -300,6 +380,9 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
     buttonReactions,
     apiKeys,
     isInitialized,
+    pauseUpdates,
+    resumeUpdates,
+    isPaused,
   ]);
 
   return (

@@ -214,6 +214,12 @@ export function DialogflowCaixasAgentes({
           <p className="text-sm">
             Clique em "Adicionar Caixa" para sincronizar com sua conta Chatwit.
           </p>
+          <div className="mt-4">
+            <AdicionarCaixaDialog
+              onCaixaAdicionada={refreshCaixas}
+              caixasConfiguradas={caixas}
+            />
+          </div>
         </div>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -769,10 +775,8 @@ export function AdicionarCaixaDialog({
     toast.promise(promise, {
       loading: `Adicionando caixa...`,
       success: () => {
-        // Aguardar um pouco antes de atualizar para garantir que o agente foi criado
-        setTimeout(() => {
-          onCaixaAdicionada();
-        }, 500);
+        // ✅ Refresh imediato - o cache já foi invalidado na API
+        onCaixaAdicionada();
         setOpen(false);
         return `Caixa "${nomeInterno}" adicionada com sucesso!`;
       },

@@ -58,10 +58,29 @@ export default function WebhookTestPage() {
   const [idempotencyDisabled, setIdempotencyDisabled] = useState(false);
   const [idempotencyStatus, setIdempotencyStatus] = useState<any>(null);
   const [sourceId, setSourceId] = useState("wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgUM0FCNDNFNUMzMTJGQjc5RjcyOEQA");
-  const [randomizeSourceId, setRandomizeSourceId] = useState(false);
+  const [randomizeSourceId, setRandomizeSourceId] = useState(true);
+  const [lastSentPayload, setLastSentPayload] = useState<any>(null);
 
   const DEFAULT_EXTERNAL_DEST =
     "https://moved-chigger-randomly.ngrok-free.app/api/integrations/webhooks/socialwiseflow";
+
+  // Função para gerar source_id aleatório para WhatsApp
+  const generateRandomWhatsAppSourceId = () => {
+    return `wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgU${Math.random().toString(36).substring(2, 15).toUpperCase()}${Math.random().toString(36).substring(2, 15).toUpperCase()}A`;
+  };
+
+  // Função para gerar source_id aleatório para Instagram
+  const generateRandomInstagramSourceId = () => {
+    const base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    let result = 'aWdfZAG1faXRlbToxOklHTWVzc2FnZAUlE';
+    
+    // Gerar parte aleatória do source_id do Instagram (similar ao formato existente)
+    for (let i = 0; i < 40; i++) {
+      result += base64Chars.charAt(Math.floor(Math.random() * base64Chars.length));
+    }
+    
+    return result + 'ZDZD';
+  };
 
   useEffect(() => {
     // Carregar status da Flash Intent
@@ -85,8 +104,23 @@ export default function WebhookTestPage() {
     try {
       const savedDest = localStorage.getItem("webhook-external-dest");
       if (savedDest) setExternalDest(savedDest);
+      
+      // Carregar última mensagem do usuário
+      const savedUserMessage = localStorage.getItem("webhook-last-user-message");
+      if (savedUserMessage) setUserMessage(savedUserMessage);
     } catch {}
   }, []);
+
+  // Salvar automaticamente a última mensagem do usuário
+  useEffect(() => {
+    if (userMessage.trim()) {
+      try {
+        localStorage.setItem("webhook-last-user-message", userMessage);
+      } catch (error) {
+        console.error("Erro ao salvar mensagem do usuário:", error);
+      }
+    }
+  }, [userMessage]);
 
   const loadSavedPayloads = () => {
     try {
@@ -336,7 +370,7 @@ export default function WebhookTestPage() {
 
       // Gerar source_id aleatório se habilitado
       const finalSourceId = randomizeSourceId 
-        ? `wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgU${Math.random().toString(36).substring(2, 15).toUpperCase()}${Math.random().toString(36).substring(2, 15).toUpperCase()}A`
+        ? generateRandomWhatsAppSourceId()
         : sourceId;
 
       // Atualizar o número de telefone e source_id no payload se foi modificado
@@ -353,6 +387,9 @@ export default function WebhookTestPage() {
         },
         session: `projects/msjudicialoab-rxtd/agent/sessions/${phoneNumber.replace("+", "")}`,
       };
+
+      // Salvar o payload que está sendo enviado para debug
+      setLastSentPayload(updatedPayload);
 
       console.log("Enviando payload para webhook:", updatedPayload);
 
@@ -417,6 +454,8 @@ export default function WebhookTestPage() {
   const sendCustomPayload = () => {
     try {
       const payload = JSON.parse(customPayload);
+      // Salvar o payload customizado que está sendo enviado
+      setLastSentPayload(payload);
       sendWebhookTest(payload);
     } catch (error) {
       toast.error("JSON inválido no payload customizado");
@@ -462,7 +501,7 @@ export default function WebhookTestPage() {
   const createCustomWhatsappPayload = () => {
     const payload = JSON.parse(JSON.stringify(socialwiseWhatsappPayload));
     const finalSourceId = randomizeSourceId 
-      ? `wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgU${Math.random().toString(36).substring(2, 15).toUpperCase()}${Math.random().toString(36).substring(2, 15).toUpperCase()}A`
+      ? generateRandomWhatsAppSourceId()
       : sourceId;
     
     payload.message = userMessage;
@@ -481,7 +520,7 @@ export default function WebhookTestPage() {
   const createCustomWhatsappButtonPayload = () => {
     const payload = JSON.parse(JSON.stringify(socialwiseWhatsappButtonPayload));
     const finalSourceId = randomizeSourceId 
-      ? `wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgU${Math.random().toString(36).substring(2, 15).toUpperCase()}${Math.random().toString(36).substring(2, 15).toUpperCase()}A`
+      ? generateRandomWhatsAppSourceId()
       : sourceId;
     
     payload.message = buttonTitle;
@@ -506,15 +545,28 @@ export default function WebhookTestPage() {
 
   const createCustomInstagramPayload = () => {
     const payload = JSON.parse(JSON.stringify(socialwiseInstagramPayload));
+    
+    // Gerar source_id aleatório se habilitado
+    const finalSourceId = randomizeSourceId 
+      ? generateRandomInstagramSourceId()
+      : payload.context.message.source_id;
+
     payload.message = userMessage;
     payload.context.message.content = userMessage;
     payload.context.message.processed_message_content = userMessage;
     payload.context.message_content = userMessage;
+    payload.context.message.source_id = finalSourceId;
     return payload;
   };
 
   const createCustomInstagramButtonPayload = () => {
     const payload = JSON.parse(JSON.stringify(socialwiseInstagramButtonPayload));
+    
+    // Gerar source_id aleatório se habilitado
+    const finalSourceId = randomizeSourceId 
+      ? generateRandomInstagramSourceId()
+      : payload.context.message.source_id;
+
     payload.message = buttonTitle;
     payload.context.message.content = buttonTitle;
     payload.context.message.processed_message_content = buttonTitle;
@@ -522,6 +574,7 @@ export default function WebhookTestPage() {
     payload.context["socialwise-chatwit"].message_data.instagram_data.postback_payload = instagramButtonId;
     payload.context.interaction_type = "postback";
     payload.context.postback_payload = instagramButtonId;
+    payload.context.message.source_id = finalSourceId;
     return payload;
   };
 
@@ -529,6 +582,9 @@ export default function WebhookTestPage() {
     try {
       setLoading(true);
       setResponse(null);
+
+      // Salvar o payload que está sendo enviado para debug
+      setLastSentPayload(payload);
 
       const dest = getExternalDestination();
       try {
@@ -1679,15 +1735,31 @@ export default function WebhookTestPage() {
                   <label htmlFor="userMessage" className="text-sm font-medium">
                     Mensagem do usuário
                   </label>
-                  <Input
-                    id="userMessage"
-                    value={userMessage}
-                    onChange={(e) => setUserMessage(e.target.value)}
-                    placeholder="Digite a mensagem do usuário"
-                    className="max-w-md"
-                  />
+                  <div className="flex gap-2 items-center">
+                    <Input
+                      id="userMessage"
+                      value={userMessage}
+                      onChange={(e) => setUserMessage(e.target.value)}
+                      placeholder="Digite a mensagem do usuário"
+                      className="max-w-md"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setUserMessage("");
+                        try {
+                          localStorage.removeItem("webhook-last-user-message");
+                        } catch {}
+                      }}
+                      className="h-8 w-8 p-0"
+                      title="Limpar mensagem"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Usado nos payloads de texto simples
+                    Usado nos payloads de texto simples • <span className="text-green-600">Salvo automaticamente</span>
                   </p>
                 </div>
 
@@ -1760,7 +1832,7 @@ export default function WebhookTestPage() {
                       className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                     />
                     <label htmlFor="randomizeSourceId" className="text-sm">
-                      Randomizar Source ID (evita dedup)
+                      Randomizar Source ID (WhatsApp e Instagram)
                     </label>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
@@ -2071,13 +2143,26 @@ export default function WebhookTestPage() {
         <CardHeader>
           <CardTitle>Informações do Payload Real</CardTitle>
           <CardDescription>
-            Estrutura do payload usado nos testes
+            {lastSentPayload 
+              ? "Último payload enviado para teste (com modificações aplicadas)"
+              : "Estrutura do payload base (será modificado antes do envio)"
+            }
           </CardDescription>
         </CardHeader>
         <CardContent>
           <pre className="text-xs bg-muted p-4 rounded-lg overflow-auto max-h-96">
-            {JSON.stringify(realPayload, null, 2)}
+            {JSON.stringify(lastSentPayload || realPayload, null, 2)}
           </pre>
+          {lastSentPayload && (
+            <div className="flex items-center gap-2 mt-3">
+              <Badge variant="secondary" className="text-xs">
+                Payload Enviado
+              </Badge>
+              <p className="text-xs text-muted-foreground">
+                Este payload inclui modificações como source_id randomizado, telefone personalizado, etc.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

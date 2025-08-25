@@ -13,7 +13,6 @@ export async function GET() {
     }
 
     const prisma = getPrismaInstance();
-    const redis = getRedisInstance();
 
     // Contar total de usuários
     const totalUsers = await prisma.user.count();
@@ -26,56 +25,72 @@ export async function GET() {
     
     let flashIntentEnabledUsers = 0;
     for (const user of allUsers) {
-      const hasFlashIntent = await flashIntentChecker.isFlashIntentEnabledForUser(user.id);
-      if (hasFlashIntent) {
-        flashIntentEnabledUsers++;
+      try {
+        const hasFlashIntent = await flashIntentChecker.isFlashIntentEnabledForUser(user.id);
+        if (hasFlashIntent) {
+          flashIntentEnabledUsers++;
+        }
+      } catch (error) {
+        console.error(`Erro ao verificar Flash Intent para usuário ${user.id}:`, error);
+        // Continuar com o próximo usuário
       }
     }
 
     // Verificar saúde das filas
-    const flagManager = FeatureFlagManager.getInstance(prisma, redis);
-    
-    const [
-      respostaRapidaFlag,
-      persistenciaCredenciaisFlag,
-    ] = await Promise.all([
-      flagManager.isEnabled("HIGH_PRIORITY_QUEUE"),
-      flagManager.isEnabled("LOW_PRIORITY_QUEUE"),
-    ]);
-
-    // Verificar se as filas estão realmente funcionando
     let queueHealth = {
-      respostaRapida: respostaRapidaFlag,
-      persistenciaCredenciais: persistenciaCredenciaisFlag,
+      respostaRapida: false,
+      persistenciaCredenciais: false,
     };
 
     try {
-      // Importar as funções de health check das filas
-      const { getQueueHealth: getRespostaRapidaHealth } = await import("@/lib/queue/resposta-rapida.queue");
-      const { getQueueHealth: getPersistenciaHealth } = await import("@/lib/queue/persistencia-credenciais.queue");
+      const redis = getRedisInstance();
+      const flagManager = FeatureFlagManager.getInstance(prisma, redis);
       
-      // Verificar saúde das filas
-      const [respostaRapidaHealth, persistenciaHealth] = await Promise.all([
-        getRespostaRapidaHealth().catch(() => ({ waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 })),
-        getPersistenciaHealth().catch(() => ({ waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 })),
+      const [
+        respostaRapidaFlag,
+        persistenciaCredenciaisFlag,
+      ] = await Promise.all([
+        flagManager.isEnabled("HIGH_PRIORITY_QUEUE").catch(() => false),
+        flagManager.isEnabled("LOW_PRIORITY_QUEUE").catch(() => false),
       ]);
-      
-      // Considerar fila saudável se não há muitos jobs falhados e há atividade
-      const respostaRapidaHealthy = respostaRapidaFlag && 
-        (respostaRapidaHealth.failed < 10) && 
-        (respostaRapidaHealth.waiting + respostaRapidaHealth.active + respostaRapidaHealth.completed > 0 || true);
-        
-      const persistenciaHealthy = persistenciaCredenciaisFlag && 
-        (persistenciaHealth.failed < 10) && 
-        (persistenciaHealth.waiting + persistenciaHealth.active + persistenciaHealth.completed > 0 || true);
-      
+
+      // Verificar se as filas estão realmente funcionando
       queueHealth = {
-        respostaRapida: respostaRapidaHealthy,
-        persistenciaCredenciais: persistenciaHealthy,
+        respostaRapida: respostaRapidaFlag,
+        persistenciaCredenciais: persistenciaCredenciaisFlag,
       };
-    } catch (healthError) {
-      console.warn("Erro ao verificar saúde das filas:", healthError);
-      // Manter os valores baseados apenas nas feature flags
+
+      try {
+        // Importar as funções de health check das filas
+        const { getQueueHealth: getRespostaRapidaHealth } = await import("@/lib/queue/resposta-rapida.queue");
+        const { getQueueHealth: getPersistenciaHealth } = await import("@/lib/queue/persistencia-credenciais.queue");
+        
+        // Verificar saúde das filas
+        const [respostaRapidaHealth, persistenciaHealth] = await Promise.all([
+          getRespostaRapidaHealth().catch(() => ({ waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 })),
+          getPersistenciaHealth().catch(() => ({ waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 })),
+        ]);
+        
+        // Considerar fila saudável se não há muitos jobs falhados e há atividade
+        const respostaRapidaHealthy = respostaRapidaFlag && 
+          (respostaRapidaHealth.failed < 10) && 
+          (respostaRapidaHealth.waiting + respostaRapidaHealth.active + respostaRapidaHealth.completed > 0 || true);
+          
+        const persistenciaHealthy = persistenciaCredenciaisFlag && 
+          (persistenciaHealth.failed < 10) && 
+          (persistenciaHealth.waiting + persistenciaHealth.active + persistenciaHealth.completed > 0 || true);
+        
+        queueHealth = {
+          respostaRapida: respostaRapidaHealthy,
+          persistenciaCredenciais: persistenciaHealthy,
+        };
+      } catch (healthError) {
+        console.warn("Erro ao verificar saúde das filas:", healthError);
+        // Manter os valores baseados apenas nas feature flags
+      }
+    } catch (error) {
+      console.warn("Erro ao verificar feature flags das filas:", error);
+      // Manter valores padrão
     }
 
     return NextResponse.json({

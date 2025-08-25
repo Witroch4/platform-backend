@@ -3,6 +3,10 @@
 import { useState, useEffect, useMemo } from 'react'
 import { toast } from 'sonner'
 import type { ExtendedLead } from '../../types'
+import { TurboModePDFProcessor } from './TurboModePDFProcessor'
+import { TurboModeImageGenerator } from './TurboModeImageGenerator'
+import type { ParallelProcessingResult } from './TurboModePDFProcessor'
+import type { TurboModeConfig, TurboModeMetrics } from './useTurboMode'
 
 // Defina os tipos para os dados que você coletará nos diálogos
 type ManuscritoData = { selectedImages: string[] }
@@ -55,7 +59,13 @@ type SSENotification = {
   data?: any  // Para compatibilidade com diferentes estruturas de notificação
 }
 
-export const useLeadBatchProcessor = (leads: ExtendedLead[], onUpdate?: () => void) => {
+export const useLeadBatchProcessor = (
+  leads: ExtendedLead[], 
+  onUpdate?: () => void,
+  turboModeConfig?: TurboModeConfig | null,
+  turboModeEnabled?: boolean,
+  onTurboModeMetricsUpdate?: (metrics: Partial<TurboModeMetrics>) => void
+) => {
   console.log('[useLeadBatchProcessor] Inicializando hook com leads:', leads.length)
   
   const [isOpen, setIsOpen] = useState(false)
@@ -691,6 +701,68 @@ export const useLeadBatchProcessor = (leads: ExtendedLead[], onUpdate?: () => vo
   const processUnifyPdfs = async (leadsToProcess: ExtendedLead[]) => {
     console.log('[useLeadBatchProcessor] Processando unificação de PDFs...')
     
+    // Use TURBO mode if enabled and configured
+    if (turboModeEnabled && turboModeConfig && leadsToProcess.length > 1) {
+      console.log('[useLeadBatchProcessor] Using TURBO mode for PDF unification')
+      
+      const turboProcessor = new TurboModePDFProcessor({
+        config: turboModeConfig,
+        onProgress: (leadId, progress) => {
+          console.log(`[TURBO PDF] Progress for ${leadId}: ${progress}%`)
+        },
+        onComplete: (leadId, result) => {
+          console.log(`[TURBO PDF] Completed for ${leadId}:`, result)
+          if (result.success) {
+            setStats(prev => ({
+              ...prev,
+              completedTasks: {
+                ...prev.completedTasks,
+                pdfUnified: prev.completedTasks.pdfUnified + 1
+              }
+            }))
+          }
+        },
+        onError: (leadId, error) => {
+          console.error(`[TURBO PDF] Error for ${leadId}:`, error)
+          toast.error(`Falha ao unificar PDF para o lead: ${leadId}`)
+        }
+      })
+
+      try {
+        const startTime = Date.now()
+        const results = await turboProcessor.processLeadsInParallel(leadsToProcess)
+        const endTime = Date.now()
+        
+        const successCount = results.filter(r => r.success).length
+        const timeSaved = Math.max(0, (leadsToProcess.length * 10000) - (endTime - startTime)) // Estimate time saved
+        
+        // Update TURBO mode metrics
+        if (onTurboModeMetricsUpdate) {
+          onTurboModeMetricsUpdate({
+            totalLeads: leadsToProcess.length,
+            parallelProcessed: successCount,
+            timeSaved: timeSaved / 1000, // Convert to seconds
+            averageProcessingTime: (endTime - startTime) / leadsToProcess.length / 1000
+          })
+        }
+
+        console.log(`[TURBO PDF] Processed ${successCount}/${leadsToProcess.length} leads successfully`)
+        
+        // Update interface
+        if (onUpdate) {
+          onUpdate()
+        }
+        
+        return
+      } catch (error) {
+        console.error('[TURBO PDF] TURBO mode failed, falling back to sequential:', error)
+        toast.warning('TURBO mode encontrou um erro, continuando com processamento sequencial')
+      }
+    }
+    
+    // Sequential processing (original implementation)
+    console.log('[useLeadBatchProcessor] Using sequential PDF processing')
+    
     for (let i = 0; i < leadsToProcess.length; i++) {
       const lead = leadsToProcess[i]
       setCurrentProcessingLead(lead)
@@ -727,6 +799,68 @@ export const useLeadBatchProcessor = (leads: ExtendedLead[], onUpdate?: () => vo
 
   const processGenerateImages = async (leadsToProcess: ExtendedLead[]) => {
     console.log('[useLeadBatchProcessor] Processando geração de imagens...')
+    
+    // Use TURBO mode if enabled and configured
+    if (turboModeEnabled && turboModeConfig && leadsToProcess.length > 1) {
+      console.log('[useLeadBatchProcessor] Using TURBO mode for image generation')
+      
+      const turboImageGenerator = new TurboModeImageGenerator({
+        config: turboModeConfig,
+        onProgress: (leadId, progress) => {
+          console.log(`[TURBO IMAGE] Progress for ${leadId}: ${progress}%`)
+        },
+        onComplete: (leadId, result) => {
+          console.log(`[TURBO IMAGE] Completed for ${leadId}:`, result)
+          if (result.success) {
+            setStats(prev => ({
+              ...prev,
+              completedTasks: {
+                ...prev.completedTasks,
+                imagesGenerated: prev.completedTasks.imagesGenerated + 1
+              }
+            }))
+          }
+        },
+        onError: (leadId, error) => {
+          console.error(`[TURBO IMAGE] Error for ${leadId}:`, error)
+          toast.error(`Falha ao gerar imagens para o lead: ${leadId}`)
+        }
+      })
+
+      try {
+        const startTime = Date.now()
+        const results = await turboImageGenerator.generateImagesInParallel(leadsToProcess)
+        const endTime = Date.now()
+        
+        const successCount = results.filter((r: ParallelProcessingResult) => r.success).length
+        const timeSaved = Math.max(0, (leadsToProcess.length * 15000) - (endTime - startTime)) // Estimate time saved for image generation
+        
+        // Update TURBO mode metrics
+        if (onTurboModeMetricsUpdate) {
+          onTurboModeMetricsUpdate({
+            totalLeads: leadsToProcess.length,
+            parallelProcessed: successCount,
+            timeSaved: timeSaved / 1000, // Convert to seconds
+            averageProcessingTime: (endTime - startTime) / leadsToProcess.length / 1000
+          })
+        }
+
+        console.log(`[TURBO IMAGE] Processed ${successCount}/${leadsToProcess.length} leads successfully`)
+        
+        // Update interface
+        if (onUpdate) {
+          onUpdate()
+        }
+        
+        return
+      } catch (error) {
+        console.error('[TURBO IMAGE] TURBO mode failed, falling back to sequential:', error)
+        toast.warning('TURBO mode encontrou um erro na geração de imagens, continuando com processamento sequencial')
+      }
+    }
+    
+    // Sequential processing (original implementation)
+    console.log('[useLeadBatchProcessor] Using sequential image processing')
     
     for (let i = 0; i < leadsToProcess.length; i++) {
       const lead = leadsToProcess[i]

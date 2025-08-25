@@ -92,6 +92,7 @@ export interface NavigationSectionProps {
   onNext: () => void;
   disabled?: boolean;
   hasErrors: boolean;
+  errorMessages?: string[];
 }
 
 // Validation constants

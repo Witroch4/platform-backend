@@ -41,7 +41,7 @@ export const InteractiveMessageCreator: React.FC<
 > = ({ inboxId, onSave, editingMessage }) => {
 
   const { variables, loading: variablesLoading } = useVariableManager();
-  const { buttonReactions, caixas } = useMtfData();
+  const { buttonReactions, caixas, pauseUpdates, resumeUpdates, isUpdatesPaused } = useMtfData();
   
   // Detectar o tipo de canal usando o contexto SWR (mesmo padrão dos outros componentes)
   const channelType = useMemo(
@@ -115,6 +115,31 @@ export const InteractiveMessageCreator: React.FC<
       loadExistingReactions();
     }
   }, [editingMessage, loadExistingReactions]);
+
+  // Control MtfDataProvider updates during editing
+  useEffect(() => {
+    if (state.currentStep === 'configuration' || state.currentStep === 'preview') {
+      // Pausar atualizações durante edição para preservar estado local
+      if (!isUpdatesPaused) {
+        pauseUpdates();
+        console.log('⏸️ [InteractiveMessageCreator] Paused updates during editing step:', state.currentStep);
+      }
+    } else {
+      // Retomar atualizações quando não estiver editando
+      if (isUpdatesPaused) {
+        resumeUpdates();
+        console.log('▶️ [InteractiveMessageCreator] Resumed updates on step:', state.currentStep);
+      }
+    }
+
+    // Cleanup: sempre retomar atualizações quando componente desmontar
+    return () => {
+      if (isUpdatesPaused) {
+        resumeUpdates();
+        console.log('▶️ [InteractiveMessageCreator] Resumed updates on component unmount');
+      }
+    };
+  }, [state.currentStep, pauseUpdates, resumeUpdates, isUpdatesPaused]);
 
   // Auto-populate footer with company name if available
   useEffect(() => {
@@ -281,27 +306,50 @@ export const InteractiveMessageCreator: React.FC<
     state.saving
   ]);
 
-  const reviewProps = useMemo(() => ({
-    message: state.message,
-    reactions: state.reactions.flatMap(r => {
-      const out: Array<{ buttonId: string; reaction: { type: 'emoji' | 'text'; value: string } }> = []
-      if (r.emoji) out.push({ buttonId: r.buttonId, reaction: { type: 'emoji', value: r.emoji } })
+  const reviewProps = useMemo(() => {
+    // Debug log para verificar o estado das reactions
+    console.log('🔍 [InteractiveMessageCreator] Debug state.reactions:', JSON.stringify(state.reactions, null, 2));
+    
+    const processedReactions = state.reactions.reduce((acc, r) => {
+      console.log('🔍 [InteractiveMessageCreator] Processing reaction:', JSON.stringify(r, null, 2));
+      
+      // Para cada reação, criar entradas separadas para emoji, texto e ação
+      if (r.emoji) {
+        acc.push({ buttonId: r.buttonId, reaction: { type: 'emoji', value: r.emoji } });
+      }
+      
       // Considerar tanto textResponse (modelo interno) quanto textReaction (retorno da API)
-      const textVal: any = (r as any).textResponse ?? (r as any).textReaction
+      const textVal: any = (r as any).textResponse ?? (r as any).textReaction;
       if (typeof textVal === 'string' && textVal.length > 0) {
-        out.push({ buttonId: r.buttonId, reaction: { type: 'text', value: textVal } })
+        acc.push({ buttonId: r.buttonId, reaction: { type: 'text', value: textVal } });
       }
-      if (out.length === 0 && r.type) {
-        out.push({ buttonId: r.buttonId, reaction: { type: r.type, value: r.type === 'emoji' ? (r.emoji || '') : ((r as any).textResponse ?? (r as any).textReaction ?? '') } })
+      
+      if (r.action) {
+        console.log('🎯 [InteractiveMessageCreator] Found action reaction:', r.action, 'for button:', r.buttonId);
+        acc.push({ buttonId: r.buttonId, reaction: { type: 'action', value: r.action } });
       }
-      return out
-    }),
-    inboxId,
-    onSave: handleSave,
-    onBack: handleBackToConfiguration,
-    editingMessage,
-    disabled: state.saving
-  }), [
+      
+      // Fallback para reações que só têm type definido
+      if (!r.emoji && (!textVal || textVal.length === 0) && !r.action && r.type && (r.type === 'emoji' || r.type === 'text')) {
+        const fallbackValue = r.type === 'emoji' ? (r.emoji || '') : ((r as any).textResponse ?? (r as any).textReaction ?? '');
+        acc.push({ buttonId: r.buttonId, reaction: { type: r.type, value: fallbackValue } });
+      }
+      
+      return acc;
+    }, [] as Array<{ buttonId: string; reaction: { type: 'emoji' | 'text' | 'action'; value: string } }>);
+    
+    console.log('🎯 [InteractiveMessageCreator] Final processed reactions:', JSON.stringify(processedReactions, null, 2));
+    
+    return {
+      message: state.message,
+      reactions: processedReactions,
+      inboxId,
+      onSave: handleSave,
+      onBack: handleBackToConfiguration,
+      editingMessage,
+      disabled: state.saving
+    };
+  }, [
     state.message, 
     state.reactions,
     inboxId,

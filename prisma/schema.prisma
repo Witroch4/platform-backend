@@ -23,6 +23,7 @@ model User {
   isNew                     Boolean                   @default(true)
   mtfDiamanteSeedExecuted   Boolean                   @default(false)
   mtfVariaveisPopuladas     Boolean                   @default(false)
+  turboModeEnabled          Boolean                   @default(false)
   accounts                  Account[]
   agendamentos              Agendamento[]
   automacoes                Automacao[]
@@ -49,6 +50,8 @@ model User {
   abTests                   PromptABTest[]
   inboxConfigHistory        InboxConfigHistory[]
   iframeAuthorizedDomains   IframeAuthorizedDomain[]
+  featureFlagOverrides      UserFeatureFlagOverride[]
+  createdFeatureFlagOverrides UserFeatureFlagOverride[] @relation("CreatedUserFeatureFlagOverrides")
 }
 
 model InboxConfigHistory {
@@ -817,15 +820,62 @@ model ConversationThread {
 }
 
 model FeatureFlag {
-  id                String   @id @default(cuid())
-  name              String   @unique
+  id                String                     @id @default(cuid())
+  name              String                     @unique
   description       String
-  enabled           Boolean  @default(false)
-  rolloutPercentage Int      @default(0)
-  conditions        Json     @default("{}")
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  enabled           Boolean                    @default(false)
+  rolloutPercentage Int                        @default(0)
+  conditions        Json                       @default("{}")
+  category          String                     @default("system")
+  userSpecific      Boolean                    @default(false)
+  systemCritical    Boolean                    @default(false)
+  metadata          Json                       @default("{}")
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
   createdBy         String
+  userOverrides     UserFeatureFlagOverride[]
+  metrics           FeatureFlagMetrics[]
+
+  @@index([category])
+  @@index([userSpecific])
+  @@index([systemCritical])
+}
+
+model UserFeatureFlagOverride {
+  id        String      @id @default(cuid())
+  userId    String
+  flagId    String
+  enabled   Boolean
+  expiresAt DateTime?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  createdBy String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  flag      FeatureFlag @relation(fields: [flagId], references: [id], onDelete: Cascade)
+  creator   User        @relation("CreatedUserFeatureFlagOverrides", fields: [createdBy], references: [id])
+
+  @@unique([userId, flagId])
+  @@index([userId])
+  @@index([flagId])
+  @@index([createdBy])
+  @@index([expiresAt])
+}
+
+model FeatureFlagMetrics {
+  id                String      @id @default(cuid())
+  flagId            String
+  evaluations       Int         @default(0)
+  enabledCount      Int         @default(0)
+  disabledCount     Int         @default(0)
+  lastEvaluatedAt   DateTime?
+  averageLatencyMs  Float       @default(0)
+  date              DateTime    @db.Date
+  flag              FeatureFlag @relation(fields: [flagId], references: [id], onDelete: Cascade)
+
+  @@unique([flagId, date])
+  @@index([flagId])
+  @@index([date])
+  @@index([lastEvaluatedAt])
 }
 
 model UserFeedback {
@@ -1254,6 +1304,7 @@ enum ActionType {
   ADD_TAG
   START_FLOW
   ASSIGN_TO_AGENT
+  BUTTON_REACTION
 }
 
 enum QueueState {

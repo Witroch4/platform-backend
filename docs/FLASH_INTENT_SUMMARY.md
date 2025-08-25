@@ -3,7 +3,7 @@
 ## ✅ O que foi implementado
 
 ### 1. Interface de Administração
-- **Página principal**: `/admin/resposta-rapida`
+- **Página principal**: `/admin/features`
 - **Controle global**: Switch para ativar/desativar Flash Intent para todo o sistema
 - **Controle por usuário**: Lista de usuários com switches individuais
 - **Dashboard de métricas**: Estatísticas em tempo real

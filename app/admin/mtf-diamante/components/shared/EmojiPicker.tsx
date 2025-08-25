@@ -489,6 +489,17 @@ export function EmojiPicker({
               Responder com Texto
             </button>
 
+            {/* Botão Transferir para Atendente (Handoff) */}
+            <button
+              onClick={() => {
+                onEmojiSelect("HANDOFF_ACTION");
+                onClose();
+              }}
+              className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
+            >
+              🚨 Transferir para Atendente
+            </button>
+
             <div className="w-px h-6 bg-gray-600 mx-2" />
 
             {/* Categorias de Emoji */}

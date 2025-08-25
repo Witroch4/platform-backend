@@ -20,6 +20,9 @@ import { recordWebhookMetrics } from '@/lib/monitoring/application-performance-m
 import { getAssistantForInbox } from '@/lib/socialwise/assistant';
 import { buildWhatsAppByIntentRaw, buildWhatsAppByGlobalIntent, buildInstagramByIntentRaw, buildInstagramByGlobalIntent } from '@/lib/socialwise/templates';
 
+// 🔧 CORREÇÃO: Usar button-processor centralizado
+import { handleButtonInteraction } from '@/lib/socialwise-flow/button-processor';
+
 // Constants
 const MAX_PAYLOAD_SIZE_KB = 256;
 const WEBHOOK_TIMEOUT_MS = 400; // P95 SLA target
@@ -276,33 +279,55 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
       traceId
     });
 
-    // Step 13: Handle button interactions (legacy compatibility)
+    // Step 13: Enhanced button interaction detection and processing
+    const buttonReactionResponse = await handleButtonInteraction(
+      validPayload,
+      channelType,
+      userId,
+      wamid,
+      traceId!
+    );
+
+    if (buttonReactionResponse) {
+      webhookLogger.info('🎯 Button interaction processed successfully', {
+        buttonId: buttonReactionResponse.buttonId,
+        mappingFound: buttonReactionResponse.mappingFound,
+        hasEmoji: !!buttonReactionResponse.emoji,
+        hasText: !!buttonReactionResponse.text,
+        traceId
+      });
+
+      return NextResponse.json(buttonReactionResponse, { status: 200 });
+    }
+
+    // Legacy button processing para compatibilidade (manter variáveis necessárias)
     const ca = validPayload.context.message?.content_attributes || {};
     const swInteractive = validPayload.context['socialwise-chatwit'].message_data?.interactive_data || {};
     const swInstagram = validPayload.context['socialwise-chatwit'].message_data?.instagram_data || {};
 
+    // Legacy button processing para compatibilidade
     const interactionType: string | null =
       ca?.interaction_type ||
       swInteractive?.interaction_type ||
       swInstagram?.interaction_type ||
       null;
 
-    const buttonReply = ca?.button_reply || ca?.interactive_payload?.button_reply || {};
-    const derivedButtonId: string | null =
-      buttonReply?.id ||
+    const legacyButtonReply = ca?.button_reply || ca?.interactive_payload?.button_reply || {};
+    const legacyDerivedButtonId: string | null =
+      legacyButtonReply?.id ||
       swInteractive?.button_id ||
       ca?.postback_payload ||
       swInstagram?.postback_payload ||
       null;
-    const buttonTitle: string | null =
-      buttonReply?.title ||
+    const legacyButtonTitle: string | null =
+      legacyButtonReply?.title ||
       swInteractive?.button_title ||
       null;
 
-    // Handle button interactions with legacy routing
-    if ((interactionType === 'button_reply' || interactionType === 'postback') && derivedButtonId) {
-      const idLower = String(derivedButtonId).toLowerCase();
-      const titleLower = String(buttonTitle || '').toLowerCase();
+    // Handle legacy button interactions (se não foi processado pelo novo sistema)
+    if ((interactionType === 'button_reply' || interactionType === 'postback') && legacyDerivedButtonId && !buttonReactionResponse) {
+      const idLower = String(legacyDerivedButtonId).toLowerCase();
+      const titleLower = String(legacyButtonTitle || '').toLowerCase();
       
       // Direct automations: btn_* or ig_*
       if (idLower.startsWith('btn_') || idLower.startsWith('ig_')) {
@@ -317,7 +342,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
       
       // Intent mapping: intent:<name> or @<name>
       if (idLower.startsWith('intent:') || idLower.startsWith('@')) {
-        const norm = normalizeIntentId(String(derivedButtonId));
+        const norm = normalizeIntentId(String(legacyDerivedButtonId));
         const rawIntent = norm.plain;
         let mapped: any = null;
         
@@ -349,7 +374,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
       
       // Conversational continuation: ia_* - treat button title as user message
       if (idLower.startsWith('ia_')) {
-        const syntheticText = String(buttonTitle || textInput || '').trim();
+        const syntheticText = String(legacyButtonTitle || textInput || '').trim();
         // Process as regular text input through optimized flow
         textInput = syntheticText;
       }

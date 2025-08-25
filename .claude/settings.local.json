@@ -22,7 +22,11 @@
       "Bash(mkdir:*)",
       "Bash(cp:*)",
       "mcp__playwright__browser_wait_for",
-      "mcp__playwright__browser_hover"
+      "mcp__playwright__browser_hover",
+      "Bash(rm:*)",
+      "Bash(npm run build:*)",
+      "Bash(curl:*)",
+      "Bash(docker compose:*)"
     ],
     "deny": [],
     "ask": []

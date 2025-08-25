@@ -31,7 +31,7 @@ export const sendTwoFactorAuthEmail = async (user: User, token: string) => {
 
 	const { email } = user;
 	try {
-		const { error } = await mail.emails.send({
+		const { error } = await mail().emails.send({
 			from: RESEND_EMAIL_FROM,
 			to: email,
 			subject: OTP_SUBJECT,

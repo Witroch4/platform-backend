@@ -41,6 +41,10 @@ export const configRoutes: ConfigRoutes = {
     "/admin/queue-management/*",
     "/admin/iframe-config",
     "/admin/iframe-config/*",
+    "/admin/resposta-rapida",
+    "/admin/resposta-rapida/*",
+    "/admin/features",
+    "/admin/features/*",
   ],
   iframeRoutes: [
     "/iframe/admin",

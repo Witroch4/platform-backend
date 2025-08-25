@@ -1,0 +1,829 @@
+media for: {type: 'image', content: '', media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:221 [InteractivePreview] Header: {type: 'image', content: '', media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:222 [InteractivePreview] Media URL: https://objstoreapi.witdev.com.br/chatwit-social/d8ecd9e3-b02e-417b-8d01-d7e7a372a4bd-37c11d5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg
+InteractivePreview.tsx:349 [InteractivePreview] Rendering header media for: {type: 'image', content: '', media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:221 [InteractivePreview] Header: {type: 'image', content: '', media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:222 [InteractivePreview] Media URL: https://objstoreapi.witdev.com.br/chatwit-social/d8ecd9e3-b02e-417b-8d01-d7e7a372a4bd-37c11d5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg
+InteractiveMessageCreator.tsx:311 🔍 [InteractiveMessageCreator] Debug state.reactions: [
+  {
+    "id": "cmeqhgack002mqj0l1ogl9ua7",
+    "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+    "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+    "type": "action",
+    "emoji": "❤️",
+    "textReaction": "wwwwwwwwwww",
+    "isActive": true,
+    "createdAt": "2025-08-25T02:13:16.772Z",
+    "updatedAt": "2025-08-25T02:13:16.772Z",
+    "textResponse": "wwwwwwwwwww",
+    "action": "handoff"
+  },
+  {
+    "id": "cmeqhgacl002oqj0ly0tvuyrc",
+    "buttonId": "ig_btn_1756071335809_mqvixsvnm",
+    "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+    "type": "emoji",
+    "emoji": "😅",
+    "textReaction": null,
+    "isActive": true,
+    "createdAt": "2025-08-25T02:13:16.773Z",
+    "updatedAt": "2025-08-25T02:13:16.773Z"
+  },
+  {
+    "id": "cmeqhgacl002qqj0ly220zsxk",
+    "buttonId": "ig_btn_1756071090043_tt6chndab",
+    "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+    "type": "text",
+    "emoji": null,
+    "textReaction": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária",
+    "isActive": true,
+    "createdAt": "2025-08-25T02:13:16.774Z",
+    "updatedAt": "2025-08-25T02:13:16.774Z",
+    "textResponse": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária"
+  }
+]
+InteractiveMessageCreator.tsx:314 🔍 [InteractiveMessageCreator] Processing reaction: {
+  "id": "cmeqhgack002mqj0l1ogl9ua7",
+  "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+  "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+  "type": "action",
+  "emoji": "❤️",
+  "textReaction": "wwwwwwwwwww",
+  "isActive": true,
+  "createdAt": "2025-08-25T02:13:16.772Z",
+  "updatedAt": "2025-08-25T02:13:16.772Z",
+  "textResponse": "wwwwwwwwwww",
+  "action": "handoff"
+}
+InteractiveMessageCreator.tsx:328 🎯 [InteractiveMessageCreator] Found action reaction: handoff for button: ig_btn_1756071030509_lqrfqi04u
+InteractiveMessageCreator.tsx:314 🔍 [InteractiveMessageCreator] Processing reaction: {
+  "id": "cmeqhgacl002oqj0ly0tvuyrc",
+  "buttonId": "ig_btn_1756071335809_mqvixsvnm",
+  "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+  "type": "emoji",
+  "emoji": "😅",
+  "textReaction": null,
+  "isActive": true,
+  "createdAt": "2025-08-25T02:13:16.773Z",
+  "updatedAt": "2025-08-25T02:13:16.773Z"
+}
+InteractiveMessageCreator.tsx:314 🔍 [InteractiveMessageCreator] Processing reaction: {
+  "id": "cmeqhgacl002qqj0ly220zsxk",
+  "buttonId": "ig_btn_1756071090043_tt6chndab",
+  "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+  "type": "text",
+  "emoji": null,
+  "textReaction": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária",
+  "isActive": true,
+  "createdAt": "2025-08-25T02:13:16.774Z",
+  "updatedAt": "2025-08-25T02:13:16.774Z",
+  "textResponse": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária"
+}
+InteractiveMessageCreator.tsx:341 🎯 [InteractiveMessageCreator] Final processed reactions: [
+  {
+    "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+    "reaction": {
+      "type": "emoji",
+      "value": "❤️"
+    }
+  },
+  {
+    "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+    "reaction": {
+      "type": "text",
+      "value": "wwwwwwwwwww"
+    }
+  },
+  {
+    "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+    "reaction": {
+      "type": "action",
+      "value": "handoff"
+    }
+  },
+  {
+    "buttonId": "ig_btn_1756071335809_mqvixsvnm",
+    "reaction": {
+      "type": "emoji",
+      "value": "😅"
+    }
+  },
+  {
+    "buttonId": "ig_btn_1756071090043_tt6chndab",
+    "reaction": {
+      "type": "text",
+      "value": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária"
+    }
+  }
+]
+InteractiveMessageCreator.tsx:311 🔍 [InteractiveMessageCreator] Debug state.reactions: [
+  {
+    "id": "cmeqhgack002mqj0l1ogl9ua7",
+    "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+    "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+    "type": "action",
+    "emoji": "❤️",
+    "textReaction": "wwwwwwwwwww",
+    "isActive": true,
+    "createdAt": "2025-08-25T02:13:16.772Z",
+    "updatedAt": "2025-08-25T02:13:16.772Z",
+    "textResponse": "wwwwwwwwwww",
+    "action": "handoff"
+  },
+  {
+    "id": "cmeqhgacl002oqj0ly0tvuyrc",
+    "buttonId": "ig_btn_1756071335809_mqvixsvnm",
+    "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+    "type": "emoji",
+    "emoji": "😅",
+    "textReaction": null,
+    "isActive": true,
+    "createdAt": "2025-08-25T02:13:16.773Z",
+    "updatedAt": "2025-08-25T02:13:16.773Z"
+  },
+  {
+    "id": "cmeqhgacl002qqj0ly220zsxk",
+    "buttonId": "ig_btn_1756071090043_tt6chndab",
+    "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+    "type": "text",
+    "emoji": null,
+    "textReaction": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária",
+    "isActive": true,
+    "createdAt": "2025-08-25T02:13:16.774Z",
+    "updatedAt": "2025-08-25T02:13:16.774Z",
+    "textResponse": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária"
+  }
+]
+InteractiveMessageCreator.tsx:314 🔍 [InteractiveMessageCreator] Processing reaction: {
+  "id": "cmeqhgack002mqj0l1ogl9ua7",
+  "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+  "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+  "type": "action",
+  "emoji": "❤️",
+  "textReaction": "wwwwwwwwwww",
+  "isActive": true,
+  "createdAt": "2025-08-25T02:13:16.772Z",
+  "updatedAt": "2025-08-25T02:13:16.772Z",
+  "textResponse": "wwwwwwwwwww",
+  "action": "handoff"
+}
+InteractiveMessageCreator.tsx:328 🎯 [InteractiveMessageCreator] Found action reaction: handoff for button: ig_btn_1756071030509_lqrfqi04u
+InteractiveMessageCreator.tsx:314 🔍 [InteractiveMessageCreator] Processing reaction: {
+  "id": "cmeqhgacl002oqj0ly0tvuyrc",
+  "buttonId": "ig_btn_1756071335809_mqvixsvnm",
+  "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+  "type": "emoji",
+  "emoji": "😅",
+  "textReaction": null,
+  "isActive": true,
+  "createdAt": "2025-08-25T02:13:16.773Z",
+  "updatedAt": "2025-08-25T02:13:16.773Z"
+}
+InteractiveMessageCreator.tsx:314 🔍 [InteractiveMessageCreator] Processing reaction: {
+  "id": "cmeqhgacl002qqj0ly220zsxk",
+  "buttonId": "ig_btn_1756071090043_tt6chndab",
+  "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+  "type": "text",
+  "emoji": null,
+  "textReaction": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária",
+  "isActive": true,
+  "createdAt": "2025-08-25T02:13:16.774Z",
+  "updatedAt": "2025-08-25T02:13:16.774Z",
+  "textResponse": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária"
+}
+InteractiveMessageCreator.tsx:341 🎯 [InteractiveMessageCreator] Final processed reactions: [
+  {
+    "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+    "reaction": {
+      "type": "emoji",
+      "value": "❤️"
+    }
+  },
+  {
+    "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+    "reaction": {
+      "type": "text",
+      "value": "wwwwwwwwwww"
+    }
+  },
+  {
+    "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+    "reaction": {
+      "type": "action",
+      "value": "handoff"
+    }
+  },
+  {
+    "buttonId": "ig_btn_1756071335809_mqvixsvnm",
+    "reaction": {
+      "type": "emoji",
+      "value": "😅"
+    }
+  },
+  {
+    "buttonId": "ig_btn_1756071090043_tt6chndab",
+    "reaction": {
+      "type": "text",
+      "value": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária"
+    }
+  }
+]
+useInteractiveMessageValidation.ts:350 ✅ [canProceed] Todas validações OK - pode prosseguir
+useInteractiveMessageValidation.ts:350 ✅ [canProceed] Todas validações OK - pode prosseguir
+InteractivePreview.tsx:349 [InteractivePreview] Rendering header media for: {type: 'image', content: '', media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:221 [InteractivePreview] Header: {type: 'image', content: '', media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:222 [InteractivePreview] Media URL: https://objstoreapi.witdev.com.br/chatwit-social/d8ecd9e3-b02e-417b-8d01-d7e7a372a4bd-37c11d5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg
+InteractivePreview.tsx:349 [InteractivePreview] Rendering header media for: {type: 'image', content: '', media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:221 [InteractivePreview] Header: {type: 'image', content: '', media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:222 [InteractivePreview] Media URL: https://objstoreapi.witdev.com.br/chatwit-social/d8ecd9e3-b02e-417b-8d01-d7e7a372a4bd-37c11d5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg
+UnifiedEditingStep.tsx:262 🔄 [Next] Iniciando validação...
+UnifiedEditingStep.tsx:277 � [Next] Estado da mensagem: {name: 'Mandado de segurança OAB', type: 'button', bodyLength: 39, hasHeader: false, buttonsCount: 3, …}
+useInteractiveMessageValidation.ts:178 [Validation][immediate] result {isValid: true, errors: Array(0), warnings: Array(0), messageSummary: {…}}
+useInteractiveMessageValidation.ts:350 ✅ [canProceed] Todas validações OK - pode prosseguir
+useInteractiveMessageValidation.ts:350 ✅ [canProceed] Todas validações OK - pode prosseguir
+InteractivePreview.tsx:349 [InteractivePreview] Rendering header media for: {type: 'image', content: '', media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:221 [InteractivePreview] Header: {type: 'image', content: '', media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:222 [InteractivePreview] Media URL: https://objstoreapi.witdev.com.br/chatwit-social/d8ecd9e3-b02e-417b-8d01-d7e7a372a4bd-37c11d5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg
+InteractivePreview.tsx:349 [InteractivePreview] Rendering header media for: {type: 'image', content: '', media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:221 [InteractivePreview] Header: {type: 'image', content: '', media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:222 [InteractivePreview] Media URL: https://objstoreapi.witdev.com.br/chatwit-social/d8ecd9e3-b02e-417b-8d01-d7e7a372a4bd-37c11d5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg
+useInteractiveMessageValidation.ts:350 ✅ [canProceed] Todas validações OK - pode prosseguir
+UnifiedEditingStep.tsx:283 ✅ [Next] Validação OK - avançando para próxima etapa
+InteractivePreview.tsx:349 [InteractivePreview] Rendering header media for: {type: 'image', content: undefined, media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:221 [InteractivePreview] Header: {type: 'image', content: undefined, media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:222 [InteractivePreview] Media URL: https://objstoreapi.witdev.com.br/chatwit-social/d8ecd9e3-b02e-417b-8d01-d7e7a372a4bd-37c11d5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg
+InteractivePreview.tsx:349 [InteractivePreview] Rendering header media for: {type: 'image', content: undefined, media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:221 [InteractivePreview] Header: {type: 'image', content: undefined, media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:222 [InteractivePreview] Media URL: https://objstoreapi.witdev.com.br/chatwit-social/d8ecd9e3-b02e-417b-8d01-d7e7a372a4bd-37c11d5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg
+MtfDataProvider.tsx:280 ▶️ [MtfDataProvider] Updates resumed - fetching fresh data
+InteractiveMessageCreator.tsx:139 ▶️ [InteractiveMessageCreator] Resumed updates on component unmount
+InteractiveMessageCreator.tsx:311 🔍 [InteractiveMessageCreator] Debug state.reactions: [
+  {
+    "id": "cmeqhgack002mqj0l1ogl9ua7",
+    "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+    "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+    "type": "action",
+    "emoji": "❤️",
+    "textReaction": "wwwwwwwwwww",
+    "isActive": true,
+    "createdAt": "2025-08-25T02:13:16.772Z",
+    "updatedAt": "2025-08-25T02:13:16.772Z",
+    "textResponse": "wwwwwwwwwww",
+    "action": "handoff"
+  },
+  {
+    "id": "cmeqhgacl002oqj0ly0tvuyrc",
+    "buttonId": "ig_btn_1756071335809_mqvixsvnm",
+    "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+    "type": "emoji",
+    "emoji": "😅",
+    "textReaction": null,
+    "isActive": true,
+    "createdAt": "2025-08-25T02:13:16.773Z",
+    "updatedAt": "2025-08-25T02:13:16.773Z"
+  },
+  {
+    "id": "cmeqhgacl002qqj0ly220zsxk",
+    "buttonId": "ig_btn_1756071090043_tt6chndab",
+    "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+    "type": "text",
+    "emoji": null,
+    "textReaction": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária",
+    "isActive": true,
+    "createdAt": "2025-08-25T02:13:16.774Z",
+    "updatedAt": "2025-08-25T02:13:16.774Z",
+    "textResponse": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária"
+  }
+]
+InteractiveMessageCreator.tsx:314 🔍 [InteractiveMessageCreator] Processing reaction: {
+  "id": "cmeqhgack002mqj0l1ogl9ua7",
+  "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+  "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+  "type": "action",
+  "emoji": "❤️",
+  "textReaction": "wwwwwwwwwww",
+  "isActive": true,
+  "createdAt": "2025-08-25T02:13:16.772Z",
+  "updatedAt": "2025-08-25T02:13:16.772Z",
+  "textResponse": "wwwwwwwwwww",
+  "action": "handoff"
+}
+InteractiveMessageCreator.tsx:328 🎯 [InteractiveMessageCreator] Found action reaction: handoff for button: ig_btn_1756071030509_lqrfqi04u
+InteractiveMessageCreator.tsx:314 🔍 [InteractiveMessageCreator] Processing reaction: {
+  "id": "cmeqhgacl002oqj0ly0tvuyrc",
+  "buttonId": "ig_btn_1756071335809_mqvixsvnm",
+  "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+  "type": "emoji",
+  "emoji": "😅",
+  "textReaction": null,
+  "isActive": true,
+  "createdAt": "2025-08-25T02:13:16.773Z",
+  "updatedAt": "2025-08-25T02:13:16.773Z"
+}
+InteractiveMessageCreator.tsx:314 🔍 [InteractiveMessageCreator] Processing reaction: {
+  "id": "cmeqhgacl002qqj0ly220zsxk",
+  "buttonId": "ig_btn_1756071090043_tt6chndab",
+  "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+  "type": "text",
+  "emoji": null,
+  "textReaction": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária",
+  "isActive": true,
+  "createdAt": "2025-08-25T02:13:16.774Z",
+  "updatedAt": "2025-08-25T02:13:16.774Z",
+  "textResponse": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária"
+}
+InteractiveMessageCreator.tsx:341 🎯 [InteractiveMessageCreator] Final processed reactions: [
+  {
+    "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+    "reaction": {
+      "type": "emoji",
+      "value": "❤️"
+    }
+  },
+  {
+    "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+    "reaction": {
+      "type": "text",
+      "value": "wwwwwwwwwww"
+    }
+  },
+  {
+    "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+    "reaction": {
+      "type": "action",
+      "value": "handoff"
+    }
+  },
+  {
+    "buttonId": "ig_btn_1756071335809_mqvixsvnm",
+    "reaction": {
+      "type": "emoji",
+      "value": "😅"
+    }
+  },
+  {
+    "buttonId": "ig_btn_1756071090043_tt6chndab",
+    "reaction": {
+      "type": "text",
+      "value": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária"
+    }
+  }
+]
+InteractiveMessageCreator.tsx:311 🔍 [InteractiveMessageCreator] Debug state.reactions: [
+  {
+    "id": "cmeqhgack002mqj0l1ogl9ua7",
+    "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+    "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+    "type": "action",
+    "emoji": "❤️",
+    "textReaction": "wwwwwwwwwww",
+    "isActive": true,
+    "createdAt": "2025-08-25T02:13:16.772Z",
+    "updatedAt": "2025-08-25T02:13:16.772Z",
+    "textResponse": "wwwwwwwwwww",
+    "action": "handoff"
+  },
+  {
+    "id": "cmeqhgacl002oqj0ly0tvuyrc",
+    "buttonId": "ig_btn_1756071335809_mqvixsvnm",
+    "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+    "type": "emoji",
+    "emoji": "😅",
+    "textReaction": null,
+    "isActive": true,
+    "createdAt": "2025-08-25T02:13:16.773Z",
+    "updatedAt": "2025-08-25T02:13:16.773Z"
+  },
+  {
+    "id": "cmeqhgacl002qqj0ly220zsxk",
+    "buttonId": "ig_btn_1756071090043_tt6chndab",
+    "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+    "type": "text",
+    "emoji": null,
+    "textReaction": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária",
+    "isActive": true,
+    "createdAt": "2025-08-25T02:13:16.774Z",
+    "updatedAt": "2025-08-25T02:13:16.774Z",
+    "textResponse": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária"
+  }
+]
+InteractiveMessageCreator.tsx:314 🔍 [InteractiveMessageCreator] Processing reaction: {
+  "id": "cmeqhgack002mqj0l1ogl9ua7",
+  "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+  "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+  "type": "action",
+  "emoji": "❤️",
+  "textReaction": "wwwwwwwwwww",
+  "isActive": true,
+  "createdAt": "2025-08-25T02:13:16.772Z",
+  "updatedAt": "2025-08-25T02:13:16.772Z",
+  "textResponse": "wwwwwwwwwww",
+  "action": "handoff"
+}
+InteractiveMessageCreator.tsx:328 🎯 [InteractiveMessageCreator] Found action reaction: handoff for button: ig_btn_1756071030509_lqrfqi04u
+InteractiveMessageCreator.tsx:314 🔍 [InteractiveMessageCreator] Processing reaction: {
+  "id": "cmeqhgacl002oqj0ly0tvuyrc",
+  "buttonId": "ig_btn_1756071335809_mqvixsvnm",
+  "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+  "type": "emoji",
+  "emoji": "😅",
+  "textReaction": null,
+  "isActive": true,
+  "createdAt": "2025-08-25T02:13:16.773Z",
+  "updatedAt": "2025-08-25T02:13:16.773Z"
+}
+InteractiveMessageCreator.tsx:314 🔍 [InteractiveMessageCreator] Processing reaction: {
+  "id": "cmeqhgacl002qqj0ly220zsxk",
+  "buttonId": "ig_btn_1756071090043_tt6chndab",
+  "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+  "type": "text",
+  "emoji": null,
+  "textReaction": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária",
+  "isActive": true,
+  "createdAt": "2025-08-25T02:13:16.774Z",
+  "updatedAt": "2025-08-25T02:13:16.774Z",
+  "textResponse": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária"
+}
+InteractiveMessageCreator.tsx:341 🎯 [InteractiveMessageCreator] Final processed reactions: [
+  {
+    "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+    "reaction": {
+      "type": "emoji",
+      "value": "❤️"
+    }
+  },
+  {
+    "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+    "reaction": {
+      "type": "text",
+      "value": "wwwwwwwwwww"
+    }
+  },
+  {
+    "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+    "reaction": {
+      "type": "action",
+      "value": "handoff"
+    }
+  },
+  {
+    "buttonId": "ig_btn_1756071335809_mqvixsvnm",
+    "reaction": {
+      "type": "emoji",
+      "value": "😅"
+    }
+  },
+  {
+    "buttonId": "ig_btn_1756071090043_tt6chndab",
+    "reaction": {
+      "type": "text",
+      "value": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária"
+    }
+  }
+]
+InteractivePreview.tsx:349 [InteractivePreview] Rendering header media for: {type: 'image', content: undefined, media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:221 [InteractivePreview] Header: {type: 'image', content: undefined, media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:222 [InteractivePreview] Media URL: https://objstoreapi.witdev.com.br/chatwit-social/d8ecd9e3-b02e-417b-8d01-d7e7a372a4bd-37c11d5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg
+InteractivePreview.tsx:349 [InteractivePreview] Rendering header media for: {type: 'image', content: undefined, media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:221 [InteractivePreview] Header: {type: 'image', content: undefined, media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:222 [InteractivePreview] Media URL: https://objstoreapi.witdev.com.br/chatwit-social/d8ecd9e3-b02e-417b-8d01-d7e7a372a4bd-37c11d5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg
+MtfDataProvider.tsx:280 ▶️ [MtfDataProvider] Updates resumed - fetching fresh data
+InteractiveMessageCreator.tsx:139 ▶️ [InteractiveMessageCreator] Resumed updates on component unmount
+MtfDataProvider.tsx:270 ⏸️ [MtfDataProvider] Updates paused - preserving current data
+InteractiveMessageCreator.tsx:125 ⏸️ [InteractiveMessageCreator] Paused updates during editing step: preview
+InteractiveMessageCreator.tsx:311 🔍 [InteractiveMessageCreator] Debug state.reactions: [
+  {
+    "id": "cmeqhgack002mqj0l1ogl9ua7",
+    "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+    "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+    "type": "action",
+    "emoji": "❤️",
+    "textReaction": "wwwwwwwwwww",
+    "isActive": true,
+    "createdAt": "2025-08-25T02:13:16.772Z",
+    "updatedAt": "2025-08-25T02:13:16.772Z",
+    "textResponse": "wwwwwwwwwww",
+    "action": "handoff"
+  },
+  {
+    "id": "cmeqhgacl002oqj0ly0tvuyrc",
+    "buttonId": "ig_btn_1756071335809_mqvixsvnm",
+    "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+    "type": "emoji",
+    "emoji": "😅",
+    "textReaction": null,
+    "isActive": true,
+    "createdAt": "2025-08-25T02:13:16.773Z",
+    "updatedAt": "2025-08-25T02:13:16.773Z"
+  },
+  {
+    "id": "cmeqhgacl002qqj0ly220zsxk",
+    "buttonId": "ig_btn_1756071090043_tt6chndab",
+    "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+    "type": "text",
+    "emoji": null,
+    "textReaction": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária",
+    "isActive": true,
+    "createdAt": "2025-08-25T02:13:16.774Z",
+    "updatedAt": "2025-08-25T02:13:16.774Z",
+    "textResponse": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária"
+  }
+]
+InteractiveMessageCreator.tsx:314 🔍 [InteractiveMessageCreator] Processing reaction: {
+  "id": "cmeqhgack002mqj0l1ogl9ua7",
+  "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+  "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+  "type": "action",
+  "emoji": "❤️",
+  "textReaction": "wwwwwwwwwww",
+  "isActive": true,
+  "createdAt": "2025-08-25T02:13:16.772Z",
+  "updatedAt": "2025-08-25T02:13:16.772Z",
+  "textResponse": "wwwwwwwwwww",
+  "action": "handoff"
+}
+InteractiveMessageCreator.tsx:328 🎯 [InteractiveMessageCreator] Found action reaction: handoff for button: ig_btn_1756071030509_lqrfqi04u
+InteractiveMessageCreator.tsx:314 🔍 [InteractiveMessageCreator] Processing reaction: {
+  "id": "cmeqhgacl002oqj0ly0tvuyrc",
+  "buttonId": "ig_btn_1756071335809_mqvixsvnm",
+  "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+  "type": "emoji",
+  "emoji": "😅",
+  "textReaction": null,
+  "isActive": true,
+  "createdAt": "2025-08-25T02:13:16.773Z",
+  "updatedAt": "2025-08-25T02:13:16.773Z"
+}
+InteractiveMessageCreator.tsx:314 🔍 [InteractiveMessageCreator] Processing reaction: {
+  "id": "cmeqhgacl002qqj0ly220zsxk",
+  "buttonId": "ig_btn_1756071090043_tt6chndab",
+  "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+  "type": "text",
+  "emoji": null,
+  "textReaction": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária",
+  "isActive": true,
+  "createdAt": "2025-08-25T02:13:16.774Z",
+  "updatedAt": "2025-08-25T02:13:16.774Z",
+  "textResponse": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária"
+}
+InteractiveMessageCreator.tsx:341 🎯 [InteractiveMessageCreator] Final processed reactions: [
+  {
+    "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+    "reaction": {
+      "type": "emoji",
+      "value": "❤️"
+    }
+  },
+  {
+    "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+    "reaction": {
+      "type": "text",
+      "value": "wwwwwwwwwww"
+    }
+  },
+  {
+    "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+    "reaction": {
+      "type": "action",
+      "value": "handoff"
+    }
+  },
+  {
+    "buttonId": "ig_btn_1756071335809_mqvixsvnm",
+    "reaction": {
+      "type": "emoji",
+      "value": "😅"
+    }
+  },
+  {
+    "buttonId": "ig_btn_1756071090043_tt6chndab",
+    "reaction": {
+      "type": "text",
+      "value": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária"
+    }
+  }
+]
+InteractiveMessageCreator.tsx:311 🔍 [InteractiveMessageCreator] Debug state.reactions: [
+  {
+    "id": "cmeqhgack002mqj0l1ogl9ua7",
+    "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+    "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+    "type": "action",
+    "emoji": "❤️",
+    "textReaction": "wwwwwwwwwww",
+    "isActive": true,
+    "createdAt": "2025-08-25T02:13:16.772Z",
+    "updatedAt": "2025-08-25T02:13:16.772Z",
+    "textResponse": "wwwwwwwwwww",
+    "action": "handoff"
+  },
+  {
+    "id": "cmeqhgacl002oqj0ly0tvuyrc",
+    "buttonId": "ig_btn_1756071335809_mqvixsvnm",
+    "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+    "type": "emoji",
+    "emoji": "😅",
+    "textReaction": null,
+    "isActive": true,
+    "createdAt": "2025-08-25T02:13:16.773Z",
+    "updatedAt": "2025-08-25T02:13:16.773Z"
+  },
+  {
+    "id": "cmeqhgacl002qqj0ly220zsxk",
+    "buttonId": "ig_btn_1756071090043_tt6chndab",
+    "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+    "type": "text",
+    "emoji": null,
+    "textReaction": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária",
+    "isActive": true,
+    "createdAt": "2025-08-25T02:13:16.774Z",
+    "updatedAt": "2025-08-25T02:13:16.774Z",
+    "textResponse": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária"
+  }
+]
+InteractiveMessageCreator.tsx:314 🔍 [InteractiveMessageCreator] Processing reaction: {
+  "id": "cmeqhgack002mqj0l1ogl9ua7",
+  "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+  "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+  "type": "action",
+  "emoji": "❤️",
+  "textReaction": "wwwwwwwwwww",
+  "isActive": true,
+  "createdAt": "2025-08-25T02:13:16.772Z",
+  "updatedAt": "2025-08-25T02:13:16.772Z",
+  "textResponse": "wwwwwwwwwww",
+  "action": "handoff"
+}
+InteractiveMessageCreator.tsx:328 🎯 [InteractiveMessageCreator] Found action reaction: handoff for button: ig_btn_1756071030509_lqrfqi04u
+InteractiveMessageCreator.tsx:314 🔍 [InteractiveMessageCreator] Processing reaction: {
+  "id": "cmeqhgacl002oqj0ly0tvuyrc",
+  "buttonId": "ig_btn_1756071335809_mqvixsvnm",
+  "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+  "type": "emoji",
+  "emoji": "😅",
+  "textReaction": null,
+  "isActive": true,
+  "createdAt": "2025-08-25T02:13:16.773Z",
+  "updatedAt": "2025-08-25T02:13:16.773Z"
+}
+InteractiveMessageCreator.tsx:314 🔍 [InteractiveMessageCreator] Processing reaction: {
+  "id": "cmeqhgacl002qqj0ly220zsxk",
+  "buttonId": "ig_btn_1756071090043_tt6chndab",
+  "messageId": "cmeq4fg71001ppf0ky17g6jrx",
+  "type": "text",
+  "emoji": null,
+  "textReaction": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária",
+  "isActive": true,
+  "createdAt": "2025-08-25T02:13:16.774Z",
+  "updatedAt": "2025-08-25T02:13:16.774Z",
+  "textResponse": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária"
+}
+InteractiveMessageCreator.tsx:341 🎯 [InteractiveMessageCreator] Final processed reactions: [
+  {
+    "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+    "reaction": {
+      "type": "emoji",
+      "value": "❤️"
+    }
+  },
+  {
+    "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+    "reaction": {
+      "type": "text",
+      "value": "wwwwwwwwwww"
+    }
+  },
+  {
+    "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+    "reaction": {
+      "type": "action",
+      "value": "handoff"
+    }
+  },
+  {
+    "buttonId": "ig_btn_1756071335809_mqvixsvnm",
+    "reaction": {
+      "type": "emoji",
+      "value": "😅"
+    }
+  },
+  {
+    "buttonId": "ig_btn_1756071090043_tt6chndab",
+    "reaction": {
+      "type": "text",
+      "value": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária"
+    }
+  }
+]
+InteractivePreview.tsx:349 [InteractivePreview] Rendering header media for: {type: 'image', content: undefined, media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:221 [InteractivePreview] Header: {type: 'image', content: undefined, media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:222 [InteractivePreview] Media URL: https://objstoreapi.witdev.com.br/chatwit-social/d8ecd9e3-b02e-417b-8d01-d7e7a372a4bd-37c11d5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg
+InteractivePreview.tsx:349 [InteractivePreview] Rendering header media for: {type: 'image', content: undefined, media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:221 [InteractivePreview] Header: {type: 'image', content: undefined, media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:222 [InteractivePreview] Media URL: https://objstoreapi.witdev.com.br/chatwit-social/d8ecd9e3-b02e-417b-8d01-d7e7a372a4bd-37c11d5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg
+ReviewStep.tsx:210 [ReviewStep] Saving with payload: {
+  "inboxId": "cmeq4fg71001ppf0ky17g6jrx",
+  "message": {
+    "name": "Mandado de segurança OAB",
+    "type": "button",
+    "header": {
+      "type": "image",
+      "content": "https://objstoreapi.witdev.com.br/chatwit-social/d8ecd9e3-b02e-417b-8d01-d7e7a372a4bd-37c11d5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg",
+      "media_url": "https://objstoreapi.witdev.com.br/chatwit-social/d8ecd9e3-b02e-417b-8d01-d7e7a372a4bd-37c11d5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg"
+    },
+    "body": {
+      "text": "Foi injustiçado em alguma prova da OAB?"
+    },
+    "footer": {
+      "text": "Somos especialista em Mandado de Segurança e ação ordinária."
+    },
+    "action": {
+      "type": "button",
+      "buttons": [
+        {
+          "id": "ig_btn_1756071030509_lqrfqi04u",
+          "title": "Falar com a Dra",
+          "type": "reply",
+          "reply": {
+            "id": "ig_btn_1756071030509_lqrfqi04u",
+            "title": "Falar com a Dra"
+          },
+          "payload": "ig_btn_1756071030509_lqrfqi04u"
+        },
+        {
+          "id": "ig_btn_1756071090043_tt6chndab",
+          "title": "Mais informações",
+          "type": "reply",
+          "reply": {
+            "id": "ig_btn_1756071090043_tt6chndab",
+            "title": "Mais informações"
+          },
+          "payload": "ig_btn_1756071090043_tt6chndab"
+        },
+        {
+          "id": "ig_btn_1756071335809_mqvixsvnm",
+          "title": "Finalizar",
+          "type": "reply",
+          "reply": {
+            "id": "ig_btn_1756071335809_mqvixsvnm",
+            "title": "Finalizar"
+          },
+          "payload": "ig_btn_1756071335809_mqvixsvnm"
+        }
+      ]
+    }
+  },
+  "reactions": [
+    {
+      "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+      "reaction": {
+        "type": "emoji",
+        "value": "❤️"
+      }
+    },
+    {
+      "buttonId": "ig_btn_1756071030509_lqrfqi04u",
+      "reaction": {
+        "type": "text",
+        "value": "wwwwwwwwwww"
+      }
+    },
+    {
+      "buttonId": "ig_btn_1756071335809_mqvixsvnm",
+      "reaction": {
+        "type": "emoji",
+        "value": "😅"
+      }
+    },
+    {
+      "buttonId": "ig_btn_1756071090043_tt6chndab",
+      "reaction": {
+        "type": "text",
+        "value": "O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária"
+      }
+    }
+  ],
+  "messageId": "cmeq7lxa9001bpf0k9rpdo2fy"
+}
+MtfDataProvider.tsx:316 🚀 [MtfDataProvider] Optimistic update applied: {isEdit: true, messageId: 'cmeq7lxa9001bpf0k9rpdo2fy', totalMessages: 1}
+ReviewStep.tsx:241 🚀 [ReviewStep] Optimistic update applied, making API call...
+InteractivePreview.tsx:349 [InteractivePreview] Rendering header media for: {type: 'image', content: undefined, media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:221 [InteractivePreview] Header: {type: 'image', content: undefined, media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:222 [InteractivePreview] Media URL: https://objstoreapi.witdev.com.br/chatwit-social/d8ecd9e3-b02e-417b-8d01-d7e7a372a4bd-37c11d5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg
+InteractivePreview.tsx:349 [InteractivePreview] Rendering header media for: {type: 'image', content: undefined, media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:221 [InteractivePreview] Header: {type: 'image', content: undefined, media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:222 [InteractivePreview] Media URL: https://objstoreapi.witdev.com.br/chatwit-social/d8ecd9e3-b02e-417b-8d01-d7e7a372a4bd-37c11d5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg
+InteractivePreview.tsx:349 [InteractivePreview] Rendering header media for: {type: 'image', content: undefined, media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:221 [InteractivePreview] Header: {type: 'image', content: undefined, media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:222 [InteractivePreview] Media URL: https://objstoreapi.witdev.com.br/chatwit-social/d8ecd9e3-b02e-417b-8d01-d7e7a372a4bd-37c11d5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg
+InteractivePreview.tsx:349 [InteractivePreview] Rendering header media for: {type: 'image', content: undefined, media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:221 [InteractivePreview] Header: {type: 'image', content: undefined, media_url: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg'}
+InteractivePreview.tsx:222 [InteractivePreview] Media URL: https://objstoreapi.witdev.com.br/chatwit-social/d8ecd9e3-b02e-417b-8d01-d7e7a372a4bd-37c11d5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg
+ReviewStep.tsx:281 ✅ [ReviewStep] Raw success response: {"success":true,"messageId":"cmeq7lxa9001bpf0k9rpdo2fy","reactionIds":["cmeqhmgwk0039qj0lpsnan31n","cmeqhmgwm003bqj0lt5sjc7ac","cmeqhmgwm003dqj0lys2snbsk"],"message":{"id":"cmeq7lxa9001bpf0k9rpdo2fy","name":"Mandado de segurança OAB","type":"button","content":{"name":"Mandado de segurança OAB","type":"button","header":{"type":"image","text":"https://objstoreapi.witdev.com.br/chatwit-social/d8ecd9e3-b02e-417b-8d01-d7e7a372a4bd-37c11d5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg","media_url":"https://objstoreapi.witdev.com.br/chatwit-social/d8ecd9e3-b02e-417b-8d01-d7e7a372a4bd-37c11d5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg","content":"https://objstoreapi.witdev.com.br/chatwit-social/d8ecd9e3-b02e-417b-8d01-d7e7a372a4bd-37c11d5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg"},"body":{"text":"Foi injustiçado em alguma prova da OAB?"},"footer":{"text":"Somos especialista em Mandado de Segurança e ação ordinária."},"action":{"id":"cmeqhmgwf0037qj0lo93h904k","buttons":[{"id":"ig_btn_1756071030509_lqrfqi04u","type":"reply","reply":{"id":"ig_btn_1756071030509_lqrfqi04u","title":"Falar com a Dra"},"title":"Falar com a Dra","payload":"ig_btn_1756071030509_lqrfqi04u"},{"id":"ig_btn_1756071090043_tt6chndab","type":"reply","reply":{"id":"ig_btn_1756071090043_tt6chndab","title":"Mais informações"},"title":"Mais informações","payload":"ig_btn_1756071090043_tt6chndab"},{"id":"ig_btn_1756071335809_mqvixsvnm","type":"reply","reply":{"id":"ig_btn_1756071335809_mqvixsvnm","title":"Finalizar"},"title":"Finalizar","payload":"ig_btn_1756071335809_mqvixsvnm"}],"interactiveContentId":"cmeq7lxa9001cpf0k3yffbt8l"}},"createdAt":"2025-08-24T21:37:43.617Z","updatedAt":"2025-08-25T02:18:05.192Z"},"reactions":[{"id":"cmeqhmgwk0039qj0lpsnan31n","buttonId":"ig_btn_1756071030509_lqrfqi04u","messageId":"cmeq4fg71001ppf0ky17g6jrx","type":"text","emoji":"❤️","textReaction":"wwwwwwwwwww","textResponse":"wwwwwwwwwww","action":null,"isActive":true,"createdAt":"2025-08-25T02:18:05.204Z"},{"id":"cmeqhmgwm003bqj0lt5sjc7ac","buttonId":"ig_btn_1756071335809_mqvixsvnm","messageId":"cmeq4fg71001ppf0ky17g6jrx","type":"emoji","emoji":"😅","textReaction":null,"textResponse":null,"action":null,"isActive":true,"createdAt":"2025-08-25T02:18:05.206Z"},{"id":"cmeqhmgwm003dqj0lys2snbsk","buttonId":"ig_btn_1756071090043_tt6chndab","messageId":"cmeq4fg71001ppf0ky17g6jrx","type":"text","emoji":null,"textReaction":"O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária","textResponse":"O Prazo máximo é de 120 dias pra MS e 5 anos pra ação ordinária","action":null,"isActive":true,"createdAt":"2025-08-25T02:18:05.207Z"}]}
+ReviewStep.tsx:304 ✅ [ReviewStep] Save successful, syncing with server data...
+MtfDataProvider.tsx:228 🔄 [MtfDataProvider] Refreshing caixas via SWR mutate...
+MtfDataProvider.tsx:280 ▶️ [MtfDataProvider] Updates resumed - fetching fresh data
+InteractiveMessageCreator.tsx:139 ▶️ [InteractiveMessageCreator] Resumed updates on component unmount
+MensagensInterativasTab.tsx:170 [DEBUG] interactiveMessages sample: {id: 'cmeq7lxa9001bpf0k9rpdo2fy', name: 'Mandado de segurança OAB', type: 'INTERACTIVE_MESSAGE', simpleReplyText: null, interactiveContent: {…}, …}
+MensagensInterativasTab.tsx:171 [DEBUG] mensagens normalizadas: {id: 'cmeq7lxa9001bpf0k9rpdo2fy', nome: 'Mandado de segurança OAB', texto: 'Foi injustiçado em alguma prova da OAB?', headerTipo: 'image', headerConteudo: 'https://objstoreapi.witdev.com.br/chatwit-social/d…5f-9eba-4f38-8a7f-ee95ffa28b0c-atendimento_wp.jpg', …}
+MtfDataProvider.tsx:199 📊 [MtfDataProvider] Estado atualizado: {inboxId: 'cmeq4fg71001ppf0ky17g6jrx', hasData: true, isLoading: false, error: undefined, totalData: {…}}

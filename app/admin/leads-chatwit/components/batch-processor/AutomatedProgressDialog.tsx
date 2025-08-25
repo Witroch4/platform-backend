@@ -1,7 +1,9 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Progress } from '@/components/ui/progress'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Zap } from 'lucide-react'
 import { BatchSSEStatus } from './BatchSSEStatus'
+import { TurboModeBadge } from './TurboModeIndicator'
+import type { TurboModeConfig } from './useTurboMode'
 
 type AutomatedProgressDialogProps = {
   isOpen: boolean
@@ -12,6 +14,8 @@ type AutomatedProgressDialogProps = {
   sseConnections?: number
   leadsBeingProcessed?: string[]
   totalLeads?: number
+  turboModeEnabled?: boolean
+  turboModeConfig?: TurboModeConfig | null
 }
 
 export function AutomatedProgressDialog({ 
@@ -22,21 +26,27 @@ export function AutomatedProgressDialog({
   leadName,
   sseConnections = 0,
   leadsBeingProcessed = [],
-  totalLeads = 0
+  totalLeads = 0,
+  turboModeEnabled = false,
+  turboModeConfig = null
 }: AutomatedProgressDialogProps) {
   const percentage = progress.total > 0 ? (progress.current / progress.total) * 100 : 0
 
   const getStepTitle = () => {
-    switch (currentStep) {
-      case 'unifying-pdf':
-        return 'Unificando PDFs'
-      case 'generating-images':
-        return 'Gerando Imagens'
-      case 'preliminary-analysis':
-        return 'Enviando para Análise Preliminar'
-      default:
-        return 'Processando...'
-    }
+    const baseTitle = (() => {
+      switch (currentStep) {
+        case 'unifying-pdf':
+          return 'Unificando PDFs'
+        case 'generating-images':
+          return 'Gerando Imagens'
+        case 'preliminary-analysis':
+          return 'Enviando para Análise Preliminar'
+        default:
+          return 'Processando...'
+      }
+    })()
+    
+    return turboModeEnabled ? `${baseTitle} (TURBO)` : baseTitle
   }
 
   const getProgressText = () => {
@@ -52,7 +62,17 @@ export function AutomatedProgressDialog({
     <Dialog open={isOpen}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>{getStepTitle()}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            {turboModeEnabled && <Zap className="h-4 w-4 text-yellow-500" />}
+            {getStepTitle()}
+            {turboModeEnabled && (
+              <TurboModeBadge 
+                enabled={true} 
+                config={turboModeConfig} 
+                className="ml-auto" 
+              />
+            )}
+          </DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-4 py-6">
           <div className="flex flex-col items-center justify-center gap-4">
@@ -63,7 +83,10 @@ export function AutomatedProgressDialog({
               </p>
               <Progress value={percentage} className="mt-2" />
               <p className="text-xs text-muted-foreground mt-2">
-                Processamento automático em andamento...
+                {turboModeEnabled 
+                  ? `Processamento TURBO em andamento (até ${turboModeConfig?.maxParallelLeads || 10} leads simultâneos)...`
+                  : 'Processamento automático em andamento...'
+                }
               </p>
             </div>
           </div>

@@ -2,10 +2,10 @@
 // services/openai-components/server-embeddings.ts
 import OpenAI from "openai";
 import { DEFAULT_MODELS } from "./types";
-import { openaiEmbeddingWithCost } from "@/lib/cost/openai-wrapper";
 
 export async function getEmbeddings(this: { client: OpenAI }, input: string | string[]) {
   try {
+    const { openaiEmbeddingWithCost } = await import("@/lib/cost/openai-wrapper");
     const response = await openaiEmbeddingWithCost(
       this.client,
       DEFAULT_MODELS.EMBEDDING,

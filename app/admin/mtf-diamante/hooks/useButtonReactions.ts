@@ -10,6 +10,7 @@ interface ButtonReaction {
   messageId?: string
   emoji?: string
   textReaction?: string
+  action?: string // "handoff", "end_conversation", etc.
   createdAt?: string
   updatedAt?: string
 }

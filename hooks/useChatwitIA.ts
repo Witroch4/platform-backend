@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import axios from 'axios';
 import type { AxiosError } from 'axios';
-import openaiService, { type FilePurpose } from '@/services/openai';
+import { openaiService, type FilePurpose } from '@/services/openai-client-only';
 
 function isAxiosError<T = any>(err: unknown): err is AxiosError<T> {
   return typeof err === 'object' && err !== null && 'isAxiosError' in (err as any);

@@ -6,8 +6,10 @@ import { useLeadBatchProcessor } from './useLeadBatchProcessor'
 import { AutomatedProgressDialog } from './AutomatedProgressDialog'
 import { ImageGalleryDialog } from '../image-gallery-dialog'
 import { BatchCompletionDialog } from './BatchCompletionDialog'
+import { TurboModeIndicator } from './TurboModeIndicator'
 import type { ExtendedLead } from '../../types'
 import { useEffect, useRef, useState } from 'react'
+import { useTurboMode } from './useTurboMode'
 
 type BatchProcessorOrchestratorProps = {
   leads: ExtendedLead[]
@@ -19,6 +21,15 @@ export function BatchProcessorOrchestrator({ leads, onClose, onUpdate }: BatchPr
   console.log('[BatchProcessorOrchestrator] Inicializando com leads:', leads.length)
   
   const hasStarted = useRef(false)
+  
+  // TURBO mode integration
+  const { 
+    turboModeEnabled, 
+    hasAccess, 
+    turboModeConfig, 
+    checkAccess,
+    turboModeMetrics 
+  } = useTurboMode()
   
   // Helper para buscar imagens convertidas
   const getConvertedImages = async (lead: any): Promise<string[]> => {
@@ -68,18 +79,31 @@ export function BatchProcessorOrchestrator({ leads, onClose, onUpdate }: BatchPr
     stats,
     sseConnections,
     leadsBeingProcessed,
-  } = useLeadBatchProcessor(leads, onUpdate)
+  } = useLeadBatchProcessor(
+    leads, 
+    onUpdate, 
+    turboModeConfig, 
+    turboModeEnabled,
+    (metrics) => {
+      // Update TURBO mode metrics when received from the hook
+      console.log('[BatchProcessorOrchestrator] TURBO mode metrics updated:', metrics)
+    }
+  )
 
   console.log('[BatchProcessorOrchestrator] Estado do hook - isOpen:', isOpen, 'currentStep:', currentStep)
 
   // Inicia o processo quando o componente é montado (apenas uma vez)
   useEffect(() => {
     if (!hasStarted.current) {
-      console.log('[BatchProcessorOrchestrator] Componente montado, iniciando processo...')
+      console.log('[BatchProcessorOrchestrator] Componente montado, verificando TURBO mode e iniciando processo...')
       hasStarted.current = true
-      start()
+      
+      // Check TURBO mode access before starting
+      checkAccess().then(() => {
+        start()
+      })
     }
-  }, [])
+  }, [checkAccess, start])
 
   const handleCloseInternal = () => {
     console.log('[BatchProcessorOrchestrator] Fechamento interno chamado')
@@ -115,15 +139,27 @@ export function BatchProcessorOrchestrator({ leads, onClose, onUpdate }: BatchPr
     // Passo 2: Tarefas automatizadas
     if (showAutomatedDialog && (currentStep === 'unifying-pdf' || currentStep === 'generating-images' || currentStep === 'preliminary-analysis')) {
       return (
-        <AutomatedProgressDialog
-          isOpen={true}
-          progress={progress}
-          currentStep={currentStep}
-          leadName={currentProcessingLead?.nome}
-          sseConnections={sseConnections}
-          leadsBeingProcessed={leadsBeingProcessed}
-          totalLeads={leads.length}
-        />
+        <>
+          {turboModeEnabled && (
+            <TurboModeIndicator 
+              enabled={true}
+              config={turboModeConfig || null}
+              metrics={turboModeMetrics}
+              currentStep={currentStep}
+            />
+          )}
+          <AutomatedProgressDialog
+            isOpen={true}
+            progress={progress}
+            currentStep={currentStep}
+            leadName={currentProcessingLead?.nome}
+            sseConnections={sseConnections}
+            leadsBeingProcessed={leadsBeingProcessed}
+            totalLeads={leads.length}
+            turboModeEnabled={turboModeEnabled}
+            turboModeConfig={turboModeConfig}
+          />
+        </>
       )
     }
 
@@ -220,6 +256,7 @@ export function BatchProcessorOrchestrator({ leads, onClose, onUpdate }: BatchPr
           onClose={handleCloseInternal} 
           count={leads.length}
           stats={stats}
+          turboModeMetrics={turboModeMetrics}
         />
       )
     }

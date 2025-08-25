@@ -286,14 +286,25 @@ export async function GET(request: NextRequest) {
       const actionPayload = reaction.actionPayload as any;
       const emoji = actionPayload?.emoji;
       const textReaction = actionPayload?.textReaction;
+      const action = actionPayload?.action;
+      
+      // Determinar tipo baseado na prioridade: action > text > emoji
+      let type: 'emoji' | 'text' | 'action' = 'emoji';
+      if (action) {
+        type = 'action';
+      } else if (textReaction) {
+        type = 'text';
+      }
       
       return {
         id: reaction.id,
         buttonId: reaction.buttonId,
         messageId: reaction.inboxId,
-        type: textReaction ? "text" : "emoji",
+        type,
         emoji: emoji || null,
         textReaction: textReaction || null,
+        textResponse: textReaction || null, // Alias para compatibilidade
+        action: action || null,
         isActive: true,
         createdAt: reaction.createdAt,
         updatedAt: reaction.updatedAt,
