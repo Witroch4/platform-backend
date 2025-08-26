@@ -265,7 +265,10 @@ class InstagramTemplateConverter {
     const instagramButtons = whatsappButtons.map((btn: any) => ({
       text: btn.reply?.title || btn.title || '',
       id: btn.reply?.id || btn.id || '',
-      payload: btn.reply?.id || btn.id || ''
+      payload: btn.reply?.id || btn.id || '',
+      // Preservar URL e tipo original do botão
+      url: btn.url,
+      originalType: btn.originalType || btn.type
     }));
     
     console.log('[Instagram Converter] Extracted buttons:', JSON.stringify(instagramButtons, null, 2));
@@ -472,16 +475,26 @@ class InstagramTemplateConverter {
   static convertButtonsForInstagram(buttons: any[] = [], ctaUrl?: any): any[] {
     const instagramButtons: any[] = [];
     
-    // Adicionar botões de reply como postback
-    buttons.slice(0, 2).forEach((btn: any) => {
-      instagramButtons.push({
-        type: 'postback',
-        title: InstagramTemplateConverter.truncateText(btn.text || btn.title || '', 20),
-        payload: btn.id || btn.payload || btn.text || ''
-      });
+    // Processar cada botão individualmente respeitando o tipo original
+    buttons.slice(0, 3).forEach((btn: any) => {
+      // Se o botão tem URL e é do tipo URL, criar botão web_url
+      if ((btn.url || btn.originalType === 'url') && btn.url) {
+        instagramButtons.push({
+          type: 'web_url',
+          title: InstagramTemplateConverter.truncateText(btn.text || btn.title || '', 20),
+          url: btn.url
+        });
+      } else {
+        // Caso contrário, criar botão postback
+        instagramButtons.push({
+          type: 'postback',
+          title: InstagramTemplateConverter.truncateText(btn.text || btn.title || '', 20),
+          payload: btn.id || btn.payload || btn.text || ''
+        });
+      }
     });
     
-    // Adicionar CTA URL se disponível
+    // Adicionar CTA URL se disponível e ainda há espaço
     if (ctaUrl?.url && instagramButtons.length < 3) {
       instagramButtons.push({
         type: 'web_url',
@@ -575,6 +588,7 @@ export async function buildInstagramByIntentRaw(intentRaw: string, inboxId: stri
 
   // Aplicar variáveis do inbox (aproveitar lógica existente)
   const builder = new WhatsAppPayloadBuilder();
+  builder.setChannelType('Channel::Instagram'); // Configurar como Instagram
   await builder.setVariablesFromInboxId(inboxId);
 
   // Processar diferentes tipos de template
@@ -671,6 +685,7 @@ export async function buildInstagramByGlobalIntent(intentRaw: string, inboxId: s
 
   // Aplicar variáveis do inbox
   const builder = new WhatsAppPayloadBuilder();
+  builder.setChannelType('Channel::Instagram'); // Configurar como Instagram
   await builder.setVariablesFromInboxId(inboxId);
 
   const t = intent.template;

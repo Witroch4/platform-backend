@@ -307,12 +307,24 @@ export const InteractiveMessageCreator: React.FC<
   ]);
 
   const reviewProps = useMemo(() => {
+    // Otimização: Skip processamento se não há reações
+    if (!state.reactions || state.reactions.length === 0) {
+      console.log('🎯 [InteractiveMessageCreator] No reactions to process - skipping');
+      return {
+        message: state.message,
+        reactions: [],
+        inboxId,
+        onSave: handleSave,
+        onBack: handleBackToConfiguration,
+        editingMessage,
+        disabled: state.saving
+      };
+    }
+    
     // Debug log para verificar o estado das reactions
-    console.log('🔍 [InteractiveMessageCreator] Debug state.reactions:', JSON.stringify(state.reactions, null, 2));
+    console.log('🔍 [InteractiveMessageCreator] Debug state.reactions:', state.reactions.length, 'reactions');
     
     const processedReactions = state.reactions.reduce((acc, r) => {
-      console.log('🔍 [InteractiveMessageCreator] Processing reaction:', JSON.stringify(r, null, 2));
-      
       // Para cada reação, criar entradas separadas para emoji, texto e ação
       if (r.emoji) {
         acc.push({ buttonId: r.buttonId, reaction: { type: 'emoji', value: r.emoji } });
@@ -338,7 +350,7 @@ export const InteractiveMessageCreator: React.FC<
       return acc;
     }, [] as Array<{ buttonId: string; reaction: { type: 'emoji' | 'text' | 'action'; value: string } }>);
     
-    console.log('🎯 [InteractiveMessageCreator] Final processed reactions:', JSON.stringify(processedReactions, null, 2));
+    console.log('🎯 [InteractiveMessageCreator] Final processed reactions:', processedReactions.length, 'processed');
     
     return {
       message: state.message,

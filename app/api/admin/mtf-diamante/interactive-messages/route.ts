@@ -232,7 +232,8 @@ export async function POST(request: NextRequest) {
                 text: message.body.text
               }
             },
-            ...(message.header && {
+            // Instagram Quick Replies e Button Template não usam header nem footer
+            ...(message.header && message.type !== 'quick_replies' && message.type !== 'button_template' && {
               header: {
                 create: {
                   type: message.header.type,
@@ -240,7 +241,7 @@ export async function POST(request: NextRequest) {
                 }
               }
             }),
-            ...(message.footer && {
+            ...(message.footer && message.type !== 'quick_replies' && message.type !== 'button_template' && {
               footer: {
                 create: {
                   text: message.footer.text
@@ -255,7 +256,7 @@ export async function POST(request: NextRequest) {
                 }
               }
             }),
-            ...(message.type === 'button' && message.action && {
+            ...((message.type === 'button' || message.type === 'generic' || message.type === 'button_template' || message.type === 'quick_replies') && message.action && {
               actionReplyButton: {
                 create: {
                   buttons: message.action.buttons || []

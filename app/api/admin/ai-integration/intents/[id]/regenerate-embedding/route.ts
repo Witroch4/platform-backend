@@ -18,6 +18,7 @@ export async function POST(
     // Check if intent exists
     const intent = await prisma.intent.findUnique({
       where: { id },
+      select: { id: true, name: true, description: true },
     });
 
     if (!intent) {

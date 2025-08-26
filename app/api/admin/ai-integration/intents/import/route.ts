@@ -17,6 +17,7 @@ import { auth } from '@/auth';
 import { getPrismaInstance, getRedisInstance } from '@/lib/connections';
 import { embeddingGenerator } from '@/lib/ai-integration/services/embedding-generator';
 import { createLogger } from '@/lib/utils/logger';
+import { Prisma } from '@prisma/client';
 
 const prisma = getPrismaInstance();
 const logger = createLogger('AI-Intents-Import');
@@ -116,7 +117,7 @@ async function generateUniqueSlug(baseSlug: string, userId: string): Promise<str
   let slug = baseSlug;
   let counter = 1;
   while (true) {
-    const existing = await prisma.intent.findFirst({ where: { slug, createdById: userId } });
+  const existing = await prisma.intent.findFirst({ where: { slug, createdById: userId }, select: { id: true } });
     if (!existing) break;
     slug = `${baseSlug}-${counter}`;
     counter++;
@@ -458,12 +459,7 @@ export async function POST(request: NextRequest) {
     for (const intentData of importData.intents) {
       try {
         // Verificar se intenção já existe
-        const existing = await prisma.intent.findFirst({
-          where: {
-            name: intentData.name,
-            createdById: session.user.id
-          }
-        });
+    const existing = await prisma.intent.findFirst({ where: { name: intentData.name, createdById: session.user.id }, select: { id: true, name: true, description: true } });
 
         if (existing && options.conflictResolution === 'skip') {
           result.summary.skippedIntents++;
@@ -500,10 +496,19 @@ export async function POST(request: NextRequest) {
               templateId: templateId,
               similarityThreshold: intentData.similarityThreshold,
               isActive: intentData.isActive,
-              embedding,
               updatedAt: new Date()
             }
           });
+          
+          // Atualizar embedding separadamente usando raw query
+          if (embedding && embedding.length > 0) {
+            const vectorString = `[${embedding.join(',')}]`;
+            await prisma.$executeRawUnsafe(
+              `UPDATE "Intent" SET "embedding" = $1::vector WHERE "id" = $2`,
+              vectorString,
+              updated.id
+            );
+          }
           intentId = updated.id;
           result.summary.updatedIntents++;
           result.details.processedIntents.push({
@@ -524,10 +529,19 @@ export async function POST(request: NextRequest) {
               templateId: templateId,
               similarityThreshold: intentData.similarityThreshold,
               isActive: intentData.isActive,
-              createdById: session.user.id,
-              embedding
+              createdById: session.user.id
             }
           });
+          
+          // Atualizar embedding separadamente usando raw query
+          if (embedding && embedding.length > 0) {
+            const vectorString = `[${embedding.join(',')}]`;
+            await prisma.$executeRawUnsafe(
+              `UPDATE "Intent" SET "embedding" = $1::vector WHERE "id" = $2`,
+              vectorString,
+              created.id
+            );
+          }
           intentId = created.id;
           result.summary.importedIntents++;
           result.details.processedIntents.push({
@@ -551,11 +565,13 @@ export async function POST(request: NextRequest) {
           );
           
           if (newEmbedding) {
-            // Atualizar no banco também
-            await prisma.intent.update({
-              where: { id: intentId },
-              data: { embedding: newEmbedding }
-            });
+            // Atualizar embedding no banco usando raw query
+            const vectorString = `[${newEmbedding.join(',')}]`;
+            await prisma.$executeRawUnsafe(
+              `UPDATE "Intent" SET "embedding" = $1::vector WHERE "id" = $2`,
+              vectorString,
+              intentId
+            );
             result.summary.warnings.push(`Embedding regenerado para intenção "${intentData.name}"`);
           }
         }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -154,11 +154,16 @@ const normalizeMessage = (m: AnyMsg): Mensagem => {
 };
 
 const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
-  const { interactiveMessages, caixas, refreshCaixas, buttonReactions } = useMtfData();
+  // PONTO-CHAVE 1: Pegando as novas funções otimizadas do contexto
+  const { interactiveMessages, caixas, refreshCaixas, buttonReactions, saveMessage, updateMessagesCache, deleteMessage } = useMtfData();
   const [currentView, setCurrentView] = useState<"list" | "create" | "edit">(
     "list"
   );
   const [editingMessage, setEditingMessage] = useState<any>(null);
+  
+  // ✅ FIX: Proteção contra múltiplas operações simultâneas
+  const isProcessingRef = useRef<boolean>(false);
+  
   const mensagens = useMemo<Mensagem[]>(
     () => (interactiveMessages ?? []).map(normalizeMessage),
     [interactiveMessages]
@@ -166,9 +171,25 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
 
   // Debug temporário para verificar o shape dos dados
   useEffect(() => {
-    if (interactiveMessages) {
-      console.log("[DEBUG] interactiveMessages sample:", interactiveMessages[0]);
-      console.log("[DEBUG] mensagens normalizadas:", mensagens[0]);
+    console.log('[MensagensInterativasTab] interactiveMessages atualizado:', {
+      count: interactiveMessages?.length || 0,
+      sample: interactiveMessages?.[0] ? {
+        id: interactiveMessages[0].id,
+        name: interactiveMessages[0].name || interactiveMessages[0].nome,
+        texto: interactiveMessages[0].texto,
+        full: interactiveMessages[0]
+      } : null
+    });
+    
+    if (mensagens.length > 0) {
+      console.log('[MensagensInterativasTab] mensagens normalizadas:', {
+        count: mensagens.length,
+        sample: {
+          id: mensagens[0].id,
+          nome: mensagens[0].nome,
+          texto: mensagens[0].texto
+        }
+      });
     }
   }, [interactiveMessages, mensagens]);
   const loading = !interactiveMessages; // opcional; ou use um Skeleton quando vazio
@@ -261,17 +282,18 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
 
   const handleDelete = async (mensagemId: string) => {
     try {
-      const response = await fetch(
-        `/api/admin/mtf-diamante/interactive-messages/${mensagemId}`,
-        { method: "DELETE" }
-      );
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Falha ao excluir mensagem.");
-      }
+      console.log('🗑️ [MensagensInterativasTab] Iniciando deleção:', { mensagemId });
+      
+      // 1. Chama a API para deletar
+      await deleteMessage(mensagemId);
+      
+      // 2. Atualiza o cache instantaneamente removendo a mensagem
+      updateMessagesCache(mensagemId, 'remove');
+      
+      console.log('✅ [MensagensInterativasTab] Mensagem excluída e cache atualizado');
       toast.success("Mensagem excluída com sucesso!");
-      await refreshCaixas(); // força revalidação imediata
     } catch (error) {
+      console.error('❌ [MensagensInterativasTab] Erro na deleção:', error);
       toast.error((error as Error).message);
     }
   };
@@ -484,12 +506,84 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
     }
   };
 
-  const handleSaveMessage = (message: any) => {
-    toast.success("Mensagem salva com sucesso!");
-    setCurrentView("list");
-    setEditingMessage(null);
-    // Dados serão atualizados automaticamente via SWR
-  };
+  // PONTO-CHAVE 2: Esta função agora aguarda até que a mensagem esteja visível na UI
+  // antes de redirecionar para garantir que o usuário veja a mensagem criada.
+  
+  // Função para criar payload da API
+  const createApiPayload = useCallback((messageData: any, isEdit = false) => {
+    const payload: any = {
+      inboxId: caixaId,  // ✅ Usar "inboxId" conforme esperado pela API
+      message: messageData,
+      reactions: []  // ✅ Adicionar campo "reactions" obrigatório
+    };
+
+    // ✅ FIX: Só adiciona messageId para edições REAIS (não IDs temporários)
+    if (isEdit && messageData.id && !messageData.id.toString().startsWith('temp-')) {
+      payload.messageId = messageData.id;
+      console.log('📝 [createApiPayload] Payload para edição REAL:', {
+        messageId: messageData.id,
+        messageName: messageData.name
+      });
+    } else {
+      console.log('➕ [createApiPayload] Payload para criação:', {
+        messageName: messageData.name,
+        hadTempId: messageData.id?.toString().startsWith('temp-') ? messageData.id : null
+      });
+    }
+
+    return payload;
+  }, [caixaId]);
+
+  const handleSaveMessage = useCallback(async (optimisticUIData: any) => {
+    // ✅ FIX: Proteção contra múltiplas chamadas simultâneas
+    if (isProcessingRef.current) {
+      console.log('🚫 [MensagensInterativasTab] Tentativa de salvar bloqueada - já processando');
+      return;
+    }
+
+    // Marca como processando IMEDIATAMENTE para evitar race conditions
+    isProcessingRef.current = true;
+
+    console.log('💾 [MensagensInterativasTab] handleSaveMessage iniciado:', {
+      optimisticId: optimisticUIData.id,
+      name: optimisticUIData.name,
+      texto: optimisticUIData.texto
+    });
+
+    try {
+      // 1. ✅ FIX: Detecta edição corretamente - ID real vs temporário
+      const isEditMode = !!(optimisticUIData.id && !optimisticUIData.id.toString().startsWith('temp-'));
+      const apiPayload = createApiPayload(optimisticUIData, isEditMode);
+
+      console.log('🔍 [MensagensInterativasTab] Detectando modo de operação:', {
+        messageId: optimisticUIData.id,
+        isTemporary: optimisticUIData.id?.toString().startsWith('temp-'),
+        isEditMode,
+        action: isEditMode ? 'PUT (edição)' : 'POST (criação)'
+      });
+
+      // 2. Salva na API e aguarda o retorno com a mensagem completa
+      const result = await saveMessage(apiPayload, isEditMode);
+      console.log('✅ [MensagensInterativasTab] Mensagem salva na API:', result.message);
+
+      // 3. ⚡ ATUALIZA O CACHE INSTANTANEAMENTE com a mensagem retornada
+      await updateMessagesCache(result.message, isEditMode ? 'update' : 'add');
+      console.log('⚡ [MensagensInterativasTab] Cache do SWR atualizado instantaneamente!');
+
+      // 4. Redireciona IMEDIATAMENTE - a lista já estará atualizada
+      setCurrentView("list");
+      console.log('🎯 [MensagensInterativasTab] Redirecionamento concluído - experiência instantânea!');
+
+      toast.success(isEditMode ? "Mensagem atualizada com sucesso!" : "Mensagem criada com sucesso!");
+
+    } catch (error) {
+      console.error('❌ [MensagensInterativasTab] Erro no handleSaveMessage:', error);
+      toast.error('Erro ao salvar mensagem: ' + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      // ✅ FIX: Sempre liberar o lock, mesmo em caso de erro
+      isProcessingRef.current = false;
+    }
+  }, [saveMessage, updateMessagesCache, createApiPayload]);
 
   const handleBackToList = () => {
     setCurrentView("list");
@@ -523,6 +617,7 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
           </div>
         </div>
 
+        {/* PONTO-CHAVE 3: Passe a função simplificada. */}
         <InteractiveMessageCreator
           inboxId={caixaId}
           onSave={handleSaveMessage}

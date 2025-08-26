@@ -346,7 +346,6 @@ export function InteractivePreview({
             {debouncedMessage.header &&
               debouncedMessage.header.type !== "text" && (
                 <>
-                  {console.log('[InteractivePreview] Rendering header media for:', debouncedMessage.header)}
                   {renderHeaderMedia(debouncedMessage.header)}
                 </>
               )}

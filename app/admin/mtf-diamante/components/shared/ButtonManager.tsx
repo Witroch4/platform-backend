@@ -46,6 +46,7 @@ interface ButtonManagerProps {
   className?: string;
   showReactionConfig?: boolean;
   idPrefix?: string; // optional prefix for generated ids (e.g., ig_)
+  isInstagramQuickReplies?: boolean; // para limitar aos tipos permitidos
 }
 
 // Button type configurations
@@ -132,6 +133,7 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
   className,
   showReactionConfig = true,
   idPrefix,
+  isInstagramQuickReplies = false,
 }) => {
   const [validationErrors, setValidationErrors] = useState<Record<string, string[]>>({});
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
@@ -290,15 +292,25 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuItem onClick={() => addButton('reply')}>
-                <MessageSquare className="h-3 w-3 mr-2" /> Quick Reply
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => addButton('url')}>
-                <ExternalLink className="h-3 w-3 mr-2" /> URL Button
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => addButton('phone_number')}>
-                <Phone className="h-3 w-3 mr-2" /> Phone Button
-              </DropdownMenuItem>
+              {isInstagramQuickReplies ? (
+                // Para Instagram Quick Replies, só mostrar Quick Reply
+                <DropdownMenuItem onClick={() => addButton('reply')}>
+                  <MessageSquare className="h-3 w-3 mr-2" /> Quick Reply
+                </DropdownMenuItem>
+              ) : (
+                // Para outros tipos, mostrar todas as opções
+                <>
+                  <DropdownMenuItem onClick={() => addButton('reply')}>
+                    <MessageSquare className="h-3 w-3 mr-2" /> Quick Reply
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => addButton('url')}>
+                    <ExternalLink className="h-3 w-3 mr-2" /> URL Button
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => addButton('phone_number')}>
+                    <Phone className="h-3 w-3 mr-2" /> Phone Button
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         )}

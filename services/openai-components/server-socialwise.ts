@@ -514,7 +514,7 @@ Gerar títulos curtos e acionáveis para cada serviço jurídico.
       console.error("Erro ao gerar títulos curtos em lote:", error);
       return null;
     }
-  }, agent.warmupDeadlineMs || 250);
+  }, agent.warmupDeadlineMs || 15000);
 }
 
 /**
@@ -572,7 +572,7 @@ Gerar uma resposta curta (introduction_text) e 2–3 botões objetivos para avan
       console.error("Erro ao gerar chat livre com botões:", error);
       return null;
     }
-  }, agent.warmupDeadlineMs || 1000);
+  }, agent.warmupDeadlineMs || 15000);
 }
 
 /**
@@ -637,7 +637,7 @@ Gerar uma pequena introdução e botões para desambiguar a intenção do usuár
       console.error("Erro ao gerar botões de aquecimento:", error);
       return null;
     }
-  }, agent.softDeadlineMs || 300);
+  }, agent.softDeadlineMs || 15000);
 }
 
 /**
@@ -701,5 +701,5 @@ Decida entre roteamento para intenção específica ou chat livre.
       console.error("Erro no Router LLM:", error);
       return null;
     }
-  }, agent.hardDeadlineMs || 400);
+  }, agent.hardDeadlineMs || 15000);
 }

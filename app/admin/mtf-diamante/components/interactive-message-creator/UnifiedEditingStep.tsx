@@ -5,6 +5,7 @@ import { useState, useCallback, useMemo, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useMtfData } from "../../context/MtfDataProvider";
+import { isInstagramChannel } from "@/types/interactive-messages";
 
 // Import refactored components
 import {
@@ -92,27 +93,31 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
   // Get MtfData context for reactions management
   const { caixas } = useMtfData();
 
-  // Update header media files when message header changes
+  // Update header media files when message header changes (debounced)
   useEffect(() => {
-    const mediaUrl = message.header?.media_url || message.header?.mediaUrl || message.header?.content;
-    if (message.header && message.header.type !== "text" && mediaUrl) {
-      setHeaderMediaFiles([
-        {
-          id: "header-media",
-          progress: 100,
-          status: "success",
-          url: mediaUrl,
-          mime_type:
-            message.header.type === "image"
-              ? "image/jpeg"
-              : message.header.type === "video"
-                ? "video/mp4"
-                : "application/pdf",
-        },
-      ]);
-    } else if (!mediaUrl || message.header?.type === "text") {
-      setHeaderMediaFiles([]);
-    }
+    const timeout = setTimeout(() => {
+      const mediaUrl = message.header?.media_url || message.header?.mediaUrl || message.header?.content;
+      if (message.header && message.header.type !== "text" && mediaUrl) {
+        setHeaderMediaFiles([
+          {
+            id: "header-media",
+            progress: 100,
+            status: "success",
+            url: mediaUrl,
+            mime_type:
+              message.header.type === "image"
+                ? "image/jpeg"
+                : message.header.type === "video"
+                  ? "video/mp4"
+                  : "application/pdf",
+          },
+        ]);
+      } else if (!mediaUrl || message.header?.type === "text") {
+        setHeaderMediaFiles([]);
+      }
+    }, 150); // Debounce updates
+
+    return () => clearTimeout(timeout);
   }, [message.header?.content, message.header?.media_url, message.header?.mediaUrl, message.header?.type]);
 
   // Ensure header exists as text on first render
@@ -326,6 +331,12 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
     }));
   }, [reactions]);
 
+  // Determine if we should show Header and Footer sections
+  // For Instagram Quick Replies, header and footer are not supported
+  const isInstagram = isInstagramChannel(channelType);
+  const isQuickReplies = message.type === 'quick_replies';
+  const shouldShowHeaderAndFooter = !(isInstagram && isQuickReplies);
+
   return (
     <div className={cn("space-y-6", className)}>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -341,17 +352,19 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
             validateField={validateField}
           />
 
-          <HeaderSection
-            message={message}
-            onMessageUpdate={onMessageUpdate}
-            disabled={disabled}
-            isFieldValid={isFieldValid}
-            headerMediaFiles={headerMediaFiles}
-            setHeaderMediaFiles={setHeaderMediaFiles}
-            handleValidationError={handleValidationError}
-            validateField={validateField}
-            channelType={channelType || undefined}
-          />
+          {shouldShowHeaderAndFooter && (
+            <HeaderSection
+              message={message}
+              onMessageUpdate={onMessageUpdate}
+              disabled={disabled}
+              isFieldValid={isFieldValid}
+              headerMediaFiles={headerMediaFiles}
+              setHeaderMediaFiles={setHeaderMediaFiles}
+              handleValidationError={handleValidationError}
+              validateField={validateField}
+              channelType={channelType || undefined}
+            />
+          )}
 
           <BodySection
             message={message}
@@ -362,14 +375,16 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
             channelType={channelType || undefined}
           />
 
-          <FooterSection
-            message={message}
-            onMessageUpdate={onMessageUpdate}
-            disabled={disabled}
-            isFieldValid={isFieldValid}
-            validationLimits={VALIDATION_LIMITS}
-            channelType={channelType || undefined}
-          />
+          {shouldShowHeaderAndFooter && (
+            <FooterSection
+              message={message}
+              onMessageUpdate={onMessageUpdate}
+              disabled={disabled}
+              isFieldValid={isFieldValid}
+              validationLimits={VALIDATION_LIMITS}
+              channelType={channelType || undefined}
+            />
+          )}
 
           <CtaUrlSection
             message={message}

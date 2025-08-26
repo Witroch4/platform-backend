@@ -157,13 +157,15 @@ async function checkEmbeddingIndex(): Promise<HealthCheckResult> {
   try {
     const prisma = getPrismaInstance();
     
-    // Check if we have intents with embeddings
-    const intentCount = await (prisma as any).intent.count({
-      where: {
-        isActive: true,
-        embedding: { not: null }
-      }
-    });
+    // Check if we have intents with embeddings using raw SQL
+    // Prisma doesn't handle Unsupported("vector") type filters properly
+    // and may generate invalid casts like embedding::jsonb
+    const countResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
+      SELECT COUNT(*) as count FROM "Intent" 
+      WHERE "isActive" = true AND embedding IS NOT NULL
+    `;
+    
+    const intentCount = countResult.length > 0 ? Number(countResult[0].count) : 0;
     
     const responseTime = Date.now() - startTime;
     

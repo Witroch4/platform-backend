@@ -34,7 +34,7 @@ CREATE TYPE "public"."TemplateScope" AS ENUM ('GLOBAL', 'PRIVATE');
 CREATE TYPE "public"."TemplateStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED');
 
 -- CreateEnum
-CREATE TYPE "public"."ActionType" AS ENUM ('SEND_TEMPLATE', 'ADD_TAG', 'START_FLOW', 'ASSIGN_TO_AGENT');
+CREATE TYPE "public"."ActionType" AS ENUM ('SEND_TEMPLATE', 'ADD_TAG', 'START_FLOW', 'ASSIGN_TO_AGENT', 'BUTTON_REACTION');
 
 -- CreateEnum
 CREATE TYPE "public"."QueueState" AS ENUM ('healthy', 'warning', 'critical', 'paused', 'stopped');
@@ -1218,7 +1218,7 @@ CREATE TABLE "public"."Intent" (
     "description" TEXT,
     "actionType" "public"."IntentActionType" NOT NULL,
     "templateId" TEXT,
-    "embedding" JSONB,
+    "embedding" vector(1536),
     "similarityThreshold" DOUBLE PRECISION NOT NULL DEFAULT 0.8,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "usageCount" INTEGER NOT NULL DEFAULT 0,

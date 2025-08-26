@@ -8,7 +8,8 @@ type Redis = any;
 import { getPrismaInstance } from "@/lib/connections";
 type PrismaClient = ReturnType<typeof getPrismaInstance>;
 import { EmbeddingGenerator } from "./embedding-generator";
-import { SimilaritySearchService } from "./similarity-search";
+// Usamos classification.ts como padrão do sistema
+import { classifyIntent } from "../../socialwise-flow/classification";
 import { IntentClassificationResult } from "../types/intent";
 
 import aiLogger from "../../log";
@@ -40,20 +41,20 @@ export interface ClassificationMetrics {
 
 export class IntentClassifier {
   private embeddingGenerator: EmbeddingGenerator;
-  private similaritySearch: SimilaritySearchService;
+  // Removido similaritySearch - usamos classification.ts diretamente
   private prisma: PrismaClient;
   private redis: Redis;
   private config: IntentClassifierConfig;
 
   constructor(
     embeddingGenerator: EmbeddingGenerator,
-    similaritySearch: SimilaritySearchService,
+    // Removido similaritySearch parameter
     prisma: PrismaClient,
     redis: Redis,
     config: Partial<IntentClassifierConfig> = {}
   ) {
     this.embeddingGenerator = embeddingGenerator;
-    this.similaritySearch = similaritySearch;
+    // Removido this.similaritySearch
     this.prisma = prisma;
     this.redis = redis;
     this.config = {
@@ -103,24 +104,34 @@ export class IntentClassifier {
         removeExtraSpaces: true
       });
 
-      // Step 2: Perform similarity search
-      const searchResult = await this.similaritySearch.searchSimilarIntents({
-        embedding: embedding.values,
-        threshold,
-        limit: this.config.maxCandidates
-      });
+      // Step 2: Use classification.ts as the standard system
+      // Em vez de similarity search, usamos o sistema padrão de classificação
+      const classificationResult = await classifyIntent(
+        text,
+        'default-user', // TODO: passar userId real
+        { 
+          model: 'gpt-4o-mini', 
+          warmupDeadlineMs: 1500,
+          embedipreview: true 
+        }, // AgentConfig básico
+        true, // embedipreview
+        {
+          channelType: 'api',
+          inboxId: 'classifier',
+          traceId
+        }
+      );
 
-      // Step 3: Apply threshold-based decision making
-      const bestMatch =
-        searchResult.candidates.length > 0 ? searchResult.candidates[0] : null;
-      const classified = !!bestMatch;
+      // Convert classification result to our expected format
+      const bestMatch = classificationResult.candidates.length > 0 ? classificationResult.candidates[0] : null;
+      const classified = classificationResult.band === "HARD" || classificationResult.band === "SOFT";
 
       const result: IntentClassificationResult = {
         intent: bestMatch?.name,
-        score: bestMatch?.similarity || 0,
-        candidates: searchResult.candidates.map((candidate) => ({
+        score: classificationResult.score,
+        candidates: classificationResult.candidates.map((candidate: any) => ({
           name: candidate.name,
-          similarity: candidate.similarity,
+          similarity: candidate.score,
         })),
         threshold,
         classified,
@@ -188,7 +199,7 @@ export class IntentClassifier {
   }
 
   /**
-   * Batch classify multiple texts
+   * Batch classify multiple texts using classification.ts
    */
   async classifyBatch(
     texts: string[],
@@ -204,42 +215,37 @@ export class IntentClassifier {
         batchSize: texts.length,
       });
 
-      // Generate embeddings for all texts
-      const embeddings = await Promise.all(
-        texts.map((text) =>
-          this.embeddingGenerator.generateEmbedding(text, {
-            normalize: true,
-            trim: true,
-            lowercase: false,
-            removeExtraSpaces: true
-          })
-        )
-      );
       const results: IntentClassificationResult[] = [];
 
-      // Classify each text
+      // Classify each text using the standard classification system
       for (let i = 0; i < texts.length; i++) {
-        const embedding = embeddings[i];
+        const text = texts[i];
+        
+        const classificationResult = await classifyIntent(
+          text,
+          'default-user', // TODO: passar userId real
+          { 
+            model: 'gpt-4o-mini', 
+            warmupDeadlineMs: 1500,
+            embedipreview: true 
+          },
+          true, // embedipreview
+          {
+            channelType: 'api',
+            inboxId: 'classifier',
+            traceId
+          }
+        );
 
-        // Perform similarity search for this embedding
-        const searchResult = await this.similaritySearch.searchSimilarIntents({
-          embedding: embedding.values,
-          threshold: options.customThreshold || this.config.defaultThreshold,
-          limit: this.config.maxCandidates
-        });
-
-        const bestMatch =
-          searchResult.candidates.length > 0
-            ? searchResult.candidates[0]
-            : null;
-        const classified = !!bestMatch;
+        const bestMatch = classificationResult.candidates.length > 0 ? classificationResult.candidates[0] : null;
+        const classified = classificationResult.band === "HARD" || classificationResult.band === "SOFT";
 
         results.push({
           intent: bestMatch?.name,
-          score: bestMatch?.similarity || 0,
-          candidates: searchResult.candidates.map((candidate) => ({
+          score: classificationResult.score,
+          candidates: classificationResult.candidates.map((candidate: any) => ({
             name: candidate.name,
-            similarity: candidate.similarity,
+            similarity: candidate.score,
           })),
           threshold: options.customThreshold || this.config.defaultThreshold,
           classified,
@@ -446,18 +452,16 @@ export class IntentClassifier {
 }
 
 /**
- * Factory function to create intent classifier
+ * Factory function to create intent classifier (usando classification.ts como padrão)
  */
 export function createIntentClassifier(
   embeddingGenerator: EmbeddingGenerator,
-  similaritySearch: SimilaritySearchService,
   prisma: PrismaClient,
   redis: Redis,
   config: Partial<IntentClassifierConfig> = {}
 ): IntentClassifier {
   return new IntentClassifier(
     embeddingGenerator,
-    similaritySearch,
     prisma,
     redis,
     config

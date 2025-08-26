@@ -156,7 +156,7 @@ export function DialogflowCaixasAgentes({
   const [selectedCaixaId, setSelectedCaixaId] = useState<string | null>(null);
 
   // Usando contexto de dados para cache persistente
-  const { caixas, loadingCaixas: loading, refreshCaixas } = useMtfData();
+  const { caixas, loadingCaixas: loading, refreshCaixas, optimisticAddCaixa } = useMtfData();
 
   // Seleção automática apenas se não houver seleção
   useEffect(() => {
@@ -729,6 +729,9 @@ export function AdicionarCaixaDialog({
     {}
   );
   
+  // Importar a função optimisticAddCaixa do contexto
+  const { optimisticAddCaixa } = useMtfData();
+  
   // Ref para controlar se já foi carregado
   const hasLoaded = useRef(false);
 
@@ -765,18 +768,33 @@ export function AdicionarCaixaDialog({
 
   const handleAdicionarCaixa = async (caixa: Inbox) => {
     const nomeInterno = nomesInternos[caixa.id] || caixa.name;
-    const promise = axios.post("/api/admin/mtf-diamante/dialogflow/caixas", {
+    
+    // Payload para API
+    const apiPayload = {
       nome: nomeInterno,
       accountId: caixa.account_id,
       inboxId: caixa.id.toString(),
       inboxName: caixa.name,
       channelType: caixa.channel_type,
-    });
+    };
+    
+    // Dados otimistas para mostrar na UI imediatamente
+    const optimisticCaixaData = {
+      id: `temp-${Date.now()}`, // ID temporário
+      nome: nomeInterno,
+      accountId: caixa.account_id,
+      inboxId: caixa.id.toString(),
+      inboxName: caixa.name,
+      channelType: caixa.channel_type,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const promise = optimisticAddCaixa(apiPayload, optimisticCaixaData);
+    
     toast.promise(promise, {
       loading: `Adicionando caixa...`,
       success: () => {
-        // ✅ Refresh imediato - o cache já foi invalidado na API
-        onCaixaAdicionada();
         setOpen(false);
         return `Caixa "${nomeInterno}" adicionada com sucesso!`;
       },

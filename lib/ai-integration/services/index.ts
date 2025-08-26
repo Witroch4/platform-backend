@@ -11,7 +11,7 @@ export * from './message-ordering';
 
 // Intent classification system services
 export * from './embedding-generator';
-export * from './similarity-search';
+// export * from './similarity-search'; // Removido - classification.ts é o padrão
 export * from './intent-classifier';
 export * from './threshold-tuner';
 export * from './payload-router';

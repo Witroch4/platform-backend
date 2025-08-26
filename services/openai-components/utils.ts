@@ -4,12 +4,12 @@
 /**
  * Executes an operation with a real AbortController and deadline management
  * @param fn Function to execute with abort signal
- * @param ms Deadline in milliseconds (default: 250ms)
+ * @param ms Deadline in milliseconds (default: 15000ms)
  * @returns Result of the operation or null if aborted
  */
 export async function withDeadlineAbort<T>(
   fn: (signal: AbortSignal) => Promise<T>,
-  ms = 250
+  ms = 15000
 ): Promise<T | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => {

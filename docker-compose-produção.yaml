@@ -39,8 +39,6 @@ x-common-environment: &common-environment
   REDIS_PASSWORD: ${REDIS_PASSWORD}
   REDIS_USE_TLS: ${REDIS_USE_TLS}
   WEBHOOK_URL: ${WEBHOOK_URL}
-  BULL_BOARD_SECRET_TOKEN: ${BULL_BOARD_SECRET_TOKEN}
-  BULL_BOARD_PORT: ${BULL_BOARD_PORT}
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
   STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
   STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
@@ -79,7 +77,7 @@ services:
           - node.role == manager
       resources:
         limits:
-          cpus: "2.0"
+          cpus: "1.5"
           memory: 3024M
       labels:
         - traefik.enable=true
@@ -124,8 +122,8 @@ services:
           - node.role == manager
       resources:
         limits:
-          cpus: "3.0"  # Aumentado para acomodar todos os workers
-          memory: 6G   # Aumentado para acomodar todos os workers
+          cpus: "1.5"  # Aumentado para acomodar todos os workers
+          memory: 3024M   # Aumentado para acomodar todos os workers
     logging: *common-logging
 
 volumes:

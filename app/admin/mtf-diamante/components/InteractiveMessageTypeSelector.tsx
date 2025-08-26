@@ -46,9 +46,9 @@ const INSTAGRAM_TYPES: MessageTypeConfig[] = [
   {
     id: 'quick_replies',
     label: 'Respostas Rápidas',
-    description: 'Botões de resposta rápida com até 13 opções',
+    description: 'Botões de resposta rápida com até 13 botões',
     icon: MessageCircle,
-    features: ['Até 13 opções', 'Título de 20 caracteres', 'Prompt de 1000 caracteres'],
+    features: ['Até 13 botões', 'Título de 20 caracteres', 'Prompt de 1000 caracteres'],
     examples: ['Menu de opções', 'Pesquisa de satisfação', 'Seleção de categoria'],
     complexity: 'Simples',
     supportedChannels: ['instagram'],
@@ -368,7 +368,7 @@ export const InteractiveMessageTypeSelector: React.FC<InteractiveMessageTypeSele
                         {type.instagramLimits.maxOptions && (
                           <li className="flex items-center gap-1">
                             <div className="w-1 h-1 bg-purple-500 rounded-full" />
-                            Opções: máx {type.instagramLimits.maxOptions}
+                            Botões: máx {type.instagramLimits.maxOptions}
                           </li>
                         )}
                       </ul>

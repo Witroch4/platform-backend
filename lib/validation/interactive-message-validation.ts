@@ -62,12 +62,14 @@ export const HeaderSchema = z.object({
   filename: z.string().optional(),
 }).refine((data) => {
   if (data.type === 'text') {
-    return data.content && data.content.length <= MESSAGE_LIMITS.HEADER_TEXT_MAX_LENGTH;
+    // For text headers, allow empty content
+    return !data.content || data.content.length <= MESSAGE_LIMITS.HEADER_TEXT_MAX_LENGTH;
   }
-  return data.content || data.mediaUrl || data.media_url || data.mediaId;
+  // For media headers, content can be optional as well
+  return true;
 }, {
-  message: "Header content is required and must meet type-specific requirements"
-});
+  message: "Header validation failed"
+}).optional();
 
 export const BodySchema = z.object({
   text: z.string()
@@ -92,13 +94,13 @@ export const ButtonActionSchema = z.object({
   type: z.literal('button'),
   buttons: z.array(QuickReplyButtonSchema)
     .min(1, 'At least one button is required')
-    .max(MESSAGE_LIMITS.BUTTON_MAX_COUNT, VALIDATION_MESSAGES.TOO_MANY_BUTTONS)
+    .max(13, 'Maximum 13 buttons allowed') // Use Instagram limit as maximum
     .refine((buttons) => {
       const ids = buttons.map(b => b.id);
       return new Set(ids).size === ids.length;
     }, { message: VALIDATION_MESSAGES.DUPLICATE_BUTTON_ID })
     .refine((buttons) => {
-      const titles = buttons.map(b => b.title);
+      const titles = buttons.map(b => b.title).filter(title => title && title.trim());
       return new Set(titles).size === titles.length;
     }, { message: VALIDATION_MESSAGES.DUPLICATE_BUTTON_TITLE })
 });
@@ -169,6 +171,14 @@ export const InstagramQuickRepliesActionSchema = z.object({
   buttons: z.array(QuickReplyButtonSchema)
     .min(1, 'At least one quick reply is required')
     .max(MESSAGE_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_COUNT, 'Too many quick replies for Instagram')
+    .refine((buttons) => {
+      const ids = buttons.map(b => b.id);
+      return new Set(ids).size === ids.length;
+    }, { message: 'Button IDs must be unique' })
+    .refine((buttons) => {
+      const titles = buttons.map(b => b.title).filter(title => title && title.trim());
+      return new Set(titles).size === titles.length;
+    }, { message: 'Button titles must be unique' })
 });
 
 export const InstagramButtonTemplateActionSchema = z.object({
@@ -568,7 +578,7 @@ export class InteractiveMessageValidator {
 
     // Check for duplicate IDs and titles
     const ids = buttons.map(b => b.id);
-    const titles = buttons.map(b => b.title);
+    const titles = buttons.map(b => b.title).filter(title => title && title.trim());
     
     if (new Set(ids).size !== ids.length) {
       errors.push({
@@ -579,7 +589,7 @@ export class InteractiveMessageValidator {
       });
     }
 
-    if (new Set(titles).size !== titles.length) {
+    if (titles.length > 0 && new Set(titles).size !== titles.length) {
       errors.push({
         field: 'action.buttons',
         code: 'DUPLICATE_VALUE',
@@ -620,6 +630,24 @@ export class InteractiveMessageValidator {
   }
 
   private static validateBusinessRules(message: InteractiveMessage, context: ValidationContext | undefined, errors: ValidationError[], warnings: ValidationError[]) {
+    // Instagram Quick Replies specific validation
+    if (message.type === 'quick_replies') {
+      // Instagram Quick Replies não precisam de header nem footer
+      // Não adicionar erros se header/footer estiverem ausentes
+      
+      // Validar se tem ação de botões (para quick_replies, a ação deve ter buttons)
+      if (!message.action || !('buttons' in message.action) || !message.action.buttons) {
+        errors.push({
+          field: 'action',
+          code: 'MISSING_REQUIRED_ACTION',
+          message: 'Quick Replies requer configuração de botões',
+          severity: 'error'
+        });
+      }
+      
+      return; // Sair cedo para Instagram Quick Replies
+    }
+    
     // Message type specific validation
     if (message.type === 'button' && (!message.action || message.action.type !== 'button')) {
       errors.push({

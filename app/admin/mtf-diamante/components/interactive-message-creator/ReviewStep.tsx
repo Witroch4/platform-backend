@@ -1,7 +1,7 @@
 'use client'
 
 import type React from 'react'
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -100,12 +100,14 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
   disabled = false,
   className
 }) => {
-  const { optimisticUpdateMessage, refreshCaixas } = useMtfData();
   const [saveState, setSaveState] = useState<SaveState>({
     saving: false,
     success: false,
     error: null
   })
+
+  // 🛡️ Proteção contra múltiplas chamadas simultâneas
+  const isProcessingRef = useRef(false)
 
   // Extract buttons from message action
   const buttons = useMemo(() => {
@@ -138,13 +140,20 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
 
   // Handle save operation with unified API
   const handleSave = useCallback(async () => {
-    if (saveState.saving) return
+    // 🛡️ Proteção contra múltiplas chamadas simultâneas
+    if (saveState.saving || isProcessingRef.current) {
+      console.log('🚫 [ReviewStep] Tentativa de salvar bloqueada - já processando');
+      return;
+    }
+
+    // Marca como processando IMEDIATAMENTE para evitar race conditions
+    isProcessingRef.current = true;
 
     setSaveState({
       saving: true,
       success: false,
       error: null
-    })
+    });
 
     try {
       // Normalize action for API expectations (flatten CTA URL)
@@ -162,58 +171,8 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
         }
       }
 
-      // Prepare the unified save payload
-      const savePayload = {
-        inboxId,
-        message: {
-          name: message.name,
-          type: message.type,
-          header: message.header ? {
-            type: message.header.type,
-            content: message.header.type === 'text' ? message.header.content : (message.header.media_url || message.header.content),
-            media_url: message.header.type !== 'text' ? message.header.media_url || message.header.content : undefined,
-            filename: message.header.filename
-          } : undefined,
-          body: {
-            text: message.body.text
-          },
-          footer: message.footer ? {
-            text: message.footer.text
-          } : undefined,
-          action: normalizedAction
-        },
-        // Coexistência: permitir enviar emoji, texto e action para o mesmo botão
-        reactions: reactions.flatMap(r => {
-          const out: Array<{ buttonId: string; reaction: { type: 'emoji' | 'text' | 'action'; value: string } }> = []
-          if (r.reaction?.type === 'emoji') {
-            out.push({ buttonId: r.buttonId, reaction: { type: 'emoji', value: r.reaction.value } })
-          }
-          if (r.reaction?.type === 'text') {
-            out.push({ buttonId: r.buttonId, reaction: { type: 'text', value: r.reaction.value } })
-          }
-          if (r.reaction?.type === 'action') {
-            out.push({ buttonId: r.buttonId, reaction: { type: 'action', value: r.reaction.value } })
-          }
-          return out
-        })
-      }
-
-      // Determine API endpoint and method
-      const url = editingMessage 
-        ? '/api/admin/mtf-diamante/messages-with-reactions'
-        : '/api/admin/mtf-diamante/messages-with-reactions'
-      
-      const method = editingMessage ? 'PUT' : 'POST'
-      
-      // Add messageId for updates
-      if (editingMessage) {
-        (savePayload as any).messageId = editingMessage.id
-      }
-
-      console.log('[ReviewStep] Saving with payload:', JSON.stringify(savePayload, null, 2))
-
-      // 🚀 OPTIMISTIC UPDATE: Atualizar UI imediatamente
-      const optimisticData = {
+      // 2. O objeto SIMPLIFICADO que será usado para a UI imediata.
+      const optimisticUIData = {
         id: editingMessage?.id || `temp-${Date.now()}`,
         name: message.name,
         type: message.type,
@@ -221,6 +180,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
         body: message.body,
         footer: message.footer,
         action: normalizedAction,
+        isActive: true, // Adiciona a propriedade obrigatória
         interactiveContent: {
           header: message.header,
           body: message.body,
@@ -238,129 +198,51 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
           titulo: btn.title
         })) || []
       };
-      
-      optimisticUpdateMessage(optimisticData, !!editingMessage);
-      
-      console.log('🚀 [ReviewStep] Optimistic update applied, making API call...');
 
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(savePayload),
-      })
-
-      if (!response.ok) {
-        console.error('❌ [ReviewStep] Response not ok:', {
-          status: response.status,
-          statusText: response.statusText,
-          headers: Object.fromEntries(response.headers.entries())
-        });
-        
-        let errorData: any = {};
-        try {
-          const responseText = await response.text();
-          console.error('❌ [ReviewStep] Raw error response:', responseText);
-          
-          if (responseText) {
-            errorData = JSON.parse(responseText);
-          }
-        } catch (parseError) {
-          console.error('❌ [ReviewStep] Failed to parse error response:', parseError);
-          errorData = { error: `Server error: ${response.status} ${response.statusText}` };
-        }
-        
-        // 🔄 REVERT OPTIMISTIC UPDATE: Reverter em caso de erro
-        console.log('❌ [ReviewStep] API failed, reverting optimistic update...');
-        await refreshCaixas(); // Recarregar dados do servidor
-        throw new Error(errorData.error || `Failed to ${editingMessage ? 'update' : 'save'} message`)
+      console.log('🚀 [ReviewStep] Delegando salvamento para componente pai via onSave callback');
+      
+      // ✅ CORREÇÃO: Delegar para o componente pai em vez de chamar a API diretamente
+      // Isso evita double-submit pois só o MensagensInterativasTab.handleSaveMessage chama a API
+      setSaveState({ saving: false, success: true, error: null });
+      toast.success(editingMessage ? 'Mensagem atualizada!' : 'Mensagem salva!');
+      
+      // Sinaliza para o componente pai que pode fechar a tela.
+      if (onSave) {
+        onSave(optimisticUIData); 
       }
 
-      // Parse successful response
-      let result: any;
-      try {
-        const responseText = await response.text();
-        console.log('✅ [ReviewStep] Raw success response:', responseText);
-        
-        if (!responseText) {
-          throw new Error('Empty response from server');
-        }
-        
-        result = JSON.parse(responseText);
-      } catch (parseError) {
-        console.error('❌ [ReviewStep] Failed to parse success response:', parseError);
-        // 🔄 REVERT OPTIMISTIC UPDATE: Reverter em caso de erro
-        console.log('❌ [ReviewStep] Parse failed, reverting optimistic update...');
-        await refreshCaixas(); // Recarregar dados do servidor
-        throw new Error('Invalid response format from server');
-      }
-      
-      if (!result.success) {
-        // 🔄 REVERT OPTIMISTIC UPDATE: Reverter em caso de erro
-        console.log('❌ [ReviewStep] Save failed, reverting optimistic update...');
-        await refreshCaixas(); // Recarregar dados do servidor
-        throw new Error(result.error || 'Save operation failed')
-      }
-
-      // ✅ SUCCESS: Sincronizar com dados reais do servidor
-      console.log('✅ [ReviewStep] Save successful, syncing with server data...');
-      await refreshCaixas(); // Garantir sincronização com dados reais
-
-      // Success!
-      setSaveState({
-        saving: false,
-        success: true,
-        error: null
-      })
-
-      const successMessage = editingMessage 
-        ? 'Interactive message updated successfully!' 
-        : 'Interactive message saved successfully!'
-      
-      toast.success(successMessage)
-
-      // Call onSave callback if provided
-      if (onSave && result.message) {
-        onSave(result.message.content || result.message)
-      }
-
-      // Auto-hide success state after 3 seconds
-      setTimeout(() => {
-        setSaveState(prev => ({ ...prev, success: false }))
-      }, 3000)
+      // Libera o lock de processamento após sucesso
+      isProcessingRef.current = false;
 
     } catch (error) {
-      console.error('[ReviewStep] Save error:', error)
+      console.error('[ReviewStep] Falha ao salvar:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Um erro inesperado ocorreu.';
+      setSaveState({ saving: false, success: false, error: errorMessage });
+      toast.error(errorMessage);
       
-      // 🔄 REVERT OPTIMISTIC UPDATE: Reverter em caso de erro
-      console.log('❌ [ReviewStep] Unexpected error, reverting optimistic update...');
-      try {
-        await refreshCaixas(); // Recarregar dados do servidor
-      } catch (refreshError) {
-        console.error('Failed to refresh data after error:', refreshError);
-      }
-      
-      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred'
-      
-      setSaveState({
-        saving: false,
-        success: false,
-        error: errorMessage
-      })
-
-      toast.error(errorMessage)
+      // Libera o lock de processamento após erro
+      isProcessingRef.current = false;
     }
-  }, [message, reactions, inboxId, editingMessage, onSave, saveState.saving, optimisticUpdateMessage, refreshCaixas])
+  }, [
+    message, reactions, inboxId, editingMessage, 
+    onSave, saveState.saving
+  ]);
 
   // Validation check
   const canSave = useMemo(() => {
     return Boolean(
       message.name?.trim() && 
       message.body?.text?.trim() && 
-      !saveState.saving
+      !saveState.saving &&
+      !isProcessingRef.current // Adiciona verificação do ref
     )
   }, [message.name, message.body?.text, saveState.saving])
+
+  // Função para limpar o estado de erro e permitir ao usuário continuar
+  const clearError = useCallback(() => {
+    setSaveState(prev => ({ ...prev, error: null }));
+    isProcessingRef.current = false; // Garante que o lock seja liberado
+  }, []);
 
   return (
     <div className={cn("space-y-6", className)}>
@@ -390,8 +272,26 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
       {saveState.error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            {saveState.error}
+          <AlertDescription className="flex items-center justify-between">
+            <span>{saveState.error}</span>
+            <div className="flex items-center gap-2 ml-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={clearError}
+                className="text-xs"
+              >
+                Limpar Erro
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onBack}
+                className="text-xs"
+              >
+                Voltar
+              </Button>
+            </div>
           </AlertDescription>
         </Alert>
       )}
@@ -685,18 +585,6 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
             )}
           </Button>
 
-          {/* Send for Analysis Button (if not editing) */}
-          {!editingMessage && (
-            <Button
-              variant="secondary"
-              onClick={handleSave}
-              disabled={!canSave || disabled}
-              className="flex items-center gap-2"
-            >
-              <Send className="h-4 w-4" />
-              Send for Analysis
-            </Button>
-          )}
         </div>
       </div>
     </div>

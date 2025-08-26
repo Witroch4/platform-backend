@@ -167,7 +167,7 @@ function formatMessage(template: any) {
         text: interactive.header.content || "",
         media_url: interactive.header.type !== 'text' ? interactive.header.content || "" : "",
         content: interactive.header.content || ""
-      } : undefined,
+      } : null, // ✅ FIX: Retornar null em vez de undefined para headers vazios
       body: {
         text: interactive.body?.text || ''
       },
@@ -434,7 +434,13 @@ export async function POST(request: NextRequest) {
                   text: message.body.text
                 }
               },
-              ...(message.header && {
+              // Instagram Quick Replies e Button Template não usam header nem footer
+              // ✅ FIX: Só criar header se tiver conteúdo real (não vazio)
+              ...(message.header && 
+                  message.type !== 'quick_replies' && 
+                  message.type !== 'button_template' && 
+                  (message.header.content || message.header.media_url || message.header.mediaUrl || message.header.text) && 
+                  (message.header.content || message.header.media_url || message.header.mediaUrl || message.header.text)?.trim() !== "" && {
                 header: {
                   create: {
                     type: message.header.type,
@@ -448,7 +454,7 @@ export async function POST(request: NextRequest) {
                   },
                 },
               }),
-              ...(message.footer && {
+              ...(message.footer && message.type !== 'quick_replies' && message.type !== 'button_template' && {
                 footer: {
                   create: {
                     text: message.footer.text
@@ -463,7 +469,7 @@ export async function POST(request: NextRequest) {
                   }
                 }
               }),
-              ...((message.type === 'button' || message.type === 'generic' || message.type === 'button_template') && message.action && {
+              ...((message.type === 'button' || message.type === 'generic' || message.type === 'button_template' || message.type === 'quick_replies') && message.action && {
                 actionReplyButton: {
                   create: {
                     buttons: message.action.buttons || []
@@ -781,8 +787,13 @@ export async function PUT(request: NextRequest) {
           });
         }
 
-        // Update header
-        if (message.header) {
+        // Update header (não salvar para Instagram Quick Replies e Button Template)
+        // ✅ FIX: Só atualizar header se tiver conteúdo real (não vazio)
+        if (message.header && 
+            message.type !== 'quick_replies' && 
+            message.type !== 'button_template' &&
+            (message.header.content || message.header.media_url || message.header.mediaUrl || message.header.text) &&
+            (message.header.content || message.header.media_url || message.header.mediaUrl || message.header.text)?.trim() !== "") {
           if (updatedTemplate.interactiveContent.header) {
             await tx.header.update({
               where: { id: updatedTemplate.interactiveContent.header.id },
@@ -800,10 +811,18 @@ export async function PUT(request: NextRequest) {
               }
             });
           }
+        } else if (message.header && 
+                   (!(message.header.content || message.header.media_url || message.header.mediaUrl || message.header.text) ||
+                    (message.header.content || message.header.media_url || message.header.mediaUrl || message.header.text)?.trim() === "") &&
+                   updatedTemplate.interactiveContent.header) {
+          // ✅ FIX: Remover header se foi deixado vazio
+          await tx.header.delete({
+            where: { id: updatedTemplate.interactiveContent.header.id }
+          });
         }
 
-        // Update footer
-        if (message.footer) {
+        // Update footer (não salvar para Instagram Quick Replies e Button Template)
+        if (message.footer && message.type !== 'quick_replies' && message.type !== 'button_template') {
           if (updatedTemplate.interactiveContent.footer) {
             await tx.footer.update({
               where: { id: updatedTemplate.interactiveContent.footer.id },
@@ -847,7 +866,7 @@ export async function PUT(request: NextRequest) {
                 interactiveContentId
               }
             });
-          } else if (message.type === 'button' || message.type === 'generic' || message.type === 'button_template') {
+          } else if (message.type === 'button' || message.type === 'generic' || message.type === 'button_template' || message.type === 'quick_replies') {
             await tx.actionReplyButton.create({
               data: {
                 buttons: message.action.buttons || [],

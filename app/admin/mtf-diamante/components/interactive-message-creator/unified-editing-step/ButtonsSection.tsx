@@ -36,6 +36,29 @@ export const ButtonsSection: React.FC<ButtonsSectionProps> = ({
            instagramTemplate.type === 'button_template';
   }, [channelType, instagramTemplate.type]);
 
+  // Check if this is Instagram Quick Replies
+  const isInstagramQuickReplies = React.useMemo(() => {
+    return channelType === 'Channel::Instagram' && 
+           (message.type === 'quick_replies' || instagramTemplate.type === 'quick_replies');
+  }, [channelType, message.type, instagramTemplate.type]);
+
+  // Get max buttons count based on Instagram type
+  const getMaxButtons = React.useMemo(() => {
+    if (channelType !== 'Channel::Instagram') {
+      return validationLimits.BUTTON_MAX_COUNT;
+    }
+    
+    if (isInstagramQuickReplies) {
+      return 13; // Instagram Quick Replies limit
+    }
+    
+    if (isInstagramButtonTemplate) {
+      return 3; // Instagram Button Template limit
+    }
+    
+    return 3; // Default Instagram limit for other types
+  }, [channelType, isInstagramQuickReplies, isInstagramButtonTemplate, validationLimits.BUTTON_MAX_COUNT]);
+
   // Instagram Button Template validation
   const instagramButtonValidation = React.useMemo(() => {
     if (!isInstagramButtonTemplate) return null;
@@ -50,9 +73,9 @@ export const ButtonsSection: React.FC<ButtonsSectionProps> = ({
       textLength: bodyLength,
       maxTextLength: 640,
       hasInvalidHeader: hasHeader,
-      buttonCountValid: buttonCount >= 1 && buttonCount <= 3,
+      buttonCountValid: buttonCount >= 1 && buttonCount <= getMaxButtons,
       buttonCount,
-      maxButtons: 3
+      maxButtons: getMaxButtons
     };
   }, [isInstagramButtonTemplate, message.body?.text, message.header, buttons.length]);
 
@@ -69,7 +92,7 @@ export const ButtonsSection: React.FC<ButtonsSectionProps> = ({
       <CardHeader className="pb-4">
         <CardTitle className="text-base">Interactive Buttons</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Add up to {isInstagramButtonTemplate ? 3 : validationLimits.BUTTON_MAX_COUNT} interactive buttons
+          Add up to {getMaxButtons} interactive buttons
         </p>
         
         {/* Instagram Template Information */}
@@ -95,9 +118,10 @@ export const ButtonsSection: React.FC<ButtonsSectionProps> = ({
             // Convert array format to individual calls if needed
             reactionsArray.forEach(reaction => onReactionChange(reaction));
           }}
-          maxButtons={isInstagramButtonTemplate ? 3 : validationLimits.BUTTON_MAX_COUNT}
+          maxButtons={getMaxButtons}
           disabled={disabled}
           idPrefix={channelType === 'Channel::Instagram' ? 'ig_' : ''}
+          isInstagramQuickReplies={isInstagramQuickReplies}
         />
       </CardContent>
     </Card>

@@ -9,9 +9,11 @@ import { getPublicMediaUrl, isMetaMediaUrl } from '../whatsapp-media';
  * alinhada com o schema Prisma do projeto.
  * 
  * Agora com suporte integrado para resolução de variáveis MTF Diamante.
+ * Também suporta Instagram Quick Replies com validações específicas.
  */
 export class WhatsAppPayloadBuilder {
   private variablesResolver?: WhatsAppVariablesResolver;
+  private channelType: string = 'Channel::WhatsApp'; // Default para WhatsApp
 
   /**
    * Configura o resolvedor de variáveis para este builder
@@ -19,6 +21,14 @@ export class WhatsAppPayloadBuilder {
   setVariablesResolver(resolver: WhatsAppVariablesResolver): void {
     this.variablesResolver = resolver;
     console.log('[WhatsApp PayloadBuilder] Variables resolver configured');
+  }
+
+  /**
+   * Configura o tipo de canal (WhatsApp ou Instagram)
+   */
+  setChannelType(channelType: string): void {
+    this.channelType = channelType;
+    console.log(`[WhatsApp PayloadBuilder] Channel type set to: ${channelType}`);
   }
 
   /**
@@ -69,9 +79,10 @@ export class WhatsAppPayloadBuilder {
     };
 
     if (processedContent.header) {
-      interactivePayload.header = this._buildHeader(
-        processedContent.header
-      );
+      const builtHeader = this._buildHeader(processedContent.header);
+      if (builtHeader) {
+        interactivePayload.header = builtHeader;
+      }
     }
 
     if (processedContent.footer?.text) {
@@ -247,11 +258,19 @@ export class WhatsAppPayloadBuilder {
 
   private _buildHeader(dbHeader: any): any {
     const header: any = { type: dbHeader.type };
+    const isInstagram = this.channelType === 'Channel::Instagram';
 
     switch (dbHeader.type) {
       case "text":
-        if (!dbHeader.content)
-          throw new Error("Header de texto requer o campo 'content'.");
+        // Para Instagram Quick Replies, header content é opcional
+        if (!dbHeader.content) {
+          if (isInstagram) {
+            console.log('[WhatsApp PayloadBuilder] Instagram: skipping empty header content');
+            return null; // Retorna null para não incluir header vazio no payload
+          } else {
+            throw new Error("Header de texto requer o campo 'content'.");
+          }
+        }
         header.text = dbHeader.content;
         break;
       case "image":
@@ -280,13 +299,31 @@ export class WhatsAppPayloadBuilder {
       );
     }
     return {
-      buttons: dbAction.buttons.map((btn: any) => ({
-        type: "reply",
-        reply: {
-          id: btn.id,
-          title: btn.title,
-        },
-      })),
+      buttons: dbAction.buttons.map((btn: any) => {
+        // Preservar o tipo original do botão
+        if (btn.type === "url" && btn.url) {
+          // Botão URL (Instagram web_url ou similar)
+          return {
+            type: "reply",
+            reply: {
+              id: btn.id,
+              title: btn.title,
+            },
+            // Preservar URL no payload para conversão posterior
+            url: btn.url,
+            originalType: "url"
+          };
+        } else {
+          // Botão reply padrão
+          return {
+            type: "reply",
+            reply: {
+              id: btn.id,
+              title: btn.title,
+            },
+          };
+        }
+      }),
     };
   }
 

@@ -413,7 +413,7 @@ export async function PUT(
             interactiveContentId,
           },
         });
-      } else if (message.type === "button") {
+      } else if (message.type === "button" || message.type === "generic" || message.type === "button_template" || message.type === "quick_replies") {
         await getPrismaInstance().actionReplyButton.create({
           data: {
             buttons: message.action.buttons || [],

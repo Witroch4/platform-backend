@@ -33,6 +33,7 @@ import { auth } from '@/auth';
 import { getPrismaInstance, getRedisInstance } from '@/lib/connections';
 import { embeddingGenerator } from '@/lib/ai-integration/services/embedding-generator';
 import { createLogger } from '@/lib/utils/logger';
+import { Prisma } from '@prisma/client';
 
 const prisma = getPrismaInstance();
 const logger = createLogger('AI-Intents');
@@ -55,7 +56,7 @@ async function generateUniqueSlug(baseSlug: string, userId: string): Promise<str
   let slug = baseSlug;
   let counter = 1;
   while (true) {
-    const existing = await prisma.intent.findFirst({ where: { slug, createdById: userId } });
+  const existing = await prisma.intent.findFirst({ where: { slug, createdById: userId }, select: { id: true } });
     if (!existing) break;
     slug = `${baseSlug}-${counter}`;
     counter++;
@@ -267,9 +268,13 @@ export async function POST(request: NextRequest) {
 
   try {
     // Se já existe do mesmo usuário → atualiza (com re-embed se descrição mudou)
-    const existingForUser = await prisma.intent.findFirst({ where: { name, createdById: session.user.id } });
+  const existingForUser = await prisma.intent.findFirst({ where: { name, createdById: session.user.id }, select: { id: true, name: true, description: true, createdById: true, templateId: true } });
     if (existingForUser) {
-      let embedding: any = existingForUser.embedding;
+      // Buscar embedding usando raw query
+      const intentWithEmbedding: Array<{ embedding: number[] | null }> = await prisma.$queryRaw(
+        Prisma.sql`SELECT "embedding" FROM "Intent" WHERE "id" = ${existingForUser.id}`
+      );
+      let embedding: any = intentWithEmbedding[0]?.embedding || null;
       const shouldReembed = (description && description !== (existingForUser.description || ''));
 
       if (shouldReembed) {
@@ -302,16 +307,26 @@ export async function POST(request: NextRequest) {
           templateId: templateId ?? existingForUser.templateId,
           actionType: templateId ? 'TEMPLATE' : 'TEXT',
           isActive: true,
-          embedding,
         },
         select: { id: true, name: true, description: true, similarityThreshold: true, actionType: true, templateId: true, createdAt: true },
       });
+      
+      // Atualizar embedding separadamente usando raw query
+      if (embedding && embedding.length > 0) {
+        const vectorString = `[${embedding.join(',')}]`;
+        await prisma.$executeRawUnsafe(
+          `UPDATE "Intent" SET "embedding" = $1::vector WHERE "id" = $2`,
+          vectorString,
+          existingForUser.id
+        );
+      }
+      
       logger.info('Intent atualizada com embedding', { id: updated.id, hasEmbedding: Array.isArray(embedding) });
       return NextResponse.json({ intent: updated, updated: true }, { status: 200 });
     }
 
     // Nome usado por outro usuário?
-    const anyWithSameName = await prisma.intent.findUnique({ where: { name } }).catch(() => null);
+  const anyWithSameName = await prisma.intent.findUnique({ where: { name }, select: { id: true, createdById: true } }).catch(() => null);
     if (anyWithSameName && anyWithSameName.createdById !== session.user.id) {
       return NextResponse.json({ error: 'Já existe uma intenção global com este nome' }, { status: 409 });
     }
@@ -342,10 +357,19 @@ export async function POST(request: NextRequest) {
         similarityThreshold,
         isActive: true,
         createdById: session.user.id,
-        embedding,
       },
       select: { id: true, name: true, description: true, similarityThreshold: true, actionType: true, templateId: true, createdAt: true },
     });
+
+    // Atualizar embedding separadamente usando raw query
+    if (embedding && embedding.length > 0) {
+      const vectorString = `[${embedding.join(',')}]`;
+      await prisma.$executeRawUnsafe(
+        `UPDATE "Intent" SET "embedding" = $1::vector WHERE "id" = $2`,
+        vectorString,
+        created.id
+      );
+    }
 
     if (pkgForCache) {
       await saveEmbeddingsToRedis(created.id, pkgForCache);
@@ -385,12 +409,13 @@ export async function DELETE(request: NextRequest) {
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id obrigatório' }, { status: 400 });
 
-  const intent = await prisma.intent.findUnique({ where: { id } });
+  const intent = await prisma.intent.findUnique({ where: { id }, select: { id: true, createdById: true, name: true, slug: true } });
   if (!intent || intent.createdById !== session.user.id) {
     return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
   }
 
-  await prisma.intent.delete({ where: { id } });
+  // Use raw SQL to avoid Prisma trying to deserialize vector column
+  await prisma.$executeRaw`DELETE FROM "Intent" WHERE id = ${id}`;
   await deleteEmbeddingsFromRedis(id);
 
   logger.info('Intent deletada', { id, name: intent.name, slug: intent.slug });
@@ -407,7 +432,7 @@ export async function PATCH(request: NextRequest) {
   const id = String(body?.id || '').trim();
   if (!id) return NextResponse.json({ error: 'id obrigatório' }, { status: 400 });
 
-  const intent = await prisma.intent.findUnique({ where: { id } });
+  const intent = await prisma.intent.findUnique({ where: { id }, select: { id: true, createdById: true, name: true, description: true } });
   if (!intent || intent.createdById !== session.user.id) {
     return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
   }
@@ -426,7 +451,7 @@ export async function PATCH(request: NextRequest) {
 
   // Enforce unique name se mudou
   if (nextNameRaw && nextNameRaw !== intent.name) {
-    const conflict = await prisma.intent.findUnique({ where: { name: nextNameRaw } }).catch(() => null);
+    const conflict = await prisma.intent.findUnique({ where: { name: nextNameRaw }, select: { id: true } }).catch(() => null);
     if (conflict && conflict.id !== id) {
       return NextResponse.json({ error: 'Já existe uma intenção com este nome' }, { status: 409 });
     }

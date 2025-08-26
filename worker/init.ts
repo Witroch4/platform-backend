@@ -4,7 +4,9 @@ import {
   initLeadsChatwitWorker, 
   // initMtfDiamanteAsyncWorker, // Temporariamente desabilitado
   initInstagramTranslationWorker,
-  initParentWorker 
+  initializeInstagramTranslationWorker,  // Adicionado
+  initParentWorker,
+  initializeLegacyWorkers
 } from './webhook.worker';
 import { initializeExistingAgendamentos } from '../lib/scheduler-bullmq';
 import { initJobs } from './webhook.worker';
@@ -68,22 +70,16 @@ export async function initializeWorkers() {
     // LEGACY WORKERS (BACKWARD COMPATIBILITY)
     // ============================================================================
 
-    // Inicializa o worker de agendamento (agora é feito no bull-board-server.ts)
-    // await initAgendamentoWorker();
+    // Primeiro, inicializa todos os workers legacy de uma vez
+    await initializeLegacyWorkers();
+    console.log('[Worker] ✅ Legacy Workers inicializados');
 
-    // Inicializa o worker de manuscrito
-    await initManuscritoWorker();
-    console.log('[Worker] ✅ Worker de Manuscrito inicializado');
-    
-    // Inicializa o worker de leads-chatwit
-    await initLeadsChatwitWorker();
-    console.log('[Worker] ✅ Worker de Leads Chatwit inicializado');
-
-    // Inicializa o worker assíncrono MTF Diamante
-    // await initMtfDiamanteAsyncWorker(); // Temporariamente desabilitado
+    // ============================================================================
+    // ADDITIONAL WORKERS
+    // ============================================================================
 
     // Inicializa o worker de tradução Instagram
-    await initInstagramTranslationWorker();
+    await initializeInstagramTranslationWorker();
     console.log('[Worker] ✅ Worker de Tradução Instagram inicializado');
 
     // ============================================================================

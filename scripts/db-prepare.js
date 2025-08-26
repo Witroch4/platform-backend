@@ -176,11 +176,23 @@ async function adjustEmbeddingColumnAndIndex(prisma, dims) {
   const typ = String(col[0].typ || "");
   if (!/vector/i.test(typ)) {
     console.log(`🛠️ Ajustando tipo de "embedding" para vector(${dims})... (era: ${typ})`);
+    
+    // Se for jsonb, primeiro converter para text, depois para vector
+    if (typ.toLowerCase() === 'jsonb') {
+      console.log("🔄 Convertendo jsonb → text → vector...");
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "Intent"
+        ALTER COLUMN "embedding" TYPE text USING "embedding"::text
+      `);
+      console.log("✅ Convertido para text.");
+    }
+    
+    // Agora converter para vector
     await prisma.$executeRawUnsafe(`
       ALTER TABLE "Intent"
       ALTER COLUMN "embedding" TYPE vector(${dims}) USING "embedding"::vector
     `);
-    console.log("✅ Tipo ajustado.");
+    console.log("✅ Tipo ajustado para vector.");
   } else {
     // confirmar dimensão
     const dimRow = await prisma.$queryRawUnsafe(`

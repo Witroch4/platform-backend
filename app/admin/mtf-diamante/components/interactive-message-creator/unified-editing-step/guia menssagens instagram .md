@@ -7,7 +7,12 @@
 
 Este guia apresenta todas as estruturas de mensagens disponíveis na Instagram API, com foco em Next.js. Cada tipo de mensagem possui limites específicos e formatos obrigatórios.
 
-## 🔧 Configuração Base
+## 🔧 Conf**Limites:**
+- **Texto do prompt (campo text)**: 1000 caracteres - mesmo limite de mensagem de texto
+- **Máximo de quick replies**: 13 por mensagem
+- **Caracteres por botão**: 20 (truncado após este limite)
+- **Suporte**: Apenas texto simples
+- **Disponibilidade**: Não funciona em desktopão Base
 
 ### URL Base
 ```javascript
@@ -285,10 +290,10 @@ const mediaShareMessage: MediaShareMessage = {
 ```
 
 ### 8. Quick Replies (Respostas Rápidas)
-message_format: 'QUICK_REPLIES'
+message_format: 'esse é o QUICK_REPLIES'
 
 **Limites:**
-- **Texto do prompt (campo text)**: 1000 bytes (UTF-8) - mesmo limite de mensagem de texto
+- **Texto do prompt (campo text)**: 1000 Caracters - mesmo limite de mensagem de texto
 - **Máximo de quick replies**: 13 por mensagem
 - **Caracteres por botão**: 20 (truncado após este limite)
 - **Suporte**: Apenas texto simples

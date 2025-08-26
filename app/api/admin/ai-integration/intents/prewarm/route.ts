@@ -21,23 +21,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'intentIds deve ser um array não vazio' }, { status: 400 });
     }
 
-    // Get intents with embeddings
-    const intents = await prisma.intent.findMany({
-      where: {
-        id: { in: intentIds },
-        createdById: session.user.id,
-        isActive: true,
-        embedding: { not: Prisma.JsonNull }
-      },
-      select: {
-        id: true,
-        name: true,
-        embedding: true,
-        slug: true
-      }
-    });
+    // Get intents with embeddings using raw query
+    const intentsWithEmbedding: Array<{
+      id: string;
+      name: string;
+      slug: string;
+      embedding: number[] | null;
+    }> = await prisma.$queryRaw(
+      Prisma.sql`
+        SELECT "id", "name", "slug", "embedding"
+        FROM "Intent" 
+        WHERE "id" = ANY(${intentIds}::text[])
+          AND "createdById" = ${session.user.id}
+          AND "isActive" = true
+          AND "embedding" IS NOT NULL
+      `
+    );
 
-    if (intents.length === 0) {
+    if (intentsWithEmbedding.length === 0) {
       return NextResponse.json({ error: 'Nenhuma intenção com embedding encontrada' }, { status: 404 });
     }
 
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
     // 3. Warm up vector search indexes
     
     // For now, we'll simulate the prewarming process
-    const prewarmedIntents = intents.map(intent => ({
+    const prewarmedIntents = intentsWithEmbedding.map(intent => ({
       id: intent.id,
       name: intent.name,
       slug: intent.slug,

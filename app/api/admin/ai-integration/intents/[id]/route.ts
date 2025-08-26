@@ -28,7 +28,12 @@ export async function GET(
 
     const intent = await prisma.intent.findUnique({
       where: { id },
-      include: {
+      // Avoid selecting the unsupported "embedding" column
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        actionType: true,
         template: {
           select: {
             id: true,
@@ -45,7 +50,7 @@ export async function GET(
         },
         hitLogs: {
           take: 10,
-          orderBy: { createdAt: "desc" },
+          orderBy: { createdAt: 'desc' },
           select: {
             id: true,
             similarity: true,
@@ -88,6 +93,7 @@ export async function PUT(
     // Check if intent exists
     const existingIntent = await prisma.intent.findUnique({
       where: { id },
+      select: { id: true, name: true, description: true, slug: true },
     });
 
     if (!existingIntent) {
@@ -100,6 +106,7 @@ export async function PUT(
         slug: validatedData.slug,
         id: { not: id },
       },
+      select: { id: true },
     });
 
     if (slugConflict) {
@@ -126,14 +133,12 @@ export async function PUT(
     const intent = await prisma.intent.update({
       where: { id },
       data: validatedData,
-      include: {
-        template: {
-          select: {
-            id: true,
-            name: true,
-            type: true,
-          },
-        },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        actionType: true,
+        template: { select: { id: true, name: true, type: true } },
       },
     });
 
@@ -182,16 +187,15 @@ export async function DELETE(
     // Check if intent exists
     const existingIntent = await prisma.intent.findUnique({
       where: { id },
+      select: { id: true, name: true, description: true, createdById: true },
     });
 
     if (!existingIntent) {
       return NextResponse.json({ error: "Intent not found" }, { status: 404 });
     }
 
-    // Delete the intent (this will cascade delete hit logs)
-    await prisma.intent.delete({
-      where: { id },
-    });
+    // Delete the intent using raw SQL to avoid vector deserialization issues
+    await prisma.$executeRaw`DELETE FROM "Intent" WHERE id = ${id}`;
 
     return NextResponse.json({ success: true });
   } catch (error) {

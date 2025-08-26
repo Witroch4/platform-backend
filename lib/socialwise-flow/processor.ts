@@ -883,6 +883,14 @@ export async function processSocialWiseFlow(
       };
     }
 
+    // Debug: log resolved userId for classification tracing
+    processorLogger.info('Resolved userId for classification', {
+      userIdPreview: String(userId).substring(0, 16),
+      userIdLength: String(userId).length,
+      inboxId: context.inboxId,
+      traceId: context.traceId
+    });
+
     // Get full assistant configuration for agent settings
     const agentConfig = await loadAssistantConfiguration(context.inboxId, context.chatwitAccountId, context.assistantId);
     if (!agentConfig) {
