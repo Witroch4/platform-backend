@@ -45,6 +45,8 @@ export interface ProcessorContext {
   userId?: string;
   wamid?: string;
   traceId?: string;
+  contactName?: string;
+  contactPhone?: string;
   assistantId?: string; // Para playground e casos específicos
   originalPayload?: any; // Para detectar cliques de botão
 }
@@ -242,9 +244,10 @@ async function processHardBand(
 
     // Try direct mapping for WhatsApp and Instagram channels
     if (isWhatsAppChannel(context.channelType)) {
-      let mapped = await buildWhatsAppByIntentRaw(topIntent.slug, context.inboxId, context.wamid);
+      const contactContext = { contactName: context.contactName, contactPhone: context.contactPhone };
+      let mapped = await buildWhatsAppByIntentRaw(topIntent.slug, context.inboxId, context.wamid, contactContext);
       if (!mapped) {
-        mapped = await buildWhatsAppByGlobalIntent(topIntent.slug, context.inboxId, context.wamid);
+        mapped = await buildWhatsAppByGlobalIntent(topIntent.slug, context.inboxId, context.wamid, contactContext);
       }
       
       if (mapped) {
@@ -481,9 +484,10 @@ async function processRouterBand(
         // Try to map the intent (only for WhatsApp)
         const intentName = routerResult.intent_payload.replace(/^@/, '');
         if (isWhatsAppChannel(context.channelType)) {
-          let mapped = await buildWhatsAppByIntentRaw(intentName, context.inboxId, context.wamid);
+          const contactContext = { contactName: context.contactName, contactPhone: context.contactPhone };
+          let mapped = await buildWhatsAppByIntentRaw(intentName, context.inboxId, context.wamid, contactContext);
           if (!mapped) {
-            mapped = await buildWhatsAppByGlobalIntent(intentName, context.inboxId, context.wamid);
+            mapped = await buildWhatsAppByGlobalIntent(intentName, context.inboxId, context.wamid, contactContext);
           }
           
           if (mapped) {

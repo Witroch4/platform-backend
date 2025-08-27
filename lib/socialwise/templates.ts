@@ -28,7 +28,7 @@ function normalizeIntentRaw(raw: string): {
  * Constrói o bloco de canal a partir de um intent mapeado para WhatsApp.
  * Retorna { whatsapp: {...} } ou { text: '...' } ou null.
  */
-export async function buildWhatsAppByIntentRaw(intentRaw: string, inboxId: string, wamid?: string) {
+export async function buildWhatsAppByIntentRaw(intentRaw: string, inboxId: string, wamid?: string, contactContext?: { contactName?: string; contactPhone?: string }) {
   const intentName = String(intentRaw || '').trim();
   if (!intentName || !inboxId) return null;
   const prisma = getPrismaInstance();
@@ -94,7 +94,12 @@ export async function buildWhatsAppByIntentRaw(intentRaw: string, inboxId: strin
   if (!mapping || !mapping.template) return null;
 
   const builder = new WhatsAppPayloadBuilder();
-  await builder.setVariablesFromInboxId(inboxId, { wamid });
+  const variablesContext = { 
+    wamid,
+    contactPhone: contactContext?.contactPhone,
+    personName: contactContext?.contactName // personName tem prioridade no resolver
+  };
+  await builder.setVariablesFromInboxId(inboxId, variablesContext);
 
   if (mapping.template.type === 'WHATSAPP_OFFICIAL' && mapping.template.whatsappOfficialInfo) {
     const wi: any = mapping.template.whatsappOfficialInfo as any;
@@ -127,7 +132,7 @@ export async function buildWhatsAppByIntentRaw(intentRaw: string, inboxId: strin
  * Constrói o bloco WhatsApp a partir de uma Intent global (modelo Intent → Template).
  * Busca o ChatwitInbox pelo inboxId externo e usa o userId dono para filtrar as intents.
  */
-export async function buildWhatsAppByGlobalIntent(intentRaw: string, inboxId: string, wamid?: string) {
+export async function buildWhatsAppByGlobalIntent(intentRaw: string, inboxId: string, wamid?: string, contactContext?: { contactName?: string; contactPhone?: string }) {
   const prisma = getPrismaInstance();
   const nameRaw = String(intentRaw || '').trim();
   if (!nameRaw || !inboxId) return null;
@@ -180,7 +185,12 @@ export async function buildWhatsAppByGlobalIntent(intentRaw: string, inboxId: st
   if (!intent || !intent.template) return null;
 
   const builder = new WhatsAppPayloadBuilder();
-  await builder.setVariablesFromInboxId(inboxId, { wamid });
+  const variablesContext = { 
+    wamid,
+    contactPhone: contactContext?.contactPhone,
+    personName: contactContext?.contactName // personName tem prioridade no resolver
+  };
+  await builder.setVariablesFromInboxId(inboxId, variablesContext);
 
   const t = intent.template;
   if (t.type === 'WHATSAPP_OFFICIAL' && t.whatsappOfficialInfo) {

@@ -252,6 +252,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
     const wamid = validPayload.context.message?.source_id ||
                   validPayload.context['socialwise-chatwit'].wamid || 
                   validPayload.context['socialwise-chatwit'].message_data?.id || '';
+    
+    // Extract contact information for variable resolution
+    const contactName = validPayload.context['socialwise-chatwit'].contact_data?.name || 
+                       validPayload.context['socialwise-chatwit'].contact_name;
+    const contactPhone = validPayload.context['socialwise-chatwit'].contact_data?.phone_number || 
+                        validPayload.context['socialwise-chatwit'].contact_phone;
 
     // Step 12: Resolve inbox and user information
     const prisma = getPrismaInstance();
@@ -348,9 +354,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
         
         // Try mapping based on channel type
         if (channelType.toLowerCase().includes('whatsapp')) {
-          mapped = await buildWhatsAppByIntentRaw(rawIntent, inboxId, wamid);
+          const contactContext = { contactName, contactPhone };
+          mapped = await buildWhatsAppByIntentRaw(rawIntent, inboxId, wamid, contactContext);
           if (!mapped) {
-            mapped = await buildWhatsAppByGlobalIntent(rawIntent, inboxId, wamid);
+            mapped = await buildWhatsAppByGlobalIntent(rawIntent, inboxId, wamid, contactContext);
           }
         } else if (channelType.toLowerCase().includes('instagram')) {
           mapped = await buildInstagramByIntentRaw(rawIntent, inboxId);
@@ -390,6 +397,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
         userId,
         wamid,
         traceId,
+        contactName,
+        contactPhone,
         originalPayload: payload // For button reaction detection
       };
 
