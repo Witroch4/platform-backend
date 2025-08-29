@@ -65,7 +65,7 @@ interface MtfDataContextType {
   
   // 👇 NOVO: Funções para o fluxo otimizado instantâneo
   saveMessage: (apiPayload: any, isEdit: boolean) => Promise<any>;
-  updateMessagesCache: (messageOrId: any, action: 'add' | 'update' | 'remove') => Promise<any>;
+  updateMessagesCache: (messageOrId: any, action: 'add' | 'update' | 'remove', reactions?: any[]) => Promise<any>;
   deleteMessage: (messageId: string) => Promise<any>;
   
   // Reações de botões (nova)
@@ -161,7 +161,7 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
     timestamp: number;
     messageCount: number;
   messageId?: string;
-  operation?: 'add' | 'remove';
+  operation?: 'add' | 'update' | 'remove';
   isCompleted?: boolean; // Novo flag para indicar conclusão bem-sucedida
   } | null>(null);
   
@@ -228,7 +228,9 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
           const recent = recentOptimisticRef.current;
           
           if (recent && !recent.isCompleted) {
-            const protectionTime = 15000; // Aumentado para 15 segundos
+            // ✅ FIX: Proteção mais curta para UPDATE (dados optimistic já corretos)
+            const wasUpdateOperation = recent.operation === 'update';
+            const protectionTime = wasUpdateOperation ? 5000 : 15000; // 5s para UPDATE, 15s para ADD/REMOVE
             const timeElapsed = now - recent.timestamp;
             
             if (timeElapsed < protectionTime) {
@@ -237,6 +239,16 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
               const hasTargetMessage = recent.messageId ? 
                 d.interactiveMessages?.some((msg: any) => msg.id === recent.messageId) : 
                 false;
+              
+              // 🔍 DEBUG: Log para investigar por que hasTargetMessage é false
+              if (wasUpdateOperation && !hasTargetMessage && recent.messageId) {
+                console.log('🔍 [DEBUG] hasTargetMessage false para UPDATE:', {
+                  targetMessageId: recent.messageId,
+                  serverMessages: d.interactiveMessages?.map((m: any) => ({ id: m.id, name: m.name })) || [],
+                  serverCount: serverMessageCount,
+                  hasTargetMessage
+                });
+              }
 
               // 👇 LÓGICA DE DEFESA ATUALIZADA E CORRIGIDA (USANDO `operation` EXPLÍCITO)
               let serverSynced = false;
@@ -246,6 +258,11 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
               if (wasAddOperation) {
                 // Para ADD, o servidor está sincronizado se a contagem for a esperada E a mensagem existir
                 serverSynced = serverMessageCount >= recent.messageCount && hasTargetMessage;
+              } else if (wasUpdateOperation) {
+                // Para UPDATE, o servidor está sincronizado se a mensagem existe (não importa a contagem)
+                // ✅ FIX: Para UPDATE, sempre preferir dados optimistic durante o período de proteção
+                // pois eles contêm as mudanças mais recentes (incluindo buttonReactions atualizadas)
+                serverSynced = false; // Sempre manter dados optimistic durante proteção UPDATE
               } else if (wasRemoveOperation) {
                 // Para REMOVE, o servidor está sincronizado se a contagem for a esperada E a mensagem NÃO existir mais
                 serverSynced = serverMessageCount <= recent.messageCount && !hasTargetMessage;
@@ -256,7 +273,7 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
                 console.log('✅ [MtfDataProvider] Servidor sincronizado - aceitando dados:', {
                   serverCount: serverMessageCount,
                   expectedCount: recent.messageCount,
-                  operation: wasAddOperation ? 'ADD' : 'REMOVE',
+                  operation: wasAddOperation ? 'ADD' : (wasUpdateOperation ? 'UPDATE' : 'REMOVE'),
                   protection: 'removed'
                 });
                 recentOptimisticRef.current = { ...recent, isCompleted: true };
@@ -266,7 +283,7 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
                   serverCount: serverMessageCount,
                   expectedCount: recent.messageCount,
                   timeLeft: Math.round((protectionTime - timeElapsed) / 1000),
-                  operation: wasAddOperation ? 'ADD (aguardando)' : 'REMOVE (aguardando)',
+                  operation: wasAddOperation ? 'ADD (aguardando)' : (wasUpdateOperation ? 'UPDATE (aguardando)' : 'REMOVE (aguardando)'),
                   hasTargetMessage,
                   keepingPrevRef: !!prevRef.current
                 });
@@ -362,8 +379,9 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
         prevRef.current?.interactiveMessages?.some((msg: any) => msg.id === recent.messageId) :
         false;
       
-  // 👇 LÓGICA CORRIGIDA: Distinguir entre ADD e REMOVE operations usando `operation`
+  // 👇 LÓGICA CORRIGIDA: Distinguir entre ADD, UPDATE e REMOVE operations usando `operation`
   const wasAddOperation = recent.operation === 'add';
+  const wasUpdateOperation = recent.operation === 'update';
   const wasRemoveOperation = recent.operation === 'remove';
       
       if (wasAddOperation) {
@@ -387,6 +405,26 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
             protectionActive: true
           });
           return prevRef.current?.interactiveMessages || [];
+        }
+      } else if (wasUpdateOperation) {
+        // ✅ FIX: Para UPDATE, sempre preferir prevRef (dados optimistic) durante a proteção
+        // pois eles têm as mudanças mais recentes incluindo buttonReactions atualizadas
+        if (prevHasTarget) {
+          console.log('📋 [MtfDataProvider] UPDATE protegido - usando prevRef (optimistic):', {
+            hasTargetMessage: prevHasTarget,
+            operation: 'UPDATE', 
+            protectionActive: true,
+            reason: 'dados optimistic são mais atuais que servidor'
+          });
+          return prevRef.current?.interactiveMessages || [];
+        } else if (currentHasTarget) {
+          console.log('📋 [MtfDataProvider] UPDATE fallback - usando currentData:', {
+            hasTargetMessage: currentHasTarget,
+            operation: 'UPDATE',
+            protectionActive: true,
+            reason: 'fallback quando prevRef não tem target'
+          });
+          return currentData?.interactiveMessages || [];
         }
       } else if (wasRemoveOperation) {
         // Para REMOVE: usar currentData se tem mensagens reduzidas E NÃO tem a mensagem target
@@ -571,7 +609,8 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
   // 👇 NOVA FUNÇÃO OTIMIZADA: Atualiza o cache manualmente sem refetch
   const updateMessagesCache = useCallback((
     messageOrId: any, 
-    action: 'add' | 'update' | 'remove'
+    action: 'add' | 'update' | 'remove',
+    reactions?: any[]  // ✅ FIX: Novo parâmetro opcional para reações
   ) => {
     console.log(`🔄 [MtfDataProvider] Atualizando cache manualmente: ${action}`);
     
@@ -591,6 +630,19 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
         messageId: messageOrId.id,
         expectedCount: currentCount + 1,
         protectionTime: '15 segundos'
+      });
+    } else if (action === 'update') {
+      // ✅ FIX: Proteção para edições também
+      recentOptimisticRef.current = {
+        timestamp: now,
+        messageCount: currentCount, // Count não muda em updates
+        messageId: messageOrId.id,
+        operation: 'update' as any, // Adicionar 'update' ao tipo
+        isCompleted: false
+      };
+      console.log('🛡️ [MtfDataProvider] Proteção ativada para edição de mensagem:', {
+        messageId: messageOrId.id,
+        protectionTime: '5 segundos (UPDATE otimizado)'
       });
     } else if (action === 'remove') {
       recentOptimisticRef.current = {
@@ -636,11 +688,51 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
           updatedMessages = currentMessages;
       }
 
-      // Retorna o objeto de dados completo com a lista de mensagens atualizada
-      const updatedData = { ...currentData, interactiveMessages: updatedMessages };
+      // ✅ FIX: Também atualiza buttonReactions se fornecidas
+      let updatedButtonReactions = currentData.buttonReactions || [];
+      
+      if (reactions && reactions.length > 0) {
+        if (action === 'add') {
+          // Adiciona novas reações
+          updatedButtonReactions = [...updatedButtonReactions, ...reactions];
+          console.log('➕ [MtfDataProvider] Reações adicionadas ao cache:', reactions.length);
+        } else if (action === 'update') {
+          // Remove reações antigas desta mensagem e adiciona as novas
+          // ✅ FIX: As reações usam buttonId para identificação, não messageId
+          const currentButtonIds = reactions.map(r => r.buttonId);
+          updatedButtonReactions = updatedButtonReactions.filter((r: any) => 
+            !currentButtonIds.includes(r.buttonId)
+          );
+          updatedButtonReactions = [...updatedButtonReactions, ...reactions];
+          console.log('🔄 [MtfDataProvider] Reações atualizadas no cache:', reactions.length, 'buttonIds:', currentButtonIds);
+        }
+      } else if (action === 'remove') {
+        // Remove reações da mensagem removida
+        const messageId = messageOrId;
+        updatedButtonReactions = updatedButtonReactions.filter((r: any) => r.messageId !== messageId);
+        console.log('🗑️ [MtfDataProvider] Reações removidas do cache para mensagem:', messageId);
+      }
+
+      // Retorna o objeto de dados completo com a lista de mensagens E reações atualizadas
+      const updatedData = { 
+        ...currentData, 
+        interactiveMessages: updatedMessages,
+        buttonReactions: updatedButtonReactions  // ✅ FIX: Incluir buttonReactions atualizadas
+      };
       
       // ✅ FIX: Atualiza prevRef para manter consistência
       prevRef.current = updatedData;
+      
+      // 🔍 DEBUG: Log para verificar se a mensagem está no prevRef após update
+      if (action === 'update' && messageOrId.id) {
+        const messageInPrevRef = updatedData.interactiveMessages?.some((m: any) => m.id === messageOrId.id);
+        console.log('🔍 [DEBUG] Mensagem no prevRef após update:', {
+          messageId: messageOrId.id,
+          messageInPrevRef,
+          totalMessages: updatedData.interactiveMessages?.length || 0,
+          totalReactions: updatedData.buttonReactions?.length || 0
+        });
+      }
       
       return updatedData;
 

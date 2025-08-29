@@ -514,7 +514,7 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
     const payload: any = {
       inboxId: caixaId,  // ✅ Usar "inboxId" conforme esperado pela API
       message: messageData,
-      reactions: []  // ✅ Adicionar campo "reactions" obrigatório
+      reactions: messageData.reactions || []  // ✅ FIX: Usar reações do messageData recebido
     };
 
     // ✅ FIX: Só adiciona messageId para edições REAIS (não IDs temporários)
@@ -566,9 +566,12 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
       const result = await saveMessage(apiPayload, isEditMode);
       console.log('✅ [MensagensInterativasTab] Mensagem salva na API:', result.message);
 
-      // 3. ⚡ ATUALIZA O CACHE INSTANTANEAMENTE com a mensagem retornada
-      await updateMessagesCache(result.message, isEditMode ? 'update' : 'add');
-      console.log('⚡ [MensagensInterativasTab] Cache do SWR atualizado instantaneamente!');
+      // 3. ⚡ ATUALIZA O CACHE INSTANTANEAMENTE com a mensagem E reações retornadas
+      await updateMessagesCache(result.message, isEditMode ? 'update' : 'add', result.reactions);
+      console.log('⚡ [MensagensInterativasTab] Cache do SWR atualizado instantaneamente com reações!', {
+        message: result.message?.id,
+        reactions: result.reactions?.length || 0
+      });
 
       // 4. Redireciona IMEDIATAMENTE - a lista já estará atualizada
       setCurrentView("list");

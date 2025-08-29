@@ -579,6 +579,25 @@ export function AppAdminDashboard() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
 
+                {/* Debug - Lista de Hooks */}
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={(e) => {
+                      e.preventDefault();
+                      startTransition(() => {
+                        router.push('/admin/hooklist');
+                      });
+                    }}
+                    onMouseEnter={() => {
+                      try { router.prefetch('/admin/hooklist'); } catch {}
+                    }}
+                    className={`flex items-center transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
+                  >
+                    <Zap className="mr-2" />
+                    {state !== "collapsed" && <span>Debug - Hooks Chatwit</span>}
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+
                 {/* Teste OpenAI Responses API */}
                 <SidebarMenuItem>
                   <SidebarMenuButton

@@ -181,6 +181,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
         footer: message.footer,
         action: normalizedAction,
         isActive: true, // Adiciona a propriedade obrigatória
+        reactions: reactions, // ✅ FIX: Incluir as reações recebidas via props
         interactiveContent: {
           header: message.header,
           body: message.body,
