@@ -2,7 +2,7 @@
 
 ## Introduction
 
-O sistema SocialWise Flow está enfrentando erros de schema inválido com a nova API do OpenAI GPT-5 (família). O erro específico é "400 Invalid schema" com código `invalid_json_schema` no parâmetro `text.format.schema`, indicando que o schema gerado pelo Zod contém palavras-chave não suportadas como `allOf`/`anyOf`. O problema aparece especificamente no schema `RouterDecision` em `buttons[].title`. A solução deve ser cirúrgica e rápida, seguindo o padrão da rota de teste `app/api/openai-source-test` que funciona 100% com a nova API.
+O sistema SocialWise Flow está enfrentando erros de schema inválido com a nova API do OpenAI GPT-5 (família). O erro específico é "400 Invalid schema" com código `invalid_json_schema` no parâmetro `text.format.schema`, indicando que o schema gerado pelo Zod contém palavras-chave não suportadas como `allOf`/`anyOf`. O problema aparece especificamente no schema `RouterDecision` em `buttons[].title`. A solução deve ser cirúrgica e rápida, seguindo o padrão da rota de teste `app/api/openai-source-test-biblia` que funciona 100% com a nova API.
 
 ## Requirements
 

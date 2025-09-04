@@ -2,7 +2,7 @@
 
 ## Overview
 
-Este documento detalha o design para corrigir os erros de schema inválido no sistema SocialWise Flow com a nova API OpenAI GPT-5. O problema central é que os schemas Zod atuais geram `allOf`/`anyOf` no JSON Schema, que não são suportados pelo Structured Outputs da OpenAI. A solução implementa um padrão de fallback automático baseado na rota de teste `app/api/openai-source-test/route.ts` que funciona 100% com a nova API.
+Este documento detalha o design para corrigir os erros de schema inválido no sistema SocialWise Flow com a nova API OpenAI GPT-5. O problema central é que os schemas Zod atuais geram `allOf`/`anyOf` no JSON Schema, que não são suportados pelo Structured Outputs da OpenAI. A solução implementa um padrão de fallback automático baseado na rota de teste `app/api/openai-source-test-biblia/route.ts` que funciona 100% com a nova API.
 
 ## Architecture
 

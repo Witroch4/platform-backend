@@ -52,7 +52,7 @@ type ApiResult = {
   };
 };
 
-const DEFAULT_ENDPOINT = "/api/openai-source-test";
+const DEFAULT_ENDPOINT = "/api/openai-source-test-biblia";
 
 export default function OpenAISourceTestPage() {
   const [apiEndpoint, setApiEndpoint] = useState(DEFAULT_ENDPOINT);
@@ -407,7 +407,7 @@ ${JSON.stringify(openaiDbg?.raw_response_snippet ?? {}, null, 2)}
                     id="endpoint"
                     value={apiEndpoint}
                     onChange={(e) => setApiEndpoint(e.target.value)}
-                    placeholder="/api/openai-source-test"
+                    placeholder="/api/openai-source-test-biblia"
                   />
                 </div>
                 <div className="space-y-2">

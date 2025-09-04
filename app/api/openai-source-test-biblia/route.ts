@@ -1,4 +1,4 @@
-// app/api/openai-source-test/route.ts
+// app/api/openai-source-test-biblia/route.ts
 /**
  * ######################################################################
  *  OpenAI Responses API — Rota de Referência (produção + debug, dinâmica)
@@ -25,7 +25,7 @@
  * - text.verbosity: suportado por todos; pode ser low/medium/high.
  *
  * Como consumir:
- *   POST /api/openai-source-test
+ *   POST /api/openai-source-test-biblia
  *   Body (exemplo):
  *     {
  *       "userText": "Queria saber sobre Mandado de Segurança",
@@ -547,7 +547,7 @@ async function structuredOrJson(args: {
 }
 
 // ————————————————————————————————————————————————————————————————
-// 9) HANDLER — POST /api/openai-source-test
+// 9) HANDLER — POST /api/openai-source-test-biblia
 // ————————————————————————————————————————————————————————————————
 export async function POST(request: NextRequest) {
   const t_all0 = Date.now();

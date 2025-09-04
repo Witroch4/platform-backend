@@ -70,16 +70,49 @@ export interface ButtonReactionMeta {
 export function extractSessionId(payload: any, channelType: string): string | undefined {
   if (!payload) return undefined;
 
-  // WhatsApp: sessionId é o número do telefone
+  // Debug log
+  console.log('[SessionExtraction] DEBUG: Extracting sessionId', {
+    channelType,
+    hasPayload: !!payload,
+    payloadKeys: Object.keys(payload || {}),
+    sessionIdDirect: payload.session_id,
+    contactPhone: payload.context?.contact?.phone_number
+  });
+
+  // Primeiro, tenta extrair do campo session_id direto (formato Chatwit)
+  if (payload.session_id) {
+    console.log('[SessionExtraction] INFO: SessionId found directly', { sessionId: payload.session_id });
+    return payload.session_id;
+  }
+
+  // WhatsApp: sessionId pode estar no contexto do contato
   if (isWhatsAppChannel(channelType)) {
-    return payload.contacts?.[0]?.wa_id || payload.entry?.[0]?.changes?.[0]?.value?.contacts?.[0]?.wa_id;
+    // Formato Chatwit: context.contact.phone_number
+    const phoneFromContext = payload.context?.contact?.phone_number;
+    if (phoneFromContext) {
+      console.log('[SessionExtraction] INFO: SessionId from contact phone', { sessionId: phoneFromContext });
+      return phoneFromContext;
+    }
+
+    // Formato Meta: payload direto
+    const phoneFromMeta = payload.contacts?.[0]?.wa_id || payload.entry?.[0]?.changes?.[0]?.value?.contacts?.[0]?.wa_id;
+    if (phoneFromMeta) {
+      console.log('[SessionExtraction] INFO: SessionId from Meta format', { sessionId: phoneFromMeta });
+      return phoneFromMeta;
+    }
   }
 
-  // Instagram: sessionId é o ID da plataforma
+  // Instagram: sessionId pode estar no contexto
   if (isInstagramChannel(channelType)) {
-    return payload.entry?.[0]?.messaging?.[0]?.sender?.id || payload.sender?.id;
+    // Formato Chatwit: context.contact.identifier ou similar
+    const instagramId = payload.context?.contact?.identifier || payload.entry?.[0]?.messaging?.[0]?.sender?.id || payload.sender?.id;
+    if (instagramId) {
+      console.log('[SessionExtraction] INFO: SessionId from Instagram', { sessionId: instagramId });
+      return instagramId;
+    }
   }
 
+  console.log('[SessionExtraction] WARNING: No sessionId found', { channelType, payloadStructure: Object.keys(payload || {}) });
   return undefined;
 }
 
@@ -365,6 +398,13 @@ async function processSoftBand(
     }
 
     // Generate warmup buttons using LLM with concurrency control
+    processorLogger.info('Preparing warmup buttons generation', {
+      sessionId: context.sessionId,
+      hasSessionId: !!context.sessionId,
+      channelType: context.channelType,
+      traceId: context.traceId
+    });
+
     const warmupResult = await concurrencyManager.executeLlmOperation(
       context.inboxId,
       () => openaiService.generateWarmupButtons(
@@ -491,6 +531,8 @@ async function processRouterBand(
       model: agentConfig.model,
       reasoningEffort: agentConfig.reasoningEffort,
       verbosity: agentConfig.verbosity,
+      sessionId: context.sessionId,
+      hasSessionId: !!context.sessionId,
       traceId: context.traceId
     });
 

@@ -1,5 +1,5 @@
 // services/openai.ts
-//biblia app\api\openai-source-test\route.ts
+//biblia app\api\openai-source-test-biblia\route.ts
 import { IOpenAIService } from "./openai-components/types";
 import { ServerOpenAIService } from "./openai-components/server";
 import { ClientOpenAIService } from "./openai-components/client";

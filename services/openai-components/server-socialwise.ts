@@ -95,19 +95,37 @@ async function ensureSession(
     channel: ChannelType;
   },
   signal?: AbortSignal
-): Promise<string | undefined> {
+): Promise<{ responseId: string | undefined; isNewSession: boolean }> {
+  // 🔍 DEBUG: Log ensureSession início
+  console.log("🔐 ENSURE SESSION - Iniciando:", {
+    sessionId: params.sessionId,
+    model: params.agent.model,
+    channel: params.channel,
+    hasInstructions: !!params.agent.instructions
+  });
+
   // Monta chave única: sessionId + model + hash(instructions + channel)
   const identity = `${params.agent.model}:${params.channel}:${params.agent.instructions || 'default'}`;
   const identityHash = hashShort(identity);
   const sessionKey = `session:${params.sessionId}:${identityHash}`;
   
+  console.log("🔐 ENSURE SESSION - Chave da sessão:", sessionKey);
+  
   const existing = await getSessionPointer(sessionKey);
-  if (existing) return existing;
+  if (existing) {
+    console.log("🔐 ENSURE SESSION - Sessão existente encontrada:", existing);
+    return { responseId: existing, isNewSession: false };
+  }
 
-  return withLock(sessionKey, async () => {
+  console.log("🔐 ENSURE SESSION - Criando nova sessão...");
+
+  const result = await withLock(sessionKey, async () => {
     // Double-check após adquirir lock
     const recheck = await getSessionPointer(sessionKey);
-    if (recheck) return recheck;
+    if (recheck) {
+      console.log("🔐 ENSURE SESSION - Sessão criada durante lock:", recheck);
+      return { responseId: recheck, isNewSession: false };
+    }
 
     // Cria sessão inicial com OpenAI
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -127,13 +145,15 @@ async function ensureSession(
 
       const responseId = init.id;
       await setSessionPointer(sessionKey, responseId);
-      console.log(`[Session] Criada nova sessão: ${sessionKey} -> ${responseId}`);
-      return responseId;
+      console.log(`🔐 ENSURE SESSION - Criada nova sessão: ${sessionKey} -> ${responseId}`);
+      return { responseId, isNewSession: true };
     } catch (error) {
-      console.error(`[Session] Erro ao criar sessão ${sessionKey}:`, error);
-      return undefined;
+      console.error(`🔐 ENSURE SESSION - Erro ao criar sessão ${sessionKey}:`, error);
+      return { responseId: undefined, isNewSession: true }; // Erro = tratado como nova sessão
     }
   });
+
+  return result;
 }
 
 // ==== Structured Outputs with Fallback Pattern ====
@@ -253,11 +273,20 @@ async function structuredOrJson<T>(args: {
   // Se temos sessionId e channel, tenta garantir previous_response_id da sessão
   let finalPreviousResponseId = previous_response_id;
   if (sessionId && channel && !previous_response_id) {
+    // console.log("🔍 STRUCTURED OR JSON - Tentando obter sessão:", { sessionId, channel, hasPreviousId: !!previous_response_id }); // Log desabilitado temporariamente
     try {
-      finalPreviousResponseId = await ensureSession({ sessionId, agent, channel }, signal);
+      const sessionResult = await ensureSession({ sessionId, agent, channel }, signal);
+      finalPreviousResponseId = sessionResult.responseId;
+      // console.log("🔍 STRUCTURED OR JSON - Previous response ID obtido:", finalPreviousResponseId); // Log desabilitado temporariamente
     } catch (error) {
       console.warn("[Session] Erro ao obter sessão, prosseguindo sem memória:", error);
     }
+  } else {
+    // console.log("🔍 STRUCTURED OR JSON - Não tentará sessão:", { 
+    //   hasSessionId: !!sessionId, 
+    //   hasChannel: !!channel, 
+    //   hasPreviousId: !!previous_response_id 
+    // }); // Log desabilitado temporariamente
   }
 
   // Apêndice de "modo estrito" para o retry de correção de schema
@@ -282,6 +311,19 @@ async function structuredOrJson<T>(args: {
         max_output_tokens,
         ...(reasoning && caps.reasoning ? { reasoning } : {}),
       };
+
+      // 🔍 DEBUG: Log do request final para OpenAI
+      console.log("🧠 OPENAI REQUEST FINAL:", JSON.stringify({
+        model: req.model,
+        messages_count: req.input?.length,
+        messages: req.input,
+        instructions_preview: req.instructions?.substring(0, 100) + "...",
+        previous_response_id: req.previous_response_id,
+        store: req.store,
+        has_reasoning: !!req.reasoning,
+        has_temperature: !!req.temperature,
+        has_top_p: !!req.top_p
+      }, null, 2));
 
       // Sampling: se strict mode, usa sampling conservador da bíblia
       if (strict) {
@@ -315,14 +357,12 @@ async function structuredOrJson<T>(args: {
 
       // Update session pointer after successful response
       if (sessionId && result.id && channel) {
-        const sessionKey = await ensureSession({ 
-          sessionId, 
-          agent: { ...agent, model, instructions }, 
-          channel 
-        });
-        if (sessionKey) {
-          await setSessionPointer(sessionKey, result.id);
-        }
+        // Gerar chave da sessão manualmente para atualização
+        const identity = `${model}:${channel}:${instructions || 'default'}`;
+        const identityHash = hashShort(identity);
+        const sessionKey = `session:${sessionId}:${identityHash}`;
+        
+        await setSessionPointer(sessionKey, result.id);
       }
 
       return result;
@@ -380,10 +420,21 @@ async function structuredOrJson<T>(args: {
       (strict ? STRICT_APPEND : ""),
     previous_response_id: finalPreviousResponseId,
     store,
-    text: { format: { type: "json_object" } as const },
     max_output_tokens,
     ...(reasoning && caps.reasoning ? { reasoning } : {}),
   };
+
+  // 🔍 DEBUG: Log do fallback request para OpenAI
+  console.log("🧠 OPENAI FALLBACK REQUEST:", JSON.stringify({
+    model: req.model,
+    messages_count: req.input?.length,
+    messages: req.input,
+    instructions_preview: req.instructions?.substring(0, 100) + "...",
+    previous_response_id: req.previous_response_id,
+    store: req.store,
+    max_output_tokens: req.max_output_tokens,
+    has_reasoning: !!req.reasoning
+  }, null, 2));
 
   // No fallback, também aplicamos a mesma lógica de sampling
   if (strict) {
@@ -448,14 +499,12 @@ async function structuredOrJson<T>(args: {
 
   // Update session pointer after successful response
   if (sessionId && result.id && channel) {
-    const sessionKey = await ensureSession({ 
-      sessionId, 
-      agent: { ...agent, model, instructions }, 
-      channel 
-    });
-    if (sessionKey) {
-      await setSessionPointer(sessionKey, result.id);
-    }
+    // Gerar chave da sessão manualmente para atualização
+    const identity = `${model}:${channel}:${instructions || 'default'}`;
+    const identityHash = hashShort(identity);
+    const sessionKey = `session:${sessionId}:${identityHash}`;
+    
+    await setSessionPointer(sessionKey, result.id);
   }
 
   return result;
@@ -688,6 +737,9 @@ export async function generateFreeChatButtons(
   const schema = createButtonsSchema(channel);
   const c = getConstraintsForChannel(channel);
 
+  // 🔍 DEBUG: Log sessionId recebido
+  console.log("🎯 FREE CHAT BUTTONS - SessionId recebido:", opts?.sessionId);
+
   // ✅ HIERARQUIA MODERNA: Instructions para identidade + 1 developer para regras específicas
   const taskRules = `
 # OBJETIVO
@@ -702,14 +754,41 @@ Gerar uma resposta curta (response_text) e 2–3 botões objetivos para avançar
   return withDeadlineAbort(async (signal) => {
     try {
       const caps = getModelCaps(agent.model);
+      
+      // 🔑 PADRÃO DA BÍBLIA: Detectar se precisa enviar prompts developer
+      const hasSessionId = !!opts?.sessionId;
+      
+      // Primeira chamada ensureSession para obter previous_response_id e flag de nova sessão
+      let finalPreviousResponseId;
+      let isNewSession = true; // Default para nova sessão
+      if (hasSessionId) {
+        try {
+          const sessionResult = await ensureSession({ sessionId: opts.sessionId!, agent, channel }, signal);
+          finalPreviousResponseId = sessionResult.responseId;
+          isNewSession = sessionResult.isNewSession;
+        } catch (error) {
+          console.warn("[Session] Erro ao obter sessão:", error);
+          isNewSession = true; // Em caso de erro, tratar como nova sessão
+        }
+      }
+      
+      const statelessInit = isNewSession; // Se é nova sessão, precisa enviar developer prompts
+      
+      // 🧠 MENSAGENS DINÂMICAS: developer prompts apenas na primeira vez
+      const messages = [
+        ...(statelessInit
+          ? [
+              { role: "developer" as const, content: createMasterPrompt(channel) },
+              { role: "developer" as const, content: taskRules },
+            ]
+          : []),
+        { role: "user" as const, content: user },
+      ];
+
       const result = await structuredOrJson<WarmupButtonsResponse>({
         client: this.client,
         model: agent.model,
-        messages: [
-          { role: "developer", content: createMasterPrompt(channel) },
-          { role: "developer", content: taskRules },
-          { role: "user", content: user },
-        ],
+        messages,
         instructions: agent.instructions || "Você é um UX writer especializado em criar botões de navegação. Siga o schema estritamente e gere botões objetivos.",
         max_output_tokens: agent.maxOutputTokens || 256,
         verbosity: caps.reasoning && isGPT5(agent.model) ? normVerb(agent.verbosity) : undefined,
@@ -746,6 +825,9 @@ export async function generateWarmupButtons(
 ): Promise<WarmupButtonsResponse | null> {
   if (!candidates.length) return null;
 
+  // 🔍 DEBUG: Log sessionId recebido
+  console.log("🎯 GENERATE WARMUP BUTTONS - SessionId recebido:", opts?.sessionId);
+
   const candidatesText = candidates
     .map((c, i) => `${i + 1}. @${c.slug}: ${c.desc || c.name || c.slug}`)
     .join("\n");
@@ -768,14 +850,41 @@ Gerar uma pequena introdução e botões para desambiguar a intenção do usuár
   return withDeadlineAbort(async (signal) => {
     try {
       const caps = getModelCaps(agent.model);
+      
+      // 🔑 PADRÃO DA BÍBLIA: Detectar se precisa enviar prompts developer
+      const hasSessionId = !!opts?.sessionId;
+      
+      // Primeira chamada ensureSession para obter previous_response_id e flag de nova sessão
+      let finalPreviousResponseId;
+      let isNewSession = true; // Default para nova sessão
+      if (hasSessionId) {
+        try {
+          const sessionResult = await ensureSession({ sessionId: opts.sessionId!, agent, channel }, signal);
+          finalPreviousResponseId = sessionResult.responseId;
+          isNewSession = sessionResult.isNewSession;
+        } catch (error) {
+          console.warn("[Session] Erro ao obter sessão:", error);
+          isNewSession = true; // Em caso de erro, tratar como nova sessão
+        }
+      }
+      
+      const statelessInit = isNewSession; // Se é nova sessão, precisa enviar developer prompts
+      
+      // 🧠 MENSAGENS DINÂMICAS: developer prompts apenas na primeira vez
+      const messages = [
+        ...(statelessInit
+          ? [
+              { role: "developer" as const, content: createMasterPrompt(channel) },
+              { role: "developer" as const, content: taskRules },
+            ]
+          : []),
+        { role: "user" as const, content: user },
+      ];
+
       const result = await structuredOrJson<WarmupButtonsResponse>({
         client: this.client,
         model: agent.model,
-        messages: [
-          { role: "developer", content: createMasterPrompt(channel) },
-          { role: "developer", content: taskRules },
-          { role: "user", content: user },
-        ],
+        messages,
         instructions: agent.instructions || "Você é um UX writer especializado em criar botões de navegação. Siga o schema estritamente e gere botões objetivos.",
         max_output_tokens: agent.maxOutputTokens || 256,
         verbosity: caps.reasoning && isGPT5(agent.model) ? normVerb(agent.verbosity) : undefined,
@@ -813,6 +922,9 @@ export async function routerLLM(
   const schema = createRouterSchema(channel);
   const c = getConstraintsForChannel(channel);
 
+  // 🔍 DEBUG: Log sessionId recebido
+  console.log("🎯 ROUTER LLM - SessionId recebido:", opts?.sessionId);
+
   // ✅ HIERARQUIA MODERNA: Instructions para identidade + 1 developer para regras específicas
   const taskRules = `
 # OBJETIVO
@@ -837,14 +949,41 @@ Como ${agent.instructions ? 'assistente especializado' : 'roteador inteligente'}
   return withDeadlineAbort(async (signal) => {
     try {
       const caps = getModelCaps(agent.model);
+      
+      // 🔑 PADRÃO DA BÍBLIA: Detectar se precisa enviar prompts developer
+      const hasSessionId = !!opts?.sessionId;
+      
+      // Primeira chamada ensureSession para obter previous_response_id e flag de nova sessão
+      let finalPreviousResponseId;
+      let isNewSession = true; // Default para nova sessão
+      if (hasSessionId) {
+        try {
+          const sessionResult = await ensureSession({ sessionId: opts.sessionId!, agent, channel }, signal);
+          finalPreviousResponseId = sessionResult.responseId;
+          isNewSession = sessionResult.isNewSession;
+        } catch (error) {
+          console.warn("[Session] Erro ao obter sessão:", error);
+          isNewSession = true; // Em caso de erro, tratar como nova sessão
+        }
+      }
+      
+      const statelessInit = isNewSession; // Se é nova sessão, precisa enviar developer prompts
+      
+      // 🧠 MENSAGENS DINÂMICAS: developer prompts apenas na primeira vez
+      const messages = [
+        ...(statelessInit
+          ? [
+              { role: "developer" as const, content: createMasterPrompt(channel) },
+              { role: "developer" as const, content: taskRules },
+            ]
+          : []),
+        { role: "user" as const, content: user },
+      ];
+
       const result = await structuredOrJson<RouterDecision>({
         client: this.client,
         model: agent.model,
-        messages: [
-          { role: "developer", content: createMasterPrompt(channel) },
-          { role: "developer", content: taskRules },
-          { role: "user", content: user },
-        ],
+        messages,
         instructions: agent.instructions || "Você é um roteador inteligente. Siga o schema estritamente.",
         max_output_tokens: agent.maxOutputTokens || 512,
         verbosity: caps.reasoning && isGPT5(agent.model) ? normVerb(agent.verbosity) : undefined,

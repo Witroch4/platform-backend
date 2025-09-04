@@ -604,11 +604,11 @@ export function AppAdminDashboard() {
                     onClick={(e) => {
                       e.preventDefault();
                       startTransition(() => {
-                        router.push('/admin/openai-source-test');
+                        router.push('/admin/openai-source-test-biblia');
                       });
                     }}
                     onMouseEnter={() => {
-                      try { router.prefetch('/admin/openai-source-test'); } catch {}
+                      try { router.prefetch('/admin/openai-source-test-biblia'); } catch {}
                     }}
                     className={`flex items-center transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
                   >

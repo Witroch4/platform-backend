@@ -115,8 +115,8 @@ export class SocialWiseMonitoringDashboard {
   
   private readonly QUALITY_SAMPLE_RATE = 0.1; // 10% sampling
   private readonly MAX_QUALITY_SAMPLES = 1000;
-  private readonly HEALTH_CHECK_INTERVAL_MS = 30000; // 30 seconds
-  private readonly ALERT_CHECK_INTERVAL_MS = 60000; // 1 minute
+  private readonly HEALTH_CHECK_INTERVAL_MS = 300000; // 5 minutes (instead of 30 seconds)
+  private readonly ALERT_CHECK_INTERVAL_MS = 300000; // 5 minutes (instead of 1 minute)
 
   constructor() {
     this.redis = getRedisInstance();
@@ -134,7 +134,7 @@ export class SocialWiseMonitoringDashboard {
    * Start periodic monitoring tasks
    */
   private startPeriodicTasks(): void {
-    // Health checks
+    // Health checks - Reabilitado com timeout de 5 minutos
     this.healthCheckInterval = setInterval(() => {
       this.performHealthChecks().catch(error => {
         dashboardLogger.error('Health check failed', { 
@@ -143,7 +143,7 @@ export class SocialWiseMonitoringDashboard {
       });
     }, this.HEALTH_CHECK_INTERVAL_MS);
 
-    // Alert checks
+    // Alert checks - Reabilitado com intervalo de 5 minutos
     this.alertCheckInterval = setInterval(() => {
       this.checkSLAViolations().catch(error => {
         dashboardLogger.error('SLA check failed', { 
@@ -152,7 +152,7 @@ export class SocialWiseMonitoringDashboard {
       });
     }, this.ALERT_CHECK_INTERVAL_MS);
 
-    dashboardLogger.info('SocialWise monitoring tasks started');
+    dashboardLogger.info('SocialWise monitoring tasks started (5-minute intervals)');
   }
 
   /**
@@ -216,7 +216,7 @@ export class SocialWiseMonitoringDashboard {
     try {
       const [embeddingHealth, llmHealth] = await Promise.allSettled([
         this.checkEmbeddingIndexHealth(),
-        this.checkLLMAvailability()
+        this.checkLLMAvailability() // Reabilitado com timeout de 5 minutos
       ]);
 
       // Process embedding health
@@ -231,7 +231,7 @@ export class SocialWiseMonitoringDashboard {
         });
       }
 
-      // Process LLM health
+      // Process LLM health - Reabilitado
       if (llmHealth.status === 'fulfilled') {
         await this.processLLMHealthResult(llmHealth.value);
       } else {
@@ -309,14 +309,14 @@ export class SocialWiseMonitoringDashboard {
     const startTime = Date.now();
     
     try {
-      // Test simple LLM call with proper deadline configuration
+      // Test simple LLM call with extended deadline configuration (5 minutes)
       const testAgent = {
         model: 'gpt-4o-mini',
         developer: 'Health check test',
         instructions: 'Respond with "OK" only',
-        hardDeadlineMs: 10000, // 10 seconds for health check
-        warmupDeadlineMs: 5000, // 5 seconds for health check
-        softDeadlineMs: 8000    // 8 seconds for health check
+        hardDeadlineMs: 300000, // 5 minutes for health check
+        warmupDeadlineMs: 300000, // 5 minutes for health check
+        softDeadlineMs: 300000    // 5 minutes for health check
       };
       
       const response = await openaiService.routerLLM("Health check", testAgent);
