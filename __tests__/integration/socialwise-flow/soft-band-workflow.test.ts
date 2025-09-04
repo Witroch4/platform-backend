@@ -60,7 +60,7 @@ describe('SoftBandProcessor Integration Tests', () => {
 
       // Mock successful warmup buttons generation
       openaiService.generateWarmupButtons.mockResolvedValue({
-        introduction_text: 'Posso ajudar com sua questão. Qual dessas opções se aproxima mais do que você precisa?',
+        response_text: 'Posso ajudar com sua questão. Qual dessas opções se aproxima mais do que você precisa?',
         buttons: [
           { title: 'Recorrer Multa', payload: '@recurso_multa_transito' },
           { title: 'Ação Judicial', payload: '@mandado_seguranca' },
@@ -76,7 +76,7 @@ describe('SoftBandProcessor Integration Tests', () => {
 
       expect(duration).toBeLessThan(300);
       expect(result.type).toBe('warmup_buttons');
-      expect(result.introduction_text).toBeTruthy();
+      expect(result.response_text).toBeTruthy();
       expect(result.buttons).toHaveLength(3);
       expect(result.response_time_ms).toBeLessThan(300);
 
@@ -101,7 +101,7 @@ describe('SoftBandProcessor Integration Tests', () => {
 
       // Mock successful warmup buttons generation (should still work)
       openaiService.generateWarmupButtons.mockResolvedValue({
-        introduction_text: 'Posso ajudar com sua questão jurídica. Qual dessas opções se aproxima mais?',
+        response_text: 'Posso ajudar com sua questão jurídica. Qual dessas opções se aproxima mais?',
         buttons: [
           { title: 'Recurso Multa', payload: '@recurso_multa_transito' },
           { title: 'Mandado Segurança', payload: '@mandado_seguranca' },
@@ -146,7 +146,7 @@ describe('SoftBandProcessor Integration Tests', () => {
 
       expect(duration).toBeLessThan(300);
       expect(result.type).toBe('warmup_buttons');
-      expect(result.introduction_text).toBe('Posso ajudar com sua questão jurídica. Qual dessas opções se aproxima mais do que você precisa?');
+      expect(result.response_text).toBe('Posso ajudar com sua questão jurídica. Qual dessas opções se aproxima mais do que você precisa?');
       expect(result.buttons).toHaveLength(3);
       
       // Should have humanized titles (clamped to 20 characters at word boundaries)
@@ -168,7 +168,7 @@ describe('SoftBandProcessor Integration Tests', () => {
         'Título 1', 'Título 2', 'Título 3'
       ]);
       openaiService.generateWarmupButtons.mockResolvedValue({
-        introduction_text: 'Teste',
+        response_text: 'Teste',
         buttons: [
           { title: 'Botão 1', payload: '@test1' },
           { title: 'Botão 2', payload: '@test2' },
@@ -191,7 +191,7 @@ describe('SoftBandProcessor Integration Tests', () => {
         'Título 1', 'Título 2' // Missing third title
       ]);
       openaiService.generateWarmupButtons.mockResolvedValue({
-        introduction_text: 'Teste parcial',
+        response_text: 'Teste parcial',
         buttons: [
           { title: 'Botão 1', payload: '@test1' },
           { title: 'Botão 2', payload: '@test2' }
@@ -214,7 +214,7 @@ describe('SoftBandProcessor Integration Tests', () => {
         'Rápido 1', 'Rápido 2', 'Rápido 3'
       ]);
       openaiService.generateWarmupButtons.mockResolvedValue({
-        introduction_text: 'Resposta rápida',
+        response_text: 'Resposta rápida',
         buttons: [
           { title: 'Rápido 1', payload: '@fast1' },
           { title: 'Rápido 2', payload: '@fast2' },
@@ -269,7 +269,7 @@ describe('SoftBandProcessor Integration Tests', () => {
       expect(result.buttons).toHaveLength(3);
       
       // Should use fallback buttons
-      expect(result.introduction_text).toBe('Posso ajudar com sua questão jurídica. Qual dessas opções se aproxima mais do que você precisa?');
+      expect(result.response_text).toBe('Posso ajudar com sua questão jurídica. Qual dessas opções se aproxima mais do que você precisa?');
     });
   });
 
@@ -281,7 +281,7 @@ describe('SoftBandProcessor Integration Tests', () => {
         'Título Válido', 'Outro Título', 'Terceiro'
       ]);
       openaiService.generateWarmupButtons.mockResolvedValue({
-        introduction_text: 'Escolha uma opção:',
+        response_text: 'Escolha uma opção:',
         buttons: [
           { title: 'Título Válido', payload: '@recurso_multa_transito' },
           { title: 'Outro Título', payload: '@mandado_seguranca' },
@@ -309,7 +309,7 @@ describe('SoftBandProcessor Integration Tests', () => {
       ]);
       // Mock the OpenAI service to return long titles (simulating what would happen before clamping)
       openaiService.generateWarmupButtons.mockResolvedValue({
-        introduction_text: 'Títulos longos serão cortados:',
+        response_text: 'Títulos longos serão cortados:',
         buttons: [
           { title: 'Título Muito Longo Q', payload: '@test1' }, // Already clamped by OpenAI service
           { title: 'Outro Título Também', payload: '@test2' },
@@ -340,7 +340,7 @@ describe('SoftBandProcessor Integration Tests', () => {
       ]);
       // OpenAI service should already limit to 3 buttons, but let's test our defense in depth
       openaiService.generateWarmupButtons.mockResolvedValue({
-        introduction_text: 'Muitas opções:',
+        response_text: 'Muitas opções:',
         buttons: [
           { title: 'Título 1', payload: '@test1' },
           { title: 'Título 2', payload: '@test2' },
@@ -372,7 +372,7 @@ describe('SoftBandProcessor Integration Tests', () => {
 
       expect(result.type).toBe('warmup_buttons');
       expect(result.buttons).toHaveLength(3);
-      expect(result.introduction_text).toBeTruthy();
+      expect(result.response_text).toBeTruthy();
     });
 
     test('should handle network errors gracefully', async () => {
@@ -390,7 +390,7 @@ describe('SoftBandProcessor Integration Tests', () => {
 
       expect(result.type).toBe('warmup_buttons');
       expect(result.buttons).toHaveLength(3);
-      expect(result.introduction_text).toBe('Posso ajudar com sua questão jurídica. Qual dessas opções se aproxima mais do que você precisa?');
+      expect(result.response_text).toBe('Posso ajudar com sua questão jurídica. Qual dessas opções se aproxima mais do que você precisa?');
     });
 
     test('should handle empty candidates array', async () => {
@@ -398,7 +398,7 @@ describe('SoftBandProcessor Integration Tests', () => {
 
       expect(result.type).toBe('warmup_buttons');
       expect(result.buttons).toHaveLength(0);
-      expect(result.introduction_text).toBeTruthy();
+      expect(result.response_text).toBeTruthy();
     });
   });
 
@@ -410,7 +410,7 @@ describe('SoftBandProcessor Integration Tests', () => {
         'Consistente 1', 'Consistente 2', 'Consistente 3'
       ]);
       openaiService.generateWarmupButtons.mockResolvedValue({
-        introduction_text: 'Performance consistente',
+        response_text: 'Performance consistente',
         buttons: [
           { title: 'Consistente 1', payload: '@test1' },
           { title: 'Consistente 2', payload: '@test2' },

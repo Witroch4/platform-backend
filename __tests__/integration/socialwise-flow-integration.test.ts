@@ -262,7 +262,7 @@ describe('SocialWise Flow Integration Tests', () => {
 
     test('should generate warmup buttons for SOFT band classification', async () => {
       mockOpenAI.generateWarmupButtons.mockResolvedValue({
-        introduction_text: 'Vejo que você tem uma questão relacionada à OAB. Qual dessas opções melhor descreve sua situação?',
+        response_text: 'Vejo que você tem uma questão relacionada à OAB. Qual dessas opções melhor descreve sua situação?',
         buttons: [
           { title: 'Recurso OAB', payload: '@recurso_oab' },
           { title: 'Inscrição OAB', payload: '@inscricao_oab' },
@@ -337,7 +337,7 @@ describe('SocialWise Flow Integration Tests', () => {
 
     test('should validate button constraints in SOFT band responses', async () => {
       mockOpenAI.generateWarmupButtons.mockResolvedValue({
-        introduction_text: 'Esta é uma introdução muito longa que pode exceder os limites de caracteres permitidos para o WhatsApp e precisa ser truncada adequadamente para manter a compatibilidade com a plataforma.',
+        response_text: 'Esta é uma introdução muito longa que pode exceder os limites de caracteres permitidos para o WhatsApp e precisa ser truncada adequadamente para manter a compatibilidade com a plataforma.',
         buttons: [
           { title: 'Título muito longo que excede limite', payload: '@recurso_oab' },
           { title: 'Inscrição', payload: '@inscricao_oab' },
@@ -461,7 +461,7 @@ describe('SocialWise Flow Integration Tests', () => {
       mockOpenAI.routerLLM.mockResolvedValue({
         mode: 'intent',
         intent_payload: '@recurso_oab',
-        introduction_text: 'Entendi que você quer fazer um recurso na OAB.',
+        response_text: 'Entendi que você quer fazer um recurso na OAB.',
       });
 
       mockBuildWhatsAppByIntentRaw.mockResolvedValue({
@@ -576,7 +576,7 @@ describe('SocialWise Flow Integration Tests', () => {
       });
 
       mockOpenAI.generateWarmupButtons.mockResolvedValue({
-        introduction_text: 'Como posso ajudar?',
+        response_text: 'Como posso ajudar?',
         buttons: [
           { title: 'Opção 1', payload: '@opcao_1' },
           { title: 'Opção 2', payload: '@opcao_2' },
@@ -625,7 +625,7 @@ describe('SocialWise Flow Integration Tests', () => {
       });
 
       mockOpenAI.generateWarmupButtons.mockResolvedValue({
-        introduction_text: 'Posso ajudar com:',
+        response_text: 'Posso ajudar com:',
         buttons: [
           { title: 'Instagram 1', payload: '@instagram_1' },
           { title: 'Instagram 2', payload: '@instagram_2' },
@@ -708,7 +708,7 @@ describe('SocialWise Flow Integration Tests', () => {
       });
 
       mockOpenAI.generateWarmupButtons.mockResolvedValue({
-        introduction_text: 'Test payload validation',
+        response_text: 'Test payload validation',
         buttons: [
           { title: 'Valid Payload', payload: '@valid_payload_123' },
           { title: 'Invalid', payload: 'invalid-payload-format!' }, // Invalid format
@@ -845,7 +845,7 @@ describe('SocialWise Flow Integration Tests', () => {
       });
 
       mockOpenAI.generateWarmupButtons.mockResolvedValue({
-        introduction_text: 'GPT-5 generated response',
+        response_text: 'GPT-5 generated response',
         buttons: [
           { title: 'GPT-5 Option', payload: '@gpt5_option' },
         ],

@@ -7,6 +7,7 @@
 import { createLogger } from '@/lib/utils/logger';
 import { getPrismaInstance } from '@/lib/connections';
 import { openaiService } from '@/services/openai';
+import type { ChannelType } from '@/services/openai-components/types';
 import { classifyIntent, ClassificationResult } from './classification';
 import { buildChannelResponse, buildDefaultLegalTopics, buildFallbackResponse, logChannelResponse, ChannelResponse } from './channel-formatting';
 import { collectPerformanceMetrics, createPerformanceMetrics } from './metrics';
@@ -49,6 +50,7 @@ export interface ProcessorContext {
   contactPhone?: string;
   assistantId?: string; // Para playground e casos específicos
   originalPayload?: any; // Para detectar cliques de botão
+  sessionId?: string; // Para continuidade conversacional
 }
 
 export interface ButtonReactionMeta {
@@ -56,6 +58,29 @@ export interface ButtonReactionMeta {
   reaction?: 'love' | 'like' | 'haha' | 'wow' | 'sad' | 'angry';
   reactionEmoji?: string;
   textReaction?: string;
+  mappingFound?: boolean; // Indica se o botão foi mapeado
+  shouldContinueProcessing?: boolean; // Indica se deve continuar para LLM
+}
+
+/** 
+ * Extrai sessionId do payload conforme o canal:
+ * - WhatsApp: número do telefone
+ * - Instagram: ID da plataforma
+ */
+export function extractSessionId(payload: any, channelType: string): string | undefined {
+  if (!payload) return undefined;
+
+  // WhatsApp: sessionId é o número do telefone
+  if (isWhatsAppChannel(channelType)) {
+    return payload.contacts?.[0]?.wa_id || payload.entry?.[0]?.changes?.[0]?.value?.contacts?.[0]?.wa_id;
+  }
+
+  // Instagram: sessionId é o ID da plataforma
+  if (isInstagramChannel(channelType)) {
+    return payload.entry?.[0]?.messaging?.[0]?.sender?.id || payload.sender?.id;
+  }
+
+  return undefined;
 }
 
 export interface ProcessorResult {
@@ -346,7 +371,10 @@ async function processSoftBand(
         context.userText,
         classification.candidates,
         agentConfig,
-        { channelType: normalizeChannelType(context.channelType) }
+        { 
+          channelType: normalizeChannelType(context.channelType),
+          sessionId: context.sessionId
+        }
       ),
       {
         priority: 'medium',
@@ -365,7 +393,7 @@ async function processSoftBand(
 
       const response = buildChannelResponse(
         context.channelType,
-        warmupResult.introduction_text,
+        warmupResult.response_text,
         buttons
       );
 
@@ -469,7 +497,10 @@ async function processRouterBand(
     // Use Router LLM to decide between intent and chat with concurrency control
     const routerResult = await concurrencyManager.executeLlmOperation(
       context.inboxId,
-      () => openaiService.routerLLM(context.userText, agentConfig, { channelType: normalizeChannelType(context.channelType) }),
+      () => openaiService.routerLLM(context.userText, agentConfig, { 
+        channelType: normalizeChannelType(context.channelType),
+        sessionId: context.sessionId
+      }),
       {
         priority: 'high', // Router decisions are high priority
         timeoutMs: agentConfig.hardDeadlineMs || 400,
@@ -480,6 +511,16 @@ async function processRouterBand(
     const llmWarmupMs = Date.now() - startTime;
 
     if (routerResult) {
+      // Debug: Log router result details
+      processorLogger.info('Router LLM result details', {
+        mode: routerResult.mode,
+        intent_payload: routerResult.intent_payload,
+        response_text: routerResult.response_text,
+        response_text_length: routerResult.response_text?.length || 0,
+        buttons_count: routerResult.buttons?.length || 0,
+        traceId: context.traceId
+      });
+      
       if (routerResult.mode === 'intent' && routerResult.intent_payload) {
         // Try to map the intent (only for WhatsApp)
         const intentName = routerResult.intent_payload.replace(/^@/, '');
@@ -508,7 +549,18 @@ async function processRouterBand(
         payload: btn.payload
       }));
 
-      const responseText = routerResult.introduction_text || routerResult.text || 'Como posso ajudar você?';
+      // O Router LLM sempre deve retornar response_text válido
+      const responseText = routerResult.response_text;
+      
+      // Debug: Log response construction details
+      processorLogger.info('Building channel response', {
+        mode: routerResult.mode,
+        response_text: routerResult.response_text,
+        response_text_length: routerResult.response_text?.length || 0,
+        buttonsCount: buttons?.length || 0,
+        traceId: context.traceId
+      });
+      
       const response = buildChannelResponse(context.channelType, responseText, buttons);
 
       processorLogger.info('ROUTER band decision processed', {
@@ -612,7 +664,11 @@ async function processButtonReaction(context: ProcessorContext): Promise<ButtonR
                           payload.context?.wamid || 
                           payload.wamid;
   
-  if (!context.inboxId) return { replyToMessageId };
+  if (!context.inboxId) return { 
+    replyToMessageId, 
+    mappingFound: false, 
+    shouldContinueProcessing: true 
+  };
 
   try {
     const prisma = getPrismaInstance();
@@ -627,7 +683,20 @@ async function processButtonReaction(context: ProcessorContext): Promise<ButtonR
       },
     });
 
-    if (!mapping || !mapping.actionPayload) return { replyToMessageId };
+    // Se não há mapeamento, sinaliza para continuar processamento com LLM
+    if (!mapping || !mapping.actionPayload) {
+      processorLogger.info('Button not mapped, continuing to LLM processing', {
+        buttonId,
+        inboxId: context.inboxId,
+        traceId: context.traceId
+      });
+      
+      return { 
+        replyToMessageId, 
+        mappingFound: false, 
+        shouldContinueProcessing: true 
+      };
+    }
 
     // Extrai dados de reação do actionPayload
     const actionPayload: any = mapping.actionPayload || {};
@@ -637,7 +706,7 @@ async function processButtonReaction(context: ProcessorContext): Promise<ButtonR
     // Mapeia emoji para reação Instagram
     const reaction = mapEmojiToInstagramReaction(emoji);
     
-    processorLogger.info('Button reaction detected', {
+    processorLogger.info('Button reaction mapped successfully', {
       buttonId,
       inboxId: context.inboxId,
       channelType: context.channelType,
@@ -653,6 +722,8 @@ async function processButtonReaction(context: ProcessorContext): Promise<ButtonR
       reaction: reaction || undefined,
       reactionEmoji: emoji || undefined,
       textReaction: textReaction || undefined,
+      mappingFound: true,
+      shouldContinueProcessing: false // Não continua processamento quando há mapeamento
     };
     
   } catch (error) {
@@ -663,7 +734,12 @@ async function processButtonReaction(context: ProcessorContext): Promise<ButtonR
       traceId: context.traceId
     });
     
-    return { replyToMessageId };
+    // Em caso de erro, continua para LLM
+    return { 
+      replyToMessageId, 
+      mappingFound: false, 
+      shouldContinueProcessing: true 
+    };
   }
 }
 
@@ -843,6 +919,9 @@ export async function processSocialWiseFlow(
   try {
     // 1. Check for button reactions first (for both WhatsApp and Instagram)
     let buttonReactionMeta: ButtonReactionMeta | undefined;
+    let shouldProcessLLM = true; // Por padrão, processa LLM
+    let bypassEmbedding = false; // Flag para pular embedding em botões não mapeados
+    
     if (isInstagramChannel(context.channelType) || isWhatsAppChannel(context.channelType)) {
       buttonReactionMeta = await processButtonReaction(context);
       
@@ -851,9 +930,87 @@ export async function processSocialWiseFlow(
           channelType: context.channelType,
           hasReaction: !!buttonReactionMeta.reaction,
           hasTextReaction: !!buttonReactionMeta.textReaction,
+          mappingFound: !!buttonReactionMeta.mappingFound,
+          shouldContinueProcessing: !!buttonReactionMeta.shouldContinueProcessing,
           traceId: context.traceId
         });
+        
+        // Se é botão mapeado que não precisa de LLM, só aplica a reação sem processar LLM
+        if (buttonReactionMeta.mappingFound && !buttonReactionMeta.shouldContinueProcessing) {
+          shouldProcessLLM = false;
+        }
+        
+        // Se é botão não mapeado, modifica o contexto para processar o texto real do botão
+        if (!buttonReactionMeta.mappingFound && buttonReactionMeta.shouldContinueProcessing) {
+          // Usa o campo 'message' padronizado que contém o texto real do botão
+          // Esse campo é consistente entre WhatsApp e Instagram
+          const realButtonText = context.originalPayload?.message;
+          
+          if (realButtonText && realButtonText.trim()) {
+            context.userText = realButtonText;
+            
+            // 🚀 OTIMIZAÇÃO: Para botões não mapeados, pular embedding e ir direto para Router LLM
+            bypassEmbedding = true;
+            
+            processorLogger.info('Button not mapped, bypassing embedding and using Router LLM directly', {
+              originalUserText: context.userText,
+              realButtonText: realButtonText,
+              bypassEmbedding: true,
+              traceId: context.traceId
+            });
+          } else {
+            // Fallback: extrai o buttonId para usar como texto se não houver message
+            const payload = context.originalPayload;
+            let buttonId: string | undefined;
+            
+            if (isWhatsAppChannel(context.channelType)) {
+              buttonId = payload?.context?.message?.content_attributes?.button_reply?.id || payload?.button_id;
+            } else if (isInstagramChannel(context.channelType)) {
+              buttonId = payload?.context?.message?.content_attributes?.postback_payload || payload?.postback_payload;
+            }
+            
+            if (buttonId) {
+              // Remove @ do início se existir e usa como texto de entrada
+              const buttonText = buttonId.startsWith('@') ? buttonId.substring(1) : buttonId;
+              context.userText = buttonText;
+              
+              // Também bypassa embedding para fallback de buttonId
+              bypassEmbedding = true;
+              
+              processorLogger.info('Button not mapped, bypassing embedding and using buttonId as fallback for Router LLM', {
+                originalButtonId: buttonId,
+                fallbackText: buttonText,
+                bypassEmbedding: true,
+                traceId: context.traceId
+              });
+            }
+          }
+        }
       }
+    }
+
+    // Se é botão mapeado que não precisa de LLM, retorna apenas a reação
+    if (!shouldProcessLLM && buttonReactionMeta) {
+      const fallbackResponse = buildFallbackResponse(context.channelType, "");
+      const routeTotalMs = Date.now() - startTime;
+      
+      // Aplica metadados de reação
+      let response = fallbackResponse;
+      if (isInstagramChannel(context.channelType)) {
+        response = applyInstagramReactionMeta(response, buttonReactionMeta);
+      } else if (isWhatsAppChannel(context.channelType)) {
+        response = applyWhatsAppReactionMeta(response, buttonReactionMeta);
+      }
+      
+      return {
+        response,
+        metrics: {
+          band: 'ROUTER',
+          strategy: 'button_reaction',
+          routeTotalMs,
+          score: 1.0
+        }
+      };
     }
 
     // Resolve user ID from inbox if not provided
@@ -919,7 +1076,29 @@ export async function processSocialWiseFlow(
     let response: ChannelResponse;
     let llmWarmupMs: number | undefined;
 
-    if (embedipreview) {
+    // 🚀 BYPASS OTIMIZADO: Se é botão não mapeado, pular embedding e ir direto para Router LLM
+    if (bypassEmbedding) {
+      processorLogger.info('Bypassing embedding classification for unmapped button, going directly to Router LLM', {
+        userText: context.userText,
+        bypassReason: 'unmapped_button',
+        traceId: context.traceId
+      });
+      
+      // Vai direto para Router LLM sem passar por embedding
+      const routerResult = await processRouterBand(context);
+      response = routerResult.response;
+      llmWarmupMs = routerResult.llmWarmupMs;
+      
+      classification = {
+        band: 'ROUTER',
+        score: 1.0,
+        candidates: [],
+        strategy: 'router_llm_bypass',
+        metrics: {
+          route_total_ms: Date.now() - startTime
+        }
+      };
+    } else if (embedipreview) {
       // Embedding-first classification with degradation context
       const classificationContext = {
         channelType: context.channelType,
@@ -943,6 +1122,12 @@ export async function processSocialWiseFlow(
           const softResult = await processSoftBand(classification, context);
           response = softResult.response;
           llmWarmupMs = softResult.llmWarmupMs;
+          break;
+        case 'ROUTER':
+          // Process ROUTER band within embedding-first mode (degraded cases)
+          const routerResult = await processRouterBand(context);
+          response = routerResult.response;
+          llmWarmupMs = routerResult.llmWarmupMs;
           break;
 
         default:

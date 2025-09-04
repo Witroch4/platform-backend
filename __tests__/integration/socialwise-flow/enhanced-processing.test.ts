@@ -195,7 +195,7 @@ describe('SocialWise Flow Enhanced Processing Integration', () => {
       ]);
 
       mockOpenAIService.generateWarmupButtons.mockResolvedValue({
-        introduction_text: 'Posso ajudar com qual dessas opções?',
+        response_text: 'Posso ajudar com qual dessas opções?',
         buttons: [
           { title: 'Consulta jurídica', payload: '@consulta_juridica' },
           { title: 'Documentos', payload: '@documentos' },
@@ -317,7 +317,7 @@ describe('SocialWise Flow Enhanced Processing Integration', () => {
 
       mockOpenAIService.routerLLM.mockResolvedValue({
         mode: 'chat',
-        introduction_text: 'Como posso ajudar você hoje?',
+        response_text: 'Como posso ajudar você hoje?',
         buttons: [
           { title: 'Consulta', payload: '@consulta' },
           { title: 'Documentos', payload: '@documentos' }

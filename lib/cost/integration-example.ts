@@ -113,7 +113,7 @@ export async function processRequestWithCostTracking(
     // Step 4: Generate response (simulated)
     const response = {
       type: 'warmup_buttons',
-      introduction_text: 'Posso ajudar com sua questão jurídica. Qual dessas opções se aproxima mais do que você precisa?',
+      response_text: 'Posso ajudar com sua questão jurídica. Qual dessas opções se aproxima mais do que você precisa?',
       buttons: [
         { title: 'Direito Civil', payload: '@consulta_direito_civil' },
         { title: 'Direito Consumidor', payload: '@consulta_direito_consumidor' },

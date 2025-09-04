@@ -56,7 +56,7 @@ export interface IntentCandidate {
 }
 
 export interface WarmupButtonsResponse {
-  introduction_text: string;
+  response_text: string;
   buttons: Array<{
     title: string;
     payload: string;
@@ -66,12 +66,12 @@ export interface WarmupButtonsResponse {
 export interface RouterDecision {
   mode: "intent" | "chat";
   intent_payload?: string;
-  introduction_text?: string;
-  buttons?: Array<{
+  response_text: string; // Obrigatório
+  buttons: Array<{           // Obrigatório, mínimo 2, máximo 3
     title: string;
     payload: string;
   }>;
-  text?: string;
+  // text removido - forçar uso de botões
 }
 
 // Canal do front (controla limites do schema)
@@ -167,20 +167,29 @@ export interface IOpenAIService {
     userText: string,
     candidates: IntentCandidate[],
     agent: AgentConfig,
-    opts?: { channelType?: ChannelType }
+    opts?: { 
+      channelType?: ChannelType;
+      sessionId?: string;
+    }
   ): Promise<WarmupButtonsResponse | null>;
 
   // 🎯 NOVA FUNCIONALIDADE: Chat livre com IA para banda LOW
   generateFreeChatButtons(
     userText: string,
     agent: AgentConfig,
-    opts?: { channelType?: ChannelType }
+    opts?: { 
+      channelType?: ChannelType;
+      sessionId?: string;
+    }
   ): Promise<WarmupButtonsResponse | null>;
 
   routerLLM(
     userText: string,
     agent: AgentConfig,
-    opts?: { channelType?: ChannelType }
+    opts?: { 
+      channelType?: ChannelType;
+      sessionId?: string;
+    }
   ): Promise<RouterDecision | null>;
 
   // Enhanced deadline management

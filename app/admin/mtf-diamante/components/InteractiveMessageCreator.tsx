@@ -49,28 +49,32 @@ export const InteractiveMessageCreator: React.FC<
     [caixas, inboxId]
   );
   
-  // Debug log para verificar detecção do canal
+    // Debug log para verificar detecção do canal (throttled)
   useEffect(() => {
     if (caixas && inboxId) {
-      const inbox = caixas.find((c: any) => c.id === inboxId);
-      console.log('🔍 [InteractiveMessageCreator] Canal detectado:', {
-        inboxId,
-        channelType,
-        inboxData: inbox ? { 
-          id: inbox.id,
-          nome: inbox.nome, 
-          channelType: inbox.channelType,
-          inboxId: inbox.inboxId 
-        } : 'não encontrado',
-        totalCaixas: caixas.length,
-        todasCaixas: caixas.map((c: any) => ({ 
-          id: c.id, 
-          nome: c.nome, 
-          channelType: c.channelType 
-        }))
-      });
+      const now = Date.now();
+      if (now - lastLogTimes.current.canalDetectado > 3000) { // Apenas a cada 3 segundos
+        const inbox = caixas.find((c: any) => c.id === inboxId);
+        console.log('🔍 [InteractiveMessageCreator] Canal detectado:', {
+          inboxId,
+          channelType,
+          inboxData: inbox ? { 
+            id: inbox.id,
+            nome: inbox.nome, 
+            channelType: inbox.channelType,
+            inboxId: inbox.inboxId 
+          } : 'não encontrado',
+          totalCaixas: caixas.length,
+          todasCaixas: caixas.map((c: any) => ({ 
+            id: c.id, 
+            nome: c.nome, 
+            channelType: c.channelType 
+          }))
+        });
+        lastLogTimes.current.canalDetectado = now;
+      }
     }
-  }, [channelType, inboxId, caixas]);
+  }, [caixas, inboxId, channelType]);
   const reactionsLoadedRef = useRef(false);
 
   // Initialize state with proper defaults
@@ -306,10 +310,24 @@ export const InteractiveMessageCreator: React.FC<
     state.saving
   ]);
 
+  // Throttling para logs repetitivos
+  const lastLogTimes = useRef({
+    noReactions: 0,
+    canalDetectado: 0,
+    debugReactions: 0,
+    actionReactions: 0,
+    processedReactions: 0
+  });
+
   const reviewProps = useMemo(() => {
     // Otimização: Skip processamento se não há reações
     if (!state.reactions || state.reactions.length === 0) {
-      console.log('🎯 [InteractiveMessageCreator] No reactions to process - skipping');
+      // Throttle este log para evitar spam
+      const now = Date.now();
+      if (now - lastLogTimes.current.noReactions > 2000) {
+        console.log('🎯 [InteractiveMessageCreator] No reactions to process - skipping');
+        lastLogTimes.current.noReactions = now;
+      }
       return {
         message: state.message,
         reactions: [],
@@ -321,8 +339,12 @@ export const InteractiveMessageCreator: React.FC<
       };
     }
     
-    // Debug log para verificar o estado das reactions
-    console.log('🔍 [InteractiveMessageCreator] Debug state.reactions:', state.reactions.length, 'reactions');
+    // Debug log para verificar o estado das reactions (throttled)
+    const now = Date.now();
+    if (now - lastLogTimes.current.debugReactions > 2000) {
+      console.log('🔍 [InteractiveMessageCreator] Debug state.reactions:', state.reactions.length, 'reactions');
+      lastLogTimes.current.debugReactions = now;
+    }
     
     const processedReactions = state.reactions.reduce((acc, r) => {
       // Para cada reação, criar entradas separadas para emoji, texto e ação
@@ -337,7 +359,12 @@ export const InteractiveMessageCreator: React.FC<
       }
       
       if (r.action) {
-        console.log('🎯 [InteractiveMessageCreator] Found action reaction:', r.action, 'for button:', r.buttonId);
+        // Throttle action logs para evitar spam
+        const now = Date.now();
+        if (now - lastLogTimes.current.actionReactions > 3000) {
+          console.log('🎯 [InteractiveMessageCreator] Found action reaction:', r.action, 'for button:', r.buttonId);
+          lastLogTimes.current.actionReactions = now;
+        }
         acc.push({ buttonId: r.buttonId, reaction: { type: 'action', value: r.action } });
       }
       
@@ -350,7 +377,11 @@ export const InteractiveMessageCreator: React.FC<
       return acc;
     }, [] as Array<{ buttonId: string; reaction: { type: 'emoji' | 'text' | 'action'; value: string } }>);
     
-    console.log('🎯 [InteractiveMessageCreator] Final processed reactions:', processedReactions.length, 'processed');
+    // Throttle final processed reactions log
+    if (Date.now() - lastLogTimes.current.processedReactions > 2000) {
+      console.log('🎯 [InteractiveMessageCreator] Final processed reactions:', processedReactions.length, 'processed');
+      lastLogTimes.current.processedReactions = Date.now();
+    }
     
     return {
       message: state.message,

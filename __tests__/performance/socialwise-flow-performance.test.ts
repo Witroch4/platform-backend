@@ -138,7 +138,7 @@ describe('SocialWise Flow Performance Tests', () => {
     });
 
     mockOpenAI.generateWarmupButtons.mockResolvedValue({
-      introduction_text: 'Como posso ajudar com sua questão jurídica?',
+      response_text: 'Como posso ajudar com sua questão jurídica?',
       buttons: [
         { title: 'Recurso OAB', payload: '@recurso_oab' },
         { title: 'Inscrição', payload: '@inscricao' },
@@ -149,7 +149,7 @@ describe('SocialWise Flow Performance Tests', () => {
     mockOpenAI.routerLLM.mockResolvedValue({
       mode: 'intent',
       intent_payload: '@recurso_oab',
-      introduction_text: 'Vou ajudar com seu recurso na OAB.',
+      response_text: 'Vou ajudar com seu recurso na OAB.',
     });
 
     mockBuildWhatsAppByIntentRaw.mockResolvedValue({

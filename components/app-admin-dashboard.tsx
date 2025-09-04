@@ -391,12 +391,12 @@ export function AppAdminDashboard() {
                                         {k.tokenPrefix}…{k.tokenSuffix}
                                       </div>
                                       <div className="text-xs text-muted-foreground">
-                                        {k.active ? 'Ativa' : 'Revogada'} • {new Date(k.createdAt).toLocaleString()}
+                                        {(k.active ?? k.isActive) ? 'Ativa' : 'Revogada'} • {k.createdAt ? new Date(k.createdAt).toLocaleString() : 'Data não disponível'}
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                      {k.active && (
-                                        <Button variant="destructive" size="sm" onClick={() => revokeApiKey(k.id)}>Revogar</Button>
+                                      {(k.active ?? k.isActive) && k.id && (
+                                        <Button variant="destructive" size="sm" onClick={() => revokeApiKey(k.id!)}>Revogar</Button>
                                       )}
                                     </div>
                                   </div>

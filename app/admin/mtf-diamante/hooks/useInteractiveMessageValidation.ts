@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { debounce } from 'lodash';
 import type { 
   InteractiveMessage, 
@@ -73,6 +73,12 @@ export const useInteractiveMessageValidation = (
 ): UseInteractiveMessageValidationReturn => {
   
   const finalConfig = useMemo(() => ({ ...DEFAULT_CONFIG, ...config }), [config]);
+  
+  // Throttling para logs repetitivos
+  const lastLogTimes = useRef({
+    canProceedOK: 0,
+    canProceedError: 0
+  });
   
   // State management
   const [validationState, setValidationState] = useState<ValidationState>({
@@ -343,11 +349,19 @@ export const useInteractiveMessageValidation = (
     
     const hasFieldErrors = fieldValidationsWithErrors.length > 0;
     if (hasFieldErrors && process.env.NODE_ENV !== 'production') {
-      console.log('🔴 [canProceed] Bloqueado por erros de campo:', fieldValidationsWithErrors);
+      const now = Date.now();
+      if (now - lastLogTimes.current.canProceedError > 2000) {
+        console.log('🔴 [canProceed] Bloqueado por erros de campo:', fieldValidationsWithErrors);
+        lastLogTimes.current.canProceedError = now;
+      }
     }
     
     if (process.env.NODE_ENV !== 'production' && !hasFieldErrors && !validationState.hasErrors) {
-      console.log('✅ [canProceed] Todas validações OK - pode prosseguir');
+      const now = Date.now();
+      if (now - lastLogTimes.current.canProceedOK > 1500) { // Throttle mais agressivo para este log
+        console.log('✅ [canProceed] Todas validações OK - pode prosseguir');
+        lastLogTimes.current.canProceedOK = now;
+      }
     }
     
     return !hasFieldErrors;

@@ -1,4 +1,14 @@
-{
+#!/usr/bin/env node
+
+/**
+ * Teste do Router LLM com payload real do WhatsApp
+ * Simula o processamento completo do SocialWise Flow
+ */
+
+import fetch from 'node-fetch';
+
+// Payload real do WhatsApp extraído da página de webhook test
+const REAL_WHATSAPP_PAYLOAD = {
   "session_id": "558597550136",
   "message": "Queria saber mais sobre o mandado de segurança da OAB",
   "channel_type": "Channel::Whatsapp",
@@ -191,4 +201,150 @@
     "payload_version": "2.0",
     "timestamp": "2025-08-13T22:38:25Z"
   }
+};
+
+async function testRouterLLMWithRealPayload() {
+  console.log('🚀 Testando Router LLM com payload real do WhatsApp');
+  console.log('📱 Mensagem:', REAL_WHATSAPP_PAYLOAD.message);
+  console.log('📧 Canal:', REAL_WHATSAPP_PAYLOAD.channel_type);
+  console.log('🆔 Session ID:', REAL_WHATSAPP_PAYLOAD.session_id);
+  console.log('📞 Contato:', REAL_WHATSAPP_PAYLOAD.context.contact_name);
+  console.log('📍 Caixa:', REAL_WHATSAPP_PAYLOAD.context.inbox_name);
+  console.log('');
+
+  const startTime = Date.now();
+
+  try {
+    console.log('⏳ Enviando payload para SocialWise Flow...');
+    
+    const response = await fetch('http://localhost:3002/api/integrations/webhooks/socialwiseflow', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Test-Router-LLM/1.0'
+      },
+      body: JSON.stringify(REAL_WHATSAPP_PAYLOAD)
+    });
+
+    const responseTime = Date.now() - startTime;
+    console.log(`⏱️ Tempo de resposta: ${responseTime}ms`);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+    
+    console.log('✅ Resposta recebida com sucesso!');
+    console.log('');
+    console.log('📊 RESULTADO DO PROCESSAMENTO:');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    
+    // Análise da resposta
+    if (result.success) {
+      console.log('✅ Status: Sucesso');
+      
+      if (result.response) {
+        console.log('📝 Tipo de resposta:', result.response.type || 'N/A');
+        console.log('🎯 Estratégia:', result.response.strategy || 'N/A');
+        console.log('📈 Banda de performance:', result.response.performance_band || 'N/A');
+        
+        if (result.response.ai_response) {
+          console.log('🤖 Resposta da IA:');
+          console.log('   Mode:', result.response.ai_response.mode || 'N/A');
+          
+          if (result.response.ai_response.response_text) {
+            console.log('   📄 Texto de introdução:');
+            console.log('   "' + result.response.ai_response.response_text + '"');
+          }
+          
+          if (result.response.ai_response.buttons && result.response.ai_response.buttons.length > 0) {
+            console.log('   🔘 Botões gerados:');
+            result.response.ai_response.buttons.forEach((btn, idx) => {
+              console.log(`     ${idx + 1}. "${btn.title}" → ${btn.payload || 'sem payload'}`);
+            });
+          } else {
+            console.log('   ❌ PROBLEMA: Nenhum botão foi gerado!');
+          }
+          
+          if (result.response.ai_response.intent_payload) {
+            console.log('   🎯 Intent detectada:', result.response.ai_response.intent_payload);
+          }
+        }
+        
+        if (result.response.whatsapp_message) {
+          console.log('📱 Mensagem formatada para WhatsApp:');
+          console.log('   Tipo:', result.response.whatsapp_message.type);
+          if (result.response.whatsapp_message.interactive) {
+            console.log('   📋 Formato interativo detectado');
+            if (result.response.whatsapp_message.interactive.action?.buttons) {
+              console.log('   🔘 Botões WhatsApp:');
+              result.response.whatsapp_message.interactive.action.buttons.forEach((btn, idx) => {
+                console.log(`     ${idx + 1}. "${btn.reply?.title || 'N/A'}" → ${btn.reply?.id || 'N/A'}`);
+              });
+            }
+          }
+        }
+      }
+      
+      if (result.metrics) {
+        console.log('📊 Métricas de performance:');
+        console.log('   ⏱️ Tempo total:', result.metrics.total_time_ms + 'ms');
+        console.log('   🧮 Embedding time:', result.metrics.embedding_time_ms + 'ms');
+        console.log('   🤖 LLM time:', result.metrics.llm_time_ms + 'ms');
+        console.log('   🔍 Similarity score:', result.metrics.similarity_score);
+      }
+      
+    } else {
+      console.log('❌ Status: Falha');
+      console.log('💬 Erro:', result.error || 'Erro desconhecido');
+    }
+    
+    console.log('');
+    console.log('🔍 VERIFICAÇÃO DOS OBJETIVOS:');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    
+    // Verificações específicas
+    const hasButtons = result.response?.ai_response?.buttons?.length > 0;
+    const isInteractive = result.response?.whatsapp_message?.type === 'interactive';
+    const usedRouter = result.response?.strategy === 'ROUTER' || result.response?.performance_band === 'ROUTER';
+    
+    console.log('✅ Router LLM foi chamado?', usedRouter ? 'SIM' : 'NÃO');
+    console.log('✅ Gerou botões?', hasButtons ? 'SIM (' + result.response.ai_response.buttons.length + ' botões)' : 'NÃO');
+    console.log('✅ Resposta interativa?', isInteractive ? 'SIM' : 'NÃO');
+    console.log('✅ Forçou geração de botões?', hasButtons && result.response?.ai_response?.mode === 'chat' ? 'SIM' : 'NÃO');
+    
+    if (hasButtons && isInteractive) {
+      console.log('🎉 SUCESSO: Router LLM está gerando botões corretamente!');
+    } else {
+      console.log('⚠️ PROBLEMA: Router LLM não está gerando botões como esperado');
+    }
+    
+  } catch (error) {
+    const responseTime = Date.now() - startTime;
+    console.log(`⏱️ Tempo até erro: ${responseTime}ms`);
+    console.log('❌ Erro na requisição:', error.message);
+    
+    if (error.code === 'ECONNREFUSED') {
+      console.log('🔌 Verifique se o servidor está rodando na porta 3002');
+    }
+  }
 }
+
+console.log('🧪 TESTE DO ROUTER LLM COM PAYLOAD REAL');
+console.log('========================================');
+console.log('Este teste vai verificar se o Router LLM está:');
+console.log('• Sendo chamado corretamente na banda ROUTER');
+console.log('• Gerando botões em modo chat (forçado)');
+console.log('• Retornando resposta interativa para WhatsApp');
+console.log('');
+
+testRouterLLMWithRealPayload()
+  .then(() => {
+    console.log('');
+    console.log('🏁 Teste concluído');
+  })
+  .catch(error => {
+    console.error('💥 Erro crítico no teste:', error);
+    process.exit(1);
+  });

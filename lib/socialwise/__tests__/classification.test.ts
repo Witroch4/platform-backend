@@ -320,7 +320,7 @@ describe('SocialWise Classification System', () => {
         output_text: JSON.stringify({
           mode: 'intent',
           intent_payload: '@mandado_seguranca',
-          introduction_text: 'Vou ajudar com seu mandado de segurança',
+          response_text: 'Vou ajudar com seu mandado de segurança',
           buttons: [
             { title: 'Continuar', payload: '@mandado_seguranca' },
             { title: 'Falar com atendente', payload: 'handoff:human' }
@@ -352,7 +352,7 @@ describe('SocialWise Classification System', () => {
       expect(result).toBeTruthy();
       expect(result!.mode).toBe('intent');
       expect(result!.intent_payload).toBe('@mandado_seguranca');
-      expect(result!.introduction_text).toBeTruthy();
+      expect(result!.response_text).toBeTruthy();
       expect(result!.buttons).toHaveLength(2);
     });
 

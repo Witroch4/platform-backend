@@ -31,7 +31,7 @@ export interface EvaluationResult {
   responseTimeMs: number;
   error?: string;
   generatedContent?: {
-    introduction_text?: string;
+    response_text?: string;
     buttons?: Array<{ title: string; payload: string }>;
   };
 }
@@ -172,9 +172,9 @@ export class EvaluationPipeline {
           };
           
           const bandResult = await this.processor.process(example.userText, compatibleClassification);
-          if ('introduction_text' in bandResult && 'buttons' in bandResult) {
+          if ('response_text' in bandResult && 'buttons' in bandResult) {
             generatedContent = {
-              introduction_text: bandResult.introduction_text,
+              response_text: bandResult.response_text,
               buttons: bandResult.buttons
             };
           }

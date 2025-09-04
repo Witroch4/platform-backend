@@ -1,59 +1,135 @@
-import { type NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
-import { getPrismaInstance } from "@/lib/connections"
+// app/api/admin/mtf-diamante/interactive-messages/route.ts
+// API endpoints for interactive messages management
 
-// GET - Listar mensagens interativas
+import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@/auth';
+import { getPrismaInstance } from '@/lib/connections';
+import { z } from 'zod';
+import type { InteractiveMessage, InteractiveMessageType } from '@/types/interactive-messages';
+import type { ApiResponse } from '@/app/admin/mtf-diamante/lib/types';
+
+const prisma = getPrismaInstance();
+
+// Helper function to transform action data to the correct MessageAction format
+function transformActionData(actionType: string, actionData: any): any {
+  switch (actionType) {
+    case 'button':
+      return {
+        type: 'button',
+        buttons: actionData.buttons || []
+      };
+    case 'list':
+      return {
+        type: 'list',
+        button: actionData.buttonText || 'Select',
+        sections: actionData.sections || [],
+        buttonText: actionData.buttonText
+      };
+    case 'cta_url':
+      return {
+        type: 'cta_url',
+        action: {
+          displayText: actionData.displayText || '',
+          url: actionData.url || ''
+        }
+      };
+    case 'flow':
+      return {
+        type: 'flow',
+        action: actionData
+      };
+    case 'location_request':
+      return {
+        type: 'location_request',
+        action: {}
+      };
+    default:
+      return undefined;
+  }
+}
+
+// Validation schemas
+const createMessageSchema = z.object({
+  inboxId: z.string().min(1, 'InboxId é obrigatório'),
+  message: z.object({
+    name: z.string().min(1, 'Nome da mensagem é obrigatório'),
+    type: z.enum(['button', 'list', 'cta_url', 'flow', 'location', 'location_request', 'reaction', 'sticker', 'generic', 'quick_replies', 'button_template']).default('button'),
+    header: z.object({
+      type: z.enum(['text', 'image', 'video', 'document']),
+      text: z.string().optional(),
+      content: z.string().optional(),
+      media_url: z.string().url().optional(),
+      mediaUrl: z.string().url().optional(),
+      filename: z.string().optional(),
+    }).optional(),
+    body: z.object({
+      text: z.string().min(1, 'Texto do corpo é obrigatório'),
+    }),
+    footer: z.object({
+      text: z.string().max(60, 'Texto do rodapé muito longo'),
+    }).optional(),
+    action: z.any().optional(),
+    isActive: z.boolean().default(true),
+  }),
+});
+
+const updateMessageSchema = z.object({
+  message: z.object({
+    name: z.string().min(1).optional(),
+    type: z.enum(['button', 'list', 'cta_url', 'flow', 'location', 'location_request', 'reaction', 'sticker', 'generic', 'quick_replies', 'button_template']).optional(),
+    header: z.object({
+      type: z.enum(['text', 'image', 'video', 'document']),
+      text: z.string().optional(),
+      content: z.string().optional(),
+      media_url: z.string().url().optional(),
+      mediaUrl: z.string().url().optional(),
+      filename: z.string().optional(),
+    }).optional(),
+    body: z.object({
+      text: z.string().min(1),
+    }).optional(),
+    footer: z.object({
+      text: z.string().max(60),
+    }).optional(),
+    action: z.any().optional(),
+    isActive: z.boolean().optional(),
+  }),
+});
+
+// GET /api/admin/mtf-diamante/interactive-messages
 export async function GET(request: NextRequest) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { success: false, error: "Usuário não autenticado." } as ApiResponse,
+        { status: 401 }
+      );
     }
 
     const { searchParams } = new URL(request.url);
-    const caixaId = searchParams.get("caixaId");
-    const type = searchParams.get("type");
+    const inboxId = searchParams.get('inboxId');
 
-    if (!caixaId) {
-      return NextResponse.json(
-        { error: "caixaId is required" },
-        { status: 400 }
-      );
+    // Build query conditions
+    const whereConditions: any = {};
+    
+    if (inboxId && inboxId !== 'all') {
+      whereConditions.inboxId = inboxId;
     }
 
-    // Verify user has access to this ChatwitInbox
-    const chatwitInbox = await getPrismaInstance().chatwitInbox.findFirst({
-      where: {
-        id: caixaId, // caixaId is the internal ChatwitInbox id
-        usuarioChatwit: {
-          appUserId: session.user!.id,
-        },
-      },
-    });
-
-    if (!chatwitInbox) {
-      return NextResponse.json(
-        { error: "Inbox not found or access denied" },
-        { status: 404 }
-      );
-    }
-
-    const whereClause: any = {
-      inboxId: caixaId, // Use the internal ChatwitInbox id directly
+    // Build query conditions for Template model
+    const templateWhereConditions: any = {
+      type: 'INTERACTIVE_MESSAGE',
+      createdById: session.user.id,
     };
-
-    if (type) {
-      whereClause.type = type;
+    
+    if (inboxId && inboxId !== 'all') {
+      templateWhereConditions.inboxId = inboxId;
     }
 
-    const messages = await getPrismaInstance().template.findMany({
-      where: {
-        ...whereClause,
-        type: "INTERACTIVE_MESSAGE",
-        interactiveContent: {
-          isNot: null
-        }
-      },
+    // Fetch messages from database (using Template model)
+    const messages = await prisma.template.findMany({
+      where: templateWhereConditions,
       include: {
         interactiveContent: {
           include: {
@@ -66,165 +142,173 @@ export async function GET(request: NextRequest) {
             actionFlow: true,
             actionLocationRequest: true
           }
+        },
+        inbox: {
+          select: {
+            id: true,
+            nome: true,
+          }
         }
       },
-      orderBy: {
-        createdAt: "desc",
-      },
+      orderBy: { createdAt: 'desc' }
     });
 
-    return NextResponse.json(
-      messages.map((template) => {
-        const interactive = template.interactiveContent;
-        if (!interactive) return null;
-
-        // Determinar o tipo de ação
-        let actionType = null;
-        let actionData = null;
+    // Transform to expected format using the formatMessage function pattern
+    const transformedMessages: InteractiveMessage[] = messages.map((msg: any) => {
+      const interactive = msg.interactiveContent;
+      
+      // Determine action type and data
+      let actionType = 'button'; // default
+      let actionData = null;
+      
+      if (interactive?.actionCtaUrl) {
+        actionType = 'cta_url';
+        actionData = interactive.actionCtaUrl;
+      } else if (interactive?.actionReplyButton) {
+        actionType = 'button';
+        actionData = interactive.actionReplyButton;
+      } else if (interactive?.actionList) {
+        actionType = 'list';
+        actionData = interactive.actionList;
+      } else if (interactive?.actionFlow) {
+        actionType = 'flow';
+        actionData = interactive.actionFlow;
+      } else if (interactive?.actionLocationRequest) {
+        actionType = 'location_request';
+        actionData = interactive.actionLocationRequest;
+      } else {
+        // For Instagram templates, detect type based on content
+        const bodyText = interactive?.body?.text || '';
+        const hasHeader = !!interactive?.header;
+        const hasFooter = !!interactive?.footer;
         
-        if (interactive.actionCtaUrl) {
-          actionType = 'cta_url';
-          actionData = interactive.actionCtaUrl;
-        } else if (interactive.actionReplyButton) {
-          actionType = 'button';
-          actionData = interactive.actionReplyButton;
-        } else if (interactive.actionList) {
-          actionType = 'list';
-          actionData = interactive.actionList;
-        } else if (interactive.actionFlow) {
-          actionType = 'flow';
-          actionData = interactive.actionFlow;
-        } else if (interactive.actionLocationRequest) {
-          actionType = 'location_request';
-          actionData = interactive.actionLocationRequest;
+        if (hasHeader && hasFooter) {
+          actionType = 'generic';
+        } else if (bodyText.length <= 640) {
+          actionType = 'button_template';
+        } else if (bodyText.length <= 1000) {
+          actionType = 'quick_replies';
+        } else {
+          actionType = 'generic';
         }
+      }
+      
+      return {
+        id: msg.id,
+        name: msg.name,
+        type: actionType as InteractiveMessageType,
+        header: interactive?.header ? {
+          type: interactive.header.type as 'text' | 'image' | 'video' | 'document',
+          text: interactive.header.content || '',
+          content: interactive.header.content || '',
+        } : undefined,
+        body: {
+          text: interactive?.body?.text || ''
+        },
+        footer: interactive?.footer ? {
+          text: interactive.footer.text
+        } : undefined,
+        action: actionData ? transformActionData(actionType, actionData) : undefined,
+        isActive: msg.isActive,
+        createdAt: msg.createdAt,
+        updatedAt: msg.updatedAt,
+      };
+    });
 
-        return {
-          id: template.id,
-          nome: template.name,
-          texto: interactive.body?.text || '',
-          headerTipo: interactive.header?.type || null,
-          headerConteudo: interactive.header?.content || null,
-          rodape: interactive.footer?.text || null,
-          botoes: actionType === 'button' && actionData && 'buttons' in actionData ? (actionData.buttons as any) || [] : [],
-          // Campos adicionais para compatibilidade
-          name: template.name,
-          type: actionType,
-          content: {
-            name: template.name,
-            type: actionType,
-            header: interactive.header
-              ? {
-                  type: interactive.header.type,
-                  text: interactive.header.content || "",
-                  media_url:
-                    interactive.header.type !== "text"
-                      ? ((interactive.header as any).media_url || interactive.header.content || "")
-                      : "",
-                }
-              : undefined,
-            body: {
-              text: interactive.body?.text || ''
-            },
-            footer: interactive.footer ? {
-              text: interactive.footer.text
-            } : undefined,
-            action: actionData,
-          },
-          createdAt: template.createdAt,
-          updatedAt: template.updatedAt,
-        };
-      }).filter(Boolean)
-    );
+    return NextResponse.json({
+      success: true,
+      data: transformedMessages,
+      message: `${transformedMessages.length} mensagens encontradas`
+    } as ApiResponse<InteractiveMessage[]>);
+
   } catch (error) {
-    console.error("Error fetching interactive messages:", error);
+    console.error('Error fetching interactive messages:', error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Erro interno do servidor' 
+      } as ApiResponse,
       { status: 500 }
     );
   }
 }
 
-// POST - Criar nova mensagem interativa
+// POST /api/admin/mtf-diamante/interactive-messages
 export async function POST(request: NextRequest) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { success: false, error: "Usuário não autenticado." } as ApiResponse,
+        { status: 401 }
+      );
     }
 
     const body = await request.json();
-    const { caixaId, message } = body;
-
-    // LOG DETALHADO
-    console.log("[INTERACTIVE-MESSAGE][POST] Usuário:", session.user.id);
-    console.log("[INTERACTIVE-MESSAGE][POST] caixaId:", caixaId);
-    console.log("[INTERACTIVE-MESSAGE][POST] message:", JSON.stringify(message, null, 2));
-
-    if (!caixaId || !message) {
+    console.log(`[InteractiveMessages API] Raw body received:`, JSON.stringify(body, null, 2));
+    console.log(`[InteractiveMessages API] Body keys:`, Object.keys(body));
+    console.log(`[InteractiveMessages API] Message structure:`, body.message ? JSON.stringify(body.message, null, 2) : 'NO MESSAGE FIELD');
+    
+    // Validate request body
+    const validation = createMessageSchema.safeParse(body);
+    if (!validation.success) {
+      console.error('Validation failed for interactive message creation:', {
+        errors: validation.error.errors,
+        receivedBody: body
+      });
+      console.log(`[InteractiveMessages API] Expected schema structure - checking required fields:`);
+      console.log(`  - inboxId: ${body.inboxId ? 'PRESENT' : 'MISSING'}`);
+      console.log(`  - message: ${body.message ? 'PRESENT' : 'MISSING'}`);
+      if (body.message) {
+        console.log(`  - message.name: ${body.message.name ? 'PRESENT' : 'MISSING'}`);
+        console.log(`  - message.type: ${body.message.type ? 'PRESENT' : 'MISSING'}`);
+        console.log(`  - message.body: ${body.message.body ? 'PRESENT' : 'MISSING'}`);
+        if (body.message.body) {
+          console.log(`  - message.body.text: ${body.message.body.text ? 'PRESENT' : 'MISSING'}`);
+        }
+      }
       return NextResponse.json(
-        { error: "caixaId and message are required" },
+        { 
+          success: false, 
+          error: 'Dados inválidos', 
+          details: validation.error.errors 
+        } as ApiResponse,
         { status: 400 }
       );
     }
 
-    // Validar campos obrigatórios
-    if (!message.name || !message.body?.text) {
-      return NextResponse.json(
-        { error: "Message name and body text are required" },
-        { status: 400 }
-      );
-    }
+    const { inboxId, message } = validation.data;
 
-    // Validar tipo de mensagem
-    const validTypes = [
-      "cta_url",
-      "flow",
-      "list",
-      "button",
-      "location",
-      "location_request",
-      "reaction",
-      "sticker",
-    ];
-
-    if (!validTypes.includes(message.type)) {
-      return NextResponse.json(
-        { error: "Invalid message type" },
-        { status: 400 }
-      );
-    }
-
-    // Verify user has access to this ChatwitInbox
-    const chatwitInbox = await getPrismaInstance().chatwitInbox.findFirst({
+    // Verify inbox exists and user has access
+    const inbox = await prisma.chatwitInbox.findFirst({
       where: {
-        id: caixaId, // caixaId is the internal ChatwitInbox id
+        id: inboxId,
         usuarioChatwit: {
           appUserId: session.user.id,
-        },
-      },
+        }
+      }
     });
 
-    if (!chatwitInbox) {
+    if (!inbox) {
       return NextResponse.json(
-        { error: "Inbox not found or access denied" },
+        { success: false, error: 'Caixa não encontrada ou sem permissão de acesso' } as ApiResponse,
         { status: 404 }
       );
     }
 
-    // Criar template e conteúdo interativo
-    const template = await getPrismaInstance().template.create({
+    // Create the message using Template model with interactiveContent
+    const createdMessage = await prisma.template.create({
       data: {
         name: message.name,
-        type: "INTERACTIVE_MESSAGE",
+        type: 'INTERACTIVE_MESSAGE',
         description: `Mensagem interativa: ${message.name}`,
-        scope: "PRIVATE",
-        status: "APPROVED",
-        language: "pt_BR",
+        scope: 'PRIVATE',
+        status: 'APPROVED',
+        language: 'pt_BR',
         tags: [],
-        isActive: true,
+        isActive: message.isActive,
         createdById: session.user.id,
-        inboxId: caixaId, // Use the internal ChatwitInbox id directly
+        inboxId: inboxId,
         interactiveContent: {
           create: {
             body: {
@@ -232,31 +316,25 @@ export async function POST(request: NextRequest) {
                 text: message.body.text
               }
             },
-            // Instagram Quick Replies e Button Template não usam header nem footer
-            ...(message.header && message.type !== 'quick_replies' && message.type !== 'button_template' && {
+            // Create header if provided
+            ...(message.header && {
               header: {
                 create: {
                   type: message.header.type,
-                  content: message.header.content || message.header.media_url || ""
+                  content: message.header.content || message.header.text || message.header.media_url || message.header.mediaUrl || '',
                 }
               }
             }),
-            ...(message.footer && message.type !== 'quick_replies' && message.type !== 'button_template' && {
+            // Create footer if provided
+            ...(message.footer && {
               footer: {
                 create: {
                   text: message.footer.text
                 }
               }
             }),
-            ...(message.type === 'cta_url' && message.action && {
-              actionCtaUrl: {
-                create: {
-                  displayText: message.action.displayText || "Clique aqui",
-                  url: message.action.url || ""
-                }
-              }
-            }),
-            ...((message.type === 'button' || message.type === 'generic' || message.type === 'button_template' || message.type === 'quick_replies') && message.action && {
+            // Create action based on type
+            ...(message.type === 'button' && message.action && {
               actionReplyButton: {
                 create: {
                   buttons: message.action.buttons || []
@@ -266,28 +344,39 @@ export async function POST(request: NextRequest) {
             ...(message.type === 'list' && message.action && {
               actionList: {
                 create: {
-                  buttonText: message.action.buttonText || "Ver opções",
-                  sections: message.action.sections || []
+                  // Remove invalid fields and keep only valid ones for ActionList
+                  ...(message.action.sections && { sections: message.action.sections }),
+                  ...(message.action.title && { title: message.action.title }),
+                  ...(message.action.description && { description: message.action.description })
+                }
+              }
+            }),
+            ...(message.type === 'cta_url' && message.action && {
+              actionCtaUrl: {
+                create: {
+                  // Remove invalid fields and keep only valid ones for ActionCtaUrl
+                  ...(message.action.displayText && { displayText: message.action.displayText }),
+                  ...(message.action.url && { url: message.action.url })
                 }
               }
             }),
             ...(message.type === 'flow' && message.action && {
               actionFlow: {
                 create: {
-                  flowId: message.action.flowId || "",
-                  flowCta: message.action.flowCta || "Iniciar",
-                  flowMode: message.action.flowMode || "published",
-                  flowData: message.action.flowData || null
+                  // Remove invalid fields and keep only valid ones for ActionFlow
+                  ...(message.action.flowId && { flowId: message.action.flowId }),
+                  ...(message.action.flowToken && { flowToken: message.action.flowToken })
                 }
               }
             }),
             ...(message.type === 'location_request' && message.action && {
               actionLocationRequest: {
                 create: {
-                  requestText: message.action.requestText || "Compartilhar localização"
+                  // Remove invalid fields and keep only valid ones for ActionLocationRequest
+                  ...(message.action.requestType && { requestType: message.action.requestType })
                 }
               }
-            })
+            }),
           }
         }
       },
@@ -303,68 +392,68 @@ export async function POST(request: NextRequest) {
             actionFlow: true,
             actionLocationRequest: true
           }
+        },
+        inbox: {
+          select: {
+            id: true,
+            nome: true,
+          }
         }
       }
     });
 
-    const interactive = template.interactiveContent;
-    if (!interactive) {
-      return NextResponse.json(
-        { error: "Failed to create interactive content" },
-        { status: 500 }
-      );
-    }
-
-    // Determinar o tipo de ação
-    let actionType = null;
+    // Transform to expected format using the formatMessage function pattern
+    const interactive = createdMessage.interactiveContent;
+    
+    // Determine action type and data
+    let actionType = message.type;
     let actionData = null;
     
-    if (interactive.actionCtaUrl) {
-      actionType = 'cta_url';
+    if (interactive?.actionCtaUrl) {
       actionData = interactive.actionCtaUrl;
-    } else if (interactive.actionReplyButton) {
-      actionType = 'button';
+    } else if (interactive?.actionReplyButton) {
       actionData = interactive.actionReplyButton;
-    } else if (interactive.actionList) {
-      actionType = 'list';
+    } else if (interactive?.actionList) {
       actionData = interactive.actionList;
-    } else if (interactive.actionFlow) {
-      actionType = 'flow';
+    } else if (interactive?.actionFlow) {
       actionData = interactive.actionFlow;
-    } else if (interactive.actionLocationRequest) {
-      actionType = 'location_request';
+    } else if (interactive?.actionLocationRequest) {
       actionData = interactive.actionLocationRequest;
     }
 
+    const transformedMessage: InteractiveMessage = {
+      id: createdMessage.id,
+      name: createdMessage.name,
+      type: actionType as InteractiveMessageType,
+      header: interactive?.header ? {
+        type: interactive.header.type as 'text' | 'image' | 'video' | 'document',
+        content: interactive.header.content || '',
+      } : undefined,
+      body: {
+        text: interactive?.body?.text || ''
+      },
+      footer: interactive?.footer ? {
+        text: interactive.footer.text
+      } : undefined,
+      action: actionData ? transformActionData(actionType, actionData) : undefined,
+      isActive: createdMessage.isActive,
+      createdAt: createdMessage.createdAt,
+      updatedAt: createdMessage.updatedAt,
+    };
+
     return NextResponse.json({
       success: true,
-      message: {
-        id: template.id,
-        name: template.name,
-        type: actionType,
-        content: {
-          name: template.name,
-          type: actionType,
-          header: interactive.header ? {
-            type: interactive.header.type,
-            text: interactive.header.content || "",
-            media_url: interactive.header.type !== 'text' ? (((interactive.header as any).media_url) || interactive.header.content || "") : ""
-          } : undefined,
-          body: {
-            text: interactive.body?.text || ''
-          },
-          footer: interactive.footer ? {
-            text: interactive.footer.text
-          } : undefined,
-          action: actionData,
-        },
-        createdAt: template.createdAt,
-      },
-    });
+      data: transformedMessage,
+      message: 'Mensagem criada com sucesso'
+    } as ApiResponse<InteractiveMessage>, { status: 201 });
+
   } catch (error) {
-    console.error("Error creating interactive message:", error);
+    console.error('Error creating interactive message:', error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Erro interno do servidor' 
+      } as ApiResponse,
       { status: 500 }
     );
   }

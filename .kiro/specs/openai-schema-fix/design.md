@@ -210,7 +210,7 @@ const Button = z.object({
 const RouterDecision = z.object({
   mode: z.enum(["intent", "chat"]),
   intent_payload: z.string().regex(/^@[a-z0-9_]+$/u).nullable(),
-  introduction_text: z.string().regex(/^.{1,1024}$/u).nullable(),
+  response_text: z.string().regex(/^.{1,1024}$/u).nullable(),
   text: z.string().regex(/^.{1,1024}$/u).nullable(),
   buttons: z.array(Button).max(3).nullable(),
 }).strict();
@@ -219,7 +219,7 @@ const RouterDecision = z.object({
 **Warmup Buttons Schema (Compatible)**:
 ```typescript
 const WarmupButtons = z.object({
-  introduction_text: z.string().regex(/^.{1,1024}$/u),
+  response_text: z.string().regex(/^.{1,1024}$/u),
   buttons: z.array(Button).min(1).max(3),
 }).strict();
 ```

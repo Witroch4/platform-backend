@@ -103,7 +103,7 @@ O sistema de IA identificou as seguintes intenções jurídicas como as mais pro
 
 # SUA TAREFA
 Gere uma resposta no formato JSON com:
-1. "introduction_text": frase curta e empática (≤ 180 chars) que reconhece a situação jurídica do usuário
+1. "response_text": frase curta e empática (≤ 180 chars) que reconhece a situação jurídica do usuário
 2. "buttons": até 3 objetos com "title" (≤ 20 chars, ação jurídica clara) e "payload" (@intent_name)
 
 # REGRAS DE UX WRITING JURÍDICO
@@ -123,7 +123,7 @@ Gere uma resposta no formato JSON com:
 
 # FORMATO DE RESPOSTA
 {
-  "introduction_text": "Posso ajudar com sua questão jurídica. Qual dessas opções se aproxima mais do que você precisa?",
+  "response_text": "Posso ajudar com sua questão jurídica. Qual dessas opções se aproxima mais do que você precisa?",
   "buttons": [
     {"title": "Recorrer Multa", "payload": "@recurso_multa_transito"},
     {"title": "Ação Judicial", "payload": "@mandado_seguranca"},
@@ -190,7 +190,7 @@ Analise a mensagem e sugira as 3 áreas jurídicas mais relevantes para um escri
 
 # FORMATO DE RESPOSTA
 {
-  "introduction_text": "Posso ajudar com diversas questões jurídicas. Qual área se aproxima mais da sua necessidade?",
+  "response_text": "Posso ajudar com diversas questões jurídicas. Qual área se aproxima mais da sua necessidade?",
   "buttons": [
     {"title": "Direito Trânsito", "payload": "@direito_transito"},
     {"title": "Direito Civil", "payload": "@direito_civil"},

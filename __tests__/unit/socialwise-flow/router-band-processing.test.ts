@@ -34,7 +34,7 @@ describe('RouterBandProcessor Unit Tests', () => {
 
       expect(duration).toBeLessThan(200);
       expect(result.type).toBe('domain_topics');
-      expect(result.introduction_text).toBeTruthy();
+      expect(result.response_text).toBeTruthy();
       expect(result.buttons).toHaveLength(3);
       expect(result.response_time_ms).toBeLessThan(200);
     });
@@ -47,7 +47,7 @@ describe('RouterBandProcessor Unit Tests', () => {
         choices: [{
           message: {
             content: JSON.stringify({
-              introduction_text: "Posso ajudar com sua questão jurídica. Qual área melhor se relaciona com sua situação?",
+              response_text: "Posso ajudar com sua questão jurídica. Qual área melhor se relaciona com sua situação?",
               buttons: [
                 { title: "Direito Civil", payload: "@consulta_direito_civil" },
                 { title: "Direito Consumidor", payload: "@consulta_direito_consumidor" },
@@ -63,7 +63,7 @@ describe('RouterBandProcessor Unit Tests', () => {
       const result = await processor.process(userText);
 
       expect(result.type).toBe('domain_topics');
-      expect(result.introduction_text).toBe("Posso ajudar com sua questão jurídica. Qual área melhor se relaciona com sua situação?");
+      expect(result.response_text).toBe("Posso ajudar com sua questão jurídica. Qual área melhor se relaciona com sua situação?");
       expect(result.buttons).toHaveLength(3);
       expect(result.buttons[0].title).toBe("Direito Civil");
       expect(result.buttons[0].payload).toBe("@consulta_direito_civil");
@@ -98,7 +98,7 @@ describe('RouterBandProcessor Unit Tests', () => {
 
       expect(duration).toBeLessThan(200);
       expect(result.type).toBe('domain_topics');
-      expect(result.introduction_text).toBe("Posso ajudar com sua questão jurídica. Qual área melhor se relaciona com sua situação?");
+      expect(result.response_text).toBe("Posso ajudar com sua questão jurídica. Qual área melhor se relaciona com sua situação?");
       expect(result.buttons).toHaveLength(3);
       
       // Should have deterministic fallback topics
@@ -127,7 +127,7 @@ describe('RouterBandProcessor Unit Tests', () => {
       const result = await processor.process(userText);
 
       expect(result.type).toBe('domain_topics');
-      expect(result.introduction_text).toBeTruthy();
+      expect(result.response_text).toBeTruthy();
       expect(result.buttons).toHaveLength(3);
       
       // Should fallback to deterministic topics
@@ -168,7 +168,7 @@ describe('RouterBandProcessor Unit Tests', () => {
         choices: [{
           message: {
             content: JSON.stringify({
-              introduction_text: longIntroduction,
+              response_text: longIntroduction,
               buttons: [
                 { title: "Direito Civil", payload: "@direito_civil" },
                 { title: "Direito Penal", payload: "@direito_penal" },
@@ -181,8 +181,8 @@ describe('RouterBandProcessor Unit Tests', () => {
 
       const result = await processor.process("texto longo");
 
-      expect(result.introduction_text.length).toBeLessThanOrEqual(180);
-      expect(result.introduction_text).toBe(longIntroduction.slice(0, 180).trim());
+      expect(result.response_text.length).toBeLessThanOrEqual(180);
+      expect(result.response_text).toBe(longIntroduction.slice(0, 180).trim());
     });
 
     test('should clamp button titles to 20 characters', async () => {
@@ -192,7 +192,7 @@ describe('RouterBandProcessor Unit Tests', () => {
         choices: [{
           message: {
             content: JSON.stringify({
-              introduction_text: "Escolha uma área:",
+              response_text: "Escolha uma área:",
               buttons: [
                 { title: "Direito Civil e Empresarial Muito Longo", payload: "@direito_civil" },
                 { title: "Direito do Consumidor e Relações", payload: "@direito_consumidor" },
@@ -224,7 +224,7 @@ describe('RouterBandProcessor Unit Tests', () => {
         choices: [{
           message: {
             content: JSON.stringify({
-              introduction_text: "Escolha:",
+              response_text: "Escolha:",
               buttons: [
                 { title: "Civil", payload: "invalid-payload" },
                 { title: "Penal", payload: "@valid_payload" },
@@ -253,7 +253,7 @@ describe('RouterBandProcessor Unit Tests', () => {
         choices: [{
           message: {
             content: JSON.stringify({
-              introduction_text: "Muitas opções:",
+              response_text: "Muitas opções:",
               buttons: [
                 { title: "Civil", payload: "@civil" },
                 { title: "Penal", payload: "@penal" },
@@ -358,7 +358,7 @@ describe('RouterBandProcessor Unit Tests', () => {
           choices: [{
             message: {
               content: JSON.stringify({
-                introduction_text: "Baseado no contexto legal brasileiro:",
+                response_text: "Baseado no contexto legal brasileiro:",
                 buttons: [
                   { title: "Direito Civil", payload: "@direito_civil" },
                   { title: "Direito Penal", payload: "@direito_penal" },
@@ -391,8 +391,8 @@ describe('RouterBandProcessor Unit Tests', () => {
       ]);
       
       // Should be professional but accessible
-      expect(result.introduction_text).toContain("questão jurídica");
-      expect(result.introduction_text).toContain("área");
+      expect(result.response_text).toContain("questão jurídica");
+      expect(result.response_text).toContain("área");
     });
   });
 
@@ -436,7 +436,7 @@ describe('RouterBandProcessor Unit Tests', () => {
         
         expect(result.type).toBe('domain_topics');
         expect(result.buttons).toHaveLength(3);
-        expect(result.introduction_text).toBeTruthy();
+        expect(result.response_text).toBeTruthy();
       }
     });
 
@@ -474,7 +474,7 @@ describe('RouterBandProcessor Unit Tests', () => {
       // All results should be identical
       results.forEach(result => {
         expect(result.type).toBe('domain_topics');
-        expect(result.introduction_text).toBe("Posso ajudar com sua questão jurídica. Qual área melhor se relaciona com sua situação?");
+        expect(result.response_text).toBe("Posso ajudar com sua questão jurídica. Qual área melhor se relaciona com sua situação?");
         expect(result.buttons).toEqual([
           { title: "Direito Civil", payload: "@consulta_direito_civil" },
           { title: "Direito Consumidor", payload: "@consulta_direito_consumidor" },

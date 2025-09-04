@@ -5,165 +5,109 @@
 
 import { z } from 'zod';
 
-// Interactive data schemas for different channels
-const WhatsAppInteractiveDataSchema = z.object({
-  interaction_type: z.string().optional(),
-  button_id: z.string().optional(),
-  button_title: z.string().optional(),
-});
+// Tipo para socialwise-chatwit para manter compatibilidade sem validação estrita
+export interface SocialWiseChatwitData {
+  wamid?: string;
+  contact_data?: {
+    id?: number;
+    name?: string;
+    phone_number?: string | null;
+    email?: string | null;
+  };
+  message_data?: {
+    id?: number;
+    content?: string;
+    interactive_data?: any;
+    instagram_data?: any;
+  };
+  inbox_data?: {
+    id?: number;
+    name?: string;
+    channel_type?: string;
+  };
+  account_data?: {
+    id?: number;
+    name?: string;
+  };
+  contact_name?: string;
+  contact_phone?: string | null;
+  [key: string]: any; // Permite qualquer campo extra
+}
 
-const InstagramInteractiveDataSchema = z.object({
-  interaction_type: z.string().optional(),
-  postback_payload: z.string().optional(),
-});
+// 🎯 SCHEMAS SIMPLIFICADOS: Validar apenas campos críticos
+// Permitir campos extras sem validação para máxima flexibilidade
 
-const MessageDataSchema = z.object({
-  id: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
-  interactive_data: WhatsAppInteractiveDataSchema.optional(),
-  instagram_data: InstagramInteractiveDataSchema.optional(),
-});
+// Schema básico para dados críticos da mensagem - apenas campos essenciais
+const CriticalMessageSchema = z.object({
+  id: z.union([z.string(), z.number()]).transform(val => String(val)),
+  content: z.string().min(1),
+  account_id: z.union([z.string(), z.number()]).transform(val => Number(val)),
+  inbox_id: z.union([z.string(), z.number()]).transform(val => Number(val)),
+  conversation_id: z.union([z.string(), z.number()]).transform(val => Number(val)),
+  message_type: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  source_id: z.string(), // CRÍTICO: wamid para WhatsApp, messageId para outros canais
+  content_type: z.string(),
+  sender_type: z.string(),
+  sender_id: z.union([z.string(), z.number()]).transform(val => Number(val)),
+}).passthrough(); // Permite campos extras
 
-const InboxDataSchema = z.object({
-  id: z.union([z.string(), z.number()]).transform(val => String(val)).refine(val => val.length > 0, "Inbox ID is required"),
-  name: z.string().optional().nullable().transform(val => val || undefined),
-  channel_type: z.string().min(1, "Channel type is required"),
-});
+// Schema básico para dados críticos da conversa - apenas campos essenciais
+const CriticalConversationSchema = z.object({
+  id: z.union([z.string(), z.number()]).transform(val => Number(val)),
+  account_id: z.union([z.string(), z.number()]).transform(val => Number(val)),
+  inbox_id: z.union([z.string(), z.number()]).transform(val => Number(val)),
+  status: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  contact_id: z.union([z.string(), z.number()]).transform(val => Number(val)),
+}).passthrough(); // Permite campos extras
 
-const AccountDataSchema = z.object({
-  id: z.union([z.string(), z.number()]).transform(val => String(val)).refine(val => val.length > 0, "Account ID is required"),
-});
+// Schema básico para dados críticos do contato - apenas campos essenciais
+const CriticalContactSchema = z.object({
+  id: z.union([z.string(), z.number()]).transform(val => Number(val)),
+  name: z.string(),
+  account_id: z.union([z.string(), z.number()]).transform(val => Number(val)),
+  created_at: z.string(),
+  updated_at: z.string(),
+}).passthrough(); // Permite campos extras
 
-const WhatsAppIdentifiersSchema = z.object({
-  wamid: z.string().optional(),
-  whatsapp_id: z.string().optional(),
-  contact_source: z.string().optional(),
-});
+// Schema básico para dados críticos da caixa - apenas campos essenciais
+const CriticalInboxSchema = z.object({
+  id: z.union([z.string(), z.number()]).transform(val => Number(val)),
+  account_id: z.union([z.string(), z.number()]).transform(val => Number(val)),
+  name: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  channel_type: z.string(),
+}).passthrough(); // Permite campos extras
 
-const SocialWiseChatwitContextSchema = z.object({
-  inbox_data: InboxDataSchema,
-  account_data: AccountDataSchema,
-  whatsapp_identifiers: WhatsAppIdentifiersSchema.optional(),
-  whatsapp_phone_number_id: z.union([z.string(), z.number()]).transform(val => String(val)).optional().nullable().transform(val => val || undefined),
-  whatsapp_business_id: z.union([z.string(), z.number()]).transform(val => String(val)).optional().nullable().transform(val => val || undefined),
-  wamid: z.string().optional().nullable().transform(val => val || undefined),
-  message_data: MessageDataSchema.optional(),
-  // Add all the other fields from the real payload
-  contact_data: z.object({
-    id: z.number().optional(),
-    name: z.string().optional(),
-    phone_number: z.string().optional(),
-    email: z.string().nullable().optional().transform(val => val || undefined),
-    identifier: z.string().nullable().optional().transform(val => val || undefined),
-    custom_attributes: z.record(z.any()).optional(),
-  }).optional(),
-  conversation_data: z.object({
-    id: z.number().optional(),
-    status: z.string().optional(),
-    assignee_id: z.number().nullable().optional().transform(val => val || undefined),
-    created_at: z.string().optional(),
-    updated_at: z.string().optional(),
-  }).optional(),
-  metadata: z.object({
-    socialwise_active: z.boolean().optional(),
-    is_whatsapp_channel: z.boolean().optional(),
-    payload_version: z.string().optional(),
-    timestamp: z.string().optional(),
-    has_whatsapp_api_key: z.boolean().optional(),
-  }).optional(),
-  whatsapp_api_key: z.string().optional(),
-  // Legacy flat fields for backward compatibility
-  contact_source: z.string().optional(),
-  contact_name: z.string().optional(),
-  contact_phone: z.string().optional(),
-  contact_email: z.string().nullable().optional().transform(val => val || undefined),
-  contact_identifier: z.string().nullable().optional().transform(val => val || undefined),
-  contact_id: z.number().optional(),
-  conversation_id: z.number().optional(),
-  conversation_status: z.string().optional(),
-  conversation_assignee_id: z.number().nullable().optional().transform(val => val || undefined),
-  conversation_created_at: z.string().optional(),
-  conversation_updated_at: z.string().optional(),
-  message_id: z.number().optional(),
-  message_content: z.string().optional(),
-  message_type: z.string().optional(),
-  message_created_at: z.string().optional(),
-  message_content_type: z.string().optional(),
-  button_id: z.string().nullable().optional().transform(val => val || undefined),
-  button_title: z.string().nullable().optional().transform(val => val || undefined),
-  list_id: z.string().nullable().optional().transform(val => val || undefined),
-  list_title: z.string().nullable().optional().transform(val => val || undefined),
-  list_description: z.string().nullable().optional().transform(val => val || undefined),
-  interaction_type: z.string().nullable().optional().transform(val => val || undefined),
-  postback_payload: z.string().nullable().optional().transform(val => val || undefined),
-  quick_reply_payload: z.string().nullable().optional().transform(val => val || undefined),
-  inbox_id: z.number().optional(),
-  inbox_name: z.string().optional(),
-  channel_type: z.string().optional(),
-  account_id: z.number().optional(),
-  account_name: z.string().optional(),
-  phone_number_id: z.string().optional(),
-  business_id: z.string().optional(),
-  socialwise_active: z.boolean().optional(),
-  is_whatsapp_channel: z.boolean().optional(),
-  has_whatsapp_api_key: z.boolean().optional(),
-  payload_version: z.string().optional(),
-  timestamp: z.string().optional(),
-});
+// Schema crítico do contexto - apenas campos essenciais obrigatórios
+const CriticalContextSchema = z.object({
+  message: CriticalMessageSchema,
+  conversation: CriticalConversationSchema,
+  contact: CriticalContactSchema,
+  inbox: CriticalInboxSchema,
+}).passthrough(); // Permite qualquer campo extra sem validação
 
-const MessageContentAttributesSchema = z.object({
-  interaction_type: z.string().optional(),
-  button_reply: z.object({
-    id: z.string().optional(),
-    title: z.string().optional(),
-  }).optional(),
-  quick_reply_payload: z.string().optional(),
-  postback_payload: z.string().optional(),
-  interactive_payload: z.object({
-    button_reply: z.object({
-      id: z.string().optional(),
-      title: z.string().optional(),
-    }).optional(),
-  }).optional(),
-});
-
-const MessageContextSchema = z.object({
-  id: z.number().optional(),
-  source_id: z.string().optional(), // Priority field for message identification (wamid for WhatsApp, message ID for Instagram/Facebook)
-  content_attributes: MessageContentAttributesSchema.optional(),
-});
-
-const ContextSchema = z.object({
-  'socialwise-chatwit': SocialWiseChatwitContextSchema,
-  message: MessageContextSchema.optional(),
-  channel_type: z.string().optional(),
-  inbox_id: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
-  account_id: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
-  interaction_type: z.string().optional(),
-  postback_payload: z.string().optional(),
-  quick_reply_payload: z.string().optional(),
-});
-
-// Main SocialWise Flow payload schema
+// Main SocialWise Flow payload schema - SIMPLIFICADO
+// Valida apenas campos críticos, permite qualquer campo extra
 export const SocialWiseFlowPayloadSchema = z.object({
   session_id: z.union([z.string(), z.number()]).transform(val => String(val)).refine(val => val.length > 0, "Session ID is required"),
-  context: ContextSchema,
   message: z.string().min(1, "Message content is required"),
   channel_type: z.string().min(1, "Channel type is required"),
-}).refine(
+  language: z.string().optional(),
+  context: CriticalContextSchema,
+}).passthrough() // Permite qualquer campo extra no nível raiz
+.refine(
   (data) => {
-    // Ensure we have identifier for idempotency - priority: context.message.source_id > wamid > message_data.id
-    const swContext = data.context['socialwise-chatwit'];
-    const messageSourceId = data.context.message?.source_id;
-    const wamid = swContext?.wamid || swContext?.whatsapp_identifiers?.wamid;
-    const messageId = swContext?.message_data?.id || swContext?.message_id;
-    const sessionId = data.session_id;
-    
-    // At minimum, we need session_id for idempotency, but prefer message source_id, wamid or message_id
-    return sessionId && (messageSourceId || wamid || messageId || sessionId);
+    // Validação básica de integridade
+    return data.session_id && data.message && data.channel_type;
   },
   {
-    message: "Session ID is required for idempotency, with optional message source_id, wamid or message_data.id",
-    path: ['context'],
+    message: "Session ID, message and channel_type are required",
+    path: ['session_id'],
   }
 );
 
@@ -249,103 +193,30 @@ export function validateNonce(nonce: string): {
 }
 
 /**
- * Preprocess payload to handle common type coercion issues
- * Converts numbers to strings where expected and handles null values
+ * Preprocess payload simples - apenas conversões básicas de tipo
+ * Remove complexidade desnecessária, focando apenas no essencial
  */
 export function preprocessSocialWisePayload(payload: any): any {
   if (!payload || typeof payload !== 'object') {
     return payload;
   }
 
-  // Helper function to convert number/null to string or remove null/undefined
-  const processValue = (value: any, shouldConvertToString = true): any => {
-    if (value === null || value === undefined) {
-      return undefined;
-    }
-    return shouldConvertToString ? String(value) : value;
-  };
-
-  // Helper function to remove null values from an object
-  const removeNulls = (obj: any): any => {
-    if (obj === null || obj === undefined) {
-      return undefined;
-    }
-    if (typeof obj !== 'object' || Array.isArray(obj)) {
-      return obj;
-    }
-    const cleaned: any = {};
-    for (const [key, value] of Object.entries(obj)) {
-      if (value !== null) {
-        cleaned[key] = typeof value === 'object' && !Array.isArray(value) ? removeNulls(value) : value;
-      }
-    }
-    return cleaned;
-  };
-
-  // Deep clone to avoid mutating original
+  // Deep clone simples
   const processed = JSON.parse(JSON.stringify(payload));
 
-  // Convert session_id
+  // Conversões básicas apenas nos campos críticos
   if ('session_id' in processed) {
-    processed.session_id = processValue(processed.session_id);
+    processed.session_id = String(processed.session_id || '');
   }
 
-  // Convert context fields
-  if (processed.context) {
-    if ('inbox_id' in processed.context) {
-      processed.context.inbox_id = processValue(processed.context.inbox_id);
-    }
-    if ('account_id' in processed.context) {
-      processed.context.account_id = processValue(processed.context.account_id);
-    }
-
-    // Convert socialwise-chatwit context
-    const swContext = processed.context['socialwise-chatwit'];
-    if (swContext) {
-      // Convert inbox_data
-      if (swContext.inbox_data) {
-        if ('id' in swContext.inbox_data) {
-          swContext.inbox_data.id = processValue(swContext.inbox_data.id);
-        }
-        if ('name' in swContext.inbox_data) {
-          swContext.inbox_data.name = processValue(swContext.inbox_data.name, false);
-          if (swContext.inbox_data.name === undefined) {
-            delete swContext.inbox_data.name;
-          }
-        }
-      }
-      
-      // Convert account_data.id
-      if (swContext.account_data && 'id' in swContext.account_data) {
-        swContext.account_data.id = processValue(swContext.account_data.id);
-      }
-
-      // Convert WhatsApp IDs
-      if ('whatsapp_phone_number_id' in swContext) {
-        swContext.whatsapp_phone_number_id = processValue(swContext.whatsapp_phone_number_id);
-        if (swContext.whatsapp_phone_number_id === undefined) {
-          delete swContext.whatsapp_phone_number_id;
-        }
-      }
-      if ('whatsapp_business_id' in swContext) {
-        swContext.whatsapp_business_id = processValue(swContext.whatsapp_business_id);
-        if (swContext.whatsapp_business_id === undefined) {
-          delete swContext.whatsapp_business_id;
-        }
-      }
-
-      // Convert message_data.id
-      if (swContext.message_data && 'id' in swContext.message_data) {
-        swContext.message_data.id = processValue(swContext.message_data.id);
-      }
-    }
+  // Garante que context existe
+  if (!processed.context) {
+    processed.context = {};
   }
 
-  // Apply null removal to the entire context to clean up any remaining nulls
-  if (processed.context) {
-    processed.context = removeNulls(processed.context);
-  }
-
+  // NÃO remove nulls - aceita nulls como valores válidos
+  // A validação Zod deve lidar com nullable() campos adequadamente
+  
   return processed;
 }
 

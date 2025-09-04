@@ -139,7 +139,7 @@ describe('OpenAI SocialWise Flow Enhancements', () => {
 
     it('should validate and clamp response fields', async () => {
       const mockResponse = {
-        introduction_text: 'Este é um texto de introdução muito longo que precisa ser cortado porque excede o limite de 180 caracteres estabelecido para garantir que a mensagem seja concisa e não cause problemas de formatação',
+        response_text: 'Este é um texto de introdução muito longo que precisa ser cortado porque excede o limite de 180 caracteres estabelecido para garantir que a mensagem seja concisa e não cause problemas de formatação',
         buttons: [
           { title: 'Título muito longo que precisa ser cortado', payload: '@test_intent' },
           { title: 'Normal', payload: 'invalid_payload' },
@@ -162,7 +162,7 @@ describe('OpenAI SocialWise Flow Enhancements', () => {
       const result = await openaiService.generateWarmupButtons('test message', candidates, agent);
       
       expect(result).toBeDefined();
-      expect(result!.introduction_text.length).toBeLessThanOrEqual(180);
+      expect(result!.response_text.length).toBeLessThanOrEqual(180);
       expect(result!.buttons).toHaveLength(3); // Max 3 buttons
       expect(result!.buttons[0].title.length).toBeLessThanOrEqual(20);
       expect(result!.buttons[1].payload).toMatch(/^@[a-z0-9_]+$/); // Should be fixed
@@ -188,7 +188,7 @@ describe('OpenAI SocialWise Flow Enhancements', () => {
       const mockResponse = {
         mode: 'intent',
         intent_payload: '@legal_consultation',
-        introduction_text: 'Confirmação da intenção',
+        response_text: 'Confirmação da intenção',
         buttons: [{ title: 'Confirmar', payload: '@legal_consultation' }]
       };
 
@@ -269,7 +269,7 @@ describe('OpenAI SocialWise Flow Enhancements', () => {
       const mockResponse = {
         mode: 'chat',
         text: longText,
-        introduction_text: longIntro
+        response_text: longIntro
       };
 
       mockResponsesCall.mockResolvedValue({
@@ -283,14 +283,14 @@ describe('OpenAI SocialWise Flow Enhancements', () => {
       
       expect(result).toBeDefined();
       expect(result!.text!.length).toBeLessThanOrEqual(1024);
-      expect(result!.introduction_text!.length).toBeLessThanOrEqual(180);
+      expect(result!.response_text!.length).toBeLessThanOrEqual(180);
     });
   });
 
   describe('Structured Output Validation', () => {
     it('should validate payload format in buttons', async () => {
       const mockResponse = {
-        introduction_text: 'Test',
+        response_text: 'Test',
         buttons: [
           { title: 'Valid', payload: '@valid_intent' },
           { title: 'Invalid', payload: 'invalid-payload!' },

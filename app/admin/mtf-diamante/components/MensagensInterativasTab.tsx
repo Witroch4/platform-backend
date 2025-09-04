@@ -25,6 +25,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import InteractiveMessageCreator from "./InteractiveMessageCreator";
 import type { InteractiveMessageType } from "./interactive-message-creator/types";
 import { useMtfData } from "@/app/admin/mtf-diamante/context/MtfDataProvider";
+import { useInteractiveMessages } from "@/app/admin/mtf-diamante/hooks/useInteractiveMessages";
   import {
     Dialog,
     DialogContent,
@@ -154,8 +155,10 @@ const normalizeMessage = (m: AnyMsg): Mensagem => {
 };
 
 const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
-  // PONTO-CHAVE 1: Pegando as novas funções otimizadas do contexto
-  const { interactiveMessages, caixas, refreshCaixas, buttonReactions, saveMessage, updateMessagesCache, deleteMessage } = useMtfData();
+  // ✅ CORRIGIDO: Usando hooks dedicados ao invés dos deprecated
+  const { interactiveMessages, caixas, refreshCaixas, buttonReactions, deleteMessage } = useMtfData();
+  const { addMessage, updateMessage } = useInteractiveMessages(caixaId);
+  
   const [currentView, setCurrentView] = useState<"list" | "create" | "edit">(
     "list"
   );
@@ -175,8 +178,8 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
       count: interactiveMessages?.length || 0,
       sample: interactiveMessages?.[0] ? {
         id: interactiveMessages[0].id,
-        name: interactiveMessages[0].name || interactiveMessages[0].nome,
-        texto: interactiveMessages[0].texto,
+        name: interactiveMessages[0].name,
+        texto: interactiveMessages[0].body?.text || '',
         full: interactiveMessages[0]
       } : null
     });
@@ -284,11 +287,8 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
     try {
       console.log('🗑️ [MensagensInterativasTab] Iniciando deleção:', { mensagemId });
       
-      // 1. Chama a API para deletar
+      // 1. Chama a API para deletar (já atualiza o cache automaticamente)
       await deleteMessage(mensagemId);
-      
-      // 2. Atualiza o cache instantaneamente removendo a mensagem
-      updateMessagesCache(mensagemId, 'remove');
       
       console.log('✅ [MensagensInterativasTab] Mensagem excluída e cache atualizado');
       toast.success("Mensagem excluída com sucesso!");
@@ -479,7 +479,7 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
           const resp = await fetch(`/api/admin/mtf-diamante/interactive-messages`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ caixaId, message }),
+            body: JSON.stringify({ inboxId: caixaId, message }),
           });
           if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
@@ -511,9 +511,20 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
   
   // Função para criar payload da API
   const createApiPayload = useCallback((messageData: any, isEdit = false) => {
+    // ✅ FIX: Estruturar corretamente o payload para a API
+    const apiMessage = {
+      name: messageData.name,
+      type: messageData.type || 'button',
+      body: messageData.body || { text: messageData.texto || '' },
+      header: messageData.header,
+      footer: messageData.footer,
+      action: messageData.action,
+      isActive: messageData.isActive !== undefined ? messageData.isActive : true
+    };
+
     const payload: any = {
       inboxId: caixaId,  // ✅ Usar "inboxId" conforme esperado pela API
-      message: messageData,
+      message: apiMessage,
       reactions: messageData.reactions || []  // ✅ FIX: Usar reações do messageData recebido
     };
 
@@ -522,12 +533,14 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
       payload.messageId = messageData.id;
       console.log('📝 [createApiPayload] Payload para edição REAL:', {
         messageId: messageData.id,
-        messageName: messageData.name
+        messageName: messageData.name,
+        apiMessage
       });
     } else {
       console.log('➕ [createApiPayload] Payload para criação:', {
         messageName: messageData.name,
-        hadTempId: messageData.id?.toString().startsWith('temp-') ? messageData.id : null
+        hadTempId: messageData.id?.toString().startsWith('temp-') ? messageData.id : null,
+        apiMessage
       });
     }
 
@@ -562,18 +575,16 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
         action: isEditMode ? 'PUT (edição)' : 'POST (criação)'
       });
 
-      // 2. Salva na API e aguarda o retorno com a mensagem completa
-      const result = await saveMessage(apiPayload, isEditMode);
-      console.log('✅ [MensagensInterativasTab] Mensagem salva na API:', result.message);
+      // 2. ✅ CORRIGIDO: Usar hooks dedicados ao invés dos deprecated
+      if (isEditMode) {
+        await updateMessage(optimisticUIData, apiPayload);
+        console.log('✅ [MensagensInterativasTab] Mensagem atualizada via hook dedicado');
+      } else {
+        await addMessage(optimisticUIData, apiPayload);
+        console.log('✅ [MensagensInterativasTab] Mensagem criada via hook dedicado');
+      }
 
-      // 3. ⚡ ATUALIZA O CACHE INSTANTANEAMENTE com a mensagem E reações retornadas
-      await updateMessagesCache(result.message, isEditMode ? 'update' : 'add', result.reactions);
-      console.log('⚡ [MensagensInterativasTab] Cache do SWR atualizado instantaneamente com reações!', {
-        message: result.message?.id,
-        reactions: result.reactions?.length || 0
-      });
-
-      // 4. Redireciona IMEDIATAMENTE - a lista já estará atualizada
+      // 3. Redireciona IMEDIATAMENTE - o hook já atualizou o cache
       setCurrentView("list");
       console.log('🎯 [MensagensInterativasTab] Redirecionamento concluído - experiência instantânea!');
 
@@ -586,7 +597,7 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
       // ✅ FIX: Sempre liberar o lock, mesmo em caso de erro
       isProcessingRef.current = false;
     }
-  }, [saveMessage, updateMessagesCache, createApiPayload]);
+  }, [addMessage, updateMessage, createApiPayload]);
 
   const handleBackToList = () => {
     setCurrentView("list");

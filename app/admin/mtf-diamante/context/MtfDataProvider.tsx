@@ -5,126 +5,55 @@ import type React from "react";
 import {
   createContext,
   useContext,
-  useEffect,
   useState,
   useCallback,
-  useRef,
   useMemo,
 } from "react";
-import useSWR, { useSWRConfig } from 'swr';
-import { swrFetcher } from '@/lib/swr-config';
 import { usePathname } from 'next/navigation';
+import { SWRConfig } from 'swr';
 
-interface MtfDiamanteVariavel {
-  id?: string;
-  chave: string;
-  valor: string;
-}
+// Import SSR helpers
+import { createSWRFallback, type MtfInitialData } from '../lib/ssr-helpers';
 
-interface MtfDiamanteLote {
-  id?: string;
-  numero: number;
-  nome: string;
-  valor: string;
-  dataInicio: string;
-  dataFim: string;
-  isActive: boolean;
-}
+// Import error handling utilities
+import { 
+  logError, 
+  shouldRetryError, 
+  getRetryDelay, 
+  fetchWithErrorHandling,
+  MtfError,
+  type ApiError 
+} from '../lib/error-handling';
 
-import type { AgenteDialogflow, ChatwitInbox } from "@/types/dialogflow";
+// Import cleanup utilities
+import { deprecated, devLog } from '../lib/cleanup-utils';
 
-type MtfCaixa = ChatwitInbox;
+// Import dedicated hooks
+import { useInteractiveMessages } from '../hooks/useInteractiveMessages';
+import { useCaixasManager } from '../hooks/useCaixas';
+import { useLotesManager } from '../hooks/useLotes';
+import { useVariaveisManager } from '../hooks/useVariaveis';
+import { useApiKeysManager } from '../hooks/useApiKeys';
 
-interface InteractiveMessage {
-  id: string;
-  [key: string]: any; // Permite outras propriedades
-}
+// Import types
+import type { MtfDataContextType, ChatwitInbox } from '../lib/types';
 
-interface MtfDataContextType {
-  // Variáveis
-  variaveis: MtfDiamanteVariavel[];
-  loadingVariaveis: boolean;
-  refreshVariaveis: () => Promise<any>;
-
-  // Lotes
-  lotes: MtfDiamanteLote[];
-  loadingLotes: boolean;
-  refreshLotes: () => Promise<any>;
-
-  // Caixas
-  caixas: MtfCaixa[];
-  setCaixas: React.Dispatch<React.SetStateAction<MtfCaixa[]>>;
-  loadingCaixas: boolean;
-  refreshCaixas: () => Promise<any>;
-  prefetchInbox: (inboxId: string) => Promise<void>;
-  // Função para update otimista de caixas
-  optimisticAddCaixa: (apiPayload: any, optimisticCaixaData: any) => Promise<any>;
-
-  // Mensagens interativas - NOVA ESTRATÉGIA OTIMIZADA
-  interactiveMessages: any[];
-  
-  // 👇 NOVO: Funções para o fluxo otimizado instantâneo
-  saveMessage: (apiPayload: any, isEdit: boolean) => Promise<any>;
-  updateMessagesCache: (messageOrId: any, action: 'add' | 'update' | 'remove', reactions?: any[]) => Promise<any>;
-  deleteMessage: (messageId: string) => Promise<any>;
-  
-  // Reações de botões (nova)
-  buttonReactions: any[];
-  
-  // API Keys (nova)
-  apiKeys: any[];
-
-  // Controle geral
-  isInitialized: boolean;
-  
-  // Controle de pausar atualizações para edição
-  pauseUpdates: () => void;
-  resumeUpdates: () => void;
-  isUpdatesPaused: boolean;
-}
-
-const MtfDataContext = createContext<MtfDataContextType | undefined>(undefined);
-
-export function useMtfData() {
-  const context = useContext(MtfDataContext);
-  if (!context) {
-    throw new Error("useMtfData deve ser usado dentro de MtfDataProvider");
-  }
-  return context;
-}
-
-// PONTO-CHAVE 2: Função helper que faz a chamada real à API
+// Legacy API function for compatibility
 async function saveMessageWithReactions(payload: any, isEdit: boolean) {
   const url = '/api/admin/mtf-diamante/messages-with-reactions';
   const method = isEdit ? 'PUT' : 'POST';
 
-  // ✅ FIX: Extrai messageId de várias fontes possíveis para PUT
   if (isEdit) {
     const messageId = payload.editingMessageId || 
                      payload.messageId || 
                      payload.message?.id || 
                      payload.id;
     
-    // ✅ FIX: Validação adicional - não aceita IDs temporários para edição
     if (!messageId || messageId.toString().startsWith('temp-')) {
       throw new Error('ID válido é obrigatório para edições. IDs temporários não são permitidos.');
     }
     
-    // Garante que o messageId está no payload
     payload.messageId = messageId;
-    
-    console.log('🔄 [saveMessageWithReactions] PUT request:', {
-      messageId,
-      isTemporary: messageId.toString().startsWith('temp-'),
-      hasMessage: !!payload.message,
-      payloadKeys: Object.keys(payload)
-    });
-  } else {
-    console.log('➕ [saveMessageWithReactions] POST request:', {
-      hasMessage: !!payload.message,
-      payloadKeys: Object.keys(payload),
-      tempId: payload.message?.id?.toString().startsWith('temp-') ? payload.message.id : null
-    });
   }
 
   const response = await fetch(url, {
@@ -138,762 +67,220 @@ async function saveMessageWithReactions(payload: any, isEdit: boolean) {
     throw new Error(errorData.error || 'Falha ao salvar a mensagem.');
   }
   
-  // Retorna os dados da API para o SWR popular o cache
   return response.json();
+}
+
+const MtfDataContext = createContext<MtfDataContextType | undefined>(undefined);
+
+export function useMtfData() {
+  const context = useContext(MtfDataContext);
+  if (!context) {
+    throw new Error("useMtfData deve ser usado dentro de MtfDataProvider");
+  }
+  return context;
 }
 
 interface MtfDataProviderProps {
   children: React.ReactNode;
-  initialData?: any; // Dados iniciais do SSR para evitar flicker
+  initialData?: MtfInitialData; // Dados iniciais do SSR para evitar flicker
 }
 
+/**
+ * Simplified MtfDataProvider that orchestrates dedicated hooks
+ * 
+ * This refactored version:
+ * - Removes complex useRef, timers and manual protections
+ * - Uses dedicated hooks internally for each data type
+ * - Maintains public API compatibility
+ * - Implements simplified pause/resume functionality
+ */
 export function MtfDataProvider({ children, initialData }: MtfDataProviderProps) {
   const pathname = usePathname();
-  const { mutate: globalMutate } = useSWRConfig();
   
-  // Estado para controlar pausar atualizações durante edição
+  // Simple pause state management
   const [isPaused, setIsPaused] = useState(false);
-  const pausedDataRef = useRef<any>(null);
-  const lastUpdateRef = useRef<number>(0);
   
-  // 🛡️ CORREÇÃO 1: Proteção mais robusta com timeout maior e verificação de ID
-  const recentOptimisticRef = useRef<{
-    timestamp: number;
-    messageCount: number;
-  messageId?: string;
-  operation?: 'add' | 'update' | 'remove';
-  isCompleted?: boolean; // Novo flag para indicar conclusão bem-sucedida
-  } | null>(null);
+  // Extract inboxId from URL if on a specific inbox page
+  const inboxId = pathname?.match(/\/inbox\/([^\/]+)/)?.[1] || null;
   
-  // 🛡️ Proteção contra múltiplas chamadas simultâneas à mesma função
-  const processingRef = useRef<Set<string>>(new Set());
+  // Use dedicated hooks with pause support
+  const messagesHook = useInteractiveMessages(inboxId, isPaused);
+  const caixasHook = useCaixasManager(isPaused);
+  const lotesHook = useLotesManager(isPaused);
+  const variaveisHook = useVariaveisManager(isPaused);
+  const apiKeysHook = useApiKeysManager(isPaused);
   
-  // Extrair inboxId da URL se estiver em uma página de inbox específica
-  const inboxId = pathname?.match(/\/inbox\/([^\/]+)/)?.[1];
-  
-  // Ref para manter dados anteriores válidos
-  const prevRef = useRef<any>(null);
-  
-  // 🛡️ CORREÇÃO 2: Ref para controlar revalidações pendentes
-  const pendingRevalidationRef = useRef<NodeJS.Timeout | null>(null);
-  
-  // Fetcher resiliente que trata 404s sem derrubar a UI
-  const fetchInboxView = useCallback(async (url: string) => {
-    const r = await fetch(url, { 
-      headers: { 
-        'Accept': 'application/json',
-        'x-skip-cache': '0' 
-      } 
-    });
-    
-    if (r.status === 404) {
-      // Caixa ainda não pronta / cache frio / id trocando -> não derruba a UI
-      console.log('⚠️ [MtfDataProvider] 404 tratado graciosamente para:', url);
-      return { interactiveMessages: [], caixas: [], lotes: [], variaveis: [], apiKeys: [] };
-    }
-    
-    if (!r.ok) {
-      const text = await r.text().catch(() => '');
-      const err: any = new Error(text || `HTTP ${r.status}`);
-      err.status = r.status;
-      throw err; // 5xx etc: mantém erro para retry/backoff
-    }
-    
-    return r.json();
-  }, []);
-  
-  // Construir chave SWR - sempre busca os dados base.
-  // Quando não houver inboxId, usamos "all" para carregar variáveis, caixas e chaves.
-  const swrKey = [
-    `/api/admin/mtf-diamante/inbox-view`,
-    inboxId || "all",
-  ] as const;
-  
-  // Usar SWR para gerenciar o estado e cache automaticamente
-  const { data: bffData, error, isLoading, mutate } = useSWR(
-    isPaused ? null : swrKey, // Pausar fetches quando isPaused é true
-    ([base, id]) =>
-      fetchInboxView(id && id !== "all" ? `${base}?inboxId=${id}` : base),
-    {
-      keepPreviousData: true, // Mantém dados anteriores durante navegação
-      revalidateOnFocus: !isPaused, // Não revalidar quando pausado
-      revalidateOnReconnect: !isPaused, // Não revalidar quando pausado
-      dedupingInterval: 300, 
-      shouldRetryOnError: (err: any) => Number(err?.status) >= 500, // sem retry para 404
-      fallbackData: prevRef.current ?? initialData,
-      onSuccess: (d) => { 
-        if (d && !isPaused) {
-          // 🛡️ CORREÇÃO 3: Proteção aprimorada com verificação de ID e timeout maior
-          const now = Date.now();
-          const recent = recentOptimisticRef.current;
-          
-          if (recent && !recent.isCompleted) {
-            // ✅ FIX: Proteção mais curta para UPDATE (dados optimistic já corretos)
-            const wasUpdateOperation = recent.operation === 'update';
-            const protectionTime = wasUpdateOperation ? 5000 : 15000; // 5s para UPDATE, 15s para ADD/REMOVE
-            const timeElapsed = now - recent.timestamp;
-            
-            if (timeElapsed < protectionTime) {
-              // Verifica se o servidor já tem o estado esperado
-              const serverMessageCount = d.interactiveMessages?.length || 0;
-              const hasTargetMessage = recent.messageId ? 
-                d.interactiveMessages?.some((msg: any) => msg.id === recent.messageId) : 
-                false;
-              
-              // 🔍 DEBUG: Log para investigar por que hasTargetMessage é false
-              if (wasUpdateOperation && !hasTargetMessage && recent.messageId) {
-                console.log('🔍 [DEBUG] hasTargetMessage false para UPDATE:', {
-                  targetMessageId: recent.messageId,
-                  serverMessages: d.interactiveMessages?.map((m: any) => ({ id: m.id, name: m.name })) || [],
-                  serverCount: serverMessageCount,
-                  hasTargetMessage
-                });
-              }
-
-              // 👇 LÓGICA DE DEFESA ATUALIZADA E CORRIGIDA (USANDO `operation` EXPLÍCITO)
-              let serverSynced = false;
-              const wasAddOperation = recent.operation === 'add';
-              const wasRemoveOperation = recent.operation === 'remove';
-
-              if (wasAddOperation) {
-                // Para ADD, o servidor está sincronizado se a contagem for a esperada E a mensagem existir
-                serverSynced = serverMessageCount >= recent.messageCount && hasTargetMessage;
-              } else if (wasUpdateOperation) {
-                // Para UPDATE, o servidor está sincronizado se a mensagem existe (não importa a contagem)
-                // ✅ FIX: Para UPDATE, sempre preferir dados optimistic durante o período de proteção
-                // pois eles contêm as mudanças mais recentes (incluindo buttonReactions atualizadas)
-                serverSynced = false; // Sempre manter dados optimistic durante proteção UPDATE
-              } else if (wasRemoveOperation) {
-                // Para REMOVE, o servidor está sincronizado se a contagem for a esperada E a mensagem NÃO existir mais
-                serverSynced = serverMessageCount <= recent.messageCount && !hasTargetMessage;
-              }
-              // Fim da lógica de defesa
-              
-              if (serverSynced) {
-                console.log('✅ [MtfDataProvider] Servidor sincronizado - aceitando dados:', {
-                  serverCount: serverMessageCount,
-                  expectedCount: recent.messageCount,
-                  operation: wasAddOperation ? 'ADD' : (wasUpdateOperation ? 'UPDATE' : 'REMOVE'),
-                  protection: 'removed'
-                });
-                recentOptimisticRef.current = { ...recent, isCompleted: true };
-                prevRef.current = d;
-              } else {
-                console.log('🛡️ [MtfDataProvider] Protegendo contra revalidação prematura:', {
-                  serverCount: serverMessageCount,
-                  expectedCount: recent.messageCount,
-                  timeLeft: Math.round((protectionTime - timeElapsed) / 1000),
-                  operation: wasAddOperation ? 'ADD (aguardando)' : (wasUpdateOperation ? 'UPDATE (aguardando)' : 'REMOVE (aguardando)'),
-                  hasTargetMessage,
-                  keepingPrevRef: !!prevRef.current
-                });
-                // NÃO atualiza prevRef - mantém dados optimistic
-                return;
-              }
-            } else {
-              // Timeout de proteção expirou
-              console.log('⏰ [MtfDataProvider] Proteção expirou - aceitando dados do servidor');
-              recentOptimisticRef.current = null;
-              prevRef.current = d;
-            }
-          } else {
-            // Sem operação optimistic recente ou já completada - aceita normalmente
-            prevRef.current = d;
-          }
-        }
-      },
-      // Otimizações para atualização mais responsiva
-      revalidateIfStale: !isPaused,
-      revalidateOnMount: true,
-      focusThrottleInterval: 2000,
-      refreshInterval: isPaused ? 0 : 15000, // Polling mais frequente para mensagens interativas
-    }
-  );
-
-  // Estados derivados do BFF com fallback seguro e memo para evitar re-renders
-  const currentData = useMemo(() => {
-    const now = Date.now();
-    const recent = recentOptimisticRef.current;
-    
-    if (isPaused && pausedDataRef.current) {
-      return pausedDataRef.current;
-    }
-    
-    // 🛡️ CORREÇÃO 4: Verificação aprimorada com timeout maior
-    if (recent && !recent.isCompleted && (now - recent.timestamp) < 15000) {
-      if (bffData) {
-        const serverMessageCount = bffData.interactiveMessages?.length || 0;
-        const hasTargetMessage = recent.messageId ? 
-          bffData.interactiveMessages?.some((msg: any) => msg.id === recent.messageId) : 
-          false;
-          
-        if (serverMessageCount < recent.messageCount && !hasTargetMessage) {
-          console.log('🛡️ [MtfDataProvider] Mantendo dados optimistic na UI:', {
-            serverCount: serverMessageCount,
-            expectedCount: recent.messageCount,
-            hasTargetMessage,
-            preservingOptimistic: true,
-            usingPrevRef: !!prevRef.current
-          });
-          // SEMPRE retorna dados anteriores quando servidor está atrasado
-          return prevRef.current || {
-            ...bffData,
-            interactiveMessages: bffData.interactiveMessages || []
-          };
-        }
-      } else if (prevRef.current) {
-        // Se não há bffData mas há dados anteriores, preserva durante proteção
-        console.log('🛡️ [MtfDataProvider] Preservando dados anteriores durante proteção optimistic');
-        return prevRef.current;
-      }
-    }
-    
-    return bffData;
-  }, [isPaused, bffData]);
-  
-  const variaveis = useMemo(() => 
-    currentData?.variaveis ?? prevRef.current?.variaveis ?? [],
-    [currentData?.variaveis, isPaused]
-  );
-  const lotes = useMemo(() => 
-    currentData?.lotes ?? prevRef.current?.lotes ?? [],
-    [currentData?.lotes, isPaused]
-  );
-  const caixas = useMemo(() => 
-    currentData?.caixas ?? prevRef.current?.caixas ?? [],
-    [currentData?.caixas, isPaused]
-  );
-  const interactiveMessages = useMemo(() => {
-    const now = Date.now();
-    const recent = recentOptimisticRef.current;
-    
-    // 🛡️ CORREÇÃO 5: Proteção adicional com verificação de ID
-    if (recent && !recent.isCompleted && (now - recent.timestamp) < 15000) {
-      // Verificar se currentData tem o número esperado de mensagens OU a mensagem específica
-      const currentCount = currentData?.interactiveMessages?.length || 0;
-      const prevCount = prevRef.current?.interactiveMessages?.length || 0;
-      const currentHasTarget = recent.messageId ? 
-        currentData?.interactiveMessages?.some((msg: any) => msg.id === recent.messageId) :
-        false;
-      const prevHasTarget = recent.messageId ?
-        prevRef.current?.interactiveMessages?.some((msg: any) => msg.id === recent.messageId) :
-        false;
-      
-  // 👇 LÓGICA CORRIGIDA: Distinguir entre ADD, UPDATE e REMOVE operations usando `operation`
-  const wasAddOperation = recent.operation === 'add';
-  const wasUpdateOperation = recent.operation === 'update';
-  const wasRemoveOperation = recent.operation === 'remove';
-      
-      if (wasAddOperation) {
-        // Para ADD: usar currentData se tem mensagens suficientes E tem a mensagem target
-        if (currentCount >= recent.messageCount && currentHasTarget) {
-          console.log('📋 [MtfDataProvider] ADD sincronizado - usando currentData:', {
-            currentCount,
-            expectedCount: recent.messageCount,
-            hasTargetMessage: currentHasTarget,
-            operation: 'ADD',
-            protectionActive: true
-          });
-          return currentData?.interactiveMessages || [];
-        } else if (prevCount >= recent.messageCount && prevHasTarget) {
-          console.log('📋 [MtfDataProvider] ADD pendente - usando prevRef:', {
-            currentCount,
-            prevCount,
-            expectedCount: recent.messageCount,
-            hasTargetMessage: prevHasTarget,
-            operation: 'ADD',
-            protectionActive: true
-          });
-          return prevRef.current?.interactiveMessages || [];
-        }
-      } else if (wasUpdateOperation) {
-        // ✅ FIX: Para UPDATE, sempre preferir prevRef (dados optimistic) durante a proteção
-        // pois eles têm as mudanças mais recentes incluindo buttonReactions atualizadas
-        if (prevHasTarget) {
-          console.log('📋 [MtfDataProvider] UPDATE protegido - usando prevRef (optimistic):', {
-            hasTargetMessage: prevHasTarget,
-            operation: 'UPDATE', 
-            protectionActive: true,
-            reason: 'dados optimistic são mais atuais que servidor'
-          });
-          return prevRef.current?.interactiveMessages || [];
-        } else if (currentHasTarget) {
-          console.log('📋 [MtfDataProvider] UPDATE fallback - usando currentData:', {
-            hasTargetMessage: currentHasTarget,
-            operation: 'UPDATE',
-            protectionActive: true,
-            reason: 'fallback quando prevRef não tem target'
-          });
-          return currentData?.interactiveMessages || [];
-        }
-      } else if (wasRemoveOperation) {
-        // Para REMOVE: usar currentData se tem mensagens reduzidas E NÃO tem a mensagem target
-        if (currentCount <= recent.messageCount && !currentHasTarget) {
-          console.log('📋 [MtfDataProvider] REMOVE sincronizado - usando currentData:', {
-            currentCount,
-            expectedCount: recent.messageCount,
-            hasTargetMessage: currentHasTarget,
-            operation: 'REMOVE',
-            protectionActive: true
-          });
-          return currentData?.interactiveMessages || [];
-        } else {
-          // Servidor ainda não processou a remoção, manter estado otimista
-          console.log('📋 [MtfDataProvider] REMOVE pendente - mantendo estado otimista:', {
-            currentCount,
-            prevCount,
-            expectedCount: recent.messageCount,
-            hasTargetMessage: currentHasTarget,
-            operation: 'REMOVE',
-            protectionActive: true
-          });
-          // Filtra a mensagem deletada do prevRef para manter o estado otimista
-          const result = prevRef.current?.interactiveMessages?.filter((msg: any) => msg.id !== recent.messageId) || [];
-          return result;
-        }
-      }
-    }
-    
-    // Sem proteção ativa ou dados já sincronizados
-    const result = currentData?.interactiveMessages ?? prevRef.current?.interactiveMessages ?? [];
-    console.log('📋 [MtfDataProvider] interactiveMessages memo atualizado:', {
-      isPaused,
-      currentDataHasMessages: !!currentData?.interactiveMessages,
-      prevRefHasMessages: !!prevRef.current?.interactiveMessages,
-      resultCount: result.length,
-      protectionActive: !!(recent && !recent.isCompleted && (now - recent.timestamp) < 15000),
-      firstMessage: result[0] ? {
-        id: result[0].id,
-        name: result[0].name || result[0].nome,
-        texto: result[0].texto
-      } : null
-    });
-    return result;
-  }, [currentData?.interactiveMessages, isPaused]);
-  const buttonReactions = useMemo(() => 
-    currentData?.buttonReactions ?? prevRef.current?.buttonReactions ?? [],
-    [currentData?.buttonReactions, isPaused]
-  );
-  const apiKeys = useMemo(() => 
-    currentData?.apiKeys ?? prevRef.current?.apiKeys ?? [],
-    [currentData?.apiKeys, isPaused]
-  );
-  
-  // Estados de loading individuais baseados no SWR
-  const loadingVariaveis = isLoading;
-  const loadingLotes = isLoading;
-  const loadingCaixas = isLoading;
-  const isInitialized = !isLoading && !error;
-  
-  // Debug log para verificar se está funcionando - só quando dados mudam efetivamente
-  useEffect(() => {
-    if (bffData || error) {
-      console.log('📊 [MtfDataProvider] Estado atualizado:', {
-        inboxId,
-        hasData: !!bffData,
-        isLoading,
-        error: error?.message,
-        totalData: {
-          variaveis: variaveis.length,
-          lotes: lotes.length,
-          caixas: caixas.length,
-          interactiveMessages: interactiveMessages.length,
-          buttonReactions: buttonReactions.length,
-          apiKeys: apiKeys.length,
-        }
-      });
-    }
-  }, [bffData, error, inboxId]);
-
-  // Funções de refresh usando SWR mutate
-  const refreshVariaveis = useCallback(() => {
-    console.log('🔄 [MtfDataProvider] Refreshing variaveis via SWR mutate...');
-    return mutate();
-  }, [mutate]);
-
-  const refreshLotes = useCallback(() => {
-    console.log('🔄 [MtfDataProvider] Refreshing lotes via SWR mutate...');
-    return mutate();
-  }, [mutate]);
-
-  const refreshCaixas = useCallback(() => {
-    console.log('🔄 [MtfDataProvider] Refreshing caixas via SWR mutate...');
-    // Force immediate revalidation with multiple strategies
-    const [base, id] = swrKey;
-    
-    // 1. Invalidate current cache
-    mutate(undefined, false);
-    
-    // 2. Force fresh fetch with cache-busting and nocache
-    const bustingUrl = id && id !== "all" 
-      ? `${base}?inboxId=${id}&nocache=1&t=${Date.now()}`
-      : `${base}?nocache=1&t=${Date.now()}`;
-    
-    // 3. Fetch fresh data and update cache
-    return mutate(
-      fetchInboxView(bustingUrl),
-      { 
-        revalidate: true,
-        populateCache: true,
-        rollbackOnError: false 
-      }
-    );
-  }, [mutate, swrKey, fetchInboxView]);
-
-  // Prefetch de uma inbox específica para navegação fluida
-  const prefetchInbox = useCallback(async (id: string) => {
-    const key = [
-      `/api/admin/mtf-diamante/inbox-view`,
-      id,
-    ] as const;
-    await globalMutate(
-      key,
-      () => fetchInboxView(`/api/admin/mtf-diamante/inbox-view?inboxId=${id}`),
-      { revalidate: false }
-    );
-  }, [globalMutate, fetchInboxView]);
-
-  // Funções de controle de pausa com debounce
+  // Pause/Resume functions
   const pauseUpdates = useCallback(() => {
-    if (!isPaused && (bffData || prevRef.current)) {
-      // Preservar estado atual antes de pausar
-      pausedDataRef.current = bffData || prevRef.current;
-      setIsPaused(true);
-      console.log('⏸️ [MtfDataProvider] Updates paused - preserving current data');
-    }
-  }, [isPaused, bffData]);
+    setIsPaused(true);
+  }, []);
 
   const resumeUpdates = useCallback(() => {
-    if (isPaused) {
-      setIsPaused(false);
-      pausedDataRef.current = null;
-      
-      // ✅ FIX: Verifica se há operação optimistic recente antes de fazer refetch
-      const now = Date.now();
-      const recent = recentOptimisticRef.current;
-      const hasRecentOptimistic = recent && !recent.isCompleted && (now - recent.timestamp) < 15000; // 15 segundos
-      
-      // Trigger fresh fetch apenas se necessário E se não há operação optimistic recente
-      const shouldRefetch = !bffData || 
-        ((Date.now() - (lastUpdateRef.current || 0)) > 5000 && !hasRecentOptimistic); // 5 segundos
-      
-      if (shouldRefetch) {
-        mutate();
-        console.log('▶️ [MtfDataProvider] Updates resumed - fetching fresh data');
-      } else if (hasRecentOptimistic) {
-        console.log('▶️ [MtfDataProvider] Updates resumed - SKIPPING fetch due to recent optimistic update:', {
-          messageId: recent?.messageId,
-          timeLeft: Math.round((15000 - (now - (recent?.timestamp || 0))) / 1000)
-        });
-      } else {
-        console.log('▶️ [MtfDataProvider] Updates resumed - using cached data');
-      }
-      
-      lastUpdateRef.current = Date.now();
-    }
-  }, [isPaused, mutate, bffData]);
+    setIsPaused(false);
+    
+    // Trigger revalidation when resuming to sync with server
+    messagesHook.mutate();
+    caixasHook.mutate();
+    lotesHook.mutate();
+    variaveisHook.mutate();
+    apiKeysHook.mutate();
+  }, [messagesHook, caixasHook, lotesHook, variaveisHook, apiKeysHook]);
 
-
-
-  // 👇 NOVA FUNÇÃO: Apenas chama a API e retorna a promessa.
-  const saveMessage = useCallback(async (
+  // Legacy compatibility functions (deprecated but maintained)
+  const saveMessage = useCallback(deprecated(async (
     apiPayload: any, 
     isEdit: boolean
   ): Promise<any> => {
-    console.log('🚀 [MtfDataProvider] saveMessage: Iniciando chamada à API...', { isEdit });
-    // Apenas chama a função que faz o fetch e aguarda o resultado.
-    // O SWR não é manipulado aqui.
     return saveMessageWithReactions(apiPayload, isEdit);
-  }, []); // Sem dependências, pois saveMessageWithReactions é externa
+  }, 'saveMessage is deprecated', 'addMessage or updateMessage from dedicated hooks'), []);
 
-  // 👇 NOVA FUNÇÃO OTIMIZADA: Atualiza o cache manualmente sem refetch
-  const updateMessagesCache = useCallback((
+  const updateMessagesCache = useCallback(deprecated(async (
     messageOrId: any, 
-    action: 'add' | 'update' | 'remove',
-    reactions?: any[]  // ✅ FIX: Novo parâmetro opcional para reações
-  ) => {
-    console.log(`🔄 [MtfDataProvider] Atualizando cache manualmente: ${action}`);
-    
-    // ✅ FIX: Ativa proteção contra revalidação prematura
-    const now = Date.now();
-    const currentCount = currentData?.interactiveMessages?.length || 0;
-    
-    if (action === 'add') {
-      recentOptimisticRef.current = {
-        timestamp: now,
-        messageCount: currentCount + 1,
-  messageId: messageOrId.id,
-  operation: 'add',
-        isCompleted: false
-      };
-      console.log('🛡️ [MtfDataProvider] Proteção ativada para nova mensagem:', {
-        messageId: messageOrId.id,
-        expectedCount: currentCount + 1,
-        protectionTime: '15 segundos'
-      });
-    } else if (action === 'update') {
-      // ✅ FIX: Proteção para edições também
-      recentOptimisticRef.current = {
-        timestamp: now,
-        messageCount: currentCount, // Count não muda em updates
-        messageId: messageOrId.id,
-        operation: 'update' as any, // Adicionar 'update' ao tipo
-        isCompleted: false
-      };
-      console.log('🛡️ [MtfDataProvider] Proteção ativada para edição de mensagem:', {
-        messageId: messageOrId.id,
-        protectionTime: '5 segundos (UPDATE otimizado)'
-      });
-    } else if (action === 'remove') {
-      recentOptimisticRef.current = {
-        timestamp: now,
-        messageCount: currentCount - 1,
-        messageId: messageOrId, // ID da mensagem deletada
-  operation: 'remove',
-        isCompleted: false
-      };
-      console.log('🛡️ [MtfDataProvider] Proteção ativada para deleção de mensagem:', {
-        deletedMessageId: messageOrId,
-        expectedCount: currentCount - 1,
-        protectionTime: '15 segundos'
-      });
+    action: string,
+    _reactions?: any[]
+  ): Promise<any> => {
+    // Simple wrapper that delegates to the appropriate hook method
+    try {
+      if (action === 'add' && typeof messageOrId === 'object') {
+        await messagesHook.addMessage(messageOrId, messageOrId);
+      } else if (action === 'update' && typeof messageOrId === 'object') {
+        await messagesHook.updateMessage(messageOrId, messageOrId);
+      } else if (action === 'remove' && typeof messageOrId === 'string') {
+        await messagesHook.deleteMessage(messageOrId);
+      }
+    } catch (error) {
+      devLog.error('Error in updateMessagesCache wrapper:', error);
+      throw error;
     }
-    
-    return mutate((currentData: any) => {
-      // Se não houver dados atuais no cache, não faz nada
-      if (!currentData) return currentData;
+  }, 'updateMessagesCache is deprecated', 'dedicated hook methods'), [messagesHook]);
 
-      let updatedMessages;
-      const currentMessages = currentData.interactiveMessages || [];
 
-      switch (action) {
-        case 'add':
-          // Adiciona a nova mensagem no início da lista
-          updatedMessages = [messageOrId, ...currentMessages];
-          console.log('➕ [MtfDataProvider] Mensagem adicionada ao cache:', messageOrId.id || messageOrId.name);
-          break;
-        case 'update':
-          // Atualiza uma mensagem existente
-          updatedMessages = currentMessages.map((msg: any) => 
-            msg.id === messageOrId.id ? messageOrId : msg
-          );
-          console.log('� [MtfDataProvider] Mensagem atualizada no cache:', messageOrId.id);
-          break;
-        case 'remove':
-          // Remove uma mensagem pelo ID
-          updatedMessages = currentMessages.filter((msg: any) => msg.id !== messageOrId);
-          console.log('🗑️ [MtfDataProvider] Mensagem removida do cache:', messageOrId);
-          break;
-        default:
-          updatedMessages = currentMessages;
-      }
 
-      // ✅ FIX: Também atualiza buttonReactions se fornecidas
-      let updatedButtonReactions = currentData.buttonReactions || [];
-      
-      if (reactions && reactions.length > 0) {
-        if (action === 'add') {
-          // Adiciona novas reações
-          updatedButtonReactions = [...updatedButtonReactions, ...reactions];
-          console.log('➕ [MtfDataProvider] Reações adicionadas ao cache:', reactions.length);
-        } else if (action === 'update') {
-          // Remove reações antigas desta mensagem e adiciona as novas
-          // ✅ FIX: As reações usam buttonId para identificação, não messageId
-          const currentButtonIds = reactions.map(r => r.buttonId);
-          updatedButtonReactions = updatedButtonReactions.filter((r: any) => 
-            !currentButtonIds.includes(r.buttonId)
-          );
-          updatedButtonReactions = [...updatedButtonReactions, ...reactions];
-          console.log('🔄 [MtfDataProvider] Reações atualizadas no cache:', reactions.length, 'buttonIds:', currentButtonIds);
-        }
-      } else if (action === 'remove') {
-        // Remove reações da mensagem removida
-        const messageId = messageOrId;
-        updatedButtonReactions = updatedButtonReactions.filter((r: any) => r.messageId !== messageId);
-        console.log('🗑️ [MtfDataProvider] Reações removidas do cache para mensagem:', messageId);
-      }
+  // Refresh functions for backward compatibility
+  const refreshMessages = useCallback(() => messagesHook.mutate(), [messagesHook]);
+  const refreshCaixas = useCallback(() => caixasHook.mutate(), [caixasHook]);
+  const refreshLotes = useCallback(() => lotesHook.mutate(), [lotesHook]);
+  const refreshVariaveis = useCallback(() => variaveisHook.mutate(), [variaveisHook]);
+  const refreshApiKeys = useCallback(() => apiKeysHook.mutate(), [apiKeysHook]);
 
-      // Retorna o objeto de dados completo com a lista de mensagens E reações atualizadas
-      const updatedData = { 
-        ...currentData, 
-        interactiveMessages: updatedMessages,
-        buttonReactions: updatedButtonReactions  // ✅ FIX: Incluir buttonReactions atualizadas
-      };
-      
-      // ✅ FIX: Atualiza prevRef para manter consistência
-      prevRef.current = updatedData;
-      
-      // 🔍 DEBUG: Log para verificar se a mensagem está no prevRef após update
-      if (action === 'update' && messageOrId.id) {
-        const messageInPrevRef = updatedData.interactiveMessages?.some((m: any) => m.id === messageOrId.id);
-        console.log('🔍 [DEBUG] Mensagem no prevRef após update:', {
-          messageId: messageOrId.id,
-          messageInPrevRef,
-          totalMessages: updatedData.interactiveMessages?.length || 0,
-          totalReactions: updatedData.buttonReactions?.length || 0
-        });
-      }
-      
-      return updatedData;
-
-    }, { revalidate: false }); // IMPORTANTE: revalidate: false evita uma busca de rede desnecessária
-  }, [mutate, currentData?.interactiveMessages]);
-
-  // 👇 NOVA FUNÇÃO: Deleção simples
-  const deleteMessage = useCallback(async (messageId: string): Promise<any> => {
-    console.log('🗑️ [MtfDataProvider] deleteMessage: Iniciando deleção...', { messageId });
-    
-    const response = await fetch(`/api/admin/mtf-diamante/interactive-messages/${messageId}`, {
-      method: 'DELETE',
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Falha na comunicação com o servidor.' }));
-      throw new Error(errorData.error || 'Falha ao excluir a mensagem.');
-    }
-    
-    return { success: true, deletedId: messageId };
+  // Prefetch function for smooth navigation
+  const prefetchInbox = useCallback(async (id: string) => {
+    // This could be implemented with SWR's global mutate if needed
+    // Feature can be implemented when needed for performance optimization
   }, []);
 
-  // Função para update otimista de caixas
-  const optimisticAddCaixa = useCallback(async (apiPayload: any, optimisticCaixaData: any) => {
-    console.log('🚀 [MtfDataProvider] optimisticAddCaixa iniciada');
-    
-    // Função helper que faz a chamada real à API
-    const addCaixaAPI = async (payload: any) => {
-      const response = await fetch('/api/admin/mtf-diamante/dialogflow/caixas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP ${response.status}`);
-      }
-      
-      return response.json();
-    };
+  // Optimistic add caixa for backward compatibility
+  const optimisticAddCaixa = useCallback(deprecated(async (apiPayload: any, optimisticCaixaData: any) => {
+    return caixasHook.addCaixa(optimisticCaixaData, apiPayload);
+  }, 'optimisticAddCaixa is deprecated', 'addCaixa from useCaixas hook'), [caixasHook]);
 
-    return mutate(
-      addCaixaAPI(apiPayload),
-      {
-        // Dados otimistas: Como a UI deve ficar IMEDIATAMENTE
-        optimisticData: (currentBffData: any) => {
-          console.log('📊 [MtfDataProvider] optimisticAddCaixa - optimisticData executada');
-          
-          if (!currentBffData) {
-            console.log('⚠️ [MtfDataProvider] Cache vazio, criando novo com caixa');
-            return { ...initialData, caixas: [optimisticCaixaData] };
-          }
-          
-          const currentCaixas = currentBffData.caixas || [];
-          const updatedCaixas = [...currentCaixas, optimisticCaixaData];
-          
-          console.log('📋 [MtfDataProvider] Caixas atualizadas:', {
-            antes: currentCaixas.length,
-            depois: updatedCaixas.length
-          });
-          
-          return { ...currentBffData, caixas: updatedCaixas };
-        },
-        
-        // Popular cache com dados reais da API
-        populateCache: (apiResult, currentBffData) => {
-          console.log('🏆 [MtfDataProvider] optimisticAddCaixa - populateCache executada');
-          
-          const realCaixa = apiResult.caixa;
-          const currentCaixas = currentBffData.caixas || [];
-          
-          // Substituir a caixa otimista pela real
-          const updatedCaixas = currentCaixas.map((caixa: any) =>
-            caixa.id === optimisticCaixaData.id ? realCaixa : caixa
-          );
-          
-          // Se não encontrou para substituir, adicionar
-          if (!updatedCaixas.find((c: any) => c.id === realCaixa.id)) {
-            updatedCaixas.push(realCaixa);
-          }
-          
-          return { ...currentBffData, caixas: updatedCaixas };
-        },
-        
-        // Rollback automático em caso de erro
-        rollbackOnError: true,
-        revalidate: false,
-      }
-    );
-  }, [mutate, initialData]);
+  // Computed state
+  const isInitialized = useMemo(() => {
+    return !messagesHook.isLoading && 
+           !caixasHook.isLoading && 
+           !lotesHook.isLoading && 
+           !variaveisHook.isLoading && 
+           !apiKeysHook.isLoading;
+  }, [
+    messagesHook.isLoading,
+    caixasHook.isLoading,
+    lotesHook.isLoading,
+    variaveisHook.isLoading,
+    apiKeysHook.isLoading
+  ]);
 
-  // Estado setter para compatibilidade
-  const setCaixas = useCallback((newCaixas: MtfCaixa[] | ((prev: MtfCaixa[]) => MtfCaixa[])) => {
-    const dataToUpdate = isPaused && pausedDataRef.current ? pausedDataRef.current : bffData;
-    console.log('⚠️ [MtfDataProvider] setCaixas called - consider using mutate instead');
-    
-    if (typeof newCaixas === 'function') {
-      const updated = newCaixas(caixas);
-      const newData = { ...dataToUpdate, caixas: updated };
-      if (isPaused) {
-        pausedDataRef.current = newData;
-      } else {
-        mutate(newData, false);
-      }
-    } else {
-      const newData = { ...dataToUpdate, caixas: newCaixas };
-      if (isPaused) {
-        pausedDataRef.current = newData;
-      } else {
-        mutate(newData, false);
-      }
-    }
-  }, [caixas, bffData, isPaused, mutate]);
-
+  // Context value with maintained API compatibility
   const contextValue: MtfDataContextType = useMemo(() => ({
-    variaveis,
-    loadingVariaveis,
-    refreshVariaveis,
-    lotes,
-    loadingLotes,
-    refreshLotes,
-    caixas,
-    setCaixas,
-    loadingCaixas,
-    refreshCaixas,
-    prefetchInbox,
-    interactiveMessages,
-    saveMessage,
-    updateMessagesCache,
-    deleteMessage,
-    optimisticAddCaixa,
-    buttonReactions,
-    apiKeys,
-    isInitialized,
-    pauseUpdates,
-    resumeUpdates,
+    // Interactive Messages
+    interactiveMessages: messagesHook.messages,
+    isLoadingMessages: messagesHook.isLoading,
+    addMessage: messagesHook.addMessage,
+    updateMessage: messagesHook.updateMessage,
+    deleteMessage: messagesHook.deleteMessage,
+    
+    // Caixas
+    caixas: caixasHook.caixas,
+    isLoadingCaixas: caixasHook.isLoading,
+    addCaixa: caixasHook.addCaixa,
+    updateCaixa: caixasHook.updateCaixa,
+    deleteCaixa: caixasHook.deleteCaixa,
+    
+    // Lotes
+    lotes: lotesHook.lotes,
+    isLoadingLotes: lotesHook.isLoading,
+    addLote: lotesHook.addLote,
+    updateLote: lotesHook.updateLote,
+    deleteLote: lotesHook.deleteLote,
+    
+    // Variáveis
+    variaveis: variaveisHook.variaveis,
+    isLoadingVariaveis: variaveisHook.isLoading,
+    addVariavel: variaveisHook.addVariavel,
+    updateVariavel: variaveisHook.updateVariavel,
+    deleteVariavel: variaveisHook.deleteVariavel,
+    
+    // API Keys
+    apiKeys: apiKeysHook.apiKeys,
+    isLoadingApiKeys: apiKeysHook.isLoading,
+    addApiKey: apiKeysHook.addApiKey,
+    updateApiKey: apiKeysHook.updateApiKey,
+    deleteApiKey: apiKeysHook.deleteApiKey,
+    
+    // Button Reactions (placeholder - can be implemented later)
+    buttonReactions: [],
+    isLoadingButtonReactions: false,
+    addButtonReaction: async () => {},
+    updateButtonReaction: async () => {},
+    deleteButtonReaction: async () => {},
+    
+    // Pause Control
     isUpdatesPaused: isPaused,
-  }), [
-    variaveis,
-    loadingVariaveis,
-    refreshVariaveis,
-    lotes,
-    loadingLotes,
-    refreshLotes,
-    caixas,
-    setCaixas,
-    loadingCaixas,
-    refreshCaixas,
-    prefetchInbox,
-    interactiveMessages,
-    saveMessage,
-    updateMessagesCache,
-    deleteMessage,
-    optimisticAddCaixa,
-    buttonReactions,
-    apiKeys,
-    isInitialized,
     pauseUpdates,
     resumeUpdates,
+    
+    // Legacy compatibility functions (deprecated)
+    saveMessage,
+    updateMessagesCache,
+    
+    // Refresh functions
+    refreshMessages,
+    refreshCaixas,
+    refreshLotes,
+    refreshVariaveis,
+    refreshApiKeys,
+    refreshButtonReactions: async () => {},
+    
+    // Legacy properties for backward compatibility
+    loadingVariaveis: variaveisHook.isLoading,
+    loadingLotes: lotesHook.isLoading,
+    loadingCaixas: caixasHook.isLoading,
+    setCaixas: deprecated(() => {
+      // No-op function for backward compatibility
+    }, 'setCaixas is deprecated', 'dedicated hook methods') as React.Dispatch<React.SetStateAction<ChatwitInbox[]>>,
+    prefetchInbox,
+    optimisticAddCaixa,
+    
+    // General state
+    isInitialized,
+  }), [
+    messagesHook,
+    caixasHook,
+    lotesHook,
+    variaveisHook,
+    apiKeysHook,
     isPaused,
+    pauseUpdates,
+    resumeUpdates,
+    saveMessage,
+    updateMessagesCache,
+    refreshMessages,
+    refreshCaixas,
+    refreshLotes,
+    refreshVariaveis,
+    refreshApiKeys,
+    prefetchInbox,
+    optimisticAddCaixa,
+    isInitialized,
   ]);
 
   return (
@@ -902,3 +289,139 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
     </MtfDataContext.Provider>
   );
 }
+
+/**
+ * Provider wrapper with SWRConfig for centralized error handling and fallback data
+ * 
+ * Features:
+ * - Centralized error handling with logging
+ * - SSR support with fallback data
+ * - Intelligent retry strategy
+ * - Global SWR configuration
+ */
+export function MtfDataProviderWithSWR({ children, initialData }: MtfDataProviderProps) {
+  // Create fallback data for SWR from initialData
+  const fallbackData = useMemo(() => createSWRFallback(initialData), [initialData]);
+
+  // Global SWR configuration with enhanced error handling
+  const swrConfig = useMemo(() => ({
+    // Enhanced default fetcher with error handling
+    fetcher: async (url: string) => {
+      const response = await fetchWithErrorHandling(url, {}, {
+        operation: `SWR fetch: ${url}`,
+      });
+      return response.json();
+    },
+    
+    // Fallback data for SSR
+    fallback: fallbackData,
+    
+    // Enhanced global error handling
+    onError: (error: ApiError, key: string) => {
+      // Use structured logging
+      logError(error, {
+        key,
+        operation: 'SWR Data Fetch',
+        additionalData: {
+          url: key,
+          timestamp: new Date().toISOString(),
+        },
+      });
+      
+      // Show user-friendly notifications for critical errors
+      if (error.status && error.status >= 500) {
+        // In a real implementation, you would use a toast system here
+        // Example: toast(createErrorToast(error));
+        console.warn('⚠️ Erro interno do servidor. Os dados podem estar desatualizados.');
+      } else if (!error.status) {
+        // Network errors
+        console.warn('⚠️ Erro de conexão. Verificando conectividade...');
+      }
+      
+      // Additional error context for debugging
+      if (process.env.NODE_ENV === 'development') {
+        console.group(`🔍 [SWR Error Debug] ${key}`);
+        console.error('Error details:', error);
+        console.error('Stack trace:', error.stack);
+        console.groupEnd();
+      }
+    },
+    
+    // Intelligent retry strategy
+    shouldRetryOnError: (error: ApiError) => {
+      return shouldRetryError(error);
+    },
+    
+    // Enhanced retry configuration with exponential backoff
+    errorRetryCount: 3,
+    errorRetryInterval: 2000, // Base retry interval (will be enhanced in onErrorRetry)
+    
+    // Global revalidation settings
+    revalidateOnFocus: true,
+    revalidateOnReconnect: true,
+    revalidateIfStale: true,
+    
+    // Deduplication settings
+    dedupingInterval: 2000, // 2 seconds
+    
+    // Loading timeout
+    loadingTimeout: 15000, // 15 seconds (increased for better UX)
+    
+    // Enhanced success callback
+    onSuccess: (data: any, key: string) => {
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`✅ [SWR Success] ${key}`, {
+          dataType: Array.isArray(data) ? 'array' : typeof data,
+          dataLength: Array.isArray(data) ? data.length : 'N/A',
+          timestamp: new Date().toISOString(),
+        });
+      }
+    },
+    
+    // Loading state callback with enhanced logging
+    onLoadingSlow: (key: string) => {
+      console.warn(`⏳ [SWR Slow Loading] ${key} está demorando mais que o esperado`);
+      
+      // In production, you might want to track this metric
+      if (process.env.NODE_ENV === 'production') {
+        // Example: analytics.track('SWR Slow Loading', { key });
+      }
+    },
+    
+    // Enhanced mutation error handling with exponential backoff
+    onErrorRetry: (error: ApiError, key: string, config: any, revalidate: any, { retryCount }: any) => {
+      // Don't retry on 404
+      if (error.status === 404) return;
+      
+      // Don't retry after 3 attempts
+      if (retryCount >= 3) return;
+      
+      // Calculate delay with exponential backoff
+      const delay = getRetryDelay(retryCount, 1000);
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`🔄 [SWR Retry] ${key} - Attempt ${retryCount + 1}/3 in ${delay}ms`);
+      }
+      
+      // Retry with calculated delay
+      setTimeout(() => revalidate({ retryCount }), delay);
+    },
+    
+    // Focus revalidation throttling
+    focusThrottleInterval: 5000, // 5 seconds
+    
+    // Keep previous data during revalidation for better UX
+    keepPreviousData: true,
+  }), [fallbackData]);
+
+  return (
+    <SWRConfig value={swrConfig}>
+      <MtfDataProvider initialData={initialData}>
+        {children}
+      </MtfDataProvider>
+    </SWRConfig>
+  );
+}
+
+// Export the SWR-wrapped version as default for better DX
+export default MtfDataProviderWithSWR;

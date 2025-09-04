@@ -123,8 +123,8 @@ export class UXWritingService {
 
       if (result && result.mode === "intent" && result.buttons) {
         return {
-          introduction_text:
-            result.introduction_text ||
+          response_text:
+            result.response_text ||
             "Posso ajudar com diversas questões jurídicas. Qual área se aproxima mais da sua necessidade?",
           buttons: result.buttons.map((btn) => {
             const clamped = clampButtonData(btn, "whatsapp");
@@ -173,7 +173,7 @@ export class UXWritingService {
     const legalContext = analyzeLegalContext(userText);
 
     // Enhance introduction text with legal context if needed
-    let enhancedIntro = result.introduction_text;
+    let enhancedIntro = result.response_text;
     if (legalContext.confidence === "high" && legalContext.primaryArea) {
       const areaNames: Record<string, string> = {
         traffic: "trânsito",
@@ -218,7 +218,7 @@ export class UXWritingService {
     });
 
     return {
-      introduction_text: enhancedIntro.slice(0, 180),
+      response_text: enhancedIntro.slice(0, 180),
       buttons: enhancedButtons.slice(0, 3),
     };
   }
@@ -273,7 +273,7 @@ export class UXWritingService {
         : `Posso ajudar com diversas questões jurídicas. Qual opção melhor descreve sua necessidade?`;
 
     return {
-      introduction_text: introText,
+      response_text: introText,
       buttons: buttons.map((btn) => {
         const clamped = clampButtonData(btn, "whatsapp");
         return { title: clamped.title, payload: clamped.payload };
@@ -325,7 +325,7 @@ export class UXWritingService {
       domainButtons[primaryArea || "default"] || domainButtons.default;
 
     return {
-      introduction_text:
+      response_text:
         "Posso ajudar com diversas questões jurídicas. Qual área se aproxima mais da sua necessidade?",
       buttons: buttons.map((btn) => {
         const clamped = clampButtonData(btn, "whatsapp");

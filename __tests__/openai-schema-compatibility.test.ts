@@ -56,7 +56,7 @@ function createButtonsSchema(channel: "whatsapp" | "instagram" | "facebook") {
   
   return z
     .object({
-      introduction_text: z
+      response_text: z
         .string()
         .regex(new RegExp(`^.{1,${bodyMax}}$`, "u"), `máx ${bodyMax} caracteres`),
       buttons: z.array(Btn).min(1).max(maxButtons),
@@ -75,7 +75,7 @@ function createRouterSchema(channel: "whatsapp" | "instagram" | "facebook") {
         .string()
         .regex(/^(|@[a-z0-9_]+)$/u)
         .default(""),
-      introduction_text: z
+      response_text: z
         .string()
         .regex(new RegExp(`^(|.{1,${bodyMax}})$`, "u"))
         .default(""),
@@ -212,7 +212,7 @@ describe("OpenAI Schema Compatibility", () => {
       const validData = {
         mode: "intent",
         intent_payload: "@ver_saldo",
-        introduction_text: "",
+        response_text: "",
         text: "",
         buttons: []
       };
@@ -226,7 +226,7 @@ describe("OpenAI Schema Compatibility", () => {
       const validData = {
         mode: "chat",
         intent_payload: "",
-        introduction_text: "Como posso ajudar?",
+        response_text: "Como posso ajudar?",
         text: "",
         buttons: [
           { title: "Opção 1", payload: "@opcao1" },

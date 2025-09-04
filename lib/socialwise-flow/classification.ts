@@ -58,6 +58,7 @@ export interface ClassificationResult {
     | "warmup_buttons"
     | "domain_topics"
     | "router_llm"
+    | "router_llm_bypass"
     | "direct_map_degraded"
     | "warmup_buttons_degraded"
     | "domain_topics_degraded"

@@ -81,7 +81,7 @@ describe('SocialWise API Routes', () => {
   describe('/api/chatwitia/socialwise/warmup-buttons', () => {
     it('should generate warmup buttons successfully', async () => {
       const mockResponse = {
-        introduction_text: 'Como posso ajudar?',
+        response_text: 'Como posso ajudar?',
         buttons: [
           { title: 'Opção 1', payload: '@option1' },
           { title: 'Opção 2', payload: '@option2' }
@@ -140,7 +140,7 @@ describe('SocialWise API Routes', () => {
       const mockResponse = {
         mode: 'intent' as const,
         intent_payload: '@legal_consultation',
-        introduction_text: 'Vou ajudar com sua consulta jurídica'
+        response_text: 'Vou ajudar com sua consulta jurídica'
       };
       mockOpenaiService.routerLLM.mockResolvedValue(mockResponse);
 

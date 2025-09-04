@@ -5,7 +5,7 @@
 
 import { getRedisInstance } from '@/lib/connections';
 import { RateLimiterService, RateLimitResult, parseRateLimitConfig } from '@/lib/ai-integration/services/rate-limiter';
-import { SocialWiseFlowPayloadType } from '../schemas/payload';
+import { SocialWiseFlowPayloadType, type SocialWiseChatwitData } from '../schemas/payload';
 
 export interface SocialWiseRateLimitContext {
   accountId: string;
@@ -33,11 +33,19 @@ export class SocialWiseRateLimiterService {
     payload: SocialWiseFlowPayloadType,
     request: Request
   ): SocialWiseRateLimitContext {
-    const context = payload.context['socialwise-chatwit'];
+    const context = payload.context['socialwise-chatwit'] as SocialWiseChatwitData | undefined;
     
-    // Convert IDs to strings for consistency
-    const accountId = String(context.account_data.id);
-    const inboxId = String(context.inbox_data.id);
+    // Convert IDs to strings for consistency with fallbacks
+    const accountId = String(
+      context?.account_data?.id || 
+      payload.context.inbox?.account_id || 
+      0
+    );
+    const inboxId = String(
+      context?.inbox_data?.id || 
+      payload.context.inbox?.id || 
+      0
+    );
     const sessionId = payload.session_id;
 
     // Extract client IP from headers

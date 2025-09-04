@@ -82,7 +82,7 @@ async generateWarmupButtons(
   userText: string,
   candidates: { slug: string; desc?: string }[],
   agent: { model: string; developer?: string; instructions?: string }
-): Promise<{ introduction_text: string; buttons: Array<{title: string; payload: string}> } | null>
+): Promise<{ response_text: string; buttons: Array<{title: string; payload: string}> } | null>
 
 // Router LLM for embedipreview=false mode
 async routerLLM(
@@ -126,7 +126,7 @@ interface IntentCandidate {
 interface RouterDecision {
   mode: 'intent' | 'chat';
   intent_payload?: string;
-  introduction_text?: string;
+  response_text?: string;
   buttons?: ButtonOption[];
   text?: string;
 }
@@ -155,7 +155,7 @@ O sistema de IA identificou as seguintes intenções como as mais prováveis, ma
 
 # SUA TAREFA
 Gere uma resposta no formato JSON com:
-1. "introduction_text": frase curta e amigável (≤ 180 chars)
+1. "response_text": frase curta e amigável (≤ 180 chars)
 2. "buttons": até 3 objetos com "title" (≤ 20 chars, ação do usuário) e "payload" (@intent_name)
 `;
 ```
@@ -408,7 +408,7 @@ describe('Aquecimento com Botões', () => {
     expect(result.buttons).toHaveLength(3);
     expect(result.buttons[0].title).toMatch(/Recorrer|Multa/);
     expect(result.buttons[1].title).toMatch(/Ação|Judicial/);
-    expect(result.introduction_text).toContain("qual");
+    expect(result.response_text).toContain("qual");
   });
 
   test('respects character limits', async () => {
@@ -418,7 +418,7 @@ describe('Aquecimento com Botões', () => {
       expect(button.title.length).toBeLessThanOrEqual(20);
       expect(button.payload).toMatch(/^@[a-z0-9_]+$/);
     });
-    expect(result.introduction_text.length).toBeLessThanOrEqual(180);
+    expect(result.response_text.length).toBeLessThanOrEqual(180);
   });
 });
 ```

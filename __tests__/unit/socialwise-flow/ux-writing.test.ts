@@ -238,7 +238,7 @@ describe('SocialWise Flow UX Writing', () => {
       const userText = 'ajuda legal';
       const result = buildDomainTopicsPrompt(userText);
 
-      expect(result).toContain('"introduction_text"');
+      expect(result).toContain('"response_text"');
       expect(result).toContain('"buttons"');
       expect(result).toContain('@direito_transito');
     });

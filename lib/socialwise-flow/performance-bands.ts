@@ -24,7 +24,7 @@ export interface HardBandResult {
 
 export interface SoftBandResult {
   type: 'warmup_buttons';
-  introduction_text: string;
+  response_text: string;
   buttons: Array<{
     title: string;
     payload: string;
@@ -244,9 +244,9 @@ export class SoftBandProcessor {
 
       return {
         type: 'warmup_buttons',
-        introduction_text: warmupResult.introduction_text.length <= 180 
-          ? warmupResult.introduction_text 
-          : warmupResult.introduction_text.slice(0, 180).trim(),
+        response_text: warmupResult.response_text.length <= 180 
+          ? warmupResult.response_text 
+          : warmupResult.response_text.slice(0, 180).trim(),
         buttons: validatedButtons,
         response_time_ms: totalTime
       };
@@ -303,7 +303,7 @@ export class SoftBandProcessor {
 
     return {
       type: 'warmup_buttons',
-      introduction_text: "Posso ajudar com sua questão jurídica. Qual dessas opções se aproxima mais do que você precisa?",
+      response_text: "Posso ajudar com sua questão jurídica. Qual dessas opções se aproxima mais do que você precisa?",
       buttons: fallbackButtons,
       response_time_ms: elapsedTime
     };
@@ -390,7 +390,7 @@ export class PerformanceBandProcessor {
       // Ultimate fallback
       return {
         type: 'warmup_buttons',
-        introduction_text: "Desculpe, houve um problema. Como posso ajudar com sua questão jurídica?",
+        response_text: "Desculpe, houve um problema. Como posso ajudar com sua questão jurídica?",
         buttons: [
           { title: "Falar com Humano", payload: "@handoff_human" },
           { title: "Tentar Novamente", payload: "@retry_classification" },

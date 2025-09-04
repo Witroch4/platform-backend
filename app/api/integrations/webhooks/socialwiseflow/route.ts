@@ -10,8 +10,8 @@ import { createLogger } from '@/lib/utils/logger';
 import { getPrismaInstance } from '@/lib/connections';
 
 // SocialWise Flow optimized components
-import { processSocialWiseFlow } from '@/lib/socialwise-flow/processor';
-import { validateSocialWisePayloadWithPreprocessing, sanitizeUserText } from '@/lib/socialwise-flow/schemas/payload';
+import { processSocialWiseFlow, extractSessionId } from '@/lib/socialwise-flow/processor';
+import { SocialWiseFlowPayloadSchema, SanitizedTextSchema, validateSocialWisePayloadWithPreprocessing, type SocialWiseFlowPayloadType, type SocialWiseChatwitData } from '@/lib/socialwise-flow/schemas/payload';
 import { SocialWiseIdempotencyService } from '@/lib/socialwise-flow/services/idempotency';
 import { SocialWiseRateLimiterService } from '@/lib/socialwise-flow/services/rate-limiter';
 import { SocialWiseReplayProtectionService } from '@/lib/socialwise-flow/services/replay-protection';
@@ -29,6 +29,20 @@ const WEBHOOK_TIMEOUT_MS = 400; // P95 SLA target
 
 // Logger
 const webhookLogger = createLogger('SocialwiseFlowWebhook');
+
+/**
+ * Helper function to safely access socialwise-chatwit data
+ */
+function getSocialWiseChatwitData(context: any): SocialWiseChatwitData | undefined {
+  return context['socialwise-chatwit'] as SocialWiseChatwitData | undefined;
+}
+
+/**
+ * Sanitize user input text
+ */
+function sanitizeUserText(text: string) {
+  return SanitizedTextSchema.safeParse(text);
+}
 
 /**
  * Normalize intent text to a plain name (no prefixes) and a standard external id (intent:name)
@@ -141,7 +155,15 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
     const payloadValidation = validateSocialWisePayloadWithPreprocessing(payload);
     if (!payloadValidation.success) {
       webhookLogger.error('Invalid payload schema', { 
-        errors: payloadValidation.error?.errors,
+        errors: payloadValidation.error?.errors?.map(err => ({
+          code: err.code,
+          path: err.path,
+          message: err.message,
+          ...(err.code === 'invalid_type' && 'expected' in err && 'received' in err ? {
+            expected: err.expected,
+            received: err.received
+          } : {})
+        })),
         originalPayload: payload,
         preprocessedPayload: payloadValidation.preprocessed
       });
@@ -159,11 +181,15 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 
     // Step 5: Generate trace ID for monitoring
     traceId = `sw-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    // Priority order: context.message.source_id > socialwise-chatwit.wamid > socialwise-chatwit.message_data.id
-    correlationId = validPayload.context.message?.source_id ||
-                   validPayload.context['socialwise-chatwit'].wamid || 
-                   validPayload.context['socialwise-chatwit'].message_data?.id || 
-                   traceId;
+    // Priority order: context.message.source_id > socialwise-chatwit.wamid > socialwise-chatwit.message_data.id > context.message.id
+    const socialwiseDataForCorrelation = getSocialWiseChatwitData(validPayload.context);
+    correlationId = String(
+      validPayload.context.message?.source_id ||
+      socialwiseDataForCorrelation?.wamid || 
+      socialwiseDataForCorrelation?.message_data?.id ||
+      validPayload.context.message?.id ||
+      traceId
+    );
 
     // Step 6: Initialize security services
     const socialWiseIdempotency = new SocialWiseIdempotencyService();
@@ -192,10 +218,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
     // Step 8: Idempotency check
     const isDuplicate = await socialWiseIdempotency.isPayloadDuplicate(validPayload);
     if (isDuplicate) {
+      const socialwiseDataForLog = getSocialWiseChatwitData(validPayload.context);
       webhookLogger.info('Duplicate message detected', {
         sessionId: validPayload.session_id,
-        accountId: validPayload.context['socialwise-chatwit'].account_data.id,
-        inboxId: validPayload.context['socialwise-chatwit'].inbox_data.id,
+        accountId: socialwiseDataForLog?.account_data?.id || validPayload.context.inbox?.account_id,
+        inboxId: socialwiseDataForLog?.inbox_data?.id || validPayload.context.inbox?.id,
         traceId
       });
       return NextResponse.json({ ok: true, dedup: true }, { status: 200 });
@@ -204,10 +231,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
     // Step 9: Rate limiting
     const rateLimitResult = await socialWiseRateLimit.checkPayloadRateLimit(validPayload, request);
     if (!rateLimitResult.allowed) {
+      const socialwiseDataForLog = getSocialWiseChatwitData(validPayload.context);
       webhookLogger.warn('Rate limit exceeded', {
         sessionId: validPayload.session_id,
-        accountId: validPayload.context['socialwise-chatwit'].account_data.id,
-        inboxId: validPayload.context['socialwise-chatwit'].inbox_data.id,
+        accountId: socialwiseDataForLog?.account_data?.id || validPayload.context.inbox?.account_id,
+        inboxId: socialwiseDataForLog?.inbox_data?.id || validPayload.context.inbox?.id,
         scope: rateLimitResult.scope,
         limit: rateLimitResult.limit,
         remaining: rateLimitResult.remaining,
@@ -244,27 +272,30 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 
     // Step 11: Extract context from validated payload
     const rootChannelType = validPayload.channel_type;
-    const ctxChannelType = validPayload.context['socialwise-chatwit'].inbox_data.channel_type;
-    const channelType = rootChannelType || ctxChannelType;
-    const externalInboxNumeric = validPayload.context['socialwise-chatwit'].inbox_data.id;
-    const chatwitAccountId = validPayload.context['socialwise-chatwit'].account_data.id;
+    const socialwiseData = getSocialWiseChatwitData(validPayload.context);
+    const ctxChannelType = socialwiseData?.inbox_data?.channel_type || validPayload.context.inbox?.channel_type;
+    const channelType = rootChannelType || ctxChannelType || 'unknown';
+    const externalInboxNumeric = socialwiseData?.inbox_data?.id || validPayload.context.inbox?.id || 0;
+    const chatwitAccountId = socialwiseData?.account_data?.id || validPayload.context.inbox?.account_id || 0;
     // Priority order: context.message.source_id > socialwise-chatwit.wamid > socialwise-chatwit.message_data.id
-    const wamid = validPayload.context.message?.source_id ||
-                  validPayload.context['socialwise-chatwit'].wamid || 
-                  validPayload.context['socialwise-chatwit'].message_data?.id || '';
+    const wamid = String(validPayload.context.message?.source_id ||
+                  socialwiseData?.wamid || 
+                  socialwiseData?.message_data?.id || '');
     
-    // Extract contact information for variable resolution
-    const contactName = validPayload.context['socialwise-chatwit'].contact_data?.name || 
-                       validPayload.context['socialwise-chatwit'].contact_name;
-    const contactPhone = validPayload.context['socialwise-chatwit'].contact_data?.phone_number || 
-                        validPayload.context['socialwise-chatwit'].contact_phone;
+    // Extract contact information for variable resolution with fallbacks
+    const contactName = socialwiseData?.contact_data?.name || 
+                       validPayload.context.contact?.name ||
+                       socialwiseData?.contact_name;
+    const contactPhone = socialwiseData?.contact_data?.phone_number || 
+                        validPayload.context.contact?.phone_number ||
+                        socialwiseData?.contact_phone;
 
     // Step 12: Resolve inbox and user information
     const prisma = getPrismaInstance();
     const inboxRow = await prisma.chatwitInbox.findFirst({
       where: {
-        inboxId: externalInboxNumeric,
-        usuarioChatwit: { chatwitAccountId: chatwitAccountId || undefined },
+        inboxId: String(externalInboxNumeric),
+        usuarioChatwit: { chatwitAccountId: String(chatwitAccountId) || undefined },
       },
       select: {
         id: true,
@@ -306,10 +337,46 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
       return NextResponse.json(buttonReactionResponse, { status: 200 });
     }
 
-    // Legacy button processing para compatibilidade (manter variáveis necessárias)
-    const ca = validPayload.context.message?.content_attributes || {};
-    const swInteractive = validPayload.context['socialwise-chatwit'].message_data?.interactive_data || {};
-    const swInstagram = validPayload.context['socialwise-chatwit'].message_data?.instagram_data || {};
+    // Check if this is an unmapped button click that should be processed by LLM
+    const ca = (validPayload.context.message?.content_attributes || {}) as any;
+    const socialwiseForButtons = getSocialWiseChatwitData(validPayload.context);
+    const swInteractive = socialwiseForButtons?.message_data?.interactive_data || {};
+    const swInstagram = socialwiseForButtons?.message_data?.instagram_data || {};
+    
+    // Detect unmapped button clicks
+    let unmappedButtonId: string | null = null;
+    if (channelType.toLowerCase().includes('whatsapp')) {
+      unmappedButtonId = ca?.button_reply?.id || (validPayload.context as any)?.button_id || null;
+    } else if (channelType.toLowerCase().includes('instagram')) {
+      unmappedButtonId = ca?.postback_payload || (validPayload.context as any)?.postback_payload || null;
+    }
+    
+    // If it's an unmapped button, use the real button text (message field) as input for LLM
+    if (unmappedButtonId && ((validPayload.context as any)?.interaction_type === 'button_reply' || (validPayload.context as any)?.interaction_type === 'postback')) {
+      // Usar o campo 'message' que contém o texto real do botão
+      // Isso é padronizado entre WhatsApp e Instagram
+      const realButtonText = validPayload.message || validPayload.context?.message?.content;
+      
+      if (realButtonText && realButtonText !== textInput) {
+        textInput = realButtonText;
+        
+        webhookLogger.info('🔄 Unmapped button detected, using real button text for LLM processing', {
+          originalButtonId: unmappedButtonId,
+          realButtonText: realButtonText,
+          traceId
+        });
+      } else {
+        // Fallback: usar buttonId se não houver campo message
+        const buttonText = unmappedButtonId.startsWith('@') ? unmappedButtonId.substring(1) : unmappedButtonId;
+        textInput = buttonText;
+        
+        webhookLogger.info('🔄 Unmapped button detected, using buttonId as fallback for LLM processing', {
+          originalButtonId: unmappedButtonId,
+          fallbackText: buttonText,
+          traceId
+        });
+      }
+    }
 
     // Legacy button processing para compatibilidade
     const interactionType: string | null =
@@ -354,7 +421,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
         
         // Try mapping based on channel type
         if (channelType.toLowerCase().includes('whatsapp')) {
-          const contactContext = { contactName, contactPhone };
+          const contactContext = { 
+            contactName, 
+            contactPhone: typeof contactPhone === 'string' ? contactPhone : undefined 
+          };
           mapped = await buildWhatsAppByIntentRaw(rawIntent, inboxId, wamid, contactContext);
           if (!mapped) {
             mapped = await buildWhatsAppByGlobalIntent(rawIntent, inboxId, wamid, contactContext);
@@ -393,17 +463,18 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
         userText: textInput,
         channelType,
         inboxId,
-        chatwitAccountId,
+        chatwitAccountId: String(chatwitAccountId),
         userId,
         wamid,
         traceId,
         contactName,
-        contactPhone,
-        originalPayload: payload // For button reaction detection
+        contactPhone: typeof contactPhone === 'string' ? contactPhone : undefined,
+        originalPayload: payload, // For button reaction detection
+        sessionId: extractSessionId(payload, channelType) // For conversational memory
       };
 
       // Get agent configuration for embedipreview setting
-      const assistant = await getAssistantForInbox(inboxId, chatwitAccountId);
+      const assistant = await getAssistantForInbox(inboxId, String(chatwitAccountId));
       const embedipreview = true; // Default: embedding-first (TODO: Get from agent config when implemented)
 
       // Process through optimized SocialWise Flow

@@ -4,7 +4,7 @@
  */
 
 import { getRedisInstance } from '@/lib/connections';
-import { SocialWiseFlowPayloadType } from '../schemas/payload';
+import { SocialWiseFlowPayloadType, type SocialWiseChatwitData } from '../schemas/payload';
 
 export interface SocialWiseIdempotencyKey {
   wamid?: string;
@@ -36,7 +36,7 @@ export class SocialWiseIdempotencyService {
    * Extract idempotency key from SocialWise payload
    */
   extractIdempotencyKey(payload: SocialWiseFlowPayloadType): SocialWiseIdempotencyKey {
-    const socialwiseContext = payload.context['socialwise-chatwit'];
+    const socialwiseContext = payload.context['socialwise-chatwit'] as SocialWiseChatwitData | undefined;
     
     // Primary identifier: context.message.source_id (wamid)
     const wamid = payload.context.message?.source_id;
@@ -44,9 +44,17 @@ export class SocialWiseIdempotencyService {
     // Fallback identifier: context.message.id
     const messageId = payload.context.message?.id ? String(payload.context.message.id) : undefined;
     
-    // Account and inbox IDs (convert to string for consistency)
-    const accountId = String(socialwiseContext.account_data.id);
-    const inboxId = String(socialwiseContext.inbox_data.id);
+    // Account and inbox IDs (convert to string for consistency) with fallbacks
+    const accountId = String(
+      socialwiseContext?.account_data?.id || 
+      payload.context.inbox?.account_id || 
+      0
+    );
+    const inboxId = String(
+      socialwiseContext?.inbox_data?.id || 
+      payload.context.inbox?.id || 
+      0
+    );
     const sessionId = payload.session_id;
 
     return {

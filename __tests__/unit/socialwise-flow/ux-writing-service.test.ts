@@ -58,7 +58,7 @@ describe('UXWritingService', () => {
   describe('generateWarmupButtons', () => {
     it('should generate warmup buttons using OpenAI service', async () => {
       const mockResponse: WarmupButtonsResponse = {
-        introduction_text: 'Posso ajudar com sua questão de trânsito. Qual opção se aproxima mais?',
+        response_text: 'Posso ajudar com sua questão de trânsito. Qual opção se aproxima mais?',
         buttons: [
           { title: 'Recorrer Multa', payload: '@recurso_multa_transito' },
           { title: 'Ação Judicial', payload: '@mandado_seguranca' }
@@ -80,12 +80,12 @@ describe('UXWritingService', () => {
       );
       expect(result).toBeDefined();
       expect(result!.buttons).toHaveLength(2);
-      expect(result!.introduction_text).toContain('trânsito');
+      expect(result!.response_text).toContain('trânsito');
     });
 
     it('should enhance buttons with legal context', async () => {
       const mockResponse: WarmupButtonsResponse = {
-        introduction_text: 'Como posso ajudar?',
+        response_text: 'Como posso ajudar?',
         buttons: [
           { title: 'Recorrer Multa', payload: '@recurso_multa_transito' }
         ]
@@ -99,7 +99,7 @@ describe('UXWritingService', () => {
         sampleAgent
       );
 
-      expect(result!.introduction_text).toContain('trânsito');
+      expect(result!.response_text).toContain('trânsito');
     });
 
     it('should fallback to deterministic buttons when LLM fails', async () => {
@@ -159,7 +159,7 @@ describe('UXWritingService', () => {
 
     it('should validate and fix invalid buttons from LLM', async () => {
       const mockResponse: WarmupButtonsResponse = {
-        introduction_text: 'Como posso ajudar?',
+        response_text: 'Como posso ajudar?',
         buttons: [
           { title: 'Este título é muito longo para um botão', payload: 'invalid-payload' }
         ]
@@ -243,7 +243,7 @@ describe('UXWritingService', () => {
     it('should generate domain topics using router LLM', async () => {
       const mockRouterResponse: RouterDecision = {
         mode: 'intent',
-        introduction_text: 'Posso ajudar com diversas questões jurídicas.',
+        response_text: 'Posso ajudar com diversas questões jurídicas.',
         buttons: [
           { title: 'Direito Trânsito', payload: '@direito_transito' },
           { title: 'Direito Civil', payload: '@direito_civil' }
@@ -302,7 +302,7 @@ describe('UXWritingService', () => {
 
       // Should fallback to deterministic topics
       expect(result.buttons).toHaveLength(3);
-      expect(result.introduction_text).toContain('diversas questões jurídicas');
+      expect(result.response_text).toContain('diversas questões jurídicas');
     });
   });
 

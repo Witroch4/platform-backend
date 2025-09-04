@@ -46,11 +46,16 @@ export interface ButtonReactionResponse {
 
 /**
  * Detectar cliques de botão de forma robusta para múltiplos canais
+ * Usa fallbacks dos campos padrão do context quando socialwise-chatwit não existe
  */
 export function detectButtonClick(validPayload: any, channelType: string): ButtonDetectionResult {
   const ca = validPayload.context.message?.content_attributes || {};
-  const swInteractive = validPayload.context['socialwise-chatwit'].message_data?.interactive_data || {};
-  const swInstagram = validPayload.context['socialwise-chatwit'].message_data?.instagram_data || {};
+  const context = validPayload.context;
+  
+  // Dados socialwise-chatwit (opcionais)
+  const socialwiseData = context['socialwise-chatwit'];
+  const swInteractive = socialwiseData?.message_data?.interactive_data || {};
+  const swInstagram = socialwiseData?.message_data?.instagram_data || {};
 
   let isButtonClick = false;
   let buttonId: string | null = null;
@@ -59,32 +64,51 @@ export function detectButtonClick(validPayload: any, channelType: string): Butto
 
   // Instagram: detectar postback_payload
   if (channelType.toLowerCase().includes('instagram')) {
-    const postbackPayload = ca?.postback_payload || swInstagram?.postback_payload;
-    if (postbackPayload) {
+    // Priority: content_attributes.postback_payload > context.postback_payload > socialwise-chatwit
+    const postbackPayload = ca?.postback_payload || 
+                           context?.postback_payload || 
+                           swInstagram?.postback_payload;
+    
+    // Verificar se é um clique de botão Instagram (interaction_type = "postback")
+    const interactionType = context?.interaction_type || swInstagram?.interaction_type;
+    
+    if (postbackPayload && interactionType === 'postback') {
       isButtonClick = true;
       buttonId = postbackPayload;
+      buttonTitle = validPayload.message; // O texto do botão sempre está em message
       detectionSource = 'instagram_postback';
     }
   }
 
   // WhatsApp: detectar button_reply
   if (channelType.toLowerCase().includes('whatsapp')) {
+    // Priority: content_attributes.button_reply > socialwise-chatwit
     const buttonReply = ca?.button_reply;
-    if (buttonReply?.id) {
+    const interactionType = ca?.interaction_type || context?.interaction_type;
+    
+    if (buttonReply?.id && interactionType === 'button_reply') {
       isButtonClick = true;
       buttonId = buttonReply.id;
-      buttonTitle = buttonReply.title || null;
+      buttonTitle = buttonReply.title || validPayload.message; // Fallback para message
       detectionSource = 'whatsapp_button_reply';
     }
   }
 
-  // Fallback detection para outros formatos
+  // Fallback detection para outros formatos ou legacy
   if (!isButtonClick) {
-    const derivedButtonId = swInteractive?.button_id || ca?.interactive_payload?.button_reply?.id;
-    if (derivedButtonId) {
+    // Tentar detectar pelos campos do context
+    const fallbackButtonId = context?.button_id || 
+                            context?.postback_payload ||
+                            swInteractive?.button_id || 
+                            ca?.interactive_payload?.button_reply?.id;
+    
+    if (fallbackButtonId) {
       isButtonClick = true;
-      buttonId = derivedButtonId;
-      buttonTitle = swInteractive?.button_title || ca?.interactive_payload?.button_reply?.title || null;
+      buttonId = fallbackButtonId;
+      buttonTitle = context?.button_title || 
+                   swInteractive?.button_title || 
+                   ca?.interactive_payload?.button_reply?.title || 
+                   validPayload.message; // Sempre usar message como fallback
       detectionSource = 'fallback_detection';
     }
   }
@@ -104,7 +128,7 @@ export async function processButtonClick(
   buttonDetection: ButtonDetectionResult,
   context: ButtonProcessingContext,
   wamid: string
-): Promise<ButtonReactionResponse> {
+): Promise<ButtonReactionResponse | null> {
   const { buttonId } = buttonDetection;
   const { channelType, userId, traceId } = context;
 
@@ -150,21 +174,15 @@ export async function processButtonClick(
       return response;
 
     } else {
-      // Sem mapeamento: reação padrão
-      logger.info('⚠️ No button reaction found, using default reaction', {
+      // Sem mapeamento: retorna null para permitir fallback para LLM
+      logger.info('⚠️ No button reaction found, continuing to LLM processing', {
         buttonId,
         channelType,
         userId,
         traceId
       });
 
-      return {
-        action_type: 'button_reaction',
-        buttonId: buttonId,
-        emoji: '👍',
-        processed: true,
-        mappingFound: false
-      };
+      return null; // Permite fallback para SocialWise Flow Processor
     }
 
   } catch (error) {

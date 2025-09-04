@@ -11,14 +11,130 @@ import {
 } from "./types";
 // import { responsesCall } from "@/lib/cost/openai-wrapper"; // (opcional) não usado aqui
 import { withDeadlineAbort } from "./utils";
+import { getRedisInstance } from "@/lib/connections";
 
 // ==== MASTER_PROMPT - Lógica de negócio imutável ====
-const MASTER_PROMPT = `
+const MASTER_PROMPT_BASE = `
 # MASTER
 Você é um assistente especializado em geração de respostas estruturadas para chatbots.
 Sempre retorne EXATAMENTE no schema especificado, sem texto fora do JSON.
 Foque em respostas concisas, profissionais e acionáveis.
+
+# REGRAS UNIVERSAIS PARA BOTÕES
+- Títulos de botões: máximo 20 caracteres, objetivos e acionáveis
+- Payload: sempre no formato @slug (obrigatório)
+- Retorne SOMENTE no schema especificado (sem explicações fora do JSON)
 `;
+
+// Função que gera o MASTER_PROMPT dinamicamente com limites do canal
+function createMasterPrompt(channel: ChannelType): string {
+  const c = getConstraintsForChannel(channel);
+  return MASTER_PROMPT_BASE + `- response_text: até ${c.bodyMax} caracteres, sempre útil e contextual\n`;
+}
+
+// ===== SESSÃO & MEMÓRIA — baseado na "bíblia" =====
+
+// Pequeno hash determinístico (FNV-1a) para derivar a sessão de (modelo+capitão)
+function hashShort(s: string) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36);
+}
+
+const sessionState = new Map<string, string>(); // Fallback local — dev/CI
+const SESSION_TTL_SECONDS = 60 * 60 * 24; // 24h
+const LOCK_TTL_SECONDS = 5; // lock curto
+
+async function getSessionPointer(key: string) {
+  const redis = getRedisInstance?.();
+  if (redis) {
+    try {
+      return await redis.get(key);
+    } catch (error) {
+      console.warn("Redis get failed, using fallback", error);
+    }
+  }
+  return sessionState.get(key);
+}
+
+async function setSessionPointer(key: string, value: string) {
+  const redis = getRedisInstance?.();
+  if (redis) {
+    try {
+      await redis.setex(key, SESSION_TTL_SECONDS, value);
+    } catch (error) {
+      console.warn("Redis set failed, using fallback", error);
+    }
+  }
+  sessionState.set(key, value);
+}
+
+async function withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const redis = getRedisInstance?.();
+  if (!redis) return fn(); // sem Redis, executa direto
+
+  const lockKey = `lock:${key}`;
+  const ok = await redis.set(lockKey, "1", "NX", "EX", LOCK_TTL_SECONDS);
+  if (!ok) {
+    throw new Error(`Sessão ${key} em uso por outro processo`);
+  }
+  try {
+    return await fn();
+  } finally {
+    await redis.del(lockKey);
+  }
+}
+
+async function ensureSession(
+  params: { 
+    sessionId: string; 
+    agent: AgentConfig; 
+    channel: ChannelType;
+  },
+  signal?: AbortSignal
+): Promise<string | undefined> {
+  // Monta chave única: sessionId + model + hash(instructions + channel)
+  const identity = `${params.agent.model}:${params.channel}:${params.agent.instructions || 'default'}`;
+  const identityHash = hashShort(identity);
+  const sessionKey = `session:${params.sessionId}:${identityHash}`;
+  
+  const existing = await getSessionPointer(sessionKey);
+  if (existing) return existing;
+
+  return withLock(sessionKey, async () => {
+    // Double-check após adquirir lock
+    const recheck = await getSessionPointer(sessionKey);
+    if (recheck) return recheck;
+
+    // Cria sessão inicial com OpenAI
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    
+    try {
+      const init = await client.responses.create(
+        {
+          model: params.agent.model,
+          input: [
+            { role: "developer", content: createMasterPrompt(params.channel) },
+            { role: "developer", content: params.agent.instructions || "Você é um assistente especializado." },
+          ],
+          store: true,
+        },
+        { signal } as any
+      );
+
+      const responseId = init.id;
+      await setSessionPointer(sessionKey, responseId);
+      console.log(`[Session] Criada nova sessão: ${sessionKey} -> ${responseId}`);
+      return responseId;
+    } catch (error) {
+      console.error(`[Session] Erro ao criar sessão ${sessionKey}:`, error);
+      return undefined;
+    }
+  });
+}
 
 // ==== Structured Outputs with Fallback Pattern ====
 interface StructuredOrJsonResult<T> {
@@ -107,6 +223,8 @@ async function structuredOrJson<T>(args: {
   schema: any;
   schemaName: string;
   strict?: boolean;
+  sessionId?: string;
+  channel?: ChannelType;
 }): Promise<StructuredOrJsonResult<T>> {
   const {
     client,
@@ -123,12 +241,24 @@ async function structuredOrJson<T>(args: {
     schema,
     schemaName,
     strict = false,
+    sessionId,
+    channel,
   } = args;
 
   const caps = getModelCaps(model);
   
   // Resolve sampling usando a lógica da bíblia
   const sampling = resolveSamplingPrefs({ caps, agent });
+
+  // Se temos sessionId e channel, tenta garantir previous_response_id da sessão
+  let finalPreviousResponseId = previous_response_id;
+  if (sessionId && channel && !previous_response_id) {
+    try {
+      finalPreviousResponseId = await ensureSession({ sessionId, agent, channel }, signal);
+    } catch (error) {
+      console.warn("[Session] Erro ao obter sessão, prosseguindo sem memória:", error);
+    }
+  }
 
   // Apêndice de "modo estrito" para o retry de correção de schema
   const STRICT_APPEND =
@@ -143,7 +273,7 @@ async function structuredOrJson<T>(args: {
         model,
         input: messages,
         instructions: instructions + (strict ? STRICT_APPEND : ""),
-        previous_response_id,
+        previous_response_id: finalPreviousResponseId,
         store,
         text: {
           format: zodTextFormat(schema, schemaName),
@@ -171,7 +301,7 @@ async function structuredOrJson<T>(args: {
         throw new Error(`incomplete:${res.incomplete_details?.reason ?? "unknown"}`);
       }
 
-      return {
+      const result = {
         mode: "structured" as const,
         id: res.id,
         parsed: res.output_parsed as T,
@@ -182,6 +312,20 @@ async function structuredOrJson<T>(args: {
         openaiRequestEcho: req,
         raw_text,
       };
+
+      // Update session pointer after successful response
+      if (sessionId && result.id && channel) {
+        const sessionKey = await ensureSession({ 
+          sessionId, 
+          agent: { ...agent, model, instructions }, 
+          channel 
+        });
+        if (sessionKey) {
+          await setSessionPointer(sessionKey, result.id);
+        }
+      }
+
+      return result;
     } catch (e: any) {
       // Se já estamos em strict mode, não tenta mais retry
       if (strict) {
@@ -234,7 +378,7 @@ async function structuredOrJson<T>(args: {
       `\nRetorne um ÚNICO objeto JSON que obedeça ao schema '${schemaName}'.` +
       "\nNÃO envolva em uma chave raiz." +
       (strict ? STRICT_APPEND : ""),
-    previous_response_id,
+    previous_response_id: finalPreviousResponseId,
     store,
     text: { format: { type: "json_object" } as const },
     max_output_tokens,
@@ -290,7 +434,7 @@ async function structuredOrJson<T>(args: {
     throw err;
   }
 
-  return {
+  const result = {
     mode: "json_mode_fallback" as const,
     id: res.id,
     parsed,
@@ -301,6 +445,20 @@ async function structuredOrJson<T>(args: {
     openaiRequestEcho: req,
     raw_text: rawText,
   };
+
+  // Update session pointer after successful response
+  if (sessionId && result.id && channel) {
+    const sessionKey = await ensureSession({ 
+      sessionId, 
+      agent: { ...agent, model, instructions }, 
+      channel 
+    });
+    if (sessionKey) {
+      await setSessionPointer(sessionKey, result.id);
+    }
+  }
+
+  return result;
 }
 
 // ===== SCHEMAS ZOD (seguindo o guia à risca) =====
@@ -360,7 +518,7 @@ function createButtonsSchema(channel: ChannelType) {
   
   return z
     .object({
-      introduction_text: z
+      response_text: z
         .string()
         .regex(new RegExp(`^.{1,${bodyMax}}$`, "u"), `máx ${bodyMax} caracteres`),
       buttons: z.array(Btn).min(1).max(maxButtons),
@@ -382,16 +540,13 @@ function createRouterSchema(channel: ChannelType) {
         .string()
         .regex(/^(|@[a-z0-9_]+)$/u)
         .default(""),
-      // Permitir string vazia OU texto válido
-      introduction_text: z
+      // response_text é obrigatório e deve ser útil em ambos os modos
+      response_text: z
         .string()
-        .regex(new RegExp(`^(|.{1,${bodyMax}})$`, "u"))
-        .default(""),
-      text: z
-        .string()
-        .regex(new RegExp(`^(|.{1,${bodyMax}})$`, "u"))
-        .default(""),
-      buttons: z.array(Btn).max(maxButtons).default([]),
+        .min(3, "texto muito curto")
+        .regex(new RegExp(`^.{3,${bodyMax}}$`, "u"), `mín 3, máx ${bodyMax} caracteres`),
+      // Botões são obrigatórios para facilitar interação - mínimo 2, máximo 3
+      buttons: z.array(Btn).min(2).max(3),
     })
     .strict();
 }
@@ -467,12 +622,11 @@ export async function generateShortTitlesBatch(
   // ✅ HIERARQUIA MODERNA: Instructions para identidade + 1 developer para regras específicas
   const taskRules = `
 # OBJETIVO
-Gerar títulos curtos e acionáveis para cada serviço jurídico.
+Gerar títulos curtos e acionáveis para cada serviço.
 
-# REGRAS
-- Títulos: até 20 caracteres (obrigatório).
-- Linguagem neutra e profissional.
-- Retorne SOMENTE no schema 'ShortTitles' (sem explicações fora do JSON).
+# REGRAS ESPECÍFICAS
+- Títulos: até 20 caracteres (obrigatório)
+- Linguagem neutra e profissional
 `;
 
   const user = `Serviços (na ordem):\n${items}`;
@@ -495,7 +649,7 @@ Gerar títulos curtos e acionáveis para cada serviço jurídico.
         client: this.client,
         model: agent.model,
         messages: [
-          { role: "developer", content: MASTER_PROMPT },
+          { role: "developer", content: createMasterPrompt("whatsapp") },
           { role: "developer", content: taskRules },
           { role: "user", content: user },
         ],
@@ -525,7 +679,10 @@ export async function generateFreeChatButtons(
   this: { client: OpenAI },
   userText: string,
   agent: AgentConfig,
-  opts?: { channelType?: ChannelType }
+  opts?: { 
+    channelType?: ChannelType;
+    sessionId?: string;
+  }
 ): Promise<WarmupButtonsResponse | null> {
   const channel: ChannelType = opts?.channelType || "whatsapp";
   const schema = createButtonsSchema(channel);
@@ -534,14 +691,10 @@ export async function generateFreeChatButtons(
   // ✅ HIERARQUIA MODERNA: Instructions para identidade + 1 developer para regras específicas
   const taskRules = `
 # OBJETIVO
-Gerar uma resposta curta (introduction_text) e 2–3 botões objetivos para avançar a conversa.
+Gerar uma resposta curta (response_text) e 2–3 botões objetivos para avançar a conversa.
 
-# REGRAS
-- Títulos de botões: até 20 caracteres (obrigatório).
-- Payload: formato @slug (obrigatório).
-- introduction_text: até ${c.bodyMax} caracteres.
-- Linguagem neutra e profissional.
-- Retorne SOMENTE no schema 'FreeChatButtons' (sem explicações fora do JSON).
+# REGRAS ESPECÍFICAS
+- Linguagem neutra e profissional
 `;
 
   const user = `Cliente: "${userText}"`;
@@ -553,17 +706,19 @@ Gerar uma resposta curta (introduction_text) e 2–3 botões objetivos para avan
         client: this.client,
         model: agent.model,
         messages: [
-          { role: "developer", content: MASTER_PROMPT },
+          { role: "developer", content: createMasterPrompt(channel) },
           { role: "developer", content: taskRules },
           { role: "user", content: user },
         ],
-        instructions: agent.instructions || "Você é um UX writer jurídico. Siga o schema estritamente.",
+        instructions: agent.instructions || "Você é um UX writer especializado em criar botões de navegação. Siga o schema estritamente e gere botões objetivos.",
         max_output_tokens: agent.maxOutputTokens || 256,
         verbosity: caps.reasoning && isGPT5(agent.model) ? normVerb(agent.verbosity) : undefined,
         reasoning: caps.reasoning ? { effort: normEffort(agent.reasoningEffort) } : undefined,
         agent,
         schema,
         schemaName: "FreeChatButtons",
+        sessionId: opts?.sessionId,
+        channel,
         signal,
       });
 
@@ -584,7 +739,10 @@ export async function generateWarmupButtons(
   userText: string,
   candidates: IntentCandidate[],
   agent: AgentConfig,
-  opts?: { channelType?: ChannelType }
+  opts?: { 
+    channelType?: ChannelType;
+    sessionId?: string;
+  }
 ): Promise<WarmupButtonsResponse | null> {
   if (!candidates.length) return null;
 
@@ -601,12 +759,8 @@ export async function generateWarmupButtons(
 # OBJETIVO
 Gerar uma pequena introdução e botões para desambiguar a intenção do usuário.
 
-# REGRAS
-- Títulos de botões: até 20 caracteres (obrigatório).
-- Payload: formato @slug (obrigatório).
-- introduction_text: até ${c.bodyMax} caracteres.
-- Linguagem neutra e profissional.
-- Retorne SOMENTE no schema 'WarmupButtons' (sem explicações fora do JSON).
+# REGRAS ESPECÍFICAS
+- Linguagem neutra e profissional
 `;
 
   const user = `Intenções candidatas:\n${candidatesText}\n\nMensagem do usuário: "${userText}"`;
@@ -618,17 +772,19 @@ Gerar uma pequena introdução e botões para desambiguar a intenção do usuár
         client: this.client,
         model: agent.model,
         messages: [
-          { role: "developer", content: MASTER_PROMPT },
+          { role: "developer", content: createMasterPrompt(channel) },
           { role: "developer", content: taskRules },
           { role: "user", content: user },
         ],
-        instructions: agent.instructions || "Você é um UX writer jurídico. Siga o schema estritamente.",
+        instructions: agent.instructions || "Você é um UX writer especializado em criar botões de navegação. Siga o schema estritamente e gere botões objetivos.",
         max_output_tokens: agent.maxOutputTokens || 256,
         verbosity: caps.reasoning && isGPT5(agent.model) ? normVerb(agent.verbosity) : undefined,
         reasoning: caps.reasoning ? { effort: normEffort(agent.reasoningEffort) } : undefined,
         agent,
         schema,
         schemaName: "WarmupButtons",
+        sessionId: opts?.sessionId,
+        channel,
         signal,
       });
 
@@ -648,7 +804,10 @@ export async function routerLLM(
   this: { client: OpenAI },
   userText: string,
   agent: AgentConfig,
-  opts?: { channelType?: ChannelType }
+  opts?: { 
+    channelType?: ChannelType;
+    sessionId?: string;
+  }
 ): Promise<RouterDecision | null> {
   const channel: ChannelType = opts?.channelType || "whatsapp";
   const schema = createRouterSchema(channel);
@@ -657,15 +816,20 @@ export async function routerLLM(
   // ✅ HIERARQUIA MODERNA: Instructions para identidade + 1 developer para regras específicas
   const taskRules = `
 # OBJETIVO
-Decida entre roteamento para intenção específica ou chat livre.
+Como ${agent.instructions ? 'assistente especializado' : 'roteador inteligente'}, decida entre roteamento para intenção específica ou resposta conversacional.
 
-# REGRAS
-- mode='intent' quando houver uma intenção clara (inclua intent_payload no formato @slug).
-- mode='chat' caso contrário (inclua text ou introduction_text + buttons).
-- Títulos de botões: até 20 caracteres.
-- Payload: formato @slug.
-- Textos: até ${c.bodyMax} caracteres.
-- Retorne SOMENTE no schema 'RouterDecision' (sem explicações fora do JSON).
+# REGRAS DE ROTEAMENTO
+- mode='intent' quando houver uma intenção clara e específica que pode ser mapeada
+  * Para modo 'intent': inclua intent_payload no formato @slug
+  * response_text deve ser uma resposta útil relacionada à intenção
+  * buttons obrigatório com 2-3 opções relacionadas à intenção
+
+- mode='chat' para conversa geral ou quando não há intenção específica mapeável
+  * Para modo 'chat': response_text deve ser uma resposta conversacional útil
+  * buttons obrigatório com 2-3 opções para continuar a conversa
+
+# REGRAS ESPECÍFICAS
+- Mantenha a identidade e tom definidos nas instruções principais
 `;
 
   const user = `Mensagem do usuário: "${userText}"`;
@@ -677,7 +841,7 @@ Decida entre roteamento para intenção específica ou chat livre.
         client: this.client,
         model: agent.model,
         messages: [
-          { role: "developer", content: MASTER_PROMPT },
+          { role: "developer", content: createMasterPrompt(channel) },
           { role: "developer", content: taskRules },
           { role: "user", content: user },
         ],
@@ -688,6 +852,8 @@ Decida entre roteamento para intenção específica ou chat livre.
         agent,
         schema,
         schemaName: "RouterDecision",
+        sessionId: opts?.sessionId,
+        channel,
         signal,
       });
 
