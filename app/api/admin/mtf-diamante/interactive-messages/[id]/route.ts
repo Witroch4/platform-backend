@@ -316,8 +316,7 @@ export async function PUT(
       templateUpdateData.isActive = cleanUpdateData.isActive;
     }
 
-    // Handle updates - for now, we'll only support basic template field updates
-    // Complex interactiveContent updates would require more sophisticated logic
+    // ✅ FIXED: Implement complex interactiveContent updates
     if (Object.keys(templateUpdateData).length > 0) {
       await prisma.template.update({
         where: { id: id },
@@ -325,8 +324,77 @@ export async function PUT(
       });
     }
 
-    // TODO: Implement complex interactiveContent updates in a future iteration
-    // This would involve updating nested relationships for header, body, footer, and actions
+    // Update interactive content if provided
+    const interactiveUpdateData = cleanUpdateData;
+    
+    if (interactiveUpdateData.header || interactiveUpdateData.body || interactiveUpdateData.footer || interactiveUpdateData.action) {
+      // Get existing interactive content
+      const existingInteractive = await prisma.interactiveContent.findFirst({
+        where: { templateId: id },
+        include: {
+          header: true,
+          body: true,
+          footer: true
+        }
+      });
+
+      if (existingInteractive) {
+        // Update header if provided
+        if (interactiveUpdateData.header) {
+          const headerData = {
+            type: interactiveUpdateData.header.type,
+            content: interactiveUpdateData.header.content
+          };
+          
+          if (existingInteractive.header) {
+            await prisma.header.update({
+              where: { id: existingInteractive.header.id },
+              data: headerData
+            });
+          } else {
+            await prisma.header.create({
+              data: {
+                ...headerData,
+                interactiveContentId: existingInteractive.id
+              }
+            });
+          }
+        }
+
+        // Update body if provided
+        if (interactiveUpdateData.body) {
+          const bodyData = {
+            text: interactiveUpdateData.body.text
+          };
+          
+          await prisma.body.update({
+            where: { id: existingInteractive.bodyId },
+            data: bodyData
+          });
+        }
+
+        // Update footer if provided
+        if (interactiveUpdateData.footer) {
+          const footerData = {
+            text: interactiveUpdateData.footer.text
+          };
+          
+          if (existingInteractive.footer) {
+            await prisma.footer.update({
+              where: { id: existingInteractive.footer.id },
+              data: footerData
+            });
+          } else {
+            await prisma.footer.create({
+              data: {
+                ...footerData,
+                interactiveContentId: existingInteractive.id
+              }
+            });
+          }
+        }
+      }
+    }
 
     // Fetch the updated message
     const updatedMessage = await prisma.template.findFirst({

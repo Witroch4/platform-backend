@@ -156,7 +156,7 @@ const normalizeMessage = (m: AnyMsg): Mensagem => {
 
 const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
   // ✅ CORRIGIDO: Usando hooks dedicados ao invés dos deprecated
-  const { interactiveMessages, caixas, refreshCaixas, buttonReactions, deleteMessage } = useMtfData();
+  const { interactiveMessages, caixas, refreshCaixas, buttonReactions, deleteMessage, isLoadingMessages } = useMtfData();
   const { addMessage, updateMessage } = useInteractiveMessages(caixaId);
   
   const [currentView, setCurrentView] = useState<"list" | "create" | "edit">(
@@ -195,7 +195,9 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
       });
     }
   }, [interactiveMessages, mensagens]);
-  const loading = !interactiveMessages; // opcional; ou use um Skeleton quando vazio
+  
+  // ✅ CORRIGIDO: Usar o estado de loading correto do SWR
+  const loading = isLoadingMessages;
 
   // Import/Export state
   const [importDialogOpen, setImportDialogOpen] = useState(false);

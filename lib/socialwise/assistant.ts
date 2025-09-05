@@ -4,6 +4,7 @@ type AssistantLite = {
   id: string;
   model: string | null;
   instructions: string | null;
+  embedipreview: boolean;
 };
 
 /**
@@ -27,7 +28,7 @@ export async function getAssistantForInbox(inboxId: string, chatwitAccountId?: s
       usuarioChatwit: true,
       aiAssistantLinks: {
         include: {
-          assistant: { select: { id: true, model: true, instructions: true, updatedAt: true } },
+          assistant: { select: { id: true, model: true, instructions: true, embedipreview: true, updatedAt: true } },
         },
         orderBy: { createdAt: 'desc' },
       },
@@ -37,7 +38,7 @@ export async function getAssistantForInbox(inboxId: string, chatwitAccountId?: s
   const linked = (inbox as any)?.aiAssistantLinks as any[] | undefined;
   if (linked && linked.length > 0 && linked[0]?.assistant) {
     const a = linked[0].assistant;
-    return { id: a.id, model: a.model, instructions: a.instructions } as AssistantLite;
+    return { id: a.id, model: a.model, instructions: a.instructions, embedipreview: a.embedipreview } as AssistantLite;
   }
 
   // 2) Fallback: último Capitão do usuário dono da inbox
@@ -46,7 +47,7 @@ export async function getAssistantForInbox(inboxId: string, chatwitAccountId?: s
   const fallback = await (prisma as any).aiAssistant.findFirst({
     where: { userId, isActive: true },
     orderBy: { updatedAt: 'desc' },
-    select: { id: true, model: true, instructions: true },
+    select: { id: true, model: true, instructions: true, embedipreview: true },
   });
   return fallback as AssistantLite | null;
 }

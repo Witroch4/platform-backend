@@ -475,7 +475,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 
       // Get agent configuration for embedipreview setting
       const assistant = await getAssistantForInbox(inboxId, String(chatwitAccountId));
-      const embedipreview = true; // Default: embedding-first (TODO: Get from agent config when implemented)
+      const embedipreview = assistant?.embedipreview ?? true; // Default: embedding-first if assistant not found
+      
+      webhookLogger.info('Agent routing strategy configuration', {
+        assistantId: assistant?.id || 'not-found',
+        embedipreview,
+        strategy: embedipreview ? 'embedding-first' : 'llm-first',
+        traceId
+      });
 
       // Process through optimized SocialWise Flow
       const result = await processSocialWiseFlow(processorContext, embedipreview);

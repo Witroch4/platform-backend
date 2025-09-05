@@ -1620,6 +1620,7 @@ model AiDocument {
   title        String
   sourceUrl    String?
   contentText  String?       @db.Text
+  embedding    Unsupported("vector(1536)")? // OpenAI embeddings vector
   isActive     Boolean       @default(true)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
@@ -1627,6 +1628,7 @@ model AiDocument {
   assistant    AiAssistant?  @relation(fields: [assistantId], references: [id])
 
   @@index([userId, assistantId, isActive])
+  @@index([embedding]) // Índice para busca vetorial
 }
 
 enum AiFaqStatus {

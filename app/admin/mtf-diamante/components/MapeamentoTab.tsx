@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { useMtfData } from "../context/MtfDataProvider";
+import useSWR from 'swr';
 import {
   Card,
   CardContent,
@@ -61,19 +63,54 @@ interface Template {
   name: string;
 }
 
-interface MensagemInterativa {
-  id: string;
-  nome: string;
-}
-
 const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
-  const [mapeamentos, setMapeamentos] = useState<Mapeamento[]>([]);
-  const [mensagens, setMensagens] = useState<MensagemInterativa[]>([]);
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Usar o provider SWR para obter as mensagens interativas
+  const { interactiveMessages, isLoadingMessages } = useMtfData();
+  
+  // Usar SWR para mapeamentos
+  const { data: mapeamentos = [], error: mapeamentosError, mutate: mutateMapeamentos } = useSWR(
+    caixaId ? `/api/admin/mtf-diamante/mapeamentos/${caixaId}` : null,
+    async (url) => {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Falha ao buscar mapeamentos');
+      return response.json();
+    }
+  );
+  
+  // Usar SWR para templates (primeiro tentar específicos da caixa, depois globais)
+  const { data: templates = [], error: templatesError, mutate: mutateTemplates } = useSWR(
+    caixaId ? [`templates`, caixaId] : null,
+    async () => {
+      try {
+        // Tentar buscar templates específicos da caixa primeiro
+        const templateResponse = await fetch(`/api/admin/mtf-diamante/templates/${caixaId}`);
+        if (templateResponse.ok) {
+          const templateData = await templateResponse.json();
+          setUsingGlobalTemplates(false);
+          return templateData;
+        }
+      } catch (error) {
+        console.log("Falha ao buscar templates da caixa, tentando fallback...");
+      }
+      
+      // Fallback: buscar templates globais da conta
+      const globalTemplateResponse = await fetch(`/api/admin/mtf-diamante/templates`);
+      if (globalTemplateResponse.ok) {
+        const globalTemplateData = await globalTemplateResponse.json();
+        const templates = globalTemplateData.success
+          ? globalTemplateData.templates
+          : globalTemplateData;
+        setUsingGlobalTemplates(true);
+        return templates;
+      }
+      
+      throw new Error("Falha ao buscar templates.");
+    }
+  );
+  
+  const [loading, setLoading] = useState(false);
   const [usingGlobalTemplates, setUsingGlobalTemplates] = useState(false);
-  // IA intents (novo)
-  const [aiIntents, setAiIntents] = useState<any[]>([]);
+  // IA intents (novo) - usando SWR agora
   const [aiName, setAiName] = useState("");
   const [aiSelectedTemplate, setAiSelectedTemplate] = useState<string | null>(null);
   const [aiSelectedMensagem, setAiSelectedMensagem] = useState<string | null>(null);
@@ -99,105 +136,16 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
 
   // Ações para lista IA: usaremos os mesmos handlers de mapeamento (editar/excluir)
 
-  const fetchData = async () => {
-    if (!caixaId) {
-      toast.error(
-        "Selecione ou crie uma caixa de entrada para configurar mapeamentos"
-      );
-      return;
+  // Usar SWR para AI intents
+  const { data: aiIntents = [] } = useSWR(
+    caixaId ? '/api/admin/ai-integration/intents' : null,
+    async (url) => {
+      const response = await fetch(url, { cache: 'no-store' });
+      if (!response.ok) return [];
+      const data = await response.json();
+      return Array.isArray(data?.intents) ? data.intents : [];
     }
-    try {
-      setLoading(true);
-
-      // Buscar mapeamentos
-      const mapResponse = await fetch(
-        `/api/admin/mtf-diamante/mapeamentos/${caixaId}`
-      );
-      if (!mapResponse.ok) throw new Error("Falha ao buscar mapeamentos.");
-      const mapData = await mapResponse.json();
-      setMapeamentos(mapData);
-
-      // Mensagens interativas são sempre globais do sistema
-      try {
-        const msgResponse = await fetch(
-          `/api/admin/mtf-diamante/interactive-messages?caixaId=${caixaId}`
-        );
-        if (msgResponse.ok) {
-          const msgData = await msgResponse.json();
-          setMensagens(msgData);
-        } else {
-          throw new Error("Falha ao buscar mensagens interativas");
-        }
-      } catch (error) {
-        console.log("Falha ao buscar mensagens interativas:", error);
-        setMensagens([]);
-      }
-
-      // Tentar buscar templates específicos da caixa primeiro
-      try {
-        const templateResponse = await fetch(
-          `/api/admin/mtf-diamante/templates/${caixaId}`
-        );
-        if (templateResponse.ok) {
-          const templateData = await templateResponse.json();
-          setTemplates(templateData);
-          setUsingGlobalTemplates(false);
-          return; // Se conseguiu buscar da caixa, não precisa do fallback
-        }
-      } catch (error) {
-        console.log("Falha ao buscar templates da caixa, tentando fallback...");
-      }
-
-      // Fallback: buscar templates globais da conta
-      try {
-        const globalTemplateResponse = await fetch(
-          `/api/admin/mtf-diamante/templates`
-        );
-        if (globalTemplateResponse.ok) {
-          const globalTemplateData = await globalTemplateResponse.json();
-          const templates = globalTemplateData.success
-            ? globalTemplateData.templates
-            : globalTemplateData;
-          setTemplates(templates);
-          setUsingGlobalTemplates(true);
-
-          // Mostrar aviso sobre uso de templates globais
-          if (templates.length > 0) {
-            toast.info("Usando templates das configurações globais", {
-              description:
-                "Não foram encontrados templates específicos para esta caixa.",
-            });
-          }
-        } else {
-          throw new Error("Falha ao buscar templates globais.");
-        }
-      } catch (error) {
-        throw new Error("Falha ao buscar templates.");
-      }
-    } catch (err: any) {
-      toast.error(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-  }, [caixaId]);
-
-  // Carregar intents de IA
-  const loadAiIntents = async () => {
-    try {
-      const r = await fetch('/api/admin/ai-integration/intents', { cache: 'no-store' });
-      if (r.ok) {
-        const j = await r.json();
-        setAiIntents(Array.isArray(j?.intents) ? j.intents : []);
-      }
-    } catch {}
-  };
-  useEffect(() => {
-    if (caixaId) loadAiIntents();
-  }, [caixaId]);
+  );
 
   const resetForm = () => {
     setId(null);
@@ -231,7 +179,9 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
         throw new Error(errorData.error || "Falha ao excluir mapeamento.");
       }
       toast.success("Mapeamento excluído com sucesso!");
-      fetchData(); // Refresh
+      // Refresh dos dados SWR
+      mutateTemplates();
+      mutateMapeamentos();
     } catch (error) {
       toast.error((error as Error).message);
     }
@@ -393,7 +343,9 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
 
     await saveMappingData({ id: null, intentName: aiName.trim(), templateId, caixaId });
     setAiName(""); setAiSelectedTemplate(null); setAiSelectedMensagem(null);
-    await fetchData();
+    // Refresh dos dados SWR
+    mutateTemplates();
+    mutateMapeamentos();
   };
 
   const saveMappingData = async (mappingData: any, customVariables?: Record<string, string>) => {
@@ -417,7 +369,9 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
       
       toast.success("Mapeamento salvo com sucesso!");
       resetForm();
-      fetchData();
+      // Refresh dos dados SWR
+      mutateTemplates();
+      mutateMapeamentos();
     } catch (error) {
       toast.error((error as Error).message);
     }
@@ -572,7 +526,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
                   <SelectValue placeholder="Selecione um Template" />
                 </SelectTrigger>
                 <SelectContent>
-                  {templates.map((t) => (
+                  {templates.map((t: Template) => (
                     <SelectItem key={t.id} value={t.id}>
                       {t.name}
                     </SelectItem>
@@ -600,9 +554,9 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
                   <SelectValue placeholder="Selecione uma Mensagem" />
                 </SelectTrigger>
                 <SelectContent>
-                  {mensagens.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.nome}
+                  {interactiveMessages?.map((m) => (
+                    <SelectItem key={m.id} value={m.id || ''}>
+                      {m.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -632,7 +586,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mapeamentos.map((map) => (
+              {mapeamentos.map((map: Mapeamento) => (
                 <TableRow key={map.id}>
                   <TableCell className="font-medium">{map.intentName}</TableCell>
                   <TableCell>
@@ -726,7 +680,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
                     <SelectValue placeholder="Selecione um Template" />
                   </SelectTrigger>
                   <SelectContent>
-                    {templates.map((t) => (
+                    {templates.map((t: Template) => (
                       <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -746,8 +700,8 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
                     <SelectValue placeholder="Selecione uma Mensagem" />
                   </SelectTrigger>
                   <SelectContent>
-                    {mensagens.map((m) => (
-                      <SelectItem key={m.id} value={m.id}>{m.nome}</SelectItem>
+                    {interactiveMessages?.map((m) => (
+                      <SelectItem key={m.id} value={m.id || ''}>{m.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -770,7 +724,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {mapeamentos.filter(m => aiIntents.some((g: any) => g.name === m.intentName)).map((map) => (
+                {mapeamentos.filter((m: Mapeamento) => aiIntents.some((g: any) => g.name === m.intentName)).map((map: Mapeamento) => (
                   <TableRow key={map.id}>
                     <TableCell className="font-medium">{map.intentName}</TableCell>
                     <TableCell>
@@ -794,7 +748,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
                     </TableCell>
                   </TableRow>
                 ))}
-                {mapeamentos.filter(m => aiIntents.some((g: any) => g.name === m.intentName)).length === 0 && (
+                {mapeamentos.filter((m: Mapeamento) => aiIntents.some((g: any) => g.name === m.intentName)).length === 0 && (
                   <TableRow>
                     <TableCell colSpan={3} className="text-sm text-muted-foreground">Nenhuma intenção mapeada nesta caixa.</TableCell>
                   </TableRow>

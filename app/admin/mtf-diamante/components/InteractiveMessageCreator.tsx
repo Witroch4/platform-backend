@@ -108,7 +108,8 @@ export const InteractiveMessageCreator: React.FC<
 
   // Load existing message data when editing
   useEffect(() => {
-    if (editingMessage) {
+    if (editingMessage && state.currentStep === "type-selection") {
+      // Apenas carregar dados iniciais, não durante edição ativa
       setState(prev => ({
         ...prev,
         currentStep: "configuration", // Skip type selection when editing
@@ -118,7 +119,7 @@ export const InteractiveMessageCreator: React.FC<
       // Load existing reactions from context
       loadExistingReactions();
     }
-  }, [editingMessage, loadExistingReactions]);
+  }, [editingMessage, loadExistingReactions, state.currentStep]);
 
   // Control MtfDataProvider updates during editing
   useEffect(() => {
