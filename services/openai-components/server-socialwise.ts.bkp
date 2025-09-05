@@ -1,0 +1,1010 @@
+// services/openai-components/server-socialwise.ts
+import OpenAI from "openai";
+import { zodTextFormat } from "openai/helpers/zod";
+import { z } from "zod";
+import {
+  IntentCandidate,
+  AgentConfig,
+  WarmupButtonsResponse,
+  RouterDecision,
+  ChannelType,
+} from "./types";
+// import { responsesCall } from "@/lib/cost/openai-wrapper"; // (opcional) não usado aqui
+import { withDeadlineAbort } from "./utils";
+import { getRedisInstance } from "@/lib/connections";
+
+// ==== MASTER_PROMPT - Lógica de negócio imutável ====
+const MASTER_PROMPT_BASE = `
+# MASTER
+Você é um assistente especializado em geração de respostas estruturadas para chatbots.
+Sempre retorne EXATAMENTE no schema especificado, sem texto fora do JSON.
+Foque em respostas concisas, profissionais e acionáveis.
+
+# REGRAS UNIVERSAIS PARA BOTÕES
+- Títulos de botões: máximo 20 caracteres, objetivos e acionáveis
+- Payload: sempre no formato @slug (obrigatório)
+- Retorne SOMENTE no schema especificado (sem explicações fora do JSON)
+`;
+
+// Função que gera o MASTER_PROMPT dinamicamente com limites do canal
+function createMasterPrompt(channel: ChannelType): string {
+  const c = getConstraintsForChannel(channel);
+  return MASTER_PROMPT_BASE + `- response_text: até ${c.bodyMax} caracteres, sempre útil e contextual\n`;
+}
+
+// ===== SESSÃO & MEMÓRIA — baseado na "bíblia" =====
+
+// Pequeno hash determinístico (FNV-1a) para derivar a sessão de (modelo+capitão)
+function hashShort(s: string) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36);
+}
+
+const sessionState = new Map<string, string>(); // Fallback local — dev/CI
+const SESSION_TTL_SECONDS = 60 * 60 * 24; // 24h
+const LOCK_TTL_SECONDS = 5; // lock curto
+
+async function getSessionPointer(key: string) {
+  const redis = getRedisInstance?.();
+  if (redis) {
+    try {
+      return await redis.get(key);
+    } catch (error) {
+      console.warn("Redis get failed, using fallback", error);
+    }
+  }
+  return sessionState.get(key);
+}
+
+async function setSessionPointer(key: string, value: string) {
+  const redis = getRedisInstance?.();
+  if (redis) {
+    try {
+      await redis.setex(key, SESSION_TTL_SECONDS, value);
+    } catch (error) {
+      console.warn("Redis set failed, using fallback", error);
+    }
+  }
+  sessionState.set(key, value);
+}
+
+async function withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const redis = getRedisInstance?.();
+  if (!redis) return fn(); // sem Redis, executa direto
+
+  const lockKey = `lock:${key}`;
+  const ok = await redis.set(lockKey, "1", "NX", "EX", LOCK_TTL_SECONDS);
+  if (!ok) {
+    throw new Error(`Sessão ${key} em uso por outro processo`);
+  }
+  try {
+    return await fn();
+  } finally {
+    await redis.del(lockKey);
+  }
+}
+
+async function ensureSession(
+  params: { 
+    sessionId: string; 
+    agent: AgentConfig; 
+    channel: ChannelType;
+  },
+  signal?: AbortSignal
+): Promise<{ responseId: string | undefined; isNewSession: boolean }> {
+  // 🔍 DEBUG: Log ensureSession início
+  console.log("🔐 ENSURE SESSION - Iniciando:", {
+    sessionId: params.sessionId,
+    model: params.agent.model,
+    channel: params.channel,
+    hasInstructions: !!params.agent.instructions
+  });
+
+  // Monta chave única: sessionId + model + hash(instructions + channel)
+  const identity = `${params.agent.model}:${params.channel}:${params.agent.instructions || 'default'}`;
+  const identityHash = hashShort(identity);
+  const sessionKey = `session:${params.sessionId}:${identityHash}`;
+  
+  console.log("🔐 ENSURE SESSION - Chave da sessão:", sessionKey);
+  
+  const existing = await getSessionPointer(sessionKey);
+  if (existing) {
+    console.log("🔐 ENSURE SESSION - Sessão existente encontrada:", existing);
+    return { responseId: existing, isNewSession: false };
+  }
+
+  console.log("🔐 ENSURE SESSION - Criando nova sessão...");
+
+  const result = await withLock(sessionKey, async () => {
+    // Double-check após adquirir lock
+    const recheck = await getSessionPointer(sessionKey);
+    if (recheck) {
+      console.log("🔐 ENSURE SESSION - Sessão criada durante lock:", recheck);
+      return { responseId: recheck, isNewSession: false };
+    }
+
+    // Cria sessão inicial com OpenAI
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    
+    try {
+      const init = await client.responses.create(
+        {
+          model: params.agent.model,
+          input: [
+            { role: "developer", content: createMasterPrompt(params.channel) },
+            { role: "developer", content: params.agent.instructions || "Você é um assistente especializado." },
+          ],
+          store: true,
+        },
+        { signal } as any
+      );
+
+      const responseId = init.id;
+      await setSessionPointer(sessionKey, responseId);
+      console.log(`🔐 ENSURE SESSION - Criada nova sessão: ${sessionKey} -> ${responseId}`);
+      return { responseId, isNewSession: true };
+    } catch (error) {
+      console.error(`🔐 ENSURE SESSION - Erro ao criar sessão ${sessionKey}:`, error);
+      return { responseId: undefined, isNewSession: true }; // Erro = tratado como nova sessão
+    }
+  });
+
+  return result;
+}
+
+// ==== Structured Outputs with Fallback Pattern ====
+interface StructuredOrJsonResult<T> {
+  mode: "structured" | "json_mode_fallback";
+  id: string;
+  parsed: T;
+  meta: {
+    usage?: any;
+    incomplete_details?: any;
+  };
+  openaiRequestEcho: any;
+  raw_text?: string;
+}
+
+// Heurística para detectar o drift mais comum: raiz como array ou { schema_name: [...] }
+function isSchemaArrayError(err: any): boolean {
+  try {
+    const msg = String(err?.message ?? err ?? "");
+    if (/invalid_type/i.test(msg) && /expected/i.test(msg) && /object/i.test(msg) && /received/i.test(msg) && /array/i.test(msg)) {
+      return true;
+    }
+    const raw = err?.__openai?.raw_output_text;
+    if (raw) {
+      const obj = JSON.parse(raw);
+      if (Array.isArray(obj)) return true;
+      // Verifica se tem alguma chave que é array quando deveria ser objeto (ex: { router_decision: [...] })
+      if (obj && typeof obj === 'object') {
+        for (const key in obj) {
+          // Só considera erro se for array não-vazio ou se a chave sugere que deveria ser objeto
+          if (Array.isArray(obj[key]) && (obj[key].length > 0 || key.includes('_decision') || key.includes('_response'))) {
+            return true;
+          }
+        }
+      }
+    }
+  } catch {}
+  return false;
+}
+
+// Resolve sampling preferences following the test route pattern
+function resolveSamplingPrefs(args: {
+  caps: { reasoning: boolean; sampling: boolean };
+  agent: AgentConfig;
+}): { temperature?: number; top_p?: number } | undefined {
+  if (!args.caps.sampling) return undefined;
+
+  const temperature = args.agent.tempCopy ?? args.agent.temperature;
+  const top_p = args.agent.topP;
+
+  // ⚠️ REGRA DA BÍBLIA:
+  // Em modelos com reasoning, a API só aceita sampling "neutro".
+  // Se o agente tem sampling configurado, normalize para { temperature:1, top_p:1 }.
+  if (args.caps.reasoning) {
+    const userAskedSampling = (temperature !== undefined && temperature !== null) || 
+                             (top_p !== undefined && top_p !== null);
+    if (userAskedSampling) {
+      return { temperature: 1, top_p: 1 };
+    }
+    // Se o agente NÃO pediu sampling, não envie nada.
+    return undefined;
+  }
+
+  // —— Comportamento para modelos sem reasoning ——
+  const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+  const resolved: { temperature?: number; top_p?: number } = {
+    temperature: (temperature !== undefined && temperature !== null) ? clamp(temperature, 0, 2) : 0.2, // default conservador
+    top_p: (top_p !== undefined && top_p !== null) ? clamp(top_p, 0, 1) : undefined,
+  };
+  // Se nada setado de fato, não envie
+  if (resolved.temperature === undefined && resolved.top_p === undefined) return undefined;
+  return resolved;
+}
+
+async function structuredOrJson<T>(args: {
+  client: OpenAI;
+  model: string;
+  messages: Array<{ role: string; content: string }>;
+  instructions?: string;
+  previous_response_id?: string;
+  store?: boolean;
+  max_output_tokens?: number;
+  signal?: AbortSignal;
+  verbosity?: string;
+  reasoning?: { effort: string };
+  agent: AgentConfig;
+  schema: any;
+  schemaName: string;
+  strict?: boolean;
+  sessionId?: string;
+  channel?: ChannelType;
+}): Promise<StructuredOrJsonResult<T>> {
+  const {
+    client,
+    model,
+    messages,
+    instructions,
+    previous_response_id,
+    store = true,
+    max_output_tokens,
+    signal,
+    verbosity,
+    reasoning,
+    agent,
+    schema,
+    schemaName,
+    strict = false,
+    sessionId,
+    channel,
+  } = args;
+
+  const caps = getModelCaps(model);
+  
+  // Resolve sampling usando a lógica da bíblia
+  const sampling = resolveSamplingPrefs({ caps, agent });
+
+  // Se temos sessionId e channel, tenta garantir previous_response_id da sessão
+  let finalPreviousResponseId = previous_response_id;
+  if (sessionId && channel && !previous_response_id) {
+    // console.log("🔍 STRUCTURED OR JSON - Tentando obter sessão:", { sessionId, channel, hasPreviousId: !!previous_response_id }); // Log desabilitado temporariamente
+    try {
+      const sessionResult = await ensureSession({ sessionId, agent, channel }, signal);
+      finalPreviousResponseId = sessionResult.responseId;
+      // console.log("🔍 STRUCTURED OR JSON - Previous response ID obtido:", finalPreviousResponseId); // Log desabilitado temporariamente
+    } catch (error) {
+      console.warn("[Session] Erro ao obter sessão, prosseguindo sem memória:", error);
+    }
+  } else {
+    // console.log("🔍 STRUCTURED OR JSON - Não tentará sessão:", { 
+    //   hasSessionId: !!sessionId, 
+    //   hasChannel: !!channel, 
+    //   hasPreviousId: !!previous_response_id 
+    // }); // Log desabilitado temporariamente
+  }
+
+  // Apêndice de "modo estrito" para o retry de correção de schema
+  const STRICT_APPEND =
+    "\nMODO ESTRITO: retorne EXATAMENTE um objeto JSON válido no schema especificado." +
+    " Não retorne array na raiz, nem texto fora do JSON." +
+    " Use estrutura de objeto simples e direta.";
+
+  // 1) Tentativa: Structured Outputs (se suportado)
+  if (caps.structured) {
+    try {
+      const req: any = {
+        model,
+        input: messages,
+        instructions: instructions + (strict ? STRICT_APPEND : ""),
+        previous_response_id: finalPreviousResponseId,
+        store,
+        text: {
+          format: zodTextFormat(schema, schemaName),
+          ...(verbosity && caps.reasoning && isGPT5(model) ? { verbosity } : {}),
+        },
+        max_output_tokens,
+        ...(reasoning && caps.reasoning ? { reasoning } : {}),
+      };
+
+      // 🔍 DEBUG: Log do request final para OpenAI
+      console.log("🧠 OPENAI REQUEST FINAL:", JSON.stringify({
+        model: req.model,
+        messages_count: req.input?.length,
+        messages: req.input,
+        instructions_preview: req.instructions?.substring(0, 100) + "...",
+        previous_response_id: req.previous_response_id,
+        store: req.store,
+        has_reasoning: !!req.reasoning,
+        has_temperature: !!req.temperature,
+        has_top_p: !!req.top_p
+      }, null, 2));
+
+      // Sampling: se strict mode, usa sampling conservador da bíblia
+      if (strict) {
+        req.temperature = 0.2;
+        req.top_p = 0.9;
+      } else if (sampling?.temperature !== undefined) {
+        req.temperature = sampling.temperature;
+      }
+      if (!strict && sampling?.top_p !== undefined) {
+        req.top_p = sampling.top_p;
+      }
+
+      const res = await client.responses.parse(req, { signal } as any);
+      const raw_text = (res as any)?.output_text as string | undefined;
+
+      if (res.status === "incomplete") {
+        throw new Error(`incomplete:${res.incomplete_details?.reason ?? "unknown"}`);
+      }
+
+      const result = {
+        mode: "structured" as const,
+        id: res.id,
+        parsed: res.output_parsed as T,
+        meta: {
+          usage: (res as any).usage ?? undefined,
+          incomplete_details: res.incomplete_details ?? undefined,
+        },
+        openaiRequestEcho: req,
+        raw_text,
+      };
+
+      // Update session pointer after successful response
+      if (sessionId && result.id && channel) {
+        // Gerar chave da sessão manualmente para atualização
+        const identity = `${model}:${channel}:${instructions || 'default'}`;
+        const identityHash = hashShort(identity);
+        const sessionKey = `session:${sessionId}:${identityHash}`;
+        
+        await setSessionPointer(sessionKey, result.id);
+      }
+
+      return result;
+    } catch (e: any) {
+      // Se já estamos em strict mode, não tenta mais retry
+      if (strict) {
+        throw e;
+      }
+
+      const msg = String(e?.message ?? e);
+      
+      // Se for erro de sampling não suportado, tenta sem sampling
+      const unsupportedSampling = /Unsupported parameter: 'temperature'|Unsupported parameter: 'top_p'|is not supported with this model/i.test(msg);
+      
+      if (unsupportedSampling) {
+        console.warn("Sampling not supported, retrying without sampling:", e?.message);
+        // Retry sem sampling
+        return structuredOrJson({
+          ...args,
+          agent: { ...agent, tempCopy: undefined, temperature: null, topP: null }
+        });
+      }
+
+      // Se for erro de schema array (drift clássico), tenta modo estrito
+      if (isSchemaArrayError(e)) {
+        console.warn("Schema array error detected, retrying with strict mode:", e?.message);
+        // Retry "estrito": corrige drift clássico (array na raiz ou schema_name:[])
+        return structuredOrJson({
+          ...args,
+          strict: true
+        });
+      }
+      
+      // Se for erro de schema, tenta fallback
+      const isSchemaError = e?.code === "invalid_json_schema" || 
+                           e?.param === "text.format.schema" ||
+                           String(e?.message || "").includes("invalid_json_schema");
+      
+      if (!isSchemaError) {
+        throw e; // Re-throw outros erros
+      }
+      
+      console.warn("Structured Outputs failed, falling back to JSON mode:", e?.message);
+    }
+  }
+
+  // 2) Fallback: JSON mode + validação local
+  const req: any = {
+    model,
+    input: messages,
+    instructions:
+      (instructions ?? "") +
+      `\nRetorne um ÚNICO objeto JSON que obedeça ao schema '${schemaName}'.` +
+      "\nNÃO envolva em uma chave raiz." +
+      (strict ? STRICT_APPEND : ""),
+    previous_response_id: finalPreviousResponseId,
+    store,
+    max_output_tokens,
+    ...(reasoning && caps.reasoning ? { reasoning } : {}),
+  };
+
+  // 🔍 DEBUG: Log do fallback request para OpenAI
+  console.log("🧠 OPENAI FALLBACK REQUEST:", JSON.stringify({
+    model: req.model,
+    messages_count: req.input?.length,
+    messages: req.input,
+    instructions_preview: req.instructions?.substring(0, 100) + "...",
+    previous_response_id: req.previous_response_id,
+    store: req.store,
+    max_output_tokens: req.max_output_tokens,
+    has_reasoning: !!req.reasoning
+  }, null, 2));
+
+  // No fallback, também aplicamos a mesma lógica de sampling
+  if (strict) {
+    req.temperature = 0.2;
+    req.top_p = 0.9;
+  } else {
+    if (sampling?.temperature !== undefined) {
+      req.temperature = sampling.temperature;
+    }
+    if (sampling?.top_p !== undefined) {
+      req.top_p = sampling.top_p;
+    }
+  }
+
+  const res = await client.responses.create(req, { signal } as any);
+
+  if (res.status === "incomplete") {
+    throw new Error(`incomplete:${res.incomplete_details?.reason ?? "unknown"}`);
+  }
+
+  const rawText = res.output_text ?? "{}";
+  let obj: any;
+  try {
+    obj = JSON.parse(rawText);
+  } catch {
+    const err: any = new Error("Modelo retornou JSON inválido no fallback.");
+    err.__openai = { request: req, raw_output_text: rawText };
+    throw err;
+  }
+
+  // aceita {schema_name:{...}} OU objeto direto
+  const candidate = obj?.[schemaName] ?? obj;
+  let parsed: T;
+  try {
+    parsed = schema.parse(candidate);
+  } catch (zerr: any) {
+    // Se não estamos em strict mode e é erro de schema array, tenta strict mode
+    if (!strict && isSchemaArrayError(zerr)) {
+      console.warn("Schema array error in JSON mode, retrying with strict mode");
+      return structuredOrJson({
+        ...args,
+        strict: true
+      });
+    }
+    
+    const err: any = new Error(JSON.stringify(zerr?.issues ?? zerr?.message ?? zerr));
+    err.__openai = { request: req, raw_output_text: rawText };
+    throw err;
+  }
+
+  const result = {
+    mode: "json_mode_fallback" as const,
+    id: res.id,
+    parsed,
+    meta: {
+      usage: (res as any).usage ?? undefined,
+      incomplete_details: res.incomplete_details ?? undefined,
+    },
+    openaiRequestEcho: req,
+    raw_text: rawText,
+  };
+
+  // Update session pointer after successful response
+  if (sessionId && result.id && channel) {
+    // Gerar chave da sessão manualmente para atualização
+    const identity = `${model}:${channel}:${instructions || 'default'}`;
+    const identityHash = hashShort(identity);
+    const sessionKey = `session:${sessionId}:${identityHash}`;
+    
+    await setSessionPointer(sessionKey, result.id);
+  }
+
+  return result;
+}
+
+// ===== SCHEMAS ZOD (seguindo o guia à risca) =====
+
+/** Helper para limites por canal */
+function getConstraintsForChannel(channel: ChannelType) {
+  if (channel === "whatsapp") {
+    return {
+      bodyMax: 1024,
+      buttonTitleMax: 20,
+      payloadMax: 256,
+      maxButtons: 3,
+      titleWordMax: 4,
+    };
+  }
+  if (channel === "instagram") {
+    return {
+      bodyMax: 640,
+      buttonTitleMax: 20,
+      payloadMax: 1000,
+      maxButtons: 3,
+      titleWordMax: 4,
+    };
+  }
+  // facebook / genérico
+  return {
+    bodyMax: 2000,
+    buttonTitleMax: 20,
+    payloadMax: 1000,
+    maxButtons: 3,
+    titleWordMax: 4,
+  };
+}
+
+/** Factory de schema de botão por canal (evita allOf/anyOf) */
+function createButtonSchemaForChannel(channel: ChannelType) {
+  const { buttonTitleMax, payloadMax } = getConstraintsForChannel(channel);
+  
+  // Usar apenas regex para evitar allOf - não combinar múltiplas validações
+  const titleRegex = new RegExp(`^.{1,${buttonTitleMax}}$`, "u");
+  // Permitir string vazia OU formato @slug para payload
+  const payloadRegex = new RegExp(`^(|@[a-z0-9_]{1,${payloadMax}})$`, "u");
+  
+  return z
+    .object({
+      title: z.string().regex(titleRegex, `máx ${buttonTitleMax} caracteres`),
+      // Para evitar anyOf, usar string com default vazio em vez de nullable
+      payload: z.string().regex(payloadRegex, `formato @slug ou vazio`).default(""),
+    })
+    .strict();
+}
+
+/** Schema Zod para botões de warmup/freechat (compatível com Structured Outputs) */
+function createButtonsSchema(channel: ChannelType) {
+  const { bodyMax, maxButtons } = getConstraintsForChannel(channel);
+  const Btn = createButtonSchemaForChannel(channel);
+  
+  return z
+    .object({
+      response_text: z
+        .string()
+        .regex(new RegExp(`^.{1,${bodyMax}}$`, "u"), `máx ${bodyMax} caracteres`),
+      buttons: z.array(Btn).min(1).max(maxButtons),
+    })
+    .strict();
+}
+
+/** Schema Zod para decisão do router (compatível com Structured Outputs) */
+function createRouterSchema(channel: ChannelType) {
+  const { bodyMax, maxButtons } = getConstraintsForChannel(channel);
+  const Btn = createButtonSchemaForChannel(channel);
+  
+  return z
+    .object({
+      mode: z.enum(["intent", "chat"]),
+      // Para evitar anyOf, usar string com default vazio em vez de nullable
+      // Permitir string vazia OU formato @slug
+      intent_payload: z
+        .string()
+        .regex(/^(|@[a-z0-9_]+)$/u)
+        .default(""),
+      // response_text é obrigatório e deve ser útil em ambos os modos
+      response_text: z
+        .string()
+        .min(3, "texto muito curto")
+        .regex(new RegExp(`^.{3,${bodyMax}}$`, "u"), `mín 3, máx ${bodyMax} caracteres`),
+      // Botões são obrigatórios para facilitar interação - mínimo 2, máximo 3
+      buttons: z.array(Btn).min(2).max(3),
+    })
+    .strict();
+}
+
+// ===== TYPES INFERIDOS DO ZOD =====
+// type TShortTitles removido - usando tipo dinâmico
+// type TButton = z.infer<typeof ButtonSchema>; // substituído por schema por canal
+
+
+
+// ==== Model Capabilities System ====
+interface ModelCapabilities {
+  reasoning: boolean;    // Supports reasoning.effort
+  structured: boolean;   // Supports Structured Outputs
+  sampling: boolean;     // Supports temperature/top_p
+  label: string;
+}
+
+const MODEL_CAPS: Record<string, ModelCapabilities> = {
+  "gpt-5": { reasoning: true, structured: true, sampling: true, label: "GPT-5" },
+  "gpt-5-nano": { reasoning: true, structured: true, sampling: false, label: "GPT-5 Nano" }, // Não suporta temperature com reasoning
+  "gpt-4.1-nano": { reasoning: false, structured: true, sampling: true, label: "GPT-4.1 Nano" },
+};
+
+// ==== Helpers GPT-5 (case-insensitive) ====
+const isGPT5 = (m?: string) => (m || "").toLowerCase().includes("gpt-5");
+const normEffort = (e?: string) =>
+  e === "low" || e === "medium" || e === "high" ? e : "low"; // "minimal" => "low"
+const normVerb = (v?: string) =>
+  v === "low" || v === "medium" || v === "high" ? v : "low";
+
+// Get model capabilities with fallback
+function getModelCaps(model: string): ModelCapabilities {
+  return MODEL_CAPS[model] ?? { 
+    reasoning: false, 
+    structured: true, 
+    sampling: false, 
+    label: model 
+  };
+}
+
+// Mescla Structured Outputs + (opcional) verbosity do GPT-5
+function buildTextFormat<T>(schema: T, name: string, agent: AgentConfig) {
+  const caps = getModelCaps(agent.model);
+  const base: any = { format: zodTextFormat(schema as any, name) };
+  
+  // Só adiciona verbosity se o modelo suportar (GPT-5 family)
+  if (caps.reasoning && isGPT5(agent.model)) {
+    base.verbosity = normVerb((agent as any).verbosity);
+  }
+  
+  return base;
+}
+
+/**
+ * Generates short titles for multiple intent candidates in a single batch call
+ * Optimized for SOFT band processing in SocialWise Flow
+ */
+export async function generateShortTitlesBatch(
+  this: { client: OpenAI },
+  intents: IntentCandidate[],
+  agent: AgentConfig
+): Promise<string[] | null> {
+  if (!intents.length) return [];
+
+  const items = intents
+    .map(
+      (intent, i) =>
+        `${i + 1}. ${intent.slug}: ${intent.desc || intent.name || intent.slug}`
+    )
+    .join("\n");
+
+  // ✅ HIERARQUIA MODERNA: Instructions para identidade + 1 developer para regras específicas
+  const taskRules = `
+# OBJETIVO
+Gerar títulos curtos e acionáveis para cada serviço.
+
+# REGRAS ESPECÍFICAS
+- Títulos: até 20 caracteres (obrigatório)
+- Linguagem neutra e profissional
+`;
+
+  const user = `Serviços (na ordem):\n${items}`;
+
+  return withDeadlineAbort(async (signal) => {
+    try {
+      // Schema dinâmico: exigir a mesma quantidade de títulos que intents
+      const ShortTitlesSchemaN = z
+        .object({
+          titles: z
+            .array(
+              z.string().regex(/^.{1,20}$/u, "máx 20 caracteres")
+            )
+            .length(intents.length),
+        })
+        .strict();
+
+      const caps = getModelCaps(agent.model);
+      const result = await structuredOrJson<{ titles: string[] }>({
+        client: this.client,
+        model: agent.model,
+        messages: [
+          { role: "developer", content: createMasterPrompt("whatsapp") },
+          { role: "developer", content: taskRules },
+          { role: "user", content: user },
+        ],
+        instructions: agent.instructions || "Você é um UX writer jurídico. Siga o schema estritamente.",
+        max_output_tokens: agent.maxOutputTokens || 256,
+        verbosity: caps.reasoning && isGPT5(agent.model) ? normVerb(agent.verbosity) : undefined,
+        reasoning: caps.reasoning ? { effort: normEffort(agent.reasoningEffort) } : undefined,
+        agent,
+        schema: ShortTitlesSchemaN,
+        schemaName: "ShortTitles",
+        signal,
+      });
+
+      return result.parsed.titles;
+    } catch (error) {
+      console.error("Erro ao gerar títulos curtos em lote:", error);
+      return null;
+    }
+  }, agent.warmupDeadlineMs || 15000);
+}
+
+/**
+ * 🎯 NOVA FUNCIONALIDADE: Chat livre com IA gerando botões dinâmicos
+ * Usado na banda LOW quando não há intenções claras mas cliente quer conversar
+ */
+export async function generateFreeChatButtons(
+  this: { client: OpenAI },
+  userText: string,
+  agent: AgentConfig,
+  opts?: { 
+    channelType?: ChannelType;
+    sessionId?: string;
+  }
+): Promise<WarmupButtonsResponse | null> {
+  const channel: ChannelType = opts?.channelType || "whatsapp";
+  const schema = createButtonsSchema(channel);
+  const c = getConstraintsForChannel(channel);
+
+  // 🔍 DEBUG: Log sessionId recebido
+  console.log("🎯 FREE CHAT BUTTONS - SessionId recebido:", opts?.sessionId);
+
+  // ✅ HIERARQUIA MODERNA: Instructions para identidade + 1 developer para regras específicas
+  const taskRules = `
+# OBJETIVO
+Gerar uma resposta curta (response_text) e 2–3 botões objetivos para avançar a conversa.
+
+# REGRAS ESPECÍFICAS
+- Linguagem neutra e profissional
+`;
+
+  const user = `Cliente: "${userText}"`;
+
+  return withDeadlineAbort(async (signal) => {
+    try {
+      const caps = getModelCaps(agent.model);
+      
+      // 🔑 PADRÃO DA BÍBLIA: Detectar se precisa enviar prompts developer
+      const hasSessionId = !!opts?.sessionId;
+      
+      // Primeira chamada ensureSession para obter previous_response_id e flag de nova sessão
+      let finalPreviousResponseId;
+      let isNewSession = true; // Default para nova sessão
+      if (hasSessionId) {
+        try {
+          const sessionResult = await ensureSession({ sessionId: opts.sessionId!, agent, channel }, signal);
+          finalPreviousResponseId = sessionResult.responseId;
+          isNewSession = sessionResult.isNewSession;
+        } catch (error) {
+          console.warn("[Session] Erro ao obter sessão:", error);
+          isNewSession = true; // Em caso de erro, tratar como nova sessão
+        }
+      }
+      
+      const statelessInit = isNewSession; // Se é nova sessão, precisa enviar developer prompts
+      
+      // 🧠 MENSAGENS DINÂMICAS: developer prompts apenas na primeira vez
+      const messages = [
+        ...(statelessInit
+          ? [
+              { role: "developer" as const, content: createMasterPrompt(channel) },
+              { role: "developer" as const, content: taskRules },
+            ]
+          : []),
+        { role: "user" as const, content: user },
+      ];
+
+      const result = await structuredOrJson<WarmupButtonsResponse>({
+        client: this.client,
+        model: agent.model,
+        messages,
+        instructions: agent.instructions || "Você é um UX writer especializado em criar botões de navegação. Siga o schema estritamente e gere botões objetivos.",
+        max_output_tokens: agent.maxOutputTokens || 256,
+        verbosity: caps.reasoning && isGPT5(agent.model) ? normVerb(agent.verbosity) : undefined,
+        reasoning: caps.reasoning ? { effort: normEffort(agent.reasoningEffort) } : undefined,
+        agent,
+        schema,
+        schemaName: "FreeChatButtons",
+        sessionId: opts?.sessionId,
+        channel,
+        signal,
+      });
+
+      return result.parsed;
+    } catch (error) {
+      console.error("Erro ao gerar chat livre com botões:", error);
+      return null;
+    }
+  }, agent.warmupDeadlineMs || 15000);
+}
+
+/**
+ * Generates warmup buttons with contextual introduction for uncertain intents
+ * Used in SOFT band processing (0.65-0.79 similarity score)
+ */
+export async function generateWarmupButtons(
+  this: { client: OpenAI },
+  userText: string,
+  candidates: IntentCandidate[],
+  agent: AgentConfig,
+  opts?: { 
+    channelType?: ChannelType;
+    sessionId?: string;
+  }
+): Promise<WarmupButtonsResponse | null> {
+  if (!candidates.length) return null;
+
+  // 🔍 DEBUG: Log sessionId recebido
+  console.log("🎯 GENERATE WARMUP BUTTONS - SessionId recebido:", opts?.sessionId);
+
+  const candidatesText = candidates
+    .map((c, i) => `${i + 1}. @${c.slug}: ${c.desc || c.name || c.slug}`)
+    .join("\n");
+
+  const channel: ChannelType = opts?.channelType || "whatsapp";
+  const schema = createButtonsSchema(channel);
+  const c = getConstraintsForChannel(channel);
+
+  // ✅ HIERARQUIA MODERNA: Instructions para identidade + 1 developer para regras específicas
+  const taskRules = `
+# OBJETIVO
+Gerar uma pequena introdução e botões para desambiguar a intenção do usuário.
+
+# REGRAS ESPECÍFICAS
+- Linguagem neutra e profissional
+`;
+
+  const user = `Intenções candidatas:\n${candidatesText}\n\nMensagem do usuário: "${userText}"`;
+
+  return withDeadlineAbort(async (signal) => {
+    try {
+      const caps = getModelCaps(agent.model);
+      
+      // 🔑 PADRÃO DA BÍBLIA: Detectar se precisa enviar prompts developer
+      const hasSessionId = !!opts?.sessionId;
+      
+      // Primeira chamada ensureSession para obter previous_response_id e flag de nova sessão
+      let finalPreviousResponseId;
+      let isNewSession = true; // Default para nova sessão
+      if (hasSessionId) {
+        try {
+          const sessionResult = await ensureSession({ sessionId: opts.sessionId!, agent, channel }, signal);
+          finalPreviousResponseId = sessionResult.responseId;
+          isNewSession = sessionResult.isNewSession;
+        } catch (error) {
+          console.warn("[Session] Erro ao obter sessão:", error);
+          isNewSession = true; // Em caso de erro, tratar como nova sessão
+        }
+      }
+      
+      const statelessInit = isNewSession; // Se é nova sessão, precisa enviar developer prompts
+      
+      // 🧠 MENSAGENS DINÂMICAS: developer prompts apenas na primeira vez
+      const messages = [
+        ...(statelessInit
+          ? [
+              { role: "developer" as const, content: createMasterPrompt(channel) },
+              { role: "developer" as const, content: taskRules },
+            ]
+          : []),
+        { role: "user" as const, content: user },
+      ];
+
+      const result = await structuredOrJson<WarmupButtonsResponse>({
+        client: this.client,
+        model: agent.model,
+        messages,
+        instructions: agent.instructions || "Você é um UX writer especializado em criar botões de navegação. Siga o schema estritamente e gere botões objetivos.",
+        max_output_tokens: agent.maxOutputTokens || 256,
+        verbosity: caps.reasoning && isGPT5(agent.model) ? normVerb(agent.verbosity) : undefined,
+        reasoning: caps.reasoning ? { effort: normEffort(agent.reasoningEffort) } : undefined,
+        agent,
+        schema,
+        schemaName: "WarmupButtons",
+        sessionId: opts?.sessionId,
+        channel,
+        signal,
+      });
+
+      return result.parsed;
+    } catch (error) {
+      console.error("Erro ao gerar botões de aquecimento:", error);
+      return null;
+    }
+  }, agent.softDeadlineMs || 15000);
+}
+
+/**
+ * Router LLM for embedipreview=false mode
+ * Decides between intent classification and open chat
+ */
+export async function routerLLM(
+  this: { client: OpenAI },
+  userText: string,
+  agent: AgentConfig,
+  opts?: { 
+    channelType?: ChannelType;
+    sessionId?: string;
+  }
+): Promise<RouterDecision | null> {
+  const channel: ChannelType = opts?.channelType || "whatsapp";
+  const schema = createRouterSchema(channel);
+  const c = getConstraintsForChannel(channel);
+
+  // 🔍 DEBUG: Log sessionId recebido
+  console.log("🎯 ROUTER LLM - SessionId recebido:", opts?.sessionId);
+
+  // ✅ HIERARQUIA MODERNA: Instructions para identidade + 1 developer para regras específicas
+  const taskRules = `
+# OBJETIVO
+Como ${agent.instructions ? 'assistente especializado' : 'roteador inteligente'}, decida entre roteamento para intenção específica ou resposta conversacional.
+
+# REGRAS DE ROTEAMENTO
+- mode='intent' quando houver uma intenção clara e específica que pode ser mapeada
+  * Para modo 'intent': inclua intent_payload no formato @slug
+  * response_text deve ser uma resposta útil relacionada à intenção
+  * buttons obrigatório com 2-3 opções relacionadas à intenção
+
+- mode='chat' para conversa geral ou quando não há intenção específica mapeável
+  * Para modo 'chat': response_text deve ser uma resposta conversacional útil
+  * buttons obrigatório com 2-3 opções para continuar a conversa
+
+# REGRAS ESPECÍFICAS
+- Mantenha a identidade e tom definidos nas instruções principais
+`;
+
+  const user = `Mensagem do usuário: "${userText}"`;
+
+  return withDeadlineAbort(async (signal) => {
+    try {
+      const caps = getModelCaps(agent.model);
+      
+      // 🔑 PADRÃO DA BÍBLIA: Detectar se precisa enviar prompts developer
+      const hasSessionId = !!opts?.sessionId;
+      
+      // Primeira chamada ensureSession para obter previous_response_id e flag de nova sessão
+      let finalPreviousResponseId;
+      let isNewSession = true; // Default para nova sessão
+      if (hasSessionId) {
+        try {
+          const sessionResult = await ensureSession({ sessionId: opts.sessionId!, agent, channel }, signal);
+          finalPreviousResponseId = sessionResult.responseId;
+          isNewSession = sessionResult.isNewSession;
+        } catch (error) {
+          console.warn("[Session] Erro ao obter sessão:", error);
+          isNewSession = true; // Em caso de erro, tratar como nova sessão
+        }
+      }
+      
+      const statelessInit = isNewSession; // Se é nova sessão, precisa enviar developer prompts
+      
+      // 🧠 MENSAGENS DINÂMICAS: developer prompts apenas na primeira vez
+      const messages = [
+        ...(statelessInit
+          ? [
+              { role: "developer" as const, content: createMasterPrompt(channel) },
+              { role: "developer" as const, content: taskRules },
+            ]
+          : []),
+        { role: "user" as const, content: user },
+      ];
+
+      const result = await structuredOrJson<RouterDecision>({
+        client: this.client,
+        model: agent.model,
+        messages,
+        instructions: agent.instructions || "Você é um roteador inteligente. Siga o schema estritamente.",
+        max_output_tokens: agent.maxOutputTokens || 512,
+        verbosity: caps.reasoning && isGPT5(agent.model) ? normVerb(agent.verbosity) : undefined,
+        reasoning: caps.reasoning ? { effort: normEffort(agent.reasoningEffort) } : undefined,
+        agent,
+        schema,
+        schemaName: "RouterDecision",
+        sessionId: opts?.sessionId,
+        channel,
+        signal,
+      });
+
+      // Validate the response structure
+      if (!result.parsed.mode || !["intent", "chat"].includes(result.parsed.mode)) {
+        return null;
+      }
+
+      return result.parsed;
+    } catch (error) {
+      console.error("Erro no Router LLM:", error);
+      return null;
+    }
+  }, agent.hardDeadlineMs || 15000);
+}
