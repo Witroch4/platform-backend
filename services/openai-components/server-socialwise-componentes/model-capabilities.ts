@@ -1,6 +1,6 @@
 // services/openai-components/model-capabilities.ts
 import { zodTextFormat } from "openai/helpers/zod";
-import { AgentConfig } from "./types";
+import { AgentConfig } from "../types";
 
 export interface ModelCapabilities {
   reasoning: boolean;    // Supports reasoning.effort

@@ -1,6 +1,6 @@
 // services/openai-components/channel-constraints.ts
 import { z } from "zod";
-import { ChannelType } from "./types";
+import { ChannelType } from "../types";
 
 export interface ChannelConstraints {
   bodyMax: number;

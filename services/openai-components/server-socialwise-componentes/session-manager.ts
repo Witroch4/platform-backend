@@ -1,7 +1,7 @@
 // services/openai-components/session-manager.ts
 import OpenAI from "openai";
 import { getRedisInstance } from "@/lib/connections";
-import { AgentConfig, ChannelType } from "./types";
+import { AgentConfig, ChannelType } from "../types";
 
 // Pequeno hash determinístico (FNV-1a) para derivar a sessão de (modelo+capitão)
 function hashShort(s: string): string {

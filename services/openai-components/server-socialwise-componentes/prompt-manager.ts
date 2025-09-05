@@ -1,5 +1,5 @@
 // services/openai-components/prompt-manager.ts
-import { ChannelType } from "./types";
+import { ChannelType } from "../types";
 import { getConstraintsForChannel } from "./channel-constraints";
 
 // ==== MASTER_PROMPT - Lógica de negócio imutável ====

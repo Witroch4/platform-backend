@@ -1,7 +1,7 @@
 // services/openai-components/structured-outputs.ts
 import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
-import { AgentConfig, ChannelType } from "./types";
+import { AgentConfig, ChannelType } from "../types";
 import { ensureSession, updateSessionPointer } from "./session-manager";
 import { createMasterPrompt } from "./prompt-manager";
 import { getModelCaps, isGPT5, resolveSamplingPrefs } from "./model-capabilities";

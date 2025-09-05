@@ -1,8 +1,8 @@
 // services/openai-components/ai-functions.ts
 import OpenAI from "openai";
 import { z } from "zod";
-import { IntentCandidate, AgentConfig, WarmupButtonsResponse, RouterDecision, ChannelType } from "./types";
-import { withDeadlineAbort } from "./utils";
+import { IntentCandidate, AgentConfig, WarmupButtonsResponse, RouterDecision, ChannelType } from "../types";
+import { withDeadlineAbort } from "../utils";
 import { createButtonsSchema, createRouterSchema } from "./channel-constraints";
 import { buildMessages } from "./prompt-manager";
 import { structuredOrJson } from "./structured-outputs";

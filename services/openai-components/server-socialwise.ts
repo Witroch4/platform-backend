@@ -7,15 +7,15 @@ export {
   generateFreeChatButtons,
   generateWarmupButtons,
   routerLLM
-} from "./ai-functions";
+} from "./server-socialwise-componentes/ai-functions";
 
 // Re-exportar utilitários dos módulos filhos para compatibilidade
-export { structuredOrJson } from "./structured-outputs";
-export { ensureSession } from "./session-manager";
-export { buildMessages, createMasterPrompt } from "./prompt-manager";
-export { getModelCaps, isGPT5, normEffort, normVerb } from "./model-capabilities";
+export { structuredOrJson } from "./server-socialwise-componentes/structured-outputs";
+export { ensureSession } from "./server-socialwise-componentes/session-manager";
+export { buildMessages, createMasterPrompt } from "./server-socialwise-componentes/prompt-manager";
+export { getModelCaps, isGPT5, normEffort, normVerb } from "./server-socialwise-componentes/model-capabilities";
 export { 
   getConstraintsForChannel,
   createButtonsSchema,
   createRouterSchema 
-} from "./channel-constraints";
+} from "./server-socialwise-componentes/channel-constraints";
