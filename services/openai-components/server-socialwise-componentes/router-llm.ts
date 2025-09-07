@@ -65,21 +65,24 @@ export async function routerLLM(
       // Build INTENT_HINTS block (score ≥ 0.35 filtered upstream)
       const hints = opts?.intentHints || [];
       let finalInstructions = agent.instructions || "Você é um roteador inteligente. Siga o schema estritamente.";
-      if (hints.length > 0) {
-        const lines = hints
-          .slice(0, 5)
-          .map((h) => {
-            const sc = typeof h.score === "number" ? Number(h.score!.toFixed(3)) : undefined;
-            const nm = h.name ? ` (${h.name})` : "";
-            const desc = (h.desc || "").replace(/\s+/g, " ").trim().slice(0, 140);
-            const aliases = Array.isArray((h as any).aliases) && (h as any).aliases.length
-              ? ` aliases: ${((h as any).aliases as string[]).slice(0, 5).join(", ")}`
-              : "";
-            return `- @${h.slug}${nm}${sc !== undefined ? ` score:${sc}` : ""}${desc ? `\n  desc: ${desc}` : ""}${aliases ? `\n  ${aliases}` : ""}`;
-          })
-          .join("\n");
-        finalInstructions += `\n\n# INTENT_HINTS (score ≥ 0.35)\nFornecidas pelo sistema. Use-as para decidir o roteamento.\n${lines}`;
-      }
+  if (hints.length > 0) {
+    const lines = hints
+      .slice(0, 5)
+      .map((h) => {
+        const sc = typeof h.score === "number" ? Number(h.score!.toFixed(3)) : undefined;
+        const nm = h.name ? ` (${h.name})` : "";
+        const desc = (h.desc || "").replace(/\s+/g, " ").trim().slice(0, 140);
+        const aliases = Array.isArray((h as any).aliases) && (h as any).aliases.length
+          ? ` aliases: ${((h as any).aliases as string[]).slice(0, 5).join(", ")}`
+          : "";
+        return `- @${h.slug}${nm}${sc !== undefined ? ` score:${sc}` : ""}${desc ? `\n  desc: ${desc}` : ""}${aliases ? `\n  ${aliases}` : ""}`;
+      })
+      .join("\n");
+    finalInstructions += `\n\n# INTENT_HINTS (score ≥ 0.35)\nFornecidas pelo sistema. Use-as para decidir o roteamento.\n${lines}`;
+
+    // Reforço suave de políticas de uso de hints sem obrigar roteamento
+    finalInstructions += `\n\n# POLÍTICA DE ROTEAMENTO COM HINTS (não restritiva)\n- Avalie o ALINHAMENTO semântico entre a pergunta e cada hint.\n- Se existir UM hint claramente alinhado, é PREFERÍVEL usar mode='intent' com o slug EXATO do hint (incluindo @).\n- Se houver AMBIGUIDADE ou múltiplos hints plausíveis, escolha mode='chat' e DESAMBIGUE com 2–3 botões usando EXCLUSIVAMENTE slugs dos INTENT_HINTS; você pode incluir @falar_atendente quando apropriado.\n- Caso opte por mode='intent', NUNCA invente novos slugs: escolha somente entre os fornecidos em INTENT_HINTS; se nenhum servir, use mode='chat'.\n- Não afirme dados operacionais (ex.: horário exato). Prefira linguagem neutra e ofereça botões como “Ver horário”.`;
+  }
 
       const result = await structuredOrJson<RouterDecision>({
         client: this.client,
