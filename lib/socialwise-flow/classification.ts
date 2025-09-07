@@ -84,6 +84,7 @@ interface ScoredIntent {
   score: number;
   threshold: number;
   meta?: Record<string, any>;
+  aliases?: string[];
 }
 
 // -----------------------------
@@ -115,6 +116,12 @@ function normalizeText(t: string) {
     .replace(/\s+/g, " ")
     .trim();
 }
+
+/**
+ * Extract base description and alias lines from a description following the convention:
+ * <desc>\n---\nALIASES:\n<alias1>\n<alias2>\n...
+ */
+// splitDescAndAliases and filtering were removed per request; keep raw description
 
 // -----------------------------
 // Embedding generation (HTTP direto, com timeout por chamada)
@@ -418,6 +425,7 @@ async function searchSimilarIntents(
 
       const centroid = pack.centroid;
       const aliases = pack.aliases || [];
+      const aliasTexts = (pack as any).aliasTexts as string[] | undefined;
 
       let base = cosineSimilarity(qVec, centroid);
       let aliasMax = -Infinity;
@@ -443,7 +451,8 @@ async function searchSimilarIntents(
           base,
           aliasMax: isFinite(aliasMax) ? aliasMax : undefined,
           aliasIdx: aliasIdx >= 0 ? aliasIdx : undefined,
-        }
+        },
+        aliases: Array.isArray(aliasTexts) ? aliasTexts : undefined,
       });
     }
 
@@ -467,6 +476,7 @@ async function searchSimilarIntents(
       desc: s.desc,
       score: s.score,
       threshold: s.threshold,
+      aliases: s.aliases,
     }));
 
     return { candidates, searchMs };

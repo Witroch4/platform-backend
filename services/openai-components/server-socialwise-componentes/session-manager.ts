@@ -81,10 +81,8 @@ export async function ensureSession(
     hasInstructions: !!params.agent.instructions
   });
 
-  // Monta chave única: sessionId + model + hash(instructions + channel)
-  const identity = `${params.agent.model}:${params.channel}:${params.agent.instructions || 'default'}`;
-  const identityHash = hashShort(identity);
-  const sessionKey = `session:${params.sessionId}:${identityHash}`;
+  // Chave única baseada apenas no sessionId do webhook
+  const sessionKey = `session:${params.sessionId}`;
   
   console.log("🔐 ENSURE SESSION - Chave da sessão:", sessionKey);
   
@@ -94,43 +92,9 @@ export async function ensureSession(
     return { responseId: existing, isNewSession: false };
   }
 
-  console.log("🔐 ENSURE SESSION - Criando nova sessão...");
-
-  const result = await withLock(sessionKey, async () => {
-    // Double-check após adquirir lock
-    const recheck = await getSessionPointer(sessionKey);
-    if (recheck) {
-      console.log("🔐 ENSURE SESSION - Sessão criada durante lock:", recheck);
-      return { responseId: recheck, isNewSession: false };
-    }
-
-    // Cria sessão inicial com OpenAI
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    
-    try {
-      const init = await client.responses.create(
-        {
-          model: params.agent.model,
-          input: [
-            { role: "developer", content: createMasterPrompt(params.channel) },
-            { role: "developer", content: params.agent.instructions || "Você é um assistente especializado." },
-          ],
-          store: true,
-        },
-        { signal } as any
-      );
-
-      const responseId = init.id;
-      await setSessionPointer(sessionKey, responseId);
-      console.log(`🔐 ENSURE SESSION - Criada nova sessão: ${sessionKey} -> ${responseId}`);
-      return { responseId, isNewSession: true };
-    } catch (error) {
-      console.error(`🔐 ENSURE SESSION - Erro ao criar sessão ${sessionKey}:`, error);
-      return { responseId: undefined, isNewSession: true }; // Erro = tratado como nova sessão
-    }
-  });
-
-  return result;
+  console.log("🚀 SINGLE-CALL OPTIMIZATION - Nova sessão, retornando undefined para single-call");
+  // Para otimização single-call: não criar sessão prévia, deixar que seja criada na primeira chamada real
+  return { responseId: undefined, isNewSession: true };
 }
 
 export async function updateSessionPointer(
@@ -140,9 +104,15 @@ export async function updateSessionPointer(
   instructions: string,
   newResponseId: string
 ): Promise<void> {
-  const identity = `${model}:${channel}:${instructions || 'default'}`;
-  const identityHash = hashShort(identity);
-  const sessionKey = `session:${sessionId}:${identityHash}`;
-  
+  const sessionKey = `session:${sessionId}`;
   await setSessionPointer(sessionKey, newResponseId);
 }
+
+// Verifica se já há ponteiro de sessão para esse sessionId
+export async function hasSessionPointer(sessionId: string): Promise<boolean> {
+  const sessionKey = `session:${sessionId}`;
+  const existing = await getSessionPointer(sessionKey);
+  return !!existing;
+}
+
+

@@ -96,7 +96,11 @@ export class ServerOpenAIService implements IOpenAIService {
   generateShortTitlesBatch: (intents: IntentCandidate[], agent: AgentConfig) => Promise<string[] | null>;
   generateWarmupButtons: (userText: string, candidates: IntentCandidate[], agent: AgentConfig, opts?: { channelType?: import("./types").ChannelType }) => Promise<WarmupButtonsResponse | null>;
   generateFreeChatButtons: (userText: string, agent: AgentConfig, opts?: { channelType?: import("./types").ChannelType }) => Promise<WarmupButtonsResponse | null>;
-  routerLLM: (userText: string, agent: AgentConfig, opts?: { channelType?: import("./types").ChannelType }) => Promise<RouterDecision | null>;
+  routerLLM: (
+    userText: string,
+    agent: AgentConfig,
+    opts?: { channelType?: import("./types").ChannelType; sessionId?: string; intentHints?: import("./types").IntentCandidate[] }
+  ) => Promise<RouterDecision | null>;
 
   async checkApiConnection() {
     try {

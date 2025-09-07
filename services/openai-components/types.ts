@@ -53,6 +53,9 @@ export interface IntentCandidate {
   desc?: string;
   score?: number;
   threshold?: number;
+  // optional metadata for routing hints
+  aliases?: string[];
+  aliasMatched?: string;
 }
 
 export interface WarmupButtonsResponse {
@@ -189,6 +192,7 @@ export interface IOpenAIService {
     opts?: { 
       channelType?: ChannelType;
       sessionId?: string;
+      intentHints?: IntentCandidate[];
     }
   ): Promise<RouterDecision | null>;
 

@@ -215,7 +215,8 @@ async function buildEmbeddingsPackage(name: string, description: string | null) 
       aliases: [] as number[][], 
       model: 'text-embedding-3-small', 
       seedsCount: 0, 
-      seedsText: [] as string[] 
+      seedsText: [] as string[],
+      aliasesText: aliases,
     };
   }
 
@@ -233,6 +234,7 @@ async function buildEmbeddingsPackage(name: string, description: string | null) 
       model: 'text-embedding-3-small',
       seedsCount: 0,
       seedsText: seedsFinal,
+      aliasesText: aliases,
     };
   }
 
@@ -259,7 +261,7 @@ async function buildEmbeddingsPackage(name: string, description: string | null) 
     dims: centroid.length,
   });
 
-  return { centroid, aliases: vecs, model: 'text-embedding-3-small', seedsCount: seedsFinal.length, seedsText: seedsFinal };
+  return { centroid, aliases: vecs, model: 'text-embedding-3-small', seedsCount: seedsFinal.length, seedsText: seedsFinal, aliasesText: aliases };
 }
 
 /**

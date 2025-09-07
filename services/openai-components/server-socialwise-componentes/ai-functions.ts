@@ -103,7 +103,7 @@ export async function generateFreeChatButtons(
       let isNewSession = true; // Default para nova sessão
       if (hasSessionId) {
         try {
-          const sessionResult = await ensureSession({ sessionId: opts.sessionId!, agent, channel }, createMasterPrompt, signal);
+          const sessionResult = await ensureSession({ sessionId: (opts!.sessionId as string), agent, channel }, createMasterPrompt, signal);
           isNewSession = sessionResult.isNewSession;
         } catch (error) {
           console.warn("[Session] Erro ao obter sessão:", error);
@@ -115,7 +115,7 @@ export async function generateFreeChatButtons(
         { 
           channel, 
           taskType: "FREE_CHAT", 
-          statelessInit: isNewSession 
+          statelessInit: false 
         },
         user
       );
@@ -204,7 +204,7 @@ export async function generateWarmupButtons(
       let isNewSession = true; // Default para nova sessão
       if (hasSessionId) {
         try {
-          const sessionResult = await ensureSession({ sessionId: opts.sessionId!, agent, channel }, createMasterPrompt, signal);
+          const sessionResult = await ensureSession({ sessionId: (opts!.sessionId as string), agent, channel }, createMasterPrompt, signal);
           isNewSession = sessionResult.isNewSession;
         } catch (error) {
           console.warn("[Session] Erro ao obter sessão:", error);
@@ -216,7 +216,7 @@ export async function generateWarmupButtons(
         { 
           channel, 
           taskType: "WARMUP_BUTTONS", 
-          statelessInit: isNewSession 
+          statelessInit: false 
         },
         user
       );
@@ -256,6 +256,7 @@ export async function routerLLM(
   opts?: { 
     channelType?: ChannelType;
     sessionId?: string;
+    intentHints?: IntentCandidate[];
   }
 ): Promise<RouterDecision | null> {
   const channel: ChannelType = opts?.channelType || "whatsapp";
@@ -277,7 +278,7 @@ export async function routerLLM(
       let isNewSession = true; // Default para nova sessão
       if (hasSessionId) {
         try {
-          const sessionResult = await ensureSession({ sessionId: opts.sessionId!, agent, channel }, createMasterPrompt, signal);
+          const sessionResult = await ensureSession({ sessionId: (opts!.sessionId as string), agent, channel }, createMasterPrompt, signal);
           isNewSession = sessionResult.isNewSession;
         } catch (error) {
           console.warn("[Session] Erro ao obter sessão:", error);
@@ -290,7 +291,7 @@ export async function routerLLM(
           channel, 
           taskType: "router", 
           hasInstructions: !!agent.instructions,
-          statelessInit: isNewSession 
+          statelessInit: false 
         },
         user
       );
@@ -323,3 +324,4 @@ export async function routerLLM(
     }
   }, agent.hardDeadlineMs || 15000);
 }
+

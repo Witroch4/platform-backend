@@ -511,7 +511,11 @@ export class ClientOpenAIService implements IOpenAIService {
   async generateFreeChatButtons(): Promise<WarmupButtonsResponse | null> {
     throw new Error("generateFreeChatButtons não disponível no cliente");
   }
-  async routerLLM(): Promise<RouterDecision | null> {
+  async routerLLM(
+    _userText: string,
+    _agent: AgentConfig,
+    _opts?: { channelType?: import("./types").ChannelType; sessionId?: string; intentHints?: IntentCandidate[] }
+  ): Promise<RouterDecision | null> {
     throw new Error("routerLLM não disponível no cliente");
   }
   async withDeadlineAbort<T>(

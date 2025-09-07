@@ -16,6 +16,14 @@ import {
 } from './metrics';
 import { apm, createAPMAlert, AlertLevel } from '@/lib/monitoring/application-performance-monitor';
 
+// Configuration flags
+const MONITORING_CONFIG = {
+  // Health checks desabilitados para economizar custos da OpenAI
+  // Para reabilitar, altere para true
+  ENABLE_HEALTH_CHECKS: false,
+  ENABLE_ALERT_CHECKS: false
+} as const;
+
 const dashboardLogger = createLogger('SocialWise-Dashboard');
 
 // SLA Thresholds
@@ -134,25 +142,33 @@ export class SocialWiseMonitoringDashboard {
    * Start periodic monitoring tasks
    */
   private startPeriodicTasks(): void {
-    // Health checks - Reabilitado com timeout de 5 minutos
-    this.healthCheckInterval = setInterval(() => {
-      this.performHealthChecks().catch(error => {
-        dashboardLogger.error('Health check failed', { 
-          error: error instanceof Error ? error.message : String(error) 
+    // Health checks - DESABILITADO para economizar custos da OpenAI
+    if (MONITORING_CONFIG.ENABLE_HEALTH_CHECKS) {
+      this.healthCheckInterval = setInterval(() => {
+        this.performHealthChecks().catch(error => {
+          dashboardLogger.error('Health check failed', { 
+            error: error instanceof Error ? error.message : String(error) 
+          });
         });
-      });
-    }, this.HEALTH_CHECK_INTERVAL_MS);
+      }, this.HEALTH_CHECK_INTERVAL_MS);
+      dashboardLogger.info('Health checks enabled (5-minute intervals)');
+    } else {
+      dashboardLogger.info('Health checks DISABLED to save OpenAI costs');
+    }
 
-    // Alert checks - Reabilitado com intervalo de 5 minutos
-    this.alertCheckInterval = setInterval(() => {
-      this.checkSLAViolations().catch(error => {
-        dashboardLogger.error('SLA check failed', { 
-          error: error instanceof Error ? error.message : String(error) 
+    // Alert checks - DESABILITADO para economizar custos da OpenAI
+    if (MONITORING_CONFIG.ENABLE_ALERT_CHECKS) {
+      this.alertCheckInterval = setInterval(() => {
+        this.checkSLAViolations().catch(error => {
+          dashboardLogger.error('SLA check failed', { 
+            error: error instanceof Error ? error.message : String(error) 
+          });
         });
-      });
-    }, this.ALERT_CHECK_INTERVAL_MS);
-
-    dashboardLogger.info('SocialWise monitoring tasks started (5-minute intervals)');
+      }, this.ALERT_CHECK_INTERVAL_MS);
+      dashboardLogger.info('Alert checks enabled (5-minute intervals)');
+    } else {
+      dashboardLogger.info('Alert checks DISABLED to save OpenAI costs');
+    }
   }
 
   /**

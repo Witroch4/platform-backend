@@ -1,4 +1,7 @@
 {
     "cSpell.enabled": false,
-    "typescript.autoClosingTags": false
+    "typescript.autoClosingTags": false,
+    "chatgpt.config": {
+        
+    }
 }

@@ -7,7 +7,7 @@
 import { createLogger } from '@/lib/utils/logger';
 import { getPrismaInstance } from '@/lib/connections';
 import { openaiService } from '@/services/openai';
-import type { ChannelType } from '@/services/openai-components/types';
+import type { ChannelType, IntentCandidate } from '@/services/openai-components/types';
 import { classifyIntent, ClassificationResult } from './classification';
 import { buildChannelResponse, buildDefaultLegalTopics, buildFallbackResponse, logChannelResponse, ChannelResponse } from './channel-formatting';
 import { collectPerformanceMetrics, createPerformanceMetrics } from './metrics';
@@ -510,7 +510,8 @@ async function processSoftBand(
  * Full LLM routing with conversational freedom and concurrency control
  */
 async function processRouterBand(
-  context: ProcessorContext
+  context: ProcessorContext,
+  intentHints?: IntentCandidate[]
 ): Promise<{ response: ChannelResponse; llmWarmupMs?: number }> {
   const startTime = Date.now();
   const concurrencyManager = getConcurrencyManager();
@@ -537,11 +538,22 @@ async function processRouterBand(
     });
 
     // Use Router LLM to decide between intent and chat with concurrency control
+    // Prepare filtered intent hints (score >= 0.35)
+    const filteredHints = (intentHints || []).filter(c => typeof c.score === 'number' && c.score! >= 0.35);
+    
+    // Log how many hints we are sending to Router
+    processorLogger.info('Router LLM invoking with hints', {
+      hints_count: filteredHints.length,
+      min_score: 0.35,
+      traceId: context.traceId
+    });
+
     const routerResult = await concurrencyManager.executeLlmOperation(
       context.inboxId,
       () => openaiService.routerLLM(context.userText, agentConfig, { 
         channelType: normalizeChannelType(context.channelType),
-        sessionId: context.sessionId
+        sessionId: context.sessionId,
+        intentHints: filteredHints
       }),
       {
         priority: 'high', // Router decisions are high priority
@@ -562,6 +574,34 @@ async function processRouterBand(
         buttons_count: routerResult.buttons?.length || 0,
         traceId: context.traceId
       });
+      
+      // Fallback: se Router retornou mode='intent' sem intent_payload, usar top-K hints
+      if (routerResult.mode === 'intent' && !routerResult.intent_payload) {
+        const candidates = (intentHints || []).filter(c => typeof c.score === 'number');
+        candidates.sort((a, b) => (b.score! - a.score!));
+        const top = candidates[0];
+        const topScore = top?.score ?? 0;
+        const threshold = typeof top?.threshold === 'number' ? top.threshold! : 0.5;
+
+        if (top && topScore >= threshold) {
+          routerResult.intent_payload = `@${top.slug}`;
+          processorLogger.warn('ROUTER fallback applied: intent_payload filled from hints', {
+            filled_payload: routerResult.intent_payload,
+            top_score: Number(topScore.toFixed(3)),
+            threshold,
+            traceId: context.traceId
+          });
+        } else {
+          // Degrada para chat por baixa confiança
+          processorLogger.warn('ROUTER fallback applied: degraded to chat (low confidence, no valid intent)', {
+            top_slug: top?.slug,
+            top_score: topScore || null,
+            threshold,
+            traceId: context.traceId
+          });
+          routerResult.mode = 'chat';
+        }
+      }
       
       if (routerResult.mode === 'intent' && routerResult.intent_payload) {
         // Try to map the intent (only for WhatsApp)
@@ -1126,8 +1166,34 @@ export async function processSocialWiseFlow(
         traceId: context.traceId
       });
       
-      // Vai direto para Router LLM sem passar por embedding
-      const routerResult = await processRouterBand(context);
+      // Mesmo no bypass, obtém intent hints para melhor contexto no Router LLM
+      let intentHints: IntentCandidate[] = [];
+      try {
+        const quickClassification = await classifyIntent(
+          context.userText, 
+          userId, 
+          agentConfig, 
+          true, 
+          {
+            channelType: context.channelType,
+            inboxId: context.inboxId,
+            traceId: context.traceId
+          }
+        );
+        intentHints = quickClassification.candidates || [];
+        processorLogger.info('Bypass: obtained intent hints for Router LLM', {
+          hintsCount: intentHints.length,
+          traceId: context.traceId
+        });
+      } catch (error) {
+        processorLogger.warn('Bypass: failed to obtain intent hints, proceeding without', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          traceId: context.traceId
+        });
+      }
+      
+      // Vai para Router LLM com intent hints quando disponíveis
+      const routerResult = await processRouterBand(context, intentHints);
       response = routerResult.response;
       llmWarmupMs = routerResult.llmWarmupMs;
       
@@ -1167,7 +1233,7 @@ export async function processSocialWiseFlow(
           break;
         case 'ROUTER':
           // Process ROUTER band within embedding-first mode (degraded cases)
-          const routerResult = await processRouterBand(context);
+          const routerResult = await processRouterBand(context, classification.candidates);
           response = routerResult.response;
           llmWarmupMs = routerResult.llmWarmupMs;
           break;
@@ -1176,8 +1242,34 @@ export async function processSocialWiseFlow(
           response = buildFallbackResponse(context.channelType, context.userText);
       }
     } else {
-      // Router LLM mode
-      const routerResult = await processRouterBand(context);
+      // Router LLM mode - obtém intent hints primeiro para melhor contexto
+      let intentHints: IntentCandidate[] = [];
+      try {
+        const quickClassification = await classifyIntent(
+          context.userText, 
+          userId, 
+          agentConfig, 
+          true, 
+          {
+            channelType: context.channelType,
+            inboxId: context.inboxId,
+            traceId: context.traceId
+          }
+        );
+        intentHints = quickClassification.candidates || [];
+        processorLogger.info('Router LLM mode: obtained intent hints', {
+          hintsCount: intentHints.length,
+          traceId: context.traceId
+        });
+      } catch (error) {
+        processorLogger.warn('Router LLM mode: failed to obtain intent hints, proceeding without', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          traceId: context.traceId
+        });
+      }
+      
+      // Router LLM com intent hints quando disponíveis
+      const routerResult = await processRouterBand(context, intentHints);
       response = routerResult.response;
       llmWarmupMs = routerResult.llmWarmupMs;
       

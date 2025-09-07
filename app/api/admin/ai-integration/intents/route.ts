@@ -1,20 +1,20 @@
-/**
+﻿/**
  * app/api/admin/ai-integration/intents/route.ts
  *
- * API de Gerenciamento de Intenções para Integração com IA
+ * API de Gerenciamento de IntenÃ§Ãµes para IntegraÃ§Ã£o com IA
  *
  * Ciclo completo:
- * - ✅ Criação de intenções com geração automática de embeddings
- * - ✅ Atualização com regeneração de embeddings quando descrição mudar
- * - ✅ Exclusão com limpeza de cache
- * - ✅ Listagem (GET) com filtros básicos
- * - ✅ OpenAI Embeddings (text-embedding-3-small, 1536d)
- * - ✅ Cache: pacote (centroide + aliases) salvo no Redis
- * - ✅ Fallback: funciona sem OPENAI_API_KEY (sem embeddings)
+ * - âœ… CriaÃ§Ã£o de intenÃ§Ãµes com geraÃ§Ã£o automÃ¡tica de embeddings
+ * - âœ… AtualizaÃ§Ã£o com regeneraÃ§Ã£o de embeddings quando descriÃ§Ã£o mudar
+ * - âœ… ExclusÃ£o com limpeza de cache
+ * - âœ… Listagem (GET) com filtros bÃ¡sicos
+ * - âœ… OpenAI Embeddings (text-embedding-3-small, 1536d)
+ * - âœ… Cache: pacote (centroide + aliases) salvo no Redis
+ * - âœ… Fallback: funciona sem OPENAI_API_KEY (sem embeddings)
  *
- * Convenção de descrição com aliases (opcional):
+ * ConvenÃ§Ã£o de descriÃ§Ã£o com aliases (opcional):
  *
- *  Descrição livre...
+ *  DescriÃ§Ã£o livre...
  *
  *  ---
  *  ALIASES:
@@ -23,7 +23,7 @@
  *  impugnar gabarito oab fgv
  *  ...
  *
- * Observação: a consulta (similaridade) deve ler o pacote do Redis:
+ * ObservaÃ§Ã£o: a consulta (similaridade) deve ler o pacote do Redis:
  *   HGETALL ai:intent:{id}:emb  => { model, centroid, aliases, updatedAt }
  * e usar score = max(cos(q, centroid), ...cos(q, alias_i)).
  */
@@ -93,10 +93,10 @@ function avg(vs: number[][]) {
 }
 
 /**
- * Extrai a descrição base e a lista de aliases (um por linha) de um texto
- * com a convenção:
+ * Extrai a descriÃ§Ã£o base e a lista de aliases (um por linha) de um texto
+ * com a convenÃ§Ã£o:
  *
- *  <descrição>
+ *  <descriÃ§Ã£o>
  *  ---
  *  ALIASES:
  *  alias 1
@@ -124,7 +124,7 @@ function extractDescAndAliases(raw: string) {
  * - Normaliza textos
  * - Gera embeddings em lote (1 chamada OpenAI)
  * - L2-normaliza e calcula centroide
- * - Se não houver aliases, inclui alguns curtos automáticos
+ * - Se nÃ£o houver aliases, inclui alguns curtos automÃ¡ticos
  */
 async function buildEmbeddingsPackage(name: string, description: string | null) {
   const { base, aliases } = extractDescAndAliases(description || '');
@@ -138,16 +138,10 @@ async function buildEmbeddingsPackage(name: string, description: string | null) 
     if (n && !seeds.includes(n)) seeds.push(n);
   }
 
-  if (seeds.length === 1) {
-    // Falha de robustez quando só há 1 seed → adiciona curtos automáticos
-    for (const a of ['recurso oab', 'recurso exame da oab', 'recurso fgv']) {
-      if (!seeds.includes(a)) seeds.push(a);
-    }
-  }
 
   const seedsFinal = Array.from(new Set(seeds)).slice(0, 32); // dedup + limite
   if (!seedsFinal.length || !process.env.OPENAI_API_KEY) {
-    return { centroid: null as any, aliases: [] as number[][], model: OPENAI_EMBED_MODEL, seedsCount: 0, seedsText: [] as string[] };
+    return { centroid: null as any, aliases: [] as number[][], model: OPENAI_EMBED_MODEL, seedsCount: 0, seedsText: [] as string[], aliasesText: aliases };
   }
 
   const r = await fetch('https://api.openai.com/v1/embeddings', {
@@ -163,7 +157,8 @@ async function buildEmbeddingsPackage(name: string, description: string | null) 
       aliases: [] as number[][],
       model: OPENAI_EMBED_MODEL,
       seedsCount: 0,
-      seedsText: seedsFinal, // ← mantém consistência e permite prewarm opcional
+      seedsText: seedsFinal, // â† mantÃ©m consistÃªncia e permite prewarm opcional
+      aliasesText: aliases,
     };
   }
 
@@ -176,7 +171,8 @@ async function buildEmbeddingsPackage(name: string, description: string | null) 
       centroid: null as any,
       aliases: [] as number[][],
       model: OPENAI_EMBED_MODEL,
-      seedsCount: seedsFinal.length,   // mantém o total real de seeds
+      aliasesText: aliases,
+      seedsCount: seedsFinal.length,   // mantÃ©m o total real de seeds
       seedsText: seedsFinal,           // habilita prewarm/observabilidade mesmo sem vetor
     };
   }
@@ -190,18 +186,18 @@ async function buildEmbeddingsPackage(name: string, description: string | null) 
     dims: centroid.length,
   });
 
-  return { centroid, aliases: vecs, model: OPENAI_EMBED_MODEL, seedsCount: seedsFinal.length, seedsText: seedsFinal };
+  return { centroid, aliases: vecs, model: OPENAI_EMBED_MODEL, seedsCount: seedsFinal.length, seedsText: seedsFinal, aliasesText: aliases };
 }
 
 /** Salva pacote (centroide + aliases) no Redis */
-async function saveEmbeddingsToRedis(intentId: string, pkg: { centroid: number[], aliases: number[][], model: string, seedsText?: string[] }) {
+async function saveEmbeddingsToRedis(intentId: string, pkg: { centroid: number[], aliases: number[][], model: string, seedsText?: string[], aliasesText?: string[] }) {
   try {
     const redis = getRedisInstance();
     await redis.hset(`ai:intent:${intentId}:emb`, {
       model: pkg.model,
       centroid: JSON.stringify(pkg.centroid),
       aliases: JSON.stringify(pkg.aliases),
-      aliases_text: JSON.stringify(pkg.seedsText || []), // ← novo para observabilidade
+      aliases_text: JSON.stringify(pkg.aliasesText || []), // â† novo para observabilidade
       updatedAt: Date.now().toString(),
     });
     logger.info('Pacote de embeddings salvo no Redis', { intentId, aliases: pkg.aliases.length });
@@ -226,7 +222,7 @@ async function deleteEmbeddingsFromRedis(intentId: string) {
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
+    return NextResponse.json({ error: 'NÃ£o autenticado' }, { status: 401 });
   }
 
   const items = await prisma.intent.findMany({
@@ -249,7 +245,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
+    return NextResponse.json({ error: 'NÃ£o autenticado' }, { status: 401 });
   }
 
   await ensureUserExists(session.user.id, (session.user as any)?.email as string, session.user.name || undefined);
@@ -261,13 +257,13 @@ export async function POST(request: NextRequest) {
     typeof body?.similarityThreshold === 'number' ? Number(body.similarityThreshold) : 0.8
   ));
   const templateId: string | null = body?.templateId || null;
-  if (!name) return NextResponse.json({ error: 'Nome é obrigatório' }, { status: 400 });
+  if (!name) return NextResponse.json({ error: 'Nome Ã© obrigatÃ³rio' }, { status: 400 });
 
   const baseSlug = slugify(name);
   const slug = await generateUniqueSlug(baseSlug, session.user.id);
 
   try {
-    // Se já existe do mesmo usuário → atualiza (com re-embed se descrição mudou)
+    // Se jÃ¡ existe do mesmo usuÃ¡rio â†’ atualiza (com re-embed se descriÃ§Ã£o mudou)
   const existingForUser = await prisma.intent.findFirst({ where: { name, createdById: session.user.id }, select: { id: true, name: true, description: true, createdById: true, templateId: true } });
     if (existingForUser) {
       // Buscar embedding usando raw query
@@ -285,13 +281,13 @@ export async function POST(request: NextRequest) {
           await saveEmbeddingsToRedis(existingForUser.id, pkg);
           logger.info('Embedding atualizado (centroide + aliases)', { id: existingForUser.id, dims: embedding.length });
           logger.debug('Embedding preview (primeiros 8 valores)', (embedding as number[]).slice(0, 8));
-          // 🔥 PREWARM também no caminho de update via POST
+          // ðŸ”¥ PREWARM tambÃ©m no caminho de update via POST
           if (pkg.seedsText && pkg.seedsText.length) {
             try {
               await embeddingGenerator.generateEmbeddings(pkg.seedsText, {
                 normalize: true, trim: true, lowercase: true, removeExtraSpaces: true,
               });
-              logger.info('Prewarm de query embeddings (POST-update) concluído', { count: pkg.seedsText.length });
+              logger.info('Prewarm de query embeddings (POST-update) concluÃ­do', { count: pkg.seedsText.length });
             } catch (e: any) {
               logger.warn('Falha no prewarm de query embeddings (POST-update)', { err: e?.message || e });
             }
@@ -325,25 +321,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ intent: updated, updated: true }, { status: 200 });
     }
 
-    // Nome usado por outro usuário?
+    // Nome usado por outro usuÃ¡rio?
   const anyWithSameName = await prisma.intent.findUnique({ where: { name }, select: { id: true, createdById: true } }).catch(() => null);
     if (anyWithSameName && anyWithSameName.createdById !== session.user.id) {
-      return NextResponse.json({ error: 'Já existe uma intenção global com este nome' }, { status: 409 });
+      return NextResponse.json({ error: 'JÃ¡ existe uma intenÃ§Ã£o global com este nome' }, { status: 409 });
     }
 
     // Gerar embedding inicial (centroide + aliases)
     let embedding: any = null;
-    let pkgForCache: { centroid: number[]; aliases: number[][]; model: string; seedsText?: string[] } | null = null;
+    let pkgForCache: { centroid: number[]; aliases: number[][]; model: string; seedsText?: string[]; aliasesText?: string[] } | null = null;
 
     if (description && process.env.OPENAI_API_KEY) {
       const pkg = await buildEmbeddingsPackage(name, description);
       if (pkg.centroid) {
         embedding = pkg.centroid;
-        pkgForCache = { centroid: pkg.centroid, aliases: pkg.aliases, model: pkg.model, seedsText: pkg.seedsText };
+        pkgForCache = { centroid: pkg.centroid, aliases: pkg.aliases, model: pkg.model, seedsText: pkg.seedsText, aliasesText: pkg.aliasesText };
         logger.info('Embedding criado (centroide + aliases)', { dimensions: embedding.length, model: pkg.model });
         logger.debug('Embedding preview (primeiros 8 valores)', (embedding as number[]).slice(0, 8));
       } else {
-        logger.warn('Embedding não gerado (sem OPENAI ou sem seeds)');
+        logger.warn('Embedding nÃ£o gerado (sem OPENAI ou sem seeds)');
       }
     }
 
@@ -373,13 +369,13 @@ export async function POST(request: NextRequest) {
 
     if (pkgForCache) {
       await saveEmbeddingsToRedis(created.id, pkgForCache);
-      // 🔥 PREWARM: grava embeddings de consulta (frases/aliases) no cache do Redis
+      // ðŸ”¥ PREWARM: grava embeddings de consulta (frases/aliases) no cache do Redis
       if (pkgForCache.seedsText && pkgForCache.seedsText.length) {
         try {
           await embeddingGenerator.generateEmbeddings(pkgForCache.seedsText, {
             normalize: true, trim: true, lowercase: true, removeExtraSpaces: true,
           });
-          logger.info('Prewarm de query embeddings concluído', { count: pkgForCache.seedsText.length });
+          logger.info('Prewarm de query embeddings concluÃ­do', { count: pkgForCache.seedsText.length });
         } catch (e: any) {
           logger.warn('Falha no prewarm de query embeddings', { err: e?.message || e });
         }
@@ -393,25 +389,25 @@ export async function POST(request: NextRequest) {
       if (e?.meta?.target?.includes('slug')) {
         return NextResponse.json({ error: 'Erro interno: slug duplicado detectado. Tente novamente.' }, { status: 409 });
       }
-      return NextResponse.json({ error: 'Já existe uma intenção com este nome' }, { status: 409 });
+      return NextResponse.json({ error: 'JÃ¡ existe uma intenÃ§Ã£o com este nome' }, { status: 409 });
     }
     logger.error('Erro ao criar intent', { error: e?.message || e, code: e?.code });
-    return NextResponse.json({ error: 'Falha ao criar intenção' }, { status: 500 });
+    return NextResponse.json({ error: 'Falha ao criar intenÃ§Ã£o' }, { status: 500 });
   }
 }
 
 export async function DELETE(request: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
+    return NextResponse.json({ error: 'NÃ£o autenticado' }, { status: 401 });
   }
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
-  if (!id) return NextResponse.json({ error: 'id obrigatório' }, { status: 400 });
+  if (!id) return NextResponse.json({ error: 'id obrigatÃ³rio' }, { status: 400 });
 
   const intent = await prisma.intent.findUnique({ where: { id }, select: { id: true, createdById: true, name: true, slug: true } });
   if (!intent || intent.createdById !== session.user.id) {
-    return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
+    return NextResponse.json({ error: 'NÃ£o encontrado' }, { status: 404 });
   }
 
   // Use raw SQL to avoid Prisma trying to deserialize vector column
@@ -425,16 +421,16 @@ export async function DELETE(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
+    return NextResponse.json({ error: 'NÃ£o autenticado' }, { status: 401 });
   }
 
   const body = await request.json().catch(() => ({} as any));
   const id = String(body?.id || '').trim();
-  if (!id) return NextResponse.json({ error: 'id obrigatório' }, { status: 400 });
+  if (!id) return NextResponse.json({ error: 'id obrigatÃ³rio' }, { status: 400 });
 
   const intent = await prisma.intent.findUnique({ where: { id }, select: { id: true, createdById: true, name: true, description: true } });
   if (!intent || intent.createdById !== session.user.id) {
-    return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
+    return NextResponse.json({ error: 'NÃ£o encontrado' }, { status: 404 });
   }
 
   const nextNameRaw: string | undefined = typeof body?.name === 'string' ? body.name.trim() : undefined;
@@ -453,7 +449,7 @@ export async function PATCH(request: NextRequest) {
   if (nextNameRaw && nextNameRaw !== intent.name) {
     const conflict = await prisma.intent.findUnique({ where: { name: nextNameRaw }, select: { id: true } }).catch(() => null);
     if (conflict && conflict.id !== id) {
-      return NextResponse.json({ error: 'Já existe uma intenção com este nome' }, { status: 409 });
+      return NextResponse.json({ error: 'JÃ¡ existe uma intenÃ§Ã£o com este nome' }, { status: 409 });
     }
   }
 
@@ -469,7 +465,7 @@ export async function PATCH(request: NextRequest) {
     data.actionType = nextTemplateId ? 'TEMPLATE' : 'TEXT';
   }
 
-  // Se a descrição mudou, regera pacote e atualiza DB + Redis
+  // Se a descriÃ§Ã£o mudou, regera pacote e atualiza DB + Redis
   const descriptionChanged = nextDescription !== undefined && (nextDescription || null) !== (intent.description || null);
   if (descriptionChanged && process.env.OPENAI_API_KEY) {
     const pkg = await buildEmbeddingsPackage(nextNameRaw || intent.name, nextDescription || '');
@@ -478,22 +474,22 @@ export async function PATCH(request: NextRequest) {
       await saveEmbeddingsToRedis(id, pkg);
       logger.info('Embedding (PATCH) atualizado', { id, dims: (data.embedding as number[]).length });
       logger.debug('Embedding (PATCH) preview (primeiros 8 valores)', (data.embedding as number[]).slice(0, 8));
-      // 🔥 PREWARM após atualização
+      // ðŸ”¥ PREWARM apÃ³s atualizaÃ§Ã£o
       if (pkg.seedsText && pkg.seedsText.length) {
         try {
           await embeddingGenerator.generateEmbeddings(pkg.seedsText, {
             normalize: true, trim: true, lowercase: true, removeExtraSpaces: true,
           });
-          logger.info('Prewarm de query embeddings (PATCH) concluído', { count: pkg.seedsText.length });
+          logger.info('Prewarm de query embeddings (PATCH) concluÃ­do', { count: pkg.seedsText.length });
         } catch (e: any) {
           logger.warn('Falha no prewarm de query embeddings (PATCH)', { err: e?.message || e });
         }
       }
     } else {
-      logger.warn('Embedding (PATCH) não gerado (sem OPENAI ou sem seeds)');
+      logger.warn('Embedding (PATCH) nÃ£o gerado (sem OPENAI ou sem seeds)');
     }
   } else if (descriptionChanged) {
-    logger.warn('Descrição mudou mas OPENAI_API_KEY não está setada — sem re-embedding');
+    logger.warn('DescriÃ§Ã£o mudou mas OPENAI_API_KEY nÃ£o estÃ¡ setada â€” sem re-embedding');
   }
 
   const updated = await prisma.intent.update({

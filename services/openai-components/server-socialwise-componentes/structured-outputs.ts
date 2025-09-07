@@ -61,6 +61,10 @@ export interface StructuredOrJsonArgs<T> {
   strict?: boolean;
   sessionId?: string;
   channel?: ChannelType;
+  // When true, don't pre-warm a session; create/update pointer only after this call
+  disableEnsureSession?: boolean;
+  // Stable identifier for session pointer (avoid dynamic content like hints)
+  pointerKey?: string;
 }
 
 export async function structuredOrJson<T>(args: StructuredOrJsonArgs<T>): Promise<StructuredOrJsonResult<T>> {
@@ -90,14 +94,30 @@ export async function structuredOrJson<T>(args: StructuredOrJsonArgs<T>): Promis
 
   // Se temos sessionId e channel, tenta garantir previous_response_id da sessão
   let finalPreviousResponseId = previous_response_id;
-  if (sessionId && channel && !previous_response_id) {
+  let finalMessages = messages;
+  
+  if (sessionId && channel && !previous_response_id && !args.disableEnsureSession) {
     // console.log("🔍 STRUCTURED OR JSON - Tentando obter sessão:", { sessionId, channel, hasPreviousId: !!previous_response_id }); // Log desabilitado temporariamente
     try {
       const sessionResult = await ensureSession({ sessionId, agent, channel }, createMasterPrompt, signal);
       finalPreviousResponseId = sessionResult.responseId;
+      
+      // Se é nova sessão, inclui master prompt nas mensagens para single-call
+      if (sessionResult.isNewSession && !finalPreviousResponseId) {
+        console.log("🚀 SINGLE-CALL OPTIMIZATION - Incluindo master prompt nas mensagens");
+        finalMessages = [
+          { role: "developer", content: createMasterPrompt(channel) },
+          ...messages
+        ];
+      }
       // console.log("🔍 STRUCTURED OR JSON - Previous response ID obtido:", finalPreviousResponseId); // Log desabilitado temporariamente
     } catch (error) {
-      console.warn("[Session] Erro ao obter sessão, prosseguindo sem memória:", error);
+      console.warn("[Session] Erro ao obter sessão, incluindo master prompt para single-call:", error);
+      // Em caso de erro, faz single-call com master prompt
+      finalMessages = [
+        { role: "developer", content: createMasterPrompt(channel) },
+        ...messages
+      ];
     }
   } else {
     // console.log("🔍 STRUCTURED OR JSON - Não tentará sessão:", { 
@@ -118,7 +138,7 @@ export async function structuredOrJson<T>(args: StructuredOrJsonArgs<T>): Promis
     try {
       const req: any = {
         model,
-        input: messages,
+        input: finalMessages,
         instructions: instructions + (strict ? STRICT_APPEND : ""),
         previous_response_id: finalPreviousResponseId,
         store,
@@ -130,19 +150,8 @@ export async function structuredOrJson<T>(args: StructuredOrJsonArgs<T>): Promis
         ...(reasoning && caps.reasoning ? { reasoning } : {}),
       };
 
-      // 🔍 DEBUG: Log do request final para OpenAI
-      // Use logger for OpenAI request logging
-      const { logger } = require('../../lib/logger');
-      logger.openaiRequest({
-        model: req.model,
-        messages_count: req.input?.length,
-        instructions_preview: req.instructions?.substring(0, 100) + "...",
-        previous_response_id: req.previous_response_id,
-        store: req.store,
-        has_reasoning: !!req.reasoning,
-        has_temperature: !!req.temperature,
-        has_top_p: !!req.top_p
-      });
+      // 🔍 DEBUG: Log do request original JSON puro para OpenAI
+      console.log("🧠 OPENAI RAW REQUEST (JSON):", JSON.stringify(req, null, 2));
 
       // Sampling: se strict mode, usa sampling conservador da bíblia
       if (strict) {
@@ -176,7 +185,8 @@ export async function structuredOrJson<T>(args: StructuredOrJsonArgs<T>): Promis
 
       // Update session pointer after successful response
       if (sessionId && result.id && channel) {
-        await updateSessionPointer(sessionId, model, channel, instructions || 'default', result.id);
+        const stableKey = args.pointerKey ?? instructions ?? 'default';
+        await updateSessionPointer(sessionId, model, channel, stableKey, result.id);
       }
 
       return result;
@@ -226,7 +236,7 @@ export async function structuredOrJson<T>(args: StructuredOrJsonArgs<T>): Promis
   // 2) Fallback: JSON mode + validação local
   const req: any = {
     model,
-    input: messages,
+    input: finalMessages,
     instructions:
       (instructions ?? "") +
       `\nRetorne um ÚNICO objeto JSON que obedeça ao schema '${schemaName}'.` +
@@ -238,17 +248,8 @@ export async function structuredOrJson<T>(args: StructuredOrJsonArgs<T>): Promis
     ...(reasoning && caps.reasoning ? { reasoning } : {}),
   };
 
-  // 🔍 DEBUG: Log do fallback request para OpenAI
-  console.log("🧠 OPENAI FALLBACK REQUEST:", JSON.stringify({
-    model: req.model,
-    messages_count: req.input?.length,
-    messages: req.input,
-    instructions_preview: req.instructions?.substring(0, 100) + "...",
-    previous_response_id: req.previous_response_id,
-    store: req.store,
-    max_output_tokens: req.max_output_tokens,
-    has_reasoning: !!req.reasoning
-  }, null, 2));
+  // 🔍 DEBUG: Log do fallback request original JSON puro para OpenAI  
+  console.log("🧠 OPENAI RAW FALLBACK REQUEST (JSON):", JSON.stringify(req, null, 2));
 
   // No fallback, também aplicamos a mesma lógica de sampling
   if (strict) {
@@ -313,7 +314,8 @@ export async function structuredOrJson<T>(args: StructuredOrJsonArgs<T>): Promis
 
   // Update session pointer after successful response
   if (sessionId && result.id && channel) {
-    await updateSessionPointer(sessionId, model, channel, instructions || 'default', result.id);
+    const stableKey = args.pointerKey ?? instructions ?? 'default';
+    await updateSessionPointer(sessionId, model, channel, stableKey, result.id);
   }
 
   return result;

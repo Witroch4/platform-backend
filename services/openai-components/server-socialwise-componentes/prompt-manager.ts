@@ -83,6 +83,7 @@ export function buildMessages(
   // Add developer prompts only if statelessInit (new session)
   if (options.statelessInit !== false) { // default true
     messages.push({ role: "developer", content: createMasterPrompt(options.channel) });
+    messages.push({ role: "developer", content: "\n# REGRAS DE CONFIABILIDADE (ANTIALUCINAÇÃO)\n- Nunca invente dados operacionais do cliente (ex.: horário de atendimento, preços, endereços, prazos, telefones).\n- Só afirme fatos se vierem explicitamente do sistema (INTENT_HINTS, mapeamentos/integrações, ou contexto de sessão) ou do próprio usuário.\n- Caso falte o dado, NÃO chute: ofereça botões para obter/confirmar a informação.\n" });
     
     if (options.taskType === 'router') {
       messages.push({ 

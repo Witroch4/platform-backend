@@ -5,9 +5,11 @@
 export {
   generateShortTitlesBatch,
   generateFreeChatButtons,
-  generateWarmupButtons,
-  routerLLM
+  generateWarmupButtons
 } from "./server-socialwise-componentes/ai-functions";
+
+// Export patched routerLLM implementation that appends INTENT_HINTS and handles developer prompts
+export { routerLLM } from "./server-socialwise-componentes/router-llm";
 
 // Re-exportar utilitários dos módulos filhos para compatibilidade
 export { structuredOrJson } from "./server-socialwise-componentes/structured-outputs";
