@@ -48,6 +48,21 @@ export async function generateShortTitlesBatch(
         user
       );
 
+      // Instruções auxiliares (como developer message): INTENT_HINTS e política de desambiguação
+      const intentLines = intents
+        .slice(0, 5)
+        .map((c, i) => {
+          const sc = typeof c.score === 'number' ? Number(c.score!.toFixed(3)) : undefined;
+          const desc = (c.desc || c.name || c.slug || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+          return `- @${c.slug}${sc !== undefined ? ` score:${sc}` : ''}${desc ? `\n  desc: ${desc}` : ''}`;
+        })
+        .join("\n");
+
+      const guidance = `\n# INTENT_HINTS (para desambiguação)\nUse estes candidatos para montar os botões (2–3 opções).\n${intentLines}\n\n# POLÍTICA DE WARMUP (não restritiva)\n- Gere 2–3 botões objetivos com payloads usando EXCLUSIVAMENTE os slugs acima.\n- Se houver ambiguidade (ex.: premium vs. motoqueiro), faça uma pergunta curta no response_text e use os botões para o usuário se identificar.\n- Não invente dados operacionais (ex.: horário exato). Prefira linguagem neutra (ex.: “Posso confirmar seu caso, escolha uma opção”).\n- Pode incluir @falar_atendente quando fizer sentido.`;
+
+      // Posicionar como mensagem de developer para orientar a LLM
+      messages.unshift({ role: "developer", content: guidance });
+
       const caps = getModelCaps(agent.model);
       const result = await structuredOrJson<{ titles: string[] }>({
         client: this.client,
@@ -115,10 +130,21 @@ export async function generateFreeChatButtons(
         { 
           channel, 
           taskType: "FREE_CHAT", 
-          statelessInit: false 
+          statelessInit: isNewSession  // ← Usa a detecção real!
         },
         user
       );
+
+      // FREE_CHAT - simplificado sem INTENT_HINTS
+      const intentLinesWarmup = ""
+        .split('')
+        .map((c, i) => `char ${i}: ${c}`)
+        .join("\n");
+
+      const guidanceWarmup = `\n# INTENT_HINTS (para desambiguação)\nUse estes candidatos para montar os botões (2–3 opções).\n${intentLinesWarmup}\n\n# POLÍTICA DE WARMUP (não restritiva)\n- Gere 2–3 botões objetivos com payloads usando EXCLUSIVAMENTE os slugs acima.\n- Se houver ambiguidade (ex.: premium vs. motoqueiro), faça uma pergunta curta no response_text e use os botões para o usuário se identificar.\n- Não invente dados operacionais (ex.: horário exato). Prefira linguagem neutra (ex.: “Posso confirmar seu caso, escolha uma opção”).\n- Pode incluir @falar_atendente quando fizer sentido.`;
+
+      // Posicionar como mensagem de developer para orientar a LLM
+      messages.unshift({ role: "developer", content: guidanceWarmup });
 
       const result = await structuredOrJson<WarmupButtonsResponse>({
         client: this.client,
@@ -191,20 +217,20 @@ export async function generateWarmupButtons(
   const channel: ChannelType = opts?.channelType || "whatsapp";
   const schema = createButtonsSchema(channel);
 
-  const user = `Intenções candidatas:\n${candidatesText}\n\nMensagem do usuário: "${userText}"`;
+  // Mantém o texto do usuário limpo; candidatos irão nas 'instructions'
+  const user = `Mensagem do usuário: "${userText}"`;
 
   return withDeadlineAbort(async (signal) => {
     try {
       const caps = getModelCaps(agent.model);
       
-      // 🔑 PADRÃO DA BÍBLIA: Detectar se precisa enviar prompts developer
+      // 🔑 DETECÇÃO DE NOVA SESSÃO: Verificar se existe previous_response_id
       const hasSessionId = !!opts?.sessionId;
-      
-      // Primeira chamada ensureSession para obter previous_response_id e flag de nova sessão
       let isNewSession = true; // Default para nova sessão
+      
       if (hasSessionId) {
         try {
-          const sessionResult = await ensureSession({ sessionId: (opts!.sessionId as string), agent, channel }, createMasterPrompt, signal);
+          const sessionResult = await ensureSession({ sessionId: opts!.sessionId!, agent, channel }, createMasterPrompt, signal);
           isNewSession = sessionResult.isNewSession;
         } catch (error) {
           console.warn("[Session] Erro ao obter sessão:", error);
@@ -212,20 +238,36 @@ export async function generateWarmupButtons(
         }
       }
       
+      // 🎯 ENVIAR DEVELOPER PROMPTS APENAS EM NOVA SESSÃO
       const messages = buildMessages(
         { 
           channel, 
           taskType: "WARMUP_BUTTONS", 
-          statelessInit: false 
+          statelessInit: isNewSession  // ← Usa a detecção real!
         },
         user
       );
+
+      // 🎯 PADRÃO CORRETO: Injetar INTENT_HINTS nas instructions junto com as do agente
+      const intentLines = candidates
+        .slice(0, 5)
+        .map((c, i) => {
+          const sc = typeof c.score === 'number' ? Number(c.score!.toFixed(3)) : undefined;
+          const desc = (c.desc || c.name || c.slug || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+          return `- @${c.slug}${sc !== undefined ? ` score:${sc}` : ''}${desc ? `\n  desc: ${desc}` : ''}`;
+        })
+        .join("\n");
+
+      const intentHintsGuidance = `\n\n# INTENT_HINTS (para desambiguação)\nUse estes candidatos para montar os botões (2–3 opções):\n${intentLines}\n\n# POLÍTICA DE WARMUP (não restritiva)\n- Gere 2–3 botões objetivos com payloads usando EXCLUSIVAMENTE os slugs acima.\n- Se houver ambiguidade (ex.: premium vs. motoqueiro), faça uma pergunta curta no response_text e use os botões para o usuário se identificar.\n- Não invente dados operacionais (ex.: horário exato). Prefira linguagem neutra (ex.: "Posso confirmar seu caso, escolha uma opção").\n- Pode incluir @falar_atendente quando fizer sentido.`;
+
+      // Combinar instruções do agente com os INTENT_HINTS
+      const combinedInstructions = (agent.instructions || "Você é um UX writer especializado em criar botões de navegação. Siga o schema estritamente e gere botões objetivos.") + intentHintsGuidance;
 
       const result = await structuredOrJson<WarmupButtonsResponse>({
         client: this.client,
         model: agent.model,
         messages,
-        instructions: agent.instructions || "Você é um UX writer especializado em criar botões de navegação. Siga o schema estritamente e gere botões objetivos.",
+        instructions: combinedInstructions,
         max_output_tokens: agent.maxOutputTokens || 256,
         verbosity: caps.reasoning && isGPT5(agent.model) ? normVerb(agent.verbosity) : undefined,
         reasoning: caps.reasoning ? { effort: normEffort(agent.reasoningEffort) } : undefined,
@@ -291,7 +333,7 @@ export async function routerLLM(
           channel, 
           taskType: "router", 
           hasInstructions: !!agent.instructions,
-          statelessInit: false 
+          statelessInit: isNewSession  // ← Usa a detecção real!
         },
         user
       );
@@ -324,4 +366,3 @@ export async function routerLLM(
     }
   }, agent.hardDeadlineMs || 15000);
 }
-

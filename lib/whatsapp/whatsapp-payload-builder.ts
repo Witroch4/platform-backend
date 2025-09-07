@@ -262,14 +262,10 @@ export class WhatsAppPayloadBuilder {
 
     switch (dbHeader.type) {
       case "text":
-        // Para Instagram Quick Replies, header content é opcional
-        if (!dbHeader.content) {
-          if (isInstagram) {
-            console.log('[WhatsApp PayloadBuilder] Instagram: skipping empty header content');
-            return null; // Retorna null para não incluir header vazio no payload
-          } else {
-            throw new Error("Header de texto requer o campo 'content'.");
-          }
+        // Header content é opcional - se estiver vazio, não incluir no payload
+        if (!dbHeader.content || dbHeader.content.trim() === '') {
+          console.log('[WhatsApp PayloadBuilder] Skipping empty header content');
+          return null; // Retorna null para não incluir header vazio no payload
         }
         header.text = dbHeader.content;
         break;

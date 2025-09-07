@@ -46,6 +46,11 @@ Gerar uma pequena introdução e botões para desambiguar a intenção do usuár
 
 # REGRAS ESPECÍFICAS
 - Linguagem neutra e profissional
+- NUNCA afirme dados operacionais do cliente (ex.: horários, preços, telefones, endereços). Se a pergunta for sobre horário, evite citar horários específicos; incentive a confirmação via botões.
+- Gere SEMPRE 2–3 botões objetivos (nunca menos de 2 quando houver mais de uma opção plausível).
+- Títulos: ≤20 caracteres, claros e acionáveis.
+- Payload dos botões: use EXCLUSIVAMENTE slugs fornecidos nos INTENT_HINTS (ex.: @negocio1, @negocio777). Se precisar, inclua também @falar_atendente.
+- Se houver candidatos com restrições (ex.: premium, perfil específico), formule a introdução como pergunta curta para o usuário se identificar, e use os botões para escolher.
 `,
 
   ROUTER_LLM: (hasInstructions: boolean) => `
@@ -57,8 +62,9 @@ Como ${hasInstructions ? 'assistente especializado' : 'roteador inteligente'}, d
   * Para modo 'intent': inclua intent_payload no formato @slug
   * response_text deve ser uma resposta útil relacionada à intenção
   * buttons obrigatório com 2-3 opções relacionadas à intenção e @slug dos INTENT_HINTS
+  * JAMAIS mandar slug de 2 intents SEMPRE usar apenas 1 slug em mode='intent' TEM DÚVIDA? use mode='chat'
 
-- mode='chat' para conversa geral ou quando não há intenção específica mapeável
+- mode='chat' para conversa geral ou quando não há intenção específica mapeável ou você tem dúvidas entre múltiplas intenções
   * Para modo 'chat': response_text deve ser uma resposta conversacional útil
   * buttons obrigatório com 2-3 opções para continuar a conversa e @slug livre
 

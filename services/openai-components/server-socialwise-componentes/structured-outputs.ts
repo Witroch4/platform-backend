@@ -104,20 +104,14 @@ export async function structuredOrJson<T>(args: StructuredOrJsonArgs<T>): Promis
       
       // Se é nova sessão, inclui master prompt nas mensagens para single-call
       if (sessionResult.isNewSession && !finalPreviousResponseId) {
-        console.log("🚀 SINGLE-CALL OPTIMIZATION - Incluindo master prompt nas mensagens");
-        finalMessages = [
-          { role: "developer", content: createMasterPrompt(channel) },
-          ...messages
-        ];
+        console.log("🚀 SINGLE-CALL OPTIMIZATION - Nova sessão já tem developer prompts, mantendo mensagens originais");
+        // Não modificar finalMessages - elas já vêm do buildMessages com todos os prompts necessários
       }
       // console.log("🔍 STRUCTURED OR JSON - Previous response ID obtido:", finalPreviousResponseId); // Log desabilitado temporariamente
     } catch (error) {
-      console.warn("[Session] Erro ao obter sessão, incluindo master prompt para single-call:", error);
-      // Em caso de erro, faz single-call com master prompt
-      finalMessages = [
-        { role: "developer", content: createMasterPrompt(channel) },
-        ...messages
-      ];
+      console.warn("[Session] Erro ao obter sessão, mantendo mensagens originais do buildMessages:", error);
+      // Em caso de erro, mantém as mensagens que já vêm do buildMessages
+      // (que já incluem MASTER + TASK_PROMPTS se statelessInit: true)
     }
   } else {
     // console.log("🔍 STRUCTURED OR JSON - Não tentará sessão:", { 
