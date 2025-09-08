@@ -15,6 +15,7 @@ This file provides comprehensive guidance to Claude Code (claude.ai/code) and Cu
 9. **Front linguagem clara e direta sem termos tecnicos**
 10. **Tudo deve ser compativel com thema dark e light do shadcn**
 11. **Edição no front deve ser olhar com a tool de navegação o resutado**
+12. **Interactive message buttons: All types ('button', 'quick_replies', 'button_template', 'generic') must be included in API validation arrays**
 
 ## 🚀 Project Overview
 
@@ -387,6 +388,44 @@ Enterprise-grade queue system:
 - Performance monitoring with real-time metrics
 - Alert management with configurable thresholds
 
+### 5. Interactive Messages (MTF Diamante) - Button Fix ✅
+**RESOLVED**: All interactive message types now properly save and load buttons in edit mode.
+
+#### Fixed Message Types:
+- ✅ **`button_template`** (Template de Botões) - Button creation and editing
+- ✅ **`quick_replies`** (Respostas Rápidas) - Quick reply button handling  
+- ✅ **`generic`** (Template Genérico) - Generic template with buttons
+
+#### Root Cause Resolution:
+The issue was in both POST (create) and PUT (update) API routes where `'generic'` type was missing from:
+1. `transformActionData` function button type validation
+2. Message creation/update action saving conditions
+
+#### Files Modified:
+- `app/api/admin/mtf-diamante/interactive-messages/route.ts` (POST route)
+- `app/api/admin/mtf-diamante/interactive-messages/[id]/route.ts` (PUT route)
+
+#### Technical Implementation:
+```typescript
+// Fixed transformActionData to include 'generic'
+case 'button':
+case 'quick_replies': 
+case 'button_template':
+case 'generic': // ✅ ADDED
+  return { type: 'button', buttons: Array.isArray(buttons) ? buttons : [] };
+
+// Fixed action saving conditions
+if (['button', 'quick_replies', 'button_template', 'generic'].includes(messageType) && action.buttons) {
+  // Save actionReplyButton
+}
+```
+
+#### Validation Confirmed:
+- Buttons display correctly in interface ("Buttons (1/3)")
+- Edit mode loads existing buttons properly
+- All button types save to database correctly
+- Preview shows buttons in real-time
+
 ## 💰 Cost Management System
 
 ### Components
@@ -462,6 +501,27 @@ app/api/[feature]/
 │   └── route.ts         # GET, PUT, DELETE for item
 └── [id]/[action]/
     └── route.ts         # Custom actions
+```
+
+### Debugging Interactive Components
+When buttons or interactive elements don't appear in edit mode:
+
+1. **Check Type Validation**: Ensure all message types are included in validation arrays
+2. **Verify Action Saving**: Check both POST and PUT routes handle all types
+3. **Database Consistency**: Validate that actionReplyButton records are created
+4. **Browser Testing**: Use browser automation to test full workflow
+
+#### Common Pattern for Interactive Messages:
+```typescript
+// Always include all button types in conditions
+if (['button', 'quick_replies', 'button_template', 'generic'].includes(messageType) && action.buttons) {
+  await prisma.actionReplyButton.create({
+    data: {
+      interactiveContentId: interactiveContent.id,
+      buttons: action.buttons
+    }
+  });
+}
 ```
 
 ## 🎨 Responsive Dialog Example

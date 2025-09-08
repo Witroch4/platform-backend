@@ -466,15 +466,16 @@ export async function PATCH(request: NextRequest) {
   }
 
   // Se a descriÃ§Ã£o mudou, regera pacote e atualiza DB + Redis
+  let embedding: any = null;
   const descriptionChanged = nextDescription !== undefined && (nextDescription || null) !== (intent.description || null);
   if (descriptionChanged && process.env.OPENAI_API_KEY) {
     const pkg = await buildEmbeddingsPackage(nextNameRaw || intent.name, nextDescription || '');
     if (pkg.centroid) {
-      data.embedding = pkg.centroid; // DB guarda centroide
+      embedding = pkg.centroid; // Mantém separado do data para update manual
       await saveEmbeddingsToRedis(id, pkg);
-      logger.info('Embedding (PATCH) atualizado', { id, dims: (data.embedding as number[]).length });
-      logger.debug('Embedding (PATCH) preview (primeiros 8 valores)', (data.embedding as number[]).slice(0, 8));
-      // ðŸ”¥ PREWARM apÃ³s atualizaÃ§Ã£o
+      logger.info('Embedding (PATCH) atualizado', { id, dims: (embedding as number[]).length });
+      logger.debug('Embedding (PATCH) preview (primeiros 8 valores)', (embedding as number[]).slice(0, 8));
+      // ðŸ"¥ PREWARM apÃ³s atualizaÃ§Ã£o
       if (pkg.seedsText && pkg.seedsText.length) {
         try {
           await embeddingGenerator.generateEmbeddings(pkg.seedsText, {
@@ -489,7 +490,7 @@ export async function PATCH(request: NextRequest) {
       logger.warn('Embedding (PATCH) nÃ£o gerado (sem OPENAI ou sem seeds)');
     }
   } else if (descriptionChanged) {
-    logger.warn('DescriÃ§Ã£o mudou mas OPENAI_API_KEY nÃ£o estÃ¡ setada â€” sem re-embedding');
+    logger.warn('DescriÃ§Ã£o mudou mas OPENAI_API_KEY nÃ£o estÃ¡ setada â€" sem re-embedding');
   }
 
   const updated = await prisma.intent.update({
@@ -498,6 +499,16 @@ export async function PATCH(request: NextRequest) {
     select: { id: true, name: true, description: true, similarityThreshold: true, actionType: true, templateId: true, createdAt: true },
   });
 
-  logger.info('Intent atualizada (PATCH)', { id: updated.id, regeneratedEmbedding: Boolean(data.embedding) });
+  // Atualizar embedding separadamente usando raw query (se necessário)
+  if (embedding && embedding.length > 0) {
+    const vectorString = `[${embedding.join(',')}]`;
+    await prisma.$executeRawUnsafe(
+      `UPDATE "Intent" SET "embedding" = $1::vector WHERE "id" = $2`,
+      vectorString,
+      id
+    );
+  }
+
+  logger.info('Intent atualizada (PATCH)', { id: updated.id, regeneratedEmbedding: Boolean(embedding) });
   return NextResponse.json({ intent: updated });
 }

@@ -34,6 +34,7 @@ import { useCaixasManager } from '../hooks/useCaixas';
 import { useLotesManager } from '../hooks/useLotes';
 import { useVariaveisManager } from '../hooks/useVariaveis';
 import { useApiKeysManager } from '../hooks/useApiKeys';
+import { useInboxButtonReactions } from '../hooks/useInboxButtonReactions';
 
 // Import types
 import type { MtfDataContextType, ChatwitInbox } from '../lib/types';
@@ -109,6 +110,7 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
   const lotesHook = useLotesManager(isPaused);
   const variaveisHook = useVariaveisManager(isPaused);
   const apiKeysHook = useApiKeysManager(isPaused);
+  const buttonReactionsHook = useInboxButtonReactions({ inboxId, paused: isPaused });
   
   // Pause/Resume functions
   const pauseUpdates = useCallback(() => {
@@ -124,7 +126,8 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
     lotesHook.mutate();
     variaveisHook.mutate();
     apiKeysHook.mutate();
-  }, [messagesHook, caixasHook, lotesHook, variaveisHook, apiKeysHook]);
+    buttonReactionsHook.mutate();
+  }, [messagesHook, caixasHook, lotesHook, variaveisHook, apiKeysHook, buttonReactionsHook]);
 
   // Legacy compatibility functions (deprecated but maintained)
   const saveMessage = useCallback(deprecated(async (
@@ -162,12 +165,63 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
   const refreshLotes = useCallback(() => lotesHook.mutate(), [lotesHook]);
   const refreshVariaveis = useCallback(() => variaveisHook.mutate(), [variaveisHook]);
   const refreshApiKeys = useCallback(() => apiKeysHook.mutate(), [apiKeysHook]);
+  const refreshButtonReactions = useCallback(() => buttonReactionsHook.mutate(), [buttonReactionsHook]);
 
   // Prefetch function for smooth navigation
   const prefetchInbox = useCallback(async (id: string) => {
     // This could be implemented with SWR's global mutate if needed
     // Feature can be implemented when needed for performance optimization
   }, []);
+
+  // Button reactions compatibility functions
+  const addButtonReactionCompat = useCallback(async (optimisticReaction: any, apiPayload: any) => {
+    if (!inboxId) throw new Error('Inbox ID é obrigatório');
+    
+    // Convert from the expected interface to our hook interface
+    const reactionData = {
+      buttonId: optimisticReaction.buttonId,
+      actionType: 'BUTTON_REACTION' as const,
+      actionPayload: {
+        emoji: optimisticReaction.emoji || null,
+        textReaction: optimisticReaction.label || null,
+        action: optimisticReaction.action || null
+      },
+      description: optimisticReaction.label || null,
+      inboxId
+    };
+    
+    await buttonReactionsHook.addButtonReaction(reactionData);
+  }, [buttonReactionsHook, inboxId]);
+
+  const updateButtonReactionCompat = useCallback(async (updatedReaction: any, apiPayload: any) => {
+    if (!updatedReaction.id) return;
+    
+    const updates = {
+      buttonId: updatedReaction.buttonId,
+      actionPayload: {
+        emoji: updatedReaction.emoji || null,
+        textReaction: updatedReaction.label || null,
+        action: updatedReaction.action || null
+      },
+      description: updatedReaction.label || null
+    };
+    
+    await buttonReactionsHook.updateButtonReaction(updatedReaction.id, updates);
+  }, [buttonReactionsHook]);
+
+  // Convert button reactions to expected format
+  const convertedButtonReactions = useMemo(() => {
+    return buttonReactionsHook.reactions.map((reaction: any) => ({
+      id: reaction.id,
+      messageId: reaction.messageId || reaction.inboxId, // Use messageId first, then inboxId as fallback
+      buttonId: reaction.buttonId,
+      emoji: reaction.emoji || '',
+      label: reaction.description || reaction.textReaction || '',
+      action: reaction.actionPayload?.action || reaction.action || '', // Use actionPayload.action first, then direct action field as fallback
+      createdAt: reaction.createdAt,
+      updatedAt: reaction.updatedAt
+    }));
+  }, [buttonReactionsHook.reactions]);
 
   // Optimistic add caixa for backward compatibility
   const optimisticAddCaixa = useCallback(deprecated(async (apiPayload: any, optimisticCaixaData: any) => {
@@ -180,13 +234,15 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
            !caixasHook.isLoading && 
            !lotesHook.isLoading && 
            !variaveisHook.isLoading && 
-           !apiKeysHook.isLoading;
+           !apiKeysHook.isLoading &&
+           !buttonReactionsHook.isLoading;
   }, [
     messagesHook.isLoading,
     caixasHook.isLoading,
     lotesHook.isLoading,
     variaveisHook.isLoading,
-    apiKeysHook.isLoading
+    apiKeysHook.isLoading,
+    buttonReactionsHook.isLoading
   ]);
 
   // Context value with maintained API compatibility
@@ -226,12 +282,12 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
     updateApiKey: apiKeysHook.updateApiKey,
     deleteApiKey: apiKeysHook.deleteApiKey,
     
-    // Button Reactions (placeholder - can be implemented later)
-    buttonReactions: [],
-    isLoadingButtonReactions: false,
-    addButtonReaction: async () => {},
-    updateButtonReaction: async () => {},
-    deleteButtonReaction: async () => {},
+    // Button Reactions
+    buttonReactions: convertedButtonReactions,
+    isLoadingButtonReactions: buttonReactionsHook.isLoading,
+    addButtonReaction: addButtonReactionCompat,
+    updateButtonReaction: updateButtonReactionCompat,
+    deleteButtonReaction: buttonReactionsHook.deleteButtonReaction,
     
     // Pause Control
     isUpdatesPaused: isPaused,
@@ -248,7 +304,7 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
     refreshLotes,
     refreshVariaveis,
     refreshApiKeys,
-    refreshButtonReactions: async () => {},
+    refreshButtonReactions,
     
     // Legacy properties for backward compatibility
     loadingVariaveis: variaveisHook.isLoading,
@@ -278,9 +334,13 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
     refreshLotes,
     refreshVariaveis,
     refreshApiKeys,
+    refreshButtonReactions,
     prefetchInbox,
     optimisticAddCaixa,
     isInitialized,
+    addButtonReactionCompat,
+    updateButtonReactionCompat,
+    convertedButtonReactions,
   ]);
 
   return (

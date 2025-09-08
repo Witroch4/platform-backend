@@ -706,18 +706,110 @@ export async function PUT(request: NextRequest) {
     }
 
     // Reações no fluxo unificado vêm como { buttonId, reaction: { type, value } }
-    // Usamos o mesmo schema do POST para evitar 400 indevido
+    // Mas podem vir no formato ButtonReaction do frontend, então transformamos primeiro
+    console.log('🔍 [PUT] Validating reactions:', { 
+      reactionsCount: reactions?.length || 0, 
+      reactionsData: reactions,
+      messageId 
+    });
+    
+    // Transformar ButtonReaction format para ApiButtonReaction format se necessário
+    const transformedReactions = (reactions || []).map((reaction: any, index: number) => {
+      console.log(`🔍 [PUT] Processing reaction ${index}:`, reaction);
+      
+      // Se já está no formato correto, validar se tem valores válidos
+      if (reaction.reaction || reaction.action) {
+        // Verificar se reaction.value não está vazio
+        if (reaction.reaction && (!reaction.reaction.value || reaction.reaction.value.trim() === '')) {
+          console.log(`⚠️ [PUT] Skipping reaction ${index} - empty reaction.value:`, reaction);
+          return null;
+        }
+        // Verificar se action não está vazio
+        if (reaction.action && reaction.action.trim() === '') {
+          console.log(`⚠️ [PUT] Skipping reaction ${index} - empty action:`, reaction);
+          return null;
+        }
+        return reaction;
+      }
+      
+      // Se está no formato ButtonReaction, transformar
+      if (reaction.buttonId) {
+        const transformed: any = { buttonId: reaction.buttonId };
+        let hasValidValue = false;
+        
+        // Só adicionar reaction se houver valor válido (não vazio)
+        if (reaction.emoji && reaction.emoji.trim()) {
+          transformed.reaction = { type: 'emoji', value: reaction.emoji.trim() };
+          hasValidValue = true;
+        } else if (reaction.textResponse && reaction.textResponse.trim()) {
+          transformed.reaction = { type: 'text', value: reaction.textResponse.trim() };
+          hasValidValue = true;
+        } else if (reaction.action && reaction.action.trim()) {
+          transformed.action = reaction.action.trim();
+          hasValidValue = true;
+        }
+        
+        if (!hasValidValue) {
+          // Se não há valor válido, marcar como inválida
+          console.log(`⚠️ [PUT] Skipping reaction ${index} - no valid values:`, reaction);
+          return null;
+        }
+        
+        console.log(`🔄 [PUT] Transformed reaction ${index}:`, { original: reaction, transformed });
+        return transformed;
+      }
+      
+      console.log(`⚠️ [PUT] Skipping reaction ${index} - no buttonId:`, reaction);
+      return null;
+    }).filter(Boolean); // Remove reações nulas/inválidas
+    
+    console.log('📊 [PUT] Transformation summary:', {
+      originalCount: reactions?.length || 0,
+      transformedCount: transformedReactions.length,
+      transformedReactions
+    });
+    
+    // Permitir array vazio quando todas as reações são removidas
     const reactionsValidation = z
       .array(ApiButtonReactionSchema)
-      .safeParse(reactions || []);
+      .safeParse(transformedReactions);
+    
+    // Se a validação falhou
     if (!reactionsValidation.success) {
-      return NextResponse.json(
-        {
-          error: "Reactions validation failed",
-          details: reactionsValidation.error.errors,
-        },
-        { status: 400 }
-      );
+      // Se são reações vazias (remoção total), isso é válido
+      if (Array.isArray(transformedReactions) && transformedReactions.length === 0) {
+        console.log('✅ [PUT] Empty reactions array - allowing removal of all reactions');
+      } else {
+        console.error('❌ [PUT] Reactions validation failed:', {
+          errors: reactionsValidation.error.errors,
+          originalData: reactions,
+          transformedData: transformedReactions,
+          expectedSchema: 'ApiButtonReactionSchema = { buttonId, reaction?: { type, value }, action?: string }'
+        });
+        
+        // Log cada reação que falhou
+        transformedReactions.forEach((reaction: any, index: number) => {
+          try {
+            ApiButtonReactionSchema.parse(reaction);
+            console.log(`✅ Reaction ${index} is valid:`, reaction);
+          } catch (error) {
+            console.error(`❌ Reaction ${index} failed validation:`, { reaction, error });
+          }
+        });
+        
+        return NextResponse.json(
+          {
+            error: "Reactions validation failed",
+            details: reactionsValidation.error.errors,
+            receivedData: reactions,
+            transformedData: transformedReactions,
+            expectedFormat: "Array<{ buttonId: string, reaction?: { type: 'emoji'|'text'|'action', value: string }, action?: string }>"
+          },
+          { status: 400 }
+        );
+      }
+    } else {
+      console.log('✅ [PUT] All reactions validated successfully:', transformedReactions);
     }
 
     // Verify message exists and user has access
@@ -928,23 +1020,26 @@ export async function PUT(request: NextRequest) {
         const templateInboxId = existingMessage.inboxId;
         
         if (templateInboxId) {
-      // Limpar apenas reações dos botões presentes no payload de reactions
-      const incomingButtonIds: string[] = Array.from(
-        new Set(reactionsValidation.data.map((r) => r.buttonId))
-      );
+          // Use validated reactions or empty array
+          const validatedReactions = reactionsValidation.success ? reactionsValidation.data : [];
+          
+          console.log('🗑️ [PUT] Clearing ALL existing reactions for inbox:', templateInboxId);
+          
+          // CORREÇÃO: Primeiro limpar TODAS as reações desta inbox
+          // Isso garante que reações removidas sejam deletadas do banco
+          await tx.mapeamentoBotao.deleteMany({
+            where: {
+              inboxId: templateInboxId,
+            },
+          });
 
-      if (incomingButtonIds.length > 0) {
-        await tx.mapeamentoBotao.deleteMany({
-          where: {
-            inboxId: templateInboxId,
-            buttonId: { in: incomingButtonIds },
-          },
-        });
-      }
+          console.log('✅ [PUT] All existing reactions cleared, now adding new ones:', validatedReactions.length);
 
           // Group incoming reactions by buttonId to support emoji + text + action coexistence
           const grouped = new Map<string, { emoji?: string | null; textReaction?: string | null; action?: string | null }>();
-          for (const r of reactions) {
+          const reactionsToProcess = validatedReactions;
+          
+          for (const r of reactionsToProcess) {
             if (!r?.reaction && !r?.action) continue;
             const current = grouped.get(r.buttonId) || { emoji: null, textReaction: null, action: null };
             
@@ -1047,6 +1142,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const messageId = searchParams.get("messageId");
     const inboxId = searchParams.get("inboxId");
+    const reactionsOnly = searchParams.get("reactionsOnly") === "true";
 
     if (!messageId && !inboxId) {
       return NextResponse.json(
@@ -1126,6 +1222,23 @@ export async function GET(request: NextRequest) {
         );
       }
 
+      // Special case: return only reactions for this inbox
+      if (reactionsOnly) {
+        const buttonReactions = await getPrismaInstance().mapeamentoBotao.findMany({
+          where: { 
+            inboxId: inboxId,
+          },
+          orderBy: { createdAt: "asc" },
+        });
+
+        const formattedReactions = buttonReactions.map(formatReaction);
+
+        return NextResponse.json({
+          success: true,
+          reactions: formattedReactions,
+        });
+      }
+
       // Get all messages for this ChatwitInbox
       const messages = await getPrismaInstance().template.findMany({
         where: {
@@ -1180,6 +1293,161 @@ export async function GET(request: NextRequest) {
     console.error("Error fetching messages with reactions:", error);
     return NextResponse.json(
       { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE - Delete message with reactions atomically
+export async function DELETE(request: NextRequest) {
+  const requestId = `delete_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  
+  try {
+    // Authentication check
+    const session = await auth();
+    if (!session?.user?.id) {
+      console.error(`[${requestId}] Authentication failed`);
+      
+      return NextResponse.json(
+        { 
+          error: "Unauthorized",
+          code: "AUTH_UNAUTHORIZED",
+          requestId 
+        }, 
+        { status: 401 }
+      );
+    }
+
+    // Get messageId from query parameters
+    const { searchParams } = new URL(request.url);
+    const messageId = searchParams.get("messageId");
+
+    if (!messageId) {
+      console.error(`[${requestId}] Missing messageId parameter`);
+      
+      return NextResponse.json(
+        {
+          error: "messageId is required",
+          code: "MISSING_MESSAGE_ID",
+          requestId
+        },
+        { status: 400 }
+      );
+    }
+
+    console.log(`[${requestId}] Deleting message - User: ${session.user!.id}, MessageId: ${messageId}`);
+
+    // Verify message exists and user has access
+    const existingMessage = await getPrismaInstance().template.findFirst({
+      where: {
+        id: messageId,
+        createdById: session.user!.id,
+        type: "INTERACTIVE_MESSAGE",
+      },
+      include: {
+        inbox: { select: { usuarioChatwitId: true } },
+        interactiveContent: {
+          include: {
+            actionReplyButton: true,
+          }
+        }
+      }
+    });
+
+    if (!existingMessage) {
+      console.warn(`[${requestId}] Message not found or access denied - MessageId: ${messageId}, UserId: ${session.user!.id}`);
+      
+      return NextResponse.json(
+        { 
+          error: "Message not found or access denied",
+          code: "MESSAGE_NOT_FOUND",
+          requestId
+        },
+        { status: 404 }
+      );
+    }
+
+    // Execute atomic transaction to delete message and related data
+    await getPrismaInstance().$transaction(async (tx) => {
+      // 1. Delete button reactions first (foreign key dependency)
+      if (existingMessage.interactiveContent?.actionReplyButton) {
+        // Get all button IDs from the message
+        const buttons = existingMessage.interactiveContent.actionReplyButton.buttons as any[] || [];
+        const buttonIds = buttons.map((btn: any) => btn.id).filter(Boolean);
+        
+        if (buttonIds.length > 0) {
+          console.log(`[${requestId}] Deleting ${buttonIds.length} button reactions`);
+          await tx.mapeamentoBotao.deleteMany({
+            where: { 
+              buttonId: { in: buttonIds },
+              inboxId: existingMessage.inboxId!
+            }
+          });
+        }
+      }
+
+      // 2. Delete the template (cascade will handle related data)
+      await tx.template.delete({
+        where: { id: messageId }
+      });
+      
+      console.log(`[${requestId}] Template deleted successfully`);
+    });
+
+    // Invalidação de cache do Instagram para intents vinculadas a este template/inbox
+    try {
+      const inboxId = existingMessage.inboxId;
+      const usuarioChatwitId = existingMessage.inbox?.usuarioChatwitId;
+
+      if (inboxId && usuarioChatwitId) {
+        // Buscar intents que apontam para este template nesta inbox
+        const mappedIntents = await getPrismaInstance().mapeamentoIntencao.findMany({
+          where: { templateId: messageId, inboxId },
+          select: { intentName: true },
+        });
+
+        for (const mi of mappedIntents) {
+          await invalidateTemplateMappingCache(mi.intentName, usuarioChatwitId, inboxId);
+        }
+        
+        console.log(`[${requestId}] Cache invalidated for ${mappedIntents.length} mapped intents`);
+      }
+    } catch (cacheError) {
+      console.warn(`[${requestId}] Cache invalidation failed:`, cacheError);
+      // Não falhar a requisição por causa de cache
+    }
+
+    console.log(`[${requestId}] Message deletion completed successfully`);
+
+    return NextResponse.json({
+      success: true,
+      messageId,
+      requestId
+    });
+    
+  } catch (error) {
+    console.error(`[${requestId}] Error deleting message:`, error);
+
+    // Handle specific database errors
+    if (error instanceof Error) {
+      if (error.message.includes("Foreign key constraint")) {
+        return NextResponse.json(
+          { 
+            error: "Cannot delete message due to existing references",
+            code: "DATABASE_FOREIGN_KEY_VIOLATION",
+            requestId
+          },
+          { status: 409 }
+        );
+      }
+    }
+
+    return NextResponse.json(
+      { 
+        error: "Internal server error",
+        code: "INTERNAL_SERVER_ERROR",
+        requestId
+      },
       { status: 500 }
     );
   }

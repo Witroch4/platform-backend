@@ -103,26 +103,29 @@ export const interactiveMessagesApi = {
   // Get all messages for an inbox
   getAll: async (inboxId?: string): Promise<InteractiveMessage[]> => {
     const endpoint = inboxId 
-      ? `/interactive-messages?inboxId=${inboxId}`
-      : '/interactive-messages';
+      ? `/messages-with-reactions?inboxId=${inboxId}`
+      : '/messages-with-reactions';
     
-    const response = await apiRequest<ApiResponse<InteractiveMessage[]>>(
+    const response = await apiRequest<any>(
       endpoint,
       {},
       { operation: `Fetch Interactive Messages${inboxId ? ` for inbox ${inboxId}` : ''}` }
     );
-    return response.data || [];
+    
+    // messages-with-reactions returns: { success: true, messages: [...] }
+    return response.messages || response.data || [];
   },
 
   // Get a specific message
   getById: async (messageId: string): Promise<InteractiveMessage> => {
-    const response = await apiRequest<ApiResponse<InteractiveMessage>>(
-      `/interactive-messages/${messageId}`,
+    const response = await apiRequest<any>(
+      `/messages-with-reactions?messageId=${messageId}`,
       {},
       { operation: `Fetch Interactive Message ${messageId}` }
     );
     
-    if (!response.data) {
+    // messages-with-reactions returns: { success: true, message: {...} }
+    if (!response.message) {
       throw new MtfError('Mensagem não encontrada', {
         status: 404,
         context: 'Interactive Message Not Found',
@@ -130,13 +133,14 @@ export const interactiveMessagesApi = {
       });
     }
     
-    return response.data;
+    return response.message;
   },
 
   // Create a new message
   create: async (payload: CreateMessagePayload): Promise<InteractiveMessage> => {
-    const response = await apiRequest<ApiResponse<InteractiveMessage>>(
-      '/interactive-messages',
+    // Use messages-with-reactions endpoint for atomic creation with reactions
+    const response = await apiRequest<any>(
+      '/messages-with-reactions',
       {
         method: 'POST',
         body: JSON.stringify(payload),
@@ -144,20 +148,22 @@ export const interactiveMessagesApi = {
       { operation: 'Create Interactive Message' }
     );
     
-    if (!response.data) {
+    // messages-with-reactions returns: { success: true, message: {...}, reactions: [...] }
+    if (!response.message) {
       throw new MtfError('Falha ao criar mensagem', {
         context: 'Interactive Message Creation Failed',
         code: 'MESSAGE_CREATE_FAILED',
       });
     }
     
-    return response.data;
+    return response.message;
   },
 
   // Update an existing message
   update: async (payload: UpdateMessagePayload): Promise<InteractiveMessage> => {
-    const response = await apiRequest<ApiResponse<InteractiveMessage>>(
-      `/interactive-messages/${payload.messageId}`,
+    // Use messages-with-reactions endpoint for atomic update with reactions
+    const response = await apiRequest<any>(
+      `/messages-with-reactions`,
       {
         method: 'PUT',
         body: JSON.stringify(payload),
@@ -165,20 +171,21 @@ export const interactiveMessagesApi = {
       { operation: `Update Interactive Message ${payload.messageId}` }
     );
     
-    if (!response.data) {
+    // messages-with-reactions returns: { success: true, message: {...}, reactions: [...] }
+    if (!response.message) {
       throw new MtfError('Falha ao atualizar mensagem', {
         context: 'Interactive Message Update Failed',
         code: 'MESSAGE_UPDATE_FAILED',
       });
     }
     
-    return response.data;
+    return response.message;
   },
 
   // Delete a message
   delete: async (messageId: string): Promise<void> => {
     await apiRequest<ApiResponse>(
-      `/interactive-messages/${messageId}`,
+      `/messages-with-reactions?messageId=${messageId}`,
       {
         method: 'DELETE',
       },

@@ -14,9 +14,14 @@ const prisma = getPrismaInstance();
 function transformActionData(actionType: string, actionData: any): any {
   switch (actionType) {
     case 'button':
+    case 'quick_replies':
+    case 'button_template':
+    case 'generic':
+      // Handle both direct buttons array and wrapped structure from database
+      const buttons = actionData?.buttons || actionData || [];
       return {
         type: 'button',
-        buttons: actionData.buttons || []
+        buttons: Array.isArray(buttons) ? buttons : []
       };
     case 'list':
       return {
@@ -157,6 +162,19 @@ export async function GET(request: NextRequest) {
     const transformedMessages: InteractiveMessage[] = messages.map((msg: any) => {
       const interactive = msg.interactiveContent;
       
+      console.log(`[GET API] Processing message ${msg.id}:`, {
+        interactive: !!interactive,
+        actionReplyButton: !!interactive?.actionReplyButton,
+        actionReplyButtonData: interactive?.actionReplyButton,
+        allActions: {
+          actionCtaUrl: !!interactive?.actionCtaUrl,
+          actionReplyButton: !!interactive?.actionReplyButton,
+          actionList: !!interactive?.actionList,
+          actionFlow: !!interactive?.actionFlow,
+          actionLocationRequest: !!interactive?.actionLocationRequest
+        }
+      });
+      
       // Determine action type and data
       let actionType = 'button'; // default
       let actionData = null;
@@ -165,8 +183,20 @@ export async function GET(request: NextRequest) {
         actionType = 'cta_url';
         actionData = interactive.actionCtaUrl;
       } else if (interactive?.actionReplyButton) {
-        actionType = 'button';
+        // Determine correct button type based on button count and content
+        const buttonCount = interactive.actionReplyButton.buttons?.length || 0;
+        const bodyText = interactive?.body?.text || '';
+        
+        if (buttonCount > 3) {
+          actionType = 'quick_replies';
+        } else if (buttonCount <= 3 && bodyText.length <= 640) {
+          actionType = 'button_template';
+        } else {
+          actionType = 'quick_replies';
+        }
+        
         actionData = interactive.actionReplyButton;
+        console.log(`[GET API] Button action data for ${msg.id}:`, actionData);
       } else if (interactive?.actionList) {
         actionType = 'list';
         actionData = interactive.actionList;
@@ -193,7 +223,7 @@ export async function GET(request: NextRequest) {
         }
       }
       
-      return {
+      const finalMessage = {
         id: msg.id,
         name: msg.name,
         type: actionType as InteractiveMessageType,
@@ -213,6 +243,18 @@ export async function GET(request: NextRequest) {
         createdAt: msg.createdAt,
         updatedAt: msg.updatedAt,
       };
+      
+      console.log(`[GET API] Final message structure for ${msg.id}:`, {
+        id: finalMessage.id,
+        name: finalMessage.name,
+        type: finalMessage.type,
+        hasAction: !!finalMessage.action,
+        actionType: finalMessage.action?.type,
+        buttonsCount: finalMessage.action?.buttons?.length || 0,
+        buttons: finalMessage.action?.buttons || []
+      });
+      
+      return finalMessage;
     });
 
     return NextResponse.json({
@@ -279,6 +321,17 @@ export async function POST(request: NextRequest) {
 
     const { inboxId, message } = validation.data;
 
+    console.log(`[InteractiveMessages API] Validated data:`, {
+      inboxId,
+      messageType: message.type,
+      hasAction: !!message.action,
+      actionStructure: message.action ? JSON.stringify(message.action, null, 2) : 'NO ACTION',
+      conditions: {
+        isButtonType: ['button', 'quick_replies', 'button_template'].includes(message.type),
+        hasActionButtons: !!(message.action && message.action.buttons && message.action.buttons.length > 0)
+      }
+    });
+
     // Verify inbox exists and user has access
     const inbox = await prisma.chatwitInbox.findFirst({
       where: {
@@ -334,13 +387,16 @@ export async function POST(request: NextRequest) {
               }
             }),
             // Create action based on type
-            ...(message.type === 'button' && message.action && {
-              actionReplyButton: {
-                create: {
-                  buttons: message.action.buttons || []
+            ...((message.type === 'button' || message.type === 'quick_replies' || message.type === 'button_template' || message.type === 'generic') && message.action && (() => {
+              console.log(`[InteractiveMessages API] Creating actionReplyButton for type ${message.type} with buttons:`, message.action.buttons);
+              return {
+                actionReplyButton: {
+                  create: {
+                    buttons: message.action.buttons || []
+                  }
                 }
-              }
-            }),
+              };
+            })()),
             ...(message.type === 'list' && message.action && {
               actionList: {
                 create: {

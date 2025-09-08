@@ -14,9 +14,14 @@ const prisma = getPrismaInstance();
 function transformActionData(actionType: string, actionData: any): any {
   switch (actionType) {
     case 'button':
+    case 'quick_replies':
+    case 'button_template':
+    case 'generic':
+      // Handle both direct buttons array and wrapped structure from database
+      const buttons = actionData?.buttons || actionData || [];
       return {
         type: 'button',
-        buttons: actionData.buttons || []
+        buttons: Array.isArray(buttons) ? buttons : []
       };
     case 'list':
       return {
@@ -393,6 +398,73 @@ export async function PUT(
             });
           }
         }
+
+        // ✅ FIXED: Update actions if provided
+        if (interactiveUpdateData.action) {
+          const messageType = interactiveUpdateData.type || 'generic';
+          
+          console.log(`[InteractiveMessages API UPDATE] Updating action for type ${messageType}:`, interactiveUpdateData.action);
+          
+          // Clear existing actions
+          await prisma.actionReplyButton.deleteMany({
+            where: { interactiveContentId: existingInteractive.id }
+          });
+          await prisma.actionList.deleteMany({
+            where: { interactiveContentId: existingInteractive.id }
+          });
+          await prisma.actionCtaUrl.deleteMany({
+            where: { interactiveContentId: existingInteractive.id }
+          });
+          await prisma.actionFlow.deleteMany({
+            where: { interactiveContentId: existingInteractive.id }
+          });
+          await prisma.actionLocationRequest.deleteMany({
+            where: { interactiveContentId: existingInteractive.id }
+          });
+
+          // Create new action based on type
+          if (['button', 'quick_replies', 'button_template', 'generic'].includes(messageType) && interactiveUpdateData.action.buttons) {
+            console.log(`[InteractiveMessages API UPDATE] Creating actionReplyButton with buttons:`, interactiveUpdateData.action.buttons);
+            await prisma.actionReplyButton.create({
+              data: {
+                interactiveContentId: existingInteractive.id,
+                buttons: interactiveUpdateData.action.buttons
+              }
+            });
+          } else if (messageType === 'list') {
+            await prisma.actionList.create({
+              data: {
+                interactiveContentId: existingInteractive.id,
+                ...(interactiveUpdateData.action.sections && { sections: interactiveUpdateData.action.sections }),
+                ...(interactiveUpdateData.action.title && { title: interactiveUpdateData.action.title }),
+                ...(interactiveUpdateData.action.description && { description: interactiveUpdateData.action.description })
+              }
+            });
+          } else if (messageType === 'cta_url') {
+            await prisma.actionCtaUrl.create({
+              data: {
+                interactiveContentId: existingInteractive.id,
+                ...(interactiveUpdateData.action.displayText && { displayText: interactiveUpdateData.action.displayText }),
+                ...(interactiveUpdateData.action.url && { url: interactiveUpdateData.action.url })
+              }
+            });
+          } else if (messageType === 'flow') {
+            await prisma.actionFlow.create({
+              data: {
+                interactiveContentId: existingInteractive.id,
+                ...(interactiveUpdateData.action.flowId && { flowId: interactiveUpdateData.action.flowId }),
+                ...(interactiveUpdateData.action.flowToken && { flowToken: interactiveUpdateData.action.flowToken })
+              }
+            });
+          } else if (messageType === 'location_request') {
+            await prisma.actionLocationRequest.create({
+              data: {
+                interactiveContentId: existingInteractive.id,
+                ...(interactiveUpdateData.action.requestType && { requestType: interactiveUpdateData.action.requestType })
+              }
+            });
+          }
+        }
       }
     }
 
@@ -439,7 +511,19 @@ export async function PUT(
       actionType = 'cta_url';
       actionData = interactive.actionCtaUrl;
     } else if (interactive?.actionReplyButton) {
-      actionType = 'button';
+      // Determine correct button type based on button count and content
+      const buttons = interactive.actionReplyButton.buttons as any[];
+      const buttonCount = Array.isArray(buttons) ? buttons.length : 0;
+      const bodyText = interactive?.body?.text || '';
+      
+      if (buttonCount > 3) {
+        actionType = 'quick_replies';
+      } else if (buttonCount <= 3 && bodyText.length <= 640) {
+        actionType = 'button_template';
+      } else {
+        actionType = 'quick_replies';
+      }
+      
       actionData = interactive.actionReplyButton;
     } else if (interactive?.actionList) {
       actionType = 'list';

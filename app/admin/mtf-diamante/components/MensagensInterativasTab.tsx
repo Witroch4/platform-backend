@@ -156,7 +156,17 @@ const normalizeMessage = (m: AnyMsg): Mensagem => {
 
 const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
   // ✅ CORRIGIDO: Usando hooks dedicados ao invés dos deprecated
-  const { interactiveMessages, caixas, refreshCaixas, buttonReactions, deleteMessage, isLoadingMessages } = useMtfData();
+  const { 
+    interactiveMessages, 
+    caixas, 
+    refreshCaixas, 
+    buttonReactions, 
+    refreshButtonReactions, 
+    deleteMessage, 
+    isLoadingMessages,
+    addButtonReaction,
+    updateButtonReaction 
+  } = useMtfData();
   const { addMessage, updateMessage } = useInteractiveMessages(caixaId);
   
   const [currentView, setCurrentView] = useState<"list" | "create" | "edit">(
@@ -478,7 +488,7 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
           if (message.type === 'button' && message.action?.buttons?.length) {
             message.action = regenerateButtonIds(message.action, prefix);
           }
-          const resp = await fetch(`/api/admin/mtf-diamante/interactive-messages`, {
+          const resp = await fetch(`/api/admin/mtf-diamante/messages-with-reactions`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ inboxId: caixaId, message }),
@@ -562,7 +572,8 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
     console.log('💾 [MensagensInterativasTab] handleSaveMessage iniciado:', {
       optimisticId: optimisticUIData.id,
       name: optimisticUIData.name,
-      texto: optimisticUIData.texto
+      texto: optimisticUIData.texto,
+      reactions: optimisticUIData.reactions
     });
 
     try {
@@ -578,15 +589,22 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
       });
 
       // 2. ✅ CORRIGIDO: Usar hooks dedicados ao invés dos deprecated
+      let savedMessage: any;
       if (isEditMode) {
-        await updateMessage(optimisticUIData, apiPayload);
+        savedMessage = await updateMessage(optimisticUIData, apiPayload);
         console.log('✅ [MensagensInterativasTab] Mensagem atualizada via hook dedicado');
       } else {
-        await addMessage(optimisticUIData, apiPayload);
+        savedMessage = await addMessage(optimisticUIData, apiPayload);
         console.log('✅ [MensagensInterativasTab] Mensagem criada via hook dedicado');
       }
 
-      // 3. Redireciona IMEDIATAMENTE - o hook já atualizou o cache
+      // 3. ✅ As reações já são processadas automaticamente pela API de interactive-messages
+      // Mas vamos forçar refresh das reações para garantir que a UI esteja sincronizada
+      console.log('🔄 [MensagensInterativasTab] Revalidando reações após salvar...');
+      await refreshButtonReactions();
+      console.log('ℹ️ [MensagensInterativasTab] Mensagem e reações salvas com sucesso via API unificada');
+
+      // 4. Redireciona IMEDIATAMENTE - o hook já atualizou o cache
       setCurrentView("list");
       console.log('🎯 [MensagensInterativasTab] Redirecionamento concluído - experiência instantânea!');
 
@@ -599,7 +617,7 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
       // ✅ FIX: Sempre liberar o lock, mesmo em caso de erro
       isProcessingRef.current = false;
     }
-  }, [addMessage, updateMessage, createApiPayload]);
+  }, [addMessage, updateMessage, createApiPayload, addButtonReaction, refreshButtonReactions, caixaId]);
 
   const handleBackToList = () => {
     setCurrentView("list");
@@ -767,6 +785,7 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
                         const botaoReaction = buttonReactions.find(reaction => 
                           reaction.buttonId === botao.id && reaction.action === 'handoff'
                         );
+                        
                         
                         return (
                           <div key={idx} className="flex items-center gap-1">
