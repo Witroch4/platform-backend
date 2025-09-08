@@ -66,8 +66,8 @@ Decidir entre mode='intent' ou mode='chat'.
 
 # Em ambos
 - response_text útil e conciso; gere 2–3 botões.
-- mode='intent': botões relacionados à intenção usando slugs de INTENT_HINTS.
-- mode='chat': botões para continuar/desambiguar; pode incluir @falar_atendente.
+- mode='intent': botões relacionados à intenção usando slugs EXATOS de INTENT_HINTS.
+- mode='chat': slugs livres para desambiguação/contexto; pode incluir @falar_atendente.
 
 # Identidade
 Mantenha a identidade e o tom definidos nas instruções principais${hasInstructions ? " (injetadas)." : "."}
