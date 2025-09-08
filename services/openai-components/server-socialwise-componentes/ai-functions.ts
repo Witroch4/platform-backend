@@ -1,14 +1,41 @@
 // services/openai-components/ai-functions.ts
 import OpenAI from "openai";
 import { z } from "zod";
-import { IntentCandidate, AgentConfig, WarmupButtonsResponse, RouterDecision, ChannelType } from "../types";
+import {
+  IntentCandidate,
+  AgentConfig,
+  WarmupButtonsResponse,
+  RouterDecision,
+  ChannelType,
+} from "../types";
 import { withDeadlineAbort } from "../utils";
-import { createButtonsSchema, createRouterSchema } from "./channel-constraints";
-import { buildMessages } from "./prompt-manager";
+import {
+  createButtonsSchema,
+  createRouterSchema,
+  getConstraintsForChannel,
+} from "./channel-constraints";
+import { buildMessages, buildEphemeralInstructions } from "./prompt-manager";
 import { structuredOrJson } from "./structured-outputs";
 import { ensureSession } from "./session-manager";
 import { createMasterPrompt } from "./prompt-manager";
 import { getModelCaps, isGPT5, normVerb, normEffort } from "./model-capabilities";
+
+type HintOut = { slug: string; score?: number; aliases?: string[]; desc?: string };
+
+function sanitizeHintsWithDesc(cands: IntentCandidate[], topN = 4): HintOut[] {
+  return (cands ?? [])
+    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+    .slice(0, topN)
+    .map((c) => ({
+      slug: c.slug?.startsWith("@") ? c.slug : `@${c.slug}`,
+      score: typeof c.score === "number" ? Number(c.score.toFixed(3)) : undefined,
+      aliases: (c.aliases ?? [])
+        .map((s) => String(s).trim())
+        .filter(Boolean)
+        .slice(0, 3), // <= máximo 3
+      desc: String(c.desc || c.name || "").trim(), // descrição completa
+    }));
+}
 
 /**
  * Generates short titles for multiple intent candidates in a single batch call
@@ -35,11 +62,7 @@ export async function generateShortTitlesBatch(
       // Schema dinâmico: exigir a mesma quantidade de títulos que intents
       const ShortTitlesSchemaN = z
         .object({
-          titles: z
-            .array(
-              z.string().regex(/^.{1,20}$/u, "máx 20 caracteres")
-            )
-            .length(intents.length),
+          titles: z.array(z.string().min(1).max(20)).length(intents.length),
         })
         .strict();
 
@@ -48,30 +71,30 @@ export async function generateShortTitlesBatch(
         user
       );
 
-      // Instruções auxiliares (como developer message): INTENT_HINTS e política de desambiguação
-      const intentLines = intents
-        .slice(0, 5)
-        .map((c, i) => {
-          const sc = typeof c.score === 'number' ? Number(c.score!.toFixed(3)) : undefined;
-          const desc = (c.desc || c.name || c.slug || '').replace(/\s+/g, ' ').trim().slice(0, 140);
-          return `- @${c.slug}${sc !== undefined ? ` score:${sc}` : ''}${desc ? `\n  desc: ${desc}` : ''}`;
-        })
-        .join("\n");
-
-      const guidance = `\n# INTENT_HINTS (para desambiguação)\nUse estes candidatos para montar os botões (2–3 opções).\n${intentLines}\n\n# POLÍTICA DE WARMUP (não restritiva)\n- Gere 2–3 botões objetivos com payloads usando EXCLUSIVAMENTE os slugs acima.\n- Se houver ambiguidade (ex.: premium vs. motoqueiro), faça uma pergunta curta no response_text e use os botões para o usuário se identificar.\n- Não invente dados operacionais (ex.: horário exato). Prefira linguagem neutra (ex.: “Posso confirmar seu caso, escolha uma opção”).\n- Pode incluir @falar_atendente quando fizer sentido.`;
-
-      // Posicionar como mensagem de developer para orientar a LLM
-      messages.unshift({ role: "developer", content: guidance });
+      // Instruções enxutas: task rules + limites do canal (sem persona hardcoded)
+      const combinedInstructions =
+        (agent.instructions || "Siga o schema estritamente.") +
+        "\n\n" +
+        buildEphemeralInstructions({
+          task: "SHORT_TITLES",
+          channel: "whatsapp",
+          hints: [], // não necessário aqui
+        });
 
       const caps = getModelCaps(agent.model);
       const result = await structuredOrJson<{ titles: string[] }>({
         client: this.client,
         model: agent.model,
         messages,
-        instructions: agent.instructions || "Você é um UX writer jurídico. Siga o schema estritamente.",
-        max_output_tokens: agent.maxOutputTokens || 256,
-        verbosity: caps.reasoning && isGPT5(agent.model) ? normVerb(agent.verbosity) : undefined,
-        reasoning: caps.reasoning ? { effort: normEffort(agent.reasoningEffort) } : undefined,
+        instructions: combinedInstructions,
+        max_output_tokens: agent.maxOutputTokens || 128,
+        verbosity:
+          caps.reasoning && isGPT5(agent.model)
+            ? normVerb(agent.verbosity)
+            : undefined,
+        reasoning: caps.reasoning
+          ? { effort: normEffort(agent.reasoningEffort) }
+          : undefined,
         agent,
         schema: ShortTitlesSchemaN,
         schemaName: "ShortTitles",
@@ -87,14 +110,14 @@ export async function generateShortTitlesBatch(
 }
 
 /**
- * 🎯 NOVA FUNCIONALIDADE: Chat livre com IA gerando botões dinâmicos
- * Usado na banda LOW quando não há intenções claras mas cliente quer conversar
+ * 🎯 Chat livre com IA gerando botões dinâmicos
+ * Usado quando não há intenções claras mas cliente quer conversar
  */
 export async function generateFreeChatButtons(
   this: { client: OpenAI },
   userText: string,
   agent: AgentConfig,
-  opts?: { 
+  opts?: {
     channelType?: ChannelType;
     sessionId?: string;
   }
@@ -105,55 +128,66 @@ export async function generateFreeChatButtons(
   // 🔍 DEBUG: Log sessionId recebido
   console.log("🎯 FREE CHAT BUTTONS - SessionId recebido:", opts?.sessionId);
 
-  const user = `Cliente: "${userText}"`;
+  // Texto cru do usuário (sem molduras/prefixos)
+  const user = userText;
 
   return withDeadlineAbort(async (signal) => {
     try {
       const caps = getModelCaps(agent.model);
-      
-      // 🔑 PADRÃO DA BÍBLIA: Detectar se precisa enviar prompts developer
+      const c = getConstraintsForChannel(channel);
+
+      // Detectar se precisa enviar developer prompts (MASTER) — nova sessão
       const hasSessionId = !!opts?.sessionId;
-      
-      // Primeira chamada ensureSession para obter previous_response_id e flag de nova sessão
-      let isNewSession = true; // Default para nova sessão
+      let isNewSession = true;
+
       if (hasSessionId) {
         try {
-          const sessionResult = await ensureSession({ sessionId: (opts!.sessionId as string), agent, channel }, createMasterPrompt, signal);
+          const sessionResult = await ensureSession(
+            { sessionId: opts!.sessionId as string, agent, channel },
+            createMasterPrompt,
+            signal
+          );
           isNewSession = sessionResult.isNewSession;
         } catch (error) {
           console.warn("[Session] Erro ao obter sessão:", error);
-          isNewSession = true; // Em caso de erro, tratar como nova sessão
+          isNewSession = true;
         }
       }
-      
+
       const messages = buildMessages(
-        { 
-          channel, 
-          taskType: "FREE_CHAT", 
-          statelessInit: isNewSession  // ← Usa a detecção real!
+        {
+          channel,
+          taskType: "FREE_CHAT",
+          statelessInit: isNewSession, // MASTER só em nova sessão
         },
         user
       );
 
-      // FREE_CHAT - simplificado sem INTENT_HINTS
-      const intentLinesWarmup = ""
-        .split('')
-        .map((c, i) => `char ${i}: ${c}`)
-        .join("\n");
-
-      const guidanceWarmup = `\n# INTENT_HINTS (para desambiguação)\nUse estes candidatos para montar os botões (2–3 opções).\n${intentLinesWarmup}\n\n# POLÍTICA DE WARMUP (não restritiva)\n- Gere 2–3 botões objetivos com payloads usando EXCLUSIVAMENTE os slugs acima.\n- Se houver ambiguidade (ex.: premium vs. motoqueiro), faça uma pergunta curta no response_text e use os botões para o usuário se identificar.\n- Não invente dados operacionais (ex.: horário exato). Prefira linguagem neutra (ex.: “Posso confirmar seu caso, escolha uma opção”).\n- Pode incluir @falar_atendente quando fizer sentido.`;
-
-      // Posicionar como mensagem de developer para orientar a LLM
-      messages.unshift({ role: "developer", content: guidanceWarmup });
+      // instructions-only: task rules + limits (sem hints)
+      const combinedInstructions =
+        (agent.instructions || "Siga o schema estritamente.") +
+        "\n\n" +
+        buildEphemeralInstructions({
+          task: "FREE_CHAT",
+          channel,
+          hints: [], // não há hints aqui
+        });
 
       const result = await structuredOrJson<WarmupButtonsResponse>({
         client: this.client,
         model: agent.model,
         messages,
-        instructions: agent.instructions || "Você é um UX writer especializado em criar botões de navegação. Siga o schema estritamente e gere botões objetivos.",
-        max_output_tokens: agent.maxOutputTokens || 256,
-        verbosity: caps.reasoning && isGPT5(agent.model) ? normVerb(agent.verbosity) : undefined,
-        reasoning: caps.reasoning ? { effort: normEffort(agent.reasoningEffort) } : undefined,
+        instructions: combinedInstructions,
+        max_output_tokens:
+          agent.maxOutputTokens ||
+          Math.min(256, Math.max(128, Math.round(c.bodyMax * 1.5))),
+        verbosity:
+          caps.reasoning && isGPT5(agent.model)
+            ? normVerb(agent.verbosity)
+            : undefined,
+        reasoning: caps.reasoning
+          ? { effort: normEffort(agent.reasoningEffort) }
+          : undefined,
         agent,
         schema,
         schemaName: "FreeChatButtons",
@@ -179,7 +213,7 @@ export async function generateWarmupButtons(
   userText: string,
   candidates: IntentCandidate[],
   agent: AgentConfig,
-  opts?: { 
+  opts?: {
     channelType?: ChannelType;
     sessionId?: string;
   }
@@ -189,88 +223,78 @@ export async function generateWarmupButtons(
   // 🔍 DEBUG: Log sessionId recebido
   console.log("🎯 GENERATE WARMUP BUTTONS - SessionId recebido:", opts?.sessionId);
 
-  const candidatesText = candidates
-    .map((c, i) => {
-      const raw = (c.desc || c.name || c.slug || "").toString();
-      const marker = "\n---\nALIASES:\n";
-      let main = raw;
-      let aliases: string[] = [];
-      const idx = raw.indexOf(marker);
-      if (idx !== -1) {
-        main = raw.substring(0, idx).trim();
-        const rest = raw.substring(idx + marker.length);
-        aliases = rest
-          .split(/\r?\n/g)
-          .map((s) => s.trim())
-          .filter(Boolean);
-      }
-      const lines: string[] = [];
-      lines.push(`${i + 1}. @${c.slug}: ${main || c.name || c.slug}`);
-      if (aliases.length) {
-        lines.push("ALIASES:");
-        for (const a of aliases) lines.push(`- ${a}`);
-      }
-      return lines.join("\n");
-    })
-    .join("\n");
-
   const channel: ChannelType = opts?.channelType || "whatsapp";
   const schema = createButtonsSchema(channel);
 
-  // Mantém o texto do usuário limpo; candidatos irão nas 'instructions'
-  const user = `Mensagem do usuário: "${userText}"`;
+  // Texto cru do usuário - sem prefixos
+  const user = userText;
+  const c = getConstraintsForChannel(channel);
 
   return withDeadlineAbort(async (signal) => {
     try {
       const caps = getModelCaps(agent.model);
-      
-      // 🔑 DETECÇÃO DE NOVA SESSÃO: Verificar se existe previous_response_id
+
+      // DETECÇÃO DE NOVA SESSÃO
       const hasSessionId = !!opts?.sessionId;
-      let isNewSession = true; // Default para nova sessão
-      
+      let isNewSession = true;
+
       if (hasSessionId) {
         try {
-          const sessionResult = await ensureSession({ sessionId: opts!.sessionId!, agent, channel }, createMasterPrompt, signal);
+          const sessionResult = await ensureSession(
+            { sessionId: opts!.sessionId!, agent, channel },
+            createMasterPrompt,
+            signal
+          );
           isNewSession = sessionResult.isNewSession;
         } catch (error) {
           console.warn("[Session] Erro ao obter sessão:", error);
-          isNewSession = true; // Em caso de erro, tratar como nova sessão
+          isNewSession = true;
         }
       }
-      
-      // 🎯 ENVIAR DEVELOPER PROMPTS APENAS EM NOVA SESSÃO
+
+      // MASTER (developer) apenas em nova sessão
       const messages = buildMessages(
-        { 
-          channel, 
-          taskType: "WARMUP_BUTTONS", 
-          statelessInit: isNewSession  // ← Usa a detecção real!
+        {
+          channel,
+          taskType: "WARMUP_BUTTONS",
+          statelessInit: isNewSession,
         },
         user
       );
 
-      // 🎯 PADRÃO CORRETO: Injetar INTENT_HINTS nas instructions junto com as do agente
-      const intentLines = candidates
-        .slice(0, 5)
-        .map((c, i) => {
-          const sc = typeof c.score === 'number' ? Number(c.score!.toFixed(3)) : undefined;
-          const desc = (c.desc || c.name || c.slug || '').replace(/\s+/g, ' ').trim().slice(0, 140);
-          return `- @${c.slug}${sc !== undefined ? ` score:${sc}` : ''}${desc ? `\n  desc: ${desc}` : ''}`;
-        })
-        .join("\n");
+      // instructions-only: task rules + limits + hints JSON (com desc completo)
+      const hints = sanitizeHintsWithDesc(
+        candidates.map((h) => ({
+          ...h,
+          aliases: h.aliases, // já respeitamos máx 3 no helper
+        })),
+        4 // top-N intents para enviar; ajuste se quiser
+      );
 
-      const intentHintsGuidance = `\n\n# INTENT_HINTS (para desambiguação)\nUse estes candidatos para montar os botões (2–3 opções):\n${intentLines}\n\n# POLÍTICA DE WARMUP (não restritiva)\n- Gere 2–3 botões objetivos com payloads usando EXCLUSIVAMENTE os slugs acima.\n- Se houver ambiguidade (ex.: premium vs. motoqueiro), faça uma pergunta curta no response_text e use os botões para o usuário se identificar.\n- Não invente dados operacionais (ex.: horário exato). Prefira linguagem neutra (ex.: "Posso confirmar seu caso, escolha uma opção").\n- Pode incluir @falar_atendente quando fizer sentido.`;
-
-      // Combinar instruções do agente com os INTENT_HINTS
-      const combinedInstructions = (agent.instructions || "Você é um UX writer especializado em criar botões de navegação. Siga o schema estritamente e gere botões objetivos.") + intentHintsGuidance;
+      const combinedInstructions =
+        (agent.instructions || "Siga o schema estritamente.") +
+        "\n\n" +
+        buildEphemeralInstructions({
+          task: "WARMUP_BUTTONS",
+          channel,
+          hints, // inclui desc completo
+        });
 
       const result = await structuredOrJson<WarmupButtonsResponse>({
         client: this.client,
         model: agent.model,
         messages,
         instructions: combinedInstructions,
-        max_output_tokens: agent.maxOutputTokens || 256,
-        verbosity: caps.reasoning && isGPT5(agent.model) ? normVerb(agent.verbosity) : undefined,
-        reasoning: caps.reasoning ? { effort: normEffort(agent.reasoningEffort) } : undefined,
+        max_output_tokens:
+          agent.maxOutputTokens ||
+          Math.min(256, Math.max(128, Math.round(c.bodyMax * 1.5))),
+        verbosity:
+          caps.reasoning && isGPT5(agent.model)
+            ? normVerb(agent.verbosity)
+            : undefined,
+        reasoning: caps.reasoning
+          ? { effort: normEffort(agent.reasoningEffort) }
+          : undefined,
         agent,
         schema,
         schemaName: "WarmupButtons",
@@ -295,7 +319,7 @@ export async function routerLLM(
   this: { client: OpenAI },
   userText: string,
   agent: AgentConfig,
-  opts?: { 
+  opts?: {
     channelType?: ChannelType;
     sessionId?: string;
     intentHints?: IntentCandidate[];
@@ -306,46 +330,77 @@ export async function routerLLM(
 
   // 🔍 DEBUG: Log sessionId recebido
   console.log("🎯 ROUTER LLM - SessionId recebido:", opts?.sessionId);
+  const c = getConstraintsForChannel(channel);
 
-  const user = `Mensagem do usuário: "${userText}"`;
+  // Texto cru do usuário - sem molduras
+  const user = userText;
 
   return withDeadlineAbort(async (signal) => {
     try {
       const caps = getModelCaps(agent.model);
-      
-      // 🔑 PADRÃO DA BÍBLIA: Detectar se precisa enviar prompts developer
+
+      // Detectar nova sessão para decidir se envia MASTER (developer)
       const hasSessionId = !!opts?.sessionId;
-      
-      // Primeira chamada ensureSession para obter previous_response_id e flag de nova sessão
-      let isNewSession = true; // Default para nova sessão
+      let isNewSession = true;
+
       if (hasSessionId) {
         try {
-          const sessionResult = await ensureSession({ sessionId: (opts!.sessionId as string), agent, channel }, createMasterPrompt, signal);
+          const sessionResult = await ensureSession(
+            { sessionId: opts!.sessionId as string, agent, channel },
+            createMasterPrompt,
+            signal
+          );
           isNewSession = sessionResult.isNewSession;
         } catch (error) {
           console.warn("[Session] Erro ao obter sessão:", error);
-          isNewSession = true; // Em caso de erro, tratar como nova sessão
+          isNewSession = true;
         }
       }
-      
+
       const messages = buildMessages(
-        { 
-          channel, 
-          taskType: "router", 
+        {
+          channel,
+          taskType: "router",
           hasInstructions: !!agent.instructions,
-          statelessInit: isNewSession  // ← Usa a detecção real!
+          statelessInit: isNewSession, // MASTER só em nova sessão
         },
         user
       );
+
+      // Instruções compactas para router (com hints com desc completo se fornecidos)
+      const hints = sanitizeHintsWithDesc(
+        (opts?.intentHints ?? []).map((h) => ({
+          ...h,
+          aliases: h.aliases,
+        })),
+        4
+      );
+
+      const compactRouterInstr =
+        (agent.instructions || "Siga o schema estritamente.") +
+        "\n\n" +
+        buildEphemeralInstructions({
+          task: "router",
+          channel,
+          hasInstructions: !!agent.instructions,
+          hints, // inclui desc completo
+        });
 
       const result = await structuredOrJson<RouterDecision>({
         client: this.client,
         model: agent.model,
         messages,
-        instructions: agent.instructions || "Você é um roteador inteligente. Siga o schema estritamente.",
-        max_output_tokens: agent.maxOutputTokens || 512,
-        verbosity: caps.reasoning && isGPT5(agent.model) ? normVerb(agent.verbosity) : undefined,
-        reasoning: caps.reasoning ? { effort: normEffort(agent.reasoningEffort) } : undefined,
+        instructions: compactRouterInstr,
+        max_output_tokens:
+          agent.maxOutputTokens ||
+          Math.min(384, Math.max(192, Math.round(c.bodyMax * 2))),
+        verbosity:
+          caps.reasoning && isGPT5(agent.model)
+            ? normVerb(agent.verbosity)
+            : undefined,
+        reasoning: caps.reasoning
+          ? { effort: normEffort(agent.reasoningEffort) }
+          : undefined,
         agent,
         schema,
         schemaName: "RouterDecision",

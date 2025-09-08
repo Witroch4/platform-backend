@@ -1052,6 +1052,28 @@ export async function processSocialWiseFlow(
             }
             
             if (buttonId) {
+              // ⚡ MAPEAMENTO AUTOMÁTICO: @falar_atendente -> handoff nativo
+              if (buttonId === '@falar_atendente') {
+                processorLogger.info('🚨 HANDOFF AUTOMÁTICO: @falar_atendente detectado', {
+                  buttonId,
+                  channelType: context.channelType,
+                  traceId: context.traceId
+                });
+                
+                const routeTotalMs = Date.now() - startTime;
+                return {
+                  response: { action: 'handoff' },
+                  metrics: {
+                    band: 'ROUTER',
+                    strategy: 'auto_handoff_button',
+                    routeTotalMs,
+                    embeddingMs: 0,
+                    llmWarmupMs: 0,
+                    score: 1.0
+                  }
+                };
+              }
+              
               // Remove @ do início se existir e usa como texto de entrada
               const buttonText = buttonId.startsWith('@') ? buttonId.substring(1) : buttonId;
               context.userText = buttonText;

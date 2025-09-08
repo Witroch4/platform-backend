@@ -5,11 +5,12 @@
 export {
   generateShortTitlesBatch,
   generateFreeChatButtons,
-  generateWarmupButtons
+  generateWarmupButtons,
+  routerLLM  // ← Agora usa a implementação nova do ai-functions
 } from "./server-socialwise-componentes/ai-functions";
 
-// Export patched routerLLM implementation that appends INTENT_HINTS and handles developer prompts
-export { routerLLM } from "./server-socialwise-componentes/router-llm";
+// REMOVIDO: Export antigo do router-llm.ts
+// export { routerLLM } from "./server-socialwise-componentes/router-llm";
 
 // Re-exportar utilitários dos módulos filhos para compatibilidade
 export { structuredOrJson } from "./server-socialwise-componentes/structured-outputs";

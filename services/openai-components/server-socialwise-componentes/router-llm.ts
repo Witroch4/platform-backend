@@ -29,7 +29,8 @@ export async function routerLLM(
   // Debug: log session id
   console.log("🎯 ROUTER LLM - SessionId recebido:", opts?.sessionId);
 
-  const user = `Mensagem do usuário: "${userText}"`;
+  // ✅ Texto cru do usuário - sem prefixos para evitar prompt injection
+  const user = userText;
 
   return withDeadlineAbort(async (signal) => {
     try {

@@ -30,17 +30,17 @@ export const FooterSection: React.FC<FooterSectionProps> = ({
     return getInstagramTemplateType(bodyText, hasImage, selectedType);
   }, [isInstagram, message.body?.text, message.header?.type, message.type]);
 
-  // Ocultar completamente se for Instagram Button Template
-  if (isInstagram && instagramTemplate?.type === 'button_template') {
-    return null;
-  }
-
   const handleFooterTextChange = React.useCallback(
     (text: string) => {
       onMessageUpdate({ footer: { text } });
     },
     [onMessageUpdate]
   );
+
+  // Ocultar completamente se for Instagram Button Template
+  if (isInstagram && instagramTemplate?.type === 'button_template') {
+    return null;
+  }
 
   const getFooterDescription = () => {
     if (isInstagram) {

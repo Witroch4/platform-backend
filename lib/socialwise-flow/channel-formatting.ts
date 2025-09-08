@@ -144,14 +144,29 @@ export function buildChannelResponse(
 ): ChannelResponse {
   const lowerChannelType = (channelType || '').toLowerCase();
 
-  // Palavras-chave para handoff
+  // Palavras-chave para handoff - mas NÃO se há botões válidos
   const lowerText = (text || '').toLowerCase();
-  if (
-    lowerText.includes('atendente') ||
-    lowerText.includes('humano') ||
-    lowerText.includes('falar')
-  ) {
+  const hasHandoffKeywords = lowerText.includes('atendente') ||
+                           lowerText.includes('humano') ||
+                           lowerText.includes('falar');
+  
+  // Se há botões válidos, não fazer handoff automático mesmo com palavras-chave
+  if (hasHandoffKeywords && (!buttons || buttons.length === 0)) {
+    formattingLogger.info('🚨 HANDOFF AUTOMÁTICO DETECTADO', {
+      originalText: text,
+      triggerWord: lowerText.includes('atendente') ? 'atendente' : 
+                   lowerText.includes('humano') ? 'humano' : 'falar',
+      reason: 'Palavras-chave de handoff sem botões alternativos'
+    });
     return { action: 'handoff' };
+  } else if (hasHandoffKeywords && buttons && buttons.length > 0) {
+    formattingLogger.info('⚠️ HANDOFF KEYWORDS IGNORADAS - BOTÕES PRESENTES', {
+      originalText: text,
+      triggerWord: lowerText.includes('atendente') ? 'atendente' : 
+                   lowerText.includes('humano') ? 'humano' : 'falar',
+      buttonCount: buttons.length,
+      reason: 'Botões válidos previnem handoff automático'
+    });
   }
 
   // Sem botões → texto simples do canal
@@ -239,7 +254,7 @@ export function buildFallbackResponse(
   const fallbackButtons: ButtonOption[] = [
     { title: 'Consulta jurídica', payload: '@consulta_juridica' },
     { title: 'Documentos', payload: '@documentos' },
-    { title: 'Falar com atendente', payload: '@handoff_human' },
+    { title: 'Falar com atendente', payload: '@falar_atendente' },
   ];
 
   return buildChannelResponse(

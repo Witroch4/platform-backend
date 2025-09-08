@@ -1,91 +1,79 @@
 // services/openai-components/prompt-manager.ts
 import { ChannelType } from "../types";
 import { getConstraintsForChannel } from "./channel-constraints";
+import type { IntentCandidate } from "../types";
 
-// ==== MASTER_PROMPT - Lógica de negócio imutável ====
+// ==== MASTER_PROMPT - lógica de negócio IMUTÁVEL ====
+// Conciso, assertivo e econômico em tokens. Consolidamos regras universais
+// (JSON estrito, identidade/tom, antialucinação e botões) aqui, e reforçamos
+// pontualmente nos TASK_PROMPTS quando necessário.
 const MASTER_PROMPT_BASE = `
-# MASTER
-Você é um assistente especializado em geração de respostas estruturadas para chatbots.
-Sempre retorne EXATAMENTE no schema especificado, sem texto fora do JSON.
-Foque em respostas concisas, profissionais e acionáveis.
+# MASTER (imutável)
+- Saída: apenas JSON válido no schema fornecido; sem texto fora do JSON.
+- Respeite a identidade e o tom definidos nas instructions do agente.
 
-# REGRAS UNIVERSAIS PARA BOTÕES
-- Títulos de botões: máximo 20 caracteres, objetivos e acionáveis
-- Payload: sempre no formato @slug (obrigatório)
-- Retorne SOMENTE no schema especificado (sem explicações fora do JSON)
+# Antialucinação Operacional
+- Não invente dados operacionais (horários, preços, telefones, endereços, prazos).
+- Afirme fatos só se vierem de INTENT_HINTS, integrações, contexto da sessão ou do próprio usuário.
+- Na falta de dado, não chute: ofereça botões para confirmar/obter informação.
+
+# Regras Universais de Botões
+- Títulos até 20 caracteres, objetivos e acionáveis.
+- Quantidade: use 2–3 botões quando aplicável.
+- Payload em formato @slug; não invente slugs.
 `;
 
-// Função que gera o MASTER_PROMPT dinamicamente com limites do canal
+// Gera o MASTER com limites do canal (mantém o bloco imutável + ajustes de canal)
 export function createMasterPrompt(channel: ChannelType): string {
   const c = getConstraintsForChannel(channel);
-  return MASTER_PROMPT_BASE + `- response_text: até ${c.bodyMax} caracteres, sempre útil e contextual\n`;
+  return (
+    MASTER_PROMPT_BASE +
+    `# Limites do Canal\n- response_text: até ${c.bodyMax} caracteres.\n`
+  );
 }
 
-// Task-specific prompt templates
+// Task-specific prompt templates (enxutos e assertivos)
 export const TASK_PROMPTS = {
   SHORT_TITLES: `
-# OBJETIVO
-Gerar títulos curtos e acionáveis para cada serviço.
-
-# REGRAS ESPECÍFICAS
-- Títulos: até 20 caracteres (obrigatório)
-- Linguagem neutra e profissional
+# Objetivo
+Gerar títulos curtos (≤ 20) e acionáveis para cada serviço.
+Linguagem neutra e profissional.
 `,
 
   FREE_CHAT: `
-# OBJETIVO
-Gerar uma resposta curta (response_text) e 2–3 botões objetivos para avançar a conversa.
-
-# REGRAS ESPECÍFICAS
-- Linguagem neutra e profissional
+# Objetivo
+Gerar response_text conciso e 2–3 botões para continuar a conversa.
+Evite afirmar dados operacionais não fornecidos.
 `,
 
   WARMUP_BUTTONS: `
-# OBJETIVO
-Gerar uma pequena introdução e botões para desambiguar a intenção do usuário.
+# Objetivo
+Gerar breve introdução e 2–3 botões para desambiguar a intenção do usuário.
 
-# REGRAS ESPECÍFICAS
-- Linguagem neutra e profissional
-- NUNCA afirme dados operacionais do cliente (ex.: horários, preços, telefones, endereços). Se a pergunta for sobre horário, evite citar horários específicos; incentive a confirmação via botões.
-- Gere SEMPRE 2–3 botões objetivos (nunca menos de 2 quando houver mais de uma opção plausível).
-- Títulos: ≤20 caracteres, claros e acionáveis.
-- Payload dos botões: use EXCLUSIVAMENTE slugs fornecidos nos INTENT_HINTS (ex.: @negocio1, @negocio777). Se precisar, inclua também @falar_atendente.
-- Se houver candidatos com restrições (ex.: premium, perfil específico), formule a introdução como pergunta curta para o usuário se identificar, e use os botões para escolher.
+# Específicas
+- Títulos baseados na "desc" dos intents, não no slug técnico.
+- Use apenas slugs de INTENT_HINTS no payload; pode incluir @falar_atendente.
+- Títulos ≤ 20 caracteres, claros e acionáveis.
 `,
 
   ROUTER_LLM: (hasInstructions: boolean) => `
-# OBJETIVO
-Como ${hasInstructions ? 'assistente especializado' : 'roteador inteligente'}, decida entre roteamento para intenção específica mode='intent' ou resposta conversacional mode='chat'.
+# Objetivo
+Decidir entre mode='intent' ou mode='chat'.
 
-# REGRAS DE ROTEAMENTO
-- mode='intent' quando houver uma intenção clara e específica que pode ser mapeada
-  * Para modo 'intent': inclua intent_payload no formato @slug
-  * response_text deve ser uma resposta útil relacionada à intenção
-  * buttons obrigatório com 2-3 opções relacionadas à intenção e @slug dos INTENT_HINTS
-  * JAMAIS mandar slug de 2 intents SEMPRE usar apenas 1 slug em mode='intent' TEM DÚVIDA? use mode='chat'
+# Decisão
+- Intenção claramente mapeável: mode='intent' com intent_payload=@slug EXATO (apenas um).
+- Dúvida ou múltiplas plausíveis: mode='chat'.
 
-- mode='chat' para conversa geral ou quando não há intenção específica mapeável ou você tem dúvidas entre múltiplas intenções
-  * Para modo 'chat': response_text deve ser uma resposta conversacional útil
-  * buttons obrigatório com 2-3 opções para continuar a conversa e @slug livre
+# Em ambos
+- response_text útil e conciso; gere 2–3 botões.
+- mode='intent': botões relacionados à intenção usando slugs de INTENT_HINTS.
+- mode='chat': botões para continuar/desambiguar; pode incluir @falar_atendente.
 
-# REGRAS ESPECÍFICAS
-- Mantenha a identidade e tom definidos nas instruções principais
+# Identidade
+Mantenha a identidade e o tom definidos nas instruções principais${hasInstructions ? " (injetadas)." : "."}
 
-# USO DOS INTENT_HINTS (priorize sem restringir)
-- Considere com atenção os INTENT_HINTS fornecidos pelo sistema.
-- Se houver UM único hint fortemente alinhado ao pedido (ex.: pergunta sobre “horário/funcionamento” e hint descreve “horário de atendimento”), é preferível escolher mode='intent' com o slug EXATO do hint.
-- Se houver dúvida ou múltiplos hints plausíveis, prefira mode='chat' e desambigue com 2–3 botões baseados nos slugs dos INTENT_HINTS. Pode incluir um botão de atendimento humano quando fizer sentido (ex.: @falar_atendente).
-- Quando optar por mode='intent', use exatamente um slug de INTENT_HINTS (não invente slugs). Se nenhum slug for adequado, escolha mode='chat' para usar @slug livremente.
-
-# BOTÕES DE DESAMBIGUAÇÃO (quando em chat)
-- Use títulos curtos (≤20) e objetivos.
-- Priorize 2–3 opções: (1) top hint; (2) segunda opção relevante; (3) falar com atendente (opcional).
-- Os payloads dos botões devem ser @slug de INTENT_HINTS ou, em último caso, livres quando for apenas continuação da conversa.
-- Não veio INTENT_HINTS? Use 2–3 botões livres para continuar a conversa.
-
-# ANTIALUCINAÇÃO OPERACIONAL
-- Nunca afirme dados operacionais (horários, preços, telefones, endereços) a menos que estejam explícitos nos INTENT_HINTS ou contexto.
-- Para perguntas de “horário de atendimento”, responda de forma neutra e ofereça botões como “Ver horário” em vez de citar horários específicos.
+# Antialucinação
+Siga o MASTER: não invente dados operacionais; prefira perguntar.
 `,
 };
 
@@ -96,31 +84,56 @@ export interface PromptBuilderOptions {
   statelessInit?: boolean;
 }
 
+// Constrói 'messages' no formato esperado pelos clientes que usam developer+user
 export function buildMessages(
   options: PromptBuilderOptions,
   userContent: string
 ): Array<{ role: "developer" | "user"; content: string }> {
   const messages: Array<{ role: "developer" | "user"; content: string }> = [];
-  
-  // Add developer prompts only if statelessInit (new session)
-  if (options.statelessInit !== false) { // default true
+
+  // Adiciona apenas MASTER nas developer messages (nova sessão).
+  // Task rules e hints ficam em `instructions` (evita duplicação).
+  if (options.statelessInit !== false) {
     messages.push({ role: "developer", content: createMasterPrompt(options.channel) });
-    messages.push({ role: "developer", content: "\n# REGRAS DE CONFIABILIDADE (ANTIALUCINAÇÃO)\n- Nunca invente dados operacionais do cliente (ex.: horário de atendimento, preços, endereços, prazos, telefones).\n- Só afirme fatos se vierem explicitamente do sistema (INTENT_HINTS, mapeamentos/integrações, ou contexto de sessão) ou do próprio usuário.\n- Caso falte o dado, NÃO chute: ofereça botões para obter/confirmar a informação.\n" });
-    
-    if (options.taskType === 'router') {
-      messages.push({ 
-        role: "developer", 
-        content: TASK_PROMPTS.ROUTER_LLM(options.hasInstructions || false) 
-      });
-    } else {
-      const taskPrompt = TASK_PROMPTS[options.taskType];
-      if (typeof taskPrompt === 'string') {
-        messages.push({ role: "developer", content: taskPrompt });
-      }
-    }
   }
-  
+
+  // Texto cru do usuário (sem molduras).
   messages.push({ role: "user", content: userContent });
-  
+
   return messages;
 }
+
+// Builder de instructions efêmeras (task rules + guardrails + limits + hints JSON)
+export function buildEphemeralInstructions(opts: {
+  task: keyof typeof TASK_PROMPTS | 'router';
+  channel: ChannelType;
+  hasInstructions?: boolean;
+  hints?: Array<{ slug: string; score?: number; aliases?: string[]; desc?: string }>;
+  extra?: string;
+}): string {
+  const { channel, task, hasInstructions, hints, extra } = opts;
+  const c = getConstraintsForChannel(channel);
+  const core =
+    task === 'router'
+      ? TASK_PROMPTS.ROUTER_LLM(!!hasInstructions)
+      : (TASK_PROMPTS[task] as string);
+
+  // mantém ordem e números curtos
+  const top = (hints ?? [])
+    .map(h => ({
+      slug: h.slug?.startsWith('@') ? h.slug : `@${h.slug}`,
+      score: typeof h.score === 'number' ? Number(h.score.toFixed(3)) : undefined,
+      aliases: (h.aliases ?? []).slice(0, 3),
+      desc: (h.desc ?? '').toString().trim(), // <<< descrição completa
+    }));
+
+  let out = "";
+  out += "TASK_RULES:\n" + core.trim();
+  out += `\n\nGUARDRAILS\n- Não afirme dados operacionais sem fonte no contexto ou do usuário.\n- Não invente payloads: use somente slugs permitidos.`;
+  out += `\n\nCHANNEL_LIMITS\n- response_text<=${c.bodyMax}; button_title<=${c.buttonTitleMax}; buttons=2–3; payload=@slug ou vazio ("").`;
+  out += `\n\nBUTTON_POLICY\n- Títulos ≤ ${c.buttonTitleMax} chars. Use slugs de INTENT_HINTS no payload; se nenhum aplicar, inclua @falar_atendente.\n- EXEMPLOS: desc="horario Premium" → título="Clientes Premium" (payload="@negocio666"); desc="atendimento escritorio" → título="Horário Escritório" (payload="@negocio1")`;
+  out += `\n\nINTENT_HINTS_JSON\n` + JSON.stringify(top, null, 0);
+  if (extra && extra.trim()) out += `\n\nEXTRA\n` + extra.trim();
+  return out;
+}
+

@@ -76,6 +76,7 @@ export const InteractiveMessageCreator: React.FC<
     }
   }, [caixas, inboxId, channelType]);
   const reactionsLoadedRef = useRef(false);
+  const footerUserClearedRef = useRef(false);
 
   // Initialize state with proper defaults
   const [state, setState] = useState<InteractiveMessageState>({
@@ -109,6 +110,9 @@ export const InteractiveMessageCreator: React.FC<
   // Load existing message data when editing
   useEffect(() => {
     if (editingMessage && state.currentStep === "type-selection") {
+      // Reset footer flag when editing existing message - assume user is OK with current footer
+      footerUserClearedRef.current = false;
+      
       // Apenas carregar dados iniciais, não durante edição ativa
       setState(prev => ({
         ...prev,
@@ -146,9 +150,9 @@ export const InteractiveMessageCreator: React.FC<
     };
   }, [state.currentStep, pauseUpdates, resumeUpdates, isUpdatesPaused]);
 
-  // Auto-populate footer with company name if available
+  // Auto-populate footer with company name if available (only if user hasn't explicitly cleared it)
   useEffect(() => {
-    if (!variablesLoading && variables.length > 0 && !state.message.footer?.text) {
+    if (!variablesLoading && variables.length > 0 && !state.message.footer?.text && !footerUserClearedRef.current) {
       const companyNameVar = variables.find(v => v.chave === 'nome_do_escritorio_rodape');
       if (companyNameVar?.valor) {
         updateMessage({ footer: { text: companyNameVar.valor } });
@@ -180,6 +184,14 @@ export const InteractiveMessageCreator: React.FC<
 
   // Unified state update functions
   const updateMessage = useCallback((updates: Partial<InteractiveMessage>) => {
+    // Check if footer is being explicitly cleared by user
+    if (updates.footer && updates.footer.text === '') {
+      footerUserClearedRef.current = true;
+    } else if (updates.footer && updates.footer.text && updates.footer.text.trim() !== '') {
+      // Footer is being set with content, reset the flag
+      footerUserClearedRef.current = false;
+    }
+    
     setState(prev => ({
       ...prev,
       message: { ...prev.message, ...updates },
