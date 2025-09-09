@@ -351,13 +351,39 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
       unmappedButtonId = ca?.postback_payload || (validPayload.context as any)?.postback_payload || null;
     }
     
+    webhookLogger.debug('🔍 Debug unmapped button detection', {
+      channelType,
+      unmappedButtonId,
+      caPostbackPayload: ca?.postback_payload,
+      contextPostbackPayload: (validPayload.context as any)?.postback_payload,
+      contextInteractionType: (validPayload.context as any)?.interaction_type,
+      caInteractionType: ca?.interaction_type,
+      traceId
+    });
+    
     // If it's an unmapped button, use the real button text (message field) as input for LLM
-    if (unmappedButtonId && ((validPayload.context as any)?.interaction_type === 'button_reply' || (validPayload.context as any)?.interaction_type === 'postback')) {
+    const isWhatsAppButton = unmappedButtonId && (validPayload.context as any)?.interaction_type === 'button_reply';
+    const isInstagramButton = unmappedButtonId && channelType.toLowerCase().includes('instagram') && ca?.postback_payload;
+    
+    if (unmappedButtonId && (isWhatsAppButton || isInstagramButton)) {
       // Usar o campo 'message' que contém o texto real do botão
       // Isso é padronizado entre WhatsApp e Instagram
       const realButtonText = validPayload.message || validPayload.context?.message?.content;
       
-      if (realButtonText && realButtonText !== textInput) {
+      webhookLogger.debug('🔍 Debug button text extraction', {
+        unmappedButtonId,
+        isWhatsAppButton,
+        isInstagramButton,
+        validPayloadMessage: validPayload.message,
+        contextMessageContent: validPayload.context?.message?.content,
+        realButtonText,
+        currentTextInput: textInput,
+        interactionType: (validPayload.context as any)?.interaction_type,
+        traceId
+      });
+      
+      if (realButtonText) {
+        // Se temos o texto real do botão, usar ele (mesmo que seja igual ao textInput atual)
         textInput = realButtonText;
         
         webhookLogger.info('🔄 Unmapped button detected, using real button text for LLM processing', {
@@ -398,7 +424,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
       null;
 
     // Handle legacy button interactions (se não foi processado pelo novo sistema)
-    if ((interactionType === 'button_reply' || interactionType === 'postback') && legacyDerivedButtonId && !buttonReactionResponse) {
+    // Skip legacy processing if we already detected and processed an unmapped button
+    if ((interactionType === 'button_reply' || interactionType === 'postback') && legacyDerivedButtonId && !buttonReactionResponse && !unmappedButtonId) {
       const idLower = String(legacyDerivedButtonId).toLowerCase();
       const titleLower = String(legacyButtonTitle || '').toLowerCase();
       
@@ -481,6 +508,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
         assistantId: assistant?.id || 'not-found',
         embedipreview,
         strategy: embedipreview ? 'embedding-first' : 'llm-first',
+        traceId
+      });
+
+      webhookLogger.info('Starting SocialWise Flow processing', {
+        userText: textInput,
+        channelType,
+        inboxId,
+        userId,
         traceId
       });
 

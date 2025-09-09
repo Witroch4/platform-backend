@@ -440,7 +440,10 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
         : undefined,
       body: { text: body?.text || "" },
       footer: footer ? { text: footer.text || "" } : undefined,
-      action: action ? { ...action } : undefined,
+      action: action ? { 
+        ...action, 
+        type: type === "button" ? "button" : action.type || type 
+      } : undefined,
     };
   };
 
@@ -491,7 +494,7 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
           const resp = await fetch(`/api/admin/mtf-diamante/messages-with-reactions`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ inboxId: caixaId, message }),
+            body: JSON.stringify({ inboxId: caixaId, message, reactions: [] }),
           });
           if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));

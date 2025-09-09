@@ -52,6 +52,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import LoginBadge from "@/components/auth/login-badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { AdicionarCaixaDialog } from "@/app/admin/mtf-diamante/components/DialogflowCaixasAgentes";
+import { InboxContextMenu } from "./inbox-context-menu";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -222,17 +223,25 @@ export function AppAdminDashboard() {
                               };
                               return (
                                 <SidebarMenuSubItem key={cx.id}>
-                                  <SidebarMenuSubButton
-                                    href={targetHref}
-                                    onClick={handleClick}
-                                    onMouseEnter={handleMouseEnter}
-                                    className={`text-[0.95rem] py-2 transition-colors ${
-                                      isActive ? 'bg-accent' : 'hover:bg-accent'
-                                    } ${isPending ? 'opacity-75' : ''}`}
+                                  <InboxContextMenu 
+                                    inbox={cx} 
+                                    onInboxDeleted={() => {
+                                      // Refresh a lista de caixas após deletar
+                                      refreshCaixas();
+                                    }}
                                   >
-                                    <Icon className={isInstagram ? 'text-pink-500' : 'text-green-500'} />
-                                    <span className="font-medium">{cx.nome || cx.inboxName || 'Inbox'}</span>
-                                  </SidebarMenuSubButton>
+                                    <SidebarMenuSubButton
+                                      href={targetHref}
+                                      onClick={handleClick}
+                                      onMouseEnter={handleMouseEnter}
+                                      className={`text-[0.95rem] py-2 transition-colors ${
+                                        isActive ? 'bg-accent' : 'hover:bg-accent'
+                                      } ${isPending ? 'opacity-75' : ''}`}
+                                    >
+                                      <Icon className={isInstagram ? 'text-pink-500' : 'text-green-500'} />
+                                      <span className="font-medium">{cx.nome || cx.inboxName || 'Inbox'}</span>
+                                    </SidebarMenuSubButton>
+                                  </InboxContextMenu>
                                 </SidebarMenuSubItem>
                               );
                             })

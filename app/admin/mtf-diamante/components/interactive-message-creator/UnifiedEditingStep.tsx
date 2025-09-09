@@ -325,10 +325,63 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
 
   // Normalize reactions from backend
   const normalizedReactions = useMemo(() => {
-    return (reactions || []).map((r) => ({
-      ...r,
-      textResponse: (r as any).textResponse ?? (r as any).textReaction ?? undefined,
-    }));
+    return (reactions || []).map((r) => {
+      const anyReaction = r as any;
+      
+      // Se já está no formato correto (com campos diretos type, emoji, textResponse, action)
+      if (anyReaction.type && (anyReaction.emoji || anyReaction.textResponse || anyReaction.action)) {
+        return anyReaction;
+      }
+      
+      // Se tem o formato .reaction nested
+      if (anyReaction.reaction) {
+        const nestedReaction = anyReaction.reaction;
+        return {
+          ...anyReaction,
+          type: nestedReaction.type,
+          emoji: nestedReaction.type === 'emoji' ? nestedReaction.value : undefined,
+          textResponse: nestedReaction.type === 'text' ? nestedReaction.value : undefined,
+          action: nestedReaction.type === 'action' ? nestedReaction.value : undefined,
+        };
+      }
+      
+      // Converter do formato do backend (textResponse, emoji diretos sem type)
+      if (anyReaction.textResponse || anyReaction.textReaction) {
+        return {
+          ...anyReaction,
+          type: 'text',
+          textResponse: anyReaction.textResponse || anyReaction.textReaction,
+          emoji: undefined,
+          action: undefined
+        };
+      }
+      
+      if (anyReaction.emoji) {
+        return {
+          ...anyReaction,
+          type: 'emoji',
+          emoji: anyReaction.emoji,
+          textResponse: undefined,
+          action: undefined
+        };
+      }
+      
+      if (anyReaction.action) {
+        return {
+          ...anyReaction,
+          type: 'action',
+          action: anyReaction.action,
+          emoji: undefined,
+          textResponse: undefined
+        };
+      }
+      
+      // Fallback - manter original
+      return {
+        ...anyReaction,
+        textResponse: anyReaction.textResponse ?? anyReaction.textReaction ?? undefined,
+      };
+    });
   }, [reactions]);
 
   // Determine if we should show Header and Footer sections

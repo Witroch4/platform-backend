@@ -41,7 +41,7 @@ export const InteractiveMessageCreator: React.FC<
 > = ({ inboxId, onSave, editingMessage }) => {
 
   const { variables, loading: variablesLoading } = useVariableManager();
-  const { buttonReactions, caixas, pauseUpdates, resumeUpdates, isUpdatesPaused } = useMtfData();
+  const { buttonReactions, caixas } = useMtfData();
   
   // Detectar o tipo de canal usando o contexto SWR (mesmo padrão dos outros componentes)
   const channelType = useMemo(
@@ -134,30 +134,10 @@ export const InteractiveMessageCreator: React.FC<
     }
   }, [editingMessage, loadExistingReactions, state.currentStep]);
 
-  // Control MtfDataProvider updates during editing
-  useEffect(() => {
-    if (state.currentStep === 'configuration' || state.currentStep === 'preview') {
-      // Pausar atualizações durante edição para preservar estado local
-      if (!isUpdatesPaused) {
-        pauseUpdates();
-        console.log('⏸️ [InteractiveMessageCreator] Paused updates during editing step:', state.currentStep);
-      }
-    } else {
-      // Retomar atualizações quando não estiver editando
-      if (isUpdatesPaused) {
-        resumeUpdates();
-        console.log('▶️ [InteractiveMessageCreator] Resumed updates on step:', state.currentStep);
-      }
-    }
-
-    // Cleanup: sempre retomar atualizações quando componente desmontar
-    return () => {
-      if (isUpdatesPaused) {
-        resumeUpdates();
-        console.log('▶️ [InteractiveMessageCreator] Resumed updates on component unmount');
-      }
-    };
-  }, [state.currentStep, pauseUpdates, resumeUpdates, isUpdatesPaused]);
+  // ✅ REMOVIDO: Pause global que afetava as caixas no sidebar
+  // O InteractiveMessageCreator não deve pausar TODAS as atualizações,
+  // apenas gerenciar seu próprio estado interno.
+  // As caixas devem sempre permanecer visíveis na sidebar.
 
   // Auto-populate footer with company name if available (only if user hasn't explicitly cleared it)
   useEffect(() => {
