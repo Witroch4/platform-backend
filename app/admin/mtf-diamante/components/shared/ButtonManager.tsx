@@ -135,6 +135,10 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
   idPrefix,
   isInstagramQuickReplies = false,
 }) => {
+  // Debug logs para verificar os dados das reações
+  console.log('[ButtonManager] Reactions data:', reactions);
+  console.log('[ButtonManager] Buttons data:', buttons);
+  
   const [validationErrors, setValidationErrors] = useState<Record<string, string[]>>({});
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -248,14 +252,86 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
 
   // Check if button has reaction configured
   const hasReaction = (buttonId: string): boolean => {
+    // Debug log do que estamos procurando
+    const allReactions = reactions.filter(r => r.buttonId === buttonId);
+    console.log(`[hasReaction] Checking button ${buttonId}:`, allReactions);
+    
     return reactions.some(reaction => 
-      reaction.buttonId === buttonId && reaction.reaction
+      reaction.buttonId === buttonId && (
+        reaction.reaction || 
+        (reaction as any).textResponse || 
+        (reaction as any).textReaction ||
+        (reaction as any).emoji
+      )
     );
   };
 
-  // Get reaction for button
-  const getReaction = (buttonId: string): ButtonReaction | undefined => {
-    return reactions.find(reaction => reaction.buttonId === buttonId);
+  // Get all reactions for button
+  const getReactions = (buttonId: string): any[] => {
+    const allReactions = reactions.filter(reaction => reaction.buttonId === buttonId);
+    console.log(`[getReactions] Found reactions for button ${buttonId}:`, allReactions);
+    
+    if (!allReactions.length) return [];
+    
+    return allReactions.map(reaction => {
+      const anyReaction = reaction as any;
+      
+      // Se já está no formato correto (com campos diretos type, emoji, textResponse)
+      if (anyReaction.type && (anyReaction.emoji || anyReaction.textResponse || anyReaction.action)) {
+        return anyReaction;
+      }
+      
+      // Se tem o formato .reaction nested
+      if (anyReaction.reaction) {
+        const nestedReaction = anyReaction.reaction;
+        return {
+          ...anyReaction,
+          type: nestedReaction.type,
+          emoji: nestedReaction.type === 'emoji' ? nestedReaction.value : undefined,
+          textResponse: nestedReaction.type === 'text' ? nestedReaction.value : undefined,
+          action: nestedReaction.type === 'action' ? nestedReaction.value : undefined,
+        };
+      }
+      
+      // Converter do formato do backend (textResponse, emoji diretos)
+      if (anyReaction.textResponse || anyReaction.textReaction) {
+        return {
+          ...anyReaction,
+          type: 'text',
+          textResponse: anyReaction.textResponse || anyReaction.textReaction,
+          emoji: undefined,
+          action: undefined
+        };
+      }
+      
+      if (anyReaction.emoji) {
+        return {
+          ...anyReaction,
+          type: 'emoji',
+          emoji: anyReaction.emoji,
+          textResponse: undefined,
+          action: undefined
+        };
+      }
+      
+      if (anyReaction.action) {
+        return {
+          ...anyReaction,
+          type: 'action',
+          action: anyReaction.action,
+          emoji: undefined,
+          textResponse: undefined
+        };
+      }
+      
+      return anyReaction;
+    });
+  };
+
+  // Get reaction for button (legacy - compatibility)
+  const getReaction = (buttonId: string): any => {
+    const allReactions = getReactions(buttonId);
+    return allReactions.length > 0 ? allReactions[0] : undefined;
   };
 
   // Handle reaction configuration (placeholder for integration with ReactionConfigManager)
@@ -447,6 +523,65 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
                 </div>
               )}
 
+              {/* Button Reactions Section */}
+              {BUTTON_TYPES[button.type].supportsReactions && showReactionConfig && (
+                <div className="space-y-2 pt-2 border-t">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-medium text-muted-foreground">
+                      Reação Configurada
+                    </Label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleReactionConfig(button.id)}
+                      disabled={disabled}
+                      className="h-6 text-xs"
+                    >
+                      {hasReaction(button.id) ? 'Editar' : 'Configurar'}
+                    </Button>
+                  </div>
+                  
+                  {hasReaction(button.id) && (
+                    <div className="space-y-2">
+                      {getReactions(button.id).map((reactionData, index) => (
+                        <div key={index} className="p-2 bg-muted/50 rounded-md">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              {reactionData?.type === 'emoji' ? (
+                                <div className="flex items-center gap-1">
+                                  <Zap className="h-3 w-3 text-muted-foreground" />
+                                  <span className="text-sm">
+                                    {reactionData?.emoji}
+                                  </span>
+                                </div>
+                              ) : reactionData?.type === 'text' ? (
+                                <div className="flex items-center gap-1">
+                                  <MessageSquare className="h-3 w-3 text-muted-foreground" />
+                                  <span className="text-xs text-muted-foreground max-w-[150px] truncate" title={reactionData?.textResponse}>
+                                    {reactionData?.textResponse}
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-1">
+                                  <Zap className="h-3 w-3 text-muted-foreground" />
+                                  <span className="text-xs text-muted-foreground">
+                                    {reactionData?.action || 'Ação'}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                            <Badge variant="secondary" className="text-xs">
+                              {reactionData?.type === 'emoji' ? 'Emoji' : 
+                               reactionData?.type === 'text' ? 'Texto' : 'Ação'}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Validation Errors */}
               {validationErrors[button.id] && validationErrors[button.id].length > 0 && (

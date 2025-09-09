@@ -215,9 +215,12 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
       id: reaction.id,
       messageId: reaction.messageId || reaction.inboxId, // Use messageId first, then inboxId as fallback
       buttonId: reaction.buttonId,
-      emoji: reaction.emoji || '',
-      label: reaction.description || reaction.textReaction || '',
+      emoji: reaction.actionPayload?.emoji || reaction.emoji || '',
+      textResponse: reaction.actionPayload?.textReaction || reaction.textReaction || reaction.description || '',
+      textReaction: reaction.actionPayload?.textReaction || reaction.textReaction || reaction.description || '', // Alias for compatibility
+      label: reaction.description || reaction.textReaction || '', // Legacy compatibility
       action: reaction.actionPayload?.action || reaction.action || '', // Use actionPayload.action first, then direct action field as fallback
+      actionPayload: reaction.actionPayload, // Keep original actionPayload for full data access
       createdAt: reaction.createdAt,
       updatedAt: reaction.updatedAt
     }));

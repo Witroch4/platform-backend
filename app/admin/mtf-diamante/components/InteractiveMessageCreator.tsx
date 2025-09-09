@@ -97,13 +97,22 @@ export const InteractiveMessageCreator: React.FC<
   const loadExistingReactions = useCallback(() => {
     if (!buttonReactions || buttonReactions.length === 0) return;
 
-    // Normalizar para sempre expor textResponse (compat com API que retorna textReaction)
-    const normalized = buttonReactions.map((r: any) => ({
-      ...r,
-      textResponse: r?.textResponse ?? r?.textReaction ?? undefined,
+    // Os dados já vêm normalizados do MtfDataProvider, mas precisam ser convertidos para o tipo correto
+    console.log('🔍 [loadExistingReactions] Raw buttonReactions from context:', buttonReactions);
+    
+    const convertedReactions: ButtonReaction[] = buttonReactions.map((r: any) => ({
+      id: r.id,
+      messageId: r.messageId || '',
+      buttonId: r.buttonId,
+      type: r.emoji ? 'emoji' : (r.textResponse || r.textReaction ? 'text' : (r.action ? 'action' : 'emoji')),
+      emoji: r.emoji || '',
+      textResponse: r.textResponse || r.textReaction || '',
+      action: r.action || '',
+      isActive: true,
+      createdAt: r.createdAt
     }));
-
-    setState(prev => ({ ...prev, reactions: normalized }));
+    
+    setState(prev => ({ ...prev, reactions: convertedReactions }));
     reactionsLoadedRef.current = true;
   }, [buttonReactions]);
 
