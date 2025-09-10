@@ -18,7 +18,7 @@ import { SocialWiseReplayProtectionService } from '@/lib/socialwise-flow/service
 import { recordSocialWiseQualitySample } from '@/lib/socialwise-flow/monitoring-dashboard';
 import { recordWebhookMetrics } from '@/lib/monitoring/application-performance-monitor';
 import { getAssistantForInbox } from '@/lib/socialwise/assistant';
-import { buildWhatsAppByIntentRaw, buildWhatsAppByGlobalIntent, buildInstagramByIntentRaw, buildInstagramByGlobalIntent } from '@/lib/socialwise/templates';
+import { buildWhatsAppByIntentRaw, buildWhatsAppByGlobalIntent, buildInstagramByIntentRaw, buildInstagramByGlobalIntent, buildFacebookPageByIntentRaw, buildFacebookPageByGlobalIntent } from '@/lib/socialwise/templates';
 
 // 🔧 CORREÇÃO: Usar button-processor centralizado
 import { handleButtonInteraction } from '@/lib/socialwise-flow/button-processor';
@@ -459,8 +459,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
       const idLower = String(legacyDerivedButtonId).toLowerCase();
       const titleLower = String(legacyButtonTitle || '').toLowerCase();
       
-      // Direct automations: btn_* or ig_*
-      if (idLower.startsWith('btn_') || idLower.startsWith('ig_')) {
+      // Direct automations: btn_* or ig_* or fb_*
+      if (idLower.startsWith('btn_') || idLower.startsWith('ig_') || idLower.startsWith('fb_')) {
         // Handoff shortcuts
         if (idLower.includes('handoff') || titleLower.includes('falar') || 
             titleLower.includes('atendente') || titleLower.includes('humano')) {
@@ -495,6 +495,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
           mapped = await buildInstagramByIntentRaw(rawIntent, inboxId);
           if (!mapped) {
             mapped = await buildInstagramByGlobalIntent(rawIntent, inboxId);
+          }
+        } else if (channelType.toLowerCase().includes('facebook')) {
+          mapped = await buildFacebookPageByIntentRaw(rawIntent, inboxId);
+          if (!mapped) {
+            mapped = await buildFacebookPageByGlobalIntent(rawIntent, inboxId);
           }
         }
         

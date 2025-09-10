@@ -155,7 +155,13 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
 
     return Array.from(unique.values()).map((btn, idx) => {
       const converted = convertBackendToInteractive(btn);
-      if (!converted.id.startsWith(channelType === 'Channel::Instagram' ? 'ig_' : 'btn_')) {
+      const expectedPrefix =
+        channelType === 'Channel::Instagram'
+          ? 'ig_'
+          : channelType === 'Channel::FacebookPage'
+            ? 'fb_'
+            : 'btn_';
+      if (!converted.id.startsWith(expectedPrefix)) {
         converted.id = generatePrefixedId(channelType, converted.id || `${idx}`);
       }
       return converted;

@@ -21,30 +21,33 @@ export const ButtonsSection: React.FC<ButtonsSectionProps> = ({
 }) => {
   const [reactionConfigButton, setReactionConfigButton] = React.useState<string | null>(null);
 
-  // Instagram template type determination
+  // Instagram/Facebook (Meta) template type determination
   const instagramTemplate = React.useMemo(() => {
     const bodyText = message.body?.text || "";
     const hasImage = message.header?.type === "image" && !!message.header?.content;
-    // Para Instagram, mapear 'button' para 'button_template'
+    // Para Instagram/Facebook, mapear 'button' para 'button_template'
     const selectedType = message.type === 'button' ? 'button_template' : message.type;
     return getInstagramTemplateType(bodyText, hasImage, selectedType);
   }, [message.body?.text, message.header, message.type]);
 
-  // Check if this is Instagram Button Template
+  // Meta channels detection (Instagram or FacebookPage)
+  const isMetaChannel = React.useMemo(() => {
+    return channelType === 'Channel::Instagram' || channelType === 'Channel::FacebookPage';
+  }, [channelType]);
+
+  // Check if this is Meta Button Template
   const isInstagramButtonTemplate = React.useMemo(() => {
-    return channelType === 'Channel::Instagram' && 
-           instagramTemplate.type === 'button_template';
-  }, [channelType, instagramTemplate.type]);
+    return isMetaChannel && instagramTemplate.type === 'button_template';
+  }, [isMetaChannel, instagramTemplate.type]);
 
-  // Check if this is Instagram Quick Replies
+  // Check if this is Meta Quick Replies
   const isInstagramQuickReplies = React.useMemo(() => {
-    return channelType === 'Channel::Instagram' && 
-           (message.type === 'quick_replies' || instagramTemplate.type === 'quick_replies');
-  }, [channelType, message.type, instagramTemplate.type]);
+    return isMetaChannel && (message.type === 'quick_replies' || instagramTemplate.type === 'quick_replies');
+  }, [isMetaChannel, message.type, instagramTemplate.type]);
 
-  // Get max buttons count based on Instagram type
+  // Get max buttons count based on Meta type
   const getMaxButtons = React.useMemo(() => {
-    if (channelType !== 'Channel::Instagram') {
+    if (!isMetaChannel) {
       return validationLimits.BUTTON_MAX_COUNT;
     }
     
@@ -56,8 +59,8 @@ export const ButtonsSection: React.FC<ButtonsSectionProps> = ({
       return 3; // Instagram Button Template limit
     }
     
-    return 3; // Default Instagram limit for other types
-  }, [channelType, isInstagramQuickReplies, isInstagramButtonTemplate, validationLimits.BUTTON_MAX_COUNT]);
+    return 3; // Default Meta limit for other types
+  }, [isMetaChannel, isInstagramQuickReplies, isInstagramButtonTemplate, validationLimits.BUTTON_MAX_COUNT]);
 
   // Instagram Button Template validation
   const instagramButtonValidation = React.useMemo(() => {
@@ -95,12 +98,12 @@ export const ButtonsSection: React.FC<ButtonsSectionProps> = ({
           Add up to {getMaxButtons} interactive buttons
         </p>
         
-        {/* Instagram Template Information */}
-        {channelType === 'Channel::Instagram' && isInstagramButtonTemplate && (
+        {/* Instagram/Facebook Template Information */}
+        {isMetaChannel && isInstagramButtonTemplate && (
           <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/50 rounded-lg border border-blue-200 dark:border-blue-800">
             <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5" />
             <div className="text-sm">
-              <p className="font-medium text-blue-900 dark:text-blue-100">Tipos de Botão Suportados:</p>
+              <p className="font-medium text-blue-900 dark:text-blue-100">Tipos de Botão Suportados (Instagram/Facebook):</p>
               <p className="text-blue-700 dark:text-blue-300">
                 URL (links) e Respostas Rápidas. Pode usar uma mistura dos dois tipos.
               </p>
@@ -120,7 +123,7 @@ export const ButtonsSection: React.FC<ButtonsSectionProps> = ({
           }}
           maxButtons={getMaxButtons}
           disabled={disabled}
-          idPrefix={channelType === 'Channel::Instagram' ? 'ig_' : ''}
+          idPrefix={channelType === 'Channel::Instagram' ? 'ig_' : channelType === 'Channel::FacebookPage' ? 'fb_' : ''}
           isInstagramQuickReplies={isInstagramQuickReplies}
         />
       </CardContent>

@@ -482,7 +482,7 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
     setImporting(true);
     try {
       // Usa o channelType do contexto
-      const prefix = channelType === 'Channel::Instagram' ? 'ig_' : '';
+      const prefix = channelType === 'Channel::Instagram' ? 'ig_' : channelType === 'Channel::FacebookPage' ? 'fb_' : '';
 
       const results = await Promise.allSettled(
         selected.map(async (m) => {
@@ -778,7 +778,7 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
                         : "TEXTO"}
                     </Badge>
                   </div>
-                  <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
+                  <p className="text-sm text-muted-foreground line-clamp-2 mb-2 max-w-[80ch] break-words whitespace-normal">
                     {(msg.texto || "").trim() || "—"}
                   </p>
                   {((msg.botoes ?? []).length || 0) > 0 && (

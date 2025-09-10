@@ -67,7 +67,9 @@ export const convertCentralToLocal = (
 
 // Helper function to generate prefixed IDs
 export const generatePrefixedId = (channelType: string | null, fallbackSuffix: string): string => {
-  const prefix = channelType === 'Channel::Instagram' ? 'ig_' : '';
+  let prefix = '';
+  if (channelType === 'Channel::Instagram') prefix = 'ig_';
+  else if (channelType === 'Channel::FacebookPage') prefix = 'fb_';
   return `${prefix}btn_${fallbackSuffix}`;
 };
 

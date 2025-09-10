@@ -114,13 +114,12 @@ export function getRedisInstance(): any {
       }
 
       if (useTestRedis) {
-        console.log("🔗 Using Test Redis on port 6380");
-        const {
-          testRedisConfig,
-        } = require("../__tests__/setup/test-redis-config");
-        const RedisClass = getRedisClass();
-        globalThis.redis = new RedisClass(testRedisConfig);
-        return globalThis.redis;
+  console.log("🔗 Using Test Redis na porta 6380 (configuração de teste removida)");
+  // Configuração de teste removida: test-redis-config não existe mais
+  // Se necessário, adicione configuração inline ou ajuste conforme o novo padrão de testes
+  const RedisClass = getRedisClass();
+  globalThis.redis = new RedisClass();
+  return globalThis.redis;
       }
     }
 

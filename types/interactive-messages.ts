@@ -428,11 +428,12 @@ export interface InstagramTemplateTypeResult {
 }
 
 // Channel type detection
-export type ChannelType = 'Channel::WhatsApp' | 'Channel::Instagram' | string;
+export type ChannelType = 'Channel::WhatsApp' | 'Channel::Instagram' | 'Channel::FacebookPage' | string;
 
 // Helper to determine if channel is Instagram
 export const isInstagramChannel = (channelType: string): boolean => {
-  return channelType === 'Channel::Instagram';
+  // Tratar Facebook Page com a mesma lógica do Instagram
+  return channelType === 'Channel::Instagram' || channelType === 'Channel::FacebookPage';
 };
 
 // Helper to determine if channel is WhatsApp
