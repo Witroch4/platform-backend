@@ -34,7 +34,7 @@ export interface ButtonOption {
 export interface ChannelResponse {
   whatsapp?: WhatsAppMessage;
   instagram?: InstagramMessage;
-  facebook?: { message: { text: string } };
+  facebook?: InstagramMessage | { message: { text: string } }; // Suporta estrutura complexa como Instagram OU simples
   text?: string;
   action?: 'handoff';
 }
@@ -205,20 +205,24 @@ export function buildChannelResponse(
   } else if (lowerChannelType.includes('instagram')) {
     const result = buildInstagramButtons(text, buttons);
     formattingLogger.info('Instagram response built with specialized formatter', {
-      hasAttachment: (result as any)?.message?.attachment != null,
-      hasText: (result as any)?.message?.text != null,
-      buttonCount:
-        (result as any)?.message?.attachment?.payload?.buttons?.length || 0,
+      hasAttachment: (result as any)?.message_format != null,
+      hasText: (result as any)?.text != null,
+      buttonCount: (result as any)?.buttons?.length || 0,
     });
     return { instagram: result };
   } else if (
     lowerChannelType.includes('facebook') ||
     lowerChannelType.includes('messenger')
   ) {
-    // Messenger: fallback de texto com opções numeradas (sem formatter dedicado)
-    const optionsText = buttons.map((btn) => `• ${btn.title}`).join('\n');
-    const fullText = `${text}\n\n${optionsText}`;
-    return { facebook: { message: { text: clampBodyCentralized(fullText, 'facebook') } } };
+    // CORREÇÃO: Facebook Page segue as MESMAS regras do Instagram
+    const result = buildInstagramButtons(text, buttons);
+    formattingLogger.info('Facebook response built with Instagram formatter (same rules)', {
+      hasAttachment: (result as any)?.message_format != null,
+      hasText: (result as any)?.text != null,
+      buttonCount: (result as any)?.buttons?.length || 0,
+      channelType: lowerChannelType
+    });
+    return { facebook: result };
   } else {
     // Genérico (texto com opções)
     const optionsText = buttons.map((btn) => `• ${btn.title}`).join('\n');

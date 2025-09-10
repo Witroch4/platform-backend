@@ -123,7 +123,7 @@ export async function GET(request: NextRequest) {
       variaveisLotes.push({
         id: `lote_ativo`,
         chave: `lote_ativo`,
-        valor: 'Nenhum lote ativo no momento',
+        valor: '*⚠️🚫 ATENÇÃO: Este serviço NÃO pode ser solicitado agora Nenhum lote ativo no momento. Veja sobre mandado de segurança!!*',
         valorRaw: '', 
         tipo: 'lote' as const,
         descricao: 'Lote Ativo - Nenhum lote selecionado',

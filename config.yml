@@ -1,0 +1,84 @@
+# Configuração Centralizada - Socialwise Chatwit
+# Este arquivo centraliza os limites e configurações do sistema
+
+# SocialWise Flow - Concorrência e Performance
+socialwise_flow:
+  concurrency:
+    # Limite de operações simultâneas por inbox
+    # Padrão: 100 (aumentado de 3 para melhor performance)
+    # ENV: SOCIALWISE_CONCURRENCY_LIMIT
+    max_concurrent_llm_calls_per_inbox: 100
+    
+    # Limite global de operações simultâneas
+    # Padrão: 300 (aumentado de 50 para alta demanda)
+    # ENV: SOCIALWISE_GLOBAL_CONCURRENCY_LIMIT
+    max_concurrent_llm_calls_global: 300
+    
+    # Timeout da fila de operações em ms
+    # ENV: SOCIALWISE_QUEUE_TIMEOUT_MS
+    queue_timeout_ms: 5000
+    
+    # Habilita degradação em casos de sobrecarga
+    # ENV: SOCIALWISE_DEGRADATION_ENABLED
+    degradation_enabled: true
+
+# Database Connection Pool
+database:
+  # ENV: DATABASE_CONNECTION_LIMIT
+  connection_limit: 10
+  
+  # ENV: DATABASE_POOL_TIMEOUT
+  pool_timeout: 10000
+  
+  # ENV: DATABASE_QUERY_TIMEOUT
+  query_timeout: 30000
+
+# Redis Configuration
+redis:
+  # ENV: REDIS_MAX_RETRIES
+  max_retries: 3
+  
+  # ENV: REDIS_CONNECT_TIMEOUT
+  connect_timeout: 10000
+  
+  # ENV: REDIS_COMMAND_TIMEOUT
+  command_timeout: 5000
+  
+  # ENV: REDIS_KEEPALIVE
+  keepalive: 30000
+
+# Workers Configuration
+workers:
+  leads_chatwit:
+    # ENV: LEADS_CHATWIT_CONCURRENCY
+    concurrency: 3
+    
+    # ENV: LEADS_CHATWIT_LOCK_DURATION
+    lock_duration: 60000
+
+# Application Configuration
+application:
+  # ENV: LOG_LEVEL
+  log_level: "info"
+  
+  # ENV: HEALTH_CHECK_TIMEOUT
+  health_check_timeout: 5000
+  
+  # ENV: HEALTH_CHECK_INTERVAL
+  health_check_interval: 30000
+
+# Webhook Processing
+webhooks:
+  # ENV: WEBHOOK_DIRECT_PROCESSING
+  direct_processing: true
+
+# Container Limits (for reference only)
+container:
+  memory_limit: "1024M"
+  cpu_limit: "1.0"
+
+# Observações:
+# - Os valores definidos aqui são padrões
+# - Use variáveis de ambiente (ENV) para sobrescrever em produção
+# - Monitore o desempenho após mudanças nos limites
+# - O limite de 100 por inbox resolve o problema de "Sistema ocupado"

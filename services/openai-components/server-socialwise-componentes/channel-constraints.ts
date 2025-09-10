@@ -32,7 +32,7 @@ export function getConstraintsForChannel(channel: ChannelType): ChannelConstrain
   }
   // facebook / genérico
   return {
-    bodyMax: 2000,
+    bodyMax: 640,
     buttonTitleMax: 20,
     payloadMax: 1000,
     maxButtons: 3,

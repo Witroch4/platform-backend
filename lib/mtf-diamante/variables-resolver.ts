@@ -118,12 +118,12 @@ export async function getAllVariablesForUser(userId: string): Promise<VariavelRe
             }
           },
           update: {
-            valor: 'Nenhum lote ativo no momento'
+            valor: '*⚠️🚫 ATENÇÃO: Este serviço NÃO pode ser solicitado agora Nenhum lote ativo no momento. Veja sobre mandado de segurança!!*'
           },
           create: {
             configId: config.id,
             chave: 'lote_ativo',
-            valor: 'Nenhum lote ativo no momento'
+            valor: '*⚠️🚫 ATENÇÃO: Este serviço NÃO pode ser solicitado agora Nenhum lote ativo no momento. Veja sobre mandado de segurança!!*'
           }
         });
       }
@@ -160,7 +160,7 @@ async function getLoteAtivoFormatado(userId: string): Promise<string> {
     });
 
     if (!config || !config.variaveis[0]) {
-      return "Nenhum lote configurado";
+      return "*⚠️🚫 ATENÇÃO: Este serviço NÃO pode ser solicitado agora Nenhum lote ativo no momento. Veja sobre mandado de segurança!!*";
     }
 
     const lotesVariavel = config.variaveis[0];
@@ -172,7 +172,7 @@ async function getLoteAtivoFormatado(userId: string): Promise<string> {
     const loteAtivo = lotes.find(l => l.isActive === true);
 
     if (!loteAtivo) {
-      return "Nenhum lote ativo no momento";
+      return "*⚠️🚫 ATENÇÃO: Este serviço NÃO pode ser solicitado agora Nenhum lote ativo no momento. Veja sobre mandado de segurança!!*";
     }
 
     // Formatação humanizada do lote ativo com data e hora

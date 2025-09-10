@@ -735,3 +735,184 @@ export async function buildInstagramByGlobalIntent(intentRaw: string, inboxId: s
   return null;
 }
 
+/**
+ * Constrói o bloco Facebook Page a partir de uma Intent específica do inbox.
+ * EXATAMENTE O MESMO PADRÃO DO INSTAGRAM - Facebook Page segue as mesmas regras
+ */
+export async function buildFacebookPageByIntentRaw(intentRaw: string, inboxId: string): Promise<any> {
+  const intentName = String(intentRaw || '').trim();
+  if (!intentName || !inboxId) return null;
+  
+  const prisma = getPrismaInstance();
+  const norm = normalizeIntentRaw(intentName);
+
+  // 1) Tentativas diretas por igualdade de nome (MESMO PADRÃO DO INSTAGRAM)
+  let mapping = await prisma.mapeamentoIntencao.findFirst({
+    where: {
+      inbox: { inboxId },
+      OR: [
+        { intentName: norm.original },
+        { intentName: norm.plain },
+      ],
+    },
+    include: {
+      template: {
+        include: {
+          interactiveContent: {
+            include: {
+              header: true,
+              body: true,
+              footer: true,
+              actionCtaUrl: true,
+              actionReplyButton: true,
+              actionList: true,
+              actionFlow: true,
+              actionLocationRequest: true,
+            },
+          },
+          whatsappOfficialInfo: true,
+        },
+      },
+    },
+  });
+
+  // 2) Fallback por slug (case-insensitive) - MESMO PADRÃO DO INSTAGRAM
+  if (!mapping) {
+    const candidates = await prisma.mapeamentoIntencao.findMany({
+      where: { inbox: { inboxId } },
+      include: {
+        template: {
+          include: {
+            interactiveContent: {
+              include: {
+                header: true,
+                body: true,
+                footer: true,
+                actionCtaUrl: true,
+                actionReplyButton: true,
+                actionList: true,
+                actionFlow: true,
+                actionLocationRequest: true,
+              },
+            },
+            whatsappOfficialInfo: true,
+          },
+        },
+      },
+    });
+    mapping = candidates.find((m: any) => slugify(m.intentName) === norm.slug) || null as any;
+  }
+
+  if (!mapping || !mapping.template) return null;
+
+  // Aplicar variáveis do inbox (configurar como Facebook Page)
+  const builder = new WhatsAppPayloadBuilder();
+  builder.setChannelType('Channel::FacebookPage'); // Configurar como Facebook Page
+  await builder.setVariablesFromInboxId(inboxId);
+
+  // Processar diferentes tipos de template (MESMA LÓGICA DO INSTAGRAM)
+  if (mapping.template.type === 'INTERACTIVE_MESSAGE' && mapping.template.interactiveContent) {
+    // Aplicar variáveis no template antes da conversão
+    const interactive = await builder.buildInteractiveMessagePayload(mapping.template.interactiveContent);
+    
+    // Converter para Facebook Page usando os MESMOS 3 padrões do Instagram
+    return InstagramTemplateConverter.convertInteractiveToInstagram(interactive, inboxId);
+  }
+
+  if (mapping.template.type === 'WHATSAPP_OFFICIAL' && mapping.template.whatsappOfficialInfo) {
+    // Para templates oficiais, converter para texto simples
+    const templateName = mapping.template.name || 'Template oficial';
+    return {
+      facebook: {
+        message_format: 'TEXT',
+        text: `📋 ${templateName}\n\nEm breve enviaremos mais detalhes sobre sua solicitação.`
+      }
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Constrói o bloco Facebook Page a partir de uma Intent global.
+ * EXATAMENTE O MESMO PADRÃO DO INSTAGRAM - Facebook Page segue as mesmas regras
+ */
+export async function buildFacebookPageByGlobalIntent(intentRaw: string, inboxId: string): Promise<any> {
+  const prisma = getPrismaInstance();
+  const nameRaw = String(intentRaw || '').trim();
+  if (!nameRaw || !inboxId) return null;
+
+  // Normalizar entrada (remove '@' e 'intent:') - MESMO PADRÃO DO INSTAGRAM
+  const norm = normalizeIntentRaw(nameRaw);
+
+  // Encontrar a inbox para obter o userId (appUserId) - MESMO PADRÃO DO INSTAGRAM
+  const inbox = await prisma.chatwitInbox.findFirst({
+    where: { inboxId },
+    include: { usuarioChatwit: true },
+  });
+  const userId = (inbox as any)?.usuarioChatwit?.appUserId as string | undefined;
+  if (!userId) return null;
+
+  // Buscar Intent do usuário pelo nome - MESMO PADRÃO DO INSTAGRAM
+  const intent = await prisma.intent.findFirst({
+    where: {
+      createdById: userId,
+      isActive: true,
+      OR: [
+        { name: norm.original },
+        { name: norm.plain },
+      ],
+    },
+    include: {
+      template: {
+        include: {
+          interactiveContent: {
+            include: {
+              header: true,
+              body: true,
+              footer: true,
+              actionCtaUrl: true,
+              actionReplyButton: true,
+              actionList: true,
+              actionFlow: true,
+              actionLocationRequest: true,
+            },
+          },
+          whatsappOfficialInfo: true,
+        },
+      },
+    },
+  });
+
+  if (!intent || !intent.template) return null;
+
+  // Aplicar variáveis do inbox (configurar como Facebook Page)
+  const builder = new WhatsAppPayloadBuilder();
+  builder.setChannelType('Channel::FacebookPage'); // Configurar como Facebook Page
+  await builder.setVariablesFromInboxId(inboxId);
+
+  const t = intent.template;
+  
+  if (t.type === 'INTERACTIVE_MESSAGE' && t.interactiveContent) {
+    // Aplicar variáveis no template antes da conversão
+    const interactive = await builder.buildInteractiveMessagePayload(t.interactiveContent);
+    
+    // Converter para Facebook Page usando os MESMOS 3 padrões do Instagram
+    return InstagramTemplateConverter.convertInteractiveToInstagram(interactive, inboxId);
+  }
+
+  if (t.type === 'WHATSAPP_OFFICIAL' && t.whatsappOfficialInfo) {
+    // Para templates oficiais, converter para texto simples
+    const templateName = t.name || 'Template oficial';
+    return {
+      facebook: {
+        message_format: 'TEXT',
+        text: `📋 ${templateName}\n\nEm breve enviaremos mais detalhes sobre sua solicitação.`
+      }
+    };
+  }
+
+  return null;
+}
+
+

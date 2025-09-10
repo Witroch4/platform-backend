@@ -22,6 +22,16 @@ import { getModelCaps, isGPT5, normVerb, normEffort } from "./model-capabilities
 
 type HintOut = { slug: string; score?: number; aliases?: string[]; desc?: string };
 
+// Helper function to safely escape strings for JSON context
+const safeString = (str: string) => {
+  return str
+    .replace(/\\/g, '\\\\')    // Escape backslashes
+    .replace(/"/g, '\\"')      // Escape quotes
+    .replace(/\n/g, '\\n')     // Escape newlines
+    .replace(/\r/g, '\\r')     // Escape carriage returns
+    .replace(/\t/g, '\\t');    // Escape tabs
+};
+
 function sanitizeHintsWithDesc(cands: IntentCandidate[], topN = 4): HintOut[] {
   return (cands ?? [])
     .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
@@ -30,10 +40,10 @@ function sanitizeHintsWithDesc(cands: IntentCandidate[], topN = 4): HintOut[] {
       slug: c.slug?.startsWith("@") ? c.slug : `@${c.slug}`,
       score: typeof c.score === "number" ? Number(c.score.toFixed(3)) : undefined,
       aliases: (c.aliases ?? [])
-        .map((s) => String(s).trim())
+        .map((s) => safeString(String(s).trim()))
         .filter(Boolean)
         .slice(0, 3), // <= máximo 3
-      desc: String(c.desc || c.name || "").trim(), // descrição completa
+      desc: safeString(String(c.desc || c.name || "").trim()), // descrição completa escapada
     }));
 }
 

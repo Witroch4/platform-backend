@@ -126,6 +126,22 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
     const rawBody = await request.text();
     const payloadSizeKB = Buffer.byteLength(rawBody, 'utf8') / 1024;
     
+    // 🐛 DEBUG: Log do payload RAW original exato que o Chatwit envia
+    webhookLogger.info('🔍 CHATWIT ORIGINAL RAW PAYLOAD DEBUG', {
+      timestamp: new Date().toISOString(),
+      payloadSizeKB: Number(payloadSizeKB.toFixed(2)),
+      rawBodyString: rawBody,
+      rawBodyLength: rawBody.length,
+      headers: {
+        'content-type': request.headers.get('content-type'),
+        'user-agent': request.headers.get('user-agent'),
+        'x-forwarded-for': request.headers.get('x-forwarded-for'),
+        authorization: request.headers.get('authorization') ? '[REDACTED]' : null,
+      },
+      method: request.method,
+      url: request.url
+    });
+    
     if (payloadSizeKB > MAX_PAYLOAD_SIZE_KB) {
       webhookLogger.error('Payload too large', { 
         sizeKB: payloadSizeKB, 
@@ -141,9 +157,22 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
     let payload: any;
     try {
       payload = JSON.parse(rawBody);
+      
+      // 🐛 DEBUG: Log do payload JSON parseado para comparação
+      webhookLogger.info('📋 CHATWIT PARSED JSON PAYLOAD DEBUG', {
+        timestamp: new Date().toISOString(),
+        parsedPayload: payload,
+        payloadType: typeof payload,
+        payloadKeys: payload && typeof payload === 'object' ? Object.keys(payload) : null,
+        hasContext: payload?.context ? true : false,
+        hasMessage: payload?.context?.message ? true : false,
+        hasSocialwiseChatwit: payload?.context?.['socialwise-chatwit'] ? true : false
+      });
+      
     } catch (error) {
       webhookLogger.error('Invalid JSON payload', { 
-        error: error instanceof Error ? error.message : String(error) 
+        error: error instanceof Error ? error.message : String(error),
+        rawBodyPreview: rawBody.substring(0, 200) + (rawBody.length > 200 ? '...' : '')
       });
       return NextResponse.json(
         { error: 'Invalid JSON' },
@@ -424,8 +453,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
       null;
 
     // Handle legacy button interactions (se não foi processado pelo novo sistema)
-    // Skip legacy processing if we already detected and processed an unmapped button
-    if ((interactionType === 'button_reply' || interactionType === 'postback') && legacyDerivedButtonId && !buttonReactionResponse && !unmappedButtonId) {
+    // Allow handoff buttons to be processed by legacy even if detected as unmapped
+    const isHandoffButton = unmappedButtonId === '@falar_atendente';
+    if ((interactionType === 'button_reply' || interactionType === 'postback') && legacyDerivedButtonId && !buttonReactionResponse && (!unmappedButtonId || isHandoffButton)) {
       const idLower = String(legacyDerivedButtonId).toLowerCase();
       const titleLower = String(legacyButtonTitle || '').toLowerCase();
       
@@ -442,6 +472,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
       
       // Intent mapping: intent:<name> or @<name>
       if (idLower.startsWith('intent:') || idLower.startsWith('@')) {
+        // Direct handoff for specific button IDs
+        if (idLower === '@falar_atendente') {
+          return NextResponse.json({ action: 'handoff' }, { status: 200 });
+        }
+        
         const norm = normalizeIntentId(String(legacyDerivedButtonId));
         const rawIntent = norm.plain;
         let mapped: any = null;
@@ -556,8 +591,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
           if (result.response.whatsapp && 'interactive' in result.response.whatsapp) {
             return result.response.whatsapp.interactive?.action?.buttons?.map((b: any) => b.reply.title);
           }
-          if (result.response.instagram && 'message' in result.response.instagram && 'attachment' in result.response.instagram.message) {
-            return result.response.instagram.message.attachment?.payload?.buttons?.map((b: any) => b.title);
+          if (result.response.instagram && 'buttons' in result.response.instagram) {
+            return result.response.instagram.buttons?.map((b: any) => b.title);
           }
           return undefined;
         })(),

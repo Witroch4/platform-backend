@@ -54,10 +54,10 @@ export class ConcurrencyManager {
   public static getInstance(config?: ConcurrencyConfig): ConcurrencyManager {
     if (!ConcurrencyManager.instance) {
       const defaultConfig: ConcurrencyConfig = {
-        maxConcurrentLlmCallsPerInbox: 3,
-        maxConcurrentLlmCallsGlobal: 50,
-        queueTimeoutMs: 5000,
-        degradationEnabled: true
+        maxConcurrentLlmCallsPerInbox: parseInt(process.env.SOCIALWISE_CONCURRENCY_LIMIT || '100', 10),
+        maxConcurrentLlmCallsGlobal: parseInt(process.env.SOCIALWISE_GLOBAL_CONCURRENCY_LIMIT || '300', 10),
+        queueTimeoutMs: parseInt(process.env.SOCIALWISE_QUEUE_TIMEOUT_MS || '5000', 10),
+        degradationEnabled: process.env.SOCIALWISE_DEGRADATION_ENABLED !== 'false'
       };
       ConcurrencyManager.instance = new ConcurrencyManager(config || defaultConfig);
     }

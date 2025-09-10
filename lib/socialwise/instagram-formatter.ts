@@ -17,16 +17,10 @@ function withinWordLimit(title: string, maxWords = 4): boolean {
 }
 
 export interface InstagramButtonTemplate {
-  message: {
-    attachment: {
-      type: 'template';
-      payload: {
-        template_type: 'button';
-        text: string; // ≤ 640 chars
-        buttons: Array<{ type: 'postback'; title: string; payload: string }>;
-      };
-    };
-  };
+  message_format: 'BUTTON_TEMPLATE';
+  template_type: 'button';
+  text: string; // ≤ 640 chars
+  buttons: Array<{ type: 'postback'; title: string; payload: string }>;
 }
 
 export interface InstagramTextMessage {
@@ -96,16 +90,10 @@ export function buildInstagramButtons(
     }
 
     return {
-      message: {
-        attachment: {
-          type: 'template',
-          payload: {
-            template_type: 'button',
-            text: clampedText,
-            buttons: processed,
-          },
-        },
-      },
+      message_format: 'BUTTON_TEMPLATE',
+      template_type: 'button',
+      text: clampedText,
+      buttons: processed,
     };
   } catch (err) {
     if (enableFallback) return buildInstagramTextFallback(text, buttons);
@@ -134,14 +122,14 @@ export function validateInstagramMessage(message: InstagramMessage): {
   isValid: boolean; violations: string[];
 } {
   const v: string[] = [];
-  if ('attachment' in message.message) {
-    const tpl = message.message.attachment.payload;
-    if (!tpl.text) v.push('Template text required');
-    else if (tpl.text.length > 640) v.push(`Template text > 640 (${tpl.text.length})`);
-    if (!tpl.buttons || !Array.isArray(tpl.buttons)) v.push('Buttons required');
+  if ('message_format' in message) {
+    // Validação para BUTTON_TEMPLATE
+    if (!message.text) v.push('Template text required');
+    else if (message.text.length > 640) v.push(`Template text > 640 (${message.text.length})`);
+    if (!message.buttons || !Array.isArray(message.buttons)) v.push('Buttons required');
     else {
-      if (tpl.buttons.length > 3) v.push(`Too many buttons: ${tpl.buttons.length}`);
-      tpl.buttons.forEach((b, i) => {
+      if (message.buttons.length > 3) v.push(`Too many buttons: ${message.buttons.length}`);
+      message.buttons.forEach((b: any, i: number) => {
         if (!b.title) v.push(`Button ${i+1} title required`);
         else if (b.title.length > 20) v.push(`Button ${i+1} title > 20`);
         else if (b.title.trim().split(/\s+/).length > 4) v.push(`Button ${i+1} title > 4 words`);
@@ -151,12 +139,13 @@ export function validateInstagramMessage(message: InstagramMessage): {
         if (b.type !== 'postback') v.push(`Button ${i+1} type must be 'postback'`);
       });
     }
-    if (message.message.attachment.payload.template_type !== 'button') {
+    if (message.template_type !== 'button') {
       v.push('Template type must be "button"');
     }
-  } else if ('text' in message.message) {
-    if (!message.message.text) v.push('Text body required');
-    else if (message.message.text.length > 640) v.push(`Text > 640`);
+  } else if ('message' in message && 'text' in (message as any).message) {
+    const textMsg = message as InstagramTextMessage;
+    if (!textMsg.message.text) v.push('Text body required');
+    else if (textMsg.message.text.length > 640) v.push(`Text > 640`);
   } else v.push('Unknown message format');
   return { isValid: v.length === 0, violations: v };
 }

@@ -28,7 +28,8 @@ function isWhatsAppChannel(channelType?: string) {
 }
 
 function isInstagramChannel(channelType?: string) {
-  return (channelType || '').toLowerCase().includes('instagram');
+  const normalized = (channelType || '').toLowerCase();
+  return normalized.includes('instagram') || normalized.includes('facebookpage');
 }
 
 function normalizeChannelType(channelType: string): import('../../services/openai-components/types').ChannelType {
@@ -959,7 +960,7 @@ function applyInstagramReactionMeta(response: ChannelResponse, reactionMeta: But
 
     // Create response with Instagram reaction metadata
     const responseText = response.text || 
-                        ((response.instagram?.message as any)?.text) || 
+                        ((response.instagram as any)?.text) || 
                         '👍';
     
     return {

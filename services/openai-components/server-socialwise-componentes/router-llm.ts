@@ -2,7 +2,7 @@
 import OpenAI from "openai";
 import { AgentConfig, ChannelType, IntentCandidate, RouterDecision } from "../types";
 import { withDeadlineAbort } from "../utils";
-import { createRouterSchema } from "./channel-constraints";
+import { createRouterSchema, getConstraintsForChannel } from "./channel-constraints";
 import { buildMessages, createMasterPrompt } from "./prompt-manager";
 import { structuredOrJson } from "./structured-outputs";
 import { ensureSession } from "./session-manager";
@@ -25,6 +25,13 @@ export async function routerLLM(
 ): Promise<RouterDecision | null> {
   const channel: ChannelType = opts?.channelType || "whatsapp";
   const schema = createRouterSchema(channel);
+  const constraints = getConstraintsForChannel(channel);
+  
+  // Calcular max_output_tokens baseado no bodyMax do canal
+  // Regra: ~1.5 tokens por caractere + margem de segurança
+  const channelMaxTokens = Math.min(Math.ceil(constraints.bodyMax * 1.5), 1024);
+  // Agente sobrescreve o limite do canal (agente manda!)
+  const finalMaxTokens = agent.maxOutputTokens || channelMaxTokens;
 
   // Debug: log session id
   console.log("🎯 ROUTER LLM - SessionId recebido:", opts?.sessionId);
@@ -66,15 +73,26 @@ export async function routerLLM(
       // Build INTENT_HINTS block (score ≥ 0.35 filtered upstream)
       const hints = opts?.intentHints || [];
       let finalInstructions = agent.instructions || "Você é um roteador inteligente. Siga o schema estritamente.";
+  
+  // Helper function to safely escape strings for JSON context
+  const safeString = (str: string) => {
+    return str
+      .replace(/\\/g, '\\\\')    // Escape backslashes
+      .replace(/"/g, '\\"')      // Escape quotes
+      .replace(/\n/g, '\\n')     // Escape newlines
+      .replace(/\r/g, '\\r')     // Escape carriage returns
+      .replace(/\t/g, '\\t');    // Escape tabs
+  };
+  
   if (hints.length > 0) {
     const lines = hints
       .slice(0, 5)
       .map((h) => {
         const sc = typeof h.score === "number" ? Number(h.score!.toFixed(3)) : undefined;
-        const nm = h.name ? ` (${h.name})` : "";
-        const desc = (h.desc || "").replace(/\s+/g, " ").trim().slice(0, 140);
+        const nm = h.name ? ` (${safeString(h.name)})` : "";
+        const desc = safeString((h.desc || "").replace(/\s+/g, " ").trim().slice(0, 140));
         const aliases = Array.isArray((h as any).aliases) && (h as any).aliases.length
-          ? ` aliases: ${((h as any).aliases as string[]).slice(0, 5).join(", ")}`
+          ? ` aliases: ${((h as any).aliases as string[]).slice(0, 5).map(alias => safeString(alias)).join(", ")}`
           : "";
         return `- @${h.slug}${nm}${sc !== undefined ? ` score:${sc}` : ""}${desc ? `\n  desc: ${desc}` : ""}${aliases ? `\n  ${aliases}` : ""}`;
       })
@@ -91,7 +109,7 @@ export async function routerLLM(
         messages,
         instructions: finalInstructions,
         previous_response_id: previousResponseId,
-        max_output_tokens: agent.maxOutputTokens || 512,
+        max_output_tokens: finalMaxTokens,
         verbosity: caps.reasoning && isGPT5(agent.model) ? normVerb(agent.verbosity) : undefined,
         reasoning: caps.reasoning ? { effort: normEffort(agent.reasoningEffort) } : undefined,
         agent,

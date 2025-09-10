@@ -118,13 +118,23 @@ export function buildEphemeralInstructions(opts: {
       ? TASK_PROMPTS.ROUTER_LLM(!!hasInstructions)
       : (TASK_PROMPTS[task] as string);
 
+  // Helper function to safely escape strings for JSON context
+  const safeString = (str: string) => {
+    return str
+      .replace(/\\/g, '\\\\')    // Escape backslashes
+      .replace(/"/g, '\\"')      // Escape quotes
+      .replace(/\n/g, '\\n')     // Escape newlines
+      .replace(/\r/g, '\\r')     // Escape carriage returns
+      .replace(/\t/g, '\\t');    // Escape tabs
+  };
+
   // mantém ordem e números curtos
   const top = (hints ?? [])
     .map(h => ({
       slug: h.slug?.startsWith('@') ? h.slug : `@${h.slug}`,
       score: typeof h.score === 'number' ? Number(h.score.toFixed(3)) : undefined,
-      aliases: (h.aliases ?? []).slice(0, 3),
-      desc: (h.desc ?? '').toString().trim(), // <<< descrição completa
+      aliases: (h.aliases ?? []).slice(0, 3).map(alias => safeString(String(alias))),
+      desc: safeString((h.desc ?? '').toString().trim()), // <<< descrição completa escapada
     }));
 
   let out = "";

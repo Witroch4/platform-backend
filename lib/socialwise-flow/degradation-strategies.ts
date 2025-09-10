@@ -307,11 +307,15 @@ export function buildConcurrencyLimitFallback(context: DegradationContext): Degr
   const startTime = Date.now();
   
   try {
-    const topics = getContextualLegalTopics(context.userText);
-    const response = buildChannelResponseFromTopics(
-      context.channelType, 
-      topics, 
-      'Sistema ocupado. Posso ajudar com:'
+    // Usar botões padrão para sistema ocupado
+    const standardButtons = [
+      { title: 'Atendimento', payload: '@falar_atendente' },
+      { title: 'Finalizar', payload: '@finalizar' }
+    ];
+    const response = buildChannelResponse(
+      context.channelType,
+      'Sistema ocupado. Posso ajudar com:',
+      standardButtons
     );
     
     degradationLogger.info('Concurrency limit fallback', {

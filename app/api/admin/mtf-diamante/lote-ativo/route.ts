@@ -33,7 +33,7 @@ export async function GET() {
         variavel: {
           id: "lote_ativo",
           chave: "lote_ativo",
-          valor: "Nenhum lote ativo no momento",
+          valor: "*⚠️🚫 ATENÇÃO: Este serviço NÃO pode ser solicitado agora Nenhum lote ativo no momento. Veja sobre mandado de segurança!!*",
           tipo: "lote",
           descricao: "Lote Ativo - Nenhum lote selecionado",
           displayName: "Lote Ativo",
@@ -117,7 +117,7 @@ export async function GET() {
         variavel: {
           id: "lote_ativo",
           chave: "lote_ativo",
-          valor: "Nenhum lote ativo no momento",
+          valor: "*⚠️🚫 ATENÇÃO: Este serviço NÃO pode ser solicitado agora Nenhum lote ativo no momento. Veja sobre mandado de segurança!!*",
           tipo: "lote",
           descricao: "Lote Ativo - Nenhum lote selecionado",
           displayName: "Lote Ativo",

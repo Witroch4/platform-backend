@@ -49,7 +49,7 @@ export default function WebhookTestPage() {
   const [clearingCache, setClearingCache] = useState(false);
   const [buttonId, setButtonId] = useState("btn_1754993780819_0_tqji");
   const [buttonTitle, setButtonTitle] = useState("Falar com a Dra");
-  const [userMessage, setUserMessage] = useState("Queria saber mais sobre o mandado de segurança da OAB");
+  const [userMessage, setUserMessage] = useState("VCS SÃO ESPECIALISTAS?");
   const [instagramButtonId, setInstagramButtonId] = useState("ig_btn_1755004696546_uekaa4clu");
   const [testCount, setTestCount] = useState(0);
   const [infiniteTestMode, setInfiniteTestMode] = useState(false);
@@ -60,9 +60,17 @@ export default function WebhookTestPage() {
   const [sourceId, setSourceId] = useState("wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgUM0FCNDNFNUMzMTJGQjc5RjcyOEQA");
   const [randomizeSourceId, setRandomizeSourceId] = useState(true);
   const [lastSentPayload, setLastSentPayload] = useState<any>(null);
+  const [facebookSessionId, setFacebookSessionId] = useState("9296550493690812");
+  const [randomizeSessionId, setRandomizeSessionId] = useState(true);
+  const [lastFacebookMessage, setLastFacebookMessage] = useState("VCS SÃO ESPECIALISTAS?");
 
   const DEFAULT_EXTERNAL_DEST =
     "https://moved-chigger-randomly.ngrok-free.app/api/integrations/webhooks/socialwiseflow";
+
+  // Função para gerar session_id aleatório para Facebook
+  const generateRandomFacebookSessionId = () => {
+    return Math.floor(Math.random() * 9000000000000000 + 1000000000000000).toString();
+  };
 
   // Função para gerar source_id aleatório para WhatsApp
   const generateRandomWhatsAppSourceId = () => {
@@ -121,6 +129,39 @@ export default function WebhookTestPage() {
       }
     }
   }, [userMessage]);
+
+  // Salvar automaticamente a última mensagem do Facebook
+  useEffect(() => {
+    if (lastFacebookMessage.trim()) {
+      try {
+        localStorage.setItem("webhook-last-facebook-message", lastFacebookMessage);
+      } catch (error) {
+        console.error("Erro ao salvar mensagem do Facebook:", error);
+      }
+    }
+  }, [lastFacebookMessage]);
+
+  // Carregar configurações salvas
+  useEffect(() => {
+    try {
+      const savedUserMessage = localStorage.getItem("webhook-last-user-message");
+      if (savedUserMessage) {
+        setUserMessage(savedUserMessage);
+      }
+
+      const savedFacebookMessage = localStorage.getItem("webhook-last-facebook-message");
+      if (savedFacebookMessage) {
+        setLastFacebookMessage(savedFacebookMessage);
+      }
+
+      const savedExternalDest = localStorage.getItem("webhook-external-dest");
+      if (savedExternalDest) {
+        setExternalDest(savedExternalDest);
+      }
+    } catch (error) {
+      console.error("Erro ao carregar configurações:", error);
+    }
+  }, []);
 
   const loadSavedPayloads = () => {
     try {
@@ -498,10 +539,32 @@ export default function WebhookTestPage() {
     externalDest.trim() || DEFAULT_EXTERNAL_DEST;
 
   // Funções para criar payloads personalizados
+  // Função para gerar Source ID aleatório
+  const generateRandomSourceId = (type: 'whatsapp' | 'instagram' | 'facebook') => {
+    const timestamp = Date.now().toString();
+    const random = Math.random().toString(36).substring(2, 15);
+    
+    switch (type) {
+      case 'whatsapp':
+        // Formato WhatsApp: wamid.HBgM + números + letras maiúsculas
+        const whatsappBase = Math.random().toString().substring(2, 15);
+        const whatsappSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
+        return `wamid.HBgM${whatsappBase}FQIAEhgU${whatsappSuffix}`;
+      case 'instagram':
+        // Formato Instagram: ig_ + timestamp + random
+        return `ig_${timestamp}_${random}`;
+      case 'facebook':
+        // Formato Facebook: m_ + string aleatória
+        return `m_${random}${timestamp.substring(-8)}`;
+      default:
+        return random;
+    }
+  };
+
   const createCustomWhatsappPayload = () => {
     const payload = JSON.parse(JSON.stringify(socialwiseWhatsappPayload));
     const finalSourceId = randomizeSourceId 
-      ? generateRandomWhatsAppSourceId()
+      ? generateRandomSourceId('whatsapp')
       : sourceId;
     
     payload.message = userMessage;
@@ -520,7 +583,7 @@ export default function WebhookTestPage() {
   const createCustomWhatsappButtonPayload = () => {
     const payload = JSON.parse(JSON.stringify(socialwiseWhatsappButtonPayload));
     const finalSourceId = randomizeSourceId 
-      ? generateRandomWhatsAppSourceId()
+      ? generateRandomSourceId('whatsapp')
       : sourceId;
     
     payload.message = buttonTitle;
@@ -548,7 +611,7 @@ export default function WebhookTestPage() {
     
     // Gerar source_id aleatório se habilitado
     const finalSourceId = randomizeSourceId 
-      ? generateRandomInstagramSourceId()
+      ? generateRandomSourceId('instagram')
       : payload.context.message.source_id;
 
     payload.message = userMessage;
@@ -564,7 +627,7 @@ export default function WebhookTestPage() {
     
     // Gerar source_id aleatório se habilitado
     const finalSourceId = randomizeSourceId 
-      ? generateRandomInstagramSourceId()
+      ? generateRandomSourceId('instagram')
       : payload.context.message.source_id;
 
     payload.message = buttonTitle;
@@ -575,6 +638,31 @@ export default function WebhookTestPage() {
     payload.context.interaction_type = "postback";
     payload.context.postback_payload = instagramButtonId;
     payload.context.message.source_id = finalSourceId;
+    return payload;
+  };
+
+  const createCustomFacebookPayload = () => {
+    const payload = JSON.parse(JSON.stringify(socialwiseFacebookPayload));
+    
+    // Gerar session_id aleatório se habilitado
+    const finalSessionId = randomizeSessionId 
+      ? generateRandomFacebookSessionId()
+      : facebookSessionId;
+
+    // Gerar source_id aleatório se habilitado
+    const finalSourceId = randomizeSourceId 
+      ? generateRandomSourceId('facebook')
+      : payload.context.message.source_id;
+
+    payload.message = lastFacebookMessage;
+    payload.session_id = finalSessionId;
+    payload.context.message.content = lastFacebookMessage;
+    payload.context.message.processed_message_content = lastFacebookMessage;
+    payload.context.message_content = lastFacebookMessage;
+    payload.context.message.source_id = finalSourceId;
+    payload.context.contact_source = finalSessionId;
+    payload.context["socialwise-chatwit"].whatsapp_identifiers.contact_source = finalSessionId;
+    payload.wamid = finalSourceId;
     return payload;
   };
 
@@ -1453,6 +1541,211 @@ export default function WebhookTestPage() {
     }
   };
 
+  // Payload do Facebook Page baseado no arquivo fornecido
+  const socialwiseFacebookPayload = {
+    "session_id": "9296550493690812",
+    "message": "VCS SÃO ESPECIALISTAS?",
+    "channel_type": "Channel::FacebookPage",
+    "language": "pt_BR",
+    "context": {
+      "message": {
+        "id": 39590,
+        "content": "VCS SÃO ESPECIALISTAS?",
+        "account_id": 3,
+        "inbox_id": 106,
+        "conversation_id": 2214,
+        "message_type": "incoming",
+        "created_at": "2025-09-10T00:34:26.634Z",
+        "updated_at": "2025-09-10T00:34:26.634Z",
+        "private": false,
+        "status": "sent",
+        "source_id": "m_hBmwB2VudaP_a-qDP80sO9U7pdhRMN1xJsA3bf_Z0Idw6RRNyb6rvtemBLejzD2MT5RBigeBix0Vdu7iNIXYWw",
+        "content_type": "text",
+        "content_attributes": {
+          "in_reply_to_external_id": null
+        },
+        "sender_type": "Contact",
+        "sender_id": 1916,
+        "external_source_ids": {},
+        "additional_attributes": {},
+        "processed_message_content": "VCS SÃO ESPECIALISTAS?",
+        "sentiment": {}
+      },
+      "conversation": {
+        "id": 2214,
+        "account_id": 3,
+        "inbox_id": 106,
+        "status": "pending",
+        "assignee_id": null,
+        "created_at": "2025-09-09T13:43:19.328Z",
+        "updated_at": "2025-09-10T00:34:26.641Z",
+        "contact_id": 1916,
+        "display_id": 2004,
+        "contact_last_seen_at": null,
+        "agent_last_seen_at": "2025-09-09T22:10:05.175Z",
+        "additional_attributes": {},
+        "contact_inbox_id": 2215,
+        "uuid": "69ea5f8a-2431-4eb1-a403-786d24dcca5d",
+        "identifier": null,
+        "last_activity_at": "2025-09-10T00:34:26.634Z",
+        "team_id": null,
+        "campaign_id": null,
+        "snoozed_until": null,
+        "custom_attributes": {},
+        "assignee_last_seen_at": null,
+        "first_reply_created_at": null,
+        "priority": null,
+        "sla_policy_id": null,
+        "waiting_since": "2025-09-09T13:43:19.328Z",
+        "cached_label_list": null,
+        "label_list": []
+      },
+      "contact": {
+        "id": 1916,
+        "name": "Witalo Rocha",
+        "email": null,
+        "phone_number": null,
+        "account_id": 3,
+        "created_at": "2025-07-28T12:38:21.807Z",
+        "updated_at": "2025-09-10T00:34:26.866Z",
+        "additional_attributes": {},
+        "identifier": null,
+        "custom_attributes": {},
+        "last_activity_at": "2025-09-10T00:34:26.862Z",
+        "contact_type": "visitor",
+        "middle_name": "",
+        "last_name": "",
+        "location": null,
+        "country_code": null,
+        "blocked": false,
+        "label_list": []
+      },
+      "inbox": {
+        "id": 106,
+        "channel_id": 79,
+        "account_id": 3,
+        "name": "Dra. Amanda Sousa - Advocacia Previdenciária",
+        "created_at": "2025-07-25T11:02:41.530Z",
+        "updated_at": "2025-07-25T11:02:41.530Z",
+        "channel_type": "Channel::FacebookPage",
+        "enable_auto_assignment": true,
+        "greeting_enabled": false,
+        "greeting_message": null,
+        "email_address": null,
+        "working_hours_enabled": false,
+        "out_of_office_message": null,
+        "timezone": "UTC",
+        "enable_email_collect": true,
+        "csat_survey_enabled": false,
+        "allow_messages_after_resolved": true,
+        "auto_assignment_config": {},
+        "lock_to_single_conversation": false,
+        "portal_id": null,
+        "sender_name_type": "friendly",
+        "business_name": null,
+        "allow_agent_to_delete_message": true,
+        "external_token": null,
+        "csat_response_visible": false,
+        "csat_config": {}
+      },
+      "socialwise-chatwit": {
+        "whatsapp_identifiers": {
+          "wamid": "m_hBmwB2VudaP_a-qDP80sO9U7pdhRMN1xJsA3bf_Z0Idw6RRNyb6rvtemBLejzD2MT5RBigeBix0Vdu7iNIXYWw",
+          "whatsapp_id": "m_hBmwB2VudaP_a-qDP80sO9U7pdhRMN1xJsA3bf_Z0Idw6RRNyb6rvtemBLejzD2MT5RBigeBix0Vdu7iNIXYWw",
+          "contact_source": "9296550493690812"
+        },
+        "contact_data": {
+          "id": 1916,
+          "name": "Witalo Rocha",
+          "phone_number": null,
+          "email": null,
+          "identifier": null,
+          "custom_attributes": {}
+        },
+        "conversation_data": {
+          "id": 2214,
+          "status": "pending",
+          "assignee_id": null,
+          "created_at": "2025-09-09T13:43:19Z",
+          "updated_at": "2025-09-10T00:34:26Z"
+        },
+        "message_data": {
+          "id": 39590,
+          "content": "VCS SÃO ESPECIALISTAS?",
+          "content_type": "text",
+          "message_type": "incoming",
+          "created_at": "2025-09-10T00:34:26Z",
+          "interactive_data": {},
+          "instagram_data": {}
+        },
+        "inbox_data": {
+          "id": 106,
+          "name": "Dra. Amanda Sousa - Advocacia Previdenciária",
+          "channel_type": "Channel::FacebookPage"
+        },
+        "account_data": {
+          "id": 3,
+          "name": "DraAmandaSousa"
+        },
+        "metadata": {
+          "socialwise_active": true,
+          "is_whatsapp_channel": false,
+          "payload_version": "2.0",
+          "timestamp": "2025-09-10T00:34:27Z",
+          "has_whatsapp_api_key": false
+        },
+        "whatsapp_api_key": null,
+        "whatsapp_phone_number_id": null,
+        "whatsapp_business_id": null
+      },
+      "wamid": "m_hBmwB2VudaP_a-qDP80sO9U7pdhRMN1xJsA3bf_Z0Idw6RRNyb6rvtemBLejzD2MT5RBigeBix0Vdu7iNIXYWw",
+      "contact_source": "9296550493690812",
+      "contact_name": "Witalo Rocha",
+      "contact_phone": null,
+      "contact_email": null,
+      "contact_identifier": null,
+      "contact_id": 1916,
+      "conversation_id": 2214,
+      "conversation_status": "pending",
+      "conversation_assignee_id": null,
+      "conversation_created_at": "2025-09-09T13:43:19Z",
+      "conversation_updated_at": "2025-09-10T00:34:26Z",
+      "message_id": 39590,
+      "message_content": "VCS SÃO ESPECIALISTAS?",
+      "message_type": "incoming",
+      "message_created_at": "2025-09-10T00:34:26Z",
+      "message_content_type": "text",
+      "button_id": null,
+      "button_title": null,
+      "list_id": null,
+      "list_title": null,
+      "list_description": null,
+      "interaction_type": null,
+      "postback_payload": null,
+      "quick_reply_payload": null,
+      "inbox_id": 106,
+      "inbox_name": "Dra. Amanda Sousa - Advocacia Previdenciária",
+      "channel_type": "Channel::FacebookPage",
+      "account_id": 3,
+      "account_name": "DraAmandaSousa",
+      "whatsapp_api_key": null,
+      "phone_number_id": null,
+      "business_id": null,
+      "socialwise_active": true,
+      "is_whatsapp_channel": false,
+      "has_whatsapp_api_key": false,
+      "payload_version": "2.0",
+      "timestamp": "2025-09-10T00:34:27Z"
+    },
+    "metadata": {
+      "event_name": "message.created",
+      "conversation_id": 2214,
+      "message_id": 39590,
+      "account_id": 3,
+      "inbox_id": 106
+    }
+  };
+
   return (
     <div className="container mx-auto py-6 space-y-6">
       {/* Header */}
@@ -1812,6 +2105,62 @@ export default function WebhookTestPage() {
                 </div>
 
                 <div>
+                  <label htmlFor="facebookSessionId" className="text-sm font-medium">
+                    Session ID Facebook
+                  </label>
+                  <Input
+                    id="facebookSessionId"
+                    value={facebookSessionId}
+                    onChange={(e) => setFacebookSessionId(e.target.value)}
+                    placeholder="9296550493690812"
+                    className="max-w-md"
+                    disabled={randomizeSessionId}
+                  />
+                  <div className="flex items-center space-x-2 mt-2">
+                    <input
+                      type="checkbox"
+                      id="randomizeSessionId"
+                      checked={randomizeSessionId}
+                      onChange={(e) => setRandomizeSessionId(e.target.checked)}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="randomizeSessionId" className="text-sm">
+                      Randomizar Session ID (Facebook)
+                    </label>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    ID único da sessão do Facebook
+                  </p>
+                </div>
+
+                <div>
+                  <label htmlFor="lastFacebookMessage" className="text-sm font-medium">
+                    Mensagem Facebook
+                  </label>
+                  <div className="flex gap-2 items-center">
+                    <Input
+                      id="lastFacebookMessage"
+                      value={lastFacebookMessage}
+                      onChange={(e) => setLastFacebookMessage(e.target.value)}
+                      placeholder="VCS SÃO ESPECIALISTAS?"
+                      className="max-w-md"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setLastFacebookMessage("VCS SÃO ESPECIALISTAS?")}
+                      className="h-8 px-3"
+                      title="Restaurar mensagem padrão"
+                    >
+                      Reset
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Mensagem específica para Facebook • <span className="text-green-600">Salva automaticamente</span>
+                  </p>
+                </div>
+
+                <div>
                   <label htmlFor="sourceId" className="text-sm font-medium">
                     Source ID (wamid)
                   </label>
@@ -1930,7 +2279,7 @@ export default function WebhookTestPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <h5 className="text-sm font-medium">WhatsApp</h5>
               <div className="flex gap-2 flex-wrap">
@@ -1971,6 +2320,20 @@ export default function WebhookTestPage() {
                   size="sm"
                 >
                   Com Botão
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h5 className="text-sm font-medium">Facebook Page</h5>
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  onClick={() => sendToExternal(createCustomFacebookPayload())}
+                  disabled={loading}
+                  variant="outline"
+                  size="sm"
+                >
+                  Texto Simples
                 </Button>
               </div>
             </div>
