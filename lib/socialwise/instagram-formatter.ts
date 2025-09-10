@@ -1,7 +1,6 @@
 /**
- * Instagram button template formatting for SocialWise Flow
- * Limits + whitelist + dedupe (por payload) + 4-word titles + graceful degradation
- * (+) Valida 4 palavras também no validate
+ * Instagram Quick Replies formatting for SocialWise Flow
+ * Limits + whitelist + dedupe (por payload) + graceful degradation
  * (+) Helpers: createInstagramButtonOptions / buildSimpleInstagramMessage
  */
 
@@ -16,18 +15,23 @@ function withinWordLimit(title: string, maxWords = 4): boolean {
   return (title.trim().split(/\s+/).length) <= maxWords;
 }
 
-export interface InstagramButtonTemplate {
-  message_format: 'BUTTON_TEMPLATE';
-  template_type: 'button';
-  text: string; // ≤ 640 chars
-  buttons: Array<{ type: 'postback'; title: string; payload: string }>;
+export interface InstagramQuickReplyItem {
+  content_type: 'text';
+  title: string; // ≤ 20 chars (no word limit enforcement)
+  payload: string; // @slug or empty (≤1000)
+}
+
+export interface InstagramQuickRepliesMessage {
+  message_format: 'QUICK_REPLIES';
+  text: string; // ≤ 1000 chars
+  quick_replies: InstagramQuickReplyItem[]; // 1–13 items
 }
 
 export interface InstagramTextMessage {
   message: { text: string }; // texto simples no limite do Instagram (640)
 }
 
-export type InstagramMessage = InstagramButtonTemplate | InstagramTextMessage;
+export type InstagramMessage = InstagramQuickRepliesMessage | InstagramTextMessage;
 
 export interface InstagramButtonOptions {
   title: string;
@@ -53,35 +57,35 @@ export function buildInstagramButtons(
     throw new Error('Text and buttons array are required');
   }
 
-  const limitedButtons = buttons.slice(0, 3);
+  // Quick Replies allow up to 13
+  const limitedButtons = buttons.slice(0, 13);
 
   try {
-    const clampedText = clampBody(text, 'instagram'); // 640
+    const clampedText = clampBody(text, 'instagram'); // now 1000
     if (!clampedText) throw new Error('Text is empty after clamping');
 
-    const processed: Array<{ type: 'postback'; title: string; payload: string }> = [];
+    const processed: InstagramQuickReplyItem[] = [];
     const seen = new Set<string>();
 
     for (let i = 0; i < limitedButtons.length; i++) {
       const b = limitedButtons[i];
-      const title = clampTitle(b.title);                     // ≤20
+      // For Quick Replies, enforce 20 chars but do not restrict word count
+      const title = clampTitle(b.title, 20, 99);
       const payload = clampPayload(b.payload, 'instagram');  // ≤1000
 
       const formatOk = validatePayloadFormat(payload);       // ^@[a-z0-9_]+$
       const whiteOk  = !allowedPayloads || allowedPayloads.includes(payload);
-      const wordsOk  = withinWordLimit(title, 4);
-
       // dedupe por ID (payload) – identificador relevante no Instagram
       const dedupKey = payload;
 
-      if (!title || !formatOk || !whiteOk || !wordsOk || seen.has(dedupKey)) {
+      if (!title || !formatOk || !whiteOk || seen.has(dedupKey)) {
         if (dropInvalidInsteadOfFallback) continue;
         if (enableFallback) return buildInstagramTextFallback(text, buttons);
         throw new Error(`Invalid button at index ${i}`);
       }
 
       seen.add(dedupKey);
-      processed.push({ type: 'postback', title, payload });
+      processed.push({ content_type: 'text', title, payload });
     }
 
     if (processed.length === 0) {
@@ -90,10 +94,9 @@ export function buildInstagramButtons(
     }
 
     return {
-      message_format: 'BUTTON_TEMPLATE',
-      template_type: 'button',
+      message_format: 'QUICK_REPLIES',
       text: clampedText,
-      buttons: processed,
+      quick_replies: processed,
     };
   } catch (err) {
     if (enableFallback) return buildInstagramTextFallback(text, buttons);
@@ -123,29 +126,26 @@ export function validateInstagramMessage(message: InstagramMessage): {
 } {
   const v: string[] = [];
   if ('message_format' in message) {
-    // Validação para BUTTON_TEMPLATE
+    // Validação para QUICK_REPLIES
     if (!message.text) v.push('Template text required');
-    else if (message.text.length > 640) v.push(`Template text > 640 (${message.text.length})`);
-    if (!message.buttons || !Array.isArray(message.buttons)) v.push('Buttons required');
+    else if (message.text.length > 1000) v.push(`Template text > 1000 (${message.text.length})`);
+    if (!('quick_replies' in message) || !Array.isArray((message as any).quick_replies)) v.push('Quick replies required');
     else {
-      if (message.buttons.length > 3) v.push(`Too many buttons: ${message.buttons.length}`);
-      message.buttons.forEach((b: any, i: number) => {
-        if (!b.title) v.push(`Button ${i+1} title required`);
-        else if (b.title.length > 20) v.push(`Button ${i+1} title > 20`);
-        else if (b.title.trim().split(/\s+/).length > 4) v.push(`Button ${i+1} title > 4 words`);
-        if (!b.payload) v.push(`Button ${i+1} payload required`);
-        else if (b.payload.length > 1000) v.push(`Button ${i+1} payload > 1000`);
-        else if (!validatePayloadFormat(b.payload)) v.push(`Button ${i+1} payload invalid`);
-        if (b.type !== 'postback') v.push(`Button ${i+1} type must be 'postback'`);
+      const list = (message as any).quick_replies as InstagramQuickReplyItem[];
+      if (list.length > 13) v.push(`Too many quick replies: ${list.length}`);
+      list.forEach((b: any, i: number) => {
+        if (!b.title) v.push(`Quick reply ${i+1} title required`);
+        else if (b.title.length > 20) v.push(`Quick reply ${i+1} title > 20`);
+        if (!b.payload) v.push(`Quick reply ${i+1} payload required`);
+        else if (b.payload.length > 1000) v.push(`Quick reply ${i+1} payload > 1000`);
+        else if (!validatePayloadFormat(b.payload)) v.push(`Quick reply ${i+1} payload invalid`);
+        if (b.content_type !== 'text') v.push(`Quick reply ${i+1} content_type must be 'text'`);
       });
-    }
-    if (message.template_type !== 'button') {
-      v.push('Template type must be "button"');
     }
   } else if ('message' in message && 'text' in (message as any).message) {
     const textMsg = message as InstagramTextMessage;
     if (!textMsg.message.text) v.push('Text body required');
-    else if (textMsg.message.text.length > 640) v.push(`Text > 640`);
+    else if (textMsg.message.text.length > 1000) v.push(`Text > 1000`);
   } else v.push('Unknown message format');
   return { isValid: v.length === 0, violations: v };
 }

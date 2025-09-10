@@ -19,16 +19,20 @@ const MASTER_PROMPT_BASE = `
 
 # Regras Universais de Botões
 - Títulos até 20 caracteres, objetivos e acionáveis.
-- Quantidade: use 2–3 botões quando aplicável.
+- Quantidade: use poucos botões úteis (siga os limites do canal abaixo).
 - Payload em formato @slug; não invente slugs.
 `;
 
 // Gera o MASTER com limites do canal (mantém o bloco imutável + ajustes de canal)
 export function createMasterPrompt(channel: ChannelType): string {
   const c = getConstraintsForChannel(channel);
+  const buttonRange = channel === 'whatsapp' ? '2–3' : '2–13';
   return (
     MASTER_PROMPT_BASE +
-    `# Limites do Canal\n- response_text: até ${c.bodyMax} caracteres.\n`
+    `# Limites do Canal\n` +
+    `- response_text: até ${c.bodyMax} caracteres.\n` +
+    `- button_title: até ${c.buttonTitleMax} caracteres.\n` +
+    `- buttons: ${buttonRange}.\n`
   );
 }
 
@@ -42,13 +46,13 @@ Linguagem neutra e profissional.
 
   FREE_CHAT: `
 # Objetivo
-Gerar response_text conciso e 2–3 botões para continuar a conversa.
+Gerar response_text conciso e botões para continuar a conversa.
 Evite afirmar dados operacionais não fornecidos.
 `,
 
   WARMUP_BUTTONS: `
 # Objetivo
-Gerar breve introdução e 2–3 botões para desambiguar a intenção do usuário.
+Gerar breve introdução e botões para desambiguar a intenção do usuário.
 
 # Específicas
 - Títulos baseados na "desc" dos intents, não no slug técnico.
@@ -65,7 +69,7 @@ Decidir entre mode='intent' ou mode='chat'.
 - Dúvida ou múltiplas plausíveis: mode='chat'.
 
 # Em ambos
-- response_text útil e conciso; gere 2–3 botões.
+- response_text útil e conciso; gere botões conforme CHANNEL_LIMITS.
 - mode='intent': botões relacionados à intenção usando slugs EXATOS de INTENT_HINTS.
 - mode='chat': slugs livres para desambiguação/contexto; pode incluir @falar_atendente.
 
@@ -140,10 +144,10 @@ export function buildEphemeralInstructions(opts: {
   let out = "";
   out += "TASK_RULES:\n" + core.trim();
   out += `\n\nGUARDRAILS\n- Não afirme dados operacionais sem fonte no contexto ou do usuário.\n- Não invente payloads: use somente slugs permitidos.`;
-  out += `\n\nCHANNEL_LIMITS\n- response_text<=${c.bodyMax}; button_title<=${c.buttonTitleMax}; buttons=2–3; payload=@slug ou vazio ("").`;
+  const buttonRange = channel === 'whatsapp' ? `2–${c.maxButtons}` : `2–${c.maxButtons}`;
+  out += `\n\nCHANNEL_LIMITS\n- response_text<=${c.bodyMax}; button_title<=${c.buttonTitleMax}; buttons=${buttonRange}; payload=@slug ou vazio ("").`;
   out += `\n\nBUTTON_POLICY\n- Títulos ≤ ${c.buttonTitleMax} chars. Use slugs de INTENT_HINTS no payload; se nenhum aplicar, inclua @falar_atendente.\n- EXEMPLOS: desc="horario Premium" → título="Clientes Premium" (payload="@negocio666"); desc="atendimento escritorio" → título="Horário Escritório" (payload="@negocio1")`;
   out += `\n\nINTENT_HINTS_JSON\n` + JSON.stringify(top, null, 0);
   if (extra && extra.trim()) out += `\n\nEXTRA\n` + extra.trim();
   return out;
 }
-

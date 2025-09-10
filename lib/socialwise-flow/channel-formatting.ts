@@ -207,7 +207,10 @@ export function buildChannelResponse(
     formattingLogger.info('Instagram response built with specialized formatter', {
       hasAttachment: (result as any)?.message_format != null,
       hasText: (result as any)?.text != null,
-      buttonCount: (result as any)?.buttons?.length || 0,
+      buttonCount:
+        ((result as any)?.buttons && (result as any)?.buttons?.length) ||
+        ((result as any)?.quick_replies && (result as any)?.quick_replies?.length) ||
+        0,
     });
     return { instagram: result };
   } else if (
@@ -219,7 +222,10 @@ export function buildChannelResponse(
     formattingLogger.info('Facebook response built with Instagram formatter (same rules)', {
       hasAttachment: (result as any)?.message_format != null,
       hasText: (result as any)?.text != null,
-      buttonCount: (result as any)?.buttons?.length || 0,
+      buttonCount:
+        ((result as any)?.buttons && (result as any)?.buttons?.length) ||
+        ((result as any)?.quick_replies && (result as any)?.quick_replies?.length) ||
+        0,
       channelType: lowerChannelType
     });
     return { facebook: result };

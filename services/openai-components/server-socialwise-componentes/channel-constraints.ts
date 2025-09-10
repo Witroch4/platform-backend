@@ -23,19 +23,19 @@ export function getConstraintsForChannel(channel: ChannelType): ChannelConstrain
   }
   if (channel === "instagram") {
     return {
-      bodyMax: 640,
+      bodyMax: 1000,
       buttonTitleMax: 20,
       payloadMax: 1000,
-      maxButtons: 3,
+      maxButtons: 13,
       titleWordMax: 4,
     };
   }
   // facebook / genérico
   return {
-    bodyMax: 640,
+    bodyMax: 1000,
     buttonTitleMax: 20,
     payloadMax: 1000,
-    maxButtons: 3,
+    maxButtons: 13,
     titleWordMax: 4,
   };
 }
@@ -68,7 +68,8 @@ export function createButtonsSchema(channel: ChannelType) {
       response_text: z
         .string()
         .regex(new RegExp(`^.{1,${bodyMax}}$`, "u"), `máx ${bodyMax} caracteres`),
-      buttons: z.array(Btn).min(1).max(maxButtons),
+      // mínimo 2 botões, máximo conforme canal (3 no WhatsApp; 13 em IG/FB)
+      buttons: z.array(Btn).min(2).max(maxButtons),
     })
     .strict();
 }
@@ -92,8 +93,9 @@ export function createRouterSchema(channel: ChannelType) {
         .string()
         .min(3, "texto muito curto")
         .regex(new RegExp(`^.{3,${bodyMax}}$`, "u"), `mín 3, máx ${bodyMax} caracteres`),
-      // Botões são obrigatórios para facilitar interação - mínimo 2, máximo 3
-      buttons: z.array(Btn).min(2).max(3),
+      // Botões são obrigatórios para facilitar interação - mínimo 2, máximo conforme canal
+      // WhatsApp: 3; Instagram/Facebook: até 13
+      buttons: z.array(Btn).min(2).max(maxButtons),
     })
     .strict();
 }

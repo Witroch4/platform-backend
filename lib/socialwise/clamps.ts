@@ -52,8 +52,8 @@ export function clampBody(
   // Channel-specific limits
   const limits = {
     whatsapp: 1024,
-    instagram: 640,
-    facebook: 640, // Same as Instagram for consistency
+    instagram: 1000,
+    facebook: 1000, // Align IG/FB to support Quick Replies text
   };
 
   const maxChars = limits[channelType] || 1024;
@@ -192,14 +192,14 @@ export const CHANNEL_LIMITS = {
   instagram: {
     buttonTitle: 20,
     payload: 1000,
-    bodyText: 640,
-    maxButtons: 3,
+    bodyText: 1000,
+    maxButtons: 13,
   },
   facebook: {
     buttonTitle: 20,
     payload: 1000,
-    bodyText: 640,
-    maxButtons: 3,
+    bodyText: 1000,
+    maxButtons: 13,
   },
 } as const;
 
