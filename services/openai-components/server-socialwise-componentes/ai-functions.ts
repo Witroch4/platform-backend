@@ -14,7 +14,7 @@ import {
   createRouterSchema,
   getConstraintsForChannel,
 } from "./channel-constraints";
-import { buildMessages, buildEphemeralInstructions } from "./prompt-manager";
+import { buildMessages, buildEphemeralInstructions, TASK_PROMPTS } from "./prompt-manager";
 import { structuredOrJson } from "./structured-outputs";
 import { ensureSession } from "./session-manager";
 import { createMasterPrompt } from "./prompt-manager";
@@ -333,6 +333,7 @@ export async function routerLLM(
     channelType?: ChannelType;
     sessionId?: string;
     intentHints?: IntentCandidate[];
+    profile?: 'lite' | 'full';
   }
 ): Promise<RouterDecision | null> {
   const channel: ChannelType = opts?.channelType || "whatsapp";
@@ -341,6 +342,7 @@ export async function routerLLM(
   // 🔍 DEBUG: Log sessionId recebido
   console.log("🎯 ROUTER LLM - SessionId recebido:", opts?.sessionId);
   const c = getConstraintsForChannel(channel);
+  const profile = opts?.profile === 'lite' ? 'lite' : 'full';
 
   // Texto cru do usuário - sem molduras
   const user = userText;
@@ -367,53 +369,48 @@ export async function routerLLM(
         }
       }
 
-      const messages = buildMessages(
-        {
-          channel,
-          taskType: "router",
-          hasInstructions: !!agent.instructions,
-          statelessInit: isNewSession, // MASTER só em nova sessão
-        },
-        user
-      );
-
       // Instruções compactas para router (com hints com desc completo se fornecidos)
+      const topN = profile === 'lite' ? 3 : 4;
       const hints = sanitizeHintsWithDesc(
         (opts?.intentHints ?? []).map((h) => ({
           ...h,
           aliases: h.aliases,
         })),
-        4
+        topN
       );
 
-      const compactRouterInstr =
-        (agent.instructions || "Siga o schema estritamente.") +
-        "\n\n" +
-        buildEphemeralInstructions({
-          task: "router",
-          channel,
-          hasInstructions: !!agent.instructions,
-          hints, // inclui desc completo
-        });
+      // Prompt persistente em developer: MASTER + TASK (ROUTER LLM)
+      const messages: Array<{ role: 'developer' | 'user'; content: string }> = [];
+      if (isNewSession) {
+        const routerTask = TASK_PROMPTS.ROUTER_LLM(!!agent.instructions);
+        const developerFixed = createMasterPrompt(channel) + "\n\nTASK_RULES\n" + routerTask.trim();
+        messages.push({ role: 'developer', content: developerFixed });
+      }
+      messages.push({ role: 'user', content: user });
 
+      // Instruções efêmeras: prompt do agente + HINTS (apenas conteúdos que mudam)
+      const ephemeralInstructions =
+        (agent.instructions || "Siga o schema estritamente.") +
+        "\n\nINTENT_HINTS_JSON\n" +
+        JSON.stringify(hints, null, 0);
+
+      const useReasoning = caps.reasoning && isGPT5(agent.model);
       const result = await structuredOrJson<RouterDecision>({
         client: this.client,
         model: agent.model,
         messages,
-        instructions: compactRouterInstr,
+        instructions: ephemeralInstructions,
         max_output_tokens:
           agent.maxOutputTokens ||
-          Math.min(384, Math.max(192, Math.round(c.bodyMax * 2))),
-        verbosity:
-          caps.reasoning && isGPT5(agent.model)
-            ? normVerb(agent.verbosity)
-            : undefined,
-        reasoning: caps.reasoning
-          ? { effort: normEffort(agent.reasoningEffort) }
-          : undefined,
+          (profile === 'lite'
+            ? Math.min(256, Math.max(128, Math.round(c.bodyMax * 1.2)))
+            : Math.min(384, Math.max(192, Math.round(c.bodyMax * 2)))),
+        verbosity: useReasoning ? normVerb(agent.verbosity) : undefined,
+        reasoning: useReasoning ? { effort: (normEffort(agent.reasoningEffort) as any) || 'minimal' } : undefined,
         agent,
         schema,
         schemaName: "RouterDecision",
+        pointerKey: 'router_dev_prompt',
         sessionId: opts?.sessionId,
         channel,
         signal,

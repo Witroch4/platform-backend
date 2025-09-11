@@ -146,7 +146,7 @@ export function buildEphemeralInstructions(opts: {
   out += `\n\nGUARDRAILS\n- Não afirme dados operacionais sem fonte no contexto ou do usuário.\n- Não invente payloads: use somente slugs permitidos.`;
   const buttonRange = channel === 'whatsapp' ? `2–${c.maxButtons}` : `2–${c.maxButtons}`;
   out += `\n\nCHANNEL_LIMITS\n- response_text<=${c.bodyMax}; button_title<=${c.buttonTitleMax}; buttons=${buttonRange}; payload=@slug ou vazio ("").`;
-  out += `\n\nBUTTON_POLICY\n- Títulos ≤ ${c.buttonTitleMax} chars. Use slugs de INTENT_HINTS no payload; se nenhum aplicar, inclua @falar_atendente.\n- EXEMPLOS: desc="horario Premium" → título="Clientes Premium" (payload="@negocio666"); desc="atendimento escritorio" → título="Horário Escritório" (payload="@negocio1")`;
+  out += `\n\nBUTTON_POLICY\n- OBRIGATÓRIO: gere pelo menos 2 opções. Se apenas uma for realmente relevante, complemente com "Falar com atendente" (@falar_atendente).\n- Títulos ≤ ${c.buttonTitleMax} chars. Use slugs de INTENT_HINTS no payload; se nenhum aplicar, inclua @falar_atendente.\n- EXEMPLOS: desc="horario Premium" → título="Clientes Premium" (payload="@negocio666"); desc="atendimento escritorio" → título="Horário Escritório" (payload="@negocio1")`;
   out += `\n\nINTENT_HINTS_JSON\n` + JSON.stringify(top, null, 0);
   if (extra && extra.trim()) out += `\n\nEXTRA\n` + extra.trim();
   return out;

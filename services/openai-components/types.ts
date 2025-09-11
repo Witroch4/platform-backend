@@ -193,6 +193,7 @@ export interface IOpenAIService {
       channelType?: ChannelType;
       sessionId?: string;
       intentHints?: IntentCandidate[];
+      profile?: 'lite' | 'full';
     }
   ): Promise<RouterDecision | null>;
 

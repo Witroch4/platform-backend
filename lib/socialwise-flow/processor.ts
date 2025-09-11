@@ -12,7 +12,7 @@ import { classifyIntent, ClassificationResult } from './classification';
 import { buildChannelResponse, buildDefaultLegalTopics, buildFallbackResponse, logChannelResponse, ChannelResponse } from './channel-formatting';
 import { collectPerformanceMetrics, createPerformanceMetrics } from './metrics';
 import { getAssistantForInbox } from '@/lib/socialwise/assistant';
-import { buildWhatsAppByIntentRaw, buildWhatsAppByGlobalIntent, buildInstagramByIntentRaw, buildInstagramByGlobalIntent } from '@/lib/socialwise/templates';
+import { buildWhatsAppByIntentRaw, buildWhatsAppByGlobalIntent, buildInstagramByIntentRaw, buildInstagramByGlobalIntent, buildFacebookPageByIntentRaw, buildFacebookPageByGlobalIntent } from '@/lib/socialwise/templates';
 import { getConcurrencyManager } from './concurrency-manager';
 import { 
   selectDegradationStrategy, 
@@ -29,7 +29,12 @@ function isWhatsAppChannel(channelType?: string) {
 
 function isInstagramChannel(channelType?: string) {
   const normalized = (channelType || '').toLowerCase();
-  return normalized.includes('instagram') || normalized.includes('facebookpage');
+  return normalized.includes('instagram');
+}
+
+function isFacebookChannel(channelType?: string) {
+  const normalized = (channelType || '').toLowerCase();
+  return normalized.includes('facebook') || normalized.includes('messenger') || normalized.includes('facebookpage');
 }
 
 function normalizeChannelType(channelType: string): import('../../services/openai-components/types').ChannelType {
@@ -37,6 +42,16 @@ function normalizeChannelType(channelType: string): import('../../services/opena
   if (normalized.includes('whatsapp')) return 'whatsapp';
   if (normalized.includes('instagram')) return 'instagram';
   return 'facebook'; // fallback
+}
+
+// Dynamic threshold for hint adoption: defaults around 0.55 with bounds [0.4, 0.7]
+function computeDynamicHintThreshold(candidates?: IntentCandidate[]): number {
+  const list = (candidates || []).filter(c => typeof c.score === 'number') as Required<Pick<IntentCandidate,'score'>>[];
+  const topScore = list.length ? (list[0] as any).score as number : 0;
+  if (topScore >= 0.75) return 0.7;
+  if (topScore >= 0.6) return 0.55;
+  if (topScore >= 0.5) return 0.5;
+  return 0.4;
 }
 
 export interface ProcessorContext {
@@ -398,54 +413,126 @@ async function processSoftBand(
       };
     }
 
-    // Generate warmup buttons using LLM with concurrency control
-    processorLogger.info('Preparing warmup buttons generation', {
-      sessionId: context.sessionId,
-      hasSessionId: !!context.sessionId,
-      channelType: context.channelType,
-      traceId: context.traceId
-    });
+    const useRouterLite = (process.env.SOCIALWISE_ROUTER_LITE || '').trim() === '1';
 
-    const warmupResult = await concurrencyManager.executeLlmOperation(
-      context.inboxId,
-      () => openaiService.generateWarmupButtons(
-        context.userText,
-        classification.candidates,
-        agentConfig,
-        { 
-          channelType: normalizeChannelType(context.channelType),
-          sessionId: context.sessionId
-        }
-      ),
-      {
-        priority: 'medium',
-        timeoutMs: agentConfig.softDeadlineMs || 300,
-        allowDegradation: true
-      }
-    );
-
-    const llmWarmupMs = Date.now() - startTime;
-
-    if (warmupResult) {
-      const buttons = warmupResult.buttons.map(btn => ({
-        title: btn.title,
-        payload: btn.payload
-      }));
-
-      const response = buildChannelResponse(
-        context.channelType,
-        warmupResult.response_text,
-        buttons
-      );
-
-      processorLogger.info('SOFT band warmup buttons generated', {
-        candidatesCount: classification.candidates.length,
-        buttonsGenerated: buttons.length,
-        llmWarmupMs,
+    if (!useRouterLite) {
+      // Generate warmup buttons using LLM with concurrency control
+      processorLogger.info('Preparing warmup buttons generation', {
+        sessionId: context.sessionId,
+        hasSessionId: !!context.sessionId,
+        channelType: context.channelType,
         traceId: context.traceId
       });
 
-      return { response, llmWarmupMs };
+      const warmupResult = await concurrencyManager.executeLlmOperation(
+        context.inboxId,
+        () => openaiService.generateWarmupButtons(
+          context.userText,
+          classification.candidates,
+          agentConfig,
+          { 
+            channelType: normalizeChannelType(context.channelType),
+            sessionId: context.sessionId
+          }
+        ),
+        {
+          priority: 'medium',
+          timeoutMs: agentConfig.softDeadlineMs || 300,
+          allowDegradation: true
+        }
+      );
+
+      const llmWarmupMs = Date.now() - startTime;
+
+      if (warmupResult) {
+        const buttons = warmupResult.buttons.map(btn => ({
+          title: btn.title,
+          payload: btn.payload
+        }));
+
+        const response = buildChannelResponse(
+          context.channelType,
+          warmupResult.response_text,
+          buttons
+        );
+
+        processorLogger.info('SOFT band warmup buttons generated', {
+          candidatesCount: classification.candidates.length,
+          buttonsGenerated: buttons.length,
+          llmWarmupMs,
+          traceId: context.traceId
+        });
+
+        return { response, llmWarmupMs };
+      }
+    } else {
+      // ROUTER_LITE path replacing SOFT band
+      processorLogger.info('SOFT band replaced by ROUTER_LITE (flag enabled)', {
+        sessionId: context.sessionId,
+        hasSessionId: !!context.sessionId,
+        channelType: context.channelType,
+        traceId: context.traceId
+      });
+
+      const routerResult = await concurrencyManager.executeLlmOperation(
+        context.inboxId,
+        () => openaiService.routerLLM(
+          context.userText,
+          agentConfig,
+          {
+            channelType: normalizeChannelType(context.channelType),
+            sessionId: context.sessionId,
+            intentHints: classification.candidates,
+            profile: 'lite'
+          }
+        ),
+        {
+          priority: 'medium',
+          timeoutMs: agentConfig.softDeadlineMs || 300,
+          allowDegradation: true
+        }
+      );
+
+      const llmWarmupMs = Date.now() - startTime;
+
+      if (routerResult) {
+        if (routerResult.mode === 'intent' && !routerResult.intent_payload) {
+          const candidates = (classification.candidates || []).filter(c => typeof c.score === 'number');
+          candidates.sort((a, b) => (b.score! - a.score!));
+          const top = candidates[0];
+          const dynThreshold = computeDynamicHintThreshold(candidates);
+
+          if (top && (top.score ?? 0) >= dynThreshold) {
+            routerResult.intent_payload = `@${top.slug}`;
+            processorLogger.warn('ROUTER_LITE fallback applied: intent_payload filled from hints', {
+              filled_payload: routerResult.intent_payload,
+              top_score: Number((top.score ?? 0).toFixed(3)),
+              threshold: dynThreshold,
+              traceId: context.traceId
+            });
+          } else {
+            processorLogger.warn('ROUTER_LITE fallback applied: degraded to chat (low confidence, no valid intent)', {
+              top_slug: top?.slug,
+              top_score: top?.score ?? null,
+              threshold: dynThreshold,
+              traceId: context.traceId
+            });
+            routerResult.mode = 'chat';
+          }
+        }
+
+        const buttons = routerResult.buttons?.map(btn => ({ title: btn.title, payload: btn.payload }));
+        const response = buildChannelResponse(context.channelType, routerResult.response_text, buttons);
+
+        processorLogger.info('SOFT band via ROUTER_LITE processed', {
+          mode: routerResult.mode,
+          hasButtons: !!buttons?.length,
+          llmWarmupMs,
+          traceId: context.traceId
+        });
+
+        return { response, llmWarmupMs };
+      }
     }
 
     // Degradation: Use humanized titles when LLM fails or is throttled
@@ -581,23 +668,22 @@ async function processRouterBand(
         const candidates = (intentHints || []).filter(c => typeof c.score === 'number');
         candidates.sort((a, b) => (b.score! - a.score!));
         const top = candidates[0];
-        const topScore = top?.score ?? 0;
-        const threshold = typeof top?.threshold === 'number' ? top.threshold! : 0.5;
+        const dynThreshold = computeDynamicHintThreshold(candidates);
 
-        if (top && topScore >= threshold) {
+        if (top && (top.score ?? 0) >= dynThreshold) {
           routerResult.intent_payload = `@${top.slug}`;
           processorLogger.warn('ROUTER fallback applied: intent_payload filled from hints', {
             filled_payload: routerResult.intent_payload,
-            top_score: Number(topScore.toFixed(3)),
-            threshold,
+            top_score: Number((top.score ?? 0).toFixed(3)),
+            threshold: dynThreshold,
             traceId: context.traceId
           });
         } else {
           // Degrada para chat por baixa confiança
           processorLogger.warn('ROUTER fallback applied: degraded to chat (low confidence, no valid intent)', {
             top_slug: top?.slug,
-            top_score: topScore || null,
-            threshold,
+            top_score: top?.score ?? null,
+            threshold: dynThreshold,
             traceId: context.traceId
           });
           routerResult.mode = 'chat';
@@ -605,24 +691,21 @@ async function processRouterBand(
       }
       
       if (routerResult.mode === 'intent' && routerResult.intent_payload) {
-        // Try to map the intent (only for WhatsApp)
+        // Try to map the intent based on channel
         const intentName = routerResult.intent_payload.replace(/^@/, '');
         if (isWhatsAppChannel(context.channelType)) {
           const contactContext = { contactName: context.contactName, contactPhone: context.contactPhone };
           let mapped = await buildWhatsAppByIntentRaw(intentName, context.inboxId, context.wamid, contactContext);
-          if (!mapped) {
-            mapped = await buildWhatsAppByGlobalIntent(intentName, context.inboxId, context.wamid, contactContext);
-          }
-          
-          if (mapped) {
-            return { response: mapped, llmWarmupMs };
-          }
-        } else {
-          processorLogger.info('ROUTER band skipping direct mapping for non-WhatsApp channel', {
-            channelType: context.channelType,
-            intent: intentName,
-            traceId: context.traceId
-          });
+          if (!mapped) mapped = await buildWhatsAppByGlobalIntent(intentName, context.inboxId, context.wamid, contactContext);
+          if (mapped) return { response: mapped, llmWarmupMs };
+        } else if (isFacebookChannel(context.channelType)) {
+          let mapped = await buildFacebookPageByIntentRaw(intentName, context.inboxId);
+          if (!mapped) mapped = await buildFacebookPageByGlobalIntent(intentName, context.inboxId);
+          if (mapped) return { response: mapped, llmWarmupMs };
+        } else if (isInstagramChannel(context.channelType)) {
+          let mapped = await buildInstagramByIntentRaw(intentName, context.inboxId);
+          if (!mapped) mapped = await buildInstagramByGlobalIntent(intentName, context.inboxId);
+          if (mapped) return { response: mapped, llmWarmupMs };
         }
       }
 

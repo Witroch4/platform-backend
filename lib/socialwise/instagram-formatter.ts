@@ -15,6 +15,18 @@ function withinWordLimit(title: string, maxWords = 4): boolean {
   return (title.trim().split(/\s+/).length) <= maxWords;
 }
 
+function toSlugBase(text: string): string {
+  const lower = (text || '').toLowerCase();
+  // Normalize and replace non [a-z0-9] with underscore
+  let s = lower
+    .normalize('NFKD')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .replace(/_{2,}/g, '_');
+  if (!s) s = 'opcao';
+  return s.slice(0, 60);
+}
+
 export interface InstagramQuickReplyItem {
   content_type: 'text';
   title: string; // ≤ 20 chars (no word limit enforcement)
@@ -71,20 +83,55 @@ export function buildInstagramButtons(
       const b = limitedButtons[i];
       // For Quick Replies, enforce 20 chars but do not restrict word count
       const title = clampTitle(b.title, 20, 99);
-      const payload = clampPayload(b.payload, 'instagram');  // ≤1000
+      let payload = clampPayload(b.payload, 'instagram');  // ≤1000
 
-      const formatOk = validatePayloadFormat(payload);       // ^@[a-z0-9_]+$
+      let formatOk = validatePayloadFormat(payload);       // ^@[a-z0-9_]+$
       const whiteOk  = !allowedPayloads || allowedPayloads.includes(payload);
-      // dedupe por ID (payload) – identificador relevante no Instagram
-      const dedupKey = payload;
 
-      if (!title || !formatOk || !whiteOk || seen.has(dedupKey)) {
+      if (!title || !whiteOk) {
         if (dropInvalidInsteadOfFallback) continue;
         if (enableFallback) return buildInstagramTextFallback(text, buttons);
         throw new Error(`Invalid button at index ${i}`);
       }
 
-      seen.add(dedupKey);
+      // Try to auto-generate payload from title if invalid/empty
+      if (!formatOk) {
+        const base = toSlugBase(title);
+        let candidate = `@${base}`;
+        let suffix = 2;
+        while (seen.has(candidate) && suffix < 100) {
+          candidate = `@${base}_${suffix++}`;
+        }
+        if (candidate.length <= 1000) {
+          payload = candidate;
+          formatOk = true;
+        }
+      }
+
+      if (!formatOk) {
+        if (dropInvalidInsteadOfFallback) continue;
+        if (enableFallback) return buildInstagramTextFallback(text, buttons);
+        throw new Error(`Invalid payload at index ${i}`);
+      }
+
+      if (seen.has(payload)) {
+        // ensure uniqueness by suffix
+        const base = toSlugBase(title);
+        let candidate = `@${base}`;
+        let suffix = 2;
+        while (seen.has(candidate) && suffix < 100) {
+          candidate = `@${base}_${suffix++}`;
+        }
+        if (!seen.has(candidate)) payload = candidate;
+      }
+
+      if (seen.has(payload)) {
+        if (dropInvalidInsteadOfFallback) continue;
+        if (enableFallback) return buildInstagramTextFallback(text, buttons);
+        throw new Error(`Duplicate payload at index ${i}`);
+      }
+
+      seen.add(payload);
       processed.push({ content_type: 'text', title, payload });
     }
 
