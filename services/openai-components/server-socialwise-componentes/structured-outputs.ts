@@ -44,6 +44,34 @@ function isSchemaArrayError(err: any): boolean {
   return false;
 }
 
+// ---------- Helpers de saneamento para saídas com "sujeira" ----------
+function stripCodeFences(s: string): string {
+  if (!s) return s;
+  // remove ```json ... ``` ou ``` ... ```
+  return s
+    .replace(/^\s*```(?:json)?\s*/i, "")
+    .replace(/\s*```\s*$/i, "");
+}
+
+function removeNullBytes(s: string): string {
+  return s ? s.replace(/\u0000/g, "") : s;
+}
+
+// Tenta extrair um bloco JSON quando há texto extra antes/depois
+function extractJsonLoose(s: string): string | null {
+  if (!s) return null;
+  const first = s.indexOf("{");
+  const last = s.lastIndexOf("}");
+  if (first === -1 || last === -1 || last <= first) return null;
+  return s.slice(first, last + 1);
+}
+
+function sanitizeRawTextForJson(raw: string | undefined): string {
+  let t = removeNullBytes(raw || "");
+  t = stripCodeFences(t).trim();
+  return t;
+}
+
 export interface StructuredOrJsonArgs<T> {
   client: OpenAI;
   model: string;
@@ -133,7 +161,7 @@ export async function structuredOrJson<T>(args: StructuredOrJsonArgs<T>): Promis
       const req: any = {
         model,
         input: finalMessages,
-        instructions: instructions + (strict ? STRICT_APPEND : ""),
+        instructions: (instructions ?? "") + (strict ? STRICT_APPEND : ""),
         previous_response_id: finalPreviousResponseId,
         store,
         text: {
@@ -159,7 +187,7 @@ export async function structuredOrJson<T>(args: StructuredOrJsonArgs<T>): Promis
       }
 
       const res = await client.responses.parse(req, { signal } as any);
-      const raw_text = (res as any)?.output_text as string | undefined;
+      const raw_text = sanitizeRawTextForJson((res as any)?.output_text as string | undefined);
 
       if (res.status === "incomplete") {
         throw new Error(`incomplete:${res.incomplete_details?.reason ?? "unknown"}`);
@@ -264,11 +292,21 @@ export async function structuredOrJson<T>(args: StructuredOrJsonArgs<T>): Promis
     throw new Error(`incomplete:${res.incomplete_details?.reason ?? "unknown"}`);
   }
 
-  const rawText = res.output_text ?? "{}";
+  const rawText = sanitizeRawTextForJson(res.output_text ?? "{}");
   let obj: any;
   try {
     obj = JSON.parse(rawText);
   } catch {
+    // Tenta extrair bloco JSON solto (texto extra antes/depois)
+    const extracted = extractJsonLoose(rawText);
+    if (extracted) {
+      try {
+        obj = JSON.parse(extracted);
+      } catch {}
+    }
+  }
+
+  if (!obj) {
     const err: any = new Error("Modelo retornou JSON inválido no fallback.");
     err.__openai = { request: req, raw_output_text: rawText };
     throw err;
@@ -288,9 +326,12 @@ export async function structuredOrJson<T>(args: StructuredOrJsonArgs<T>): Promis
         strict: true
       });
     }
-    
+
+    // Loga uma amostra do texto bruto para diagnóstico (truncado)
+    const sample = (rawText || "").slice(0, 800);
     const err: any = new Error(JSON.stringify(zerr?.issues ?? zerr?.message ?? zerr));
     err.__openai = { request: req, raw_output_text: rawText };
+    console.error("[JSON Fallback] Schema parse failed. Raw sample:", sample);
     throw err;
   }
 

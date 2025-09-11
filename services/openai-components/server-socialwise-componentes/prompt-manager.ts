@@ -21,6 +21,16 @@ const MASTER_PROMPT_BASE = `
 - Títulos até 20 caracteres, objetivos e acionáveis.
 - Quantidade: use poucos botões úteis (siga os limites do canal abaixo).
 - Payload em formato @slug; não invente slugs.
+
+# Handoff Humano (regra simples e obrigatória)
+- Quando precisar oferecer atendimento humano, use APENAS o slug @falar_atendente.
+- O título do botão DEVE ser um destes (preferir o primeiro): "Atendimento Humano", "Falar com atendente", "Falar com humano", "Suporte humano".
+- É proibido mascarar handoff com outro título (ex.: "Mandado de Segurança" não pode apontar para @falar_atendente).
+- Incluir no MÁXIMO 1 botão de handoff e posicioná-lo por último.
+
+# Aviso final (formatação literal)
+- Ao final do response_text (quando houver botões/desambiguação), inclua literalmente: \`Se nenhum botão atender, digite sua solicitação\`.
+- Não repetir o aviso se já estiver presente. Não usar crases triplas.
 `;
 
 // Gera o MASTER com limites do canal (mantém o bloco imutável + ajustes de canal)
@@ -56,7 +66,10 @@ Gerar breve introdução e botões para desambiguar a intenção do usuário.
 
 # Específicas
 - Títulos baseados na "desc" dos intents, não no slug técnico.
-- Use apenas slugs de INTENT_HINTS no payload; pode incluir @falar_atendente.
+- Use apenas slugs de INTENT_HINTS no payload. Se houver ambiguidade real OU o usuário pedir humano, pode incluir 1 handoff:
+  - payload: @falar_atendente
+  - título: "Atendimento Humano" (ou variações permitidas)
+  - por último.
 - Títulos ≤ 20 caracteres, claros e acionáveis.
 `,
 
@@ -65,13 +78,18 @@ Gerar breve introdução e botões para desambiguar a intenção do usuário.
 Decidir entre mode='intent' ou mode='chat'.
 
 # Decisão
-- Intenção claramente mapeável: mode='intent' com intent_payload=@slug EXATO (apenas um).
-- Dúvida ou múltiplas plausíveis: mode='chat'.
+- O modo padrão é 'chat'.
+- Use 'intent' SOMENTE com CERTEZA ABSOLUTA de que o pedido corresponde a UMA única intenção (baseando-se principalmente na "desc" da intenção):
+  - então preencha intent_payload=@slug EXATO (apenas um).
+- Se houver dúvida, múltiplas plausíveis, conflito ou falta de informação → use 'chat'.
 
 # Em ambos
 - response_text útil e conciso; gere botões conforme CHANNEL_LIMITS.
 - mode='intent': botões relacionados à intenção usando slugs EXATOS de INTENT_HINTS.
-- mode='chat': slugs livres para desambiguação/contexto; pode incluir @falar_atendente.
+- mode='chat': use slugs de INTENT_HINTS para hipóteses. Se ambiguidade real OU pedido explícito por humano, inclua 1 botão de handoff:
+  - payload: @falar_atendente
+  - título: "Atendimento Humano" (ou variações permitidas)
+  - por último.
 
 # Identidade
 Mantenha a identidade e o tom definidos nas instruções principais${hasInstructions ? " (injetadas)." : "."}
@@ -146,7 +164,7 @@ export function buildEphemeralInstructions(opts: {
   out += `\n\nGUARDRAILS\n- Não afirme dados operacionais sem fonte no contexto ou do usuário.\n- Não invente payloads: use somente slugs permitidos.`;
   const buttonRange = channel === 'whatsapp' ? `2–${c.maxButtons}` : `2–${c.maxButtons}`;
   out += `\n\nCHANNEL_LIMITS\n- response_text<=${c.bodyMax}; button_title<=${c.buttonTitleMax}; buttons=${buttonRange}; payload=@slug ou vazio ("").`;
-  out += `\n\nBUTTON_POLICY\n- OBRIGATÓRIO: gere pelo menos 2 opções. Se apenas uma for realmente relevante, complemente com "Falar com atendente" (@falar_atendente).\n- Títulos ≤ ${c.buttonTitleMax} chars. Use slugs de INTENT_HINTS no payload; se nenhum aplicar, inclua @falar_atendente.\n- EXEMPLOS: desc="horario Premium" → título="Clientes Premium" (payload="@negocio666"); desc="atendimento escritorio" → título="Horário Escritório" (payload="@negocio1")`;
+  out += `\n\nBUTTON_POLICY\n- Gere pelo menos 2 opções úteis.\n- Títulos ≤ ${c.buttonTitleMax} chars. Use slugs de INTENT_HINTS no payload.\n- Se houver ambiguidade real OU o usuário pedir humano, inclua 1 botão de handoff por último: "Atendimento Humano" (@falar_atendente).`;
   out += `\n\nINTENT_HINTS_JSON\n` + JSON.stringify(top, null, 0);
   if (extra && extra.trim()) out += `\n\nEXTRA\n` + extra.trim();
   return out;

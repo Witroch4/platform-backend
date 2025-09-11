@@ -19,6 +19,7 @@ import { structuredOrJson } from "./structured-outputs";
 import { ensureSession } from "./session-manager";
 import { createMasterPrompt } from "./prompt-manager";
 import { getModelCaps, isGPT5, normVerb, normEffort } from "./model-capabilities";
+import { normalizeHandoffButtons, ensureFinalNotice } from "./text-normalizers";
 
 type HintOut = { slug: string; score?: number; aliases?: string[]; desc?: string };
 
@@ -206,7 +207,11 @@ export async function generateFreeChatButtons(
         signal,
       });
 
-      return result.parsed;
+      // Normalizações simples e determinísticas
+      const parsed = result.parsed;
+      parsed.buttons = normalizeHandoffButtons(parsed.buttons, c.buttonTitleMax);
+      parsed.response_text = ensureFinalNotice(parsed.response_text);
+      return parsed;
     } catch (error) {
       console.error("Erro ao gerar chat livre com botões:", error);
       return null;
@@ -313,7 +318,10 @@ export async function generateWarmupButtons(
         signal,
       });
 
-      return result.parsed;
+      const parsed = result.parsed;
+      parsed.buttons = normalizeHandoffButtons(parsed.buttons, c.buttonTitleMax);
+      parsed.response_text = ensureFinalNotice(parsed.response_text);
+      return parsed;
     } catch (error) {
       console.error("Erro ao gerar botões de aquecimento:", error);
       return null;
@@ -421,7 +429,15 @@ export async function routerLLM(
         return null;
       }
 
-      return result.parsed;
+      // Normalizações idem (apenas se houver campos)
+      const parsed = result.parsed;
+      if ((parsed as any).buttons) {
+        parsed.buttons = normalizeHandoffButtons((parsed as any).buttons, c.buttonTitleMax);
+      }
+      if ((parsed as any).response_text) {
+        parsed.response_text = ensureFinalNotice((parsed as any).response_text);
+      }
+      return parsed;
     } catch (error) {
       console.error("Erro no Router LLM:", error);
       return null;

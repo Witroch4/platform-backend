@@ -141,6 +141,15 @@ export async function buildWhatsAppByGlobalIntent(intentRaw: string, inboxId: st
   const norm = normalizeIntentRaw(nameRaw);
   const slug = norm.slug;
 
+  console.log('🔍 DEBUG: buildWhatsAppByGlobalIntent Intent Search', {
+    intentRaw,
+    nameRaw,
+    normOriginal: norm.original,
+    normPlain: norm.plain,
+    normSlug: norm.slug,
+    inboxId
+  });
+
   // Encontrar a inbox para obter o userId (appUserId)
   const inbox = await prisma.chatwitInbox.findFirst({
     where: { inboxId },
@@ -149,8 +158,31 @@ export async function buildWhatsAppByGlobalIntent(intentRaw: string, inboxId: st
   const userId = (inbox as any)?.usuarioChatwit?.appUserId as string | undefined;
   if (!userId) return null;
 
-  // Buscar Intent do usuário pelo nome ou slug
-  const intent = await prisma.intent.findFirst({
+  console.log('🔍 DEBUG: buildWhatsAppByGlobalIntent User found', {
+    userId,
+    inboxId
+  });
+
+  // DEBUG: List all active intents for this user to see what exists
+  const allIntents = await prisma.intent.findMany({
+    where: {
+      createdById: userId,
+      isActive: true,
+    },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+    },
+  });
+  console.log('🔍 DEBUG: All active intents for WhatsApp user', {
+    userId,
+    totalIntents: allIntents.length,
+    intentNames: allIntents.map(i => ({ name: i.name, slug: i.slug }))
+  });
+
+  // First try exact match
+  let intent = await prisma.intent.findFirst({
     where: {
       createdById: userId,
       isActive: true,
@@ -161,7 +193,22 @@ export async function buildWhatsAppByGlobalIntent(intentRaw: string, inboxId: st
         { slug: slugify(nameRaw) },
       ],
     },
-    include: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      description: true,
+      actionType: true,
+      templateId: true,
+      similarityThreshold: true,
+      isActive: true,
+      usageCount: true,
+      createdAt: true,
+      updatedAt: true,
+      createdById: true,
+      accountId: true,
+      // Excluir explicitamente o campo embedding que causa problemas
+      // embedding: false,
       template: {
         include: {
           interactiveContent: {
@@ -180,6 +227,73 @@ export async function buildWhatsAppByGlobalIntent(intentRaw: string, inboxId: st
         },
       },
     },
+  });
+
+  // If exact match failed, try case-insensitive search
+  if (!intent) {
+    console.log('🔍 DEBUG: WhatsApp exact match failed, trying case-insensitive search');
+    const caseInsensitiveMatch = allIntents.find(i => 
+      i.name.toLowerCase() === nameRaw.toLowerCase() ||
+      i.name.toLowerCase() === norm.plain.toLowerCase() ||
+      i.slug.toLowerCase() === slug.toLowerCase()
+    );
+    
+    if (caseInsensitiveMatch) {
+      console.log('🔍 DEBUG: WhatsApp found case-insensitive match', {
+        foundName: caseInsensitiveMatch.name,
+        foundSlug: caseInsensitiveMatch.slug,
+        searchedFor: norm.plain
+      });
+      
+      // Fetch the full intent with template data
+      intent = await prisma.intent.findFirst({
+        where: {
+          id: caseInsensitiveMatch.id,
+          createdById: userId,
+          isActive: true,
+        },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          description: true,
+          actionType: true,
+          templateId: true,
+          similarityThreshold: true,
+          isActive: true,
+          usageCount: true,
+          createdAt: true,
+          updatedAt: true,
+          createdById: true,
+          accountId: true,
+          template: {
+            include: {
+              interactiveContent: {
+                include: {
+                  header: true,
+                  body: true,
+                  footer: true,
+                  actionCtaUrl: true,
+                  actionReplyButton: true,
+                  actionList: true,
+                  actionFlow: true,
+                  actionLocationRequest: true,
+                },
+              },
+              whatsappOfficialInfo: true,
+            },
+          },
+        },
+      });
+    }
+  }
+
+  console.log('🔍 DEBUG: buildWhatsAppByGlobalIntent Intent Result', {
+    intentFound: !!intent,
+    intentName: intent?.name,
+    intentSlug: intent?.slug,
+    intentId: intent?.id,
+    hasTemplate: !!intent?.template
   });
 
   if (!intent || !intent.template) return null;
@@ -530,7 +644,7 @@ class InstagramTemplateConverter {
  * Retorna { instagram: {...} } ou { text: '...' } ou null.
  * EXATAMENTE O MESMO PADRÃO DO WHATSAPP mas para Instagram
  */
-export async function buildInstagramByIntentRaw(intentRaw: string, inboxId: string): Promise<any> {
+export async function buildInstagramByIntentRaw(intentRaw: string, inboxId: string, contactContext?: { contactName?: string; contactPhone?: string }): Promise<any> {
   const intentName = String(intentRaw || '').trim();
   if (!intentName || !inboxId) return null;
   
@@ -599,7 +713,11 @@ export async function buildInstagramByIntentRaw(intentRaw: string, inboxId: stri
   // Aplicar variáveis do inbox (aproveitar lógica existente)
   const builder = new WhatsAppPayloadBuilder();
   builder.setChannelType('Channel::Instagram'); // Configurar como Instagram
-  await builder.setVariablesFromInboxId(inboxId);
+  const variablesContext = { 
+    contactPhone: contactContext?.contactPhone,
+    personName: contactContext?.contactName // personName tem prioridade no resolver
+  };
+  await builder.setVariablesFromInboxId(inboxId, variablesContext);
 
   // Processar diferentes tipos de template
   if (mapping.template.type === 'INTERACTIVE_MESSAGE' && mapping.template.interactiveContent) {
@@ -641,7 +759,7 @@ export async function buildInstagramByIntentRaw(intentRaw: string, inboxId: stri
  * Constrói o bloco Instagram a partir de uma Intent global.
  * EXATAMENTE O MESMO PADRÃO DO WHATSAPP mas para Instagram
  */
-export async function buildInstagramByGlobalIntent(intentRaw: string, inboxId: string): Promise<any> {
+export async function buildInstagramByGlobalIntent(intentRaw: string, inboxId: string, contactContext?: { contactName?: string; contactPhone?: string }): Promise<any> {
   const prisma = getPrismaInstance();
   const nameRaw = String(intentRaw || '').trim();
   if (!nameRaw || !inboxId) return null;
@@ -670,7 +788,22 @@ export async function buildInstagramByGlobalIntent(intentRaw: string, inboxId: s
         { slug: slugify(nameRaw) },
       ],
     },
-    include: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      description: true,
+      actionType: true,
+      templateId: true,
+      similarityThreshold: true,
+      isActive: true,
+      usageCount: true,
+      createdAt: true,
+      updatedAt: true,
+      createdById: true,
+      accountId: true,
+      // Excluir explicitamente o campo embedding que causa problemas
+      // embedding: false,
       template: {
         include: {
           interactiveContent: {
@@ -696,7 +829,11 @@ export async function buildInstagramByGlobalIntent(intentRaw: string, inboxId: s
   // Aplicar variáveis do inbox
   const builder = new WhatsAppPayloadBuilder();
   builder.setChannelType('Channel::Instagram'); // Configurar como Instagram
-  await builder.setVariablesFromInboxId(inboxId);
+  const variablesContext = { 
+    contactPhone: contactContext?.contactPhone,
+    personName: contactContext?.contactName // personName tem prioridade no resolver
+  };
+  await builder.setVariablesFromInboxId(inboxId, variablesContext);
 
   const t = intent.template;
   
@@ -739,7 +876,7 @@ export async function buildInstagramByGlobalIntent(intentRaw: string, inboxId: s
  * Constrói o bloco Facebook Page a partir de uma Intent específica do inbox.
  * EXATAMENTE O MESMO PADRÃO DO INSTAGRAM - Facebook Page segue as mesmas regras
  */
-export async function buildFacebookPageByIntentRaw(intentRaw: string, inboxId: string): Promise<any> {
+export async function buildFacebookPageByIntentRaw(intentRaw: string, inboxId: string, contactContext?: { contactName?: string; contactPhone?: string }): Promise<any> {
   const intentName = String(intentRaw || '').trim();
   if (!intentName || !inboxId) return null;
   
@@ -808,7 +945,11 @@ export async function buildFacebookPageByIntentRaw(intentRaw: string, inboxId: s
   // Aplicar variáveis do inbox (configurar como Facebook Page)
   const builder = new WhatsAppPayloadBuilder();
   builder.setChannelType('Channel::FacebookPage'); // Configurar como Facebook Page
-  await builder.setVariablesFromInboxId(inboxId);
+  const variablesContext = { 
+    contactPhone: contactContext?.contactPhone,
+    personName: contactContext?.contactName // personName tem prioridade no resolver
+  };
+  await builder.setVariablesFromInboxId(inboxId, variablesContext);
 
   // Processar diferentes tipos de template (MESMA LÓGICA DO INSTAGRAM)
   if (mapping.template.type === 'INTERACTIVE_MESSAGE' && mapping.template.interactiveContent) {
@@ -837,7 +978,7 @@ export async function buildFacebookPageByIntentRaw(intentRaw: string, inboxId: s
  * Constrói o bloco Facebook Page a partir de uma Intent global.
  * EXATAMENTE O MESMO PADRÃO DO INSTAGRAM - Facebook Page segue as mesmas regras
  */
-export async function buildFacebookPageByGlobalIntent(intentRaw: string, inboxId: string): Promise<any> {
+export async function buildFacebookPageByGlobalIntent(intentRaw: string, inboxId: string, contactContext?: { contactName?: string; contactPhone?: string }): Promise<any> {
   const prisma = getPrismaInstance();
   const nameRaw = String(intentRaw || '').trim();
   if (!nameRaw || !inboxId) return null;
@@ -854,7 +995,35 @@ export async function buildFacebookPageByGlobalIntent(intentRaw: string, inboxId
   if (!userId) return null;
 
   // Buscar Intent do usuário pelo nome - MESMO PADRÃO DO INSTAGRAM
-  const intent = await prisma.intent.findFirst({
+  console.log('🔍 DEBUG: buildFacebookPageByGlobalIntent Intent Search', {
+    intentRaw,
+    normOriginal: norm.original,
+    normPlain: norm.plain,
+    normSlug: norm.slug,
+    userId,
+    inboxId
+  });
+  
+  // DEBUG: List all active intents for this user to see what exists
+  const allIntents = await prisma.intent.findMany({
+    where: {
+      createdById: userId,
+      isActive: true,
+    },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+    },
+  });
+  console.log('🔍 DEBUG: All active intents for user', {
+    userId,
+    totalIntents: allIntents.length,
+    intentNames: allIntents.map(i => ({ name: i.name, slug: i.slug }))
+  });
+  
+  // First try exact match
+  let intent = await prisma.intent.findFirst({
     where: {
       createdById: userId,
       isActive: true,
@@ -863,7 +1032,22 @@ export async function buildFacebookPageByGlobalIntent(intentRaw: string, inboxId
         { name: norm.plain },
       ],
     },
-    include: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      description: true,
+      actionType: true,
+      templateId: true,
+      similarityThreshold: true,
+      isActive: true,
+      usageCount: true,
+      createdAt: true,
+      updatedAt: true,
+      createdById: true,
+      accountId: true,
+      // Excluir explicitamente o campo embedding que causa problemas
+      // embedding: false,
       template: {
         include: {
           interactiveContent: {
@@ -884,12 +1068,81 @@ export async function buildFacebookPageByGlobalIntent(intentRaw: string, inboxId
     },
   });
 
+  // If exact match failed, try case-insensitive search
+  if (!intent) {
+    console.log('🔍 DEBUG: Exact match failed, trying case-insensitive search');
+    const caseInsensitiveMatch = allIntents.find(i => 
+      i.name.toLowerCase() === norm.original.toLowerCase() ||
+      i.name.toLowerCase() === norm.plain.toLowerCase()
+    );
+    
+    if (caseInsensitiveMatch) {
+      console.log('🔍 DEBUG: Found case-insensitive match', {
+        foundName: caseInsensitiveMatch.name,
+        searchedFor: norm.plain
+      });
+      
+      // Fetch the full intent with template data
+      intent = await prisma.intent.findFirst({
+        where: {
+          id: caseInsensitiveMatch.id,
+          createdById: userId,
+          isActive: true,
+        },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          description: true,
+          actionType: true,
+          templateId: true,
+          similarityThreshold: true,
+          isActive: true,
+          usageCount: true,
+          createdAt: true,
+          updatedAt: true,
+          createdById: true,
+          accountId: true,
+          template: {
+            include: {
+              interactiveContent: {
+                include: {
+                  header: true,
+                  body: true,
+                  footer: true,
+                  actionCtaUrl: true,
+                  actionReplyButton: true,
+                  actionList: true,
+                  actionFlow: true,
+                  actionLocationRequest: true,
+                },
+              },
+              whatsappOfficialInfo: true,
+            },
+          },
+        },
+      });
+    }
+  }
+
+  console.log('🔍 DEBUG: buildFacebookPageByGlobalIntent Intent Result', {
+    intentFound: !!intent,
+    intentName: intent?.name,
+    intentSlug: intent?.slug,
+    intentId: intent?.id,
+    hasTemplate: !!intent?.template
+  });
+
   if (!intent || !intent.template) return null;
 
   // Aplicar variáveis do inbox (configurar como Facebook Page)
   const builder = new WhatsAppPayloadBuilder();
   builder.setChannelType('Channel::FacebookPage'); // Configurar como Facebook Page
-  await builder.setVariablesFromInboxId(inboxId);
+  const variablesContext = { 
+    contactPhone: contactContext?.contactPhone,
+    personName: contactContext?.contactName // personName tem prioridade no resolver
+  };
+  await builder.setVariablesFromInboxId(inboxId, variablesContext);
 
   const t = intent.template;
   

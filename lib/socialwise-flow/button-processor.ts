@@ -6,6 +6,7 @@
 
 import { createLogger } from '@/lib/utils/logger';
 import { getReactionByButtonId, formatReactionData } from '@/lib/button-reaction-queries';
+import { getPrismaInstance } from '@/lib/connections';
 
 const logger = createLogger('SocialWiseButtonProcessor');
 
@@ -62,21 +63,37 @@ export function detectButtonClick(validPayload: any, channelType: string): Butto
   let buttonTitle: string | null = null;
   let detectionSource = '';
 
-  // Instagram: detectar postback_payload
-  if (channelType.toLowerCase().includes('instagram')) {
-    // Priority: content_attributes.postback_payload > context.postback_payload > socialwise-chatwit
-    const postbackPayload = ca?.postback_payload || 
-                           context?.postback_payload || 
-                           swInstagram?.postback_payload;
-    
-    // Verificar se é um clique de botão Instagram (interaction_type = "postback")
+  // Meta Platforms (Instagram + Facebook): detectar postback_payload e quick_reply_payload
+  if (channelType.toLowerCase().includes('instagram') || channelType.toLowerCase().includes('facebook')) {
     const interactionType = context?.interaction_type || swInstagram?.interaction_type;
+    const platformName = channelType.toLowerCase().includes('instagram') ? 'instagram' : 'facebook';
     
-    if (postbackPayload && interactionType === 'postback') {
-      isButtonClick = true;
-      buttonId = postbackPayload;
-      buttonTitle = validPayload.message; // O texto do botão sempre está em message
-      detectionSource = 'instagram_postback';
+    // Meta Postback (botões template)
+    if (interactionType === 'postback') {
+      const postbackPayload = ca?.postback_payload || 
+                             context?.postback_payload || 
+                             swInstagram?.postback_payload;
+      
+      if (postbackPayload) {
+        isButtonClick = true;
+        buttonId = postbackPayload;
+        buttonTitle = validPayload.message; // O texto do botão sempre está em message
+        detectionSource = `${platformName}_postback`;
+      }
+    }
+    
+    // Meta Quick Reply (respostas rápidas)
+    if (interactionType === 'quick_reply') {
+      const quickReplyPayload = ca?.quick_reply_payload || 
+                               context?.quick_reply_payload ||
+                               swInstagram?.quick_reply_payload;
+      
+      if (quickReplyPayload) {
+        isButtonClick = true;
+        buttonId = quickReplyPayload;
+        buttonTitle = validPayload.message; // O texto do botão sempre está em message
+        detectionSource = `${platformName}_quick_reply`;
+      }
     }
   }
 
@@ -145,6 +162,23 @@ export async function processButtonClick(
   });
 
   try {
+    // ⚡ MAPEAMENTO AUTOMÁTICO: @falar_atendente -> handoff nativo
+    if (buttonId === '@falar_atendente') {
+      logger.info('🚨 HANDOFF AUTOMÁTICO: @falar_atendente detectado', {
+        buttonId,
+        channelType,
+        traceId
+      });
+      
+      return {
+        action_type: 'button_reaction',
+        buttonId: buttonId,
+        processed: true,
+        mappingFound: true,
+        action: 'handoff'
+      };
+    }
+
     // Buscar reação usando button-reaction-queries
     const buttonReaction = await getReactionByButtonId(buttonId, userId || '');
 

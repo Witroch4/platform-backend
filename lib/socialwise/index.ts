@@ -47,9 +47,11 @@ export {
   buildSimpleInstagramMessage,
   type InstagramButtonOptions,
   type InstagramMessage,
-  type InstagramButtonTemplate,
   type InstagramTextMessage
 } from './instagram-formatter';
+
+// Import InstagramButtonTemplate from types
+export type { InstagramButtonTemplate } from '../../types/interactive-messages';
 
 // Classification system utilities
 export {

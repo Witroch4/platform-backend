@@ -169,28 +169,10 @@ export function buildChannelResponse(
     });
   }
 
-  // Sem botões → texto simples do canal
+  // Sem botões → formato simples universal { "text": "..." } para todos os canais
   if (!buttons || buttons.length === 0) {
-    if (lowerChannelType.includes('whatsapp')) {
-      return {
-        whatsapp: {
-          type: 'text',
-          text: { body: clampBodyCentralized(text, 'whatsapp') },
-        },
-      };
-    } else if (lowerChannelType.includes('instagram')) {
-      return {
-        instagram: { message: { text: clampBodyCentralized(text, 'instagram') } },
-      };
-    } else if (
-      lowerChannelType.includes('facebook') ||
-      lowerChannelType.includes('messenger')
-    ) {
-      return { facebook: { message: { text: clampBodyCentralized(text, 'facebook') } } };
-    } else {
-      // Genérico (usa limite do Facebook por ser mais permissivo)
-      return { text: clampBodyCentralized(text, 'facebook') };
-    }
+    // Usa limite mais permissivo (WhatsApp) para máxima compatibilidade
+    return { text: clampBodyCentralized(text, 'whatsapp') };
   }
 
   // Com botões → usar formatters especializados

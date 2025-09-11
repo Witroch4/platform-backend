@@ -261,6 +261,14 @@ export function formatReactionData(
     }
   }
 
+  if (channelType.toLowerCase().includes('facebook')) {
+    response.facebook = {
+      message_id: wamid,
+      reaction_emoji: actionPayload.emoji || undefined,
+      response_text: actionPayload.textReaction || undefined,
+    }
+  }
+
   return response
 }
 

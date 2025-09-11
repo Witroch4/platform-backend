@@ -333,15 +333,16 @@ async function processHardBand(
         });
         return mapped;
       }
-    } else if (isInstagramChannel(context.channelType)) {
-      processorLogger.info('HARD band attempting Instagram mapping', {
+    } else if (isInstagramChannel(context.channelType) || isFacebookChannel(context.channelType)) {
+      const platformName = isInstagramChannel(context.channelType) ? 'Instagram' : 'Facebook';
+      processorLogger.info(`HARD band attempting ${platformName} mapping`, {
         intent: topIntent.slug,
         score: topIntent.score,
         traceId: context.traceId
       });
       
       let mapped = await buildInstagramByIntentRaw(topIntent.slug, context.inboxId);
-      processorLogger.info('HARD band Instagram intent raw result', {
+      processorLogger.info(`HARD band ${platformName} intent raw result`, {
         intent: topIntent.slug,
         found: !!mapped,
         traceId: context.traceId
@@ -349,7 +350,7 @@ async function processHardBand(
       
       if (!mapped) {
         mapped = await buildInstagramByGlobalIntent(topIntent.slug, context.inboxId);
-        processorLogger.info('HARD band Instagram global intent result', {
+        processorLogger.info(`HARD band ${platformName} global intent result`, {
           intent: topIntent.slug,
           found: !!mapped,
           traceId: context.traceId
@@ -357,7 +358,7 @@ async function processHardBand(
       }
       
       if (mapped) {
-        processorLogger.info('HARD band Instagram direct mapping successful', {
+        processorLogger.info(`HARD band ${platformName} direct mapping successful`, {
           intent: topIntent.slug,
           score: topIntent.score,
           processingMs: Date.now() - startTime,
@@ -365,7 +366,7 @@ async function processHardBand(
         });
         return mapped;
       } else {
-        processorLogger.info('HARD band Instagram mapping failed - falling back to channel response', {
+        processorLogger.info(`HARD band ${platformName} mapping failed - falling back to channel response`, {
           intent: topIntent.slug,
           score: topIntent.score,
           traceId: context.traceId
@@ -402,6 +403,7 @@ async function processSoftBand(
 ): Promise<{ response: ChannelResponse; llmWarmupMs?: number }> {
   const startTime = Date.now();
   const concurrencyManager = getConcurrencyManager();
+  let llmWarmupMs: number | undefined;
   
   try {
     // Get full assistant configuration with deadlines
@@ -442,7 +444,7 @@ async function processSoftBand(
         }
       );
 
-      const llmWarmupMs = Date.now() - startTime;
+      llmWarmupMs = Date.now() - startTime;
 
       if (warmupResult) {
         const buttons = warmupResult.buttons.map(btn => ({
@@ -699,12 +701,14 @@ async function processRouterBand(
           if (!mapped) mapped = await buildWhatsAppByGlobalIntent(intentName, context.inboxId, context.wamid, contactContext);
           if (mapped) return { response: mapped, llmWarmupMs };
         } else if (isFacebookChannel(context.channelType)) {
-          let mapped = await buildFacebookPageByIntentRaw(intentName, context.inboxId);
-          if (!mapped) mapped = await buildFacebookPageByGlobalIntent(intentName, context.inboxId);
+          const contactContext = { contactName: context.contactName, contactPhone: context.contactPhone };
+          let mapped = await buildFacebookPageByIntentRaw(intentName, context.inboxId, contactContext);
+          if (!mapped) mapped = await buildFacebookPageByGlobalIntent(intentName, context.inboxId, contactContext);
           if (mapped) return { response: mapped, llmWarmupMs };
         } else if (isInstagramChannel(context.channelType)) {
-          let mapped = await buildInstagramByIntentRaw(intentName, context.inboxId);
-          if (!mapped) mapped = await buildInstagramByGlobalIntent(intentName, context.inboxId);
+          const contactContext = { contactName: context.contactName, contactPhone: context.contactPhone };
+          let mapped = await buildInstagramByIntentRaw(intentName, context.inboxId, contactContext);
+          if (!mapped) mapped = await buildInstagramByGlobalIntent(intentName, context.inboxId, contactContext);
           if (mapped) return { response: mapped, llmWarmupMs };
         }
       }
@@ -814,8 +818,8 @@ async function processButtonReaction(context: ProcessorContext): Promise<ButtonR
                   payload.button_id);
     buttonId = payload.context?.message?.content_attributes?.button_reply?.id || 
                payload.button_id;
-  } else if (isInstagramChannel(context.channelType)) {
-    // Instagram: verifica postback_payload em content_attributes ou na raiz
+  } else if (isInstagramChannel(context.channelType) || isFacebookChannel(context.channelType)) {
+    // Instagram/Facebook: verifica postback_payload em content_attributes ou na raiz
     isButton = !!(payload.context?.message?.content_attributes?.postback_payload || 
                   payload.postback_payload) && 
                (payload.interaction_type === 'postback');
@@ -1088,7 +1092,7 @@ export async function processSocialWiseFlow(
     let shouldProcessLLM = true; // Por padrão, processa LLM
     let bypassEmbedding = false; // Flag para pular embedding em botões não mapeados
     
-    if (isInstagramChannel(context.channelType) || isWhatsAppChannel(context.channelType)) {
+    if (isInstagramChannel(context.channelType) || isFacebookChannel(context.channelType) || isWhatsAppChannel(context.channelType)) {
       buttonReactionMeta = await processButtonReaction(context);
       
       if (buttonReactionMeta) {
@@ -1131,8 +1135,12 @@ export async function processSocialWiseFlow(
             
             if (isWhatsAppChannel(context.channelType)) {
               buttonId = payload?.context?.message?.content_attributes?.button_reply?.id || payload?.button_id;
-            } else if (isInstagramChannel(context.channelType)) {
-              buttonId = payload?.context?.message?.content_attributes?.postback_payload || payload?.postback_payload;
+            } else if (isInstagramChannel(context.channelType) || isFacebookChannel(context.channelType)) {
+              // Meta Platforms (Instagram + Facebook) usam a mesma estrutura
+              buttonId = payload?.context?.message?.content_attributes?.postback_payload || 
+                        payload?.context?.message?.content_attributes?.quick_reply_payload ||
+                        payload?.postback_payload || 
+                        payload?.quick_reply_payload;
             }
             
             if (buttonId) {
@@ -1393,8 +1401,8 @@ export async function processSocialWiseFlow(
     const routeTotalMs = Date.now() - startTime;
 
     // Apply button reaction metadata for Instagram and WhatsApp
-    if (buttonReactionMeta && (isInstagramChannel(context.channelType) || isWhatsAppChannel(context.channelType))) {
-      if (isInstagramChannel(context.channelType)) {
+    if (buttonReactionMeta && (isInstagramChannel(context.channelType) || isFacebookChannel(context.channelType) || isWhatsAppChannel(context.channelType))) {
+      if (isInstagramChannel(context.channelType) || isFacebookChannel(context.channelType)) {
         response = applyInstagramReactionMeta(response, buttonReactionMeta);
       } else if (isWhatsAppChannel(context.channelType)) {
         // For WhatsApp, we can apply similar logic or extend for WhatsApp-specific format

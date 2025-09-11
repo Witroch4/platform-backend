@@ -28,6 +28,8 @@ import {
   Shield,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { quickReplyFBPayload } from "./paylod-quick-FB";
+import { quickReplyIGPayload } from "./paylod-quick-IG";
 
 interface SavedPayload {
   id: string;
@@ -46,6 +48,7 @@ export default function WebhookTestPage() {
   const [payloadName, setPayloadName] = useState("");
   const [externalDest, setExternalDest] = useState<string>("");
   const [clearCache, setClearCache] = useState(true);
+  const [quickReplyPayload, setQuickReplyPayload] = useState("@falar_atendente");
   const [clearingCache, setClearingCache] = useState(false);
   const [buttonId, setButtonId] = useState("btn_1754993780819_0_tqji");
   const [buttonTitle, setButtonTitle] = useState("Falar com a Dra");
@@ -663,6 +666,24 @@ export default function WebhookTestPage() {
     payload.context.contact_source = finalSessionId;
     payload.context["socialwise-chatwit"].whatsapp_identifiers.contact_source = finalSessionId;
     payload.wamid = finalSourceId;
+    return payload;
+  };
+
+  const createCustomQuickReplyFBPayload = () => {
+    const payload = JSON.parse(JSON.stringify(quickReplyFBPayload));
+    // Atualizar o quick_reply_payload com o valor personalizado
+    payload.context.message.content_attributes.quick_reply_payload = quickReplyPayload;
+    payload.context["socialwise-chatwit"].message_data.instagram_data.quick_reply_payload = quickReplyPayload;
+    payload.quick_reply_payload = quickReplyPayload;
+    return payload;
+  };
+
+  const createCustomQuickReplyIGPayload = () => {
+    const payload = JSON.parse(JSON.stringify(quickReplyIGPayload));
+    // Atualizar o quick_reply_payload com o valor personalizado
+    payload.context.message.content_attributes.quick_reply_payload = quickReplyPayload;
+    payload.context["socialwise-chatwit"].message_data.instagram_data.quick_reply_payload = quickReplyPayload;
+    payload.quick_reply_payload = quickReplyPayload;
     return payload;
   };
 
@@ -2270,6 +2291,30 @@ export default function WebhookTestPage() {
         </Card>
       </div>
 
+      {/* Campo para personalizar Quick Reply Payload */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Quick Reply Payload</CardTitle>
+          <CardDescription>
+            Personalize o payload enviado nos quick replies do Instagram e Facebook
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            <label htmlFor="quickReplyPayload" className="text-sm font-medium">
+              Quick Reply Payload:
+            </label>
+            <Input
+              id="quickReplyPayload"
+              value={quickReplyPayload}
+              onChange={(e) => setQuickReplyPayload(e.target.value)}
+              placeholder="Ex: @falar_atendente"
+              className="font-mono"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Enviar para destino customizado (cargas padrão) */}
       <Card>
         <CardHeader>
@@ -2321,6 +2366,14 @@ export default function WebhookTestPage() {
                 >
                   Com Botão
                 </Button>
+                <Button
+                  onClick={() => sendToExternal(createCustomQuickReplyIGPayload())}
+                  disabled={loading}
+                  variant="outline"
+                  size="sm"
+                >
+                  Quick Reply
+                </Button>
               </div>
             </div>
 
@@ -2334,6 +2387,14 @@ export default function WebhookTestPage() {
                   size="sm"
                 >
                   Texto Simples
+                </Button>
+                <Button
+                  onClick={() => sendToExternal(createCustomQuickReplyFBPayload())}
+                  disabled={loading}
+                  variant="outline"
+                  size="sm"
+                >
+                  Quick Reply
                 </Button>
               </div>
             </div>

@@ -15,7 +15,15 @@ function hashShort(s: string): string {
 
 const sessionState = new Map<string, string>(); // Fallback local — dev/CI
 const SESSION_TTL_SECONDS = 60 * 60 * 24; // 24h
+const SESSION_TTL_DEV_SECONDS = 30; // 30 segundos para devs
 const LOCK_TTL_SECONDS = 5; // lock curto
+
+// Session IDs dos desenvolvedores para TTL reduzido
+const DEV_SESSION_IDS = new Set([
+  "9296550493690812",
+  "1002859634954741", 
+  "558597550136"
+]);
 
 async function getSessionPointer(key: string): Promise<string | undefined> {
   const redis = getRedisInstance?.();
@@ -29,11 +37,19 @@ async function getSessionPointer(key: string): Promise<string | undefined> {
   return sessionState.get(key);
 }
 
-async function setSessionPointer(key: string, value: string): Promise<void> {
+async function setSessionPointer(key: string, value: string, sessionId?: string): Promise<void> {
+  // Determinar TTL baseado se é dev ou não
+  const isDevSession = sessionId && DEV_SESSION_IDS.has(sessionId);
+  const ttl = isDevSession ? SESSION_TTL_DEV_SECONDS : SESSION_TTL_SECONDS;
+  
+  if (isDevSession) {
+    console.log(`🔧 DEV SESSION: Usando TTL de ${SESSION_TTL_DEV_SECONDS}s para sessionId ${sessionId}`);
+  }
+  
   const redis = getRedisInstance?.();
   if (redis) {
     try {
-      await redis.setex(key, SESSION_TTL_SECONDS, value);
+      await redis.setex(key, ttl, value);
     } catch (error) {
       console.warn("Redis set failed, using fallback", error);
     }
@@ -105,7 +121,7 @@ export async function updateSessionPointer(
   newResponseId: string
 ): Promise<void> {
   const sessionKey = `session:${sessionId}`;
-  await setSessionPointer(sessionKey, newResponseId);
+  await setSessionPointer(sessionKey, newResponseId, sessionId);
 }
 
 // Verifica se já há ponteiro de sessão para esse sessionId

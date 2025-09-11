@@ -11,6 +11,7 @@ import { getPrismaInstance } from '@/lib/connections';
 
 // SocialWise Flow optimized components
 import { processSocialWiseFlow, extractSessionId } from '@/lib/socialwise-flow/processor';
+import { buildChannelResponse } from '@/lib/socialwise-flow/channel-formatting';
 import { SocialWiseFlowPayloadSchema, SanitizedTextSchema, validateSocialWisePayloadWithPreprocessing, type SocialWiseFlowPayloadType, type SocialWiseChatwitData } from '@/lib/socialwise-flow/schemas/payload';
 import { SocialWiseIdempotencyService } from '@/lib/socialwise-flow/services/idempotency';
 import { SocialWiseRateLimiterService } from '@/lib/socialwise-flow/services/rate-limiter';
@@ -59,49 +60,23 @@ function normalizeIntentId(raw: string): { plain: string; standardId: string } {
 /**
  * Build channel-specific response for legacy compatibility
  */
-function buildChannelResponse(channelType: string, text: string) {
-  const lower = (text || '').toLowerCase();
-  const ch = (channelType || '').toLowerCase();
-
-  // Handoff keywords in plain text
-  if (lower.includes('atendente') || lower.includes('humano')) {
-    return { action: 'handoff' };
-  }
-
-  if (ch.includes('whatsapp')) {
-    const content = text || 'Como posso ajudar você hoje?';
-    const interactive = {
-      type: 'button',
-      body: { text: content },
-      action: {
-        buttons: [
-          { type: 'reply', reply: { id: 'ia_recurso_oab', title: 'Recurso OAB' } },
-          { type: 'reply', reply: { id: 'ia_inscricao', title: 'Inscrição' } },
-          { type: 'reply', reply: { id: 'handoff:human', title: 'Falar com atendente' } },
-        ],
-      },
-    };
-    return { whatsapp: { type: 'interactive', interactive } };
-  }
-
-  if (ch.includes('instagram')) {
-    const igPayload = {
-      template_type: 'button',
-      text: text || 'Posso ajudar com:',
-      buttons: [
-        { type: 'postback', title: 'Recurso OAB', payload: 'ia_recurso_oab' },
-        { type: 'postback', title: 'Inscrição', payload: 'ia_inscricao' },
-      ],
-    };
-    return { instagram: { message: { attachment: { type: 'template', payload: igPayload } } } };
-  }
-
-  if (ch.includes('facebook') || ch.includes('messenger')) {
-    return { facebook: { message: { text: text || 'Como posso ajudar?' } } };
-  }
-
-  return { text: text || 'Como posso ajudar?' };
+/**
+ * Log humanizado da resposta final enviada para o Chatwit
+ */
+function logFinalResponse(responseData: any, status: number, traceId?: string) {
+  const responseSize = JSON.stringify(responseData).length;
+  const responseSizeKB = Math.round((responseSize / 1024) * 100) / 100;
+  
+  webhookLogger.info('📤 CHATWIT FINAL RESPONSE DEBUG', {
+    timestamp: new Date().toISOString(),
+    responseSizeKB,
+    responseLength: responseSize,
+    status,
+    traceId,
+    responseData: JSON.stringify(responseData, null, 2)
+  });
 }
+
 
 /**
  * POST /api/integrations/webhooks/socialwiseflow
@@ -254,7 +229,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
         inboxId: socialwiseDataForLog?.inbox_data?.id || validPayload.context.inbox?.id,
         traceId
       });
-      return NextResponse.json({ ok: true, dedup: true }, { status: 200 });
+      const dedupResponse = { ok: true, dedup: true };
+      logFinalResponse(dedupResponse, 200, traceId);
+      return NextResponse.json(dedupResponse, { status: 200 });
     }
 
     // Step 9: Rate limiting
@@ -363,6 +340,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
         traceId
       });
 
+      logFinalResponse(buttonReactionResponse, 200, traceId);
       return NextResponse.json(buttonReactionResponse, { status: 200 });
     }
 
@@ -376,8 +354,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
     let unmappedButtonId: string | null = null;
     if (channelType.toLowerCase().includes('whatsapp')) {
       unmappedButtonId = ca?.button_reply?.id || (validPayload.context as any)?.button_id || null;
-    } else if (channelType.toLowerCase().includes('instagram')) {
-      unmappedButtonId = ca?.postback_payload || (validPayload.context as any)?.postback_payload || null;
+    } else if (channelType.toLowerCase().includes('instagram') || channelType.toLowerCase().includes('facebook')) {
+      // Meta Platforms (Instagram + Facebook) usam a mesma estrutura
+      unmappedButtonId = ca?.postback_payload || ca?.quick_reply_payload || 
+                        (validPayload.context as any)?.postback_payload || 
+                        (validPayload.context as any)?.quick_reply_payload || null;
     }
     
     webhookLogger.debug('🔍 Debug unmapped button detection', {
@@ -392,17 +373,18 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
     
     // If it's an unmapped button, use the real button text (message field) as input for LLM
     const isWhatsAppButton = unmappedButtonId && (validPayload.context as any)?.interaction_type === 'button_reply';
-    const isInstagramButton = unmappedButtonId && channelType.toLowerCase().includes('instagram') && ca?.postback_payload;
+    const isMetaButton = unmappedButtonId && (channelType.toLowerCase().includes('instagram') || channelType.toLowerCase().includes('facebook')) && 
+                        (ca?.postback_payload || ca?.quick_reply_payload);
     
-    if (unmappedButtonId && (isWhatsAppButton || isInstagramButton)) {
+    if (unmappedButtonId && (isWhatsAppButton || isMetaButton)) {
       // Usar o campo 'message' que contém o texto real do botão
-      // Isso é padronizado entre WhatsApp e Instagram
+      // Isso é padronizado entre WhatsApp e Meta Platforms (Instagram/Facebook)
       const realButtonText = validPayload.message || validPayload.context?.message?.content;
       
       webhookLogger.debug('🔍 Debug button text extraction', {
         unmappedButtonId,
         isWhatsAppButton,
-        isInstagramButton,
+        isMetaButton,
         validPayloadMessage: validPayload.message,
         contextMessageContent: validPayload.context?.message?.content,
         realButtonText,
@@ -428,6 +410,62 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
         webhookLogger.info('🔄 Unmapped button detected, using buttonId as fallback for LLM processing', {
           originalButtonId: unmappedButtonId,
           fallbackText: buttonText,
+          traceId
+        });
+      }
+    }
+
+    // Process unmapped button as intent if it starts with @ (quick reply intent)
+    if (unmappedButtonId && unmappedButtonId.startsWith('@') && !buttonReactionResponse) {
+      const idLower = unmappedButtonId.toLowerCase();
+      
+      // Direct handoff for specific button IDs
+      if (idLower === '@falar_atendente') {
+        const handoffResponse = { action: 'handoff' };
+        logFinalResponse(handoffResponse, 200, traceId);
+        return NextResponse.json(handoffResponse, { status: 200 });
+      }
+      
+      const norm = normalizeIntentId(unmappedButtonId);
+      const rawIntent = norm.plain;
+      let mapped: any = null;
+      
+      // Try mapping based on channel type
+      if (channelType.toLowerCase().includes('whatsapp')) {
+        const contactContext = { 
+          contactName, 
+          contactPhone: typeof contactPhone === 'string' ? contactPhone : undefined 
+        };
+        mapped = await buildWhatsAppByIntentRaw(rawIntent, inboxId, wamid, contactContext);
+        if (!mapped) {
+          mapped = await buildWhatsAppByGlobalIntent(rawIntent, inboxId, wamid, contactContext);
+        }
+      } else if (channelType.toLowerCase().includes('instagram')) {
+        mapped = await buildInstagramByIntentRaw(rawIntent, inboxId);
+        if (!mapped) {
+          mapped = await buildInstagramByGlobalIntent(rawIntent, inboxId);
+        }
+      } else if (channelType.toLowerCase().includes('facebook')) {
+        mapped = await buildFacebookPageByIntentRaw(rawIntent, inboxId);
+        if (!mapped) {
+          mapped = await buildFacebookPageByGlobalIntent(rawIntent, inboxId);
+        }
+      }
+      
+      if (mapped) {
+        webhookLogger.info('✅ Intent mapped successfully for unmapped button', {
+          unmappedButtonId,
+          rawIntent,
+          channelType,
+          traceId
+        });
+        logFinalResponse(mapped, 200, traceId);
+        return NextResponse.json(mapped, { status: 200 });
+      } else {
+        webhookLogger.info('⚠️ No intent mapping found for unmapped button, continuing to LLM', {
+          unmappedButtonId,
+          rawIntent,
+          channelType,
           traceId
         });
       }
@@ -464,17 +502,23 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
         // Handoff shortcuts
         if (idLower.includes('handoff') || titleLower.includes('falar') || 
             titleLower.includes('atendente') || titleLower.includes('humano')) {
-          return NextResponse.json({ action: 'handoff' }, { status: 200 });
+          const handoffResponse = { action: 'handoff' };
+        logFinalResponse(handoffResponse, 200, traceId);
+        return NextResponse.json(handoffResponse, { status: 200 });
         }
         // No IA processing needed for direct automations
-        return NextResponse.json({}, { status: 200 });
+        const emptyResponse = {};
+        logFinalResponse(emptyResponse, 200, traceId);
+        return NextResponse.json(emptyResponse, { status: 200 });
       }
       
       // Intent mapping: intent:<name> or @<name>
       if (idLower.startsWith('intent:') || idLower.startsWith('@')) {
         // Direct handoff for specific button IDs
         if (idLower === '@falar_atendente') {
-          return NextResponse.json({ action: 'handoff' }, { status: 200 });
+          const handoffResponse = { action: 'handoff' };
+        logFinalResponse(handoffResponse, 200, traceId);
+        return NextResponse.json(handoffResponse, { status: 200 });
         }
         
         const norm = normalizeIntentId(String(legacyDerivedButtonId));
@@ -511,7 +555,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
         });
         
         if (mapped) {
-          return NextResponse.json(mapped, { status: 200 });
+          logFinalResponse(mapped, 200, traceId);
+        return NextResponse.json(mapped, { status: 200 });
         }
         // Fall back to conversational flow if no mapping found
       }
@@ -597,7 +642,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
             return result.response.whatsapp.interactive?.action?.buttons?.map((b: any) => b.reply.title);
           }
           if (result.response.instagram && 'buttons' in result.response.instagram) {
-            return result.response.instagram.buttons?.map((b: any) => b.title);
+            const instagramResponse = result.response.instagram as { buttons?: any[] };
+            return instagramResponse.buttons?.map((b: any) => b.title);
           }
           return undefined;
         })(),
@@ -617,7 +663,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 
       // Handle handoff action
       if (result.response.action === 'handoff') {
-        return NextResponse.json({ action: 'handoff' }, { status: 200 });
+        const handoffResponse = { action: 'handoff' };
+        logFinalResponse(handoffResponse, 200, traceId);
+        return NextResponse.json(handoffResponse, { status: 200 });
       }
 
       // Log da resposta final exata que será retornada
@@ -641,17 +689,27 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 
       // Return channel-specific response
       if (result.response.whatsapp) {
-        return NextResponse.json({ whatsapp: result.response.whatsapp }, { status: 200 });
+        const whatsappResponse = { whatsapp: result.response.whatsapp };
+        logFinalResponse(whatsappResponse, 200, traceId);
+        return NextResponse.json(whatsappResponse, { status: 200 });
       } else if (result.response.instagram) {
-        return NextResponse.json({ instagram: result.response.instagram }, { status: 200 });
+        const instagramResponse = { instagram: result.response.instagram };
+        logFinalResponse(instagramResponse, 200, traceId);
+        return NextResponse.json(instagramResponse, { status: 200 });
       } else if (result.response.facebook) {
-        return NextResponse.json({ facebook: result.response.facebook }, { status: 200 });
+        const facebookResponse = { facebook: result.response.facebook };
+        logFinalResponse(facebookResponse, 200, traceId);
+        return NextResponse.json(facebookResponse, { status: 200 });
       } else if (result.response.text) {
-        return NextResponse.json({ text: result.response.text }, { status: 200 });
+        const textResponse = { text: result.response.text };
+        logFinalResponse(textResponse, 200, traceId);
+        return NextResponse.json(textResponse, { status: 200 });
       }
 
       // Ultimate fallback
-      return NextResponse.json(buildChannelResponse(channelType, textInput), { status: 200 });
+      const fallbackResponse = buildChannelResponse(channelType, textInput);
+      logFinalResponse(fallbackResponse, 200, traceId);
+      return NextResponse.json(fallbackResponse, { status: 200 });
 
     } catch (processingError) {
       const routeTotalMs = Date.now() - startTime;
@@ -674,7 +732,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
       });
 
       // Fallback to simple channel response
-      return NextResponse.json(buildChannelResponse(channelType, textInput), { status: 200 });
+      const channelFallbackResponse = buildChannelResponse(channelType, textInput);
+      logFinalResponse(channelFallbackResponse, 200, traceId);
+      return NextResponse.json(channelFallbackResponse, { status: 200 });
     }
 
   } catch (error) {
