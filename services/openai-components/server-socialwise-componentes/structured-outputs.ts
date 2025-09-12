@@ -5,6 +5,7 @@ import { AgentConfig, ChannelType } from "../types";
 import { ensureSession, updateSessionPointer } from "./session-manager";
 import { createMasterPrompt } from "./prompt-manager";
 import { getModelCaps, isGPT5, resolveSamplingPrefs } from "./model-capabilities";
+import { getConstraintsForChannel } from "./channel-constraints";
 
 // ==== Structured Outputs with Fallback Pattern ====
 export interface StructuredOrJsonResult<T> {
@@ -55,6 +56,38 @@ function stripCodeFences(s: string): string {
 
 function removeNullBytes(s: string): string {
   return s ? s.replace(/\u0000/g, "") : s;
+}
+
+// ---------- Helpers de truncamento seguro ----------
+function trimTo(s: string, max: number): string {
+  if (!s) return s;
+  if (s.length <= max) return s;
+  // corta em limite de caractere (não mexe em surrogate pairs)
+  return s.slice(0, max);
+}
+
+function coerceLengths<T extends Record<string, any>>(candidate: T, channel?: ChannelType): T {
+  if (!channel) return candidate;
+  try {
+    const c = getConstraintsForChannel(channel);
+    const out: any = { ...candidate };
+
+    if (typeof out.response_text === "string") {
+      out.response_text = trimTo(out.response_text, c.bodyMax);
+    }
+    if (Array.isArray(out.buttons)) {
+      // trunca títulos e limita quantidade de botões
+      out.buttons = out.buttons
+        .map((b: any) => ({
+          title: trimTo(String(b?.title ?? ""), c.buttonTitleMax),
+          payload: String(b?.payload ?? ""),
+        }))
+        .slice(0, c.maxButtons);
+    }
+    return out;
+  } catch {
+    return candidate;
+  }
 }
 
 // Tenta extrair um bloco JSON quando há texto extra antes/depois
@@ -313,11 +346,27 @@ export async function structuredOrJson<T>(args: StructuredOrJsonArgs<T>): Promis
   }
 
   // aceita {schema_name:{...}} OU objeto direto
-  const candidate = obj?.[schemaName] ?? obj;
+  let candidate = obj?.[schemaName] ?? obj;
+  
+  // 🛟 Fallback de truncamento antes da validação Zod
+  candidate = coerceLengths(candidate, channel);
+  
   let parsed: T;
   try {
     parsed = schema.parse(candidate);
   } catch (zerr: any) {
+    // Se estourou tamanho, tenta uma coerção extra e re-parse
+    const issues = Array.isArray(zerr?.issues) ? zerr.issues : [];
+    const hasSizeIssue = issues.some((it: any) =>
+      it?.path?.includes("response_text") || it?.path?.includes("buttons")
+    );
+    if (hasSizeIssue) {
+      try {
+        candidate = coerceLengths(candidate, channel);
+        parsed = schema.parse(candidate);
+      } catch {}
+    }
+    
     // Se não estamos em strict mode e é erro de schema array, tenta strict mode
     if (!strict && isSchemaArrayError(zerr)) {
       console.warn("Schema array error in JSON mode, retrying with strict mode");

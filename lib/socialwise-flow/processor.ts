@@ -1090,7 +1090,6 @@ export async function processSocialWiseFlow(
     // 1. Check for button reactions first (for both WhatsApp and Instagram)
     let buttonReactionMeta: ButtonReactionMeta | undefined;
     let shouldProcessLLM = true; // Por padrão, processa LLM
-    let bypassEmbedding = false; // Flag para pular embedding em botões não mapeados
     
     if (isInstagramChannel(context.channelType) || isFacebookChannel(context.channelType) || isWhatsAppChannel(context.channelType)) {
       buttonReactionMeta = await processButtonReaction(context);
@@ -1119,13 +1118,12 @@ export async function processSocialWiseFlow(
           if (realButtonText && realButtonText.trim()) {
             context.userText = realButtonText;
             
-            // 🚀 OTIMIZAÇÃO: Para botões não mapeados, pular embedding e ir direto para Router LLM
-            bypassEmbedding = true;
-            
-            processorLogger.info('Button not mapped, bypassing embedding and using Router LLM directly', {
+            // ✅ CORREÇÃO: NÃO pular embedding - deixar seguir o fluxo completo
+            // direct alias hit → embedding → classificação por bandas
+            processorLogger.info('Button not mapped, processing through full flow with button text', {
               originalUserText: context.userText,
               realButtonText: realButtonText,
-              bypassEmbedding: true,
+              bypassEmbedding: false,
               traceId: context.traceId
             });
           } else {
@@ -1170,13 +1168,11 @@ export async function processSocialWiseFlow(
               const buttonText = buttonId.startsWith('@') ? buttonId.substring(1) : buttonId;
               context.userText = buttonText;
               
-              // Também bypassa embedding para fallback de buttonId
-              bypassEmbedding = true;
-              
-              processorLogger.info('Button not mapped, bypassing embedding and using buttonId as fallback for Router LLM', {
+              // ✅ CORREÇÃO: NÃO pular embedding - deixar seguir o fluxo completo
+              processorLogger.info('Button not mapped, processing buttonId through full flow', {
                 originalButtonId: buttonId,
                 fallbackText: buttonText,
-                bypassEmbedding: true,
+                bypassEmbedding: false,
                 traceId: context.traceId
               });
             }
@@ -1272,55 +1268,8 @@ export async function processSocialWiseFlow(
     let response: ChannelResponse;
     let llmWarmupMs: number | undefined;
 
-    // 🚀 BYPASS OTIMIZADO: Se é botão não mapeado, pular embedding e ir direto para Router LLM
-    if (bypassEmbedding) {
-      processorLogger.info('Bypassing embedding classification for unmapped button, going directly to Router LLM', {
-        userText: context.userText,
-        bypassReason: 'unmapped_button',
-        traceId: context.traceId
-      });
-      
-      // Mesmo no bypass, obtém intent hints para melhor contexto no Router LLM
-      let intentHints: IntentCandidate[] = [];
-      try {
-        const quickClassification = await classifyIntent(
-          context.userText, 
-          userId, 
-          agentConfig, 
-          true, 
-          {
-            channelType: context.channelType,
-            inboxId: context.inboxId,
-            traceId: context.traceId
-          }
-        );
-        intentHints = quickClassification.candidates || [];
-        processorLogger.info('Bypass: obtained intent hints for Router LLM', {
-          hintsCount: intentHints.length,
-          traceId: context.traceId
-        });
-      } catch (error) {
-        processorLogger.warn('Bypass: failed to obtain intent hints, proceeding without', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-          traceId: context.traceId
-        });
-      }
-      
-      // Vai para Router LLM com intent hints quando disponíveis
-      const routerResult = await processRouterBand(context, intentHints);
-      response = routerResult.response;
-      llmWarmupMs = routerResult.llmWarmupMs;
-      
-      classification = {
-        band: 'ROUTER',
-        score: 1.0,
-        candidates: [],
-        strategy: 'router_llm_bypass',
-        metrics: {
-          route_total_ms: Date.now() - startTime
-        }
-      };
-    } else if (embedipreview) {
+    // ✅ SEMPRE usar o fluxo completo: embedding-first ou router LLM mode
+    if (embedipreview) {
       // Embedding-first classification with degradation context
       const classificationContext = {
         channelType: context.channelType,

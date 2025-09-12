@@ -25,8 +25,8 @@ export const BodySection: React.FC<BodySectionProps> = ({
     if (!isInstagram) return null;
     const bodyText = message.body?.text || '';
     const hasImage = message.header?.type === 'image';
-    // Para Instagram, mapear 'button' para 'button_template'
-    const selectedType = message.type === 'button' ? 'button_template' : message.type;
+    // Use message type directly
+    const selectedType = message.type;
     const result = getInstagramTemplateType(bodyText, hasImage, selectedType);
     
     console.log('� [Instagram] Template detectado:', {

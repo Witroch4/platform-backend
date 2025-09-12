@@ -137,7 +137,28 @@ function formatMessage(template: any) {
     actionData = interactive.actionLocationRequest;
   }
 
-  // Para templates Instagram, usar os tipos específicos baseados no conteúdo
+  // Para templates Instagram, determinar tipo baseado na estrutura dos botões
+  if (actionType === 'button' && interactive.actionReplyButton) {
+    const buttons = interactive.actionReplyButton.buttons || [];
+    
+    // Para Instagram Quick Replies, os botões têm formato { content_type: 'text', title: string, payload: string }
+    // Para Button Template, os botões têm formato { type: 'postback'|'url', title: string, payload: string|url: string }
+    const hasInstagramQuickReplyFormat = buttons.some((btn: any) => btn.content_type === 'text' && btn.payload);
+    const hasButtonTemplateFormat = buttons.some((btn: any) => btn.type === 'postback' || btn.type === 'url');
+    
+    // Se tem botões no formato Instagram Quick Reply, é quick_replies
+    // Se tem botões no formato Button Template, é button_template
+    if (hasInstagramQuickReplyFormat && !hasButtonTemplateFormat) {
+      actionType = 'quick_replies';
+    } else if (hasButtonTemplateFormat) {
+      actionType = 'button_template';
+    } else {
+      // Fallback: se não conseguiu detectar, manter como button_template
+      actionType = 'button_template';
+    }
+  }
+  
+  // Para templates Instagram sem actionType específico, usar detecção baseada no conteúdo
   if (!actionType) {
     const bodyText = interactive.body?.text || '';
     const hasHeader = !!interactive.header;
@@ -146,22 +167,18 @@ function formatMessage(template: any) {
     // Instagram type detection based on content
     if (hasHeader && hasFooter) {
       actionType = 'generic'; // Carousel/Generic template
-    } else if (bodyText.length <= 640) {
-      actionType = 'button_template'; // Button template
-    } else if (bodyText.length <= 1000) {
-      actionType = 'quick_replies'; // Quick replies
     } else {
-      actionType = 'generic'; // Default fallback
+      actionType = 'button_template'; // Default fallback for Instagram
     }
   }
 
   return {
     id: template.id,
     name: template.name,
-    type: actionType,
+    type: actionType, // Use detected interactive message type
     content: {
       name: template.name,
-      type: actionType,
+      type: actionType, // Use detected interactive message type
       header: interactive.header ? {
         type: interactive.header.type,
         text: interactive.header.content || "",
@@ -174,11 +191,27 @@ function formatMessage(template: any) {
       footer: interactive.footer ? {
         text: interactive.footer.text
       } : undefined,
-      action: actionData,
+      action: formatActionData(actionData, actionType),
     },
     createdAt: template.createdAt,
     updatedAt: template.updatedAt,
   };
+}
+
+function formatActionData(actionData: any, actionType: string): any {
+  if (!actionData) return actionData;
+  
+  // For quick_replies, buttons are already in Instagram API format from database
+  if (actionType === 'quick_replies' && actionData.buttons) {
+    return {
+      id: actionData.id,
+      interactiveContentId: actionData.interactiveContentId,
+      quick_replies: actionData.buttons // Already in correct format from database
+    };
+  }
+  
+  // For other types, return as is
+  return actionData;
 }
 
 // POST - Create message with reactions atomically
@@ -472,7 +505,13 @@ export async function POST(request: NextRequest) {
               ...((message.type === 'button' || message.type === 'generic' || message.type === 'button_template' || message.type === 'quick_replies') && message.action && {
                 actionReplyButton: {
                   create: {
-                    buttons: message.action.buttons || []
+                    buttons: message.type === 'quick_replies' 
+                      ? (message.action.buttons || []).map((button: any) => ({
+                          content_type: 'text',
+                          title: button.title ? button.title.substring(0, 20) : '', 
+                          payload: button.payload || button.id
+                        }))
+                      : (message.action.buttons || [])
                   }
                 }
               }),
@@ -961,7 +1000,13 @@ export async function PUT(request: NextRequest) {
           } else if (message.type === 'button' || message.type === 'generic' || message.type === 'button_template' || message.type === 'quick_replies') {
             await tx.actionReplyButton.create({
               data: {
-                buttons: message.action.buttons || [],
+                buttons: message.type === 'quick_replies' 
+                  ? (message.action.buttons || []).map((button: any) => ({
+                      content_type: 'text',
+                      title: button.title ? button.title.substring(0, 20) : '', 
+                      payload: button.payload || button.id
+                    }))
+                  : (message.action.buttons || []),
                 interactiveContentId
               }
             });

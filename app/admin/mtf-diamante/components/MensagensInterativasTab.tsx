@@ -56,6 +56,7 @@ interface Mensagem {
   headerConteudo?: string | null;
   rodape?: string | null;
   botoes: Botao[];
+  type?: InteractiveMessageType;
 }
 
 type AnyMsg = any;
@@ -64,7 +65,7 @@ const pick = (...vals: any[]) =>
   vals.find(v => typeof v === "string" && v.trim().length > 0);
 
 // 🛠️ Versão mais agressiva que cobre todos os caminhos possíveis
-const normalizeMessage = (m: AnyMsg): Mensagem => {
+const normalizeMessage = (m: AnyMsg): Mensagem & { type?: InteractiveMessageType } => {
   // header/footer/action em múltiplos caminhos
   const header =
     m.header ??
@@ -87,9 +88,13 @@ const normalizeMessage = (m: AnyMsg): Mensagem => {
   // coleciona possíveis fontes de botões
   const candidates: any[] = [];
   if (Array.isArray(action?.buttons)) candidates.push(...action.buttons);
+  // ✅ Considerar também quick_replies (Instagram/Facebook)
+  if (Array.isArray((action as any)?.quick_replies)) candidates.push(...(action as any).quick_replies);
   if (Array.isArray(m.botoes)) candidates.push(...m.botoes);
   if (Array.isArray(m.content?.action?.buttons))
     candidates.push(...m.content.action.buttons);
+  if (Array.isArray(m.content?.action?.quick_replies))
+    candidates.push(...m.content.action.quick_replies);
   if (Array.isArray(m.actionReplyButton?.buttons))
     candidates.push(...m.actionReplyButton.buttons);
   if (Array.isArray(m.interactiveContent?.actionReplyButton?.buttons))
@@ -100,11 +105,12 @@ const normalizeMessage = (m: AnyMsg): Mensagem => {
   // remove duplicados por id
   const seen = new Map<string, any>();
   for (const b of candidates) {
-    const key = b?.id || b?.reply?.id || JSON.stringify(b);
+    const key = b?.id || b?.reply?.id || b?.payload || JSON.stringify(b);
     if (!seen.has(key)) seen.set(key, b);
   }
   const botoes: Botao[] = Array.from(seen.values()).map((b: any) => ({
-    id: b?.id || b?.reply?.id,
+    // Para quick_replies, usar payload como id
+    id: b?.id || b?.reply?.id || b?.payload,
     titulo: b?.title || b?.reply?.title || b?.text || b?.titulo || "",
   }));
 
@@ -151,6 +157,19 @@ const normalizeMessage = (m: AnyMsg): Mensagem => {
     headerConteudo,
     rodape,
     botoes,
+    // ✅ Preservar/deduzir o tipo para edição correta
+    type: (m.type as InteractiveMessageType) || (m.content?.type as InteractiveMessageType) || (() => {
+      // Deduzir pelo formato dos botões quando possível
+      if (Array.isArray((action as any)?.quick_replies) || Array.isArray(m.content?.action?.quick_replies)) {
+        return 'quick_replies' as InteractiveMessageType;
+      }
+      // Se algum botão tem shape de Template de Botões do Instagram
+      const list = Array.from(seen.values());
+      const hasButtonTemplate = list.some((btn: any) => btn?.type === 'postback' || btn?.type === 'url');
+      if (hasButtonTemplate) return 'button_template' as InteractiveMessageType;
+      // Caso contrário, manter como 'button' (WhatsApp) por compatibilidade
+      return 'button' as InteractiveMessageType;
+    })(),
   };
 };
 
@@ -240,8 +259,8 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
   // Dados já vêm do contexto via useMemo - não precisa espelhar estado
 
   const handleEdit = (msg: any) => {
-    // Detect type from msg (API provides msg.type and msg.content?.type)
-    const detectedType = (msg?.type || msg?.content?.type || 'button') as InteractiveMessageType;
+    // Detect type from normalized msg (agora preserva type)
+    const detectedType = (msg?.type || 'button') as InteractiveMessageType;
 
     // Base fields
     const base: any = {
@@ -273,8 +292,8 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
         displayText: actionData.displayText || actionData.display_text || actionData.cta_text || '',
         url: actionData.url || actionData.cta_url || '',
       };
-    } else if ((msg.botoes?.length || 0) > 0 || Array.isArray(msg?.content?.action?.buttons)) {
-      const buttonsSrc = Array.isArray(msg?.content?.action?.buttons) ? msg.content.action.buttons : msg.botoes || [];
+    } else if ((msg.botoes?.length || 0) > 0) {
+      const buttonsSrc = msg.botoes || [];
       base.action = {
         type: 'button' as const,
         buttons: (buttonsSrc || []).map((b: any) => ({
@@ -283,6 +302,7 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
           type: (b.type as any) || 'reply',
           reply:
             b.reply || (b.title || b.titulo ? { id: b.id || `btn_${Date.now()}`, title: b.title || b.titulo } : undefined),
+          // Para quick_replies, payload é essencial. Usar id como fallback.
           payload: b.payload || (b.id || b?.reply?.id),
           url: b.url,
         })),

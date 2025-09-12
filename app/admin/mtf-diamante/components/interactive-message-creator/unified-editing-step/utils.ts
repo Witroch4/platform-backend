@@ -3,6 +3,16 @@ import { MESSAGE_LIMITS, type InstagramTemplateTypeResult } from "@/types/intera
 
 // Conversion helpers between backend-stored buttons and UI InteractiveButton
 export const convertBackendToInteractive = (button: any): InteractiveButton => {
+  // Handle Instagram quick_replies format (content_type indicates it's a quick reply)
+  if (button?.content_type === 'text') {
+    return { 
+      id: button.payload || `btn_${Math.random().toString(36).slice(2, 11)}`, 
+      text: button.title || '', 
+      type: 'reply' 
+    };
+  }
+  
+  // Handle standard button format
   const detectedType = (button?.type as any) || (button?.reply ? 'reply' : 'reply');
   const id = button?.id || button?.reply?.id || `btn_${Math.random().toString(36).slice(2, 11)}`;
   const title = button?.title || button?.reply?.title || button?.text || '';
@@ -94,8 +104,8 @@ export const getInstagramTemplateType = (
 ): InstagramTemplateTypeResult => {
   const bodyLength = bodyText.length;
 
-  // Se o usuário selecionou explicitamente um tipo, use-o como base
-  // Mapear tipos do WhatsApp para Instagram equivalentes
+  // PRIORIDADE 1: Se o usuário selecionou explicitamente um tipo, SEMPRE respeitá-lo
+  // Independente do comprimento do texto, apenas validar os limites
   if (selectedType === "button" || selectedType === "button_template") {
     // Template de Botões: 1-640 caracteres (conforme guia Instagram linha 434+)
     if (bodyLength > MESSAGE_LIMITS.INSTAGRAM_BUTTON_TEMPLATE_TEXT_MAX_LENGTH) {
@@ -112,6 +122,7 @@ export const getInstagramTemplateType = (
   }
 
   if (selectedType === "quick_replies") {
+    // SEMPRE respeitar a escolha do usuário por quick_replies
     const isOverQuickRepliesLimit = bodyLength > MESSAGE_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_LENGTH;
     return {
       type: "quick_replies",
@@ -130,25 +141,15 @@ export const getInstagramTemplateType = (
     };
   }
 
-  // Fallback para detecção automática baseada no comprimento (comportamento anterior)
-  if (bodyLength > MESSAGE_LIMITS.INSTAGRAM_BUTTON_TEMPLATE_TEXT_MAX_LENGTH) {
-    const isOverQuickRepliesLimit = bodyLength > MESSAGE_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_LENGTH;
-    return {
-      type: "quick_replies",
-      reason: `Respostas Rápidas (${bodyLength} chars > ${MESSAGE_LIMITS.INSTAGRAM_BUTTON_TEMPLATE_TEXT_MAX_LENGTH})${isOverQuickRepliesLimit ? " - EXCEDE LIMITE INSTAGRAM" : ""}`,
-      isOverLimit: isOverQuickRepliesLimit,
-    };
-  } else if (bodyLength <= MESSAGE_LIMITS.INSTAGRAM_GENERIC_TITLE_MAX_LENGTH) {
-    return {
-      type: "generic",
-      reason: `Template Genérico (${bodyLength} chars ≤ ${MESSAGE_LIMITS.INSTAGRAM_GENERIC_TITLE_MAX_LENGTH})`,
-    };
-  } else {
-    return {
-      type: "button_template",
-      reason: `Template de Botões (${bodyLength} chars: ${MESSAGE_LIMITS.INSTAGRAM_GENERIC_TITLE_MAX_LENGTH + 1}-${MESSAGE_LIMITS.INSTAGRAM_BUTTON_TEMPLATE_TEXT_MAX_LENGTH})`,
-    };
-  }
+  // COMPORTAMENTO LEGADO REMOVIDO:
+  // A lógica de seleção automática baseada apenas no comprimento foi removida
+  // pois agora existe um seletor manual de tipos de template.
+  // Se chegou aqui sem selectedType definido, retorna um padrão simples.
+  return {
+    type: "quick_replies",
+    reason: `Respostas Rápidas (padrão - ${bodyLength} chars)`,
+    isOverLimit: bodyLength > MESSAGE_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_LENGTH,
+  };
 };
 
 // Helper to determine appropriate Instagram message format

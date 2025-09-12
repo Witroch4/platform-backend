@@ -37,8 +37,8 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({
     if (!isInstagram) return null;
     const bodyText = message.body?.text || "";
     const hasImage = message.header?.type === "image" && !!message.header?.content;
-    // Para Instagram, mapear 'button' para 'button_template'
-    const selectedType = message.type === 'button' ? 'button_template' : message.type;
+    // Use message type directly
+    const selectedType = message.type;
     return getInstagramTemplateType(bodyText, hasImage, selectedType);
   }, [isInstagram, message.body?.text, message.header, message.type]);
 

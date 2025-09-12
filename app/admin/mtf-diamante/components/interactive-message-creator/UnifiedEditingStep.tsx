@@ -132,6 +132,15 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
   // Extract buttons from message action and convert to InteractiveButton format
   const buttons = useMemo(() => {
     const candidates: any[] = [];
+    
+    // Handle new quick_replies format
+    const fromQuickReplies = (message.action as any)?.quick_replies;
+    if (Array.isArray(fromQuickReplies)) candidates.push(...fromQuickReplies);
+    
+    const fromContentQuickReplies = (message as any)?.content?.action?.quick_replies;
+    if (Array.isArray(fromContentQuickReplies)) candidates.push(...fromContentQuickReplies);
+
+    // Handle standard buttons format
     const fromAction = (message.action as any)?.buttons;
     if (Array.isArray(fromAction)) candidates.push(...fromAction);
 

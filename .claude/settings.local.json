@@ -33,7 +33,9 @@
       "Bash(node:*)",
       "Bash(taskkill:*)",
       "Bash(sed:*)",
-      "Bash(source:*)"
+      "Bash(source:*)",
+      "Bash(find:*)",
+      "mcp__playwright__browser_install"
     ],
     "deny": [],
     "ask": []

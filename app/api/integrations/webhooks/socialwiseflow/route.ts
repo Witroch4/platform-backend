@@ -19,7 +19,7 @@ import { SocialWiseReplayProtectionService } from '@/lib/socialwise-flow/service
 import { recordSocialWiseQualitySample } from '@/lib/socialwise-flow/monitoring-dashboard';
 import { recordWebhookMetrics } from '@/lib/monitoring/application-performance-monitor';
 import { getAssistantForInbox } from '@/lib/socialwise/assistant';
-import { buildWhatsAppByIntentRaw, buildWhatsAppByGlobalIntent, buildInstagramByIntentRaw, buildInstagramByGlobalIntent, buildFacebookPageByIntentRaw, buildFacebookPageByGlobalIntent } from '@/lib/socialwise/templates';
+// Template functions removed - now using full SocialWise Flow for all button processing
 
 // 🔧 CORREÇÃO: Usar button-processor centralizado
 import { handleButtonInteraction } from '@/lib/socialwise-flow/button-processor';
@@ -276,6 +276,35 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
     }
     let textInput = sanitizedText.data!;
 
+    // Step 10.1: Check for native handoff payloads BEFORE content processing
+    const contentAttrs = (validPayload.context?.message?.content_attributes || {}) as any;
+    const quickReplyPayload = contentAttrs.quick_reply_payload;
+    const postbackPayload = contentAttrs.postback_payload;
+    
+    // Check quick_reply_payload for handoff
+    if (quickReplyPayload && quickReplyPayload.toLowerCase() === '@falar_atendente') {
+      webhookLogger.info('🚨 NATIVE HANDOFF detected in quick_reply_payload', {
+        quickReplyPayload,
+        messageContent: textInput,
+        traceId
+      });
+      const handoffResponse = { action: 'handoff' };
+      logFinalResponse(handoffResponse, 200, traceId);
+      return NextResponse.json(handoffResponse, { status: 200 });
+    }
+    
+    // Check postback_payload for handoff
+    if (postbackPayload && postbackPayload.toLowerCase() === '@falar_atendente') {
+      webhookLogger.info('🚨 NATIVE HANDOFF detected in postback_payload', {
+        postbackPayload,
+        messageContent: textInput,
+        traceId
+      });
+      const handoffResponse = { action: 'handoff' };
+      logFinalResponse(handoffResponse, 200, traceId);
+      return NextResponse.json(handoffResponse, { status: 200 });
+    }
+
     // Step 11: Extract context from validated payload
     const rootChannelType = validPayload.channel_type;
     const socialwiseData = getSocialWiseChatwitData(validPayload.context);
@@ -416,61 +445,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
       }
     }
 
-    // Process unmapped button as intent if it starts with @ (quick reply intent)
-    if (unmappedButtonId && unmappedButtonId.startsWith('@') && !buttonReactionResponse) {
-      const idLower = unmappedButtonId.toLowerCase();
-      
-      // Direct handoff for specific button IDs
-      if (idLower === '@falar_atendente') {
-        const handoffResponse = { action: 'handoff' };
-        logFinalResponse(handoffResponse, 200, traceId);
-        return NextResponse.json(handoffResponse, { status: 200 });
-      }
-      
-      const norm = normalizeIntentId(unmappedButtonId);
-      const rawIntent = norm.plain;
-      let mapped: any = null;
-      
-      // Try mapping based on channel type
-      if (channelType.toLowerCase().includes('whatsapp')) {
-        const contactContext = { 
-          contactName, 
-          contactPhone: typeof contactPhone === 'string' ? contactPhone : undefined 
-        };
-        mapped = await buildWhatsAppByIntentRaw(rawIntent, inboxId, wamid, contactContext);
-        if (!mapped) {
-          mapped = await buildWhatsAppByGlobalIntent(rawIntent, inboxId, wamid, contactContext);
-        }
-      } else if (channelType.toLowerCase().includes('instagram')) {
-        mapped = await buildInstagramByIntentRaw(rawIntent, inboxId);
-        if (!mapped) {
-          mapped = await buildInstagramByGlobalIntent(rawIntent, inboxId);
-        }
-      } else if (channelType.toLowerCase().includes('facebook')) {
-        mapped = await buildFacebookPageByIntentRaw(rawIntent, inboxId);
-        if (!mapped) {
-          mapped = await buildFacebookPageByGlobalIntent(rawIntent, inboxId);
-        }
-      }
-      
-      if (mapped) {
-        webhookLogger.info('✅ Intent mapped successfully for unmapped button', {
-          unmappedButtonId,
-          rawIntent,
-          channelType,
-          traceId
-        });
-        logFinalResponse(mapped, 200, traceId);
-        return NextResponse.json(mapped, { status: 200 });
-      } else {
-        webhookLogger.info('⚠️ No intent mapping found for unmapped button, continuing to LLM', {
-          unmappedButtonId,
-          rawIntent,
-          channelType,
-          traceId
-        });
-      }
+    // Direct handoff for specific button IDs only - do not try direct intent mapping
+    if (unmappedButtonId && unmappedButtonId.toLowerCase() === '@falar_atendente') {
+      const handoffResponse = { action: 'handoff' };
+      logFinalResponse(handoffResponse, 200, traceId);
+      return NextResponse.json(handoffResponse, { status: 200 });
     }
+
+    // For all other unmapped buttons, let them go through the full flow:
+    // text input → direct alias hit → embedding → classification by bands
+    // This ensures proper intent resolution through the complete SocialWise Flow
 
     // Legacy button processing para compatibilidade
     const interactionType: string | null =
@@ -515,51 +499,29 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
       
       // Intent mapping: intent:<name> or @<name>
       if (idLower.startsWith('intent:') || idLower.startsWith('@')) {
-        // Direct handoff for specific button IDs
+        // Direct handoff for specific button IDs only
         if (idLower === '@falar_atendente') {
           const handoffResponse = { action: 'handoff' };
-        logFinalResponse(handoffResponse, 200, traceId);
-        return NextResponse.json(handoffResponse, { status: 200 });
+          logFinalResponse(handoffResponse, 200, traceId);
+          return NextResponse.json(handoffResponse, { status: 200 });
         }
         
+        // For all other intent buttons, let them go through the full SocialWise Flow
+        // This ensures proper direct alias hit → embedding → classification process
         const norm = normalizeIntentId(String(legacyDerivedButtonId));
         const rawIntent = norm.plain;
-        let mapped: any = null;
         
-        // Try mapping based on channel type
-        if (channelType.toLowerCase().includes('whatsapp')) {
-          const contactContext = { 
-            contactName, 
-            contactPhone: typeof contactPhone === 'string' ? contactPhone : undefined 
-          };
-          mapped = await buildWhatsAppByIntentRaw(rawIntent, inboxId, wamid, contactContext);
-          if (!mapped) {
-            mapped = await buildWhatsAppByGlobalIntent(rawIntent, inboxId, wamid, contactContext);
-          }
-        } else if (channelType.toLowerCase().includes('instagram')) {
-          mapped = await buildInstagramByIntentRaw(rawIntent, inboxId);
-          if (!mapped) {
-            mapped = await buildInstagramByGlobalIntent(rawIntent, inboxId);
-          }
-        } else if (channelType.toLowerCase().includes('facebook')) {
-          mapped = await buildFacebookPageByIntentRaw(rawIntent, inboxId);
-          if (!mapped) {
-            mapped = await buildFacebookPageByGlobalIntent(rawIntent, inboxId);
-          }
-        }
+        // Use the raw intent text as input for the full flow processing
+        textInput = rawIntent;
         
-        webhookLogger.info('Button intent mapping', { 
-          intent: norm.standardId, 
-          found: !!mapped,
+        webhookLogger.info('Legacy button will be processed through full SocialWise Flow', { 
+          buttonId: legacyDerivedButtonId,
+          rawIntent,
           channelType,
           traceId 
         });
         
-        if (mapped) {
-          logFinalResponse(mapped, 200, traceId);
-        return NextResponse.json(mapped, { status: 200 });
-        }
-        // Fall back to conversational flow if no mapping found
+        // Continue to Step 14 for full flow processing
       }
       
       // Conversational continuation: ia_* - treat button title as user message

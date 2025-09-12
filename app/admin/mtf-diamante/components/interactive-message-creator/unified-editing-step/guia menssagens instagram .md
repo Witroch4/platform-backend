@@ -343,7 +343,25 @@ const quickReplyMessage: QuickReplyMessage = {
   }
 };
 ```
-
+salvamento de botoes no banco:
+    type: "Escolha uma opção:", // Max 1000 bytes UTF-8
+    quick_replies: [
+      {
+        content_type: "text",
+        title: "Opção 1", // Max 20 chars
+        payload: "OPTION_1_SELECTED"
+      },
+      {
+        content_type: "text",
+        title: "Opção 2", // Max 20 chars
+        payload: "OPTION_2_SELECTED"
+      },
+      {
+        content_type: "text",
+        title: "Opção 3", // Max 20 chars
+        payload: "OPTION_3_SELECTED"
+      }
+    ]
 ### 9. Template Genérico (Carrossel)
 message_format: 'GENERIC_TEMPLATE'
 

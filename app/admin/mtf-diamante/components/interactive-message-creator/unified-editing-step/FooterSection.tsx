@@ -26,7 +26,7 @@ export const FooterSection: React.FC<FooterSectionProps> = ({
     if (!isInstagram) return null;
     const bodyText = message.body?.text || '';
     const hasImage = message.header?.type === 'image';
-    const selectedType = message.type === 'button' ? 'button_template' : message.type;
+    const selectedType = message.type;
     return getInstagramTemplateType(bodyText, hasImage, selectedType);
   }, [isInstagram, message.body?.text, message.header?.type, message.type]);
 

@@ -67,7 +67,8 @@ export function createButtonsSchema(channel: ChannelType) {
     .object({
       response_text: z
         .string()
-        .regex(new RegExp(`^.{1,${bodyMax}}$`, "u"), `máx ${bodyMax} caracteres`),
+        .min(1, "mín 1")
+        .max(bodyMax, `máx ${bodyMax} caracteres`),
       // mínimo 2 botões, máximo conforme canal (3 no WhatsApp; 13 em IG/FB)
       buttons: z.array(Btn).min(2).max(maxButtons),
     })
@@ -91,8 +92,8 @@ export function createRouterSchema(channel: ChannelType) {
       // response_text é obrigatório e deve ser útil em ambos os modos
       response_text: z
         .string()
-        .min(3, "texto muito curto")
-        .regex(new RegExp(`^.{3,${bodyMax}}$`, "u"), `mín 3, máx ${bodyMax} caracteres`),
+        .min(3, "mín 3")
+        .max(bodyMax, `máx ${bodyMax} caracteres`),
       // Botões são obrigatórios para facilitar interação - mínimo 2, máximo conforme canal
       // WhatsApp: 3; Instagram/Facebook: até 13
       buttons: z.array(Btn).min(2).max(maxButtons),
