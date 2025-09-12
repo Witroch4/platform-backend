@@ -334,14 +334,17 @@ async function processHardBand(
         return mapped;
       }
     } else if (isInstagramChannel(context.channelType) || isFacebookChannel(context.channelType)) {
-      const platformName = isInstagramChannel(context.channelType) ? 'Instagram' : 'Facebook';
+      const isInsta = isInstagramChannel(context.channelType);
+      const platformName = isInsta ? 'Instagram' : 'Facebook';
       processorLogger.info(`HARD band attempting ${platformName} mapping`, {
         intent: topIntent.slug,
         score: topIntent.score,
         traceId: context.traceId
       });
       
-      let mapped = await buildInstagramByIntentRaw(topIntent.slug, context.inboxId);
+      let mapped = isInsta
+        ? await buildInstagramByIntentRaw(topIntent.slug, context.inboxId)
+        : await buildFacebookPageByIntentRaw(topIntent.slug, context.inboxId, { contactName: context.contactName, contactPhone: context.contactPhone });
       processorLogger.info(`HARD band ${platformName} intent raw result`, {
         intent: topIntent.slug,
         found: !!mapped,
@@ -349,7 +352,9 @@ async function processHardBand(
       });
       
       if (!mapped) {
-        mapped = await buildInstagramByGlobalIntent(topIntent.slug, context.inboxId);
+        mapped = isInsta
+          ? await buildInstagramByGlobalIntent(topIntent.slug, context.inboxId)
+          : await buildFacebookPageByGlobalIntent(topIntent.slug, context.inboxId, { contactName: context.contactName, contactPhone: context.contactPhone });
         processorLogger.info(`HARD band ${platformName} global intent result`, {
           intent: topIntent.slug,
           found: !!mapped,

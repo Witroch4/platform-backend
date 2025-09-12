@@ -35,7 +35,9 @@
       "Bash(sed:*)",
       "Bash(source:*)",
       "Bash(find:*)",
-      "mcp__playwright__browser_install"
+      "mcp__playwright__browser_install",
+      "mcp__playwright__browser_fill_form",
+      "Bash(docker history:*)"
     ],
     "deny": [],
     "ask": []

@@ -294,23 +294,49 @@ export class WhatsAppPayloadBuilder {
         "Ação de botão requer um array de 'buttons' no payload JSON."
       );
     }
+    const isMetaChannel = this.channelType === 'Channel::Instagram' || this.channelType === 'Channel::FacebookPage';
     return {
       buttons: dbAction.buttons.map((btn: any) => {
-        // Preservar o tipo original do botão
-        if (btn.type === "url" && btn.url) {
-          // Botão URL (Instagram web_url ou similar)
+        // Caso QUICK REPLY (Instagram/Facebook): vem como { content_type: 'text', title, payload }
+        if (btn?.content_type === 'text' && typeof btn?.title === 'string') {
+          const payload = btn?.payload || btn?.id || '';
+          if (isMetaChannel) {
+            return {
+              type: 'reply',
+              reply: {
+                id: payload,
+                title: btn.title,
+              },
+              // Metadados apenas para Meta (Instagram/Facebook)
+              payload,
+              originalType: 'quick_reply' as const,
+            };
+          }
+          // WhatsApp: não incluir chaves extras
           return {
-            type: "reply",
+            type: 'reply',
             reply: {
-              id: btn.id,
+              id: payload,
               title: btn.title,
             },
-            // Preservar URL no payload para conversão posterior
-            url: btn.url,
-            originalType: "url"
           };
-        } else {
-          // Botão reply padrão
+        }
+
+        if (btn.type === "url" && btn.url) {
+          // Botão URL (Instagram web_url ou similar)
+          if (isMetaChannel) {
+            return {
+              type: "reply",
+              reply: {
+                id: btn.id,
+                title: btn.title,
+              },
+              // Metadados apenas para Meta
+              url: btn.url,
+              originalType: "url" as const,
+            };
+          }
+          // WhatsApp: sem metadados
           return {
             type: "reply",
             reply: {
@@ -319,6 +345,29 @@ export class WhatsAppPayloadBuilder {
             },
           };
         }
+
+        // Botão reply padrão (WhatsApp / postback)
+        const replyId = btn.id || btn.payload || '';
+        if (isMetaChannel) {
+          return {
+            type: "reply",
+            reply: {
+              id: replyId,
+              title: btn.title,
+            },
+            // Metadados apenas para Meta
+            payload: btn.payload || btn.id || '',
+            originalType: (btn.type as any) || 'reply',
+          };
+        }
+        // WhatsApp: sem metadados
+        return {
+          type: "reply",
+          reply: {
+            id: replyId,
+            title: btn.title,
+          },
+        };
       }),
     };
   }

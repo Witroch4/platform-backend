@@ -386,14 +386,19 @@ class InstagramTemplateConverter {
     
     // Extrair botões do payload WhatsApp
     const whatsappButtons = whatsappPayload?.action?.buttons || [];
-    const instagramButtons = whatsappButtons.map((btn: any) => ({
-      text: btn.reply?.title || btn.title || '',
-      id: btn.reply?.id || btn.id || '',
-      payload: btn.reply?.id || btn.id || '',
-      // Preservar URL e tipo original do botão
-      url: btn.url,
-      originalType: btn.originalType || btn.type
-    }));
+    const instagramButtons = whatsappButtons.map((btn: any) => {
+      const title = btn?.reply?.title || btn?.title || '';
+      const id = btn?.reply?.id || btn?.id || btn?.payload || '';
+      const payload = btn?.payload || btn?.reply?.id || btn?.id || title;
+      const originalType = btn?.originalType || (btn?.url ? 'url' : (btn?.type || 'reply'));
+      return {
+        text: title,
+        id,
+        payload,
+        url: btn?.url,
+        originalType,
+      };
+    });
     
     console.log('[Instagram Converter] Extracted buttons:', JSON.stringify(instagramButtons, null, 2));
     
@@ -422,7 +427,7 @@ class InstagramTemplateConverter {
     console.log('[Instagram Converter] Full text assembled:', fullText);
     
     // Determinar tipo de template
-    const templateType = InstagramTemplateConverter.determineInstagramTemplateType(fullText, hasImage, instagramButtons.length);
+    const templateType = InstagramTemplateConverter.determineInstagramTemplateType(fullText, hasImage, instagramButtons);
     console.log('[Instagram Converter] Template type determined:', templateType);
     
     let result;
@@ -459,7 +464,7 @@ class InstagramTemplateConverter {
     const ctaUrl = interactiveContent?.actionCtaUrl;
     
     // Determinar tipo de template baseado no conteúdo
-    const templateType = InstagramTemplateConverter.determineInstagramTemplateType(bodyText, hasImage, replyButtons.length);
+    const templateType = InstagramTemplateConverter.determineInstagramTemplateType(bodyText, hasImage, replyButtons);
     
     switch (templateType) {
       case 'GENERIC_TEMPLATE':
@@ -478,22 +483,28 @@ class InstagramTemplateConverter {
    * Determina o tipo de template Instagram baseado no conteúdo
    */
   static determineInstagramTemplateType(
-    bodyText: string, 
-    hasImage: boolean, 
-    buttonCount: number
+    bodyText: string,
+    hasImage: boolean,
+    buttons: any[]
   ): 'GENERIC_TEMPLATE' | 'BUTTON_TEMPLATE' | 'QUICK_REPLIES' {
-    
-    // GENERIC_TEMPLATE: Para carrosséis ou conteúdo rico
-    if (hasImage && buttonCount > 2) {
-      return 'GENERIC_TEMPLATE';
-    }
-    
-    // BUTTON_TEMPLATE: Para botões com URLs ou até 3 botões
-    if (buttonCount > 0 && buttonCount <= 3) {
-      return 'BUTTON_TEMPLATE';
-    }
-    
-    // QUICK_REPLIES: Para texto simples com opções rápidas
+    const buttonList = Array.isArray(buttons) ? buttons : [];
+
+    // 1) Se detectarmos quick replies na origem (content_type ou originalType), priorizar QUICK_REPLIES
+    const hasExplicitQuickReplies = buttonList.some((b: any) => (
+      String(b?.originalType || '').toLowerCase() === 'quick_reply' ||
+      String(b?.content_type || '').toLowerCase() === 'text'
+    ));
+    if (hasExplicitQuickReplies) return 'QUICK_REPLIES';
+
+    const buttonCount = buttonList.length;
+
+    // 2) GENERIC_TEMPLATE: imagem + muitos botões
+    if (hasImage && buttonCount > 2) return 'GENERIC_TEMPLATE';
+
+    // 3) BUTTON_TEMPLATE: até 3 botões com URL/postback
+    if (buttonCount > 0 && buttonCount <= 3) return 'BUTTON_TEMPLATE';
+
+    // 4) QUICK_REPLIES: fallback
     return 'QUICK_REPLIES';
   }
 
@@ -957,7 +968,15 @@ export async function buildFacebookPageByIntentRaw(intentRaw: string, inboxId: s
     const interactive = await builder.buildInteractiveMessagePayload(mapping.template.interactiveContent);
     
     // Converter para Facebook Page usando os MESMOS 3 padrões do Instagram
-    return InstagramTemplateConverter.convertInteractiveToInstagram(interactive, inboxId);
+    const converted = InstagramTemplateConverter.convertInteractiveToInstagram(interactive, inboxId);
+    // Ajuste: substituir a chave 'instagram' por 'facebook'
+    if (converted && converted.instagram) {
+      return { facebook: converted.instagram };
+    }
+    // Fallbacks
+    if (converted && converted.facebook) return converted;
+    if (converted && converted.text) return { facebook: { message_format: 'TEXT', text: converted.text } };
+    return converted;
   }
 
   if (mapping.template.type === 'WHATSAPP_OFFICIAL' && mapping.template.whatsappOfficialInfo) {
@@ -1151,7 +1170,13 @@ export async function buildFacebookPageByGlobalIntent(intentRaw: string, inboxId
     const interactive = await builder.buildInteractiveMessagePayload(t.interactiveContent);
     
     // Converter para Facebook Page usando os MESMOS 3 padrões do Instagram
-    return InstagramTemplateConverter.convertInteractiveToInstagram(interactive, inboxId);
+    const converted = InstagramTemplateConverter.convertInteractiveToInstagram(interactive, inboxId);
+    if (converted && (converted as any).instagram) {
+      return { facebook: (converted as any).instagram };
+    }
+    if (converted && (converted as any).facebook) return converted;
+    if (converted && (converted as any).text) return { facebook: { message_format: 'TEXT', text: (converted as any).text } };
+    return converted as any;
   }
 
   if (t.type === 'WHATSAPP_OFFICIAL' && t.whatsappOfficialInfo) {
@@ -1167,5 +1192,3 @@ export async function buildFacebookPageByGlobalIntent(intentRaw: string, inboxId
 
   return null;
 }
-
-
