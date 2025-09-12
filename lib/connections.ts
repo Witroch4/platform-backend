@@ -35,6 +35,7 @@ declare global {
 
 // Flag para controlar se já foi inicializado
 let prismaInitialized = false;
+let heartbeatInterval: NodeJS.Timeout | null = null;
 
 /**
  * Obtém instância singleton do Prisma
@@ -79,6 +80,9 @@ export function getPrismaInstance(): PrismaClient {
     if (!prismaInitialized) {
       console.log(`🔗 Prisma Client inicializado (${nodeEnv})`);
       prismaInitialized = true;
+      
+      // Inicia heartbeat para evitar conexões fantasma
+      startPrismaHeartbeat();
     }
 
     // Log de configuração apenas em staging/desenvolvimento
@@ -91,6 +95,116 @@ export function getPrismaInstance(): PrismaClient {
   }
 
   return globalThis.prisma;
+}
+
+/**
+ * Wrapper para todas as queries do Prisma com reconexão automática
+ * Intercepta erros de conexão e reconecta automaticamente
+ */
+export function withPrismaReconnect<T>(queryFn: (prisma: PrismaClient) => Promise<T>): Promise<T> {
+  return new Promise(async (resolve, reject) => {
+    const maxRetries = 3;
+    let attempts = 0;
+    
+    const executeQuery = async (): Promise<T> => {
+      attempts++;
+      const prisma = getPrismaInstance();
+      
+      try {
+        const result = await queryFn(prisma);
+        return result;
+      } catch (error: any) {
+        const isConnectionError = 
+          error.message?.includes('Engine is not yet connected') ||
+          error.message?.includes('Response from the Engine was empty') ||
+          error.message?.includes('Connection pool timeout') ||
+          error.code === 'P1001' || // Connection error
+          error.code === 'P1002' || // Connection timeout
+          error.code === 'P1008' || // Operations timeout
+          error.code === 'P1017';   // Server has closed connection
+        
+        if (isConnectionError && attempts < maxRetries) {
+          console.warn(`⚠️ Prisma connection error (attempt ${attempts}/${maxRetries}):`, error.message);
+          
+          try {
+            // Força desconexão e reconexão
+            await prisma.$disconnect().catch(() => {});
+            
+            // Recria instância se necessário
+            if (attempts >= 2) {
+              globalThis.prisma = undefined;
+              prismaInitialized = false;
+            }
+            
+            // Obtém nova/reconectada instância
+            const newPrisma = getPrismaInstance();
+            await newPrisma.$connect();
+            
+            console.log(`✅ Prisma reconectado (tentativa ${attempts})`);
+            
+            // Tenta novamente
+            return await executeQuery();
+          } catch (reconnectError: any) {
+            console.error(`❌ Falha na reconexão (tentativa ${attempts}):`, reconnectError.message);
+            
+            if (attempts >= maxRetries) {
+              throw reconnectError;
+            } else {
+              // Aguarda um pouco antes da próxima tentativa
+              await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
+              return await executeQuery();
+            }
+          }
+        } else {
+          // Não é erro de conexão ou esgotaram tentativas
+          throw error;
+        }
+      }
+    };
+    
+    try {
+      const result = await executeQuery();
+      resolve(result);
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+/**
+ * Inicia heartbeat para manter conexão Prisma viva
+ * Evita conexões fantasma com timeout do PostgreSQL
+ */
+function startPrismaHeartbeat() {
+  // Limpa heartbeat anterior se existir
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+  }
+  
+  // Heartbeat a cada 5 minutos (300 segundos)
+  // PostgreSQL default idle_in_transaction_session_timeout = 0 (desabilitado)
+  // Mas idle timeout pode ser configurado pelo DBA
+  heartbeatInterval = setInterval(async () => {
+    try {
+      const prisma = globalThis.prisma;
+      if (prisma) {
+        await prisma.$queryRaw`SELECT 1`;
+        console.log('💓 Prisma heartbeat - conexão mantida viva');
+      }
+    } catch (error: any) {
+      console.warn('⚠️ Prisma heartbeat falhou - conexão pode estar morta:', error.message);
+      
+      // Se heartbeat falhar, marca para recriar na próxima vez
+      if (error.message?.includes('Engine is not yet connected') || 
+          error.message?.includes('Response from the Engine was empty')) {
+        console.log('🔄 Marcando Prisma para recriação...');
+        globalThis.prisma = undefined;
+        prismaInitialized = false;
+      }
+    }
+  }, 5 * 60 * 1000); // 5 minutos
+  
+  console.log('💓 Prisma heartbeat iniciado (5 min)');
 }
 
 /**
@@ -199,10 +313,18 @@ export function getRedisInstance(): any {
 export async function closeConnections(): Promise<void> {
   const promises: Promise<void>[] = [];
 
+  // Limpa heartbeat
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+    console.log("💓 Prisma heartbeat parado");
+  }
+
   if (globalThis.prisma) {
     promises.push(
       globalThis.prisma.$disconnect().then(() => {
         globalThis.prisma = undefined;
+        prismaInitialized = false;
         console.log("🔌 Prisma desconectado");
       })
     );

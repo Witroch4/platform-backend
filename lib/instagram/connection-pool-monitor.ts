@@ -5,7 +5,7 @@
  * automatic recovery mechanisms for Instagram translation operations.
  */
 
-import { getPrismaInstance } from "@/lib/connections";
+import { withPrismaReconnect } from "@/lib/connections";
 import { getRedisInstance } from '../connections';
 import { PrismaClient, Prisma } from '@prisma/client';
 
@@ -272,15 +272,15 @@ class ConnectionPoolMonitor {
   // Test database connectivity
   private async testDatabaseConnectivity(): Promise<boolean> {
     try {
-      const prisma = getPrismaInstance();
       const start = Date.now();
       
-      await prisma.$queryRaw`SELECT 1`;
+      await withPrismaReconnect(async (prisma) => {
+        return prisma.$queryRaw`SELECT 1`;
+      });
       
       const connectionTime = Date.now() - start;
       this.recordConnectionAcquisition(connectionTime);
       
-      await prisma.$disconnect();
       return true;
     } catch (error) {
       console.error('[ConnectionPoolMonitor] Database connectivity test failed:', error);

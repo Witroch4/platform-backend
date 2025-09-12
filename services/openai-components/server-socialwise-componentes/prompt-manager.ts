@@ -29,14 +29,14 @@ const MASTER_PROMPT_BASE = `
 - Incluir no MÁXIMO 1 botão de handoff e posicioná-lo por último.
 
 # Aviso final (formatação literal)
-- Ao final do response_text (quando houver botões/desambiguação), inclua literalmente: \`Se nenhum botão atender, digite sua solicitação\`.
+- Ao final do response_text (quando houver botões/desambiguação), inclua literalmente NO FINAL: \`Se nenhum botão atender, digite sua solicitação\`.
 - Não repetir o aviso se já estiver presente. Não usar crases triplas.
 `;
 
 // Gera o MASTER com limites do canal (mantém o bloco imutável + ajustes de canal)
 export function createMasterPrompt(channel: ChannelType): string {
   const c = getConstraintsForChannel(channel);
-  const buttonRange = channel === 'whatsapp' ? '2–3' : '2–13';
+  const buttonRange = channel === 'whatsapp' ? '3' : '4-6';
   return (
     MASTER_PROMPT_BASE +
     `# Limites do Canal\n` +

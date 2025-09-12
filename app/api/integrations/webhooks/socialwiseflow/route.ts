@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createLogger } from '@/lib/utils/logger';
-import { getPrismaInstance } from '@/lib/connections';
+import { withPrismaReconnect } from '@/lib/connections';
 
 // SocialWise Flow optimized components
 import { processSocialWiseFlow, extractSessionId } from '@/lib/socialwise-flow/processor';
@@ -297,18 +297,19 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
                         socialwiseData?.contact_phone;
 
     // Step 12: Resolve inbox and user information
-    const prisma = getPrismaInstance();
-    const inboxRow = await prisma.chatwitInbox.findFirst({
-      where: {
-        inboxId: String(externalInboxNumeric),
-        usuarioChatwit: { chatwitAccountId: String(chatwitAccountId) || undefined },
-      },
-      select: {
-        id: true,
-        inboxId: true,
-        nome: true,
-        usuarioChatwit: { select: { appUserId: true, chatwitAccountId: true } },
-      },
+    const inboxRow = await withPrismaReconnect(async (prisma) => {
+      return prisma.chatwitInbox.findFirst({
+        where: {
+          inboxId: String(externalInboxNumeric),
+          usuarioChatwit: { chatwitAccountId: String(chatwitAccountId) || undefined },
+        },
+        select: {
+          id: true,
+          inboxId: true,
+          nome: true,
+          usuarioChatwit: { select: { appUserId: true, chatwitAccountId: true } },
+        },
+      });
     });
     
     const inboxId = String(inboxRow?.inboxId || externalInboxNumeric || '');
@@ -790,8 +791,9 @@ export async function GET(): Promise<NextResponse> {
 
     // Quick database connectivity check
     try {
-      const prisma = getPrismaInstance();
-      await prisma.$queryRaw`SELECT 1`;
+      await withPrismaReconnect(async (prisma) => {
+        return prisma.$queryRaw`SELECT 1`;
+      });
     } catch (dbError) {
       healthStatus.services.database = 'unhealthy';
       healthStatus.status = 'degraded';
