@@ -31,6 +31,10 @@ function getEnvironment(): Environment {
 declare global {
   var prisma: PrismaClient | undefined;
   var redis: any | undefined;
+  // 🔒 lock global para evitar múltiplos $connect() concorrentes
+  // (usado pelo getPrismaInstance/withPrismaReconnect)
+  // eslint-disable-next-line no-var
+  var __prismaConnectLock: Promise<void> | null | undefined;
 }
 
 // Flag para controlar se já foi inicializado
@@ -63,26 +67,36 @@ export function getPrismaInstance(): PrismaClient {
       },
     });
 
-    // Conectar automaticamente e detectar erros cedo
-    globalThis.prisma.$connect().catch((error: any) => {
-      console.error("❌ Erro ao conectar Prisma:", error);
-
-      // Em produção, tentar reconectar após delay
-      if (nodeEnv === "production") {
-        setTimeout(() => {
-          console.log("🔄 Tentando reconectar Prisma...");
-          globalThis.prisma?.$connect().catch(console.error);
-        }, 5000);
-      }
-    });
+    // 🔒 Conectar apenas uma vez usando lock; inicia heartbeat SÓ após conectar
+    if (!globalThis.__prismaConnectLock) {
+      globalThis.__prismaConnectLock = (async () => {
+        try {
+          await globalThis.prisma!.$connect();
+          startPrismaHeartbeat(); // 💓 agora só inicia depois do connect bem-sucedido
+        } catch (error: any) {
+          console.error("❌ Erro ao conectar Prisma:", error);
+          // tenta uma reconexão simples em produção
+          if (nodeEnv === "production") {
+            try {
+              await new Promise(r => setTimeout(r, 5000));
+              await globalThis.prisma!.$connect();
+              startPrismaHeartbeat();
+              console.log("✅ Prisma reconectado após falha inicial");
+            } catch (e) {
+              console.error("❌ Falha na reconexão inicial do Prisma:", (e as any)?.message);
+            }
+          }
+        } finally {
+          globalThis.__prismaConnectLock = null;
+        }
+      })();
+    }
 
     // Log apenas na primeira inicialização real
     if (!prismaInitialized) {
       console.log(`🔗 Prisma Client inicializado (${nodeEnv})`);
       prismaInitialized = true;
-      
-      // Inicia heartbeat para evitar conexões fantasma
-      startPrismaHeartbeat();
+      // 🛑 (REMOVIDO) NÃO iniciar heartbeat aqui para não bater antes de conectar
     }
 
     // Log de configuração apenas em staging/desenvolvimento
@@ -105,6 +119,11 @@ export function withPrismaReconnect<T>(queryFn: (prisma: PrismaClient) => Promis
   return new Promise(async (resolve, reject) => {
     const maxRetries = 3;
     let attempts = 0;
+
+    // 🔒 Aguarda conexão em andamento (se houver) antes de executar a primeira query
+    if (globalThis.__prismaConnectLock) {
+      try { await globalThis.__prismaConnectLock; } catch {}
+    }
     
     const executeQuery = async (): Promise<T> => {
       attempts++;
@@ -136,9 +155,15 @@ export function withPrismaReconnect<T>(queryFn: (prisma: PrismaClient) => Promis
               prismaInitialized = false;
             }
             
-            // Obtém nova/reconectada instância
+            // 🔒 Recria e garante connect via lock compartilhado
             const newPrisma = getPrismaInstance();
-            await newPrisma.$connect();
+            if (!globalThis.__prismaConnectLock) {
+              globalThis.__prismaConnectLock = newPrisma.$connect().finally(() => {
+                globalThis.__prismaConnectLock = null;
+              });
+            }
+            try { await globalThis.__prismaConnectLock; } catch {}
+            // Heartbeat será (ou já foi) iniciado após o connect em getPrismaInstance()
             
             console.log(`✅ Prisma reconectado (tentativa ${attempts})`);
             
@@ -176,10 +201,8 @@ export function withPrismaReconnect<T>(queryFn: (prisma: PrismaClient) => Promis
  * Evita conexões fantasma com timeout do PostgreSQL
  */
 function startPrismaHeartbeat() {
-  // Limpa heartbeat anterior se existir
-  if (heartbeatInterval) {
-    clearInterval(heartbeatInterval);
-  }
+  // ✅ Evita múltiplos heartbeats simultâneos
+  if (heartbeatInterval) return;
   
   // Heartbeat a cada 5 minutos (300 segundos)
   // PostgreSQL default idle_in_transaction_session_timeout = 0 (desabilitado)
