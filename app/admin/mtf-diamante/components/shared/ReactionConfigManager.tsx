@@ -66,14 +66,24 @@ export function ReactionConfigManager({
 
   // Initialize state from current reaction
   useEffect(() => {
-    if (currentReaction?.reaction) {
-      setSelectedType(currentReaction.reaction.type)
-      setReactionValue(currentReaction.reaction.value)
-    } else {
-      setSelectedType(null)
-      setReactionValue('')
+    if (isOpen) {
+      console.log('🔍 [ReactionConfigManager] Inicializando estado:', {
+        currentReaction,
+        hasReaction: !!currentReaction?.reaction,
+        reactionType: currentReaction?.reaction?.type,
+        reactionValue: currentReaction?.reaction?.value,
+        isOpen
+      });
+
+      if (currentReaction?.reaction) {
+        setSelectedType(currentReaction.reaction.type)
+        setReactionValue(currentReaction.reaction.value || '')
+      } else {
+        setSelectedType(null)
+        setReactionValue('')
+      }
+      setErrors([])
     }
-    setErrors([])
   }, [currentReaction, isOpen])
 
   // Validation
@@ -99,12 +109,16 @@ export function ReactionConfigManager({
   // Handle reaction type selection
   const handleTypeSelection = (type: ReactionType) => {
     setSelectedType(type)
-    setReactionValue('')
     setErrors([])
-    
+
     if (type === 'emoji') {
+      setReactionValue('')
       setShowEmojiPicker(true)
     } else if (type === 'text') {
+      // Manter valor existente se já houver uma reação de texto
+      if (!(currentReaction?.reaction?.type === 'text' && reactionValue)) {
+        setReactionValue('')
+      }
       setShowTextEditor(true)
     }
   }
@@ -125,6 +139,11 @@ export function ReactionConfigManager({
 
   // Handle text editor save
   const handleTextSave = (text: string) => {
+    console.log('💾 [ReactionConfigManager] Salvando texto:', {
+      text,
+      currentReactionValue: reactionValue,
+      selectedType
+    });
     setReactionValue(text)
     setShowTextEditor(false)
   }
@@ -371,6 +390,7 @@ export function ReactionConfigManager({
           placeholder="Enter your automatic text response..."
           maxLength={1000}
           showPreview={true}
+          key={`text-editor-${reactionValue}-${Date.now()}`} // Force re-render
         />
       )}
     </>

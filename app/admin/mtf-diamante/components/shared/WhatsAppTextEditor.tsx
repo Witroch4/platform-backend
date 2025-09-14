@@ -85,6 +85,16 @@ export function WhatsAppTextEditor({
   // Initialize/sync text only when initialText changes.
   // Importante: não chamar onChange aqui para evitar loops com o pai.
   useEffect(() => {
+    // Log inicialização apenas em desenvolvimento
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 [WhatsAppTextEditor] Inicializando com:', {
+        initialText,
+        currentText: text,
+        maxLength,
+        willSet: maxLength ? initialText.slice(0, maxLength) : initialText
+      });
+    }
+
     const truncated = maxLength ? initialText.slice(0, maxLength) : initialText;
     setText(truncated);
     const newErrors: string[] = [];
@@ -414,10 +424,10 @@ export function WhatsAppTextEditor({
 
   // Modal version (original behavior)
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <Card className="w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <CardTitle className="text-lg font-semibold">
+    <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50">
+      <Card className="w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+          <CardTitle className="text-lg font-semibold text-gray-900 dark:text-gray-100">
             Editor de Texto - Formatação WhatsApp
           </CardTitle>
           {onClose && (
@@ -427,7 +437,7 @@ export function WhatsAppTextEditor({
           )}
         </CardHeader>
 
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 bg-white dark:bg-gray-900">
           {/* Toolbar */}
           <div className="flex flex-wrap gap-2 p-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
             <Button
@@ -455,7 +465,7 @@ export function WhatsAppTextEditor({
               <Strikethrough className="h-4 w-4" />
             </Button>
 
-            <div className="w-px h-6 bg-gray-300 mx-1" />
+            <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1" />
 
             <Button
               variant="outline"
@@ -483,7 +493,7 @@ export function WhatsAppTextEditor({
             </Button>
 
             <>
-              <div className="w-px h-6 bg-gray-300 mx-1" />
+              <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1" />
               <Button
                 variant="outline"
                 size="sm"
@@ -591,7 +601,7 @@ export function WhatsAppTextEditor({
           )}
 
           {/* Action buttons */}
-          <div className="flex justify-end gap-2 pt-4 border-t">
+          <div className="flex justify-end gap-2 pt-4 border-t border-gray-200 dark:border-gray-800">
             {onClose && (
               <Button variant="outline" onClick={onClose}>
                 Cancelar

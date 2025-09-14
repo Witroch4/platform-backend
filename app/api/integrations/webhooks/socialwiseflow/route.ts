@@ -318,9 +318,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
                   socialwiseData?.message_data?.id || '');
     
     // Extract contact information for variable resolution with fallbacks
-    const contactName = socialwiseData?.contact_data?.name || 
-                       validPayload.context.contact?.name ||
-                       socialwiseData?.contact_name;
+    const igUserName = validPayload.context?.contact?.additional_attributes?.social_instagram_user_name
+                    || validPayload.context?.contact?.additional_attributes?.social_profiles?.instagram;
+    const contactName = socialwiseData?.contact_data?.name 
+                     || validPayload.context?.contact?.name 
+                     || igUserName 
+                     || socialwiseData?.contact_name;
     const contactPhone = socialwiseData?.contact_data?.phone_number || 
                         validPayload.context.contact?.phone_number ||
                         socialwiseData?.contact_phone;

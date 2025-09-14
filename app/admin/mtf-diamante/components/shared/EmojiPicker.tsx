@@ -470,13 +470,13 @@ export function EmojiPicker({
   const currentEmojis = getCurrentEmojis();
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50">
       <div
         ref={pickerRef}
-        className="bg-gray-900 rounded-lg shadow-xl w-96 h-96 flex flex-col border border-gray-700"
+        className="bg-white dark:bg-gray-900 rounded-lg shadow-xl w-96 h-96 flex flex-col border border-gray-200 dark:border-gray-700"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-700">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center space-x-2">
             {/* Botão Responder com Texto */}
             <button
@@ -500,7 +500,7 @@ export function EmojiPicker({
               🚨 Transferir para Atendente
             </button>
 
-            <div className="w-px h-6 bg-gray-600 mx-2" />
+            <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2" />
 
             {/* Categorias de Emoji */}
             {Object.entries(EMOJI_CATEGORIES).map(([key, category]) => {
@@ -515,7 +515,7 @@ export function EmojiPicker({
                   className={`p-2 rounded-lg transition-colors ${
                     activeCategory === key
                       ? "bg-blue-600 text-white"
-                      : "text-gray-400 hover:text-white hover:bg-gray-800"
+                      : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800"
                   }`}
                 >
                   <IconComponent size={16} />
@@ -525,17 +525,17 @@ export function EmojiPicker({
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white p-1"
+            className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white p-1"
           >
             ✕
           </button>
         </div>
 
         {/* Search */}
-        <div className="p-4 border-b border-gray-700">
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
           <div className="relative">
             <Search
-              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500"
               size={16}
             />
             <Input
@@ -543,7 +543,7 @@ export function EmojiPicker({
               placeholder="Pesquisar emoji"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 bg-gray-800 border-gray-600 text-white placeholder-gray-400"
+              className="pl-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
             />
           </div>
         </div>
@@ -555,7 +555,7 @@ export function EmojiPicker({
               <button
                 key={`${emoji}-${index}`}
                 onClick={() => handleEmojiSelect(emoji)}
-                className="w-10 h-10 flex items-center justify-center text-2xl hover:bg-gray-800 rounded-lg transition-colors"
+                className="w-10 h-10 flex items-center justify-center text-2xl hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
                 title={getEmojiName(emoji)}
               >
                 {emoji}
@@ -565,13 +565,13 @@ export function EmojiPicker({
         </div>
 
         {/* Footer com emojis recentes/populares */}
-        <div className="border-t border-gray-700 p-2">
+        <div className="border-t border-gray-200 dark:border-gray-700 p-2">
           <div className="flex justify-center space-x-2">
             {["❤️", "😂", "😍", "👍", "🔥", "💯", "😊", "🎉"].map((emoji) => (
               <button
                 key={emoji}
                 onClick={() => handleEmojiSelect(emoji)}
-                className="w-8 h-8 flex items-center justify-center text-lg hover:bg-gray-800 rounded transition-colors"
+                className="w-8 h-8 flex items-center justify-center text-lg hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
               >
                 {emoji}
               </button>

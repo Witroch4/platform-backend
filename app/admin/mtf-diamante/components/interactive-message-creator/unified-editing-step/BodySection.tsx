@@ -29,14 +29,17 @@ export const BodySection: React.FC<BodySectionProps> = ({
     const selectedType = message.type;
     const result = getInstagramTemplateType(bodyText, hasImage, selectedType);
     
-    console.log('� [Instagram] Template detectado:', {
-      tipo: result.type,
-      motivo: result.reason,
-      textoLength: bodyText.length,
-      tipoMensagem: message.type,
-      temImagem: hasImage,
-      dentroLimite: !result.isOverLimit
-    });
+    // Log template detection apenas em desenvolvimento
+    if (process.env.NODE_ENV === 'development') {
+      console.log('� [Instagram] Template detectado:', {
+        tipo: result.type,
+        motivo: result.reason,
+        textoLength: bodyText.length,
+        tipoMensagem: message.type,
+        temImagem: hasImage,
+        dentroLimite: !result.isOverLimit
+      });
+    }
     
     return result;
   }, [isInstagram, message.body?.text, message.header?.type, message.type]);

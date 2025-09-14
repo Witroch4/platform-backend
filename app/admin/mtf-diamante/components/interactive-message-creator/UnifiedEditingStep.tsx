@@ -569,13 +569,16 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
           buttonText={
             buttons.find((b) => b.id === reactionConfigButton)?.text || ""
           }
-          currentReaction={
-            reactions.find((r) => r.buttonId === reactionConfigButton)
-              ? convertCentralToLocal(
-                  reactions.find((r) => r.buttonId === reactionConfigButton)!
-                )
-              : undefined
-          }
+          currentReaction={(() => {
+            const foundReaction = reactions.find((r) => r.buttonId === reactionConfigButton);
+            console.log('🔍 [UnifiedEditingStep] Debugging currentReaction:', {
+              reactionConfigButton,
+              foundReaction,
+              allReactions: reactions,
+              converted: foundReaction ? convertCentralToLocal(foundReaction) : undefined
+            });
+            return foundReaction ? convertCentralToLocal(foundReaction) : undefined;
+          })()}
           onReactionChange={handleReactionChange}
           onReactionRemove={() => handleReactionRemove(reactionConfigButton)}
           isOpen={true}

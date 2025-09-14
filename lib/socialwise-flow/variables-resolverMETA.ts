@@ -275,10 +275,10 @@ export class METAVariablesResolver {
       );
     }
 
-    // Resolve variables in button titles
+    // Resolve variables in action.buttons (builder-style shape)
     if (processedData.action?.buttons) {
       console.log(
-        `[META Variables] Resolving ${processedData.action.buttons.length} button titles`
+        `[META Variables] Resolving ${processedData.action.buttons.length} button titles (action.buttons)`
       );
       for (let i = 0; i < processedData.action.buttons.length; i++) {
         const button = processedData.action.buttons[i];
@@ -288,10 +288,30 @@ export class METAVariablesResolver {
           );
           button.title = await this.resolveText(button.title);
         }
+        // WhatsApp reply shape may carry nested reply.title
+        if (button.reply?.title) {
+          button.reply.title = await this.resolveText(button.reply.title);
+        }
       }
     }
 
-    // Resolve variables in list sections and rows
+    // Resolve variables in actionReplyButton.buttons (Prisma raw shape)
+    if (processedData.actionReplyButton?.buttons && Array.isArray(processedData.actionReplyButton.buttons)) {
+      console.log(
+        `[META Variables] Resolving ${processedData.actionReplyButton.buttons.length} button titles (actionReplyButton.buttons)`
+      );
+      for (let i = 0; i < processedData.actionReplyButton.buttons.length; i++) {
+        const button = processedData.actionReplyButton.buttons[i];
+        if (button.title) {
+          button.title = await this.resolveText(button.title);
+        }
+        if (button.reply?.title) {
+          button.reply.title = await this.resolveText(button.reply.title);
+        }
+      }
+    }
+
+    // Resolve variables in list sections and rows (builder-style shape)
     if (processedData.action?.sections) {
       console.log(
         `[META Variables] Resolving ${processedData.action.sections.length} list sections`
@@ -322,6 +342,44 @@ export class METAVariablesResolver {
           }
         }
       }
+    }
+
+    // Resolve variables in ActionList (Prisma raw shape)
+    if (processedData.actionList?.sections) {
+      console.log(
+        `[META Variables] Resolving ${processedData.actionList.sections.length} list sections (actionList.sections)`
+      );
+      for (let i = 0; i < processedData.actionList.sections.length; i++) {
+        const section = processedData.actionList.sections[i];
+        if (section.title) {
+          section.title = await this.resolveText(section.title);
+        }
+        if (section.rows) {
+          for (let j = 0; j < section.rows.length; j++) {
+            const row = section.rows[j];
+            if (row.title) row.title = await this.resolveText(row.title);
+            if (row.description) row.description = await this.resolveText(row.description);
+          }
+        }
+      }
+      if (processedData.actionList.buttonText) {
+        processedData.actionList.buttonText = await this.resolveText(processedData.actionList.buttonText);
+      }
+    }
+
+    // Resolve CTA URL display text
+    if (processedData.actionCtaUrl?.displayText) {
+      processedData.actionCtaUrl.displayText = await this.resolveText(processedData.actionCtaUrl.displayText);
+    }
+
+    // Resolve Flow CTA text
+    if (processedData.actionFlow?.flowCta) {
+      processedData.actionFlow.flowCta = await this.resolveText(processedData.actionFlow.flowCta);
+    }
+
+    // Resolve Location Request text
+    if (processedData.actionLocationRequest?.requestText) {
+      processedData.actionLocationRequest.requestText = await this.resolveText(processedData.actionLocationRequest.requestText);
     }
 
     console.log(

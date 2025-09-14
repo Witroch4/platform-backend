@@ -135,16 +135,18 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
   idPrefix,
   isInstagramQuickReplies = false,
 }) => {
-  // Debug logs para verificar os dados das reações
-  console.log('[ButtonManager] Reactions data:', reactions);
-  console.log('[ButtonManager] Buttons data:', buttons);
+  // Debug logs para verificar os dados das reações (somente em desenvolvimento)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[ButtonManager] Reactions data:', reactions);
+    console.log('[ButtonManager] Buttons data:', buttons);
+  }
   
   const [validationErrors, setValidationErrors] = useState<Record<string, string[]>>({});
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   // Generate unique ID for new buttons
   const generateButtonId = (): string => {
-    const base = `btn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const base = `btn_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     return `${idPrefix ?? ''}${base}`;
   };
 
@@ -252,14 +254,10 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
 
   // Check if button has reaction configured
   const hasReaction = (buttonId: string): boolean => {
-    // Debug log do que estamos procurando
-    const allReactions = reactions.filter(r => r.buttonId === buttonId);
-    console.log(`[hasReaction] Checking button ${buttonId}:`, allReactions);
-    
-    return reactions.some(reaction => 
+    return reactions.some(reaction =>
       reaction.buttonId === buttonId && (
-        reaction.reaction || 
-        (reaction as any).textResponse || 
+        reaction.reaction ||
+        (reaction as any).textResponse ||
         (reaction as any).textReaction ||
         (reaction as any).emoji
       )
@@ -269,7 +267,6 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
   // Get all reactions for button
   const getReactions = (buttonId: string): any[] => {
     const allReactions = reactions.filter(reaction => reaction.buttonId === buttonId);
-    console.log(`[getReactions] Found reactions for button ${buttonId}:`, allReactions);
     
     if (!allReactions.length) return [];
     
@@ -328,16 +325,13 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
     });
   };
 
-  // Get reaction for button (legacy - compatibility)
-  const getReaction = (buttonId: string): any => {
-    const allReactions = getReactions(buttonId);
-    return allReactions.length > 0 ? allReactions[0] : undefined;
-  };
 
   // Handle reaction configuration (placeholder for integration with ReactionConfigManager)
   const handleReactionConfig = (buttonId: string) => {
     // This will be integrated with the ReactionConfigManager component
-    console.log('Configure reaction for button:', buttonId);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Configure reaction for button:', buttonId);
+    }
   };
 
   return (

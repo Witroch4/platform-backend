@@ -201,27 +201,29 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
     [interactiveMessages]
   );
 
-  // Debug temporário para verificar o shape dos dados
+  // Debug temporário para verificar o shape dos dados (desenvolvimento apenas)
   useEffect(() => {
-    console.log('[MensagensInterativasTab] interactiveMessages atualizado:', {
-      count: interactiveMessages?.length || 0,
-      sample: interactiveMessages?.[0] ? {
-        id: interactiveMessages[0].id,
-        name: interactiveMessages[0].name,
-        texto: interactiveMessages[0].body?.text || '',
-        full: interactiveMessages[0]
-      } : null
-    });
-    
-    if (mensagens.length > 0) {
-      console.log('[MensagensInterativasTab] mensagens normalizadas:', {
-        count: mensagens.length,
-        sample: {
-          id: mensagens[0].id,
-          nome: mensagens[0].nome,
-          texto: mensagens[0].texto
-        }
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[MensagensInterativasTab] interactiveMessages atualizado:', {
+        count: interactiveMessages?.length || 0,
+        sample: interactiveMessages?.[0] ? {
+          id: interactiveMessages[0].id,
+          name: interactiveMessages[0].name,
+          texto: interactiveMessages[0].body?.text || '',
+          full: interactiveMessages[0]
+        } : null
       });
+
+      if (mensagens.length > 0) {
+        console.log('[MensagensInterativasTab] mensagens normalizadas:', {
+          count: mensagens.length,
+          sample: {
+            id: mensagens[0].id,
+            nome: mensagens[0].nome,
+            texto: mensagens[0].texto
+          }
+        });
+      }
     }
   }, [interactiveMessages, mensagens]);
   

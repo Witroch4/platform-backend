@@ -60,9 +60,26 @@ export const convertCentralToLocal = (
   reaction: CentralButtonReaction
 ): LocalButtonReaction => {
   // Preferir valores reais quando vierem do backend
-  const value = reaction.type === 'emoji' 
-    ? (reaction.emoji || (reaction as any).emoji || '') 
+  const value = reaction.type === 'emoji'
+    ? (reaction.emoji || (reaction as any).emoji || '')
     : (reaction.textResponse || (reaction as any).textReaction || '');
+
+  console.log('🔄 [convertCentralToLocal] Converting reaction:', {
+    input: reaction,
+    type: reaction.type,
+    emoji: reaction.emoji,
+    textResponse: reaction.textResponse,
+    textReaction: (reaction as any).textReaction,
+    finalValue: value,
+    output: {
+      buttonId: reaction.buttonId,
+      reaction: reaction.type === 'emoji' || reaction.type === 'text' ? {
+        type: reaction.type,
+        value: value,
+      } : undefined,
+    }
+  });
+
   return {
     buttonId: reaction.buttonId,
     reaction:

@@ -668,13 +668,26 @@ export function InteractivePreview({
       )}
 
       {/* WhatsApp Text Editor */}
-      {showTextEditor && (
-        <WhatsAppTextEditor
-          onSave={(text) => handleTextResponseSave(showTextEditor, text)}
-          onClose={() => setShowTextEditor(null)}
-          placeholder="Digite a resposta que será enviada quando este botão for clicado..."
-        />
-      )}
+      {showTextEditor && (() => {
+        const buttonReaction = getButtonReaction(showTextEditor);
+        const initialText = buttonReaction?.textResponse || "";
+        console.log('🔍 [InteractivePreview] Abrindo WhatsAppTextEditor:', {
+          showTextEditor,
+          buttonReaction,
+          initialText,
+          hasTextResponse: !!buttonReaction?.textResponse
+        });
+
+        return (
+          <WhatsAppTextEditor
+            onSave={(text) => handleTextResponseSave(showTextEditor, text)}
+            onClose={() => setShowTextEditor(null)}
+            initialText={initialText}
+            placeholder="Digite a resposta que será enviada quando este botão for clicado..."
+            key={`text-editor-${showTextEditor}-${initialText}`}
+          />
+        );
+      })()}
     </div>
   );
 }

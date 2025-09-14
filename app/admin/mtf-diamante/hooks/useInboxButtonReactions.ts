@@ -29,19 +29,25 @@ export function useInboxButtonReactions({ inboxId, paused = false }: UseInboxBut
   // Use the unified API with reactionsOnly=true to get only reactions in the same format
   const key = !paused && inboxId ? `/api/admin/mtf-diamante/messages-with-reactions?inboxId=${inboxId}&reactionsOnly=true` : null
   
-  // Debug logs
-  console.log('🔍 [useInboxButtonReactions] Hook called:', { inboxId, paused, key })
+  // Debug logs (desenvolvimento apenas)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('🔍 [useInboxButtonReactions] Hook called:', { inboxId, paused, key })
+  }
 
   const { data, error, mutate, isLoading } = useSWR(
     key,
     async (url: string) => {
-      console.log('🌐 [useInboxButtonReactions] Fetching from:', url)
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🌐 [useInboxButtonReactions] Fetching from:', url)
+      }
       const response = await fetch(url)
       if (!response.ok) {
         throw new Error(`Erro ao carregar reações: ${response.status}`)
       }
       const result = await response.json()
-      console.log('✅ [useInboxButtonReactions] Fetched data:', result)
+      if (process.env.NODE_ENV === 'development') {
+        console.log('✅ [useInboxButtonReactions] Fetched data:', result)
+      }
       
       // Return the reactions directly from the unified API response
       return result.reactions || []

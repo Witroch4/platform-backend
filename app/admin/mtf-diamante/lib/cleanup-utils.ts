@@ -275,11 +275,5 @@ export const codeQualityMetrics = {
 };
 
 // Initialize migration tracking for MTF Diamante refactor
-if (process.env.NODE_ENV === 'development') {
-  LegacyMigrationTracker.markCompleted('hooks-creation', 'All dedicated hooks created');
-  LegacyMigrationTracker.markCompleted('api-endpoints', 'Separate API endpoints implemented');
-  LegacyMigrationTracker.markCompleted('provider-refactor', 'MtfDataProvider simplified');
-  LegacyMigrationTracker.markCompleted('error-handling', 'Centralized error handling implemented');
-  LegacyMigrationTracker.markCompleted('performance-optimization', 'Performance optimizations applied');
-  LegacyMigrationTracker.markCompleted('code-cleanup', 'Legacy code cleanup completed');
-}
+// REMOVIDO: Logs de migration desnecessários que só geram ruído no console
+// As migrações já foram concluídas e não precisam mais ser logadas

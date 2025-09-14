@@ -343,7 +343,7 @@ async function processHardBand(
       });
       
       let mapped = isInsta
-        ? await buildInstagramByIntentRaw(topIntent.slug, context.inboxId)
+        ? await buildInstagramByIntentRaw(topIntent.slug, context.inboxId, { contactName: context.contactName, contactPhone: context.contactPhone })
         : await buildFacebookPageByIntentRaw(topIntent.slug, context.inboxId, { contactName: context.contactName, contactPhone: context.contactPhone });
       processorLogger.info(`HARD band ${platformName} intent raw result`, {
         intent: topIntent.slug,
@@ -353,7 +353,7 @@ async function processHardBand(
       
       if (!mapped) {
         mapped = isInsta
-          ? await buildInstagramByGlobalIntent(topIntent.slug, context.inboxId)
+          ? await buildInstagramByGlobalIntent(topIntent.slug, context.inboxId, { contactName: context.contactName, contactPhone: context.contactPhone })
           : await buildFacebookPageByGlobalIntent(topIntent.slug, context.inboxId, { contactName: context.contactName, contactPhone: context.contactPhone });
         processorLogger.info(`HARD band ${platformName} global intent result`, {
           intent: topIntent.slug,

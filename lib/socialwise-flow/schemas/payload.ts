@@ -71,6 +71,12 @@ const CriticalContactSchema = z.object({
   account_id: z.union([z.string(), z.number()]).transform(val => Number(val)),
   created_at: z.string(),
   updated_at: z.string(),
+  additional_attributes: z.object({
+    social_instagram_user_name: z.string().optional(),
+    social_profiles: z.object({
+      instagram: z.string().optional(),
+    }).optional(),
+  }).optional(),
 }).passthrough(); // Permite campos extras
 
 // Schema básico para dados críticos da caixa - apenas campos essenciais
