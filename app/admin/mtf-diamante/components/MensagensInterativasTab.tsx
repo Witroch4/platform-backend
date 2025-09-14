@@ -557,6 +557,14 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
       isActive: messageData.isActive !== undefined ? messageData.isActive : true
     };
 
+    // Normalizar ação para quick_replies: alguns editores usam action.quick_replies
+    if (apiMessage.type === 'quick_replies' && apiMessage.action) {
+      const ar: any = apiMessage.action as any;
+      if (!Array.isArray(ar.buttons) && Array.isArray(ar.quick_replies)) {
+        apiMessage.action = { ...ar, buttons: ar.quick_replies } as any;
+      }
+    }
+
     const payload: any = {
       inboxId: caixaId,  // ✅ Usar "inboxId" conforme esperado pela API
       message: apiMessage,

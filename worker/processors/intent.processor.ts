@@ -7,7 +7,7 @@ import {
 } from "../../lib/webhook-utils";
 import { WorkerResponse, WhatsAppCredentials, TemplateMapping } from "../types/types";
 import { WhatsAppApiManager } from "../services/whatsapp.service";
-import { WhatsAppPayloadBuilder } from "../../lib/whatsapp/whatsapp-payload-builder";
+import { METAPayloadBuilder } from "../../lib/socialwise-flow/meta-payload-builder";
 
 const whatsappApiManager = new WhatsAppApiManager();
 
@@ -492,7 +492,7 @@ export class IntentProcessor {
   }
 
   /**
-   * Build message content directly using WhatsAppPayloadBuilder
+   * Build message content directly using METAPayloadBuilder
    * Simplified approach eliminating intermediary processing
    */
   private async buildMessageContent(
@@ -528,7 +528,7 @@ export class IntentProcessor {
       });
 
       // Create PayloadBuilder with variables resolver
-      const payloadBuilder = new WhatsAppPayloadBuilder();
+      const payloadBuilder = new METAPayloadBuilder();
       if (inboxId) {
         await payloadBuilder.setVariablesFromInboxId(inboxId, {
           contactPhone: variables.contactPhone,
@@ -653,7 +653,7 @@ export class IntentProcessor {
   }
 
   /**
-   * Build Interactive Message using WhatsAppPayloadBuilder (Whitelist approach)
+   * Build Interactive Message using METAPayloadBuilder (Whitelist approach)
    */
   private async buildInteractiveMessage(
     data: any, // O objeto interactiveContent vindo do banco
@@ -665,7 +665,7 @@ export class IntentProcessor {
       const processedData = await this.resolveInteractiveMessageVariables(data, resolveAllVariables);
       
       // 2. Usa o PayloadBuilder para construir o payload limpo e seguro
-      const payloadBuilder = new WhatsAppPayloadBuilder();
+      const payloadBuilder = new METAPayloadBuilder();
       const interactivePayload = payloadBuilder.buildInteractiveMessagePayload(processedData);
 
       // 3. Retorna o objeto final pronto para ser enviado

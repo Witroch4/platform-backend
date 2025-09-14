@@ -23,6 +23,7 @@ export interface PrismaInteractiveContent {
   id: string;
   templateId: string;
   bodyId: string;
+  interactiveType?: InteractiveMessageType | string;
   createdAt: Date;
   updatedAt: Date;
 }

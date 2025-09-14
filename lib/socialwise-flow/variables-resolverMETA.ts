@@ -1,5 +1,5 @@
 /**
- * WhatsApp Variables Resolver
+ * META Variables Resolver REFATORED
  *
  * Resolvedor de variáveis específico para payloads do WhatsApp
  * Integra com o sistema MTF Diamante para substituir variáveis em mensagens
@@ -7,9 +7,9 @@
 
 import { getPrismaInstance } from "../connections";
 import { replaceVariablesInText } from "../mtf-diamante/variables-resolver";
-import { resolveTextWithVariables } from "./variables-shared";
+import { resolveTextWithVariables } from "../whatsapp/variables-shared";
 
-export interface WhatsAppVariableContext {
+export interface METAVariableContext {
   userId?: string;
   inboxId?: string;
   contactPhone?: string;
@@ -18,12 +18,12 @@ export interface WhatsAppVariableContext {
   personName?: string; // nome vindo do Dialogflow (parameters.person.name)
 }
 
-export class WhatsAppVariablesResolver {
+export class METAVariablesResolver {
   private userId: string | null = null;
-  private context: WhatsAppVariableContext = {};
+  private context: METAVariableContext = {};
   private cachedLeadName: string | null = null;
 
-  constructor(context: WhatsAppVariableContext = {}) {
+  constructor(context: METAVariableContext = {}) {
     this.context = context;
     this.userId = context.userId || null;
   }
@@ -41,14 +41,14 @@ export class WhatsAppVariablesResolver {
   async initialize(): Promise<void> {
     if (this.userId) {
       console.log(
-        `[WhatsApp Variables] Already initialized with userId: ${this.userId}`
+        `[META Variables] Already initialized with userId: ${this.userId}`
       );
       return;
     }
 
     if (!this.context.inboxId) {
       console.warn(
-        "[WhatsApp Variables] No inboxId provided, cannot resolve user-specific variables"
+        "[META Variables] No inboxId provided, cannot resolve user-specific variables"
       );
       return;
     }
@@ -70,16 +70,16 @@ export class WhatsAppVariablesResolver {
 
       if (this.userId) {
         console.log(
-          `[WhatsApp Variables] Initialized with userId: ${this.userId} from inboxId: ${this.context.inboxId}`
+          `[META Variables] Initialized with userId: ${this.userId} from inboxId: ${this.context.inboxId}`
         );
       } else {
         console.warn(
-          `[WhatsApp Variables] No userId found for inboxId: ${this.context.inboxId}`
+          `[META Variables] No userId found for inboxId: ${this.context.inboxId}`
         );
       }
     } catch (error) {
       console.error(
-        `[WhatsApp Variables] Error getting userId from inboxId ${this.context.inboxId}:`,
+        `[META Variables] Error getting userId from inboxId ${this.context.inboxId}:`,
         error
       );
     }
@@ -90,12 +90,12 @@ export class WhatsAppVariablesResolver {
    */
   async resolveText(text: string): Promise<string> {
     if (!text) {
-      console.log("[WhatsApp Variables] Empty text, skipping resolution");
+      console.log("[META Variables] Empty text, skipping resolution");
       return text;
     }
 
     console.log(
-      `[WhatsApp Variables] Resolving text: "${text.substring(0, 100)}${text.length > 100 ? "..." : ""}"`
+      `[META Variables] Resolving text: "${text.substring(0, 100)}${text.length > 100 ? "..." : ""}"`
     );
 
     let resolvedText = text;
@@ -109,7 +109,7 @@ export class WhatsAppVariablesResolver {
         const nomeLead = await this.resolveNomeLead();
         resolvedText = resolvedText.replace(/\{\{nome_lead\}\}/g, nomeLead);
       } catch (e) {
-        console.warn("[WhatsApp Variables] Failed to resolve {{nome_lead}}:", e);
+        console.warn("[META Variables] Failed to resolve {{nome_lead}}:", e);
         // fallback silencioso para manter placeholder ou substituir por Cliente
         resolvedText = resolvedText.replace(/\{\{nome_lead\}\}/g, "Cliente");
       }
@@ -121,7 +121,7 @@ export class WhatsAppVariablesResolver {
         defaultLeadExampleName: "João",
       });
     } catch (e) {
-      console.warn("[WhatsApp Variables] Named placeholder quick pass falhou:", e);
+      console.warn("[META Variables] Named placeholder quick pass falhou:", e);
     }
 
     // 3. Resolver variáveis do MTF Diamante se userId estiver disponível
@@ -133,28 +133,28 @@ export class WhatsAppVariablesResolver {
 
         if (originalText !== resolvedText) {
           console.log(
-            `[WhatsApp Variables] MTF variables (including lote_ativo) resolved for user ${this.userId}`
+            `[META Variables] MTF variables (including lote_ativo) resolved for user ${this.userId}`
           );
           console.log(
-            `[WhatsApp Variables] Before: "${originalText.substring(0, 100)}${originalText.length > 100 ? "..." : ""}"`
+            `[META Variables] Before: "${originalText.substring(0, 100)}${originalText.length > 100 ? "..." : ""}"`
           );
           console.log(
-            `[WhatsApp Variables] After: "${resolvedText.substring(0, 100)}${resolvedText.length > 100 ? "..." : ""}"`
+            `[META Variables] After: "${resolvedText.substring(0, 100)}${resolvedText.length > 100 ? "..." : ""}"`
           );
         } else {
           console.log(
-            `[WhatsApp Variables] No MTF variables found in text for user ${this.userId}`
+            `[META Variables] No MTF variables found in text for user ${this.userId}`
           );
         }
       } catch (error) {
         console.error(
-          `[WhatsApp Variables] Error resolving MTF variables for user ${this.userId}:`,
+          `[META Variables] Error resolving MTF variables for user ${this.userId}:`,
           error
         );
       }
     } else {
       console.log(
-        "[WhatsApp Variables] No userId available, skipping MTF variable resolution"
+        "[META Variables] No userId available, skipping MTF variable resolution"
       );
     }
 
@@ -206,7 +206,7 @@ export class WhatsAppVariablesResolver {
       this.cachedLeadName = "Cliente";
       return this.cachedLeadName;
     } catch (error) {
-      console.error("[WhatsApp Variables] Error resolving lead name:", error);
+      console.error("[META Variables] Error resolving lead name:", error);
       this.cachedLeadName = "Cliente";
       return this.cachedLeadName;
     }
@@ -239,7 +239,7 @@ export class WhatsAppVariablesResolver {
     }
 
     if (hasSystemVariables) {
-      console.log(`[WhatsApp Variables] System variables resolved`);
+      console.log(`[META Variables] System variables resolved`);
     }
 
     return resolvedText;
@@ -249,13 +249,13 @@ export class WhatsAppVariablesResolver {
    * Resolve variáveis em um objeto de mensagem interativa
    */
   async resolveInteractiveMessage(data: any): Promise<any> {
-    console.log("[WhatsApp Variables] Resolving interactive message variables");
+    console.log("[META Variables] Resolving interactive message variables");
 
     const processedData = JSON.parse(JSON.stringify(data)); // Deep clone
 
     // Resolve variables in header text
     if (processedData.header?.type === "text" && processedData.header.content) {
-      console.log("[WhatsApp Variables] Resolving header text");
+      console.log("[META Variables] Resolving header text");
       processedData.header.content = await this.resolveText(
         processedData.header.content
       );
@@ -263,13 +263,13 @@ export class WhatsAppVariablesResolver {
 
     // Resolve variables in body text
     if (processedData.body?.text) {
-      console.log("[WhatsApp Variables] Resolving body text");
+      console.log("[META Variables] Resolving body text");
       processedData.body.text = await this.resolveText(processedData.body.text);
     }
 
     // Resolve variables in footer text
     if (processedData.footer?.text) {
-      console.log("[WhatsApp Variables] Resolving footer text");
+      console.log("[META Variables] Resolving footer text");
       processedData.footer.text = await this.resolveText(
         processedData.footer.text
       );
@@ -278,13 +278,13 @@ export class WhatsAppVariablesResolver {
     // Resolve variables in button titles
     if (processedData.action?.buttons) {
       console.log(
-        `[WhatsApp Variables] Resolving ${processedData.action.buttons.length} button titles`
+        `[META Variables] Resolving ${processedData.action.buttons.length} button titles`
       );
       for (let i = 0; i < processedData.action.buttons.length; i++) {
         const button = processedData.action.buttons[i];
         if (button.title) {
           console.log(
-            `[WhatsApp Variables] Resolving button ${i + 1} title: "${button.title}"`
+            `[META Variables] Resolving button ${i + 1} title: "${button.title}"`
           );
           button.title = await this.resolveText(button.title);
         }
@@ -294,13 +294,13 @@ export class WhatsAppVariablesResolver {
     // Resolve variables in list sections and rows
     if (processedData.action?.sections) {
       console.log(
-        `[WhatsApp Variables] Resolving ${processedData.action.sections.length} list sections`
+        `[META Variables] Resolving ${processedData.action.sections.length} list sections`
       );
       for (let i = 0; i < processedData.action.sections.length; i++) {
         const section = processedData.action.sections[i];
         if (section.title) {
           console.log(
-            `[WhatsApp Variables] Resolving section ${i + 1} title: "${section.title}"`
+            `[META Variables] Resolving section ${i + 1} title: "${section.title}"`
           );
           section.title = await this.resolveText(section.title);
         }
@@ -309,13 +309,13 @@ export class WhatsAppVariablesResolver {
             const row = section.rows[j];
             if (row.title) {
               console.log(
-                `[WhatsApp Variables] Resolving row ${j + 1} title: "${row.title}"`
+                `[META Variables] Resolving row ${j + 1} title: "${row.title}"`
               );
               row.title = await this.resolveText(row.title);
             }
             if (row.description) {
               console.log(
-                `[WhatsApp Variables] Resolving row ${j + 1} description: "${row.description}"`
+                `[META Variables] Resolving row ${j + 1} description: "${row.description}"`
               );
               row.description = await this.resolveText(row.description);
             }
@@ -325,7 +325,7 @@ export class WhatsAppVariablesResolver {
     }
 
     console.log(
-      "[WhatsApp Variables] Interactive message variables resolved successfully"
+      "[META Variables] Interactive message variables resolved successfully"
     );
     return processedData;
   }
@@ -339,7 +339,7 @@ export class WhatsAppVariablesResolver {
     }
 
     console.log(
-      `[WhatsApp Variables] Resolving ${components.length} template components`
+      `[META Variables] Resolving ${components.length} template components`
     );
 
     const resolvedComponents = await Promise.all(
@@ -348,21 +348,21 @@ export class WhatsAppVariablesResolver {
 
         if (component.type === "BODY" && component.text) {
           console.log(
-            `[WhatsApp Variables] Resolving BODY component ${index + 1}: "${component.text}"`
+            `[META Variables] Resolving BODY component ${index + 1}: "${component.text}"`
           );
           processedComponent.text = await this.resolveText(component.text);
         }
 
         if (component.type === "HEADER" && component.text) {
           console.log(
-            `[WhatsApp Variables] Resolving HEADER component ${index + 1}: "${component.text}"`
+            `[META Variables] Resolving HEADER component ${index + 1}: "${component.text}"`
           );
           processedComponent.text = await this.resolveText(component.text);
         }
 
         if (component.type === "FOOTER" && component.text) {
           console.log(
-            `[WhatsApp Variables] Resolving FOOTER component ${index + 1}: "${component.text}"`
+            `[META Variables] Resolving FOOTER component ${index + 1}: "${component.text}"`
           );
           processedComponent.text = await this.resolveText(component.text);
         }
@@ -372,7 +372,7 @@ export class WhatsAppVariablesResolver {
     );
 
     console.log(
-      "[WhatsApp Variables] Template components resolved successfully"
+      "[META Variables] Template components resolved successfully"
     );
     return resolvedComponents;
   }
@@ -382,9 +382,9 @@ export class WhatsAppVariablesResolver {
    */
   static async fromInboxId(
     inboxId: string,
-    context: Partial<WhatsAppVariableContext> = {}
-  ): Promise<WhatsAppVariablesResolver> {
-    const resolver = new WhatsAppVariablesResolver({
+    context: Partial<METAVariableContext> = {}
+  ): Promise<METAVariablesResolver> {
+    const resolver = new METAVariablesResolver({
       ...context,
       inboxId,
     });
@@ -398,9 +398,9 @@ export class WhatsAppVariablesResolver {
    */
   static fromUserId(
     userId: string,
-    context: Partial<WhatsAppVariableContext> = {}
-  ): WhatsAppVariablesResolver {
-    return new WhatsAppVariablesResolver({
+    context: Partial<METAVariableContext> = {}
+  ): METAVariablesResolver {
+    return new METAVariablesResolver({
       ...context,
       userId,
     });

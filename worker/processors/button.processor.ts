@@ -6,7 +6,7 @@ import {
   ButtonActionMapping,
 } from "../types/types";
 import { WhatsAppApiManager } from "../services/whatsapp.service";
-import { WhatsAppPayloadBuilder } from "../../lib/whatsapp/whatsapp-payload-builder";
+import { METAPayloadBuilder } from "../../lib/socialwise-flow/meta-payload-builder";
 import { IntentProcessor } from "./intent.processor";
 
 const whatsappApiManager = new WhatsAppApiManager();
@@ -100,7 +100,7 @@ export class ButtonProcessor {
         const hasText = typeof payload.textReaction === 'string' && payload.textReaction.trim() !== '';
 
         if (hasEmoji) {
-          const builder = new WhatsAppPayloadBuilder();
+          const builder = new METAPayloadBuilder();
           const reactionPayload = builder.buildReactionPayload(wamid, payload.emoji);
           comboMessageId = await whatsappApiManager.sendMessage(
             contactPhone,
@@ -112,7 +112,7 @@ export class ButtonProcessor {
         }
 
         if (hasText) {
-          const builder = new WhatsAppPayloadBuilder();
+          const builder = new METAPayloadBuilder();
           const textPayload = await builder.buildTextReplyPayload(wamid, payload.textReaction);
           comboMessageId = await whatsappApiManager.sendMessage(
             contactPhone,
@@ -587,7 +587,7 @@ export class ButtonProcessor {
       );
 
       // Create PayloadBuilder with variables resolver
-      const payloadBuilder = new WhatsAppPayloadBuilder();
+      const payloadBuilder = new METAPayloadBuilder();
       if (inboxId) {
         await payloadBuilder.setVariablesFromInboxId(inboxId, {});
       }
@@ -661,7 +661,7 @@ export class ButtonProcessor {
 
       if (emoji) {
         // Send emoji reaction usando o Payload Builder
-        const payloadBuilder = new WhatsAppPayloadBuilder();
+        const payloadBuilder = new METAPayloadBuilder();
         const messageContent = payloadBuilder.buildReactionPayload(
           wamid,
           emoji
@@ -741,7 +741,7 @@ export class ButtonProcessor {
       const textResponse = this.generateTextResponseForButton(buttonId);
 
       // Create PayloadBuilder with variables resolver and build payload
-      const payloadBuilder = new WhatsAppPayloadBuilder();
+      const payloadBuilder = new METAPayloadBuilder();
       if (inboxId) {
         await payloadBuilder.setVariablesFromInboxId(inboxId, {});
       }

@@ -158,39 +158,32 @@ export async function GET(
     // Transform to expected format using the formatMessage function pattern
     const interactive = message.interactiveContent;
     
-    // Determine action type and data
-    let actionType = 'button'; // default
-    let actionData = null;
-    
-    if (interactive?.actionCtaUrl) {
-      actionType = 'cta_url';
-      actionData = interactive.actionCtaUrl;
-    } else if (interactive?.actionReplyButton) {
-      actionType = 'button';
-      actionData = interactive.actionReplyButton;
-    } else if (interactive?.actionList) {
-      actionType = 'list';
-      actionData = interactive.actionList;
-    } else if (interactive?.actionFlow) {
-      actionType = 'flow';
-      actionData = interactive.actionFlow;
-    } else if (interactive?.actionLocationRequest) {
-      actionType = 'location_request';
-      actionData = interactive.actionLocationRequest;
-    } else {
-      // For Instagram templates, detect type based on content
-      const bodyText = interactive?.body?.text || '';
-      const hasHeader = !!interactive?.header;
-      const hasFooter = !!interactive?.footer;
-      
-      if (hasHeader && hasFooter) {
-        actionType = 'generic';
-      } else if (bodyText.length <= 640) {
-        actionType = 'button_template';
-      } else if (bodyText.length <= 1000) {
-        actionType = 'quick_replies';
+    // Capturar dados da ação primeiro
+    let actionData = null as any;
+    if (interactive?.actionCtaUrl) actionData = interactive.actionCtaUrl;
+    if (interactive?.actionReplyButton) actionData = interactive.actionReplyButton;
+    if (interactive?.actionList) actionData = interactive.actionList;
+    if (interactive?.actionFlow) actionData = interactive.actionFlow;
+    if (interactive?.actionLocationRequest) actionData = interactive.actionLocationRequest;
+
+    // Determinar tipo: priorizar tipo salvo
+    let actionType = ((interactive as any)?.interactiveType as string) || 'button';
+    if (!((interactive as any)?.interactiveType)) {
+      if (interactive?.actionCtaUrl) {
+        actionType = 'cta_url';
+      } else if (interactive?.actionReplyButton) {
+        actionType = 'button';
+      } else if (interactive?.actionList) {
+        actionType = 'list';
+      } else if (interactive?.actionFlow) {
+        actionType = 'flow';
+      } else if (interactive?.actionLocationRequest) {
+        actionType = 'location_request';
       } else {
-        actionType = 'generic';
+        const bodyText = interactive?.body?.text || '';
+        const hasHeader = !!interactive?.header;
+        const hasFooter = !!interactive?.footer;
+        actionType = hasHeader && hasFooter ? 'generic' : (bodyText.length <= 640 ? 'button_template' : 'quick_replies');
       }
     }
 
@@ -208,7 +201,7 @@ export async function GET(
       footer: interactive?.footer ? {
         text: interactive.footer.text
       } : undefined,
-      action: actionData ? transformActionData(actionType, actionData) : undefined,
+      action: (transformActionData(actionType, actionData) || (interactive?.actionReplyButton?.buttons ? { type: 'button', buttons: interactive.actionReplyButton.buttons } : undefined)) as any,
       isActive: message.isActive,
       createdAt: message.createdAt,
       updatedAt: message.updatedAt,
@@ -344,6 +337,13 @@ export async function PUT(
       });
 
       if (existingInteractive) {
+        // Persist explicit interactive type if provided
+        if (interactiveUpdateData.type) {
+          await prisma.interactiveContent.update({
+            where: { id: existingInteractive.id },
+            data: { interactiveType: interactiveUpdateData.type },
+          });
+        }
         // Update header if provided
         if (interactiveUpdateData.header) {
           const headerData = {
@@ -423,12 +423,14 @@ export async function PUT(
           });
 
           // Create new action based on type
-          if (['button', 'quick_replies', 'button_template', 'generic'].includes(messageType) && interactiveUpdateData.action.buttons) {
-            console.log(`[InteractiveMessages API UPDATE] Creating actionReplyButton with buttons:`, interactiveUpdateData.action.buttons);
+          if (['button', 'quick_replies', 'button_template', 'generic'].includes(messageType) && (interactiveUpdateData.action.buttons || (interactiveUpdateData.action as any).quick_replies)) {
+            console.log(`[InteractiveMessages API UPDATE] Creating actionReplyButton with buttons:`, interactiveUpdateData.action.buttons || (interactiveUpdateData.action as any).quick_replies);
             await prisma.actionReplyButton.create({
               data: {
                 interactiveContentId: existingInteractive.id,
-                buttons: interactiveUpdateData.action.buttons
+                buttons: messageType === 'quick_replies'
+                  ? ((interactiveUpdateData.action as any).quick_replies || interactiveUpdateData.action.buttons)
+                  : interactiveUpdateData.action.buttons
               }
             });
           } else if (messageType === 'list') {
@@ -503,14 +505,14 @@ export async function PUT(
     // Transform to expected format using the formatMessage function pattern
     const interactive = updatedMessage.interactiveContent;
     
-    // Determine action type and data
-    let actionType = 'button'; // default
+    // Determine action type and data (prefer stored explicit type)
+    let actionType = ((interactive as any)?.interactiveType as string) || 'button'; // default
     let actionData = null;
     
-    if (interactive?.actionCtaUrl) {
+    if (!((interactive as any)?.interactiveType) && interactive?.actionCtaUrl) {
       actionType = 'cta_url';
       actionData = interactive.actionCtaUrl;
-    } else if (interactive?.actionReplyButton) {
+    } else if (!((interactive as any)?.interactiveType) && interactive?.actionReplyButton) {
       // Determine correct button type based on button count and content
       const buttons = interactive.actionReplyButton.buttons as any[];
       const buttonCount = Array.isArray(buttons) ? buttons.length : 0;
@@ -525,16 +527,16 @@ export async function PUT(
       }
       
       actionData = interactive.actionReplyButton;
-    } else if (interactive?.actionList) {
+    } else if (!((interactive as any)?.interactiveType) && interactive?.actionList) {
       actionType = 'list';
       actionData = interactive.actionList;
-    } else if (interactive?.actionFlow) {
+    } else if (!((interactive as any)?.interactiveType) && interactive?.actionFlow) {
       actionType = 'flow';
       actionData = interactive.actionFlow;
-    } else if (interactive?.actionLocationRequest) {
+    } else if (!((interactive as any)?.interactiveType) && interactive?.actionLocationRequest) {
       actionType = 'location_request';
       actionData = interactive.actionLocationRequest;
-    } else {
+    } else if (!((interactive as any)?.interactiveType)) {
       // For Instagram templates, detect type based on content
       const bodyText = interactive?.body?.text || '';
       const hasHeader = !!interactive?.header;
@@ -565,7 +567,7 @@ export async function PUT(
       footer: interactive?.footer ? {
         text: interactive.footer.text
       } : undefined,
-      action: actionData ? transformActionData(actionType, actionData) : undefined,
+      action: (transformActionData(actionType, actionData) || (interactive?.actionReplyButton?.buttons ? { type: 'button', buttons: interactive.actionReplyButton.buttons } : undefined)) as any,
       isActive: updatedMessage.isActive,
       createdAt: updatedMessage.createdAt,
       updatedAt: updatedMessage.updatedAt,

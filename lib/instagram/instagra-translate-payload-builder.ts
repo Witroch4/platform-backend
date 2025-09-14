@@ -35,8 +35,12 @@ export async function buildInstagramFromInteractiveContent(
   // Extract footer text
   const footerText = interactiveContent?.footer?.text
 
-  // Determine template type based on body length
-  const templateType = determineInstagramTemplateType(bodyText, Boolean(hasImage))
+  // Determine template type based on stored type or fallback to body length
+  let templateType = determineInstagramTemplateType(bodyText, Boolean(hasImage))
+  const explicitType = (interactiveContent as any)?.interactiveType as string | undefined
+  if (explicitType === 'generic') templateType = 'generic'
+  else if (explicitType === 'button_template' || explicitType === 'button') templateType = 'button'
+  else if (explicitType === 'quick_replies') templateType = 'quick_replies'
   instagramTranslationLogger.workerTemplateTypeDetected(
     logContext,
     templateType,
@@ -142,5 +146,4 @@ export async function buildInstagramFromInteractiveContent(
 
   return fulfillmentMessages
 }
-
 

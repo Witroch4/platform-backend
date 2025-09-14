@@ -175,51 +175,36 @@ export async function GET(request: NextRequest) {
         }
       });
       
-      // Determine action type and data
-      let actionType = 'button'; // default
-      let actionData = null;
-      
-      if (interactive?.actionCtaUrl) {
-        actionType = 'cta_url';
-        actionData = interactive.actionCtaUrl;
-      } else if (interactive?.actionReplyButton) {
-        // Determine correct button type based on button count and content
-        const buttonCount = interactive.actionReplyButton.buttons?.length || 0;
-        const bodyText = interactive?.body?.text || '';
-        
-        if (buttonCount > 3) {
-          actionType = 'quick_replies';
-        } else if (buttonCount <= 3 && bodyText.length <= 640) {
-          actionType = 'button_template';
+      // Capturar dados da ação primeiro
+      let actionData = null as any;
+      if (interactive?.actionCtaUrl) actionData = interactive.actionCtaUrl;
+      if (interactive?.actionReplyButton) actionData = interactive.actionReplyButton;
+      if (interactive?.actionList) actionData = interactive.actionList;
+      if (interactive?.actionFlow) actionData = interactive.actionFlow;
+      if (interactive?.actionLocationRequest) actionData = interactive.actionLocationRequest;
+
+      // Determinar o tipo: preferir o tipo salvo
+      let actionType = ((interactive as any)?.interactiveType as string) || 'button';
+      if (!((interactive as any)?.interactiveType)) {
+        if (interactive?.actionCtaUrl) {
+          actionType = 'cta_url';
+        } else if (interactive?.actionReplyButton) {
+          // Subtipos para IG
+          const buttonCount = interactive.actionReplyButton.buttons?.length || 0;
+          const bodyText = interactive?.body?.text || '';
+          actionType = buttonCount > 3 ? 'quick_replies' : (bodyText.length <= 640 ? 'button_template' : 'quick_replies');
+        } else if (interactive?.actionList) {
+          actionType = 'list';
+        } else if (interactive?.actionFlow) {
+          actionType = 'flow';
+        } else if (interactive?.actionLocationRequest) {
+          actionType = 'location_request';
         } else {
-          actionType = 'quick_replies';
-        }
-        
-        actionData = interactive.actionReplyButton;
-        console.log(`[GET API] Button action data for ${msg.id}:`, actionData);
-      } else if (interactive?.actionList) {
-        actionType = 'list';
-        actionData = interactive.actionList;
-      } else if (interactive?.actionFlow) {
-        actionType = 'flow';
-        actionData = interactive.actionFlow;
-      } else if (interactive?.actionLocationRequest) {
-        actionType = 'location_request';
-        actionData = interactive.actionLocationRequest;
-      } else {
-        // For Instagram templates, detect type based on content
-        const bodyText = interactive?.body?.text || '';
-        const hasHeader = !!interactive?.header;
-        const hasFooter = !!interactive?.footer;
-        
-        if (hasHeader && hasFooter) {
-          actionType = 'generic';
-        } else if (bodyText.length <= 640) {
-          actionType = 'button_template';
-        } else if (bodyText.length <= 1000) {
-          actionType = 'quick_replies';
-        } else {
-          actionType = 'generic';
+          // Detecção baseada no conteúdo
+          const bodyText = interactive?.body?.text || '';
+          const hasHeader = !!interactive?.header;
+          const hasFooter = !!interactive?.footer;
+          actionType = hasHeader && hasFooter ? 'generic' : (bodyText.length <= 640 ? 'button_template' : 'quick_replies');
         }
       }
       
@@ -238,7 +223,7 @@ export async function GET(request: NextRequest) {
         footer: interactive?.footer ? {
           text: interactive.footer.text
         } : undefined,
-        action: actionData ? transformActionData(actionType, actionData) : undefined,
+        action: (transformActionData(actionType, actionData) || (interactive?.actionReplyButton?.buttons ? { type: 'button', buttons: interactive.actionReplyButton.buttons } : undefined)) as any,
         isActive: msg.isActive,
         createdAt: msg.createdAt,
         updatedAt: msg.updatedAt,
@@ -364,6 +349,7 @@ export async function POST(request: NextRequest) {
         inboxId: inboxId,
         interactiveContent: {
           create: {
+            interactiveType: message.type,
             body: {
               create: {
                 text: message.body.text
@@ -392,7 +378,9 @@ export async function POST(request: NextRequest) {
               return {
                 actionReplyButton: {
                   create: {
-                    buttons: message.action.buttons || []
+                    buttons: message.type === 'quick_replies'
+                      ? ((message.action.quick_replies || message.action.buttons || []))
+                      : (message.action.buttons || [])
                   }
                 }
               };
@@ -462,7 +450,7 @@ export async function POST(request: NextRequest) {
     const interactive = createdMessage.interactiveContent;
     
     // Determine action type and data
-    let actionType = message.type;
+    let actionType = ((interactive as any)?.interactiveType as string) || message.type;
     let actionData = null;
     
     if (interactive?.actionCtaUrl) {

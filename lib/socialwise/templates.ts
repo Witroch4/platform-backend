@@ -1,5 +1,5 @@
 import { getPrismaInstance } from '@/lib/connections';
-import { WhatsAppPayloadBuilder } from '@/lib/whatsapp/whatsapp-payload-builder';
+import { METAPayloadBuilder } from '@/lib/socialwise-flow/meta-payload-builder';
 
 function slugify(value: string): string {
   return String(value || '')
@@ -93,7 +93,7 @@ export async function buildWhatsAppByIntentRaw(intentRaw: string, inboxId: strin
 
   if (!mapping || !mapping.template) return null;
 
-  const builder = new WhatsAppPayloadBuilder();
+  const builder = new METAPayloadBuilder();
   const variablesContext = { 
     wamid,
     contactPhone: contactContext?.contactPhone,
@@ -298,7 +298,7 @@ export async function buildWhatsAppByGlobalIntent(intentRaw: string, inboxId: st
 
   if (!intent || !intent.template) return null;
 
-  const builder = new WhatsAppPayloadBuilder();
+  const builder = new METAPayloadBuilder();
   const variablesContext = { 
     wamid,
     contactPhone: contactContext?.contactPhone,
@@ -426,8 +426,14 @@ class InstagramTemplateConverter {
     
     console.log('[Instagram Converter] Full text assembled:', fullText);
     
-    // Determinar tipo de template
-    const templateType = InstagramTemplateConverter.determineInstagramTemplateType(fullText, hasImage, instagramButtons);
+    // Determinar tipo de template (respeitando tipo explícito quando presente)
+    let templateType = InstagramTemplateConverter.determineInstagramTemplateType(fullText, hasImage, instagramButtons);
+    const explicit = (whatsappPayload as any)?.interactiveType as string | undefined;
+    if (explicit) {
+      if (explicit === 'generic') templateType = 'GENERIC_TEMPLATE';
+      else if (explicit === 'button_template' || explicit === 'button') templateType = 'BUTTON_TEMPLATE';
+      else if (explicit === 'quick_replies') templateType = 'QUICK_REPLIES';
+    }
     console.log('[Instagram Converter] Template type determined:', templateType);
     
     let result;
@@ -463,8 +469,14 @@ class InstagramTemplateConverter {
     const replyButtons = interactiveContent?.actionReplyButton?.buttons || [];
     const ctaUrl = interactiveContent?.actionCtaUrl;
     
-    // Determinar tipo de template baseado no conteúdo
-    const templateType = InstagramTemplateConverter.determineInstagramTemplateType(bodyText, hasImage, replyButtons);
+    // Determinar tipo de template baseado no conteúdo, respeitando tipo explícito salvo
+    let templateType = InstagramTemplateConverter.determineInstagramTemplateType(bodyText, hasImage, replyButtons);
+    const explicit = (interactiveContent as any)?.interactiveType as string | undefined;
+    if (explicit) {
+      if (explicit === 'generic') templateType = 'GENERIC_TEMPLATE';
+      else if (explicit === 'button_template' || explicit === 'button') templateType = 'BUTTON_TEMPLATE';
+      else if (explicit === 'quick_replies') templateType = 'QUICK_REPLIES';
+    }
     
     switch (templateType) {
       case 'GENERIC_TEMPLATE':
@@ -722,7 +734,7 @@ export async function buildInstagramByIntentRaw(intentRaw: string, inboxId: stri
   if (!mapping || !mapping.template) return null;
 
   // Aplicar variáveis do inbox (aproveitar lógica existente)
-  const builder = new WhatsAppPayloadBuilder();
+  const builder = new METAPayloadBuilder();
   builder.setChannelType('Channel::Instagram'); // Configurar como Instagram
   const variablesContext = { 
     contactPhone: contactContext?.contactPhone,
@@ -838,7 +850,7 @@ export async function buildInstagramByGlobalIntent(intentRaw: string, inboxId: s
   if (!intent || !intent.template) return null;
 
   // Aplicar variáveis do inbox
-  const builder = new WhatsAppPayloadBuilder();
+  const builder = new METAPayloadBuilder();
   builder.setChannelType('Channel::Instagram'); // Configurar como Instagram
   const variablesContext = { 
     contactPhone: contactContext?.contactPhone,
@@ -954,7 +966,7 @@ export async function buildFacebookPageByIntentRaw(intentRaw: string, inboxId: s
   if (!mapping || !mapping.template) return null;
 
   // Aplicar variáveis do inbox (configurar como Facebook Page)
-  const builder = new WhatsAppPayloadBuilder();
+  const builder = new METAPayloadBuilder();
   builder.setChannelType('Channel::FacebookPage'); // Configurar como Facebook Page
   const variablesContext = { 
     contactPhone: contactContext?.contactPhone,
@@ -1155,7 +1167,7 @@ export async function buildFacebookPageByGlobalIntent(intentRaw: string, inboxId
   if (!intent || !intent.template) return null;
 
   // Aplicar variáveis do inbox (configurar como Facebook Page)
-  const builder = new WhatsAppPayloadBuilder();
+  const builder = new METAPayloadBuilder();
   builder.setChannelType('Channel::FacebookPage'); // Configurar como Facebook Page
   const variablesContext = { 
     contactPhone: contactContext?.contactPhone,

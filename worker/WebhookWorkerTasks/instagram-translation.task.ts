@@ -59,7 +59,7 @@ import {
   getCachedVariablesForUser,
   replaceVariablesInText
 } from '../../lib/mtf-diamante/variables-resolver';
-import { WhatsAppVariablesResolver } from '@/lib/whatsapp/variables-resolverWP';
+import { METAVariablesResolver } from '@/lib/socialwise-flow/variables-resolverMETA';
 
 const prisma = getPrismaInstance();
 
@@ -881,9 +881,9 @@ async function convertInteractiveContentToInstagram(
     const personName = extractPersonNameFromPayload(context?.originalPayload);
 
     // Instanciar resolvedor de variáveis
-    let resolver: WhatsAppVariablesResolver | null = null;
+    let resolver: METAVariablesResolver | null = null;
     if (appUserId) {
-      resolver = WhatsAppVariablesResolver.fromUserId(appUserId, {
+      resolver = METAVariablesResolver.fromUserId(appUserId, {
         userId: appUserId,
         inboxId: context?.inboxId,
         contactPhone: context?.contactPhone,
@@ -891,7 +891,7 @@ async function convertInteractiveContentToInstagram(
         personName,
       });
     } else if (context?.inboxId) {
-      resolver = await WhatsAppVariablesResolver.fromInboxId(context.inboxId, {
+      resolver = await METAVariablesResolver.fromInboxId(context.inboxId, {
         inboxId: context.inboxId,
         contactPhone: context.contactPhone,
         correlationId,

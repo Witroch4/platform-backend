@@ -116,29 +116,27 @@ function formatMessage(template: any) {
   const interactive = template.interactiveContent;
   if (!interactive) return null;
 
-  // Determinar o tipo de ação (para WhatsApp)
-  let actionType = null;
-  let actionData = null;
-  
-  if (interactive.actionCtaUrl) {
-    actionType = 'cta_url';
-    actionData = interactive.actionCtaUrl;
-  } else if (interactive.actionReplyButton) {
-    actionType = 'button';
-    actionData = interactive.actionReplyButton;
-  } else if (interactive.actionList) {
-    actionType = 'list';
-    actionData = interactive.actionList;
-  } else if (interactive.actionFlow) {
-    actionType = 'flow';
-    actionData = interactive.actionFlow;
-  } else if (interactive.actionLocationRequest) {
-    actionType = 'location_request';
-    actionData = interactive.actionLocationRequest;
+  // Primeiro, captar qualquer dado de ação presente
+  let actionData = null as any;
+  if (interactive.actionCtaUrl) actionData = interactive.actionCtaUrl;
+  if (interactive.actionReplyButton) actionData = interactive.actionReplyButton;
+  if (interactive.actionList) actionData = interactive.actionList;
+  if (interactive.actionFlow) actionData = interactive.actionFlow;
+  if (interactive.actionLocationRequest) actionData = interactive.actionLocationRequest;
+
+  // Determinar o tipo final: priorizar o tipo explícito salvo
+  let actionType: string | null = (interactive as any)?.interactiveType || null;
+  const explicitType: string | undefined = actionType || undefined;
+  if (!actionType) {
+    if (interactive.actionCtaUrl) actionType = 'cta_url';
+    else if (interactive.actionReplyButton) actionType = 'button';
+    else if (interactive.actionList) actionType = 'list';
+    else if (interactive.actionFlow) actionType = 'flow';
+    else if (interactive.actionLocationRequest) actionType = 'location_request';
   }
 
-  // Para templates Instagram, determinar tipo baseado na estrutura dos botões
-  if (actionType === 'button' && interactive.actionReplyButton) {
+  // Para templates Instagram, determinar tipo baseado na estrutura dos botões, quando não houver tipo explícito
+  if (!explicitType && actionType === 'button' && interactive.actionReplyButton) {
     const buttons = interactive.actionReplyButton.buttons || [];
     
     // Para Instagram Quick Replies, os botões têm formato { content_type: 'text', title: string, payload: string }
@@ -172,6 +170,13 @@ function formatMessage(template: any) {
     }
   }
 
+  // Computar action de saída num formato unificado
+  const computedAction = formatActionData(actionData, actionType!) || (
+    interactive.actionReplyButton?.buttons
+      ? { type: 'button', buttons: interactive.actionReplyButton.buttons }
+      : undefined
+  );
+
   return {
     id: template.id,
     name: template.name,
@@ -191,7 +196,7 @@ function formatMessage(template: any) {
       footer: interactive.footer ? {
         text: interactive.footer.text
       } : undefined,
-      action: formatActionData(actionData, actionType),
+      action: computedAction,
     },
     createdAt: template.createdAt,
     updatedAt: template.updatedAt,
@@ -200,17 +205,10 @@ function formatMessage(template: any) {
 
 function formatActionData(actionData: any, actionType: string): any {
   if (!actionData) return actionData;
-  
-  // For quick_replies, buttons are already in Instagram API format from database
-  if (actionType === 'quick_replies' && actionData.buttons) {
-    return {
-      id: actionData.id,
-      interactiveContentId: actionData.interactiveContentId,
-      quick_replies: actionData.buttons // Already in correct format from database
-    };
+  // Unificar Reply Buttons (inclui quick_replies/button_template/generic) no formato { type: 'button', buttons: [] }
+  if (Array.isArray(actionData.buttons)) {
+    return { type: 'button', buttons: actionData.buttons };
   }
-  
-  // For other types, return as is
   return actionData;
 }
 
@@ -462,6 +460,7 @@ export async function POST(request: NextRequest) {
           inboxId: inboxId, // Use the passed inboxId (which is the internal ChatwitInbox id)
           interactiveContent: {
             create: {
+              interactiveType: message.type,
               body: {
                 create: {
                   text: message.body.text
@@ -506,11 +505,11 @@ export async function POST(request: NextRequest) {
                 actionReplyButton: {
                   create: {
                     buttons: message.type === 'quick_replies' 
-                      ? (message.action.buttons || []).map((button: any) => ({
+                      ? ((message.action.quick_replies || message.action.buttons || []).map((button: any) => ({
                           content_type: 'text',
-                          title: button.title ? button.title.substring(0, 20) : '', 
+                          title: (button.title || button.text || '').substring(0, 20), 
                           payload: button.payload || button.id
-                        }))
+                        })))
                       : (message.action.buttons || [])
                   }
                 }
@@ -910,6 +909,14 @@ export async function PUT(request: NextRequest) {
       if (updatedTemplate.interactiveContent) {
         const interactiveContentId = updatedTemplate.interactiveContent.id;
         
+        // Persist explicit interactive type if provided
+        if (message.type) {
+          await tx.interactiveContent.update({
+            where: { id: interactiveContentId },
+            data: { interactiveType: message.type },
+          });
+        }
+
         // Update body
         if (message.body?.text) {
           await tx.body.update({
@@ -1001,11 +1008,11 @@ export async function PUT(request: NextRequest) {
             await tx.actionReplyButton.create({
               data: {
                 buttons: message.type === 'quick_replies' 
-                  ? (message.action.buttons || []).map((button: any) => ({
+                  ? ((message.action.quick_replies || message.action.buttons || []).map((button: any) => ({
                       content_type: 'text',
-                      title: button.title ? button.title.substring(0, 20) : '', 
+                      title: (button.title || button.text || '').substring(0, 20), 
                       payload: button.payload || button.id
-                    }))
+                    })))
                   : (message.action.buttons || []),
                 interactiveContentId
               }

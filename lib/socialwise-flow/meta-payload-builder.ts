@@ -1,8 +1,8 @@
-import { WhatsAppVariablesResolver, WhatsAppVariableContext } from './variables-resolverWP';
+import { METAVariablesResolver, METAVariableContext } from './variables-resolverMETA';
 import { getPublicMediaUrl, isMetaMediaUrl } from '../whatsapp-media';
 
 /**
- * WhatsAppPayloadBuilder
+ * METAPayloadBuilder
  *
  * Classe centralizada para construir payloads para a API do WhatsApp
  * usando a abordagem de whitelist (lista de inclusão), perfeitamente
@@ -11,16 +11,16 @@ import { getPublicMediaUrl, isMetaMediaUrl } from '../whatsapp-media';
  * Agora com suporte integrado para resolução de variáveis MTF Diamante.
  * Também suporta Instagram Quick Replies com validações específicas.
  */
-export class WhatsAppPayloadBuilder {
-  private variablesResolver?: WhatsAppVariablesResolver;
+export class METAPayloadBuilder {
+  private variablesResolver?: METAVariablesResolver;
   private channelType: string = 'Channel::WhatsApp'; // Default para WhatsApp
 
   /**
    * Configura o resolvedor de variáveis para este builder
    */
-  setVariablesResolver(resolver: WhatsAppVariablesResolver): void {
+  setVariablesResolver(resolver: METAVariablesResolver): void {
     this.variablesResolver = resolver;
-    console.log('[WhatsApp PayloadBuilder] Variables resolver configured');
+    console.log('[META PayloadBuilder] Variables resolver configured');
   }
 
   /**
@@ -28,23 +28,23 @@ export class WhatsAppPayloadBuilder {
    */
   setChannelType(channelType: string): void {
     this.channelType = channelType;
-    console.log(`[WhatsApp PayloadBuilder] Channel type set to: ${channelType}`);
+    console.log(`[META PayloadBuilder] Channel type set to: ${channelType}`);
   }
 
   /**
    * Configura o resolvedor de variáveis a partir de um inboxId
    */
-  async setVariablesFromInboxId(inboxId: string, context: Partial<WhatsAppVariableContext> = {}): Promise<void> {
-    console.log(`[WhatsApp PayloadBuilder] Setting up variables resolver from inboxId: ${inboxId}`);
-    this.variablesResolver = await WhatsAppVariablesResolver.fromInboxId(inboxId, context);
+  async setVariablesFromInboxId(inboxId: string, context: Partial<METAVariableContext> = {}): Promise<void> {
+    console.log(`[META PayloadBuilder] Setting up variables resolver from inboxId: ${inboxId}`);
+    this.variablesResolver = await METAVariablesResolver.fromInboxId(inboxId, context);
   }
 
   /**
    * Configura o resolvedor de variáveis a partir de um userId
    */
-  setVariablesFromUserId(userId: string, context: Partial<WhatsAppVariableContext> = {}): void {
-    console.log(`[WhatsApp PayloadBuilder] Setting up variables resolver from userId: ${userId}`);
-    this.variablesResolver = WhatsAppVariablesResolver.fromUserId(userId, context);
+  setVariablesFromUserId(userId: string, context: Partial<METAVariableContext> = {}): void {
+    console.log(`[META PayloadBuilder] Setting up variables resolver from userId: ${userId}`);
+    this.variablesResolver = METAVariablesResolver.fromUserId(userId, context);
   }
 
   /**
@@ -53,8 +53,8 @@ export class WhatsAppPayloadBuilder {
    * @returns O objeto 'interactive' formatado para a API.
    */
   public async buildInteractiveMessagePayload(dbInteractiveContent: any): Promise<any> {
-    console.log('[WhatsApp PayloadBuilder] Building interactive message payload');
-    console.log('[WhatsApp PayloadBuilder] Input data:', JSON.stringify(dbInteractiveContent, null, 2));
+    console.log('[META PayloadBuilder] Building interactive message payload');
+    console.log('[META PayloadBuilder] Input data:', JSON.stringify(dbInteractiveContent, null, 2));
     
     if (!dbInteractiveContent || !dbInteractiveContent.body?.text) {
       throw new Error(
@@ -65,11 +65,11 @@ export class WhatsAppPayloadBuilder {
     // Resolve variables if resolver is configured
     let processedContent = dbInteractiveContent;
     if (this.variablesResolver) {
-      console.log('[WhatsApp PayloadBuilder] Resolving variables in interactive message');
+      console.log('[META PayloadBuilder] Resolving variables in interactive message');
       processedContent = await this.variablesResolver.resolveInteractiveMessage(dbInteractiveContent);
-      console.log('[WhatsApp PayloadBuilder] Variables resolved, processed data:', JSON.stringify(processedContent, null, 2));
+      console.log('[META PayloadBuilder] Variables resolved, processed data:', JSON.stringify(processedContent, null, 2));
     } else {
-      console.log('[WhatsApp PayloadBuilder] No variables resolver configured, using original data');
+      console.log('[META PayloadBuilder] No variables resolver configured, using original data');
     }
 
     const interactivePayload: any = {
@@ -77,6 +77,11 @@ export class WhatsAppPayloadBuilder {
         text: processedContent.body.text,
       },
     };
+
+    // Preserve stored interactive type (pure type) for downstream converters (IG/FB)
+    if (processedContent?.interactiveType) {
+      interactivePayload.interactiveType = processedContent.interactiveType;
+    }
 
     if (processedContent.header) {
       const builtHeader = this._buildHeader(processedContent.header);
@@ -133,8 +138,8 @@ export class WhatsAppPayloadBuilder {
       );
     }
 
-    console.log('[WhatsApp PayloadBuilder] Interactive message payload built successfully');
-    console.log('[WhatsApp PayloadBuilder] Final payload:', JSON.stringify(interactivePayload, null, 2));
+    console.log('[META PayloadBuilder] Interactive message payload built successfully');
+    console.log('[META PayloadBuilder] Final payload:', JSON.stringify(interactivePayload, null, 2));
     return interactivePayload;
   }
 
@@ -161,15 +166,15 @@ export class WhatsAppPayloadBuilder {
    * @returns O payload completo da mensagem de texto contextual.
    */
   public async buildTextReplyPayload(messageId: string, text: string): Promise<any> {
-    console.log(`[WhatsApp PayloadBuilder] Building text reply payload for message: ${messageId}`);
-    console.log(`[WhatsApp PayloadBuilder] Original text: "${text}"`);
+    console.log(`[META PayloadBuilder] Building text reply payload for message: ${messageId}`);
+    console.log(`[META PayloadBuilder] Original text: "${text}"`);
 
     let resolvedText = text;
     if (this.variablesResolver) {
-      console.log('[WhatsApp PayloadBuilder] Resolving variables in text reply');
+      console.log('[META PayloadBuilder] Resolving variables in text reply');
       resolvedText = await this.variablesResolver.resolveText(text);
     } else {
-      console.log('[WhatsApp PayloadBuilder] No variables resolver configured for text reply');
+      console.log('[META PayloadBuilder] No variables resolver configured for text reply');
     }
 
     const payload = {
@@ -182,8 +187,8 @@ export class WhatsAppPayloadBuilder {
       },
     };
 
-    console.log('[WhatsApp PayloadBuilder] Text reply payload built successfully');
-    console.log('[WhatsApp PayloadBuilder] Final payload:', JSON.stringify(payload, null, 2));
+    console.log('[META PayloadBuilder] Text reply payload built successfully');
+    console.log('[META PayloadBuilder] Final payload:', JSON.stringify(payload, null, 2));
     return payload;
   }
 
@@ -193,15 +198,15 @@ export class WhatsAppPayloadBuilder {
    * @returns O payload completo da mensagem de texto.
    */
   public async buildSimpleTextPayload(text: string): Promise<any> {
-    console.log(`[WhatsApp PayloadBuilder] Building simple text payload`);
-    console.log(`[WhatsApp PayloadBuilder] Original text: "${text}"`);
+    console.log(`[META PayloadBuilder] Building simple text payload`);
+    console.log(`[META PayloadBuilder] Original text: "${text}"`);
 
     let resolvedText = text;
     if (this.variablesResolver) {
-      console.log('[WhatsApp PayloadBuilder] Resolving variables in simple text');
+      console.log('[META PayloadBuilder] Resolving variables in simple text');
       resolvedText = await this.variablesResolver.resolveText(text);
     } else {
-      console.log('[WhatsApp PayloadBuilder] No variables resolver configured for simple text');
+      console.log('[META PayloadBuilder] No variables resolver configured for simple text');
     }
 
     const payload = {
@@ -211,8 +216,8 @@ export class WhatsAppPayloadBuilder {
       },
     };
 
-    console.log('[WhatsApp PayloadBuilder] Simple text payload built successfully');
-    console.log('[WhatsApp PayloadBuilder] Final payload:', JSON.stringify(payload, null, 2));
+    console.log('[META PayloadBuilder] Simple text payload built successfully');
+    console.log('[META PayloadBuilder] Final payload:', JSON.stringify(payload, null, 2));
     return payload;
   }
 
@@ -229,8 +234,8 @@ export class WhatsAppPayloadBuilder {
     components: any[] = [],
     metaTemplateId?: string
   ): Promise<any> {
-    console.log(`[WhatsApp PayloadBuilder] Building template payload: ${templateName}`);
-    console.log(`[WhatsApp PayloadBuilder] Input components:`, JSON.stringify(components, null, 2));
+    console.log(`[META PayloadBuilder] Building template payload: ${templateName}`);
+    console.log(`[META PayloadBuilder] Input components:`, JSON.stringify(components, null, 2));
 
     // Transformar componentes salvos (definição do template) no formato de envio aceito pela Meta
     const metaComponents = await this._transformOfficialTemplateComponents(
@@ -247,8 +252,8 @@ export class WhatsAppPayloadBuilder {
       },
     };
 
-    console.log('[WhatsApp PayloadBuilder] Template payload built successfully');
-    console.log('[WhatsApp PayloadBuilder] Final payload:', JSON.stringify(payload, null, 2));
+    console.log('[META PayloadBuilder] Template payload built successfully');
+    console.log('[META PayloadBuilder] Final payload:', JSON.stringify(payload, null, 2));
     return payload;
   }
 
@@ -264,7 +269,7 @@ export class WhatsAppPayloadBuilder {
       case "text":
         // Header content é opcional - se estiver vazio, não incluir no payload
         if (!dbHeader.content || dbHeader.content.trim() === '') {
-          console.log('[WhatsApp PayloadBuilder] Skipping empty header content');
+          console.log('[META PayloadBuilder] Skipping empty header content');
           return null; // Retorna null para não incluir header vazio no payload
         }
         header.text = dbHeader.content;
@@ -481,7 +486,7 @@ export class WhatsAppPayloadBuilder {
                 // metaTemplateId é preferido; como fallback, usa o próprio link (hash) para chavear o upload
                 publicUrl = await getPublicMediaUrl(metaTemplateId || exampleUrl, userId, exampleUrl);
               } catch (e) {
-                console.warn('[WhatsApp PayloadBuilder] Falha ao obter public media URL do MinIO:', e);
+                console.warn('[META PayloadBuilder] Falha ao obter public media URL do MinIO:', e);
               }
             }
           }
@@ -604,7 +609,7 @@ export class WhatsAppPayloadBuilder {
 
       return resultComponents;
     } catch (error) {
-      console.error('[WhatsApp PayloadBuilder] Error transforming official components:', error);
+      console.error('[META PayloadBuilder] Error transforming official components:', error);
       // Em caso de erro, retornar payload mínimo para evitar chaves inválidas
       return [{ type: 'body' }];
     }
