@@ -402,28 +402,27 @@ class InstagramTemplateConverter {
     
     console.log('[Instagram Converter] Extracted buttons:', JSON.stringify(instagramButtons, null, 2));
     
-    // Combinar header, body e footer
-    let fullText = '';
-    
+    // Combinar header e body (sem footer) para título/base de texto
+    // O footer será tratado como subtitle apenas no Generic Template
+    let baseText = '';
+
     // Se há imagem, não incluir header text no título (a imagem já representa o header)
     if (hasImage) {
-      fullText = bodyText;
+      baseText = bodyText;
     } else {
       // Sem imagem, combinar header e body se diferentes
       if (headerText && headerText !== bodyText) {
-        fullText = headerText;
+        baseText = headerText;
         if (bodyText && bodyText !== headerText) {
-          fullText += `\n\n${bodyText}`;
+          baseText += `\n\n${bodyText}`;
         }
       } else {
-        fullText = bodyText;
+        baseText = bodyText;
       }
     }
-    
-    if (footerText) {
-      fullText += `\n\n${footerText}`;
-    }
-    
+
+    // Para logs e decisões que considerem o texto completo, montar também com footer
+    const fullText = footerText ? `${baseText}\n\n${footerText}` : baseText;
     console.log('[Instagram Converter] Full text assembled:', fullText);
     
     // Determinar tipo de template (respeitando tipo explícito quando presente)
@@ -439,16 +438,19 @@ class InstagramTemplateConverter {
     let result;
     switch (templateType) {
       case 'GENERIC_TEMPLATE':
-        result = InstagramTemplateConverter.buildGenericTemplate(fullText, imageUrl, instagramButtons, undefined, '');
+        // No Generic, o footer vai em subtitle; o título usa somente header/body
+        result = InstagramTemplateConverter.buildGenericTemplate(baseText, imageUrl, instagramButtons, undefined, footerText);
         break;
       
       case 'BUTTON_TEMPLATE':
-        result = InstagramTemplateConverter.buildButtonTemplate(fullText, imageUrl, instagramButtons, undefined, '');
+        // No Button Template, o texto é único; passar body+header como base e footer separado
+        result = InstagramTemplateConverter.buildButtonTemplate(baseText, imageUrl, instagramButtons, undefined, footerText);
         break;
       
       case 'QUICK_REPLIES':
       default:
-        result = InstagramTemplateConverter.buildQuickReplies(fullText, instagramButtons, '');
+        // No Quick Replies, o texto é único; passar body+header como base e footer separado
+        result = InstagramTemplateConverter.buildQuickReplies(baseText, instagramButtons, footerText);
         break;
     }
     
