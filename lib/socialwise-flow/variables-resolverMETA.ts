@@ -13,6 +13,7 @@ export interface METAVariableContext {
   userId?: string;
   inboxId?: string;
   contactPhone?: string;
+  contactName?: string; // nome vindo do webhook (contact_name)
   wamid?: string;
   correlationId?: string;
   personName?: string; // nome vindo do Dialogflow (parameters.person.name)
@@ -163,17 +164,28 @@ export class METAVariablesResolver {
 
   /**
    * Resolve o nome do lead seguindo prioridades:
-   * 1) LeadOabData.nomeReal (quando houver lead associado ao telefone)
-   * 2) Lead.name (nome salvo no lead)
-   * 3) "Cliente" (fallback)
+   * 1) contact_name do webhook (informação mais atual)
+   * 2) LeadOabData.nomeReal (quando houver lead associado ao telefone)
+   * 3) Lead.name (nome salvo no lead)
+   * 4) personName do Dialogflow (fallback)
+   * 5) "Cliente" (fallback final)
    */
   private async resolveNomeLead(): Promise<string> {
     if (this.cachedLeadName) return this.cachedLeadName;
 
-    // Prioridade 1: nome vindo do webhook (Dialogflow person.name), quando fornecido no contexto
+    // Prioridade 1: nome vindo do webhook (contact_name), mais atual
+    const contactName = this.context.contactName;
+    if (contactName && typeof contactName === 'string' && contactName.trim()) {
+      this.cachedLeadName = contactName.trim();
+      console.log(`[META Variables] Using contact_name from webhook: "${this.cachedLeadName}"`);
+      return this.cachedLeadName;
+    }
+
+    // Prioridade 2: nome vindo do webhook (Dialogflow person.name), quando fornecido no contexto
     const personName = (this.context as any).personName as string | undefined;
     if (personName && typeof personName === 'string' && personName.trim()) {
       this.cachedLeadName = personName.trim();
+      console.log(`[META Variables] Using personName from Dialogflow: "${this.cachedLeadName}"`);
       return this.cachedLeadName;
     }
 
@@ -181,6 +193,7 @@ export class METAVariablesResolver {
     const contactPhone = String(contactPhoneRaw).replace(/\D/g, "");
     if (!contactPhone) {
       this.cachedLeadName = "Cliente";
+      console.log(`[META Variables] No contact phone, using fallback: "${this.cachedLeadName}"`);
       return this.cachedLeadName;
     }
 
@@ -191,19 +204,24 @@ export class METAVariablesResolver {
         include: { oabData: true },
       });
 
+      // Prioridade 3: OAB data (mais específico)
       const nomeFromOab = lead?.oabData?.nomeReal?.trim();
       if (nomeFromOab) {
         this.cachedLeadName = nomeFromOab;
+        console.log(`[META Variables] Using lead OAB name: "${this.cachedLeadName}"`);
         return this.cachedLeadName;
       }
 
+      // Prioridade 4: Lead name (genérico)
       const nomeFromLead = lead?.name?.trim();
       if (nomeFromLead) {
         this.cachedLeadName = nomeFromLead;
+        console.log(`[META Variables] Using lead name: "${this.cachedLeadName}"`);
         return this.cachedLeadName;
       }
 
       this.cachedLeadName = "Cliente";
+      console.log(`[META Variables] No lead found for phone ${contactPhone}, using fallback: "${this.cachedLeadName}"`);
       return this.cachedLeadName;
     } catch (error) {
       console.error("[META Variables] Error resolving lead name:", error);
@@ -218,6 +236,7 @@ export class METAVariablesResolver {
   private resolveSystemVariables(text: string): string {
     const systemVariables: Record<string, string> = {
       "{{contact_phone}}": this.context.contactPhone || "",
+      "{{contact_name}}": this.context.contactName || "",
       "{{wamid}}": this.context.wamid || "",
       "{{correlation_id}}": this.context.correlationId || "",
       "{{timestamp}}": new Date().toISOString(),

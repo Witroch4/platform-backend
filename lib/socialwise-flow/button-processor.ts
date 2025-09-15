@@ -327,7 +327,17 @@ async function buildActionSendPayload(
     }
 
     const builder = new METAPayloadBuilder();
-    if (inboxId) await builder.setVariablesFromInboxId(String(inboxId), {});
+
+    // Extract webhook context for variable resolution
+    const webhookContext = {
+      contactPhone: validPayload?.context?.contact_phone || validPayload?.context?.contact_source,
+      contactName: validPayload?.context?.contact_name,
+      wamid: validPayload?.context?.wamid,
+    };
+
+    if (inboxId) {
+      await builder.setVariablesFromInboxId(String(inboxId), webhookContext);
+    }
     builder.setChannelType(channelType);
 
     const lower = (channelType || '').toLowerCase();
@@ -359,6 +369,51 @@ async function buildActionSendPayload(
         const explicit = String(ic?.interactiveType || '').toLowerCase();
         const rawButtons: any[] = Array.isArray(ic?.actionReplyButton?.buttons) ? ic.actionReplyButton.buttons : [];
         const hasImage = ic?.header?.type === 'image' && !!ic?.header?.content;
+        const hasCarousel = ic?.actionCarousel || (explicit === 'carousel');
+
+        // Handle carousel type
+        if (hasCarousel && ic?.actionCarousel?.elements) {
+          const elements = Array.isArray(ic.actionCarousel.elements) ? ic.actionCarousel.elements.slice(0, 10) : [];
+          const carouselElements = elements.map((element: any) => {
+            const mappedElement: any = {
+              title: String(element.title || '').slice(0, 80),
+            };
+
+            if (element.subtitle) {
+              mappedElement.subtitle = String(element.subtitle).slice(0, 80);
+            }
+
+            if (element.image_url) {
+              mappedElement.image_url = String(element.image_url);
+            }
+
+            if (element.default_action?.url) {
+              mappedElement.default_action = {
+                type: 'web_url',
+                url: String(element.default_action.url),
+              };
+            }
+
+            if (element.buttons && Array.isArray(element.buttons)) {
+              mappedElement.buttons = element.buttons.slice(0, 3).map((btn: any) => {
+                const title = String(btn.title || '').slice(0, 20);
+                if ((btn?.type === 'url' || btn?.type === 'web_url') && btn?.url) {
+                  return { type: 'web_url', title, url: btn.url };
+                }
+                return { type: 'postback', title, payload: btn.id || btn.payload || title };
+              });
+            }
+
+            return mappedElement;
+          });
+
+          const full = {
+            message_format: 'GENERIC_TEMPLATE',
+            template_type: 'generic',
+            elements: carouselElements,
+          };
+          return lower.includes('instagram') ? { instagram: full } : { facebook: full };
+        }
 
         // Detect IG type
         const hasQuickReplyShape = rawButtons.some((b: any) => String(b?.content_type || '').toLowerCase() === 'text');
