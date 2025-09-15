@@ -60,9 +60,14 @@ export const convertCentralToLocal = (
   reaction: CentralButtonReaction
 ): LocalButtonReaction => {
   // Preferir valores reais quando vierem do backend
-  const value = reaction.type === 'emoji'
-    ? (reaction.emoji || (reaction as any).emoji || '')
-    : (reaction.textResponse || (reaction as any).textReaction || '');
+  let value = '';
+  if (reaction.type === 'emoji') {
+    value = reaction.emoji || (reaction as any).emoji || '';
+  } else if (reaction.type === 'text') {
+    value = reaction.textResponse || (reaction as any).textReaction || '';
+  } else if (reaction.type === 'action') {
+    value = reaction.action || (reaction as any).action || '';
+  }
 
   console.log('🔄 [convertCentralToLocal] Converting reaction:', {
     input: reaction,
@@ -73,22 +78,20 @@ export const convertCentralToLocal = (
     finalValue: value,
     output: {
       buttonId: reaction.buttonId,
-      reaction: reaction.type === 'emoji' || reaction.type === 'text' ? {
-        type: reaction.type,
-        value: value,
-      } : undefined,
+      reaction: (reaction.type === 'emoji' || reaction.type === 'text' || reaction.type === 'action')
+        ? { type: reaction.type as any, value }
+        : undefined,
     }
   });
 
   return {
     buttonId: reaction.buttonId,
-    reaction:
-      reaction.type === 'emoji' || reaction.type === 'text'
-        ? {
-            type: reaction.type,
-            value: value,
-          }
-        : undefined,
+    reaction: (reaction.type === 'emoji' || reaction.type === 'text' || reaction.type === 'action')
+      ? {
+          type: reaction.type as any,
+          value,
+        }
+      : undefined,
   };
 };
 

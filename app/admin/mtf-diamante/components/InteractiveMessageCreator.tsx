@@ -19,7 +19,7 @@ import type {
 } from "@/types/interactive-messages";
 import { StepIndicator } from "./interactive-message-creator/StepIndicator";
 import { TypeSelectionStep } from "./interactive-message-creator/TypeSelectionStep";
-import { UnifiedEditingStep } from "./interactive-message-creator/UnifiedEditingStep";
+import { UnifiedEditingStep } from "./interactive-message-creator/UnifiedEditingStepRefactored";
 import { ReviewStep } from "./interactive-message-creator/ReviewStep";
 import type { MinIOMediaFile } from "./shared/MinIOMediaUpload";
 

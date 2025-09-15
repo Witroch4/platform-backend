@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Smile, X, Settings, Save, Trash2 } from 'lucide-react'
-import { EmojiPicker } from './EmojiPicker'
+import { ButtonReactionPicker } from './ButtonReactionPicker'
 import { toast } from 'sonner'
 
 interface ButtonReaction {
@@ -21,15 +21,17 @@ interface ButtonReactionConfigProps {
     text: string
   }>
   messageId?: string
+  inboxId?: string
   onSave: (reactions: ButtonReaction[]) => Promise<void>
   existingReactions?: ButtonReaction[]
 }
 
-export function ButtonReactionConfig({ 
-  buttons, 
-  messageId, 
-  onSave, 
-  existingReactions = [] 
+export function ButtonReactionConfig({
+  buttons,
+  messageId,
+  inboxId,
+  onSave,
+  existingReactions = []
 }: ButtonReactionConfigProps) {
   const [reactions, setReactions] = useState<ButtonReaction[]>([])
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null)
@@ -216,10 +218,11 @@ export function ButtonReactionConfig({
 
           {/* Emoji Picker */}
           {showEmojiPicker && (
-            <EmojiPicker
+            <ButtonReactionPicker
               isOpen={true}
               onEmojiSelect={(emoji) => handleEmojiSelect(showEmojiPicker, emoji)}
               onClose={() => setShowEmojiPicker(null)}
+              inboxId={inboxId}
             />
           )}
         </CardContent>

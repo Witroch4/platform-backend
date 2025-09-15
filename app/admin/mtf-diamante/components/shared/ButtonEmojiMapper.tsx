@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { Smile, Trash2, Save, Plus } from 'lucide-react'
 import { toast } from 'sonner'
-import { EmojiPicker } from './EmojiPicker'
+import { ButtonReactionPicker } from './ButtonReactionPicker'
 
 interface ButtonReaction {
   buttonId: string
@@ -20,6 +20,7 @@ interface ButtonReaction {
 
 interface ButtonEmojiMapperProps {
   messageId?: string
+  inboxId?: string
   buttons: Array<{
     id: string
     text: string
@@ -30,9 +31,10 @@ interface ButtonEmojiMapperProps {
   className?: string
 }
 
-export function ButtonEmojiMapper({ 
-  messageId, 
-  buttons, 
+export function ButtonEmojiMapper({
+  messageId,
+  inboxId,
+  buttons,
   onReactionsChange,
   showSaveButton = true,
   className = ""
@@ -277,10 +279,11 @@ export function ButtonEmojiMapper({
 
         {/* Emoji Picker */}
         {showEmojiPicker && (
-          <EmojiPicker
+          <ButtonReactionPicker
             isOpen={true}
             onEmojiSelect={(emoji) => handleEmojiSelect(showEmojiPicker, emoji)}
             onClose={() => setShowEmojiPicker(null)}
+            inboxId={inboxId}
           />
         )}
       </CardContent>

@@ -39,7 +39,7 @@ import { Input } from "@/components/ui/input";
 import { SendProgressDialog } from "./send-progress-dialog";
 import { LeadsSelectorDialog } from "./leads-selector-dialog";
 import { InteractivePreview } from "../../shared/InteractivePreview";
-import { EmojiPicker } from "../../shared/EmojiPicker";
+import { ButtonReactionPicker } from "../../shared/ButtonReactionPicker";
 import { WhatsAppTextEditor } from "../../shared/WhatsAppTextEditor";
 import type {
   InteractiveMessage,
@@ -900,10 +900,11 @@ export default function TemplateDetailsInternal({
 
       {/* Emoji Picker para configurar reações */}
       {showEmojiPicker && (
-        <EmojiPicker
+        <ButtonReactionPicker
           isOpen={true}
           onEmojiSelect={(emoji) => handleEmojiSelect(showEmojiPicker, emoji)}
           onClose={() => setShowEmojiPicker(null)}
+          inboxId={undefined} // Templates são globais, não têm inbox específico
         />
       )}
 

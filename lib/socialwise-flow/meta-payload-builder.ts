@@ -78,10 +78,29 @@ export class METAPayloadBuilder {
       },
     };
 
-    // Preserve stored interactive type (pure type) for downstream converters (IG/FB)
-    if (processedContent?.interactiveType) {
-      interactivePayload.interactiveType = processedContent.interactiveType;
-    }
+    // Preserve or detect interactive type for downstream converters (IG/FB)
+    const detectInteractiveType = (): string | undefined => {
+      try {
+        const explicit = (processedContent as any)?.interactiveType as string | undefined;
+        if (explicit) return explicit;
+        // Quick heuristic
+        const buttons = processedContent?.actionReplyButton?.buttons || [];
+        const hasQR = Array.isArray(buttons) && buttons.some((b: any) => String(b?.content_type || '').toLowerCase() === 'text');
+        if (hasQR) return 'quick_replies';
+        const hasImage = processedContent?.header?.type === 'image' && !!processedContent?.header?.content;
+        if (hasImage && Array.isArray(buttons) && buttons.length > 2) return 'generic';
+        if (Array.isArray(buttons) && buttons.length > 0) return 'button_template';
+        if (processedContent?.actionList) return 'list';
+        if (processedContent?.actionCtaUrl) return 'cta_url';
+        if (processedContent?.actionFlow) return 'flow';
+        if (processedContent?.actionLocationRequest) return 'location_request';
+        return undefined;
+      } catch {
+        return undefined;
+      }
+    };
+    const computedType = detectInteractiveType();
+    if (computedType) interactivePayload.interactiveType = computedType;
 
     if (processedContent.header) {
       const builtHeader = this._buildHeader(processedContent.header);

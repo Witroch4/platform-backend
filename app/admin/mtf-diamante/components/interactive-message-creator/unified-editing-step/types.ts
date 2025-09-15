@@ -75,6 +75,7 @@ export interface ButtonsSectionProps {
   disabled?: boolean;
   channelType?: string;
   validationLimits: typeof VALIDATION_LIMITS;
+  inboxId?: string;
 }
 
 export interface CtaUrlSectionProps {

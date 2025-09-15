@@ -793,6 +793,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
 
                     <ButtonEmojiMapper
                       messageId={showReactionConfig}
+                      inboxId={caixaId}
                       buttons={
                         selectedTemplateDetails.components
                           ?.find((c: any) => c.type === 'BUTTONS')
@@ -819,6 +820,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
 
                     <ButtonEmojiMapper
                       messageId={showReactionConfig}
+                      inboxId={caixaId}
                       buttons={[]} // Será carregado pelo componente baseado no messageId
                       showSaveButton={true}
                     />

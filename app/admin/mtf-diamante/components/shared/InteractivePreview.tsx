@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Smile, Settings, Zap, FileText, Download, Info, List, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "next-themes";
-import { EmojiPicker } from "./EmojiPicker";
+import { ButtonReactionPicker } from "./ButtonReactionPicker";
 import { WhatsAppTextEditor } from "./WhatsAppTextEditor";
 import { toast } from "sonner";
 import type {
@@ -68,6 +68,7 @@ interface InteractivePreviewProps {
   className?: string;
   title?: string;
   debounceMs?: number;
+  inboxId?: string;
 }
 
 export function InteractivePreview({
@@ -80,12 +81,14 @@ export function InteractivePreview({
   className = "",
   title,
   debounceMs = 300,
+  inboxId,
 }: InteractivePreviewProps) {
   const { theme } = useTheme();
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
   const [showTextEditor, setShowTextEditor] = useState<string | null>(null);
   const [configMode, setConfigMode] = useState(false);
   const [showAllButtons, setShowAllButtons] = useState(false);
+  const [actionConfig, setActionConfig] = useState<{ buttonId: string; defaultMode: 'send_template' | 'send_interactive' } | null>(null);
 
   // Debounce the message to prevent excessive re-renders during real-time updates
   const debouncedMessage = useDebounce(message, debounceMs);
@@ -108,6 +111,19 @@ export function InteractivePreview({
         if (r.textResponse) merged.textResponse = r.textResponse;
         if (r.action) merged.action = r.action;
       }
+
+      // Debug para todas as ações
+      if (merged.action) {
+        console.log('🔍 [InteractivePreview] Reaction com action encontrada:', {
+          buttonId,
+          action: merged.action,
+          type: typeof merged.action,
+          merged,
+          originalEntries: entries,
+          hasReaction: !!(merged.emoji || merged.textResponse || merged.action)
+        });
+      }
+
       return merged as any;
     },
     [reactions]
@@ -181,6 +197,30 @@ export function InteractivePreview({
         onButtonReactionChange?.(buttonId, { action: "handoff" });
         setShowEmojiPicker(null);
         toast.success(`🚨 Transferência para atendente configurada para o botão`);
+      } else if (emoji.startsWith('send_template:') || emoji.startsWith('send_interactive:')) {
+        // Tokens retornados pelo ButtonReactionPicker (Tabs Templates/Interativas)
+        onButtonReactionChange?.(buttonId, { action: emoji });
+        setShowEmojiPicker(null);
+
+        // Feedback visual imediato com detalhes do que foi configurado
+        const isTemplate = emoji.startsWith('send_template:');
+        const configuredId = emoji.split(':')[1];
+
+        toast.success(
+          isTemplate
+            ? `📄 Template configurado para o botão`
+            : `📱 Mensagem interativa configurada para o botão`,
+          {
+            description: `ID: ${configuredId}`,
+            duration: 3000,
+          }
+        );
+      } else if (emoji === "SEND_TEMPLATE") {
+        setShowEmojiPicker(null);
+        setActionConfig({ buttonId, defaultMode: 'send_template' });
+      } else if (emoji === "SEND_INTERACTIVE") {
+        setShowEmojiPicker(null);
+        setActionConfig({ buttonId, defaultMode: 'send_interactive' });
       } else {
         // Configure emoji (não apaga texto existente)
         onButtonReactionChange?.(buttonId, { emoji });
@@ -399,6 +439,19 @@ export function InteractivePreview({
                       const reaction = getButtonReaction(button.id);
                       const hasReaction = reaction?.emoji || reaction?.textResponse || reaction?.action;
 
+                      // Debug específico para verificar se hasReaction está correto
+                      if (reaction?.action) {
+                        console.log('🔍 [Render Debug] Button render:', {
+                          buttonId: button.id,
+                          buttonTitle: button.title,
+                          reaction,
+                          hasReaction,
+                          hasEmoji: !!reaction?.emoji,
+                          hasTextResponse: !!reaction?.textResponse,
+                          hasAction: !!reaction?.action
+                        });
+                      }
+
                       return (
                         <div key={button.id} className="relative">
                           <button
@@ -431,6 +484,17 @@ export function InteractivePreview({
                                 {reaction?.textResponse && (
                                   <Badge variant="secondary" className="text-xs">
                                     Texto
+                                  </Badge>
+                                )}
+                                {reaction?.action && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    {reaction.action === 'handoff'
+                                      ? 'Atendente'
+                                      : (String(reaction.action).startsWith('send_template:')
+                                          ? 'Template'
+                                          : (String(reaction.action).startsWith('send_interactive:')
+                                              ? 'Interativa'
+                                              : 'Ação'))}
                                   </Badge>
                                 )}
                                 {configMode && showReactionConfig && (
@@ -516,8 +580,14 @@ export function InteractivePreview({
                                       </Badge>
                                     )}
                                     {reaction?.action && (
-                                      <Badge variant="destructive" className="text-xs">
-                                        {reaction.action === 'handoff' ? 'Atendente' : reaction.action}
+                                      <Badge variant="secondary" className="text-xs">
+                                        {reaction.action === 'handoff'
+                                          ? 'Atendente'
+                                          : (String(reaction.action).startsWith('send_template:')
+                                              ? 'Template'
+                                              : (String(reaction.action).startsWith('send_interactive:')
+                                                  ? 'Interativa'
+                                                  : 'Ação'))}
                                       </Badge>
                                     )}
                                     {configMode && showReactionConfig && (
@@ -552,6 +622,19 @@ export function InteractivePreview({
                     {buttons.map((button) => {
                       const reaction = getButtonReaction(button.id);
                       const hasReaction = reaction?.emoji || reaction?.textResponse || reaction?.action;
+
+                      // Debug específico para verificar se hasReaction está correto
+                      if (reaction?.action) {
+                        console.log('🔍 [Render Debug] Button render (<=3):', {
+                          buttonId: button.id,
+                          buttonTitle: button.title,
+                          reaction,
+                          hasReaction,
+                          hasEmoji: !!reaction?.emoji,
+                          hasTextResponse: !!reaction?.textResponse,
+                          hasAction: !!reaction?.action
+                        });
+                      }
 
                       return (
                         <div key={button.id} className="relative">
@@ -588,8 +671,14 @@ export function InteractivePreview({
                                   </Badge>
                                 )}
                                 {reaction?.action && (
-                                  <Badge variant="destructive" className="text-xs">
-                                    {reaction.action === 'handoff' ? 'Atendente' : reaction.action}
+                                  <Badge variant="secondary" className="text-xs">
+                                    {reaction.action === 'handoff'
+                                      ? 'Atendente'
+                                      : (String(reaction.action).startsWith('send_template:')
+                                          ? 'Template'
+                                          : (String(reaction.action).startsWith('send_interactive:')
+                                              ? 'Interativa'
+                                              : 'Ação'))}
                                   </Badge>
                                 )}
                                 {configMode && showReactionConfig && (
@@ -660,10 +749,37 @@ export function InteractivePreview({
 
       {/* Emoji Picker */}
       {showEmojiPicker && (
-        <EmojiPicker
+        <ButtonReactionPicker
           isOpen={true}
           onEmojiSelect={(emoji) => handleEmojiSelect(showEmojiPicker, emoji)}
           onClose={() => setShowEmojiPicker(null)}
+          inboxId={inboxId}
+        />
+      )}
+
+      {actionConfig && (
+        <ButtonReactionPicker
+          isOpen={true}
+          onClose={() => setActionConfig(null)}
+          inboxId={inboxId}
+          onEmojiSelect={(value) => {
+            if (value === "TEXT_RESPONSE") {
+              setShowTextEditor(actionConfig.buttonId);
+            } else if (value === "HANDOFF_ACTION") {
+              onButtonReactionChange?.(actionConfig.buttonId, { action: 'handoff' });
+            } else if (value.startsWith("send_template:")) {
+              const templateId = value.replace("send_template:", "");
+              onButtonReactionChange?.(actionConfig.buttonId, { action: `send_template:${templateId}` });
+            } else if (value.startsWith("send_interactive:")) {
+              const messageId = value.replace("send_interactive:", "");
+              onButtonReactionChange?.(actionConfig.buttonId, { action: `send_interactive:${messageId}` });
+              toast.success(`📱 Mensagem interativa configurada para o botão`);
+            } else {
+              // É um emoji normal
+              onButtonReactionChange?.(actionConfig.buttonId, { emoji: value });
+            }
+            setActionConfig(null);
+          }}
         />
       )}
 

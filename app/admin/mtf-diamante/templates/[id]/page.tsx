@@ -40,7 +40,7 @@ import { Input } from "@/components/ui/input";
 import { SendProgressDialog } from "../../components/TemplatesTab/components/send-progress-dialog";
 import { LeadsSelectorDialog } from "../../components/TemplatesTab/components/leads-selector-dialog";
 import { InteractivePreview } from "../../components/shared/InteractivePreview";
-import { EmojiPicker } from "../../components/shared/EmojiPicker";
+import { ButtonReactionPicker } from "../../components/shared/ButtonReactionPicker";
 import { WhatsAppTextEditor } from "../../components/shared/WhatsAppTextEditor";
 import type {
   InteractiveMessage,
@@ -961,10 +961,11 @@ function TemplateDetailsClient({
 
       {/* Emoji Picker para configurar reações */}
       {showEmojiPicker && (
-        <EmojiPicker
+        <ButtonReactionPicker
           isOpen={true}
           onEmojiSelect={(emoji) => handleEmojiSelect(showEmojiPicker, emoji)}
           onClose={() => setShowEmojiPicker(null)}
+          inboxId={undefined} // Templates são globais, não têm inbox específico
         />
       )}
 

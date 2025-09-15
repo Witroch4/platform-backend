@@ -5,6 +5,7 @@ import { useState, useCallback, useMemo, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useMtfData } from "../../context/MtfDataProvider";
+import { isInstagramChannel } from "@/types/interactive-messages";
 
 // Import refactored components
 import {
@@ -29,7 +30,6 @@ import {
 
 // Import legacy components that are still needed
 import { WhatsAppTextEditor } from "../shared/WhatsAppTextEditor";
-import { ReactionConfigManager } from "../shared/ReactionConfigManager";
 import MinIOMediaUpload, { MinIOMediaFile } from "../shared/MinIOMediaUpload";
 
 // Import validation hook
@@ -39,6 +39,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
   message,
   reactions,
   variables = [],
+  channelType = 'Channel::WhatsApp',
   onMessageUpdate,
   onReactionUpdate,
   onNext,
@@ -88,34 +89,34 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
     validateOnMount: false,
   });
 
-  // Get channel type from context
+  // Get MtfData context for reactions management
   const { caixas } = useMtfData();
-  const channelType = useMemo(
-    () => caixas?.find((c: any) => c.id === inboxId)?.channelType ?? null,
-    [caixas, inboxId]
-  );
 
-  // Update header media files when message header changes
+  // Update header media files when message header changes (debounced)
   useEffect(() => {
-    const mediaUrl = message.header?.media_url || message.header?.mediaUrl || message.header?.content;
-    if (message.header && message.header.type !== "text" && mediaUrl) {
-      setHeaderMediaFiles([
-        {
-          id: "header-media",
-          progress: 100,
-          status: "success",
-          url: mediaUrl,
-          mime_type:
-            message.header.type === "image"
-              ? "image/jpeg"
-              : message.header.type === "video"
-                ? "video/mp4"
-                : "application/pdf",
-        },
-      ]);
-    } else if (!mediaUrl || message.header?.type === "text") {
-      setHeaderMediaFiles([]);
-    }
+    const timeout = setTimeout(() => {
+      const mediaUrl = message.header?.media_url || message.header?.mediaUrl || message.header?.content;
+      if (message.header && message.header.type !== "text" && mediaUrl) {
+        setHeaderMediaFiles([
+          {
+            id: "header-media",
+            progress: 100,
+            status: "success",
+            url: mediaUrl,
+            mime_type:
+              message.header.type === "image"
+                ? "image/jpeg"
+                : message.header.type === "video"
+                  ? "video/mp4"
+                  : "application/pdf",
+          },
+        ]);
+      } else if (!mediaUrl || message.header?.type === "text") {
+        setHeaderMediaFiles([]);
+      }
+    }, 150); // Debounce updates
+
+    return () => clearTimeout(timeout);
   }, [message.header?.content, message.header?.media_url, message.header?.mediaUrl, message.header?.type]);
 
   // Ensure header exists as text on first render
@@ -130,6 +131,15 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
   // Extract buttons from message action and convert to InteractiveButton format
   const buttons = useMemo(() => {
     const candidates: any[] = [];
+
+    // Handle new quick_replies format
+    const fromQuickReplies = (message.action as any)?.quick_replies;
+    if (Array.isArray(fromQuickReplies)) candidates.push(...fromQuickReplies);
+
+    const fromContentQuickReplies = (message as any)?.content?.action?.quick_replies;
+    if (Array.isArray(fromContentQuickReplies)) candidates.push(...fromContentQuickReplies);
+
+    // Handle standard buttons format
     const fromAction = (message.action as any)?.buttons;
     if (Array.isArray(fromAction)) candidates.push(...fromAction);
 
@@ -248,16 +258,24 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
       if (reaction.reaction?.type === 'emoji') {
         centralReaction.emoji = reaction.reaction.value;
         centralReaction.textResponse = undefined;
+        centralReaction.action = undefined as any;
       }
       if (reaction.reaction?.type === 'text') {
         centralReaction.textResponse = reaction.reaction.value;
         centralReaction.emoji = undefined;
+        centralReaction.action = undefined as any;
+      }
+      if (reaction.reaction?.type === 'action') {
+        centralReaction.action = reaction.reaction.value;
+        centralReaction.emoji = undefined;
+        centralReaction.textResponse = undefined;
       }
 
       onReactionUpdate(reaction.buttonId, centralReaction);
     },
     [onReactionUpdate]
   );
+
 
   const handleReactionRemove = useCallback(
     (buttonId: string) => {
@@ -268,28 +286,131 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
 
   // Handle next step
   const handleNext = useCallback(async () => {
+    console.log('🔄 [Next] Iniciando validação...');
+
     if (message.header?.type === "text" && !message.header.content?.trim()) {
+      console.log('🔧 [Next] Removendo header de texto vazio');
       onMessageUpdate({ header: undefined });
     }
 
+    const messageState = {
+      name: message.name,
+      type: message.type,
+      bodyLength: message.body?.text?.length || 0,
+      hasHeader: !!message.header?.content,
+      buttonsCount: buttons.length,
+      footerLength: message.footer?.text?.length || 0
+    };
+    console.log('  [Next] Estado da mensagem:', messageState);
+
     const immediate = await validateMessage({ ...message });
-    if (immediate.isValid && canProceed()) {
+    const canProceedResult = canProceed();
+
+    if (immediate.isValid && canProceedResult) {
+      console.log('✅ [Next] Validação OK - avançando para próxima etapa');
       onNext();
     } else {
-      toast.error("Please fix validation errors before proceeding");
+      console.warn('⚠️ [Next] Validação pendente:', {
+        validationValid: immediate.isValid,
+        canProceed: canProceedResult,
+        errorsCount: immediate.errors.length
+      });
+      toast.error("Por favor, corrija os erros de validação antes de continuar");
     }
-  }, [validateMessage, message, canProceed, onNext, onMessageUpdate]);
+  }, [validateMessage, message, canProceed, onNext, onMessageUpdate, buttons]);
 
   // Check if form has errors
   const hasErrors = validationState.hasErrors || !canProceed();
 
+  // Get all error messages for display
+  const allErrorMessages = useMemo(() => {
+    const messages: string[] = [];
+
+    // Get errors from message validation if available
+    if (validationState.messageValidation?.errors) {
+      validationState.messageValidation.errors.forEach(error => {
+        messages.push(error.message);
+      });
+    }
+
+    // Get field-specific errors
+    Object.values(validationState.fieldValidations).forEach(fieldValidation => {
+      if (fieldValidation.errors) {
+        fieldValidation.errors.forEach(error => {
+          messages.push(error.message);
+        });
+      }
+    });
+
+    return messages;
+  }, [validationState.messageValidation, validationState.fieldValidations]);
+
   // Normalize reactions from backend
   const normalizedReactions = useMemo(() => {
-    return (reactions || []).map((r) => ({
-      ...r,
-      textResponse: (r as any).textResponse ?? (r as any).textReaction ?? undefined,
-    }));
+    return (reactions || []).map((r) => {
+      const anyReaction = r as any;
+
+      // Se já está no formato correto (com campos diretos type, emoji, textResponse, action)
+      if (anyReaction.type && (anyReaction.emoji || anyReaction.textResponse || anyReaction.action)) {
+        return anyReaction;
+      }
+
+      // Se tem o formato .reaction nested
+      if (anyReaction.reaction) {
+        const nestedReaction = anyReaction.reaction;
+        return {
+          ...anyReaction,
+          type: nestedReaction.type,
+          emoji: nestedReaction.type === 'emoji' ? nestedReaction.value : undefined,
+          textResponse: nestedReaction.type === 'text' ? nestedReaction.value : undefined,
+          action: nestedReaction.type === 'action' ? nestedReaction.value : undefined,
+        };
+      }
+
+      // Converter do formato do backend (textResponse, emoji diretos sem type)
+      if (anyReaction.textResponse || anyReaction.textReaction) {
+        return {
+          ...anyReaction,
+          type: 'text',
+          textResponse: anyReaction.textResponse || anyReaction.textReaction,
+          emoji: undefined,
+          action: undefined
+        };
+      }
+
+      if (anyReaction.emoji) {
+        return {
+          ...anyReaction,
+          type: 'emoji',
+          emoji: anyReaction.emoji,
+          textResponse: undefined,
+          action: undefined
+        };
+      }
+
+      if (anyReaction.action) {
+        return {
+          ...anyReaction,
+          type: 'action',
+          action: anyReaction.action,
+          emoji: undefined,
+          textResponse: undefined
+        };
+      }
+
+      // Fallback - manter original
+      return {
+        ...anyReaction,
+        textResponse: anyReaction.textResponse ?? anyReaction.textReaction ?? undefined,
+      };
+    });
   }, [reactions]);
+
+  // Determine if we should show Header and Footer sections
+  // For Instagram Quick Replies, header and footer are not supported
+  const isInstagram = isInstagramChannel(channelType);
+  const isQuickReplies = message.type === 'quick_replies';
+  const shouldShowHeaderAndFooter = !(isInstagram && isQuickReplies);
 
   return (
     <div className={cn("space-y-6", className)}>
@@ -306,16 +427,19 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
             validateField={validateField}
           />
 
-          <HeaderSection
-            message={message}
-            onMessageUpdate={onMessageUpdate}
-            disabled={disabled}
-            isFieldValid={isFieldValid}
-            headerMediaFiles={headerMediaFiles}
-            setHeaderMediaFiles={setHeaderMediaFiles}
-            handleValidationError={handleValidationError}
-            validateField={validateField}
-          />
+          {shouldShowHeaderAndFooter && (
+            <HeaderSection
+              message={message}
+              onMessageUpdate={onMessageUpdate}
+              disabled={disabled}
+              isFieldValid={isFieldValid}
+              headerMediaFiles={headerMediaFiles}
+              setHeaderMediaFiles={setHeaderMediaFiles}
+              handleValidationError={handleValidationError}
+              validateField={validateField}
+              channelType={channelType || undefined}
+            />
+          )}
 
           <BodySection
             message={message}
@@ -323,15 +447,19 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
             disabled={disabled}
             isFieldValid={isFieldValid}
             validationLimits={VALIDATION_LIMITS}
+            channelType={channelType || undefined}
           />
 
-          <FooterSection
-            message={message}
-            onMessageUpdate={onMessageUpdate}
-            disabled={disabled}
-            isFieldValid={isFieldValid}
-            validationLimits={VALIDATION_LIMITS}
-          />
+          {shouldShowHeaderAndFooter && (
+            <FooterSection
+              message={message}
+              onMessageUpdate={onMessageUpdate}
+              disabled={disabled}
+              isFieldValid={isFieldValid}
+              validationLimits={VALIDATION_LIMITS}
+              channelType={channelType || undefined}
+            />
+          )}
 
           <CtaUrlSection
             message={message}
@@ -344,23 +472,25 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
           />
 
           {!isCtaUrl && (
-            <ButtonsSection
-              message={message}
-              buttons={buttons}
-              reactions={normalizedReactions}
-              onButtonsChange={handleButtonsChange}
-              onReactionChange={handleReactionChange}
-              disabled={disabled}
-              channelType={channelType || undefined}
-              validationLimits={VALIDATION_LIMITS}
-            />
-          )}
+          <ButtonsSection
+            message={message}
+            buttons={buttons}
+            reactions={normalizedReactions}
+            onButtonsChange={handleButtonsChange}
+            onReactionChange={handleReactionChange}
+            disabled={disabled}
+            channelType={channelType || undefined}
+            validationLimits={VALIDATION_LIMITS}
+            inboxId={inboxId}
+          />
+        )}
 
           <NavigationSection
             onBack={onBack}
             onNext={handleNext}
             disabled={disabled}
             hasErrors={hasErrors}
+            errorMessages={allErrorMessages}
           />
         </div>
 
@@ -370,6 +500,43 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
             message={message}
             variables={variables}
             channelType={channelType || undefined}
+            reactions={normalizedReactions}
+            inboxId={inboxId}
+            onReactionChange={(buttonId, reaction) => {
+              // Buscar reação existente para manter valores não alterados
+              const existingReaction = normalizedReactions.find(r => r.buttonId === buttonId);
+
+              const centralReaction: Partial<CentralButtonReaction> = {
+                buttonId,
+                type: reaction.action ? 'action' : (reaction.emoji ? 'emoji' : 'text'),
+                isActive: true,
+              };
+
+              // Manter valores existentes e aplicar novas mudanças
+              if (existingReaction?.emoji) centralReaction.emoji = existingReaction.emoji;
+              if (existingReaction?.textResponse) centralReaction.textResponse = existingReaction.textResponse;
+              if (existingReaction?.action) centralReaction.action = existingReaction.action;
+
+              // Aplicar novas mudanças
+              if (reaction.action !== undefined) {
+                centralReaction.action = reaction.action;
+                centralReaction.type = reaction.action ? 'action' : (centralReaction.emoji ? 'emoji' : 'text');
+              }
+              if (reaction.emoji !== undefined) {
+                centralReaction.emoji = reaction.emoji;
+                if (!reaction.action) {
+                  centralReaction.type = reaction.emoji ? 'emoji' : (centralReaction.textResponse ? 'text' : 'emoji');
+                }
+              }
+              if (reaction.textResponse !== undefined) {
+                centralReaction.textResponse = reaction.textResponse;
+                if (!reaction.action && !reaction.emoji) {
+                  centralReaction.type = reaction.textResponse ? 'text' : 'emoji';
+                }
+              }
+
+              onReactionUpdate(buttonId, centralReaction);
+            }}
           />
         </div>
       </div>
@@ -405,25 +572,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
         />
       )}
 
-      {reactionConfigButton && (
-        <ReactionConfigManager
-          buttonId={reactionConfigButton}
-          buttonText={
-            buttons.find((b) => b.id === reactionConfigButton)?.text || ""
-          }
-          currentReaction={
-            reactions.find((r) => r.buttonId === reactionConfigButton)
-              ? convertCentralToLocal(
-                  reactions.find((r) => r.buttonId === reactionConfigButton)!
-                )
-              : undefined
-          }
-          onReactionChange={handleReactionChange}
-          onReactionRemove={() => handleReactionRemove(reactionConfigButton)}
-          isOpen={true}
-          onClose={() => setReactionConfigButton(null)}
-        />
-      )}
+      {/* ReactionConfigManager now handled inside ButtonsSection */}
     </div>
   );
 };

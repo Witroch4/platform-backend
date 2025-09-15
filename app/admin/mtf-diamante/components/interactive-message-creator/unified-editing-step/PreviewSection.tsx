@@ -14,6 +14,7 @@ interface PreviewSectionProps {
   channelType?: string;
   reactions?: CentralButtonReaction[];
   onReactionChange?: (buttonId: string, reaction: { emoji?: string; textResponse?: string; action?: string }) => void;
+  inboxId?: string;
 }
 
 export const PreviewSection: React.FC<PreviewSectionProps> = ({
@@ -22,6 +23,7 @@ export const PreviewSection: React.FC<PreviewSectionProps> = ({
   channelType,
   reactions = [],
   onReactionChange,
+  inboxId,
 }) => {
   // Create a resolved version of the message for preview
   const resolvedMessage = React.useMemo((): InteractiveMessage => {
@@ -81,6 +83,7 @@ export const PreviewSection: React.FC<PreviewSectionProps> = ({
             onButtonReactionChange={onReactionChange}
             title="Interactive Preview"
             className="w-full"
+            inboxId={inboxId}
           />
         </CardContent>
       </Card>

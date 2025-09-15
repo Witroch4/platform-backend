@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Info } from "lucide-react";
 import { ButtonManager } from "../../shared/ButtonManager";
 import { getInstagramTemplateType } from "./utils";
+import { ButtonReactionPicker } from "../../shared/ButtonReactionPicker";
 import type { ButtonsSectionProps } from "./types";
 
 export const ButtonsSection: React.FC<ButtonsSectionProps> = ({
@@ -18,6 +19,7 @@ export const ButtonsSection: React.FC<ButtonsSectionProps> = ({
   disabled = false,
   channelType,
   validationLimits,
+  inboxId,
 }) => {
   const [reactionConfigButton, setReactionConfigButton] = React.useState<string | null>(null);
 
@@ -121,11 +123,40 @@ export const ButtonsSection: React.FC<ButtonsSectionProps> = ({
             // Convert array format to individual calls if needed
             reactionsArray.forEach(reaction => onReactionChange(reaction));
           }}
+          onRequestReactionConfig={(buttonId) => setReactionConfigButton(buttonId)}
           maxButtons={getMaxButtons}
           disabled={disabled}
           idPrefix={channelType === 'Channel::Instagram' ? 'ig_' : channelType === 'Channel::FacebookPage' ? 'fb_' : ''}
           isInstagramQuickReplies={isInstagramQuickReplies}
         />
+
+        {reactionConfigButton && (
+          <ButtonReactionPicker
+            isOpen={true}
+            onClose={() => setReactionConfigButton(null)}
+            inboxId={inboxId}
+            onEmojiSelect={(value) => {
+              if (value === "TEXT_RESPONSE") {
+                // Abrir editor de texto (será implementado no InteractivePreview se necessário)
+                console.log("TEXT_RESPONSE selected for button:", reactionConfigButton);
+              } else if (value === "HANDOFF_ACTION") {
+                onReactionChange({ buttonId: reactionConfigButton, reaction: { type: 'action', value: 'handoff' } } as any);
+              } else if (value.startsWith("send_template:")) {
+                const templateId = value.replace("send_template:", "");
+                onReactionChange({ buttonId: reactionConfigButton, reaction: { type: 'action', value: `send_template:${templateId}` } } as any);
+                console.log(`📋 [ButtonsSection] Template configurado: ${templateId} para botão: ${reactionConfigButton}`);
+              } else if (value.startsWith("send_interactive:")) {
+                const messageId = value.replace("send_interactive:", "");
+                onReactionChange({ buttonId: reactionConfigButton, reaction: { type: 'action', value: `send_interactive:${messageId}` } } as any);
+                console.log(`🔗 [ButtonsSection] Mensagem interativa configurada: ${messageId} para botão: ${reactionConfigButton}`);
+              } else {
+                // É um emoji normal
+                onReactionChange({ buttonId: reactionConfigButton, reaction: { type: 'emoji', value } } as any);
+              }
+              setReactionConfigButton(null);
+            }}
+          />
+        )}
       </CardContent>
     </Card>
   );

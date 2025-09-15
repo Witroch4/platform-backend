@@ -30,10 +30,13 @@ export interface InteractiveButton {
 
 export interface ButtonReaction {
   buttonId: string;
+  // Local reaction config used by EmojiPicker
   reaction?: {
-    type: 'emoji' | 'text';
+    type: 'emoji' | 'text' | 'action';
     value: string;
   };
+  // Optional direct action field for preview/other UIs
+  action?: string;
 }
 
 interface ButtonManagerProps {
@@ -41,6 +44,7 @@ interface ButtonManagerProps {
   reactions?: ButtonReaction[];
   onChange: (buttons: InteractiveButton[]) => void;
   onReactionChange?: (reactions: ButtonReaction[]) => void;
+  onRequestReactionConfig?: (buttonId: string) => void;
   maxButtons?: number;
   disabled?: boolean;
   className?: string;
@@ -128,6 +132,7 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
   reactions = [],
   onChange,
   onReactionChange,
+  onRequestReactionConfig,
   maxButtons = 3,
   disabled = false,
   className,
@@ -326,12 +331,10 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
   };
 
 
-  // Handle reaction configuration (placeholder for integration with ReactionConfigManager)
+  // Handle reaction configuration (placeholder for integration with EmojiPicker)
   const handleReactionConfig = (buttonId: string) => {
-    // This will be integrated with the ReactionConfigManager component
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Configure reaction for button:', buttonId);
-    }
+    if (onRequestReactionConfig) return onRequestReactionConfig(buttonId);
+    if (process.env.NODE_ENV === 'development') console.log('Configure reaction for button:', buttonId);
   };
 
   return (
@@ -560,14 +563,26 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
                                 <div className="flex items-center gap-1">
                                   <Zap className="h-3 w-3 text-muted-foreground" />
                                   <span className="text-xs text-muted-foreground">
-                                    {reactionData?.action || 'Ação'}
+                                    {reactionData?.action === 'handoff'
+                                      ? 'Atendente'
+                                      : (String(reactionData?.action || '').startsWith('send_template:')
+                                          ? 'Template'
+                                          : (String(reactionData?.action || '').startsWith('send_interactive:')
+                                              ? 'Interativa'
+                                              : 'Ação'))}
                                   </span>
                                 </div>
                               )}
                             </div>
                             <Badge variant="secondary" className="text-xs">
                               {reactionData?.type === 'emoji' ? 'Emoji' : 
-                               reactionData?.type === 'text' ? 'Texto' : 'Ação'}
+                               reactionData?.type === 'text' ? 'Texto' : (
+                                 reactionData?.action === 'handoff' ? 'Atendente' : (
+                                   String(reactionData?.action || '').startsWith('send_template:') ? 'Template' : (
+                                     String(reactionData?.action || '').startsWith('send_interactive:') ? 'Interativa' : 'Ação'
+                                   )
+                                 )
+                               )}
                             </Badge>
                           </div>
                         </div>
