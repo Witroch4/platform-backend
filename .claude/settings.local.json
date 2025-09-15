@@ -37,7 +37,8 @@
       "Bash(find:*)",
       "mcp__playwright__browser_install",
       "mcp__playwright__browser_fill_form",
-      "Bash(docker history:*)"
+      "Bash(docker history:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

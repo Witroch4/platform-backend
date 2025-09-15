@@ -148,7 +148,8 @@ ENV AUTH_SECRET=${AUTH_SECRET} \
 # Dependências JS para build
 COPY package*.json ./
 COPY prisma ./prisma/
-RUN npm ci
+# Instalar dependências excluindo Playwright (não necessário em produção)
+RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci
 
 # Código-fonte
 COPY . .
@@ -190,7 +191,7 @@ RUN if [ -f /etc/ImageMagick-6/policy.xml ]; then \
 # Apenas deps de PRODUÇÃO
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/prisma ./prisma/
-RUN npm ci --omit=dev && \
+RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci --omit=dev && \
     npx prisma generate && \
     npm cache clean --force
 

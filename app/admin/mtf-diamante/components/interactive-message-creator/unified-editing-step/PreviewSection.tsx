@@ -84,6 +84,7 @@ export const PreviewSection: React.FC<PreviewSectionProps> = ({
             title="Interactive Preview"
             className="w-full"
             inboxId={inboxId}
+            templateName={message.name}
           />
         </CardContent>
       </Card>

@@ -14,6 +14,7 @@ import {
   BodySection,
   FooterSection,
   ButtonsSection,
+  CarouselSection,
   CtaUrlSection,
   NavigationSection,
   PreviewSection,
@@ -471,19 +472,48 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
             disabled={disabled}
           />
 
-          {!isCtaUrl && (
-          <ButtonsSection
-            message={message}
-            buttons={buttons}
-            reactions={normalizedReactions}
-            onButtonsChange={handleButtonsChange}
-            onReactionChange={handleReactionChange}
-            disabled={disabled}
-            channelType={channelType || undefined}
-            validationLimits={VALIDATION_LIMITS}
-            inboxId={inboxId}
-          />
-        )}
+          {!isCtaUrl && message.type !== "carousel" && (
+            <ButtonsSection
+              message={message}
+              buttons={buttons}
+              reactions={normalizedReactions}
+              onButtonsChange={handleButtonsChange}
+              onReactionChange={handleReactionChange}
+              disabled={disabled}
+              channelType={channelType || undefined}
+              validationLimits={VALIDATION_LIMITS}
+              inboxId={inboxId}
+            />
+          )}
+
+          {!isCtaUrl && (message.type === "carousel" || message.action?.type === "carousel") && (
+            <CarouselSection
+              message={message}
+              onMessageUpdate={onMessageUpdate}
+              disabled={disabled}
+              channelType={channelType || undefined}
+              isFieldValid={isFieldValid}
+              validationLimits={{
+                HEADER_TEXT_MAX_LENGTH: VALIDATION_LIMITS.HEADER_TEXT_MAX_LENGTH,
+                BODY_TEXT_MAX_LENGTH: VALIDATION_LIMITS.BODY_TEXT_MAX_LENGTH,
+                FOOTER_TEXT_MAX_LENGTH: VALIDATION_LIMITS.FOOTER_TEXT_MAX_LENGTH,
+                BUTTON_TITLE_MAX_LENGTH: 20,
+                BUTTON_MAX_COUNT: VALIDATION_LIMITS.BUTTON_MAX_COUNT,
+                LIST_SECTION_MAX_COUNT: 10,
+                LIST_ROW_MAX_COUNT: 10,
+                LIST_TITLE_MAX_LENGTH: 24,
+                LIST_DESCRIPTION_MAX_LENGTH: 72,
+                INSTAGRAM_QUICK_REPLIES_MAX_LENGTH: VALIDATION_LIMITS.INSTAGRAM_QUICK_REPLIES_MAX_LENGTH,
+                INSTAGRAM_QUICK_REPLIES_MAX_COUNT: 13,
+                INSTAGRAM_QUICK_REPLY_TITLE_MAX_LENGTH: 20,
+                INSTAGRAM_GENERIC_MAX_ELEMENTS: 10,
+                INSTAGRAM_GENERIC_TITLE_MAX_LENGTH: 80,
+                INSTAGRAM_GENERIC_SUBTITLE_MAX_LENGTH: 80,
+                INSTAGRAM_BUTTON_TEMPLATE_TEXT_MAX_LENGTH: 640,
+                INSTAGRAM_BUTTON_TEMPLATE_MAX_BUTTONS: 3,
+              }}
+            />
+          )}
 
           <NavigationSection
             onBack={onBack}

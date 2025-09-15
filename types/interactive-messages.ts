@@ -66,13 +66,15 @@ export type InteractiveMessageType =
   | "product_list" // Product list message
   | "quick_replies" // Instagram Quick Replies
   | "generic" // Instagram Generic Template (Carousel)
-  | "button_template"; // Instagram Button Template
+  | "button_template" // Instagram Button Template
+  | "carousel"; // Carousel Template (Multi-element Generic)
 
 // Instagram-specific message types
 export type InstagramMessageType =
   | "quick_replies" // Instagram Quick Replies (max 13 options)
   | "generic" // Instagram Generic Template (Carousel, max 10 elements)
-  | "button_template"; // Instagram Button Template (1-3 buttons)
+  | "button_template" // Instagram Button Template (1-3 buttons)
+  | "carousel"; // Instagram Carousel Template (multi-element generic)
 
 // WhatsApp-specific message types
 export type WhatsAppMessageType =
@@ -222,6 +224,26 @@ export interface StickerAction {
   mediaId: string;
 }
 
+// Carousel element interface (internal system structure)
+export interface CarouselElement {
+  id?: string;
+  title: string; // Max 80 characters for Instagram
+  subtitle?: string; // Max 80 characters for Instagram
+  image_url?: string;
+  default_action?: {
+    type: 'web_url';
+    url: string;
+    messenger_extensions?: boolean;
+    webview_height_ratio?: 'compact' | 'tall' | 'full';
+  };
+  buttons?: QuickReplyButton[]; // Max 3 buttons per element for Instagram
+}
+
+// Carousel action interface (internal system structure)
+export interface CarouselAction {
+  elements: CarouselElement[]; // Max 10 elements for Instagram
+}
+
 // Action union type for different message types (internal system structure)
 export type MessageAction =
   | { type: "button"; buttons: QuickReplyButton[] }
@@ -233,7 +255,8 @@ export type MessageAction =
   | { type: "reaction"; action: ReactionAction }
   | { type: "sticker"; action: StickerAction }
   | { type: "product"; product: Product }
-  | { type: "product_list"; productList: ProductList };
+  | { type: "product_list"; productList: ProductList }
+  | { type: "carousel"; action: CarouselAction };
 
 // Main interactive message interface
 export interface InteractiveMessage {
@@ -355,6 +378,12 @@ export function isLocationRequestAction(
   return action.type === "location_request";
 }
 
+export function isCarouselAction(
+  action: MessageAction
+): action is Extract<MessageAction, { type: "carousel" }> {
+  return action.type === "carousel";
+}
+
 // Constants for validation
 export const MESSAGE_LIMITS = {
   HEADER_TEXT_MAX_LENGTH: 60,
@@ -396,12 +425,16 @@ export interface InstagramGenericElement {
   default_action?: {
     type: 'web_url';
     url: string;
+    messenger_extensions?: boolean;
+    webview_height_ratio?: 'compact' | 'tall' | 'full';
   };
   buttons?: Array<{
     type: 'web_url' | 'postback';
     title: string;
     url?: string; // For web_url
     payload?: string; // For postback
+    messenger_extensions?: boolean; // For web_url
+    webview_height_ratio?: 'compact' | 'tall' | 'full'; // For web_url
   }>; // Max 3 buttons per element
 }
 

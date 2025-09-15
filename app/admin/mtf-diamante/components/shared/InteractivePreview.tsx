@@ -69,6 +69,7 @@ interface InteractivePreviewProps {
   title?: string;
   debounceMs?: number;
   inboxId?: string;
+  templateName?: string; // Nome do template/mensagem para exibir no badge
 }
 
 export function InteractivePreview({
@@ -82,6 +83,7 @@ export function InteractivePreview({
   title,
   debounceMs = 300,
   inboxId,
+  templateName,
 }: InteractivePreviewProps) {
   const { theme } = useTheme();
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
@@ -135,6 +137,14 @@ export function InteractivePreview({
       return [];
     }
     return debouncedMessage.action.buttons || [];
+  }, [debouncedMessage.action]);
+
+  // Get carousel elements from message action
+  const carouselElements = useMemo(() => {
+    if (!debouncedMessage.action || debouncedMessage.action.type !== "carousel") {
+      return [];
+    }
+    return debouncedMessage.action.action?.elements || [];
   }, [debouncedMessage.action]);
 
   // CTA URL preview support
@@ -332,9 +342,16 @@ export function InteractivePreview({
   return (
     <div className={cn("space-y-4", className)}>
       {/* Header with title and config toggle */}
-      {(title || showReactionConfig) && (
+      {(title || showReactionConfig || templateName) && (
         <div className="flex items-center justify-between">
-          {title && <h3 className="text-lg font-semibold">{title}</h3>}
+          <div className="flex items-center gap-2">
+            {title && <h3 className="text-lg font-semibold">{title}</h3>}
+            {templateName && (
+              <Badge variant="outline" className="text-xs">
+                {templateName}
+              </Badge>
+            )}
+          </div>
           {showReactionConfig && (
             <div className="flex items-center gap-2">
               <Button
@@ -429,8 +446,101 @@ export function InteractivePreview({
               </div>
             )}
 
+            {/* Carousel Elements */}
+            {!ctaUrl && carouselElements.length > 0 && (
+              <div className="mt-3 space-y-2">
+                <div className="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">
+                  Carrossel ({carouselElements.length} elementos)
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  {carouselElements.map((element: any, index: number) => (
+                    <div key={index} className="flex-shrink-0 w-48 border rounded-lg bg-gray-50 dark:bg-gray-800">
+                      {/* Element Image */}
+                      {element.image_url && (
+                        <div className="w-full h-32 mb-2">
+                          <img
+                            src={element.image_url}
+                            alt={element.title}
+                            className="w-full h-full object-cover rounded-t-lg"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = "none";
+                            }}
+                          />
+                        </div>
+                      )}
+
+                      <div className="p-2">
+                        {/* Element Title */}
+                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">
+                          {element.title}
+                        </div>
+
+                        {/* Element Subtitle */}
+                        {element.subtitle && (
+                          <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+                            {element.subtitle}
+                          </div>
+                        )}
+
+                        {/* Element Buttons */}
+                        {element.buttons && element.buttons.length > 0 && (
+                          <div className="space-y-1">
+                            {element.buttons.map((button: any, btnIndex: number) => {
+                              const buttonId = button.id || `${element.id || index}_btn_${btnIndex}`;
+                              const reaction = getButtonReaction(buttonId);
+                              const hasReaction = reaction?.emoji || reaction?.textResponse || reaction?.action;
+
+                              return (
+                                <button
+                                  key={btnIndex}
+                                  onClick={() => handleButtonClick({ id: buttonId, title: button.title })}
+                                  className={cn(
+                                    "w-full p-1.5 text-xs border rounded transition-colors text-left",
+                                    "text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800",
+                                    "hover:bg-blue-50 dark:hover:bg-blue-900/20",
+                                    configMode &&
+                                      showReactionConfig &&
+                                      "ring-1 ring-blue-300 dark:ring-blue-600",
+                                    hasReaction &&
+                                      "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700"
+                                  )}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span className="truncate">{button.title}</span>
+                                    <div className="flex items-center gap-1 flex-shrink-0">
+                                      {showReactionIndicators && hasReaction && (
+                                        <Zap className="h-2 w-2 text-yellow-500" />
+                                      )}
+                                      {reaction?.emoji && (
+                                        <span className="text-xs">{reaction.emoji}</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* Default Action Button */}
+                        {element.default_action?.url && (
+                          <button
+                            onClick={() => window.open(element.default_action.url, '_blank', 'noopener')}
+                            className="w-full mt-1 p-1.5 text-xs border rounded text-center text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          >
+                            Abrir
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Buttons */}
-            {!ctaUrl && buttons.length > 0 && (
+            {!ctaUrl && !carouselElements.length && buttons.length > 0 && (
               <div className="mt-3 space-y-1">
                 {/* Quando houver mais de 3 botões, exibir 2 + "Ver todas as opções" */}
                 {buttons.length > 3 ? (

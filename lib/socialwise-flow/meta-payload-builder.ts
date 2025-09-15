@@ -88,6 +88,8 @@ export class METAPayloadBuilder {
         const hasQR = Array.isArray(buttons) && buttons.some((b: any) => String(b?.content_type || '').toLowerCase() === 'text');
         if (hasQR) return 'quick_replies';
         const hasImage = processedContent?.header?.type === 'image' && !!processedContent?.header?.content;
+        const hasCarousel = processedContent?.actionCarousel || (processedContent?.actionReplyButton?.elements && Array.isArray(processedContent.actionReplyButton.elements));
+        if (hasCarousel) return 'carousel';
         if (hasImage && Array.isArray(buttons) && buttons.length > 2) return 'generic';
         if (Array.isArray(buttons) && buttons.length > 0) return 'button_template';
         if (processedContent?.actionList) return 'list';
@@ -100,7 +102,7 @@ export class METAPayloadBuilder {
       }
     };
     const computedType = detectInteractiveType();
-    if (computedType) interactivePayload.interactiveType = computedType;
+    // Note: interactiveType is used internally for downstream converters (IG/FB) but should not be in WhatsApp payload
 
     if (processedContent.header) {
       const builtHeader = this._buildHeader(processedContent.header);
@@ -115,7 +117,12 @@ export class METAPayloadBuilder {
       };
     }
 
-    if (processedContent.actionReplyButton) {
+    if (processedContent.actionCarousel) {
+      interactivePayload.type = "carousel";
+      interactivePayload.action = this._buildCarouselAction(
+        processedContent.actionCarousel
+      );
+    } else if (processedContent.actionReplyButton) {
       interactivePayload.type = "button";
       interactivePayload.action = this._buildButtonAction(
         processedContent.actionReplyButton
@@ -454,6 +461,71 @@ export class METAPayloadBuilder {
         flow_action_payload: flowActionPayload,
         mode: dbAction.flowMode || "published", // Usa flowMode do schema
       },
+    };
+  }
+
+  private _buildCarouselAction(dbAction: any): any {
+    if (
+      !dbAction.elements ||
+      !Array.isArray(dbAction.elements) ||
+      dbAction.elements.length === 0
+    ) {
+      throw new Error(
+        "Ação de carrossel requer um array de 'elements' no payload JSON."
+      );
+    }
+
+    return {
+      elements: dbAction.elements.slice(0, 10).map((element: any) => {
+        const mappedElement: any = {
+          title: String(element.title || '').slice(0, 80),
+        };
+
+        // Subtitle support
+        if (element.subtitle && String(element.subtitle).trim()) {
+          mappedElement.subtitle = String(element.subtitle).slice(0, 80);
+        }
+
+        // Image URL support
+        if (element.image_url && String(element.image_url).trim()) {
+          mappedElement.image_url = String(element.image_url);
+        }
+
+        // Default action support
+        if (element.default_action?.url) {
+          mappedElement.default_action = {
+            type: 'web_url',
+            url: String(element.default_action.url),
+            ...(element.default_action.messenger_extensions && { messenger_extensions: element.default_action.messenger_extensions }),
+            ...(element.default_action.webview_height_ratio && { webview_height_ratio: element.default_action.webview_height_ratio }),
+          };
+        }
+
+        // Buttons support (max 3 per element)
+        if (element.buttons && Array.isArray(element.buttons) && element.buttons.length > 0) {
+          mappedElement.buttons = element.buttons.slice(0, 3).map((btn: any) => {
+            if (btn.type === "url" && btn.url) {
+              return {
+                type: "web_url",
+                title: String(btn.title || '').slice(0, 20),
+                url: String(btn.url),
+                ...(btn.messenger_extensions && { messenger_extensions: btn.messenger_extensions }),
+                ...(btn.webview_height_ratio && { webview_height_ratio: btn.webview_height_ratio }),
+              };
+            }
+
+            // Postback button
+            const replyId = btn.id || btn.payload || '';
+            return {
+              type: "postback",
+              title: String(btn.title || '').slice(0, 20),
+              payload: String(replyId),
+            };
+          });
+        }
+
+        return mappedElement;
+      }),
     };
   }
 

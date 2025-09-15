@@ -444,11 +444,27 @@ async function buildActionSendPayload(
         });
 
         if (igType === 'GENERIC_TEMPLATE') {
+          const element: any = {
+            title: bodyText.slice(0, 80),
+          };
+
+          // Add subtitle from footer if available
+          if (ic?.footer?.text) {
+            element.subtitle = String(ic.footer.text).slice(0, 80);
+          }
+
+          // Add image_url if available
+          if (hasImage && ic?.header?.content) {
+            element.image_url = ic.header.content;
+          }
+
+          // Add buttons
+          element.buttons = mappedButtons;
+
           const full = {
             message_format: 'GENERIC_TEMPLATE',
-            title: bodyText.slice(0, 80),
-            image_url: hasImage ? ic?.header?.content : undefined,
-            buttons: mappedButtons,
+            template_type: 'generic',
+            elements: [element],
           };
           return lower.includes('instagram') ? { instagram: full } : { facebook: full };
         }

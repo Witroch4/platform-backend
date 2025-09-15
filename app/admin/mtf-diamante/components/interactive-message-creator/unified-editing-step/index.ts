@@ -3,6 +3,7 @@ export { HeaderSection } from './HeaderSection';
 export { BodySection } from './BodySection';
 export { FooterSection } from './FooterSection';
 export { ButtonsSection } from './ButtonsSection';
+export { CarouselSection } from './CarouselSection';
 export { CtaUrlSection } from './CtaUrlSection';
 export { NavigationSection } from './NavigationSection';
 export { PreviewSection } from './PreviewSection';

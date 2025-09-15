@@ -75,4 +75,9 @@ export const MESSAGE_TYPES = {
     icon: MousePointer,
     description: "Template de botões do Instagram",
   },
+  carousel: {
+    label: "Carrossel",
+    icon: ImageIcon,
+    description: "Carrossel com múltiplos elementos",
+  },
 };
