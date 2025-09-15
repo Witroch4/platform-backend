@@ -24,6 +24,8 @@ export interface PrismaInteractiveContent {
   templateId: string;
   bodyId: string;
   interactiveType?: InteractiveMessageType | string;
+  // Optional JSON blob to keep Generic Template elements (Instagram/Facebook)
+  genericPayload?: any;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -236,7 +238,15 @@ export interface CarouselElement {
     messenger_extensions?: boolean;
     webview_height_ratio?: 'compact' | 'tall' | 'full';
   };
-  buttons?: QuickReplyButton[]; // Max 3 buttons per element for Instagram
+  // For Instagram Generic Template per-element buttons
+  buttons?: Array<{
+    type: 'web_url' | 'postback';
+    title: string;
+    url?: string; // when type='web_url'
+    payload?: string; // when type='postback'
+    messenger_extensions?: boolean;
+    webview_height_ratio?: 'compact' | 'tall' | 'full';
+  }>; // Max 3 buttons per element
 }
 
 // Carousel action interface (internal system structure)

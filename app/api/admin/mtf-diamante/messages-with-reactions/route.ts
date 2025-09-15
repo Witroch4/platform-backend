@@ -111,21 +111,23 @@ function formatReaction(reaction: any) {
   };
 }
 
-// Helper function to format message response
-function formatMessage(template: any) {
-  const interactive = template.interactiveContent;
-  if (!interactive) return null;
+  // Helper function to format message response
+  function formatMessage(template: any) {
+    const interactive = template.interactiveContent;
+    if (!interactive) return null;
 
-  // Primeiro, captar qualquer dado de ação presente
-  let actionData = null as any;
-  if (interactive.actionCtaUrl) actionData = interactive.actionCtaUrl;
-  if (interactive.actionReplyButton) actionData = interactive.actionReplyButton;
-  if (interactive.actionList) actionData = interactive.actionList;
-  if (interactive.actionFlow) actionData = interactive.actionFlow;
-  if (interactive.actionLocationRequest) actionData = interactive.actionLocationRequest;
+    // Primeiro, captar qualquer dado de ação presente
+    let actionData = null as any;
+    if (interactive.actionCtaUrl) actionData = interactive.actionCtaUrl;
+    if (interactive.actionReplyButton) actionData = interactive.actionReplyButton;
+    if (interactive.actionList) actionData = interactive.actionList;
+    if (interactive.actionFlow) actionData = interactive.actionFlow;
+    if (interactive.actionLocationRequest) actionData = interactive.actionLocationRequest;
+    // Suporte a Generic Template com múltiplos elementos
+    const hasGenericElements = Boolean((interactive as any)?.genericPayload?.elements && Array.isArray((interactive as any).genericPayload.elements));
 
-  // Determinar o tipo final: priorizar o tipo explícito salvo
-  let actionType: string | null = (interactive as any)?.interactiveType || null;
+    // Determinar o tipo final: priorizar o tipo explícito salvo
+    let actionType: string | null = (interactive as any)?.interactiveType || null;
   const explicitType: string | undefined = actionType || undefined;
   if (!actionType) {
     if (interactive.actionCtaUrl) actionType = 'cta_url';
@@ -136,8 +138,8 @@ function formatMessage(template: any) {
   }
 
   // Para templates Instagram, determinar tipo baseado na estrutura dos botões, quando não houver tipo explícito
-  if (!explicitType && actionType === 'button' && interactive.actionReplyButton) {
-    const buttons = interactive.actionReplyButton.buttons || [];
+    if (!explicitType && actionType === 'button' && interactive.actionReplyButton) {
+      const buttons = interactive.actionReplyButton.buttons || [];
     
     // Para Instagram Quick Replies, os botões têm formato { content_type: 'text', title: string, payload: string }
     // Para Button Template, os botões têm formato { type: 'postback'|'url', title: string, payload: string|url: string }
@@ -163,7 +165,9 @@ function formatMessage(template: any) {
     const hasFooter = !!interactive.footer;
     
     // Instagram type detection based on content
-    if (hasHeader && hasFooter) {
+    if (hasGenericElements) {
+      actionType = 'generic';
+    } else if (hasHeader && hasFooter) {
       actionType = 'generic'; // Carousel/Generic template
     } else {
       actionType = 'button_template'; // Default fallback for Instagram
@@ -171,11 +175,18 @@ function formatMessage(template: any) {
   }
 
   // Computar action de saída num formato unificado
-  const computedAction = formatActionData(actionData, actionType!) || (
-    interactive.actionReplyButton?.buttons
-      ? { type: 'button', buttons: interactive.actionReplyButton.buttons }
-      : undefined
-  );
+  let computedAction = formatActionData(actionData, actionType!);
+  // Se temos genericPayload.elements, padronizar para o front como action: { type: 'carousel', action: { elements } }
+  if (hasGenericElements) {
+    computedAction = {
+      type: 'carousel',
+      action: {
+        elements: (interactive as any).genericPayload.elements,
+      },
+    };
+  } else if (!computedAction && interactive.actionReplyButton?.buttons) {
+    computedAction = { type: 'button', buttons: interactive.actionReplyButton.buttons } as any;
+  }
 
   return {
     id: template.id,
@@ -501,7 +512,17 @@ export async function POST(request: NextRequest) {
                   }
                 }
               }),
-              ...((message.type === 'button' || message.type === 'generic' || message.type === 'button_template' || message.type === 'quick_replies') && message.action && {
+              // Instagram Generic Template (Carousel multi-element)
+              ...(message.type === 'generic' && (Array.isArray((message as any)?.action?.elements) || Array.isArray((message as any)?.action?.action?.elements)) && {
+                genericPayload: ((): any => {
+                  const elements = ((message as any)?.action?.action?.elements || (message as any)?.action?.elements || []) as any[];
+                  // store as-is (whitelist is enforced at send time); keep max 10 elements
+                  return { elements: elements.slice(0, 10) };
+                })(),
+              }),
+
+              // Legacy/other button-based structures (quick_replies/button_template/generic-single)
+              ...((message.type === 'button' || message.type === 'generic' || message.type === 'button_template' || message.type === 'quick_replies') && message.action && !((Array.isArray((message as any)?.action?.elements) || Array.isArray((message as any)?.action?.action?.elements))) && {
                 actionReplyButton: {
                   create: {
                     buttons: message.type === 'quick_replies' 
@@ -995,7 +1016,22 @@ export async function PUT(request: NextRequest) {
             await tx.actionLocationRequest.delete({ where: { id: updatedTemplate.interactiveContent.actionLocationRequest.id } });
           }
 
-          // Create new action based on type
+          // Handle Generic Template multi-elements first (persist as JSON on InteractiveContent)
+          const genericElements = ((message as any)?.action?.action?.elements || (message as any)?.action?.elements) as any[] | undefined;
+          if (message.type === 'generic' && Array.isArray(genericElements)) {
+            await tx.interactiveContent.update({
+              where: { id: interactiveContentId },
+              data: { genericPayload: { elements: genericElements.slice(0, 10) } },
+            });
+          } else {
+            // If switching away from generic or no elements provided, clear genericPayload
+            await tx.interactiveContent.update({
+              where: { id: interactiveContentId },
+              data: { genericPayload: null },
+            });
+          }
+
+          // Create new action based on type (except when generic with elements, which we stored above)
           if (message.type === 'cta_url') {
             await tx.actionCtaUrl.create({
               data: {
@@ -1004,7 +1040,7 @@ export async function PUT(request: NextRequest) {
                 interactiveContentId
               }
             });
-          } else if (message.type === 'button' || message.type === 'generic' || message.type === 'button_template' || message.type === 'quick_replies') {
+          } else if (message.type === 'button' || (message.type === 'generic' && !Array.isArray(genericElements)) || message.type === 'button_template' || message.type === 'quick_replies') {
             await tx.actionReplyButton.create({
               data: {
                 buttons: message.type === 'quick_replies' 

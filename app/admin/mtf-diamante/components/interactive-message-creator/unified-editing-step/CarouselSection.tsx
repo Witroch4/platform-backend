@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,11 @@ import { cn } from "@/lib/utils";
 import type { InteractiveMessage, CarouselElement } from "@/types/interactive-messages";
 import { MESSAGE_LIMITS } from "@/types/interactive-messages";
 import { generatePrefixedId } from "./utils";
+import MinIOMediaUpload, { MinIOMediaFile } from "../../shared/MinIOMediaUpload";
+import { DndContext, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import { SortableItem } from "../../shared/dnd/SortableItem";
+import ButtonManager, { type InteractiveButton as BMInteractiveButton } from "../../shared/ButtonManager";
 
 interface CarouselSectionProps {
   message: InteractiveMessage;
@@ -39,6 +44,8 @@ export const CarouselSection: React.FC<CarouselSectionProps> = ({
   validationLimits,
 }) => {
   const [expandedElements, setExpandedElements] = useState<Set<number>>(new Set([0]));
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const [elementUploads, setElementUploads] = useState<Record<string, MinIOMediaFile[]>>({});
 
   // Get carousel elements from message action
   const carouselElements = React.useMemo(() => {
@@ -47,6 +54,20 @@ export const CarouselSection: React.FC<CarouselSectionProps> = ({
     }
     return [];
   }, [message.action]);
+
+  // Seed upload states from existing image_url
+  useEffect(() => {
+    const map: Record<string, MinIOMediaFile[]> = { ...elementUploads };
+    (carouselElements || []).forEach((el, idx) => {
+      const key = el.id || String(idx);
+      const has = Array.isArray(map[key]) && map[key].length > 0;
+      if (!has && el.image_url) {
+        map[key] = [{ id: `${key}-img`, progress: 100, status: 'success', url: el.image_url, mime_type: 'image/jpeg' }];
+      }
+    });
+    setElementUploads(map);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [carouselElements.length]);
 
   // Toggle element expansion
   const toggleElementExpansion = (index: number) => {
@@ -59,11 +80,23 @@ export const CarouselSection: React.FC<CarouselSectionProps> = ({
     setExpandedElements(newExpanded);
   };
 
+  // Drag reorder elements
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = carouselElements.findIndex((e, i) => (e.id || String(i)) === active.id);
+    const newIndex = carouselElements.findIndex((e, i) => (e.id || String(i)) === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const newOrder = arrayMove(carouselElements, oldIndex, newIndex);
+    onMessageUpdate({ action: { type: 'carousel', action: { elements: newOrder } } });
+  };
+
   // Initialize carousel action if not exists
   const initializeCarousel = () => {
     if (message.action?.type !== "carousel") {
       onMessageUpdate({
-        type: "carousel",
+        // Persist as Instagram Generic Template with carousel elements
+        type: "generic",
         action: {
           type: "carousel",
           action: {
@@ -246,11 +279,15 @@ export const CarouselSection: React.FC<CarouselSectionProps> = ({
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
+        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+          <SortableContext items={carouselElements.map((el, idx) => el.id || String(idx))} strategy={verticalListSortingStrategy}>
         {carouselElements.map((element, index) => (
-          <Card key={element.id || index} className="border-l-4 border-l-blue-500">
+          <SortableItem id={element.id || String(index)} key={element.id || index}>
+          <Card className="border-l-4 border-l-blue-500">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
+                  <Grip className="h-3 w-3 text-muted-foreground" />
                   <Button
                     variant="ghost"
                     size="sm"
@@ -324,18 +361,24 @@ export const CarouselSection: React.FC<CarouselSectionProps> = ({
                   </div>
                 </div>
 
-                {/* Image URL */}
+                {/* Image Upload */}
                 <div className="space-y-1">
-                  <Label htmlFor={`element-image-${index}`} className="text-xs">
-                    URL da Imagem (opcional)
-                  </Label>
-                  <Input
-                    id={`element-image-${index}`}
-                    value={element.image_url || ''}
-                    onChange={(e) => updateElement(index, 'image_url', e.target.value)}
-                    disabled={disabled}
-                    placeholder="https://exemplo.com/imagem.jpg"
-                    className="text-sm"
+                  <Label className="text-xs">Imagem do Elemento (opcional)</Label>
+                  <MinIOMediaUpload
+                    uploadedFiles={elementUploads[element.id || String(index)] || []}
+                    setUploadedFiles={(updater) => {
+                      setElementUploads((prev) => {
+                        const key = element.id || String(index);
+                        const next = typeof updater === 'function' ? (updater as any)(prev[key] || []) : updater;
+                        return { ...prev, [key]: next };
+                      });
+                    }}
+                    allowedTypes={['image/jpeg','image/png','image/jpg','image/gif']}
+                    maxSizeMB={8}
+                    maxFiles={1}
+                    title="Upload image"
+                    description="Upload para MinIO"
+                    onUploadComplete={(file) => updateElement(index, 'image_url', file.url || '')}
                   />
                 </div>
 
@@ -356,77 +399,34 @@ export const CarouselSection: React.FC<CarouselSectionProps> = ({
                   />
                 </div>
 
-                {/* Buttons */}
+                {/* Buttons with drag-and-drop (standard app pattern) */}
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs">Botões (máx. 3 por elemento)</Label>
-                    {(!element.buttons || element.buttons.length < 3) && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => addButtonToElement(index)}
-                        disabled={disabled}
-                        className="h-6 text-xs"
-                      >
-                        <Plus className="h-3 w-3 mr-1" />
-                        Botão
-                      </Button>
-                    )}
-                  </div>
-
-                  {element.buttons && element.buttons.map((button, buttonIndex) => (
-                    <div key={buttonIndex} className="flex gap-2 items-start p-2 border rounded-lg bg-gray-50 dark:bg-gray-800">
-                      <div className="flex-1 space-y-2">
-                        <Input
-                          value={button.title}
-                          onChange={(e) => updateElementButton(index, buttonIndex, 'title', e.target.value.slice(0, 20))}
-                          disabled={disabled}
-                          placeholder="Título do botão"
-                          className="text-sm"
-                        />
-
-                        <div className="flex gap-2">
-                          <select
-                            value={(button as any).type || 'postback'}
-                            onChange={(e) => updateElementButton(index, buttonIndex, 'type', e.target.value)}
-                            disabled={disabled}
-                            className="text-xs border rounded px-2 py-1 bg-background"
-                          >
-                            <option value="postback">Postback</option>
-                            <option value="web_url">URL</option>
-                          </select>
-
-                          <Input
-                            value={(button as any).type === 'web_url' ? (button as any).url || '' : (button as any).payload || ''}
-                            onChange={(e) => updateElementButton(
-                              index,
-                              buttonIndex,
-                              (button as any).type === 'web_url' ? 'url' : 'payload',
-                              e.target.value
-                            )}
-                            disabled={disabled}
-                            placeholder={(button as any).type === 'web_url' ? "https://exemplo.com" : "payload_do_botao"}
-                            className="text-sm flex-1"
-                          />
-                        </div>
-                      </div>
-
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeButtonFromElement(index, buttonIndex)}
-                        disabled={disabled}
-                        className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  ))}
+                  <Label className="text-xs">Botões (máx. 3 por elemento)</Label>
+                  <ButtonManager
+                    buttons={(element.buttons || []).slice(0,3).map((b, i) => {
+                      if ((b as any).type === 'web_url') {
+                        return { id: (b as any).payload || (b as any).id || `btn_${i}`, text: String(b.title || ''), type: 'url', url: (b as any).url } as BMInteractiveButton;
+                      }
+                      return { id: (b as any).payload || (b as any).id || `btn_${i}`, text: String(b.title || ''), type: 'reply' } as BMInteractiveButton;
+                    })}
+                    onChange={(bm) => {
+                      const mapped = bm.slice(0,3).map((x) => x.type === 'url' ? ({ type: 'web_url', title: x.text, url: x.url }) : ({ type: 'postback', title: x.text, payload: x.id }));
+                      updateElement(index, 'buttons', mapped as any);
+                    }}
+                    maxButtons={3}
+                    disabled={disabled}
+                    className="pt-1"
+                    showReactionConfig={false}
+                    idPrefix={channelType === 'Channel::Instagram' ? 'ig_' : (channelType === 'Channel::FacebookPage' ? 'fb_' : '')}
+                  />
                 </div>
               </CardContent>
             )}
           </Card>
+          </SortableItem>
         ))}
+          </SortableContext>
+        </DndContext>
       </CardContent>
     </Card>
   );

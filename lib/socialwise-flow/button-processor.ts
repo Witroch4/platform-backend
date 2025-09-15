@@ -369,11 +369,15 @@ async function buildActionSendPayload(
         const explicit = String(ic?.interactiveType || '').toLowerCase();
         const rawButtons: any[] = Array.isArray(ic?.actionReplyButton?.buttons) ? ic.actionReplyButton.buttons : [];
         const hasImage = ic?.header?.type === 'image' && !!ic?.header?.content;
-        const hasCarousel = ic?.actionCarousel || (explicit === 'carousel');
+        const hasGenericPayload = Array.isArray((ic as any)?.genericPayload?.elements) && (ic as any).genericPayload.elements.length > 0;
+        const hasCarousel = hasGenericPayload || ic?.actionCarousel || (explicit === 'carousel');
 
         // Handle carousel type
-        if (hasCarousel && ic?.actionCarousel?.elements) {
-          const elements = Array.isArray(ic.actionCarousel.elements) ? ic.actionCarousel.elements.slice(0, 10) : [];
+        if (hasCarousel && (hasGenericPayload || ic?.actionCarousel?.elements)) {
+          const rawElements = hasGenericPayload
+            ? (ic as any).genericPayload.elements
+            : ic.actionCarousel.elements;
+          const elements = Array.isArray(rawElements) ? rawElements.slice(0, 10) : [];
           const carouselElements = elements.map((element: any) => {
             const mappedElement: any = {
               title: String(element.title || '').slice(0, 80),

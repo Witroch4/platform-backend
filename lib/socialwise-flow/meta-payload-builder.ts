@@ -88,7 +88,9 @@ export class METAPayloadBuilder {
         const hasQR = Array.isArray(buttons) && buttons.some((b: any) => String(b?.content_type || '').toLowerCase() === 'text');
         if (hasQR) return 'quick_replies';
         const hasImage = processedContent?.header?.type === 'image' && !!processedContent?.header?.content;
-        const hasCarousel = processedContent?.actionCarousel || (processedContent?.actionReplyButton?.elements && Array.isArray(processedContent.actionReplyButton.elements));
+        const hasCarousel = processedContent?.actionCarousel ||
+          (processedContent?.actionReplyButton?.elements && Array.isArray(processedContent.actionReplyButton.elements)) ||
+          (Array.isArray((processedContent as any)?.genericPayload?.elements) && (processedContent as any).genericPayload.elements.length > 0);
         if (hasCarousel) return 'carousel';
         if (hasImage && Array.isArray(buttons) && buttons.length > 2) return 'generic';
         if (Array.isArray(buttons) && buttons.length > 0) return 'button_template';

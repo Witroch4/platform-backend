@@ -342,6 +342,9 @@ model InteractiveContent {
   interactiveType       String                 @default("button")
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
+  // Stores Instagram Generic Template full elements array when applicable
+  // Example: { elements: [ { title, subtitle?, image_url?, default_action?, buttons? }, ... ] }
+  genericPayload        Json?
   actionCtaUrl          ActionCtaUrl?
   actionFlow            ActionFlow?
   actionList            ActionList?

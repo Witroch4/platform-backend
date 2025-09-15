@@ -411,7 +411,9 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
   // For Instagram Quick Replies, header and footer are not supported
   const isInstagram = isInstagramChannel(channelType);
   const isQuickReplies = message.type === 'quick_replies';
-  const shouldShowHeaderAndFooter = !(isInstagram && isQuickReplies);
+  // For Instagram Generic (carousel), header/footer are handled per-element, so hide global header/footer
+  const isGenericCarousel = message.type === 'generic' || message.action?.type === 'carousel';
+  const shouldShowHeaderAndFooter = !(isInstagram && (isQuickReplies || isGenericCarousel));
 
   return (
     <div className={cn("space-y-6", className)}>
@@ -442,14 +444,16 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
             />
           )}
 
-          <BodySection
-            message={message}
-            onMessageUpdate={onMessageUpdate}
-            disabled={disabled}
-            isFieldValid={isFieldValid}
-            validationLimits={VALIDATION_LIMITS}
-            channelType={channelType || undefined}
-          />
+          {!isGenericCarousel && (
+            <BodySection
+              message={message}
+              onMessageUpdate={onMessageUpdate}
+              disabled={disabled}
+              isFieldValid={isFieldValid}
+              validationLimits={VALIDATION_LIMITS}
+              channelType={channelType || undefined}
+            />
+          )}
 
           {shouldShowHeaderAndFooter && (
             <FooterSection
@@ -472,7 +476,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
             disabled={disabled}
           />
 
-          {!isCtaUrl && message.type !== "carousel" && (
+          {!isCtaUrl && !(message.type === "carousel" || message.type === "generic") && (
             <ButtonsSection
               message={message}
               buttons={buttons}
@@ -486,7 +490,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
             />
           )}
 
-          {!isCtaUrl && (message.type === "carousel" || message.action?.type === "carousel") && (
+          {!isCtaUrl && (message.type === "generic" || message.type === "carousel" || message.action?.type === "carousel") && (
             <CarouselSection
               message={message}
               onMessageUpdate={onMessageUpdate}
