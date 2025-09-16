@@ -390,6 +390,161 @@ Enterprise-grade queue system:
 - Performance monitoring with real-time metrics
 - Alert management with configurable thresholds
 
+## 🔧 Critical Frontend Data Access Patterns
+
+### ⚠️ IMPORTANTE: Acesso aos Dados do genericPayload
+
+**PROBLEMA COMUM**: Dados salvos no banco (`genericPayload`) não aparecem no frontend de edição.
+
+#### Root Cause Identificado
+O problema ocorre quando o frontend usa dados "normalizados" ao invés dos dados originais do **provedor de dados MTF** que contêm toda a estrutura do `genericPayload`.
+
+#### Localização do Problema
+- **File**: `app/admin/mtf-diamante/components/MensagensInterativasTab.tsx`
+- **Function**: `handleEdit()` - linha ~263
+- **Data Source**: ✅ `useMtfData()` - **USANDO PROVEDOR CORRETAMENTE**
+- **Issue**: A função usa `normalizeMessage()` apenas para exibição, mas no edit perdeu a referência aos dados originais do provedor
+
+#### Como o Provedor MTF Funciona
+
+```typescript
+const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
+  // ✅ USANDO PROVEDOR DE DADOS MTF - NÃO É CONSULTA DIRETA
+  const {
+    interactiveMessages,    // ⭐ DADOS ORIGINAIS DA API COM genericPayload
+    caixas,
+    refreshCaixas,
+    buttonReactions,
+    refreshButtonReactions,
+    deleteMessage,
+    isLoadingMessages,
+    addMessage,
+    updateMessage,
+    addButtonReaction,
+    updateButtonReaction
+  } = useMtfData();
+
+  // ⚠️ PROBLEMA: normalizeMessage() apenas para EXIBIÇÃO na lista
+  const mensagens = useMemo<Mensagem[]>(
+    () => (interactiveMessages ?? []).map(normalizeMessage),
+    [interactiveMessages]
+  );
+};
+```
+
+#### Solução Implementada
+
+```typescript
+const handleEdit = (msg: any) => {
+  // ✅ CORRIGIDO: Buscar mensagem original com dados completos
+  const originalMessage = interactiveMessages?.find(m => m.id === msg.id);
+
+  if (originalMessage) {
+    // ✅ Preservar estrutura original + garantir campos obrigatórios
+    const normalizedOriginal = {
+      ...originalMessage,
+      // Garantir body.text existe (fallback para dados normalizados)
+      body: originalMessage.body || { text: msg.texto || '' },
+      // ⭐ CRÍTICO: Preservar content para acesso ao genericPayload
+      content: originalMessage.content,
+      // Garantir name e type existem
+      name: originalMessage.name || msg.nome,
+      type: originalMessage.type || msg.type || 'button'
+    };
+
+    setEditingMessage(normalizedOriginal);
+    setCurrentView("edit");
+    return;
+  }
+
+  // Fallback para reconstrução (só quando necessário)
+  // ... resto da lógica original
+};
+```
+
+#### Como o CarouselSection Acessa os Dados
+
+**File**: `app/admin/mtf-diamante/components/interactive-message-creator/unified-editing-step/CarouselSection.tsx`
+
+```typescript
+const carouselElements = React.useMemo(() => {
+  if (message.type === 'generic') {
+    const a: any = message.action || {};
+    let elements = a.elements || a.action?.elements || [];
+
+    // ⭐ CRÍTICO: Verificar content.action (formato da API)
+    if (elements.length === 0 && (message as any).content?.action?.elements) {
+      elements = (message as any).content.action.elements;
+    }
+
+    // ⭐ CRÍTICO: Verificar genericPayload diretamente
+    if (elements.length === 0 && (message as any).content?.genericPayload) {
+      if ((message as any).content.genericPayload.elements) {
+        elements = (message as any).content.genericPayload.elements;
+      }
+    }
+
+    return elements.map((el: any, index: number) => ({
+      ...el,
+      id: el.id || generatePrefixedId(channelType || null, `element_${index}_${Date.now()}`),
+      buttons: el.buttons?.map((btn: any, btnIndex: number) => ({
+        ...btn,
+        id: btn.id || btn.payload || generatePrefixedId(channelType || null, `btn_${index}_${btnIndex}_${Date.now()}`)
+      })) || []
+    }));
+  }
+  return [];
+}, [message.type, message.action, (message as any).content?.action, channelType]);
+```
+
+#### ✅ Padrão para Futuras Implementações
+
+**SEMPRE que precisar acessar dados completos via Provedor MTF:**
+
+1. **✅ USE o provedor MTF**: `const { interactiveMessages } = useMtfData()`
+2. **❌ NÃO use dados normalizados para edição**: `mensagens` são só para lista
+3. **✅ ACESSE dados originais do provedor**: `interactiveMessages?.find(m => m.id === msg.id)`
+4. **✅ PRESERVE a estrutura `content`**: contém `genericPayload`, `action`, etc.
+5. **✅ NORMALIZE apenas campos obrigatórios**: `body.text`, `name`, `type`
+6. **✅ VERIFIQUE múltiplas localizações dos dados**:
+   - `message.action.elements`
+   - `message.content.action.elements`
+   - `message.content.genericPayload.elements`
+
+#### 🏗️ Arquitetura Correta do MTF Data Provider
+
+```typescript
+// ✅ CORRETO: Provedor MTF gerencia tudo
+useMtfData() → SWR → API → Database (genericPayload)
+     ↓
+interactiveMessages (dados completos)
+     ↓
+normalizeMessage() (só para exibição na lista)
+     ↓
+handleEdit() → DEVE usar interactiveMessages originais
+```
+
+#### 🚨 Red Flags a Evitar
+
+- ❌ **Usar apenas `msg.nome`, `msg.texto`** (dados normalizados)
+- ❌ **Perder referência ao `originalMessage`**
+- ❌ **Não preservar `content` no `setEditingMessage`**
+- ❌ **Assumir que dados estão em apenas uma localização**
+
+#### Debug Steps para Problemas Similares
+
+1. **Verificar console logs**: `[MensagensInterativasTab] Using original message for edit:`
+2. **Inspecionar estrutura da mensagem**: `console.log('[Debug] message structure:', JSON.stringify(message, null, 2))`
+3. **Verificar se `content` existe**: `console.log('[Debug] message.content:', message.content)`
+4. **Verificar elementos encontrados**: `console.log('[Debug] elements found:', elements)`
+
+#### Files Modificados na Correção
+
+- ✅ `app/admin/mtf-diamante/components/MensagensInterativasTab.tsx:263-287`
+- ✅ `app/admin/mtf-diamante/components/interactive-message-creator/unified-editing-step/CarouselSection.tsx:51-67`
+
+**Resultado**: Carousel agora exibe "3/10 elementos" ao invés de "0/10 elementos" e todos os dados do `genericPayload` são acessíveis na edição.
+
 ## 💰 Cost Management System
 
 ### Components
@@ -512,6 +667,13 @@ OPENAI_API_KEY     # OpenAI API key
 - **Comprehensive Coverage**: Legal compliance requirements
 
 
----
+como bugs de foco/input em
+  React geralmente são causados por:
 
-*This document is the single source of truth for Socialwise Chatwit development. Keep it updated as the project evolves.*
+  - Keys instáveis em listas
+  - IDs que mudam entre renders
+  - Referencias de objetos que quebram igualdade
+
+  Sua solução demonstra que às vezes a correção mais eficaz
+   é a mais simples: manter a identidade dos elementos 
+  estável para que React possa otimizar corretamente.

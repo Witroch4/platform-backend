@@ -12,6 +12,7 @@ import { WhatsAppTextEditor } from "./WhatsAppTextEditor";
 import { toast } from "sonner";
 import type {
   InteractiveMessage,
+  InteractiveMessageWithContent,
   ButtonReaction,
   QuickReplyButton,
   MessageHeader,
@@ -131,22 +132,86 @@ export function InteractivePreview({
     [reactions]
   );
 
-  // Get buttons from message action
+  // Get buttons from message action (multiple sources like MensagensInterativasTab)
   const buttons = useMemo(() => {
-    if (!debouncedMessage.action || debouncedMessage.action.type !== "button") {
-      return [];
+    const source: any = debouncedMessage;
+    const action: any = source.action || {};
+
+    // Coletar botões de múltiplas fontes possíveis
+    const candidates: any[] = [];
+
+    // 1. Action direto (formato padrão WhatsApp)
+    if (Array.isArray(action?.buttons)) candidates.push(...action.buttons);
+
+    // 2. Quick replies (Instagram/Facebook)
+    if (Array.isArray(action?.quick_replies)) candidates.push(...action.quick_replies);
+
+    // 3. Botões no nível raiz da mensagem
+    if (Array.isArray(source.botoes)) candidates.push(...source.botoes);
+
+    // 4. Content.action (dados salvos no genericPayload)
+    if (Array.isArray(source.content?.action?.buttons))
+      candidates.push(...source.content.action.buttons);
+    if (Array.isArray(source.content?.action?.quick_replies))
+      candidates.push(...source.content.action.quick_replies);
+
+    // 5. ActionReplyButton (formato alternativo)
+    if (Array.isArray(source.actionReplyButton?.buttons))
+      candidates.push(...source.actionReplyButton.buttons);
+    if (Array.isArray(source.interactiveContent?.actionReplyButton?.buttons))
+      candidates.push(...source.interactiveContent.actionReplyButton.buttons);
+    if (Array.isArray(source.content?.interactiveContent?.actionReplyButton?.buttons))
+      candidates.push(...source.content.interactiveContent.actionReplyButton.buttons);
+
+    // Remove duplicados por id e normaliza
+    const seen = new Map<string, any>();
+    for (const btn of candidates) {
+      const id = btn.id || btn?.reply?.id || btn.payload || `btn_${Math.random()}`;
+      if (!seen.has(id)) {
+        seen.set(id, {
+          id,
+          title: btn.title || btn?.reply?.title || btn.titulo || btn.text || '',
+          type: btn.type || 'reply',
+          payload: btn.payload || id
+        });
+      }
     }
-    return debouncedMessage.action.buttons || [];
-  }, [debouncedMessage.action]);
+
+    return Array.from(seen.values());
+  }, [debouncedMessage]);
 
   // Get carousel elements from message action
   const carouselElements = useMemo(() => {
-    if (!debouncedMessage || !debouncedMessage.type) return [] as any[];
-    if (debouncedMessage.type === 'generic') {
-      const a: any = debouncedMessage.action || {};
-      return a.elements || a.action?.elements || [];
+    if (!debouncedMessage || debouncedMessage.type !== 'generic') {
+      return [] as any[];
     }
-    return [] as any[];
+
+    const source: InteractiveMessageWithContent = debouncedMessage as InteractiveMessageWithContent;
+    const action = (source.action as any) || {};
+
+    let elements: any[] = Array.isArray(action.elements)
+      ? action.elements
+      : Array.isArray(action.action?.elements)
+        ? action.action.elements
+        : [];
+
+    const content = source.content || {};
+    const contentAction = (content as any)?.action;
+
+    if (!elements.length && Array.isArray(contentAction?.elements)) {
+      elements = contentAction.elements;
+    }
+
+    if (!elements.length && Array.isArray(content?.genericPayload?.elements)) {
+      elements = content.genericPayload.elements;
+    }
+
+    return Array.isArray(elements)
+      ? elements.map((el: any) => ({
+          ...el,
+          buttons: Array.isArray(el.buttons) ? el.buttons : [],
+        }))
+      : [];
   }, [debouncedMessage]);
 
   // CTA URL preview support
@@ -264,82 +329,6 @@ export function InteractivePreview({
     [onButtonReactionChange]
   );
 
-  // Render header media component
-  const renderHeaderMedia = useCallback((header: MessageHeader) => {
-    // Suporte para ambos os formatos: media_url (snake_case) e mediaUrl (camelCase)
-    const mediaUrl = header.media_url || header.mediaUrl || header.content;
-
-    // Debug logs
-    console.log('[InteractivePreview] Header:', header);
-    console.log('[InteractivePreview] Media URL:', mediaUrl);
-
-    // Não renderizar se não há URL válida
-    if (!mediaUrl || mediaUrl.trim() === "") {
-      console.log('[InteractivePreview] No media URL found, not rendering');
-      return null;
-    }
-
-    switch (header.type) {
-      case "image":
-        return (
-          <div className="mb-2 relative flex justify-center">
-            <div className="relative">
-              <img
-                src={mediaUrl}
-                alt="Header image"
-                className="max-w-full h-auto rounded-lg max-h-48 object-cover"
-                onError={(e) => {
-                  const target = e.target as HTMLImageElement;
-                  target.style.display = "none";
-                }}
-              />
-            </div>
-          </div>
-        );
-
-      case "video":
-        return (
-          <div className="mb-2 relative flex justify-center">
-            <div className="relative">
-              <video
-                src={mediaUrl}
-                controls
-                className="max-w-full h-auto rounded-lg max-h-48"
-                onError={(e) => {
-                  const target = e.target as HTMLVideoElement;
-                  target.style.display = "none";
-                }}
-              />
-            </div>
-          </div>
-        );
-
-      case "document":
-        return (
-          <div className="mb-2 flex justify-center">
-            <div className="flex items-center gap-2 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg border w-full">
-              <div className="flex-shrink-0">
-                <FileText className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                  {header.filename || "Document"}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Documento
-                </p>
-              </div>
-              <div className="flex-shrink-0">
-                <Download className="h-4 w-4 text-gray-400" />
-              </div>
-            </div>
-          </div>
-        );
-
-      default:
-        return null;
-    }
-  }, []);
 
   return (
     <div className={cn("space-y-4", className)}>
@@ -389,45 +378,87 @@ export function InteractivePreview({
         >
           <div className="bg-white dark:bg-gray-800 rounded-lg p-3 shadow-md border border-gray-200 dark:border-gray-700 w-full">
             {/* Header Text */}
-            {debouncedMessage.header?.type === "text" &&
-              debouncedMessage.header.content && (
+            {(() => {
+              const header = debouncedMessage.header || (debouncedMessage as any).content?.header;
+              return header?.type === "text" && header.content && (
                 <div
                   className="font-semibold text-sm mb-2 text-gray-900 dark:text-gray-100 break-words overflow-wrap-anywhere"
                   dangerouslySetInnerHTML={{
-                    __html: processWhatsAppFormatting(
-                      debouncedMessage.header.content
-                    ),
+                    __html: processWhatsAppFormatting(header.content),
                   }}
                 />
-              )}
+              );
+            })()}
 
-            {/* Header Media */}
-            {debouncedMessage.header &&
-              debouncedMessage.header.type !== "text" && (
-                <>
-                  {renderHeaderMedia(debouncedMessage.header)}
-                </>
-              )}
+            {/* Header Media - Force render if there's any media URL */}
+            {(() => {
+              const header = debouncedMessage.header || (debouncedMessage as any).content?.header;
+
+              // Verificar se existe URL de mídia, independente do tipo
+              if (header) {
+                const mediaUrl = header.media_url || header.mediaUrl || header.content || (header as any).url || (header as any).link;
+                const isImageUrl = mediaUrl && /\.(jpg|jpeg|png|gif|webp)$/i.test(mediaUrl);
+
+                // Log apenas se há mudança de tipo suspeita
+                if (header?.type === 'text' && mediaUrl) {
+                  console.log('[InteractivePreview] ⚠️ Header type is "text" but has media URL:', {
+                    headerType: header?.type,
+                    mediaUrl: mediaUrl.substring(0, 50) + '...'
+                  });
+                }
+
+                // FORÇA a renderização se há URL válida, ignorando tipo completamente
+                if (mediaUrl && mediaUrl.trim() !== "") {
+                  return (
+                    <div className="mb-2 relative flex justify-center">
+                      <div className="relative">
+                        <img
+                          src={mediaUrl}
+                          alt="Header media"
+                          className="max-w-full h-auto rounded-lg max-h-48 object-cover"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = "none";
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                }
+              }
+
+              return null;
+            })()}
 
             {/* Body */}
-            <div
-              className="text-sm mb-2 text-gray-900 dark:text-gray-100 break-words overflow-wrap-anywhere"
-              dangerouslySetInnerHTML={{
-                __html: processWhatsAppFormatting(debouncedMessage.body?.text ?? ""),
-              }}
-            />
+            {(() => {
+              const bodyText = debouncedMessage.body?.text ||
+                              (debouncedMessage as any).content?.body?.text ||
+                              (debouncedMessage as any).texto ||
+                              "";
+              return bodyText && (
+                <div
+                  className="text-sm mb-2 text-gray-900 dark:text-gray-100 break-words overflow-wrap-anywhere"
+                  dangerouslySetInnerHTML={{
+                    __html: processWhatsAppFormatting(bodyText),
+                  }}
+                />
+              );
+            })()}
 
             {/* Footer */}
-            {debouncedMessage.footer?.text && (
-              <div
-                className="text-xs text-gray-500 dark:text-gray-400 mb-2 break-words overflow-wrap-anywhere"
-                dangerouslySetInnerHTML={{
-                  __html: processWhatsAppFormatting(
-                    debouncedMessage.footer.text
-                  ),
-                }}
-              />
-            )}
+            {(() => {
+              const footerText = debouncedMessage.footer?.text ||
+                                (debouncedMessage as any).content?.footer?.text;
+              return footerText && (
+                <div
+                  className="text-xs text-gray-500 dark:text-gray-400 mb-2 break-words overflow-wrap-anywhere"
+                  dangerouslySetInnerHTML={{
+                    __html: processWhatsAppFormatting(footerText),
+                  }}
+                />
+              );
+            })()}
 
             {/* CTA URL */}
             {ctaUrl && (

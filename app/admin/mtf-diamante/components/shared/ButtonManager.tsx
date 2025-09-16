@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { DndContext, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { debounce } from 'lodash';
 import { SortableItem } from './dnd/SortableItem';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -128,7 +129,7 @@ const validatePhoneNumber = (phone: string): string[] => {
   return errors;
 };
 
-export const ButtonManager: React.FC<ButtonManagerProps> = ({
+const ButtonManagerComponent: React.FC<ButtonManagerProps> = ({
   buttons,
   reactions = [],
   onChange,
@@ -151,11 +152,17 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
   const [validationErrors, setValidationErrors] = useState<Record<string, string[]>>({});
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
-  // Detect Meta channels (Instagram/Facebook) to filter available button types
-  const isMetaChannel = channelType === 'Channel::Instagram' || channelType === 'Channel::FacebookPage';
+  // Ref to store input values to prevent losing focus during validation
+  const buttonInputValues = useRef<Record<string, string>>({});
 
-  // Get available button types based on channel
-  const getAvailableButtonTypes = () => {
+  // Detect Meta channels (Instagram/Facebook) to filter available button types - memoized to prevent re-renders
+  const isMetaChannel = useMemo(() =>
+    channelType === 'Channel::Instagram' || channelType === 'Channel::FacebookPage',
+    [channelType]
+  );
+
+  // Get available button types based on channel - memoized to prevent re-renders
+  const availableButtonTypes = useMemo(() => {
     if (isInstagramQuickReplies) {
       // Instagram Quick Replies only supports reply buttons
       return ['reply'] as const;
@@ -168,9 +175,7 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
 
     // All channels support all button types
     return ['reply', 'url', 'phone_number'] as const;
-  };
-
-  const availableButtonTypes = getAvailableButtonTypes();
+  }, [isInstagramQuickReplies, isMetaChannel]);
 
   // Generate unique ID for new buttons
   const generateButtonId = (): string => {
@@ -221,34 +226,70 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
     onChange(newOrder);
   };
 
-  // Update button
-  const updateButton = (buttonId: string, updates: Partial<InteractiveButton>) => {
+  // Debounced validation function to prevent excessive re-renders - more aggressive debouncing
+  const debouncedValidateButton = useMemo(
+    () => debounce((buttonId: string, button: InteractiveButton) => {
+      validateButton(buttonId, button);
+    }, 500), // Increased debounce time to reduce re-renders
+    []
+  );
+
+  // Update button with optimizations to prevent input focus loss
+  const updateButton = useCallback((buttonId: string, updates: Partial<InteractiveButton>) => {
+    // Store text value in ref to prevent focus loss
+    if (updates.text !== undefined) {
+      buttonInputValues.current[buttonId] = updates.text;
+    }
+
+    // Check if the update would actually change the button to avoid unnecessary re-renders
+    const existingButton = buttons.find(b => b.id === buttonId);
+    if (!existingButton) return;
+
+    // Check if there are actual changes to avoid triggering onChange unnecessarily
+    const hasChanges = Object.keys(updates).some(key => {
+      const updateKey = key as keyof InteractiveButton;
+      return existingButton[updateKey] !== updates[updateKey];
+    });
+
+    if (!hasChanges) return; // No actual changes, skip update
+
     const newButtons = buttons.map(button => {
       if (button.id === buttonId) {
         const updatedButton = { ...button, ...updates };
-        
+
         // Clear type-specific fields when changing type
         if (updates.type && updates.type !== button.type) {
           if (updates.type !== 'url') updatedButton.url = undefined;
           if (updates.type !== 'phone_number') updatedButton.phone_number = undefined;
-          
+
           // Remove reaction if new type doesn't support reactions
           if (!BUTTON_TYPES[updates.type].supportsReactions && onReactionChange) {
             const newReactions = reactions.filter(reaction => reaction.buttonId !== buttonId);
             onReactionChange(newReactions);
           }
         }
-        
+
         return updatedButton;
       }
       return button;
     });
-    
+
     onChange(newButtons);
-    
-    // Validate updated button
-    validateButton(buttonId, newButtons.find(b => b.id === buttonId)!);
-  };
+
+    // Use debounced validation for text changes to prevent focus loss
+    if (updates.text !== undefined) {
+      const updatedButton = newButtons.find(b => b.id === buttonId);
+      if (updatedButton) {
+        debouncedValidateButton(buttonId, updatedButton);
+      }
+    } else {
+      // Immediate validation for non-text updates
+      const updatedButton = newButtons.find(b => b.id === buttonId);
+      if (updatedButton) {
+        validateButton(buttonId, updatedButton);
+      }
+    }
+  }, [buttons, onChange, onReactionChange, reactions, debouncedValidateButton]);
 
   // Validate individual button
   const validateButton = (buttonId: string, button: InteractiveButton) => {
@@ -359,6 +400,13 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
     if (onRequestReactionConfig) return onRequestReactionConfig(buttonId);
     if (process.env.NODE_ENV === 'development') console.log('Configure reaction for button:', buttonId);
   };
+
+  // Cleanup debounced function on unmount
+  useEffect(() => {
+    return () => {
+      debouncedValidateButton.cancel();
+    };
+  }, [debouncedValidateButton]);
 
   return (
     <div className={cn("space-y-4", className)}>
@@ -479,13 +527,14 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
                   Button Text (max {BUTTON_TYPES[button.type].maxLength} chars)
                 </Label>
                 <Input
+                  key={`button-text-${button.id}`}
                   value={button.text}
                   onChange={(e) => updateButton(button.id, { text: e.target.value })}
                   placeholder="Enter button text..."
                   disabled={disabled}
                   maxLength={BUTTON_TYPES[button.type].maxLength}
                   className={cn(
-                    validationErrors[button.id]?.some(error => error.includes('text')) && 
+                    validationErrors[button.id]?.some(error => error.includes('text')) &&
                     "border-destructive focus-visible:ring-destructive"
                   )}
                 />
@@ -639,5 +688,23 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
     </div>
   );
 };
+
+// Memoize the component to prevent unnecessary re-renders when props haven't changed
+export const ButtonManager = React.memo(ButtonManagerComponent, (prevProps, nextProps) => {
+  // Custom comparison function to optimize re-renders
+  return (
+    prevProps.buttons === nextProps.buttons &&
+    prevProps.reactions === nextProps.reactions &&
+    prevProps.maxButtons === nextProps.maxButtons &&
+    prevProps.disabled === nextProps.disabled &&
+    prevProps.className === nextProps.className &&
+    prevProps.showReactionConfig === nextProps.showReactionConfig &&
+    prevProps.idPrefix === nextProps.idPrefix &&
+    prevProps.isInstagramQuickReplies === nextProps.isInstagramQuickReplies &&
+    prevProps.channelType === nextProps.channelType
+  );
+});
+
+ButtonManager.displayName = 'ButtonManager';
 
 export default ButtonManager;

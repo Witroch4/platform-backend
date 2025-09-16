@@ -120,12 +120,26 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
     return () => clearTimeout(timeout);
   }, [message.header?.content, message.header?.media_url, message.header?.mediaUrl, message.header?.type]);
 
-  // Ensure header exists as text on first render
+  // Ensure header exists but preserve existing media headers
   useEffect(() => {
     if (!message.header) {
-      onMessageUpdate({
-        header: { type: "text", content: "" },
-      });
+      // Check if there's media in content.header first
+      const contentHeader = (message as any).content?.header;
+      if (contentHeader && contentHeader.media_url) {
+        // Preserve existing media header
+        onMessageUpdate({
+          header: {
+            type: contentHeader.type || "image",
+            media_url: contentHeader.media_url,
+            content: contentHeader.content
+          },
+        });
+      } else {
+        // Only default to text if no media exists
+        onMessageUpdate({
+          header: { type: "text", content: "" },
+        });
+      }
     }
   }, [message.header, onMessageUpdate]);
 

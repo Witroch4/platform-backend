@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
@@ -23,10 +23,10 @@ import ConfiguracoesLoteTab from './components/ConfiguracoesLoteTab';
 import { TemplateLibraryTab } from './components/TemplateLibraryTab';
  
 
-const MtfDiamanteAtendimentoPage = () => {
+const MtfDiamanteContent = () => {
   const searchParams = useSearchParams();
   const tabParam = searchParams?.get('tab');
-  
+
   // Agora a página concentra apenas Globais/Templates/Library
   const [activeTab, setActiveTab] = useState<string>(tabParam || 'lote');
   const [configPadrao, setConfigPadrao] = useState<WhatsAppConfig | null>(null);
@@ -60,7 +60,7 @@ const MtfDiamanteAtendimentoPage = () => {
 
     initializeMtfVariaveis();
     fetchConfig();
-    
+
     // Se vier um parâmetro de tab na URL, ativar essa tab
     if (tabParam) {
       setActiveTab(tabParam);
@@ -83,16 +83,24 @@ const MtfDiamanteAtendimentoPage = () => {
         <TabsContent value="lote">
             {loadingConfig ? <Loader2 className="animate-spin" /> : <ConfiguracoesLoteTab configPadrao={configPadrao} onUpdate={fetchConfig} />}
         </TabsContent>
-        
+
         <TabsContent value="templates">
             <TemplatesTab />
         </TabsContent>
-        
+
         <TabsContent value="library">
             <TemplateLibraryTab />
         </TabsContent>
       </Tabs>
     </div>
+  );
+};
+
+const MtfDiamanteAtendimentoPage = () => {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-screen"><Loader2 className="animate-spin" /></div>}>
+      <MtfDiamanteContent />
+    </Suspense>
   );
 };
 

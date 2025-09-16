@@ -24,7 +24,7 @@ import MinIOMediaUpload, { MinIOMediaFile } from "../../shared/MinIOMediaUpload"
 import { DndContext, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 import { SortableItem } from "../../shared/dnd/SortableItem";
-import ButtonManager, { type InteractiveButton as BMInteractiveButton } from "../../shared/ButtonManager";
+import { ButtonManager, type InteractiveButton as BMInteractiveButton } from "../../shared/ButtonManager";
 
 interface CarouselSectionProps {
   message: InteractiveMessage;
@@ -51,10 +51,33 @@ export const CarouselSection: React.FC<CarouselSectionProps> = ({
   const carouselElements = React.useMemo(() => {
     if (message.type === 'generic') {
       const a: any = message.action || {};
-      return a.elements || a.action?.elements || [];
+      // Try to get elements from different possible locations
+      let elements = a.elements || a.action?.elements || [];
+
+      // Also check in content.action (API response format)
+      if (elements.length === 0 && (message as any).content?.action?.elements) {
+        elements = (message as any).content.action.elements;
+      }
+
+      // Also check genericPayload directly
+      if (elements.length === 0 && (message as any).content?.genericPayload) {
+        if ((message as any).content.genericPayload.elements) {
+          elements = (message as any).content.genericPayload.elements;
+        }
+      }
+
+      // Ensure all elements have IDs for internal management
+      return elements.map((el: any, index: number) => ({
+        ...el,
+        id: el.id || generatePrefixedId(channelType || null, `element_${index}_${Date.now()}`),
+        buttons: el.buttons?.map((btn: any, btnIndex: number) => ({
+          ...btn,
+          id: btn.id || btn.payload || generatePrefixedId(channelType || null, `btn_${index}_${btnIndex}_${Date.now()}`)
+        })) || []
+      }));
     }
     return [];
-  }, [message.type, message.action]);
+  }, [message.type, message.action, (message as any).content?.action, channelType]);
 
   // Seed upload states from existing image_url
   useEffect(() => {
@@ -162,15 +185,12 @@ export const CarouselSection: React.FC<CarouselSectionProps> = ({
       [field]: value
     };
 
+    // Keep the elements with IDs for local state management
     onMessageUpdate({
       type: 'generic',
       action: {
         type: "generic",
-        elements: updatedElements.map(el => {
-          // Remove internal 'id' field before sending to API (Instagram doesn't use it)
-          const { id, ...elementWithoutId } = el;
-          return elementWithoutId;
-        })
+        elements: updatedElements // Keep IDs for internal management
       } as any
     });
   };
@@ -391,7 +411,7 @@ export const CarouselSection: React.FC<CarouselSectionProps> = ({
                   <Label className="text-xs">Botões (máx. 3 por elemento)</Label>
                   <ButtonManager
                     buttons={(element.buttons || []).slice(0,3).map((b: any) => {
-                      // Ensure proper ID with prefix
+                      // Ensure proper ID with prefix so focus is stable while typing
                       const buttonId = (b as any).payload || (b as any).id || generatePrefixedId(channelType || null, `${Date.now()}_${Math.random().toString(36).slice(2, 11)}`);
 
                       if ((b as any).type === 'web_url') {
@@ -400,7 +420,25 @@ export const CarouselSection: React.FC<CarouselSectionProps> = ({
                       return { id: buttonId, text: String(b.title || ''), type: 'reply' } as BMInteractiveButton;
                     })}
                     onChange={(bm) => {
-                      const mapped = bm.slice(0,3).map((x) => x.type === 'url' ? ({ type: 'web_url', title: x.text, url: x.url }) : ({ type: 'postback', title: x.text, payload: x.id }));
+                      const mapped = bm.slice(0,3).map((x) => {
+                        const buttonId = x.id || generatePrefixedId(channelType || null, `${Date.now()}_${Math.random().toString(36).slice(2, 11)}`);
+
+                        if (x.type === 'url') {
+                          return {
+                            id: buttonId,
+                            type: 'web_url',
+                            title: x.text,
+                            url: x.url || ''
+                          };
+                        }
+
+                        return {
+                          id: buttonId,
+                          type: 'postback',
+                          title: x.text,
+                          payload: buttonId
+                        };
+                      });
                       updateElement(index, 'buttons', mapped as any);
                     }}
                     maxButtons={3}

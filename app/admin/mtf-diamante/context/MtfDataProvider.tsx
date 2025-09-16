@@ -8,6 +8,7 @@ import {
   useState,
   useCallback,
   useMemo,
+  Suspense,
 } from "react";
 import { usePathname, useSearchParams } from 'next/navigation';
 import { SWRConfig } from 'swr';
@@ -87,15 +88,9 @@ interface MtfDataProviderProps {
 }
 
 /**
- * Simplified MtfDataProvider that orchestrates dedicated hooks
- * 
- * This refactored version:
- * - Removes complex useRef, timers and manual protections
- * - Uses dedicated hooks internally for each data type
- * - Maintains public API compatibility
- * - Implements simplified pause/resume functionality
+ * Internal component that uses useSearchParams
  */
-export function MtfDataProvider({ children, initialData }: MtfDataProviderProps) {
+function MtfDataProviderContent({ children, initialData }: MtfDataProviderProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   
@@ -353,6 +348,25 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
     <MtfDataContext.Provider value={contextValue}>
       {children}
     </MtfDataContext.Provider>
+  );
+}
+
+/**
+ * Simplified MtfDataProvider that orchestrates dedicated hooks
+ *
+ * This refactored version:
+ * - Removes complex useRef, timers and manual protections
+ * - Uses dedicated hooks internally for each data type
+ * - Maintains public API compatibility
+ * - Implements simplified pause/resume functionality
+ */
+export function MtfDataProvider({ children, initialData }: MtfDataProviderProps) {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <MtfDataProviderContent initialData={initialData}>
+        {children}
+      </MtfDataProviderContent>
+    </Suspense>
   );
 }
 

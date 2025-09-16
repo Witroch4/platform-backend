@@ -282,6 +282,18 @@ export interface InteractiveMessage {
   updatedAt?: Date;
 }
 
+// Extended interface for API responses that include content and genericPayload
+export interface InteractiveMessageWithContent extends InteractiveMessage {
+  content?: {
+    action?: MessageAction;
+    genericPayload?: {
+      elements?: CarouselElement[];
+      [key: string]: any;
+    };
+    [key: string]: any;
+  };
+}
+
 // Template-related interfaces
 export interface TemplateWithContent extends PrismaTemplate {
   interactiveContent?: PrismaInteractiveContent & {

@@ -583,6 +583,7 @@ export async function POST(request: NextRequest) {
               actionList: true,
               actionFlow: true,
               actionLocationRequest: true
+              // Note: genericPayload is a JSON field, not a relation, so it's included automatically
             }
           }
         }
@@ -929,6 +930,7 @@ export async function PUT(request: NextRequest) {
               actionList: true,
               actionFlow: true,
               actionLocationRequest: true
+              // Note: genericPayload is a JSON field, not a relation, so it's included automatically
             }
           }
         }
@@ -1104,6 +1106,7 @@ export async function PUT(request: NextRequest) {
               actionList: true,
               actionFlow: true,
               actionLocationRequest: true
+              // Note: genericPayload is a JSON field, not a relation, so it's included automatically
             }
           }
         }
@@ -1270,6 +1273,7 @@ export async function GET(request: NextRequest) {
               actionList: true,
               actionFlow: true,
               actionLocationRequest: true
+              // Note: genericPayload is a JSON field, not a relation, so it's included automatically
             }
           }
         }
@@ -1352,6 +1356,7 @@ export async function GET(request: NextRequest) {
               actionList: true,
               actionFlow: true,
               actionLocationRequest: true
+              // Note: genericPayload is a JSON field, not a relation, so it's included automatically
             }
           }
         },

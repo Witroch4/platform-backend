@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import InteractiveMessageCreator from "./InteractiveMessageCreator";
 import type { InteractiveMessageType } from "./interactive-message-creator/types";
+import type { InteractiveMessageWithContent } from "@/types/interactive-messages";
 import { useMtfData } from "@/app/admin/mtf-diamante/context/MtfDataProvider";
   import {
     Dialog,
@@ -261,7 +262,32 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
   // Dados já vêm do contexto via useMemo - não precisa espelhar estado
 
   const handleEdit = (msg: any) => {
-    // Detect type from normalized msg (agora preserva type)
+    // ✅ CORRIGIDO: Para preservar dados completos, buscar mensagem original
+    const originalMessage = interactiveMessages?.find(m => m.id === msg.id);
+
+    if (originalMessage) {
+      // Use the original message which contains all the data from the API
+      console.log('[MensagensInterativasTab] Using original message for edit:', originalMessage);
+
+      // ✅ Ensure the message has the required structure for the editor
+      const normalizedOriginal = {
+        ...originalMessage,
+        // Ensure body.text exists (fallback to normalized data)
+        body: originalMessage.body || { text: msg.texto || '' },
+        // Preserve the original content structure for genericPayload access
+        content: (originalMessage as InteractiveMessageWithContent).content,
+        // Ensure name exists
+        name: originalMessage.name || msg.nome,
+        // Ensure type exists
+        type: originalMessage.type || msg.type || 'button'
+      };
+
+      setEditingMessage(normalizedOriginal);
+      setCurrentView("edit");
+      return;
+    }
+
+    // Fallback: Detect type from normalized msg (agora preserva type)
     const detectedType = (msg?.type || 'button') as InteractiveMessageType;
 
     // Base fields
