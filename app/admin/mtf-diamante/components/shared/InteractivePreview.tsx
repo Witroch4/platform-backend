@@ -141,11 +141,13 @@ export function InteractivePreview({
 
   // Get carousel elements from message action
   const carouselElements = useMemo(() => {
-    if (!debouncedMessage.action || debouncedMessage.action.type !== "carousel") {
-      return [];
+    if (!debouncedMessage || !debouncedMessage.type) return [] as any[];
+    if (debouncedMessage.type === 'generic') {
+      const a: any = debouncedMessage.action || {};
+      return a.elements || a.action?.elements || [];
     }
-    return debouncedMessage.action.action?.elements || [];
-  }, [debouncedMessage.action]);
+    return [] as any[];
+  }, [debouncedMessage]);
 
   // CTA URL preview support
   const ctaUrl = useMemo(() => {

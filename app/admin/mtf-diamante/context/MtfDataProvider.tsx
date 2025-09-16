@@ -9,7 +9,7 @@ import {
   useCallback,
   useMemo,
 } from "react";
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { SWRConfig } from 'swr';
 
 // Import SSR helpers
@@ -97,12 +97,15 @@ interface MtfDataProviderProps {
  */
 export function MtfDataProvider({ children, initialData }: MtfDataProviderProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   
   // Simple pause state management
   const [isPaused, setIsPaused] = useState(false);
   
-  // Extract inboxId from URL if on a specific inbox page
-  const inboxId = pathname?.match(/\/inbox\/([^\/]+)/)?.[1] || null;
+  // Extract inboxId from URL (path or query). Query takes precedence to align keys across consumers.
+  const inboxIdFromQuery = (searchParams?.get('inboxId') || searchParams?.get('caixaId')) ?? null;
+  const inboxIdFromPath = pathname?.match(/\/inbox\/([^\/]+)/)?.[1] || null;
+  const inboxId = (inboxIdFromQuery || inboxIdFromPath);
   
   // Use dedicated hooks with pause support
   const messagesHook = useInteractiveMessages(inboxId, isPaused);

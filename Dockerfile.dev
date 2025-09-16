@@ -50,6 +50,17 @@ RUN if [ -f /etc/ImageMagick-6/policy.xml ]; then \
 #    É fundamental copiar também o package-lock.json para o npm ci funcionar.
 COPY package.json package-lock.json ./
 COPY prisma ./prisma/
+
+# 4.1. Configura variáveis de ambiente para Playwright
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+# 4.2. Cria diretórios necessários para Playwright
+RUN mkdir -p /root/.cache/ms-playwright && \
+    mkdir -p /ms-playwright && \
+    chmod 755 /root/.cache/ms-playwright && \
+    chmod 755 /ms-playwright
+
 RUN npm ci
 
 # 5. Instala globalmente as dependências de desenvolvimento necessárias

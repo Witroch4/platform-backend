@@ -49,16 +49,17 @@ export const CarouselSection: React.FC<CarouselSectionProps> = ({
 
   // Get carousel elements from message action
   const carouselElements = React.useMemo(() => {
-    if (message.action?.type === "carousel") {
-      return message.action.action?.elements || [];
+    if (message.type === 'generic') {
+      const a: any = message.action || {};
+      return a.elements || a.action?.elements || [];
     }
     return [];
-  }, [message.action]);
+  }, [message.type, message.action]);
 
   // Seed upload states from existing image_url
   useEffect(() => {
     const map: Record<string, MinIOMediaFile[]> = { ...elementUploads };
-    (carouselElements || []).forEach((el, idx) => {
+    (carouselElements || []).forEach((el: any, idx: number) => {
       const key = el.id || String(idx);
       const has = Array.isArray(map[key]) && map[key].length > 0;
       if (!has && el.image_url) {
@@ -84,33 +85,30 @@ export const CarouselSection: React.FC<CarouselSectionProps> = ({
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIndex = carouselElements.findIndex((e, i) => (e.id || String(i)) === active.id);
-    const newIndex = carouselElements.findIndex((e, i) => (e.id || String(i)) === over.id);
+    const oldIndex = carouselElements.findIndex((e: any, i: number) => (e.id || String(i)) === active.id);
+    const newIndex = carouselElements.findIndex((e: any, i: number) => (e.id || String(i)) === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
     const newOrder = arrayMove(carouselElements, oldIndex, newIndex);
-    onMessageUpdate({ action: { type: 'carousel', action: { elements: newOrder } } });
+    onMessageUpdate({ type: 'generic', action: { type: 'generic', elements: newOrder } as any });
   };
 
   // Initialize carousel action if not exists
   const initializeCarousel = () => {
-    if (message.action?.type !== "carousel") {
+    if (message.type !== 'generic') {
       onMessageUpdate({
-        // Persist as Instagram Generic Template with carousel elements
-        type: "generic",
+        type: 'generic',
         action: {
-          type: "carousel",
-          action: {
-            elements: [
-              {
-                id: generatePrefixedId(channelType || null, Math.random().toString(36).slice(2, 11)),
-                title: "Elemento 1",
-                subtitle: "",
-                image_url: "",
-                buttons: [],
-              }
-            ]
-          }
-        }
+          type: 'generic',
+          elements: [
+            {
+              id: generatePrefixedId(channelType || null, Math.random().toString(36).slice(2, 11)),
+              title: 'Elemento 1',
+              subtitle: '',
+              image_url: '',
+              buttons: [],
+            },
+          ],
+        } as any,
       });
     }
   };
@@ -133,21 +131,14 @@ export const CarouselSection: React.FC<CarouselSectionProps> = ({
     // Expand the new element
     setExpandedElements(prev => new Set([...prev, newIndex]));
 
-    onMessageUpdate({
-      action: {
-        type: "carousel",
-        action: {
-          elements: updatedElements
-        }
-      }
-    });
+    onMessageUpdate({ type: 'generic', action: { type: 'generic', elements: updatedElements } as any });
   };
 
   // Remove carousel element
   const removeElement = (index: number) => {
     if (carouselElements.length <= 1) return; // Keep at least one element
 
-    const updatedElements = carouselElements.filter((_, i) => i !== index);
+    const updatedElements = carouselElements.filter((_: any, i: number) => i !== index);
 
     // Update expanded elements indices
     const newExpanded = new Set<number>();
@@ -160,14 +151,7 @@ export const CarouselSection: React.FC<CarouselSectionProps> = ({
     });
     setExpandedElements(newExpanded);
 
-    onMessageUpdate({
-      action: {
-        type: "carousel",
-        action: {
-          elements: updatedElements
-        }
-      }
-    });
+    onMessageUpdate({ type: 'generic', action: { type: 'generic', elements: updatedElements } as any });
   };
 
   // Update element field
@@ -179,12 +163,15 @@ export const CarouselSection: React.FC<CarouselSectionProps> = ({
     };
 
     onMessageUpdate({
+      type: 'generic',
       action: {
-        type: "carousel",
-        action: {
-          elements: updatedElements
-        }
-      }
+        type: "generic",
+        elements: updatedElements.map(el => {
+          // Remove internal 'id' field before sending to API (Instagram doesn't use it)
+          const { id, ...elementWithoutId } = el;
+          return elementWithoutId;
+        })
+      } as any
     });
   };
 
@@ -209,7 +196,7 @@ export const CarouselSection: React.FC<CarouselSectionProps> = ({
     const element = carouselElements[elementIndex];
     if (!element?.buttons) return;
 
-    const updatedButtons = element.buttons.filter((_, i) => i !== buttonIndex);
+    const updatedButtons = element.buttons.filter((_: any, i: number) => i !== buttonIndex);
     updateElement(elementIndex, 'buttons', updatedButtons);
   };
 
@@ -226,7 +213,7 @@ export const CarouselSection: React.FC<CarouselSectionProps> = ({
     updateElement(elementIndex, 'buttons', updatedButtons);
   };
 
-  if (message.action?.type !== "carousel") {
+  if (message.type !== 'generic') {
     return (
       <Card>
         <CardHeader>
@@ -280,8 +267,8 @@ export const CarouselSection: React.FC<CarouselSectionProps> = ({
       </CardHeader>
       <CardContent className="space-y-4">
         <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-          <SortableContext items={carouselElements.map((el, idx) => el.id || String(idx))} strategy={verticalListSortingStrategy}>
-        {carouselElements.map((element, index) => (
+          <SortableContext items={carouselElements.map((el: any, idx: number) => el.id || String(idx))} strategy={verticalListSortingStrategy}>
+        {carouselElements.map((element: any, index: number) => (
           <SortableItem id={element.id || String(index)} key={element.id || index}>
           <Card className="border-l-4 border-l-blue-500">
             <CardHeader className="pb-2">
@@ -403,11 +390,14 @@ export const CarouselSection: React.FC<CarouselSectionProps> = ({
                 <div className="space-y-2">
                   <Label className="text-xs">Botões (máx. 3 por elemento)</Label>
                   <ButtonManager
-                    buttons={(element.buttons || []).slice(0,3).map((b, i) => {
+                    buttons={(element.buttons || []).slice(0,3).map((b: any) => {
+                      // Ensure proper ID with prefix
+                      const buttonId = (b as any).payload || (b as any).id || generatePrefixedId(channelType || null, `${Date.now()}_${Math.random().toString(36).slice(2, 11)}`);
+
                       if ((b as any).type === 'web_url') {
-                        return { id: (b as any).payload || (b as any).id || `btn_${i}`, text: String(b.title || ''), type: 'url', url: (b as any).url } as BMInteractiveButton;
+                        return { id: buttonId, text: String(b.title || ''), type: 'url', url: (b as any).url } as BMInteractiveButton;
                       }
-                      return { id: (b as any).payload || (b as any).id || `btn_${i}`, text: String(b.title || ''), type: 'reply' } as BMInteractiveButton;
+                      return { id: buttonId, text: String(b.title || ''), type: 'reply' } as BMInteractiveButton;
                     })}
                     onChange={(bm) => {
                       const mapped = bm.slice(0,3).map((x) => x.type === 'url' ? ({ type: 'web_url', title: x.text, url: x.url }) : ({ type: 'postback', title: x.text, payload: x.id }));
@@ -418,6 +408,7 @@ export const CarouselSection: React.FC<CarouselSectionProps> = ({
                     className="pt-1"
                     showReactionConfig={false}
                     idPrefix={channelType === 'Channel::Instagram' ? 'ig_' : (channelType === 'Channel::FacebookPage' ? 'fb_' : '')}
+                    channelType={channelType}
                   />
                 </div>
               </CardContent>

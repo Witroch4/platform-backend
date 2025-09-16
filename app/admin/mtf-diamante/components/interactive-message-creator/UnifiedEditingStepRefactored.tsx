@@ -304,7 +304,19 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
     };
     console.log('  [Next] Estado da mensagem:', messageState);
 
-    const immediate = await validateMessage({ ...message });
+    // Ensure body text for generic (carousel) messages
+    let messageForValidation = { ...message } as any;
+    if (messageForValidation.type === 'generic') {
+      const elements = (messageForValidation.action?.elements || messageForValidation.action?.action?.elements || []) as any[];
+      const fallbackTitle = elements?.[0]?.title || 'Carrossel';
+      if (!messageForValidation.body?.text || !String(messageForValidation.body.text).trim()) {
+        messageForValidation = { ...messageForValidation, body: { text: fallbackTitle } };
+        // Reflect this default in state to avoid repeated warnings
+        onMessageUpdate({ body: { text: fallbackTitle } } as any);
+      }
+    }
+
+    const immediate = await validateMessage(messageForValidation);
     const canProceedResult = canProceed();
 
     if (immediate.isValid && canProceedResult) {
@@ -412,7 +424,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
   const isInstagram = isInstagramChannel(channelType);
   const isQuickReplies = message.type === 'quick_replies';
   // For Instagram Generic (carousel), header/footer are handled per-element, so hide global header/footer
-  const isGenericCarousel = message.type === 'generic' || message.action?.type === 'carousel';
+  const isGenericCarousel = message.type === 'generic';
   const shouldShowHeaderAndFooter = !(isInstagram && (isQuickReplies || isGenericCarousel));
 
   return (
@@ -476,7 +488,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
             disabled={disabled}
           />
 
-          {!isCtaUrl && !(message.type === "carousel" || message.type === "generic") && (
+          {!isCtaUrl && message.type !== 'generic' && (
             <ButtonsSection
               message={message}
               buttons={buttons}
@@ -490,7 +502,7 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
             />
           )}
 
-          {!isCtaUrl && (message.type === "generic" || message.type === "carousel" || message.action?.type === "carousel") && (
+          {!isCtaUrl && message.type === 'generic' && (
             <CarouselSection
               message={message}
               onMessageUpdate={onMessageUpdate}

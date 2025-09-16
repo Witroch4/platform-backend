@@ -73,7 +73,6 @@ export const HeaderSchema = z.object({
 
 export const BodySchema = z.object({
   text: z.string()
-    .min(1, VALIDATION_MESSAGES.BODY_TEXT_REQUIRED)
     .max(MESSAGE_LIMITS.BODY_TEXT_MAX_LENGTH, VALIDATION_MESSAGES.BODY_TOO_LONG)
 });
 
@@ -200,25 +199,39 @@ export const MessageActionSchema = z.discriminatedUnion('type', [
   InstagramButtonTemplateActionSchema
 ]);
 
-export const InteractiveMessageSchema = z.object({
+const BaseInteractiveMessageSchema = z.object({
   id: z.string().optional(),
   name: z.string()
     .min(1, VALIDATION_MESSAGES.NAME_REQUIRED)
     .max(255, VALIDATION_MESSAGES.NAME_TOO_LONG),
   type: z.enum([
-    'button', 'list', 'cta_url', 'flow', 'location_request', 
+    'button', 'list', 'cta_url', 'flow', 'location_request',
     'location', 'reaction', 'sticker', 'product', 'product_list',
     // Instagram specific types
     'quick_replies', 'generic', 'button_template'
   ]),
   header: HeaderSchema.optional(),
-  body: BodySchema,
+  body: BodySchema.optional(),
   footer: FooterSchema.optional(),
   action: MessageActionSchema.optional(),
   isActive: z.boolean().default(true),
   createdAt: z.date().optional(),
   updatedAt: z.date().optional()
 });
+
+export const InteractiveMessageSchema = BaseInteractiveMessageSchema.refine((data) => {
+  // For generic type (carousel), body is optional since content is in action.elements
+  if (data.type === 'generic') {
+    return true;
+  }
+  // For all other types, body is required
+  return data.body && data.body.text && data.body.text.trim().length > 0;
+}, {
+  message: "Body text is required for non-generic message types"
+});
+
+// Export a partial schema for updates
+export const PartialInteractiveMessageSchema = BaseInteractiveMessageSchema.partial();
 
 export const ButtonReactionSchema = z.object({
   id: z.string().optional(),
@@ -399,6 +412,11 @@ export class InteractiveMessageValidator {
   }
 
   private static validateBodyText(text: string, errors: ValidationError[], warnings: ValidationError[], messageType?: InteractiveMessageType) {
+    // For generic type (carousel), body text is not required since content is in action.elements
+    if (messageType === 'generic') {
+      return; // Skip body text validation for carousels
+    }
+
     if (!text || !text.trim()) {
       errors.push({
         field: 'body.text',
@@ -410,19 +428,7 @@ export class InteractiveMessageValidator {
     }
 
     // Instagram specific validation based on message type
-    if (messageType === 'generic') {
-      // For Instagram Generic Template (Carousel), validate title length
-      if (text.length > MESSAGE_LIMITS.INSTAGRAM_GENERIC_TITLE_MAX_LENGTH) {
-        errors.push({
-          field: 'body.text',
-          code: 'INVALID_LENGTH',
-          message: `Título do carrossel deve ter no máximo ${MESSAGE_LIMITS.INSTAGRAM_GENERIC_TITLE_MAX_LENGTH} caracteres`,
-          value: text.length,
-          limit: MESSAGE_LIMITS.INSTAGRAM_GENERIC_TITLE_MAX_LENGTH,
-          severity: 'error'
-        });
-      }
-    } else if (messageType === 'button_template') {
+    if (messageType === 'button_template') {
       // For Instagram Button Template
       if (text.length > MESSAGE_LIMITS.INSTAGRAM_BUTTON_TEMPLATE_TEXT_MAX_LENGTH) {
         errors.push({

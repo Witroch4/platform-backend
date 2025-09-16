@@ -51,6 +51,7 @@ interface ButtonManagerProps {
   showReactionConfig?: boolean;
   idPrefix?: string; // optional prefix for generated ids (e.g., ig_)
   isInstagramQuickReplies?: boolean; // para limitar aos tipos permitidos
+  channelType?: string; // channel type for Meta channels detection
 }
 
 // Button type configurations
@@ -139,15 +140,37 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
   showReactionConfig = true,
   idPrefix,
   isInstagramQuickReplies = false,
+  channelType,
 }) => {
   // Debug logs para verificar os dados das reações (somente em desenvolvimento)
   if (process.env.NODE_ENV === 'development') {
     console.log('[ButtonManager] Reactions data:', reactions);
     console.log('[ButtonManager] Buttons data:', buttons);
   }
-  
+
   const [validationErrors, setValidationErrors] = useState<Record<string, string[]>>({});
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+
+  // Detect Meta channels (Instagram/Facebook) to filter available button types
+  const isMetaChannel = channelType === 'Channel::Instagram' || channelType === 'Channel::FacebookPage';
+
+  // Get available button types based on channel
+  const getAvailableButtonTypes = () => {
+    if (isInstagramQuickReplies) {
+      // Instagram Quick Replies only supports reply buttons
+      return ['reply'] as const;
+    }
+
+    if (isMetaChannel) {
+      // Meta channels (Instagram/Facebook) only support reply and url buttons
+      return ['reply', 'url'] as const;
+    }
+
+    // All channels support all button types
+    return ['reply', 'url', 'phone_number'] as const;
+  };
+
+  const availableButtonTypes = getAvailableButtonTypes();
 
   // Generate unique ID for new buttons
   const generateButtonId = (): string => {
@@ -365,25 +388,14 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
-              {isInstagramQuickReplies ? (
-                // Para Instagram Quick Replies, só mostrar Quick Reply
-                <DropdownMenuItem onClick={() => addButton('reply')}>
-                  <MessageSquare className="h-3 w-3 mr-2" /> Quick Reply
-                </DropdownMenuItem>
-              ) : (
-                // Para outros tipos, mostrar todas as opções
-                <>
-                  <DropdownMenuItem onClick={() => addButton('reply')}>
-                    <MessageSquare className="h-3 w-3 mr-2" /> Quick Reply
+              {availableButtonTypes.map((buttonType) => {
+                const ButtonIcon = BUTTON_TYPES[buttonType].icon;
+                return (
+                  <DropdownMenuItem key={buttonType} onClick={() => addButton(buttonType)}>
+                    <ButtonIcon className="h-3 w-3 mr-2" /> {BUTTON_TYPES[buttonType].label}
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => addButton('url')}>
-                    <ExternalLink className="h-3 w-3 mr-2" /> URL Button
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => addButton('phone_number')}>
-                    <Phone className="h-3 w-3 mr-2" /> Phone Button
-                  </DropdownMenuItem>
-                </>
-              )}
+                );
+              })}
             </DropdownMenuContent>
           </DropdownMenu>
         )}
@@ -443,14 +455,17 @@ export const ButtonManager: React.FC<ButtonManagerProps> = ({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(BUTTON_TYPES).map(([type, config]) => (
-                      <SelectItem key={type} value={type}>
-                        <div className="flex items-center gap-2">
-                          {getButtonIcon(type as InteractiveButton['type'])}
-                          <span>{config.label}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
+                    {availableButtonTypes.map((type) => {
+                      const config = BUTTON_TYPES[type];
+                      return (
+                        <SelectItem key={type} value={type}>
+                          <div className="flex items-center gap-2">
+                            {getButtonIcon(type)}
+                            <span>{config.label}</span>
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">

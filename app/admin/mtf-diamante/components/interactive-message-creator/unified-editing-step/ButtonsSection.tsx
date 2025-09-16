@@ -128,6 +128,7 @@ export const ButtonsSection: React.FC<ButtonsSectionProps> = ({
           disabled={disabled}
           idPrefix={channelType === 'Channel::Instagram' ? 'ig_' : channelType === 'Channel::FacebookPage' ? 'fb_' : ''}
           isInstagramQuickReplies={isInstagramQuickReplies}
+          channelType={channelType}
         />
 
         {reactionConfigButton && (

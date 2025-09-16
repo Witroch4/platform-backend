@@ -25,7 +25,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import InteractiveMessageCreator from "./InteractiveMessageCreator";
 import type { InteractiveMessageType } from "./interactive-message-creator/types";
 import { useMtfData } from "@/app/admin/mtf-diamante/context/MtfDataProvider";
-import { useInteractiveMessages } from "@/app/admin/mtf-diamante/hooks/useInteractiveMessages";
   import {
     Dialog,
     DialogContent,
@@ -183,10 +182,11 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
     refreshButtonReactions, 
     deleteMessage, 
     isLoadingMessages,
+    addMessage,
+    updateMessage,
     addButtonReaction,
     updateButtonReaction 
   } = useMtfData();
-  const { addMessage, updateMessage } = useInteractiveMessages(caixaId);
   
   const [currentView, setCurrentView] = useState<"list" | "create" | "edit">(
     "list"

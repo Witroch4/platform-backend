@@ -1,9 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getPrismaInstance } from "@/lib/connections"
+import { Prisma } from "@prisma/client"
 import { z } from "zod";
-import { 
+import {
   InteractiveMessageSchema,
+  PartialInteractiveMessageSchema,
   ButtonReactionSchema,
   InteractiveMessageValidator,
   InteractiveMessageValidationError
@@ -40,7 +42,7 @@ const ApiInteractiveMessageSchema = z.object({
     "sticker",
     // Instagram specific types
     "generic",
-    "quick_replies", 
+    "quick_replies",
     "button_template"
   ]),
   header: z
@@ -55,7 +57,7 @@ const ApiInteractiveMessageSchema = z.object({
     .optional(),
   body: z.object({
     text: z.string().min(1, "Body text is required"),
-  }),
+  }).optional(),
   footer: z
     .object({
       text: z.string().max(60, "Footer text too long"),
@@ -73,6 +75,15 @@ const ApiInteractiveMessageSchema = z.object({
   // Sticker fields
   stickerMediaId: z.string().optional(),
   stickerUrl: z.string().optional(),
+}).refine((data) => {
+  // For generic type (carousel), body is optional since content is in action.elements
+  if (data.type === 'generic') {
+    return true;
+  }
+  // For all other types, body is required
+  return data.body && data.body.text && data.body.text.trim().length > 0;
+}, {
+  message: "Body text is required for non-generic message types"
 });
 
 const SaveMessageWithReactionsSchema = z.object({
@@ -176,13 +187,11 @@ function formatReaction(reaction: any) {
 
   // Computar action de saída num formato unificado
   let computedAction = formatActionData(actionData, actionType!);
-  // Se temos genericPayload.elements, padronizar para o front como action: { type: 'carousel', action: { elements } }
+  // Se temos genericPayload.elements, padronizar para o front como action: { type: 'generic', elements }
   if (hasGenericElements) {
     computedAction = {
-      type: 'carousel',
-      action: {
-        elements: (interactive as any).genericPayload.elements,
-      },
+      type: 'generic',
+      elements: (interactive as any).genericPayload.elements,
     };
   } else if (!computedAction && interactive.actionReplyButton?.buttons) {
     computedAction = { type: 'button', buttons: interactive.actionReplyButton.buttons } as any;
@@ -311,7 +320,7 @@ export async function POST(request: NextRequest) {
 
     // Instagram specific validation
     if (message.type === 'generic' || message.type === 'quick_replies' || message.type === 'button_template') {
-      const bodyTextLength = message.body.text.length;
+      const bodyTextLength = message.body?.text?.length || 0;
       
       if (message.type === 'generic' && bodyTextLength > 80) {
         return NextResponse.json(
@@ -398,7 +407,7 @@ export async function POST(request: NextRequest) {
     console.log(`[${requestId}] Message data:`, {
       name: message.name,
       type: message.type,
-      bodyLength: message.body.text.length,
+      bodyLength: message.body?.text?.length || 0,
       hasHeader: !!message.header,
       hasFooter: !!message.footer,
       hasAction: !!message.action
@@ -474,7 +483,7 @@ export async function POST(request: NextRequest) {
               interactiveType: message.type,
               body: {
                 create: {
-                  text: message.body.text
+                  text: message.body?.text || ''
                 }
               },
               // Instagram Quick Replies e Button Template não usam header nem footer
@@ -752,8 +761,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Validate request body (partial update allowed)
-    const PartialMessageSchema = InteractiveMessageSchema.partial();
-    const messageValidation = PartialMessageSchema.safeParse(message);
+    const messageValidation = PartialInteractiveMessageSchema.safeParse(message);
     if (!messageValidation.success) {
       return NextResponse.json(
         {
@@ -1027,7 +1035,7 @@ export async function PUT(request: NextRequest) {
             // If switching away from generic or no elements provided, clear genericPayload
             await tx.interactiveContent.update({
               where: { id: interactiveContentId },
-              data: { genericPayload: null },
+              data: { genericPayload: Prisma.JsonNull },
             });
           }
 

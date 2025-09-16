@@ -350,6 +350,10 @@ class InstagramTemplateConverter {
       console.log('[Instagram Converter] Detected WhatsApp processed payload');
       // É payload WhatsApp processado - converter para Instagram
       return InstagramTemplateConverter.convertWhatsAppPayloadToInstagram(interactiveContent);
+    } else if (interactiveContent?.action?.elements && Array.isArray(interactiveContent.action.elements)) {
+      // Payload já montado em formato de carrossel multi-elementos (resultado do builder)
+      console.log('[Instagram Converter] Detected processed carousel elements; building GENERIC_TEMPLATE directly');
+      return InstagramTemplateConverter.buildGenericTemplateFromElements(interactiveContent.action.elements);
     } else {
       console.log('[Instagram Converter] Detected Prisma raw data');
       // São dados brutos do Prisma - processar normalmente
@@ -559,6 +563,44 @@ class InstagramTemplateConverter {
       instagram: {
         message_format: 'GENERIC_TEMPLATE',
         ...template
+      }
+    };
+  }
+
+  /**
+   * Constrói GENERIC_TEMPLATE a partir de um array de elements já normalizados
+   * (cada element pode conter: title, subtitle?, image_url?, default_action?, buttons[])
+   */
+  static buildGenericTemplateFromElements(elementsInput: any[]): any {
+    const safeList = Array.isArray(elementsInput) ? elementsInput.slice(0, 10) : [];
+    const elements = safeList.map((el: any) => {
+      const out: any = {
+        title: InstagramTemplateConverter.truncateText(String(el?.title || ''), 80),
+      };
+      if (el?.subtitle) out.subtitle = InstagramTemplateConverter.truncateText(String(el.subtitle), 80);
+      if (el?.image_url) out.image_url = String(el.image_url);
+      if (el?.default_action?.url) {
+        out.default_action = { type: 'web_url', url: String(el.default_action.url) };
+      }
+      if (Array.isArray(el?.buttons) && el.buttons.length > 0) {
+        out.buttons = el.buttons.slice(0, 3).map((b: any) => {
+          const t = String(b?.type || '').toLowerCase();
+          if ((t === 'web_url' || t === 'url') && b?.url) {
+            return { type: 'web_url', title: String(b.title || '').slice(0, 20), url: String(b.url) };
+          }
+          // postback default
+          const payload = String(b?.payload || b?.id || b?.reply?.id || '') || String(b?.title || '');
+          return { type: 'postback', title: String(b.title || '').slice(0, 20), payload };
+        });
+      }
+      return out;
+    });
+
+    return {
+      instagram: {
+        message_format: 'GENERIC_TEMPLATE',
+        template_type: 'generic',
+        elements,
       }
     };
   }

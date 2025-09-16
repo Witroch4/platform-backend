@@ -124,6 +124,16 @@ export class METAPayloadBuilder {
       interactivePayload.action = this._buildCarouselAction(
         processedContent.actionCarousel
       );
+    } else if (
+      processedContent?.genericPayload &&
+      Array.isArray((processedContent as any).genericPayload.elements) &&
+      (processedContent as any).genericPayload.elements.length > 0
+    ) {
+      // Support Instagram/Facebook Generic Template stored in genericPayload
+      interactivePayload.type = "carousel";
+      interactivePayload.action = this._buildCarouselAction({
+        elements: (processedContent as any).genericPayload.elements,
+      });
     } else if (processedContent.actionReplyButton) {
       interactivePayload.type = "button";
       interactivePayload.action = this._buildButtonAction(
@@ -506,9 +516,11 @@ export class METAPayloadBuilder {
         // Buttons support (max 3 per element)
         if (element.buttons && Array.isArray(element.buttons) && element.buttons.length > 0) {
           mappedElement.buttons = element.buttons.slice(0, 3).map((btn: any) => {
-            if (btn.type === "url" && btn.url) {
+            const t = String(btn.type || '').toLowerCase();
+            // Accept both 'url' and 'web_url' from UI
+            if ((t === 'url' || t === 'web_url') && btn.url) {
               return {
-                type: "web_url",
+                type: 'web_url',
                 title: String(btn.title || '').slice(0, 20),
                 url: String(btn.url),
                 ...(btn.messenger_extensions && { messenger_extensions: btn.messenger_extensions }),
@@ -519,7 +531,7 @@ export class METAPayloadBuilder {
             // Postback button
             const replyId = btn.id || btn.payload || '';
             return {
-              type: "postback",
+              type: 'postback',
               title: String(btn.title || '').slice(0, 20),
               payload: String(replyId),
             };
