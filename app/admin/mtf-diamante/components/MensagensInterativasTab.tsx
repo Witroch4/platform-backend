@@ -85,6 +85,12 @@ const normalizeMessage = (m: AnyMsg): Mensagem & { type?: InteractiveMessageType
     m.interactiveContent?.action ??
     null;
 
+  // ✅ Para mensagens generic (carousel), extrair elementos e botões dos elementos
+  let elements: any[] = [];
+  if (m.type === 'generic') {
+    elements = action?.elements || m.content?.action?.elements || m.content?.genericPayload?.elements || [];
+  }
+
   // coleciona possíveis fontes de botões
   const candidates: any[] = [];
   if (Array.isArray(action?.buttons)) candidates.push(...action.buttons);
@@ -101,6 +107,15 @@ const normalizeMessage = (m: AnyMsg): Mensagem & { type?: InteractiveMessageType
     candidates.push(...m.interactiveContent.actionReplyButton.buttons);
   if (Array.isArray(m.content?.interactiveContent?.actionReplyButton?.buttons))
     candidates.push(...m.content.interactiveContent.actionReplyButton.buttons);
+
+  // ✅ Para generic, também pegar botões dos elementos do carousel
+  if (elements.length > 0) {
+    elements.forEach(element => {
+      if (Array.isArray(element.buttons)) {
+        candidates.push(...element.buttons);
+      }
+    });
+  }
 
   // remove duplicados por id
   const seen = new Map<string, any>();
@@ -126,15 +141,27 @@ const normalizeMessage = (m: AnyMsg): Mensagem & { type?: InteractiveMessageType
       m.content?.titulo
     ) || "";
 
-  const texto =
-    pick(
-      m.body?.text,
-      m.texto,
-      m.content?.body?.text,
-      m.interactiveContent?.body?.text,
-      m.message,
-      m.description
-    ) || "";
+  // ✅ Para generic, criar texto descritivo baseado nos elementos
+  let texto = "";
+  if (m.type === 'generic' && elements.length > 0) {
+    texto = `Carrossel (${elements.length} ${elements.length === 1 ? 'elemento' : 'elementos'})`;
+    // Adicionar títulos dos primeiros elementos como preview
+    const titulos = elements.slice(0, 2).map(el => el.title || el.subtitle).filter(Boolean);
+    if (titulos.length > 0) {
+      texto += ` - ${titulos.join(', ')}`;
+      if (elements.length > 2) texto += '...';
+    }
+  } else {
+    texto =
+      pick(
+        m.body?.text,
+        m.texto,
+        m.content?.body?.text,
+        m.interactiveContent?.body?.text,
+        m.message,
+        m.description
+      ) || "";
+  }
 
   const headerTipo =
     header?.type ?? m.headerTipo ?? null;
