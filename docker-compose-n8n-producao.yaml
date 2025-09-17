@@ -37,7 +37,7 @@ x-n8n-common-env: &n8n-common-env
 
 services:
   n8n_editor:
-    image: witrocha/n8n-axios:1.98.1
+    image: witrocha/n8n-axios:1.112.1
     command: start
     user: "1000:1000"
     networks:
@@ -67,7 +67,7 @@ services:
         - traefik.http.middlewares.secure-headers-n8n.headers.browserXssFilter=true
 
   n8n_webhook:
-    image: witrocha/n8n-axios:1.98.1
+    image: witrocha/n8n-axios:1.112.1
     command: webhook
     user: "1000:1000"
     networks:
@@ -92,7 +92,7 @@ services:
         - traefik.http.routers.n8n_webhook.middlewares=secure-headers-n8n
 
   n8n_worker:
-    image: witrocha/n8n-axios:1.98.1
+    image: witrocha/n8n-axios:1.112.1
     command: worker --concurrency=10
     user: "1000:1000"
     networks:

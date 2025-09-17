@@ -215,8 +215,8 @@ const BaseInteractiveMessageSchema = z.object({
   footer: FooterSchema.optional(),
   action: MessageActionSchema.optional(),
   isActive: z.boolean().default(true),
-  createdAt: z.date().optional(),
-  updatedAt: z.date().optional()
+  createdAt: z.union([z.date(), z.string().datetime()]).optional(),
+  updatedAt: z.union([z.date(), z.string().datetime()]).optional()
 });
 
 export const InteractiveMessageSchema = BaseInteractiveMessageSchema.refine((data) => {
