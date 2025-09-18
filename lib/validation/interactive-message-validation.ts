@@ -655,13 +655,21 @@ export class InteractiveMessageValidator {
     }
     
     // Message type specific validation
-    if (message.type === 'button' && (!message.action || message.action.type !== 'button')) {
-      errors.push({
-        field: 'action',
-        code: 'MISSING_REQUIRED_ACTION',
-        message: 'Button message type requires button action configuration',
-        severity: 'error'
-      });
+    if (message.type === 'button') {
+      // Para mensagens button, verificar se tem botões configurados (mais importante que action.type)
+      const buttonAction = message.action as any;
+      const hasButtons = buttonAction?.buttons && Array.isArray(buttonAction.buttons) && buttonAction.buttons.length > 0;
+      const hasActionType = message.action?.type === 'button';
+
+      // Se não tem nem botões nem action.type correto, é erro
+      if (!hasButtons && !hasActionType) {
+        errors.push({
+          field: 'action',
+          code: 'MISSING_REQUIRED_ACTION',
+          message: 'Button message type requires button action configuration',
+          severity: 'error'
+        });
+      }
     }
 
     // Context-specific validation

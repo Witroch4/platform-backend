@@ -306,7 +306,34 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
         // Ensure name exists
         name: originalMessage.name || msg.nome,
         // Ensure type exists
-        type: originalMessage.type || msg.type || 'button'
+        type: originalMessage.type || msg.type || 'button',
+        // ✅ Ensure action.type matches message type for validation and buttons exist
+        action: (() => {
+          if (originalMessage.action) {
+            return {
+              ...originalMessage.action,
+              type: originalMessage.action.type || (originalMessage.type === 'button' ? 'button' : originalMessage.type),
+              // ✅ Se não tem botões no action mas tem na normalização, adicionar
+              buttons: (originalMessage.action as any).buttons?.length > 0
+                ? (originalMessage.action as any).buttons
+                : (msg.botoes?.length > 0 ? msg.botoes.map((btn: any) => ({
+                    id: btn.id,
+                    title: btn.titulo,
+                    payload: btn.id
+                  })) : undefined)
+            };
+          } else if (originalMessage.type === 'button' && msg.botoes?.length > 0) {
+            return {
+              type: 'button',
+              buttons: msg.botoes.map((btn: any) => ({
+                id: btn.id,
+                title: btn.titulo,
+                payload: btn.id
+              }))
+            };
+          }
+          return undefined;
+        })()
       };
 
       setEditingMessage(normalizedOriginal);
