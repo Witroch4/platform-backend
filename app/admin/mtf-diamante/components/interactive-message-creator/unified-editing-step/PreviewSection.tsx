@@ -17,7 +17,7 @@ interface PreviewSectionProps {
   inboxId?: string;
 }
 
-export const PreviewSection: React.FC<PreviewSectionProps> = ({
+export const PreviewSection: React.FC<PreviewSectionProps> = React.memo(({
   message,
   variables,
   channelType,
@@ -25,8 +25,13 @@ export const PreviewSection: React.FC<PreviewSectionProps> = ({
   onReactionChange,
   inboxId,
 }) => {
-  // Create a resolved version of the message for preview
+  // Create a resolved version of the message for preview - optimized for performance
   const resolvedMessage = React.useMemo((): InteractiveMessage => {
+    // Skip variable resolution if no variables to improve performance
+    if (!variables?.length) {
+      return message;
+    }
+
     const headerContentSafe = message.header
       ? message.header.type === 'text'
         ? resolveVariables(message.header.content || '', variables)
@@ -90,4 +95,6 @@ export const PreviewSection: React.FC<PreviewSectionProps> = ({
       </Card>
     </div>
   );
-};
+});
+
+PreviewSection.displayName = 'PreviewSection';

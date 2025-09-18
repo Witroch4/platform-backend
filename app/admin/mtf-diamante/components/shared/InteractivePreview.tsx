@@ -93,14 +93,20 @@ export function InteractivePreview({
   const [showAllButtons, setShowAllButtons] = useState(false);
   const [actionConfig, setActionConfig] = useState<{ buttonId: string; defaultMode: 'send_template' | 'send_interactive' } | null>(null);
 
-  // Debounce the message to prevent excessive re-renders during real-time updates
-  const debouncedMessage = useDebounce(message, debounceMs);
+  // Use immediate message for faster preview, only debounce for heavy operations
+  const debouncedMessage = useMemo(() => message, [message]);
 
-  // Memoize WhatsApp background to prevent unnecessary recalculations
+  // Memoize and preload WhatsApp background for faster rendering
   const whatsappBackground = useMemo(() => {
-    return theme === "dark"
-      ? "/fundo_whatsapp_black.jpg"
-      : "/fundo_whatsapp.jpg";
+    const bgUrl = theme === "dark" ? "/fundo_whatsapp_black.jpg" : "/fundo_whatsapp.jpg";
+
+    // Preload background image for immediate display
+    if (typeof window !== 'undefined') {
+      const img = new Image();
+      img.src = bgUrl;
+    }
+
+    return bgUrl;
   }, [theme]);
 
   // Get reaction for a button (merge multiple entries per buttonId)
@@ -415,11 +421,17 @@ export function InteractivePreview({
                         <img
                           src={mediaUrl}
                           alt="Header media"
-                          className="max-w-full h-auto rounded-lg max-h-48 object-cover"
+                          className="max-w-full h-auto rounded-lg max-h-48 object-cover transition-opacity duration-200"
+                          loading="eager"
+                          onLoad={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.opacity = "1";
+                          }}
                           onError={(e) => {
                             const target = e.target as HTMLImageElement;
                             target.style.display = "none";
                           }}
+                          style={{ opacity: 0 }}
                         />
                       </div>
                     </div>
