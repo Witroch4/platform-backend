@@ -71,6 +71,7 @@ interface InteractivePreviewProps {
   debounceMs?: number;
   inboxId?: string;
   templateName?: string; // Nome do template/mensagem para exibir no badge
+  channelType?: string; // Tipo do canal para controlar abas disponíveis
 }
 
 export function InteractivePreview({
@@ -85,6 +86,7 @@ export function InteractivePreview({
   debounceMs = 300,
   inboxId,
   templateName,
+  channelType,
 }: InteractivePreviewProps) {
   const { theme } = useTheme();
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
@@ -909,6 +911,7 @@ export function InteractivePreview({
           onEmojiSelect={(emoji) => handleEmojiSelect(showEmojiPicker, emoji)}
           onClose={() => setShowEmojiPicker(null)}
           inboxId={inboxId}
+          channelType={channelType}
         />
       )}
 
@@ -917,6 +920,7 @@ export function InteractivePreview({
           isOpen={true}
           onClose={() => setActionConfig(null)}
           inboxId={inboxId}
+          channelType={channelType}
           onEmojiSelect={(value) => {
             if (value === "TEXT_RESPONSE") {
               setShowTextEditor(actionConfig.buttonId);

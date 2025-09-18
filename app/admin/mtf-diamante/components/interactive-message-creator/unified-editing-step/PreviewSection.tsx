@@ -90,6 +90,7 @@ export const PreviewSection: React.FC<PreviewSectionProps> = React.memo(({
             className="w-full"
             inboxId={inboxId}
             templateName={message.name}
+            channelType={channelType}
           />
         </CardContent>
       </Card>

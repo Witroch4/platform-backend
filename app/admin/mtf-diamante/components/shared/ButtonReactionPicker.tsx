@@ -393,6 +393,7 @@ interface ButtonReactionPickerProps {
   onClose: () => void;
   isOpen: boolean;
   inboxId?: string; // necessário para listar mensagens interativas por inbox
+  channelType?: string; // necessário para detectar se é WhatsApp e mostrar aba Templates
 }
 
 export function ButtonReactionPicker({
@@ -400,10 +401,18 @@ export function ButtonReactionPicker({
   onClose,
   isOpen,
   inboxId,
+  channelType,
 }: ButtonReactionPickerProps) {
   // Debug: verificar se inboxId está sendo recebido
   console.log('[ButtonReactionPicker] inboxId recebido:', inboxId);
   const [activeTab, setActiveTab] = useState("emojis");
+
+  // Redirecionar para aba válida se templates estiver ativo em canal não-WhatsApp
+  useEffect(() => {
+    if (activeTab === 'templates' && channelType !== 'Channel::Whatsapp') {
+      setActiveTab('emojis');
+    }
+  }, [activeTab, channelType]);
   const [activeCategory, setActiveCategory] = useState("recent");
   const [searchTerm, setSearchTerm] = useState("");
   const [filteredEmojis, setFilteredEmojis] = useState<string[]>([]);
@@ -643,15 +652,18 @@ export function ButtonReactionPicker({
 
         {/* Sistema de Abas */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-          <TabsList className="mx-4 mt-3 grid w-full grid-cols-3">
+          <TabsList className={`mx-4 mt-3 grid w-full ${channelType === 'Channel::Whatsapp' ? 'grid-cols-3' : 'grid-cols-2'}`}>
             <TabsTrigger value="emojis" className="flex items-center gap-1">
               <Smile size={16} />
               Emojis
             </TabsTrigger>
-            <TabsTrigger value="templates" className="flex items-center gap-1">
-              <FileText size={16} />
-              Templates
-            </TabsTrigger>
+            {/* Aba Templates - apenas para WhatsApp */}
+            {channelType === 'Channel::Whatsapp' && (
+              <TabsTrigger value="templates" className="flex items-center gap-1">
+                <FileText size={16} />
+                Templates
+              </TabsTrigger>
+            )}
             <TabsTrigger value="interactives" className="flex items-center gap-1">
               <MessageSquare size={16} />
               Interativas

@@ -38,7 +38,8 @@
       "mcp__playwright__browser_install",
       "mcp__playwright__browser_fill_form",
       "Bash(docker history:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
