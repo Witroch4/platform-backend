@@ -38,11 +38,11 @@ services:
       - redis
       - postgres
 
-  # ───────────────────────────────────────────────────────
-  # Worker 1: automacao (worker/automacao.worker.ts)
-  # ───────────────────────────────────────────────────────
-  automacao_worker:
-    container_name: chatwit_worker_automacao
+  # ============================================================================
+  # WORKER UNIFICADO - TODOS OS WORKERS EM UM ÚNICO CONTAINER (DEV)
+  # ============================================================================
+  worker:
+    container_name: chatwit_worker_unified
     build:
       context: .
       dockerfile: Dockerfile.dev
@@ -51,38 +51,18 @@ services:
     environment:
       REDIS_HOST: "redis"
       REDIS_PORT: "6379"
-    command: npm run start:worker        # roda worker/automacao.worker.ts
+    # Comando para iniciar TODOS os workers usando o init.ts
+    command: npm run start:unified-worker
     volumes:
       - .:/src
       - node_modules:/src/node_modules
+      - ./temp:/src/temp
     networks:
       - minha_rede
     restart: unless-stopped
     depends_on:
       - redis
-
-  # ───────────────────────────────────────────────────────
-  # Worker 2: webhook (worker/webhook.worker.ts)
-  # ───────────────────────────────────────────────────────
-  webhook_worker:
-    container_name: chatwit_worker_webhook
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    env_file:
-      - .env.development
-    environment:
-      REDIS_HOST: "redis"
-      REDIS_PORT: "6379"
-    command: npm run worker             # roda worker/webhook.worker.ts
-    volumes:
-      - .:/src
-      - node_modules:/src/node_modules
-    networks:
-      - minha_rede
-    restart: unless-stopped
-    depends_on:
-      - redis
+      - postgres
 
   # ───────────────────────────────────────────────────────
   # Redis

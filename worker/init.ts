@@ -1,7 +1,7 @@
-import { 
-  initAgendamentoWorker, 
-  initManuscritoWorker, 
-  initLeadsChatwitWorker, 
+import {
+  initAgendamentoWorker,
+  initManuscritoWorker,
+  initLeadsChatwitWorker,
   // initMtfDiamanteAsyncWorker, // Temporariamente desabilitado
   initInstagramTranslationWorker,
   initializeInstagramTranslationWorker,  // Adicionado
@@ -12,6 +12,7 @@ import { initializeExistingAgendamentos } from '../lib/scheduler-bullmq';
 import { initJobs } from './webhook.worker';
 import { startWorkers as startAIIntegrationWorkers } from './ai-integration.worker';
 import { instagramWebhookWorker } from './automacao.worker';
+import { initializeQueueManagement, shutdownQueueManagement } from './queue-manager-integration';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -83,6 +84,14 @@ export async function initializeWorkers() {
     console.log('[Worker] ✅ Worker de Tradução Instagram inicializado');
 
     // ============================================================================
+    // QUEUE MANAGEMENT SYSTEM
+    // ============================================================================
+
+    // Initialize queue management system to monitor all registered queues
+    await initializeQueueManagement();
+    console.log('[Worker] ✅ Sistema de Gerenciamento de Filas inicializado');
+
+    // ============================================================================
     // SHARED INITIALIZATION
     // ============================================================================
 
@@ -104,6 +113,7 @@ export async function initializeWorkers() {
     console.log('📱 Worker de Automação Instagram ativo');
     console.log('📝 Workers legados (manuscrito, leads, tradução) ativos');
     console.log('⏰ Jobs recorrentes configurados');
+    console.log('📊 Sistema de Gerenciamento de Filas monitorando todas as filas');
     console.log('');
 
     return { success: true, count: result.count };
@@ -116,14 +126,18 @@ export async function initializeWorkers() {
 // Setup graceful shutdown para todos os workers
 async function gracefulShutdown(signal: string) {
   console.log(`[Worker] 🛑 Recebido sinal ${signal}, iniciando shutdown graceful...`);
-  
+
   try {
+    // Shutdown queue management first
+    console.log('[Worker] Parando sistema de gerenciamento de filas...');
+    await shutdownQueueManagement();
+
     // Parar o worker de automação
     if (instagramWebhookWorker) {
       console.log('[Worker] Parando worker de automação...');
       await instagramWebhookWorker.close();
     }
-    
+
     console.log('[Worker] 👋 Shutdown concluído com sucesso');
     process.exit(0);
   } catch (error) {

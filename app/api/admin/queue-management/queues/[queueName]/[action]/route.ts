@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { NextRequest, NextResponse } from "next/server";
-import { QueueManagerService } from "@/lib/queue-management/services/queue-manager.service";
-import { AuditLogService } from "@/lib/services/audit-log.service";
+import { getRedisInstance } from "@/lib/connections";
+import { Queue } from "bullmq";
 
 export async function POST(
   request: NextRequest,
@@ -18,67 +18,91 @@ export async function POST(
     }
 
     const { queueName, action } = await params;
-    const queueManager = QueueManagerService.getInstance();
-    const auditLog = AuditLogService.getInstance();
 
-    let result;
-    let auditAction = "";
-    let auditDetails = {};
+    try {
+      const redis = getRedisInstance();
+      const queue = new Queue(queueName, { connection: redis });
 
-    switch (action) {
-      case "pause":
-        result = await queueManager.pauseQueue(queueName);
-        auditAction = "QUEUE_PAUSED";
-        auditDetails = { queueName };
-        break;
+      let result;
 
-      case "resume":
-        result = await queueManager.resumeQueue(queueName);
-        auditAction = "QUEUE_RESUMED";
-        auditDetails = { queueName };
-        break;
+      switch (action) {
+        case "pause":
+          await queue.pause();
+          result = { success: true, message: `Queue ${queueName} paused` };
+          break;
 
-      case "retry-failed":
-        result = await queueManager.retryAllFailed(queueName);
-        auditAction = "QUEUE_RETRY_FAILED";
-        auditDetails = { queueName, retriedJobs: result };
-        break;
+        case "resume":
+          await queue.resume();
+          result = { success: true, message: `Queue ${queueName} resumed` };
+          break;
 
-      case "clean":
-        result = await queueManager.cleanCompleted(queueName);
-        auditAction = "QUEUE_CLEANED";
-        auditDetails = { queueName, cleanedJobs: result };
-        break;
+        case "retry-failed":
+          const failedJobs = await queue.getFailed();
+          let retriedCount = 0;
+          for (const job of failedJobs) {
+            try {
+              await job.retry();
+              retriedCount++;
+            } catch (retryError) {
+              console.warn(`Failed to retry job ${job.id}:`, retryError);
+            }
+          }
+          result = {
+            success: true,
+            processed: retriedCount,
+            total: failedJobs.length,
+            message: `Retried ${retriedCount}/${failedJobs.length} failed jobs`
+          };
+          break;
 
-      default:
-        return NextResponse.json(
-          { error: `Ação '${action}' não suportada` },
-          { status: 400 }
-        );
+        case "clean":
+          const completedJobs = await queue.getCompleted();
+          const cutoffTime = Date.now() - (24 * 60 * 60 * 1000); // 24 hours
+          const jobsToClean = completedJobs.filter(job =>
+            job.finishedOn && job.finishedOn < cutoffTime
+          );
+
+          let cleanedCount = 0;
+          for (const job of jobsToClean) {
+            try {
+              await job.remove();
+              cleanedCount++;
+            } catch (cleanError) {
+              console.warn(`Failed to clean job ${job.id}:`, cleanError);
+            }
+          }
+
+          result = {
+            success: true,
+            processed: cleanedCount,
+            total: jobsToClean.length,
+            message: `Cleaned ${cleanedCount}/${jobsToClean.length} completed jobs`
+          };
+          break;
+
+        default:
+          return NextResponse.json(
+            { error: `Ação '${action}' não suportada` },
+            { status: 400 }
+          );
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `Ação '${action}' executada com sucesso na fila '${queueName}'`,
+        result,
+      });
+
+    } catch (queueError) {
+      console.error(`Queue manager error for action ${action} on queue ${queueName}:`, queueError);
+      return NextResponse.json(
+        { error: `Falha ao executar ação: ${queueError instanceof Error ? queueError.message : 'Unknown error'}` },
+        { status: 500 }
+      );
     }
 
-    // Log da auditoria
-    await auditLog.log({
-      userId: session.user.id,
-      action: auditAction,
-      resource: "queue",
-      resourceId: queueName,
-      details: auditDetails,
-      ipAddress: request.headers.get("x-forwarded-for") || 
-                 request.headers.get("x-real-ip") || 
-                 "unknown",
-      userAgent: request.headers.get("user-agent") || "unknown",
-    });
-
-    return NextResponse.json({
-      success: true,
-      message: `Ação '${action}' executada com sucesso na fila '${queueName}'`,
-      result,
-    });
-
   } catch (error) {
-    const { queueName, action } = await params;
-    console.error(`Erro ao executar ação ${action} na fila ${queueName}:`, error);
+    console.error(`Erro ao executar ação na fila:`, error);
     return NextResponse.json(
       { error: "Erro interno do servidor" },
       { status: 500 }

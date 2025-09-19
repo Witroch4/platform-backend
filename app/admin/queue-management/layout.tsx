@@ -42,27 +42,27 @@ export default async function QueueManagementLayout({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b">
+      <div className="bg-card shadow-sm border-b border-border">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <Activity className="h-8 w-8 text-blue-600" />
+              <Activity className="h-8 w-8 text-primary" />
               <div>
-                <h1 className="text-xl font-semibold text-gray-900">
+                <h1 className="text-xl font-semibold text-foreground">
                   Sistema de Filas BullMQ
                 </h1>
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-muted-foreground">
                   Painel de controle para SUPERADMIN
                 </p>
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">
+              <span className="text-sm text-muted-foreground">
                 Logado como: {session.user.name || session.user.email}
               </span>
-              <span className="px-2 py-1 bg-red-100 text-red-800 text-xs font-medium rounded-full">
+              <span className="px-2 py-1 bg-destructive/10 text-destructive text-xs font-medium rounded-full border border-destructive/20">
                 SUPERADMIN
               </span>
             </div>
@@ -83,8 +83,8 @@ export default async function QueueManagementLayout({
                     href={item.href}
                     className={cn(
                       "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
-                      "hover:bg-gray-100 hover:text-gray-900",
-                      "text-gray-600"
+                      "hover:bg-muted hover:text-foreground",
+                      "text-muted-foreground"
                     )}
                   >
                     <Icon className="h-5 w-5 mr-3" />

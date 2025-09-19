@@ -627,10 +627,12 @@ function AssistenteItem({
     }
 
     try {
+      let response;
+      
       if (!assistente.conectado) {
         console.log(`📍 [DEBUG] Criando novo link para assistente "${assistente.nome}"`);
         // Criar link + ativar
-        await axios.post('/api/admin/ai-integration/assistant-links', {
+        response = await axios.post('/api/admin/ai-integration/assistant-links', {
           assistantId: assistente.id,
           inboxId: caixa.inboxId,
           isActive: true
@@ -638,14 +640,16 @@ function AssistenteItem({
       } else {
         console.log(`📍 [DEBUG] Atualizando link existente "${assistente.linkId}" para assistente "${assistente.nome}"`);
         // Toggle link existente
-        await axios.patch(`/api/admin/ai-integration/assistant-links/${assistente.linkId}`, {
+        response = await axios.patch(`/api/admin/ai-integration/assistant-links/${assistente.linkId}`, {
           isActive: newState
         });
       }
       
-      // ✅ NÃO chamamos refreshCaixas() aqui para evitar conflito com optimistic update
-      // O estado visual já foi atualizado optimisticamente
-      console.log(`✅ [DEBUG] Toggle do assistente "${assistente.nome}" concluído com sucesso`);
+      console.log(`✅ [DEBUG] Toggle do assistente "${assistente.nome}" concluído com sucesso`, response.data);
+      
+      // 🔄 REFRESH DADOS: Agora sim, recarregamos para sincronizar com o backend
+      // Isso garante que o linkId seja atualizado corretamente
+      await refreshCaixas();
       
     } catch (error) {
       console.error(`❌ [DEBUG] Erro no toggle do assistente "${assistente.nome}":`, error);
@@ -722,17 +726,23 @@ function AssistenteItem({
             checked={optimisticAtivo}
             onCheckedChange={handleToggleWithToast}
           />
-          {optimisticConectado && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setShowDeleteDialog(true)}
-              className="text-destructive hover:text-destructive"
-              title="Desconectar assistente"
-            >
-              <Trash2 className="w-4 h-4" />
-            </Button>
-          )}
+          {/* Sempre renderiza o botão de lixeira para consistência visual.
+              Quando o assistente não está conectado, o botão fica desabilitado
+              e com opacidade reduzida para indicar estado inativo. */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => optimisticConectado && setShowDeleteDialog(true)}
+            className={cn(
+              "transition-opacity",
+              optimisticConectado ? "text-destructive hover:text-destructive opacity-100" : "opacity-40 cursor-not-allowed"
+            )}
+            title={optimisticConectado ? "Desconectar assistente" : "Assistente não conectado"}
+            aria-disabled={!optimisticConectado}
+            disabled={!optimisticConectado}
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
         </div>
       </div>
 
