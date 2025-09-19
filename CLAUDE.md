@@ -1,4 +1,4 @@
-# CLAUDE.md
+# CLAUDE.md - Socialwise Chatwit Development Guide
 
 This file provides comprehensive guidance to Claude Code (claude.ai/code) and Cursor AI when working with the Socialwise Chatwit repository.
 
@@ -15,9 +15,8 @@ This file provides comprehensive guidance to Claude Code (claude.ai/code) and Cu
 9. **Front linguagem clara e direta sem termos tecnicos**
 10. **Tudo deve ser compativel com thema dark e light do shadcn**
 11. **Edição no front deve ser olhar com a tool de navegação o resutado**
-12. ** Sempre que adicionar uma feture adicione sem necessiade de controle global só controle de acesso pagina que controla acesso as features admin/features OU SEJA 
-❌ Antes: FeatureFlag Global → UserOverride → Funcionalidade
-✅ Agora: Controle de Acesso → Funcionalidade (sempre disponível)**
+12. **Sempre que adicionar uma feature adicione sem necessidade de controle global só controle de acesso pagina que controla acesso as features admin/features**
+13. **BFF como Fonte Única (UI)**: telas devem **ler** do BFF e **mutar** usando a **mesma SWR key**; CRUD puro fica para domínio/serviços
 
 ## 🚀 Project Overview
 
@@ -42,6 +41,7 @@ This file provides comprehensive guidance to Claude Code (claude.ai/code) and Cu
 - **Backend**: Node.js with Next.js API routes, Express.js, Prisma ORM
 - **Database**: PostgreSQL 17 with pgvector extension
 - **Cache/Queue**: Redis 7+ with BullMQ for job processing
+- **State Management**: SWR 2.3.6 for data fetching and caching
 - **UI Framework**: Tailwind CSS, Shadcn/UI components, Framer Motion
 - **Authentication**: NextAuth.js v5 with Prisma adapter
 - **File Storage**: MinIO (S3-compatible) for document management
@@ -103,7 +103,295 @@ export async function POST(
 }
 ```
 
-### Database Operations (Prisma)
+## 🧭 GUIA DEFINITIVO — SWR 2.3.6 para Socialwise/Chatwit
+
+> Padrões oficiais e opinionados para telas **rápidas, estáveis e sem flicker** em React/Next.js com **SWR 2.3.6**.
+
+### 0) Decisões do Projeto (TL;DR)
+- **Fetcher único** (JSON + erro se `!res.ok`), validação opcional (Zod) **no hook**
+- **SWRConfig global**: `revalidateOnFocus:true`, `revalidateOnReconnect:true`, `revalidateIfStale:true`, `dedupingInterval: 1000–2000ms`
+- **Listas/filtros**: `keepPreviousData:true` (sem "piscar")
+- **Mutations**: **`useSWRMutation` para rede** + **`mutate` para cache** (optimistic/rollback/populateCache)
+- **Prefetch**: `preload`
+- **Tempo real**: `useSWRSubscription` (WS/SSE), evitar polling quando possível
+- **Next.js App Router**: buscar no **Server** e injetar **Promise em `SWRConfig.fallback`**; no Client usar SWR + Suspense
+- **Observabilidade**: middlewares para métricas/retry/tracing
+
+### 1) SWR + BFF = Fonte Única de Verdade (UI)
+
+**Regra de ouro**: a UI **lê** sempre do **BFF** e todas as mutações **atualizam a mesma SWR key** que abastece a tela.
+
+#### Por quê?
+- Evita estado dividido entre endpoints diferentes (flicker/race)
+- Um único formato/DTO para UI (o BFF agrega/normaliza)
+- Cache consistente: `mutate(key)` atualiza exatamente o que a UI lê
+
+#### No MTF Diamante (Caixas/Agentes)
+- **Leitura/Lista**: `GET /api/admin/mtf-diamante/inbox-view?dataType=caixas`
+  - ⚠️ **Cache BYPASS** quando `dataType=caixas` (servidor manda `no-store`): dado sempre fresco
+- **Mutations (create/update/delete)**: chamadas de domínio (CRUD) podem existir, **mas a UI SEMPRE muta a mesma key do BFF** via `mutate('/api/admin/mtf-diamante/inbox-view?dataType=caixas', ...)` com **optimistic + rollback** e **`revalidate:false`**
+- **Resultado**: **sem "aparece→some→volta"**, sem desencontro entre CRUD e BFF
+
+> **Pode apagar o CRUD?** Não. **Boa prática**: manter CRUD para serviços/integradores e o **BFF para a UI**. O BFF pode internamente usar o CRUD/Prisma, mas a tela conversa só com o BFF.
+
+### 2) SWRConfig (client)
+
+```tsx
+'use client'
+import { SWRConfig } from 'swr';
+
+export function SWRProvider({ children }: { children: React.ReactNode }) {
+  return (
+    <SWRConfig value={{
+      fetcher: async (url: string) => {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      },
+      revalidateOnFocus: true,
+      revalidateOnReconnect: true,
+      revalidateIfStale: true,
+      dedupingInterval: 1500,
+      errorRetryInterval: 3000,
+      shouldRetryOnError: (err: any) => !String(err?.message).includes('401'),
+      provider: () => new Map(),
+    }}>
+      {children}
+    </SWRConfig>
+  );
+}
+```
+
+### 3) Hook de Dados (única fonte + sem flash)
+
+```ts
+import useSWR from 'swr';
+import type { ChatwitInbox } from '@/types/dialogflow';
+
+const KEY = '/api/admin/mtf-diamante/inbox-view?dataType=caixas';
+
+export function useCaixas(isPaused = false) {
+  const { data, error, isLoading, mutate } = useSWR<ChatwitInbox[]>(
+    isPaused ? null : KEY,
+    // fetcher global
+    {
+      keepPreviousData: true,
+      revalidateOnFocus: !isPaused,
+      revalidateOnReconnect: !isPaused,
+      refreshInterval: isPaused ? 0 : 30000,
+      dedupingInterval: 25000,
+    }
+  );
+  return { caixas: data ?? [], isLoading, error, mutate, KEY };
+}
+```
+
+### 4) Playbook de Mutations (optimistic + rollback)
+
+> **Padrão oficial** da equipe: **`useSWRMutation` faz a chamada remota**; **`mutate(KEY, promise, { ... })` orquestra o cache**.
+
+#### Create (append no final, sem revalidate)
+
+```ts
+import useSWRMutation from 'swr/mutation';
+import type { ChatwitInbox, CreateCaixaPayload } from '@/types/dialogflow';
+
+export function useCreateCaixa() {
+  return useSWRMutation('/api/admin/mtf-diamante/caixas', async (_url, { arg }: { arg: CreateCaixaPayload }) => {
+    const r = await fetch(_url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(arg) });
+    if (!r.ok) throw new Error('Falha ao criar');
+    return r.json();
+  });
+}
+
+export async function addCaixaOptimistic({
+  optimistic,
+  payload,
+  mutate,
+  KEY
+}: {
+  optimistic: ChatwitInbox; 
+  payload: CreateCaixaPayload; 
+  mutate: any; 
+  KEY: string;
+}) {
+  await mutate(
+    (async () => {
+      const r = await fetch('/api/admin/mtf-diamante/caixas', { 
+        method:'POST', 
+        headers:{'Content-Type':'application/json'}, 
+        body: JSON.stringify(payload) 
+      });
+      if (!r.ok) throw new Error('Falha ao criar');
+      const { data: created } = await r.json();
+      return (curr: ChatwitInbox[] = []) => [...curr.filter(c => c.id !== optimistic.id), created];
+    })(),
+    {
+      optimisticData: (curr: ChatwitInbox[] = []) => [...curr, optimistic],
+      rollbackOnError: true,
+      populateCache: (updater, curr: ChatwitInbox[]) => (typeof updater === 'function' ? updater(curr) : curr),
+      revalidate: false,
+    }
+  );
+}
+```
+
+#### Update (replace por id)
+
+```ts
+export async function updateCaixaOptimistic({
+  updated,
+  payload,
+  mutate
+}: {
+  updated: ChatwitInbox; 
+  payload: { caixaId: string } & Record<string, any>; 
+  mutate: any;
+}) {
+  await mutate(
+    (async () => {
+      const r = await fetch(`/api/admin/mtf-diamante/caixas/${payload.caixaId}`, { 
+        method:'PUT', 
+        headers:{'Content-Type':'application/json'}, 
+        body: JSON.stringify(payload) 
+      });
+      if (!r.ok) throw new Error('Falha ao atualizar');
+      const { data: result } = await r.json();
+      return (curr: ChatwitInbox[] = []) => curr.map(c => c.id === result.id ? result : c);
+    })(),
+    {
+      optimisticData: (curr: ChatwitInbox[] = []) => curr.map(c => c.id === updated.id ? updated : c),
+      rollbackOnError: true,
+      populateCache: (updater, curr: ChatwitInbox[]) => (typeof updater === 'function' ? updater(curr) : curr),
+      revalidate: false,
+    }
+  );
+}
+```
+
+#### Delete (filter por id)
+
+```ts
+export async function deleteCaixaOptimistic({ id, mutate }: { id: string; mutate: any }) {
+  await mutate(
+    (async () => {
+      const r = await fetch(`/api/admin/mtf-diamante/caixas/${id}`, { method:'DELETE' });
+      if (!r.ok) throw new Error('Falha ao excluir');
+      return (curr: any[] = []) => curr.filter(c => c.id !== id);
+    })(),
+    {
+      optimisticData: (curr: any[] = []) => curr.filter(c => c.id !== id),
+      rollbackOnError: true,
+      populateCache: (updater, curr: any[]) => (typeof updater === 'function' ? updater(curr) : curr),
+      revalidate: false,
+    }
+  );
+}
+```
+
+### 5) Evitando "flicker" (flash) e corridas
+- **`keepPreviousData:true`** em listas/paginação
+- **Uma única key** para a lista: `'/api/admin/mtf-diamante/inbox-view?dataType=caixas'`
+- **Não** misturar leitura (CRUD) e mutação (BFF) — **sempre a mesma key** do BFF
+- **Bypass de cache no BFF** para `dataType=caixas` (servidor responde `no-store`)
+
+### 6) Post-mortem (bug "aparece → some → volta")
+**Causa raiz**: UI lia lista de um endpoint e mutava por outro (CRUD vs BFF), com cache intermediário → estado divergente e re-render com "sumir/voltar".
+
+**Correção**:
+1) UI **lê apenas** do BFF `/inbox-view?dataType=caixas`
+2) **Todas as mutações** usam `mutate` **na mesma key**
+3) **Bypass** de cache para `dataType=caixas`
+4) **Optimistic + rollback** com `revalidate:false`
+
+**Resultado**: lista estável, sem flicker, agentes/assistentes visíveis e previsíveis.
+
+### 7) Snippets úteis
+- **Invalidate múltiplas páginas**: `mutate((key) => typeof key==='string' && key.startsWith('/api/posts?page='), undefined, { revalidate:true })`
+- **Prefetch**: `preload(KEY, fetcher)`
+- **Subscription**: `useSWRSubscription(KEY, (k,{next}) => { const ws=new WebSocket(...); ws.onmessage=e=>next(null,JSON.parse(e.data)); return ()=>ws.close(); })`
+
+### 8) Checklist por tela
+- [ ] Usa BFF como fonte única?
+- [ ] Mesma **SWR key** para leitura e mutate?
+- [ ] `keepPreviousData:true`?
+- [ ] Optimistic + rollback + `revalidate:false`?
+- [ ] Sem misturar CRUD puro na UI?
+- [ ] Prefetch/Subscription quando fizer sentido?
+
+## 🎨 UI/UX Standards
+
+### Optimistic Updates
+- Atualize o estado da UI **antes** da resposta da API e reverta só em caso de erro
+- Prefira `startTransition` (UI local) e/ou React Query/Server Actions para conciliar cache e rollback
+- Combine com `toast.promise` para feedback transparente da operação
+
+### Toasts (sonner)
+- Use **sonner** (o toast do shadcn foi **depreciado**). Renderize `<Toaster />` no layout raiz e chame `toast` em clientes
+- Para chamadas de API, padronize **`toast.promise`** (loading → success/error)
+
+```tsx
+// app/layout.tsx
+import { Toaster } from "sonner";
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="pt-BR">
+      <body>
+        {children}
+        <Toaster richColors closeButton />
+      </body>
+    </html>
+  );
+}
+```
+
+```tsx
+"use client";
+import { toast } from "sonner";
+
+async function save(data: FormData) {
+  // sua chamada de API/Server Action aqui
+}
+
+export function SaveButton() {
+  const onClick = () => {
+    const promise = save(new FormData());
+    toast.promise(promise, {
+      loading: "Salvando...",
+      success: (result) => `Salvo com sucesso`,
+      error: (err) => err?.message ?? "Erro ao salvar",
+    });
+  };
+  return <button onClick={onClick}>Salvar</button>;
+}
+```
+
+### Dialogs
+- Use **`Dialog`** para modais gerais e **`AlertDialog`** para ações destrutivas (confirm/deny)
+- Evite `confirm()/alert()`
+- Garanta foco inicial e fechamento por `Esc`
+- **Responsive Design**: Use Tailwind responsive classes (w-[96vw] sm:max-w-2xl)
+- **Scroll Areas**: For extensive content, use ScrollArea with defined height
+
+### Responsive Dialog Example
+```tsx
+// Dialog with scroll and responsiveness
+<Dialog>
+  <DialogContent className="w-[96vw] sm:max-w-2xl max-h-[85vh]">
+    <DialogHeader>
+      <DialogTitle>Título</DialogTitle>
+    </DialogHeader>
+    <ScrollArea className="h-[58vh] sm:h-[62vh]">
+      {/* Scrollable content */}
+    </ScrollArea>
+    <DialogFooter>
+      {/* Actions */}
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+```
+
+## Database Operations (Prisma)
 ```typescript
 // All database interactions through Prisma ORM
 import { getPrismaInstance } from '@/lib/connections';
@@ -117,61 +405,6 @@ await prisma.someModel.update({
   },
 });
 ```
-
-### UI/UX Standards
-
-* **Optimistic updates**
-
-  * Atualize o estado da UI **antes** da resposta da API e reverta só em caso de erro.
-  * Prefira `startTransition` (UI local) e/ou React Query/Server Actions para conciliar cache e rollback.
-  * Combine com `toast.promise` para feedback transparente da operação. ([strapi.io][1], [Medium][2])
-
-* **Toasts (sonner)**
-
-  * Use **sonner** (o toast do shadcn foi **depreciado**). Renderize `<Toaster />` no layout raiz e chame `toast` em clientes.
-  * Para chamadas de API, padronize **`toast.promise`** (loading → success/error).
-
-  ```tsx
-  // app/layout.tsx
-  import { Toaster } from "sonner";
-  export default function RootLayout({ children }: { children: React.ReactNode }) {
-    return (
-      <html lang="pt-BR">
-        <body>
-          {children}
-          <Toaster richColors closeButton />
-        </body>
-      </html>
-    );
-  }
-  ```
-  ```tsx
-  "use client";
-  import { toast } from "sonner";
-
-  async function save(data: FormData) {
-    // sua chamada de API/Server Action aqui
-  }
-
-  export function SaveButton() {
-    const onClick = () => {
-      const promise = save(new FormData());
-      toast.promise(promise, {
-        loading: "Salvando...",
-        success: (result) => `Salvo com sucesso`,
-        error: (err) => err?.message ?? "Erro ao salvar",
-      });
-    };
-    return <button onClick={onClick}>Salvar</button>;
-  }
-  ```
-
-* **Dialogs**
-
-  * Use **`Dialog`** para modais gerais e **`AlertDialog`** para ações destrutivas (confirm/deny). Evite `confirm()/alert()`. Garanta foco inicial e fechamento por `Esc`.
-
-- **Responsive Design**: Use Tailwind responsive classes (w-[96vw] sm:max-w-2xl)
-- **Scroll Areas**: For extensive content, use ScrollArea with defined height
 
 ## 🛠️ Development Commands
 
@@ -300,15 +533,13 @@ lib/
 ├── ai-integration/       # AI service integrations
 │   ├── services/         # Core AI services
 │   ├── types/            # AI integration types
-
 │   ├── schemas/          # Data schemas
 │   ├── workers/          # Worker processes
 │   └── queues/           # Queue management
 ├── socialwise-flow/      # SocialWise Flow Processing System
 │   ├── processor.ts      # Main flow processor
-
-│   ├── metrics.ts            # Performance metrics
-│   └── services/             # SocialWise services
+│   ├── metrics.ts        # Performance metrics
+│   └── services/         # SocialWise services
 ├── cost/                 # Cost Management System
 │   ├── cost-worker.ts    # Main cost processing worker
 │   ├── budget-system.ts  # Budget management system
@@ -622,26 +853,6 @@ app/api/[feature]/
     └── route.ts         # Custom actions
 ```
 
-## 🎨 Responsive Dialog Example
-```tsx
-// Dialog with scroll and responsiveness
-<Dialog>
-  <DialogContent className="w-[96vw] sm:max-w-2xl max-h-[85vh]">
-    <DialogHeader>
-      <DialogTitle>Título</DialogTitle>
-    </DialogHeader>
-    <ScrollArea className="h-[58vh] sm:h-[62vh]">
-      {/* Scrollable content */}
-    </ScrollArea>
-    <DialogFooter>
-      {/* Actions */}
-    </DialogFooter>
-  </DialogContent>
-</Dialog>
-```
-
-
-
 ## 🚦 Environment Variables
 
 ```bash
@@ -666,14 +877,13 @@ OPENAI_API_KEY     # OpenAI API key
 - **Performance Tests**: Queue and AI systems
 - **Comprehensive Coverage**: Legal compliance requirements
 
+## 💡 Key Insights
 
-como bugs de foco/input em
-  React geralmente são causados por:
+Como bugs de foco/input em React geralmente são causados por:
+- Keys instáveis em listas
+- IDs que mudam entre renders
+- Referencias de objetos que quebram igualdade
 
-  - Keys instáveis em listas
-  - IDs que mudam entre renders
-  - Referencias de objetos que quebram igualdade
+Sua solução demonstra que às vezes a correção mais eficaz é a mais simples: manter a identidade dos elementos estável para que React possa otimizar corretamente.
 
-  Sua solução demonstra que às vezes a correção mais eficaz
-   é a mais simples: manter a identidade dos elementos 
-  estável para que React possa otimizar corretamente.
+No projeto MTF Diamante, houve um bug de "aparece → some → volta" nas caixas por usar listagem do BFF (/inbox-view) com cache e mutações no CRUD (/caixas). A solução foi tornar o BFF (/inbox-view?dataType=caixas) a fonte única da lista para a UI, desabilitar cache para esse dataType, alinhar a SWR key das mutações com a mesma key da lista e evitar misturar endpoints. Manter CRUD puro para uso interno/serviços e BFF para a UI.
