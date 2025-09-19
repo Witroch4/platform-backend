@@ -44,7 +44,7 @@ import { toast } from "sonner";
 import axios from "axios";
 import { cn } from "@/lib/utils";
 import { CaixaCardSkeleton } from "./LoadingSkeletons";
-import { useMtfData } from "../context/MtfDataProvider";
+import { useMtfData } from "../context/SwrProvider";
 
 import type { 
   AgenteDialogflow, 
@@ -156,7 +156,7 @@ export function DialogflowCaixasAgentes({
   const [selectedCaixaId, setSelectedCaixaId] = useState<string | null>(null);
 
   // Usando contexto de dados para cache persistente
-  const { caixas, loadingCaixas: loading, refreshCaixas, optimisticAddCaixa } = useMtfData();
+  const { caixas, loadingCaixas: loading, refreshCaixas, addCaixa } = useMtfData();
 
   // Seleção automática apenas se não houver seleção
   useEffect(() => {
@@ -344,6 +344,7 @@ function CaixaCard({
                   assistente={assistente}
                   onUpdate={onUpdate}
                   refreshCaixas={refreshCaixas}
+                  caixa={caixa}
                 />
               ))
             )}
@@ -584,72 +585,117 @@ function AssistenteItem({
   assistente,
   onUpdate,
   refreshCaixas,
+  caixa,
 }: {
   assistente: AssistenteCaptiao;
   onUpdate: () => void;
   refreshCaixas: () => Promise<void>;
+  caixa: CaixaEntrada;
 }) {
   const { caixas, setCaixas } = useMtfData();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [optimisticAtivo, setOptimisticAtivo] = useState(assistente.ativo);
+  const [optimisticConectado, setOptimisticConectado] = useState(assistente.conectado);
+  const [isToggling, setIsToggling] = useState(false);
+  const [lastAssistenteId, setLastAssistenteId] = useState(assistente.id);
 
-  // Função para toggle do assistente do Capitão
+  // Sincronizar apenas quando mudar de assistente (componente remontado)
+  if (lastAssistenteId !== assistente.id) {
+    setOptimisticAtivo(assistente.ativo);
+    setOptimisticConectado(assistente.conectado);
+    setLastAssistenteId(assistente.id);
+  }
+
+  // Função para toggle do assistente do Capitão com optimistic updates
   const handleToggleAssistente = async () => {
-    const togglePromise = async () => {
-      try {
-        // Chama a API para ativar/desativar o assistente
-        const response = await axios.patch(
-          `/api/admin/ai-integration/assistants/${assistente.id}`,
-          { isActive: !assistente.ativo }
-        );
-
-        // Atualiza o estado local imediatamente
-        setCaixas((currentCaixas) => {
-          return currentCaixas.map((c) => ({
-            ...c,
-            assistentes: (c.assistentes || []).map((a) => 
-              a.id === assistente.id 
-                ? { ...a, ativo: !assistente.ativo }
-                : a
-            ),
-          }));
-        });
-
-        return response.data;
-      } catch (error) {
-        throw error;
-      }
-    };
-
-    toast.promise(togglePromise(), {
-      loading: assistente.ativo ? "Desativando assistente..." : "Ativando assistente...",
-      success: () => `Assistente ${assistente.ativo ? 'desativado' : 'ativado'} com sucesso!`,
-      error: (err) => err.response?.data?.error || "Erro ao alterar status do assistente",
+    const newState = !optimisticAtivo;
+    
+    console.log(`🔍 [DEBUG] Toggle assistente "${assistente.nome}":`, {
+      optimisticAtivo,
+      newState,
+      conectado: assistente.conectado,
+      linkId: assistente.linkId,
+      ativo: assistente.ativo
     });
+    
+    setIsToggling(true);
+    
+    // ⚡ OPTIMISTIC UPDATE: Muda visual instantaneamente
+    setOptimisticAtivo(newState);
+    if (!assistente.conectado) {
+      setOptimisticConectado(true);
+    }
+
+    try {
+      if (!assistente.conectado) {
+        console.log(`📍 [DEBUG] Criando novo link para assistente "${assistente.nome}"`);
+        // Criar link + ativar
+        await axios.post('/api/admin/ai-integration/assistant-links', {
+          assistantId: assistente.id,
+          inboxId: caixa.inboxId,
+          isActive: true
+        });
+      } else {
+        console.log(`📍 [DEBUG] Atualizando link existente "${assistente.linkId}" para assistente "${assistente.nome}"`);
+        // Toggle link existente
+        await axios.patch(`/api/admin/ai-integration/assistant-links/${assistente.linkId}`, {
+          isActive: newState
+        });
+      }
+      
+      // ✅ NÃO chamamos refreshCaixas() aqui para evitar conflito com optimistic update
+      // O estado visual já foi atualizado optimisticamente
+      console.log(`✅ [DEBUG] Toggle do assistente "${assistente.nome}" concluído com sucesso`);
+      
+    } catch (error) {
+      console.error(`❌ [DEBUG] Erro no toggle do assistente "${assistente.nome}":`, error);
+      // ⏪ Rollback em caso de erro
+      setOptimisticAtivo(assistente.ativo);
+      setOptimisticConectado(assistente.conectado);
+      throw error;
+    } finally {
+      setIsToggling(false);
+    }
   };
 
   // Função para remover o link do assistente (não deletar o assistente, apenas desconectar)
   const handleDesconectarAssistente = async () => {
     const deletePromise = axios.delete(
-      `/api/admin/ai-integration/assistants/inboxes`,
-      {
-        data: {
-          assistantId: assistente.id,
-          inboxId: assistente.linkId,
-          attach: false
-        }
-      }
+      `/api/admin/ai-integration/assistant-links/${assistente.linkId}`
     );
 
     toast.promise(deletePromise, {
       loading: "Desconectando assistente...",
       success: () => {
-        onUpdate();
+        refreshCaixas();
         setShowDeleteDialog(false);
         return "Assistente desconectado com sucesso!";
       },
       error: "Erro ao desconectar assistente",
     });
   };
+
+  const togglePromise = async () => {
+    return handleToggleAssistente();
+  };
+
+  const handleToggleWithToast = () => {
+    toast.promise(togglePromise(), {
+      loading: optimisticAtivo ? "Desativando assistente..." : "Ativando assistente...",
+      success: () => `Assistente ${optimisticAtivo ? 'desativado' : 'ativado'} com sucesso!`,
+      error: (err) => err.response?.data?.error || "Erro ao alterar status do assistente",
+    });
+  };
+
+  // Debug dos dados do assistente
+  console.log(`🔍 [RENDER] Assistente "${assistente.nome}":`, {
+    id: assistente.id,
+    linkId: assistente.linkId,
+    ativo: assistente.ativo,
+    conectado: assistente.conectado,
+    optimisticAtivo,
+    optimisticConectado
+  });
 
   return (
     <>
@@ -660,27 +706,33 @@ function AssistenteItem({
           <Badge variant="outline" className="text-xs">
             Capitão
           </Badge>
-          {assistente.ativo && (
-            <Badge variant="default" className="bg-green-500 h-5">
-              Ativo
-            </Badge>
+          {!optimisticConectado && (
+            <Badge variant="secondary">Disponível</Badge>
+          )}
+          {optimisticConectado && optimisticAtivo && (
+            <Badge variant="default" className="bg-green-500">Ativo</Badge>
+          )}
+          {optimisticConectado && !optimisticAtivo && (
+            <Badge variant="destructive" className="bg-red-500">Inativo</Badge>
           )}
         </div>
         <div className="flex items-center gap-2">
           <Switch
             id={`switch-assistente-${assistente.id}`}
-            checked={assistente.ativo}
-            onCheckedChange={handleToggleAssistente}
+            checked={optimisticAtivo}
+            onCheckedChange={handleToggleWithToast}
           />
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setShowDeleteDialog(true)}
-            className="text-destructive hover:text-destructive"
-            title="Desconectar assistente"
-          >
-            <Trash2 className="w-4 h-4" />
-          </Button>
+          {optimisticConectado && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowDeleteDialog(true)}
+              className="text-destructive hover:text-destructive"
+              title="Desconectar assistente"
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          )}
         </div>
       </div>
 
@@ -729,8 +781,8 @@ export function AdicionarCaixaDialog({
     {}
   );
   
-  // Importar a função optimisticAddCaixa do contexto
-  const { optimisticAddCaixa } = useMtfData();
+  // Importar a função addCaixa do contexto
+  const { addCaixa } = useMtfData();
   
   // Ref para controlar se já foi carregado
   const hasLoaded = useRef(false);
@@ -768,7 +820,7 @@ export function AdicionarCaixaDialog({
 
   const handleAdicionarCaixa = async (caixa: Inbox) => {
     const nomeInterno = nomesInternos[caixa.id] || caixa.name;
-    
+
     // Payload para API
     const apiPayload = {
       nome: nomeInterno,
@@ -777,7 +829,7 @@ export function AdicionarCaixaDialog({
       inboxName: caixa.name,
       channelType: caixa.channel_type,
     };
-    
+
     // Dados otimistas para mostrar na UI imediatamente
     const optimisticCaixaData = {
       id: `temp-${Date.now()}`, // ID temporário
@@ -786,12 +838,21 @@ export function AdicionarCaixaDialog({
       inboxId: caixa.id.toString(),
       inboxName: caixa.name,
       channelType: caixa.channel_type,
+      // Campos obrigatórios do ChatwitInbox
+      usuarioChatwitId: '', // será preenchido pelo backend
+      whatsappApiKey: null,
+      phoneNumberId: null,
+      whatsappBusinessAccountId: null,
+      fallbackParaInboxId: null,
+      // Arrays
+      agentes: [], // Array vazio de agentes
+      assistentes: [], // Array vazio de assistentes
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    const promise = optimisticAddCaixa(apiPayload, optimisticCaixaData);
-    
+    const promise = addCaixa(optimisticCaixaData, apiPayload);
+
     toast.promise(promise, {
       loading: `Adicionando caixa...`,
       success: () => {

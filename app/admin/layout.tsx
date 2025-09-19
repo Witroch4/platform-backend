@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import NavbarAdmin from '@/components/admin/navbar-admin';
 import { SidebarProvider, SidebarTrigger, SidebarInset } from '@/components/ui/sidebar';
 import AppAdminDashboard from '@/components/app-admin-dashboard';
-import { MtfDataProvider } from '@/app/admin/mtf-diamante/context/MtfDataProvider';
+import { SwrProvider } from '@/app/admin/mtf-diamante/context/SwrProvider';
 import { AdminLoadingIndicator } from './components/AdminLoadingIndicator';
 
 interface AdminLayoutProps {
@@ -71,7 +71,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
 
   return (
     <SidebarProvider>
-      <MtfDataProvider>
+      <SwrProvider>
         <AppAdminDashboard />
         <SidebarInset className="flex flex-col min-h-screen bg-background">
           <NavbarAdmin />
@@ -80,7 +80,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
             {children}
           </main>
         </SidebarInset>
-      </MtfDataProvider>
+      </SwrProvider>
     </SidebarProvider>
   );
 };

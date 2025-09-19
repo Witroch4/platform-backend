@@ -56,7 +56,7 @@ import { InboxContextMenu } from "./inbox-context-menu";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { useMtfData } from "@/app/admin/mtf-diamante/context/MtfDataProvider";
+import { useMtfData } from "@/app/admin/mtf-diamante/context/SwrProvider";
 
 export function AppAdminDashboard() {
   const { data: session } = useSession();
@@ -204,7 +204,11 @@ export function AppAdminDashboard() {
                               <div className="h-6 rounded bg-muted animate-pulse" />
                             </div>
                           ) : (
-                            inboxes.map((cx: any) => {
+                            // Deduplicate inboxes by id to prevent React key errors
+                            React.useMemo(() =>
+                              Array.from(new Map(inboxes.map((cx: any) => [cx.id, cx])).values()),
+                              [inboxes]
+                            ).map((cx: any) => {
                               const channel = (cx.channelType || '').toLowerCase();
                               const isInstagram = channel.includes('instagram');
                               const Icon = isInstagram ? Instagram : MessageCircle; // WhatsApp/Outros
@@ -216,15 +220,15 @@ export function AppAdminDashboard() {
                                   router.push(targetHref);
                                 });
                               };
-                              
+
                               const handleMouseEnter = () => {
                                 prefetchInbox(cx.id).catch(() => {});
                                 try { router.prefetch(targetHref); } catch {}
                               };
                               return (
                                 <SidebarMenuSubItem key={cx.id}>
-                                  <InboxContextMenu 
-                                    inbox={cx} 
+                                  <InboxContextMenu
+                                    inbox={cx}
                                     onInboxDeleted={() => {
                                       // Refresh a lista de caixas após deletar
                                       refreshCaixas();

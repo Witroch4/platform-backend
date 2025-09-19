@@ -231,7 +231,6 @@ export interface MtfDataContextType {
   addCaixa: (optimisticCaixa: ChatwitInbox, apiPayload: any) => Promise<void>;
   updateCaixa: (updatedCaixa: ChatwitInbox, apiPayload: any) => Promise<void>;
   deleteCaixa: (caixaId: string) => Promise<void>;
-  optimisticAddCaixa: (apiPayload: any, optimisticCaixaData: any) => Promise<any>; // Legacy compatibility
   prefetchInbox: (inboxId: string) => Promise<void>; // Legacy compatibility
   
   // Lotes

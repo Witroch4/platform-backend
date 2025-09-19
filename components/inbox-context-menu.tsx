@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Trash2, Settings, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
+import { useMtfData } from "@/app/admin/mtf-diamante/context/SwrProvider";
 
 interface InboxContextMenuProps {
   children: React.ReactNode;
@@ -31,8 +32,8 @@ interface InboxContextMenuProps {
 
 export function InboxContextMenu({ children, inbox, onInboxDeleted }: InboxContextMenuProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
   const router = useRouter();
+  const { deleteCaixa } = useMtfData();
 
   const handleDeleteClick = () => {
     setShowDeleteDialog(true);
@@ -43,29 +44,21 @@ export function InboxContextMenu({ children, inbox, onInboxDeleted }: InboxConte
   };
 
   const handleConfirmDelete = async () => {
-    setIsDeleting(true);
-    
-    const deletePromise = fetch(`/api/admin/mtf-diamante/dialogflow/caixas?id=${inbox.id}`, {
-      method: 'DELETE',
-    }).then(async (response) => {
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Erro ao excluir caixa');
-      }
-      return response.json();
-    });
+    const deletePromise = deleteCaixa(inbox.id);
 
     toast.promise(deletePromise, {
       loading: "Excluindo caixa...",
-      success: (data) => {
+      success: () => {
         setShowDeleteDialog(false);
-        setIsDeleting(false);
         onInboxDeleted?.();
+        // Redirecionar para a página principal se estiver na página da caixa deletada
+        if (window.location.pathname.includes(`/inbox/${inbox.id}`)) {
+          router.push('/admin/mtf-diamante');
+        }
         return "Caixa excluída com sucesso";
       },
       error: (error) => {
-        setIsDeleting(false);
-        return error.message || "Erro ao excluir caixa";
+        return error?.message || "Erro ao excluir caixa";
       },
     });
   };
@@ -124,15 +117,14 @@ export function InboxContextMenu({ children, inbox, onInboxDeleted }: InboxConte
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" disabled={isDeleting} onClick={() => setShowDeleteDialog(false)}>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
               Cancelar
             </Button>
             <Button
               onClick={handleConfirmDelete}
-              disabled={isDeleting}
               variant="destructive"
             >
-              {isDeleting ? "Excluindo..." : "Excluir definitivamente"}
+              Excluir definitivamente
             </Button>
           </DialogFooter>
         </DialogContent>

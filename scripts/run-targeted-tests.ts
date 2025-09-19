@@ -41,7 +41,7 @@ const testConfigs: TestConfig[] = [
     critical: true,
   },
   {
-    name: 'MtfDataProvider Context Tests',
+    name: 'SwrProvider Context Tests',
     command: 'npx jest __tests__/frontend/mtf-data-provider.test.tsx --config=jest.config.targeted.js --verbose',
     description: 'Context provider tests for unified data model',
     timeout: 30000,
@@ -256,19 +256,19 @@ class TestExecutor {
       {
         id: '7.2',
         name: 'Update Frontend Components for Unified Data Model',
-        tests: ['Templates Tab Frontend Tests', 'MtfDataProvider Context Tests'],
+        tests: ['Templates Tab Frontend Tests', 'SwrProvider Context Tests'],
         description: 'Frontend components updated for unified data model',
       },
       {
         id: '7.3',
         name: 'Implement Targeted Testing',
-        tests: ['Parent Worker Unit Tests', 'Webhook E2E Integration Tests', 'Templates Tab Frontend Tests', 'MtfDataProvider Context Tests'],
+        tests: ['Parent Worker Unit Tests', 'Webhook E2E Integration Tests', 'Templates Tab Frontend Tests', 'SwrProvider Context Tests'],
         description: 'Comprehensive testing suite implementation',
       },
       {
         id: '8.1',
         name: 'Unit Testing Coverage',
-        tests: ['Parent Worker Unit Tests', 'Templates Tab Frontend Tests', 'MtfDataProvider Context Tests'],
+        tests: ['Parent Worker Unit Tests', 'Templates Tab Frontend Tests', 'SwrProvider Context Tests'],
         description: 'Unit tests for core components',
       },
       {

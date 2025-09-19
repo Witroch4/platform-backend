@@ -91,7 +91,7 @@ const customJestConfig = {
     
     // Frontend component files
     'app/admin/mtf-diamante/components/TemplatesTab/**/*.tsx',
-    'app/admin/mtf-diamante/context/MtfDataProvider.tsx',
+    'app/admin/mtf-diamante/context/SwrProvider.tsx',
     
     // Exclude test files and node_modules
     '!**/*.test.{ts,tsx}',

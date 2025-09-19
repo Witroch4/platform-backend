@@ -1,4 +1,4 @@
-//app\admin\mtf-diamante\context\MtfDataProvider.tsx
+//app\admin\mtf-diamante\context\SwrProvider.tsx
 "use client";
 
 import type React from "react";
@@ -12,22 +12,36 @@ import {
 } from "react";
 import { usePathname, useSearchParams } from 'next/navigation';
 import { SWRConfig } from 'swr';
+import type { Middleware, SWRHook } from 'swr';
 
 // Import SSR helpers
 import { createSWRFallback, type MtfInitialData } from '../lib/ssr-helpers';
 
-// Import error handling utilities
-import { 
-  logError, 
-  shouldRetryError, 
-  getRetryDelay, 
-  fetchWithErrorHandling,
-  MtfError,
-  type ApiError 
+// Import error handling utilities (mantidos para compatibilidade)
+import {
+  type ApiError
 } from '../lib/error-handling';
 
 // Import cleanup utilities
 import { deprecated, devLog } from '../lib/cleanup-utils';
+
+// Middleware para observabilidade e métricas (conforme guia SWR 2.3)
+const retryMetricsMw: Middleware = (useNext: SWRHook) => (key, fetcher, config) => {
+  const t0 = performance.now();
+  return useNext(key, fetcher, {
+    errorRetryInterval: 3000,
+    shouldRetryOnError: (err: any) => !String(err?.message).includes('401'),
+    ...config,
+    onSuccess: (d: any, k: any, c: any) => {
+      console.info('[SWR OK]', k, Math.round(performance.now() - t0), 'ms');
+      config?.onSuccess?.(d, k, c);
+    },
+    onError: (e: any, k: any, c: any) => {
+      console.warn('[SWR ERR]', k, e);
+      config?.onError?.(e, k, c);
+    }
+  });
+};
 
 // Import dedicated hooks
 import { useInteractiveMessages } from '../hooks/useInteractiveMessages';
@@ -77,12 +91,12 @@ const MtfDataContext = createContext<MtfDataContextType | undefined>(undefined);
 export function useMtfData() {
   const context = useContext(MtfDataContext);
   if (!context) {
-    throw new Error("useMtfData deve ser usado dentro de MtfDataProvider");
+    throw new Error("useMtfData deve ser usado dentro de SwrProvider");
   }
   return context;
 }
 
-interface MtfDataProviderProps {
+interface SwrProviderProps {
   children: React.ReactNode;
   initialData?: MtfInitialData; // Dados iniciais do SSR para evitar flicker
 }
@@ -90,7 +104,7 @@ interface MtfDataProviderProps {
 /**
  * Internal component that uses useSearchParams
  */
-function MtfDataProviderContent({ children, initialData }: MtfDataProviderProps) {
+function SwrProviderContent({ children, initialData }: SwrProviderProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   
@@ -224,10 +238,6 @@ function MtfDataProviderContent({ children, initialData }: MtfDataProviderProps)
     }));
   }, [buttonReactionsHook.reactions]);
 
-  // Optimistic add caixa for backward compatibility
-  const optimisticAddCaixa = useCallback(deprecated(async (apiPayload: any, optimisticCaixaData: any) => {
-    return caixasHook.addCaixa(optimisticCaixaData, apiPayload);
-  }, 'optimisticAddCaixa is deprecated', 'addCaixa from useCaixas hook'), [caixasHook]);
 
   // Computed state
   const isInitialized = useMemo(() => {
@@ -315,7 +325,6 @@ function MtfDataProviderContent({ children, initialData }: MtfDataProviderProps)
       // No-op function for backward compatibility
     }, 'setCaixas is deprecated', 'dedicated hook methods') as React.Dispatch<React.SetStateAction<ChatwitInbox[]>>,
     prefetchInbox,
-    optimisticAddCaixa,
     
     // General state
     isInitialized,
@@ -337,7 +346,6 @@ function MtfDataProviderContent({ children, initialData }: MtfDataProviderProps)
     refreshApiKeys,
     refreshButtonReactions,
     prefetchInbox,
-    optimisticAddCaixa,
     isInitialized,
     addButtonReactionCompat,
     updateButtonReactionCompat,
@@ -352,7 +360,7 @@ function MtfDataProviderContent({ children, initialData }: MtfDataProviderProps)
 }
 
 /**
- * Simplified MtfDataProvider that orchestrates dedicated hooks
+ * Simplified SwrProvider that orchestrates dedicated hooks
  *
  * This refactored version:
  * - Removes complex useRef, timers and manual protections
@@ -360,12 +368,12 @@ function MtfDataProviderContent({ children, initialData }: MtfDataProviderProps)
  * - Maintains public API compatibility
  * - Implements simplified pause/resume functionality
  */
-export function MtfDataProvider({ children, initialData }: MtfDataProviderProps) {
+export function SwrProvider({ children, initialData }: SwrProviderProps) {
   return (
     <Suspense fallback={<div>Loading...</div>}>
-      <MtfDataProviderContent initialData={initialData}>
+      <SwrProviderContent initialData={initialData}>
         {children}
-      </MtfDataProviderContent>
+      </SwrProviderContent>
     </Suspense>
   );
 }
@@ -379,129 +387,103 @@ export function MtfDataProvider({ children, initialData }: MtfDataProviderProps)
  * - Intelligent retry strategy
  * - Global SWR configuration
  */
-export function MtfDataProviderWithSWR({ children, initialData }: MtfDataProviderProps) {
+export function SwrProviderWithSWR({ children, initialData }: SwrProviderProps) {
   // Create fallback data for SWR from initialData
   const fallbackData = useMemo(() => createSWRFallback(initialData), [initialData]);
 
   // Global SWR configuration with enhanced error handling
   const swrConfig = useMemo(() => ({
-    // Enhanced default fetcher with error handling
+    // Fetcher único JSON conforme guia SWR 2.3
     fetcher: async (url: string) => {
-      const response = await fetchWithErrorHandling(url, {}, {
-        operation: `SWR fetch: ${url}`,
-      });
-      return response.json();
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
     },
     
     // Fallback data for SSR
     fallback: fallbackData,
     
-    // Enhanced global error handling
-    onError: (error: ApiError, key: string) => {
-      // Use structured logging
-      logError(error, {
-        key,
-        operation: 'SWR Data Fetch',
-        additionalData: {
-          url: key,
-          timestamp: new Date().toISOString(),
-        },
-      });
-      
+    // Error handling simplificado (conforme guia SWR 2.3)
+    onError: (error: any, key: string) => {
+      console.warn('[SWR ERR]', key, error);
+
       // Show user-friendly notifications for critical errors
-      if (error.status && error.status >= 500) {
-        // In a real implementation, you would use a toast system here
-        // Example: toast(createErrorToast(error));
+      if (error.message?.includes('500')) {
         console.warn('⚠️ Erro interno do servidor. Os dados podem estar desatualizados.');
-      } else if (!error.status) {
-        // Network errors
+      } else if (!error.message?.includes('HTTP')) {
         console.warn('⚠️ Erro de conexão. Verificando conectividade...');
-      }
-      
-      // Additional error context for debugging
-      if (process.env.NODE_ENV === 'development') {
-        console.group(`🔍 [SWR Error Debug] ${key}`);
-        console.error('Error details:', error);
-        console.error('Stack trace:', error.stack);
-        console.groupEnd();
       }
     },
     
-    // Intelligent retry strategy
-    shouldRetryOnError: (error: ApiError) => {
-      return shouldRetryError(error);
-    },
+    // Intelligent retry strategy (conforme guia SWR 2.3)
+    shouldRetryOnError: (err: any) => !String(err?.message).includes('401'),
     
     // Enhanced retry configuration with exponential backoff
     errorRetryCount: 3,
-    errorRetryInterval: 2000, // Base retry interval (will be enhanced in onErrorRetry)
+    errorRetryInterval: 3000, // Conforme guia SWR 2.3
     
     // Global revalidation settings
     revalidateOnFocus: true,
     revalidateOnReconnect: true,
     revalidateIfStale: true,
     
-    // Deduplication settings
-    dedupingInterval: 2000, // 2 seconds
+    // Deduplication settings (conforme guia SWR 2.3)
+    dedupingInterval: 1500, // 1.5 seconds
     
-    // Loading timeout
-    loadingTimeout: 15000, // 15 seconds (increased for better UX)
+    // Loading timeout (conforme guia SWR 2.3)
+    loadingTimeout: 15000, // 15 seconds
     
-    // Enhanced success callback
+    // Success callback simplificado (conforme guia SWR 2.3)
     onSuccess: (data: any, key: string) => {
       if (process.env.NODE_ENV === 'development') {
-        console.log(`✅ [SWR Success] ${key}`, {
-          dataType: Array.isArray(data) ? 'array' : typeof data,
-          dataLength: Array.isArray(data) ? data.length : 'N/A',
-          timestamp: new Date().toISOString(),
+        console.info('[SWR OK]', key, {
+          type: Array.isArray(data) ? 'array' : typeof data,
+          length: Array.isArray(data) ? data.length : 'N/A',
         });
       }
     },
     
-    // Loading state callback with enhanced logging
+    // Loading state callback (conforme guia SWR 2.3)
     onLoadingSlow: (key: string) => {
       console.warn(`⏳ [SWR Slow Loading] ${key} está demorando mais que o esperado`);
-      
-      // In production, you might want to track this metric
-      if (process.env.NODE_ENV === 'production') {
-        // Example: analytics.track('SWR Slow Loading', { key });
-      }
     },
     
-    // Enhanced mutation error handling with exponential backoff
-    onErrorRetry: (error: ApiError, key: string, config: any, revalidate: any, { retryCount }: any) => {
+    // Error retry com exponential backoff simplificado (conforme guia SWR 2.3)
+    onErrorRetry: (error: any, key: string, config: any, revalidate: any, { retryCount }: any) => {
       // Don't retry on 404
-      if (error.status === 404) return;
-      
+      if (error.message?.includes('404')) return;
+
       // Don't retry after 3 attempts
       if (retryCount >= 3) return;
-      
-      // Calculate delay with exponential backoff
-      const delay = getRetryDelay(retryCount, 1000);
-      
+
+      // Exponential backoff: 1s, 2s, 4s
+      const delay = Math.pow(2, retryCount) * 1000;
+
       if (process.env.NODE_ENV === 'development') {
         console.log(`🔄 [SWR Retry] ${key} - Attempt ${retryCount + 1}/3 in ${delay}ms`);
       }
-      
-      // Retry with calculated delay
+
       setTimeout(() => revalidate({ retryCount }), delay);
     },
     
-    // Focus revalidation throttling
+    // Focus revalidation throttling (conforme guia SWR 2.3)
     focusThrottleInterval: 5000, // 5 seconds
     
-    // Keep previous data during revalidation for better UX
-    keepPreviousData: true,
+    // Provider para cache (conforme guia SWR 2.3)
+    provider: () => new Map(),
+
+    // Middleware para observabilidade (conforme guia SWR 2.3)
+    use: [retryMetricsMw],
   }), [fallbackData]);
 
   return (
     <SWRConfig value={swrConfig}>
-      <MtfDataProvider initialData={initialData}>
+      <SwrProvider initialData={initialData}>
         {children}
-      </MtfDataProvider>
+      </SwrProvider>
     </SWRConfig>
   );
 }
 
 // Export the SWR-wrapped version as default for better DX
-export default MtfDataProviderWithSWR;
+export default SwrProviderWithSWR;

@@ -18,7 +18,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { cn } from '@/lib/utils';
 import { DisparoMensagemDialog } from './DisparoMensagemDialog';
 import { LoteCardSkeleton, VariavelSkeleton } from './LoadingSkeletons';
-import { useMtfData } from '../context/MtfDataProvider';
+import { useMtfData } from '../context/SwrProvider';
 import { validateVariable, ensureSpecialVariables, SPECIAL_VARIABLES } from '@/app/lib/variable-utils';
 import { useVariableManager } from '@/hooks/useVariableManager';
 import { DateTimePicker } from '@/app/[accountid]/dashboard/agendamento/components/date-time-picker';

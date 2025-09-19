@@ -5,7 +5,7 @@ import "./globals.css";
 import "katex/dist/katex.min.css";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { SessionProvider } from "@/components/providers/session-provider";
-import { SWRProvider } from "@/components/providers/swr-provider";
+import { SWRProvider } from "@/components/providers/SwrProvider";
 import ErrorBoundary from "@/components/providers/error-boundary";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";

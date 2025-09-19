@@ -2,7 +2,7 @@
 
 ## Introduction
 
-O `MtfDataProvider` atual é um exemplo complexo de gerenciamento de estado com SWR que implementa uma camada de proteção robusta contra revalidações prematuras. No entanto, essa complexidade pode ser drasticamente simplificada utilizando os padrões modernos do SWR 2.0, separando responsabilidades em hooks dedicados e abraçando o fluxo nativo de mutações otimistas da biblioteca.
+O `SwrProvider` atual é um exemplo complexo de gerenciamento de estado com SWR que implementa uma camada de proteção robusta contra revalidações prematuras. No entanto, essa complexidade pode ser drasticamente simplificada utilizando os padrões modernos do SWR 2.0, separando responsabilidades em hooks dedicados e abraçando o fluxo nativo de mutações otimistas da biblioteca.
 
 A refatoração visa transformar um provider monolítico com lógica complexa de refs, timers e proteções manuais em uma arquitetura modular, limpa e mais confiável baseada em hooks especializados.
 
@@ -46,15 +46,15 @@ A refatoração visa transformar um provider monolítico com lógica complexa de
 
 ### Requirement 4
 
-**User Story:** Como desenvolvedor, quero um MtfDataProvider simplificado que atue como orquestrador, para que ele coordene os hooks dedicados sem conter lógica complexa de data fetching.
+**User Story:** Como desenvolvedor, quero um SwrProvider simplificado que atue como orquestrador, para que ele coordene os hooks dedicados sem conter lógica complexa de data fetching.
 
 #### Acceptance Criteria
 
-1. WHEN o MtfDataProvider é refatorado THEN ele deve usar hooks dedicados internamente
-2. WHEN o MtfDataProvider é refatorado THEN ele deve expor apenas as funções e dados necessários via contexto
-3. WHEN o MtfDataProvider é refatorado THEN ele deve manter a API pública compatível para não quebrar componentes existentes
-4. WHEN o MtfDataProvider é refatorado THEN deve suportar dados iniciais via fallback do SWRConfig
-5. WHEN o MtfDataProvider é refatorado THEN deve manter o controle de pausa/retomada de updates de forma simplificada
+1. WHEN o SwrProvider é refatorado THEN ele deve usar hooks dedicados internamente
+2. WHEN o SwrProvider é refatorado THEN ele deve expor apenas as funções e dados necessários via contexto
+3. WHEN o SwrProvider é refatorado THEN ele deve manter a API pública compatível para não quebrar componentes existentes
+4. WHEN o SwrProvider é refatorado THEN deve suportar dados iniciais via fallback do SWRConfig
+5. WHEN o SwrProvider é refatorado THEN deve manter o controle de pausa/retomada de updates de forma simplificada
 
 ### Requirement 5
 

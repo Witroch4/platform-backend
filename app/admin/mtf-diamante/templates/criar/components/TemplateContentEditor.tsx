@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { WhatsAppTextEditor } from "@/app/admin/mtf-diamante/components/shared/WhatsAppTextEditor";
 import { ButtonEditor } from "./ButtonEditor";
 import { HeaderEditor } from "./HeaderEditor";
-import { useMtfData } from "@/app/admin/mtf-diamante/context/MtfDataProvider";
+import { useMtfData } from "@/app/admin/mtf-diamante/context/SwrProvider";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useEffect, useMemo } from "react";

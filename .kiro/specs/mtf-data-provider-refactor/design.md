@@ -2,7 +2,7 @@
 
 ## Overview
 
-Esta refatoração transforma o `MtfDataProvider` atual de um provider monolítico complexo em uma arquitetura modular baseada em hooks dedicados, seguindo as melhores práticas do SWR 2.0. A nova arquitetura separa responsabilidades, elimina complexidade desnecessária e abraça o fluxo nativo de mutações otimistas do SWR.
+Esta refatoração transforma o `SwrProvider` atual de um provider monolítico complexo em uma arquitetura modular baseada em hooks dedicados, seguindo as melhores práticas do SWR 2.0. A nova arquitetura separa responsabilidades, elimina complexidade desnecessária e abraça o fluxo nativo de mutações otimistas do SWR.
 
 ## Architecture
 
@@ -10,7 +10,7 @@ Esta refatoração transforma o `MtfDataProvider` atual de um provider monolíti
 
 **Atual (Monolítica):**
 ```
-MtfDataProvider
+SwrProvider
 ├── useSWR único para todos os dados
 ├── Lógica complexa de proteção com useRef
 ├── Timers e verificações manuais
@@ -20,7 +20,7 @@ MtfDataProvider
 
 **Nova (Modular):**
 ```
-MtfDataProvider (Orquestrador)
+SwrProvider (Orquestrador)
 ├── useInteractiveMessages (Hook dedicado)
 ├── useCaixas (Hook dedicado)  
 ├── useLotes (Hook dedicado)
@@ -93,7 +93,7 @@ export function useLotes(
 ): UseLotesReturn
 ```
 
-### 2. MtfDataProvider Refatorado
+### 2. SwrProvider Refatorado
 
 ```typescript
 interface MtfDataContextType {
@@ -144,7 +144,7 @@ app/admin/mtf-diamante/
 │   ├── useApiKeys.ts
 │   └── useButtonReactions.ts
 ├── context/
-│   └── MtfDataProvider.tsx (refatorado)
+│   └── SwrProvider.tsx (refatorado)
 ├── lib/
 │   ├── api-clients.ts (funções de API)
 │   └── types.ts (tipos TypeScript)
@@ -316,7 +316,7 @@ describe('useInteractiveMessages', () => {
 - Testes unitários para cada hook
 
 ### Fase 2: Refatoração do Provider
-- Modificar MtfDataProvider para usar hooks dedicados
+- Modificar SwrProvider para usar hooks dedicados
 - Manter interface pública compatível
 - Adicionar testes de integração
 

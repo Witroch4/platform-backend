@@ -14,7 +14,7 @@ Successfully implemented comprehensive targeted testing for the refactored backe
 
 ### ✅ Requirement 7.2 - Update Frontend Components for Unified Data Model
 - **Templates Tab Tests**: Created tests for unified Template model handling
-- **MtfDataProvider Tests**: Implemented context provider tests for unified data management
+- **SwrProvider Tests**: Implemented context provider tests for unified data management
 - **Data Source Handling**: Validated API vs database data source indicators
 - **Error States**: Tested loading states and error handling scenarios
 
@@ -94,7 +94,7 @@ Successfully implemented comprehensive targeted testing for the refactored backe
 - ✅ Data source indicators (API vs Database)
 - ✅ Accessibility and keyboard navigation
 
-#### MtfDataProvider Tests (`mtf-data-provider.test.tsx`)
+#### SwrProvider Tests (`mtf-data-provider.test.tsx`)
 **Coverage:**
 - Context initialization and data loading
 - Caching mechanisms and performance optimization

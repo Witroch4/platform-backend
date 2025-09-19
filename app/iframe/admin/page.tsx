@@ -54,7 +54,7 @@ import { AdicionarCaixaDialog } from "@/app/admin/mtf-diamante/components/Dialog
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { useMtfData } from "@/app/admin/mtf-diamante/context/MtfDataProvider";
+import { useMtfData } from "@/app/admin/mtf-diamante/context/SwrProvider";
 
 interface IframeAuthResult {
   authorized: boolean;

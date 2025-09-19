@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
 
     // 2) DB em paralelo (SELECT minimal + paginação)
     const dbStart = performance.now();
-    const [variaveisData, caixasData, interactiveMessages, apiKeys, buttonReactions] = await Promise.all([
+    const [variaveisData, caixasData, interactiveMessages, apiKeys, buttonReactions, allAssistants] = await Promise.all([
       // Variáveis
       prisma.mtfDiamanteVariavel.findMany({
         select: { id: true, chave: true, valor: true },
@@ -126,6 +126,7 @@ export async function GET(request: NextRequest) {
               select: {
                 id: true,
                 assistantId: true,
+                isActive: true,
                 assistant: {
                   select: {
                     id: true,
@@ -253,26 +254,63 @@ export async function GET(request: NextRequest) {
         },
         orderBy: { createdAt: "asc" },
       }) : [],
+
+      // Buscar todos os assistentes de IA disponíveis do usuário
+      prisma.aiAssistant.findMany({
+        where: { userId: session.user.id },
+        select: {
+          id: true,
+          name: true,
+          isActive: true,
+          model: true,
+          description: true,
+        },
+        orderBy: { name: "asc" },
+      }),
     ]);
     const dbEnd = performance.now();
     serverTiming.push(`db;dur=${(dbEnd - dbStart).toFixed(0)}`);
 
     // Transformar dados se necessário
-    const caixasProcessadas = caixasData.map((caixa: any) => ({
-      ...caixa,
-      agentes: Array.isArray(caixa.agentes) ? caixa.agentes : [],
-      assistentes: Array.isArray(caixa.aiAssistantLinks) 
-        ? caixa.aiAssistantLinks.map((link: any) => ({
-            id: link.assistant.id,
-            linkId: link.id,
-            nome: link.assistant.name,
-            ativo: link.assistant.isActive,
-            model: link.assistant.model,
-            description: link.assistant.description,
-            tipo: 'capitao' // Identificador para distinguir dos agentes Dialogflow
-          }))
-        : [],
-    }));
+    const caixasProcessadas = caixasData.map((caixa: any) => {
+      // Criar mapa dos assistentes conectados a esta caixa
+      const assistentesConectados = new Map();
+      caixa.aiAssistantLinks.forEach((link: any) => {
+        assistentesConectados.set(link.assistantId, {
+          linkId: link.id,
+          isActive: link.isActive,
+        });
+      });
+
+      // Combinar todos os assistentes com status de conexão
+      const assistentesCompletos = allAssistants.map((assistant: any) => {
+        const conexao = assistentesConectados.get(assistant.id);
+        const isConnected = !!conexao;
+        const isActive = conexao ? conexao.isActive : false;
+        
+        // Debug log para identificar problemas
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[Debug Assistente] ${assistant.name}: conectado=${isConnected}, ativo=${isActive}, linkId=${conexao?.linkId}, raw_conexao=`, conexao);
+        }
+        
+        return {
+          id: assistant.id,
+          linkId: conexao?.linkId || null,
+          nome: assistant.name,
+          ativo: isActive,
+          conectado: isConnected,
+          model: assistant.model,
+          description: assistant.description,
+          tipo: 'capitao'
+        };
+      });
+
+      return {
+        ...caixa,
+        agentes: Array.isArray(caixa.agentes) ? caixa.agentes : [],
+        assistentes: assistentesCompletos,
+      };
+    });
 
     // Processar lotes da variável especial
     const lotesVariavel = variaveisData.find((v: any) => v.chave === 'lotes_oab');

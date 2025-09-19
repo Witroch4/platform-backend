@@ -51,9 +51,10 @@ export function useInteractiveMessages(
   );
 
   // Use SWR hook with optimized configuration
+  // Don't make requests when paused OR when there's no inboxId (global context)
   const { data, error, isLoading, mutate } = useSWR(
-    isPaused ? null : swrKey,
-    () => interactiveMessagesApi.getAll(inboxId || undefined),
+    (isPaused || !inboxId) ? null : swrKey,
+    () => interactiveMessagesApi.getAll(inboxId!), // inboxId is guaranteed to be non-null here due to the condition above
     swrConfig
   );
 

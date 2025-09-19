@@ -1611,6 +1611,7 @@ model AiAssistantInbox {
   id          String        @id @default(cuid())
   assistantId String
   inboxDbId   String
+  isActive    Boolean       @default(true)
   createdAt   DateTime      @default(now())
   assistant   AiAssistant   @relation(fields: [assistantId], references: [id], onDelete: Cascade)
   inbox       ChatwitInbox  @relation(fields: [inboxDbId], references: [id], onDelete: Cascade)

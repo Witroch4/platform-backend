@@ -9,7 +9,7 @@ const reactionsDataCache = new Map<string, any[]>();
 
 import { toast } from "sonner";
 import { useVariableManager } from "@/hooks/useVariableManager";
-import { useMtfData } from "../context/MtfDataProvider";
+import { useMtfData } from "../context/SwrProvider";
 import type {
   InteractiveMessage,
   InteractiveMessageCreatorProps,
@@ -97,7 +97,7 @@ export const InteractiveMessageCreator: React.FC<
   const loadExistingReactions = useCallback(() => {
     if (!buttonReactions || buttonReactions.length === 0) return;
 
-    // Os dados já vêm normalizados do MtfDataProvider, mas precisam ser convertidos para o tipo correto
+    // Os dados já vêm normalizados do SwrProvider, mas precisam ser convertidos para o tipo correto
     console.log('🔍 [loadExistingReactions] Raw buttonReactions from context:', buttonReactions);
     
     const convertedReactions: ButtonReaction[] = buttonReactions.map((r: any) => ({

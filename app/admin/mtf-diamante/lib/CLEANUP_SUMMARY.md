@@ -18,7 +18,7 @@ This document summarizes the code cleanup performed as part of the MTF Data Prov
 - Implemented structured logging for better debugging
 
 **Files Updated**:
-- `app/admin/mtf-diamante/context/MtfDataProvider.tsx`
+- `app/admin/mtf-diamante/context/SwrProvider.tsx`
 - `app/admin/mtf-diamante/lib/performance-utils.ts`
 - All hook files (`useInteractiveMessages.ts`, etc.)
 
@@ -140,7 +140,7 @@ LegacyMigrationTracker.getStatus(); // View progress
 
 ### Core Files
 
-#### `MtfDataProvider.tsx`
+#### `SwrProvider.tsx`
 - ✅ Removed direct console.log statements
 - ✅ Applied deprecated() wrapper to legacy functions
 - ✅ Cleaned up unused imports
@@ -180,7 +180,7 @@ LegacyMigrationTracker.getStatus(); // View progress
 ### Completed Migrations
 - ✅ **hooks-creation**: All dedicated hooks created and tested
 - ✅ **api-endpoints**: Separate API endpoints implemented
-- ✅ **provider-refactor**: MtfDataProvider simplified and optimized
+- ✅ **provider-refactor**: SwrProvider simplified and optimized
 - ✅ **error-handling**: Centralized error handling implemented
 - ✅ **performance-optimization**: Performance optimizations applied
 - ✅ **code-cleanup**: Legacy code cleanup completed

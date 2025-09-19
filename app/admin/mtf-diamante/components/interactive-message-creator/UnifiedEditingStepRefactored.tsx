@@ -4,7 +4,7 @@ import type React from "react";
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { useMtfData } from "../../context/MtfDataProvider";
+import { useMtfData } from "../../context/SwrProvider";
 import { isInstagramChannel } from "@/types/interactive-messages";
 
 // Import refactored components

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { useMtfData } from "../context/MtfDataProvider";
+import { useMtfData } from "../context/SwrProvider";
 import useSWR from 'swr';
 import {
   Card,

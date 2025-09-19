@@ -9,7 +9,7 @@ import type {
 } from './types';
 
 /**
- * Interface for initial data that can be passed to MtfDataProvider
+ * Interface for initial data that can be passed to SwrProvider
  * for SSR support and avoiding loading flickers
  */
 export interface MtfInitialData {
@@ -22,7 +22,7 @@ export interface MtfInitialData {
 
 /**
  * Creates fallback data object for SWR from initial data
- * This is used internally by MtfDataProviderWithSWR
+ * This is used internally by SwrProviderWithSWR
  * 
  * @param initialData - Initial data from SSR or prefetch
  * @returns SWR fallback data object

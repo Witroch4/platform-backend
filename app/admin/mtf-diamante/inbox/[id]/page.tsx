@@ -1,7 +1,7 @@
 'use client';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import MensagensInterativasTab from '@/app/admin/mtf-diamante/components/MensagensInterativasTab';
 import MapeamentoTab from '@/app/admin/mtf-diamante/components/MapeamentoTab';
@@ -10,17 +10,58 @@ import SafeBoundary from '@/components/SafeBoundary';
 import { Loader2, Settings, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { toast } from 'sonner';
+import { useMtfData } from '@/app/admin/mtf-diamante/context/SwrProvider';
 
 export default function InboxDashboardPage() {
   const params = useParams() as { id?: string };
   const caixaId = params?.id ?? '';
   const sp = useSearchParams();
+  const router = useRouter();
   const initialTab = sp?.get('tab') || 'interativas';
   const [tab, setTab] = useState(initialTab);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
+  // MTF Data Provider para operações com optimistic updates
+  const { caixas, deleteCaixa } = useMtfData();
+
+  // Encontrar a caixa atual
+  const currentCaixa = caixas.find(c => c.id === caixaId);
 
   useEffect(() => {
     if (sp?.get('tab')) setTab(sp.get('tab')!);
   }, [sp]);
+
+  const handleDeleteClick = () => {
+    setShowDeleteDialog(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!currentCaixa) return;
+
+    const deletePromise = deleteCaixa(caixaId);
+
+    toast.promise(deletePromise, {
+      loading: "Excluindo caixa...",
+      success: () => {
+        setShowDeleteDialog(false);
+        // Redirecionar para a página principal após exclusão
+        router.push('/admin/mtf-diamante');
+        return `Caixa "${currentCaixa.nome || 'Inbox'}" excluída com sucesso`;
+      },
+      error: (error) => {
+        return error?.message || "Erro ao excluir caixa";
+      },
+    });
+  };
 
   // Guarda para evitar renderização com inboxId undefined
   if (!caixaId) {
@@ -98,7 +139,11 @@ export default function InboxDashboardPage() {
                     <p className="text-sm text-muted-foreground mb-3">
                       Ações irreversíveis relacionadas a esta caixa de entrada
                     </p>
-                    <Button variant="destructive" size="sm">
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleDeleteClick}
+                    >
                       Excluir Caixa
                     </Button>
                   </div>
@@ -175,6 +220,39 @@ export default function InboxDashboardPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Dialog de confirmação para deletar caixa */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir caixa de entrada</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja excluir a caixa "{currentCaixa?.nome || 'Inbox'}"?
+              <br /><br />
+              <strong>Esta ação não pode ser desfeita</strong> e todos os dados relacionados serão removidos:
+              <br />
+              • Agentes configurados
+              <br />
+              • Templates de mensagens
+              <br />
+              • Mapeamentos de intenções
+              <br />
+              • Histórico de conversas
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmDelete}
+              variant="destructive"
+            >
+              Excluir definitivamente
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </SafeBoundary>
   );
 }

@@ -16,9 +16,10 @@ export interface AgenteDialogflow {
 
 export interface AssistenteCaptiao {
   id: string;
-  linkId: string;
+  linkId: string | null;    // null se não conectado
   nome: string;
-  ativo: boolean;
+  ativo: boolean;           // se o link está ativo
+  conectado: boolean;       // se há um link (mesmo que inativo)
   model: string;
   description?: string | null;
   tipo: 'capitao';
