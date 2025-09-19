@@ -35,9 +35,14 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const { inboxId } = Q.parse(Object.fromEntries(searchParams.entries()));
     
+    // ✅ BYPASS AUTOMÁTICO para dataType=caixas (dados críticos que precisam ser sempre atualizados)
+    const dataType = searchParams.get('dataType');
+    const isRequestingCaixas = dataType === 'caixas';
+    
     // Debug: bypass de cache
     const noCache = searchParams.get('nocache') === '1'
-                 || request.headers.get('x-skip-cache') === '1';
+                 || request.headers.get('x-skip-cache') === '1'
+                 || isRequestingCaixas; // 🔥 SEMPRE bypass cache para caixas
 
     // (Opcional) Verificação de acesso à inbox
     // TODO: troque pela sua regra real (tenant/ownership).
@@ -47,6 +52,11 @@ export async function GET(request: NextRequest) {
 
     const cacheKey = `inbox:view:v1:${session.user.id}:${inboxId || "all"}`;
     const redis = getRedisInstance();
+
+    // 🚨 Log especial para requisições de caixas (debug)
+    if (isRequestingCaixas && process.env.NODE_ENV === 'development') {
+      console.log(`🔥 [CAIXAS] Cache BYPASSED automaticamente - dados sempre frescos`);
+    }
 
     // 1) Tenta cache (só se não for bypass)
     let cacheHit = false;

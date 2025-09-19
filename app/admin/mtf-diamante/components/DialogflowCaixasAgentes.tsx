@@ -853,10 +853,12 @@ export function AdicionarCaixaDialog({
 
     const promise = addCaixa(optimisticCaixaData, apiPayload);
 
+    // 🔥 FECHAR DIALOG IMEDIATAMENTE - não esperar o toast
+    setOpen(false);
+
     toast.promise(promise, {
       loading: `Adicionando caixa...`,
       success: () => {
-        setOpen(false);
         return `Caixa "${nomeInterno}" adicionada com sucesso!`;
       },
       error: "Erro ao adicionar a caixa.",

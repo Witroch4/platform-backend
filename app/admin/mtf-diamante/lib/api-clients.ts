@@ -196,14 +196,14 @@ export const interactiveMessagesApi = {
 
 // Caixas API
 export const caixasApi = {
-  // Get all caixas
+  // Get all caixas WITH AI assistants data (to match useCaixas hook)
   getAll: async (): Promise<ChatwitInbox[]> => {
-    const response = await apiRequest<ApiResponse<ChatwitInbox[]>>(
-      '/caixas',
+    const response = await apiRequest<any>(
+      '/inbox-view?dataType=caixas',
       {},
-      { operation: 'Fetch All Caixas' }
+      { operation: 'Fetch All Caixas with AI Assistants' }
     );
-    return response.data || [];
+    return response.caixas || [];
   },
 
   // Get a specific caixa
