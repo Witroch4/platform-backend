@@ -28,8 +28,13 @@ import {
   Shield,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { quickReplyFBPayload } from "./paylod-quick-FB";
+import { quickReplyFBPayload } from "./quickReplyFBPayload";
 import { quickReplyIGPayload } from "./paylod-quick-IG";
+import { socialwiseWhatsappPayload } from "./socialwiseWhatsappPayload";
+import { socialwiseWhatsappButtonPayload } from "./socialwiseWhatsappButtonPayload";
+import { socialwiseInstagramPayload } from "./socialwiseInstagramPayload";
+import { socialwiseInstagramButtonPayload } from "./socialwiseInstagramButtonPayload";
+import { socialwiseFacebookPayload } from "./socialwiseFacebookPayload";
 
 interface SavedPayload {
   id: string;
@@ -48,50 +53,27 @@ export default function WebhookTestPage() {
   const [payloadName, setPayloadName] = useState("");
   const [externalDest, setExternalDest] = useState<string>("");
   const [clearCache, setClearCache] = useState(true);
-  const [quickReplyPayload, setQuickReplyPayload] = useState("@falar_atendente");
   const [clearingCache, setClearingCache] = useState(false);
-  const [buttonId, setButtonId] = useState("btn_1754993780819_0_tqji");
-  const [buttonTitle, setButtonTitle] = useState("Falar com a Dra");
-  const [userMessage, setUserMessage] = useState("VCS SÃO ESPECIALISTAS?");
-  const [instagramButtonId, setInstagramButtonId] = useState("ig_btn_1755004696546_uekaa4clu");
+  // Fonte única da verdade - apenas 2 campos principais
+  const [userMessage, setUserMessage] = useState("");
+  const [buttonPayload, setButtonPayload] = useState("");
+
+  // Flag para controlar se já carregou do localStorage
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // Estados auxiliares mantidos para funcionalidade
   const [testCount, setTestCount] = useState(0);
   const [infiniteTestMode, setInfiniteTestMode] = useState(false);
   const [infiniteTestInterval, setInfiniteTestInterval] = useState(2000);
   const [infiniteTestRunning, setInfiniteTestRunning] = useState(false);
   const [idempotencyDisabled, setIdempotencyDisabled] = useState(false);
   const [idempotencyStatus, setIdempotencyStatus] = useState<any>(null);
-  const [sourceId, setSourceId] = useState("wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgUM0FCNDNFNUMzMTJGQjc5RjcyOEQA");
   const [randomizeSourceId, setRandomizeSourceId] = useState(true);
   const [lastSentPayload, setLastSentPayload] = useState<any>(null);
-  const [facebookSessionId, setFacebookSessionId] = useState("9296550493690812");
-  const [randomizeSessionId, setRandomizeSessionId] = useState(true);
-  const [lastFacebookMessage, setLastFacebookMessage] = useState("VCS SÃO ESPECIALISTAS?");
 
   const DEFAULT_EXTERNAL_DEST =
     "https://moved-chigger-randomly.ngrok-free.app/api/integrations/webhooks/socialwiseflow";
 
-  // Função para gerar session_id aleatório para Facebook
-  const generateRandomFacebookSessionId = () => {
-    return Math.floor(Math.random() * 9000000000000000 + 1000000000000000).toString();
-  };
-
-  // Função para gerar source_id aleatório para WhatsApp
-  const generateRandomWhatsAppSourceId = () => {
-    return `wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgU${Math.random().toString(36).substring(2, 15).toUpperCase()}${Math.random().toString(36).substring(2, 15).toUpperCase()}A`;
-  };
-
-  // Função para gerar source_id aleatório para Instagram
-  const generateRandomInstagramSourceId = () => {
-    const base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-    let result = 'aWdfZAG1faXRlbToxOklHTWVzc2FnZAUlE';
-    
-    // Gerar parte aleatória do source_id do Instagram (similar ao formato existente)
-    for (let i = 0; i < 40; i++) {
-      result += base64Chars.charAt(Math.floor(Math.random() * base64Chars.length));
-    }
-    
-    return result + 'ZDZD';
-  };
 
   useEffect(() => {
     // Carregar status da Flash Intent
@@ -109,62 +91,54 @@ export default function WebhookTestPage() {
       }
     };
 
+    // Carregar dados salvos PRIMEIRO
+    try {
+      const savedUserMessage = localStorage.getItem("webhook-user-message");
+      const savedButtonPayload = localStorage.getItem("webhook-button-payload");
+      const savedExternalDest = localStorage.getItem("webhook-external-dest");
+
+      // Definir valores salvos ou padrões
+      setUserMessage(savedUserMessage || "VCS SÃO ESPECIALISTAS?");
+      setButtonPayload(savedButtonPayload || "btn_1754993780819_0_tqji");
+      if (savedExternalDest) setExternalDest(savedExternalDest);
+    } catch (error) {
+      console.error("Erro ao carregar configurações:", error);
+      // Valores padrão em caso de erro
+      setUserMessage("VCS SÃO ESPECIALISTAS?");
+      setButtonPayload("btn_1754993780819_0_tqji");
+    }
+
     loadFlashIntentStatus();
     loadSavedPayloads();
     loadIdempotencyStatus();
-    try {
-      const savedDest = localStorage.getItem("webhook-external-dest");
-      if (savedDest) setExternalDest(savedDest);
-      
-      // Carregar última mensagem do usuário
-      const savedUserMessage = localStorage.getItem("webhook-last-user-message");
-      if (savedUserMessage) setUserMessage(savedUserMessage);
-    } catch {}
+
+    // Marcar como carregado após definir os valores iniciais
+    setIsLoaded(true);
   }, []);
 
-  // Salvar automaticamente a última mensagem do usuário
+  // Salvar automaticamente os valores principais (só depois do carregamento inicial)
   useEffect(() => {
-    if (userMessage.trim()) {
+    if (isLoaded && userMessage.trim()) {
       try {
-        localStorage.setItem("webhook-last-user-message", userMessage);
+        localStorage.setItem("webhook-user-message", userMessage);
+        console.log("💾 Mensagem salva:", userMessage);
       } catch (error) {
         console.error("Erro ao salvar mensagem do usuário:", error);
       }
     }
-  }, [userMessage]);
+  }, [userMessage, isLoaded]);
 
-  // Salvar automaticamente a última mensagem do Facebook
   useEffect(() => {
-    if (lastFacebookMessage.trim()) {
+    if (isLoaded && buttonPayload.trim()) {
       try {
-        localStorage.setItem("webhook-last-facebook-message", lastFacebookMessage);
+        localStorage.setItem("webhook-button-payload", buttonPayload);
+        console.log("💾 Payload salvo:", buttonPayload);
       } catch (error) {
-        console.error("Erro ao salvar mensagem do Facebook:", error);
+        console.error("Erro ao salvar payload do botão:", error);
       }
     }
-  }, [lastFacebookMessage]);
+  }, [buttonPayload, isLoaded]);
 
-  // Carregar configurações salvas
-  useEffect(() => {
-    try {
-      const savedUserMessage = localStorage.getItem("webhook-last-user-message");
-      if (savedUserMessage) {
-        setUserMessage(savedUserMessage);
-      }
-
-      const savedFacebookMessage = localStorage.getItem("webhook-last-facebook-message");
-      if (savedFacebookMessage) {
-        setLastFacebookMessage(savedFacebookMessage);
-      }
-
-      const savedExternalDest = localStorage.getItem("webhook-external-dest");
-      if (savedExternalDest) {
-        setExternalDest(savedExternalDest);
-      }
-    } catch (error) {
-      console.error("Erro ao carregar configurações:", error);
-    }
-  }, []);
 
   const loadSavedPayloads = () => {
     try {
@@ -413,9 +387,9 @@ export default function WebhookTestPage() {
       setResponse(null);
 
       // Gerar source_id aleatório se habilitado
-      const finalSourceId = randomizeSourceId 
-        ? generateRandomWhatsAppSourceId()
-        : sourceId;
+      const finalSourceId = randomizeSourceId
+        ? generateRandomSourceId('whatsapp')
+        : "wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgUM0FCNDNFNUMzMTJGQjc5RjcyOEQA";
 
       // Atualizar o número de telefone e source_id no payload se foi modificado
       const updatedPayload = {
@@ -541,35 +515,35 @@ export default function WebhookTestPage() {
   const getExternalDestination = () =>
     externalDest.trim() || DEFAULT_EXTERNAL_DEST;
 
-  // Funções para criar payloads personalizados
-  // Função para gerar Source ID aleatório
+  // Função para gerar Source ID aleatório baseada no tipo de plataforma
   const generateRandomSourceId = (type: 'whatsapp' | 'instagram' | 'facebook') => {
     const timestamp = Date.now().toString();
     const random = Math.random().toString(36).substring(2, 15);
-    
+
     switch (type) {
       case 'whatsapp':
-        // Formato WhatsApp: wamid.HBgM + números + letras maiúsculas
         const whatsappBase = Math.random().toString().substring(2, 15);
         const whatsappSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
         return `wamid.HBgM${whatsappBase}FQIAEhgU${whatsappSuffix}`;
       case 'instagram':
-        // Formato Instagram: ig_ + timestamp + random
         return `ig_${timestamp}_${random}`;
       case 'facebook':
-        // Formato Facebook: m_ + string aleatória
         return `m_${random}${timestamp.substring(-8)}`;
       default:
         return random;
     }
   };
 
-  const createCustomWhatsappPayload = () => {
+  // Função para gerar session ID aleatório para Facebook
+  const generateRandomFacebookSessionId = () => {
+    return Math.floor(Math.random() * 9000000000000000 + 1000000000000000).toString();
+  };
+
+  // FONTE ÚNICA DA VERDADE: Funções que usam apenas userMessage e buttonPayload
+  const createWhatsappTextPayload = () => {
     const payload = JSON.parse(JSON.stringify(socialwiseWhatsappPayload));
-    const finalSourceId = randomizeSourceId 
-      ? generateRandomSourceId('whatsapp')
-      : sourceId;
-    
+    const finalSourceId = randomizeSourceId ? generateRandomSourceId('whatsapp') : "wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgUM0FCNDNFNUMzMTJGQjc5RjcyOEQA";
+
     payload.message = userMessage;
     payload.context.message.content = userMessage;
     payload.context.message.processed_message_content = userMessage;
@@ -583,23 +557,21 @@ export default function WebhookTestPage() {
     return payload;
   };
 
-  const createCustomWhatsappButtonPayload = () => {
+  const createWhatsappButtonPayload = () => {
     const payload = JSON.parse(JSON.stringify(socialwiseWhatsappButtonPayload));
-    const finalSourceId = randomizeSourceId 
-      ? generateRandomSourceId('whatsapp')
-      : sourceId;
-    
-    payload.message = buttonTitle;
-    payload.context.message.content = buttonTitle;
-    payload.context.message.processed_message_content = buttonTitle;
-    payload.context.message.content_attributes.button_reply.id = buttonId;
-    payload.context.message.content_attributes.button_reply.title = buttonTitle;
-    payload.context.message.content_attributes.interactive_payload.button_reply.id = buttonId;
-    payload.context.message.content_attributes.interactive_payload.button_reply.title = buttonTitle;
-    payload.context["socialwise-chatwit"].message_data.interactive_data.button_id = buttonId;
-    payload.context["socialwise-chatwit"].message_data.interactive_data.button_title = buttonTitle;
-    payload.context.button_id = buttonId;
-    payload.context.button_title = buttonTitle;
+    const finalSourceId = randomizeSourceId ? generateRandomSourceId('whatsapp') : "wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgUM0FCNDNFNUMzMTJGQjc5RjcyOEQA";
+
+    payload.message = userMessage;
+    payload.context.message.content = userMessage;
+    payload.context.message.processed_message_content = userMessage;
+    payload.context.message.content_attributes.button_reply.id = buttonPayload;
+    payload.context.message.content_attributes.button_reply.title = userMessage;
+    payload.context.message.content_attributes.interactive_payload.button_reply.id = buttonPayload;
+    payload.context.message.content_attributes.interactive_payload.button_reply.title = userMessage;
+    payload.context["socialwise-chatwit"].message_data.interactive_data.button_id = buttonPayload;
+    payload.context["socialwise-chatwit"].message_data.interactive_data.button_title = userMessage;
+    payload.context.button_id = buttonPayload;
+    payload.context.button_title = userMessage;
     payload.context.contact_phone = phoneNumber;
     payload.context.contact_source = phoneNumber.replace("+", "");
     payload.session_id = phoneNumber.replace("+", "");
@@ -609,13 +581,9 @@ export default function WebhookTestPage() {
     return payload;
   };
 
-  const createCustomInstagramPayload = () => {
+  const createInstagramTextPayload = () => {
     const payload = JSON.parse(JSON.stringify(socialwiseInstagramPayload));
-    
-    // Gerar source_id aleatório se habilitado
-    const finalSourceId = randomizeSourceId 
-      ? generateRandomSourceId('instagram')
-      : payload.context.message.source_id;
+    const finalSourceId = randomizeSourceId ? generateRandomSourceId('instagram') : payload.context.message.source_id;
 
     payload.message = userMessage;
     payload.context.message.content = userMessage;
@@ -625,43 +593,31 @@ export default function WebhookTestPage() {
     return payload;
   };
 
-  const createCustomInstagramButtonPayload = () => {
+  const createInstagramButtonPayload = () => {
     const payload = JSON.parse(JSON.stringify(socialwiseInstagramButtonPayload));
-    
-    // Gerar source_id aleatório se habilitado
-    const finalSourceId = randomizeSourceId 
-      ? generateRandomSourceId('instagram')
-      : payload.context.message.source_id;
+    const finalSourceId = randomizeSourceId ? generateRandomSourceId('instagram') : payload.context.message.source_id;
 
-    payload.message = buttonTitle;
-    payload.context.message.content = buttonTitle;
-    payload.context.message.processed_message_content = buttonTitle;
-    payload.context.message.content_attributes.postback_payload = instagramButtonId;
-    payload.context["socialwise-chatwit"].message_data.instagram_data.postback_payload = instagramButtonId;
+    payload.message = userMessage;
+    payload.context.message.content = userMessage;
+    payload.context.message.processed_message_content = userMessage;
+    payload.context.message.content_attributes.postback_payload = buttonPayload;
+    payload.context["socialwise-chatwit"].message_data.instagram_data.postback_payload = buttonPayload;
     payload.context.interaction_type = "postback";
-    payload.context.postback_payload = instagramButtonId;
+    payload.context.postback_payload = buttonPayload;
     payload.context.message.source_id = finalSourceId;
     return payload;
   };
 
-  const createCustomFacebookPayload = () => {
+  const createFacebookTextPayload = () => {
     const payload = JSON.parse(JSON.stringify(socialwiseFacebookPayload));
-    
-    // Gerar session_id aleatório se habilitado
-    const finalSessionId = randomizeSessionId 
-      ? generateRandomFacebookSessionId()
-      : facebookSessionId;
+    const finalSessionId = generateRandomFacebookSessionId();
+    const finalSourceId = randomizeSourceId ? generateRandomSourceId('facebook') : payload.context.message.source_id;
 
-    // Gerar source_id aleatório se habilitado
-    const finalSourceId = randomizeSourceId 
-      ? generateRandomSourceId('facebook')
-      : payload.context.message.source_id;
-
-    payload.message = lastFacebookMessage;
+    payload.message = userMessage;
     payload.session_id = finalSessionId;
-    payload.context.message.content = lastFacebookMessage;
-    payload.context.message.processed_message_content = lastFacebookMessage;
-    payload.context.message_content = lastFacebookMessage;
+    payload.context.message.content = userMessage;
+    payload.context.message.processed_message_content = userMessage;
+    payload.context.message_content = userMessage;
     payload.context.message.source_id = finalSourceId;
     payload.context.contact_source = finalSessionId;
     payload.context["socialwise-chatwit"].whatsapp_identifiers.contact_source = finalSessionId;
@@ -669,21 +625,36 @@ export default function WebhookTestPage() {
     return payload;
   };
 
-  const createCustomQuickReplyFBPayload = () => {
+  const createFacebookQuickReplyPayload = () => {
     const payload = JSON.parse(JSON.stringify(quickReplyFBPayload));
-    // Atualizar o quick_reply_payload com o valor personalizado
-    payload.context.message.content_attributes.quick_reply_payload = quickReplyPayload;
-    payload.context["socialwise-chatwit"].message_data.instagram_data.quick_reply_payload = quickReplyPayload;
-    payload.quick_reply_payload = quickReplyPayload;
+    const finalSessionId = generateRandomFacebookSessionId();
+    const finalSourceId = randomizeSourceId ? generateRandomSourceId('facebook') : payload.context.message.source_id;
+
+    payload.message = userMessage;
+    payload.session_id = finalSessionId;
+    payload.context.message.content = userMessage;
+    payload.context.message.processed_message_content = userMessage;
+    payload.context.message_content = userMessage;
+    payload.context.message.source_id = finalSourceId;
+    payload.context.contact_source = finalSessionId;
+    payload.context.message.content_attributes.quick_reply_payload = buttonPayload;
+    payload.context["socialwise-chatwit"].message_data.instagram_data.quick_reply_payload = buttonPayload;
+    payload.quick_reply_payload = buttonPayload;
     return payload;
   };
 
-  const createCustomQuickReplyIGPayload = () => {
+  const createInstagramQuickReplyPayload = () => {
     const payload = JSON.parse(JSON.stringify(quickReplyIGPayload));
-    // Atualizar o quick_reply_payload com o valor personalizado
-    payload.context.message.content_attributes.quick_reply_payload = quickReplyPayload;
-    payload.context["socialwise-chatwit"].message_data.instagram_data.quick_reply_payload = quickReplyPayload;
-    payload.quick_reply_payload = quickReplyPayload;
+    const finalSourceId = randomizeSourceId ? generateRandomSourceId('instagram') : payload.context.message.source_id;
+
+    payload.message = userMessage;
+    payload.context.message.content = userMessage;
+    payload.context.message.processed_message_content = userMessage;
+    payload.context.message_content = userMessage;
+    payload.context.message.source_id = finalSourceId;
+    payload.context.message.content_attributes.quick_reply_payload = buttonPayload;
+    payload.context["socialwise-chatwit"].message_data.instagram_data.quick_reply_payload = buttonPayload;
+    payload.quick_reply_payload = buttonPayload;
     return payload;
   };
 
@@ -738,1034 +709,7 @@ export default function WebhookTestPage() {
     }
   };
 
-  // Payloads padrão (SocialwiseFlow) - versões completas
-  const socialwiseWhatsappPayload = {
-    "session_id": "558597550136",
-    "message": "Queria saber mais sobre o mandado de segurança da OAB",
-    "channel_type": "Channel::Whatsapp",
-    "language": "pt_BR",
-    "context": {
-      "message": {
-        "id": 36021,
-        "content": "Queria saber mais sobre o mandado de segurança da OAB",
-        "account_id": 3,
-        "inbox_id": 4,
-        "conversation_id": 2133,
-        "message_type": "incoming",
-        "created_at": "2025-08-13T22:38:24.870Z",
-        "updated_at": "2025-08-13T22:38:24.870Z",
-        "private": false,
-        "status": "sent",
-        "source_id": "wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgUM0FFOTRBNzA5ODRCNzhCNTEzNTEA",
-        "content_type": "text",
-        "content_attributes": {},
-        "sender_type": "Contact",
-        "sender_id": 1447,
-        "external_source_ids": {},
-        "additional_attributes": {},
-        "processed_message_content": "Queria saber mais sobre o mandado de segurança da OAB",
-        "sentiment": {}
-      },
-      "conversation": {
-        "id": 2133,
-        "account_id": 3,
-        "inbox_id": 4,
-        "status": "pending",
-        "assignee_id": null,
-        "created_at": "2025-08-12T17:53:23.278Z",
-        "updated_at": "2025-08-13T22:38:24.873Z",
-        "contact_id": 1447,
-        "display_id": 1923,
-        "contact_last_seen_at": null,
-        "agent_last_seen_at": "2025-08-12T18:57:06.792Z",
-        "additional_attributes": {},
-        "contact_inbox_id": 1690,
-        "uuid": "08c5e7d4-9100-41bb-bf5b-c55a965cebcb",
-        "identifier": null,
-        "last_activity_at": "2025-08-13T22:38:24.870Z",
-        "team_id": null,
-        "campaign_id": null,
-        "snoozed_until": null,
-        "custom_attributes": {},
-        "assignee_last_seen_at": null,
-        "first_reply_created_at": null,
-        "priority": null,
-        "sla_policy_id": null,
-        "waiting_since": "2025-08-12T17:53:23.278Z",
-        "cached_label_list": null,
-        "label_list": []
-      },
-      "contact": {
-        "id": 1447,
-        "name": "Witalo Rocha",
-        "email": null,
-        "phone_number": "+558597550136",
-        "account_id": 3,
-        "created_at": "2025-07-06T14:35:28.590Z",
-        "updated_at": "2025-08-13T22:38:24.940Z",
-        "additional_attributes": {},
-        "identifier": null,
-        "custom_attributes": {},
-        "last_activity_at": "2025-08-13T22:38:24.932Z",
-        "contact_type": "lead",
-        "middle_name": "",
-        "last_name": "",
-        "location": null,
-        "country_code": null,
-        "blocked": false,
-        "label_list": []
-      },
-      "inbox": {
-        "id": 4,
-        "channel_id": 1,
-        "account_id": 3,
-        "name": "WhatsApp - ANA",
-        "created_at": "2024-06-09T00:52:47.311Z",
-        "updated_at": "2025-08-13T21:50:09.580Z",
-        "channel_type": "Channel::Whatsapp",
-        "enable_auto_assignment": true,
-        "greeting_enabled": false,
-        "greeting_message": null,
-        "email_address": null,
-        "working_hours_enabled": false,
-        "out_of_office_message": null,
-        "timezone": "UTC",
-        "enable_email_collect": true,
-        "csat_survey_enabled": false,
-        "allow_messages_after_resolved": true,
-        "auto_assignment_config": {},
-        "lock_to_single_conversation": false,
-        "portal_id": null,
-        "sender_name_type": "friendly",
-        "business_name": null,
-        "allow_agent_to_delete_message": true,
-        "external_token": null,
-        "csat_response_visible": false,
-        "csat_config": {}
-      },
-      "socialwise-chatwit": {
-        "whatsapp_identifiers": {
-          "wamid": "wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgUM0FFOTRBNzA5ODRCNzhCNTEzNTEA",
-          "whatsapp_id": "wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgUM0FFOTRBNzA5ODRCNzhCNTEzNTEA",
-          "contact_source": "558597550136"
-        },
-        "contact_data": {
-          "id": 1447,
-          "name": "Witalo Rocha",
-          "phone_number": "+558597550136",
-          "email": null,
-          "identifier": null,
-          "custom_attributes": {}
-        },
-        "conversation_data": {
-          "id": 2133,
-          "status": "pending",
-          "assignee_id": null,
-          "created_at": "2025-08-12T17:53:23Z",
-          "updated_at": "2025-08-13T22:38:24Z"
-        },
-        "message_data": {
-          "id": 36021,
-          "content": "Queria saber mais sobre o mandado de segurança da OAB",
-          "content_type": "text",
-          "message_type": "incoming",
-          "created_at": "2025-08-13T22:38:24Z",
-          "interactive_data": {},
-          "instagram_data": {}
-        },
-        "inbox_data": {
-          "id": 4,
-          "name": "WhatsApp - ANA",
-          "channel_type": "Channel::Whatsapp"
-        },
-        "account_data": {
-          "id": 3,
-          "name": "DraAmandaSousa"
-        },
-        "metadata": {
-          "socialwise_active": true,
-          "is_whatsapp_channel": true,
-          "payload_version": "2.0",
-          "timestamp": "2025-08-13T22:38:25Z",
-          "has_whatsapp_api_key": true
-        },
-        "whatsapp_api_key": "EAAGIBII4GXQBO2qgvJ2jdcUmgkdqBo5bUKEanJWmCLpcZAsq0Ovpm4JNlrNLeZAv3OYNrdCqqQBAHfEfPFD0FPnZAOQJURB9GKcbXpa83XdAsa3i6fTr23lBFM2LwUZC23xXrZAnB8QjCCFZBxrxlBvzPj8LsejvUjz0C04Q8Jsl8nTGHUd4ZBRPc4NiHFnc",
-        "whatsapp_phone_number_id": "274633962398273",
-        "whatsapp_business_id": "294585820394901"
-      },
-      "wamid": "wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgUM0FFOTRBNzA5ODRCNzhCNTEzNTEA",
-      "contact_source": "558597550136",
-      "contact_name": "Witalo Rocha",
-      "contact_phone": "+558597550136",
-      "contact_email": null,
-      "contact_identifier": null,
-      "contact_id": 1447,
-      "conversation_id": 2133,
-      "conversation_status": "pending",
-      "conversation_assignee_id": null,
-      "conversation_created_at": "2025-08-12T17:53:23Z",
-      "conversation_updated_at": "2025-08-13T22:38:24Z",
-      "message_id": 36021,
-      "message_content": "Queria saber mais sobre o mandado de segurança da OAB",
-      "message_type": "incoming",
-      "message_created_at": "2025-08-13T22:38:24Z",
-      "message_content_type": "text",
-      "button_id": null,
-      "button_title": null,
-      "list_id": null,
-      "list_title": null,
-      "list_description": null,
-      "interaction_type": null,
-      "postback_payload": null,
-      "quick_reply_payload": null,
-      "inbox_id": 4,
-      "inbox_name": "WhatsApp - ANA",
-      "channel_type": "Channel::Whatsapp",
-      "account_id": 3,
-      "account_name": "DraAmandaSousa",
-      "whatsapp_api_key": "EAAGIBII4GXQBO2qgvJ2jdcUmgkdqBo5bUKEanJWmCLpcZAsq0Ovpm4JNlrNLeZAv3OYNrdCqqQBAHfEfPFD0FPnZAOQJURB9GKcbXpa83XdAsa3i6fTr23lBFM2LwUZC23xXrZAnB8QjCCFZBxrxlBvzPj8LsejvUjz0C04Q8Jsl8nTGHUd4ZBRPc4NiHFnc",
-      "phone_number_id": "274633962398273",
-      "business_id": "294585820394901",
-      "socialwise_active": true,
-      "is_whatsapp_channel": true,
-      "has_whatsapp_api_key": true,
-      "payload_version": "2.0",
-      "timestamp": "2025-08-13T22:38:25Z"
-    }
-  };
-
-  const socialwiseWhatsappButtonPayload = {
-    "session_id": "558597550136",
-    "message": "Falar com a Dra",
-    "channel_type": "Channel::Whatsapp",
-    "language": "pt_BR",
-    "context": {
-      "message": {
-        "id": 36023,
-        "content": "Falar com a Dra",
-        "account_id": 3,
-        "inbox_id": 4,
-        "conversation_id": 2133,
-        "message_type": "incoming",
-        "created_at": "2025-08-13T22:44:06.875Z",
-        "updated_at": "2025-08-13T22:44:06.875Z",
-        "private": false,
-        "status": "sent",
-        "source_id": "wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgUM0FCNDNFNUMzMTJGQjc5RjcyOEQA",
-        "content_type": "text",
-        "content_attributes": {
-          "button_reply": {
-            "id": "btn_1754993780819_0_tqji",
-            "title": "Falar com a Dra"
-          },
-          "interaction_type": "button_reply",
-          "interactive_payload": {
-            "type": "button_reply",
-            "button_reply": {
-              "id": "btn_1754993780819_0_tqji",
-              "title": "Falar com a Dra"
-            }
-          }
-        },
-        "sender_type": "Contact",
-        "sender_id": 1447,
-        "external_source_ids": {},
-        "additional_attributes": {},
-        "processed_message_content": "Falar com a Dra",
-        "sentiment": {}
-      },
-      "conversation": {
-        "id": 2133,
-        "account_id": 3,
-        "inbox_id": 4,
-        "status": "pending",
-        "assignee_id": null,
-        "created_at": "2025-08-12T17:53:23.278Z",
-        "updated_at": "2025-08-13T22:44:06.877Z",
-        "contact_id": 1447,
-        "display_id": 1923,
-        "contact_last_seen_at": null,
-        "agent_last_seen_at": "2025-08-12T18:57:06.792Z",
-        "additional_attributes": {},
-        "contact_inbox_id": 1690,
-        "uuid": "08c5e7d4-9100-41bb-bf5b-c55a965cebcb",
-        "identifier": null,
-        "last_activity_at": "2025-08-13T22:44:06.875Z",
-        "team_id": null,
-        "campaign_id": null,
-        "snoozed_until": null,
-        "custom_attributes": {},
-        "assignee_last_seen_at": null,
-        "first_reply_created_at": null,
-        "priority": null,
-        "sla_policy_id": null,
-        "waiting_since": "2025-08-12T17:53:23.278Z",
-        "cached_label_list": null,
-        "label_list": []
-      },
-      "contact": {
-        "id": 1447,
-        "name": "Witalo Rocha",
-        "email": null,
-        "phone_number": "+558597550136",
-        "account_id": 3,
-        "created_at": "2025-07-06T14:35:28.590Z",
-        "updated_at": "2025-08-13T22:44:06.926Z",
-        "additional_attributes": {},
-        "identifier": null,
-        "custom_attributes": {},
-        "last_activity_at": "2025-08-13T22:44:06.920Z",
-        "contact_type": "lead",
-        "middle_name": "",
-        "last_name": "",
-        "location": null,
-        "country_code": null,
-        "blocked": false,
-        "label_list": []
-      },
-      "inbox": {
-        "id": 4,
-        "channel_id": 1,
-        "account_id": 3,
-        "name": "WhatsApp - ANA",
-        "created_at": "2024-06-09T00:52:47.311Z",
-        "updated_at": "2025-08-13T21:50:09.580Z",
-        "channel_type": "Channel::Whatsapp",
-        "enable_auto_assignment": true,
-        "greeting_enabled": false,
-        "greeting_message": null,
-        "email_address": null,
-        "working_hours_enabled": false,
-        "out_of_office_message": null,
-        "timezone": "UTC",
-        "enable_email_collect": true,
-        "csat_survey_enabled": false,
-        "allow_messages_after_resolved": true,
-        "auto_assignment_config": {},
-        "lock_to_single_conversation": false,
-        "portal_id": null,
-        "sender_name_type": "friendly",
-        "business_name": null,
-        "allow_agent_to_delete_message": true,
-        "external_token": null,
-        "csat_response_visible": false,
-        "csat_config": {}
-      },
-      "socialwise-chatwit": {
-        "whatsapp_identifiers": {
-          "wamid": "wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgUM0FCNDNFNUMzMTJGQjc5RjcyOEQA",
-          "whatsapp_id": "wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgUM0FCNDNFNUMzMTJGQjc5RjcyOEQA",
-          "contact_source": "558597550136"
-        },
-        "contact_data": {
-          "id": 1447,
-          "name": "Witalo Rocha",
-          "phone_number": "+558597550136",
-          "email": null,
-          "identifier": null,
-          "custom_attributes": {}
-        },
-        "conversation_data": {
-          "id": 2133,
-          "status": "pending",
-          "assignee_id": null,
-          "created_at": "2025-08-12T17:53:23Z",
-          "updated_at": "2025-08-13T22:44:06Z"
-        },
-        "message_data": {
-          "id": 36023,
-          "content": "Falar com a Dra",
-          "content_type": "text",
-          "message_type": "incoming",
-          "created_at": "2025-08-13T22:44:06Z",
-          "interactive_data": {
-            "button_id": "btn_1754993780819_0_tqji",
-            "button_title": "Falar com a Dra",
-            "interaction_type": "button_reply"
-          },
-          "instagram_data": {}
-        },
-        "inbox_data": {
-          "id": 4,
-          "name": "WhatsApp - ANA",
-          "channel_type": "Channel::Whatsapp"
-        },
-        "account_data": {
-          "id": 3,
-          "name": "DraAmandaSousa"
-        },
-        "metadata": {
-          "socialwise_active": true,
-          "is_whatsapp_channel": true,
-          "payload_version": "2.0",
-          "timestamp": "2025-08-13T22:44:07Z",
-          "has_whatsapp_api_key": true
-        },
-        "whatsapp_api_key": "EAAGIBII4GXQBO2qgvJ2jdcUmgkdqBo5bUKEanJWmCLpcZAsq0Ovpm4JNlrNLeZAv3OYNrdCqqQBAHfEfPFD0FPnZAOQJURB9GKcbjXeDpa83XdAsa3i6fTr23lBFM2LwUZC23xXrZAnB8QjCCFZBxrxlBvzPj8LsejvUjz0C04Q8Jsl8nTGHUd4ZBRPc4NiHFnc",
-        "whatsapp_phone_number_id": "274633962398273",
-        "whatsapp_business_id": "294585820394901"
-      },
-      "wamid": "wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgUM0FCNDNFNUMzMTJGQjc5RjcyOEQA",
-      "contact_source": "558597550136",
-      "contact_name": "Witalo Rocha",
-      "contact_phone": "+558597550136",
-      "contact_email": null,
-      "contact_identifier": null,
-      "contact_id": 1447,
-      "conversation_id": 2133,
-      "conversation_status": "pending",
-      "conversation_assignee_id": null,
-      "conversation_created_at": "2025-08-12T17:53:23Z",
-      "conversation_updated_at": "2025-08-13T22:44:06Z",
-      "message_id": 36023,
-      "message_content": "Falar com a Dra",
-      "message_type": "incoming",
-      "message_created_at": "2025-08-13T22:44:06Z",
-      "message_content_type": "text",
-      "button_id": "btn_1754993780819_0_tqji",
-      "button_title": "Falar com a Dra",
-      "list_id": null,
-      "list_title": null,
-      "list_description": null,
-      "interaction_type": null,
-      "postback_payload": null,
-      "quick_reply_payload": null,
-      "inbox_id": 4,
-      "inbox_name": "WhatsApp - ANA",
-      "channel_type": "Channel::Whatsapp",
-      "account_id": 3,
-      "account_name": "DraAmandaSousa",
-      "whatsapp_api_key": "EAAGIBII4GXQBO2qgvJ2jdcUmgkdqBo5bUKEanJWmCLpcZAsq0Ovpm4JNlrNLeZAv3OYNrdCqqQBAHfEfPFD0FPnZAOQJURB9GKcbjXeDpa83XdAsa3i6fTr23lBFM2LwUZC23xXrZAnB8QjCCFZBxrxlBvzPj8LsejvUjz0C04Q8Jsl8nTGHUd4ZBRPc4NiHFnc",
-      "phone_number_id": "274633962398273",
-      "business_id": "294585820394901",
-      "socialwise_active": true,
-      "is_whatsapp_channel": true,
-      "has_whatsapp_api_key": true,
-      "payload_version": "2.0",
-      "timestamp": "2025-08-13T22:44:07Z"
-    }
-  };
-
-  const socialwiseInstagramPayload = {
-    "session_id": "1002859634954741",
-    "message": "Bom dia mais informações sobre recurso da OAB",
-    "channel_type": "Channel::Instagram",
-    "language": "pt-BR",
-    "context": {
-      "message": {
-        "id": 36027,
-        "content": "Bom dia mais informações sobre recurso da OAB",
-        "account_id": 3,
-        "inbox_id": 105,
-        "conversation_id": 2132,
-        "message_type": "incoming",
-        "created_at": "2025-08-13T23:00:33.751Z",
-        "updated_at": "2025-08-13T23:00:33.751Z",
-        "private": false,
-        "status": "sent",
-        "source_id": "aWdfZAG1faXRlbToxOklHTWVzc2FnZAUlEOjE3ODQxNDQ3NDk3Mzc2NjYxOjM0MDI4MjM2Njg0MTcxMDMwMTI0NDI1ODczNzUyMDkyNTU5MjcwNzozMjM3NjM2MDY3NjE3NzM3MDExMzg1NjczMDA5OTA4OTQwOAZDZD",
-        "content_type": "text",
-        "content_attributes": {
-          "in_reply_to_external_id": null
-        },
-        "sender_type": "Contact",
-        "sender_id": 1885,
-        "external_source_ids": {},
-        "additional_attributes": {},
-        "processed_message_content": "Bom dia mais informações sobre recurso da OAB",
-        "sentiment": {}
-      },
-      "conversation": {
-        "id": 2132,
-        "account_id": 3,
-        "inbox_id": 105,
-        "status": "pending",
-        "assignee_id": null,
-        "created_at": "2025-08-12T17:30:10.706Z",
-        "updated_at": "2025-08-13T23:00:33.753Z",
-        "contact_id": 1885,
-        "display_id": 1922,
-        "contact_last_seen_at": null,
-        "agent_last_seen_at": "2025-08-12T21:29:14.507Z",
-        "additional_attributes": {},
-        "contact_inbox_id": 2177,
-        "uuid": "0d586852-6639-4bd1-b2c9-c6df07756e6f",
-        "identifier": null,
-        "last_activity_at": "2025-08-13T23:00:33.751Z",
-        "team_id": null,
-        "campaign_id": null,
-        "snoozed_until": null,
-        "custom_attributes": {},
-        "assignee_last_seen_at": null,
-        "first_reply_created_at": null,
-        "priority": null,
-        "sla_policy_id": null,
-        "waiting_since": "2025-08-12T17:30:10.706Z",
-        "cached_label_list": null,
-        "label_list": []
-      },
-      "contact": {
-        "id": 1885,
-        "name": "Witalo Rocha",
-        "email": null,
-        "phone_number": null,
-        "account_id": 3,
-        "created_at": "2025-07-25T11:02:03.286Z",
-        "updated_at": "2025-08-13T23:00:33.799Z",
-        "additional_attributes": {
-          "social_profiles": {
-            "instagram": "witalo_rocha_"
-          },
-          "social_instagram_user_name": "witalo_rocha_",
-          "social_instagram_follower_count": 1262,
-          "social_instagram_is_verified_user": false,
-          "social_instagram_is_business_follow_user": true,
-          "social_instagram_is_user_follow_business": true
-        },
-        "identifier": null,
-        "custom_attributes": {},
-        "last_activity_at": "2025-08-13T23:00:33.792Z",
-        "contact_type": "lead",
-        "middle_name": "",
-        "last_name": "",
-        "location": null,
-        "country_code": null,
-        "blocked": false,
-        "label_list": []
-      },
-      "inbox": {
-        "id": 105,
-        "channel_id": 4,
-        "account_id": 3,
-        "name": "dra.amandasousadv",
-        "created_at": "2025-07-25T10:44:53.201Z",
-        "updated_at": "2025-07-25T10:44:53.201Z",
-        "channel_type": "Channel::Instagram",
-        "enable_auto_assignment": true,
-        "greeting_enabled": false,
-        "greeting_message": null,
-        "email_address": null,
-        "working_hours_enabled": false,
-        "out_of_office_message": null,
-        "timezone": "UTC",
-        "enable_email_collect": true,
-        "csat_survey_enabled": false,
-        "allow_messages_after_resolved": true,
-        "auto_assignment_config": {},
-        "lock_to_single_conversation": false,
-        "portal_id": null,
-        "sender_name_type": "friendly",
-        "business_name": null,
-        "allow_agent_to_delete_message": true,
-        "external_token": null,
-        "csat_response_visible": false,
-        "csat_config": {}
-      },
-      "socialwise-chatwit": {
-        "whatsapp_identifiers": {
-          "wamid": "aWdfZAG1faXRlbToxOklHTWVzc2FnZAUlEOjE3ODQxNDQ3NDk3Mzc2NjYxOjM0MDI4MjM2Njg0MTcxMDMwMTI0NDI1ODczNzUyMDkyNTU5MjcwNzozMjM3NjM2MDY3NjE3NzM3MDExMzg1NjczMDA5OTA4OTQwOAZDZD",
-          "whatsapp_id": "aWdfZAG1faXRlbToxOklHTWVzc2FnZAUlEOjE3ODQxNDQ3NDk3Mzc2NjYxOjM0MDI4MjM2Njg0MTcxMDMwMTI0NDI1ODczNzUyMDkyNTU5MjcwNzozMjM3NjM2MDY3NjE3NzM3MDExMzg1NjczMDA5OTA4OTQwOAZDZD",
-          "contact_source": "1002859634954741"
-        },
-        "contact_data": {
-          "id": 1885,
-          "name": "Witalo Rocha",
-          "phone_number": null,
-          "email": null,
-          "identifier": null,
-          "custom_attributes": {}
-        },
-        "conversation_data": {
-          "id": 2132,
-          "status": "pending",
-          "assignee_id": null,
-          "created_at": "2025-08-12T17:30:10Z",
-          "updated_at": "2025-08-13T23:00:33Z"
-        },
-        "message_data": {
-          "id": 36027,
-          "content": "Bom dia mais informações sobre recurso da OAB",
-          "content_type": "text",
-          "message_type": "incoming",
-          "created_at": "2025-08-13T23:00:33Z",
-          "interactive_data": {},
-          "instagram_data": {}
-        },
-        "inbox_data": {
-          "id": 105,
-          "name": "dra.amandasousadv",
-          "channel_type": "Channel::Instagram"
-        },
-        "account_data": {
-          "id": 3,
-          "name": "DraAmandaSousa"
-        },
-        "metadata": {
-          "socialwise_active": true,
-          "is_whatsapp_channel": false,
-          "payload_version": "2.0",
-          "timestamp": "2025-08-13T23:00:33Z",
-          "has_whatsapp_api_key": false
-        },
-        "whatsapp_api_key": null,
-        "whatsapp_phone_number_id": null,
-        "whatsapp_business_id": null
-      },
-      "wamid": "aWdfZAG1faXRlbToxOklHTWVzc2FnZAUlEOjE3ODQxNDQ3NDk3Mzc2NjYxOjM0MDI4MjM2Njg0MTcxMDMwMTI0NDI1ODczNzUyMDkyNTU5MjcwNzozMjM3NjM2MDY3NjE3NzM3MDExMzg1NjczMDA5OTA4OTQwOAZDZD",
-      "contact_source": "1002859634954741",
-      "contact_name": "Witalo Rocha",
-      "contact_phone": null,
-      "contact_email": null,
-      "contact_identifier": null,
-      "contact_id": 1885,
-      "conversation_id": 2132,
-      "conversation_status": "pending",
-      "conversation_assignee_id": null,
-      "conversation_created_at": "2025-08-12T17:30:10Z",
-      "conversation_updated_at": "2025-08-13T23:00:33Z",
-      "message_id": 36027,
-      "message_content": "Bom dia mais informações sobre recurso da OAB",
-      "message_type": "incoming",
-      "message_created_at": "2025-08-13T23:00:33Z",
-      "message_content_type": "text",
-      "button_id": null,
-      "button_title": null,
-      "list_id": null,
-      "list_title": null,
-      "list_description": null,
-      "interaction_type": null,
-      "postback_payload": null,
-      "quick_reply_payload": null,
-      "inbox_id": 105,
-      "inbox_name": "dra.amandasousadv",
-      "channel_type": "Channel::Instagram",
-      "account_id": 3,
-      "account_name": "DraAmandaSousa",
-      "whatsapp_api_key": null,
-      "phone_number_id": null,
-      "business_id": null,
-      "socialwise_active": true,
-      "is_whatsapp_channel": false,
-      "has_whatsapp_api_key": false,
-      "payload_version": "2.0",
-      "timestamp": "2025-08-13T23:00:33Z"
-    }
-  };
-
-  const socialwiseInstagramButtonPayload = {
-    "session_id": "1002859634954741",
-    "message": "Falar com a Dra",
-    "channel_type": "Channel::Instagram",
-    "language": "pt-BR",
-    "context": {
-      "message": {
-        "id": 36029,
-        "content": "Falar com a Dra",
-        "account_id": 3,
-        "inbox_id": 105,
-        "conversation_id": 2132,
-        "message_type": "incoming",
-        "created_at": "2025-08-13T23:02:06.966Z",
-        "updated_at": "2025-08-13T23:02:06.966Z",
-        "private": false,
-        "status": "sent",
-        "source_id": "aWdfZAG1faXRlbToxOklHTWVzc2FnZAUlEOjE3ODQxNDQ3NDk3Mzc2NjYxOjM0MDI4MjM2Njg0MTcxMDMwMTI0NDI1ODczNzUyMDkyNTU5MjcwNzozMjM3NjM2MjQzNzg0OTM0MjgwNjMyNjUzMDgyNDczMjY3MgZDZD",
-        "content_type": "text",
-        "content_attributes": {
-          "in_reply_to_external_id": null,
-          "postback_payload": "ig_btn_1755004696546_uekaa4clu"
-        },
-        "sender_type": "Contact",
-        "sender_id": 1885,
-        "external_source_ids": {},
-        "additional_attributes": {},
-        "processed_message_content": "Falar com a Dra",
-        "sentiment": {}
-      },
-      "conversation": {
-        "id": 2132,
-        "account_id": 3,
-        "inbox_id": 105,
-        "status": "pending",
-        "assignee_id": null,
-        "created_at": "2025-08-12T17:30:10.706Z",
-        "updated_at": "2025-08-13T23:02:06.968Z",
-        "contact_id": 1885,
-        "display_id": 1922,
-        "contact_last_seen_at": null,
-        "agent_last_seen_at": "2025-08-12T21:29:14.507Z",
-        "additional_attributes": {},
-        "contact_inbox_id": 2177,
-        "uuid": "0d586852-6639-4bd1-b2c9-c6df07756e6f",
-        "identifier": null,
-        "last_activity_at": "2025-08-13T23:02:06.966Z",
-        "team_id": null,
-        "campaign_id": null,
-        "snoozed_until": null,
-        "custom_attributes": {},
-        "assignee_last_seen_at": null,
-        "first_reply_created_at": null,
-        "priority": null,
-        "sla_policy_id": null,
-        "waiting_since": "2025-08-12T17:30:10.706Z",
-        "cached_label_list": null,
-        "label_list": []
-      },
-      "contact": {
-        "id": 1885,
-        "name": "Witalo Rocha",
-        "email": null,
-        "phone_number": null,
-        "account_id": 3,
-        "created_at": "2025-07-25T11:02:03.286Z",
-        "updated_at": "2025-08-13T23:02:07.005Z",
-        "additional_attributes": {
-          "social_profiles": {
-            "instagram": "witalo_rocha_"
-          },
-          "social_instagram_user_name": "witalo_rocha_",
-          "social_instagram_follower_count": 1262,
-          "social_instagram_is_verified_user": false,
-          "social_instagram_is_business_follow_user": true,
-          "social_instagram_is_user_follow_business": true
-        },
-        "identifier": null,
-        "custom_attributes": {},
-        "last_activity_at": "2025-08-13T23:02:07.002Z",
-        "contact_type": "lead",
-        "middle_name": "",
-        "last_name": "",
-        "location": null,
-        "country_code": null,
-        "blocked": false,
-        "label_list": []
-      },
-      "inbox": {
-        "id": 105,
-        "channel_id": 4,
-        "account_id": 3,
-        "name": "dra.amandasousadv",
-        "created_at": "2025-07-25T10:44:53.201Z",
-        "updated_at": "2025-07-25T10:44:53.201Z",
-        "channel_type": "Channel::Instagram",
-        "enable_auto_assignment": true,
-        "greeting_enabled": false,
-        "greeting_message": null,
-        "email_address": null,
-        "working_hours_enabled": false,
-        "out_of_office_message": null,
-        "timezone": "UTC",
-        "enable_email_collect": true,
-        "csat_survey_enabled": false,
-        "allow_messages_after_resolved": true,
-        "auto_assignment_config": {},
-        "lock_to_single_conversation": false,
-        "portal_id": null,
-        "sender_name_type": "friendly",
-        "business_name": null,
-        "allow_agent_to_delete_message": true,
-        "external_token": null,
-        "csat_response_visible": false,
-        "csat_config": {}
-      },
-      "socialwise-chatwit": {
-        "whatsapp_identifiers": {
-          "wamid": "aWdfZAG1faXRlbToxOklHTWVzc2FnZAUlEOjE3ODQxNDQ3NDk3Mzc2NjYxOjM0MDI4MjM2Njg0MTcxMDMwMTI0NDI1ODczNzUyMDkyNTU5MjcwNzozMjM3NjM2MjQzNzg0OTM0MjgwNjMyNjUzMDgyNDczMjY3MgZDZD",
-          "whatsapp_id": "aWdfZAG1faXRlbToxOklHTWVzc2FnZAUlEOjE3ODQxNDQ3NDk3Mzc2NjYxOjM0MDI4MjM2Njg0MTcxMDMwMTI0NDI1ODczNzUyMDkyNTU5MjcwNzozMjM3NjM2MjQzNzg0OTM0MjgwNjMyNjUzMDgyNDczMjY3MgZDZD",
-          "contact_source": "1002859634954741"
-        },
-        "contact_data": {
-          "id": 1885,
-          "name": "Witalo Rocha",
-          "phone_number": null,
-          "email": null,
-          "identifier": null,
-          "custom_attributes": {}
-        },
-        "conversation_data": {
-          "id": 2132,
-          "status": "pending",
-          "assignee_id": null,
-          "created_at": "2025-08-12T17:30:10Z",
-          "updated_at": "2025-08-13T23:02:06Z"
-        },
-        "message_data": {
-          "id": 36029,
-          "content": "Falar com a Dra",
-          "content_type": "text",
-          "message_type": "incoming",
-          "created_at": "2025-08-13T23:02:06Z",
-          "interactive_data": {},
-          "instagram_data": {
-            "postback_payload": "ig_btn_1755004696546_uekaa4clu",
-            "interaction_type": "postback"
-          }
-        },
-        "inbox_data": {
-          "id": 105,
-          "name": "dra.amandasousadv",
-          "channel_type": "Channel::Instagram"
-        },
-        "account_data": {
-          "id": 3,
-          "name": "DraAmandaSousa"
-        },
-        "metadata": {
-          "socialwise_active": true,
-          "is_whatsapp_channel": false,
-          "payload_version": "2.0",
-          "timestamp": "2025-08-13T23:02:07Z",
-          "has_whatsapp_api_key": false
-        },
-        "whatsapp_api_key": null,
-        "whatsapp_phone_number_id": null,
-        "whatsapp_business_id": null
-      },
-      "wamid": "aWdfZAG1faXRlbToxOklHTWVzc2FnZAUlEOjE3ODQxNDQ3NDk3Mzc2NjYxOjM0MDI4MjM2Njg0MTcxMDMwMTI0NDI1ODczNzUyMDkyNTU5MjcwNzozMjM3NjM2MjQzNzg0OTM0MjgwNjMyNjUzMDgyNDczMjY3MgZDZD",
-      "contact_source": "1002859634954741",
-      "contact_name": "Witalo Rocha",
-      "contact_phone": null,
-      "contact_email": null,
-      "contact_identifier": null,
-      "contact_id": 1885,
-      "conversation_id": 2132,
-      "conversation_status": "pending",
-      "conversation_assignee_id": null,
-      "conversation_created_at": "2025-08-12T17:30:10Z",
-      "conversation_updated_at": "2025-08-13T23:02:06Z",
-      "message_id": 36029,
-      "message_content": "Falar com a Dra",
-      "message_type": "incoming",
-      "message_created_at": "2025-08-13T23:02:06Z",
-      "message_content_type": "text",
-      "button_id": null,
-      "button_title": null,
-      "list_id": null,
-      "list_title": null,
-      "list_description": null,
-      "interaction_type": "postback",
-      "postback_payload": "ig_btn_1755004696546_uekaa4clu",
-      "quick_reply_payload": null,
-      "inbox_id": 105,
-      "inbox_name": "dra.amandasousadv",
-      "channel_type": "Channel::Instagram",
-      "account_id": 3,
-      "account_name": "DraAmandaSousa",
-      "whatsapp_api_key": null,
-      "phone_number_id": null,
-      "business_id": null,
-      "socialwise_active": true,
-      "is_whatsapp_channel": false,
-      "has_whatsapp_api_key": false,
-      "payload_version": "2.0",
-      "timestamp": "2025-08-13T23:02:07Z"
-    }
-  };
-
-  // Payload do Facebook Page baseado no arquivo fornecido
-  const socialwiseFacebookPayload = {
-    "session_id": "9296550493690812",
-    "message": "VCS SÃO ESPECIALISTAS?",
-    "channel_type": "Channel::FacebookPage",
-    "language": "pt_BR",
-    "context": {
-      "message": {
-        "id": 39590,
-        "content": "VCS SÃO ESPECIALISTAS?",
-        "account_id": 3,
-        "inbox_id": 106,
-        "conversation_id": 2214,
-        "message_type": "incoming",
-        "created_at": "2025-09-10T00:34:26.634Z",
-        "updated_at": "2025-09-10T00:34:26.634Z",
-        "private": false,
-        "status": "sent",
-        "source_id": "m_hBmwB2VudaP_a-qDP80sO9U7pdhRMN1xJsA3bf_Z0Idw6RRNyb6rvtemBLejzD2MT5RBigeBix0Vdu7iNIXYWw",
-        "content_type": "text",
-        "content_attributes": {
-          "in_reply_to_external_id": null
-        },
-        "sender_type": "Contact",
-        "sender_id": 1916,
-        "external_source_ids": {},
-        "additional_attributes": {},
-        "processed_message_content": "VCS SÃO ESPECIALISTAS?",
-        "sentiment": {}
-      },
-      "conversation": {
-        "id": 2214,
-        "account_id": 3,
-        "inbox_id": 106,
-        "status": "pending",
-        "assignee_id": null,
-        "created_at": "2025-09-09T13:43:19.328Z",
-        "updated_at": "2025-09-10T00:34:26.641Z",
-        "contact_id": 1916,
-        "display_id": 2004,
-        "contact_last_seen_at": null,
-        "agent_last_seen_at": "2025-09-09T22:10:05.175Z",
-        "additional_attributes": {},
-        "contact_inbox_id": 2215,
-        "uuid": "69ea5f8a-2431-4eb1-a403-786d24dcca5d",
-        "identifier": null,
-        "last_activity_at": "2025-09-10T00:34:26.634Z",
-        "team_id": null,
-        "campaign_id": null,
-        "snoozed_until": null,
-        "custom_attributes": {},
-        "assignee_last_seen_at": null,
-        "first_reply_created_at": null,
-        "priority": null,
-        "sla_policy_id": null,
-        "waiting_since": "2025-09-09T13:43:19.328Z",
-        "cached_label_list": null,
-        "label_list": []
-      },
-      "contact": {
-        "id": 1916,
-        "name": "Witalo Rocha",
-        "email": null,
-        "phone_number": null,
-        "account_id": 3,
-        "created_at": "2025-07-28T12:38:21.807Z",
-        "updated_at": "2025-09-10T00:34:26.866Z",
-        "additional_attributes": {},
-        "identifier": null,
-        "custom_attributes": {},
-        "last_activity_at": "2025-09-10T00:34:26.862Z",
-        "contact_type": "visitor",
-        "middle_name": "",
-        "last_name": "",
-        "location": null,
-        "country_code": null,
-        "blocked": false,
-        "label_list": []
-      },
-      "inbox": {
-        "id": 106,
-        "channel_id": 79,
-        "account_id": 3,
-        "name": "Dra. Amanda Sousa - Advocacia Previdenciária",
-        "created_at": "2025-07-25T11:02:41.530Z",
-        "updated_at": "2025-07-25T11:02:41.530Z",
-        "channel_type": "Channel::FacebookPage",
-        "enable_auto_assignment": true,
-        "greeting_enabled": false,
-        "greeting_message": null,
-        "email_address": null,
-        "working_hours_enabled": false,
-        "out_of_office_message": null,
-        "timezone": "UTC",
-        "enable_email_collect": true,
-        "csat_survey_enabled": false,
-        "allow_messages_after_resolved": true,
-        "auto_assignment_config": {},
-        "lock_to_single_conversation": false,
-        "portal_id": null,
-        "sender_name_type": "friendly",
-        "business_name": null,
-        "allow_agent_to_delete_message": true,
-        "external_token": null,
-        "csat_response_visible": false,
-        "csat_config": {}
-      },
-      "socialwise-chatwit": {
-        "whatsapp_identifiers": {
-          "wamid": "m_hBmwB2VudaP_a-qDP80sO9U7pdhRMN1xJsA3bf_Z0Idw6RRNyb6rvtemBLejzD2MT5RBigeBix0Vdu7iNIXYWw",
-          "whatsapp_id": "m_hBmwB2VudaP_a-qDP80sO9U7pdhRMN1xJsA3bf_Z0Idw6RRNyb6rvtemBLejzD2MT5RBigeBix0Vdu7iNIXYWw",
-          "contact_source": "9296550493690812"
-        },
-        "contact_data": {
-          "id": 1916,
-          "name": "Witalo Rocha",
-          "phone_number": null,
-          "email": null,
-          "identifier": null,
-          "custom_attributes": {}
-        },
-        "conversation_data": {
-          "id": 2214,
-          "status": "pending",
-          "assignee_id": null,
-          "created_at": "2025-09-09T13:43:19Z",
-          "updated_at": "2025-09-10T00:34:26Z"
-        },
-        "message_data": {
-          "id": 39590,
-          "content": "VCS SÃO ESPECIALISTAS?",
-          "content_type": "text",
-          "message_type": "incoming",
-          "created_at": "2025-09-10T00:34:26Z",
-          "interactive_data": {},
-          "instagram_data": {}
-        },
-        "inbox_data": {
-          "id": 106,
-          "name": "Dra. Amanda Sousa - Advocacia Previdenciária",
-          "channel_type": "Channel::FacebookPage"
-        },
-        "account_data": {
-          "id": 3,
-          "name": "DraAmandaSousa"
-        },
-        "metadata": {
-          "socialwise_active": true,
-          "is_whatsapp_channel": false,
-          "payload_version": "2.0",
-          "timestamp": "2025-09-10T00:34:27Z",
-          "has_whatsapp_api_key": false
-        },
-        "whatsapp_api_key": null,
-        "whatsapp_phone_number_id": null,
-        "whatsapp_business_id": null
-      },
-      "wamid": "m_hBmwB2VudaP_a-qDP80sO9U7pdhRMN1xJsA3bf_Z0Idw6RRNyb6rvtemBLejzD2MT5RBigeBix0Vdu7iNIXYWw",
-      "contact_source": "9296550493690812",
-      "contact_name": "Witalo Rocha",
-      "contact_phone": null,
-      "contact_email": null,
-      "contact_identifier": null,
-      "contact_id": 1916,
-      "conversation_id": 2214,
-      "conversation_status": "pending",
-      "conversation_assignee_id": null,
-      "conversation_created_at": "2025-09-09T13:43:19Z",
-      "conversation_updated_at": "2025-09-10T00:34:26Z",
-      "message_id": 39590,
-      "message_content": "VCS SÃO ESPECIALISTAS?",
-      "message_type": "incoming",
-      "message_created_at": "2025-09-10T00:34:26Z",
-      "message_content_type": "text",
-      "button_id": null,
-      "button_title": null,
-      "list_id": null,
-      "list_title": null,
-      "list_description": null,
-      "interaction_type": null,
-      "postback_payload": null,
-      "quick_reply_payload": null,
-      "inbox_id": 106,
-      "inbox_name": "Dra. Amanda Sousa - Advocacia Previdenciária",
-      "channel_type": "Channel::FacebookPage",
-      "account_id": 3,
-      "account_name": "DraAmandaSousa",
-      "whatsapp_api_key": null,
-      "phone_number_id": null,
-      "business_id": null,
-      "socialwise_active": true,
-      "is_whatsapp_channel": false,
-      "has_whatsapp_api_key": false,
-      "payload_version": "2.0",
-      "timestamp": "2025-09-10T00:34:27Z"
-    },
-    "metadata": {
-      "event_name": "message.created",
-      "conversation_id": 2214,
-      "message_id": 39590,
-      "account_id": 3,
-      "inbox_id": 106
-    }
-  };
+  // Payloads padrão (SocialwiseFlow) - versões completas já importadas dos arquivos separados
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -2040,21 +984,24 @@ export default function WebhookTestPage() {
               </p>
             </div>
 
-            {/* Personalização de mensagens e botões */}
+            {/* FONTE ÚNICA DA VERDADE - Apenas 2 campos principais */}
             <div className="space-y-4 border-t pt-4">
-              <h4 className="text-sm font-medium">Personalização de Conteúdo</h4>
-              
+              <h4 className="text-sm font-medium flex items-center gap-2">
+                <TestTube className="h-4 w-4" />
+                Fonte Única da Verdade
+              </h4>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="userMessage" className="text-sm font-medium">
-                    Mensagem do usuário
+                    Mensagem do usuário (ou título do botão)
                   </label>
                   <div className="flex gap-2 items-center">
                     <Input
                       id="userMessage"
                       value={userMessage}
                       onChange={(e) => setUserMessage(e.target.value)}
-                      placeholder="Digite a mensagem do usuário"
+                      placeholder="VCS SÃO ESPECIALISTAS?"
                       className="max-w-md"
                     />
                     <Button
@@ -2063,7 +1010,7 @@ export default function WebhookTestPage() {
                       onClick={() => {
                         setUserMessage("");
                         try {
-                          localStorage.removeItem("webhook-last-user-message");
+                          localStorage.removeItem("webhook-user-message");
                         } catch {}
                       }}
                       className="h-8 w-8 p-0"
@@ -2073,142 +1020,54 @@ export default function WebhookTestPage() {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Usado nos payloads de texto simples • <span className="text-green-600">Salvo automaticamente</span>
+                    Usado em TODOS os payloads como mensagem ou título do botão • <span className="text-green-600">Salvo automaticamente ao digitar</span>
                   </p>
                 </div>
 
                 <div>
-                  <label htmlFor="buttonTitle" className="text-sm font-medium">
-                    Título do botão
-                  </label>
-                  <Input
-                    id="buttonTitle"
-                    value={buttonTitle}
-                    onChange={(e) => setButtonTitle(e.target.value)}
-                    placeholder="Digite o título do botão"
-                    className="max-w-md"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Usado nos payloads com botões
-                  </p>
-                </div>
-
-                <div>
-                  <label htmlFor="buttonId" className="text-sm font-medium">
-                    ID do botão WhatsApp
-                  </label>
-                  <Input
-                    id="buttonId"
-                    value={buttonId}
-                    onChange={(e) => setButtonId(e.target.value)}
-                    placeholder="btn_1754993780819_0_tqji"
-                    className="max-w-md"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    ID único do botão WhatsApp
-                  </p>
-                </div>
-
-                <div>
-                  <label htmlFor="instagramButtonId" className="text-sm font-medium">
-                    ID do botão Instagram
-                  </label>
-                  <Input
-                    id="instagramButtonId"
-                    value={instagramButtonId}
-                    onChange={(e) => setInstagramButtonId(e.target.value)}
-                    placeholder="ig_btn_1755004696546_uekaa4clu"
-                    className="max-w-md"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    ID único do botão Instagram
-                  </p>
-                </div>
-
-                <div>
-                  <label htmlFor="facebookSessionId" className="text-sm font-medium">
-                    Session ID Facebook
-                  </label>
-                  <Input
-                    id="facebookSessionId"
-                    value={facebookSessionId}
-                    onChange={(e) => setFacebookSessionId(e.target.value)}
-                    placeholder="9296550493690812"
-                    className="max-w-md"
-                    disabled={randomizeSessionId}
-                  />
-                  <div className="flex items-center space-x-2 mt-2">
-                    <input
-                      type="checkbox"
-                      id="randomizeSessionId"
-                      checked={randomizeSessionId}
-                      onChange={(e) => setRandomizeSessionId(e.target.checked)}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                    />
-                    <label htmlFor="randomizeSessionId" className="text-sm">
-                      Randomizar Session ID (Facebook)
-                    </label>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    ID único da sessão do Facebook
-                  </p>
-                </div>
-
-                <div>
-                  <label htmlFor="lastFacebookMessage" className="text-sm font-medium">
-                    Mensagem Facebook
+                  <label htmlFor="buttonPayload" className="text-sm font-medium">
+                    Payload do Botão
                   </label>
                   <div className="flex gap-2 items-center">
                     <Input
-                      id="lastFacebookMessage"
-                      value={lastFacebookMessage}
-                      onChange={(e) => setLastFacebookMessage(e.target.value)}
-                      placeholder="VCS SÃO ESPECIALISTAS?"
+                      id="buttonPayload"
+                      value={buttonPayload}
+                      onChange={(e) => setButtonPayload(e.target.value)}
+                      placeholder="btn_1754993780819_0_tqji"
                       className="max-w-md"
                     />
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => setLastFacebookMessage("VCS SÃO ESPECIALISTAS?")}
-                      className="h-8 px-3"
-                      title="Restaurar mensagem padrão"
+                      onClick={() => {
+                        setButtonPayload("");
+                        try {
+                          localStorage.removeItem("webhook-button-payload");
+                        } catch {}
+                      }}
+                      className="h-8 w-8 p-0"
+                      title="Limpar payload"
                     >
-                      Reset
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Mensagem específica para Facebook • <span className="text-green-600">Salva automaticamente</span>
+                    Usado em TODOS os botões (WhatsApp, Instagram, Facebook) • <span className="text-green-600">Salvo automaticamente ao digitar</span>
                   </p>
                 </div>
+              </div>
 
-                <div>
-                  <label htmlFor="sourceId" className="text-sm font-medium">
-                    Source ID (wamid)
-                  </label>
-                  <Input
-                    id="sourceId"
-                    value={sourceId}
-                    onChange={(e) => setSourceId(e.target.value)}
-                    placeholder="wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgU..."
-                    className="max-w-md"
-                    disabled={randomizeSourceId}
-                  />
-                  <div className="flex items-center space-x-2 mt-2">
-                    <input
-                      type="checkbox"
-                      id="randomizeSourceId"
-                      checked={randomizeSourceId}
-                      onChange={(e) => setRandomizeSourceId(e.target.checked)}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                    />
-                    <label htmlFor="randomizeSourceId" className="text-sm">
-                      Randomizar Source ID (WhatsApp e Instagram)
-                    </label>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    ID único da mensagem para detecção de duplicatas
-                  </p>
-                </div>
+              <div className="flex items-center space-x-2 pt-2">
+                <input
+                  type="checkbox"
+                  id="randomizeSourceId"
+                  checked={randomizeSourceId}
+                  onChange={(e) => setRandomizeSourceId(e.target.checked)}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="randomizeSourceId" className="text-sm">
+                  Randomizar Source IDs automaticamente (recomendado para testes)
+                </label>
               </div>
             </div>
           </div>
@@ -2291,29 +1150,6 @@ export default function WebhookTestPage() {
         </Card>
       </div>
 
-      {/* Campo para personalizar Quick Reply Payload */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Quick Reply Payload</CardTitle>
-          <CardDescription>
-            Personalize o payload enviado nos quick replies do Instagram e Facebook
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            <label htmlFor="quickReplyPayload" className="text-sm font-medium">
-              Quick Reply Payload:
-            </label>
-            <Input
-              id="quickReplyPayload"
-              value={quickReplyPayload}
-              onChange={(e) => setQuickReplyPayload(e.target.value)}
-              placeholder="Ex: @falar_atendente"
-              className="font-mono"
-            />
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Enviar para destino customizado (cargas padrão) */}
       <Card>
@@ -2329,7 +1165,7 @@ export default function WebhookTestPage() {
               <h5 className="text-sm font-medium">WhatsApp</h5>
               <div className="flex gap-2 flex-wrap">
                 <Button
-                  onClick={() => sendToExternal(createCustomWhatsappPayload())}
+                  onClick={() => sendToExternal(createWhatsappTextPayload())}
                   disabled={loading}
                   variant="outline"
                   size="sm"
@@ -2337,7 +1173,7 @@ export default function WebhookTestPage() {
                   Texto Simples
                 </Button>
                 <Button
-                  onClick={() => sendToExternal(createCustomWhatsappButtonPayload())}
+                  onClick={() => sendToExternal(createWhatsappButtonPayload())}
                   disabled={loading}
                   variant="outline"
                   size="sm"
@@ -2351,7 +1187,7 @@ export default function WebhookTestPage() {
               <h5 className="text-sm font-medium">Instagram</h5>
               <div className="flex gap-2 flex-wrap">
                 <Button
-                  onClick={() => sendToExternal(createCustomInstagramPayload())}
+                  onClick={() => sendToExternal(createInstagramTextPayload())}
                   disabled={loading}
                   variant="outline"
                   size="sm"
@@ -2359,7 +1195,7 @@ export default function WebhookTestPage() {
                   Texto Simples
                 </Button>
                 <Button
-                  onClick={() => sendToExternal(createCustomInstagramButtonPayload())}
+                  onClick={() => sendToExternal(createInstagramButtonPayload())}
                   disabled={loading}
                   variant="outline"
                   size="sm"
@@ -2367,7 +1203,7 @@ export default function WebhookTestPage() {
                   Com Botão
                 </Button>
                 <Button
-                  onClick={() => sendToExternal(createCustomQuickReplyIGPayload())}
+                  onClick={() => sendToExternal(createInstagramQuickReplyPayload())}
                   disabled={loading}
                   variant="outline"
                   size="sm"
@@ -2381,7 +1217,7 @@ export default function WebhookTestPage() {
               <h5 className="text-sm font-medium">Facebook Page</h5>
               <div className="flex gap-2 flex-wrap">
                 <Button
-                  onClick={() => sendToExternal(createCustomFacebookPayload())}
+                  onClick={() => sendToExternal(createFacebookTextPayload())}
                   disabled={loading}
                   variant="outline"
                   size="sm"
@@ -2389,7 +1225,7 @@ export default function WebhookTestPage() {
                   Texto Simples
                 </Button>
                 <Button
-                  onClick={() => sendToExternal(createCustomQuickReplyFBPayload())}
+                  onClick={() => sendToExternal(createFacebookQuickReplyPayload())}
                   disabled={loading}
                   variant="outline"
                   size="sm"
