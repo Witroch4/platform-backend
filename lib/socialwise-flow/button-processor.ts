@@ -30,6 +30,7 @@ export interface ButtonReactionResponse {
   buttonId: string;
   processed: boolean;
   mappingFound: boolean;
+  directSend?: boolean; // 🎯 Flag para envio direto de template de intent mapping
   emoji?: string;
   text?: string;
   action?: string; // "handoff", "end_conversation", etc.
@@ -267,30 +268,36 @@ export async function processButtonClick(
         actionStr = `send_interactive:${actionPayload.messageId}`;
       }
 
-      if (actionStr) {
-        const parsed = parseActionCommand(actionStr);
-        if (parsed) {
-          const mapped = await buildActionSendPayload(parsed, channelType, wamid, validPayload, traceId, buttonId);
-          if (mapped) {
-            const response: ButtonReactionResponse = {
-              action_type: 'button_reaction',
-              buttonId: buttonId,
-              processed: true,
-              mappingFound: true,
-              mapped: mapped
-            };
+      // 🔧 CORREÇÃO: Intent mappings enviam template diretamente (não via send_template)
+      // Esta é uma ação direta de intent mapping, não uma action de botão
+      const directTemplate = await buildDirectTemplateResponse(
+        intentMapping.actionPayload.templateId,
+        channelType,
+        wamid,
+        validPayload,
+        traceId,
+        buttonId
+      );
 
-            logger.info('🎯 Intent mapping response prepared', {
-              buttonId,
-              actionType: intentMapping.actionType,
-              templateId: actionPayload?.templateId,
-              messageId: actionPayload?.messageId,
-              traceId
-            });
+      if (directTemplate) {
+        const response: ButtonReactionResponse = {
+          action_type: 'button_reaction',
+          buttonId: buttonId,
+          processed: true,
+          mappingFound: true,
+          directSend: true, // 🎯 Flag para indicar envio direto
+          mapped: directTemplate
+        };
 
-            return response;
-          }
-        }
+        logger.info('🎯 Intent mapping response prepared with direct template send', {
+          buttonId,
+          actionType: intentMapping.actionType,
+          templateId: intentMapping.actionPayload.templateId,
+          directSend: true,
+          traceId
+        });
+
+        return response;
       }
 
       logger.info('⚠️ Intent mapping found but could not build response', {
@@ -610,4 +617,147 @@ export async function handleButtonInteraction(
   };
 
   return await processButtonClick(buttonDetection, context, wamid);
+}
+
+/**
+ * Build direct template response for intent mappings
+ * Constrói resposta direta de template para mapeamentos de intent
+ */
+async function buildDirectTemplateResponse(
+  templateId: string,
+  channelType: string,
+  wamid: string,
+  validPayload: any,
+  traceId: string,
+  buttonId: string
+): Promise<{ whatsapp?: any; instagram?: any; facebook?: any } | null> {
+  try {
+    const prisma = getPrismaInstance();
+    
+    logger.info('🔨 Building direct template response', {
+      templateId,
+      channelType,
+      buttonId,
+      traceId
+    });
+
+    // Buscar template no banco
+    const template = await prisma.template.findUnique({
+      where: { id: templateId },
+      include: {
+        whatsappOfficialInfo: true,
+        interactiveContent: {
+          include: {
+            header: true,
+            body: true,
+            footer: true,
+            actionCtaUrl: true,
+            actionReplyButton: true,
+            actionList: true,
+            actionFlow: true,
+            actionLocationRequest: true,
+          },
+        },
+      },
+    });
+
+    if (!template) {
+      logger.warn('❌ Template not found for direct send', { 
+        templateId, 
+        buttonId, 
+        traceId 
+      });
+      return null;
+    }
+
+    logger.info('✅ Template found for direct send', {
+      templateId,
+      templateName: template.name,
+      templateType: template.type,
+      hasWhatsappInfo: !!template.whatsappOfficialInfo,
+      hasInteractiveContent: !!template.interactiveContent,
+      traceId
+    });
+
+    // Extrair inboxId do payload para resolução de variáveis
+    const inboxId = extractInboxIdFromPayload(validPayload);
+    
+    // Construir payload usando METAPayloadBuilder
+    const builder = new METAPayloadBuilder();
+
+    // Extract webhook context for variable resolution
+    const webhookContext = {
+      contactPhone: validPayload?.context?.contact_phone || validPayload?.context?.contact_source,
+      contactName: validPayload?.context?.contact_name,
+      wamid: validPayload?.context?.wamid,
+    };
+
+    if (inboxId) {
+      await builder.setVariablesFromInboxId(String(inboxId), webhookContext);
+    }
+    builder.setChannelType(channelType);
+
+    const lower = (channelType || '').toLowerCase();
+
+    if (lower.includes('whatsapp')) {
+      // Para WhatsApp: usar template oficial ou interativo
+      if (template.whatsappOfficialInfo && template.type === 'WHATSAPP_OFFICIAL') {
+        const wi: any = template.whatsappOfficialInfo as any;
+        const language: string = (wi && typeof wi.language === 'string') ? wi.language : 'pt_BR';
+        const components: any[] = Array.isArray(wi?.components) ? wi.components : [];
+        const metaTemplateId: string | undefined = typeof wi?.metaTemplateId === 'string' ? wi.metaTemplateId : undefined;
+        
+        const payload = await builder.buildTemplatePayload(
+          template.name || 'default',
+          language,
+          components,
+          metaTemplateId
+        );
+
+        logger.info('🎯 WhatsApp template payload built successfully', {
+          templateId,
+          templateName: template.name,
+          language,
+          componentsCount: components.length,
+          traceId
+        });
+
+        return { whatsapp: payload };
+      }
+      
+      if (template.interactiveContent && template.type === 'INTERACTIVE_MESSAGE') {
+        const interactive = await builder.buildInteractiveMessagePayload(template.interactiveContent);
+        
+        logger.info('🎯 WhatsApp interactive payload built successfully', {
+          templateId,
+          templateName: template.name,
+          interactiveType: template.interactiveContent.interactiveType,
+          traceId
+        });
+
+        return { whatsapp: { type: 'interactive', interactive } };
+      }
+    }
+
+    logger.warn('⚠️ No suitable template format found for channel', {
+      templateId,
+      channelType,
+      templateType: template.type,
+      hasWhatsappInfo: !!template.whatsappOfficialInfo,
+      hasInteractiveContent: !!template.interactiveContent,
+      traceId
+    });
+
+    return null;
+
+  } catch (error) {
+    logger.error('❌ Error building direct template response', {
+      templateId,
+      channelType,
+      buttonId,
+      error: error instanceof Error ? error.message : String(error),
+      traceId
+    });
+    return null;
+  }
 }
