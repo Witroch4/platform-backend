@@ -42,7 +42,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     console.log("Body recebido:", body);
     console.log("caixaId from params:", caixaId);
     
-    const { id: mappingId, intentName, templateId } = body;
+    const {
+      id: mappingId,
+      intentName,
+      templateId,
+      customVariables,
+    } = body;
     
     console.log("Campos extraídos:");
     console.log("- mappingId:", mappingId);
@@ -56,10 +61,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: 'Intenção e template são obrigatórios.' }, { status: 400 });
     }
 
+    const normalizedCustom: Record<string, string> = {};
+    if (customVariables && typeof customVariables === 'object') {
+      try {
+        const entries = Object.entries(customVariables as Record<string, any>);
+        for (const [key, rawVal] of entries) {
+          if (rawVal === undefined || rawVal === null) continue;
+          normalizedCustom[key] = String(rawVal);
+        }
+        console.log('[Mapeamentos][Debug] Normalized customVariables:', normalizedCustom);
+      } catch (error) {
+        console.warn('[Mapeamentos][Warn] Failed to normalize customVariables:', error);
+      }
+    }
+
     const data = {
       intentName,
       inboxId: caixaId,
       templateId,
+      customVariables: Object.keys(normalizedCustom).length > 0 ? normalizedCustom : null,
     };
     
     console.log("Data para salvar:", data);

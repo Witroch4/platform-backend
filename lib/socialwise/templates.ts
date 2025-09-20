@@ -1,5 +1,10 @@
 import { getPrismaInstance } from '@/lib/connections';
 import { METAPayloadBuilder } from '@/lib/socialwise-flow/meta-payload-builder';
+import {
+  applyCustomVariablesToComponents,
+  resolveTemplateComponents,
+  type TemplateComponentLogger
+} from '@/lib/socialwise-flow/template-component-utils';
 
 function slugify(value: string): string {
   return String(value || '')
@@ -22,6 +27,10 @@ function normalizeIntentRaw(raw: string): {
   // Normalizar espaços internos
   plain = plain.replace(/\s+/g, ' ');
   return { original, plain, slug: slugify(plain) };
+}
+
+function isRecord(value: unknown): value is Record<string, any> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
 /**
@@ -101,10 +110,24 @@ export async function buildWhatsAppByIntentRaw(intentRaw: string, inboxId: strin
   };
   await builder.setVariablesFromInboxId(inboxId, variablesContext);
 
+  const templateLogger: TemplateComponentLogger = {
+    debug: (message, context) => console.debug(`[WhatsAppTemplate][IntentRaw] ${message}`, context),
+    warn: (message, context) => console.warn(`[WhatsAppTemplate][IntentRaw] ${message}`, context),
+  };
+
   if (mapping.template.type === 'WHATSAPP_OFFICIAL' && mapping.template.whatsappOfficialInfo) {
     const wi: any = mapping.template.whatsappOfficialInfo as any;
     const language: string = (wi && typeof wi.language === 'string') ? wi.language : 'pt_BR';
-    const components: any[] = Array.isArray(wi?.components) ? wi.components : [];
+    let components = resolveTemplateComponents(wi?.components, { logger: templateLogger });
+    const customVariables = isRecord(mapping.customVariables) ? mapping.customVariables : undefined;
+    if (customVariables && Object.keys(customVariables).length > 0) {
+      components = applyCustomVariablesToComponents(
+        components,
+        customVariables,
+        contactContext?.contactPhone || '',
+        { logger: templateLogger }
+      );
+    }
     const metaTemplateId: string | undefined = typeof wi?.metaTemplateId === 'string' ? wi.metaTemplateId : undefined;
     const content = await builder.buildTemplatePayload(
       mapping.template.name || 'default',
@@ -307,10 +330,14 @@ export async function buildWhatsAppByGlobalIntent(intentRaw: string, inboxId: st
   await builder.setVariablesFromInboxId(inboxId, variablesContext);
 
   const t = intent.template;
+  const templateLogger: TemplateComponentLogger = {
+    debug: (message, context) => console.debug(`[WhatsAppTemplate][GlobalIntent] ${message}`, context),
+    warn: (message, context) => console.warn(`[WhatsAppTemplate][GlobalIntent] ${message}`, context),
+  };
   if (t.type === 'WHATSAPP_OFFICIAL' && t.whatsappOfficialInfo) {
     const wi: any = t.whatsappOfficialInfo as any;
     const language: string = (wi && typeof wi.language === 'string') ? wi.language : 'pt_BR';
-    const components: any[] = Array.isArray(wi?.components) ? wi.components : [];
+    const components = resolveTemplateComponents(wi?.components, { logger: templateLogger });
     const metaTemplateId: string | undefined = typeof wi?.metaTemplateId === 'string' ? wi.metaTemplateId : undefined;
     const content = await builder.buildTemplatePayload(
       t.name || 'default',

@@ -8,6 +8,11 @@ import {
 import { WorkerResponse, WhatsAppCredentials, TemplateMapping } from "../types/types";
 import { WhatsAppApiManager } from "../services/whatsapp.service";
 import { METAPayloadBuilder } from "../../lib/socialwise-flow/meta-payload-builder";
+import {
+  applyCustomVariablesToComponents,
+  resolveTemplateComponents,
+  type TemplateComponentLogger
+} from "../../lib/socialwise-flow/template-component-utils";
 
 const whatsappApiManager = new WhatsAppApiManager();
 
@@ -166,201 +171,6 @@ export class IntentProcessor {
         correlationId,
       };
     }
-  }
-
-  /**
-   * Aplica variáveis customizadas aos componentes do template
-   */
-  private applyCustomVariablesToComponents(
-    components: any,
-    customVariables: Record<string, string>,
-    contactPhone: string
-  ): any[] {
-    const list = this.normalizeComponentsToArray(components);
-    console.log('[Intent Processor] Applying custom variables to template components', {
-      customVariables,
-      componentsCount: Array.isArray(list) ? list.length : 0
-    });
-
-    return list.map(component => {
-      const processedComponent: any = { ...component };
-
-      // Resolver parâmetros nomeados/posicionais para BODY
-      if (component.type === 'BODY' && component.text) {
-        const params = this.buildTemplateParameters(
-          component.text,
-          customVariables,
-          component.example
-        );
-        if (params.length > 0) {
-          processedComponent.__resolvedBodyParams = params.map((p) => ({ ...p }));
-        }
-      }
-
-      // Resolver parâmetros do HEADER texto (apenas um permitido)
-      if (component.type === 'HEADER' && component.format === 'TEXT' && component.text) {
-        const params = this.buildTemplateParameters(
-          component.text,
-          customVariables,
-          component.example,
-          true // header
-        );
-        if (params.length > 0) {
-          // Cloud API espera apenas os valores, não o texto completo
-          processedComponent.__resolvedHeaderParams = [{ ...params[0] }];
-        }
-      }
-
-      // Processar botão COPY_CODE para injetar coupon_code customizado
-      if (component.type === 'BUTTONS' && Array.isArray(component.buttons)) {
-        const buttons = component.buttons as any[];
-        processedComponent.buttons = buttons.map((btn: any) => {
-          const b = { ...btn };
-          if (String(b?.type || '').toUpperCase() === 'COPY_CODE' && customVariables?.coupon_code) {
-            b.coupon_code = String(customVariables.coupon_code);
-            // mantém example como fallback; não é obrigatório alterar
-          }
-          return b;
-        });
-      }
-
-      return processedComponent;
-    });
-  }
-
-  /**
-   * Constrói a lista de parâmetros (named/positional) para Cloud API a partir do texto e exemplos
-   */
-  private buildTemplateParameters(
-    text: string,
-    customVariables: Record<string, string>,
-    example: any,
-    isHeader: boolean = false
-  ): Array<{ type: 'text'; text: string; parameter_name?: string }> {
-    if (!text) return [];
-
-    // Extrair placeholders na ordem
-    const matches = text.match(/\{\{([^}]+)\}\}/g) || [];
-    if (matches.length === 0) return [];
-
-    const namedParamsExample: Record<string, string> = {};
-    if (example) {
-      const namedArray =
-        (example.body_text_named_params as any[]) ||
-        (example.header_text_named_params as any[]) ||
-        [];
-      for (const item of namedArray) {
-        if (item?.param_name && typeof item.example === 'string') {
-          namedParamsExample[item.param_name] = item.example;
-        }
-      }
-    }
-
-    const positionalExamples: string[] =
-      (example?.body_text?.[0] as string[]) ||
-      (example?.header_text?.[0] as string[]) ||
-      [];
-
-    const params: Array<{ type: 'text'; text: string; parameter_name?: string }> = [];
-
-    matches.forEach((match, i) => {
-      const raw = match.replace(/[{}]/g, '').trim();
-      const isNumeric = /^\d+$/.test(raw);
-      let value = '';
-
-      // Preferir variáveis customizadas
-      if (!isNumeric && customVariables[raw] !== undefined) {
-        value = String(customVariables[raw]);
-      }
-
-      if (!value && customVariables[`variavel_${i}`] !== undefined) {
-        value = String(customVariables[`variavel_${i}`]);
-      }
-
-      // Fallback em exemplos
-      if (!value && !isNumeric && namedParamsExample[raw] !== undefined) {
-        value = String(namedParamsExample[raw]);
-      }
-      if (!value && positionalExamples[i] !== undefined) {
-        value = String(positionalExamples[i]);
-      }
-
-      // Último fallback: vazio
-      const param: any = { type: 'text', text: value };
-      if (!isNumeric && !isHeader) {
-        // Para BODY, enviar parameter_name quando for named
-        param.parameter_name = raw;
-      }
-      if (!isNumeric && isHeader) {
-        // Para HEADER texto com named param, alguns apps aceitam sem parameter_name; manter por consistência do BODY
-        param.parameter_name = raw;
-      }
-      params.push(param);
-    });
-
-    // Para HEADER texto, garantir no máximo 1 parâmetro
-    if (isHeader && params.length > 1) {
-      return [params[0]];
-    }
-
-    return params;
-  }
-
-  /**
-   * Substitui variáveis em texto de template usando valores customizados ou exemplos
-   */
-  private replaceVariablesInTemplateText(
-    text: string,
-    exampleValues: string[],
-    customVariables: Record<string, string>,
-    contactPhone: string
-  ): string {
-    // Novo padrão: aceitar nomes nos placeholders e manter compatibilidade numérica
-    // 1) construir mapa de variáveis disponíveis
-    const variablesMap: Record<string, string> = { ...customVariables };
-
-    // 2) fallback para exemplos por ordem de aparição
-    const allMatches = text.match(/\{\{([^}]+)\}\}/g) || [];
-    allMatches.forEach((m, i) => {
-      const raw = m.replace(/[{}]/g, '').trim();
-      const keyCandidates = [raw, `variavel_${raw}`];
-      const hasValue = keyCandidates.some((k) => variablesMap[k] !== undefined);
-      if (!hasValue && exampleValues[i] !== undefined) {
-        variablesMap[raw] = exampleValues[i];
-      }
-    });
-
-    // 3) variável especial nome_lead
-    if (!variablesMap["nome_lead"]) {
-      variablesMap["nome_lead"] = this.extractLeadNameFromPhone(contactPhone);
-    }
-
-    // 4) aplicar
-    return text.replace(/\{\{([^}]+)\}\}/g, (_m, rawKey: string) => {
-      const key = String(rawKey).trim();
-      const candidates = [key, `variavel_${key}`];
-      for (const k of candidates) {
-        if (variablesMap[k] !== undefined) {
-          let v = String(variablesMap[k] as any);
-          if (v.includes('{{nome_lead}}')) {
-            v = v.replace(/\{\{nome_lead\}\}/g, variablesMap["nome_lead"] || "Cliente");
-          }
-          return v;
-        }
-      }
-      return `{{${key}}}`; // mantém placeholder se não houver valor
-    });
-  }
-
-  /**
-   * Extrai um nome do lead a partir do telefone (implementação simplificada)
-   * Em uma implementação real, isso poderia consultar um banco de dados de contatos
-   */
-  private extractLeadNameFromPhone(phone: string): string {
-    // Por enquanto, retorna uma versão formatada do telefone
-    // Em produção, isso deveria consultar uma base de contatos
-    const cleanPhone = phone.replace(/\D/g, '');
-    return `Lead ${cleanPhone.slice(-4)}`; // Últimos 4 dígitos
   }
 
   /**
@@ -548,17 +358,22 @@ export class IntentProcessor {
       // Build message using PayloadBuilder with integrated variable resolution
       switch (type) {
         case "whatsapp_official":
-          // Normalizar componentes (podem vir como objeto indexado) e aplicar variáveis customizadas
-          let processedComponents = this.normalizeComponentsToArray(data.components || []);
-          
+          const templateLogger: TemplateComponentLogger = {
+            debug: (message, context) => console.debug('[Intent Processor]', message, context),
+            warn: (message, context) => console.warn('[Intent Processor]', message, context),
+          };
+
+          let processedComponents = resolveTemplateComponents(data.components, { logger: templateLogger });
+
           if (customVariables && typeof customVariables === 'object') {
-            processedComponents = this.applyCustomVariablesToComponents(
-              processedComponents, 
+            processedComponents = applyCustomVariablesToComponents(
+              processedComponents,
               customVariables,
-              variables.contactPhone // Passar nome do lead para substituição
+              variables.contactPhone,
+              { logger: templateLogger }
             );
           }
-          
+
           // IMPORTANTE: Enviar o NOME do template (ex.: "pix") e NÃO o ID/metaTemplateId
           // Usar metaTemplateId apenas para resolver mídia quando necessário
           return await payloadBuilder.buildTemplatePayload(
@@ -587,20 +402,6 @@ export class IntentProcessor {
       );
       throw error;
     }
-  }
-
-  /**
-   * Normaliza a estrutura de componentes (array ou objeto com chaves numéricas) para array ordenado
-   */
-  private normalizeComponentsToArray(raw: any): any[] {
-    if (Array.isArray(raw)) return raw;
-    if (raw && typeof raw === 'object') {
-      const numericKeys = Object.keys(raw).filter((k) => /^\d+$/.test(k));
-      if (numericKeys.length > 0) {
-        return numericKeys.sort((a, b) => Number(a) - Number(b)).map((k) => raw[k]);
-      }
-    }
-    return [];
   }
 
   /**
