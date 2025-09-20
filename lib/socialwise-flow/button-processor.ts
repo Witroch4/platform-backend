@@ -14,6 +14,12 @@ import {
 import { METAPayloadBuilder } from '@/lib/socialwise-flow/meta-payload-builder';
 import { getPrismaInstance } from '@/lib/connections';
 import {
+  buildInstagramByIntentRaw,
+  buildInstagramByGlobalIntent,
+  buildFacebookPageByIntentRaw,
+  buildFacebookPageByGlobalIntent
+} from '@/lib/socialwise/templates';
+import {
   applyCustomVariablesToComponents,
   resolveTemplateComponents,
   type TemplateComponentLogger
@@ -350,8 +356,42 @@ async function buildActionSendPayload(
   customVariables?: Record<string, any>
 ): Promise<{ whatsapp?: any; instagram?: any; facebook?: any } | null> {
   const inboxId = extractInboxIdFromPayload(validPayload);
+  const externalInboxId = extractExternalInboxId(validPayload) || inboxId;
   if (!inboxId) {
     logger.warn('No inboxId resolved from payload; cannot build variables context', { traceId });
+  }
+
+  const lowerChannel = (channelType || '').toLowerCase();
+  const normalizedIntent = normalizeButtonIntent(originalButtonId);
+  const contactContext = {
+    contactName:
+      validPayload?.context?.contact?.name ||
+      validPayload?.context?.contact_name ||
+      validPayload?.context?.contact?.full_name,
+    contactPhone:
+      validPayload?.context?.contact?.phone_number ||
+      validPayload?.context?.contact_phone ||
+      validPayload?.context?.contact?.whatsapp,
+  };
+
+  if (normalizedIntent && externalInboxId && lowerChannel.includes('instagram')) {
+    let mapped = await buildInstagramByIntentRaw(normalizedIntent, externalInboxId, contactContext);
+    if (!mapped) {
+      mapped = await buildInstagramByGlobalIntent(normalizedIntent, externalInboxId, contactContext);
+    }
+    if (mapped?.instagram) {
+      return { instagram: mapped.instagram };
+    }
+  }
+
+  if (normalizedIntent && externalInboxId && lowerChannel.includes('facebook')) {
+    let mapped = await buildFacebookPageByIntentRaw(normalizedIntent, externalInboxId, contactContext);
+    if (!mapped) {
+      mapped = await buildFacebookPageByGlobalIntent(normalizedIntent, externalInboxId, contactContext);
+    }
+    if (mapped?.facebook) {
+      return { facebook: mapped.facebook };
+    }
   }
 
   try {
@@ -663,6 +703,35 @@ function extractInboxIdFromPayload(validPayload: any): string | null {
   } catch {
     return null;
   }
+}
+
+function extractExternalInboxId(validPayload: any): string | null {
+  try {
+    const context = validPayload?.context || {};
+    const socialwise = context['socialwise-chatwit'] || {};
+    const external =
+      context?.inbox_id ||
+      context?.inbox?.inbox_id ||
+      socialwise?.inbox_data?.inbox_id ||
+      socialwise?.inbox_data?.external_id;
+    const fallback = socialwise?.inbox_data?.id || context?.inbox?.id;
+    const value = external ?? fallback;
+    return value ? String(value) : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeButtonIntent(buttonId: string): string {
+  let plain = String(buttonId || '').trim();
+  if (!plain) return '';
+  if (plain.toLowerCase().startsWith('intent:')) {
+    plain = plain.slice('intent:'.length).trim();
+  }
+  if (plain.startsWith('@')) {
+    plain = plain.slice(1).trim();
+  }
+  return plain;
 }
 
 /**
