@@ -177,21 +177,76 @@ const ButtonManagerComponent: React.FC<ButtonManagerProps> = ({
     return ['reply', 'url', 'phone_number'] as const;
   }, [isInstagramQuickReplies, isMetaChannel]);
 
+  // ✅ FIX: Função ultra-robusta para gerar IDs únicos com verificação contra IDs existentes
+  const idCounterRef = useRef(0);
+  
   // Generate unique ID for new buttons
   const generateButtonId = (): string => {
-    const base = `btn_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-    return `${idPrefix ?? ''}${base}`;
+    const existingIds = buttons.map(b => b.id);
+    let attempts = 0;
+    let newId: string;
+    
+    do {
+      const timestamp = Date.now();
+      const counter = (++idCounterRef.current) % 10000; // Aumentar limite
+      const performance_id = Math.floor(performance.now() * 1000) % 100000; // Usar performance.now() para maior precisão
+      const random = Math.random().toString(36).slice(2, 10); // 8 caracteres aleatórios
+      const base = `${timestamp}_${counter}_${performance_id}_${random}`;
+      newId = `${idPrefix ?? ''}btn_${base}`;
+      attempts++;
+      
+      // Failsafe: se por algum motivo ainda há colisão após 10 tentativas,
+      // força um ID único com timestamp mais preciso
+      if (attempts > 10) {
+        const microtime = performance.now().toString().replace('.', '');
+        const uuid_like = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+        newId = `${idPrefix ?? ''}btn_${microtime}_${attempts}_${uuid_like}_failsafe`;
+        break;
+      }
+    } while (existingIds.includes(newId));
+    
+    if (process.env.NODE_ENV === 'development') {
+      if (attempts > 1) {
+        console.warn(`⚠️ [ButtonManager] ID collision avoided after ${attempts} attempts. Final ID: ${newId}`);
+      } else {
+        console.log(`✅ [ButtonManager] Generated unique ID on first attempt: ${newId}`);
+      }
+    }
+    
+    return newId;
   };
 
   // Add new button
   const addButton = (type: InteractiveButton['type'] = 'reply') => {
     if (buttons.length >= maxButtons) return;
     
+    const newId = generateButtonId();
     const newButton: InteractiveButton = {
-      id: generateButtonId(),
+      id: newId,
       text: '',
       type
     };
+    
+    // ✅ FIX: Debug temporário para verificar colisões de ID
+    if (process.env.NODE_ENV === 'development') {
+      const existingIds = buttons.map(b => b.id);
+      const hasCollision = existingIds.includes(newId);
+      console.log('🆕 [ButtonManager] Adding new button:', {
+        newId,
+        type,
+        existingIds,
+        hasCollision,
+        buttonCount: buttons.length
+      });
+      
+      if (hasCollision) {
+        console.error('🚨 [ButtonManager] ID COLLISION DETECTED!', {
+          newId,
+          existingIds,
+          willCauseError: true
+        });
+      }
+    }
     
     onChange([...buttons, newButton]);
   };

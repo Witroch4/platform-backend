@@ -448,7 +448,7 @@ model AgenteDialogflow {
   usuarioChatwit   UsuarioChatwit @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
 }
 
-// intent do dialogflw (não da IA)
+// intent da IA (core)  dialogflw (deprectad)
 model MapeamentoIntencao {
   id              String       @id @default(cuid())
   intentName      String

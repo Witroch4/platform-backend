@@ -145,6 +145,17 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
 
   // Extract buttons from message action and convert to InteractiveButton format
   const buttons = useMemo(() => {
+    // ✅ FIX: Debug para rastrear re-processamento de botões
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔄 [UnifiedEditingStep] Re-processing buttons from message:', {
+        messageId: message.id,
+        hasAction: !!message.action,
+        hasContent: !!(message as any)?.content,
+        actionType: message.action?.type || 'none',
+        timestamp: Date.now()
+      });
+    }
+    
     const candidates: any[] = [];
 
     // Handle new quick_replies format
@@ -170,27 +181,75 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
     const fromContentReplyModel = (message as any)?.content?.interactiveContent?.actionReplyButton?.buttons;
     if (Array.isArray(fromContentReplyModel)) candidates.push(...fromContentReplyModel);
 
+    // ✅ FIX: Debug temporário para investigar candidatos
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🔍 [UnifiedEditingStep] Candidates found:`, {
+        total: candidates.length,
+        fromQuickReplies: fromQuickReplies?.length || 0,
+        fromContentQuickReplies: fromContentQuickReplies?.length || 0,
+        fromAction: fromAction?.length || 0,
+        fromContentAction: fromContentAction?.length || 0,
+        candidates: candidates.map(c => ({ id: c?.id, title: c?.title, payload: c?.payload }))
+      });
+    }
+
+    // ✅ FIX: Deduplicação mais robusta - usar ID real do botão
     const unique = new Map<string, any>();
     for (const btn of candidates) {
-      const key = btn?.id || btn?.reply?.id || btn?.title || btn?.reply?.title;
+      // Primeiro, tentar usar o ID real do botão
+      const realId = btn?.id || btn?.payload || btn?.reply?.id;
+      const fallbackKey = btn?.title || btn?.reply?.title || JSON.stringify(btn);
+      
+      // Usar ID real se disponível, senão usar chave baseada no conteúdo
+      const key = realId || fallbackKey;
+      
       if (key && !unique.has(key)) {
         unique.set(key, btn);
+      } else if (process.env.NODE_ENV === 'development' && key) {
+        console.warn(`🚨 [UnifiedEditingStep] Duplicate button detected and skipped:`, {
+          key,
+          existingButton: unique.get(key),
+          duplicateButton: btn
+        });
       }
     }
 
-    return Array.from(unique.values()).map((btn, idx) => {
+    // ✅ FIX: Processamento simples - PRESERVAR IDs existentes, apenas converter formato
+    const finalButtons = Array.from(unique.values()).map((btn, idx) => {
       const converted = convertBackendToInteractive(btn);
-      const expectedPrefix =
-        channelType === 'Channel::Instagram'
-          ? 'ig_'
-          : channelType === 'Channel::FacebookPage'
-            ? 'fb_'
-            : 'btn_';
-      if (!converted.id.startsWith(expectedPrefix)) {
-        converted.id = generatePrefixedId(channelType, converted.id || `${idx}`);
+      
+      // ✅ IMPORTANTE: NUNCA regenerar IDs de botões existentes!
+      // Botões do banco devem manter seus IDs originais SEMPRE
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`✅ [UnifiedEditingStep] Processed button ${idx}:`, {
+          originalId: btn?.id || btn?.payload || 'none',
+          finalId: converted.id,
+          text: converted.text,
+          type: converted.type,
+          preserved: true // ID sempre preservado
+        });
       }
+      
       return converted;
     });
+    
+    // ✅ FIX: Verificação final apenas para detectar duplicatas (sem regenerar)
+    const seenIds = new Set<string>();
+    const uniqueFinalButtons = finalButtons.filter((button, index) => {
+      if (seenIds.has(button.id)) {
+        if (process.env.NODE_ENV === 'development') {
+          console.error(`🚨 [UnifiedEditingStep] DUPLICATE ID DETECTED: ${button.id} at index ${index}. This should NOT happen!`);
+        }
+        // Se chegou aqui, é porque há dados inconsistentes no banco
+        // Não regenerar - reportar o erro
+        return false; // Remove a duplicata mas preserva o original
+      }
+      seenIds.add(button.id);
+      return true;
+    });
+    
+    return uniqueFinalButtons;
   }, [message.action, (message as any)?.content?.action, (message as any)?.actionReplyButton, (message as any)?.interactiveContent, channelType]);
 
   // Helper function to get error messages from validation errors

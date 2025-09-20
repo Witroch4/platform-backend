@@ -5,7 +5,12 @@
  */
 
 import { createLogger } from '@/lib/utils/logger';
-import { getReactionByButtonId, formatReactionData } from '@/lib/button-reaction-queries';
+import {
+  getReactionByButtonId,
+  formatReactionData,
+  getIntentMappingByButtonId,
+  ButtonReactionData
+} from '@/lib/button-reaction-queries';
 import { METAPayloadBuilder } from '@/lib/socialwise-flow/meta-payload-builder';
 import { getPrismaInstance } from '@/lib/connections';
 
@@ -230,6 +235,57 @@ export async function processButtonClick(
       return response;
 
     } else {
+      // Se não houver reação registrada, verificar se existe mapeamento direto de intenção
+      if (userId) {
+        const intentMapping = await getIntentMappingByButtonId(buttonId, userId);
+
+        if (intentMapping) {
+          logger.info('🧭 Intent mapping found for button', {
+            buttonId,
+            mappingId: intentMapping.id,
+            actionType: intentMapping.actionType,
+            inboxId: intentMapping.inboxId,
+            traceId
+          });
+
+          // Reaproveitar estrutura padrão de resposta e anexar payload mapeado
+          const intentResponse = formatReactionData(intentMapping, channelType, wamid) as ButtonReactionResponse;
+
+          const intentMappedPayload = await buildIntentMappingSendPayload(
+            intentMapping,
+            channelType,
+            wamid,
+            validPayload,
+            traceId,
+            buttonId
+          );
+
+          if (intentMappedPayload) {
+            intentResponse.mapped = {
+              ...(intentResponse.mapped || {}),
+              ...intentMappedPayload
+            };
+
+            logger.info('📬 Intent mapping payload prepared', {
+              buttonId,
+              mappingId: intentMapping.id,
+              hasWhatsApp: !!intentResponse.mapped?.whatsapp,
+              hasInstagram: !!intentResponse.mapped?.instagram,
+              hasFacebook: !!intentResponse.mapped?.facebook,
+              traceId
+            });
+
+            return intentResponse;
+          }
+
+          logger.warn('Intent mapping found but payload build failed, continuing to LLM processing', {
+            buttonId,
+            mappingId: intentMapping.id,
+            traceId
+          });
+        }
+      }
+
       // Sem mapeamento: retorna null para permitir fallback para LLM
       logger.info('⚠️ No button reaction found, continuing to LLM processing', {
         buttonId,
@@ -285,7 +341,8 @@ async function buildActionSendPayload(
   wamid: string,
   validPayload: any,
   traceId: string,
-  originalButtonId: string
+  originalButtonId: string,
+  customVariables?: Record<string, any>
 ): Promise<{ whatsapp?: any; instagram?: any; facebook?: any } | null> {
   const inboxId = extractInboxIdFromPayload(validPayload);
   if (!inboxId) {
@@ -347,7 +404,16 @@ async function buildActionSendPayload(
       if (parsed.kind === 'send_template' && template.whatsappOfficialInfo) {
         const wi: any = template.whatsappOfficialInfo as any;
         const language: string = (wi && typeof wi.language === 'string') ? wi.language : 'pt_BR';
-        const components: any[] = Array.isArray(wi?.components) ? wi.components : [];
+        let components: any[] = Array.isArray(wi?.components) ? wi.components : [];
+
+        if (customVariables && components.length > 0) {
+          components = applyCustomVariablesToComponents(
+            components,
+            customVariables,
+            webhookContext.contactPhone || ''
+          );
+        }
+
         const metaTemplateId: string | undefined = typeof wi?.metaTemplateId === 'string' ? wi.metaTemplateId : undefined;
         const payload = await builder.buildTemplatePayload(
           template.name || 'default',
@@ -495,6 +561,60 @@ async function buildActionSendPayload(
 }
 
 /**
+ * Build payload from intent mapping configuration
+ */
+async function buildIntentMappingSendPayload(
+  intentMapping: ButtonReactionData,
+  channelType: string,
+  wamid: string,
+  validPayload: any,
+  traceId: string,
+  originalButtonId: string
+): Promise<{ whatsapp?: any; instagram?: any; facebook?: any } | null> {
+  const templateId = (intentMapping.actionPayload as any)?.templateId;
+  const customVariables = (intentMapping.actionPayload as any)?.customVariables;
+
+  if (!templateId || typeof templateId !== 'string') {
+    logger.warn('Intent mapping missing templateId', {
+      mappingId: intentMapping.id,
+      buttonId: intentMapping.buttonId,
+      traceId
+    });
+    return null;
+  }
+
+  const attempts: Array<{ kind: 'send_template' | 'send_interactive'; id: string }> = [
+    { kind: 'send_interactive', id: templateId },
+    { kind: 'send_template', id: templateId }
+  ];
+
+  for (const attempt of attempts) {
+    const mapped = await buildActionSendPayload(
+      attempt,
+      channelType,
+      wamid,
+      validPayload,
+      traceId,
+      originalButtonId,
+      customVariables
+    );
+
+    if (mapped) {
+      return mapped;
+    }
+  }
+
+  logger.warn('Failed to construct payload for intent mapping', {
+    mappingId: intentMapping.id,
+    templateId,
+    buttonId: intentMapping.buttonId,
+    traceId
+  });
+
+  return null;
+}
+
+/**
  * Extract Chatwit inbox external id from payload
  */
 function extractInboxIdFromPayload(validPayload: any): string | null {
@@ -506,6 +626,207 @@ function extractInboxIdFromPayload(validPayload: any): string | null {
   } catch {
     return null;
   }
+}
+
+function normalizeComponentsToArray(raw: any): any[] {
+  if (Array.isArray(raw)) return raw;
+  if (raw && typeof raw === 'object') {
+    const numericKeys = Object.keys(raw).filter((k) => /^\d+$/.test(k));
+    if (numericKeys.length > 0) {
+      return numericKeys
+        .sort((a, b) => Number(a) - Number(b))
+        .map((key) => raw[key]);
+    }
+  }
+  return [];
+}
+
+function applyCustomVariablesToComponents(
+  components: any,
+  customVariables: Record<string, any>,
+  contactPhone: string
+): any[] {
+  const list = normalizeComponentsToArray(components);
+
+  if (!Array.isArray(list) || list.length === 0) {
+    return [];
+  }
+
+  return list.map((component) => {
+    const processedComponent: any = { ...component };
+
+    if (component.type === 'BODY' && component.text) {
+      const params = buildTemplateParameters(
+        component.text,
+        customVariables,
+        component.example
+      );
+      if (params.length > 0) {
+        processedComponent.__resolvedBodyParams = params.map((p) => ({ ...p }));
+      }
+      processedComponent.text = replaceVariablesInTemplateText(
+        component.text,
+        Array.isArray(component.example?.body_text?.[0])
+          ? component.example?.body_text?.[0]
+          : [],
+        customVariables,
+        contactPhone
+      );
+    }
+
+    if (component.type === 'HEADER' && component.format === 'TEXT' && component.text) {
+      const params = buildTemplateParameters(
+        component.text,
+        customVariables,
+        component.example,
+        true
+      );
+      if (params.length > 0) {
+        processedComponent.__resolvedHeaderParams = params.map((p) => ({ ...p }));
+      }
+      processedComponent.text = replaceVariablesInTemplateText(
+        component.text,
+        Array.isArray(component.example?.header_text?.[0])
+          ? component.example?.header_text?.[0]
+          : [],
+        customVariables,
+        contactPhone
+      );
+    }
+
+    if (component.type === 'BUTTONS' && Array.isArray(component.buttons)) {
+      processedComponent.buttons = component.buttons.map((btn: any) => {
+        const cloned = { ...btn };
+        if (String(cloned?.type || '').toUpperCase() === 'COPY_CODE' && customVariables?.coupon_code) {
+          cloned.coupon_code = String(customVariables.coupon_code);
+        }
+        return cloned;
+      });
+    }
+
+    return processedComponent;
+  });
+}
+
+function buildTemplateParameters(
+  text: string,
+  customVariables: Record<string, any>,
+  example: any,
+  isHeader: boolean = false
+): Array<{ type: 'text'; text: string; parameter_name?: string }> {
+  if (!text) return [];
+
+  const matches = text.match(/\{\{([^}]+)\}\}/g) || [];
+  if (matches.length === 0) return [];
+
+  const namedParamsExample: Record<string, string> = {};
+  if (example) {
+    const namedArray =
+      (example?.body_text_named_params as any[]) ||
+      (example?.header_text_named_params as any[]) ||
+      [];
+    for (const item of namedArray) {
+      if (item?.param_name && typeof item.example === 'string') {
+        namedParamsExample[item.param_name] = item.example;
+      }
+    }
+  }
+
+  const positionalExamples: string[] =
+    (example?.body_text?.[0] as string[]) ||
+    (example?.header_text?.[0] as string[]) ||
+    [];
+
+  return matches.map((match, index) => {
+    const raw = match.replace(/[{}]/g, '').trim();
+    const isNumeric = /^\d+$/.test(raw);
+    let value = '';
+
+    if (!isNumeric && customVariables[raw] !== undefined) {
+      value = String(customVariables[raw]);
+    }
+
+    if (!value && customVariables[`variavel_${index}`] !== undefined) {
+      value = String(customVariables[`variavel_${index}`]);
+    }
+
+    if (!value && !isNumeric && namedParamsExample[raw] !== undefined) {
+      value = String(namedParamsExample[raw]);
+    }
+
+    if (!value && positionalExamples[index] !== undefined) {
+      value = String(positionalExamples[index]);
+    }
+
+    const param: { type: 'text'; text: string; parameter_name?: string } = {
+      type: 'text',
+      text: value,
+    };
+
+    if (!isNumeric) {
+      param.parameter_name = raw;
+    }
+
+    if (isHeader) {
+      return param;
+    }
+
+    return param;
+  }).slice(0, isHeader ? 1 : undefined);
+}
+
+function replaceVariablesInTemplateText(
+  text: string,
+  exampleValues: string[],
+  customVariables: Record<string, any>,
+  contactPhone: string
+): string {
+  if (typeof text !== 'string') return text;
+
+  const variablesMap: Record<string, string> = {};
+
+  Object.entries(customVariables || {}).forEach(([key, value]) => {
+    if (typeof value === 'string' || typeof value === 'number') {
+      variablesMap[key] = String(value);
+    }
+  });
+
+  const matches = text.match(/\{\{([^}]+)\}\}/g) || [];
+  matches.forEach((match, index) => {
+    const raw = match.replace(/[{}]/g, '').trim();
+    if (variablesMap[raw] === undefined && exampleValues[index] !== undefined) {
+      variablesMap[raw] = String(exampleValues[index]);
+    }
+  });
+
+  if (!variablesMap['nome_lead']) {
+    variablesMap['nome_lead'] = extractLeadNameFromPhone(contactPhone);
+  }
+
+  return text.replace(/\{\{([^}]+)\}\}/g, (_match, rawKey: string) => {
+    const key = String(rawKey).trim();
+    const direct = variablesMap[key];
+    if (direct !== undefined) {
+      let value = String(direct);
+      if (value.includes('{{nome_lead}}')) {
+        value = value.replace(/\{\{nome_lead\}\}/g, variablesMap['nome_lead'] || 'Cliente');
+      }
+      return value;
+    }
+    const fallback = variablesMap[`variavel_${key}`];
+    if (fallback !== undefined) {
+      return String(fallback);
+    }
+    return match;
+  });
+}
+
+function extractLeadNameFromPhone(phone: string): string {
+  if (!phone) return 'Cliente';
+  const clean = String(phone).replace(/\D/g, '');
+  if (!clean) return 'Cliente';
+  const suffix = clean.slice(-4) || clean;
+  return `Lead ${suffix}`;
 }
 
 /**

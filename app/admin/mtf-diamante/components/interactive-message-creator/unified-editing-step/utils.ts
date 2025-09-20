@@ -1,12 +1,25 @@
 import type { InteractiveButton, CentralButtonReaction, LocalButtonReaction } from "./types";
 import { MESSAGE_LIMITS, type InstagramTemplateTypeResult } from "@/types/interactive-messages";
 
+// ✅ FIX: Função robusta para gerar IDs únicos combinando timestamp + counter + random + performance
+let idCounter = 0;
+const generateUniqueButtonId = (): string => {
+  const timestamp = Date.now();
+  const counter = (++idCounter) % 10000; // Aumentar limite para 10000
+  const random = Math.random().toString(36).slice(2, 10); // 8 caracteres aleatórios ao invés de 6
+  const performance_id = Math.floor(performance.now() * 1000) % 100000; // Usar performance para maior precisão
+  return `btn_${timestamp}_${counter}_${performance_id}_${random}`;
+};
+
 // Conversion helpers between backend-stored buttons and UI InteractiveButton
 export const convertBackendToInteractive = (button: any): InteractiveButton => {
+  // ✅ FIX: SEMPRE preservar ID existente se disponível
+  const existingId = button?.id || button?.payload || button?.reply?.id;
+  
   // Handle Instagram quick_replies format (content_type indicates it's a quick reply)
   if (button?.content_type === 'text') {
     return { 
-      id: button.payload || `btn_${Math.random().toString(36).slice(2, 11)}`, 
+      id: existingId || generateUniqueButtonId(), // Só gera novo ID se NÃO existir
       text: button.title || '', 
       type: 'reply' 
     };
@@ -14,8 +27,9 @@ export const convertBackendToInteractive = (button: any): InteractiveButton => {
   
   // Handle standard button format
   const detectedType = (button?.type as any) || (button?.reply ? 'reply' : 'reply');
-  const id = button?.id || button?.reply?.id || `btn_${Math.random().toString(36).slice(2, 11)}`;
+  const id = existingId || generateUniqueButtonId(); // Só gera novo ID se NÃO existir
   const title = button?.title || button?.reply?.title || button?.text || '';
+  
   if (detectedType === 'url') {
     return { id, text: title, type: 'url', url: button?.url };
   }
@@ -100,7 +114,27 @@ export const generatePrefixedId = (channelType: string | null, fallbackSuffix: s
   let prefix = '';
   if (channelType === 'Channel::Instagram') prefix = 'ig_';
   else if (channelType === 'Channel::FacebookPage') prefix = 'fb_';
-  return `${prefix}btn_${fallbackSuffix}`;
+  
+  // ✅ FIX: Se o fallbackSuffix parece ser um ID longo e único, use-o diretamente
+  // Senão, gere um ID único com timestamp + counter + performance + random
+  const uniqueSuffix = fallbackSuffix.includes('_') && fallbackSuffix.length > 15 
+    ? fallbackSuffix 
+    : (() => {
+        const timestamp = Date.now();
+        const counter = (++idCounter) % 10000;
+        const performance_id = Math.floor(performance.now() * 1000) % 100000;
+        const random = Math.random().toString(36).slice(2, 8);
+        return `${timestamp}_${counter}_${performance_id}_${random}_${fallbackSuffix}`;
+      })();
+    
+  const generatedId = `${prefix}btn_${uniqueSuffix}`;
+  
+  // Debug temporário para identificar duplicações
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`🔍 [generatePrefixedId] Generated: ${generatedId} from fallback: ${fallbackSuffix}`);
+  }
+    
+  return generatedId;
 };
 
 // Helper function to resolve variables in text
