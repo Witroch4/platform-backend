@@ -16,17 +16,17 @@ interface QueueManagementLayoutProps {
 const navigation = [
   {
     name: "Dashboard",
-    href: "/admin/queue-management",
+    href: "/admin/monitoring/queue-management",
     icon: LayoutDashboard,
   },
   {
     name: "Logs de Auditoria",
-    href: "/admin/queue-management/audit-logs",
+    href: "/admin/monitoring/queue-management/audit-logs",
     icon: FileText,
   },
   {
     name: "Monitoramento de Produção",
-    href: "/admin/queue-management/production-monitoring",
+    href: "/admin/monitoring/queue-management/production-monitoring",
     icon: Shield,
   },
 ];

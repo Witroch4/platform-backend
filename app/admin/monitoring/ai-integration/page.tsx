@@ -26,7 +26,7 @@ export default async function AIIntegrationPage() {
             Configure and manage AI intents for message classification
           </p>
           <a 
-            href="/admin/ai-integration/intents"
+            href="/admin/monitoring/ai-integration/intents"
             className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
           >
             Manage Intents
@@ -39,7 +39,7 @@ export default async function AIIntegrationPage() {
             Monitor and manage AI processing queues
           </p>
           <a 
-            href="/admin/ai-integration/queues"
+            href="/admin/monitoring/ai-integration/queues"
             className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
           >
             Manage Queues

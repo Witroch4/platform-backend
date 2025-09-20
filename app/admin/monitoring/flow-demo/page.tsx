@@ -1,8 +1,8 @@
 'use client';
 
 import React from 'react';
-import { FlowVisualizer } from '../components/FlowVisualizer';
-import { FlowTimeline } from '../components/FlowTimeline';
+import { FlowVisualizer } from '../../components/FlowVisualizer';
+import { FlowTimeline } from '../../components/FlowTimeline';
 import { FlowTree } from '@/types/queue-management';
 
 // Mock flow data for demonstration

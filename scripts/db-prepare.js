@@ -34,7 +34,8 @@ const MODE = getArg("mode", process.env.NODE_ENV === "production" ? "deploy" : "
 const PRISMA_SCHEMA = getArg("schema", process.env.PRISMA_SCHEMA || ""); // opcional: --schema prisma/schema.prisma
 const RETRIES = Number(process.env.DB_CONNECT_RETRIES || 60);
 const SLEEP_MS = Number(process.env.DB_CONNECT_SLEEP_MS || 2000);
-const RUN_SEED = String(process.env.PRISMA_RUN_SEED || "false") === "true";
+// Se não especificado via env, executa seed automaticamente em modo deploy (produção)
+const RUN_SEED = String(process.env.PRISMA_RUN_SEED || (MODE === "deploy" ? "true" : "false")) === "true";
 const ALLOW_DB_PUSH_FALLBACK = String(process.env.ALLOW_DB_PUSH_FALLBACK || "false") === "true";
 const RUN_DB_PREPARE = (process.env.RUN_DB_PREPARE || "yes").toLowerCase(); // yes|no (recomendado: yes só no app)
 const VECTOR_REQUIRED = String(process.env.VECTOR_REQUIRED || "true") === "true"; // se não conseguir habilitar vector, falha

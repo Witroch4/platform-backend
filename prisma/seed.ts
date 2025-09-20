@@ -117,6 +117,21 @@ async function seedPadrao() {
     },
   });
 
+  console.log('🤖 Criando usuário do sistema...');
+  await prisma.user.upsert({
+    where: { id: 'system' },
+    update: {},
+    create: {
+      id: 'system',
+      email: 'system@chatwit.local',
+      name: 'Sistema',
+      emailVerified: dataAtual,
+      role: UserRole.SUPERADMIN,
+      password: hashedPassword,
+      createdAt: dataAtual,
+    },
+  });
+
   console.log('✅ Seed de usuários concluído!');
   return { amandaChatwit };
 }
