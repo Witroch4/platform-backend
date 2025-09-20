@@ -394,3 +394,158 @@ export async function getReactionForReactionsModal(buttonId: string, userId: str
     } : undefined,
   }
 }
+
+/**
+ * Get intent mapping by buttonId (includes SEND_TEMPLATE, SEND_INTENT, etc.)
+ * This handles the "Mapeamento IA - Intenções" functionality
+ */
+export async function getIntentMappingByButtonId(
+  buttonId: string,
+  userId: string
+): Promise<ButtonReactionData | null> {
+  const prisma = getPrismaInstance()
+  
+  console.log('[INTENT MAPPING DEBUG] Searching for intent mapping', {
+    buttonId,
+    userId,
+    timestamp: new Date().toISOString()
+  });
+  
+  const mapping = await prisma.mapeamentoBotao.findFirst({
+    where: {
+      buttonId: buttonId,
+      // Look for any action type that's not BUTTON_REACTION (template mappings, etc.)
+      actionType: {
+        not: 'BUTTON_REACTION'
+      },
+      inbox: {
+        usuarioChatwit: {
+          appUserId: userId,
+        },
+      },
+    },
+    include: {
+      inbox: {
+        select: {
+          id: true,
+          nome: true,
+          inboxId: true,
+        },
+      },
+    },
+  })
+
+  console.log('[INTENT MAPPING DEBUG] Query result', {
+    buttonId,
+    userId,
+    found: !!mapping,
+    mappingId: mapping?.id,
+    actionType: mapping?.actionType,
+    actionPayload: mapping?.actionPayload,
+    inboxId: mapping?.inboxId,
+    timestamp: new Date().toISOString()
+  });
+
+  if (mapping) {
+    console.log('[INTENT MAPPING DEBUG] Found in MapeamentoBotao', {
+      buttonId,
+      mappingId: mapping.id,
+      actionType: mapping.actionType
+    });
+
+    return {
+      id: mapping.id,
+      buttonId: mapping.buttonId,
+      actionType: mapping.actionType,
+      actionPayload: mapping.actionPayload as any,
+      description: mapping.description,
+      inboxId: mapping.inboxId,
+      createdAt: mapping.createdAt,
+      updatedAt: mapping.updatedAt,
+      inbox: mapping.inbox,
+    }
+  }
+
+  // 🔧 CORREÇÃO: Buscar na tabela MapeamentoIntencao (novo sistema IA Intent Mapping)
+  // Extract intent name from buttonId (remove @ prefix)
+  const intentName = buttonId.startsWith('@') ? buttonId.slice(1) : buttonId
+  
+  console.log('[INTENT MAPPING DEBUG] Searching in MapeamentoIntencao', {
+    buttonId,
+    intentName,
+    userId
+  });
+
+  try {
+    const intentMapping = await prisma.mapeamentoIntencao.findFirst({
+      where: {
+        intentName: intentName,
+        inbox: {
+          usuarioChatwit: {
+            appUserId: userId,
+          },
+        },
+      },
+      include: {
+        inbox: {
+          select: {
+            id: true,
+            nome: true,
+            inboxId: true,
+          },
+        },
+        template: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (intentMapping) {
+      console.log('[INTENT MAPPING DEBUG] Found in MapeamentoIntencao', {
+        buttonId,
+        intentName,
+        mappingId: intentMapping.id,
+        templateId: intentMapping.templateId,
+        templateName: intentMapping.template.name
+      });
+
+      // Convert MapeamentoIntencao to ButtonReactionData format
+      return {
+        id: intentMapping.id,
+        buttonId: buttonId, // Use original buttonId
+        actionType: 'SEND_TEMPLATE', // Intent mappings send templates
+        actionPayload: {
+          templateId: intentMapping.templateId,
+          customVariables: intentMapping.customVariables
+        } as any,
+        description: `Intent mapping: ${intentName} -> ${intentMapping.template.name}`,
+        inboxId: intentMapping.inboxId,
+        createdAt: intentMapping.createdAt,
+        updatedAt: intentMapping.updatedAt,
+        inbox: intentMapping.inbox,
+      }
+    }
+
+    console.log('[INTENT MAPPING DEBUG] No mapping found in either table', {
+      buttonId,
+      intentName,
+      userId,
+      timestamp: new Date().toISOString()
+    });
+
+    return null
+
+  } catch (error) {
+    console.error('[INTENT MAPPING DEBUG] Error searching MapeamentoIntencao', {
+      buttonId,
+      intentName,
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+      timestamp: new Date().toISOString()
+    });
+    return null
+  }
+}

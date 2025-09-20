@@ -191,6 +191,12 @@ export async function processButtonClick(
     }
 
     // Buscar reação usando button-reaction-queries
+    logger.info('🔍 Searching for button reaction', {
+      buttonId,
+      userId: userId || 'undefined',
+      traceId
+    });
+    
     const buttonReaction = await getReactionByButtonId(buttonId, userId || '');
 
     if (buttonReaction) {
@@ -228,18 +234,88 @@ export async function processButtonClick(
       });
 
       return response;
+    }
 
-    } else {
-      // Sem mapeamento: retorna null para permitir fallback para LLM
-      logger.info('⚠️ No button reaction found, continuing to LLM processing', {
+    // 🔧 CORREÇÃO: Buscar mapeamento de intent (SEND_TEMPLATE, etc.) se não houver button reaction
+    logger.info('🔍 No button reaction found, searching for intent mapping', {
+      buttonId,
+      userId: userId || 'undefined',
+      traceId
+    });
+    
+    const { getIntentMappingByButtonId } = await import('@/lib/button-reaction-queries');
+    const intentMapping = await getIntentMappingByButtonId(buttonId, userId || '');
+
+    if (intentMapping) {
+      logger.info('✅ Intent mapping found', {
         buttonId,
-        channelType,
-        userId,
+        mappingId: intentMapping.id,
+        actionType: intentMapping.actionType,
+        hasPayload: !!intentMapping.actionPayload,
+        actionPayload: intentMapping.actionPayload,
+        description: intentMapping.description,
         traceId
       });
 
-      return null; // Permite fallback para SocialWise Flow Processor
+      // Parse action command from actionPayload
+      const actionPayload = intentMapping.actionPayload as any;
+      let actionStr: string | undefined;
+
+      if (intentMapping.actionType === 'SEND_TEMPLATE' && actionPayload?.templateId) {
+        actionStr = `send_template:${actionPayload.templateId}`;
+      } else if (intentMapping.actionType === 'SEND_INTERACTIVE' && actionPayload?.messageId) {
+        actionStr = `send_interactive:${actionPayload.messageId}`;
+      }
+
+      if (actionStr) {
+        const parsed = parseActionCommand(actionStr);
+        if (parsed) {
+          const mapped = await buildActionSendPayload(parsed, channelType, wamid, validPayload, traceId, buttonId);
+          if (mapped) {
+            const response: ButtonReactionResponse = {
+              action_type: 'button_reaction',
+              buttonId: buttonId,
+              processed: true,
+              mappingFound: true,
+              mapped: mapped
+            };
+
+            logger.info('🎯 Intent mapping response prepared', {
+              buttonId,
+              actionType: intentMapping.actionType,
+              templateId: actionPayload?.templateId,
+              messageId: actionPayload?.messageId,
+              traceId
+            });
+
+            return response;
+          }
+        }
+      }
+
+      logger.info('⚠️ Intent mapping found but could not build response', {
+        buttonId,
+        actionType: intentMapping.actionType,
+        actionPayload,
+        traceId
+      });
+    } else {
+      logger.info('❌ No intent mapping found', {
+        buttonId,
+        userId: userId || 'undefined',
+        traceId
+      });
     }
+
+    // Sem mapeamento: retorna null para permitir fallback para LLM
+    logger.info('⚠️ No button reaction or intent mapping found, continuing to LLM processing', {
+      buttonId,
+      channelType,
+      userId,
+      traceId
+    });
+
+    return null; // Permite fallback para SocialWise Flow Processor
 
   } catch (error) {
     logger.error('❌ Error processing button click', {
