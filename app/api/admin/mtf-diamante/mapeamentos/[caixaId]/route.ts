@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { getPrismaInstance } from '@/lib/connections';
 import { auth } from '@/auth';
 import { invalidateTemplateMappingCache } from '@/lib/cache/instagram-template-cache';
+import { Prisma } from '@prisma/client';
 
 // GET: Lista todos os mapeamentos de uma caixa de entrada
 export async function GET(request: NextRequest, { params }: { params: Promise<{ caixaId: string }> }) {
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       intentName,
       inboxId: caixaId,
       templateId,
-      customVariables: Object.keys(normalizedCustom).length > 0 ? normalizedCustom : null,
+      customVariables: Object.keys(normalizedCustom).length > 0 ? normalizedCustom : Prisma.JsonNull,
     };
     
     console.log("Data para salvar:", data);

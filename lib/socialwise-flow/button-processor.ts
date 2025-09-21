@@ -428,9 +428,9 @@ async function buildActionSendPayload(
       return null;
     }
 
-    if (template.whatsappOfficialInfo && template.whatsappOfficialInfoId) {
+    if (template.whatsappOfficialInfo?.id) {
       const raw = await prisma.whatsAppOfficialInfo.findUnique({
-        where: { id: template.whatsappOfficialInfoId },
+        where: { id: template.whatsappOfficialInfo.id },
         select: { components: true },
       });
       if (raw?.components) {
@@ -469,7 +469,7 @@ async function buildActionSendPayload(
           },
         };
 
-        componentLogger.debug('WhatsApp official template data', {
+        componentLogger.debug?.('WhatsApp official template data', {
           templateId: template.id,
           hasComponents: !!wi?.components,
           componentKeys: wi?.components ? Object.keys(wi.components) : undefined,
