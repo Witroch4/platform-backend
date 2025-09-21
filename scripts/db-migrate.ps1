@@ -24,18 +24,18 @@ Write-Host "Container $containerName esta rodando" -ForegroundColor Green
 switch ($Action) {
     "dev" {
         Write-Host "Executando migracoes de desenvolvimento..." -ForegroundColor Yellow
-        docker exec $containerName npx prisma migrate dev
+        docker exec $containerName pnpm exec prisma migrate dev
     }
     "deploy" {
         Write-Host "Aplicando migracoes de producao..." -ForegroundColor Yellow
-        docker exec $containerName npx prisma migrate deploy
+        docker exec $containerName pnpm exec prisma migrate deploy
     }
     "reset" {
         Write-Host "ATENCAO: Isso ira resetar o banco de dados!" -ForegroundColor Red
         $confirmation = Read-Host "Digite 'SIM' para confirmar"
         if ($confirmation -eq "SIM") {
             Write-Host "Resetando banco de dados..." -ForegroundColor Yellow
-            docker exec $containerName npx prisma migrate reset --force
+            docker exec $containerName pnpm exec prisma migrate reset --force
         } else {
             Write-Host "Operacao cancelada" -ForegroundColor Yellow
         }
@@ -43,11 +43,11 @@ switch ($Action) {
     "studio" {
         Write-Host "Abrindo Prisma Studio..." -ForegroundColor Yellow
         Write-Host "Prisma Studio estara disponivel em: http://localhost:5555" -ForegroundColor Cyan
-        docker exec -it $containerName npx prisma studio --hostname 0.0.0.0 --port 5555
+        docker exec -it $containerName pnpm exec prisma studio --hostname 0.0.0.0 --port 5555
     }
     "seed" {
         Write-Host "Executando seed do banco de dados..." -ForegroundColor Yellow
-        docker exec $containerName npx prisma db seed
+        docker exec $containerName pnpm exec prisma db seed
     }
 }
 

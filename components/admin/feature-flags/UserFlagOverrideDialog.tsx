@@ -200,7 +200,7 @@ export function UserFlagOverrideDialog({
                           
                           <Button
                             variant="outline"
-                            size="sm"
+                            
                             onClick={() => removeOverride(override.id)}
                             disabled={updating === override.id}
                             className="text-destructive hover:text-destructive"

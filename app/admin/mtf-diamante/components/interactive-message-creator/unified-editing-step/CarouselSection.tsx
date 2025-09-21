@@ -272,7 +272,7 @@ export const CarouselSection: React.FC<CarouselSectionProps> = ({
           </CardTitle>
           {carouselElements.length < 10 && (
             <Button
-              size="sm"
+              
               onClick={addElement}
               disabled={disabled}
             >
@@ -297,7 +297,7 @@ export const CarouselSection: React.FC<CarouselSectionProps> = ({
                   <Grip className="h-3 w-3 text-muted-foreground" />
                   <Button
                     variant="ghost"
-                    size="sm"
+                    
                     onClick={() => toggleElementExpansion(index)}
                     className="h-6 w-6 p-0"
                   >
@@ -319,7 +319,7 @@ export const CarouselSection: React.FC<CarouselSectionProps> = ({
                 {carouselElements.length > 1 && (
                   <Button
                     variant="ghost"
-                    size="sm"
+                    
                     onClick={() => removeElement(index)}
                     disabled={disabled}
                     className="h-6 w-6 p-0 text-red-500 hover:text-red-700"

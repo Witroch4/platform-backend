@@ -8,7 +8,7 @@ This file provides comprehensive guidance to Claude Code (claude.ai/code) and Cu
 2. **Use PowerShell commands on Windows**
 3. **Path errors with "@" outside Next.js scope don't need fixing**
 4. **In Next.js 15, route params are Promises - always use await**
-5. **Always run `npx tsc --noEmit` after edits**
+5. **Always run `pnpm exec tsc --noEmit` after edits**
 6. **Use Shadcn/UI Dialog instead of native confirm()/alert()**
 7. **Optimistic UI updates are preferred**
 8. **User-facing strings in Portuguese BR, code in English**
@@ -57,14 +57,14 @@ This file provides comprehensive guidance to Claude Code (claude.ai/code) and Cu
 - **Code Quality**: Biome (linting/formatting), TypeScript strict mode
 - **Testing**: Jest with React Testing Library, Supertest for API testing
 - **Build**: Next.js build system, Docker multi-stage builds
-- **Package Manager**: npm with lock file
+- **Package Manager**: pnpm with lock file
 
 ## 📋 Critical Development Rules
 
 ### Mandatory Rules
 ```typescript
 // 1. ALWAYS run after any file edit or creation
-npx tsc --noEmit
+pnpm exec tsc --noEmit
 
 // 2. All new code MUST be TypeScript
 // 3. User-facing strings in Brazilian Portuguese
@@ -411,59 +411,59 @@ await prisma.someModel.update({
 ### Database Operations
 ```bash
 # Development database setup
-npm run db:push              # Push schema changes to dev database
-npm run db:prepare           # Prepare database for deployment
-npm run db:reset:dev         # Reset development database
-npm run db:migrate           # Run Prisma migrations
-npm run db:generate          # Generate Prisma client
-npm run db:studio            # Open Prisma Studio
+pnpm run db:push              # Push schema changes to dev database
+pnpm run db:prepare           # Prepare database for deployment
+pnpm run db:reset:dev         # Reset development database
+pnpm run db:migrate           # Run Prisma migrations
+pnpm run db:generate          # Generate Prisma client
+pnpm run db:studio            # Open Prisma Studio
 
 # Seeding
-npm run db:seed              # Populate initial data
-npm run db:seed-prices       # Seed subscription price cards
+pnpm run db:seed              # Populate initial data
+pnpm run db:seed-prices       # Seed subscription price cards
 
 # Prisma CLI commands
-npx prisma migrate dev       # Create migration in development
-npx prisma migrate deploy    # Apply migrations in production
-npx prisma studio           # Visual database editor
+pnpm exec prisma migrate dev       # Create migration in development
+pnpm exec prisma migrate deploy    # Apply migrations in production
+pnpm exec prisma studio           # Visual database editor
 ```
 
 ### Testing
 ```bash
-npm test                     # Run all tests
-npm run test:unit            # Run unit tests only
-npm run test:integration     # Run integration tests only
-npm run test:e2e             # Run end-to-end tests
-npm run test:performance     # Run performance tests
-npm run test:comprehensive   # Run comprehensive test suite
-npm run test:targeted        # Run targeted tests
+pnpm test                     # Run all tests
+pnpm run test:unit            # Run unit tests only
+pnpm run test:integration     # Run integration tests only
+pnpm run test:e2e             # Run end-to-end tests
+pnpm run test:performance     # Run performance tests
+pnpm run test:comprehensive   # Run comprehensive test suite
+pnpm run test:targeted        # Run targeted tests
 ```
 
 ### Background Workers
 ```bash
-npm run start:worker         # Start webhook worker
-npm run worker               # Start webhook worker (alternative)
-npm run start:ai-worker      # Start AI integration worker
-npm run build:workers        # Build workers for production
+pnpm run start:worker         # Start webhook worker
+pnpm run worker               # Start webhook worker (alternative)
+pnpm run start:ai-worker      # Start AI integration worker
+pnpm run build:workers        # Build workers for production
 ```
 
 ### Development
 ```bash
-npm run dev                  # Start development server
-npm run build                # Build for production
-npm run start                # Start production server
-npm run lint                 # Run Biome linter
-npm run lint-apply           # Apply lint fixes
-npm run format-apply         # Apply formatting fixes
-npx tsc --noEmit            # Check TypeScript types
+pnpm run dev                  # Start development server
+pnpm run build                # Build for production
+pnpm run start                # Start production server
+pnpm run lint                 # Run Biome linter
+pnpm run lint-apply           # Apply lint fixes
+pnpm run format-apply         # Apply formatting fixes
+pnpm exec tsc --noEmit            # Check TypeScript types
 ```
 
 ### Specialized Commands
 ```bash
-npm run flash-intent         # Manage flash intent system
-npm run rollout              # Manage feature rollouts
-npm run init-monitoring      # Initialize monitoring
-npm run fx-rates:init        # Initialize FX rate system
+pnpm run flash-intent         # Manage flash intent system
+pnpm run rollout              # Manage feature rollouts
+pnpm run init-monitoring      # Initialize monitoring
+pnpm run fx-rates:init        # Initialize FX rate system
 ```
 
 ### Git Workflow

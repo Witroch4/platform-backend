@@ -23,7 +23,7 @@ export function LeadsTabs({ activeTab, onChange, userRole }: LeadsTabsProps) {
     <div className="bg-background">
       <div className="flex items-center justify-between border-b border-border">
         <Tabs value={activeTab} onValueChange={onChange} className="flex-1">
-          <TabsList variant="line" className="h-auto p-0 bg-transparent justify-start">
+          <TabsList className="h-auto p-0 bg-transparent justify-start">
             {tabs.map((tab) => (
               <TabsTrigger
                 key={tab.id}

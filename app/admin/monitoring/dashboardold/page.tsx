@@ -181,7 +181,7 @@ export default function MonitoringDashboard() {
         <div className="flex items-center space-x-2">
           <Button
             variant="outline"
-            size="sm"
+            
             onClick={() => setAutoRefresh(!autoRefresh)}
           >
             <RefreshCw className={`h-4 w-4 mr-2 ${autoRefresh ? 'animate-spin' : ''}`} />
@@ -196,7 +196,7 @@ export default function MonitoringDashboard() {
             <option value="24h">24 Hours</option>
             <option value="7d">7 Days</option>
           </select>
-          <Button onClick={fetchDashboardData} size="sm">
+          <Button onClick={fetchDashboardData} >
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>

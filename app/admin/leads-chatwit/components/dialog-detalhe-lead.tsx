@@ -286,7 +286,7 @@ export function DialogDetalheLead({
                     onClick={(e) => e.stopPropagation()}
                   />
                   <Button
-                    size="sm"
+                    
                     onClick={(e) => {
                       e.stopPropagation();
                       saveField("nomeReal");
@@ -341,7 +341,7 @@ export function DialogDetalheLead({
                     onClick={(e) => e.stopPropagation()}
                   />
                   <Button
-                    size="sm"
+                    
                     onClick={(e) => {
                       e.stopPropagation();
                       saveField("email");
@@ -373,7 +373,7 @@ export function DialogDetalheLead({
                   Link para o Chat
                 </div>
               {lead?.leadUrl && (
-                <Button variant="outline" size="sm" onClick={openChatwitChat} className="mt-1">
+                <Button variant="outline"  onClick={openChatwitChat} className="mt-1">
                   <MessageSquare className="h-4 w-4 mr-2" />
                   Abrir Chat no Chatwit
                 </Button>
@@ -447,7 +447,7 @@ export function DialogDetalheLead({
                   <div className="mt-2">
                     <Button
                       variant="outline"
-                      size="sm"
+                      
                       className="w-full"
                       onClick={() => setShowDatasRecurso(true)}
                     >
@@ -474,7 +474,7 @@ export function DialogDetalheLead({
                     />
                     <Button
                       variant="secondary"
-                      size="sm"
+                      
                       className="absolute bottom-2 right-2"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -561,7 +561,7 @@ export function DialogDetalheLead({
                       className="mt-1"
                     />
                     <div className="flex justify-end mt-2">
-                      <Button size="sm" onClick={handleSaveAnotacoes} disabled={isSaving}>
+                      <Button  onClick={handleSaveAnotacoes} disabled={isSaving}>
                         {isSaving ? (
                           <>
                             <RefreshCw className="mr-2 h-4 w-4 animate-spin" />

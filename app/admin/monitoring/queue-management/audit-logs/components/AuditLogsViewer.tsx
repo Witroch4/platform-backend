@@ -280,7 +280,7 @@ export default function AuditLogsViewer() {
                 <div className="flex items-center space-x-2">
                   <Button
                     variant="outline"
-                    size="sm"
+                    
                     onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
                     disabled={pagination.page <= 1}
                   >
@@ -292,7 +292,7 @@ export default function AuditLogsViewer() {
                   </span>
                   <Button
                     variant="outline"
-                    size="sm"
+                    
                     onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
                     disabled={pagination.page >= pagination.totalPages}
                   >

@@ -94,9 +94,9 @@ docker ps
 ### Desenvolvimento
 ```powershell
 # Executar comandos dentro do container
-docker exec chatwit_dev npm run dev
-docker exec chatwit_dev npx prisma generate
-docker exec chatwit_dev npx prisma db push
+docker exec chatwit_dev pnpm run dev
+docker exec chatwit_dev pnpm exec prisma generate
+docker exec chatwit_dev pnpm exec prisma db push
 ```
 
 ## Estrutura dos Serviços

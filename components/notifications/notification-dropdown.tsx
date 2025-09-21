@@ -102,7 +102,7 @@ export function NotificationDropdown() {
           {unreadCount > 0 && (
             <Button
               variant="ghost"
-              size="sm"
+              
               className="text-xs h-7"
               onClick={markAllAsRead}
             >

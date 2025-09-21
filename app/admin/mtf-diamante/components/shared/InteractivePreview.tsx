@@ -355,7 +355,7 @@ export function InteractivePreview({
             <div className="flex items-center gap-2">
               <Button
                 variant={configMode ? "default" : "outline"}
-                size="sm"
+                
                 onClick={() => setConfigMode(!configMode)}
                 className="text-xs"
               >

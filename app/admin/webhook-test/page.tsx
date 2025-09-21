@@ -731,7 +731,7 @@ export default function WebhookTestPage() {
             onClick={clearWebhookCache}
             disabled={clearingCache}
             variant="outline"
-            size="sm"
+            
             className="flex items-center gap-2"
           >
             {clearingCache ? (
@@ -833,7 +833,7 @@ export default function WebhookTestPage() {
                   onClick={clearWebhookCache}
                   disabled={clearingCache}
                   variant="outline"
-                  size="sm"
+                  
                   className="flex items-center gap-2"
                 >
                   {clearingCache ? (
@@ -930,7 +930,7 @@ export default function WebhookTestPage() {
                   onClick={startInfiniteTest}
                   disabled={infiniteTestRunning || !infiniteTestMode}
                   variant="destructive"
-                  size="sm"
+                  
                   className="flex items-center gap-2"
                 >
                   {infiniteTestRunning ? (
@@ -945,7 +945,7 @@ export default function WebhookTestPage() {
                   onClick={stopInfiniteTest}
                   disabled={!infiniteTestRunning}
                   variant="outline"
-                  size="sm"
+                  
                   className="flex items-center gap-2"
                 >
                   <XCircle className="h-4 w-4" />
@@ -1006,7 +1006,7 @@ export default function WebhookTestPage() {
                     />
                     <Button
                       variant="ghost"
-                      size="sm"
+                      
                       onClick={() => {
                         setUserMessage("");
                         try {
@@ -1038,7 +1038,7 @@ export default function WebhookTestPage() {
                     />
                     <Button
                       variant="ghost"
-                      size="sm"
+                      
                       onClick={() => {
                         setButtonPayload("");
                         try {
@@ -1168,7 +1168,7 @@ export default function WebhookTestPage() {
                   onClick={() => sendToExternal(createWhatsappTextPayload())}
                   disabled={loading}
                   variant="outline"
-                  size="sm"
+                  
                 >
                   Texto Simples
                 </Button>
@@ -1176,7 +1176,7 @@ export default function WebhookTestPage() {
                   onClick={() => sendToExternal(createWhatsappButtonPayload())}
                   disabled={loading}
                   variant="outline"
-                  size="sm"
+                  
                 >
                   Com Botão
                 </Button>
@@ -1190,7 +1190,7 @@ export default function WebhookTestPage() {
                   onClick={() => sendToExternal(createInstagramTextPayload())}
                   disabled={loading}
                   variant="outline"
-                  size="sm"
+                  
                 >
                   Texto Simples
                 </Button>
@@ -1198,7 +1198,7 @@ export default function WebhookTestPage() {
                   onClick={() => sendToExternal(createInstagramButtonPayload())}
                   disabled={loading}
                   variant="outline"
-                  size="sm"
+                  
                 >
                   Com Botão
                 </Button>
@@ -1206,7 +1206,7 @@ export default function WebhookTestPage() {
                   onClick={() => sendToExternal(createInstagramQuickReplyPayload())}
                   disabled={loading}
                   variant="outline"
-                  size="sm"
+                  
                 >
                   Quick Reply
                 </Button>
@@ -1220,7 +1220,7 @@ export default function WebhookTestPage() {
                   onClick={() => sendToExternal(createFacebookTextPayload())}
                   disabled={loading}
                   variant="outline"
-                  size="sm"
+                  
                 >
                   Texto Simples
                 </Button>
@@ -1228,7 +1228,7 @@ export default function WebhookTestPage() {
                   onClick={() => sendToExternal(createFacebookQuickReplyPayload())}
                   disabled={loading}
                   variant="outline"
-                  size="sm"
+                  
                 >
                   Quick Reply
                 </Button>
@@ -1255,7 +1255,7 @@ export default function WebhookTestPage() {
                 onChange={(e) => setPayloadName(e.target.value)}
                 className="max-w-xs"
               />
-              <Button onClick={savePayload} variant="outline" size="sm">
+              <Button onClick={savePayload} variant="outline" >
                 <Save className="h-4 w-4 mr-2" />
                 Salvar
               </Button>
@@ -1321,14 +1321,14 @@ export default function WebhookTestPage() {
                     <Button
                       onClick={() => loadPayload(payload)}
                       variant="outline"
-                      size="sm"
+                      
                     >
                       Carregar
                     </Button>
                     <Button
                       onClick={() => deletePayload(payload.id)}
                       variant="outline"
-                      size="sm"
+                      
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>

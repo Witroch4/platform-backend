@@ -91,7 +91,7 @@ export default function NotificationsPage() {
           )}
         </div>
         {unreadCount > 0 && (
-          <Button onClick={markAllAsRead} variant="outline" size="sm">
+          <Button onClick={markAllAsRead} variant="outline" >
             <CheckCircle2 className="h-4 w-4 mr-2" />
             Marcar todas como lidas
           </Button>
@@ -136,7 +136,7 @@ export default function NotificationsPage() {
                   {!notification.isRead && (
                     <Button
                       variant="ghost"
-                      size="sm"
+                      
                       onClick={() => markAsRead(notification.id)}
                     >
                       Marcar como lida

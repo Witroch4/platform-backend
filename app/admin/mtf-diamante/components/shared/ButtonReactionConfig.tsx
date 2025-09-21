@@ -109,7 +109,7 @@ export function ButtonReactionConfig({
           </CardTitle>
           <Button
             variant="ghost"
-            size="sm"
+            
             onClick={() => setIsExpanded(!isExpanded)}
           >
             {isExpanded ? 'Recolher' : 'Expandir'}
@@ -133,7 +133,7 @@ export function ButtonReactionConfig({
                 {(reaction.emoji || reaction.textReaction) && (
                   <Button
                     variant="ghost"
-                    size="sm"
+                    
                     onClick={() => removeReaction(reaction.buttonId)}
                     className="text-red-500 hover:text-red-700"
                   >
@@ -146,7 +146,7 @@ export function ButtonReactionConfig({
                 {/* Botão para selecionar emoji */}
                 <Button
                   variant={reaction.emoji ? "default" : "outline"}
-                  size="sm"
+                  
                   onClick={() => setShowEmojiPicker(reaction.buttonId)}
                   className="flex items-center gap-2"
                 >
@@ -174,7 +174,7 @@ export function ButtonReactionConfig({
                   {reaction.textReaction && (
                     <Button
                       variant="ghost"
-                      size="sm"
+                      
                       onClick={() => handleTextReactionChange(reaction.buttonId, '')}
                     >
                       <X size={14} />

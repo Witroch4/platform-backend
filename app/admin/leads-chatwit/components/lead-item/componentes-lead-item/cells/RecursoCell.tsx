@@ -171,7 +171,7 @@ export function RecursoCell({
         {recursoUrl ? (
           <Button
             variant="outline"
-            size="sm"
+            
             onClick={onRecursoClick}
             className="w-full text-xs px-2 py-1 h-auto min-h-8"
             key={`recurso-btn-${refreshKey}`}
@@ -182,7 +182,7 @@ export function RecursoCell({
         ) : aguardandoRecurso ? (
           <Button
             variant="outline"
-            size="sm"
+            
             disabled={true}
             className="w-full text-xs px-2 py-1 h-auto min-h-8"
             key={`recurso-btn-${refreshKey}`}
@@ -193,7 +193,7 @@ export function RecursoCell({
         ) : temRecursoPreliminar ? (
           <Button
             variant="outline"
-            size="sm"
+            
             onClick={onRecursoClick}
             className="w-full text-xs px-2 py-1 h-auto min-h-8"
             key={`recurso-btn-${refreshKey}`}
@@ -204,7 +204,7 @@ export function RecursoCell({
         ) : jaFezRecurso ? (
           <Button
             variant="outline"
-            size="sm"
+            
             disabled={true}
             className="w-full bg-green-50 border-green-200 text-green-700 opacity-80 text-xs px-2 py-1 h-auto min-h-8"
             key={`recurso-btn-${refreshKey}`}
@@ -218,7 +218,7 @@ export function RecursoCell({
               <TooltipTrigger asChild>
                 <Button
                   variant="outline"
-                  size="sm"
+                  
                   disabled={true}
                   className="w-full opacity-60 cursor-not-allowed text-xs px-2 py-1 h-auto min-h-8"
                   key={`recurso-btn-${refreshKey}`}
@@ -238,7 +238,7 @@ export function RecursoCell({
               <TooltipTrigger asChild>
                 <Button
                   variant="outline"
-                  size="sm"
+                  
                   disabled={true}
                   className="w-full opacity-60 cursor-not-allowed text-xs px-2 py-1 h-auto min-h-8"
                   key={`recurso-btn-${refreshKey}`}
@@ -258,7 +258,7 @@ export function RecursoCell({
         ) : (
           <Button
             variant="outline"
-            size="sm"
+            
             onClick={handleRecursoClick}
             disabled={isProcessing || isEnviandoRecurso}
             className="w-full text-xs px-2 py-1 h-auto min-h-8"

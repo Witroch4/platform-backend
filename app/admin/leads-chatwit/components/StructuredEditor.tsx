@@ -69,7 +69,7 @@ const EditableNode: React.FC<EditableNodeProps> = ({ node, onNodeChange, onDelet
             {isQuestion && onDeleteQuestion && (
               <Button
                 variant="ghost"
-                size="sm"
+                
                 onClick={onDeleteQuestion}
                 className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
                 title="Excluir questão completa"
@@ -201,7 +201,7 @@ const EditableNode: React.FC<EditableNodeProps> = ({ node, onNodeChange, onDelet
                         <td className="p-2 text-center">
                           <Button
                             variant="ghost"
-                            size="sm"
+                            
                             onClick={() => {
                               const newNode = produce(node, (draft: any) => {
                                 draft.children.splice(index, 1);
@@ -221,7 +221,7 @@ const EditableNode: React.FC<EditableNodeProps> = ({ node, onNodeChange, onDelet
               <div className="p-3 border-t bg-gray-50 dark:bg-gray-800">
                 <Button
                   variant="outline"
-                  size="sm"
+                  
                   onClick={() => {
                     const newNode = produce(node, (draft: any) => {
                       if (!draft.children) draft.children = [];
@@ -272,7 +272,7 @@ const EditableNode: React.FC<EditableNodeProps> = ({ node, onNodeChange, onDelet
                 </div>
                 <Button
                   variant="ghost"
-                  size="sm"
+                  
                   onClick={() => {
                     const newNode = produce(node, (draft: any) => {
                       draft.children.splice(index, 1);
@@ -287,7 +287,7 @@ const EditableNode: React.FC<EditableNodeProps> = ({ node, onNodeChange, onDelet
             ))}
             <Button
               variant="outline"
-              size="sm"
+              
               onClick={() => {
                 const newNode = produce(node, (draft: any) => {
                   if (!draft.children) draft.children = [];

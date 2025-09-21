@@ -54,7 +54,7 @@ export default function MinioTestPage() {
       <h1 className="text-3xl font-bold mb-6">Teste de Imagens do MinIO</h1>
 
       <Tabs defaultValue="upload">
-        <TabsList variant="line" className="mb-4">
+        <TabsList  className="mb-4">
           <TabsTrigger value="upload">Upload de Arquivos</TabsTrigger>
           <TabsTrigger value="test">Testar URLs</TabsTrigger>
           <TabsTrigger value="gallery">Galeria</TabsTrigger>
@@ -129,7 +129,7 @@ export default function MinioTestPage() {
                         <p className="font-medium truncate">{file.original_name || file.name}</p>
                         <div className="flex gap-2 mt-2">
                           <Button
-                            size="sm"
+                            
                             variant="outline"
                             onClick={() => window.open(file.url, '_blank')}
                           >
@@ -137,7 +137,7 @@ export default function MinioTestPage() {
                           </Button>
                           {file.thumbnail_url && (
                             <Button
-                              size="sm"
+                              
                               variant="outline"
                               onClick={() => window.open(file.thumbnail_url, '_blank')}
                             >

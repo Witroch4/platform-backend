@@ -692,7 +692,7 @@ export function UnifiedLeadDetail({ leadId, onUpdate, onDelete }: UnifiedLeadDet
                                 </div>
                                 <Button
                                   variant="outline"
-                                  size="sm"
+                                  
                                   onClick={() => window.open(arquivo.dataUrl, '_blank')}
                                 >
                                   <Eye className="h-4 w-4" />

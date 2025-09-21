@@ -221,7 +221,7 @@ export { DuplicateMessageCleaner };
 if (require.main === module) {
   console.log('🧹 Script de limpeza de mensagens duplicadas');
   console.log('\nUso:');
-  console.log('  npm run ts-node scripts/clear-duplicate-messages.ts');
+  console.log('  pnpm exec ts-node scripts/clear-duplicate-messages.ts');
   console.log('\nOu importe as funções em outro script:');
   console.log('  import { clearDuplicatesForSession, showDuplicateStats } from "./scripts/clear-duplicate-messages";');
   console.log('\nPara o caso específico do seu log:');

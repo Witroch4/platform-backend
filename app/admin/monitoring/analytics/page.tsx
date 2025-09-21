@@ -236,7 +236,7 @@ export default function AnalyticsPage() {
             </SelectContent>
           </Select>
           
-          <Button onClick={fetchMetrics} variant="outline" size="sm">
+          <Button onClick={fetchMetrics} variant="outline" >
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
@@ -419,7 +419,7 @@ export default function AnalyticsPage() {
                   <Button 
                     onClick={() => handleExport('csv')} 
                     variant="outline" 
-                    size="sm" 
+                     
                     className="w-full"
                   >
                     <Download className="h-4 w-4 mr-2" />
@@ -428,7 +428,7 @@ export default function AnalyticsPage() {
                   <Button 
                     onClick={() => handleExport('json')} 
                     variant="outline" 
-                    size="sm" 
+                     
                     className="w-full"
                   >
                     <Download className="h-4 w-4 mr-2" />
@@ -437,7 +437,7 @@ export default function AnalyticsPage() {
                   <Button 
                     onClick={fetchMetrics} 
                     variant="outline" 
-                    size="sm" 
+                     
                     className="w-full"
                   >
                     <RefreshCw className="h-4 w-4 mr-2" />

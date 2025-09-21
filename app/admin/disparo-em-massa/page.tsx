@@ -385,7 +385,7 @@ export default function DisparoEmMassaPage() {
                     <h3 className="text-lg font-medium">Contatos Carregados ({contacts.length})</h3>
                     <Button 
                       variant="ghost" 
-                      size="sm" 
+                       
                       onClick={() => setShowAllContacts(!showAllContacts)}
                     >
                       {showAllContacts ? "Mostrar menos" : "Ver todos"}

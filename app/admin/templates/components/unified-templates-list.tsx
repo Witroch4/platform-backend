@@ -349,7 +349,7 @@ export function UnifiedTemplatesList({
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            size="sm"
+            
             onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
             disabled={!pagination.hasPrevPage || isLoading}
           >
@@ -360,7 +360,7 @@ export function UnifiedTemplatesList({
           </span>
           <Button
             variant="outline"
-            size="sm"
+            
             onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
             disabled={!pagination.hasNextPage || isLoading}
           >

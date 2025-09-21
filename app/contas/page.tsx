@@ -108,7 +108,7 @@ export default function ContasPage() {
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            size="sm"
+            
             onClick={handleRefresh}
             disabled={isRefreshing}
           >
@@ -116,7 +116,7 @@ export default function ContasPage() {
             Atualizar
           </Button>
           <Link href="/registro/redesocial">
-            <Button variant="default" size="sm">
+            <Button variant="default" >
               <Plus className="h-4 w-4 mr-2" />
               Adicionar Conta
             </Button>

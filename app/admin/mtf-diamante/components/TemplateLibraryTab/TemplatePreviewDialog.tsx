@@ -205,7 +205,7 @@ export function TemplatePreviewDialog({ template, open, onOpenChange }: Template
                         <Button
                           key={index}
                           variant="outline"
-                          size="sm"
+                          
                           className="w-full text-blue-600 border-blue-200 hover:bg-blue-50"
                         >
                           {processText(button.text)}

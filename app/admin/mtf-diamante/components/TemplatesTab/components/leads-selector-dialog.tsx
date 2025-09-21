@@ -401,7 +401,7 @@ export function LeadsSelectorDialog({
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
-                    size="sm"
+                    
                     className="h-8 text-xs"
                   >
                     <Calendar className="mr-2 h-3 w-3" />
@@ -425,7 +425,7 @@ export function LeadsSelectorDialog({
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
-                    size="sm"
+                    
                     className="h-8 text-xs"
                   >
                     <Calendar className="mr-2 h-3 w-3" />
@@ -447,7 +447,7 @@ export function LeadsSelectorDialog({
               {/* Botão Este Mês */}
               <Button
                 variant={showThisMonth ? "default" : "outline"}
-                size="sm"
+                
                 onClick={handleThisMonth}
                 className="h-8 text-xs"
               >
@@ -459,7 +459,7 @@ export function LeadsSelectorDialog({
               {(dateFrom || dateTo) && (
                 <Button
                   variant="ghost"
-                  size="sm"
+                  
                   onClick={clearDateFilters}
                   className="h-8 text-xs text-muted-foreground hover:text-foreground"
                 >
@@ -608,7 +608,7 @@ export function LeadsSelectorDialog({
               <div className="flex gap-2">
                 <Button
                   variant="outline"
-                  size="sm"
+                  
                   disabled={pagination.page === 1 || isLoading}
                   onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
                 >
@@ -616,7 +616,7 @@ export function LeadsSelectorDialog({
                 </Button>
                 <Button
                   variant="outline"
-                  size="sm"
+                  
                   disabled={pagination.page >= leadsStats.totalPages || isLoading}
                   onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
                 >

@@ -679,11 +679,11 @@ Você é um assistente técnico conciso...`}
                   {JSON.stringify(requestBody, null, 2)}
                 </pre>
                 <div className="mt-2 flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => copy("Payload", requestBody)}>
+                  <Button  variant="outline" onClick={() => copy("Payload", requestBody)}>
                     Copiar
                   </Button>
                   <Button
-                    size="sm"
+                    
                     variant="outline"
                     onClick={() => {
                       const a = document.createElement("a");
@@ -697,10 +697,10 @@ Você é um assistente técnico conciso...`}
                   >
                     Baixar JSON
                   </Button>
-                  <Button size="sm" variant="outline" onClick={copyMarkdown}>
+                  <Button  variant="outline" onClick={copyMarkdown}>
                     Copiar tudo em Markdown
                   </Button>
-                  <Button size="sm" variant="outline" onClick={downloadMarkdown}>
+                  <Button  variant="outline" onClick={downloadMarkdown}>
                     Baixar Markdown
                   </Button>
                 </div>
@@ -718,11 +718,11 @@ Você é um assistente técnico conciso...`}
                   {JSON.stringify(result ?? { info: "sem resposta ainda" }, null, 2)}
                 </pre>
                 <div className="mt-2 flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => copy("Resposta", result)}>
+                  <Button  variant="outline" onClick={() => copy("Resposta", result)}>
                     Copiar
                   </Button>
                   <Button
-                    size="sm"
+                    
                     variant="outline"
                     onClick={() =>
                       downloadJSON("response.json", result ?? { info: "sem resposta ainda" })
@@ -834,10 +834,10 @@ Você é um assistente técnico conciso...`}
                 )}
 
                 <div className="mt-2 flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => copy("OpenAI Request", openaiDbg.request ?? {})}>
+                  <Button  variant="outline" onClick={() => copy("OpenAI Request", openaiDbg.request ?? {})}>
                     Copiar Request
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => copy("OpenAI Meta", openaiDbg.response_meta ?? {})}>
+                  <Button  variant="outline" onClick={() => copy("OpenAI Meta", openaiDbg.response_meta ?? {})}>
                     Copiar Meta
                   </Button>
                 </div>

@@ -13,7 +13,7 @@ export default function SaibaMaisCapitaoPage() {
       {/* Header */}
       <div className="flex items-center gap-4">
         <Link href="/admin/capitao">
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Voltar
           </Button>

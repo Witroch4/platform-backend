@@ -28,17 +28,17 @@ O seed cadastra automaticamente dois usuários administradores com emails verifi
 ## Como Executar o Seed
 
 ### Método 1: Durante o DB Push
-Quando você executa o comando `npm run db:push`, o seed é executado automaticamente.
+Quando você executa o comando `pnpm run db:push`, o seed é executado automaticamente.
 
 ```bash
-npm run db:push
+pnpm run db:push
 ```
 
 ### Método 2: Seed Independente
 Você também pode executar o seed independentemente:
 
 ```bash
-npm run db:seed
+pnpm run db:seed
 ```
 
 ### Método 3: Usando Scripts

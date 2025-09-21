@@ -1,6 +1,10 @@
 import { Server as HTTPServer } from 'http';
-import { Server as SocketIOServer, Socket } from 'socket.io';
+// import { Server as SocketIOServer, Socket } from 'socket.io';
 import { Alert } from '@/types/queue-management';
+
+// Temporary types to allow compilation without socket.io
+type SocketIOServer = any;
+type Socket = any;
 
 export interface WebSocketMessage {
   type: 'alert' | 'queue_update' | 'system_update';
@@ -39,6 +43,12 @@ class WebSocketManager {
   private userSubscriptions = new Map<string, Set<string>>(); // userId -> Set of queueNames
 
   initialize(server: HTTPServer) {
+    // TODO: Reinstall socket.io package to enable WebSocket functionality
+    console.log('[WebSocketManager] WebSocket functionality temporarily disabled');
+    return; // Exit early to avoid socket.io code
+
+    // The rest of this method is commented out until socket.io is installed
+    /*
     this.io = new SocketIOServer(server, {
       cors: {
         origin: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
@@ -139,6 +149,7 @@ class WebSocketManager {
     });
 
     console.log('[WebSocket] Server initialized');
+    */
   }
 
   // Broadcast alert to all subscribed clients

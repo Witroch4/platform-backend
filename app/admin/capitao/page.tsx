@@ -311,7 +311,7 @@ export default function CaptainAssistantsPage() {
           <div className="flex gap-2">
             <Button 
               variant="outline" 
-              size="sm"
+              
               onClick={() => setShowExportDialog(true)}
             >
               <Download className="w-4 h-4 mr-2" />
@@ -319,7 +319,7 @@ export default function CaptainAssistantsPage() {
             </Button>
             <Button 
               variant="outline" 
-              size="sm"
+              
               onClick={() => setShowImportDialog(true)}
             >
               <Upload className="w-4 h-4 mr-2" />
@@ -327,7 +327,7 @@ export default function CaptainAssistantsPage() {
             </Button>
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild>
-                <Button size="sm"><Plus className="w-4 h-4 mr-2" /> Criar um novo assistente</Button>
+                <Button ><Plus className="w-4 h-4 mr-2" /> Criar um novo assistente</Button>
               </DialogTrigger>
           <DialogContent className="sm:max-w-2xl w-[96vw] max-h-[85vh]">
             <DialogHeader>
@@ -389,7 +389,7 @@ export default function CaptainAssistantsPage() {
               Crie um assistente para responder seus clientes automaticamente. Ele pode aprender com seus documentos
               e conversas anteriores, e transferir para um atendente quando necessário.
             </p>
-            <Button onClick={() => setOpen(true)} size="sm"><Plus className="w-4 h-4 mr-2" /> Criar um novo assistente</Button>
+            <Button onClick={() => setOpen(true)} ><Plus className="w-4 h-4 mr-2" /> Criar um novo assistente</Button>
           </div>
         ) : (
           assistants.map((a) => (

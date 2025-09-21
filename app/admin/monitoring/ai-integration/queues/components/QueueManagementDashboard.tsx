@@ -158,7 +158,7 @@ export default function QueueManagementDashboard() {
                     <div className="flex items-center gap-2">
                       <Button
                         variant="outline"
-                        size="sm"
+                        
                         onClick={() => setSelectedQueue(queue.name)}
                         className="flex items-center gap-1"
                       >
@@ -168,7 +168,7 @@ export default function QueueManagementDashboard() {
                       {queue.isPaused ? (
                         <Button
                           variant="outline"
-                          size="sm"
+                          
                           onClick={() => handleQueueAction(queue.name, "resume")}
                           className="flex items-center gap-1 text-green-600"
                         >
@@ -178,7 +178,7 @@ export default function QueueManagementDashboard() {
                       ) : (
                         <Button
                           variant="outline"
-                          size="sm"
+                          
                           onClick={() => handleQueueAction(queue.name, "pause")}
                           className="flex items-center gap-1 text-yellow-600"
                         >
@@ -188,7 +188,7 @@ export default function QueueManagementDashboard() {
                       )}
                       <Button
                         variant="outline"
-                        size="sm"
+                        
                         onClick={() => handleQueueAction(queue.name, "clean")}
                         className="flex items-center gap-1 text-red-600"
                       >

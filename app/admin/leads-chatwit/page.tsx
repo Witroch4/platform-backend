@@ -344,7 +344,7 @@ export default function LeadsChatwitPage() {
         <div className="flex items-center gap-2">
           <Button 
             variant={showDashboard ? "default" : "outline"} 
-            size="sm"
+            
             onClick={toggleDashboard}
             className={showDashboard ? "" : "border-border hover:bg-accent"}
           >
@@ -354,7 +354,7 @@ export default function LeadsChatwitPage() {
           
           <Button 
             variant="outline" 
-            size="sm"
+            
             onClick={() => setShowEspelhosPadraoDrawer(true)}
             className="border-border hover:bg-accent"
           >
@@ -364,7 +364,7 @@ export default function LeadsChatwitPage() {
           
           <Button 
             variant="outline" 
-            size="sm"
+            
             onClick={() => setShowModeloRecursoDrawer(true)}
             className="border-border hover:bg-accent"
           >
@@ -385,7 +385,7 @@ export default function LeadsChatwitPage() {
           {searchQuery && (
             <Button
               variant="ghost"
-              size="sm"
+              
               className="absolute right-0 top-0 h-full px-3 hover:bg-accent"
               onClick={() => setSearchQuery("")}
             >

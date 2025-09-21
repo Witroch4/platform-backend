@@ -47,7 +47,7 @@ export function BatchProcessorTrigger({ selectedLeads, onUpdate }: BatchProcesso
           disabled={selectedLeads.length === 0}
           onClick={handleClick}
           variant="secondary"
-          size="sm"
+          
           className="flex items-center gap-2"
         >
           <Bot className="mr-2 h-4 w-4" />
@@ -58,7 +58,7 @@ export function BatchProcessorTrigger({ selectedLeads, onUpdate }: BatchProcesso
           <Button
             onClick={batchProcessor.continueProcess}
             variant="default"
-            size="sm"
+            
             className="flex items-center gap-2 animate-pulse"
           >
             <PlayCircle className="mr-2 h-4 w-4" />

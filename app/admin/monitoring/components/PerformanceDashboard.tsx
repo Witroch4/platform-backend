@@ -201,7 +201,7 @@ export function PerformanceDashboard({
           
           <Button
             variant="outline"
-            size="sm"
+            
             onClick={handleRefresh}
             disabled={refreshing}
           >

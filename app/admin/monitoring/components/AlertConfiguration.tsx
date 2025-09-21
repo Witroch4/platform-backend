@@ -458,7 +458,7 @@ export function AlertConfiguration({
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h4 className="font-medium">Notification Channels</h4>
-          <Button variant="outline" size="sm" onClick={handleAddChannel}>
+          <Button variant="outline"  onClick={handleAddChannel}>
             <Plus className="h-4 w-4 mr-2" />
             Add Channel
           </Button>
@@ -485,7 +485,7 @@ export function AlertConfiguration({
               
               <Button
                 variant="outline"
-                size="sm"
+                
                 onClick={() => handleRemoveChannel(index)}
               >
                 <Trash2 className="h-4 w-4" />
@@ -588,14 +588,14 @@ export function AlertConfiguration({
                 <div className="flex space-x-2">
                   <Button
                     variant="outline"
-                    size="sm"
+                    
                     onClick={() => onTestRule(rule)}
                   >
                     Test
                   </Button>
                   <Button
                     variant="outline"
-                    size="sm"
+                    
                     onClick={() => handleEditRule(rule)}
                   >
                     <Edit className="h-4 w-4 mr-1" />
@@ -603,7 +603,7 @@ export function AlertConfiguration({
                   </Button>
                   <Button
                     variant="outline"
-                    size="sm"
+                    
                     onClick={() => onDeleteRule(rule.id!)}
                   >
                     <Trash2 className="h-4 w-4 mr-1" />

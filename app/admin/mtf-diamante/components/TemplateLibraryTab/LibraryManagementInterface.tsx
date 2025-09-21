@@ -152,7 +152,7 @@ export const LibraryManagementInterface: React.FC<LibraryManagementInterfaceProp
       </Card>
 
       <Tabs defaultValue="global" className="space-y-4">
-        <TabsList variant="line">
+        <TabsList >
           <TabsTrigger value="global">
             <Globe className="h-4 w-4 mr-2" />
             Templates Globais ({globalTemplates.length})

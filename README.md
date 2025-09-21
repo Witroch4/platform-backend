@@ -285,17 +285,17 @@ git clone https://github.com/Witroch4/ChatWit-Social.git
 cd ChatWit-Social
 
 # Instale as dependências
-npm install
+pnpm install
 
 # Configure as variáveis de ambiente
 cp .env.example .env.local
 # Edite .env.local com suas configurações
 
 # Execute as migrações do banco
-npx prisma migrate dev
+pnpm exec prisma migrate dev
 
 # Inicie o servidor de desenvolvimento
-npm run dev
+pnpm run dev
 ```
 
 ### **Configuração com Docker**
@@ -353,18 +353,18 @@ WEBHOOK_SECRET="seu-webhook-secret"
 ### **Scripts Disponíveis**
 ```bash
 # Desenvolvimento
-npm run dev          # Inicia servidor de desenvolvimento
-npm run build        # Build para produção
-npm run start        # Inicia servidor de produção
+pnpm run dev          # Inicia servidor de desenvolvimento
+pnpm run build        # Build para produção
+pnpm run start        # Inicia servidor de produção
 
 # Banco de dados
-npm run db:migrate   # Executa migrações
-npm run db:seed      # Popula dados iniciais
-npm run db:studio    # Abre Prisma Studio
+pnpm run db:migrate   # Executa migrações
+pnpm run db:seed      # Popula dados iniciais
+pnpm run db:studio    # Abre Prisma Studio
 
 # Qualidade de código
-npm run lint         # Verifica linting
-npm run type-check   # Verifica tipos TypeScript
+pnpm run lint         # Verifica linting
+pnpm run type-check   # Verifica tipos TypeScript
 ```
 
 ### **Estrutura do Projeto**

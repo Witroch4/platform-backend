@@ -67,7 +67,7 @@ export const ButtonConfig: React.FC<ButtonConfigProps> = ({ message, updateActio
           <Label>Botões {(message.action && isButtonAction(message.action) ? message.action.buttons.length : 0)}/3</Label>
           <Button
             variant="outline"
-            size="sm"
+            
             onClick={addButton}
             disabled={!(message.action && isButtonAction(message.action) && message.action.buttons.length < 3)}
           >
@@ -82,7 +82,7 @@ export const ButtonConfig: React.FC<ButtonConfigProps> = ({ message, updateActio
               <Badge variant="outline">Botão {index + 1}</Badge>
               <Button
                 variant="ghost"
-                size="sm"
+                
                 onClick={() => removeButton(index)}
               >
                 <Trash2 className="h-4 w-4" />

@@ -346,7 +346,7 @@ export function AnalisePreviewDrawer({
                       </div>
                       <Button 
                         variant="outline" 
-                        size="sm" 
+                         
                         onClick={addPontoPeca} 
                         className="mt-0"
                       >
@@ -432,7 +432,7 @@ export function AnalisePreviewDrawer({
                       </div>
                       <Button 
                         variant="outline" 
-                        size="sm" 
+                         
                         onClick={addPontoQuestao} 
                         className="mt-0"
                       >
@@ -550,7 +550,7 @@ export function AnalisePreviewDrawer({
                       </div>
                       <Button 
                         variant="outline" 
-                        size="sm" 
+                         
                         onClick={addArgumentacao} 
                         className="mt-0"
                       >

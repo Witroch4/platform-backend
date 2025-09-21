@@ -134,7 +134,7 @@ export function ApprovalRequestsTable({ requests, loading, onProcessRequest }: A
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
-                        size="sm"
+                        
                         onClick={() => setSelectedRequest(request)}
                       >
                         <Eye className="h-4 w-4 mr-1" />
@@ -144,7 +144,7 @@ export function ApprovalRequestsTable({ requests, loading, onProcessRequest }: A
                         <>
                           <Button
                             variant="outline"
-                            size="sm"
+                            
                             onClick={() => openProcessDialog(request, 'approved')}
                             className="text-green-600 border-green-200 hover:bg-green-50"
                           >
@@ -153,7 +153,7 @@ export function ApprovalRequestsTable({ requests, loading, onProcessRequest }: A
                           </Button>
                           <Button
                             variant="outline"
-                            size="sm"
+                            
                             onClick={() => openProcessDialog(request, 'rejected')}
                             className="text-red-600 border-red-200 hover:bg-red-50"
                           >

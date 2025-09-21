@@ -173,7 +173,7 @@ export function UsuariosList({
           <div className="flex gap-2">
             <Button
               variant="outline"
-              size="sm"
+              
               disabled={pagination.page === 1 || isLoading}
               onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
               className="border-border hover:bg-accent"
@@ -182,7 +182,7 @@ export function UsuariosList({
             </Button>
             <Button
               variant="outline"
-              size="sm"
+              
               disabled={pagination.page === pagination.totalPages || isLoading}
               onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
               className="border-border hover:bg-accent"

@@ -383,7 +383,7 @@ export function AppAdminDashboard() {
                               <div className="rounded-md border p-3 bg-muted">
                                 <div className="flex items-center justify-between">
                                   <div className="text-sm font-medium">Nova chave (copie agora, será exibida apenas uma vez):</div>
-                                  <Button size="sm" variant="secondary" onClick={copyNewToken}>
+                                  <Button  variant="secondary" onClick={copyNewToken}>
                                     <Copy className="mr-1 h-3 w-3" /> {copied ? 'Copiado' : 'Copiar'}
                                   </Button>
                                 </div>
@@ -409,7 +409,7 @@ export function AppAdminDashboard() {
                                     </div>
                                     <div className="flex items-center gap-2">
                                       {(k.active ?? k.isActive) && k.id && (
-                                        <Button variant="destructive" size="sm" onClick={() => revokeApiKey(k.id!)}>Revogar</Button>
+                                        <Button variant="destructive"  onClick={() => revokeApiKey(k.id!)}>Revogar</Button>
                                       )}
                                     </div>
                                   </div>

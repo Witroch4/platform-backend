@@ -82,7 +82,7 @@ export default function CaptainDocumentsPage() {
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button size="sm"><Plus className="w-4 h-4 mr-2" /> Criar um novo documento</Button>
+            <Button ><Plus className="w-4 h-4 mr-2" /> Criar um novo documento</Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-2xl w-[96vw] max-h-[85vh]">
             <DialogHeader>
@@ -134,7 +134,7 @@ export default function CaptainDocumentsPage() {
           <div className="text-center py-16 border rounded-md">
             <p className="mb-4 text-lg font-medium">Nenhum documento disponível</p>
             <p className="text-sm text-muted-foreground mb-6">Os documentos são usados pelo seu assistente para gerar respostas.</p>
-            <Button onClick={() => setOpen(true)} size="sm"><Plus className="w-4 h-4 mr-2" /> Criar um novo documento</Button>
+            <Button onClick={() => setOpen(true)} ><Plus className="w-4 h-4 mr-2" /> Criar um novo documento</Button>
           </div>
         ) : (
           documents.map((d) => (

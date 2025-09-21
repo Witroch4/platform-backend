@@ -366,7 +366,7 @@ export default function PostSelection({
                 <DialogTrigger asChild>
                   <Button
                     variant="outline"
-                    size="sm"
+                    
                     className="mt-2"
                     disabled={disabled}
                   >

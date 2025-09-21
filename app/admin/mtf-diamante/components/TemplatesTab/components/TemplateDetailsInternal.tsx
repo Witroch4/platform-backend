@@ -840,7 +840,7 @@ export default function TemplateDetailsInternal({
                 <span>{template.name}</span>
                 <Button
                   variant="destructive"
-                  size="sm"
+                  
                   onClick={() => setShowDeleteDialog(true)}
                   disabled={isDeleting}
                 >

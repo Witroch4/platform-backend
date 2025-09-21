@@ -198,7 +198,7 @@ export function ButtonEmojiMapper({
               {(reaction.emoji || reaction.textReaction) && (
                 <Button
                   variant="ghost"
-                  size="sm"
+                  
                   onClick={() => removeReaction(reaction.buttonId)}
                   className="text-red-500 hover:text-red-700"
                 >
@@ -214,7 +214,7 @@ export function ButtonEmojiMapper({
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
-                    size="sm"
+                    
                     onClick={() => setShowEmojiPicker(reaction.buttonId)}
                     className="min-w-[100px] justify-start"
                   >

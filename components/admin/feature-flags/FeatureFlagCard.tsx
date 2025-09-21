@@ -144,7 +144,7 @@ export function FeatureFlagCard({
             {flag.userSpecific && onUserOverrides && (
               <Button
                 variant="outline"
-                size="sm"
+                
                 onClick={() => onUserOverrides(flag.id)}
                 className="flex items-center gap-1"
               >
@@ -156,7 +156,7 @@ export function FeatureFlagCard({
             {onMetrics && (
               <Button
                 variant="outline"
-                size="sm"
+                
                 onClick={() => onMetrics(flag.id)}
                 className="flex items-center gap-1"
               >
@@ -170,7 +170,7 @@ export function FeatureFlagCard({
             {!flag.systemCritical && onDelete && (
               <Button
                 variant="outline"
-                size="sm"
+                
                 onClick={handleDelete}
                 className="flex items-center gap-1 text-destructive hover:text-destructive"
               >

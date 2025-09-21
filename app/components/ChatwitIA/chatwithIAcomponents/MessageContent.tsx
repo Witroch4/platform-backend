@@ -214,7 +214,7 @@ const ImagePreview: React.FC<{
               <DialogTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="sm"
+                  
                   onClick={handleDialogOpen}
                   className="h-6 px-2 text-xs hover:bg-slate-200 dark:hover:bg-slate-600"
                 >
@@ -254,7 +254,7 @@ const ImagePreview: React.FC<{
                   <div className="flex gap-3 justify-center flex-wrap">
                     <Button
                       variant="outline"
-                      size="sm"
+                      
                       onClick={async () => {
                         try {
                           // 🔧 BUSCAR URL REAL DO STORAGE usando nova API
@@ -299,7 +299,7 @@ const ImagePreview: React.FC<{
                     
                     <Button
                       variant="outline"
-                      size="sm"
+                      
                       onClick={async () => {
                         try {
                           const response = await fetch(getFullImageUrl());
@@ -322,7 +322,7 @@ const ImagePreview: React.FC<{
                     
                     {onImageReference && (
                       <Button
-                        size="sm"
+                        
                         onClick={() => {
                           handleReference();
                           setIsExpanded(false);
@@ -342,7 +342,7 @@ const ImagePreview: React.FC<{
                 <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
-                    size="sm"
+                    
                     onClick={handleReference}
                     className="h-6 px-2 text-xs hover:bg-slate-200 dark:hover:bg-slate-600"
                   >
@@ -532,7 +532,7 @@ const GeneratedImage: React.FC<{
                 <DialogTrigger asChild>
                   <Button
                     variant="secondary"
-                    size="sm"
+                    
                     onClick={(e) => {
                       e.stopPropagation();
                       setIsExpanded(true);
@@ -567,7 +567,7 @@ const GeneratedImage: React.FC<{
                     <div className="flex gap-3 justify-center flex-wrap">
                       <Button
                         variant="outline"
-                        size="sm"
+                        
                         onClick={async () => {
                           try {
                             // 🔧 BUSCAR URL REAL DO STORAGE usando nova API
@@ -612,7 +612,7 @@ const GeneratedImage: React.FC<{
                       
                       <Button
                         variant="outline"
-                        size="sm"
+                        
                         onClick={handleDownload}
                       >
                         <Download className="w-4 h-4 mr-2" />
@@ -621,7 +621,7 @@ const GeneratedImage: React.FC<{
                       
                       {onReference && (
                         <Button
-                          size="sm"
+                          
                           onClick={() => {
                             handleReference();
                             setIsExpanded(false);
@@ -647,7 +647,7 @@ const GeneratedImage: React.FC<{
                 <TooltipTrigger asChild>
                   <Button
                     variant="secondary"
-                    size="sm"
+                    
                     onClick={(e) => {
                       e.stopPropagation();
                       handleDownload();
@@ -665,7 +665,7 @@ const GeneratedImage: React.FC<{
                   <TooltipTrigger asChild>
                     <Button
                       variant="secondary"
-                      size="sm"
+                      
                       onClick={(e) => {
                         e.stopPropagation();
                         handleReference();

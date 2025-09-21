@@ -315,7 +315,7 @@ export default function DLQManager() {
                     <div className="flex items-center gap-2">
                       <Button
                         variant="outline"
-                        size="sm"
+                        
                         onClick={() => setSelectedJob(job)}
                         className="flex items-center gap-1"
                       >
@@ -384,7 +384,7 @@ export default function DLQManager() {
           <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Failed Job Details: {selectedJob.jobName}</CardTitle>
-              <Button variant="ghost" size="sm" onClick={() => setSelectedJob(null)}>
+              <Button variant="ghost"  onClick={() => setSelectedJob(null)}>
                 ×
               </Button>
             </CardHeader>

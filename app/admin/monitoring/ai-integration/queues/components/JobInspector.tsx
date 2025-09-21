@@ -230,7 +230,7 @@ export default function JobInspector({ selectedQueue }: JobInspectorProps) {
                   <div className="flex items-center gap-2">
                     <Button
                       variant="outline"
-                      size="sm"
+                      
                       onClick={() => setSelectedJob(job)}
                       className="flex items-center gap-1"
                     >
@@ -240,7 +240,7 @@ export default function JobInspector({ selectedQueue }: JobInspectorProps) {
                     {job.status === "failed" && (
                       <Button
                         variant="outline"
-                        size="sm"
+                        
                         onClick={() => handleJobAction(job.id, "retry")}
                         className="flex items-center gap-1 text-blue-600"
                       >
@@ -250,7 +250,7 @@ export default function JobInspector({ selectedQueue }: JobInspectorProps) {
                     )}
                     <Button
                       variant="outline"
-                      size="sm"
+                      
                       onClick={() => handleJobAction(job.id, "remove")}
                       className="flex items-center gap-1 text-red-600"
                     >
@@ -300,7 +300,7 @@ export default function JobInspector({ selectedQueue }: JobInspectorProps) {
           <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Job Details: {selectedJob.name}</CardTitle>
-              <Button variant="ghost" size="sm" onClick={() => setSelectedJob(null)}>
+              <Button variant="ghost"  onClick={() => setSelectedJob(null)}>
                 ×
               </Button>
             </CardHeader>

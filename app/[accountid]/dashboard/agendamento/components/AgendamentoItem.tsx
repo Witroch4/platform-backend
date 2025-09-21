@@ -120,12 +120,12 @@ const AgendamentoItem: React.FC<AgendamentoItemProps> = ({ agendamento, onExclui
         </div>
 
         <div className="flex space-x-2">
-          <Button variant="outline" size="sm" onClick={() => setIsEditOpen(true)} className="border-border hover:bg-accent">
+          <Button variant="outline"  onClick={() => setIsEditOpen(true)} className="border-border hover:bg-accent">
             Editar
           </Button>
           <Button
             variant="destructive"
-            size="sm"
+            
             onClick={handleExcluir}
             disabled={isDeleting}
           >

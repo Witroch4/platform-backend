@@ -290,7 +290,7 @@ export function TurboModeNotificationSystem({
         {onViewDetails && (
           <Button
             variant="outline"
-            size="sm"
+            
             onClick={() => setShowDetails(!showDetails)}
           >
             {showDetails ? 'Ocultar' : 'Ver'} Detalhes
@@ -346,7 +346,7 @@ export function TurboModeNotificationSystem({
                   <div className="mt-3">
                     <Button
                       variant="outline"
-                      size="sm"
+                      
                       onClick={notification.onAction}
                     >
                       {notification.actionLabel || 'Ação'}
@@ -391,12 +391,12 @@ export function TurboModeNotificationSystem({
       {(onRetry || onCancel) && (
         <div className="flex space-x-2 pt-2 border-t">
           {onRetry && (
-            <Button variant="outline" size="sm" onClick={onRetry}>
+            <Button variant="outline"  onClick={onRetry}>
               Tentar Novamente
             </Button>
           )}
           {onCancel && (
-            <Button variant="outline" size="sm" onClick={onCancel}>
+            <Button variant="outline"  onClick={onCancel}>
               Cancelar Processamento
             </Button>
           )}

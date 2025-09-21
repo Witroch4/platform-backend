@@ -97,7 +97,7 @@ export function QueueDetails({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
-          <Button variant="outline" size="sm" onClick={onBack}>
+          <Button variant="outline"  onClick={onBack}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back
           </Button>
@@ -119,7 +119,7 @@ export function QueueDetails({
         <div className="flex items-center space-x-2">
           <Button
             variant="outline"
-            size="sm"
+            
             onClick={onToggleRealTime}
             className={realTimeUpdates ? 'bg-green-50 border-green-200' : ''}
           >
@@ -128,14 +128,14 @@ export function QueueDetails({
           </Button>
           <Button
             variant="outline"
-            size="sm"
+            
             onClick={handleRefresh}
             disabled={refreshing}
           >
             <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" >
             <Settings className="h-4 w-4 mr-2" />
             Settings
           </Button>

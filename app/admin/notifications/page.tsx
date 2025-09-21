@@ -324,7 +324,7 @@ const AdminNotificationsPage = () => {
           <h1 className="text-3xl font-bold text-foreground">Painel de Notificações</h1>
           <Button
             variant="outline"
-            size="sm"
+            
             onClick={activeTab === 'list' ? fetchAllNotifications : fetchUsers}
             disabled={refreshing || loadingNotifications}
             className="border-border hover:bg-accent"

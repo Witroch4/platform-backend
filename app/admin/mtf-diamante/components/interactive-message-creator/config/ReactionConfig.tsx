@@ -64,7 +64,7 @@ export const ReactionConfig: React.FC<ReactionConfigProps> = ({ message, updateM
               <Button
                 key={emoji}
                 variant={reaction.emoji === emoji ? "default" : "outline"}
-                size="sm"
+                
                 onClick={() =>
                   updateMessage({
                     action: {

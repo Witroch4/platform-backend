@@ -39,7 +39,7 @@ export function ProvaCell({
       >
         <Button
           variant="outline"
-          size="sm"
+          
           onClick={onDigitarClick}
           disabled={isDigitando}
           className="w-full text-xs px-2 py-1 h-auto min-h-8"

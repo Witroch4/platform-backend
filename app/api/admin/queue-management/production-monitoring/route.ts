@@ -102,10 +102,12 @@ export async function GET(request: NextRequest) {
       case 'status':
       default:
         const monitoringStatus = monitor.getMonitoringStatus();
+        const systemMetrics = monitoringStatus.systemMetrics ?? monitor.getLastSystemMetrics();
         return NextResponse.json({
           success: true,
           data: {
             monitoring: monitoringStatus,
+            systemMetrics,
             alerts: {
               active: monitor.getActiveAlerts().length,
               critical: monitor.getActiveAlerts().filter(a => a.severity === 'CRITICAL').length,

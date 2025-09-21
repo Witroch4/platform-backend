@@ -139,7 +139,7 @@ export const VariableContextMenu: React.FC<VariableContextMenuProps> = ({
             </CardTitle>
             <Button
               variant="ghost"
-              size="sm"
+              
               onClick={onClose}
               className="h-6 w-6 p-0"
             >
@@ -162,7 +162,7 @@ export const VariableContextMenu: React.FC<VariableContextMenuProps> = ({
           <div className="flex gap-1">
             <Button
               variant={selectedType === 'all' ? 'default' : 'outline'}
-              size="sm"
+              
               onClick={() => setSelectedType('all')}
               className="h-6 px-2 text-xs"
             >
@@ -170,7 +170,7 @@ export const VariableContextMenu: React.FC<VariableContextMenuProps> = ({
             </Button>
             <Button
               variant={selectedType === 'normal' ? 'default' : 'outline'}
-              size="sm"
+              
               onClick={() => setSelectedType('normal')}
               className="h-6 px-2 text-xs"
             >
@@ -179,7 +179,7 @@ export const VariableContextMenu: React.FC<VariableContextMenuProps> = ({
             </Button>
             <Button
               variant={selectedType === 'lote' ? 'default' : 'outline'}
-              size="sm"
+              
               onClick={() => setSelectedType('lote')}
               className="h-6 px-2 text-xs"
             >

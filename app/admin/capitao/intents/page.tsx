@@ -571,7 +571,7 @@ export default function GlobalIntentsPage() {
                 Regenera embeddings para intenções selecionadas para melhorar a classificação
               </p>
               <Button 
-                size="sm" 
+                 
                 onClick={() => regenerateEmbeddings(Array.from(selectedIntents))}
                 disabled={selectedIntents.size === 0 || bulkOperation.status === 'running'}
               >
@@ -586,7 +586,7 @@ export default function GlobalIntentsPage() {
                 Carrega embeddings no cache Redis para acesso mais rápido
               </p>
               <Button 
-                size="sm" 
+                 
                 variant="outline"
                 onClick={prewarmEmbeddings}
                 disabled={selectedIntents.size === 0}
@@ -602,7 +602,7 @@ export default function GlobalIntentsPage() {
                 Analisa métricas de classificação e sugere otimizações
               </p>
               <Button 
-                size="sm" 
+                 
                 variant="outline"
                 onClick={loadMetrics}
               >
@@ -633,14 +633,14 @@ export default function GlobalIntentsPage() {
           {/* Selection Controls */}
           <div className="flex items-center gap-2 text-sm">
             <Button 
-              size="sm" 
+               
               variant="outline"
               onClick={() => setSelectedIntents(new Set(intents.map(i => i.id)))}
             >
               Selecionar Todos
             </Button>
             <Button 
-              size="sm" 
+               
               variant="outline"
               onClick={() => setSelectedIntents(new Set())}
             >
@@ -727,8 +727,8 @@ export default function GlobalIntentsPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="text-xs text-muted-foreground">threshold: {i.similarityThreshold}</div>
-                    <Button variant="secondary" size="sm" onClick={() => openEdit(i)}>Editar</Button>
-                    <Button variant="destructive" size="sm" onClick={() => remove(i.id)}>Excluir</Button>
+                    <Button variant="secondary"  onClick={() => openEdit(i)}>Editar</Button>
+                    <Button variant="destructive"  onClick={() => remove(i.id)}>Excluir</Button>
                   </div>
                 </div>
                 

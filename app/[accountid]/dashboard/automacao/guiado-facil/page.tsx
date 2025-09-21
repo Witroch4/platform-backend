@@ -522,7 +522,7 @@ export default function UserPage() {
           )}
         </div>
 
-        <Button variant="outline" size="sm" onClick={handleAtivarAutomacao} style={{ marginTop: "20px" }}>
+        <Button variant="outline"  onClick={handleAtivarAutomacao} style={{ marginTop: "20px" }}>
           Ativar
         </Button>
       </div>

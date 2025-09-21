@@ -67,7 +67,7 @@ export function PerformanceMonitor() {
         <Button
           onClick={() => setIsVisible(true)}
           variant="outline"
-          size="sm"
+          
           className="bg-background/80 backdrop-blur-sm"
         >
           📊 Performance
@@ -80,7 +80,7 @@ export function PerformanceMonitor() {
               <Button
                 onClick={() => setIsVisible(false)}
                 variant="ghost"
-                size="sm"
+                
                 className="h-6 w-6 p-0"
               >
                 ✕
@@ -134,7 +134,7 @@ export function PerformanceMonitor() {
                   refreshStats();
                 }}
                 variant="outline"
-                size="sm"
+                
                 className="w-full text-xs"
               >
                 Atualizar & Log Console

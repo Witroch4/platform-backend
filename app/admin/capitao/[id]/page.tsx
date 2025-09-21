@@ -652,7 +652,7 @@ function PromptVersioningPanel({ assistantId }: { assistantId: string }) {
             Gerencie diferentes versões de prompts e execute testes A/B
           </div>
           <Button
-            size="sm"
+            
             onClick={() => setCreatingVersion(true)}
             disabled={loading}
             className="bg-primary hover:bg-primary/90"
@@ -778,14 +778,14 @@ function PromptVersioningPanel({ assistantId }: { assistantId: string }) {
             </div>
             <div className="flex items-center gap-2 mt-4">
               <Button
-                size="sm"
+                
                 onClick={createPromptVersion}
                 className="bg-primary hover:bg-primary/90"
               >
                 Criar Versão
               </Button>
               <Button
-                size="sm"
+                
                 variant="outline"
                 onClick={() => setCreatingVersion(false)}
                 className="border-border hover:bg-muted"
@@ -831,7 +831,7 @@ function PromptVersioningPanel({ assistantId }: { assistantId: string }) {
                     </Badge>
                   )}
                   <Button
-                    size="sm"
+                    
                     variant="outline"
                     onClick={() =>
                       toggleVersionActive(version.id, !version.isActive)
@@ -842,7 +842,7 @@ function PromptVersioningPanel({ assistantId }: { assistantId: string }) {
                   </Button>
                   {!version.isDefault && (
                     <Button
-                      size="sm"
+                      
                       variant="outline"
                       onClick={() => setAsDefault(version.id)}
                       className="border-border hover:bg-muted"

@@ -102,7 +102,7 @@ export const EditableTable: React.FC<EditableTableProps> = ({ tableNode, onNodeC
       <Button 
         onClick={addRow} 
         variant="outline" 
-        size="sm" 
+         
         className="mt-3"
       >
         <Plus className="h-4 w-4 mr-2" />

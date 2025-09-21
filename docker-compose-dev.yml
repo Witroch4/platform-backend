@@ -30,7 +30,7 @@ services:
       - .:/src
       - node_modules:/src/node_modules
       - ./temp:/src/temp
-    command: sh -c "npm run ${NEXT_SCRIPT:-dev}"
+    command: sh -c "pnpm run ${NEXT_SCRIPT:-dev}"
     networks:
       - minha_rede
     restart: unless-stopped
@@ -52,7 +52,7 @@ services:
       REDIS_HOST: "redis"
       REDIS_PORT: "6379"
     # Comando para iniciar TODOS os workers usando o init.ts
-    command: npm run start:unified-worker
+    command: pnpm run start:unified-worker
     volumes:
       - .:/src
       - node_modules:/src/node_modules
@@ -97,6 +97,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  # Para pnpm, manter node_modules como volume nomeado para cache de dependências
   node_modules:
     driver: local
   redis_data:

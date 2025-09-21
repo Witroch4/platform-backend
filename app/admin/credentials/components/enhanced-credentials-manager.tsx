@@ -478,7 +478,7 @@ export function EnhancedCredentialsManager() {
       </div>
 
       <Tabs defaultValue="global" className="space-y-6">
-        <TabsList variant="line">
+        <TabsList>
           <TabsTrigger value="global" className="flex items-center gap-2">
             <Globe className="h-4 w-4" />
             Configuração Global

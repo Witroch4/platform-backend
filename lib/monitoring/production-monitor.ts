@@ -5,6 +5,7 @@
 
 import { getPrismaInstance, getRedisInstance } from '@/lib/connections';
 import { z } from 'zod';
+import * as os from 'node:os';
 
 // Tipos e interfaces
 interface InfrastructureAlert {
@@ -13,7 +14,7 @@ interface InfrastructureAlert {
   severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   component: 'PRISMA' | 'REDIS' | 'SYSTEM' | 'QUEUE';
   message: string;
-  metrics?: Record<string, any>;
+  metrics?: Record<string, unknown>;
   timestamp: Date;
   resolved: boolean;
   resolvedAt?: Date;
@@ -26,19 +27,41 @@ interface ConnectionHealth {
   lastCheck: Date;
   errorCount: number;
   uptime: number;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 interface SystemMetrics {
   memory: {
     used: number;
     total: number;
+    free: number;
     percentage: number;
+    cgroup?: {
+      used: number;
+      limit: number;
+      percentage: number;
+    };
   };
   cpu: {
     usage: number;
+    perCore: Array<{ id: string; usage: number }>;
+    cores: number;
+    load1: number;
+    load5: number;
+    load15: number;
+  };
+  process: {
+    cpu: number;
+    memory: {
+      rss: number;
+      heapUsed: number;
+      heapTotal: number;
+      external: number;
+      arrayBuffers: number;
+    };
   };
   uptime: number;
+  processUptime: number;
   timestamp: Date;
 }
 
@@ -73,6 +96,17 @@ class ProductionMonitor {
   private config: AlertConfig;
   private monitoringInterval?: NodeJS.Timeout;
   private backupInterval?: NodeJS.Timeout;
+  private lastCpuSample?: {
+    total: number;
+    idle: number;
+    perCore: Array<{ total: number; idle: number }>;
+    timestamp: number;
+  };
+  private lastProcessCpuSample?: {
+    usage: NodeJS.CpuUsage;
+    timestamp: number;
+  };
+  private lastSystemMetrics?: SystemMetrics;
 
   private constructor(config: Partial<AlertConfig> = {}) {
     this.config = AlertConfigSchema.parse(config);
@@ -234,8 +268,8 @@ class ProductionMonitor {
       this.connectionHealth.set('REDIS', health);
 
       // Verificar uso de memória
-      const memoryUsage = parseInt(memoryInfo.used_memory || '0');
-      const maxMemory = parseInt(memoryInfo.maxmemory || '0');
+      const memoryUsage = Number.parseInt(memoryInfo.used_memory || '0');
+      const maxMemory = Number.parseInt(memoryInfo.maxmemory || '0');
       
       if (maxMemory > 0) {
         const memoryPercentage = (memoryUsage / maxMemory) * 100;
@@ -284,14 +318,16 @@ class ProductionMonitor {
   private async checkSystemMetrics(): Promise<void> {
     try {
       const metrics = await this.getSystemMetrics();
+      this.lastSystemMetrics = metrics;
+      const memoryPercentage = metrics.memory.cgroup?.percentage ?? metrics.memory.percentage;
       
       // Alerta para uso alto de memória
-      if (metrics.memory.percentage > this.config.memoryThreshold) {
+      if (memoryPercentage > this.config.memoryThreshold) {
         await this.createAlert({
           type: 'HIGH_MEMORY',
-          severity: metrics.memory.percentage > 95 ? 'CRITICAL' : 'HIGH',
+          severity: memoryPercentage > 95 ? 'CRITICAL' : 'HIGH',
           component: 'SYSTEM',
-          message: `Uso de memória do sistema alto: ${metrics.memory.percentage.toFixed(1)}%`,
+          message: `Uso de memória do sistema alto: ${memoryPercentage.toFixed(1)}%`,
           metrics: metrics.memory,
         });
       }
@@ -348,13 +384,13 @@ class ProductionMonitor {
           action: 'INFRASTRUCTURE_ALERT',
           resourceType: 'MONITORING',
           resourceId: alert.id,
-          details: {
+          details: JSON.parse(JSON.stringify({
             type: alert.type,
             severity: alert.severity,
             component: alert.component,
             message: alert.message,
             metrics: alert.metrics,
-          },
+          })),
           ipAddress: '127.0.0.1',
           userAgent: 'ProductionMonitor',
         },
@@ -424,9 +460,9 @@ class ProductionMonitor {
   /**
    * Helper para criar diretório de backup e salvar arquivo
    */
-  private async saveBackupFile(location: string, data: any): Promise<number> {
-    const fs = await import('fs/promises');
-    const path = await import('path');
+  private async saveBackupFile(location: string, data: unknown): Promise<number> {
+    const fs = await import('node:fs/promises');
+    const path = await import('node:path');
     
     // Criar diretório se não existir
     const backupDir = path.dirname(location);
@@ -492,7 +528,7 @@ class ProductionMonitor {
 
     try {
       // Obter estado das filas do Redis
-      const queueStates: Record<string, any> = {};
+      const queueStates: Record<string, unknown> = {};
       
       // Buscar todas as chaves de fila no Redis
       const keys = await this.redis.keys('bull:*');
@@ -593,20 +629,195 @@ class ProductionMonitor {
    * Obtém métricas do sistema
    */
   private async getSystemMetrics(): Promise<SystemMetrics> {
-    const memUsage = process.memoryUsage();
-    
+    const totalMem = os.totalmem();
+    const freeMem = os.freemem();
+    const usedMem = totalMem - freeMem;
+
+    const memoryMetrics: SystemMetrics['memory'] = {
+      used: usedMem,
+      total: totalMem,
+      free: freeMem,
+      percentage: totalMem > 0 ? (usedMem / totalMem) * 100 : 0,
+    };
+
+    const cgroupMemory = await this.getCgroupMemoryUsage();
+    if (cgroupMemory) {
+      memoryMetrics.cgroup = cgroupMemory;
+    }
+
+    const cpuStats = this.calculateCpuUsage();
+    const processCpu = this.calculateProcessCpuUsage();
+    const processMemory = process.memoryUsage();
+    const load = os.loadavg();
+
     return {
-      memory: {
-        used: memUsage.heapUsed,
-        total: memUsage.heapTotal,
-        percentage: (memUsage.heapUsed / memUsage.heapTotal) * 100,
-      },
+      memory: memoryMetrics,
       cpu: {
-        usage: process.cpuUsage().user / 1000000, // Converter para segundos
+        usage: cpuStats.usage,
+        perCore: cpuStats.perCore,
+        cores: cpuStats.cores,
+        load1: load[0] || 0,
+        load5: load[1] || 0,
+        load15: load[2] || 0,
       },
-      uptime: process.uptime(),
+      process: {
+        cpu: processCpu,
+        memory: {
+          rss: processMemory.rss,
+          heapUsed: processMemory.heapUsed,
+          heapTotal: processMemory.heapTotal,
+          external: processMemory.external,
+          arrayBuffers: processMemory.arrayBuffers,
+        },
+      },
+      uptime: os.uptime(),
+      processUptime: process.uptime(),
       timestamp: new Date(),
     };
+  }
+
+  private async getCgroupMemoryUsage(): Promise<{ used: number; limit: number; percentage: number } | null> {
+    try {
+      const fs = await import('node:fs/promises');
+      const candidates = [
+        { usage: '/sys/fs/cgroup/memory.current', limit: '/sys/fs/cgroup/memory.max' },
+        { usage: '/sys/fs/cgroup/memory/memory.usage_in_bytes', limit: '/sys/fs/cgroup/memory/memory.limit_in_bytes' },
+      ];
+
+      for (const candidate of candidates) {
+        try {
+          const [usageRaw, limitRaw] = await Promise.all([
+            fs.readFile(candidate.usage, 'utf8'),
+            fs.readFile(candidate.limit, 'utf8'),
+          ]);
+
+          const used = Number.parseInt(usageRaw.trim(), 10);
+          const limitValue = limitRaw.trim();
+          let limit = Number.parseInt(limitValue, 10);
+
+          if (!Number.isFinite(used)) {
+            continue;
+          }
+
+          if (!Number.isFinite(limit) || limitValue === 'max') {
+            limit = os.totalmem();
+          }
+
+          if (limit <= 0) {
+            continue;
+          }
+
+          return {
+            used,
+            limit,
+            percentage: (used / limit) * 100,
+          };
+        } catch (error) {
+          // Tenta próximo candidato
+        }
+      }
+    } catch (error) {
+      console.error('[ProductionMonitor] Erro ao ler métricas de cgroup:', error);
+    }
+
+    return null;
+  }
+
+  private calculateCpuUsage(): { usage: number; perCore: Array<{ id: string; usage: number }>; cores: number } {
+    const cpuInfos = os.cpus();
+    const coreSamples = cpuInfos.map((cpu) => {
+      const times = cpu.times;
+      const total = times.user + times.nice + times.sys + times.irq + times.idle;
+      return {
+        total,
+        idle: times.idle,
+      };
+    });
+
+    const aggregate = coreSamples.reduce(
+      (acc, sample) => {
+        acc.total += sample.total;
+        acc.idle += sample.idle;
+        return acc;
+      },
+      { total: 0, idle: 0 },
+    );
+
+    const perCoreUsage: Array<{ id: string; usage: number }> = [];
+    const now = Date.now();
+
+    if (this.lastCpuSample) {
+      for (let i = 0; i < coreSamples.length; i++) {
+        const previous = this.lastCpuSample.perCore[i];
+        const current = coreSamples[i];
+
+        if (!previous) {
+          perCoreUsage.push({ id: `cpu-${i}`, usage: 0 });
+          continue;
+        }
+
+        const totalDelta = current.total - previous.total;
+        const idleDelta = current.idle - previous.idle;
+        const usage = totalDelta > 0 ? ((totalDelta - idleDelta) / totalDelta) * 100 : 0;
+        const normalized = Number.isFinite(usage) ? Math.max(0, Math.min(usage, 100)) : 0;
+        perCoreUsage.push({ id: `cpu-${i}`, usage: normalized });
+      }
+    } else {
+      perCoreUsage.push(...coreSamples.map((_, index) => ({ id: `cpu-${index}`, usage: 0 })));
+    }
+
+    let usage = 0;
+    if (this.lastCpuSample) {
+      const totalDelta = aggregate.total - this.lastCpuSample.total;
+      const idleDelta = aggregate.idle - this.lastCpuSample.idle;
+      usage = totalDelta > 0 ? ((totalDelta - idleDelta) / totalDelta) * 100 : 0;
+      if (!Number.isFinite(usage)) {
+        usage = 0;
+      }
+      usage = Math.max(0, Math.min(usage, 100));
+    }
+
+    this.lastCpuSample = {
+      total: aggregate.total,
+      idle: aggregate.idle,
+      perCore: coreSamples,
+      timestamp: now,
+    };
+
+    return {
+      usage,
+      perCore: perCoreUsage,
+      cores: cpuInfos.length,
+    };
+  }
+
+  private calculateProcessCpuUsage(): number {
+    const now = Date.now();
+    const usage = process.cpuUsage();
+
+    if (!this.lastProcessCpuSample) {
+      this.lastProcessCpuSample = { usage, timestamp: now };
+      return 0;
+    }
+
+    const userDiff = usage.user - this.lastProcessCpuSample.usage.user;
+    const systemDiff = usage.system - this.lastProcessCpuSample.usage.system;
+    const timeDiffMs = now - this.lastProcessCpuSample.timestamp;
+    this.lastProcessCpuSample = { usage, timestamp: now };
+
+    if (timeDiffMs <= 0) {
+      return 0;
+    }
+
+    const totalCpuTimeMs = (userDiff + systemDiff) / 1000; // microseconds to ms
+    const cores = os.cpus().length || 1;
+    const percentage = (totalCpuTimeMs / (timeDiffMs * cores)) * 100;
+
+    if (!Number.isFinite(percentage)) {
+      return 0;
+    }
+
+    return Math.max(0, Math.min(percentage, 100));
   }
 
   /**
@@ -615,12 +826,12 @@ class ProductionMonitor {
   private parseRedisInfo(info: string): Record<string, string> {
     const result: Record<string, string> = {};
     
-    info.split('\r\n').forEach(line => {
+    for (const line of info.split('\r\n')) {
       if (line.includes(':')) {
         const [key, value] = line.split(':');
         result[key] = value;
       }
-    });
+    }
     
     return result;
   }
@@ -637,6 +848,10 @@ class ProductionMonitor {
    */
   getConnectionsHealth(): ConnectionHealth[] {
     return Array.from(this.connectionHealth.values());
+  }
+
+  getLastSystemMetrics(): SystemMetrics | null {
+    return this.lastSystemMetrics ?? null;
   }
 
   /**
@@ -677,6 +892,8 @@ class ProductionMonitor {
   getMonitoringStatus() {
     const activeAlerts = this.getActiveAlerts();
     const connectionsHealth = this.getConnectionsHealth();
+    const lastCheckTimes = connectionsHealth.map(c => c.lastCheck.getTime());
+    const lastCheck = lastCheckTimes.length > 0 ? Math.max(...lastCheckTimes) : Date.now();
     
     return {
       isRunning: !!this.monitoringInterval,
@@ -686,8 +903,10 @@ class ProductionMonitor {
         acc[conn.component] = conn.status;
         return acc;
       }, {} as Record<string, string>),
-      lastCheck: Math.max(...connectionsHealth.map(c => c.lastCheck.getTime())),
-      uptime: process.uptime(),
+      lastCheck,
+      uptime: os.uptime(),
+      processUptime: process.uptime(),
+      systemMetrics: this.lastSystemMetrics ?? null,
     };
   }
 }

@@ -371,7 +371,7 @@ export function WhatsAppTextEditor({
         <div className="flex flex-wrap gap-1">
           <Button
             variant="outline"
-            size="sm"
+            
             onClick={() => applyFormatting("bold")}
             title="Negrito (*texto*)"
           >
@@ -379,7 +379,7 @@ export function WhatsAppTextEditor({
           </Button>
           <Button
             variant="outline"
-            size="sm"
+            
             onClick={() => applyFormatting("italic")}
             title="Itálico (_texto_)"
           >
@@ -387,7 +387,7 @@ export function WhatsAppTextEditor({
           </Button>
           <Button
             variant="outline"
-            size="sm"
+            
             onClick={() => applyFormatting("strikethrough")}
             title="Tachado (~texto~)"
           >
@@ -395,7 +395,7 @@ export function WhatsAppTextEditor({
           </Button>
           <Button
             variant="outline"
-            size="sm"
+            
             onClick={() => setShowVariableMenu(true)}
             title="Inserir variáveis"
           >
@@ -431,7 +431,7 @@ export function WhatsAppTextEditor({
             Editor de Texto - Formatação WhatsApp
           </CardTitle>
           {onClose && (
-            <Button variant="ghost" size="sm" onClick={onClose}>
+            <Button variant="ghost"  onClick={onClose}>
               <X className="h-4 w-4" />
             </Button>
           )}
@@ -442,7 +442,7 @@ export function WhatsAppTextEditor({
           <div className="flex flex-wrap gap-2 p-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
             <Button
               variant="outline"
-              size="sm"
+              
               onClick={() => applyFormatting("bold")}
               title="Negrito (*texto*)"
             >
@@ -450,7 +450,7 @@ export function WhatsAppTextEditor({
             </Button>
             <Button
               variant="outline"
-              size="sm"
+              
               onClick={() => applyFormatting("italic")}
               title="Itálico (_texto_)"
             >
@@ -458,7 +458,7 @@ export function WhatsAppTextEditor({
             </Button>
             <Button
               variant="outline"
-              size="sm"
+              
               onClick={() => applyFormatting("strikethrough")}
               title="Tachado (~texto~)"
             >
@@ -469,7 +469,7 @@ export function WhatsAppTextEditor({
 
             <Button
               variant="outline"
-              size="sm"
+              
               onClick={() => insertList("bullet")}
               title="Lista com marcadores"
             >
@@ -477,7 +477,7 @@ export function WhatsAppTextEditor({
             </Button>
             <Button
               variant="outline"
-              size="sm"
+              
               onClick={() => insertList("numbered")}
               title="Lista numerada"
             >
@@ -485,7 +485,7 @@ export function WhatsAppTextEditor({
             </Button>
             <Button
               variant="outline"
-              size="sm"
+              
               onClick={insertQuote}
               title="Citação (> texto)"
             >
@@ -496,7 +496,7 @@ export function WhatsAppTextEditor({
               <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1" />
               <Button
                 variant="outline"
-                size="sm"
+                
                 onClick={() => setShowVariableMenu(true)}
                 title="Inserir variáveis"
               >

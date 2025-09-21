@@ -777,7 +777,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
           <div className="flex gap-2">
             <Button 
               variant="outline" 
-              size="sm"
+              
               onClick={() => setSelectedLeads([])}
               className="border-border hover:bg-accent"
             >
@@ -785,7 +785,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
             </Button>
             <Button 
               variant="destructive" 
-              size="sm"
+              
               onClick={() => setConfirmBatchDeleteFiles(true)}
               disabled={isBatchDeletingFiles}
               className="border-border hover:bg-destructive/80"
@@ -799,7 +799,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
             </Button>
             <Button 
               variant="destructive" 
-              size="sm"
+              
               onClick={() => setConfirmBatchDeleteLeads(true)}
               disabled={isBatchDeletingLeads}
               className="border-border hover:bg-destructive/80"
@@ -824,7 +824,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
             />
             <Button 
               variant="outline" 
-              size="sm" 
+               
               onClick={() => toast("Não implementado", { description: "Esta funcionalidade será adicionada em breve.",
                 })}
               className="border-border hover:bg-accent"
@@ -902,7 +902,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
           <div className="flex gap-2">
             <Button
               variant="outline"
-              size="sm"
+              
               disabled={pagination.page === 1 || isLoading}
               onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
               className="border-border hover:bg-accent"
@@ -911,7 +911,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
             </Button>
             <Button
               variant="outline"
-              size="sm"
+              
               disabled={pagination.page === pagination.totalPages || isLoading}
               onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
               className="border-border hover:bg-accent"

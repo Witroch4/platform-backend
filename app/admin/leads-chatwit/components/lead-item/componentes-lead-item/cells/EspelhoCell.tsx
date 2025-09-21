@@ -112,7 +112,7 @@ export function EspelhoCell({
                 <TooltipTrigger asChild>
                   <Button
                     variant="outline"
-                    size="sm"
+                    
                     disabled={true}
                     className="w-full opacity-60 cursor-not-allowed text-xs px-2 py-1 h-auto min-h-8"
                     key={`espelho-btn-${refreshKey}-disabled`}
@@ -131,7 +131,7 @@ export function EspelhoCell({
           ) : (
             <Button
               variant="outline"
-              size="sm"
+              
               onClick={handleButtonClick}
               disabled={isEnviandoEspelho || isUploadingEspelho}
               className="w-full text-xs px-2 py-1 h-auto min-h-8"

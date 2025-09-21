@@ -566,7 +566,7 @@ export function FlowTimeline({
               {/* Toggle Options */}
               <Button
                 variant="outline"
-                size="sm"
+                
                 onClick={() => setShowBlockedJobs(!showBlockedJobs)}
                 className={showBlockedJobs ? 'bg-yellow-50' : ''}
               >

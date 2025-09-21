@@ -4,8 +4,8 @@ import { getPrismaInstance } from '@/lib/connections';
 import { auth } from '@/auth';
 
 // GET: Lista todos os templates de uma caixa
-export async function GET(request: NextRequest, { params }: { params: Promise<{ inboxId: string }> }) {
-  const { inboxId } = await params;
+export async function GET(request: NextRequest, { params }: { params: Promise<{ caixaId: string }> }) {
+  const { caixaId } = await params;
   try {
     const session = await auth();
     if (!session?.user?.id) {
@@ -13,7 +13,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const templates = await getPrismaInstance().template.findMany({
-      where: { inboxId: inboxId },
+      where: { inboxId: caixaId },
       select: {
         id: true,
         name: true,
@@ -38,8 +38,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 // POST: Cria ou atualiza um template
-export async function POST(request: NextRequest, { params }: { params: Promise<{ inboxId: string }> }) {
-  const { inboxId } = await params;
+export async function POST(request: NextRequest, { params }: { params: Promise<{ caixaId: string }> }) {
+  const { caixaId } = await params;
   try {
     const session = await auth();
     if (!session?.user?.id) {
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         type,
         simpleReplyText: text,
         language: language || 'pt_BR',
-        inboxId: inboxId,
+        inboxId: caixaId,
         createdById: session.user.id,
         status: 'APPROVED',
       },

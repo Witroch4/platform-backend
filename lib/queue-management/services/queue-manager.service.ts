@@ -449,7 +449,7 @@ export class QueueManagerService extends EventEmitter implements QueueManagerSer
         userId: user?.id
       })
 
-      return job
+      return job || null
     } catch (error) {
       this.logger.error(`Failed to get job ${jobId} from queue ${queueName}:`, error, {
         queueName,

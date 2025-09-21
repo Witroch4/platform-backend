@@ -66,11 +66,11 @@ switch ($TestType.ToLower()) {
 $env:NODE_ENV = "test"
 $env:JEST_DETECT_OPEN_HANDLES = "true"
 
-Write-Host "🚀 Comando: npx jest $($jestArgs -join ' ')" -ForegroundColor Cyan
+Write-Host "🚀 Comando: pnpm exec jest $($jestArgs -join ' ')" -ForegroundColor Cyan
 
 try {
     # Executar Jest com as configurações
-    npx jest @jestArgs
+    pnpm exec jest @jestArgs
     
     if ($LASTEXITCODE -eq 0) {
         Write-Host "✅ Todos os testes passaram!" -ForegroundColor Green

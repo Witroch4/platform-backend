@@ -278,7 +278,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
             <div className="flex items-center gap-2 ml-4">
               <Button
                 variant="outline"
-                size="sm"
+                
                 onClick={clearError}
                 className="text-xs"
               >
@@ -286,7 +286,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
               </Button>
               <Button
                 variant="ghost"
-                size="sm"
+                
                 onClick={onBack}
                 className="text-xs"
               >

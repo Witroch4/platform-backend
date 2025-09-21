@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Progress } from '@/components/ui/progress';
 import { 
   AlertTriangle, 
   CheckCircle, 
@@ -35,7 +36,7 @@ interface InfrastructureAlert {
   message: string;
   timestamp: string;
   resolved: boolean;
-  metrics?: Record<string, any>;
+  metrics?: Record<string, unknown>;
 }
 
 interface ConnectionHealth {
@@ -45,7 +46,7 @@ interface ConnectionHealth {
   lastCheck: string;
   errorCount: number;
   uptime: number;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 interface RecoveryProcedure {
@@ -75,6 +76,69 @@ interface RecoveryExecution {
   error?: string;
 }
 
+interface SystemMetricsPayload {
+  memory: {
+    used: number;
+    total: number;
+    free: number;
+    percentage: number;
+    cgroup?: {
+      used: number;
+      limit: number;
+      percentage: number;
+    };
+  };
+  cpu: {
+    usage: number;
+    perCore: Array<{ id: string; usage: number }>;
+    cores: number;
+    load1: number;
+    load5: number;
+    load15: number;
+  };
+  process: {
+    cpu: number;
+    memory: {
+      rss: number;
+      heapUsed: number;
+      heapTotal: number;
+      external: number;
+      arrayBuffers: number;
+    };
+  };
+  uptime: number;
+  processUptime: number;
+  timestamp: string;
+}
+
+interface MonitoringStatus {
+  isRunning: boolean;
+  activeAlerts: number;
+  criticalAlerts: number;
+  connectionsHealth: Record<string, string>;
+  lastCheck: number;
+  uptime: number;
+  processUptime: number;
+  systemMetrics?: SystemMetricsPayload | null;
+}
+
+interface MonitoringStatusPayload {
+  monitoring: MonitoringStatus;
+  systemMetrics?: SystemMetricsPayload | null;
+  alerts?: {
+    active: number;
+    critical: number;
+  };
+  connections?: {
+    status: Record<string, string>;
+  };
+  recovery?: {
+    proceduresCount: number;
+    runningExecutions: number;
+  };
+  timestamp?: string;
+}
+
 interface MonitoringData {
   alerts: {
     activeAlerts: InfrastructureAlert[];
@@ -102,17 +166,53 @@ interface MonitoringData {
       failed: number;
     };
   };
-  status: {
-    monitoring: {
-      isRunning: boolean;
-      activeAlerts: number;
-      criticalAlerts: number;
-      connectionsHealth: Record<string, string>;
-      lastCheck: number;
-      uptime: number;
-    };
-  };
+  status: MonitoringStatusPayload;
 }
+
+const formatBytes = (bytes?: number) => {
+  if (!Number.isFinite(bytes ?? Number.NaN) || (bytes ?? 0) < 0) {
+    return '--';
+  }
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  let value = bytes ?? 0;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex++;
+  }
+  const precision = unitIndex === 0 ? 0 : value < 10 ? 2 : 1;
+  return `${value.toFixed(precision)} ${units[unitIndex]}`;
+};
+
+const formatPercentageValue = (value?: number) => {
+  if (!Number.isFinite(value ?? Number.NaN)) {
+    return '--';
+  }
+  return `${(value as number).toFixed(1)}%`;
+};
+
+const clampPercentage = (value?: number) => {
+  if (!Number.isFinite(value ?? Number.NaN)) return 0;
+  return Math.max(0, Math.min(value as number, 100));
+};
+
+const formatSecondsToHuman = (seconds?: number) => {
+  if (!Number.isFinite(seconds ?? Number.NaN) || (seconds ?? 0) < 0) {
+    return '--';
+  }
+  const total = Math.floor(seconds ?? 0);
+  const days = Math.floor(total / 86400);
+  const hours = Math.floor((total % 86400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+
+  if (days > 0) {
+    return `${days}d ${hours}h`;
+  }
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${Math.max(minutes, 0)}m`;
+};
 
 export default function ProductionMonitoringDashboard() {
   const [data, setData] = useState<MonitoringData | null>(null);
@@ -230,13 +330,17 @@ export default function ProductionMonitoringDashboard() {
     }
   };
 
-  const getSeverityColor = (severity: string) => {
+  const getSeverityColor = (
+    severity: string,
+  ): 'default' | 'secondary' | 'destructive' | 'outline' => {
     switch (severity) {
-      case 'CRITICAL': return 'destructive';
-      case 'HIGH': return 'destructive';
-      case 'MEDIUM': return 'default';
-      case 'LOW': return 'secondary';
-      default: return 'secondary';
+      case 'CRITICAL':
+      case 'HIGH':
+        return 'destructive';
+      case 'MEDIUM':
+        return 'default';
+      default:
+        return 'secondary';
     }
   };
 
@@ -279,6 +383,22 @@ export default function ProductionMonitoringDashboard() {
 
   if (!data) return null;
 
+  const monitoringStatus = data.status.monitoring;
+  const systemMetrics = monitoringStatus.systemMetrics ?? data.status.systemMetrics ?? null;
+  const effectiveMemoryPercentage = systemMetrics
+    ? systemMetrics.memory.cgroup?.percentage ?? systemMetrics.memory.percentage
+    : 0;
+  const memoryUsedBytes = systemMetrics
+    ? systemMetrics.memory.cgroup?.used ?? systemMetrics.memory.used
+    : 0;
+  const memoryTotalBytes = systemMetrics
+    ? systemMetrics.memory.cgroup?.limit ?? systemMetrics.memory.total
+    : 0;
+  const memoryFreeBytes = systemMetrics?.memory.free ?? 0;
+  const perCoreUsage = systemMetrics?.cpu.perCore ?? [];
+  const systemTimestamp = systemMetrics ? new Date(systemMetrics.timestamp) : null;
+  const lastCheckDate = monitoringStatus.lastCheck ? new Date(monitoringStatus.lastCheck) : null;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -290,14 +410,14 @@ export default function ProductionMonitoringDashboard() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={handleForceBackup} variant="outline" size="sm">
+          <Button onClick={handleForceBackup} variant="outline" >
             <Download className="h-4 w-4 mr-2" />
             Backup Manual
           </Button>
           <Button 
             onClick={handleRefresh} 
             variant="outline" 
-            size="sm"
+            
             disabled={refreshing}
           >
             <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
@@ -315,11 +435,12 @@ export default function ProductionMonitoringDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {data.status.monitoring.isRunning ? 'Ativo' : 'Inativo'}
+              {monitoringStatus.isRunning ? 'Ativo' : 'Inativo'}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Uptime: {Math.floor(data.status.monitoring.uptime / 3600)}h
-            </p>
+            <div className="space-y-1 text-xs text-muted-foreground">
+              <p>Host: {formatSecondsToHuman(monitoringStatus.uptime)}</p>
+              <p>Processo: {formatSecondsToHuman(monitoringStatus.processUptime)}</p>
+            </div>
           </CardContent>
         </Card>
 
@@ -371,7 +492,7 @@ export default function ProductionMonitoringDashboard() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList variant="line">
+        <TabsList >
           <TabsTrigger value="overview">Visão Geral</TabsTrigger>
           <TabsTrigger value="alerts">Alertas</TabsTrigger>
           <TabsTrigger value="connections">Conexões</TabsTrigger>
@@ -398,7 +519,7 @@ export default function ProductionMonitoringDashboard() {
                           <span className="text-sm">{alert.message}</span>
                         </div>
                         <Button 
-                          size="sm" 
+                           
                           variant="outline"
                           onClick={() => handleResolveAlert(alert.id)}
                         >
@@ -443,8 +564,109 @@ export default function ProductionMonitoringDashboard() {
                     </div>
                   ))}
                 </div>
+                <p className="mt-4 text-xs text-muted-foreground">
+                  Último health check: {lastCheckDate ? lastCheckDate.toLocaleString() : '--'}
+                </p>
               </CardContent>
             </Card>
+
+            {systemMetrics && (
+              <Card className="lg:col-span-2">
+                <CardHeader>
+                  <CardTitle>Recursos do Host</CardTitle>
+                  <CardDescription>
+                    Utilização do ambiente que executa o monitoramento e workers.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between text-sm font-medium">
+                        <span>CPU do host ({systemMetrics.cpu.cores} núcleos)</span>
+                        <span>{formatPercentageValue(systemMetrics.cpu.usage)}</span>
+                      </div>
+                      <Progress value={clampPercentage(systemMetrics.cpu.usage)} className="h-2" />
+                      <div className="grid grid-cols-3 gap-2 text-[11px] text-muted-foreground">
+                        <span>Load 1m: {systemMetrics.cpu.load1.toFixed(2)}</span>
+                        <span>5m: {systemMetrics.cpu.load5.toFixed(2)}</span>
+                        <span>15m: {systemMetrics.cpu.load15.toFixed(2)}</span>
+                      </div>
+                      {perCoreUsage.length > 0 && (
+                        <div className="flex flex-wrap gap-1 text-[11px] text-muted-foreground">
+                          {perCoreUsage.map(({ id, usage }) => (
+                            <span
+                              key={id}
+                              className="rounded-full border border-border/60 px-2 py-1"
+                            >
+                              {id.toUpperCase()}: {formatPercentageValue(usage)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between text-sm font-medium">
+                        <span>Memória</span>
+                        <span>{formatPercentageValue(effectiveMemoryPercentage)}</span>
+                      </div>
+                      <Progress value={clampPercentage(effectiveMemoryPercentage)} className="h-2" />
+                      <div className="space-y-1 text-xs text-muted-foreground">
+                        <div className="flex items-center justify-between">
+                          <span>Utilizado</span>
+                          <span>{formatBytes(memoryUsedBytes)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span>Total</span>
+                          <span>{formatBytes(memoryTotalBytes)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span>Livre</span>
+                          <span>{formatBytes(memoryFreeBytes)}</span>
+                        </div>
+                      </div>
+                      {systemMetrics.memory.cgroup && (
+                        <p className="text-[11px] text-muted-foreground">
+                          Limite do container: {formatBytes(systemMetrics.memory.cgroup.limit)}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2 text-xs text-muted-foreground md:col-span-2">
+                      <div className="flex items-center justify-between text-sm font-medium text-foreground">
+                        <span>Processo Node</span>
+                        <span>{formatPercentageValue(systemMetrics.process.cpu)}</span>
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <div className="flex items-center justify-between">
+                          <span>RSS</span>
+                          <span>{formatBytes(systemMetrics.process.memory.rss)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span>Heap usado</span>
+                          <span>{formatBytes(systemMetrics.process.memory.heapUsed)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span>Heap total</span>
+                          <span>{formatBytes(systemMetrics.process.memory.heapTotal)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span>Buffers externos</span>
+                          <span>{formatBytes(systemMetrics.process.memory.external + systemMetrics.process.memory.arrayBuffers)}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span>Uptime do processo</span>
+                        <span>{formatSecondsToHuman(systemMetrics.processUptime)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">
+                    Última leitura: {systemTimestamp ? systemTimestamp.toLocaleString() : '--'}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </TabsContent>
 
@@ -461,7 +683,7 @@ export default function ProductionMonitoringDashboard() {
                     <div className="flex items-start justify-between">
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
-                          <Badge variant={getSeverityColor(alert.severity) as any}>
+                          <Badge variant={getSeverityColor(alert.severity)}>
                             {alert.severity}
                           </Badge>
                           <Badge variant="outline">{alert.component}</Badge>
@@ -483,7 +705,7 @@ export default function ProductionMonitoringDashboard() {
                         )}
                       </div>
                       <Button 
-                        size="sm" 
+                         
                         variant="outline"
                         onClick={() => handleResolveAlert(alert.id)}
                       >
@@ -568,7 +790,7 @@ export default function ProductionMonitoringDashboard() {
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">
                             <span className="font-medium text-sm">{procedure.name}</span>
-                            <Badge variant={getSeverityColor(procedure.priority) as any} className="text-xs">
+                            <Badge variant={getSeverityColor(procedure.priority)} className="text-xs">
                               {procedure.priority}
                             </Badge>
                             {procedure.autoExecute && (
@@ -586,7 +808,7 @@ export default function ProductionMonitoringDashboard() {
                           </p>
                         </div>
                         <Button 
-                          size="sm" 
+                           
                           variant="outline"
                           onClick={() => handleExecuteRecovery(procedure.id)}
                         >
@@ -608,13 +830,15 @@ export default function ProductionMonitoringDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {data.recovery.recentExecutions.map((execution, index) => (
-                    <div key={index} className="border rounded-lg p-3">
-                      <div className="flex items-start justify-between">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-sm">
-                              {data.recovery.procedures.find(p => p.id === execution.procedureId)?.name}
+                  {data.recovery.recentExecutions.map((execution) => {
+                    const executionKey = `${execution.procedureId}-${execution.startedAt}`;
+                    return (
+                      <div key={executionKey} className="border rounded-lg p-3">
+                        <div className="flex items-start justify-between">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm">
+                                {data.recovery.procedures.find(p => p.id === execution.procedureId)?.name}
                             </span>
                             <Badge 
                               variant={
@@ -635,14 +859,15 @@ export default function ProductionMonitoringDashboard() {
                           </div>
                         </div>
                         {execution.status === 'COMPLETED' && (
-                          <Button size="sm" variant="outline">
+                          <Button  variant="outline">
                             <RotateCcw className="h-3 w-3 mr-1" />
                             Rollback
                           </Button>
                         )}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                   {data.recovery.recentExecutions.length === 0 && (
                     <p className="text-center text-muted-foreground py-4">
                       Nenhuma execução recente

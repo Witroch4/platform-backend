@@ -385,7 +385,7 @@ export function AdvancedFeatureFlagManager({
               <div className="flex gap-2">
                 <Button
                   variant="outline"
-                  size="sm"
+                  
                   onClick={() => executeBulkOperation("toggle", { enabled: true })}
                   disabled={bulkLoading}
                 >
@@ -395,7 +395,7 @@ export function AdvancedFeatureFlagManager({
                 
                 <Button
                   variant="outline"
-                  size="sm"
+                  
                   onClick={() => executeBulkOperation("toggle", { enabled: false })}
                   disabled={bulkLoading}
                 >
@@ -406,7 +406,7 @@ export function AdvancedFeatureFlagManager({
                 {canDelete && (
                   <Button
                     variant="outline"
-                    size="sm"
+                    
                     onClick={() => executeBulkOperation("delete")}
                     disabled={bulkLoading}
                     className="text-destructive hover:text-destructive"
@@ -418,7 +418,7 @@ export function AdvancedFeatureFlagManager({
 
                 <Button
                   variant="outline"
-                  size="sm"
+                  
                   onClick={() => setSelectedFlags(new Set())}
                 >
                   Limpar Seleção
@@ -443,7 +443,7 @@ export function AdvancedFeatureFlagManager({
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
-                size="sm"
+                
                 onClick={selectAllFlags}
                 className="flex items-center gap-1"
               >
@@ -504,7 +504,7 @@ export function AdvancedFeatureFlagManager({
               <div className="flex gap-2">
                 <Button
                   variant="outline"
-                  size="sm"
+                  
                   onClick={() => handlePageChange(pagination.page - 1)}
                   disabled={pagination.page === 1}
                 >
@@ -513,7 +513,7 @@ export function AdvancedFeatureFlagManager({
                 
                 <Button
                   variant="outline"
-                  size="sm"
+                  
                   onClick={() => handlePageChange(pagination.page + 1)}
                   disabled={!pagination.hasMore}
                 >

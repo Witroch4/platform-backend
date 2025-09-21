@@ -298,7 +298,7 @@ async function adjustEmbeddingColumnAndIndex(prisma, dims) {
   // Se for para pular (workers), só gera client e vaza
   if (RUN_DB_PREPARE === "no") {
     console.log("⏭️ RUN_DB_PREPARE=no → pulando criação de DB/migrations. Rodando apenas prisma generate.");
-    run("npx prisma generate", { ...process.env, DATABASE_URL: dbUrl });
+    run("pnpm exec prisma generate", { ...process.env, DATABASE_URL: dbUrl });
     console.log("🎉 pronto.");
     process.exit(0);
   }
@@ -329,17 +329,17 @@ async function adjustEmbeddingColumnAndIndex(prisma, dims) {
   try {
     if (MODE === "deploy") {
       console.log("🔄 prisma migrate deploy");
-      run("npx prisma migrate deploy", env);
+      run("pnpm exec prisma migrate deploy", env);
     } else {
       console.log("🧨 prisma migrate reset -f");
-      run("npx prisma migrate reset -f", env);
+      run("pnpm exec prisma migrate reset -f", env);
     }
     console.log("✅ Migrações aplicadas.");
   } catch (e) {
     console.error("⚠️ Falha nas migrações:", e?.message || e);
     if (ALLOW_DB_PUSH_FALLBACK) {
       console.log("🔁 Fallback habilitado → executando `npx prisma db push`");
-      run("npx prisma db push", env);
+      run("pnpm exec prisma db push", env);
       console.log("✅ db push concluído.");
     } else {
       process.exit(1);
@@ -356,13 +356,13 @@ async function adjustEmbeddingColumnAndIndex(prisma, dims) {
 
   // 6) generate
   console.log("🧩 prisma generate");
-  run("npx prisma generate", env);
+  run("pnpm exec prisma generate", env);
 
   // 7) seed (opcional)
   if (RUN_SEED) {
     console.log("🌱 prisma db seed");
     try {
-      run("npx prisma db seed", env);
+      run("pnpm exec prisma db seed", env);
       console.log("✅ Seed concluído.");
     } catch (e) {
       console.error("⚠️ Seed falhou (prosseguindo):", e?.message || e);

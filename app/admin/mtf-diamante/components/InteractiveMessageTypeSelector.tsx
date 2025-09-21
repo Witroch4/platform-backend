@@ -392,7 +392,7 @@ export const InteractiveMessageTypeSelector: React.FC<InteractiveMessageTypeSele
 
                 <Button
                   variant={isSelected ? "default" : "outline"}
-                  size="sm"
+                  
                   className="w-full mt-4"
                   onClick={(e) => {
                     e.stopPropagation();

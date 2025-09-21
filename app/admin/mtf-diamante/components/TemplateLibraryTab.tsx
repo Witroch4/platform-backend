@@ -171,7 +171,7 @@ export function TemplateLibraryTab() {
       </div>
 
       <Tabs defaultValue="library" className="space-y-4">
-        <TabsList variant="line">
+        <TabsList >
           <TabsTrigger value="library">
             <BookOpen className="h-4 w-4 mr-2" />
             Biblioteca
@@ -287,7 +287,7 @@ export function TemplateLibraryTab() {
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
-                        size="sm"
+                        
                         onClick={() => setPreviewTemplate(template)}
                       >
                         <Eye className="h-4 w-4 mr-1" />
@@ -298,7 +298,7 @@ export function TemplateLibraryTab() {
                        !template.approvalRequests.some(r => r.status === 'approved') && (
                         <Button
                           variant="outline"
-                          size="sm"
+                          
                           onClick={() => handleRequestApproval(template.id)}
                         >
                           Solicitar Aprovação
@@ -308,7 +308,7 @@ export function TemplateLibraryTab() {
                       {(template.createdById === session?.user?.id || isAdmin) && (
                         <Button
                           variant="outline"
-                          size="sm"
+                          
                           onClick={() => handleDeleteTemplate(template.id)}
                         >
                           <Trash2 className="h-4 w-4" />

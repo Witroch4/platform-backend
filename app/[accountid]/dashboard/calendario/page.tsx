@@ -165,11 +165,11 @@ export default function CalendarioPage() {
                     </p>
                   </div>
                   <div className="flex gap-2">
-                    <Button size="sm" onClick={() => handleEditarAgendamento(ag.id)}>
+                    <Button  onClick={() => handleEditarAgendamento(ag.id)}>
                       Editar
                     </Button>
                     <Button
-                      size="sm"
+                      
                       variant="destructive"
                       onClick={() => handleDelete(ag.id)}
                     >

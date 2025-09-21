@@ -769,7 +769,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
                   <h2 className="text-xl font-semibold">Configurar Reações dos Botões</h2>
                   <Button
                     variant="ghost"
-                    size="sm"
+                    
                     onClick={() => {
                       setShowReactionConfig(null);
                       setSelectedTemplateDetails(null);

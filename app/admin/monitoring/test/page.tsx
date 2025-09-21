@@ -141,7 +141,7 @@ export default function TestMonitoringDashboard() {
           </p>
         </div>
         <div className="flex items-center space-x-2">
-          <Button onClick={fetchTestData} size="sm">
+          <Button onClick={fetchTestData} >
             <RefreshCw className="h-4 w-4 mr-2" />
             Atualizar
           </Button>

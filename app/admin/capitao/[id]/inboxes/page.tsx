@@ -234,7 +234,7 @@ export default function AssistantInboxesPage() {
         </button>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button size="sm" className="bg-primary hover:bg-primary/90">
+            <Button  className="bg-primary hover:bg-primary/90">
               <Plus className="w-4 h-4 mr-2" /> Conectar uma nova caixa de entrada
             </Button>
           </DialogTrigger>
@@ -323,7 +323,7 @@ export default function AssistantInboxesPage() {
                           {inbox.socialwiseConfig?.inheritFromAgent ? 'Herda do Agente' : 'Config. Personalizada'}
                         </Badge>
                         <Button 
-                          size="sm" 
+                           
                           variant="outline"
                           onClick={() => {
                             setEditingConfig(inbox.inboxId);
@@ -365,7 +365,7 @@ export default function AssistantInboxesPage() {
                         </div>
                         <div className="mt-2 flex items-center gap-2">
                           <Button 
-                            size="sm" 
+                             
                             variant="outline"
                             onClick={() => clearInboxCache(inbox.inboxId)}
                             className="border-border hover:bg-muted"
@@ -374,7 +374,7 @@ export default function AssistantInboxesPage() {
                             Limpar Cache
                           </Button>
                           <Button 
-                            size="sm" 
+                             
                             variant="outline"
                             onClick={() => loadInboxMetrics(inbox.inboxId)}
                             className="border-border hover:bg-muted"
@@ -401,7 +401,7 @@ export default function AssistantInboxesPage() {
                                 <span className="ml-2 text-foreground">{change.userName}</span>
                               </div>
                               <Button 
-                                size="sm" 
+                                 
                                 variant="ghost"
                                 onClick={() => rollbackConfig(inbox.inboxId, change.id)}
                                 className="h-6 px-2 text-xs hover:bg-muted"
@@ -517,14 +517,14 @@ export default function AssistantInboxesPage() {
                       
                       <div className="flex items-center gap-2 mt-4">
                         <Button 
-                          size="sm"
+                          
                           onClick={() => updateInboxConfig(inbox.inboxId, tempConfig)}
                           className="bg-primary hover:bg-primary/90"
                         >
                           Salvar Configuração
                         </Button>
                         <Button 
-                          size="sm" 
+                           
                           variant="outline"
                           onClick={() => setEditingConfig(null)}
                           className="border-border hover:bg-muted"
@@ -546,7 +546,7 @@ export default function AssistantInboxesPage() {
                   antes de transferi-las para você.
                 </p>
                 <Button 
-                  size="sm" 
+                   
                   onClick={() => setOpen(true)}
                   className="bg-primary hover:bg-primary/90"
                 >

@@ -558,11 +558,11 @@ curl http://localhost:3000/api/admin/monitoring/instagram/performance
 ### Development Setup
 
 1. Clone the repository
-2. Install dependencies: `npm install`
+2. Install dependencies: `pnpm install`
 3. Set up environment variables
 4. Start Redis and PostgreSQL
-5. Run migrations: `npx prisma migrate dev`
-6. Start the development server: `npm run dev`
+5. Run migrations: `pnpm exec prisma migrate dev`
+6. Start the development server: `pnpm run dev`
 
 ### Code Style
 

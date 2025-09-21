@@ -201,7 +201,7 @@ export function AlertCenter({
           {onToggleRealTime && (
             <Button
               variant="outline"
-              size="sm"
+              
               onClick={onToggleRealTime}
               className={realTimeUpdates ? 'bg-green-50 border-green-200' : ''}
             >
@@ -217,7 +217,7 @@ export function AlertCenter({
               WebSocket: {wsConnected ? 'Connected' : 'Disconnected'}
             </span>
           </div>
-          <Button variant="outline" size="sm" onClick={onRefresh}>
+          <Button variant="outline"  onClick={onRefresh}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
@@ -225,7 +225,7 @@ export function AlertCenter({
           {/* Test Alert Button */}
           <Button 
             variant="outline" 
-            size="sm" 
+             
             onClick={async () => {
               try {
                 await fetch('/api/admin/queue-management/alerts/test', {
@@ -378,7 +378,7 @@ export function AlertCenter({
                       {alert.status === 'active' && (
                         <Button
                           variant="outline"
-                          size="sm"
+                          
                           onClick={() => handleAcknowledge(alert)}
                         >
                           <Check className="h-4 w-4 mr-1" />
@@ -388,7 +388,7 @@ export function AlertCenter({
                       {alert.status === 'acknowledged' && (
                         <Button
                           variant="outline"
-                          size="sm"
+                          
                           onClick={() => handleResolve(alert)}
                         >
                           <CheckCircle className="h-4 w-4 mr-1" />
@@ -397,7 +397,7 @@ export function AlertCenter({
                       )}
                       <Button
                         variant="outline"
-                        size="sm"
+                        
                         onClick={() => onDismissAlert(alert.id)}
                       >
                         <X className="h-4 w-4" />
@@ -466,7 +466,7 @@ export function AlertCenter({
                     {alert.status === 'active' && (
                       <Button
                         variant="outline"
-                        size="sm"
+                        
                         onClick={() => handleAcknowledge(alert)}
                       >
                         <Check className="h-4 w-4 mr-1" />
@@ -476,7 +476,7 @@ export function AlertCenter({
                     {alert.status === 'acknowledged' && (
                       <Button
                         variant="outline"
-                        size="sm"
+                        
                         onClick={() => handleResolve(alert)}
                       >
                         <CheckCircle className="h-4 w-4 mr-1" />
@@ -485,7 +485,7 @@ export function AlertCenter({
                     )}
                     <Button
                       variant="outline"
-                      size="sm"
+                      
                       onClick={() => onDismissAlert(alert.id)}
                     >
                       <X className="h-4 w-4" />

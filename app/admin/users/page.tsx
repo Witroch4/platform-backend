@@ -444,7 +444,7 @@ const UsersPage = () => {
                           <CardTitle className="text-xl flex items-center gap-2 text-card-foreground">
                             <Button
                               variant="ghost"
-                              size="sm"
+                              
                               className="p-0 h-6 w-6 hover:bg-accent"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -523,7 +523,7 @@ const UsersPage = () => {
                                               <div className="flex items-center gap-2">
                                                 <Button
                                                   variant="ghost"
-                                                  size="sm"
+                                                  
                                                   className="p-0 h-6 w-6 hover:bg-accent"
                                                   onClick={(e) => {
                                                     e.stopPropagation();

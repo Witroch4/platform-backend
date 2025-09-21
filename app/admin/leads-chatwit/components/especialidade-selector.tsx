@@ -93,7 +93,7 @@ export function EspecialidadeSelector({
         </Badge>
         <Button
           variant="ghost"
-          size="sm"
+          
           onClick={() => setSelectedEspecialidade("")}
           className="h-6 px-2 text-xs"
         >
@@ -128,7 +128,7 @@ export function EspecialidadeSelector({
       
       {selectedEspecialidade && selectedEspecialidade !== especialidadeAtual && (
         <Button
-          size="sm"
+          
           onClick={() => handleSaveEspecialidade(selectedEspecialidade)}
           disabled={isUpdating}
           className="h-8 px-2"

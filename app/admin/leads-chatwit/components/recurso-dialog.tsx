@@ -397,7 +397,7 @@ export function RecursoDialog({
                 </div>
                 <Button
                   variant="outline"
-                  size="sm"
+                  
                   onClick={handleSaveAccessToken}
                   disabled={isSavingToken}
                   className="whitespace-nowrap"

@@ -509,7 +509,7 @@ export function EspelhosPadraoDrawer({
                             {/* Botão para fazer upload */}
                             <Button
                               variant="outline"
-                              size="sm"
+                              
                               onClick={() => handleUploadEspelhoPadrao(especialidade.key)}
                               disabled={isUploading || isEnviando}
                             >
@@ -530,7 +530,7 @@ export function EspelhosPadraoDrawer({
                             {espelhoExistente && espelhoExistente.espelhoCorrecao && !espelhoExistente.aguardandoProcessamento && (
                               <Button
                                 variant="outline"
-                                size="sm"
+                                
                                 onClick={() => {
                                   const imagens = JSON.parse(espelhoExistente.espelhoCorrecao || '[]');
                                   handleEnviarParaSistemaExterno(espelhoExistente.id, imagens, especialidade.key);
@@ -555,7 +555,7 @@ export function EspelhosPadraoDrawer({
                             {espelhoExistente && espelhoExistente.textoMarkdown && (
                               <Button
                                 variant="outline"
-                                size="sm"
+                                
                                 onClick={() => handleVisualizarTexto(espelhoExistente)}
                               >
                                 <Eye className="h-4 w-4 mr-1" />

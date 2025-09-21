@@ -301,7 +301,7 @@ export default function IframeConfigPage() {
               readOnly
               className="font-mono text-sm"
             />
-            <Button variant="outline" size="sm" onClick={copyIframeUrl}>
+            <Button variant="outline"  onClick={copyIframeUrl}>
               <Copy className="h-4 w-4" />
             </Button>
           </div>
@@ -371,14 +371,14 @@ export default function IframeConfigPage() {
                         <div className="flex items-center gap-2">
                           <Button
                             variant="ghost"
-                            size="sm"
+                            
                             onClick={() => handleEdit(domain)}
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
-                            size="sm"
+                            
                             onClick={() => handleDelete(domain.id)}
                           >
                             <Trash2 className="h-4 w-4" />

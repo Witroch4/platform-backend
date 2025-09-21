@@ -97,7 +97,7 @@ export const ConfigurationStep: React.FC<ConfigurationStepProps> = ({
         {!editingMessage && (
           <Button
             variant="ghost"
-            size="sm"
+            
             onClick={() => setCurrentStep("type-selection")}
             className="w-fit mt-2"
           >

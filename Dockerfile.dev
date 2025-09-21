@@ -46,25 +46,35 @@ RUN if [ -f /etc/ImageMagick-6/policy.xml ]; then \
     fi
 
 
-# 4. Copia os arquivos de dependências e instala as dependências do Node.
-#    É fundamental copiar também o package-lock.json para o npm ci funcionar.
-COPY package.json package-lock.json ./
+# 4. Instala pnpm globalmente e configura
+ENV SHELL=/bin/bash
+RUN npm install -g pnpm@10.17.0 && \
+    SHELL=/bin/bash pnpm setup
+
+# 4.1. Configura variáveis de ambiente para pnpm
+ENV PNPM_HOME="/root/.local/share/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+
+# 5. Copia os arquivos de dependências e instala as dependências do Node.
+#    É fundamental copiar também o pnpm-lock.yaml para o pnpm install --frozen-lockfile funcionar.
+COPY package.json pnpm-lock.yaml ./
 COPY prisma ./prisma/
 
-# 4.1. Configura variáveis de ambiente para Playwright
+# 5.1. Configura variáveis de ambiente para Playwright
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
-# 4.2. Cria diretórios necessários para Playwright
+# 5.2. Cria diretórios necessários para Playwright
 RUN mkdir -p /root/.cache/ms-playwright && \
     mkdir -p /ms-playwright && \
     chmod 755 /root/.cache/ms-playwright && \
     chmod 755 /ms-playwright
 
-RUN npm ci
+# 5.3. Instala dependências com pnpm
+RUN pnpm install --frozen-lockfile
 
-# 5. Instala globalmente as dependências de desenvolvimento necessárias
-RUN npm install -g ts-node typescript tsconfig-paths
+# 6. Instala globalmente as dependências de desenvolvimento necessárias
+RUN pnpm add -g ts-node typescript tsconfig-paths
 
 # 6. Copia o restante do código-fonte para o container.
 COPY . .
@@ -73,4 +83,4 @@ COPY . .
 EXPOSE 3000 4000 5555
 
 # 8. Comando para iniciar a aplicação em modo de desenvolvimento.
-CMD ["npm", "run", "dev"]
+CMD ["pnpm", "run", "dev"]

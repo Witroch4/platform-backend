@@ -181,7 +181,7 @@ Atenciosamente,`);
                     <Button
                       key={type}
                       variant={headerType === type ? 'default' : 'outline'}
-                      size="sm"
+                      
                       onClick={() => setHeaderType(type)}
                     >
                       {type === 'NONE' ? 'Nenhum' : type}
@@ -264,7 +264,7 @@ Atenciosamente,`);
                 </span>
                 <Button
                   variant="outline"
-                  size="sm"
+                  
                   onClick={handlePreviewModeToggle}
                 >
                   {previewMode === 'numbered' ? 'Mostrar Valores Reais' : 'Mostrar Formato Numerado'}

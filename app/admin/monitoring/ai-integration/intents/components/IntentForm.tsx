@@ -165,7 +165,7 @@ export default function IntentForm({ intent, onSubmit, onCancel }: IntentFormPro
           <CardTitle>
             {intent ? "Edit Intent" : "Create Intent"}
           </CardTitle>
-          <Button variant="ghost" size="sm" onClick={onCancel}>
+          <Button variant="ghost"  onClick={onCancel}>
             <X className="h-4 w-4" />
           </Button>
         </CardHeader>

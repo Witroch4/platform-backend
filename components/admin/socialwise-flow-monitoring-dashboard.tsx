@@ -195,7 +195,7 @@ export function SocialWiseFlowMonitoringDashboard() {
         <div className="flex items-center space-x-2">
           <Button
             variant="outline"
-            size="sm"
+            
             onClick={fetchMetrics}
             disabled={loading}
           >
@@ -204,7 +204,7 @@ export function SocialWiseFlowMonitoringDashboard() {
           </Button>
           <Button
             variant={autoRefresh ? "default" : "outline"}
-            size="sm"
+            
             onClick={() => setAutoRefresh(!autoRefresh)}
           >
             <Activity className="h-4 w-4 mr-2" />
@@ -296,7 +296,7 @@ export function SocialWiseFlowMonitoringDashboard() {
 
       {/* Metrics Tabs */}
       <Tabs defaultValue="performance" className="space-y-4">
-        <TabsList variant="line">
+        <TabsList >
           <TabsTrigger value="performance">Performance</TabsTrigger>
           <TabsTrigger value="classification">Classificação</TabsTrigger>
           <TabsTrigger value="errors">Erros</TabsTrigger>

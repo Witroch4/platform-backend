@@ -590,7 +590,7 @@ export function CostEventsTable() {
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
-                    size="sm"
+                    
                     onClick={() => setPage(page - 1)}
                     disabled={!eventsData.pagination.hasPrevPage}
                   >
@@ -602,7 +602,7 @@ export function CostEventsTable() {
                   </span>
                   <Button
                     variant="outline"
-                    size="sm"
+                    
                     onClick={() => setPage(page + 1)}
                     disabled={!eventsData.pagination.hasNextPage}
                   >

@@ -384,7 +384,7 @@ export default function DisparoOABPage() {
                 <CardFooter>
                   <Button 
                     variant="outline" 
-                    size="sm" 
+                     
                     onClick={() => setResultado(null)}
                     className="w-full border-border hover:bg-accent"
                   >

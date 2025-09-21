@@ -40,9 +40,15 @@
       "Bash(docker history:*)",
       "Bash(git add:*)",
       "Bash(git push:*)",
-      "Bash(sudo chown:*)"
+      "Bash(sudo chown:*)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm:*)"
     ],
     "deny": [],
     "ask": []
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "shadcn"
+  ]
 }

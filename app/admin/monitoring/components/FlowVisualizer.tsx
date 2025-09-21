@@ -644,7 +644,7 @@ export function FlowVisualizer({
                   <TooltipTrigger asChild>
                     <Button
                       variant="outline"
-                      size="sm"
+                      
                       onClick={() => setShowDependencies(!showDependencies)}
                       className={showDependencies ? 'bg-blue-50' : ''}
                     >
@@ -660,7 +660,7 @@ export function FlowVisualizer({
                   <TooltipTrigger asChild>
                     <Button
                       variant="outline"
-                      size="sm"
+                      
                       onClick={() => setShowMetrics(!showMetrics)}
                       className={showMetrics ? 'bg-green-50' : ''}
                     >
@@ -672,19 +672,19 @@ export function FlowVisualizer({
                   </TooltipContent>
                 </Tooltip>
                 
-                <Button variant="outline" size="sm" onClick={fitToView}>
+                <Button variant="outline"  onClick={fitToView}>
                   <Move className="h-4 w-4" />
                 </Button>
                 
                 <Button
                   variant="outline"
-                  size="sm"
+                  
                   onClick={() => setIsFullscreen(!isFullscreen)}
                 >
                   {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                 </Button>
                 
-                <Button variant="outline" size="sm" onClick={resetView}>
+                <Button variant="outline"  onClick={resetView}>
                   <RefreshCw className="h-4 w-4" />
                 </Button>
               </div>
@@ -731,7 +731,7 @@ export function FlowVisualizer({
                     <TooltipTrigger asChild>
                       <Button
                         variant="outline"
-                        size="sm"
+                        
                         onClick={() => handleZoom(0.2)}
                       >
                         <ZoomIn className="h-4 w-4" />
@@ -748,7 +748,7 @@ export function FlowVisualizer({
                     <TooltipTrigger asChild>
                       <Button
                         variant="outline"
-                        size="sm"
+                        
                         onClick={() => handleZoom(-0.2)}
                       >
                         <ZoomOut className="h-4 w-4" />
@@ -1107,7 +1107,7 @@ export function FlowVisualizer({
                   <div className="space-y-2">
                     <Button
                       variant="outline"
-                      size="sm"
+                      
                       className="w-full"
                       onClick={() => {
                         // TODO: Implement job details view
@@ -1119,7 +1119,7 @@ export function FlowVisualizer({
                     {selectedNodeData.status === 'failed' && (
                       <Button
                         variant="outline"
-                        size="sm"
+                        
                         className="w-full"
                         onClick={() => {
                           // TODO: Implement retry job

@@ -481,7 +481,7 @@ const ButtonManagerComponent: React.FC<ButtonManagerProps> = ({
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
+                
                 disabled={disabled}
                 className="h-8"
               >
@@ -649,7 +649,7 @@ const ButtonManagerComponent: React.FC<ButtonManagerProps> = ({
                     <Button
                       type="button"
                       variant="ghost"
-                      size="sm"
+                      
                       onClick={() => handleReactionConfig(button.id)}
                       disabled={disabled}
                       className="h-6 text-xs"

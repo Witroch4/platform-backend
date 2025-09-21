@@ -236,7 +236,7 @@ export function DependencyTree({
             {node.hasChildren ? (
               <Button
                 variant="ghost"
-                size="sm"
+                
                 className="h-6 w-6 p-0"
                 onClick={(e) => {
                   e.stopPropagation();

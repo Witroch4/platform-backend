@@ -24,10 +24,10 @@ try {
 
 # Verificar se tsx está disponível
 try {
-    npx tsx --version | Out-Null
+    pnpm exec tsx --version | Out-Null
     Write-Host "✅ tsx disponível" -ForegroundColor Green
 } catch {
-    Write-Host "❌ tsx não encontrado! Execute: npm install" -ForegroundColor Red
+    Write-Host "❌ tsx não encontrado! Execute: pnpm install" -ForegroundColor Red
     exit 1
 }
 
@@ -83,7 +83,7 @@ Register-EngineEvent PowerShell.Exiting -Action $cleanup
 
 try {
     # Iniciar o worker usando tsx
-    npx tsx --tsconfig tsconfig.worker.json worker/init.ts
+    pnpm exec tsx --tsconfig tsconfig.worker.json worker/init.ts
 } catch {
     Write-Host "❌ Erro ao iniciar worker: $_" -ForegroundColor Red
     exit 1

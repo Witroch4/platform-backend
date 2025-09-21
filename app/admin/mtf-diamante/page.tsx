@@ -74,7 +74,7 @@ const MtfDiamanteContent = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList variant="line">
+        <TabsList >
           <TabsTrigger value="lote">Configurações Globais</TabsTrigger>
           <TabsTrigger value="templates">Templates Oficiais</TabsTrigger>
           <TabsTrigger value="library">Template Library</TabsTrigger>

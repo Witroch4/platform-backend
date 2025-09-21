@@ -203,7 +203,7 @@ export default function QueueDashboard() {
                 <div className="flex space-x-2">
                   {queue.status === "paused" ? (
                     <Button
-                      size="sm"
+                      
                       variant="outline"
                       onClick={() => handleQueueAction(queue.name, "resume")}
                     >
@@ -212,7 +212,7 @@ export default function QueueDashboard() {
                     </Button>
                   ) : (
                     <Button
-                      size="sm"
+                      
                       variant="outline"
                       onClick={() => handleQueueAction(queue.name, "pause")}
                     >
@@ -222,7 +222,7 @@ export default function QueueDashboard() {
                   )}
                   
                   <Button
-                    size="sm"
+                    
                     variant="outline"
                     onClick={() => handleQueueAction(queue.name, "retry-failed")}
                   >
@@ -231,7 +231,7 @@ export default function QueueDashboard() {
                   </Button>
                   
                   <Button
-                    size="sm"
+                    
                     variant="outline"
                     onClick={() => handleQueueAction(queue.name, "clean")}
                   >

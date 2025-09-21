@@ -130,7 +130,7 @@ export function TurboModeActivationBadge({
               
               <Button
                 variant="ghost"
-                size="sm"
+                
                 onClick={() => setShowDetails(!showDetails)}
                 className="h-6 w-6 p-0"
               >
@@ -145,7 +145,7 @@ export function TurboModeActivationBadge({
               {!isActive && onActivate && (
                 <Button
                   onClick={onActivate}
-                  size="sm"
+                  
                   className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   <Zap className="h-3 w-3 mr-1" />
@@ -157,7 +157,7 @@ export function TurboModeActivationBadge({
                 <Button
                   onClick={onDeactivate}
                   variant="outline"
-                  size="sm"
+                  
                   className="flex-1"
                 >
                   Desativar TURBO

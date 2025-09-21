@@ -99,33 +99,32 @@ const config = {
     			'accordion-up': 'accordion-up 0.2s ease-out',
     			'caret-blink': 'caret-blink 1.25s ease-out infinite'
     		},
-            // Customização do plugin typography
-            typography: {
-                DEFAULT: {
-                    css: {
-                        maxWidth: 'none',
-                        color: 'var(--tw-prose-body)',
-                        a: {
-                            color: 'var(--tw-prose-links)',
-                            '&:hover': {
-                                color: 'var(--tw-prose-links-hover)',
-                            },
-                        },
-                        strong: {
-                            fontWeight: '700',
-                        },
-                        code: {
-                            color: 'var(--tw-prose-code)',
-                            fontWeight: '500',
-                        },
-                        pre: {
-                            backgroundColor: 'var(--tw-prose-pre-bg)',
-                            color: 'var(--tw-prose-pre-code)',
-                            overflowX: 'auto',
-                        },
-                    },
-                },
-            },
+    		typography: {
+    			DEFAULT: {
+    				css: {
+    					maxWidth: 'none',
+    					color: 'var(--tw-prose-body)',
+    					a: {
+    						color: 'var(--tw-prose-links)',
+    						'&:hover': {
+    							color: 'var(--tw-prose-links-hover)'
+    						}
+    					},
+    					strong: {
+    						fontWeight: '700'
+    					},
+    					code: {
+    						color: 'var(--tw-prose-code)',
+    						fontWeight: '500'
+    					},
+    					pre: {
+    						backgroundColor: 'var(--tw-prose-pre-bg)',
+    						color: 'var(--tw-prose-pre-code)',
+    						overflowX: 'auto'
+    					}
+    				}
+    			}
+    		}
     	}
     },
 	plugins: [

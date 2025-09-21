@@ -1,0 +1,14 @@
+ignoredBuiltDependencies:
+  - '@biomejs/biome'
+  - '@playwright/browser-chromium'
+  - '@playwright/browser-firefox'
+  - '@playwright/browser-webkit'
+  - '@prisma/client'
+  - '@prisma/engines'
+  - canvas
+  - esbuild
+  - msgpackr-extract
+  - msw
+  - prisma
+  - sharp
+  - unrs-resolver

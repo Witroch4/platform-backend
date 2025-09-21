@@ -122,21 +122,21 @@ export function FeatureFlagCategoryTabs({
               <Filter className="h-4 w-4 text-muted-foreground" />
               <Button
                 variant={filterEnabled === null ? "default" : "outline"}
-                size="sm"
+                
                 onClick={() => setFilterEnabled(null)}
               >
                 Todas
               </Button>
               <Button
                 variant={filterEnabled === true ? "default" : "outline"}
-                size="sm"
+                
                 onClick={() => setFilterEnabled(true)}
               >
                 Ativas
               </Button>
               <Button
                 variant={filterEnabled === false ? "default" : "outline"}
-                size="sm"
+                
                 onClick={() => setFilterEnabled(false)}
               >
                 Inativas

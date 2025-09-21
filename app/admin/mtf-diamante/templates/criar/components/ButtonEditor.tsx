@@ -116,7 +116,7 @@ export const ButtonEditor = ({ buttons, setButtons }: ButtonEditorProps) => {
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" disabled={buttons.length >= totalLimit}>
+            <Button variant="outline"  disabled={buttons.length >= totalLimit}>
               <Plus className="h-3 w-3 mr-1" />
               Adicionar botão
               <span className="ml-2 text-xs text-muted-foreground">({buttons.length}/{totalLimit})</span>

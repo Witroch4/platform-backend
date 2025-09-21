@@ -163,7 +163,7 @@ async function runPreTestCheck() {
   } else {
     log('⚠️  Some checks failed, but tests can still run with mocked dependencies.', 'yellow');
     log('💡 To fix issues:', 'blue');
-    log('   - Install missing packages: npm install', 'blue');
+    log('   - Install missing packages: pnpm install', 'blue');
     log('   - Start Redis: redis-server (optional, will use mocks)', 'blue');
     process.exit(0); // Don't fail, just warn
   }

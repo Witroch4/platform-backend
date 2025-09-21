@@ -221,7 +221,7 @@ export function CostMonitoringDashboard() {
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
-                size="sm"
+                
                 onClick={() => setAutoRefresh(!autoRefresh)}
               >
                 <Activity className={`h-4 w-4 mr-1 ${autoRefresh ? 'text-green-500' : 'text-gray-400'}`} />
@@ -229,7 +229,7 @@ export function CostMonitoringDashboard() {
               </Button>
               <Button
                 variant="outline"
-                size="sm"
+                
                 onClick={() => fetchOverview()}
                 disabled={refreshing}
               >
@@ -406,7 +406,7 @@ export function CostMonitoringDashboard() {
               <CardTitle className="text-lg">Eventos Recentes</CardTitle>
               <CardDescription>Últimos 10 eventos de custo processados</CardDescription>
             </div>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" >
               <Eye className="h-4 w-4 mr-1" />
               Ver Todos
             </Button>

@@ -18,43 +18,43 @@ Sistema completo para backup e restauração do banco de dados PostgreSQL da apl
 
 ```bash
 # Backup completo (JSON + SQL comprimidos)
-npm run backup
+pnpm run backup
 
 # Backup simples (apenas JSON das tabelas principais)
-npm run backup:simple
+pnpm run backup:simple
 
 # Backup apenas em JSON
-npm run backup:json
+pnpm run backup:json
 
 # Backup apenas em SQL
-npm run backup:sql
+pnpm run backup:sql
 
 # Ajuda
-npm run backup:help
+pnpm run backup:help
 ```
 
 ### Backup Agendado
 
 ```bash
 # Iniciar scheduler de backup automático
-npm run backup:schedule
+pnpm run backup:schedule
 
 # Executar backup manual via scheduler
-npm run backup:schedule:run
+pnpm run backup:schedule:run
 
 # Ver configuração atual
-npm run backup:schedule:config
+pnpm run backup:schedule:config
 
 # Habilitar/desabilitar scheduler
-npm run backup:schedule:enable
-npm run backup:schedule:disable
+pnpm run backup:schedule:enable
+pnpm run backup:schedule:disable
 ```
 
 ### Restauração
 
 ```bash
 # Restaurar backup
-npm run restore backups/backup_simple_2024-01-01_12-00-00.json
+pnpm run restore backups/backup_simple_2024-01-01_12-00-00.json
 ```
 
 ## 📁 Estrutura de Arquivos

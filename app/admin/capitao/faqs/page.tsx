@@ -87,7 +87,7 @@ export default function CaptainFaqsPage() {
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button size="sm"><Plus className="w-4 h-4 mr-2" /> Criar nova FAQ</Button>
+            <Button ><Plus className="w-4 h-4 mr-2" /> Criar nova FAQ</Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-2xl w-[96vw] max-h-[85vh]">
             <DialogHeader>
@@ -142,7 +142,7 @@ export default function CaptainFaqsPage() {
           <div className="text-center py-16 border rounded-md">
             <p className="mb-4 text-lg font-medium">Nenhuma FAQ encontrada</p>
             <p className="text-sm text-muted-foreground mb-6">Ative as FAQs automáticas no assistente para sugestões baseadas nas conversas resolvidas.</p>
-            <Button onClick={() => setOpen(true)} size="sm"><Plus className="w-4 h-4 mr-2" /> Criar nova FAQ</Button>
+            <Button onClick={() => setOpen(true)} ><Plus className="w-4 h-4 mr-2" /> Criar nova FAQ</Button>
           </div>
         ) : (
           faqs.map((f) => (

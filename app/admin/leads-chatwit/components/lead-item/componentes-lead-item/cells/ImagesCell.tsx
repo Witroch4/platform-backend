@@ -71,7 +71,7 @@ export function ImagesCell({
     <TableCell className="min-w-[70px] max-w-[100px] p-2 align-middle">
       <Button
         variant="outline"
-        size="sm"
+        
         onClick={onConverter}
         disabled={isConverting === lead.id}
         className="w-full text-xs px-2 py-1 h-auto min-h-8"

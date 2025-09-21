@@ -103,7 +103,7 @@ export const ListConfig: React.FC<ListConfigProps> = ({ message, updateAction })
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <Label>Seções da Lista</Label>
-            <Button variant="outline" size="sm" onClick={addSection}>
+            <Button variant="outline"  onClick={addSection}>
               <Plus className="h-4 w-4 mr-1" />
               Adicionar Seção
             </Button>
@@ -116,7 +116,7 @@ export const ListConfig: React.FC<ListConfigProps> = ({ message, updateAction })
                   <Badge variant="outline">Seção {sectionIndex + 1}</Badge>
                   <Button
                     variant="ghost"
-                    size="sm"
+                    
                     onClick={() => removeSection(sectionIndex)}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -140,7 +140,7 @@ export const ListConfig: React.FC<ListConfigProps> = ({ message, updateAction })
                     <Label>Itens da Seção</Label>
                     <Button
                       variant="outline"
-                      size="sm"
+                      
                       onClick={() => addRow(sectionIndex)}
                     >
                       <Plus className="h-4 w-4 mr-1" />
@@ -159,7 +159,7 @@ export const ListConfig: React.FC<ListConfigProps> = ({ message, updateAction })
                         </Badge>
                         <Button
                           variant="ghost"
-                          size="sm"
+                          
                           onClick={() => removeRow(sectionIndex, rowIndex)}
                         >
                           <Trash2 className="h-3 w-3" />

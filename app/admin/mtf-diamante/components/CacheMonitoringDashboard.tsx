@@ -321,7 +321,7 @@ export default function CacheMonitoringDashboard() {
                         onClick={() => performCacheOperation('warm', { inboxIds: [inboxId] })}
                         disabled={!inboxId || operationLoading === 'warm-single'}
                         variant="outline"
-                        size="sm"
+                        
                       >
                         <Thermometer className="w-4 h-4" />
                       </Button>
@@ -329,7 +329,7 @@ export default function CacheMonitoringDashboard() {
                         onClick={() => performCacheOperation('invalidate', { inboxId })}
                         disabled={!inboxId || operationLoading === 'invalidate-single'}
                         variant="outline"
-                        size="sm"
+                        
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -352,7 +352,7 @@ export default function CacheMonitoringDashboard() {
                         }}
                         disabled={!inboxIds || operationLoading === 'warm-multiple'}
                         variant="outline"
-                        size="sm"
+                        
                       >
                         <Thermometer className="w-4 h-4" />
                       </Button>
@@ -363,7 +363,7 @@ export default function CacheMonitoringDashboard() {
                         }}
                         disabled={!inboxIds || operationLoading === 'invalidate-multiple'}
                         variant="outline"
-                        size="sm"
+                        
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>

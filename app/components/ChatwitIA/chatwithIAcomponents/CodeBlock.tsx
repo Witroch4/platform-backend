@@ -53,7 +53,7 @@ export const CodeBlock = ({ language, value }: CodeBlockProps) => {
           </span>
           <Button
             onClick={copyToClipboard}
-            size="sm"
+            
             variant="ghost"
             className="h-7 px-2 text-xs hover:bg-muted-foreground/10 transition-all duration-200"
           >

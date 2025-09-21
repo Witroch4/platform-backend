@@ -815,10 +815,10 @@ export default function EditPage() {
 
         {/* Botões Editar/Pausar ou Cancelar/Salvar */}
         <div style={{ marginTop: "20px", width: "100%" }}>
-          <Button variant="outline" size="sm" onClick={handleClickEdit} style={{ marginRight: "10px" }}>
+          <Button variant="outline"  onClick={handleClickEdit} style={{ marginRight: "10px" }}>
             {isEditing ? "Cancelar" : "Editar"}
           </Button>
-          <Button variant="outline" size="sm" onClick={handleClickPauseOrSalvar}>
+          <Button variant="outline"  onClick={handleClickPauseOrSalvar}>
             {isEditing ? "Salvar" : isLive ? "Pausar" : "Ativar"}
           </Button>
         </div>

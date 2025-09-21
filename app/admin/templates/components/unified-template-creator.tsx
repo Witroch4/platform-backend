@@ -613,7 +613,7 @@ export function UnifiedTemplateCreator({ onSuccess, initialData }: UnifiedTempla
 
               {formData.type === TemplateType.INTERACTIVE_MESSAGE && (
                 <Tabs defaultValue="content" className="space-y-4">
-                  <TabsList variant="line">
+                  <TabsList >
                     <TabsTrigger value="content">Conteúdo</TabsTrigger>
                     <TabsTrigger value="actions">Ações</TabsTrigger>
                   </TabsList>
@@ -795,7 +795,7 @@ export function UnifiedTemplateCreator({ onSuccess, initialData }: UnifiedTempla
                           <h4 className="font-medium">Botões de Resposta</h4>
                           <Button 
                             variant="outline" 
-                            size="sm" 
+                             
                             onClick={addReplyButton}
                             disabled={(formData.interactiveContent.actionReplyButton?.buttons.length || 0) >= 3}
                           >
@@ -858,7 +858,7 @@ export function UnifiedTemplateCreator({ onSuccess, initialData }: UnifiedTempla
                         <div className="space-y-4">
                           <div className="flex items-center justify-between">
                             <Label>Seções</Label>
-                            <Button variant="outline" size="sm" onClick={addListSection}>
+                            <Button variant="outline"  onClick={addListSection}>
                               <Plus className="h-4 w-4 mr-2" />
                               Adicionar Seção
                             </Button>
@@ -926,7 +926,7 @@ export function UnifiedTemplateCreator({ onSuccess, initialData }: UnifiedTempla
                                 ))}
                                 <Button
                                   variant="outline"
-                                  size="sm"
+                                  
                                   onClick={() => addListRow(sectionIndex)}
                                 >
                                   <Plus className="h-4 w-4 mr-2" />

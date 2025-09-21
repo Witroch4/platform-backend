@@ -160,7 +160,7 @@ const AgendamentoDePostagens: React.FC = () => {
             action: (
               <Button
                 variant="link"
-                size="sm"
+                
                 onClick={() => {
                   router.refresh();
                 }}

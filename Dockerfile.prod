@@ -145,24 +145,33 @@ ENV AUTH_SECRET=${AUTH_SECRET} \
     ILOVEPDF_PUBLIC_KEY=${ILOVEPDF_PUBLIC_KEY} \
     ILOVEPDF_SECRET_KEY=${ILOVEPDF_SECRET_KEY}
 
+# Instala pnpm globalmente e configura
+ENV SHELL=/bin/bash
+RUN npm install -g pnpm@10.17.0 && \
+    SHELL=/bin/bash pnpm setup
+
+# Configura variáveis de ambiente para pnpm
+ENV PNPM_HOME="/root/.local/share/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+
 # Dependências JS para build
-COPY package*.json ./
+COPY package.json pnpm-lock.yaml ./
 COPY prisma ./prisma/
 # Instalar dependências excluindo Playwright (não necessário em produção)
-RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci
+RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pnpm install --frozen-lockfile
 
 # Código-fonte
 COPY . .
 
 # Prisma (artefatos do client)
-RUN npx prisma generate
+RUN pnpm exec prisma generate
 
 # Build Next/Workers
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 # Se quiser evitar qualquer SSG que escape, habilite:
 # ENV NEXT_SKIP_BUILD_STATIC_GENERATION=true
-RUN npm run build
+RUN pnpm run build
 
 
 # ===============================
@@ -188,12 +197,23 @@ RUN if [ -f /etc/ImageMagick-6/policy.xml ]; then \
       echo "Nenhum arquivo de política do ImageMagick encontrado"; \
     fi
 
+# Instala pnpm globalmente no runtime e configura
+RUN npm install -g pnpm@10.17.0 && \
+    SHELL=/bin/bash pnpm setup
+
+# Configura variáveis de ambiente para pnpm no runtime
+ENV PNPM_HOME="/root/.local/share/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+
 # Apenas deps de PRODUÇÃO
-COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/package.json /app/pnpm-lock.yaml ./
 COPY --from=builder /app/prisma ./prisma/
-RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci --omit=dev && \
-    npx prisma generate && \
-    npm cache clean --force
+# Instalar deps de produção sem executar scripts (evita prisma generate)
+RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pnpm install --frozen-lockfile --prod --ignore-scripts
+# Copiar o cliente Prisma já gerado do builder (preserva estrutura pnpm)
+COPY --from=builder /app/node_modules/.pnpm ./node_modules/.pnpm
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+RUN pnpm store prune
 
 # Artefatos buildados
 COPY --from=builder /app/.next ./.next

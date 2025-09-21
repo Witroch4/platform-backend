@@ -567,7 +567,7 @@ export function CostBreakdownCharts() {
                 }
               </CardDescription>
             </div>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" >
               <Download className="h-4 w-4 mr-1" />
               Exportar
             </Button>

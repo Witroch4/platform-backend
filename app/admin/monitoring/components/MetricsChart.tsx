@@ -422,7 +422,7 @@ export function MetricsChart({
             
             <Button
               variant="outline"
-              size="sm"
+              
               onClick={() => setIsFullscreen(!isFullscreen)}
             >
               <Maximize2 className="h-4 w-4" />

@@ -107,7 +107,7 @@ export function QueueGrid({
         <div className="flex space-x-2">
           <Button
             variant="outline"
-            size="sm"
+            
             onClick={() => queues.forEach(q => onRefreshQueue(q.name))}
           >
             <RefreshCw className="h-4 w-4 mr-2" />
@@ -247,7 +247,7 @@ export function QueueGrid({
                   <div className="flex space-x-1">
                     <Button
                       variant="outline"
-                      size="sm"
+                      
                       onClick={(e) => {
                         e.stopPropagation();
                         onBatchAction({ action: 'pause_queue', queueName: queue.name });
@@ -258,7 +258,7 @@ export function QueueGrid({
                     </Button>
                     <Button
                       variant="outline"
-                      size="sm"
+                      
                       onClick={(e) => {
                         e.stopPropagation();
                         onBatchAction({ action: 'resume_queue', queueName: queue.name });
@@ -269,7 +269,7 @@ export function QueueGrid({
                     </Button>
                     <Button
                       variant="outline"
-                      size="sm"
+                      
                       onClick={(e) => {
                         e.stopPropagation();
                         onRefreshQueue(queue.name);
@@ -281,7 +281,7 @@ export function QueueGrid({
                   </div>
                   <Button
                     variant="outline"
-                    size="sm"
+                    
                     onClick={(e) => {
                       e.stopPropagation();
                       // TODO: Open queue settings

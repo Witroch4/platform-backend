@@ -220,11 +220,11 @@ export function JobList({
                   className="pl-8 w-64"
                 />
               </div>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" >
                 <Filter className="h-4 w-4 mr-2" />
                 Filters
               </Button>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" >
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Refresh
               </Button>
@@ -243,7 +243,7 @@ export function JobList({
                 {canRetry && (
                   <Button
                     variant="outline"
-                    size="sm"
+                    
                     onClick={() => handleJobAction('retry')}
                   >
                     <RefreshCw className="h-4 w-4 mr-2" />
@@ -253,7 +253,7 @@ export function JobList({
                 {canPromote && (
                   <Button
                     variant="outline"
-                    size="sm"
+                    
                     onClick={() => handleJobAction('promote')}
                   >
                     <TrendingUp className="h-4 w-4 mr-2" />
@@ -263,7 +263,7 @@ export function JobList({
                 {canRemove && (
                   <Button
                     variant="outline"
-                    size="sm"
+                    
                     onClick={() => handleJobAction('remove')}
                   >
                     <Trash2 className="h-4 w-4 mr-2" />
@@ -297,7 +297,7 @@ export function JobList({
                   <TableHead>
                     <Button
                       variant="ghost"
-                      size="sm"
+                      
                       onClick={() => handleSort('name')}
                       className="h-auto p-0 font-semibold"
                     >
@@ -309,7 +309,7 @@ export function JobList({
                   <TableHead>
                     <Button
                       variant="ghost"
-                      size="sm"
+                      
                       onClick={() => handleSort('createdAt')}
                       className="h-auto p-0 font-semibold"
                     >
@@ -394,7 +394,7 @@ export function JobList({
                         )}
                       </TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="sm">
+                        <Button variant="ghost" >
                           <Eye className="h-4 w-4" />
                         </Button>
                       </TableCell>
@@ -416,7 +416,7 @@ export function JobList({
               <div className="flex items-center space-x-2">
                 <Button
                   variant="outline"
-                  size="sm"
+                  
                   onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
                   disabled={pagination.page === 1}
                 >
@@ -430,7 +430,7 @@ export function JobList({
                       <Button
                         key={page}
                         variant={pagination.page === page ? "default" : "outline"}
-                        size="sm"
+                        
                         onClick={() => setPagination(prev => ({ ...prev, page }))}
                         className="w-8 h-8 p-0"
                       >
@@ -441,7 +441,7 @@ export function JobList({
                 </div>
                 <Button
                   variant="outline"
-                  size="sm"
+                  
                   onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
                   disabled={pagination.page === pagination.totalPages}
                 >

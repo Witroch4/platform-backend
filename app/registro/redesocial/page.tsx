@@ -408,7 +408,7 @@ export default function RedeSocialPage() {
                   <CardFooter className="flex justify-between pt-4">
                     <Button
                       variant="outline"
-                      size="sm"
+                      
                       onClick={(e) => {
                         e.stopPropagation();
                         navigateToDashboard(account.providerAccountId);
@@ -778,7 +778,7 @@ export default function RedeSocialPage() {
               <Button
                 onClick={() => router.push('/admin')}
                 variant="outline"
-                size="sm"
+                
                 className="mt-4"
               >
                 <BarChart className="mr-2 h-4 w-4" />

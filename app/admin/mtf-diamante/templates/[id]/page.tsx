@@ -722,7 +722,7 @@ function TemplateDetailsClient({
         <div className="space-x-2">
           <Button
             variant="destructive"
-            size="sm"
+            
             onClick={() => setShowDeleteDialog(true)}
             disabled={isDeleting}
           >

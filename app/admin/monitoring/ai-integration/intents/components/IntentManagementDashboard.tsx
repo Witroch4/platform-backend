@@ -179,7 +179,7 @@ export default function IntentManagementDashboard() {
                     <div className="flex items-center gap-2">
                       <Button
                         variant="outline"
-                        size="sm"
+                        
                         onClick={() => handleRegenerateEmbedding(intent.id)}
                         className="flex items-center gap-1"
                       >
@@ -188,7 +188,7 @@ export default function IntentManagementDashboard() {
                       </Button>
                       <Button
                         variant="outline"
-                        size="sm"
+                        
                         onClick={() => handleEditIntent(intent)}
                         className="flex items-center gap-1"
                       >
@@ -197,7 +197,7 @@ export default function IntentManagementDashboard() {
                       </Button>
                       <Button
                         variant="outline"
-                        size="sm"
+                        
                         onClick={() => handleDeleteIntent(intent.id)}
                         className="flex items-center gap-1 text-red-600 hover:text-red-700"
                       >

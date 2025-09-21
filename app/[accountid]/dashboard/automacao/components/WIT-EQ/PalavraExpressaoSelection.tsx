@@ -86,7 +86,7 @@ export default function PalavraExpressaoSelection({
               <Button
                 key={index}
                 variant="outline"
-                size="sm"
+                
                 onClick={() => handleExemploClick(exemplo)}
                 style={{
                   textTransform: "capitalize",

@@ -476,7 +476,7 @@ export function EspelhoDialog({
                   <div className="flex gap-1 sm:gap-2 flex-wrap">
                     <Button 
                       variant="outline" 
-                      size="sm"
+                      
                       onClick={handleOpenImageGallery}
                       className="text-xs sm:text-sm"
                     >
@@ -487,7 +487,7 @@ export function EspelhoDialog({
                     {imagens.length > 0 && (
                       <Button
                         variant="outline"
-                        size="sm"
+                        
                         onClick={() => handleGenerateTextFromImages(imagens)}
                         disabled={isGeneratingText || !leadData}
                         className="text-xs sm:text-sm"

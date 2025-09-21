@@ -79,7 +79,7 @@ export default function InboxDashboardPage() {
     <SafeBoundary>
       <div className="p-4 md:p-6">
         <Tabs value={tab} onValueChange={setTab} className="space-y-4">
-          <TabsList variant="line">
+          <TabsList >
             <TabsTrigger value="interativas">Mensagens Interativas</TabsTrigger>
             <TabsTrigger value="mapeamento">Mapeamento</TabsTrigger>
             <TabsTrigger value="agentes">Agentes</TabsTrigger>
@@ -119,7 +119,7 @@ export default function InboxDashboardPage() {
                     <p className="text-sm text-muted-foreground mb-3">
                       Configure o comportamento da inteligência artificial para esta caixa
                     </p>
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" >
                       Abrir Configurações IA
                     </Button>
                   </div>
@@ -129,7 +129,7 @@ export default function InboxDashboardPage() {
                     <p className="text-sm text-muted-foreground mb-3">
                       Ajuste as configurações específicas do canal de comunicação
                     </p>
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" >
                       Configurar Canal
                     </Button>
                   </div>
@@ -141,7 +141,7 @@ export default function InboxDashboardPage() {
                     </p>
                     <Button
                       variant="destructive"
-                      size="sm"
+                      
                       onClick={handleDeleteClick}
                     >
                       Excluir Caixa
@@ -204,13 +204,13 @@ export default function InboxDashboardPage() {
                 <div className="mt-6 p-4 border border-border rounded-lg bg-muted/20">
                   <h3 className="font-medium mb-3">Relatórios Detalhados</h3>
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" >
                       Exportar Dados
                     </Button>
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" >
                       Relatório Semanal
                     </Button>
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" >
                       Análise de Performance
                     </Button>
                   </div>

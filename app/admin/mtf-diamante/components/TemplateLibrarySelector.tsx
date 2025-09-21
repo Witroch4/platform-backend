@@ -225,7 +225,7 @@ export const TemplateLibrarySelector: React.FC<TemplateLibrarySelectorProps> = (
                       <div className="flex gap-2">
                         {canUseTemplate(template) ? (
                           <Button
-                            size="sm"
+                            
                             onClick={() => handleSelectTemplate(template)}
                             className="flex-1"
                           >
@@ -235,7 +235,7 @@ export const TemplateLibrarySelector: React.FC<TemplateLibrarySelectorProps> = (
                         ) : (
                           <Button
                             variant="outline"
-                            size="sm"
+                            
                             onClick={() => handleRequestApproval(template.id)}
                             className="flex-1"
                           >

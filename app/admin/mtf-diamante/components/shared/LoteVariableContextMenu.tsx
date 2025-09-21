@@ -108,7 +108,7 @@ export const LoteVariableContextMenu: React.FC<LoteVariableContextMenuProps> = (
             </CardTitle>
             <Button
               variant="ghost"
-              size="sm"
+              
               onClick={onClose}
               className="h-6 w-6 p-0"
             >
@@ -131,7 +131,7 @@ export const LoteVariableContextMenu: React.FC<LoteVariableContextMenuProps> = (
           <div className="flex gap-1">
             <Button
               variant="default"
-              size="sm"
+              
               className="h-6 px-2 text-xs"
             >
               <Package className="h-3 w-3 mr-1" />

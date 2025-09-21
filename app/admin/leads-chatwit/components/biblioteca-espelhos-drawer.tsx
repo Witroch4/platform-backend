@@ -545,7 +545,7 @@ export function BibliotecaEspelhosDrawer({
                           <Button 
                             variant="outline" 
                             onClick={() => setNewEspelhoName("")}
-                            size="sm"
+                            
                           >
                             Cancelar
                           </Button>
@@ -586,13 +586,13 @@ export function BibliotecaEspelhosDrawer({
                                       }}
                                     />
                                     <Button
-                                      size="sm"
+                                      
                                       onClick={() => handleUpdateName(espelho.id, tempName)}
                                     >
                                       Salvar
                                     </Button>
                                     <Button
-                                      size="sm"
+                                      
                                       variant="outline"
                                       onClick={() => {
                                         setEditingNameId(null);
@@ -606,7 +606,7 @@ export function BibliotecaEspelhosDrawer({
                                   <div className="flex items-center gap-2">
                                     <h4 className="font-medium">{espelho.nome}</h4>
                                     <Button
-                                      size="sm"
+                                      
                                       variant="ghost"
                                       onClick={() => {
                                         setEditingNameId(espelho.id);
@@ -649,7 +649,7 @@ export function BibliotecaEspelhosDrawer({
                               {espelho.espelhoCorrecao && !espelho.textoDOEspelho && (
                                 <Button
                                   variant="outline"
-                                  size="sm"
+                                  
                                   onClick={() => {
                                     const imagens = JSON.parse(espelho.espelhoCorrecao || '[]');
                                     handleEnviarParaSistemaExterno(espelho.id, imagens, true);
@@ -672,7 +672,7 @@ export function BibliotecaEspelhosDrawer({
                               
                               <Button
                                 variant="outline"
-                                size="sm"
+                                
                                 onClick={() => handleEditarEspelho(espelho)}
                               >
                                 <Eye className="h-4 w-4 mr-1" />
@@ -748,7 +748,7 @@ export function BibliotecaEspelhosDrawer({
                             />
                             <Button
                               variant="outline"
-                              size="sm"
+                              
                               onClick={() => handleEditarEspelho(espelho)}
                             >
                               <Edit className="h-4 w-4" />

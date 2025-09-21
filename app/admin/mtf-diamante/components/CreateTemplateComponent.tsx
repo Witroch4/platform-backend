@@ -234,7 +234,7 @@ export function CreateTemplateComponent({ onSuccess }: CreateTemplateComponentPr
         <Button
           type="button"
           variant="outline"
-          size="sm"
+          
           onClick={navigateBack}
           className="flex items-center gap-2"
         >
