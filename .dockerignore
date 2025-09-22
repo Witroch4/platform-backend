@@ -1,6 +1,6 @@
 node_modules
 npm-debug.log
-.env
+.env*
 .DS_Store
 .git
 .gitignore
@@ -9,3 +9,51 @@ npm-debug.log
 coverage
 dist
 .next
+
+# Build artifacts and cache
+.next/cache
+.turbo
+.swc
+
+# Test files
+__tests__
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+jest.config.*
+test-results
+playwright-report
+
+# Development files
+*.md
+README*
+docs/
+*.log
+pnpm-debug.log*
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Docker files themselves
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Scripts not needed in container
+scripts/test-*
+scripts/backup-*
+scripts/dev-*

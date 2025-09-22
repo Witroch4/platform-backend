@@ -76,6 +76,16 @@ function run(cmd, env) {
   execSync(full, { stdio: "inherit", env });
 }
 
+// Resolve Prisma CLI without relying on pnpm being installed in runtime
+function getPrismaBin() {
+  const binName = process.platform === 'win32' ? 'prisma.cmd' : 'prisma';
+  const localBin = path.join(process.cwd(), 'node_modules', '.bin', binName);
+  if (fs.existsSync(localBin)) return localBin;
+  // Fallbacks: global install or PATH
+  return 'prisma';
+}
+const PRISMA_BIN = getPrismaBin();
+
 // ---------- HELPERS ----------
 async function waitForConnection(prisma, label = "Postgres") {
   let lastErr;
@@ -298,7 +308,7 @@ async function adjustEmbeddingColumnAndIndex(prisma, dims) {
   // Se for para pular (workers), só gera client e vaza
   if (RUN_DB_PREPARE === "no") {
     console.log("⏭️ RUN_DB_PREPARE=no → pulando criação de DB/migrations. Rodando apenas prisma generate.");
-    run("pnpm exec prisma generate", { ...process.env, DATABASE_URL: dbUrl });
+    run(`${PRISMA_BIN} generate`, { ...process.env, DATABASE_URL: dbUrl });
     console.log("🎉 pronto.");
     process.exit(0);
   }
@@ -329,17 +339,17 @@ async function adjustEmbeddingColumnAndIndex(prisma, dims) {
   try {
     if (MODE === "deploy") {
       console.log("🔄 prisma migrate deploy");
-      run("pnpm exec prisma migrate deploy", env);
+      run(`${PRISMA_BIN} migrate deploy`, env);
     } else {
       console.log("🧨 prisma migrate reset -f");
-      run("pnpm exec prisma migrate reset -f", env);
+      run(`${PRISMA_BIN} migrate reset -f`, env);
     }
     console.log("✅ Migrações aplicadas.");
   } catch (e) {
     console.error("⚠️ Falha nas migrações:", e?.message || e);
     if (ALLOW_DB_PUSH_FALLBACK) {
-      console.log("🔁 Fallback habilitado → executando `npx prisma db push`");
-      run("pnpm exec prisma db push", env);
+      console.log("🔁 Fallback habilitado → executando `prisma db push`");
+      run(`${PRISMA_BIN} db push`, env);
       console.log("✅ db push concluído.");
     } else {
       process.exit(1);
@@ -356,13 +366,13 @@ async function adjustEmbeddingColumnAndIndex(prisma, dims) {
 
   // 6) generate
   console.log("🧩 prisma generate");
-  run("pnpm exec prisma generate", env);
+  run(`${PRISMA_BIN} generate`, env);
 
   // 7) seed (opcional)
   if (RUN_SEED) {
     console.log("🌱 prisma db seed");
     try {
-      run("pnpm exec prisma db seed", env);
+      run(`${PRISMA_BIN} db seed`, env);
       console.log("✅ Seed concluído.");
     } catch (e) {
       console.error("⚠️ Seed falhou (prosseguindo):", e?.message || e);

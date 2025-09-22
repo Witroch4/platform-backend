@@ -467,11 +467,11 @@ export function AppAdminDashboard() {
                         onClick={(e) => {
                           e.preventDefault();
                           startTransition(() => {
-                            router.push('/admin/monitoring/dashboard');
+                            router.push('/admin/monitoring');
                           });
                         }}
                         onMouseEnter={() => {
-                          try { router.prefetch('/admin/monitoring/dashboard'); } catch {}
+                          try { router.prefetch('/admin/monitoring'); } catch {}
                         }}
                         className={`flex items-center transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
                       >

@@ -169,9 +169,21 @@ RUN pnpm exec prisma generate
 # Build Next/Workers
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+# Temporary OpenAI key for build (prevents build failures)
+ENV OPENAI_API_KEY=sk-fake-key-for-build-only
 # Se quiser evitar qualquer SSG que escape, habilite:
 # ENV NEXT_SKIP_BUILD_STATIC_GENERATION=true
 RUN pnpm run build
+
+# Mantém apenas dependências necessárias em produção (preserva prisma em deps)
+RUN pnpm prune --prod --ignore-scripts
+
+# Remove development cache and unnecessary files
+RUN rm -rf .next/cache && \
+    rm -rf node_modules/@types && \
+    rm -rf node_modules/@jest && \
+    rm -rf node_modules/typescript && \
+    rm -rf node_modules/@testing-library
 
 
 # ===============================
@@ -197,23 +209,11 @@ RUN if [ -f /etc/ImageMagick-6/policy.xml ]; then \
       echo "Nenhum arquivo de política do ImageMagick encontrado"; \
     fi
 
-# Instala pnpm globalmente no runtime e configura
-RUN npm install -g pnpm@10.17.0 && \
-    SHELL=/bin/bash pnpm setup
-
-# Configura variáveis de ambiente para pnpm no runtime
-ENV PNPM_HOME="/root/.local/share/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
-
-# Apenas deps de PRODUÇÃO
-COPY --from=builder /app/package.json /app/pnpm-lock.yaml ./
+# Copiar artefatos e dependências geradas no builder
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/pnpm-lock.yaml ./pnpm-lock.yaml
 COPY --from=builder /app/prisma ./prisma/
-# Instalar deps de produção sem executar scripts (evita prisma generate)
-RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pnpm install --frozen-lockfile --prod --ignore-scripts
-# Copiar o cliente Prisma já gerado do builder (preserva estrutura pnpm)
-COPY --from=builder /app/node_modules/.pnpm ./node_modules/.pnpm
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-RUN pnpm store prune
+COPY --from=builder /app/node_modules ./node_modules
 
 # Artefatos buildados
 COPY --from=builder /app/.next ./.next

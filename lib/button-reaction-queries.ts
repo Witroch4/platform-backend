@@ -1,5 +1,71 @@
 import { getPrismaInstance } from '@/lib/connections'
 
+function slugifyIntentValue(value: string): string {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)+/g, '')
+}
+
+// Normalizes button identifiers into multiple variants so we can locate
+// intent mappings regardless of hyphen/underscore differences or casing.
+function buildIntentSearchInfo(raw: string): {
+  original: string
+  plain: string
+  slug: string
+  candidates: string[]
+} {
+  const original = String(raw || '').trim()
+  let withoutCommand = original
+  if (withoutCommand.toLowerCase().startsWith('intent:')) {
+    withoutCommand = withoutCommand.slice('intent:'.length).trim()
+  }
+
+  let plain = withoutCommand
+  if (plain.startsWith('@')) {
+    plain = plain.slice(1).trim()
+  }
+
+  plain = plain.replace(/\s+/g, ' ')
+
+  const slug = slugifyIntentValue(plain)
+  const hyphenated = plain.replace(/[\s_]+/g, '-').replace(/-+/g, '-').trim()
+  const underscored = plain.replace(/[\s-]+/g, '_').replace(/_+/g, '_').trim()
+  const condensed = plain.replace(/[\s_-]+/g, '').trim()
+
+  const candidates = new Set<string>([
+    original,
+    withoutCommand,
+    plain,
+    plain.toLowerCase(),
+    `@${plain}`,
+    slug,
+    slug.replace(/-/g, '_'),
+    hyphenated,
+    hyphenated.toLowerCase(),
+    underscored,
+    underscored.toLowerCase(),
+    condensed,
+  ])
+
+  if (slug) {
+    candidates.add(slug.replace(/-/g, ''))
+    candidates.add(`@${slug}`)
+    candidates.add(`@${slug.replace(/-/g, '_')}`)
+  }
+
+  return {
+    original,
+    plain,
+    slug,
+    candidates: Array.from(candidates)
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0),
+  }
+}
+
 export interface ButtonReactionData {
   id: string
   buttonId: string
@@ -468,18 +534,23 @@ export async function getIntentMappingByButtonId(
 
   // 🔧 CORREÇÃO: Buscar na tabela MapeamentoIntencao (novo sistema IA Intent Mapping)
   // Extract intent name from buttonId (remove @ prefix)
-  const intentName = buttonId.startsWith('@') ? buttonId.slice(1) : buttonId
+  const normalizedIntent = buildIntentSearchInfo(buttonId)
+  const intentName = normalizedIntent.plain
+  const searchCandidates = normalizedIntent.candidates
   
   console.log('[INTENT MAPPING DEBUG] Searching in MapeamentoIntencao', {
     buttonId,
     intentName,
-    userId
+    userId,
+    searchCandidates
   });
 
   try {
     const intentMapping = await prisma.mapeamentoIntencao.findFirst({
       where: {
-        intentName: intentName,
+        intentName: searchCandidates.length
+          ? { in: searchCandidates }
+          : intentName,
         inbox: {
           usuarioChatwit: {
             appUserId: userId,
@@ -503,10 +574,72 @@ export async function getIntentMappingByButtonId(
       },
     });
 
+    if (!intentMapping && normalizedIntent.slug) {
+      console.log('[INTENT MAPPING DEBUG] Direct match not found, trying slug fallback', {
+        buttonId,
+        slug: normalizedIntent.slug,
+        userId,
+      })
+
+      const fallbackCandidates = await prisma.mapeamentoIntencao.findMany({
+        where: {
+          inbox: {
+            usuarioChatwit: {
+              appUserId: userId,
+            },
+          },
+        },
+        include: {
+          inbox: {
+            select: {
+              id: true,
+              nome: true,
+              inboxId: true,
+            },
+          },
+          template: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      })
+
+      const slugMatch = fallbackCandidates.find(
+        (candidate) => slugifyIntentValue(candidate.intentName) === normalizedIntent.slug
+      )
+
+      if (slugMatch) {
+        const templateName = slugMatch.template?.name || 'unknown template'
+        console.log('[INTENT MAPPING DEBUG] Found slug fallback match in MapeamentoIntencao', {
+          buttonId,
+          intentName: slugMatch.intentName,
+          mappingId: slugMatch.id,
+          templateId: slugMatch.templateId,
+          templateName,
+        })
+        return {
+          id: slugMatch.id,
+          buttonId: buttonId,
+          actionType: 'SEND_TEMPLATE',
+          actionPayload: {
+            templateId: slugMatch.templateId,
+            customVariables: slugMatch.customVariables,
+          } as any,
+          description: `Intent mapping: ${slugMatch.intentName} -> ${templateName}`,
+          inboxId: slugMatch.inboxId,
+          createdAt: slugMatch.createdAt,
+          updatedAt: slugMatch.updatedAt,
+          inbox: slugMatch.inbox,
+        }
+      }
+    }
+
     if (intentMapping) {
       console.log('[INTENT MAPPING DEBUG] Found in MapeamentoIntencao', {
         buttonId,
-        intentName,
+        intentName: intentMapping.intentName,
         mappingId: intentMapping.id,
         templateId: intentMapping.templateId,
         templateName: intentMapping.template.name

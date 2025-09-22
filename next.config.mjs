@@ -8,7 +8,27 @@ const withNextra = nextra({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   serverExternalPackages: ["sharp"],
-  
+
+  // Production optimizations
+  productionBrowserSourceMaps: false,
+  generateEtags: false,
+  compress: true,
+
+  // Build optimizations
+  experimental: {
+    // optimizeCss disabled due to missing critters dependency
+  },
+
+  // Turbopack configuration (moved from experimental.turbo)
+  turbopack: {
+    rules: {
+      '*.svg': {
+        loaders: ['@svgr/webpack'],
+        as: '*.js',
+      },
+    },
+  },
+
   images: {
     remotePatterns: [
       {
