@@ -514,7 +514,7 @@ export class ClientOpenAIService implements IOpenAIService {
   async routerLLM(
     _userText: string,
     _agent: AgentConfig,
-    _opts?: { channelType?: import("./types").ChannelType; sessionId?: string; intentHints?: IntentCandidate[] }
+    _opts?: { channelType?: import("./types").ChannelType; sessionId?: string; intentHints?: IntentCandidate[]; supplementalContext?: string }
   ): Promise<RouterDecision | null> {
     throw new Error("routerLLM não disponível no cliente");
   }

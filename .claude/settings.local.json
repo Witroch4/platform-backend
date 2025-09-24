@@ -42,7 +42,13 @@
       "Bash(git push:*)",
       "Bash(sudo chown:*)",
       "Bash(pnpm add:*)",
-      "Bash(pnpm:*)"
+      "Bash(pnpm:*)",
+      "Read(//home/wital/.codex/**)",
+      "mcp__context7__resolve-library-id",
+      "Bash(claude mcp add:*)",
+      "Bash(claude mcp:*)",
+      "WebFetch(domain:docs.context7.com)",
+      "WebFetch(domain:context7.com)"
     ],
     "deny": [],
     "ask": []

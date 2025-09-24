@@ -99,7 +99,7 @@ export class ServerOpenAIService implements IOpenAIService {
   routerLLM: (
     userText: string,
     agent: AgentConfig,
-    opts?: { channelType?: import("./types").ChannelType; sessionId?: string; intentHints?: import("./types").IntentCandidate[] }
+    opts?: { channelType?: import("./types").ChannelType; sessionId?: string; intentHints?: import("./types").IntentCandidate[]; supplementalContext?: string }
   ) => Promise<RouterDecision | null>;
 
   async checkApiConnection() {

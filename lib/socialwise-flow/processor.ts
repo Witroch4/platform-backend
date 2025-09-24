@@ -232,88 +232,28 @@ export async function processSocialWiseFlow(
     // Override embedipreview if provided explicitly
     agentConfig.embedipreview = embedipreview;
 
-    let classification: ClassificationResult;
-    let response: ChannelResponse;
-    let llmWarmupMs: number | undefined;
+    // Delegate core decisioning to LangGraph orchestrator (preserving existing logic)
+    const { runSocialWiseGraph } = await import('./graph/supervisor');
+    const graphResult = await runSocialWiseGraph({
+      context,
+      agent: agentConfig,
+      userId,
+      embedipreview: !!embedipreview,
+      traceId: context.traceId
+    } as any);
 
-    // ✅ SEMPRE usar o fluxo completo: embedding-first ou router LLM mode
-    if (embedipreview) {
-      // Embedding-first classification with degradation context
-      const classificationContext = {
-        channelType: context.channelType,
-        inboxId: context.inboxId,
-        traceId: context.traceId
-      };
-      
-      classification = await classifyIntent(
-        context.userText, 
-        userId, 
-        agentConfig, 
-        true, 
-        classificationContext
-      );
-      
-      switch (classification.band) {
-        case 'HARD':
-          response = await processHardBand(classification, context);
-          break;
-        case 'SOFT':
-          const softResult = await processSoftBand(classification, context, agentConfig);
-          response = softResult.response;
-          llmWarmupMs = softResult.llmWarmupMs;
-          break;
-        case 'ROUTER':
-          // Process ROUTER band within embedding-first mode (degraded cases)
-          const routerResult = await processRouterBand(context, agentConfig, classification.candidates);
-          response = routerResult.response;
-          llmWarmupMs = routerResult.llmWarmupMs;
-          break;
-
-        default:
-          response = buildFallbackResponse(context.channelType, context.userText);
+    let response: ChannelResponse = graphResult.response || buildFallbackResponse(context.channelType, context.userText);
+    const llmWarmupMs: number | undefined = graphResult.metrics?.llmWarmupMs;
+    const classification: ClassificationResult = {
+      band: (graphResult.classification?.band || 'ROUTER') as any,
+      score: graphResult.classification?.score ?? 0,
+      candidates: graphResult.classification?.candidates || [],
+      strategy: (graphResult.classification?.strategy as any) || 'router_llm',
+      metrics: {
+        embedding_ms: graphResult.classification?.metrics?.embedding_ms,
+        route_total_ms: graphResult.classification?.metrics?.route_total_ms || 0
       }
-    } else {
-      // Router LLM mode - obtém intent hints primeiro para melhor contexto
-      let intentHints: IntentCandidate[] = [];
-      try {
-        const quickClassification = await classifyIntent(
-          context.userText, 
-          userId, 
-          agentConfig, 
-          true, 
-          {
-            channelType: context.channelType,
-            inboxId: context.inboxId,
-            traceId: context.traceId
-          }
-        );
-        intentHints = quickClassification.candidates || [];
-        processorLogger.info('Router LLM mode: obtained intent hints', {
-          hintsCount: intentHints.length,
-          traceId: context.traceId
-        });
-      } catch (error) {
-        processorLogger.warn('Router LLM mode: failed to obtain intent hints, proceeding without', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-          traceId: context.traceId
-        });
-      }
-      
-      // Router LLM com intent hints quando disponíveis
-      const routerResult = await processRouterBand(context, agentConfig, intentHints);
-      response = routerResult.response;
-      llmWarmupMs = routerResult.llmWarmupMs;
-      
-      classification = {
-        band: 'ROUTER',
-        score: 1.0,
-        candidates: [],
-        strategy: 'router_llm',
-        metrics: {
-          route_total_ms: Date.now() - startTime
-        }
-      };
-    }
+    };
 
     const routeTotalMs = Date.now() - startTime;
 

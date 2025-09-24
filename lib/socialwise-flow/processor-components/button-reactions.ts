@@ -22,6 +22,7 @@ export interface ProcessorContext {
   assistantId?: string;
   originalPayload?: any;
   sessionId?: string;
+  agentSupplement?: string;
 }
 
 export interface ButtonReactionMeta {

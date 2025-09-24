@@ -194,6 +194,7 @@ export interface IOpenAIService {
       sessionId?: string;
       intentHints?: IntentCandidate[];
       profile?: 'lite' | 'full';
+      supplementalContext?: string;
     }
   ): Promise<RouterDecision | null>;
 

@@ -357,7 +357,8 @@ export async function processRouterBand(
       () => openaiService.routerLLM(context.userText, agentConfig, {
         channelType: normalizeChannelType(context.channelType),
         sessionId: context.sessionId,
-        intentHints: filteredHints
+        intentHints: filteredHints,
+        supplementalContext: context.agentSupplement
       }),
       {
         priority: 'high', // Router decisions are high priority
