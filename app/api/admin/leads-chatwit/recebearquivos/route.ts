@@ -3,9 +3,11 @@ import { NextResponse } from 'next/server';
 import { getPrismaInstance } from '@/lib/connections';
 import { addLeadJob } from '@/lib/queue/leads-chatwit.queue';
 import type { WebhookPayload } from '@/types/webhook';
+import { getWebhooksConfig } from '@/lib/config';
 
 // Verificar se deve usar processamento direto (default: true)
-const WEBHOOK_DIRECT_PROCESSING = process.env.WEBHOOK_DIRECT_PROCESSING !== 'false';
+const webhooksConfig = getWebhooksConfig();
+const WEBHOOK_DIRECT_PROCESSING = webhooksConfig.direct_processing;
 
 /**
  * Processa um lead diretamente (sem fila) - mesma lógica do worker

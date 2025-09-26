@@ -17,6 +17,7 @@ export interface AssistantConfig {
   reasoningEffort: any;
   verbosity: any;
   temperature: number;
+  topP?: number | null;
   tempSchema: any;
   tempCopy: any;
   maxOutputTokens: number;
@@ -130,6 +131,8 @@ export async function loadAssistantConfiguration(
       temperature: inheritFromAgent
         ? fullAssistant.temperature
         : (inbox?.socialwiseTemperature || fullAssistant.temperature),
+
+      topP: fullAssistant.topP,
 
       tempSchema: inheritFromAgent
         ? fullAssistant.tempSchema

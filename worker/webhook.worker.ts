@@ -18,6 +18,7 @@ import {
 import cron from "node-cron";
 import { LEADS_QUEUE_NAME } from "@/lib/queue/leads-chatwit.queue";
 import { processLeadChatwitTask } from "./WebhookWorkerTasks/leads-chatwit.task";
+import { getWorkersConfig } from '@/lib/config';
 
 import { processInstagramTranslationTask } from "./WebhookWorkerTasks/instagram-translation.task";
 import { INSTAGRAM_TRANSLATION_QUEUE_NAME } from "@/lib/queue/instagram-translation.queue";
@@ -344,12 +345,9 @@ let leadCellsWorker: Worker;
 let leadsChatwitWorker: Worker;
 
 // Worker de leads‑chatwit 🔥 (concorrência ajustável baseada no ambiente)
-const leadsChatwitConcurrency = parseInt(
-  process.env.LEADS_CHATWIT_CONCURRENCY || "5" // Reduced from 10 to 5
-);
-const leadsChatwitLockDuration = parseInt(
-  process.env.LEADS_CHATWIT_LOCK_DURATION || "60000" // Increased from 30s to 60s
-);
+const workersConfig = getWorkersConfig();
+const leadsChatwitConcurrency = workersConfig.leads_chatwit.concurrency;
+const leadsChatwitLockDuration = workersConfig.leads_chatwit.lock_duration;
 
 /**
  * Initialize all legacy workers after Redis is ready

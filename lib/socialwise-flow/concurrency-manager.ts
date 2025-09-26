@@ -6,6 +6,7 @@
 
 import { createLogger } from '@/lib/utils/logger';
 import { getRedisInstance } from '@/lib/connections';
+import { getSocialwiseFlowConfig } from '@/lib/config';
 
 const concurrencyLogger = createLogger('SocialWise-Concurrency');
 
@@ -53,11 +54,13 @@ export class ConcurrencyManager {
 
   public static getInstance(config?: ConcurrencyConfig): ConcurrencyManager {
     if (!ConcurrencyManager.instance) {
+      // Load configuration from centralized config system
+      const socialwiseConfig = getSocialwiseFlowConfig();
       const defaultConfig: ConcurrencyConfig = {
-        maxConcurrentLlmCallsPerInbox: parseInt(process.env.SOCIALWISE_CONCURRENCY_LIMIT || '100', 10),
-        maxConcurrentLlmCallsGlobal: parseInt(process.env.SOCIALWISE_GLOBAL_CONCURRENCY_LIMIT || '300', 10),
-        queueTimeoutMs: parseInt(process.env.SOCIALWISE_QUEUE_TIMEOUT_MS || '5000', 10),
-        degradationEnabled: process.env.SOCIALWISE_DEGRADATION_ENABLED !== 'false'
+        maxConcurrentLlmCallsPerInbox: socialwiseConfig.concurrency.max_concurrent_llm_calls_per_inbox,
+        maxConcurrentLlmCallsGlobal: socialwiseConfig.concurrency.max_concurrent_llm_calls_global,
+        queueTimeoutMs: socialwiseConfig.concurrency.queue_timeout_ms,
+        degradationEnabled: socialwiseConfig.concurrency.degradation_enabled
       };
       ConcurrencyManager.instance = new ConcurrencyManager(config || defaultConfig);
     }

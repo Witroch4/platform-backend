@@ -48,7 +48,8 @@
       "Bash(claude mcp add:*)",
       "Bash(claude mcp:*)",
       "WebFetch(domain:docs.context7.com)",
-      "WebFetch(domain:context7.com)"
+      "WebFetch(domain:context7.com)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []

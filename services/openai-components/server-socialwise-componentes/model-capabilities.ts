@@ -10,9 +10,13 @@ export interface ModelCapabilities {
 }
 
 const MODEL_CAPS: Record<string, ModelCapabilities> = {
+  // Chaves exatas (fallback rápido)
   "gpt-5": { reasoning: true, structured: true, sampling: true, label: "GPT-5" },
-  "gpt-5-nano": { reasoning: true, structured: true, sampling: false, label: "GPT-5 Nano" }, // Não suporta temperature com reasoning
+  "gpt-5-nano": { reasoning: true, structured: true, sampling: false, label: "GPT-5 Nano" },
+  "gpt-4.1": { reasoning: false, structured: true, sampling: true, label: "GPT-4.1" },
   "gpt-4.1-nano": { reasoning: false, structured: true, sampling: true, label: "GPT-4.1 Nano" },
+  "gpt-4o": { reasoning: false, structured: true, sampling: true, label: "GPT-4o" },
+  "gpt-4o-mini": { reasoning: false, structured: true, sampling: true, label: "GPT-4o Mini" },
 };
 
 // ==== Helpers GPT-5 (case-insensitive) ====
@@ -26,12 +30,17 @@ export const normVerb = (v?: string): "low" | "medium" | "high" =>
 
 // Get model capabilities with fallback
 export function getModelCaps(model: string): ModelCapabilities {
-  return MODEL_CAPS[model] ?? { 
-    reasoning: false, 
-    structured: true, 
-    sampling: false, 
-    label: model 
-  };
+  const m = (model || '').toLowerCase();
+  // Casamento por prefixo ajuda a cobrir variantes como "gpt-4.1-turbo", "gpt-5-mini", etc.
+  if (m.includes('gpt-5-nano')) return MODEL_CAPS['gpt-5-nano'];
+  if (m.startsWith('gpt-5')) return MODEL_CAPS['gpt-5'];
+
+  if (m.startsWith('gpt-4.1')) return MODEL_CAPS['gpt-4.1'];
+  if (m.includes('gpt-4o-mini')) return MODEL_CAPS['gpt-4o-mini'];
+  if (m.startsWith('gpt-4o')) return MODEL_CAPS['gpt-4o'];
+
+  // fallback conservador: structured=true, sem reasoning, sem sampling
+  return { reasoning: false, structured: true, sampling: false, label: model };
 }
 
 // Resolve sampling preferences following the test route pattern

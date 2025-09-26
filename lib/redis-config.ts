@@ -2,6 +2,8 @@
  * Configuração inteligente do Redis baseada no ambiente
  */
 
+import { getRedisConfig as getRedisConfigSettings } from '@/lib/config';
+
 // Controle para logar apenas uma vez
 let redisConfigLogged = false;
 
@@ -49,10 +51,11 @@ export function getRedisConnectionOptions() {
   const redisPort = parseInt(process.env.REDIS_PORT || '6379');
   const redisPassword = process.env.REDIS_PASSWORD;
   
-  // Get timeout configurations from environment variables
-  const connectTimeout = parseInt(process.env.REDIS_CONNECT_TIMEOUT || '20000');
-  const commandTimeout = parseInt(process.env.REDIS_COMMAND_TIMEOUT || '60000');
-  const keepAlive = parseInt(process.env.REDIS_KEEP_ALIVE || '30000');
+  // Get timeout configurations from centralized config
+  const redisConfig = getRedisConfigSettings();
+  const connectTimeout = redisConfig.connect_timeout;
+  const commandTimeout = redisConfig.command_timeout;
+  const keepAlive = redisConfig.keepalive;
   
   return {
     host: redisHost,
