@@ -3,11 +3,11 @@ import "dotenv/config";
 import { getPrismaInstance } from "@/lib/connections";
 
 // Definindo os tipos manualmente baseado no schema
-enum UserRole {
-  DEFAULT = 'DEFAULT',
-  ADMIN = 'ADMIN',
-  SUPERADMIN = 'SUPERADMIN'
-}
+const UserRole = {
+  DEFAULT: 'DEFAULT',
+  ADMIN: 'ADMIN',
+  SUPERADMIN: 'SUPERADMIN'
+} as const;
 import * as bcryptjs from 'bcryptjs';
 import { restoreAllChatwit } from '../scripts/restore-chatwit-all';
 

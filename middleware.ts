@@ -31,6 +31,8 @@ export default async function middleware(req: any) {
     );
 
     // Para rotas públicas, permitir acesso
+    // EXCEÇÃO: Se for a rota raiz "/" e usuário estiver autenticado, permitir
+    // que a página page.tsx faça o redirecionamento inteligente
     if (isPublicRoute) {
       return NextResponse.next();
     }

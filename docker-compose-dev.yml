@@ -27,9 +27,9 @@ services:
       - "3002:3002"
       - "3005:3005" # Bull Board
     volumes:
-      - .:/src
-      - node_modules:/src/node_modules
-      - ./temp:/src/temp
+      - .:/app
+      - node_modules:/app/node_modules
+      - ./temp:/app/temp
     command: sh -c "pnpm run ${NEXT_SCRIPT:-dev}"
     networks:
       - minha_rede
@@ -54,9 +54,9 @@ services:
     # Comando para iniciar TODOS os workers usando o init.ts
     command: pnpm run start:unified-worker
     volumes:
-      - .:/src
-      - node_modules:/src/node_modules
-      - ./temp:/src/temp
+      - .:/app
+      - node_modules:/app/node_modules
+      - ./temp:/app/temp
     networks:
       - minha_rede
     restart: unless-stopped

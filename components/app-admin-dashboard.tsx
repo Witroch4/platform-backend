@@ -42,6 +42,7 @@ import {
   Copy,
   FlaskConical,
   Flag,
+  AlertCircle,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -268,6 +269,96 @@ export function AppAdminDashboard() {
 
                 {isAdmin && (
                   <>
+                    {/* MTF Dashboard - Ecosystem LangGraph */}
+                    <Collapsible defaultOpen className="group/collapsible">
+                      <SidebarMenuItem>
+                        <CollapsibleTrigger asChild>
+                          <SidebarMenuButton className="text-base py-3">
+                            <Brain className="mr-3 h-5 w-5" />
+                            {state !== "collapsed" && <span className="font-semibold">🚀 MTF Dashboard</span>}
+                          </SidebarMenuButton>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="pl-2 py-1 space-y-1">
+                            <SidebarMenuSub>
+                              <SidebarMenuSubItem>
+                                <SidebarMenuSubButton
+                                  href="/admin/MTFdashboard"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    startTransition(() => {
+                                      router.push('/admin/MTFdashboard');
+                                    });
+                                  }}
+                                  onMouseEnter={() => {
+                                    try { router.prefetch('/admin/MTFdashboard'); } catch {}
+                                  }}
+                                  className={`text-[0.95rem] py-2 transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
+                                >
+                                  <Activity className="text-purple-500" />
+                                  <span className="font-medium">Dashboard</span>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                              <SidebarMenuSubItem>
+                                <SidebarMenuSubButton
+                                  href="/admin/MTFdashboard/agentes"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    startTransition(() => {
+                                      router.push('/admin/MTFdashboard/agentes');
+                                    });
+                                  }}
+                                  onMouseEnter={() => {
+                                    try { router.prefetch('/admin/MTFdashboard/agentes'); } catch {}
+                                  }}
+                                  className={`text-[0.95rem] py-2 transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
+                                >
+                                  <Bot className="text-blue-500" />
+                                  <span className="font-medium">Agentes Nativos</span>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                              <SidebarMenuSubItem>
+                                <SidebarMenuSubButton
+                                  href="/admin/MTFdashboard/mtf-oab"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    startTransition(() => {
+                                      router.push('/admin/MTFdashboard/mtf-oab');
+                                    });
+                                  }}
+                                  onMouseEnter={() => {
+                                    try { router.prefetch('/admin/MTFdashboard/mtf-oab'); } catch {}
+                                  }}
+                                  className={`text-[0.95rem] py-2 transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
+                                >
+                                  <FileText className="text-green-500" />
+                                  <span className="font-medium">Upload OAB</span>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                              <SidebarMenuSubItem>
+                                <SidebarMenuSubButton
+                                  href="/admin/MTFdashboard/mtf-oab/oab-eval"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    startTransition(() => {
+                                      router.push('/admin/MTFdashboard/mtf-oab/oab-eval');
+                                    });
+                                  }}
+                                  onMouseEnter={() => {
+                                    try { router.prefetch('/admin/MTFdashboard/mtf-oab/oab-eval'); } catch {}
+                                  }}
+                                  className={`text-[0.95rem] py-2 transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
+                                >
+                                  <AlertCircle className="text-orange-500" />
+                                  <span className="font-medium">Avaliação OAB</span>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            </SidebarMenuSub>
+                          </div>
+                        </CollapsibleContent>
+                      </SidebarMenuItem>
+                    </Collapsible>
+
                     {/* Capitão (pai) com lista de sub-itens */}
                     <Collapsible defaultOpen className="group/collapsible">
                       <SidebarMenuItem>
@@ -607,7 +698,7 @@ export function AppAdminDashboard() {
                     className={`flex items-center transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
                   >
                     <Zap className="mr-2" />
-                    {state !== "collapsed" && <span>Debug - Hooks Chatwit</span>}
+                    {state !== "collapsed" && <span>Debug - Hooks Chatwit ✅</span>}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
 

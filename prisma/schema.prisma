@@ -9,62 +9,63 @@ datasource db {
 }
 
 model User {
-  id                        String                    @id @default(cuid())
-  name                      String?
-  email                     String                    @unique
-  emailVerified             DateTime?
-  image                     String?
-  role                      UserRole                  @default(DEFAULT)
-  password                  String?
-  isTwoFactorAuthEnabled    Boolean                   @default(false)
-  twoFactorAuthVerified     DateTime?
-  createdAt                 DateTime                  @default(now())
-  updatedAt                 DateTime                  @updatedAt
-  isNew                     Boolean                   @default(true)
-  mtfDiamanteSeedExecuted   Boolean                   @default(false)
-  mtfVariaveisPopuladas     Boolean                   @default(false)
-  turboModeEnabled          Boolean                   @default(false)
-  accounts                  Account[]
-  agendamentos              Agendamento[]
-  automacoes                Automacao[]
-  chatSessions              ChatSession[]
-  disparosMtfDiamante       DisparoMtfDiamante[]
-  generatedImages           GeneratedImage[]
-  Lead                      Lead[]
-  mtfDiamanteConfig         MtfDiamanteConfig?
-  notifications             Notification[]
-  pastas                    Pasta[]
-  subscriptions             Subscription[]
-  templates                 Template[]
-  processedApprovalRequests TemplateApprovalRequest[] @relation("ProcessedBy")
-  approvalRequests          TemplateApprovalRequest[] @relation("ApprovalRequests")
-  usuarioChatwit            UsuarioChatwit?
-  auditLogs                 AuditLog[]
-  intents                   Intent[]
-  apiKeys                   ApiKey[]
-  aiAgentConfig             AiAgentConfig?
-  aiAssistants              AiAssistant[]
-  aiDocuments               AiDocument[]
-  aiFaqs                    AiFaq[]
-  promptVersions            PromptVersion[]
-  abTests                   PromptABTest[]
-  inboxConfigHistory        InboxConfigHistory[]
-  iframeAuthorizedDomains   IframeAuthorizedDomain[]
-  featureFlagOverrides      UserFeatureFlagOverride[]
+  id                          String                    @id @default(cuid())
+  name                        String?
+  email                       String                    @unique
+  emailVerified               DateTime?
+  image                       String?
+  role                        UserRole                  @default(DEFAULT)
+  password                    String?
+  isTwoFactorAuthEnabled      Boolean                   @default(false)
+  twoFactorAuthVerified       DateTime?
+  createdAt                   DateTime                  @default(now())
+  updatedAt                   DateTime                  @updatedAt
+  isNew                       Boolean                   @default(true)
+  mtfDiamanteSeedExecuted     Boolean                   @default(false)
+  mtfVariaveisPopuladas       Boolean                   @default(false)
+  turboModeEnabled            Boolean                   @default(false)
+  accounts                    Account[]
+  agendamentos                Agendamento[]
+  aiAgentBlueprints           AiAgentBlueprint[]
+  aiAgentConfig               AiAgentConfig?
+  aiAssistants                AiAssistant[]
+  aiDocuments                 AiDocument[]
+  aiFaqs                      AiFaq[]
+  apiKeys                     ApiKey[]
+  auditLogs                   AuditLog[]
+  automacoes                  Automacao[]
+  chatSessions                ChatSession[]
+  disparosMtfDiamante         DisparoMtfDiamante[]
+  generatedImages             GeneratedImage[]
+  iframeAuthorizedDomains     IframeAuthorizedDomain[]
+  inboxConfigHistory          InboxConfigHistory[]
+  intents                     Intent[]
+  Lead                        Lead[]
+  mtfDiamanteConfig           MtfDiamanteConfig?
+  notifications               Notification[]
+  pastas                      Pasta[]
+  abTests                     PromptABTest[]
+  promptVersions              PromptVersion[]
+  subscriptions               Subscription[]
+  templates                   Template[]
+  processedApprovalRequests   TemplateApprovalRequest[] @relation("ProcessedBy")
+  approvalRequests            TemplateApprovalRequest[] @relation("ApprovalRequests")
   createdFeatureFlagOverrides UserFeatureFlagOverride[] @relation("CreatedUserFeatureFlagOverrides")
+  featureFlagOverrides        UserFeatureFlagOverride[]
+  usuarioChatwit              UsuarioChatwit?
 }
 
 model InboxConfigHistory {
-  id                     String       @id @default(cuid())
-  inboxId                String
-  userId                 String
-  changeType             String       // "create" | "update" | "rollback"
-  previousConfig         Json?        // Configuração anterior
-  newConfig              Json         // Nova configuração
-  description            String?      // Descrição da mudança
-  createdAt              DateTime     @default(now())
-  inbox                  ChatwitInbox @relation(fields: [inboxId], references: [id], onDelete: Cascade)
-  user                   User         @relation(fields: [userId], references: [id])
+  id             String       @id @default(cuid())
+  inboxId        String
+  userId         String
+  changeType     String
+  previousConfig Json?
+  newConfig      Json
+  description    String?
+  createdAt      DateTime     @default(now())
+  inbox          ChatwitInbox @relation(fields: [inboxId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id])
 
   @@index([inboxId, createdAt(sort: Desc)])
   @@index([userId])
@@ -176,6 +177,7 @@ model LeadOabData {
   espelhoBiblioteca      EspelhoBiblioteca?     @relation(fields: [espelhoBibliotecaId], references: [id])
   lead                   Lead                   @relation(fields: [leadId], references: [id], onDelete: Cascade)
   usuarioChatwit         UsuarioChatwit         @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
+  submissions            OabSubmission[]
 
   @@index([usuarioChatwitId, espelhoBibliotecaId])
 }
@@ -191,6 +193,53 @@ model ArquivoLeadOab {
   leadOabData   LeadOabData @relation(fields: [leadOabDataId], references: [id], onDelete: Cascade)
 
   @@index([leadOabDataId])
+}
+
+model OabRubric {
+  id          String             @id @default(cuid())
+  code        String?
+  exam        String?
+  area        String?
+  version     String?
+  meta        Json?
+  schema      Json
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  evaluations OabEvaluationRun[]
+}
+
+model OabSubmission {
+  id            String             @id @default(cuid())
+  leadOabDataId String?
+  alunoNome     String?
+  sourcePdfUrl  String?
+  sourceImages  Json?
+  rawExtracted  Json
+  chunkConfig   Json?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  evaluations   OabEvaluationRun[]
+  leadOabData   LeadOabData?       @relation(fields: [leadOabDataId], references: [id])
+
+  @@index([leadOabDataId])
+}
+
+model OabEvaluationRun {
+  id           String        @id @default(cuid())
+  submissionId String
+  rubricId     String
+  status       String        @default("PENDING")
+  strategy     Json?
+  scores       Json?
+  evidences    Json?
+  report       Json?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  rubric       OabRubric     @relation(fields: [rubricId], references: [id], onDelete: Cascade)
+  submission   OabSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId])
+  @@index([rubricId])
 }
 
 model UsuarioChatwit {
@@ -214,17 +263,17 @@ model UsuarioChatwit {
 }
 
 model ApiKey {
-  id           String   @id @default(cuid())
-  label        String?
-  ownerId      String
-  tokenHash    String   @unique
-  tokenPrefix  String   @db.VarChar(16)
-  tokenSuffix  String   @db.VarChar(16)
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  revokedAt    DateTime?
-  lastUsedAt   DateTime?
-  owner        User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  label       String?
+  ownerId     String
+  tokenHash   String    @unique
+  tokenPrefix String    @db.VarChar(16)
+  tokenSuffix String    @db.VarChar(16)
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  revokedAt   DateTime?
+  lastUsedAt  DateTime?
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([ownerId, active])
 }
@@ -241,37 +290,36 @@ model WhatsAppGlobalConfig {
 }
 
 model ChatwitInbox {
-  id                        String               @id @default(cuid())
-  nome                      String
-  inboxId                   String
-  channelType               String
-  createdAt                 DateTime             @default(now())
-  updatedAt                 DateTime             @updatedAt
-  usuarioChatwitId          String
-  whatsappApiKey            String?
-  phoneNumberId             String?
-  whatsappBusinessAccountId String?
-  fallbackParaInboxId       String?
-  // SocialWise Flow configuration per inbox
-  socialwiseInheritFromAgent Boolean?            @default(true)
-  socialwiseReasoningEffort  String?             // "minimal" | "low" | "medium" | "high"
-  socialwiseVerbosity        String?             // "low" | "medium" | "high"
-  socialwiseTemperature      Float?              // Para família GPT-4 (0-2)
-  socialwiseTempSchema       Float?              // Temperatura para saídas estruturadas (0.0-0.2)
+  id                         String               @id @default(cuid())
+  nome                       String
+  inboxId                    String
+  channelType                String
+  createdAt                  DateTime             @default(now())
+  updatedAt                  DateTime             @updatedAt
+  usuarioChatwitId           String
+  whatsappApiKey             String?
+  phoneNumberId              String?
+  whatsappBusinessAccountId  String?
+  fallbackParaInboxId        String?
+  socialwiseInheritFromAgent Boolean?             @default(true)
+  socialwiseReasoningEffort  String?
+  socialwiseVerbosity        String?
+  socialwiseTemperature      Float?
+  socialwiseTempSchema       Float?
   socialwiseWarmupDeadlineMs Int?
   socialwiseHardDeadlineMs   Int?
   socialwiseSoftDeadlineMs   Int?
   socialwiseShortTitleLLM    Boolean?
-  socialwiseToolChoice       String?             // "none" | "auto"
-  agentes                   AgenteDialogflow[]
-  fallbackParaInbox         ChatwitInbox?        @relation("FallbackInbox", fields: [fallbackParaInboxId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  fallbackDeInboxes         ChatwitInbox[]       @relation("FallbackInbox")
-  usuarioChatwit            UsuarioChatwit       @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
-  mapeamentosBotoes         MapeamentoBotao[]
-  mapeamentosIntencao       MapeamentoIntencao[]
-  templates                 Template[]
-  aiAssistantLinks          AiAssistantInbox[]
-  configHistory             InboxConfigHistory[]
+  socialwiseToolChoice       String?
+  agentes                    AgenteDialogflow[]
+  aiAssistantLinks           AiAssistantInbox[]
+  fallbackParaInbox          ChatwitInbox?        @relation("FallbackInbox", fields: [fallbackParaInboxId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  fallbackDeInboxes          ChatwitInbox[]       @relation("FallbackInbox")
+  usuarioChatwit             UsuarioChatwit       @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
+  configHistory              InboxConfigHistory[]
+  mapeamentosBotoes          MapeamentoBotao[]
+  mapeamentosIntencao        MapeamentoIntencao[]
+  templates                  Template[]
 
   @@unique([usuarioChatwitId, inboxId])
 }
@@ -292,13 +340,13 @@ model Template {
   updatedAt            DateTime                  @updatedAt
   createdById          String
   inboxId              String?
+  intents              Intent[]
   interactiveContent   InteractiveContent?
   mapeamentos          MapeamentoIntencao[]
   createdBy            User                      @relation(fields: [createdById], references: [id], onDelete: Cascade)
   inbox                ChatwitInbox?             @relation(fields: [inboxId], references: [id])
   approvalRequests     TemplateApprovalRequest[]
   whatsappOfficialInfo WhatsAppOfficialInfo?
-  intents              Intent[]
 
   @@index([createdById, inboxId, type, scope, status, isActive])
 }
@@ -338,12 +386,9 @@ model InteractiveContent {
   id                    String                 @id @default(cuid())
   templateId            String                 @unique
   bodyId                String
-  // Stores the concrete interactive message type (e.g., button, quick_replies, button_template, generic, list, cta_url, flow, location_request)
-  interactiveType       String                 @default("button")
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
-  // Stores Instagram Generic Template full elements array when applicable
-  // Example: { elements: [ { title, subtitle?, image_url?, default_action?, buttons? }, ... ] }
+  interactiveType       String                 @default("button")
   genericPayload        Json?
   actionCtaUrl          ActionCtaUrl?
   actionFlow            ActionFlow?
@@ -448,13 +493,12 @@ model AgenteDialogflow {
   usuarioChatwit   UsuarioChatwit @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
 }
 
-// intent da IA (core)  dialogflw (deprectad)
 model MapeamentoIntencao {
   id              String       @id @default(cuid())
   intentName      String
   inboxId         String
   templateId      String
-  customVariables Json?        // Armazena variáveis customizadas para templates oficiais
+  customVariables Json?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
   inbox           ChatwitInbox @relation(fields: [inboxId], references: [id], onDelete: Cascade)
@@ -825,21 +869,21 @@ model ConversationThread {
 }
 
 model FeatureFlag {
-  id                String                     @id @default(cuid())
-  name              String                     @unique
+  id                String                    @id @default(cuid())
+  name              String                    @unique
   description       String
-  enabled           Boolean                    @default(false)
-  rolloutPercentage Int                        @default(0)
-  conditions        Json                       @default("{}")
-  category          String                     @default("system")
-  userSpecific      Boolean                    @default(false)
-  systemCritical    Boolean                    @default(false)
-  metadata          Json                       @default("{}")
-  createdAt         DateTime                   @default(now())
-  updatedAt         DateTime                   @updatedAt
+  enabled           Boolean                   @default(false)
+  rolloutPercentage Int                       @default(0)
+  conditions        Json                      @default("{}")
+  category          String                    @default("system")
+  userSpecific      Boolean                   @default(false)
+  systemCritical    Boolean                   @default(false)
+  metadata          Json                      @default("{}")
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
   createdBy         String
-  userOverrides     UserFeatureFlagOverride[]
   metrics           FeatureFlagMetrics[]
+  userOverrides     UserFeatureFlagOverride[]
 
   @@index([category])
   @@index([userSpecific])
@@ -855,9 +899,9 @@ model UserFeatureFlagOverride {
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
   createdBy String
-  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  flag      FeatureFlag @relation(fields: [flagId], references: [id], onDelete: Cascade)
   creator   User        @relation("CreatedUserFeatureFlagOverrides", fields: [createdBy], references: [id])
+  flag      FeatureFlag @relation(fields: [flagId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, flagId])
   @@index([userId])
@@ -867,15 +911,15 @@ model UserFeatureFlagOverride {
 }
 
 model FeatureFlagMetrics {
-  id                String      @id @default(cuid())
-  flagId            String
-  evaluations       Int         @default(0)
-  enabledCount      Int         @default(0)
-  disabledCount     Int         @default(0)
-  lastEvaluatedAt   DateTime?
-  averageLatencyMs  Float       @default(0)
-  date              DateTime    @db.Date
-  flag              FeatureFlag @relation(fields: [flagId], references: [id], onDelete: Cascade)
+  id               String      @id @default(cuid())
+  flagId           String
+  evaluations      Int         @default(0)
+  enabledCount     Int         @default(0)
+  disabledCount    Int         @default(0)
+  lastEvaluatedAt  DateTime?
+  averageLatencyMs Float       @default(0)
+  date             DateTime    @db.Date
+  flag             FeatureFlag @relation(fields: [flagId], references: [id], onDelete: Cascade)
 
   @@unique([flagId, date])
   @@index([flagId])
@@ -903,108 +947,69 @@ model UserFeedback {
   @@index([createdAt])
 }
 
-// Cost Monitoring Enums
-enum Provider {
-  OPENAI
-  META_WHATSAPP
-  INFRA
-  OTHER
-}
-
-enum Unit {
-  TOKENS_IN
-  TOKENS_OUT
-  TOKENS_CACHED
-  IMAGE_LOW
-  IMAGE_MEDIUM
-  IMAGE_HIGH
-  WHATSAPP_TEMPLATE
-  AUTH_TEMPLATE
-  UTILITY_TEMPLATE
-  MARKETING_TEMPLATE
-  TOOL_CALL
-  VECTOR_GB_DAY
-  OTHER
-}
-
-enum EventStatus {
-  PENDING_PRICING
-  PRICED
-  ERROR
-}
-
-// Cost Monitoring Models
 model PriceCard {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   provider      Provider
-  product       String   // ex.: "gpt-5-nano-2025-08-07"
+  product       String
   unit          Unit
-  region        String?  // ex.: "BR"
-  currency      String   @default("USD")
-  pricePerUnit  Decimal  @db.Decimal(18,8)
+  region        String?
+  currency      String    @default("USD")
+  pricePerUnit  Decimal   @db.Decimal(18, 8)
   effectiveFrom DateTime
   effectiveTo   DateTime?
   metadata      Json?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
   @@index([provider, product, unit, region, effectiveFrom, effectiveTo])
 }
 
 model CostEvent {
-  id          String      @id @default(cuid())
-  ts          DateTime    @default(now())
-  traceId     String?
-  externalId  String?     // resp.id (OpenAI), message_id (WABA)
-  provider    Provider
-  product     String
-  unit        Unit
-  units       Decimal     @db.Decimal(18,6)
-  currency    String      @default("USD")
-  unitPrice   Decimal?    @db.Decimal(18,8)
-  cost        Decimal?    @db.Decimal(18,8)
-  status      EventStatus @default(PENDING_PRICING)
-  sessionId   String?
-  inboxId     String?
-  userId      String?
-  intent      String?
-  raw         Json
-  
+  id         String      @id @default(cuid())
+  ts         DateTime    @default(now())
+  traceId    String?
+  externalId String?
+  provider   Provider
+  product    String
+  unit       Unit
+  units      Decimal     @db.Decimal(18, 6)
+  currency   String      @default("USD")
+  unitPrice  Decimal?    @db.Decimal(18, 8)
+  cost       Decimal?    @db.Decimal(18, 8)
+  status     EventStatus @default(PENDING_PRICING)
+  sessionId  String?
+  inboxId    String?
+  userId     String?
+  intent     String?
+  raw        Json
+
   @@index([provider, product, unit, ts])
   @@index([sessionId, inboxId, userId])
   @@index([status])
 }
 
 model FxRate {
-  date   DateTime
-  base   String   @default("USD")
-  quote  String
-  rate   Decimal  @db.Decimal(18,8)
-  
+  date  DateTime
+  base  String   @default("USD")
+  quote String
+  rate  Decimal  @db.Decimal(18, 8)
+
   @@id([date, base, quote])
 }
 
 model CostBudget {
-  id          String   @id @default(cuid())
-  name        String
-  inboxId     String?
-  userId      String?
-  period      String   // "monthly", "weekly", "daily"
-  limitUSD    Decimal  @db.Decimal(18,2)
-  alertAt     Decimal  @db.Decimal(3,2) @default(0.80) // 80%
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  @@index([inboxId, userId, isActive])
-}
+  id        String   @id @default(cuid())
+  name      String
+  inboxId   String?
+  userId    String?
+  period    String
+  limitUSD  Decimal  @db.Decimal(18, 2)
+  alertAt   Decimal  @default(0.80) @db.Decimal(3, 2)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-// 1) Novo enum para segurança de domínio
-enum IntentActionType {
-  TEMPLATE
-  INTERACTIVE
-  TEXT
-  HUMAN_FALLBACK
+  @@index([inboxId, userId, isActive])
 }
 
 model NegativeExample {
@@ -1256,6 +1261,313 @@ model WebhookDelivery {
   @@index([createdAt(sort: Desc)])
 }
 
+model Intent {
+  id                  String                 @id @default(cuid())
+  name                String                 @unique
+  slug                String                 @unique
+  description         String?
+  actionType          IntentActionType
+  templateId          String?
+  embedding           Unsupported("vector")?
+  similarityThreshold Float                  @default(0.8)
+  isActive            Boolean                @default(true)
+  usageCount          Int                    @default(0)
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  createdById         String
+  accountId           String?
+  createdBy           User                   @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  template            Template?              @relation(fields: [templateId], references: [id])
+  hitLogs             IntentHitLog[]
+
+  @@index([accountId, isActive])
+  @@index([slug])
+}
+
+model LlmAudit {
+  id              String         @id @default(cuid())
+  conversationId  String
+  messageId       String
+  accountId       String
+  mode            String
+  inputText       String
+  resultJson      Json
+  score           Float?
+  tokensUsed      Int?
+  modelUsed       String?
+  latencyMs       Int?
+  traceId         String?
+  promptVersionId String?
+  createdAt       DateTime       @default(now())
+  expiresAt       DateTime       @default(dbgenerated("(now() + '90 days'::interval)"))
+  promptVersion   PromptVersion? @relation(fields: [promptVersionId], references: [id])
+
+  @@index([conversationId, createdAt])
+  @@index([accountId, createdAt])
+  @@index([expiresAt])
+  @@index([promptVersionId])
+}
+
+model PromptVersion {
+  id           String          @id @default(cuid())
+  assistantId  String
+  name         String
+  version      String
+  promptType   PromptType
+  content      String
+  systemPrompt String?
+  temperature  Float?
+  maxTokens    Int?
+  isActive     Boolean         @default(false)
+  isDefault    Boolean         @default(false)
+  abTestWeight Float           @default(1.0)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  createdById  String
+  auditLogs    LlmAudit[]
+  metrics      PromptMetrics[]
+  assistant    AiAssistant     @relation(fields: [assistantId], references: [id], onDelete: Cascade)
+  createdBy    User            @relation(fields: [createdById], references: [id])
+
+  @@unique([assistantId, name, version])
+  @@index([assistantId, isActive])
+  @@index([promptType, isActive])
+}
+
+model PromptMetrics {
+  id              String        @id @default(cuid())
+  promptVersionId String
+  date            DateTime      @default(now())
+  totalUsage      Int           @default(0)
+  successRate     Float         @default(0)
+  averageLatency  Float         @default(0)
+  averageScore    Float         @default(0)
+  tokenUsage      Int           @default(0)
+  errorRate       Float         @default(0)
+  promptVersion   PromptVersion @relation(fields: [promptVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([promptVersionId, date])
+  @@index([date])
+}
+
+model PromptABTest {
+  id              String      @id @default(cuid())
+  name            String
+  description     String?
+  assistantId     String
+  promptVersions  String[]
+  trafficSplit    Json
+  isActive        Boolean     @default(false)
+  startDate       DateTime    @default(now())
+  endDate         DateTime?
+  winnerVersionId String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  createdById     String
+  assistant       AiAssistant @relation(fields: [assistantId], references: [id], onDelete: Cascade)
+  createdBy       User        @relation(fields: [createdById], references: [id])
+
+  @@index([assistantId, isActive])
+  @@index([startDate, endDate])
+}
+
+model IntentHitLog {
+  id             String   @id @default(cuid())
+  conversationId String
+  messageId      String
+  accountId      String
+  intentId       String
+  candidateName  String
+  similarity     Float
+  chosen         Boolean  @default(false)
+  traceId        String?
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime @default(dbgenerated("(now() + '90 days'::interval)"))
+  intent         Intent   @relation(fields: [intentId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([accountId, createdAt])
+  @@index([intentId])
+  @@index([expiresAt])
+}
+
+/// Configuração do Agente de IA ("Capitão") por usuário/owner
+model AiAgentConfig {
+  id                  String   @id @default(cuid())
+  ownerId             String   @unique
+  name                String   @default("Capitão")
+  provider            String   @default("openai")
+  model               String   @default("gpt-4o-mini")
+  systemPrompt        String?
+  immutableDirectives Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  owner               User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+}
+
+model AiAgentBlueprint {
+  id              String      @id @default(cuid())
+  ownerId         String
+  name            String
+  description     String?
+  agentType       AiAgentType @default(TOOLS)
+  icon            String?
+  model           String      @default("gpt-4o-mini")
+  temperature     Float?      @default(0.7)
+  topP            Float?
+  maxOutputTokens Int?        @default(1024)
+  systemPrompt    String?
+  instructions    String?
+  toolset         Json?
+  outputParser    Json?
+  memory          Json?
+  canvasState     Json?
+  metadata        Json?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  owner           User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@index([agentType])
+}
+
+model AiAssistant {
+  id                 String               @id @default(cuid())
+  userId             String
+  name               String
+  description        String?
+  productName        String?
+  generateFaqs       Boolean              @default(false)
+  captureMemories    Boolean              @default(false)
+  instructions       String?
+  intentOutputFormat AiIntentOutputFormat @default(JSON)
+  model              String               @default("gpt-5-nano")
+  embedipreview      Boolean              @default(true)
+  reasoningEffort    String               @default("minimal")
+  verbosity          String               @default("low")
+  temperature        Float?               @default(0.7)
+  topP               Float?               @default(0.7)
+  tempSchema         Float                @default(0.1)
+  tempCopy           Float                @default(0.4)
+  maxOutputTokens    Int                  @default(648)
+  warmupDeadlineMs   Int                  @default(15000)
+  hardDeadlineMs     Int                  @default(15000)
+  softDeadlineMs     Int                  @default(18000)
+  shortTitleLLM      Boolean              @default(true)
+  toolChoice         String               @default("auto")
+  isActive           Boolean              @default(true)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  inboxLinks         AiAssistantInbox[]
+  documents          AiDocument[]
+  faqs               AiFaq[]
+  abTests            PromptABTest[]
+  promptVersions     PromptVersion[]
+
+  @@index([userId, isActive])
+}
+
+model AiAssistantInbox {
+  id          String       @id @default(cuid())
+  assistantId String
+  inboxDbId   String
+  createdAt   DateTime     @default(now())
+  isActive    Boolean      @default(true)
+  assistant   AiAssistant  @relation(fields: [assistantId], references: [id], onDelete: Cascade)
+  inbox       ChatwitInbox @relation(fields: [inboxDbId], references: [id], onDelete: Cascade)
+
+  @@unique([assistantId, inboxDbId])
+}
+
+model AiDocument {
+  id          String                 @id @default(cuid())
+  userId      String
+  assistantId String?
+  title       String
+  sourceUrl   String?
+  contentText String?
+  isActive    Boolean                @default(true)
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  embedding   Unsupported("vector")?
+  assistant   AiAssistant?           @relation(fields: [assistantId], references: [id])
+  user        User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, assistantId, isActive])
+  @@index([embedding])
+}
+
+model AiFaq {
+  id              String       @id @default(cuid())
+  userId          String
+  assistantId     String?
+  question        String
+  answer          String?
+  status          AiFaqStatus  @default(PENDING)
+  autoGenerated   Boolean      @default(false)
+  sourceMessageId String?
+  isActive        Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  assistant       AiAssistant? @relation(fields: [assistantId], references: [id])
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, assistantId, status, isActive])
+}
+
+model IframeAuthorizedDomain {
+  id          String   @id @default(cuid())
+  domain      String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String
+  user        User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@index([isActive])
+  @@index([createdBy])
+}
+
+enum Provider {
+  OPENAI
+  META_WHATSAPP
+  INFRA
+  OTHER
+}
+
+enum Unit {
+  TOKENS_IN
+  TOKENS_OUT
+  TOKENS_CACHED
+  IMAGE_LOW
+  IMAGE_MEDIUM
+  IMAGE_HIGH
+  WHATSAPP_TEMPLATE
+  AUTH_TEMPLATE
+  UTILITY_TEMPLATE
+  MARKETING_TEMPLATE
+  TOOL_CALL
+  VECTOR_GB_DAY
+  OTHER
+}
+
+enum EventStatus {
+  PENDING_PRICING
+  PRICED
+  ERROR
+}
+
+enum IntentActionType {
+  TEMPLATE
+  INTERACTIVE
+  TEXT
+  HUMAN_FALLBACK
+}
+
 enum UserRole {
   DEFAULT
   ADMIN
@@ -1405,122 +1717,6 @@ enum QueueUserRole {
   superadmin
 }
 
-// AI Integration Models
-model Intent {
-  id                  String                      @id @default(cuid())
-  name                String                      @unique
-  slug                String                      @unique
-  description         String?
-  actionType          IntentActionType
-  templateId          String?
-  embedding           Unsupported("vector(1536)")?
-  similarityThreshold Float                       @default(0.8)
-  isActive            Boolean                     @default(true)
-  usageCount          Int                         @default(0)
-  createdAt           DateTime                    @default(now())
-  updatedAt           DateTime                    @updatedAt
-  createdById         String
-  accountId           String?
-
-  createdBy User           @relation(fields: [createdById], references: [id], onDelete: Cascade)
-  template  Template?      @relation(fields: [templateId], references: [id])
-  hitLogs   IntentHitLog[]
-
-  @@index([accountId, isActive])
-  @@index([slug])
-}
-
-model LlmAudit {
-  id             String   @id @default(cuid())
-  conversationId String
-  messageId      String
-  accountId      String
-  mode           String // 'INTENT_CLASSIFY' | 'DYNAMIC_GENERATE'
-  inputText      String // PII mascarado
-  resultJson     Json
-  score          Float?
-  tokensUsed     Int?
-  modelUsed      String?
-  latencyMs      Int?
-  traceId        String?
-  promptVersionId String?
-  createdAt      DateTime @default(now())
-  expiresAt      DateTime @default(dbgenerated("NOW() + INTERVAL '90 days'"))
-
-  promptVersion PromptVersion? @relation(fields: [promptVersionId], references: [id])
-
-  @@index([conversationId, createdAt])
-  @@index([accountId, createdAt])
-  @@index([expiresAt])
-  @@index([promptVersionId])
-}
-
-model PromptVersion {
-  id              String   @id @default(cuid())
-  assistantId     String
-  name            String
-  version         String
-  promptType      PromptType
-  content         String   @db.Text
-  systemPrompt    String?  @db.Text
-  temperature     Float?
-  maxTokens       Int?
-  isActive        Boolean  @default(false)
-  isDefault       Boolean  @default(false)
-  abTestWeight    Float    @default(1.0) // For A/B testing
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  createdById     String
-
-  assistant     AiAssistant           @relation(fields: [assistantId], references: [id], onDelete: Cascade)
-  createdBy     User                  @relation(fields: [createdById], references: [id])
-  metrics       PromptMetrics[]
-  auditLogs     LlmAudit[]
-
-  @@unique([assistantId, name, version])
-  @@index([assistantId, isActive])
-  @@index([promptType, isActive])
-}
-
-model PromptMetrics {
-  id              String   @id @default(cuid())
-  promptVersionId String
-  date            DateTime @default(now())
-  totalUsage      Int      @default(0)
-  successRate     Float    @default(0)
-  averageLatency  Float    @default(0)
-  averageScore    Float    @default(0)
-  tokenUsage      Int      @default(0)
-  errorRate       Float    @default(0)
-
-  promptVersion PromptVersion @relation(fields: [promptVersionId], references: [id], onDelete: Cascade)
-
-  @@unique([promptVersionId, date])
-  @@index([date])
-}
-
-model PromptABTest {
-  id              String   @id @default(cuid())
-  name            String
-  description     String?
-  assistantId     String
-  promptVersions  String[] // Array of prompt version IDs
-  trafficSplit    Json     // { "version_id": weight }
-  isActive        Boolean  @default(false)
-  startDate       DateTime @default(now())
-  endDate         DateTime?
-  winnerVersionId String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  createdById     String
-
-  assistant       AiAssistant     @relation(fields: [assistantId], references: [id], onDelete: Cascade)
-  createdBy       User            @relation(fields: [createdById], references: [id])
-
-  @@index([assistantId, isActive])
-  @@index([startDate, endDate])
-}
-
 enum PromptType {
   INTENT_CLASSIFICATION
   WARMUP_BUTTONS
@@ -1530,149 +1726,18 @@ enum PromptType {
   DOMAIN_TOPICS
 }
 
-model IntentHitLog {
-  id             String   @id @default(cuid())
-  conversationId String
-  messageId      String
-  accountId      String
-  intentId       String
-  candidateName  String
-  similarity     Float
-  chosen         Boolean  @default(false)
-  traceId        String?
-  createdAt      DateTime @default(now())
-  expiresAt      DateTime @default(dbgenerated("NOW() + INTERVAL '90 days'"))
-
-  intent Intent @relation(fields: [intentId], references: [id], onDelete: Cascade)
-
-  @@index([conversationId, createdAt])
-  @@index([accountId, createdAt])
-  @@index([intentId])
-  @@index([expiresAt])
-}
-
-/// Configuração do Agente de IA ("Capitão") por usuário/owner
-model AiAgentConfig {
-  id                  String   @id @default(cuid())
-  ownerId             String
-  name                String   @default("Capitão")
-  provider            String   @default("openai")
-  model               String   @default("gpt-4o-mini")
-  systemPrompt        String?
-  immutableDirectives Json?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-
-  @@index([ownerId])
-  @@unique([ownerId])
-}
-
-model AiAssistant {
-  id                String   @id @default(cuid())
-  userId            String
-  name              String
-  description       String?
-  productName       String?
-  generateFaqs      Boolean  @default(false)
-  captureMemories   Boolean  @default(false)
-  instructions      String?  @db.Text
-  intentOutputFormat AiIntentOutputFormat @default(JSON)
-  model             String   @default("gpt-5-nano")
-  // SocialWise Flow optimization settings
-  embedipreview     Boolean  @default(true)
-  reasoningEffort   String   @default("minimal") // "minimal" | "low" | "medium" | "high"
-  verbosity         String   @default("low") // "low" | "medium" | "high"
-  temperature       Float?   @default(0.7) // For GPT-4 family (0-2)
-  topP              Float?   @default(0.7) // For GPT-4 family (0-1)
-  tempSchema        Float    @default(0.1) // Temperature for structured outputs (0.0-0.2)
-  tempCopy          Float    @default(0.4) // Temperature for microcopy (0.3-0.5)
-  maxOutputTokens   Int      @default(648) // Maximum output tokens (64-48000, role-based limits)
-  warmupDeadlineMs  Int      @default(15000)
-  hardDeadlineMs    Int      @default(15000)
-  softDeadlineMs    Int      @default(18000)
-  shortTitleLLM     Boolean  @default(true)
-  toolChoice        String   @default("auto") // "none" | "auto"
-  isActive          Boolean  @default(true)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  documents         AiDocument[]
-  faqs              AiFaq[]
-  inboxLinks        AiAssistantInbox[]
-  promptVersions    PromptVersion[]
-  abTests           PromptABTest[]
-
-  @@index([userId, isActive])
-}
-
-model AiAssistantInbox {
-  id          String        @id @default(cuid())
-  assistantId String
-  inboxDbId   String
-  isActive    Boolean       @default(true)
-  createdAt   DateTime      @default(now())
-  assistant   AiAssistant   @relation(fields: [assistantId], references: [id], onDelete: Cascade)
-  inbox       ChatwitInbox  @relation(fields: [inboxDbId], references: [id], onDelete: Cascade)
-
-  @@unique([assistantId, inboxDbId])
-}
-
-model AiDocument {
-  id           String        @id @default(cuid())
-  userId       String
-  assistantId  String?
-  title        String
-  sourceUrl    String?
-  contentText  String?       @db.Text
-  embedding    Unsupported("vector(1536)")? // OpenAI embeddings vector
-  isActive     Boolean       @default(true)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  assistant    AiAssistant?  @relation(fields: [assistantId], references: [id])
-
-  @@index([userId, assistantId, isActive])
-  @@index([embedding]) // Índice para busca vetorial
+enum AiAgentType {
+  TOOLS
+  OPENAI_FUNCTIONS
+  PLAN_AND_EXECUTE
+  REACT
+  CUSTOM
 }
 
 enum AiFaqStatus {
   PENDING
   APPROVED
   REJECTED
-}
-
-model AiFaq {
-  id            String       @id @default(cuid())
-  userId        String
-  assistantId   String?
-  question      String
-  answer        String?
-  status        AiFaqStatus  @default(PENDING)
-  autoGenerated Boolean      @default(false)
-  sourceMessageId String?
-  isActive      Boolean      @default(true)
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  assistant     AiAssistant? @relation(fields: [assistantId], references: [id])
-
-  @@index([userId, assistantId, status, isActive])
-}
-
-model IframeAuthorizedDomain {
-  id          String   @id @default(cuid())
-  domain      String   @unique
-  description String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  createdBy   String
-  user        User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
-
-  @@index([isActive])
-  @@index([createdBy])
 }
 
 enum AiIntentOutputFormat {

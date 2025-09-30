@@ -7,7 +7,7 @@ const withNextra = nextra({
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ["sharp"],
+  serverExternalPackages: ["sharp", "pdf-parse"],
 
   // Production optimizations
   productionBrowserSourceMaps: false,
@@ -70,6 +70,10 @@ const nextConfig = {
         path: false,
         dns: false,
       }
+
+      // Evitar bundling de pdf-parse no cliente
+      config.externals = config.externals || [];
+      config.externals.push('pdf-parse');
     }
     
     return config

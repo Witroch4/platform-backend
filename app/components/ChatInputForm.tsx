@@ -34,6 +34,29 @@ import axios from "axios";
 import { toast } from "sonner";
 import { useDropzone } from "react-dropzone";
 
+// 🎯 NOVO: Importar componentes do Prompt Input
+import {
+  PromptInput,
+  PromptInputActionAddAttachments,
+  PromptInputActionMenu,
+  PromptInputActionMenuContent,
+  PromptInputActionMenuTrigger,
+  PromptInputAttachment,
+  PromptInputAttachments,
+  PromptInputBody,
+  PromptInputButton,
+  type PromptInputMessage,
+  PromptInputModelSelect,
+  PromptInputModelSelectContent,
+  PromptInputModelSelectItem,
+  PromptInputModelSelectTrigger,
+  PromptInputModelSelectValue,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputToolbar,
+  PromptInputTools,
+} from "@/components/ai-elements/prompt-input";
+
 export type UploadPurpose = "vision" | "assistants" | "user_data";
 
 // 🔧 NOVO: Estado de upload de arquivo
@@ -129,6 +152,20 @@ const ChatInputForm: React.FC<ChatInputFormProps> = ({
   // 🔧 NOVO: Estado para modo código
   const [codeMode, setCodeMode] = useState(false);
   
+  // 🎯 NOVO: Estado de status para o Prompt Input
+  const [promptStatus, setPromptStatus] = useState<"ready" | "submitted" | "streaming" | "error">("ready");
+
+  // 🎯 NOVO: Modelos disponíveis para seleção
+  const aiModels = useMemo(() => [
+    { id: "gpt-5", name: "GPT-5" },
+    { id: "gpt-4", name: "GPT-4" },
+    { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo" },
+    { id: "claude-2", name: "Claude 2" },
+    { id: "llama-2-70b", name: "Llama 2 70B" },
+  ], []);
+
+  const [selectedModel, setSelectedModel] = useState<string>(aiModels[0].id);
+
   const sendingRef = useRef(false);
   
   // Estado para o texto visível
@@ -558,6 +595,111 @@ const ChatInputForm: React.FC<ChatInputFormProps> = ({
     return `\`\`\`${language}\n${content}\n\`\`\``;
   }, [shouldEncapsulate]);
 
+  // 🎯 NOVO: Handler para submit do Prompt Input
+  const handlePromptSubmit = useCallback(async (message: PromptInputMessage) => {
+    const hasText = Boolean(message.text?.trim());
+    const hasFiles = Boolean(message.files?.length || completedFiles.length);
+
+    if (!(hasText || hasFiles)) {
+      return;
+    }
+
+    setPromptStatus("submitted");
+    
+    try {
+      // Cria conteúdo apropriado para diferentes tipos de arquivos
+      let content = message.text?.trim() || '';
+      
+      // 🔧 ATUALIZADO: Encapsular apenas quando há risco de problemas de formatação
+      if (content && shouldEncapsulate(content)) {
+        content = encapsulateContent(content);
+        console.log(`🔧 Conteúdo protegido contra problemas de formatação`);
+      } else if (content) {
+        console.log(`✅ Texto normal enviado sem encapsulamento`);
+      }
+
+      // Processar arquivos do Prompt Input se houver
+      if (message.files?.length) {
+        for (const fileUIPart of message.files) {
+          try {
+            // Converter FileUIPart para File
+            if (fileUIPart.url.startsWith('data:')) {
+              // Data URL - converter para Blob e criar File-like object
+              const response = await fetch(fileUIPart.url);
+              const blob = await response.blob();
+              
+              // Criar um objeto File-like para compatibilidade
+              const fileObject = Object.assign(blob, {
+                name: fileUIPart.filename || 'arquivo',
+                type: fileUIPart.mediaType,
+                lastModified: Date.now(),
+                webkitRelativePath: ''
+              });
+              
+              await processFile(fileObject as File, fileUploadPurpose, fileUploadUseUrl);
+            }
+          } catch (error) {
+            console.error('Erro ao processar arquivo do Prompt Input:', error);
+          }
+        }
+      }
+
+      // Se temos arquivos para enviar com a mensagem
+      if (completedFiles.length > 0) {
+        // Adiciona referências de todos os arquivos (PDFs e imagens)
+        const fileLinks = completedFiles.map(r => {
+          // 🔧 CORREÇÃO: Para imagens com useUrl: true, usar formato markdown de imagem
+          if (r.useUrl && r.isImage && r.storageUrl) {
+            return `![${r.name}](${r.storageUrl})`;
+          } else {
+            // Para outros tipos (PDFs ou imagens via Files API), usar file_id
+            return `[${r.name}](file_id:${r.id})`;
+          }
+        }).join("\n");
+        if (content) content += "\n\n";
+        content += fileLinks;
+      }
+
+      if (!content) {
+        console.log(`⚠️ Conteúdo vazio, cancelando envio`);
+        setPromptStatus("ready");
+        return;
+      }
+
+      setPromptStatus("streaming");
+      console.log(`📤 Enviando conteúdo final: "${content}"`);
+
+      // Limpar input e arquivos
+      setInput("");
+      setCompletedFiles([]);
+      
+      // Enviar mensagem
+      await onSubmit(content);
+      setPromptStatus("ready");
+      
+      console.log(`✅ handlePromptSubmit concluído`);
+    } catch (error) {
+      console.error('Erro ao enviar mensagem:', error);
+      setPromptStatus("error");
+      setTimeout(() => setPromptStatus("ready"), 2000);
+    }
+  }, [
+    onSubmit, 
+    completedFiles, 
+    fileUploadPurpose, 
+    fileUploadUseUrl,
+    processFile,
+    shouldEncapsulate,
+    encapsulateContent,
+    setInput,
+    setCompletedFiles
+  ]);
+
+  // 🎯 NOVO: Synchronizar status com loading
+  useEffect(() => {
+    setPromptStatus(isLoading ? "streaming" : "ready");
+  }, [isLoading]);
+
   // Handle send with debounce against duplicates
   const handleSend = useCallback(async (e: React.MouseEvent | React.KeyboardEvent) => {
     e.preventDefault();
@@ -978,7 +1120,7 @@ const ChatInputForm: React.FC<ChatInputFormProps> = ({
         />
       )}
 
-      {/* 🔧 NOVO: Área de input com Drag & Drop */}
+      {/* 🎯 NOVO: Área de input com PromptInput */}
       <div 
         {...getRootProps()}
         className="sticky bottom-0 border-t border-border bg-background py-4 relative"
@@ -1001,244 +1143,182 @@ const ChatInputForm: React.FC<ChatInputFormProps> = ({
         <input {...getInputProps()} />
 
         <div className="container mx-auto max-w-6xl px-4">
-          <div className="relative flex flex-col rounded-lg border border-border bg-card shadow-sm overflow-visible">
-            <div className="flex-grow relative">
-              {/* Textarea */}
-              <textarea
-                ref={inputRef}
-                className="w-full pt-[30px] pb-[50px] pl-[30px] pr-[30px] bg-transparent text-foreground placeholder:text-muted-foreground resize-none focus:outline-none min-h-[120px] max-h-[280px] overflow-auto rounded-t-lg"
-                placeholder={isUploading ? "⏳ Aguardando processamento de arquivos..." : isDragActive ? "📁 Solte os arquivos aqui..." : "Digite sua mensagem (proteção inteligente contra problemas de formatação)..."}
-                rows={1}
-                disabled={isUploading} // 🔧 NOVO: Desabilitar durante upload
-                style={{ 
-                  height: '120px', // 🔧 CORREÇÃO: Altura inicial maior
-                  boxSizing: 'border-box',
-                  textOverflow: 'ellipsis',
-                  overflowWrap: 'break-word',
-                  wordWrap: 'break-word',
-                  opacity: isUploading ? 0.6 : 1 // 🔧 NOVO: Feedback visual durante upload
-                }}
-                onPaste={e => {
-                  if (isUploading) {
-                    e.preventDefault();
-                    return;
-                  }
-                  setTimeout(() => {
-                    const el = inputRef.current;
-                    if (el) {
-                      // 🔧 CORREÇÃO: Se o texto está vazio, voltar para altura mínima
-                      if (el.value.trim() === '') {
-                        el.style.height = "120px";
-                      } else {
-                        el.style.height = "auto";
-                        el.style.height = `${Math.min(Math.max(el.scrollHeight, 120), 280)}px`;
-                      }
-                    }
-                  }, 0);
-                }}
-                value={visibleText}
-                onChange={e => {
-                  if (isUploading) return; // 🔧 NOVO: Bloquear edição durante upload
-                  
-                  const newText = e.target.value;
-                  
-                  if (newText.length <= MAX_CHAR_LIMIT) {
-                    setInput(newText);
-                    
-                    setTimeout(() => {
-                      if (e.target) {
-                        // 🔧 CORREÇÃO: Se o texto foi removido completamente, voltar para altura mínima
-                        if (newText.trim() === '') {
-                          e.target.style.height = "120px";
-                        } else {
-                          e.target.style.height = "auto";
-                          e.target.style.height = `${Math.min(Math.max(e.target.scrollHeight, 120), 280)}px`;
-                        }
-                      }
-                    }, 0);
-                  }
-                }}
-                onKeyDown={e => {
-                  if (isUploading) {
-                    e.preventDefault();
-                    return;
-                  }
-                  
-                  if (e.key === "Enter") {
-                    if (e.shiftKey) {
-                      e.preventDefault();
-                      const textarea = e.target as HTMLTextAreaElement;
-                      const start = textarea.selectionStart;
-                      const end = textarea.selectionEnd;
-                      const currentValue = textarea.value;
-                      const newValue = currentValue.substring(0, start) + '\n' + currentValue.substring(end);
-                      
-                      if (newValue.length <= MAX_CHAR_LIMIT) {
-                        setInput(newValue);
-                        
-                        setTimeout(() => {
-                          textarea.selectionStart = textarea.selectionEnd = start + 1;
-                          textarea.style.height = "auto";
-                          textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 120), 280)}px`;
-                        }, 0);
-                      }
-                    } else {
-                      e.preventDefault();
-                      handleSend(e);
-                    }
-                  }
-                }}
-              />
-
-              {/* Overlay de botões */}
-              <div className="absolute bottom-3 left-4 right-4 flex items-center justify-between bg-card/90 backdrop-blur-sm p-2 rounded-lg border border-border shadow-sm">
-                {/* botões da esquerda */}
-                <div className="flex items-center space-x-2">
-                  {/* CNIS toggle no overlay */}
-                  <button
-                    type="button"
-                    onClick={toggleCnis}
-                    disabled={isUploading} // 🔧 NOVO: Desabilitar durante upload
-                    aria-pressed={cnisActive}
-                    className={`flex items-center px-3 py-1 rounded-full hover:bg-accent transition-colors disabled:opacity-50 ${
-                      cnisActive ? "bg-primary/20 text-primary" : "bg-transparent text-muted-foreground"
-                    }`}
-                  >
-                    <FileTextIcon size={20} />
-                    <span className="ml-1 text-sm">CNIS</span>
-                  </button>
-
-                  {/* Abertura de menu */}
-                  <button
-                    type="button"
-                    onClick={() => setShowUploadMenu(prev => !prev)}
-                    disabled={isUploading} // 🔧 NOVO: Desabilitar durante upload
-                    className="p-2 rounded-full hover:bg-accent text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                  >
-                    <Plus size={20} />
-                  </button>
-
-                  {/* Buscar */}
-                  <button
-                    type="button"
-                    onClick={toggleBuscar}
-                    disabled={isUploading} // 🔧 NOVO: Desabilitar durante upload
-                    aria-pressed={buscarActive}
-                    className={`flex items-center px-3 py-1 rounded-full hover:bg-accent transition-colors disabled:opacity-50 ${
-                      buscarActive ? "bg-primary/20 text-primary" : "bg-transparent text-muted-foreground"
-                    }`}
-                  >
-                    <Globe size={20} />
-                    <span className="ml-1 text-sm">Buscar</span>
-                  </button>
-                  
-                  {/* Investigar */}
-                  <button
-                    type="button"
-                    onClick={toggleInvestigar}
-                    disabled={isUploading} // 🔧 NOVO: Desabilitar durante upload
-                    aria-pressed={investigarActive}
-                    className={`flex items-center px-3 py-1 rounded-full hover:bg-accent transition-colors disabled:opacity-50 ${
-                      investigarActive ? "bg-primary/20 text-primary" : "bg-transparent text-muted-foreground"
-                    }`}
-                  >
-                    <Search size={20} />
-                    <span className="ml-1 text-sm">Investigar</span>
-                  </button>
-                  
-                  {/* Criar imagem */}
-                  <button
-                    type="button"
-                    onClick={() => { setGerarImagemActive(prev => !prev); onImageGenerate?.(); }}
-                    disabled={isUploading} // 🔧 NOVO: Desabilitar durante upload
-                    aria-pressed={gerarImagemActive}
-                    className={`flex items-center px-3 py-1 rounded-full hover:bg-accent transition-colors disabled:opacity-50 ${
-                      gerarImagemActive ? "bg-primary/20 text-primary" : "bg-transparent text-muted-foreground"
-                    }`}
-                  >
-                    <ImageIcon size={20} />
-                    <span className="ml-1 text-sm">Criar imagem</span>
-                  </button>
-                  
-                  {/* Menu adicional */}
-                  <button 
-                    type="button" 
-                    disabled={isUploading} // 🔧 NOVO: Desabilitar durante upload
-                    className="p-2 rounded-full hover:bg-accent text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                  >
-                    <MoreHorizontal size={20} />
-                  </button>
-                </div>
-
-                {/* botões da direita */}
-                <div className="flex items-center space-x-2">
-                  <button 
-                    onClick={onAudioCapture} 
-                    disabled={isLoading || isUploading} // 🔧 NOVO: Incluir upload no disable
-                    className="p-2 rounded-full hover:bg-accent text-muted-foreground hover:text-foreground disabled:text-muted-foreground/50 transition-colors"
-                  >
-                    <Mic size={20} />
-                  </button>
-                  
-                  <button 
-                    onClick={handleSend} 
-                    disabled={!canSend} 
-                    className="p-2 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground transition-colors"
-                  >
-                    {isUploading ? (
-                      <Loader2 size={20} className="animate-spin" />
-                    ) : (
-                      <ArrowUp size={20} />
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Upload menu */}
-            {showUploadMenu && !isUploading && ( // 🔧 NOVO: Ocultar menu durante upload
-              <div ref={uploadMenuRef} className="absolute bottom-20 left-4 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[220px] z-50">
-                {uploadMenuItems.map(item => (
-                  <button
-                    key={item.key}
-                    onClick={() => {
-                      setFileUploadPurpose(item.purpose);
-                      setFileUploadUseUrl(item.useUrl);
-                      fileInputRef.current?.click();
-                      setShowUploadMenu(false);
-                    }}
-                    className="flex items-center w-full px-4 py-2 text-sm text-foreground hover:bg-accent transition-colors"
-                  >
-                    <item.icon size={16} className="mr-2 text-muted-foreground" /> {item.label}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              onChange={async e => {
-                if (!e.target.files || isUploading) return; // 🔧 NOVO: Bloquear se já há upload
-                
-                const filesToProcess = Array.from(e.target.files);
-                
-                // Processar todos os arquivos em paralelo
-                const processPromises = filesToProcess.map(file => 
-                  processFile(file, fileUploadPurpose, fileUploadUseUrl)
-                );
-                
-                // Aguardar todos os processamentos
-                await Promise.allSettled(processPromises);
-                
-                e.target.value = "";
+          <PromptInput
+            onSubmit={handlePromptSubmit}
+            className="relative"
+          >
+            {/* 🎯 NOVO: Area de exibição de arquivos anexados */}
+            <PromptInputAttachments className="p-2">
+              {(attachment) => (
+                <PromptInputAttachment
+                  key={attachment.id}
+                  data={attachment}
+                  className="mr-2 mb-2"
+                />
+              )}
+            </PromptInputAttachments>
+            
+            <PromptInputTextarea
+              value={input}
+              onChange={(e) => {
+                if (isUploading) return;
+                const newText = e.target.value;
+                if (newText.length <= MAX_CHAR_LIMIT) {
+                  setInput(newText);
+                }
               }}
-              multiple
-              accept="image/*,application/pdf"
-              disabled={isUploading} // 🔧 NOVO: Desabilitar input durante upload
+              placeholder={isUploading ? "⏳ Aguardando processamento de arquivos..." : isDragActive ? "📁 Solte os arquivos aqui..." : "Digite sua mensagem (proteção inteligente contra problemas de formatação)..."}
+              className="w-full min-h-[120px] max-h-[280px] pt-[30px] pb-[50px] pl-[30px] pr-[30px] bg-transparent text-foreground placeholder:text-muted-foreground resize-none focus:outline-none overflow-auto rounded-t-lg"
+              style={{ 
+                opacity: isUploading ? 0.6 : 1
+              }}
+              disabled={isUploading}
             />
-          </div>
+            
+            <PromptInputToolbar className="absolute bottom-3 left-4 right-4 flex items-center justify-between bg-card/90 backdrop-blur-sm p-2 rounded-lg border border-border shadow-sm">
+              {/* Botões da esquerda */}
+              <div className="flex items-center space-x-2">
+                {/* CNIS toggle */}
+                <button
+                  type="button"
+                  onClick={toggleCnis}
+                  disabled={isUploading}
+                  aria-pressed={cnisActive}
+                  className={`flex items-center px-3 py-1 rounded-full hover:bg-accent transition-colors disabled:opacity-50 ${
+                    cnisActive ? "bg-primary/20 text-primary" : "bg-transparent text-muted-foreground"
+                  }`}
+                >
+                  <FileTextIcon size={20} />
+                  <span className="ml-1 text-sm">CNIS</span>
+                </button>
+
+                {/* Upload menu */}
+                <button
+                  type="button"
+                  onClick={() => setShowUploadMenu(prev => !prev)}
+                  disabled={isUploading}
+                  className="p-2 rounded-full hover:bg-accent text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                >
+                  <Plus size={20} />
+                </button>
+
+                {/* Buscar */}
+                <button
+                  type="button"
+                  onClick={toggleBuscar}
+                  disabled={isUploading}
+                  aria-pressed={buscarActive}
+                  className={`flex items-center px-3 py-1 rounded-full hover:bg-accent transition-colors disabled:opacity-50 ${
+                    buscarActive ? "bg-primary/20 text-primary" : "bg-transparent text-muted-foreground"
+                  }`}
+                >
+                  <Globe size={20} />
+                  <span className="ml-1 text-sm">Buscar</span>
+                </button>
+                
+                {/* Investigar */}
+                <button
+                  type="button"
+                  onClick={toggleInvestigar}
+                  disabled={isUploading}
+                  aria-pressed={investigarActive}
+                  className={`flex items-center px-3 py-1 rounded-full hover:bg-accent transition-colors disabled:opacity-50 ${
+                    investigarActive ? "bg-primary/20 text-primary" : "bg-transparent text-muted-foreground"
+                  }`}
+                >
+                  <Search size={20} />
+                  <span className="ml-1 text-sm">Investigar</span>
+                </button>
+                
+                {/* Criar imagem */}
+                <button
+                  type="button"
+                  onClick={() => { setGerarImagemActive(prev => !prev); onImageGenerate?.(); }}
+                  disabled={isUploading}
+                  aria-pressed={gerarImagemActive}
+                  className={`flex items-center px-3 py-1 rounded-full hover:bg-accent transition-colors disabled:opacity-50 ${
+                    gerarImagemActive ? "bg-primary/20 text-primary" : "bg-transparent text-muted-foreground"
+                  }`}
+                >
+                  <ImageIcon size={20} />
+                  <span className="ml-1 text-sm">Criar imagem</span>
+                </button>
+                
+                {/* Menu adicional */}
+                <button 
+                  type="button" 
+                  disabled={isUploading}
+                  className="p-2 rounded-full hover:bg-accent text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                >
+                  <MoreHorizontal size={20} />
+                </button>
+              </div>
+
+              {/* Botões da direita */}
+              <div className="flex items-center space-x-2">
+                <button 
+                  onClick={onAudioCapture} 
+                  disabled={isLoading || isUploading}
+                  className="p-2 rounded-full hover:bg-accent text-muted-foreground hover:text-foreground disabled:text-muted-foreground/50 transition-colors"
+                >
+                  <Mic size={20} />
+                </button>
+                
+                <PromptInputSubmit
+                  disabled={!canSend} 
+                  className="p-2 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground transition-colors"
+                >
+                  {isUploading ? (
+                    <Loader2 size={20} className="animate-spin" />
+                  ) : (
+                    <ArrowUp size={20} />
+                  )}
+                </PromptInputSubmit>
+              </div>
+            </PromptInputToolbar>
+          </PromptInput>
+
+          {/* Upload menu */}
+          {showUploadMenu && !isUploading && (
+            <div ref={uploadMenuRef} className="absolute bottom-20 left-4 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[220px] z-50">
+              {uploadMenuItems.map(item => (
+                <button
+                  key={item.key}
+                  onClick={() => {
+                    setFileUploadPurpose(item.purpose);
+                    setFileUploadUseUrl(item.useUrl);
+                    fileInputRef.current?.click();
+                    setShowUploadMenu(false);
+                  }}
+                  className="flex items-center w-full px-4 py-2 text-sm text-foreground hover:bg-accent transition-colors"
+                >
+                  <item.icon size={16} className="mr-2 text-muted-foreground" /> {item.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={async e => {
+              if (!e.target.files || isUploading) return;
+              
+              const filesToProcess = Array.from(e.target.files);
+              
+              const processPromises = filesToProcess.map(file => 
+                processFile(file, fileUploadPurpose, fileUploadUseUrl)
+              );
+              
+              await Promise.allSettled(processPromises);
+              
+              e.target.value = "";
+            }}
+            multiple
+            accept="image/*,application/pdf"
+            disabled={isUploading}
+          />
         </div>
       </div>
     </>
