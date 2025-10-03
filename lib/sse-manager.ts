@@ -24,7 +24,7 @@ class SseManager {
     // Don't initialize Redis in constructor to avoid Edge Runtime issues
   }
 
-  private initializeRedis() {
+  private async initializeRedis() {
     if (this.isInitialized || this.publisher) {
       return; // Already initialized
     }
@@ -33,26 +33,21 @@ class SseManager {
       // Usar singleton para publisher e subscriber
       // Nota: Para pub/sub, precisamos de instâncias separadas
       const baseRedis = getRedisInstance();
-      
+
       console.log('[SSE Redis] ⚙️ Usando conexão singleton');
 
       // Clonar configuração para pub/sub
       this.publisher = baseRedis.duplicate();
       this.subscriber = baseRedis.duplicate();
 
-      // Garantir conexão explícita em ambientes de worker/Node
-      try { (this.publisher as any).connect?.(); } catch {}
-      try { (this.subscriber as any).connect?.(); } catch {}
-
-      this.subscriber.on('message', this.handleRedisMessage.bind(this));
-      
+      // Configurar event handlers ANTES de conectar
       this.publisher.on('connect', () => {
         console.log('[SSE Redis] ✅ Publisher conectado.');
         this.isInitialized = true;
       });
 
       this.subscriber.on('connect', () => console.log('[SSE Redis] ✅ Subscriber conectado.'));
-      
+
       const handleError = (client: string) => (error: Error) => {
         console.error(`[SSE Redis] ❌ Erro no ${client}:`, error.message);
         if (client === 'publisher') this.isInitialized = false;
@@ -60,10 +55,62 @@ class SseManager {
 
       this.publisher.on('error', handleError('Publisher'));
       this.subscriber.on('error', handleError('Subscriber'));
+
+      this.subscriber.on('message', this.handleRedisMessage.bind(this));
+
+      // Conectar explicitamente e aguardar (para ambientes Node/Worker)
+      try {
+        if (typeof (this.publisher as any).connect === 'function') {
+          console.log('[SSE Redis] 🔌 Conectando Publisher...');
+          await (this.publisher as any).connect();
+        }
+      } catch (err) {
+        console.warn('[SSE Redis] ⚠️ Publisher connect não disponível ou já conectado', err);
+      }
+
+      try {
+        if (typeof (this.subscriber as any).connect === 'function') {
+          console.log('[SSE Redis] 🔌 Conectando Subscriber...');
+          await (this.subscriber as any).connect();
+        }
+      } catch (err) {
+        console.warn('[SSE Redis] ⚠️ Subscriber connect não disponível ou já conectado', err);
+      }
+
+      // Marcar como inicializado após tentativa de conexão
+      this.isInitialized = true;
+      console.log('[SSE Redis] ✅ Inicialização concluída');
     } catch (error) {
       console.error('[SSE Redis] ❌ Erro ao inicializar Redis:', error);
       // Don't throw error, just log it
     }
+  }
+
+  /**
+   * Garante que o Redis está conectado antes de usar
+   * Útil para workers que precisam garantir conexão antes de processar jobs
+   */
+  public async ensureRedisConnected(): Promise<boolean> {
+    if (this.isInitialized && this.publisher) {
+      return true;
+    }
+
+    console.log('[SSE Manager] 🔄 Garantindo conexão Redis...');
+    await this.initializeRedis();
+
+    // Aguardar até 5 segundos para conexão
+    const startTime = Date.now();
+    while (!this.isInitialized && Date.now() - startTime < 5000) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    if (!this.isInitialized) {
+      console.error('[SSE Manager] ❌ Timeout aguardando conexão Redis');
+      return false;
+    }
+
+    console.log('[SSE Manager] ✅ Redis conectado e pronto');
+    return true;
   }
 
   private handleRedisMessage(channel: string, message: string) {
@@ -95,9 +142,9 @@ class SseManager {
     }
   }
 
-  public addConnection(leadId: string, controller: ReadableStreamDefaultController<string>): string {
+  public async addConnection(leadId: string, controller: ReadableStreamDefaultController<string>): Promise<string> {
     // Initialize Redis only when needed
-    this.initializeRedis();
+    await this.initializeRedis();
     
     const connectionId = `${leadId}-${Date.now()}`;
     
@@ -152,11 +199,16 @@ class SseManager {
 
   public async sendNotification(leadId: string, data: any): Promise<boolean> {
     // Initialize Redis if not already done
-    this.initializeRedis();
-    
-    if (!this.publisher || !this.isInitialized) {
-      console.error('[SSE Manager] ‼️ ERRO CRÍTICO: Publisher Redis não conectado. A notificação não será enviada.');
-      return false;
+    await this.initializeRedis();
+
+    // Tentar garantir conexão se não estiver pronto
+    if (!this.isInitialized || !this.publisher) {
+      console.warn('[SSE Manager] ⚠️ Publisher não inicializado, tentando garantir conexão...');
+      const connected = await this.ensureRedisConnected();
+      if (!connected) {
+        console.error('[SSE Manager] ‼️ ERRO CRÍTICO: Não foi possível conectar ao Redis Publisher.');
+        return false;
+      }
     }
     
     try {

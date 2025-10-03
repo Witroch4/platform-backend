@@ -115,10 +115,16 @@ function organizeSegments(segments: string[]): TranscriptionSegment[] {
     others.push({ output: trimmed, index });
   });
 
+  // Ordenar questões por número (1, 2, 3, ...)
   questions.sort((a, b) => a.num - b.num);
+
+  // Ordenar páginas da peça por número (1, 2, 3, ...)
   pages.sort((a, b) => a.page - b.page);
+
+  // Outros mantêm ordem original
   others.sort((a, b) => a.index - b.index);
 
+  // Ordem final: Questões (ordenadas) → Páginas da Peça (ordenadas) → Outros
   return [
     ...questions.map((item) => ({ output: item.output })),
     ...pages.map((item) => ({ output: item.output })),
@@ -199,9 +205,11 @@ async function fetchImageAsBase64(descriptor: ManuscriptImageDescriptor): Promis
 
 export interface TranscriptionAgentInput {
   leadId: string;
-  images: ManuscriptImageDescriptor[];
+  images: ManuscriptImageDescriptor[] | string[]; // Suporta URLs diretas ou descritores
   telefone?: string;
   nome?: string;
+  concurrency?: number;
+  onPageComplete?: (pageIndex: number, pageLabel: string) => Promise<void> | void;
 }
 
 export interface TranscriptionAgentOutput {
@@ -211,20 +219,61 @@ export interface TranscriptionAgentOutput {
   segments: string[];
 }
 
+// Alias para compatibilidade com transcription-queue
+export interface TranscribeManuscriptResult {
+  blocks: Array<{ pageLabel: string; transcription: string }>;
+  textoDAprova: TranscriptionSegment[];
+  combinedText: string;
+  segments: string[];
+}
+
+export async function transcribeManuscript(
+  input: Omit<TranscriptionAgentInput, 'images'> & { images: string[] }
+): Promise<TranscribeManuscriptResult> {
+  const descriptors: ManuscriptImageDescriptor[] = input.images.map((url, index) => ({
+    id: `img-${index}`,
+    url,
+    page: index + 1,
+  }));
+
+  const result = await transcribeManuscriptLocally({
+    ...input,
+    images: descriptors,
+  });
+
+  return {
+    blocks: result.pages.map((page) => ({
+      pageLabel: String(page.page),
+      transcription: page.text,
+    })),
+    textoDAprova: result.textoDAprova,
+    combinedText: result.combinedText,
+    segments: result.segments,
+  };
+}
+
 export async function transcribeManuscriptLocally(input: TranscriptionAgentInput): Promise<TranscriptionAgentOutput> {
   console.log(
     `[TranscriptionAgent] Iniciando digitação local para lead ${input.leadId} com ${input.images.length} imagens`,
   );
 
+  // Normalizar images para ManuscriptImageDescriptor[]
+  const imageDescriptors: ManuscriptImageDescriptor[] = input.images.map((img, index) => {
+    if (typeof img === 'string') {
+      return { id: `img-${index}`, url: img, page: index + 1 };
+    }
+    return img;
+  });
+
   const preparedImages: PreparedImageState[] = [];
-  for (const image of input.images) {
+  for (const image of imageDescriptors) {
     const prepared = await fetchImageAsBase64(image);
     preparedImages.push(PreparedImageSchema.parse(prepared));
   }
 
   const total = preparedImages.length;
   const { transcribe_concurrency = 10 } = getOabEvalConfig();
-  const concurrency = Math.max(1, transcribe_concurrency || 10);
+  const concurrency = input.concurrency ?? Math.max(1, transcribe_concurrency || 10);
   console.log(`[TranscriptionAgent] ⚙️ Concurrency: ${concurrency}`);
 
   async function mapConcurrent<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
@@ -253,14 +302,33 @@ export async function transcribeManuscriptLocally(input: TranscriptionAgentInput
 
   const { model, systemInstructions, maxOutputTokens } = await getTranscriberConfig();
 
+  console.log('[TranscriptionAgent] 📝 Configuração do Blueprint:');
+  console.log(`  - Modelo: ${model}`);
+  console.log(`  - Max Output Tokens: ${maxOutputTokens}`);
+  console.log(`  - System Prompt (preview): ${systemInstructions.substring(0, 150)}...`);
+
   const results = await mapConcurrent(preparedImages, concurrency, async (image, index) => {
     const pageNumber = image.page ?? index + 1;
+    const startTime = Date.now();
+
     console.log(
       `[TranscriptionAgent] 🖼️ Processando página ${index + 1}/${total} (page label: ${pageNumber})`,
     );
+
     const text = await transcribeSingleImage(image, pageNumber, total, model, systemInstructions, maxOutputTokens);
     const trimmed = text.trim();
     const newSegments = splitSegments(trimmed);
+
+    const elapsedMs = Date.now() - startTime;
+    console.log(
+      `[TranscriptionAgent] ✅ Página ${index + 1}/${total} concluída em ${(elapsedMs / 1000).toFixed(1)}s (${trimmed.length} chars, ${newSegments.length} blocos)`,
+    );
+
+    // Callback de progresso
+    if (input.onPageComplete) {
+      await input.onPageComplete(index, String(pageNumber));
+    }
+
     return {
       index,
       pageNumber,
@@ -272,6 +340,10 @@ export async function transcribeManuscriptLocally(input: TranscriptionAgentInput
   // Ordenar por pageNumber para manter consistência
   results.sort((a, b) => a.pageNumber - b.pageNumber);
 
+  console.log(
+    `[TranscriptionAgent] 🔢 Ordem após sort: ${results.map(r => `p${r.pageNumber}`).join(' → ')}`
+  );
+
   const pages: ExtractedPage[] = results.map((r) => ({
     page: r.pageNumber,
     text: r.text,
@@ -279,6 +351,7 @@ export async function transcribeManuscriptLocally(input: TranscriptionAgentInput
   }));
   const segments: string[] = results.flatMap((r) => r.segments);
 
+  // Ordena por número de questão e número de página da peça
   const textoDAprova = organizeSegments(segments);
   const combinedText = pages
     .map((page) => `[[PÁGINA ${page.page}]]\n${page.text}`.trim())

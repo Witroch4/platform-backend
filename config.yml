@@ -86,6 +86,35 @@ oab_eval:
   # Número de páginas processadas em paralelo pelo agente local
   transcribe_concurrency: 10
 
+  # Configurações da fila de transcrição
+  queue:
+    # Nome da fila (padrão: oab-transcription)
+    name: 'oab-transcription'
+    # Máximo de digitações simultâneas (jobs concorrentes)
+    # ENV: OAB_EVAL_MAX_CONCURRENT_JOBS
+    max_concurrent_jobs: 3
+    # Timeout para cada job de transcrição (ms)
+    # ENV: OAB_EVAL_JOB_TIMEOUT
+    job_timeout: 300000  # 5 minutos
+    # Tentativas de retry em caso de falha
+    # ENV: OAB_EVAL_RETRY_ATTEMPTS
+    retry_attempts: 2
+
+  # Configurações de debug e logging
+  debug:
+    # Habilita logs detalhados do processo
+    # ENV: OAB_EVAL_DEBUG_ENABLED
+    enabled: true
+    # Loga o prompt usado no blueprint
+    # ENV: OAB_EVAL_LOG_PROMPTS
+    log_prompts: true
+    # Loga quantidade de tokens consumidos
+    # ENV: OAB_EVAL_LOG_TOKENS
+    log_tokens: true
+    # Dump completo do payload (apenas em desenvolvimento)
+    # ENV: OAB_EVAL_DUMP_PAYLOAD
+    dump_payload: false
+
 # Observações:
 # - Os valores definidos aqui são padrões
 # - Use variáveis de ambiente (ENV) para sobrescrever em produção

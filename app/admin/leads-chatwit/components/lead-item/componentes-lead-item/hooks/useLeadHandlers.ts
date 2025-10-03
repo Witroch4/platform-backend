@@ -324,6 +324,21 @@ export function useLeadHandlers({
         throw new Error(data.error || "Erro ao enviar manuscrito para processamento");
       }
 
+      const result = await response.json();
+
+      // Liberar botão imediatamente após enfileirar (não aguardar conclusão)
+      setIsDigitando(false);
+
+      console.log('✅ [Post-Send] Manuscrito enfileirado com sucesso:', result);
+
+      // Mostrar toast de confirmação
+      if (result.mode === 'queued') {
+        toast.success('Prova adicionada à fila de digitação', {
+          description: `${result.totalPages} páginas serão processadas. Você será notificado quando concluir.`,
+        });
+      }
+
+      // Atualizar lead local para mostrar status de aguardando
       console.log('🔄 [Post-Send] Atualizando lead local para aguardandoManuscrito: true');
       if (typeof onEdit === 'function') {
         onEdit({
@@ -333,9 +348,8 @@ export function useLeadHandlers({
           _skipDialog: true
         } as any);
       }
-      
-      console.log('✅ [Post-Send] Aguardando notificação SSE para atualização automática...');
-      setIsDigitando(false);
+
+      console.log('✅ [Post-Send] SSE cuidará de atualizar quando concluir...');
     } catch (error: any) {
       console.error("Erro ao enviar manuscrito:", error);
       setIsDigitando(false);

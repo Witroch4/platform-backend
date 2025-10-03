@@ -13,6 +13,8 @@ import { initJobs } from './webhook.worker';
 import { startWorkers as startAIIntegrationWorkers } from './ai-integration.worker';
 import { instagramWebhookWorker } from './automacao.worker';
 import { initializeQueueManagement, shutdownQueueManagement } from './queue-manager-integration';
+import { startTranscriptionWorker, stopTranscriptionWorker } from '../lib/oab-eval/transcription-queue';
+import { sseManager } from '../lib/sse-manager';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -84,6 +86,18 @@ export async function initializeWorkers() {
     console.log('[Worker] ✅ Worker de Tradução Instagram inicializado');
 
     // ============================================================================
+    // OAB TRANSCRIPTION WORKER
+    // ============================================================================
+
+    // Garantir que SSE Redis está conectado antes de iniciar worker de transcrição
+    await sseManager.ensureRedisConnected();
+    console.log('[Worker] ✅ SSE Redis conectado');
+
+    // Inicializa o worker de transcrição OAB
+    startTranscriptionWorker();
+    console.log('[Worker] ✅ Worker de Transcrição OAB inicializado');
+
+    // ============================================================================
     // QUEUE MANAGEMENT SYSTEM
     // ============================================================================
 
@@ -111,6 +125,7 @@ export async function initializeWorkers() {
     console.log('   🤖 AI Integration      → Processamento de mensagens IA');
     console.log('   📱 Instagram Webhook   → Automação Instagram');
     console.log('   📝 Workers Legados     → Manuscrito, Leads, Tradução');
+    console.log('   📄 Transcription OAB   → Digitação de manuscritos com LangGraph');
     console.log('   ⏰ Jobs Recorrentes    → Configurados e ativos');
     console.log('   📊 Queue Management    → Monitorando todas as filas');
     console.log('-'.repeat(70));
@@ -134,6 +149,10 @@ async function gracefulShutdown(signal: string) {
     // Shutdown queue management first
     console.log('[Worker] Parando sistema de gerenciamento de filas...');
     await shutdownQueueManagement();
+
+    // Parar o worker de transcrição OAB
+    console.log('[Worker] Parando worker de transcrição OAB...');
+    await stopTranscriptionWorker();
 
     // Parar o worker de automação
     if (instagramWebhookWorker) {

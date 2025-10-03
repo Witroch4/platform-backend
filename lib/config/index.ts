@@ -57,6 +57,18 @@ export interface ContainerConfig {
 export interface OabEvalConfig {
   agentelocal: boolean;
   transcribe_concurrency: number;
+  queue?: {
+    name?: string;
+    max_concurrent_jobs?: number;
+    job_timeout?: number;
+    retry_attempts?: number;
+  };
+  debug?: {
+    enabled?: boolean;
+    log_prompts?: boolean;
+    log_tokens?: boolean;
+    dump_payload?: boolean;
+  };
 }
 
 export interface AppConfig {
@@ -367,5 +379,25 @@ export function getContainerConfig(): ContainerConfig {
 
 export function getOabEvalConfig(): OabEvalConfig {
   const config = getConfig();
-  return config.oab_eval ?? { agentelocal: false };
+  return config.oab_eval ?? { agentelocal: false, transcribe_concurrency: 10 };
+}
+
+/**
+ * Get a specific configuration value by path (dot notation)
+ * Example: getConfigValue('oab_eval.queue.max_concurrent_jobs', 3)
+ */
+export function getConfigValue<T = any>(path: string, defaultValue?: T): T {
+  const config = getConfig();
+  const keys = path.split('.');
+
+  let value: any = config;
+  for (const key of keys) {
+    if (value && typeof value === 'object' && key in value) {
+      value = value[key];
+    } else {
+      return defaultValue as T;
+    }
+  }
+
+  return (value !== undefined ? value : defaultValue) as T;
 }

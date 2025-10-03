@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getPrismaInstance } from '@/lib/connections';
 import { getOabEvalConfig } from '@/lib/config';
-import { transcribeManuscriptLocally } from '@/lib/oab-eval/transcription-agent';
-import { addManuscritoJob } from '@/lib/queue/leadcells.queue';
+import { enqueueTranscription } from '@/lib/oab-eval/transcription-queue';
 
 const prisma = getPrismaInstance();
 const { agentelocal: USE_LOCAL_TRANSCRIBER } = getOabEvalConfig();
@@ -266,35 +265,34 @@ export async function POST(request: Request): Promise<Response> {
       }
 
       console.log(
-        `[Enviar Manuscrito][Local] Iniciando agente local para ${imagensPreparadas.length} imagens (lead ${resolvedLeadId})`,
+        `[Enviar Manuscrito][Queue] Enfileirando digitação de ${imagensPreparadas.length} imagens (lead ${resolvedLeadId})`,
       );
 
-      const transcription = await transcribeManuscriptLocally({
-        leadId: resolvedLeadId,
-        images: imagensPreparadas,
-        nome: payload.nome,
+      // Extrair apenas URLs para enfileirar
+      const imageUrls = imagensPreparadas.map(img => img.url);
+
+      // Enfileirar na transcription queue (retorna 202 imediatamente)
+      const job = await enqueueTranscription({
+        leadID: resolvedLeadId,
+        images: imageUrls,
         telefone: payload.telefone,
+        nome: payload.nome,
+        userId: payload.userId || 'system',
+        priority: payload.priority || 5,
       });
 
       console.log(
-        `[Enviar Manuscrito][Local] Digitação concluída com ${transcription.textoDAprova.length} blocos`,
+        `[Enviar Manuscrito][Queue] Job ${job.id} enfileirado com sucesso`,
       );
-
-      await addManuscritoJob({
-        leadID: resolvedLeadId,
-        textoDAprova: transcription.textoDAprova,
-        nome: payload.nome,
-        telefone: payload.telefone,
-        manuscrito: true,
-      });
 
       return NextResponse.json({
         success: true,
-        message: `${docType} processado localmente com sucesso`,
-        mode: "local-agent",
-        blocos: transcription.textoDAprova.length,
+        message: `Manuscrito adicionado à fila de digitação`,
+        mode: "queued",
+        jobId: job.id,
         leadId: resolvedLeadId,
-      });
+        totalPages: imagensPreparadas.length,
+      }, { status: 202 }); // 202 Accepted (processamento assíncrono)
     }
 
     // Fallback para o fluxo legado (N8N)
