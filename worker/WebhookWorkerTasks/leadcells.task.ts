@@ -91,13 +91,21 @@ async function processManuscrito(job: Job<IManuscritoJobData>) {
       },
     });
 
-    // Atualizar o modelo Lead pai com a data
-    await getPrismaInstance().lead.update({
-      where: { id: leadID },
-      data: {
-        updatedAt: new Date()
-      },
-    });
+    // Atualizar o modelo Lead pai com a data (usar o leadId real)
+    try {
+      const parentLeadId = (leadExistente as any).leadId;
+      if (parentLeadId) {
+        await getPrismaInstance().lead.update({
+          where: { id: parentLeadId },
+          data: { updatedAt: new Date() },
+        });
+      } else {
+        console.warn(`[BullMQ] Aviso: leadId pai ausente em LeadOabData ${leadID}; pulando atualização do Lead`);
+      }
+    } catch (e: any) {
+      console.warn(`[BullMQ] Não foi possível atualizar timestamp do Lead pai para LeadOabData ${leadID}: ${e?.message || e}`);
+      // não interromper o job; o manuscrito já foi salvo em LeadOabData
+    }
 
     console.log(`[BullMQ] Lead atualizado com sucesso: ${leadAtualizado.id}`);
 
@@ -178,13 +186,18 @@ async function processEspelho(job: Job<IEspelhoJobData>) {
       data: updateData,
     });
 
-    // Atualizar o modelo Lead pai com a data
-    await getPrismaInstance().lead.update({
-      where: { id: leadID },
-      data: {
-        updatedAt: new Date()
-      },
-    });
+    // Atualizar o modelo Lead pai com a data (usar leadId real)
+    try {
+      const parentLeadId = (leadExistente as any).leadId;
+      if (parentLeadId) {
+        await getPrismaInstance().lead.update({
+          where: { id: parentLeadId },
+          data: { updatedAt: new Date() },
+        });
+      }
+    } catch (e: any) {
+      console.warn(`[BullMQ] Não foi possível atualizar timestamp do Lead pai para LeadOabData ${leadID}: ${e?.message || e}`);
+    }
 
     console.log(`[BullMQ] Lead atualizado com sucesso: ${leadAtualizado.id}`);
 
@@ -264,13 +277,19 @@ async function processAnalise(job: Job<IAnaliseJobData>) {
       data: updateData,
     });
 
-    // Atualizar o modelo Lead pai com a data
-    await getPrismaInstance().lead.update({
-      where: { id: leadID },
-      data: {
-        updatedAt: new Date()
-      },
-    });
+    // Atualizar o modelo Lead pai com a data (usar leadId real)
+    try {
+      // buscar leadId do registro atualizado ou do existente
+      const parentLeadId = (leadAtualizado as any).leadId || (leadExistente as any).leadId;
+      if (parentLeadId) {
+        await getPrismaInstance().lead.update({
+          where: { id: parentLeadId },
+          data: { updatedAt: new Date() },
+        });
+      }
+    } catch (e: any) {
+      console.warn(`[BullMQ] Não foi possível atualizar timestamp do Lead pai para LeadOabData ${leadID}: ${e?.message || e}`);
+    }
 
     console.log(`[BullMQ] Lead atualizado com sucesso: ${leadAtualizado.id}`);
 

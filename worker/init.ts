@@ -103,18 +103,21 @@ export async function initializeWorkers() {
     const result = await initializeExistingAgendamentos();
     console.log('[Worker] ✅ Agendamentos existentes carregados');
 
-    console.log('');
-    console.log('🎉 ========================================');
-    console.log('🎉 TODOS OS WORKERS INICIADOS COM SUCESSO!');
-    console.log('🎉 ========================================');
-    console.log(`📊 ${result.count} agendamentos carregados`);
-    console.log('🔥 Parent Worker processando filas de alta e baixa prioridade');
-    console.log('🤖 AI Integration Workers ativos');
-    console.log('📱 Worker de Automação Instagram ativo');
-    console.log('📝 Workers legados (manuscrito, leads, tradução) ativos');
-    console.log('⏰ Jobs recorrentes configurados');
-    console.log('📊 Sistema de Gerenciamento de Filas monitorando todas as filas');
-    console.log('');
+    console.log('\n' + '='.repeat(70));
+    console.log('🎉 WORKERS UNIFICADOS INICIADOS COM SUCESSO!');
+    console.log('='.repeat(70));
+    console.log('📊 Status dos Workers:');
+    console.log('   🔥 Parent Worker       → Filas de alta e baixa prioridade');
+    console.log('   🤖 AI Integration      → Processamento de mensagens IA');
+    console.log('   📱 Instagram Webhook   → Automação Instagram');
+    console.log('   📝 Workers Legados     → Manuscrito, Leads, Tradução');
+    console.log('   ⏰ Jobs Recorrentes    → Configurados e ativos');
+    console.log('   📊 Queue Management    → Monitorando todas as filas');
+    console.log('-'.repeat(70));
+    console.log(`📈 Agendamentos:  ${result.count} carregados`);
+    console.log('🔗 URLs Úteis:');
+    console.log('   Bull UI:       http://localhost:3005');
+    console.log('='.repeat(70) + '\n');
 
     return { success: true, count: result.count };
   } catch (error) {

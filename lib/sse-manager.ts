@@ -40,6 +40,10 @@ class SseManager {
       this.publisher = baseRedis.duplicate();
       this.subscriber = baseRedis.duplicate();
 
+      // Garantir conexão explícita em ambientes de worker/Node
+      try { (this.publisher as any).connect?.(); } catch {}
+      try { (this.subscriber as any).connect?.(); } catch {}
+
       this.subscriber.on('message', this.handleRedisMessage.bind(this));
       
       this.publisher.on('connect', () => {

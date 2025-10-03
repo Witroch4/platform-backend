@@ -66,7 +66,9 @@
       "Bash(do echo \"=== $pdf ===\")",
       "Bash(export DEBUG_GABARITO=0 OAB_EVAL_FORCE_DETERMINISTIC=1)",
       "Bash(done)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(export NODE_ENV=development)",
+      "Bash(npx ts-node:*)"
     ],
     "deny": [],
     "ask": []

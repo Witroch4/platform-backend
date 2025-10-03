@@ -54,6 +54,11 @@ export interface ContainerConfig {
   cpu_limit: string;
 }
 
+export interface OabEvalConfig {
+  agentelocal: boolean;
+  transcribe_concurrency: number;
+}
+
 export interface AppConfig {
   socialwise_flow: SocialwiseFlowConfig;
   database: DatabaseConfig;
@@ -62,6 +67,7 @@ export interface AppConfig {
   application: ApplicationConfig;
   webhooks: WebhooksConfig;
   container: ContainerConfig;
+  oab_eval?: OabEvalConfig;
 }
 
 class ConfigManager {
@@ -117,6 +123,10 @@ class ConfigManager {
    */
   private applyEnvOverrides(yamlConfig: AppConfig): AppConfig {
     const config = JSON.parse(JSON.stringify(yamlConfig)); // Deep clone
+
+    if (!config.oab_eval) {
+      config.oab_eval = { agentelocal: false, transcribe_concurrency: 10 };
+    }
 
     // SocialWise Flow overrides
     if (process.env.SOCIALWISE_CONCURRENCY_LIMIT) {
@@ -196,6 +206,14 @@ class ConfigManager {
       config.webhooks.direct_processing = process.env.WEBHOOK_DIRECT_PROCESSING === 'true';
     }
 
+    if (process.env.OAB_EVAL_AGENT_LOCAL !== undefined) {
+      config.oab_eval.agentelocal = process.env.OAB_EVAL_AGENT_LOCAL === "true";
+    }
+    if (process.env.OAB_EVAL_TRANSCRIBE_CONCURRENCY) {
+      const n = parseInt(process.env.OAB_EVAL_TRANSCRIBE_CONCURRENCY, 10);
+      if (!Number.isNaN(n) && n > 0) config.oab_eval.transcribe_concurrency = n;
+    }
+
     return config;
   }
 
@@ -240,6 +258,10 @@ class ConfigManager {
       container: {
         memory_limit: process.env.CONTAINER_MEMORY_LIMIT || '1024M',
         cpu_limit: process.env.CONTAINER_CPU_LIMIT || '1.0'
+      },
+      oab_eval: {
+        agentelocal: process.env.OAB_EVAL_AGENT_LOCAL === 'true',
+        transcribe_concurrency: parseInt(process.env.OAB_EVAL_TRANSCRIBE_CONCURRENCY || '10', 10)
       }
     };
   }
@@ -266,7 +288,8 @@ class ConfigManager {
       'LOG_LEVEL',
       'HEALTH_CHECK_TIMEOUT',
       'HEALTH_CHECK_INTERVAL',
-      'WEBHOOK_DIRECT_PROCESSING'
+      'WEBHOOK_DIRECT_PROCESSING',
+      'OAB_EVAL_AGENT_LOCAL'
     ];
 
     for (const envVar of envVars) {
@@ -340,4 +363,9 @@ export function getWebhooksConfig(): WebhooksConfig {
 
 export function getContainerConfig(): ContainerConfig {
   return getConfig().container;
+}
+
+export function getOabEvalConfig(): OabEvalConfig {
+  const config = getConfig();
+  return config.oab_eval ?? { agentelocal: false };
 }

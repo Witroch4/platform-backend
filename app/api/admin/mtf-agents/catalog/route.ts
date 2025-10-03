@@ -42,6 +42,11 @@ const defaultModels = [
   { value: DEFAULT_MODELS.CHAT_ADVANCED, label: 'Chat avançado' },
   { value: DEFAULT_MODELS.CHAT_FAST, label: 'Chat rápido' },
   { value: DEFAULT_MODELS.CHAT_NANO, label: 'Chat nano' },
+  // Modelos vision/line-by-line que queremos expor explicitamente
+  { value: 'gpt-4.1', label: 'gpt-4.1 (vision)' },
+  { value: 'gpt-4o', label: 'gpt-4o (vision)' },
+  { value: 'gpt-4.1-mini', label: 'gpt-4.1-mini (rápido)' },
+  { value: 'gpt-4o-mini', label: 'gpt-4o-mini (rápido)' },
 ];
 
 const structuredOutputExamples = [
@@ -120,4 +125,3 @@ export async function GET() {
     structuredOutputExamples,
   });
 }
-

@@ -1,6 +1,27 @@
 import { NextResponse } from 'next/server';
 import { getPrismaInstance } from '@/lib/connections';
+import { getOabEvalConfig } from '@/lib/config';
+import { transcribeManuscriptLocally } from '@/lib/oab-eval/transcription-agent';
+import { addManuscritoJob } from '@/lib/queue/leadcells.queue';
+
 const prisma = getPrismaInstance();
+const { agentelocal: USE_LOCAL_TRANSCRIBER } = getOabEvalConfig();
+
+interface IncomingManuscriptImage {
+  id?: string;
+  url?: string;
+  dataUrl?: string;
+  data_url?: string;
+  nome?: string;
+  page?: number;
+}
+
+interface PreparedManuscriptImage {
+  id: string;
+  url: string;
+  nome?: string;
+  page?: number;
+}
 
 /**
  * Handler da rota POST para enviar manuscrito, espelho ou prova para processamento.
@@ -9,14 +30,6 @@ const prisma = getPrismaInstance();
 export async function POST(request: Request): Promise<Response> {
   try {
     console.log("[Enviar Documento] Recebendo requisição POST");
-    
-    // Obter a URL do webhook do ambiente
-    const webhookUrl = process.env.WEBHOOK_URL;
-    
-    if (!webhookUrl) {
-      console.error("[Enviar Documento] URL do webhook não configurada no ambiente");
-      throw new Error("URL do webhook não configurada");
-    }
     
     // Obter o payload completo
     const payload = await request.json();
@@ -51,6 +64,7 @@ export async function POST(request: Request): Promise<Response> {
     
     // Atualizar o lead para o estado apropriado (apenas se não for espelho para biblioteca)
     const leadId = payload.leadID;
+    let resolvedLeadId: string | null = leadId ?? null;
     
     // Declarar variável do espelho padrão fora do bloco
     let espelhoPadraoTexto = null;
@@ -153,8 +167,8 @@ export async function POST(request: Request): Promise<Response> {
         }
       }
       
-      const actualLeadId = lead.id;
-      
+      resolvedLeadId = lead.id;
+
       // Buscar espelho padrão se lead tiver especialidade definida
       if (lead.especialidade && (isEspelho || isManuscrito)) {
         console.log(`[Enviar Documento] Buscando espelho padrão para especialidade: ${lead.especialidade}`);
@@ -181,9 +195,12 @@ export async function POST(request: Request): Promise<Response> {
       }
       
       if (isManuscrito && !isEspelho && !isProva) {
+        if (!resolvedLeadId) {
+          throw new Error("Lead não identificado para atualização de manuscrito");
+        }
         // Marcar manuscrito como AGUARDANDO processamento
         await prisma.leadOabData.update({
-          where: { id: actualLeadId },
+          where: { id: resolvedLeadId },
           data: {
             manuscritoProcessado: false,  // NÃO processado ainda
             aguardandoManuscrito: true    // Aguardando processamento
@@ -191,9 +208,12 @@ export async function POST(request: Request): Promise<Response> {
         });
         console.log("[Enviar Manuscrito] Lead marcado como aguardando processamento");
       } else if (isEspelho && !isManuscrito && !isProva) {
+        if (!resolvedLeadId) {
+          throw new Error("Lead não identificado para atualização de espelho");
+        }
         // Marcar espelho como AGUARDANDO processamento
         await prisma.leadOabData.update({
-          where: { id: actualLeadId },
+          where: { id: resolvedLeadId },
           data: {
             espelhoProcessado: false,     // NÃO processado ainda
             aguardandoEspelho: true       // Aguardando processamento
@@ -212,29 +232,105 @@ export async function POST(request: Request): Promise<Response> {
       console.log(`[Enviar ${docType}] ✅ Texto do espelho padrão incluído no payload`);
     }
     
+    const shouldUseLocalManuscritoAgent =
+      USE_LOCAL_TRANSCRIBER && isManuscrito && !isEspelho && !isProva;
+
+    if (shouldUseLocalManuscritoAgent) {
+      if (!resolvedLeadId) {
+        throw new Error("Lead não identificado para processamento local do manuscrito");
+      }
+
+      const imagensManuscrito: IncomingManuscriptImage[] = Array.isArray(
+        payloadFinal.arquivos_imagens_manuscrito,
+      )
+        ? (payloadFinal.arquivos_imagens_manuscrito as IncomingManuscriptImage[])
+        : [];
+
+      if (!imagensManuscrito.length) {
+        console.error("[Enviar Manuscrito][Local] Nenhuma imagem fornecida para digitação");
+        throw new Error("Nenhuma imagem do manuscrito foi fornecida");
+      }
+
+      const imagensPreparadas: PreparedManuscriptImage[] = imagensManuscrito
+        .map((imagem, index): PreparedManuscriptImage => ({
+          id: String(imagem.id ?? `${resolvedLeadId}-manuscrito-${index}`),
+          url: imagem.url ?? imagem.dataUrl ?? imagem.data_url ?? "",
+          nome: imagem.nome ?? `Manuscrito ${index + 1}`,
+          page: imagem.page ?? index + 1,
+        }))
+        .filter((imagem): imagem is PreparedManuscriptImage => Boolean(imagem.url));
+
+      if (!imagensPreparadas.length) {
+        console.error("[Enviar Manuscrito][Local] Todas as imagens recebidas estão sem URL válida");
+        throw new Error("Imagens do manuscrito sem URL válida");
+      }
+
+      console.log(
+        `[Enviar Manuscrito][Local] Iniciando agente local para ${imagensPreparadas.length} imagens (lead ${resolvedLeadId})`,
+      );
+
+      const transcription = await transcribeManuscriptLocally({
+        leadId: resolvedLeadId,
+        images: imagensPreparadas,
+        nome: payload.nome,
+        telefone: payload.telefone,
+      });
+
+      console.log(
+        `[Enviar Manuscrito][Local] Digitação concluída com ${transcription.textoDAprova.length} blocos`,
+      );
+
+      await addManuscritoJob({
+        leadID: resolvedLeadId,
+        textoDAprova: transcription.textoDAprova,
+        nome: payload.nome,
+        telefone: payload.telefone,
+        manuscrito: true,
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: `${docType} processado localmente com sucesso`,
+        mode: "local-agent",
+        blocos: transcription.textoDAprova.length,
+        leadId: resolvedLeadId,
+      });
+    }
+
+    // Fallback para o fluxo legado (N8N)
+    const webhookUrl = process.env.WEBHOOK_URL;
+
+    if (!webhookUrl) {
+      console.error("[Enviar Documento] URL do webhook não configurada no ambiente");
+      throw new Error("URL do webhook não configurada");
+    }
+
     // Enviar o payload para o sistema externo de forma assíncrona
     // (Não esperamos a resposta para não bloquear o fluxo)
-    console.log(`[Enviar ${docType}] 📤 Enviando payload para processamento:`, webhookUrl);
+    console.log(`[Enviar ${docType}] 📤 Enviando payload para processamento externo:`, webhookUrl);
     fetch(webhookUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payloadFinal),
-    }).then(response => {
-      if (!response.ok) {
-        console.error(`[Enviar ${docType}] Erro na resposta do sistema externo:`, response.status);
-      } else {
-        console.log(`[Enviar ${docType}] Enviado com sucesso para o sistema externo`);
-      }
-    }).catch(error => {
-      console.error(`[Enviar ${docType}] Erro ao enviar para o sistema externo:`, error);
-    });
+    })
+      .then((response) => {
+        if (!response.ok) {
+          console.error(`[Enviar ${docType}] Erro na resposta do sistema externo:`, response.status);
+        } else {
+          console.log(`[Enviar ${docType}] Enviado com sucesso para o sistema externo`);
+        }
+      })
+      .catch((error) => {
+        console.error(`[Enviar ${docType}] Erro ao enviar para o sistema externo:`, error);
+      });
 
     // Responder imediatamente ao cliente, independente do resultado do webhook
     return NextResponse.json({
       success: true,
       message: `${docType} processado com sucesso`,
+      mode: "legacy-webhook",
     });
 
   } catch (error: any) {

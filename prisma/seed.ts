@@ -28,6 +28,14 @@ async function main() {
     // Depois, executar o restore do Chatwit
     console.log('🔄 Executando restore do Chatwit...');
     await restoreAllChatwit();
+
+    // Criar Blueprint padrão (MTF Agents Builder) para Transcrição OAB
+    console.log('🧩 Criando Blueprint padrão: OAB — Transcrição de Prova');
+    await seedOabTranscriberBlueprint();
+
+    // (Compat) Criar Assistente padrão para Transcrição OAB
+    console.log('🧠 Criando Assistente padrão: OAB — Transcrição de Prova');
+    await seedOabTranscriberAssistant();
     
     console.log('✅ Seed e restore concluídos com sucesso!');
   } catch (error) {
@@ -171,6 +179,156 @@ async function configurarWhatsAppEChatwit(amandaChatwit: any) {
   } catch (error) {
     console.error('❌ Erro ao configurar WhatsApp/Chatwit:', error);
     throw error;
+  }
+}
+
+async function seedOabTranscriberAssistant() {
+  const prisma = getPrismaInstance();
+  // Criar para todos os SUPERADMINs (para aparecer no front de cada um)
+  const owners = await prisma.user.findMany({
+    where: { role: 'SUPERADMIN' },
+    select: { id: true, email: true, name: true },
+  });
+
+  if (!owners || owners.length === 0) {
+    console.warn('⚠️ Nenhum SUPERADMIN encontrado para criar o Assistente. Pulando...');
+    return;
+  }
+
+  const instructions = `Você é um assistente jurídico especializado em transcrever provas manuscritas de Exame da OAB com máxima fidelidade.
+Regras:
+- Nunca invente nem corrija trechos; quando ilegível, use '[ilegível]'.
+- Transcreva linha a linha mantendo ordem e numeração: 'Linha X: ...'.
+- Preserve títulos e marcações nítidas (ex.: 'Peça Pagina: 1/5', 'Questão: 1').
+- Sempre inclua a seção 'Resposta do Aluno:' após o cabeçalho.
+- Se houver múltiplos blocos na mesma imagem (peça/questões), crie mais de um bloco no mesmo retorno.
+Formato obrigatório por bloco:
+Questão: <número> (quando aplicável) OU Peça Pagina: <número/total>
+Resposta do Aluno:
+Linha 1: ...
+Linha 2: ...
+...`;
+
+  for (const owner of owners) {
+    const exists = await prisma.aiAssistant.findFirst({
+      where: {
+        userId: owner.id,
+        name: { contains: 'Transcrição de Prova', mode: 'insensitive' },
+      },
+      select: { id: true },
+    });
+    if (exists) {
+      console.log(`ℹ️ Assistente de Transcrição já existe para ${owner.email}:`, exists.id);
+      continue;
+    }
+
+    const assistant = await prisma.aiAssistant.create({
+      data: {
+        userId: owner.id,
+        name: 'OAB — Transcrição de Prova (Padrão)',
+        description: 'Agente padrão para digitação de manuscrito de prova OAB',
+        instructions,
+        model: 'gpt-4.1',
+        temperature: 0,
+        maxOutputTokens: 5000,
+        embedipreview: false,
+        reasoningEffort: 'low',
+        verbosity: 'low',
+        toolChoice: 'none',
+        isActive: true,
+      },
+    });
+    console.log(`✅ Assistente criado para ${owner.email}:`, assistant.id);
+  }
+}
+
+async function seedOabTranscriberBlueprint() {
+  const prisma = getPrismaInstance();
+  const owners = await prisma.user.findMany({ where: { role: 'SUPERADMIN' }, select: { id: true, email: true } });
+  if (!owners || owners.length === 0) {
+    console.warn('⚠️ Nenhum SUPERADMIN encontrado para criar Blueprint. Pulando...');
+    return;
+  }
+  const systemPrompt = [
+    'Você é um agente de transcrição de provas manuscritas (OAB). Regras:',
+    "- Não invente nem corrija termos; quando ilegível, use '[ilegível]'.",
+    "- Transcreva linha a linha mantendo a ordem e numeração: 'Linha X: ...'.",
+    "- Preserve títulos e marcações como 'Peça Pagina: n/total' ou 'Questão: n'.",
+    "- Sempre inclua 'Resposta do Aluno:' após o cabeçalho do bloco.",
+    "- Se houver mais de um bloco na página (Peça e Questões), gere múltiplos blocos.",
+    'Formato por bloco:',
+    'Questão: <número> OU Peça Pagina: <número/total>',
+    'Resposta do Aluno:',
+    'Linha 1: ...',
+    'Linha 2: ...',
+    '...'
+  ].join('\n');
+
+  for (const owner of owners) {
+    const exists = await prisma.aiAgentBlueprint.findFirst({
+      where: { ownerId: owner.id, name: { contains: 'Transcrição de Prova', mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (exists) {
+      // Atualizar se estiver sem canvas/model/tokens
+      await prisma.aiAgentBlueprint.update({
+        where: { id: exists.id },
+        data: {
+          model: 'gpt-4.1',
+          maxOutputTokens: 5000,
+          systemPrompt,
+          instructions: systemPrompt,
+          canvasState: {
+            nodes: [
+              { id: 'agent', position: { x: 180, y: 20 }, type: 'agentDetails' },
+              { id: 'model', position: { x: 20, y: 240 }, type: 'modelConfig' },
+              { id: 'tools', position: { x: 220, y: 260 }, type: 'toolsConfig' },
+              { id: 'output', position: { x: 440, y: 240 }, type: 'outputParser' },
+            ],
+            edges: [
+              { id: 'agent-model', source: 'agent', target: 'model' },
+              { id: 'agent-tools', source: 'agent', target: 'tools' },
+              { id: 'agent-output', source: 'agent', target: 'output' },
+            ],
+          } as any,
+          metadata: { oab: true, role: 'transcriber', scope: 'system' } as any,
+        },
+      });
+      console.log(`ℹ️ Blueprint de Transcrição atualizado para ${owner.email}:`, exists.id);
+      continue;
+    }
+    const blueprint = await prisma.aiAgentBlueprint.create({
+      data: {
+        ownerId: owner.id,
+        name: 'OAB — Transcrição de Prova (Blueprint)',
+        description: 'Agente LangGraph padrão para digitar manuscritos da prova OAB',
+        agentType: 'CUSTOM' as any,
+        icon: 'typewriter',
+        model: 'gpt-4.1',
+        temperature: 0,
+        maxOutputTokens: 5000,
+        systemPrompt,
+        instructions: systemPrompt,
+        toolset: [],
+        outputParser: null,
+        memory: null,
+        canvasState: {
+          nodes: [
+            { id: 'agent', position: { x: 180, y: 20 }, type: 'agentDetails' },
+            { id: 'model', position: { x: 20, y: 240 }, type: 'modelConfig' },
+            { id: 'tools', position: { x: 220, y: 260 }, type: 'toolsConfig' },
+            { id: 'output', position: { x: 440, y: 240 }, type: 'outputParser' },
+          ],
+          edges: [
+            { id: 'agent-model', source: 'agent', target: 'model' },
+            { id: 'agent-tools', source: 'agent', target: 'tools' },
+            { id: 'agent-output', source: 'agent', target: 'output' },
+          ],
+        } as any,
+        metadata: { oab: true, role: 'transcriber', scope: 'system' } as any,
+      },
+    });
+    console.log(`✅ Blueprint criado para ${owner.email}:`, blueprint.id);
   }
 }
 

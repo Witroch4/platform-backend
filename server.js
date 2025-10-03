@@ -63,11 +63,25 @@ app.prepare().then(async () => {
   // Inicia o servidor na porta 3002
   server.listen(3002, (err) => {
     if (err) throw err;
-    console.log(`🚀 Servidor iniciado com sucesso!`);
-    console.log(`📡 Porta: 3002`);
-    console.log(`🌍 Ambiente: ${dev ? "desenvolvimento" : "produção"}`);
-    console.log(`🔗 URL: http://localhost:3002`);
-    console.log(`✅ Sistema pronto para uso!`);
+
+    const isDocker = process.env.RUN_IN_DOCKER === "true";
+    const ngrokUrl = process.env.NGROK_URL || "https://moved-chigger-randomly.ngrok-free.app";
+
+    console.log("\n" + "=".repeat(60));
+    console.log("🚀 Servidor Next.js Iniciado com Sucesso!");
+    console.log("=".repeat(60));
+    console.log(`📡 Porta:     3002`);
+    console.log(`🌍 Ambiente:  ${dev ? "desenvolvimento" : "produção"}`);
+    console.log(`🐳 Docker:    ${isDocker ? "Sim" : "Não"}`);
+    console.log("-".repeat(60));
+    console.log("🔗 URLs Disponíveis:");
+    console.log(`   Local:     http://localhost:3002`);
+    console.log(`   Bull UI:   http://localhost:3005`);
+    if (isDocker) {
+      console.log(`   Ngrok:     ${ngrokUrl}`);
+      console.log(`   Dashboard: http://localhost:4040`);
+    }
+    console.log("=".repeat(60) + "\n");
   });
 
   if (dev && !process.env.RUN_IN_DOCKER) {

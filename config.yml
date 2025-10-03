@@ -77,6 +77,15 @@ container:
   memory_limit: "1024M"
   cpu_limit: "1.0"
 
+# OAB Evaluation Pipeline
+oab_eval:
+  # ENV: OAB_EVAL_AGENT_LOCAL
+  # Quando true, utiliza agente local (LangGraph) para digitação do manuscrito
+  agentelocal: true
+  # ENV: OAB_EVAL_TRANSCRIBE_CONCURRENCY
+  # Número de páginas processadas em paralelo pelo agente local
+  transcribe_concurrency: 10
+
 # Observações:
 # - Os valores definidos aqui são padrões
 # - Use variáveis de ambiente (ENV) para sobrescrever em produção

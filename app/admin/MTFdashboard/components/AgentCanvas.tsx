@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useCallback, useEffect, useMemo } from 'react';
+import React, { memo, useCallback, useEffect, useMemo } from 'react';
 import {
   ReactFlow,
   Background,
@@ -16,18 +16,21 @@ import {
   NodeChange,
   Viewport,
   Panel,
+  MiniMap,
+  useReactFlow,
+  MarkerType,
+  ReactFlowProvider,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { InfoIcon } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { InfoIcon, Maximize2, Zap } from 'lucide-react';
+import { useCanvasLayout } from '../hooks/useCanvasLayout';
+import { useKeyBindings } from '../hooks/useKeyBindings';
+import { GRID_SIZE, MIN_ZOOM, MAX_ZOOM, NODE_TYPE_CONFIG } from '../constants/canvas';
+import CustomEdge from './canvas/CustomEdge';
+import { AgentNodeDialog } from './canvas/AgentNodeDialog';
 import type {
   AgentBlueprintDraft,
   AgentToolDefinition,
@@ -73,68 +76,44 @@ interface OutputParserNodeData {
 const AgentDetailsNode = memo(function AgentDetailsNodeComponent(props: NodeProps) {
   const data = props.data as unknown as AgentNodeData;
   const currentType = data.agentTypes.find((t) => t.id === data.draft.agentType);
+  const config = NODE_TYPE_CONFIG.agentDetails;
 
   return (
-    <Card className="w-[280px] shadow-md border-dashed border-primary/40">
-      <CardHeader className="space-y-2">
+    <Card className="w-[380px] shadow-xl border-2 transition-all hover:shadow-2xl cursor-pointer" style={{ borderColor: config.color }}>
+      <CardHeader className="space-y-2 pb-3 bg-gradient-to-br from-primary/5 to-transparent">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base font-semibold flex items-center gap-2">
-            🤖 Agente IA
+          <CardTitle className="text-lg font-semibold flex items-center gap-2">
+            <span className="text-3xl">{config.icon}</span>
+            <span>{config.label}</span>
           </CardTitle>
-          <Badge variant="outline" className="text-xs">
+          <Badge variant="outline" className="text-xs font-mono">
             {currentType?.label || 'Custom'}
           </Badge>
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="agent-name">Nome</Label>
-          <Input
-            id="agent-name"
-            value={data.draft.name}
-            onChange={(event) => data.onChange({ name: event.target.value })}
-            placeholder="Perito em Correção de ..."
-          />
+        <div className="text-sm font-medium text-foreground/90 mt-2 line-clamp-1">
+          {data.draft.name || 'Sem nome'}
+        </div>
+        <div className="text-xs text-muted-foreground line-clamp-1">
+          {data.draft.model || 'Modelo não definido'}
         </div>
       </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="space-y-2">
-          <Label>Tipo de agente</Label>
-          <Select
-            value={data.draft.agentType}
-            onValueChange={(value) => data.onChange({ agentType: value as AgentBlueprintDraft['agentType'] })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione um tipo" />
-            </SelectTrigger>
-            <SelectContent>
-              {data.agentTypes.map((type) => (
-                <SelectItem key={type.id} value={type.id}>
-                  {type.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {currentType?.description ? (
-            <p className="text-[11px] text-muted-foreground leading-snug">
-              {currentType.description}
-            </p>
-          ) : null}
+      <CardContent className="space-y-3 pt-4 pb-3">
+        <div className="grid grid-cols-2 gap-3 text-xs">
+          <div className="space-y-1">
+            <div className="text-muted-foreground">Ferramentas</div>
+            <div className="font-medium">{(data.draft.toolset || []).length} ativas</div>
+          </div>
+          <div className="space-y-1">
+            <div className="text-muted-foreground">Temperature</div>
+            <div className="font-medium font-mono">{data.draft.temperature ?? 0.7}</div>
+          </div>
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="agent-system">Prompt principal</Label>
-          <Textarea
-            id="agent-system"
-            className="min-h-[120px] resize-none"
-            value={data.draft.systemPrompt || ''}
-            placeholder="Defina o papel, tom e políticas do agente aqui..."
-            onChange={(event) => data.onChange({ systemPrompt: event.target.value })}
-          />
-          <p className="text-[11px] text-muted-foreground leading-snug flex items-center gap-1">
-            <InfoIcon className="h-3 w-3" />
-            Este é o prompt herdado pelo LangGraph antes das execuções.
-          </p>
+        <div className="pt-2 border-t text-xs text-muted-foreground flex items-center justify-center gap-1.5">
+          <InfoIcon className="h-3 w-3" />
+          Clique 2x para editar detalhes
         </div>
       </CardContent>
-      <Handle type="source" position={Position.Bottom} className="!bg-primary" />
+      <Handle type="source" position={Position.Bottom} className="!w-4 !h-4 !bg-primary !border-2 !border-background" />
     </Card>
   );
 });
@@ -142,61 +121,37 @@ AgentDetailsNode.displayName = 'AgentDetailsNode';
 
 const ModelConfigNode = memo(function ModelConfigNodeComponent(props: NodeProps) {
   const data = props.data as unknown as ModelNodeData;
+  const config = NODE_TYPE_CONFIG.modelConfig;
+
   return (
-    <Card className="w-[240px]">
-      <CardHeader className="py-3">
-        <CardTitle className="text-sm font-semibold">Modelo</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="space-y-2">
-          <Label>Modelo base</Label>
-          <Select
-            value={data.draft.model}
-            onValueChange={(value) => data.onChange({ model: value })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Escolha um modelo" />
-            </SelectTrigger>
-            <SelectContent>
-              {data.modelOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+    <Card className="w-[320px] shadow-lg border-2 transition-all hover:shadow-xl cursor-pointer" style={{ borderColor: config.color }}>
+      <CardHeader className="py-3 bg-gradient-to-br from-purple-500/5 to-transparent">
+        <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <span className="text-2xl">{config.icon}</span>
+          {config.label}
+        </CardTitle>
+        <div className="text-sm font-medium text-foreground/90 mt-2 font-mono">
+          {data.draft.model}
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="temperature">Temperature</Label>
-            <Input
-              id="temperature"
-              type="number"
-              step="0.1"
-              min="0"
-              max="2"
-              value={data.draft.temperature ?? 0.7}
-              onChange={(event) =>
-                data.onChange({ temperature: Number.parseFloat(event.target.value) })
-              }
-            />
+      </CardHeader>
+      <CardContent className="space-y-3 pt-4 pb-3">
+        <div className="grid grid-cols-2 gap-3 text-xs">
+          <div className="space-y-1">
+            <div className="text-muted-foreground">Temperature</div>
+            <div className="font-medium font-mono text-base">{data.draft.temperature ?? 0.7}</div>
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="maxTokens">Tokens</Label>
-            <Input
-              id="maxTokens"
-              type="number"
-              min="64"
-              value={data.draft.maxOutputTokens ?? 1024}
-              onChange={(event) =>
-                data.onChange({ maxOutputTokens: Number.parseInt(event.target.value, 10) })
-              }
-            />
+          <div className="space-y-1">
+            <div className="text-muted-foreground">Max Tokens</div>
+            <div className="font-medium font-mono text-base">{data.draft.maxOutputTokens ?? 1024}</div>
           </div>
+        </div>
+        <div className="pt-2 border-t text-xs text-muted-foreground flex items-center justify-center gap-1.5">
+          <InfoIcon className="h-3 w-3" />
+          Clique 2x para ajustar parâmetros
         </div>
       </CardContent>
-      <Handle type="target" position={Position.Top} className="!bg-muted" />
-      <Handle type="source" position={Position.Bottom} className="!bg-primary" />
+      <Handle type="target" position={Position.Top} className="!w-4 !h-4 !bg-muted-foreground !border-2 !border-background" />
+      <Handle type="source" position={Position.Bottom} className="!w-4 !h-4 !bg-primary !border-2 !border-background" />
     </Card>
   );
 });
@@ -205,43 +160,44 @@ ModelConfigNode.displayName = 'ModelConfigNode';
 const ToolsConfigNode = memo(function ToolsConfigNodeComponent(props: NodeProps) {
   const data = props.data as unknown as ToolsNodeData;
   const activeTools = new Set((data.draft.toolset || []).map((tool) => tool.key));
+  const config = NODE_TYPE_CONFIG.toolsConfig;
 
   return (
-    <Card className="w-[260px]">
-      <CardHeader className="py-3">
-        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-          Ferramentas
-          <Badge variant="secondary" className="text-[10px] font-normal">
-            {activeTools.size} selecionada{activeTools.size === 1 ? '' : 's'}
+    <Card className="w-[340px] shadow-lg border-2 transition-all hover:shadow-xl cursor-pointer" style={{ borderColor: config.color }}>
+      <CardHeader className="py-3 bg-gradient-to-br from-orange-500/5 to-transparent">
+        <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <span className="text-2xl">{config.icon}</span>
+          {config.label}
+          <Badge variant="secondary" className="text-xs font-medium ml-auto">
+            {activeTools.size}/{data.tools.length}
           </Badge>
         </CardTitle>
       </CardHeader>
-      <CardContent className="p-0">
-        <ScrollArea className="h-[180px]">
-          <div className="space-y-3 px-4 py-3">
-            {data.tools.map((tool) => {
-              const checked = activeTools.has(tool.key);
-              return (
-                <label key={tool.key} className="flex items-start gap-3">
-                  <Checkbox
-                    checked={checked}
-                    onCheckedChange={(value) => data.onToggleTool(tool, Boolean(value))}
-                  />
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium leading-tight">{tool.name}</p>
-                    {tool.description ? (
-                      <p className="text-[11px] text-muted-foreground leading-snug">
-                        {tool.description}
-                      </p>
-                    ) : null}
-                  </div>
-                </label>
-              );
-            })}
-          </div>
-        </ScrollArea>
+      <CardContent className="space-y-3 pt-4 pb-3">
+        <div className="space-y-2 max-h-[120px] overflow-y-auto">
+          {(data.draft.toolset || []).slice(0, 3).map((tool) => (
+            <div key={tool.key} className="flex items-center gap-2 text-xs p-2 bg-muted/50 rounded">
+              <div className="w-2 h-2 rounded-full bg-green-500" />
+              <span className="font-medium flex-1 truncate">{tool.name}</span>
+            </div>
+          ))}
+          {(data.draft.toolset || []).length > 3 && (
+            <div className="text-xs text-muted-foreground text-center">
+              +{(data.draft.toolset || []).length - 3} mais
+            </div>
+          )}
+          {(data.draft.toolset || []).length === 0 && (
+            <div className="text-xs text-muted-foreground text-center py-4">
+              Nenhuma ferramenta selecionada
+            </div>
+          )}
+        </div>
+        <div className="pt-2 border-t text-xs text-muted-foreground flex items-center justify-center gap-1.5">
+          <InfoIcon className="h-3 w-3" />
+          Clique 2x para gerenciar tools
+        </div>
       </CardContent>
-      <Handle type="target" position={Position.Top} className="!bg-muted" />
+      <Handle type="target" position={Position.Top} className="!w-4 !h-4 !bg-muted-foreground !border-2 !border-background" />
     </Card>
   );
 });
@@ -253,107 +209,52 @@ const OutputParserNode = memo(function OutputParserNodeComponent(props: NodeProp
   const schemaType = data.draft.outputParser?.schemaType || 'json_schema';
   const strict = Boolean(data.draft.outputParser?.strict);
   const autoFix = Boolean(data.draft.outputParser?.autoFixFormat);
-
-  const applyTemplate = (template: OutputParserTemplate) => {
-    data.onChange({
-      schemaType: template.schemaType,
-      schema: template.schema,
-      name: template.name,
-    });
-  };
+  const config = NODE_TYPE_CONFIG.outputParser;
 
   return (
-    <Card className="w-[320px]">
-      <CardHeader className="py-3">
-        <CardTitle className="text-sm font-semibold">Structured Output Parser</CardTitle>
+    <Card className="w-[360px] shadow-lg border-2 transition-all hover:shadow-xl cursor-pointer" style={{ borderColor: config.color }}>
+      <CardHeader className="py-3 bg-gradient-to-br from-green-500/5 to-transparent">
+        <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <span className="text-2xl">{config.icon}</span>
+          {config.label}
+        </CardTitle>
+        <div className="text-xs text-muted-foreground mt-2 font-mono">
+          {schemaType}
+        </div>
       </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="space-y-2">
-          <Label>Schema type</Label>
-          <Select
-            value={schemaType}
-            onValueChange={(value) => data.onChange({
-              ...(data.draft.outputParser ?? { schema: '' }),
-              schemaType: value as OutputParserConfig['schemaType'],
-            })}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="json_schema">JSON Schema</SelectItem>
-              <SelectItem value="zod">Zod schema</SelectItem>
-              <SelectItem value="structured">Structured Output (OpenAI)</SelectItem>
-            </SelectContent>
-          </Select>
+      <CardContent className="space-y-3 pt-4 pb-3">
+        <div className="text-xs bg-muted/50 rounded p-3 font-mono max-h-[100px] overflow-y-auto">
+          {currentSchema ? (
+            <pre className="whitespace-pre-wrap break-words text-[10px]">
+              {currentSchema.substring(0, 200)}
+              {currentSchema.length > 200 && '...'}
+            </pre>
+          ) : (
+            <span className="text-muted-foreground">Nenhum schema definido</span>
+          )}
         </div>
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label>Input Schema</Label>
-            {data.templates.length ? (
-              <Select onValueChange={(value) => {
-                const template = data.templates.find((item) => item.id === value);
-                if (template) applyTemplate(template);
-              }}>
-                <SelectTrigger className="h-8 w-[180px] text-xs">
-                  <SelectValue placeholder="Modelos prontos" />
-                </SelectTrigger>
-                <SelectContent>
-                  {data.templates.map((template) => (
-                    <SelectItem key={template.id} value={template.id}>
-                      {template.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : null}
+        <div className="grid grid-cols-2 gap-3 text-xs">
+          <div className="flex items-center gap-2 p-2 bg-muted/30 rounded">
+            <div className={`w-2 h-2 rounded-full ${strict ? 'bg-green-500' : 'bg-gray-400'}`} />
+            <span className="text-[11px]">Modo Estrito</span>
           </div>
-          <Textarea
-            className="h-[180px] font-mono text-xs"
-            value={currentSchema}
-            onChange={(event) =>
-              data.onChange({
-                ...(data.draft.outputParser ?? { schemaType }),
-                schema: event.target.value,
-              })
-            }
-            placeholder="Cole aqui o JSON Schema do parser desejado"
-          />
+          <div className="flex items-center gap-2 p-2 bg-muted/30 rounded">
+            <div className={`w-2 h-2 rounded-full ${autoFix ? 'bg-green-500' : 'bg-gray-400'}`} />
+            <span className="text-[11px]">Auto-fix</span>
+          </div>
         </div>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Label className="text-xs">Strict mode</Label>
-            <Switch
-              checked={strict}
-              onCheckedChange={(value) =>
-                data.onChange({
-                  ...(data.draft.outputParser ?? { schemaType, schema: currentSchema }),
-                  strict: Boolean(value),
-                })
-              }
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <Label className="text-xs">Auto-fix</Label>
-            <Switch
-              checked={autoFix}
-              onCheckedChange={(value) =>
-                data.onChange({
-                  ...(data.draft.outputParser ?? { schemaType, schema: currentSchema }),
-                  autoFixFormat: Boolean(value),
-                })
-              }
-            />
-          </div>
+        <div className="pt-2 border-t text-xs text-muted-foreground flex items-center justify-center gap-1.5">
+          <InfoIcon className="h-3 w-3" />
+          Clique 2x para editar schema
         </div>
       </CardContent>
-      <Handle type="target" position={Position.Top} className="!bg-muted" />
+      <Handle type="target" position={Position.Top} className="!w-4 !h-4 !bg-muted-foreground !border-2 !border-background" />
     </Card>
   );
 });
 OutputParserNode.displayName = 'OutputParserNode';
 
-export function AgentCanvas({
+function AgentCanvasInternal({
   draft,
   agentTypes,
   tools,
@@ -361,6 +262,10 @@ export function AgentCanvas({
   structuredTemplates,
   onDraftChange,
 }: AgentCanvasProps) {
+  const reactFlowInstance = useReactFlow();
+  const [dialogOpen, setDialogOpen] = React.useState(false);
+  const [dialogNodeType, setDialogNodeType] = React.useState<string | null>(null);
+
   const toggleTool = useCallback(
     (tool: AgentToolDefinition, enabled: boolean) => {
       const current = draft.toolset || [];
@@ -380,14 +285,14 @@ export function AgentCanvas({
 
       onDraftChange({ toolset: next });
     },
-    [draft.toolset, onDraftChange],
+    [draft.toolset, onDraftChange]
   );
 
   const updateOutputParser = useCallback(
     (config: OutputParserConfig | null) => {
       onDraftChange({ outputParser: config });
     },
-    [onDraftChange],
+    [onDraftChange]
   );
 
   const initialNodes: Node[] = useMemo(() => {
@@ -400,10 +305,10 @@ export function AgentCanvas({
       }));
     }
     return [
-      { id: 'agent', position: { x: 180, y: 20 }, type: 'agentDetails', data: {} },
-      { id: 'model', position: { x: 20, y: 240 }, type: 'modelConfig', data: {} },
-      { id: 'tools', position: { x: 220, y: 260 }, type: 'toolsConfig', data: {} },
-      { id: 'output', position: { x: 440, y: 240 }, type: 'outputParser', data: {} },
+      { id: 'agent', position: { x: 200, y: 20 }, type: 'agentDetails', data: {} },
+      { id: 'model', position: { x: 20, y: 320 }, type: 'modelConfig', data: {} },
+      { id: 'tools', position: { x: 260, y: 340 }, type: 'toolsConfig', data: {} },
+      { id: 'output', position: { x: 520, y: 320 }, type: 'outputParser', data: {} },
     ];
   }, [draft.canvasState?.nodes]);
 
@@ -413,13 +318,40 @@ export function AgentCanvas({
         id: edge.id,
         source: edge.source,
         target: edge.target,
+        type: 'custom',
         animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed },
+        data: { status: 'success' },
       }));
     }
     return [
-      { id: 'agent-model', source: 'agent', target: 'model', animated: true },
-      { id: 'agent-tools', source: 'agent', target: 'tools', animated: true },
-      { id: 'agent-output', source: 'agent', target: 'output', animated: true },
+      {
+        id: 'agent-model',
+        source: 'agent',
+        target: 'model',
+        type: 'custom',
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed },
+        data: { status: 'success' as const },
+      },
+      {
+        id: 'agent-tools',
+        source: 'agent',
+        target: 'tools',
+        type: 'custom',
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed },
+        data: { status: 'success' as const },
+      },
+      {
+        id: 'agent-output',
+        source: 'agent',
+        target: 'output',
+        type: 'custom',
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed },
+        data: { status: 'success' as const },
+      },
     ];
   }, [draft.canvasState?.edges]);
 
@@ -462,7 +394,7 @@ export function AgentCanvas({
         },
       });
     },
-    [draft.canvasState, onDraftChange],
+    [draft.canvasState, onDraftChange]
   );
 
   useEffect(() => {
@@ -473,20 +405,45 @@ export function AgentCanvas({
 
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
-      setNodes((nds) => {
-        const updated = applyNodeChanges(changes, nds);
-        updateCanvasState(updated, edges);
-        return updated;
-      });
+      const updated = applyNodeChanges(changes, nodes);
+      setNodes(updated);
+      queueMicrotask(() => updateCanvasState(updated, edges));
     },
-    [edges, setNodes, updateCanvasState],
+    [edges, nodes, setNodes, updateCanvasState]
   );
 
   const handleMoveEnd = useCallback(
     (_event: any, viewport: Viewport) => {
       updateCanvasState(nodes, edges, viewport);
     },
-    [nodes, edges, updateCanvasState],
+    [nodes, edges, updateCanvasState]
+  );
+
+  const { tidyUp } = useCanvasLayout(nodes as any, edges as any, setNodes as any);
+
+  // Handle node double click
+  const handleNodeDoubleClick = useCallback(
+    (_event: React.MouseEvent, node: Node) => {
+      setDialogNodeType(node.type || null);
+      setDialogOpen(true);
+    },
+    []
+  );
+
+  // Keyboard shortcuts
+  useKeyBindings({
+    'ctrl+1': () => reactFlowInstance.fitView({ padding: 0.2 }),
+    '0': () => reactFlowInstance.zoomTo(1),
+    '+': () => reactFlowInstance.zoomIn(),
+    '-': () => reactFlowInstance.zoomOut(),
+    'shift+alt+t': () => tidyUp(),
+  });
+
+  const edgeTypes = useMemo<Record<string, any>>(
+    () => ({
+      custom: CustomEdge,
+    }),
+    []
   );
 
   const nodeTypes = useMemo(
@@ -532,36 +489,89 @@ export function AgentCanvas({
         />
       ),
     }),
-    [agentTypes, draft, modelOptions, onDraftChange, structuredTemplates, toggleTool, tools, updateOutputParser],
+    [agentTypes, draft, modelOptions, onDraftChange, structuredTemplates, toggleTool, tools, updateOutputParser]
   );
 
   return (
-    <div className="h-[540px] rounded-lg border bg-card">
-      <ReactFlow
-        nodes={nodes.map((node) => ({
-          ...node,
-          data: { ...node.data },
-        }))}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        onNodesChange={handleNodesChange}
-        onEdgesChange={() => undefined}
-        onMoveEnd={handleMoveEnd}
-        fitView
-        fitViewOptions={{ padding: 0.2 }}
-        panOnScroll
-        panOnDrag
-        zoomOnScroll
-        minZoom={0.4}
-        maxZoom={1.4}
-        proOptions={{ hideAttribution: true }}
-      >
-        <Background gap={16} size={1} />
-        <Controls position="bottom-left" />
-        <Panel position="top-left" className="bg-background/80 backdrop-blur rounded-md shadow px-3 py-2 text-xs">
-          Canvas LangGraph – arraste os blocos para ajustar o diagrama. Cada nó reflete as configs salvas.
+    <>
+      <div className="h-[600px] rounded-lg border-2 bg-background/50 backdrop-blur shadow-xl overflow-hidden">
+        <ReactFlow
+          nodes={nodes.map((node) => ({
+            ...node,
+            data: { ...node.data },
+          }))}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          onNodesChange={handleNodesChange}
+          onEdgesChange={() => undefined}
+          onMoveEnd={handleMoveEnd}
+          onNodeDoubleClick={handleNodeDoubleClick}
+          fitView
+          fitViewOptions={{ padding: 0.3, maxZoom: 1.2 }}
+          panOnScroll
+          panOnDrag
+          zoomOnScroll
+          minZoom={MIN_ZOOM}
+          maxZoom={MAX_ZOOM}
+          snapToGrid
+          snapGrid={[GRID_SIZE, GRID_SIZE]}
+          deleteKeyCode={null}
+          proOptions={{ hideAttribution: true }}
+        >
+        <Background gap={GRID_SIZE} size={1} color="hsl(var(--muted-foreground))" />
+        <Controls position="bottom-right" showInteractive={false} />
+        <MiniMap
+          position="bottom-left"
+          nodeStrokeWidth={3}
+          zoomable
+          pannable
+          className="!bg-background/80 !border-2"
+        />
+        <Panel position="top-left" className="flex gap-2">
+          <div className="bg-background/95 backdrop-blur border-2 rounded-lg shadow-lg px-3 py-2 text-xs font-medium flex items-center gap-2">
+            <Zap className="h-3.5 w-3.5 text-primary" />
+            Canvas LangGraph - Configuração Visual do Agente IA
+          </div>
+          <Button
+            onClick={tidyUp}
+            size="sm"
+            variant="secondary"
+            className="shadow-lg font-medium"
+          >
+            <Maximize2 className="h-3.5 w-3.5 mr-1.5" />
+            Auto Layout
+          </Button>
+        </Panel>
+        <Panel position="top-right" className="bg-background/95 backdrop-blur border-2 rounded-lg shadow-lg px-3 py-2 text-[10px] text-muted-foreground space-y-1">
+          <div className="font-mono">⌨️ Atalhos:</div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+            <span>Ctrl+1</span><span className="text-foreground/60">Ajustar Zoom</span>
+            <span>Shift+Alt+T</span><span className="text-foreground/60">Auto Layout</span>
+            <span>+/-</span><span className="text-foreground/60">Zoom In/Out</span>
+          </div>
         </Panel>
       </ReactFlow>
     </div>
+
+    <AgentNodeDialog
+      open={dialogOpen}
+      onOpenChange={setDialogOpen}
+      draft={draft}
+      agentTypes={agentTypes}
+      tools={tools}
+      modelOptions={modelOptions}
+      structuredTemplates={structuredTemplates}
+      onSave={onDraftChange}
+    />
+    </>
+  );
+}
+
+export function AgentCanvas(props: AgentCanvasProps) {
+  return (
+    <ReactFlowProvider>
+      <AgentCanvasInternal {...props} />
+    </ReactFlowProvider>
   );
 }
