@@ -3,6 +3,7 @@ import { getConvertedImages } from "@/app/admin/leads-chatwit/components/lead-it
 import type { LeadChatwit } from "@/app/admin/leads-chatwit/types";
 import type { ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
 import { Prisma } from "@prisma/client";
+import { useOptimisticFileDeletion } from "./useOptimisticFileDeletion";
 
 interface UseLeadHandlersProps {
   lead: LeadChatwit;
@@ -126,6 +127,14 @@ export function useLeadHandlers({
   forceRefresh,
   forceServerRefresh
 }: UseLeadHandlersProps) {
+  // Hook para exclusão otimista
+  const {
+    optimisticDeleteFiles,
+    optimisticDeletePdf,
+    optimisticDeleteImages,
+    rollbackDeletion,
+    clearDeletionState,
+  } = useOptimisticFileDeletion();
 
   const handleEditLead = async (leadData: any) => {
     try {
@@ -168,9 +177,20 @@ export function useLeadHandlers({
 
   const handleDeleteFile = async (fileId: string, type: "arquivo" | "pdf" | "imagem") => {
     try {
+      // ✅ EXCLUSÃO OTIMISTA: Remover da UI imediatamente
+      if (type === "arquivo") {
+        optimisticDeleteFiles(lead, [fileId], onEdit);
+      } else if (type === "pdf") {
+        optimisticDeletePdf(lead, onEdit);
+      } else if (type === "imagem") {
+        optimisticDeleteImages(lead, onEdit);
+      }
+
       setIsDeletedFile(fileId);
+
+      // Processar a exclusão no backend
       const params = new URLSearchParams();
-      
+
       if (type === "arquivo") {
         params.append("id", fileId);
         params.append("type", "arquivo");
@@ -178,41 +198,26 @@ export function useLeadHandlers({
         params.append("leadId", lead.id);
         params.append("type", type);
       }
-      
+
       const response = await fetch(`/api/admin/leads-chatwit/arquivos?${params.toString()}`, {
         method: "DELETE"
       });
-      
+
       const data = await response.json();
-      
+
       if (response.ok) {
-        if (typeof onEdit === 'function') {
-          const updatedLead = { ...lead };
-          
-          if (type === "pdf") {
-            updatedLead.pdfUnificado = undefined;
-          } else if (type === "imagem") {
-            updatedLead.arquivos = updatedLead.arquivos.map(arquivo => ({
-              ...arquivo,
-              pdfConvertido: undefined
-            }));
-            updatedLead.imagensConvertidas = '[]';
-          } else if (type === "arquivo") {
-            updatedLead.arquivos = updatedLead.arquivos.filter(arquivo => arquivo.id !== fileId);
-          }
-          
-          onEdit({
-            ...updatedLead,
-            _skipDialog: true,
-            _internal: true
-          } as any);
-        }
+        // ✅ Sucesso: limpar estado de deleção otimista
+        clearDeletionState();
         return Promise.resolve();
       } else {
+        // ❌ Erro: reverter a UI para o estado anterior
+        rollbackDeletion(onEdit);
         throw new Error(data.error || "Erro ao excluir arquivo");
       }
     } catch (error: any) {
       toast("Erro", { description: error.message || "Não foi possível excluir o arquivo. Tente novamente." });
+      // ❌ Garantir rollback em caso de erro de rede
+      rollbackDeletion(onEdit);
       return Promise.reject(error);
     } finally {
       setIsDeletedFile(null);
