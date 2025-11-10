@@ -188,34 +188,45 @@ export function useLeadHandlers({
 
       setIsDeletedFile(fileId);
 
-      // Processar a exclusão no backend
-      const params = new URLSearchParams();
+      // Criar promise para o backend
+      const deletePromise = (async () => {
+        const params = new URLSearchParams();
 
-      if (type === "arquivo") {
-        params.append("id", fileId);
-        params.append("type", "arquivo");
-      } else if (type === "pdf" || type === "imagem") {
-        params.append("leadId", lead.id);
-        params.append("type", type);
-      }
+        if (type === "arquivo") {
+          params.append("id", fileId);
+          params.append("type", "arquivo");
+        } else if (type === "pdf" || type === "imagem") {
+          params.append("leadId", lead.id);
+          params.append("type", type);
+        }
 
-      const response = await fetch(`/api/admin/leads-chatwit/arquivos?${params.toString()}`, {
-        method: "DELETE"
+        const response = await fetch(`/api/admin/leads-chatwit/arquivos?${params.toString()}`, {
+          method: "DELETE"
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          // ✅ Sucesso: limpar estado de deleção otimista
+          clearDeletionState();
+          return `${type === 'pdf' ? 'PDF unificado' : type === 'imagem' ? 'Imagens convertidas' : 'Arquivo'} excluído com sucesso.`;
+        } else {
+          // ❌ Erro: reverter a UI para o estado anterior
+          rollbackDeletion(onEdit);
+          throw new Error(data.error || "Erro ao excluir arquivo");
+        }
+      })();
+
+      // ✅ Usar toast.promise para feedback visual
+      toast.promise(deletePromise, {
+        loading: `Excluindo ${type === 'pdf' ? 'PDF' : type === 'imagem' ? 'imagens' : 'arquivo'}...`,
+        success: (message) => message,
+        error: (error) => error?.message || "Não foi possível excluir o arquivo. Tente novamente.",
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        // ✅ Sucesso: limpar estado de deleção otimista
-        clearDeletionState();
-        return Promise.resolve();
-      } else {
-        // ❌ Erro: reverter a UI para o estado anterior
-        rollbackDeletion(onEdit);
-        throw new Error(data.error || "Erro ao excluir arquivo");
-      }
+      await deletePromise;
+      return Promise.resolve();
     } catch (error: any) {
-      toast("Erro", { description: error.message || "Não foi possível excluir o arquivo. Tente novamente." });
       // ❌ Garantir rollback em caso de erro de rede
       rollbackDeletion(onEdit);
       return Promise.reject(error);

@@ -41,31 +41,34 @@ export function DeleteFileButton({ onDelete, fileType, fileName, onSuccess }: De
   const handleConfirmDelete = async (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsDeleting(true);
-    
+
     try {
       // Mensagem personalizada com base no tipo de arquivo
-      const fileDesc = 
-        fileType === 'pdf' 
-          ? 'PDF unificado' 
-          : fileType === 'imagem' 
-            ? 'conjunto de imagens convertidas' 
+      const fileDesc =
+        fileType === 'pdf'
+          ? 'PDF unificado'
+          : fileType === 'imagem'
+            ? 'conjunto de imagens convertidas'
             : `arquivo ${fileName || ''}`;
-      
-      await onDelete();
-      
-      toast("Arquivo excluído", {
-        description: `O ${fileDesc} foi excluído com sucesso.`,
+
+      // ✅ Usar toast.promise para melhor UX
+      const deletePromise = onDelete().then(() => {
+        // Callback opcional após exclusão bem-sucedida
+        if (onSuccess) {
+          onSuccess();
+        }
+        return `O ${fileDesc} foi excluído com sucesso.`;
       });
-      
-      // Callback opcional após exclusão bem-sucedida
-      if (onSuccess) {
-        onSuccess();
-      }
+
+      toast.promise(deletePromise, {
+        loading: `Excluindo ${fileDesc}...`,
+        success: (message) => message,
+        error: "Não foi possível excluir o arquivo. Tente novamente.",
+      });
+
+      await deletePromise;
     } catch (error) {
       console.error("Erro ao excluir:", error);
-      toast.error("Erro na exclusão", {
-        description: "Não foi possível excluir o arquivo. Tente novamente.",
-      });
     } finally {
       setIsDeleting(false);
       setShowConfirm(false);
