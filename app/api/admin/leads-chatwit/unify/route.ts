@@ -179,7 +179,7 @@ export async function POST(request: Request): Promise<Response> {
     const pdfBuffer = await unifyFilesToPdf(fileObjects);
     
     // Salvar o PDF no MinIO
-    const pdfUrl = await savePdfToMinIO(pdfBuffer, fileName, process.env.S3Bucket || "chatwit", process.env.NODE_ENV || "development");
+    const pdfUrl = await savePdfToMinIO(pdfBuffer, fileName);
     
     // Atualizar o registro do Lead com a URL do PDF unificado
     if (leadId) {

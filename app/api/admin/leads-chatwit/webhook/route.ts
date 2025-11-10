@@ -196,14 +196,14 @@ export async function POST(request: Request): Promise<Response> {
         } else if (markdownMirror) {
           // Fallback para markdown se jsonMirror não existir
           textoDOEspelho = markdownMirror;
-          console.log(`[Webhook][Local] 📝 Usando markdownMirror como fallback (${textoDOEspelho.length} bytes)`);
+          console.log(`[Webhook][Local] 📝 Usando markdownMirror como fallback (${markdownMirror.length} bytes)`);
         }
 
         // Atualizar lead com espelho processado
         const leadUpdate = await prisma.leadOabData.update({
           where: { id: leadID },
           data: {
-            textoDOEspelho,
+            textoDOEspelho: textoDOEspelho ?? undefined,
             espelhoProcessado: true,
             aguardandoEspelho: false,
           },

@@ -649,7 +649,7 @@ export default function OabRubricAuditorPage() {
     const gruposFiltrados =
       groupFilter === "TODOS" ? draft.grupos : draft.grupos.filter((grupo) => grupo.questao === groupFilter);
     return sortGroups(
-      gruposFiltrados.filter((grupo) => {
+      (gruposFiltrados as GabaritoGrupo[]).filter((grupo) => {
         if (!searchTerm.trim()) return true;
         const text = `${grupo.rotulo} ${grupo.descricao} ${grupo.descricao_limpa}`.toLowerCase();
         return text.includes(searchTerm.trim().toLowerCase());
@@ -665,7 +665,7 @@ export default function OabRubricAuditorPage() {
 
   const activeGroup = useMemo(() => {
     if (!activeGroupId || !draft?.grupos) return null;
-    return draft.grupos.find((grupo) => grupo.id === activeGroupId) ?? null;
+    return (draft.grupos.find((grupo) => grupo.id === activeGroupId) as GabaritoGrupo | undefined) ?? null;
   }, [activeGroupId, draft]);
 
   const activeSubitem = useMemo(() => {
@@ -735,7 +735,7 @@ export default function OabRubricAuditorPage() {
     setDraft((prev) => {
       if (!prev) return prev;
       const remaining = (prev.grupos ?? []).filter((grupo) => !selectedGroupIds.has(grupo.id));
-      return { ...prev, grupos: reindexGroups(remaining) };
+      return { ...prev, grupos: reindexGroups(remaining as GabaritoGrupo[]) };
     });
     setSelectedGroupIds(new Set());
     if (activeGroupId && selectedGroupIds.has(activeGroupId)) {
@@ -751,7 +751,7 @@ export default function OabRubricAuditorPage() {
 
     setDraft((prev) => {
       if (!prev?.grupos) return prev;
-      const gruposOriginais = prev.grupos;
+      const gruposOriginais = prev.grupos as GabaritoGrupo[];
       const selecionados = gruposOriginais.filter((grupo) => selectedGroupIds.has(grupo.id));
       if (selecionados.length < 2) return prev;
 
@@ -774,7 +774,7 @@ export default function OabRubricAuditorPage() {
       };
 
       const outros = gruposOriginais.filter((grupo) => !selectedGroupIds.has(grupo.id));
-      return { ...prev, grupos: reindexGroups([...outros, merged]) };
+      return { ...prev, grupos: reindexGroups([...outros as GabaritoGrupo[], merged]) };
     });
 
     const primeiroId = Array.from(selectedGroupIds)[0];
@@ -786,7 +786,7 @@ export default function OabRubricAuditorPage() {
     if (!draft?.grupos) return;
     setDraft((prev) => {
       if (!prev?.grupos) return prev;
-      return { ...prev, grupos: reindexGroups(prev.grupos) };
+      return { ...prev, grupos: reindexGroups(prev.grupos as GabaritoGrupo[]) };
     });
   }, [draft]);
 

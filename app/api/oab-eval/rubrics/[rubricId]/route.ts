@@ -39,10 +39,10 @@ function buildResponsePayload(record: any) {
 
 export async function GET(
   _request: NextRequest,
-  context: { params: { rubricId: string } },
+  context: { params: Promise<{ rubricId: string }> },
 ) {
   try {
-    const { rubricId } = context.params;
+    const { rubricId } = await context.params;
     const record = await getRubricById(rubricId);
     if (!record) {
       return NextResponse.json({ success: false, error: "Gabarito não encontrado" }, { status: 404 });
@@ -63,10 +63,10 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  context: { params: { rubricId: string } },
+  context: { params: Promise<{ rubricId: string }> },
 ) {
   try {
-    const { rubricId } = context.params;
+    const { rubricId } = await context.params;
     const body = await request.json();
     if (!body?.schema) {
       return NextResponse.json({ success: false, error: "Campo 'schema' obrigatório" }, { status: 400 });
