@@ -8,7 +8,6 @@ import { DeleteFileButton } from "@/app/admin/leads-chatwit/components/delete-fi
 import { FileText, File, Upload } from "lucide-react";
 import { useState, useRef } from "react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 
 interface FilesCellProps extends FileCellProps {
   onContextMenuAction: (action: ContextAction, data?: any) => void;
@@ -119,19 +118,7 @@ export function FilesCell({
 
   return (
     <TableCell className="min-w-[100px] max-w-[150px] p-2 align-middle">
-      <div 
-        className={`grid grid-cols-3 gap-2 ${
-          lead.arquivos.length === 0 
-            ? 'border-2 border-dashed rounded-lg p-4 transition-colors ' + 
-              (isDragging 
-                ? 'border-primary bg-primary/10' 
-                : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-accent/50')
-            : ''
-        }`}
-        onDragOver={lead.arquivos.length === 0 ? handleDragOver : undefined}
-        onDragLeave={lead.arquivos.length === 0 ? handleDragLeave : undefined}
-        onDrop={lead.arquivos.length === 0 ? handleDrop : undefined}
-      >
+      <div className="grid grid-cols-3 gap-2">
         {lead.arquivos.length > 0 ? (
           lead.arquivos.map((arquivo) => (
             <LeadContextMenu
@@ -155,7 +142,18 @@ export function FilesCell({
             </LeadContextMenu>
           ))
         ) : (
-          <div className="col-span-3 flex flex-col items-center justify-center gap-2 min-h-[80px]">
+          <div 
+            className={`col-span-3 flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-md border-2 border-dashed transition-all cursor-pointer ${
+              isDragging 
+                ? 'border-primary bg-primary/10 scale-[1.02]' 
+                : 'border-muted-foreground/30 hover:border-primary/60 hover:bg-accent/30'
+            } ${isUploading ? 'opacity-60 cursor-wait' : ''}`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={!isUploading ? handleClickUpload : undefined}
+            title={isUploading ? 'Enviando arquivos...' : 'Clique ou arraste arquivos aqui'}
+          >
             <input
               ref={fileInputRef}
               type="file"
@@ -166,22 +164,11 @@ export function FilesCell({
               disabled={isUploading}
             />
             
-            <Upload className="h-6 w-6 text-muted-foreground" />
+            <Upload className={`h-5 w-5 ${isUploading ? 'text-primary animate-pulse' : 'text-muted-foreground'}`} />
             
-            <p className="text-xs text-muted-foreground text-center">
-              {isUploading ? 'Enviando...' : 'Arraste arquivos ou'}
+            <p className="text-[10px] text-muted-foreground text-center leading-tight">
+              {isUploading ? 'Enviando...' : 'Arraste ou clique'}
             </p>
-            
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handleClickUpload}
-              disabled={isUploading}
-              className="h-7 text-xs"
-            >
-              Escolher arquivos
-            </Button>
           </div>
         )}
       </div>
