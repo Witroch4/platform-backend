@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useReactFlow } from '@xyflow/react';
-import { applyLayout } from '../lib/layout';
+import { applyLayout } from '../lib/layout-utils';
 import type { CanvasNode, CanvasConnection } from '../types/canvas';
 
 export function useCanvasLayout(

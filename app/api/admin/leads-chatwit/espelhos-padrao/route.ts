@@ -2,28 +2,36 @@ import { NextResponse } from 'next/server';
 import { getPrismaInstance } from '@/lib/connections';
 const prisma = getPrismaInstance();
 import { auth } from '@/auth';
+import type { EspecialidadeJuridica } from '@prisma/client';
 
 /**
  * GET - Buscar todos os espelhos padrão
  */
 export async function GET(request: Request): Promise<Response> {
   try {
-    const { searchParams } = new URL(request.url);
-    const usuarioId = searchParams.get('usuarioId');
-    
-    if (!usuarioId) {
+    const session = await auth();
+    if (!session?.user?.id) {
       return NextResponse.json(
-        { error: "Usuario ID é obrigatório" },
-        { status: 400 }
+        { error: "Usuário não autenticado." },
+        { status: 401 }
       );
     }
 
-    // Buscar todos os espelhos padrão
+    const { searchParams } = new URL(request.url);
+    const especialidadeParam = searchParams.get('especialidade');
+
+    // Buscar espelhos padrão (com filtro opcional por especialidade)
     const espelhosPadrao = await prisma.espelhoPadrao.findMany({
       where: {
-        isAtivo: true
+        isAtivo: true,
+        ...(especialidadeParam && { especialidade: especialidadeParam as EspecialidadeJuridica }),
       },
-      include: {
+      select: {
+        id: true,
+        nome: true,
+        especialidade: true,
+        descricao: true,
+        updatedAt: true,
         atualizadoPor: {
           select: {
             id: true,
@@ -32,13 +40,13 @@ export async function GET(request: Request): Promise<Response> {
         }
       },
       orderBy: {
-        especialidade: 'asc'
+        updatedAt: 'desc'
       }
     });
 
     return NextResponse.json({
       success: true,
-      espelhosPadrao
+      espelhos: espelhosPadrao
     });
   } catch (error: any) {
     console.error("[API Espelhos Padrão GET] Erro:", error);

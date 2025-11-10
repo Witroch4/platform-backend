@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
   // Para SSE, sempre retornar stream mesmo se leadId estiver ausente
   console.log(`[SSE API] 🌊 Iniciando stream SSE para leadId: ${leadId || 'undefined'}`);
 
-  let connectionId: string | null = null;
+  let connectionId: string = '';
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
 
       // Adicionar conexão ao manager
       const sseManager = await getSseManager();
-      connectionId = sseManager.addConnection(leadId, controller);
+      connectionId = await Promise.resolve(sseManager.addConnection(leadId, controller));
       
       console.log(`[SSE API] ✅ Stream iniciado para leadId: ${leadId}, connectionId: ${connectionId}`);
       

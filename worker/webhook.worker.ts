@@ -7,8 +7,10 @@ import { getPrismaInstance } from "@/lib/connections";
 import { startRedisHealthMonitoring, checkRedisHealth } from "@/lib/redis-health-check";
 import { processAgendamentoTask } from "./WebhookWorkerTasks/agendamento.task";
 import { processLeadCellTask } from "./WebhookWorkerTasks/leadcells.task";
+import { processMirrorGenerationTask } from "./WebhookWorkerTasks/mirror-generation.task";
 import { MANUSCRITO_QUEUE_NAME } from "@/lib/queue/manuscrito.queue";
 import { leadCellsQueue } from "@/lib/queue/leadcells.queue";
+import { mirrorGenerationQueue } from "@/lib/oab-eval/mirror-queue";
 import {
   AUTO_NOTIFICATIONS_QUEUE_NAME,
   type IAutoNotificationJobData,
@@ -343,6 +345,7 @@ let agendamentoWorker: Worker;
 let manuscritoWorker: Worker;
 let leadCellsWorker: Worker;
 let leadsChatwitWorker: Worker;
+let mirrorGenerationWorker: Worker;
 
 // Worker de leads‑chatwit 🔥 (concorrência ajustável baseada no ambiente)
 const workersConfig = getWorkersConfig();
@@ -375,6 +378,13 @@ async function initializeLegacyWorkers(): Promise<void> {
       lockDuration: 30000,
     });
 
+    // Worker para geração de espelhos locais (OAB)
+    mirrorGenerationWorker = new Worker("oab-mirror-generation", processMirrorGenerationTask, {
+      connection: getRedisInstance(),
+      concurrency: 5, // Até 5 espelhos simultâneos
+      lockDuration: 300000, // 5 minutos (pode demorar mais que manuscrito)
+    });
+
     // Worker de leads‑chatwit 🔥
     leadsChatwitWorker = new Worker(
       LEADS_QUEUE_NAME,
@@ -393,6 +403,7 @@ async function initializeLegacyWorkers(): Promise<void> {
       agendamentoWorker.waitUntilReady(),
       manuscritoWorker.waitUntilReady(),
       leadCellsWorker.waitUntilReady(),
+      mirrorGenerationWorker.waitUntilReady(),
       leadsChatwitWorker.waitUntilReady(),
     ]);
 
@@ -539,6 +550,7 @@ function setupWorkerEventHandlers(): void {
     agendamentoWorker,
     manuscritoWorker,
     leadCellsWorker,
+    mirrorGenerationWorker,
     leadsChatwitWorker,
     autoNotificationsWorker,
     // mtfDiamanteAsyncWorker, // Temporariamente desabilitado
@@ -1071,6 +1083,7 @@ const gracefulShutdown = async (signal: string) => {
     if (agendamentoWorker) workersToClose.push(agendamentoWorker.close());
     if (manuscritoWorker) workersToClose.push(manuscritoWorker.close());
     if (leadCellsWorker) workersToClose.push(leadCellsWorker.close());
+    if (mirrorGenerationWorker) workersToClose.push(mirrorGenerationWorker.close());
     if (leadsChatwitWorker) workersToClose.push(leadsChatwitWorker.close());
     if (autoNotificationsWorker) workersToClose.push(autoNotificationsWorker.close());
     if (instagramTranslationWorker) workersToClose.push(instagramTranslationWorker.close());

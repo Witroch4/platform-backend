@@ -86,6 +86,13 @@ oab_eval:
   # Número de páginas processadas em paralelo pelo agente local
   transcribe_concurrency: 10
 
+  # ENV: OAB_EVAL_AGENT_LOCAL_ESPELHO
+  # Quando true, utiliza agente local (LangGraph) para geração de espelho
+  agentelocal_espelho: true
+  # ENV: OAB_EVAL_MIRROR_CONCURRENCY
+  # Número de espelhos processados em paralelo pelo agente local
+  mirror_concurrency: 5
+
   # Configurações da fila de transcrição
   queue:
     # Nome da fila (padrão: oab-transcription)

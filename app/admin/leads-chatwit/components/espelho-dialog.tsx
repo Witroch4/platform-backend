@@ -1,4 +1,6 @@
-import { useState, useEffect } from "react";
+"use client";
+
+import { useState, useEffect, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -8,9 +10,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Loader2, Image as ImageIcon, Send, ArrowRight, Eye, Edit3, FileText } from "lucide-react";
+import { Loader2, Image as ImageIcon, Send, ArrowRight, Eye, FileText } from "lucide-react";
 import { ImageGalleryDialog } from "./image-gallery-dialog";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -21,6 +22,7 @@ import { StructuredEditor } from './StructuredEditor';
 
 import { Badge } from "@/components/ui/badge";
 import type { LeadChatwit } from "../types";
+import type { StudentMirrorPayload, StudentMirrorItem } from "@/lib/oab-eval/types";
 
 interface EspelhoDialogProps {
   isOpen: boolean;
@@ -41,6 +43,285 @@ interface EspelhoDialogProps {
   };
   onBatchNext?: () => void;
   onBatchSkip?: () => void;
+}
+
+function asStudentMirrorPayload(value: unknown): StudentMirrorPayload | null {
+  let candidate: unknown = value;
+
+  if (!candidate) {
+    return null;
+  }
+
+  if (typeof candidate === 'string') {
+    try {
+      candidate = JSON.parse(candidate);
+    } catch {
+      return null;
+    }
+  }
+
+  if (Array.isArray(candidate)) {
+    // Legado: [{ textoDoEspelho: "..." }]
+    const first = candidate[0] as any;
+    if (first?.textoDoEspelho) {
+      return asStudentMirrorPayload(first.textoDoEspelho);
+    }
+  }
+
+  if (candidate && typeof candidate === 'object') {
+    const obj = candidate as Record<string, unknown>;
+
+    if (obj.payload && typeof obj.payload === 'object') {
+      return asStudentMirrorPayload(obj.payload);
+    }
+
+    if (obj.json && typeof obj.json === 'object') {
+      return asStudentMirrorPayload(obj.json);
+    }
+
+    if (obj.meta && obj.aluno && obj.itens) {
+      return obj as unknown as StudentMirrorPayload;
+    }
+  }
+
+  return null;
+}
+
+function formatScoreOptional(value: number | null | undefined): string {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value.toFixed(2);
+  }
+  return '-';
+}
+
+function groupQuestionItems(itens: StudentMirrorItem[]): Record<string, StudentMirrorItem[]> {
+  return itens.reduce<Record<string, StudentMirrorItem[]>>((acc, item) => {
+    if (!acc[item.questao]) {
+      acc[item.questao] = [];
+    }
+    acc[item.questao].push(item);
+    return acc;
+  }, {});
+}
+
+function sumQuestionScore(items: StudentMirrorItem[]): number {
+  const groupScores = new Map<string, number>();
+  let total = 0;
+
+  for (const item of items) {
+    const score = typeof item.nota_obtida === 'number' ? item.nota_obtida : 0;
+
+    if (Array.isArray(item.alternativas_grupo) && item.alternativas_grupo.length > 0) {
+      const key = item.alternativas_grupo.slice().sort().join('|');
+      const current = groupScores.get(key) ?? 0;
+      if (score > current) {
+        groupScores.set(key, score);
+      }
+      continue;
+    }
+
+    total += score;
+  }
+
+  for (const value of groupScores.values()) {
+    total += value;
+  }
+
+  return Number.parseFloat(total.toFixed(2));
+}
+
+function StudentMirrorViewer({ payload }: { payload: StudentMirrorPayload }) {
+  // Garantir que totais sempre existe com valores seguros
+  const safePayload = useMemo(() => ({
+    ...payload,
+    totais: payload.totais || {
+      peca: { obtido: 0, maximo: 10 },
+      questoes: { obtido: 0, maximo: 10 },
+      final: { obtido: 0, maximo: 20 },
+    },
+  }), [payload]);
+
+  const pieceItems = useMemo(
+    () => safePayload.itens.filter(item => item.escopo === 'Peça'),
+    [safePayload.itens],
+  );
+
+  const questionItems = useMemo(
+    () => safePayload.itens.filter(item => item.escopo === 'Questão'),
+    [safePayload.itens],
+  );
+
+  const groupedQuestions = useMemo(() => groupQuestionItems(questionItems), [questionItems]);
+
+  return (
+    <div className="space-y-6">
+      <section className="grid gap-3 md:grid-cols-2">
+        <div className="rounded-lg border bg-card p-4">
+          <h4 className="text-sm font-semibold text-muted-foreground">Dados do Exame</h4>
+          <dl className="mt-3 space-y-2 text-sm">
+            <div className="flex justify-between gap-2">
+              <dt className="font-medium text-muted-foreground">Exame</dt>
+              <dd className="text-right text-foreground">{safePayload.meta?.exam ?? '-'}</dd>
+            </div>
+            <div className="flex justify-between gap-2">
+              <dt className="font-medium text-muted-foreground">Área</dt>
+              <dd className="text-right text-foreground">{safePayload.meta?.area ?? '-'}</dd>
+            </div>
+            <div className="flex justify-between gap-2">
+              <dt className="font-medium text-muted-foreground">Fonte</dt>
+              <dd className="text-right text-foreground">{safePayload.meta?.fonte ?? '-'}</dd>
+            </div>
+            <div className="flex justify-between gap-2">
+              <dt className="font-medium text-muted-foreground">Aplicação</dt>
+              <dd className="text-right text-foreground">{safePayload.meta?.data_aplicacao ?? '-'}</dd>
+            </div>
+          </dl>
+        </div>
+        <div className="rounded-lg border bg-card p-4">
+          <h4 className="text-sm font-semibold text-muted-foreground">Dados do Examinando</h4>
+          <dl className="mt-3 space-y-2 text-sm">
+            <div className="flex justify-between gap-2">
+              <dt className="font-medium text-muted-foreground">Nome</dt>
+              <dd className="text-right text-foreground">{safePayload.aluno.nome}</dd>
+            </div>
+            <div className="flex justify-between gap-2">
+              <dt className="font-medium text-muted-foreground">Inscrição</dt>
+              <dd className="text-right text-foreground">{safePayload.aluno.inscricao}</dd>
+            </div>
+            <div className="flex justify-between gap-2">
+              <dt className="font-medium text-muted-foreground">Situação</dt>
+              <dd className="text-right text-foreground">{safePayload.aluno.situacao}</dd>
+            </div>
+            <div className="flex justify-between gap-2">
+              <dt className="font-medium text-muted-foreground">Nota Final</dt>
+              <dd className="text-right text-foreground">
+                {formatScoreOptional(safePayload.aluno.nota_final)}
+                {safePayload.aluno.nota_final_raw && (
+                  <span className="ml-2 text-xs text-muted-foreground">(Imagem: {safePayload.aluno.nota_final_raw})</span>
+                )}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <section className="rounded-lg border bg-card p-4">
+        <h4 className="text-sm font-semibold text-muted-foreground">Totais</h4>
+        <div className="mt-3 grid gap-3 md:grid-cols-3 text-sm">
+          {([
+            { label: 'Peça', data: safePayload.totais.peca },
+            { label: 'Questões', data: safePayload.totais.questoes },
+            { label: 'Nota Final', data: safePayload.totais.final },
+          ] as const).map(({ label, data }) => (
+            <div key={label} className="rounded border bg-background p-3">
+              <div className="text-xs font-medium uppercase text-muted-foreground">{label}</div>
+              <div className="mt-1 text-lg font-semibold text-foreground">
+                {formatScoreOptional(data.obtido)}
+                {typeof data.maximo === 'number' && (
+                  <span className="ml-1 text-sm text-muted-foreground">/ {data.maximo.toFixed(2)}</span>
+                )}
+              </div>
+              {(typeof data.maximo_rubrica === 'number' || typeof data.obtido_rubrica === 'number') && (
+                <div className="mt-2 text-xs text-muted-foreground">
+                  <div>Rubrica: {formatScoreOptional(data.obtido_rubrica)} / {formatScoreOptional(data.maximo_rubrica)}</div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-lg border bg-card p-4">
+        <h4 className="text-sm font-semibold text-muted-foreground">Peça Profissional</h4>
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full min-w-[600px] table-fixed border-collapse text-sm">
+            <thead>
+              <tr className="bg-muted text-left text-xs uppercase text-muted-foreground">
+                <th className="w-24 border px-3 py-2">Item</th>
+                <th className="border px-3 py-2">Descrição</th>
+                <th className="w-20 border px-3 py-2">Peso</th>
+                <th className="w-24 border px-3 py-2">Pontuação</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pieceItems.map(item => (
+                <tr key={item.id} className="border-b last:border-b-0">
+                  <td className="border px-3 py-2 font-medium text-foreground">{item.id}</td>
+                  <td className="border px-3 py-2 text-foreground">
+                    <div className="whitespace-pre-wrap leading-relaxed">{item.descricao}</div>
+                    {item.fundamentos && item.fundamentos.length > 0 && (
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Fundamentos: {item.fundamentos.join('; ')}
+                      </div>
+                    )}
+                  </td>
+                  <td className="border px-3 py-2 text-foreground">{item.peso?.toFixed(2) ?? '-'}</td>
+                  <td className="border px-3 py-2 text-foreground">
+                    {formatScoreOptional(item.nota_obtida)}
+                    {item.nota_obtida_raw && (
+                      <span className="ml-1 text-xs text-muted-foreground">(imagem: {item.nota_obtida_raw})</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="rounded-lg border bg-card p-4">
+        <h4 className="text-sm font-semibold text-muted-foreground">Questões Discursivas</h4>
+        <div className="mt-3 space-y-6">
+          {Object.entries(groupedQuestions)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([questao, itens]) => (
+              <div key={questao} className="rounded border bg-background">
+                <div className="flex items-center justify-between border-b px-4 py-2">
+                  <div className="text-sm font-semibold text-foreground">{questao}</div>
+                  <div className="text-xs text-muted-foreground">
+                    Total: {formatScoreOptional(sumQuestionScore(itens))}
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[500px] table-fixed border-collapse text-sm">
+                    <thead>
+                      <tr className="bg-muted text-left text-xs uppercase text-muted-foreground">
+                        <th className="w-28 border px-3 py-2">Item</th>
+                        <th className="border px-3 py-2">Descrição</th>
+                        <th className="w-20 border px-3 py-2">Peso</th>
+                        <th className="w-24 border px-3 py-2">Pontuação</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {itens.map(item => (
+                        <tr key={item.id} className="border-b last:border-b-0">
+                          <td className="border px-3 py-2 font-medium text-foreground">{item.id}</td>
+                          <td className="border px-3 py-2 text-foreground">
+                            <div className="whitespace-pre-wrap leading-relaxed">{item.descricao}</div>
+                            {item.fundamentos && item.fundamentos.length > 0 && (
+                              <div className="mt-1 text-xs text-muted-foreground">
+                                Fundamentos: {item.fundamentos.join('; ')}
+                              </div>
+                            )}
+                          </td>
+                          <td className="border px-3 py-2 text-foreground">{item.peso?.toFixed(2) ?? '-'}</td>
+                          <td className="border px-3 py-2 text-foreground">
+                            {formatScoreOptional(item.nota_obtida)}
+                            {item.nota_obtida_raw && (
+                              <span className="ml-1 text-xs text-muted-foreground">(imagem: {item.nota_obtida_raw})</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+        </div>
+      </section>
+    </div>
+  );
 }
 
 export function EspelhoDialog({
@@ -69,6 +350,9 @@ export function EspelhoDialog({
   const [isEditMode, setIsEditMode] = useState(false);
   const [ast, setAst] = useState<any>(null);
 
+  const structuredPayload = useMemo(() => asStudentMirrorPayload(texto), [texto]);
+  const canEditContent = !structuredPayload;
+
   // Atualiza o texto quando as props mudam
   useEffect(() => {
     if (isOpen) {
@@ -86,10 +370,10 @@ export function EspelhoDialog({
         Array.isArray(textoEspelho) ? textoEspelho.length > 0 :
         typeof textoEspelho === 'object' && textoEspelho !== null
       );
-      setIsEditMode(!hasText); // Edição se não há texto, visualização se há texto
+      setIsEditMode(!hasText && !structuredPayload); // Apenas entra em edição se não houver conteúdo estruturado
       
       // Fazer parsing do markdown para AST quando há texto
-      if (hasText) {
+      if (hasText && !structuredPayload) {
         const formattedText = formatEspelhoTexto();
         if (formattedText && formattedText.trim().length > 0) {
           try {
@@ -103,11 +387,11 @@ export function EspelhoDialog({
         }
       }
     }
-      }, [isOpen, textoEspelho, imagensEspelho, aguardandoEspelho]);
+      }, [isOpen, textoEspelho, imagensEspelho, aguardandoEspelho, structuredPayload]);
 
   // Efeito para fazer parsing do markdown quando entrar no modo de edição
   useEffect(() => {
-    if (isEditMode && !ast) {
+    if (isEditMode && !structuredPayload && !ast) {
       const formattedText = formatEspelhoTexto();
       if (formattedText && formattedText.trim().length > 0) {
         try {
@@ -120,7 +404,14 @@ export function EspelhoDialog({
         }
       }
     }
-  }, [isEditMode, texto]);
+  }, [isEditMode, texto, structuredPayload]);
+
+  useEffect(() => {
+    if (structuredPayload) {
+      setIsEditMode(false);
+      setAst(null);
+    }
+  }, [structuredPayload]);
 
   // Função para verificar se há texto formatado
   const hasFormattedText = () => {
@@ -321,6 +612,13 @@ export function EspelhoDialog({
   // Formatar o texto JSON para exibição
   const formatEspelhoTexto = () => {
     if (!texto) return "";
+    if (structuredPayload) {
+      try {
+        return JSON.stringify(structuredPayload, null, 2);
+      } catch {
+        return "";
+      }
+    }
     
     // Função auxiliar para processar quebras de linha
     const processLineBreaks = (text: string) => {
@@ -374,6 +672,20 @@ export function EspelhoDialog({
       } catch {
         return "Erro ao exibir o conteúdo do espelho. Edite com cuidado.";
       }
+    }
+  };
+
+  const handleCopyStructuredJson = async () => {
+    if (!structuredPayload) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(structuredPayload, null, 2));
+      toast.success("JSON copiado", { description: "Conteúdo estruturado disponível na área de transferência", duration: 2000 });
+    } catch (error: any) {
+      console.error("Erro ao copiar JSON do espelho:", error);
+      toast.error("Erro", { description: "Não foi possível copiar o JSON." });
     }
   };
 
@@ -455,6 +767,10 @@ export function EspelhoDialog({
                         <p>Carregando editor...</p>
                       </div>
                     )
+                  ) : structuredPayload ? (
+                    <div className="h-full overflow-y-auto pr-1">
+                      <StudentMirrorViewer payload={structuredPayload} />
+                    </div>
                   ) : (
                     <div className="prose prose-base max-w-none dark:prose-invert h-full text-base [&_h3]:text-base [&_p]:text-base [&_ul]:text-base [&_li]:text-base">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -565,33 +881,43 @@ export function EspelhoDialog({
                   {isEditMode ? "Cancelar" : "Fechar"}
                 </Button>
                 {!aguardandoEspelho && (
-                  <Button 
-                    onClick={() => {
-                      if (isEditMode) {
-                        handleSave();
-                      } else {
-                        setIsEditMode(true);
-                        // Fazer parsing do markdown quando entrar no modo de edição
-                        if (!ast) {
-                          const formattedText = formatEspelhoTexto();
-                          if (formattedText && formattedText.trim().length > 0) {
-                            try {
-                              const processor = unified().use(remarkParse).use(remarkGfm);
-                              const tree = processor.parse(formattedText);
-                              setAst(tree);
-                            } catch (error) {
-                              console.error('Erro ao fazer parsing do markdown:', error);
-                              setAst(null);
+                  canEditContent ? (
+                    <Button 
+                      onClick={() => {
+                        if (isEditMode) {
+                          handleSave();
+                        } else {
+                          setIsEditMode(true);
+                          if (!ast) {
+                            const formattedText = formatEspelhoTexto();
+                            if (formattedText && formattedText.trim().length > 0) {
+                              try {
+                                const processor = unified().use(remarkParse).use(remarkGfm);
+                                const tree = processor.parse(formattedText);
+                                setAst(tree);
+                              } catch (error) {
+                                console.error('Erro ao fazer parsing do markdown:', error);
+                                setAst(null);
+                              }
                             }
                           }
                         }
-                      }
-                    }} 
-                    disabled={isSaving || isGeneratingText}
-                  >
-                    {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    {isEditMode ? "Salvar" : "Editar"}
-                  </Button>
+                      }} 
+                      disabled={isSaving || isGeneratingText}
+                    >
+                      {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      {isEditMode ? "Salvar" : "Editar"}
+                    </Button>
+                  ) : (
+                    <Button 
+                      variant="outline" 
+                      onClick={handleCopyStructuredJson}
+                      disabled={!structuredPayload}
+                    >
+                      <FileText className="mr-2 h-4 w-4" />
+                      Copiar JSON
+                    </Button>
+                  )
                 )}
               </>
             )}

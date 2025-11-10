@@ -3,6 +3,7 @@ import { auth } from '@/auth';
 import { AiAgentType } from '@prisma/client';
 import { RetrievalToolsSchema } from '@/lib/ai-tools/retrieval-tools';
 import { DEFAULT_MODELS } from '@/services/openai-components/types';
+import { openai } from '@/lib/oab-eval/openai-client';
 
 const agentTypeCatalog = [
   {
@@ -37,6 +38,7 @@ const agentTypeCatalog = [
   },
 ];
 
+// Modelos padrão usados como fallback se a API falhar
 const defaultModels = [
   { value: DEFAULT_MODELS.CHAT, label: 'Chat (default)' },
   { value: DEFAULT_MODELS.CHAT_ADVANCED, label: 'Chat avançado' },
@@ -48,6 +50,113 @@ const defaultModels = [
   { value: 'gpt-4.1-mini', label: 'gpt-4.1-mini (rápido)' },
   { value: 'gpt-4o-mini', label: 'gpt-4o-mini (rápido)' },
 ];
+
+/**
+ * Carrega lista dinâmica de modelos disponíveis da API OpenAI
+ * Categoriza modelos por capacidade (chat, vision, embedding, audio, etc)
+ */
+async function loadDynamicModels(): Promise<Array<{ value: string; label: string; category?: string }>> {
+  try {
+    const modelsList = await openai.models.list();
+    const models = modelsList.data || [];
+
+    // Categorias de modelos
+    const categories: Record<string, Array<{ id: string; created?: number }>> = {
+      vision: [],
+      chat: [],
+      reasoning: [],
+      embedding: [],
+      audio: [],
+      image: [],
+      other: [],
+    };
+
+    // Classificar modelos por categoria
+    for (const model of models) {
+      const id: string = model.id || '';
+
+      // Vision models (suportam imagens)
+      if (/gpt-4\.1|gpt-4o|gpt-5/i.test(id) && !/audio|embed|tts/i.test(id)) {
+        categories.vision.push(model);
+        continue;
+      }
+
+      // Reasoning models (série o1)
+      if (/^o\d/i.test(id)) {
+        categories.reasoning.push(model);
+        continue;
+      }
+
+      // Embedding models
+      if (/embedding/i.test(id)) {
+        categories.embedding.push(model);
+        continue;
+      }
+
+      // Audio models (Whisper, TTS)
+      if (/whisper|tts|audio/i.test(id)) {
+        categories.audio.push(model);
+        continue;
+      }
+
+      // Image generation (DALL-E, gpt-image)
+      if (/dall-e|gpt-image/i.test(id)) {
+        categories.image.push(model);
+        continue;
+      }
+
+      // Chat models (demais GPT)
+      if (/gpt|chat/i.test(id)) {
+        categories.chat.push(model);
+        continue;
+      }
+
+      // Outros
+      categories.other.push(model);
+    }
+
+    // Construir lista formatada priorizando modelos vision
+    const formattedModels: Array<{ value: string; label: string; category?: string }> = [];
+
+    // 1. Vision models primeiro (os mais importantes para o agente OAB)
+    const visionModels = categories.vision
+      .sort((a, b) => (b.created || 0) - (a.created || 0))
+      .map(m => ({
+        value: m.id,
+        label: `${m.id} (vision)`,
+        category: 'vision',
+      }));
+    formattedModels.push(...visionModels);
+
+    // 2. Chat models
+    const chatModels = categories.chat
+      .sort((a, b) => (b.created || 0) - (a.created || 0))
+      .map(m => ({
+        value: m.id,
+        label: m.id,
+        category: 'chat',
+      }));
+    formattedModels.push(...chatModels);
+
+    // 3. Reasoning models
+    const reasoningModels = categories.reasoning
+      .sort((a, b) => (b.created || 0) - (a.created || 0))
+      .map(m => ({
+        value: m.id,
+        label: `${m.id} (reasoning)`,
+        category: 'reasoning',
+      }));
+    formattedModels.push(...reasoningModels);
+
+    console.log(`[MTF Catalog] ✅ ${formattedModels.length} modelos carregados dinamicamente da OpenAI`);
+    console.log(`[MTF Catalog] 📊 Vision: ${visionModels.length}, Chat: ${chatModels.length}, Reasoning: ${reasoningModels.length}`);
+
+    return formattedModels;
+  } catch (error) {
+    console.error('[MTF Catalog] ⚠️ Falha ao carregar modelos da API OpenAI, usando lista padrão:', error);
+    return defaultModels;
+  }
+}
 
 const structuredOutputExamples = [
   {
@@ -118,10 +227,13 @@ export async function GET() {
     parameters: tool.function.parameters,
   }));
 
+  // Carregar modelos dinamicamente da API OpenAI
+  const models = await loadDynamicModels();
+
   return NextResponse.json({
     agentTypes: agentTypeCatalog,
     tools,
-    models: defaultModels,
+    models,
     structuredOutputExamples,
   });
 }

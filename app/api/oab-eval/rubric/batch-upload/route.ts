@@ -17,12 +17,18 @@ interface BatchUploadResult {
       withEmbeddings?: boolean;
       embeddingModel?: string | null;
       metaResumo?: any;
-      pontuacao?: {
-        peca?: { total: number; ok: boolean; esperado: number };
-        questoes?: { total: number; ok: boolean; esperado: number };
-        geral?: { total: number; ok: boolean; esperado: number };
-        porQuestao?: Record<string, number>;
-      };
+        pontuacao?: {
+          peca?: { total: number; ok: boolean; esperado: number };
+          questoes?: { total: number; ok: boolean; esperado: number };
+          geral?: { total: number; ok: boolean; esperado: number };
+          porQuestao?: Record<string, { total: number; esperado: number; desvio: number; ok: boolean }>;
+        };
+        grupos?: {
+          total: number;
+          peca: { total: number; ids: string[] };
+          questoes: { total: number; ids: string[] };
+          porVariant?: Record<string, string[]>;
+        };
     };
     error?: string;
   }>;
@@ -97,13 +103,26 @@ export async function POST(request: NextRequest) {
         // Recalcular verificação de pontuação
         const { verificarPontuacao } = await import("@/lib/oab/gabarito-parser-deterministico");
         const verificacao = verificarPontuacao(payload.itens as any);
-
-        // Calcular resumo de pontuação por questão
-        const pontuacaoPorQuestao = payload.itens.reduce((acc: Record<string, number>, item: any) => {
-          const q = item.questao || 'OUTROS';
-          acc[q] = (acc[q] || 0) + (item.peso || 0);
+        const grupos = (payload as any).grupos ?? [];
+        const gruposPeca = grupos.filter((g: any) => g.questao === 'PEÇA');
+        const gruposQuestoes = grupos.filter((g: any) => g.questao !== 'PEÇA');
+        const gruposPorVariant = grupos.reduce((acc: Record<string, string[]>, grupo: any) => {
+          const key = `${grupo.questao}::${grupo.variant_family || 'default'}::${grupo.variant_key || 'default'}`;
+          if (!acc[key]) acc[key] = [];
+          acc[key].push(grupo.id);
           return acc;
-        }, {});
+        }, {} as Record<string, string[]>);
+
+        // Calcular resumo de pontuação por questão utilizando a verificação final (limita aos máximos esperados)
+        const pontuacaoPorQuestao: Record<string, { total: number; esperado: number; desvio: number; ok: boolean }> = {
+          PEÇA: {
+            total: verificacao.peca.total,
+            esperado: verificacao.peca.esperado,
+            desvio: verificacao.peca.desvio,
+            ok: verificacao.peca.ok,
+          },
+          ...verificacao.questoes.porQuestao,
+        };
 
         const stats = {
           itens: payload.itens?.length ?? 0,
@@ -122,6 +141,18 @@ export async function POST(request: NextRequest) {
             geral: { total: verificacao.geral.total, ok: verificacao.geral.ok, esperado: verificacao.geral.esperado },
             porQuestao: pontuacaoPorQuestao,
           },
+          grupos: {
+            total: grupos.length,
+            peca: {
+              total: gruposPeca.length,
+              ids: gruposPeca.map((g: any) => g.id),
+            },
+            questoes: {
+              total: gruposQuestoes.length,
+              ids: gruposQuestoes.map((g: any) => g.id),
+            },
+            porVariant: gruposPorVariant,
+          },
         };
 
         results.push({
@@ -139,11 +170,27 @@ export async function POST(request: NextRequest) {
         console.log(`[OAB-EVAL::BATCH]   📊 Itens: ${stats.itens}`);
         console.log(`[OAB-EVAL::BATCH]   📚 Área: ${stats.metaResumo.area}`);
         console.log(`[OAB-EVAL::BATCH]   📅 Aplicação: ${stats.metaResumo.data_aplicacao}`);
+        const resumoPeca = stats.grupos.peca.ids.join(', ');
+        const resumoQuestoes = stats.grupos.questoes.ids.join(', ');
+        console.log(`[OAB-EVAL::BATCH]   🧩 Grupos (PEÇA): ${stats.grupos.peca.total} -> ${resumoPeca}`);
+        console.log(`[OAB-EVAL::BATCH]   🧩 Grupos (QUESTÕES): ${stats.grupos.questoes.total} -> ${resumoQuestoes}`);
+        if (stats.grupos.porVariant) {
+          Object.entries(stats.grupos.porVariant).forEach(([variantKey, ids]) => {
+            const idsArray = Array.isArray(ids) ? ids : [];
+            console.log(`[OAB-EVAL::BATCH]     • Variante ${variantKey}: ${idsArray.length} -> ${idsArray.join(', ')}`);
+          });
+        }
         console.log(`[OAB-EVAL::BATCH]   🎯 Pontuação:`);
         console.log(`[OAB-EVAL::BATCH]      PEÇA: ${stats.pontuacao.peca?.total || 0}/${stats.pontuacao.peca?.esperado || 5} ${stats.pontuacao.peca?.ok ? '✅' : '❌'}`);
         console.log(`[OAB-EVAL::BATCH]      QUESTÕES: ${stats.pontuacao.questoes?.total || 0}/${stats.pontuacao.questoes?.esperado || 5} ${stats.pontuacao.questoes?.ok ? '✅' : '❌'}`);
         console.log(`[OAB-EVAL::BATCH]      GERAL: ${stats.pontuacao.geral?.total || 0}/${stats.pontuacao.geral?.esperado || 10} ${stats.pontuacao.geral?.ok ? '✅' : '❌'}`);
-        console.log(`[OAB-EVAL::BATCH]   📈 Por Questão:`, JSON.stringify(pontuacaoPorQuestao));
+        console.log(`[OAB-EVAL::BATCH]   📈 Por Questão:`);
+        Object.entries(pontuacaoPorQuestao).forEach(([label, dados]) => {
+          const total = dados.total.toFixed(2);
+          const esperado = dados.esperado.toFixed(2);
+          const delta = dados.desvio >= 0 ? `+${dados.desvio.toFixed(2)}` : dados.desvio.toFixed(2);
+          console.log(`[OAB-EVAL::BATCH]      ${label}: ${total}/${esperado} ${dados.ok ? '✅' : '❌'} (Δ${delta})`);
+        });
         
       } catch (error) {
         console.error(`[OAB-EVAL::BATCH] Erro para ${file.name}:`, error);

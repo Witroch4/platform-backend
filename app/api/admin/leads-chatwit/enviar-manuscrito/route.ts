@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server';
 import { getPrismaInstance } from '@/lib/connections';
 import { getOabEvalConfig } from '@/lib/config';
 import { enqueueTranscription } from '@/lib/oab-eval/transcription-queue';
+import { enqueueMirrorGeneration } from '@/lib/oab-eval/mirror-queue';
 
 const prisma = getPrismaInstance();
-const { agentelocal: USE_LOCAL_TRANSCRIBER } = getOabEvalConfig();
+const { agentelocal: USE_LOCAL_TRANSCRIBER, agentelocal_espelho: USE_LOCAL_MIRROR_AGENT } = getOabEvalConfig();
 
 interface IncomingManuscriptImage {
   id?: string;
@@ -67,6 +68,7 @@ export async function POST(request: Request): Promise<Response> {
     
     // Declarar variável do espelho padrão fora do bloco
     let espelhoPadraoTexto = null;
+    let espelhoPadraoId: string | undefined = undefined;
     
     // Se for espelho para biblioteca ou recurso, não atualizar lead específico
     if (isEspelhoBiblioteca) {
@@ -83,6 +85,7 @@ export async function POST(request: Request): Promise<Response> {
         select: {
           id: true,
           especialidade: true,
+          espelhoPadraoId: true,
           lead: {
             select: {
               sourceIdentifier: true,
@@ -104,6 +107,7 @@ export async function POST(request: Request): Promise<Response> {
             select: {
               id: true,
               especialidade: true,
+          espelhoPadraoId: true,
               lead: {
                 select: {
                   sourceIdentifier: true,
@@ -125,6 +129,7 @@ export async function POST(request: Request): Promise<Response> {
             select: {
               id: true,
               especialidade: true,
+          espelhoPadraoId: true,
               lead: {
                 select: {
                   sourceIdentifier: true,
@@ -146,6 +151,7 @@ export async function POST(request: Request): Promise<Response> {
             select: {
               id: true,
               especialidade: true,
+          espelhoPadraoId: true,
               lead: {
                 select: {
                   sourceIdentifier: true,
@@ -168,13 +174,62 @@ export async function POST(request: Request): Promise<Response> {
       
       resolvedLeadId = lead.id;
 
-      // Buscar espelho padrão se lead tiver especialidade definida
-      if (lead.especialidade && (isEspelho || isManuscrito)) {
-        console.log(`[Enviar Documento] Buscando espelho padrão para especialidade: ${lead.especialidade}`);
-        
-        const espelhoPadrao = await prisma.espelhoPadrao.findUnique({
-          where: { 
-            especialidade: lead.especialidade,
+      // IMPORTANTE: Para agente local, espelhoPadraoId vem do frontend OU do banco (se já foi selecionado)
+      // Para fluxo legado N8N, busca automaticamente por especialidade
+      espelhoPadraoId = payload.espelhoPadraoId;
+
+      // Se não veio no payload, buscar do banco (pode ter sido selecionado antes)
+      if (!espelhoPadraoId && lead.espelhoPadraoId) {
+        espelhoPadraoId = lead.espelhoPadraoId;
+        console.log(`[Enviar Documento] 🔍 espelhoPadraoId encontrado no banco: ${espelhoPadraoId}`);
+      }
+
+      if (espelhoPadraoId) {
+        // Frontend enviou ID do espelho selecionado pelo usuário
+        console.log(`[Enviar Documento] Usando espelho padrão selecionado: ${espelhoPadraoId}`);
+
+        // Tentar buscar em OabRubric (agente local) primeiro
+        const oabRubric = await prisma.oabRubric.findUnique({
+          where: { id: espelhoPadraoId },
+          select: {
+            id: true,
+            schema: true,
+            meta: true,
+            exam: true,
+            area: true
+          }
+        });
+
+        if (oabRubric) {
+          console.log(`[Enviar Documento] ✅ OabRubric encontrado (agente local): ${oabRubric.exam} - ${(oabRubric.meta as any)?.area || oabRubric.area}`);
+          // Para OabRubric, não há textoMarkdown - será gerado pelo agente
+          espelhoPadraoTexto = null; // Agente local gerará dinamicamente
+        } else {
+          // Fallback: tentar buscar em EspelhoPadrao (legado)
+          const espelhoPadrao = await prisma.espelhoPadrao.findUnique({
+            where: { id: espelhoPadraoId },
+            select: {
+              id: true,
+              textoMarkdown: true,
+              nome: true,
+              especialidade: true
+            }
+          });
+
+          if (espelhoPadrao?.textoMarkdown) {
+            espelhoPadraoTexto = espelhoPadrao.textoMarkdown;
+            console.log(`[Enviar Documento] ✅ Espelho padrão encontrado (legado): ${espelhoPadrao.nome} (${espelhoPadrao.especialidade})`);
+          } else {
+            console.warn(`[Enviar Documento] ⚠️ Espelho padrão ${espelhoPadraoId} não encontrado em OabRubric nem EspelhoPadrao`);
+          }
+        }
+      } else if (lead.especialidade && (isEspelho || isManuscrito)) {
+        // Fallback: buscar automaticamente por especialidade (comportamento antigo)
+        console.log(`[Enviar Documento] Buscando espelho padrão automaticamente para: ${lead.especialidade}`);
+
+        const espelhoPadrao = await prisma.espelhoPadrao.findFirst({
+          where: {
+            especialidade: lead.especialidade as any, // Cast porque especialidade agora é String, mas EspelhoPadrao ainda usa enum
             isAtivo: true,
             processado: true
           },
@@ -182,14 +237,15 @@ export async function POST(request: Request): Promise<Response> {
             id: true,
             textoMarkdown: true,
             nome: true
-          }
+          },
+          orderBy: { updatedAt: 'desc' }  // Pega o mais recente
         });
-        
+
         if (espelhoPadrao?.textoMarkdown) {
           espelhoPadraoTexto = espelhoPadrao.textoMarkdown;
-          console.log(`[Enviar Documento] ✅ Espelho padrão encontrado: ${espelhoPadrao.nome}`);
+          console.log(`[Enviar Documento] ✅ Espelho padrão encontrado (auto): ${espelhoPadrao.nome}`);
         } else {
-          console.log(`[Enviar Documento] ⚠️ Espelho padrão não encontrado ou sem texto processado para especialidade: ${lead.especialidade}`);
+          console.log(`[Enviar Documento] ⚠️ Nenhum espelho padrão ativo para: ${lead.especialidade}`);
         }
       }
       
@@ -233,6 +289,9 @@ export async function POST(request: Request): Promise<Response> {
     
     const shouldUseLocalManuscritoAgent =
       USE_LOCAL_TRANSCRIBER && isManuscrito && !isEspelho && !isProva;
+
+    const shouldUseLocalMirrorAgent =
+      USE_LOCAL_MIRROR_AGENT && isEspelho && !isManuscrito && !isProva;
 
     if (shouldUseLocalManuscritoAgent) {
       if (!resolvedLeadId) {
@@ -292,6 +351,80 @@ export async function POST(request: Request): Promise<Response> {
         jobId: job.id,
         leadId: resolvedLeadId,
         totalPages: imagensPreparadas.length,
+      }, { status: 202 }); // 202 Accepted (processamento assíncrono)
+    }
+
+    // Processamento local de espelho
+    if (shouldUseLocalMirrorAgent) {
+      if (!resolvedLeadId) {
+        throw new Error("Lead não identificado para processamento local do espelho");
+      }
+
+      // Buscar especialidade do lead
+      const leadData = await prisma.leadOabData.findUnique({
+        where: { id: resolvedLeadId },
+        select: { especialidade: true }
+      });
+
+      if (!leadData?.especialidade) {
+        throw new Error("Lead sem especialidade definida. Defina a especialidade antes de processar o espelho.");
+      }
+
+      const imagensEspelho: IncomingManuscriptImage[] = Array.isArray(
+        payloadFinal.arquivos_imagens_espelho,
+      )
+        ? (payloadFinal.arquivos_imagens_espelho as IncomingManuscriptImage[])
+        : Array.isArray(payloadFinal.arquivos)
+          ? (payloadFinal.arquivos as IncomingManuscriptImage[])
+          : [];
+
+      if (!imagensEspelho.length) {
+        console.error("[Enviar Espelho][Local] Nenhuma imagem fornecida para processamento");
+        throw new Error("Nenhuma imagem do espelho foi fornecida");
+      }
+
+      const imagensPreparadas = imagensEspelho
+        .map((imagem, index) => ({
+          id: String(imagem.id ?? `${resolvedLeadId}-espelho-${index}`),
+          url: imagem.url ?? imagem.dataUrl ?? imagem.data_url ?? "",
+          nome: imagem.nome ?? `Espelho ${index + 1}`,
+          page: index + 1,
+        }))
+        .filter((imagem) => Boolean(imagem.url));
+
+      if (!imagensPreparadas.length) {
+        console.error("[Enviar Espelho][Local] Todas as imagens recebidas estão sem URL válida");
+        throw new Error("Imagens do espelho sem URL válida");
+      }
+
+      console.log(
+        `[Enviar Espelho][Queue] Enfileirando geração de espelho de ${imagensPreparadas.length} imagens (lead ${resolvedLeadId}, especialidade: ${leadData.especialidade})`,
+      );
+
+      // Enfileirar na mirror queue (retorna 202 imediatamente)
+      const job = await enqueueMirrorGeneration({
+        leadId: resolvedLeadId,
+        especialidade: leadData.especialidade,
+        espelhoPadraoId: espelhoPadraoId || undefined, // ⭐ NOVO: ID do OabRubric selecionado
+        images: imagensPreparadas,
+        telefone: payload.telefone,
+        nome: payload.nome,
+        userId: payload.userId || 'system',
+        priority: payload.priority || 2,
+      });
+
+      console.log(
+        `[Enviar Espelho][Queue] Job ${job.id} enfileirado com sucesso`,
+      );
+
+      return NextResponse.json({
+        success: true,
+        message: `Espelho adicionado à fila de processamento`,
+        mode: "queued",
+        jobId: job.id,
+        leadId: resolvedLeadId,
+        totalImages: imagensPreparadas.length,
+        especialidade: leadData.especialidade,
       }, { status: 202 }); // 202 Accepted (processamento assíncrono)
     }
 

@@ -93,15 +93,16 @@ export function LeadItem({
   };
 
   // Handler para mudança de especialidade do lead
-  const handleEspelhoPadraoChange = (leadId: string, especialidade: string | null) => {
+  const handleEspelhoPadraoChange = (leadId: string, especialidade: string | null, espelhoPadraoId?: string) => {
     // Atualizar o lead localmente com flag especial para evitar efeitos colaterais
     const updatedLead = {
       ...lead,
-      especialidade: especialidade as any, // Cast para EspecialidadeJuridica
+      especialidade: especialidade, // Agora aceita qualquer string (removido enum)
+      espelhoPadraoId: espelhoPadraoId,
       _especialidadeUpdate: true, // Flag para identificar que é apenas atualização de especialidade
       _skipDialog: true, // Flag para não abrir diálogos automaticamente
     };
-    
+
     // Notificar o componente pai sobre a mudança
     onEdit(updatedLead);
   };

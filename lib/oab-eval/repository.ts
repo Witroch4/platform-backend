@@ -35,6 +35,36 @@ export async function getRubricById(rubricId: string) {
   return withPrismaReconnect((client) => client.oabRubric.findUnique({ where: { id: rubricId } }));
 }
 
+interface UpdateRubricInput {
+  id: string;
+  payload: RubricPayload;
+  meta?: Record<string, unknown> | null;
+  code?: string | null;
+  exam?: string | null;
+  area?: string | null;
+  version?: string | null;
+}
+
+export async function updateRubric(input: UpdateRubricInput) {
+  const { id, payload, meta, code, exam, area, version } = input;
+  const data: Prisma.OabRubricUpdateInput = {
+    schema: payload as unknown as Prisma.InputJsonValue,
+    meta: (meta ?? payload.meta ?? null) as Prisma.InputJsonValue,
+  };
+
+  if (code !== undefined) data.code = code;
+  if (exam !== undefined) data.exam = exam;
+  if (area !== undefined) data.area = area;
+  if (version !== undefined) data.version = version;
+
+  return withPrismaReconnect((client) =>
+    client.oabRubric.update({
+      where: { id },
+      data,
+    }),
+  );
+}
+
 interface SaveSubmissionInput {
   leadOabDataId?: string;
   alunoNome?: string;

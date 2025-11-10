@@ -55,6 +55,7 @@ export async function POST(request: Request): Promise<Response> {
     const isEspelhoConsultoriaFase2 = webhookData.espelhoconsultoriafase2 === true;
     const isEspelhoParaBiblioteca = webhookData.espelhoparabiblioteca === true;
     const isEspelhoPadrao = webhookData.espelhoPadrao === true;
+    const isEspelhoLocalProcessado = webhookData.espelhoLocalProcessado === true; // NOVO: espelho gerado por agente local
     const isManuscrito = webhookData.manuscrito === true && webhookData.textoDAprova;
     const isAnalise = webhookData.analise === true;
     const isAnaliseSimulado = webhookData.analisesimulado === true;
@@ -127,6 +128,125 @@ export async function POST(request: Request): Promise<Response> {
         return NextResponse.json({
           success: false,
           message: `Erro ao processar pré-análise: ${error.message || 'Erro desconhecido'}`,
+        }, { status: 500 });
+      }
+    }
+
+    // NOVO: Processar espelho gerado localmente pelo agente
+    if (isEspelhoLocalProcessado) {
+      console.log("[Webhook][Local] Identificado espelho processado por agente local");
+
+      const leadID = webhookData.leadID || webhookData.leadId;
+
+      if (!leadID) {
+        console.error("[Webhook][Local] leadID não fornecido no payload do espelho local");
+        return NextResponse.json({
+          success: false,
+          message: "leadID é obrigatório para espelhos locais processados",
+        }, { status: 400 });
+      }
+
+      const { markdownMirror, jsonMirror, success, error } = webhookData;
+
+      if (!success) {
+        console.error(`[Webhook][Local] Erro no processamento do espelho: ${error}`);
+
+        // Atualizar lead com status de erro
+        await prisma.leadOabData.update({
+          where: { id: leadID },
+          data: {
+            espelhoProcessado: false,
+            aguardandoEspelho: false,
+          }
+        });
+
+        // Notificar erro via SSE
+        await sendSseNotification(leadID, {
+          type: 'mirrorError',
+          message: `Erro ao gerar espelho: ${error}`,
+          leadId: leadID,
+          error,
+          timestamp: new Date().toISOString()
+        });
+
+        return NextResponse.json({
+          success: false,
+          message: `Erro ao processar espelho local: ${error}`,
+        }, { status: 500 });
+      }
+
+      if (!markdownMirror && !jsonMirror) {
+        console.error("[Webhook][Local] Espelho local sem dados de saída (markdownMirror e jsonMirror ausentes)");
+        return NextResponse.json({
+          success: false,
+          message: "Espelho local processado mas sem dados de saída",
+        }, { status: 400 });
+      }
+
+      try {
+        const textoDOEspelho = jsonMirror ?? markdownMirror;
+
+        // Atualizar lead com espelho processado
+        const leadUpdate = await prisma.leadOabData.update({
+          where: { id: leadID },
+          data: {
+            textoDOEspelho,
+            espelhoProcessado: true,
+            aguardandoEspelho: false,
+          },
+        });
+
+        console.log(`[Webhook][Local] ✅ Espelho local salvo para lead ${leadID}`);
+
+        // Buscar dados atualizados do lead para notificação
+        const leadData = await prisma.leadOabData.findUnique({
+          where: { id: leadID },
+          select: {
+            id: true,
+            nomeReal: true,
+            concluido: true,
+            manuscritoProcessado: true,
+            aguardandoManuscrito: true,
+            espelhoProcessado: true,
+            aguardandoEspelho: true,
+            analiseProcessada: true,
+            aguardandoAnalise: true,
+            analiseValidada: true,
+            situacao: true,
+            notaFinal: true,
+            textoDOEspelho: true,
+            provaManuscrita: true,
+            imagensConvertidas: true,
+          },
+        });
+
+        // Notificar frontend via SSE
+        await sendSseNotification(leadID, {
+          type: 'leadUpdate',
+          message: 'Seu espelho de correção foi processado com sucesso!',
+          leadData: {
+            ...leadData,
+            provaManuscrita: leadData?.provaManuscrita ? '[Omitido - manuscrito presente]' : null,
+            textoDOEspelho: leadData?.textoDOEspelho ? '[Omitido - espelho presente]' : null,
+            imagensConvertidas: Array.isArray(leadData?.imagensConvertidas)
+              ? `[${(leadData.imagensConvertidas as any[]).length} imagens]`
+              : null,
+          },
+          timestamp: new Date().toISOString(),
+        });
+
+        console.log(`[Webhook][Local] ✅ Notificação SSE enviada para lead ${leadID}`);
+
+        return NextResponse.json({
+          success: true,
+          message: "Espelho local processado e salvo com sucesso",
+          leadId: leadID,
+        });
+      } catch (error: any) {
+        console.error("[Webhook][Local] Erro ao salvar espelho local:", error);
+        return NextResponse.json({
+          success: false,
+          message: `Erro ao salvar espelho local: ${error.message || 'Erro desconhecido'}`,
         }, { status: 500 });
       }
     }
@@ -1245,5 +1365,3 @@ export async function GET(request: Request): Promise<Response> {
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-

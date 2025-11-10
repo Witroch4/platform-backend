@@ -68,7 +68,16 @@
       "Bash(done)",
       "Bash(ls:*)",
       "Bash(export NODE_ENV=development)",
-      "Bash(npx ts-node:*)"
+      "Bash(npx ts-node:*)",
+      "Bash(PGPASSWORD=postgres psql -h localhost -U postgres -d socialwise -c \"\\dt public.\"\"AiAgentBlueprint\"\"\")",
+      "Bash(mv:*)",
+      "Bash(docker exec:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker restart:*)",
+      "Bash(cat:*)",
+      "Bash(PGPASSWORD=postgres psql:*)",
+      "Bash(touch:*)",
+      "Bash(git log:*)"
     ],
     "deny": [],
     "ask": []

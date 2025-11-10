@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getPrismaInstance } from '@/lib/connections';
+import { optimizeMirrorPayload, estimateTokenSavings } from '@/lib/oab-eval/mirror-formatter';
+import type { StudentMirrorPayload } from '@/lib/oab-eval/types';
+
 const prisma = getPrismaInstance();
 
 /**
@@ -64,6 +67,45 @@ export async function POST(req: Request) {
       temEspelho: !!(lead.textoDOEspelho || lead.espelhoCorrecao)
     });
 
+    // ⭐ OTIMIZAÇÃO: Processar espelho se existir
+    let espelhoOtimizado = lead.textoDOEspelho;
+    if (lead.textoDOEspelho && typeof lead.textoDOEspelho === 'string') {
+      try {
+        const espelhoParsed = JSON.parse(lead.textoDOEspelho);
+
+        // Verificar se é um StudentMirrorPayload válido
+        if (espelhoParsed && espelhoParsed.meta && espelhoParsed.aluno && espelhoParsed.itens) {
+          const originalJson = JSON.stringify(espelhoParsed);
+          const originalSize = originalJson.length;
+
+          try {
+            // Otimizar removendo campos desnecessários
+            const espelhoOtimizadoObj = optimizeMirrorPayload(espelhoParsed as StudentMirrorPayload);
+            const optimizedJson = JSON.stringify(espelhoOtimizadoObj);
+            const optimizedSize = optimizedJson.length;
+
+            // Calcular economia
+            const savings = estimateTokenSavings(originalJson, optimizedJson);
+
+            console.log("[Enviar Análise] 💾 Otimização de espelho:");
+            console.log(`[Enviar Análise]    Original: ${savings.original} bytes`);
+            console.log(`[Enviar Análise]    Otimizado: ${savings.optimized} bytes`);
+            console.log(`[Enviar Análise]    Economia: ${savings.savings}`);
+
+            // Usar versão otimizada
+            espelhoOtimizado = JSON.stringify(espelhoOtimizadoObj);
+            console.log("[Enviar Análise] ✅ Espelho otimizado com sucesso");
+          } catch (optimizeError: any) {
+            console.warn("[Enviar Análise] ⚠️ Erro ao otimizar espelho, usando original:", optimizeError.message);
+            // Continua com original
+          }
+        }
+      } catch (parseError) {
+        // Se não for JSON válido, continua com original
+        console.log("[Enviar Análise] ℹ️ textoDOEspelho não é JSON válido, enviando como está");
+      }
+    }
+
     // Preparar payload para o sistema externo
     const payload = {
       leadID: lead.id,
@@ -83,8 +125,8 @@ export async function POST(req: Request) {
       }] : [],
       // Incluir dados do manuscrito se existir
       textoManuscrito: lead.provaManuscrita || "",
-      // Incluir dados do espelho se existir
-      textoEspelho: lead.textoDOEspelho || "",
+      // Incluir dados do espelho otimizado se existir
+      textoEspelho: espelhoOtimizado || "",
       ...(lead.espelhoCorrecao && {
         arquivos_imagens_espelho: JSON.parse(lead.espelhoCorrecao).map((url: string, index: number) => ({
           id: `${lead.id}-espelho-${index}`,

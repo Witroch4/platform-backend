@@ -236,11 +236,27 @@ const DEFAULT_SCHEMA_DOCS = {
     "palavras_chave",
     "embedding_text",
   ],
+  group_fields: [
+    "id",
+    "escopo",
+    "questao",
+    "indice",
+    "rotulo",
+    "segmento",
+    "descricao",
+    "descricao_bruta",
+    "descricao_limpa",
+    "peso_maximo",
+    "pesos_opcoes",
+    "pesos_brutos",
+    "subitens",
+  ],
   notas: [
     "Itens com OU viram 'alternativas_grupo' para permitir múltiplos caminhos válidos.",
     "Fundamentos jurídicos listam artigos/leis/súmulas citadas no padrão.",
     "palavras_chave inclui sinônimos comuns.",
     "embedding_text é o texto canônico sugerido para gerar embeddings de alta qualidade.",
+    "grupos agregam os subitens exatamente como o padrão oficial apresenta cada linha da tabela.",
   ],
 };
 
@@ -255,6 +271,13 @@ function convertDeterministicToPayload(parsed: GabaritoAtomico, fileName?: strin
     }
   });
 
+  const preferredVariants: Record<string, string> = {};
+  for (const grupo of parsed.grupos ?? []) {
+    if (grupo.variant_family && grupo.variant_key && !preferredVariants[grupo.variant_family]) {
+      preferredVariants[grupo.variant_family] = grupo.variant_key;
+    }
+  }
+
   return {
     meta: {
       exam: parsed.meta.exam,
@@ -264,6 +287,7 @@ function convertDeterministicToPayload(parsed: GabaritoAtomico, fileName?: strin
       versao_schema: parsed.meta.versao_schema,
       gerado_em: parsed.meta.gerado_em,
       fileName,
+      ...(Object.keys(preferredVariants).length ? { preferred_variants: preferredVariants } : {}),
     },
     schema_docs: DEFAULT_SCHEMA_DOCS,
     itens: parsed.itens.map((item) => ({
@@ -276,6 +300,24 @@ function convertDeterministicToPayload(parsed: GabaritoAtomico, fileName?: strin
       alternativas_grupo: item.ou_group_id ? groupMap.get(item.ou_group_id) : undefined,
       palavras_chave: item.palavras_chave,
       embedding_text: item.embedding_text,
+    })),
+    grupos: (parsed.grupos || []).map((grupo) => ({
+      id: grupo.id,
+      escopo: grupo.escopo,
+      questao: grupo.questao,
+      indice: grupo.indice,
+      rotulo: grupo.rotulo,
+      segmento: grupo.segmento ?? null,
+      descricao: grupo.descricao,
+      descricao_bruta: grupo.descricao_bruta,
+      descricao_limpa: grupo.descricao_limpa,
+      peso_maximo: Number((grupo.peso_maximo ?? 0).toFixed(2)),
+      pesos_opcoes: (grupo.pesos_opcoes || []).map((p) => Number(p.toFixed(2))),
+      pesos_brutos: (grupo.pesos_brutos || []).map((p) => Number(p.toFixed(2))),
+      subitens: grupo.subitens,
+      variant_family: grupo.variant_family,
+      variant_key: grupo.variant_key,
+      variant_label: grupo.variant_label,
     })),
   };
 }
@@ -341,6 +383,16 @@ export async function buildRubricFromPdf(buffer: Buffer, options: BuildRubricOpt
     const payload = convertDeterministicToPayload(deterministic, options.fileName);
     const verificacao = verificarPontuacao(deterministic.itens);
 
+    const gruposDet = deterministic.grupos ?? [];
+    const gruposPeca = gruposDet.filter((g) => g.questao === "PEÇA");
+    const gruposQuestoes = gruposDet.filter((g) => g.questao !== "PEÇA");
+    const gruposPorVariant = gruposDet.reduce<Record<string, string[]>>((acc, grupo) => {
+      const key = `${grupo.questao}::${grupo.variant_family || 'default'}::${grupo.variant_key || 'default'}`;
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(grupo.id);
+      return acc;
+    }, {});
+
     console.info("[OAB::RUBRIC_UPLOAD::DETERMINISTIC]", {
       itens: payload.itens.length,
       meta: payload.meta,
@@ -348,6 +400,18 @@ export async function buildRubricFromPdf(buffer: Buffer, options: BuildRubricOpt
         peca: { total: verificacao.peca.total, ok: verificacao.peca.ok },
         questoes: { total: verificacao.questoes.total, ok: verificacao.questoes.ok },
         geral: { total: verificacao.geral.total, ok: verificacao.geral.ok }
+      },
+      grupos: {
+        total: gruposDet.length,
+        peca: {
+          total: gruposPeca.length,
+          ids: gruposPeca.map((g) => g.id),
+        },
+        questoes: {
+          total: gruposQuestoes.length,
+          ids: gruposQuestoes.map((g) => g.id),
+        },
+        por_variant: gruposPorVariant,
       }
     });
     return payload;
@@ -408,6 +472,16 @@ export async function buildRubricFromPdf(buffer: Buffer, options: BuildRubricOpt
   const payload = convertDeterministicToPayload(deterministic, options.fileName);
   const verificacao = verificarPontuacao(deterministic.itens);
 
+  const gruposDet = deterministic.grupos ?? [];
+  const gruposPeca = gruposDet.filter((g) => g.questao === "PEÇA");
+  const gruposQuestoes = gruposDet.filter((g) => g.questao !== "PEÇA");
+  const gruposPorVariant = gruposDet.reduce<Record<string, string[]>>((acc, grupo) => {
+    const key = `${grupo.questao}::${grupo.variant_family || 'default'}::${grupo.variant_key || 'default'}`;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(grupo.id);
+    return acc;
+  }, {});
+
   console.error("[OAB::RUBRIC_UPLOAD::FORCED_DETERMINISTIC] LLM seria acionada mas foi forçado parser determinístico", {
     itens: payload.itens.length,
     meta: payload.meta,
@@ -415,6 +489,18 @@ export async function buildRubricFromPdf(buffer: Buffer, options: BuildRubricOpt
       peca: { total: verificacao.peca.total, ok: verificacao.peca.ok },
       questoes: { total: verificacao.questoes.total, ok: verificacao.questoes.ok },
       geral: { total: verificacao.geral.total, ok: verificacao.geral.ok }
+    },
+    grupos: {
+      total: gruposDet.length,
+      peca: {
+        total: gruposPeca.length,
+        ids: gruposPeca.map((g) => g.id),
+      },
+      questoes: {
+        total: gruposQuestoes.length,
+        ids: gruposQuestoes.map((g) => g.id),
+      },
+      por_variant: gruposPorVariant,
     },
     fallbackReasons: {
       noItems: !deterministic.itens.length,

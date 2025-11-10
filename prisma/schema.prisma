@@ -170,7 +170,8 @@ model LeadOabData {
   situacao               String?
   inscricao              String?
   examesParticipados     Json?
-  especialidade          EspecialidadeJuridica?
+  especialidade          String? // Área jurídica (ex: "DIREITO DO TRABALHO", "TRABALHO" - aceita qualquer string)
+  espelhoPadraoId        String? // ID do espelho padrão selecionado (OabRubric ou EspelhoPadrao)
   usuarioChatwitId       String
   espelhoBibliotecaId    String?
   arquivos               ArquivoLeadOab[]

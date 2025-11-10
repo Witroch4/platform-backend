@@ -368,6 +368,9 @@ export async function GET(request: Request): Promise<Response> {
         situacao: lead.situacao || null,
         inscricao: lead.inscricao || null,
         examesParticipados: lead.examesParticipados || null,
+        // Campos de especialidade e espelho padrão
+        especialidade: lead.especialidade || null,
+        espelhoPadraoId: lead.espelhoPadraoId || null,
         arquivos: lead.arquivos || [],
       };
     });

@@ -13,11 +13,30 @@ export type Subitem = {
   palavras_chave: string[];
   embedding_text: string;
   ou_group_id?: string;
-  ou_group_mode?: "pick_best";
+  ou_group_mode?: "pick_best" | "pick_sum";
   variant_family?: string;
   variant_key?: string;
   variant_label?: string;
   flags?: { missingParts?: boolean };
+};
+
+export type GabaritoGrupo = {
+  id: string;
+  escopo: Escopo;
+  questao: "PEÇA" | `Q${1 | 2 | 3 | 4}`;
+  indice: number;
+  rotulo: string;
+  segmento?: string | null;
+  descricao: string;
+  descricao_bruta: string;
+  descricao_limpa: string;
+  peso_maximo: number;
+  pesos_opcoes: number[];
+  pesos_brutos: number[];
+  subitens: string[];
+  variant_family?: string;
+  variant_key?: string;
+  variant_label?: string;
 };
 
 export type GabaritoAtomico = {
@@ -30,6 +49,7 @@ export type GabaritoAtomico = {
     gerado_em: string;
   };
   itens: Subitem[];
+  grupos: GabaritoGrupo[];
 };
 
 export type ParseMetaInput = {
@@ -111,6 +131,13 @@ const RX_PAGE_NOISE = /ORDEM DOS ADVOGADOS[\s\S]*$/i;
 // Remoção de tokens "(0,xx)" nas descrições - deve ser consistente com RX_DEC_ANY
 const RX_SCORE = /\([\s\n]*\d{1,2}[\s\n]*[.,][\s\n]*\d{2}[\s\n]*\)/g;
 
+const SECTION_CUTOFF_MARKERS: RegExp[] = [
+  /Gabarito Comentado/i,
+  /Distribui[çc][aã]o dos Pontos/i,
+  /PADR[ÃA]O DE RESPOSTA/i,
+  /ORDEM DOS ADVOGADOS DO BRASIL/i,
+];
+
 // Regex para linha de matriz de pontuação ("0,00/0,10/0,20/...")
 const RX_MATRIZ = /^0[0-9\s/,\.]+$/;
 const ABC = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -152,6 +179,18 @@ function decToNum(s: string): number {
 
 function uniq<T>(arr: T[]) {
   return Array.from(new Set(arr));
+}
+
+function stripSectionTail(text: string): string {
+  if (!text) return text;
+  let result = text;
+  for (const marker of SECTION_CUTOFF_MARKERS) {
+    const idx = result.search(marker);
+    if (idx > 0) {
+      result = result.slice(0, idx);
+    }
+  }
+  return result;
 }
 
 type Secao = { tipo: "PEÇA" | `Q${1 | 2 | 3 | 4}`; texto: string };
@@ -196,6 +235,7 @@ function splitSecoesDistribuicao(t: string): Secao[] {
 type LinhaItem = {
   rotulo: string;
   descricao: string;
+  descricao_raw: string;
   pesos: number[];
   temOU: boolean;
   segmento?: string | null;
@@ -361,7 +401,14 @@ function parseLinhasItens(bloco: string, questao: "PEÇA" | `Q${1 | 2 | 3 | 4}`)
       console.log(`[LOG] Item finalizado: ${currentLabel} | pesos: [${pesos.join(', ')}] | temOU: ${temOU} | segmento: ${currentItemSegment || currentSegment || 'nenhum'}`);
     }
 
-    itens.push({ rotulo: currentLabel, descricao, pesos, temOU, segmento: currentItemSegment ?? currentSegment ?? null });
+    itens.push({
+      rotulo: currentLabel,
+      descricao,
+      descricao_raw: raw,
+      pesos,
+      temOU,
+      segmento: currentItemSegment ?? currentSegment ?? null,
+    });
     buf = [];
     currentLabel = "";
     currentItemSegment = null;
@@ -585,6 +632,24 @@ function slugifyVariantLabel(label: string) {
   return normalized || 'SEGMENTO';
 }
 
+function detectGabaritoVariant(desc: string, raw: string): string | undefined {
+  const rawText = `${desc} ${raw}`;
+  const normalized = rawText
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  if (process.env.DEBUG_GABARITO === '1' && desc.startsWith('Petição')) {
+    console.log('[DEBUG::VARIANT_SAMPLE]', normalized.substring(0, 150));
+  }
+  if (/excecao\s+de\s+pre-?executiv/.test(normalized)) {
+    return 'Exceção de Pré-Executividade';
+  }
+  if (/agravo\s+de\s+peticao/.test(normalized)) {
+    return 'Agravo de Petição';
+  }
+  return undefined;
+}
+
 // Segmenta um item da PEÇA em subpartes por posição dos tokens de pontuação "(0,xx)"
 function segmentarPorPesos(desc: string): string[] {
   const tokens: { start: number; end: number; peso: number }[] = [];
@@ -745,6 +810,9 @@ export function parseGabaritoDeterministico(textoBruto: string, metaIn: ParseMet
   const secoes = splitSecoesDistribuicao(canonical);
 
   const itens: Subitem[] = [];
+  const gruposBuilders: Array<{ group: GabaritoGrupo; pesoOptions: number[] }> = [];
+  const gruposPorId = new Map<string, Array<{ group: GabaritoGrupo; pesoOptions: number[] }>>();
+  const grupoCounters = new Map<string, number>();
 
   secoes.forEach((sec) => {
     const escopo: Escopo = sec.tipo === "PEÇA" ? "Peça" : "Questão";
@@ -772,16 +840,137 @@ export function parseGabaritoDeterministico(textoBruto: string, metaIn: ParseMet
 
     let idxItem = 0;
 
+    let currentGabaritoVariant: { variant_family: string; variant_key: string; variant_label?: string } | undefined;
+
     linhas.forEach((li) => {
       const segmentKey = (li.segmento || "").trim();
       const segmentMeta = segmentIdentifiers.get(segmentKey);
-      const variantFields = segmentMeta && variantFamilyBase
-        ? {
-            variant_family: variantFamilyBase,
-            variant_key: segmentMeta.slug,
-            variant_label: segmentMeta.label,
-          }
-        : undefined;
+      const descricaoBase = stripSectionTail(li.descricao);
+      const descricaoRawBase = stripSectionTail(li.descricao_raw);
+
+      if (process.env.DEBUG_GABARITO === '1' && questao === 'PEÇA') {
+        console.log('[DEBUG::ITEM]', li.rotulo, descricaoBase.substring(0, 60));
+      }
+      const gabaritoLabel = questao === 'PEÇA' ? detectGabaritoVariant(descricaoBase, descricaoRawBase) : undefined;
+      if (process.env.DEBUG_GABARITO === '1' && questao === 'PEÇA' && gabaritoLabel) {
+        console.log('[GABARITO::VARIANT]', { rotulo: li.rotulo, gabaritoLabel });
+      }
+      let variantFamily: string | undefined;
+      let variantKey: string | undefined;
+      let variantLabel: string | undefined;
+
+      let variantInfo: { variant_family: string; variant_key: string; variant_label?: string } | undefined;
+
+      if (gabaritoLabel) {
+        variantFamily = `${questao}-GABARITO`;
+        variantKey = slugifyVariantLabel(gabaritoLabel);
+        variantLabel = gabaritoLabel;
+        variantInfo = { variant_family: variantFamily, variant_key: variantKey, variant_label: variantLabel };
+        currentGabaritoVariant = variantInfo;
+      } else if (!variantInfo && currentGabaritoVariant) {
+        variantFamily = currentGabaritoVariant.variant_family;
+        variantKey = currentGabaritoVariant.variant_key;
+        variantLabel = currentGabaritoVariant.variant_label;
+        variantInfo = { ...currentGabaritoVariant };
+      } else if (segmentMeta && variantFamilyBase) {
+        variantFamily = variantFamilyBase;
+        variantKey = segmentMeta.slug || '__DEFAULT__';
+        variantLabel = segmentMeta.label;
+        variantInfo = { variant_family: variantFamily, variant_key: variantKey, variant_label: variantLabel };
+      } else if (variantFamilyBase) {
+        variantFamily = variantFamilyBase;
+        variantKey = 'SEGMENTO';
+        variantLabel = segmentMeta?.label;
+        variantInfo = { variant_family: variantFamily, variant_key: variantKey, variant_label: variantLabel };
+      }
+
+      // SOLUÇÃO: Usar rótulo + sufixo da variante para evitar duplicação de IDs
+      // Ex: PEÇA-G11 (genérico) vs PEÇA-G11-AGRAVO (variante específica)
+      const rotuloNumerico = li.rotulo.match(/^\d+/)?.[0];
+      const indiceGrupo = rotuloNumerico ? parseInt(rotuloNumerico, 10) : ((grupoCounters.get(questao) ?? 0) + 1);
+
+      const counterKey = questao;
+      grupoCounters.set(counterKey, indiceGrupo);
+
+      const grupoId = `${questao}-G${String(indiceGrupo).padStart(2, '0')}`;
+
+      const builderList = gruposPorId.get(grupoId) ?? [];
+      const currentVariantKey = variantFamily ? `${variantFamily}::${variantKey ?? '__DEFAULT__'}` : '__BASE__';
+
+      let grupoBuilder = builderList.find((existing) => {
+        const existingVariant = existing.group.variant_family
+          ? `${existing.group.variant_family}::${existing.group.variant_key ?? '__DEFAULT__'}`
+          : '__BASE__';
+        return existingVariant === currentVariantKey;
+      });
+
+      const ensureUniqueGroupId = (baseId: string, suffixSource: string | undefined, fallbackIndex: number) => {
+        const normalizedSuffix = (suffixSource || `ALT${fallbackIndex}`)
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^A-Za-z0-9]/g, '_')
+          .replace(/^_+|_+$/g, '')
+          .toUpperCase() || `ALT${fallbackIndex}`;
+        let candidate = `${baseId}-${normalizedSuffix}`;
+        let attempt = 2;
+        while (gruposBuilders.some((builder) => builder.group.id === candidate)) {
+          candidate = `${baseId}-${normalizedSuffix}-${attempt}`;
+          attempt += 1;
+        }
+        return candidate;
+      };
+
+      if (!grupoBuilder) {
+        const uniqueId = builderList.length === 0
+          ? grupoId
+          : ensureUniqueGroupId(grupoId, variantKey || segmentMeta?.slug || variantLabel, builderList.length + 1);
+
+        const descricaoInicial = descricaoBase.trim();
+        const descricaoBrutaInicial = descricaoRawBase.trim();
+        grupoBuilder = {
+          group: {
+            id: uniqueId,
+            escopo,
+            questao: questao as GabaritoGrupo["questao"],
+            indice: indiceGrupo,
+            rotulo: rotuloNumerico ? rotuloNumerico : li.rotulo,
+            segmento: li.segmento ?? null,
+            descricao: descricaoInicial,
+            descricao_bruta: descricaoBrutaInicial,
+            descricao_limpa: sanitizeDescricao(descricaoBrutaInicial),
+            peso_maximo: 0,
+            pesos_opcoes: [] as number[],
+            pesos_brutos: li.pesos.map((p) => Number(p.toFixed(2))),
+            subitens: [] as string[],
+            variant_family: variantFamily,
+            variant_key: variantKey,
+            variant_label: variantLabel ?? segmentMeta?.label,
+          },
+          pesoOptions: [] as number[],
+        };
+        builderList.push(grupoBuilder);
+        gruposPorId.set(grupoId, builderList);
+        gruposBuilders.push(grupoBuilder);
+      } else {
+        // Unifica descrições duplicadas (casos como 5A/5B)
+        const descTrim = descricaoBase.trim();
+        if (descTrim && !grupoBuilder.group.descricao.includes(descTrim)) {
+          grupoBuilder.group.descricao = `${grupoBuilder.group.descricao}\n${descTrim}`.trim();
+        }
+        const descRawTrim = descricaoRawBase.trim();
+        if (descRawTrim && !grupoBuilder.group.descricao_bruta.includes(descRawTrim)) {
+          grupoBuilder.group.descricao_bruta = `${grupoBuilder.group.descricao_bruta}\n${descRawTrim}`.trim();
+          grupoBuilder.group.descricao_limpa = sanitizeDescricao(grupoBuilder.group.descricao_bruta);
+        }
+        grupoBuilder.group.pesos_brutos.push(...li.pesos.map((p) => Number(p.toFixed(2))));
+
+        if (!grupoBuilder.group.variant_family && variantFamily) {
+          grupoBuilder.group.variant_family = variantFamily;
+          grupoBuilder.group.variant_key = variantKey;
+          grupoBuilder.group.variant_label = variantLabel ?? segmentMeta?.label;
+        }
+      }
+
       const hasAlternative = li.temOU;
       // IMPORTANTE: Heurística refinada para QUESTÕES:
       // - Com 2-3 pesos + OU: normalmente fundamento legal alternativo (ex: "Art. X ou Súmula Y")
@@ -823,14 +1012,21 @@ export function parseGabaritoDeterministico(textoBruto: string, metaIn: ParseMet
             .replace(/[^A-Za-z0-9\-]/g, '')
         : undefined;
 
-      ramos.forEach((ramo, ramoIdx) => {
+      ramos.forEach((ramoOriginal, ramoIdx) => {
+        const ramo = stripSectionTail(ramoOriginal);
         // Usar pesos capturados no ramo específico, fallback para li.pesos apenas se não capturou nada
         const branchPesos = (pesosPorRamo[ramoIdx] && pesosPorRamo[ramoIdx].length)
           ? pesosPorRamo[ramoIdx]
           : li.pesos;
 
+        const branchTotal = Number(branchPesos.reduce((acc, p) => acc + (p ?? 0), 0).toFixed(2));
+        grupoBuilder.pesoOptions.push(branchTotal);
+        if (!Number.isNaN(branchTotal)) {
+          grupoBuilder.group.peso_maximo = Number(Math.max(grupoBuilder.group.peso_maximo, branchTotal).toFixed(2));
+        }
+
         // --- GRANULARIDADE ATÔMICA NA PEÇA (genérica, sem dicionário) ---
-        const descRaw = ramo.replace(RX_PAGE_NOISE, "");
+        const descRaw = stripSectionTail(ramo.replace(RX_PAGE_NOISE, ""));
         // saneia e remove tokens (0,xx)
         const descLimpa = sanitizeDescricao(descRaw);
 
@@ -867,7 +1063,7 @@ export function parseGabaritoDeterministico(textoBruto: string, metaIn: ParseMet
         }
 
         if (deveAtomizar) {
-          const partes = segmentarPorPesos(ramo); // usa o texto original do ramo para preservar contexto
+          const partes = segmentarPorPesos(ramo); // usa o texto original (já limpo) do ramo para preservar contexto
           
           // CASO ESPECIAL: Se segmentarPorPesos retornou 1 parte mas há múltiplos pesos,
           // é uma lista aditiva que deve somar todos os pesos no item único
@@ -896,7 +1092,7 @@ export function parseGabaritoDeterministico(textoBruto: string, metaIn: ParseMet
               peso: Number(pesoSomado.toFixed(2)),
               fundamentos,
               palavras_chave: palavras,
-              ...(variantFields ?? {}),
+              ...(variantInfo ?? {}),
               flags: {}
             };
             const metaOut: GabaritoAtomico["meta"] = {
@@ -908,7 +1104,9 @@ export function parseGabaritoDeterministico(textoBruto: string, metaIn: ParseMet
               gerado_em: new Date().toISOString()
             };
             const embedding_text = makeEmbeddingText(metaOut, baseSub);
-            itens.push({ ...baseSub, embedding_text });
+            const subitemFinal = { ...baseSub, embedding_text };
+            itens.push(subitemFinal);
+            grupoBuilder.group.subitens.push(subitemFinal.id);
             return; // Não processar mais este ramo
           }
           
@@ -965,7 +1163,7 @@ export function parseGabaritoDeterministico(textoBruto: string, metaIn: ParseMet
               peso: peso > 0 ? Number(peso.toFixed(2)) : null,
               fundamentos,
               palavras_chave: palavras,
-              ...(variantFields ?? {}),
+              ...(variantInfo ?? {}),
               flags: {}
             };
             const metaOut: GabaritoAtomico["meta"] = {
@@ -977,7 +1175,9 @@ export function parseGabaritoDeterministico(textoBruto: string, metaIn: ParseMet
               gerado_em: new Date().toISOString()
             };
             const embedding_text = makeEmbeddingText(metaOut, baseSub);
-            itens.push({ ...baseSub, embedding_text });
+            const subitemFinal = { ...baseSub, embedding_text };
+            itens.push(subitemFinal);
+            grupoBuilder.group.subitens.push(subitemFinal.id);
           }
           return;
         }
@@ -1024,7 +1224,7 @@ export function parseGabaritoDeterministico(textoBruto: string, metaIn: ParseMet
           fundamentos,
           palavras_chave: palavras,
           ...(ouGroupId ? { ou_group_id: ouGroupId, ou_group_mode: "pick_best" as const } : {}),
-          ...(variantFields ?? {}),
+          ...(variantInfo ?? {}),
           flags: {}
         };
         const metaOut: GabaritoAtomico["meta"] = {
@@ -1036,8 +1236,21 @@ export function parseGabaritoDeterministico(textoBruto: string, metaIn: ParseMet
           gerado_em: new Date().toISOString()
         };
         const embedding_text = makeEmbeddingText(metaOut, baseSub);
-        itens.push({ ...baseSub, embedding_text });
+        const subitemFinal = { ...baseSub, embedding_text };
+        itens.push(subitemFinal);
+        grupoBuilder.group.subitens.push(subitemFinal.id);
       });
+
+      const opcoesNormalizadas = uniq(grupoBuilder.pesoOptions.map((p) => Number(p.toFixed(2))));
+      if (opcoesNormalizadas.length) {
+        grupoBuilder.group.pesos_opcoes = opcoesNormalizadas;
+        grupoBuilder.group.peso_maximo = Number(Math.max(...opcoesNormalizadas).toFixed(2));
+      } else {
+        const somaBruta = grupoBuilder.group.pesos_brutos.reduce((acc, p) => acc + (p ?? 0), 0);
+        const somaNormalizada = Number(somaBruta.toFixed(2));
+        grupoBuilder.group.pesos_opcoes = somaNormalizada ? [somaNormalizada] : [];
+        grupoBuilder.group.peso_maximo = somaNormalizada;
+      }
     });
   });
 
@@ -1045,6 +1258,9 @@ export function parseGabaritoDeterministico(textoBruto: string, metaIn: ParseMet
 
   // Debug da soma da PEÇA e verificação completa
   if (process.env.DEBUG_GABARITO === "1") {
+    const gruposPeca = gruposBuilders.filter((gb) => gb.group.questao === "PEÇA");
+    const gruposQuestoes = gruposBuilders.filter((gb) => gb.group.questao !== "PEÇA");
+    console.log(`[GABARITO::GRUPOS] PEÇA=${gruposPeca.length} | QUESTOES=${gruposQuestoes.length} | TOTAL=${gruposBuilders.length}`);
     console.log("[GABARITO::SOMA_PECA]", {
       somaPeca,
       itensPeca: itens.filter(i => i.questao === "PEÇA").length,
@@ -1072,7 +1288,8 @@ export function parseGabaritoDeterministico(textoBruto: string, metaIn: ParseMet
       versao_schema: "1.0",
       gerado_em: new Date().toISOString()
     },
-    itens
+    itens,
+    grupos: gruposBuilders.map((gb) => ({ ...gb.group })),
   };
 
   // Aplica pós-processamento para correções finais
@@ -1150,7 +1367,7 @@ export function postProcessDelta(g: GabaritoAtomico): GabaritoAtomico {
     it.embedding_text = makeEmbeddingText(g.meta, it);
     itens.push(it);
   }
-  return { ...g, itens };
+  return { ...g, itens, grupos: g.grupos };
 }
 
 // --- Dev helper (optional): quick smoke check ---

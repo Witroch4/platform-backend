@@ -6,7 +6,7 @@ const prisma = getPrismaInstance();
  */
 export async function PUT(request: Request): Promise<Response> {
   try {
-    const { leadId, especialidade } = await request.json();
+    const { leadId, especialidade, espelhoPadraoId } = await request.json();
 
     if (!leadId) {
       return NextResponse.json(
@@ -15,13 +15,14 @@ export async function PUT(request: Request): Promise<Response> {
       );
     }
 
-    console.log(`[Atualizar Especialidade] Atualizando lead ${leadId} com especialidade: ${especialidade}`);
+    console.log(`[Atualizar Especialidade] Atualizando lead ${leadId} com especialidade: ${especialidade}, espelhoPadraoId: ${espelhoPadraoId}`);
 
-    // Atualizar a especialidade do lead
+    // Atualizar a especialidade e espelhoPadraoId do lead
     const updatedLead = await prisma.leadOabData.update({
       where: { id: leadId },
       data: {
         especialidade: especialidade || null,
+        espelhoPadraoId: espelhoPadraoId || null,
       },
     });
 
@@ -29,7 +30,7 @@ export async function PUT(request: Request): Promise<Response> {
 
     return NextResponse.json({
       success: true,
-      message: "Especialidade atualizada com sucesso",
+      message: "Especialidade e espelho padrão atualizados com sucesso",
       lead: updatedLead
     });
 

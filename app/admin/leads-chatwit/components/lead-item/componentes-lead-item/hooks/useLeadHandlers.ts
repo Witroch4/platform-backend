@@ -506,6 +506,7 @@ export function useLeadHandlers({
         nome: lead.nomeReal || lead.name || "Lead sem nome",
         telefone: lead.phoneNumber,
         ...(consultoriaAtiva ? { espelhoparabiblioteca: true } : { espelho: true }),
+        ...((lead as any).espelhoPadraoId && { espelhoPadraoId: (lead as any).espelhoPadraoId }), // ⭐ NOVO
         arquivos: lead.arquivos.map((a: any) => ({
           id: a.id, url: a.dataUrl, tipo: a.fileType, nome: a.fileType
         })),
@@ -548,6 +549,7 @@ export function useLeadHandlers({
         leadID: lead.id,
         nome: lead.nomeReal || lead.name || "Lead sem nome",
         telefone: lead.phoneNumber,
+        ...((lead as any).espelhoPadraoId && { espelhoPadraoId: (lead as any).espelhoPadraoId }), // ⭐ NOVO
         ...(consultoriaAtiva ? { espelhoparabiblioteca: true } : { espelho: true }),
         arquivos: lead.arquivos.map((a: any) => ({
           id: a.id, url: a.dataUrl, tipo: a.fileType, nome: a.fileType
@@ -1127,6 +1129,7 @@ export function useLeadHandlers({
         nome: lead.nomeReal || lead.name || "Lead sem nome",
         telefone: lead.phoneNumber,
         ...(consultoriaAtiva ? { espelhoparabiblioteca: true } : { espelho: true }),
+        ...((lead as any).espelhoPadraoId && { espelhoPadraoId: (lead as any).espelhoPadraoId }),
         arquivos: lead.arquivos.map((a: any) => ({
           id: a.id, url: a.dataUrl, tipo: a.fileType, nome: a.fileType
         })),

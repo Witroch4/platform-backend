@@ -57,6 +57,8 @@ export interface ContainerConfig {
 export interface OabEvalConfig {
   agentelocal: boolean;
   transcribe_concurrency: number;
+  agentelocal_espelho?: boolean;
+  mirror_concurrency?: number;
   queue?: {
     name?: string;
     max_concurrent_jobs?: number;
