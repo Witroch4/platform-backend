@@ -73,8 +73,31 @@ export async function POST(req: Request) {
       try {
         const espelhoParsed = JSON.parse(lead.textoDOEspelho);
 
+        // DEBUG: Log a estrutura do espelhoParsed para diagnosticar problema
+        console.log("[Enviar Análise] 🔍 DEBUG - Estrutura do espelhoParsed:");
+        console.log(`[Enviar Análise]    Tem 'meta'?: ${!!espelhoParsed?.meta}`);
+        console.log(`[Enviar Análise]    Tem 'aluno'?: ${!!espelhoParsed?.aluno}`);
+        console.log(`[Enviar Análise]    Tem 'itens'?: ${!!espelhoParsed?.itens}`);
+        console.log(`[Enviar Análise]    Tem 'totais'?: ${!!espelhoParsed?.totais}`);
+        console.log("[Enviar Análise]    Chaves principais:", Object.keys(espelhoParsed || {}).join(", "));
+
+        if (espelhoParsed?.meta) {
+          console.log("[Enviar Análise]    meta.aluno:", espelhoParsed.meta?.aluno);
+          console.log("[Enviar Análise]    meta.notaFinal:", espelhoParsed.meta?.notaFinal);
+        }
+
+        if (espelhoParsed?.aluno) {
+          console.log("[Enviar Análise]    aluno.nome:", espelhoParsed.aluno?.nome);
+          console.log("[Enviar Análise]    aluno.inscricao:", espelhoParsed.aluno?.inscricao);
+        }
+
+        if (espelhoParsed?.itens) {
+          console.log(`[Enviar Análise]    itens.length: ${espelhoParsed.itens.length}`);
+        }
+
         // Verificar se é um StudentMirrorPayload válido
         if (espelhoParsed && espelhoParsed.meta && espelhoParsed.aluno && espelhoParsed.itens) {
+          console.log("[Enviar Análise] ✅ Estrutura válida detectada, iniciando otimização");
           const originalJson = JSON.stringify(espelhoParsed);
           const originalSize = originalJson.length;
 
@@ -99,6 +122,9 @@ export async function POST(req: Request) {
             console.warn("[Enviar Análise] ⚠️ Erro ao otimizar espelho, usando original:", optimizeError.message);
             // Continua com original
           }
+        } else {
+          console.warn("[Enviar Análise] ⚠️ Estrutura inválida - espelhoParsed não contém meta/aluno/itens obrigatórios");
+          console.warn("[Enviar Análise] ⚠️ Enviando espelho completo sem otimização como fallback");
         }
       } catch (parseError) {
         // Se não for JSON válido, continua com original
