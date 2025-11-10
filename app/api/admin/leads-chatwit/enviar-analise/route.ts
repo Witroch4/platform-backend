@@ -69,9 +69,16 @@ export async function POST(req: Request) {
 
     // ⭐ OTIMIZAÇÃO: Processar espelho se existir
     let espelhoOtimizado = lead.textoDOEspelho;
-    if (lead.textoDOEspelho && typeof lead.textoDOEspelho === 'string') {
+    if (lead.textoDOEspelho) {
       try {
-        const espelhoParsed = JSON.parse(lead.textoDOEspelho);
+        // Converter para string se for objeto (Prisma Json? retorna como object)
+        const espelhoString = typeof lead.textoDOEspelho === 'string'
+          ? lead.textoDOEspelho
+          : JSON.stringify(lead.textoDOEspelho);
+
+        const espelhoParsed = typeof lead.textoDOEspelho === 'string'
+          ? JSON.parse(espelhoString)
+          : lead.textoDOEspelho;
 
         // DEBUG: Log a estrutura do espelhoParsed para diagnosticar problema
         console.log("[Enviar Análise] 🔍 DEBUG - Estrutura do espelhoParsed:");
@@ -115,7 +122,7 @@ export async function POST(req: Request) {
             console.log(`[Enviar Análise]    Otimizado: ${savings.optimized} bytes`);
             console.log(`[Enviar Análise]    Economia: ${savings.savings}`);
 
-            // Usar versão otimizada
+            // Usar versão otimizada (sempre como string)
             espelhoOtimizado = JSON.stringify(espelhoOtimizadoObj);
             console.log("[Enviar Análise] ✅ Espelho otimizado com sucesso");
           } catch (optimizeError: any) {
@@ -151,8 +158,8 @@ export async function POST(req: Request) {
       }] : [],
       // Incluir dados do manuscrito se existir
       textoManuscrito: lead.provaManuscrita || "",
-      // Incluir dados do espelho otimizado se existir
-      textoEspelho: espelhoOtimizado || "",
+      // Incluir dados do espelho otimizado se existir (sempre como string)
+      textoEspelho: typeof espelhoOtimizado === 'string' ? espelhoOtimizado : (espelhoOtimizado ? JSON.stringify(espelhoOtimizado) : ""),
       ...(lead.espelhoCorrecao && {
         arquivos_imagens_espelho: JSON.parse(lead.espelhoCorrecao).map((url: string, index: number) => ({
           id: `${lead.id}-espelho-${index}`,
