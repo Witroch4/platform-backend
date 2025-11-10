@@ -184,7 +184,20 @@ export async function POST(request: Request): Promise<Response> {
       }
 
       try {
-        const textoDOEspelho = jsonMirror ?? markdownMirror;
+        // ⭐ IMPORTANTE: Converter jsonMirror (objeto StudentMirrorPayload) para string JSON
+        // Isso garante que textoDOEspelho seja armazenado como string no banco
+        // Permitindo que a otimização em enviar-analise/route.ts funcione corretamente
+        let textoDOEspelho: string | null = null;
+
+        if (jsonMirror) {
+          // Se jsonMirror é um objeto, converter para JSON string
+          textoDOEspelho = typeof jsonMirror === 'string' ? jsonMirror : JSON.stringify(jsonMirror);
+          console.log(`[Webhook][Local] 📝 jsonMirror convertido para string (${textoDOEspelho.length} bytes)`);
+        } else if (markdownMirror) {
+          // Fallback para markdown se jsonMirror não existir
+          textoDOEspelho = markdownMirror;
+          console.log(`[Webhook][Local] 📝 Usando markdownMirror como fallback (${textoDOEspelho.length} bytes)`);
+        }
 
         // Atualizar lead com espelho processado
         const leadUpdate = await prisma.leadOabData.update({
