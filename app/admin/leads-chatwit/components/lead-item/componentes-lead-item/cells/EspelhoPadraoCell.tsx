@@ -86,16 +86,18 @@ export function EspelhoPadraoCell({
     : espelhosPadrao;
   const isLoadingEspelhos = usarAgenteLocal ? loadingRubrics : loadingEspelhosPadrao;
 
-  // Só mostra se há imagens convertidas (mesma lógica do ImagesCell)
-  if (!lead.arquivos.some(a => a.pdfConvertido)) {
-    return <TableCell className="min-w-[120px] max-w-[160px] p-2 align-middle"></TableCell>;
-  }
-
   // Sincronizar especialidade e espelho padrão quando o lead mudar
+  // ✅ FIXO: useEffect ANTES do early return para manter ordem dos hooks
   useEffect(() => {
     setEspecialidadeLocal(lead.especialidade || null);
     setEspelhoPadraoSelecionadoId((lead as any).espelhoPadraoId || null);
   }, [lead.id, lead.especialidade, (lead as any).espelhoPadraoId]);
+
+  // ✅ FIXO: Early return DEPOIS de todos os hooks
+  // Só mostra se há imagens convertidas (mesma lógica do ImagesCell)
+  if (!lead.arquivos.some(a => a.pdfConvertido)) {
+    return <TableCell className="min-w-[120px] max-w-[160px] p-2 align-middle"></TableCell>;
+  }
 
   const handleEspelhoChange = async (espelhoId: string) => {
     try {
