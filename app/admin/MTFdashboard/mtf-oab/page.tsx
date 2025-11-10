@@ -1,14 +1,12 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Upload,
   FileText,
@@ -18,10 +16,12 @@ import {
   Download,
   Trash2,
   Eye,
-  AlertCircle
+  AlertCircle,
+  RefreshCw
 } from "lucide-react";
 import { toast } from "sonner";
 import { useDropzone } from "react-dropzone";
+import useSWR from "swr";
 
 interface UploadedFile {
   id: string;
@@ -35,18 +35,72 @@ interface UploadedFile {
   agentId?: string;
 }
 
+interface RubricFromDB {
+  id: string;
+  exam: string | null;
+  area: string | null;
+  version: string | null;
+  createdAt: string;
+  updatedAt: string;
+  meta: Record<string, any> | null;
+  counts: {
+    itens: number;
+    grupos: number;
+  };
+  pontuacao: {
+    geral: { total: number; esperado: number; desvio: number; ok: boolean };
+    peca: { total: number; esperado: number; desvio: number; ok: boolean };
+    questoes: { total: number; esperado: number; desvio: number; ok: boolean };
+  } | null;
+}
+
 export default function MTFOABUploadPage() {
   const [files, setFiles] = useState<UploadedFile[]>([]);
-  const [uploading, setUploading] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<string>("");
+
+  // Buscar gabaritos do banco
+  const { data: rubricsData, mutate: refreshRubrics, isLoading: isLoadingRubrics } = useSWR<{
+    success: boolean;
+    rubrics: RubricFromDB[];
+    total: number;
+  }>(
+    '/api/oab-eval/rubrics',
+    async (url) => {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Falha ao carregar gabaritos');
+      return res.json();
+    },
+    {
+      revalidateOnFocus: true,
+      revalidateOnReconnect: true,
+      dedupingInterval: 5000,
+    }
+  );
+
+  // Combinar arquivos da sessão com gabaritos do banco
+  const allFiles = useMemo<Array<UploadedFile & { _isFromDB?: boolean; _rubricId?: string }>>(() => {
+    const sessionFiles = files.filter(f => f.status === 'completed');
+    const dbRubrics = (rubricsData?.rubrics ?? []).map((rubric) => ({
+      id: rubric.id,
+      name: `${rubric.exam} - ${rubric.area} (${rubric.counts.itens} itens)`,
+      size: 0,
+      type: 'application/pdf' as const,
+      status: 'completed' as const,
+      progress: 100,
+      uploadedAt: new Date(rubric.createdAt),
+      description: `ID: ${rubric.id} | ${rubric.counts.itens} itens, ${rubric.counts.grupos} grupos`,
+      agentId: undefined,
+      _isFromDB: true,
+      _rubricId: rubric.id,
+    }));
+    return [...sessionFiles, ...dbRubrics];
+  }, [files, rubricsData?.rubrics]);
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
 
-    setUploading(true);
-
     for (const file of acceptedFiles) {
-      const fileId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const fileId = `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
       const newFile: UploadedFile = {
         id: fileId,
@@ -61,45 +115,64 @@ export default function MTFOABUploadPage() {
 
       setFiles(prev => [...prev, newFile]);
 
-      // Simular upload e processamento
       try {
-        // Upload simulation
-        for (let progress = 0; progress <= 100; progress += 10) {
-          await new Promise(resolve => setTimeout(resolve, 200));
+        // Simulando progresso de upload (frontend apenas)
+        for (let progress = 0; progress <= 90; progress += 30) {
+          await new Promise(resolve => setTimeout(resolve, 100));
           setFiles(prev => prev.map(f =>
             f.id === fileId ? { ...f, progress } : f
           ));
         }
 
-        // Processing phase
+        // Transição para processamento backend
         setFiles(prev => prev.map(f =>
           f.id === fileId ? { ...f, status: 'processing', progress: 0 } : f
         ));
 
-        // Processing simulation
-        for (let progress = 0; progress <= 100; progress += 20) {
-          await new Promise(resolve => setTimeout(resolve, 300));
-          setFiles(prev => prev.map(f =>
-            f.id === fileId ? { ...f, progress } : f
-          ));
+        // Upload real para o backend
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('withEmbeddings', 'false');
+
+        const uploadPromise = fetch('/api/oab-eval/rubric/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const response = await uploadPromise;
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Falha ao enviar arquivo');
         }
+
+        const result = await response.json();
 
         // Completion
         setFiles(prev => prev.map(f =>
-          f.id === fileId ? { ...f, status: 'completed', progress: 100 } : f
+          f.id === fileId ? {
+            ...f,
+            status: 'completed',
+            progress: 100,
+            description: `Rubric ID: ${result.rubricId} | ${result.stats.itens} itens processados`
+          } : f
         ));
 
-        toast.success(`Arquivo ${file.name} processado com sucesso!`);
+        toast.success(`Arquivo ${file.name} processado com sucesso! ID: ${result.rubricId}`);
+
+        // Recarregar lista de gabaritos após upload bem-sucedido
+        refreshRubrics();
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+        console.error('[MTF-OAB::UPLOAD_ERROR]', errorMessage);
+
         setFiles(prev => prev.map(f =>
           f.id === fileId ? { ...f, status: 'error' } : f
         ));
-        toast.error(`Erro ao processar ${file.name}`);
+        toast.error(`Erro ao processar ${file.name}: ${errorMessage}`);
       }
     }
-
-    setUploading(false);
-  }, [selectedAgent]);
+  }, [selectedAgent, refreshRubrics]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -223,14 +296,24 @@ export default function MTFOABUploadPage() {
           </Card>
 
           {/* Files List */}
-          {files.length > 0 && (
+          {allFiles.length > 0 && (
             <Card>
-              <CardHeader>
-                <CardTitle>Arquivos ({files.length})</CardTitle>
+              <CardHeader className="flex items-center justify-between">
+                <CardTitle>Arquivos ({allFiles.length})</CardTitle>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => refreshRubrics()}
+                  disabled={isLoadingRubrics}
+                  className="gap-2"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isLoadingRubrics ? 'animate-spin' : ''}`} />
+                  {isLoadingRubrics ? 'Carregando...' : 'Atualizar'}
+                </Button>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {files.map((file) => (
+                  {allFiles.map((file) => (
                     <div key={file.id} className="border rounded-lg p-4">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-3">
@@ -304,22 +387,33 @@ export default function MTFOABUploadPage() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="text-center p-3 bg-muted rounded-lg">
-                  <div className="text-2xl font-bold">{files.length}</div>
-                  <div className="text-xs text-muted-foreground">Total</div>
+                  <div className="text-2xl font-bold">{allFiles.length}</div>
+                  <div className="text-xs text-muted-foreground">Gabaritos</div>
                 </div>
                 <div className="text-center p-3 bg-muted rounded-lg">
                   <div className="text-2xl font-bold">
-                    {files.filter(f => f.status === 'completed').length}
+                    {rubricsData?.total ?? 0}
                   </div>
-                  <div className="text-xs text-muted-foreground">Processados</div>
+                  <div className="text-xs text-muted-foreground">No Banco</div>
                 </div>
               </div>
 
               <div className="text-center p-3 bg-muted rounded-lg">
                 <div className="text-lg font-bold">
-                  {formatFileSize(files.reduce((acc, f) => acc + f.size, 0))}
+                  {rubricsData?.rubrics?.reduce((acc, r) => acc + r.counts.itens, 0) ?? 0}
                 </div>
-                <div className="text-xs text-muted-foreground">Tamanho Total</div>
+                <div className="text-xs text-muted-foreground">Total de Itens</div>
+              </div>
+
+              <div className="text-center p-3 bg-muted rounded-lg">
+                <div className="text-sm font-bold">
+                  {isLoadingRubrics ? 'Carregando...' : 'Sincronizado'}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {rubricsData?.rubrics?.[0]?.updatedAt
+                    ? new Date(rubricsData.rubrics[0].updatedAt).toLocaleString('pt-BR')
+                    : 'Nunca'}
+                </div>
               </div>
             </CardContent>
           </Card>
