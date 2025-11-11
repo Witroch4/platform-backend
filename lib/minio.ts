@@ -20,6 +20,27 @@ const BUCKET_NAME = process.env.S3Bucket || 'chatwit-social';
 const HOST = process.env.S3Endpoint || 'objstoreapi.witdev.com.br';
 
 /**
+ * Sanitiza o nome do arquivo removendo caracteres não suportados pelo MinIO
+ * @param fileName Nome do arquivo original
+ * @returns Nome do arquivo sanitizado
+ */
+function sanitizeFileName(fileName: string): string {
+  return fileName
+    // Remove parâmetros de query string e âncoras
+    .split('?')[0]
+    .split('#')[0]
+    .split('&')[0]
+    // Substitui todos os caracteres especiais por underscores
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    // Remove múltiplos underscores consecutivos
+    .replace(/_+/g, '_')
+    // Remove underscores no início e fim
+    .replace(/^_+|_+$/g, '')
+    // Limita o tamanho do nome (mantém apenas os primeiros 100 caracteres)
+    .substring(0, 100);
+}
+
+/**
  * Garante que a URL tenha o protocolo HTTPS
  * @param host Hostname ou URL
  * @returns URL com protocolo HTTPS garantido
@@ -165,9 +186,9 @@ export async function uploadToMinIO(
     // Calcula o tamanho do arquivo para evitar cabeçalho "undefined"
     const fileSize = file instanceof Buffer ? file.length : file.byteLength;
 
-    // Gera um nome único para o arquivo
+    // Gera um nome único para o arquivo com sanitização robusta
     const uniqueFileName = fileName
-      ? `${uuidv4()}-${fileName.replace(/[^a-zA-Z0-9.-]/g, '_')}`
+      ? `${uuidv4()}-${sanitizeFileName(fileName)}`
       : `${uuidv4()}.${mimeType?.split('/')[1] || 'bin'}`;
 
     // Converte o arquivo para um stream

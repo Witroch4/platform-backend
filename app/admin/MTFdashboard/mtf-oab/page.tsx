@@ -8,6 +8,14 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Upload,
   FileText,
   Check,
@@ -57,6 +65,8 @@ interface RubricFromDB {
 export default function MTFOABUploadPage() {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<string>("");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [rubricToDelete, setRubricToDelete] = useState<{ id: string; name: string } | null>(null);
 
   // Buscar gabaritos do banco
   const { data: rubricsData, mutate: refreshRubrics, isLoading: isLoadingRubrics } = useSWR<{
@@ -187,7 +197,47 @@ export default function MTFOABUploadPage() {
 
   const removeFile = (fileId: string) => {
     setFiles(prev => prev.filter(f => f.id !== fileId));
-    toast.success("Arquivo removido");
+    toast.success("Arquivo removido da lista");
+  };
+
+  const confirmDeleteRubric = (rubricId: string, fileName: string) => {
+    setRubricToDelete({ id: rubricId, name: fileName });
+    setDeleteDialogOpen(true);
+  };
+
+  const deleteRubricFromDB = async () => {
+    if (!rubricToDelete) return;
+
+    const { id: rubricId, name: fileName } = rubricToDelete;
+
+    const deletePromise = (async () => {
+      const response = await fetch(`/api/oab-eval/rubrics/${rubricId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Falha ao excluir gabarito');
+      }
+
+      return response.json();
+    })();
+
+    toast.promise(deletePromise, {
+      loading: `Excluindo ${fileName}...`,
+      success: () => {
+        // Atualizar lista após exclusão
+        refreshRubrics();
+        return `${fileName} excluído com sucesso`;
+      },
+      error: (err) => `Erro ao excluir: ${err.message}`,
+    });
+
+    // Fechar dialog
+    setDeleteDialogOpen(false);
+    setRubricToDelete(null);
+
+    return deletePromise;
   };
 
   const getStatusColor = (status: UploadedFile['status']) => {
@@ -347,7 +397,13 @@ export default function MTFOABUploadPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => removeFile(file.id)}
+                            onClick={() => {
+                              if (file._isFromDB && file._rubricId) {
+                                confirmDeleteRubric(file._rubricId, file.name);
+                              } else {
+                                removeFile(file.id);
+                              }
+                            }}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -460,6 +516,46 @@ export default function MTFOABUploadPage() {
           </Card>
         </div>
       </div>
+
+      {/* Dialog de Confirmação de Exclusão */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="h-5 w-5" />
+              Confirmar Exclusão
+            </DialogTitle>
+            <DialogDescription className="pt-3">
+              Tem certeza que deseja excluir permanentemente o gabarito:
+              <div className="mt-2 p-3 bg-muted rounded-md">
+                <p className="font-semibold text-foreground">{rubricToDelete?.name}</p>
+              </div>
+              <p className="mt-3 text-destructive font-medium">
+                ⚠️ Esta ação não pode ser desfeita. Todas as avaliações relacionadas também serão excluídas.
+              </p>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleteDialogOpen(false);
+                setRubricToDelete(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={deleteRubricFromDB}
+              className="gap-2"
+            >
+              <Trash2 className="h-4 w-4" />
+              Excluir Permanentemente
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

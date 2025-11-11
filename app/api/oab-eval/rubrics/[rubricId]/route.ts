@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRubricById, updateRubric } from "@/lib/oab-eval/repository";
+import { getRubricById, updateRubric, deleteRubric } from "@/lib/oab-eval/repository";
 import { RubricSchema, type RubricPayload } from "@/lib/oab-eval/types";
 import { verificarPontuacao, type Subitem } from "@/lib/oab/gabarito-parser-deterministico";
 
@@ -92,6 +92,39 @@ export async function PUT(
     return NextResponse.json(
       { success: false, error: (error as Error).message ?? "Falha ao atualizar gabarito" },
       { status: 400 },
+    );
+  }
+}
+
+export async function DELETE(
+  _request: NextRequest,
+  context: { params: Promise<{ rubricId: string }> },
+) {
+  try {
+    const { rubricId } = await context.params;
+    
+    // Verificar se gabarito existe
+    const rubric = await getRubricById(rubricId);
+    if (!rubric) {
+      return NextResponse.json(
+        { success: false, error: "Gabarito não encontrado" },
+        { status: 404 }
+      );
+    }
+
+    // Excluir gabarito
+    await deleteRubric(rubricId);
+
+    return NextResponse.json({
+      success: true,
+      message: "Gabarito excluído com sucesso",
+      deletedId: rubricId,
+    });
+  } catch (error) {
+    console.error("[OAB::RUBRICS::DETAIL::DELETE]", error);
+    return NextResponse.json(
+      { success: false, error: (error as Error).message ?? "Falha ao excluir gabarito" },
+      { status: 500 },
     );
   }
 }

@@ -228,15 +228,22 @@ export function EspelhoPadraoCell({
               {(isLoadingEspelhos || atualizandoLead) && (
                 <Loader2 className="h-3 w-3 animate-spin" />
               )}
-              <SelectValue
-                placeholder={
-                  isLoadingEspelhos
-                    ? "Carregando..."
-                    : atualizandoLead
-                      ? "Atualizando..."
-                      : "Selecionar espelho"
-                }
-              />
+              {/* Só mostra SelectValue se não tiver espelho selecionado */}
+              {!temEspelhoSelecionado ? (
+                <SelectValue
+                  placeholder={
+                    isLoadingEspelhos
+                      ? "Carregando..."
+                      : atualizandoLead
+                        ? "Atualizando..."
+                        : "Selecionar espelho"
+                  }
+                />
+              ) : (
+                <span className="text-[10px] text-muted-foreground truncate max-w-[90%]">
+                  {espelhoAtual?.area || "Espelho Selecionado"}
+                </span>
+              )}
             </div>
           </SelectTrigger>
           <SelectContent className="max-h-60 overflow-y-auto animate-in fade-in-0 zoom-in-95 duration-200 shadow-lg border-border/50">
@@ -250,39 +257,73 @@ export function EspelhoPadraoCell({
               </div>
             </SelectItem>
 
-            {/* Renderizar espelhos por área */}
+            {/* Renderizar espelhos por exame (OAB) */}
             {usarAgenteLocal
-              ? Object.entries(rubricData?.rubrics || {}).map(([area, espelhos]) => (
-                  <div key={area}>
-                    {/* Header da área */}
-                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/30">
-                      {area}
-                    </div>
-                    {/* Espelhos da área */}
-                    {(espelhos as any[]).map((espelho) => {
-                      const isSelected = espelhoPadraoSelecionadoId === espelho.id;
-                      return (
-                        <SelectItem
-                          key={espelho.id}
-                          value={espelho.id}
-                          className={`
-                            transition-all duration-200 cursor-pointer pl-4
-                            hover:bg-accent hover:text-accent-foreground hover:scale-[1.02]
-                            focus:bg-accent focus:text-accent-foreground
-                            ${isSelected ? 'bg-primary/10 text-primary' : ''}
-                          `}
-                        >
-                          <div className="flex items-center justify-between w-full">
-                            <span className={`font-medium ${isSelected ? 'text-primary font-semibold' : ''}`}>
-                              {espelho.nome}
-                            </span>
-                            {isSelected && <Check className="h-3 w-3 text-primary animate-pulse" />}
-                          </div>
-                        </SelectItem>
-                      );
-                    })}
-                  </div>
-                ))
+              ? (() => {
+                  // Organizar rubricas por exame (sem sub-agrupamento por área)
+                  const espelhosPorExame: Record<string, any[]> = {};
+                  
+                  // Agrupar por exame
+                  Object.entries(rubricData?.rubrics || {}).forEach(([area, espelhos]) => {
+                    (espelhos as any[]).forEach((espelho) => {
+                      const examNumber = espelho.exam || "Exame Desconhecido";
+                      
+                      if (!espelhosPorExame[examNumber]) {
+                        espelhosPorExame[examNumber] = [];
+                      }
+                      
+                      espelhosPorExame[examNumber].push(espelho);
+                    });
+                  });
+
+                  // Extrair número do exame para ordenação (ex: "43º Exame" -> 43)
+                  const extractExamNumber = (exam: string): number => {
+                    const match = exam.match(/(\d+)/);
+                    return match ? parseInt(match[1], 10) : 0;
+                  };
+
+                  // Ordenar exames por número (decrescente - mais recente primeiro)
+                  const examesOrdenados = Object.keys(espelhosPorExame).sort((a, b) => {
+                    return extractExamNumber(b) - extractExamNumber(a);
+                  });
+
+                  return examesOrdenados.map((exame, examIndex) => {
+                    const espelhos = espelhosPorExame[exame];
+                    
+                    return (
+                      <div key={exame}>
+                        {/* Título do Exame (OAB) - Tom cinza suave */}
+                        <div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-muted/30 border-b border-border/20 sticky top-0 z-10">
+                          {exame}
+                        </div>
+                        
+                        {/* Lista de espelhos do exame (sem sub-agrupamento) */}
+                        {espelhos.map((espelho) => {
+                          const isSelected = espelhoPadraoSelecionadoId === espelho.id;
+                          return (
+                            <SelectItem
+                              key={espelho.id}
+                              value={espelho.id}
+                              className={`
+                                transition-all duration-200 cursor-pointer pl-3
+                                hover:bg-accent hover:text-accent-foreground hover:scale-[1.01]
+                                focus:bg-accent focus:text-accent-foreground
+                                ${isSelected ? 'bg-primary/10 text-primary' : ''}
+                              `}
+                            >
+                              <div className="flex items-center justify-between w-full">
+                                <span className={`font-medium text-sm ${isSelected ? 'text-primary font-semibold' : ''}`}>
+                                  {espelho.nome}
+                                </span>
+                                {isSelected && <Check className="h-3 w-3 text-primary animate-pulse" />}
+                              </div>
+                            </SelectItem>
+                          );
+                        })}
+                      </div>
+                    );
+                  });
+                })()
               : Object.entries(especialidadeLabels).map(([key, label]) => {
                   const espelhoPadrao = espelhosPadrao.find(ep => ep.especialidade === key);
                   const disponivel = espelhoPadrao?.isAtivo && espelhoPadrao.processado;
@@ -347,16 +388,16 @@ export function EspelhoPadraoCell({
                   <BookOpen className="h-3 w-3 transition-all duration-200 hover:text-primary hover:scale-110" />
                   <Badge
                     variant="default"
-                    className="text-xs hover:shadow-sm transition-all duration-200"
+                    className="text-[10px] leading-tight py-0.5 px-1.5 hover:shadow-sm transition-all duration-200"
                   >
-                    {espelhoAtual?.nome || espelhoAtual?.area || "Selecionado"}
+                    {espelhoAtual?.area || "Selecionado"}
                   </Badge>
                 </div>
               </TooltipTrigger>
               <TooltipContent side="top" className="text-xs">
                 <p>
-                  Espelho padrão selecionado: {espelhoAtual?.nome || espelhoAtual?.area}
-                  {espelhoAtual?.exam && ` (${espelhoAtual.exam})`}
+                  {espelhoAtual?.exam && `${espelhoAtual.exam} - `}
+                  {espelhoAtual?.area || espelhoAtual?.nome}
                 </p>
               </TooltipContent>
             </Tooltip>

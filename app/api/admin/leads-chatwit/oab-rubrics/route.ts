@@ -32,6 +32,8 @@ export async function GET(request: Request) {
     // Agrupar por área (extraída do meta.area)
     const rubricsByArea = rubrics.reduce((acc, rubric: any) => {
       const metaArea = rubric.meta?.area || rubric.area || "DESCONHECIDA";
+      // Priorizar meta.exam, depois exam do campo direto
+      const examInfo = rubric.meta?.exam || rubric.exam || "Exame Desconhecido";
 
       if (!acc[metaArea]) {
         acc[metaArea] = [];
@@ -39,9 +41,9 @@ export async function GET(request: Request) {
 
       acc[metaArea].push({
         id: rubric.id,
-        nome: `${rubric.exam || "Exame"} - ${metaArea}`,
+        nome: `${examInfo} - ${metaArea}`,
         area: metaArea,
-        exam: rubric.exam,
+        exam: examInfo,
         version: rubric.version,
       });
 

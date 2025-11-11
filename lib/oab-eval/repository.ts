@@ -65,6 +65,14 @@ export async function updateRubric(input: UpdateRubricInput) {
   );
 }
 
+export async function deleteRubric(rubricId: string) {
+  return withPrismaReconnect((client) =>
+    client.oabRubric.delete({
+      where: { id: rubricId },
+    }),
+  );
+}
+
 interface SaveSubmissionInput {
   leadOabDataId?: string;
   alunoNome?: string;

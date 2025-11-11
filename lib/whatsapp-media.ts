@@ -43,13 +43,21 @@ export async function downloadMetaMediaAndUploadToMinio(
       }
     });
     
-    if (template?.whatsappOfficialInfo?.components && 
+    // Extrair publicMediaUrl do banco (pode ser null, string da Meta ou string do MinIO)
+    const existingPublicUrl = template?.whatsappOfficialInfo?.components && 
         typeof template.whatsappOfficialInfo.components === 'object' &&
-        'publicMediaUrl' in template.whatsappOfficialInfo.components &&
-        !isMetaMediaUrl(template.whatsappOfficialInfo.components.publicMediaUrl as string)) {
-      console.log(`[WhatsAppMedia] URL pública já existe no MinIO: ${template.whatsappOfficialInfo.components.publicMediaUrl}`);
-      return template.whatsappOfficialInfo.components.publicMediaUrl as string;
+        'publicMediaUrl' in template.whatsappOfficialInfo.components
+        ? template.whatsappOfficialInfo.components.publicMediaUrl as string | null
+        : null;
+    
+    // Se já existe uma URL válida (não-null E não da Meta), retornar ela
+    if (existingPublicUrl && !isMetaMediaUrl(existingPublicUrl)) {
+      console.log(`[WhatsAppMedia] URL pública já existe no MinIO: ${existingPublicUrl}`);
+      return existingPublicUrl;
     }
+    
+    // Se URL é null ou da Meta, prosseguir com download
+    console.log(`[WhatsAppMedia] ${existingPublicUrl === null ? 'URL null' : 'URL da Meta'} - prosseguindo com download...`);
     
     // Obter configuração do WhatsApp para acessar a API da Meta
     const whatsappConfig = await getWhatsAppConfig(userId);
@@ -66,10 +74,23 @@ export async function downloadMetaMediaAndUploadToMinio(
     const buffer = Buffer.from(response.data);
     const mimeType = response.headers['content-type'] || 'application/octet-stream';
     
-    // Extrair a extensão da URL
-    const fileExtension = mediaUrl.split('.').pop()?.toLowerCase() || '';
+    // Extrair a extensão da URL de forma segura
+    let fileExtension = 'jpg'; // Padrão para imagens
+    try {
+      // Tentar extrair extensão do MIME type primeiro
+      if (mimeType.includes('image/')) {
+        fileExtension = mimeType.split('/')[1].split(';')[0] || 'jpg';
+      } else if (mimeType.includes('video/')) {
+        fileExtension = mimeType.split('/')[1].split(';')[0] || 'mp4';
+      }
+    } catch (e) {
+      // Se falhar, usar extensão padrão baseada no tipo MIME
+      if (mimeType.includes('video')) {
+        fileExtension = 'mp4';
+      }
+    }
     
-    // Criar um nome de arquivo com o ID do template
+    // Criar um nome de arquivo simples e seguro
     const fileName = `whatsapp_media_${templateId}_${Date.now()}.${fileExtension}`;
     
     console.log(`[WhatsAppMedia] Fazendo upload para MinIO: ${fileName} (${mimeType})`);
@@ -112,7 +133,10 @@ export async function downloadMetaMediaAndUploadToMinio(
  * @param url URL para verificar
  * @returns true se for uma URL da Meta
  */
-export function isMetaMediaUrl(url: string): boolean {
+export function isMetaMediaUrl(url: string | null | undefined): boolean {
+  if (!url || typeof url !== 'string') {
+    return false;
+  }
   return url.includes('whatsapp.net') || url.includes('fbcdn.net') || url.includes('facebook.com');
 }
 
