@@ -353,17 +353,60 @@ export function EspelhoDialog({
   const structuredPayload = useMemo(() => asStudentMirrorPayload(texto), [texto]);
   const canEditContent = !structuredPayload;
 
+  // NOVO: Monitorar SSE em tempo real para atualizar espelho quando processado
+  useEffect(() => {
+    if (!isOpen || !leadId || !aguardandoEspelho) {
+      return;
+    }
+
+    console.log(`[EspelhoDialog] Abrindo conexão SSE para lead ${leadId}`);
+    const eventSource = new EventSource(`/api/admin/leads-chatwit/notifications?leadId=${leadId}`);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const notification = JSON.parse(event.data);
+        console.log(`[EspelhoDialog] Notificação recebida:`, notification);
+
+        // Procurar por espelho processado
+        if (notification.data?.leadData?.espelhoProcessado && !notification.data?.leadData?.aguardandoEspelho) {
+          const novoTexto = notification.data.leadData.espelhoTexto || notification.data.leadData.jsonMirror;
+          const novasImagens = notification.data.leadData.imagensEspelho || [];
+
+          if (novoTexto) {
+            console.log(`[EspelhoDialog] Espelho pronto! Atualizando dialog...`);
+            setTexto(novoTexto);
+            setImagens(novasImagens);
+            // Fechar conexão SSE após receber dados
+            eventSource.close();
+          }
+        }
+      } catch (error) {
+        console.error(`[EspelhoDialog] Erro ao processar notificação SSE:`, error);
+      }
+    };
+
+    eventSource.onerror = () => {
+      console.error(`[EspelhoDialog] Erro na conexão SSE`);
+      eventSource.close();
+    };
+
+    // Cleanup ao desmontar ou mudar leadId
+    return () => {
+      eventSource.close();
+    };
+  }, [isOpen, leadId, aguardandoEspelho]);
+
   // Atualiza o texto quando as props mudam
   useEffect(() => {
     if (isOpen) {
       setTexto(textoEspelho);
       setImagens(imagensEspelho);
-      
+
       // Se está aguardando processamento, não alterar modo
       if (aguardandoEspelho) {
         return;
       }
-      
+
       // Definir modo inicial baseado na disponibilidade de texto
       const hasText = textoEspelho && (
         typeof textoEspelho === 'string' ? textoEspelho.trim().length > 0 :
@@ -371,7 +414,7 @@ export function EspelhoDialog({
         typeof textoEspelho === 'object' && textoEspelho !== null
       );
       setIsEditMode(!hasText && !structuredPayload); // Apenas entra em edição se não houver conteúdo estruturado
-      
+
       // Fazer parsing do markdown para AST quando há texto
       if (hasText && !structuredPayload) {
         const formattedText = formatEspelhoTexto();
