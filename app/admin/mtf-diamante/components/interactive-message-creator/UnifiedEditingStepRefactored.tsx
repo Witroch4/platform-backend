@@ -1,7 +1,6 @@
 "use client";
 
-import type React from "react";
-import { useState, useCallback, useMemo, useEffect } from "react";
+import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useMtfData } from "../../context/SwrProvider";
@@ -143,11 +142,19 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
     }
   }, [message.header, onMessageUpdate]);
 
-  // Extract buttons from message action and convert to InteractiveButton format
-  const buttons = useMemo(() => {
-    // ✅ FIX: Debug para rastrear re-processamento de botões
+  // ✅ FIX: Estado local para botões - separar inicialização de atualizações
+  const [localButtons, setLocalButtons] = React.useState<InteractiveButton[]>([]);
+  
+  // ✅ FIX: Inicializar botões APENAS UMA VEZ da mensagem (não re-processar a cada render)
+  const initialButtonsRef = React.useRef<string | null>(null);
+  
+  React.useEffect(() => {
+    // Só inicializar se ainda não inicializamos para esta mensagem
+    const messageKey = message.id || 'new';
+    if (initialButtonsRef.current === messageKey) return;
+    
     if (process.env.NODE_ENV === 'development') {
-      console.log('🔄 [UnifiedEditingStep] Re-processing buttons from message:', {
+      console.log('🔄 [UnifiedEditingStep] INITIAL load of buttons from message:', {
         messageId: message.id,
         hasAction: !!message.action,
         hasContent: !!(message as any)?.content,
@@ -249,8 +256,21 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
       return true;
     });
     
-    return uniqueFinalButtons;
-  }, [message.action, (message as any)?.content?.action, (message as any)?.actionReplyButton, (message as any)?.interactiveContent, channelType]);
+    // Inicializar estado local com os botões da mensagem
+    setLocalButtons(uniqueFinalButtons);
+    initialButtonsRef.current = messageKey;
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log('✅ [UnifiedEditingStep] Buttons initialized:', {
+        messageId: message.id,
+        buttonCount: uniqueFinalButtons.length,
+        buttonIds: uniqueFinalButtons.map(b => b.id)
+      });
+    }
+  }, [message.id, message.action, (message as any)?.content]);
+
+  // ✅ FIX: Usar localButtons ao invés de re-processar sempre
+  const buttons = localButtons;
 
   // Helper function to get error messages from validation errors
   const getErrorMessages = useCallback(
@@ -310,6 +330,16 @@ export const UnifiedEditingStep: React.FC<UnifiedEditingStepProps> = ({
   const handleButtonsChange = useCallback(
     (newButtons: InteractiveButton[]) => {
       try {
+        // ✅ FIX: Atualizar estado local IMEDIATAMENTE para evitar re-processamento
+        setLocalButtons(newButtons);
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔄 [UnifiedEditingStep] Buttons changed:', {
+            newCount: newButtons.length,
+            newIds: newButtons.map(b => b.id)
+          });
+        }
+        
         const backendButtons = newButtons.map(convertInteractiveToBackend);
         const action = { type: "button" as const, buttons: backendButtons };
         onMessageUpdate({ action });

@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/collapsible";
 import { SendHorizonal, ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 
 type Assistant = {
   id: string;
@@ -21,6 +22,8 @@ type Assistant = {
   productName?: string | null;
   generateFaqs: boolean;
   captureMemories: boolean;
+  proposeHumanHandoff: boolean;
+  disableIntentSuggestion: boolean;
   instructions?: string | null;
   intentOutputFormat: "JSON" | "AT_SYMBOL";
   model: string;
@@ -49,6 +52,9 @@ export default function EditAssistantPage() {
   const [savingBasic, setSavingBasic] = useState(false);
   const [savingInstr, setSavingInstr] = useState(false);
   const [savingFlags, setSavingFlags] = useState(false);
+  const [showInstructions, setShowInstructions] = useState(false);
+  const [showFunctionalities, setShowFunctionalities] = useState(false);
+  const [showOptimizations, setShowOptimizations] = useState(false);
 
   async function loadAssistant() {
     const r = await fetch(`/api/admin/ai-integration/assistants?id=${id}`, {
@@ -174,7 +180,8 @@ export default function EditAssistantPage() {
           </div>
 
           <Collapsible
-            defaultOpen={false}
+            open={showInstructions}
+            onOpenChange={setShowInstructions}
             className="border border-border rounded-md bg-card shadow-sm"
           >
             <div className="p-4 flex items-center justify-between">
@@ -223,11 +230,19 @@ export default function EditAssistantPage() {
                 disabled={savingInstr}
                 onClick={async () => {
                   setSavingInstr(true);
-                  await update({
-                    instructions: assistant.instructions || "",
-                    intentOutputFormat: assistant.intentOutputFormat,
-                  });
-                  setSavingInstr(false);
+                  try {
+                    await update({
+                      instructions: assistant.instructions || "",
+                      intentOutputFormat: assistant.intentOutputFormat,
+                    });
+                    toast.success("Instruções salvas com sucesso!");
+                    // Fechar o collapsible após salvar
+                    setShowInstructions(false);
+                  } catch (error) {
+                    toast.error("Erro ao salvar instruções");
+                  } finally {
+                    setSavingInstr(false);
+                  }
                 }}
                 className="bg-primary hover:bg-primary/90"
               >
@@ -236,12 +251,21 @@ export default function EditAssistantPage() {
             </CollapsibleContent>
           </Collapsible>
 
-          <div className="border border-border rounded-md bg-card shadow-sm">
-            <div className="p-4 font-medium text-foreground">
-              Funcionalidades
+          <Collapsible
+            open={showFunctionalities}
+            onOpenChange={setShowFunctionalities}
+            className="border border-border rounded-md bg-card shadow-sm"
+          >
+            <div className="p-4 flex items-center justify-between">
+              <div className="font-medium text-foreground">
+                Funcionalidades
+              </div>
+              <CollapsibleTrigger className="text-sm text-muted-foreground hover:text-foreground hover:underline transition-colors">
+                Mostrar/Ocultar
+              </CollapsibleTrigger>
             </div>
             <Separator />
-            <div className="p-4 space-y-3">
+            <CollapsibleContent className="p-4 space-y-3">
               <label className="flex items-center gap-2 text-sm text-foreground">
                 <input
                   type="checkbox"
@@ -270,27 +294,83 @@ export default function EditAssistantPage() {
                 />
                 Capturar memórias de interações
               </label>
+              <label className="flex items-center gap-2 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  checked={(assistant as any).proposeHumanHandoff ?? true}
+                  onChange={(e) =>
+                    setAssistant({
+                      ...assistant,
+                      proposeHumanHandoff: e.target.checked,
+                    } as any)
+                  }
+                  className="rounded border-border bg-background"
+                />
+                <span className="flex items-center gap-2">
+                  Propor Atendimento Humano caso tenha botões disponíveis
+                  <span 
+                    className="cursor-help text-muted-foreground hover:text-foreground" 
+                    title="Quando ativo, o sistema pode sugerir um botão de atendimento humano automaticamente se houver espaço para botões e ambiguidade na conversa"
+                  >
+                    ⓘ
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-center gap-2 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  checked={(assistant as any).disableIntentSuggestion ?? false}
+                  onChange={(e) =>
+                    setAssistant({
+                      ...assistant,
+                      disableIntentSuggestion: e.target.checked,
+                    } as any)
+                  }
+                  className="rounded border-border bg-background"
+                />
+                <span className="flex items-center gap-2">
+                  Desativar Sugestão de Intenção
+                  <span 
+                    className="cursor-help text-muted-foreground hover:text-foreground" 
+                    title="Ative caso queira bloquear o sistema de proposta de intenção com base na mensagem, deixando o prompt de instruções absoluto para o agente. Isso evita que o sistema sugira intenções baseadas em INTENT_HINTS"
+                  >
+                    ⓘ
+                  </span>
+                </span>
+              </label>
               <Button
                 disabled={savingFlags}
                 onClick={async () => {
                   setSavingFlags(true);
-                  await update({
-                    generateFaqs: assistant.generateFaqs,
-                    captureMemories: assistant.captureMemories,
-                  });
-                  setSavingFlags(false);
+                  try {
+                    await update({
+                      generateFaqs: assistant.generateFaqs,
+                      captureMemories: assistant.captureMemories,
+                      proposeHumanHandoff: (assistant as any).proposeHumanHandoff ?? true,
+                      disableIntentSuggestion: (assistant as any).disableIntentSuggestion ?? false,
+                    } as any);
+                    toast.success("Funcionalidades salvas com sucesso!");
+                    // Fechar o collapsible após salvar
+                    setShowFunctionalities(false);
+                  } catch (error) {
+                    toast.error("Erro ao salvar funcionalidades");
+                  } finally {
+                    setSavingFlags(false);
+                  }
                 }}
                 className="bg-primary hover:bg-primary/90"
               >
                 Salvar
               </Button>
-            </div>
-          </div>
+            </CollapsibleContent>
+          </Collapsible>
 
           <SocialWiseFlowSettings
             assistant={assistant}
             setAssistant={setAssistant}
             onUpdate={update}
+            showOptimizations={showOptimizations}
+            setShowOptimizations={setShowOptimizations}
           />
 
           <PromptVersioningPanel assistantId={assistant.id} />
@@ -947,10 +1027,14 @@ function SocialWiseFlowSettings({
   assistant,
   setAssistant,
   onUpdate,
+  showOptimizations,
+  setShowOptimizations,
 }: {
   assistant: Assistant;
   setAssistant: (a: Assistant) => void;
   onUpdate: (patch: Partial<Assistant>) => Promise<void>;
+  showOptimizations: boolean;
+  setShowOptimizations: (show: boolean) => void;
 }) {
   const [saving, setSaving] = useState(false);
   const [userRole, setUserRole] = useState<string>("DEFAULT");
@@ -990,27 +1074,36 @@ function SocialWiseFlowSettings({
 
   const saveSettings = async () => {
     setSaving(true);
-    await onUpdate({
-      embedipreview: assistant.embedipreview,
-      reasoningEffort: assistant.reasoningEffort,
-      verbosity: assistant.verbosity,
-      temperature: assistant.temperature,
-      topP: assistant.topP,
-      tempSchema: assistant.tempSchema,
-      tempCopy: assistant.tempCopy,
-      maxOutputTokens: assistant.maxOutputTokens,
-      warmupDeadlineMs: assistant.warmupDeadlineMs,
-      hardDeadlineMs: assistant.hardDeadlineMs,
-      softDeadlineMs: assistant.softDeadlineMs,
-      shortTitleLLM: assistant.shortTitleLLM,
-      toolChoice: assistant.toolChoice,
-    });
-    setSaving(false);
+    try {
+      await onUpdate({
+        embedipreview: assistant.embedipreview,
+        reasoningEffort: assistant.reasoningEffort,
+        verbosity: assistant.verbosity,
+        temperature: assistant.temperature,
+        topP: assistant.topP,
+        tempSchema: assistant.tempSchema,
+        tempCopy: assistant.tempCopy,
+        maxOutputTokens: assistant.maxOutputTokens,
+        warmupDeadlineMs: assistant.warmupDeadlineMs,
+        hardDeadlineMs: assistant.hardDeadlineMs,
+        softDeadlineMs: assistant.softDeadlineMs,
+        shortTitleLLM: assistant.shortTitleLLM,
+        toolChoice: assistant.toolChoice,
+      });
+      toast.success("Otimizações salvas com sucesso!");
+      // Fechar o collapsible após salvar
+      setShowOptimizations(false);
+    } catch (error) {
+      toast.error("Erro ao salvar otimizações");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <Collapsible
-      defaultOpen={false}
+      open={showOptimizations}
+      onOpenChange={setShowOptimizations}
       className="border border-border rounded-md bg-card shadow-sm"
     >
       <div className="p-4 flex items-center justify-between">

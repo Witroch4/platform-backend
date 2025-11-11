@@ -26,6 +26,8 @@ export interface AssistantConfig {
   softDeadlineMs: number;
   shortTitleLLM: boolean;
   toolChoice: any;
+  proposeHumanHandoff: boolean;
+  disableIntentSuggestion: boolean;
   inheritFromAgent: boolean;
 }
 
@@ -84,7 +86,9 @@ export async function loadAssistantConfiguration(
         softDeadlineMs: true,
         shortTitleLLM: true,
         toolChoice: true,
-        embedipreview: true
+        embedipreview: true,
+        proposeHumanHandoff: true,
+        disableIntentSuggestion: true
       }
     });
 
@@ -162,6 +166,10 @@ export async function loadAssistantConfiguration(
       toolChoice: inheritFromAgent
         ? fullAssistant.toolChoice
         : (inbox?.socialwiseToolChoice || fullAssistant.toolChoice),
+
+      // New fields for human handoff and intent suggestion control
+      proposeHumanHandoff: fullAssistant.proposeHumanHandoff ?? true,
+      disableIntentSuggestion: fullAssistant.disableIntentSuggestion ?? false,
 
       inheritFromAgent
     };

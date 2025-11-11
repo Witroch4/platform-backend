@@ -16,6 +16,17 @@ export const convertBackendToInteractive = (button: any): InteractiveButton => {
   // ✅ FIX: SEMPRE preservar ID existente se disponível
   const existingId = button?.id || button?.payload || button?.reply?.id;
   
+  // Debug em desenvolvimento
+  if (process.env.NODE_ENV === 'development') {
+    console.log('🔄 [convertBackendToInteractive] Converting button:', {
+      input: button,
+      existingId,
+      hasUrl: !!button?.url,
+      hasPhoneNumber: !!button?.phone_number,
+      detectedType: button?.type
+    });
+  }
+  
   // Handle Instagram quick_replies format (content_type indicates it's a quick reply)
   if (button?.content_type === 'text') {
     return { 
@@ -25,48 +36,85 @@ export const convertBackendToInteractive = (button: any): InteractiveButton => {
     };
   }
   
-  // Handle standard button format
-  const detectedType = (button?.type as any) || (button?.reply ? 'reply' : 'reply');
+  // ✅ FIX: Detectar tipo do botão de forma mais robusta
+  // Prioridade: 1) button.type explícito, 2) presença de url/phone_number, 3) fallback para reply
+  let detectedType: 'reply' | 'url' | 'phone_number' = 'reply';
+  
+  if (button?.type === 'url' || (button?.url && button?.url !== '')) {
+    detectedType = 'url';
+  } else if (button?.type === 'phone_number' || (button?.phone_number && button?.phone_number !== '')) {
+    detectedType = 'phone_number';
+  } else if (button?.type === 'reply' || button?.reply) {
+    detectedType = 'reply';
+  }
+  
   const id = existingId || generateUniqueButtonId(); // Só gera novo ID se NÃO existir
   const title = button?.title || button?.reply?.title || button?.text || '';
   
+  // ✅ FIX: Sempre preservar url e phone_number quando existirem
   if (detectedType === 'url') {
-    return { id, text: title, type: 'url', url: button?.url };
+    const result = { id, text: title, type: 'url' as const, url: button?.url || '' };
+    if (process.env.NODE_ENV === 'development') {
+      console.log('✅ [convertBackendToInteractive] URL button:', result);
+    }
+    return result;
   }
   if (detectedType === 'phone_number') {
-    return { id, text: title, type: 'phone_number', phone_number: button?.phone_number };
+    const result = { id, text: title, type: 'phone_number' as const, phone_number: button?.phone_number || '' };
+    if (process.env.NODE_ENV === 'development') {
+      console.log('✅ [convertBackendToInteractive] Phone button:', result);
+    }
+    return result;
   }
-  return { id, text: title, type: 'reply' };
+  
+  const result = { id, text: title, type: 'reply' as const };
+  if (process.env.NODE_ENV === 'development') {
+    console.log('✅ [convertBackendToInteractive] Reply button:', result);
+  }
+  return result;
 };
 
 export const convertInteractiveToBackend = (button: InteractiveButton): any => {
+  // ✅ FIX: SEMPRE incluir o campo 'type' explicitamente para garantir persistência correta
   if (button.type === 'url') {
-    return {
+    const result = {
       id: button.id,
-      type: 'url',
+      type: 'url', // ✅ IMPORTANTE: Incluir tipo explicitamente
       title: button.text,
       url: button.url || '',
     };
+    if (process.env.NODE_ENV === 'development') {
+      console.log('💾 [convertInteractiveToBackend] URL button to save:', result);
+    }
+    return result;
   }
   if (button.type === 'phone_number') {
-    return {
+    const result = {
       id: button.id,
-      type: 'phone_number',
+      type: 'phone_number', // ✅ IMPORTANTE: Incluir tipo explicitamente
       title: button.text,
       phone_number: button.phone_number || '',
     };
+    if (process.env.NODE_ENV === 'development') {
+      console.log('💾 [convertInteractiveToBackend] Phone button to save:', result);
+    }
+    return result;
   }
   // reply default
-  return {
+  const result = {
     id: button.id,
     title: button.text,
     payload: button.id,
-    type: 'reply',
+    type: 'reply', // ✅ IMPORTANTE: Incluir tipo explicitamente
     reply: {
       id: button.id,
       title: button.text,
     },
   };
+  if (process.env.NODE_ENV === 'development') {
+    console.log('💾 [convertInteractiveToBackend] Reply button to save:', result);
+  }
+  return result;
 };
 
 // Conversion functions for ButtonReaction types

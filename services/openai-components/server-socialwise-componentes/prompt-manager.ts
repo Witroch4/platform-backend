@@ -7,7 +7,8 @@ import type { IntentCandidate } from "../types";
 // Conciso, assertivo e econômico em tokens. Consolidamos regras universais
 // (JSON estrito, identidade/tom, antialucinação e botões) aqui, e reforçamos
 // pontualmente nos TASK_PROMPTS quando necessário.
-const MASTER_PROMPT_BASE = `
+function createMasterPromptBase(proposeHumanHandoff: boolean = true): string {
+  return `
 # MASTER (imutável)
 - Saída: apenas JSON válido no schema fornecido; sem texto fora do JSON.
 - Respeite a identidade e o tom definidos nas instructions do agente.
@@ -21,24 +22,27 @@ const MASTER_PROMPT_BASE = `
 - Títulos até 20 caracteres, objetivos e acionáveis.
 - Quantidade: use poucos botões úteis (siga os limites do canal abaixo).
 - Payload em formato @slug; não invente slugs.
-
-# Handoff Humano (regra simples e obrigatória)
+${proposeHumanHandoff ? `
+# Handoff Humano
 - Quando precisar oferecer atendimento humano, use APENAS o slug @falar_atendente.
 - O título do botão DEVE ser um destes (preferir o primeiro): "Atendimento Humano", "Falar com atendente", "Falar com humano", "Suporte humano".
 - É proibido mascarar handoff com outro título (ex.: "Mandado de Segurança" não pode apontar para @falar_atendente).
-- Incluir no MÁXIMO 1 botão de handoff e posicioná-lo por último.
+- Incluir no MÁXIMO 1 botão de handoff e posicioná-lo por último.` : `
+# Handoff Humano
+- NÃO ofereça botão de atendimento humano a menos que explicitamente solicitado nas instruções do agente.`}
 
 # Aviso final (formatação literal)
 - Ao final do response_text (quando houver botões/desambiguação), inclua literalmente NO FINAL: \`Se nenhum botão atender, digite sua solicitação\`.
 - Não repetir o aviso se já estiver presente. Não usar crases triplas.
 `;
+}
 
 // Gera o MASTER com limites do canal (mantém o bloco imutável + ajustes de canal)
-export function createMasterPrompt(channel: ChannelType): string {
+export function createMasterPrompt(channel: ChannelType, proposeHumanHandoff: boolean = true): string {
   const c = getConstraintsForChannel(channel);
   const buttonRange = channel === 'whatsapp' ? '3' : '4-6';
   return (
-    MASTER_PROMPT_BASE +
+    createMasterPromptBase(proposeHumanHandoff) +
     `# Limites do Canal\n` +
     `- response_text: até ${c.bodyMax} caracteres.\n` +
     `- button_title: até ${c.buttonTitleMax} caracteres.\n` +
@@ -60,20 +64,20 @@ Gerar response_text conciso e botões para continuar a conversa.
 Evite afirmar dados operacionais não fornecidos.
 `,
 
-  WARMUP_BUTTONS: `
+  WARMUP_BUTTONS: (proposeHumanHandoff: boolean = true) => `
 # Objetivo
 Gerar breve introdução e botões para desambiguar a intenção do usuário.
 
 # Específicas
 - Títulos baseados na "desc" dos intents, não no slug técnico.
-- Use apenas slugs de INTENT_HINTS no payload. Se houver ambiguidade real OU o usuário pedir humano, pode incluir 1 handoff:
+- Use apenas slugs de INTENT_HINTS no payload.${proposeHumanHandoff ? ` Se houver ambiguidade real OU o usuário pedir humano, pode incluir 1 handoff:
   - payload: @falar_atendente
   - título: "Atendimento Humano" (ou variações permitidas)
-  - por último.
+  - por último.` : ''}
 - Títulos ≤ 20 caracteres, claros e acionáveis.
 `,
 
-  ROUTER_LLM: (hasInstructions: boolean) => `
+  ROUTER_LLM: (hasInstructions: boolean, proposeHumanHandoff: boolean = true) => `
 # Objetivo
 Decidir entre mode='intent' ou mode='chat'.
 
@@ -86,10 +90,10 @@ Decidir entre mode='intent' ou mode='chat'.
 # Em ambos
 - response_text útil e conciso; gere botões conforme CHANNEL_LIMITS.
 - mode='intent': botões relacionados à intenção usando slugs EXATOS de INTENT_HINTS.
-- mode='chat': use slugs de INTENT_HINTS para hipóteses. Se ambiguidade real OU pedido explícito por humano, inclua 1 botão de handoff:
+- mode='chat': use slugs de INTENT_HINTS para hipóteses.${proposeHumanHandoff ? ` Se ambiguidade real OU pedido explícito por humano, inclua 1 botão de handoff:
   - payload: @falar_atendente
   - título: "Atendimento Humano" (ou variações permitidas)
-  - por último.
+  - por último.` : ''}
 
 # Identidade
 Mantenha a identidade e o tom definidos nas instruções principais${hasInstructions ? " (injetadas)." : "."}
@@ -104,6 +108,8 @@ export interface PromptBuilderOptions {
   taskType: keyof typeof TASK_PROMPTS | 'router';
   hasInstructions?: boolean;
   statelessInit?: boolean;
+  proposeHumanHandoff?: boolean;
+  disableIntentSuggestion?: boolean;
 }
 
 // Constrói 'messages' no formato esperado pelos clientes que usam developer+user
@@ -116,7 +122,10 @@ export function buildMessages(
   // Adiciona apenas MASTER nas developer messages (nova sessão).
   // Task rules e hints ficam em `instructions` (evita duplicação).
   if (options.statelessInit !== false) {
-    messages.push({ role: "developer", content: createMasterPrompt(options.channel) });
+    messages.push({ 
+      role: "developer", 
+      content: createMasterPrompt(options.channel, options.proposeHumanHandoff ?? true) 
+    });
   }
 
   // Texto cru do usuário (sem molduras).
@@ -132,13 +141,21 @@ export function buildEphemeralInstructions(opts: {
   hasInstructions?: boolean;
   hints?: Array<{ slug: string; score?: number; aliases?: string[]; desc?: string }>;
   extra?: string;
+  proposeHumanHandoff?: boolean;
+  disableIntentSuggestion?: boolean;
 }): string {
-  const { channel, task, hasInstructions, hints, extra } = opts;
+  const { channel, task, hasInstructions, hints, extra, proposeHumanHandoff = true, disableIntentSuggestion = false } = opts;
   const c = getConstraintsForChannel(channel);
-  const core =
-    task === 'router'
-      ? TASK_PROMPTS.ROUTER_LLM(!!hasInstructions)
-      : (TASK_PROMPTS[task] as string);
+  
+  // Get task rules with handoff configuration
+  let core: string;
+  if (task === 'router') {
+    core = TASK_PROMPTS.ROUTER_LLM(!!hasInstructions, proposeHumanHandoff);
+  } else if (task === 'WARMUP_BUTTONS') {
+    core = TASK_PROMPTS.WARMUP_BUTTONS(proposeHumanHandoff);
+  } else {
+    core = (TASK_PROMPTS[task] as string);
+  }
 
   // Helper function to safely escape strings for JSON context
   const safeString = (str: string) => {
@@ -164,8 +181,20 @@ export function buildEphemeralInstructions(opts: {
   out += `\n\nGUARDRAILS\n- Não afirme dados operacionais sem fonte no contexto ou do usuário.\n- Não invente payloads: use somente slugs permitidos.`;
   const buttonRange = channel === 'whatsapp' ? `2–${c.maxButtons}` : `2–${c.maxButtons}`;
   out += `\n\nCHANNEL_LIMITS\n- response_text<=${c.bodyMax}; button_title<=${c.buttonTitleMax}; buttons=${buttonRange}; payload=@slug ou vazio ("").`;
-  out += `\n\nBUTTON_POLICY\n- Gere pelo menos 2 opções úteis.\n- Títulos ≤ ${c.buttonTitleMax} chars. Use slugs de INTENT_HINTS no payload.\n- Se houver ambiguidade real OU o usuário pedir humano, inclua 1 botão de handoff por último: "Atendimento Humano" (@falar_atendente).`;
-  out += `\n\nINTENT_HINTS_JSON\n` + JSON.stringify(top, null, 0);
+  out += `\n\nBUTTON_POLICY\n- Gere pelo menos 2 opções úteis.\n- Títulos ≤ ${c.buttonTitleMax} chars. Use slugs de INTENT_HINTS no payload.`;
+  if (proposeHumanHandoff) {
+    out += `\n- Se houver ambiguidade real OU o usuário pedir humano, inclua 1 botão de handoff por último: "Atendimento Humano" (@falar_atendente).`;
+  } else {
+    out += `\n- NÃO inclua botão de atendimento humano a menos que explicitamente solicitado nas instruções.`;
+  }
+  
+  // Only include INTENT_HINTS if not disabled
+  if (!disableIntentSuggestion && top.length > 0) {
+    out += `\n\nINTENT_HINTS_JSON\n` + JSON.stringify(top, null, 0);
+  } else if (disableIntentSuggestion) {
+    out += `\n\nINTENT_HINTS_DISABLED\n- Sistema de sugestão de intenção desativado. Siga estritamente as instruções do agente sem propor intenções baseadas em hints.`;
+  }
+  
   if (extra && extra.trim()) out += `\n\nEXTRA\n` + extra.trim();
   return out;
 }

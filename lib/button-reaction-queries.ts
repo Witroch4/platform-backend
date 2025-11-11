@@ -464,32 +464,45 @@ export async function getReactionForReactionsModal(buttonId: string, userId: str
 /**
  * Get intent mapping by buttonId (includes SEND_TEMPLATE, SEND_INTENT, etc.)
  * This handles the "Mapeamento IA - Intenções" functionality
+ * 
+ * 🚨 CRÍTICO: SEMPRE deve filtrar por inboxId para isolar templates por caixa
  */
 export async function getIntentMappingByButtonId(
   buttonId: string,
-  userId: string
+  userId: string,
+  inboxId?: string
 ): Promise<ButtonReactionData | null> {
   const prisma = getPrismaInstance()
   
   console.log('[INTENT MAPPING DEBUG] Searching for intent mapping', {
     buttonId,
     userId,
+    inboxId,
     timestamp: new Date().toISOString()
   });
   
-  const mapping = await prisma.mapeamentoBotao.findFirst({
-    where: {
-      buttonId: buttonId,
-      // Look for any action type that's not BUTTON_REACTION (template mappings, etc.)
-      actionType: {
-        not: 'BUTTON_REACTION'
-      },
-      inbox: {
-        usuarioChatwit: {
-          appUserId: userId,
-        },
+  // 🔒 ISOLAMENTO POR CAIXA: Construir where clause com inboxId obrigatório
+  const whereClause: any = {
+    buttonId: buttonId,
+    // Look for any action type that's not BUTTON_REACTION (template mappings, etc.)
+    actionType: {
+      not: 'BUTTON_REACTION'
+    },
+    inbox: {
+      usuarioChatwit: {
+        appUserId: userId,
       },
     },
+  };
+
+  // 🚨 CRÍTICO: Se inboxId for fornecido, DEVE filtrar por ele
+  if (inboxId) {
+    whereClause.inbox.inboxId = inboxId;
+    console.log('[INTENT MAPPING DEBUG] 🔒 Filtering by inboxId', { inboxId });
+  }
+  
+  const mapping = await prisma.mapeamentoBotao.findFirst({
+    where: whereClause,
     include: {
       inbox: {
         select: {
@@ -542,21 +555,31 @@ export async function getIntentMappingByButtonId(
     buttonId,
     intentName,
     userId,
+    inboxId,
     searchCandidates
   });
 
   try {
-    const intentMapping = await prisma.mapeamentoIntencao.findFirst({
-      where: {
-        intentName: searchCandidates.length
-          ? { in: searchCandidates }
-          : intentName,
-        inbox: {
-          usuarioChatwit: {
-            appUserId: userId,
-          },
+    // 🔒 ISOLAMENTO POR CAIXA: Construir where clause com inboxId obrigatório
+    const intentWhereClause: any = {
+      intentName: searchCandidates.length
+        ? { in: searchCandidates }
+        : intentName,
+      inbox: {
+        usuarioChatwit: {
+          appUserId: userId,
         },
       },
+    };
+
+    // 🚨 CRÍTICO: Se inboxId for fornecido, DEVE filtrar por ele
+    if (inboxId) {
+      intentWhereClause.inbox.inboxId = inboxId;
+      console.log('[INTENT MAPPING DEBUG] 🔒 Filtering MapeamentoIntencao by inboxId', { inboxId });
+    }
+
+    const intentMapping = await prisma.mapeamentoIntencao.findFirst({
+      where: intentWhereClause,
       include: {
         inbox: {
           select: {
@@ -579,16 +602,25 @@ export async function getIntentMappingByButtonId(
         buttonId,
         slug: normalizedIntent.slug,
         userId,
+        inboxId,
       })
 
-      const fallbackCandidates = await prisma.mapeamentoIntencao.findMany({
-        where: {
-          inbox: {
-            usuarioChatwit: {
-              appUserId: userId,
-            },
+      // 🔒 ISOLAMENTO POR CAIXA: Fallback também deve filtrar por inboxId
+      const fallbackWhereClause: any = {
+        inbox: {
+          usuarioChatwit: {
+            appUserId: userId,
           },
         },
+      };
+
+      if (inboxId) {
+        fallbackWhereClause.inbox.inboxId = inboxId;
+        console.log('[INTENT MAPPING DEBUG] 🔒 Filtering fallback by inboxId', { inboxId });
+      }
+
+      const fallbackCandidates = await prisma.mapeamentoIntencao.findMany({
+        where: fallbackWhereClause,
         include: {
           inbox: {
             select: {

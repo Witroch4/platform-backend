@@ -194,6 +194,14 @@ function formatReaction(reaction: any) {
       elements: (interactive as any).genericPayload.elements,
     };
   } else if (!computedAction && interactive.actionReplyButton?.buttons) {
+    // ✅ DEBUG: Log dos botões antes de retornar
+    if (process.env.NODE_ENV === 'development') {
+      console.log('📤 [API] Returning buttons from DB:', {
+        buttonsCount: interactive.actionReplyButton.buttons.length,
+        buttonsRaw: JSON.stringify(interactive.actionReplyButton.buttons, null, 2),
+        firstButton: interactive.actionReplyButton.buttons[0]
+      });
+    }
     computedAction = { type: 'button', buttons: interactive.actionReplyButton.buttons } as any;
   }
 

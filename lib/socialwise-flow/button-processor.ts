@@ -248,7 +248,17 @@ export async function processButtonClick(
     } else {
       // Se não houver reação registrada, verificar se existe mapeamento direto de intenção
       if (userId) {
-        const intentMapping = await getIntentMappingByButtonId(buttonId, userId);
+        // 🔒 CRÍTICO: Extrair inboxId do payload para isolar por caixa
+        const webhookInboxId = extractExternalInboxId(validPayload);
+        
+        console.log('[SocialWiseButtonProcessor] 🔒 Extracting inboxId for isolation', {
+          buttonId,
+          webhookInboxId,
+          userId,
+          traceId
+        });
+
+        const intentMapping = await getIntentMappingByButtonId(buttonId, userId, webhookInboxId || undefined);
 
         if (intentMapping) {
           logger.info('🧭 Intent mapping found for button', {
@@ -256,6 +266,8 @@ export async function processButtonClick(
             mappingId: intentMapping.id,
             actionType: intentMapping.actionType,
             inboxId: intentMapping.inboxId,
+            mappedInboxId: intentMapping.inbox?.inboxId,
+            webhookInboxId,
             traceId
           });
 

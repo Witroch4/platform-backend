@@ -34,6 +34,8 @@ type Assistant = {
   productName?: string | null;
   generateFaqs: boolean;
   captureMemories: boolean;
+  proposeHumanHandoff: boolean;
+  disableIntentSuggestion: boolean;
   createdAt: string;
 };
 
@@ -77,6 +79,8 @@ export default function CaptainAssistantsPage() {
     productName: '',
     generateFaqs: false,
     captureMemories: false,
+    proposeHumanHandoff: true,
+    disableIntentSuggestion: false,
     instructions: '',
     intentOutputFormat: 'JSON' as 'JSON' | 'AT_SYMBOL',
   });
@@ -131,7 +135,17 @@ export default function CaptainAssistantsPage() {
       });
       if (!res.ok) throw new Error('Falha ao criar assistente');
       setOpen(false);
-      setForm({ name: '', description: '', productName: '', generateFaqs: false, captureMemories: false, instructions: '', intentOutputFormat: 'JSON' });
+      setForm({ 
+        name: '', 
+        description: '', 
+        productName: '', 
+        generateFaqs: false, 
+        captureMemories: false, 
+        proposeHumanHandoff: true,
+        disableIntentSuggestion: false,
+        instructions: '', 
+        intentOutputFormat: 'JSON' 
+      });
       await loadAssistants();
     } finally {
       setLoading(false);
@@ -346,7 +360,7 @@ export default function CaptainAssistantsPage() {
                 <label className="text-sm font-medium">Nome do Produto</label>
                 <Input placeholder="Digite o nome do produto" value={form.productName} onChange={(e) => setForm({ ...form, productName: e.target.value })} />
               </div>
-              <div className="flex items-center gap-6">
+              <div className="space-y-3">
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={form.generateFaqs} onChange={(e) => setForm({ ...form, generateFaqs: e.target.checked })} />
                   Gerar perguntas frequentes a partir de conversas resolvidas
@@ -354,6 +368,30 @@ export default function CaptainAssistantsPage() {
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={form.captureMemories} onChange={(e) => setForm({ ...form, captureMemories: e.target.checked })} />
                   Capture memórias das interações do cliente
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={form.proposeHumanHandoff} onChange={(e) => setForm({ ...form, proposeHumanHandoff: e.target.checked })} />
+                  <span className="flex items-center gap-2">
+                    Propor Atendimento Humano caso tenha botões disponíveis
+                    <span 
+                      className="cursor-help text-muted-foreground hover:text-foreground" 
+                      title="Quando ativo, o sistema pode sugerir um botão de atendimento humano automaticamente se houver espaço para botões e ambiguidade na conversa"
+                    >
+                      ⓘ
+                    </span>
+                  </span>
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={form.disableIntentSuggestion} onChange={(e) => setForm({ ...form, disableIntentSuggestion: e.target.checked })} />
+                  <span className="flex items-center gap-2">
+                    Desativar Sugestão de Intenção
+                    <span 
+                      className="cursor-help text-muted-foreground hover:text-foreground" 
+                      title="Ative caso queira bloquear o sistema de proposta de intenção com base na mensagem, deixando o prompt de instruções absoluto para o agente. Isso evita que o sistema sugira intenções baseadas em INTENT_HINTS"
+                    >
+                      ⓘ
+                    </span>
+                  </span>
                 </label>
               </div>
               <div>

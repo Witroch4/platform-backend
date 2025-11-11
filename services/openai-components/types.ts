@@ -96,6 +96,8 @@ export interface AgentConfig {
   hardDeadlineMs?: number;
   softDeadlineMs?: number;
   embedipreview?: boolean;
+  proposeHumanHandoff?: boolean;
+  disableIntentSuggestion?: boolean;
 }
 
 // Interface para as opções de configuração de chat

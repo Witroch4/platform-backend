@@ -39,6 +39,8 @@ export async function GET(request: NextRequest) {
         productName: true,
         generateFaqs: true,
         captureMemories: true,
+        proposeHumanHandoff: true,
+        disableIntentSuggestion: true,
         instructions: true,
         intentOutputFormat: true,
         model: true,
@@ -192,6 +194,8 @@ export async function PATCH(request: NextRequest) {
   if (typeof body?.productName === 'string') updateData.productName = String(body.productName).trim();
   if (typeof body?.generateFaqs === 'boolean') updateData.generateFaqs = body.generateFaqs;
   if (typeof body?.captureMemories === 'boolean') updateData.captureMemories = body.captureMemories;
+  if (typeof body?.proposeHumanHandoff === 'boolean') updateData.proposeHumanHandoff = body.proposeHumanHandoff;
+  if (typeof body?.disableIntentSuggestion === 'boolean') updateData.disableIntentSuggestion = body.disableIntentSuggestion;
   if (typeof body?.instructions === 'string') updateData.instructions = body.instructions;
   if (typeof body?.intentOutputFormat === 'string') updateData.intentOutputFormat = body.intentOutputFormat === 'AT_SYMBOL' ? 'AT_SYMBOL' : 'JSON';
   if (typeof body?.model === 'string') updateData.model = String(body.model).trim();

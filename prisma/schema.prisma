@@ -1435,38 +1435,40 @@ model AiAgentBlueprint {
 }
 
 model AiAssistant {
-  id                 String               @id @default(cuid())
-  userId             String
-  name               String
-  description        String?
-  productName        String?
-  generateFaqs       Boolean              @default(false)
-  captureMemories    Boolean              @default(false)
-  instructions       String?
-  intentOutputFormat AiIntentOutputFormat @default(JSON)
-  model              String               @default("gpt-5-nano")
-  embedipreview      Boolean              @default(true)
-  reasoningEffort    String               @default("minimal")
-  verbosity          String               @default("low")
-  temperature        Float?               @default(0.7)
-  topP               Float?               @default(0.7)
-  tempSchema         Float                @default(0.1)
-  tempCopy           Float                @default(0.4)
-  maxOutputTokens    Int                  @default(648)
-  warmupDeadlineMs   Int                  @default(15000)
-  hardDeadlineMs     Int                  @default(15000)
-  softDeadlineMs     Int                  @default(18000)
-  shortTitleLLM      Boolean              @default(true)
-  toolChoice         String               @default("auto")
-  isActive           Boolean              @default(true)
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  inboxLinks         AiAssistantInbox[]
-  documents          AiDocument[]
-  faqs               AiFaq[]
-  abTests            PromptABTest[]
-  promptVersions     PromptVersion[]
+  id                      String               @id @default(cuid())
+  userId                  String
+  name                    String
+  description             String?
+  productName             String?
+  generateFaqs            Boolean              @default(false)
+  captureMemories         Boolean              @default(false)
+  instructions            String?
+  intentOutputFormat      AiIntentOutputFormat @default(JSON)
+  model                   String               @default("gpt-5-nano")
+  embedipreview           Boolean              @default(true)
+  reasoningEffort         String               @default("minimal")
+  verbosity               String               @default("low")
+  temperature             Float?               @default(0.7)
+  topP                    Float?               @default(0.7)
+  tempSchema              Float                @default(0.1)
+  tempCopy                Float                @default(0.4)
+  maxOutputTokens         Int                  @default(648)
+  warmupDeadlineMs        Int                  @default(15000)
+  hardDeadlineMs          Int                  @default(15000)
+  softDeadlineMs          Int                  @default(18000)
+  shortTitleLLM           Boolean              @default(true)
+  toolChoice              String               @default("auto")
+  proposeHumanHandoff     Boolean              @default(true)
+  disableIntentSuggestion Boolean              @default(false)
+  isActive                Boolean              @default(true)
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
+  user                    User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  inboxLinks              AiAssistantInbox[]
+  documents               AiDocument[]
+  faqs                    AiFaq[]
+  abTests                 PromptABTest[]
+  promptVersions          PromptVersion[]
 
   @@index([userId, isActive])
 }

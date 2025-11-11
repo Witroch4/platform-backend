@@ -90,6 +90,8 @@ export async function generateShortTitlesBatch(
           task: "SHORT_TITLES",
           channel: "whatsapp",
           hints: [], // não necessário aqui
+          proposeHumanHandoff: agent.proposeHumanHandoff ?? true,
+          disableIntentSuggestion: agent.disableIntentSuggestion ?? false,
         });
 
       const caps = getModelCaps(agent.model);
@@ -182,6 +184,8 @@ export async function generateFreeChatButtons(
           task: "FREE_CHAT",
           channel,
           hints: [], // não há hints aqui
+          proposeHumanHandoff: agent.proposeHumanHandoff ?? true,
+          disableIntentSuggestion: agent.disableIntentSuggestion ?? false,
         });
 
       const result = await structuredOrJson<WarmupButtonsResponse>({
@@ -293,6 +297,8 @@ export async function generateWarmupButtons(
           task: "WARMUP_BUTTONS",
           channel,
           hints, // inclui desc completo
+          proposeHumanHandoff: agent.proposeHumanHandoff ?? true,
+          disableIntentSuggestion: agent.disableIntentSuggestion ?? false,
         });
 
       const result = await structuredOrJson<WarmupButtonsResponse>({
@@ -390,17 +396,21 @@ export async function routerLLM(
       // Prompt persistente em developer: MASTER + TASK (ROUTER LLM)
       const messages: Array<{ role: 'developer' | 'user'; content: string }> = [];
       if (isNewSession) {
-        const routerTask = TASK_PROMPTS.ROUTER_LLM(!!agent.instructions);
-        const developerFixed = createMasterPrompt(channel) + "\n\nTASK_RULES\n" + routerTask.trim();
+        const routerTask = TASK_PROMPTS.ROUTER_LLM(!!agent.instructions, agent.proposeHumanHandoff ?? true);
+        const developerFixed = createMasterPrompt(channel, agent.proposeHumanHandoff ?? true) + "\n\nTASK_RULES\n" + routerTask.trim();
         messages.push({ role: 'developer', content: developerFixed });
       }
       messages.push({ role: 'user', content: user });
 
       // Instruções efêmeras: prompt do agente + HINTS (apenas conteúdos que mudam)
-      const ephemeralInstructions =
-        (agent.instructions || "Siga o schema estritamente.") +
-        "\n\nINTENT_HINTS_JSON\n" +
-        JSON.stringify(hints, null, 0);
+      let ephemeralInstructions = agent.instructions || "Siga o schema estritamente.";
+      
+      // Only include INTENT_HINTS if not disabled
+      if (!agent.disableIntentSuggestion && hints.length > 0) {
+        ephemeralInstructions += "\n\nINTENT_HINTS_JSON\n" + JSON.stringify(hints, null, 0);
+      } else if (agent.disableIntentSuggestion) {
+        ephemeralInstructions += "\n\nINTENT_HINTS_DISABLED\n- Sistema de sugestão de intenção desativado. Siga estritamente as instruções do agente sem propor intenções baseadas em hints.";
+      }
 
       const useReasoning = caps.reasoning && isGPT5(agent.model);
       const result = await structuredOrJson<RouterDecision>({

@@ -147,6 +147,7 @@ const ButtonManagerComponent: React.FC<ButtonManagerProps> = ({
   if (process.env.NODE_ENV === 'development') {
     console.log('[ButtonManager] Reactions data:', reactions);
     console.log('[ButtonManager] Buttons data:', buttons);
+    console.log('[ButtonManager] Button types received:', buttons.map(b => ({ id: b.id, type: b.type, text: b.text, hasUrl: !!b.url })));
   }
 
   const [validationErrors, setValidationErrors] = useState<Record<string, string[]>>({});
@@ -253,7 +254,24 @@ const ButtonManagerComponent: React.FC<ButtonManagerProps> = ({
 
   // Remove button
   const removeButton = (buttonId: string) => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🗑️ [ButtonManager] Removing button:', {
+        buttonId,
+        currentButtons: buttons.length,
+        buttonIds: buttons.map(b => b.id)
+      });
+    }
+    
     const newButtons = buttons.filter(button => button.id !== buttonId);
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🗑️ [ButtonManager] After removal:', {
+        newButtonCount: newButtons.length,
+        newButtonIds: newButtons.map(b => b.id),
+        wasRemoved: buttons.length !== newButtons.length
+      });
+    }
+    
     onChange(newButtons);
     
     // Remove associated reaction
@@ -507,7 +525,21 @@ const ButtonManagerComponent: React.FC<ButtonManagerProps> = ({
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
         <SortableContext items={buttons.map(b => b.id)} strategy={verticalListSortingStrategy}>
       <div className="space-y-3">
-        {buttons.map((button, index) => (
+        {buttons.map((button, index) => {
+          // ✅ DEBUG: Verificar se o tipo do botão está nos tipos disponíveis
+          const isTypeAvailable = (availableButtonTypes as readonly string[]).includes(button.type);
+          if (process.env.NODE_ENV === 'development' && !isTypeAvailable) {
+            console.error(`🚨 [ButtonManager] Button type "${button.type}" not in availableButtonTypes:`, {
+              buttonId: button.id,
+              buttonType: button.type,
+              availableTypes: availableButtonTypes,
+              channelType,
+              isMetaChannel,
+              isInstagramQuickReplies
+            });
+          }
+          
+          return (
           <SortableItem key={button.id} id={button.id}>
           <Card className="relative">
             <CardHeader className="pb-3">
@@ -549,9 +581,18 @@ const ButtonManagerComponent: React.FC<ButtonManagerProps> = ({
                 </Label>
                 <Select
                   value={button.type}
-                  onValueChange={(value: InteractiveButton['type']) => 
-                    updateButton(button.id, { type: value })
-                  }
+                  onValueChange={(value: InteractiveButton['type']) => {
+                    if (process.env.NODE_ENV === 'development') {
+                      console.log(`🔄 [ButtonManager] Changing button type:`, {
+                        buttonId: button.id,
+                        oldType: button.type,
+                        newType: value,
+                        hasUrl: !!button.url,
+                        url: button.url
+                      });
+                    }
+                    updateButton(button.id, { type: value });
+                  }}
                   disabled={disabled}
                 >
                   <SelectTrigger className="h-8">
@@ -724,7 +765,8 @@ const ButtonManagerComponent: React.FC<ButtonManagerProps> = ({
             </CardContent>
           </Card>
           </SortableItem>
-        ))}
+          );
+        })}
 
         {buttons.length === 0 && (
           <Card className="border-dashed">
@@ -746,10 +788,35 @@ const ButtonManagerComponent: React.FC<ButtonManagerProps> = ({
 
 // Memoize the component to prevent unnecessary re-renders when props haven't changed
 export const ButtonManager = React.memo(ButtonManagerComponent, (prevProps, nextProps) => {
-  // Custom comparison function to optimize re-renders
+  // ✅ FIX: Use deep comparison for arrays instead of reference comparison
+  // Reference comparison (===) fails when arrays are recreated with same content
+  
+  // Compare buttons array by length and content
+  const buttonsEqual = 
+    prevProps.buttons.length === nextProps.buttons.length &&
+    prevProps.buttons.every((btn, idx) => {
+      const nextBtn = nextProps.buttons[idx];
+      return btn.id === nextBtn.id &&
+             btn.text === nextBtn.text &&
+             btn.type === nextBtn.type &&
+             btn.url === nextBtn.url &&
+             btn.phone_number === nextBtn.phone_number;
+    });
+  
+  // Compare reactions array by length and content (handle undefined)
+  const prevReactions = prevProps.reactions || [];
+  const nextReactions = nextProps.reactions || [];
+  const reactionsEqual =
+    prevReactions.length === nextReactions.length &&
+    prevReactions.every((reaction, idx) => {
+      const nextReaction = nextReactions[idx];
+      return reaction.buttonId === nextReaction.buttonId &&
+             JSON.stringify(reaction.reaction) === JSON.stringify(nextReaction.reaction);
+    });
+  
   return (
-    prevProps.buttons === nextProps.buttons &&
-    prevProps.reactions === nextProps.reactions &&
+    buttonsEqual &&
+    reactionsEqual &&
     prevProps.maxButtons === nextProps.maxButtons &&
     prevProps.disabled === nextProps.disabled &&
     prevProps.className === nextProps.className &&
