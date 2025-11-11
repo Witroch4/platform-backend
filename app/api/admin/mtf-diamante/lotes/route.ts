@@ -13,6 +13,18 @@ interface LoteOab {
   isActive: boolean;
 }
 
+// Helper function to ensure "R$" prefix in value
+function normalizeValor(valor: string): string {
+  if (!valor) return valor;
+  const trimmedValor = valor.trim();
+  // Check if already has R$ prefix (case insensitive)
+  if (/^R\$\s*/i.test(trimmedValor)) {
+    return trimmedValor;
+  }
+  // Add R$ prefix
+  return `R$ ${trimmedValor}`;
+}
+
 // GET - Listar lotes
 export async function GET() {
   try {
@@ -86,12 +98,15 @@ export async function POST(request: NextRequest) {
     // Se já existem lotes, o novo será inativo por padrão
     const isFirstLote = lotes.length === 0;
 
+    // Normalizar valor para garantir prefixo R$
+    const valorNormalizado = normalizeValor(valor);
+
     // Criar novo lote
     const novoLote: LoteOab = {
       id: `lote_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
       numero: parseInt(numero),
       nome,
-      valor,
+      valor: valorNormalizado,
       dataInicio,
       dataFim,
       isActive: isFirstLote // Apenas o primeiro lote é ativo por padrão
@@ -187,7 +202,7 @@ export async function PUT(request: NextRequest) {
       ...lotes[loteIndex],
       numero: numero !== undefined ? parseInt(numero) : lotes[loteIndex].numero,
       nome: nome || lotes[loteIndex].nome,
-      valor: valor || lotes[loteIndex].valor,
+      valor: valor ? normalizeValor(valor) : lotes[loteIndex].valor,
       dataInicio: dataInicio || lotes[loteIndex].dataInicio,
       dataFim: dataFim || lotes[loteIndex].dataFim,
       isActive: isActive !== undefined ? isActive : lotes[loteIndex].isActive

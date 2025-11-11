@@ -2,6 +2,18 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { getPrismaInstance } from '@/lib/connections';
 import { auth } from '@/auth';
 
+// Helper function to ensure "R$" prefix in value
+function normalizeValor(valor: string): string {
+  if (!valor) return valor;
+  const trimmedValor = valor.trim();
+  // Check if already has R$ prefix (case insensitive)
+  if (/^R\$\s*/i.test(trimmedValor)) {
+    return trimmedValor;
+  }
+  // Add R$ prefix
+  return `R$ ${trimmedValor}`;
+}
+
 // PATCH - Atualizar lote (status ou dados completos)
 export async function PATCH(
   request: NextRequest,
@@ -58,7 +70,7 @@ export async function PATCH(
       ...lotes[loteIndex],
       numero: numero !== undefined ? parseInt(numero) : lotes[loteIndex].numero,
       nome: nome || lotes[loteIndex].nome,
-      valor: valor || lotes[loteIndex].valor,
+      valor: valor ? normalizeValor(valor) : lotes[loteIndex].valor,
       dataInicio: dataInicio || lotes[loteIndex].dataInicio,
       dataFim: dataFim || lotes[loteIndex].dataFim,
       isActive: isActive !== undefined ? isActive : lotes[loteIndex].isActive
