@@ -191,7 +191,7 @@ export function useMtfVariaveis() {
       const response = await fetch('/api/admin/mtf-diamante/variaveis');
       if (!response.ok) throw new Error('Erro ao carregar variáveis');
       const data = await response.json();
-      return data.variaveis || [];
+      return data.data || [];
     },
     { key: 'mtf-variaveis', ttl: 5 * 60 * 1000 } // 5 minutes
   );

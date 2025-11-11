@@ -28,20 +28,20 @@ export async function GET() {
     });
 
     if (!config) {
-      return NextResponse.json({ lotes: [] });
+      return NextResponse.json({ success: true, data: [] });
     }
 
     // Buscar a variável que contém os lotes
     const lotesVariavel = config.variaveis.find(v => v.chave === 'lotes_oab');
     
     if (!lotesVariavel || !lotesVariavel.valor) {
-      return NextResponse.json({ lotes: [] });
+      return NextResponse.json({ success: true, data: [] });
     }
 
     // Converter o JSON para array de lotes
     const lotes = Array.isArray(lotesVariavel.valor) ? (lotesVariavel.valor as unknown as any[]) : [];
 
-    return NextResponse.json({ lotes });
+    return NextResponse.json({ success: true, data: lotes });
   } catch (error) {
     console.error('Erro ao buscar lotes:', error);
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
@@ -132,8 +132,9 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ 
-      message: 'Lote criado com sucesso',
-      lote: novoLote
+      success: true,
+      data: novoLote,
+      message: 'Lote criado com sucesso'
     });
   } catch (error) {
     console.error('Erro ao criar lote:', error);
@@ -199,8 +200,9 @@ export async function PUT(request: NextRequest) {
     });
 
     return NextResponse.json({ 
-      message: 'Lote atualizado com sucesso',
-      lote: lotes[loteIndex]
+      success: true,
+      data: lotes[loteIndex],
+      message: 'Lote atualizado com sucesso'
     });
   } catch (error) {
     console.error('Erro ao atualizar lote:', error);
@@ -250,6 +252,7 @@ export async function DELETE(request: NextRequest) {
     });
 
     return NextResponse.json({ 
+      success: true,
       message: 'Lote removido com sucesso'
     });
   } catch (error) {

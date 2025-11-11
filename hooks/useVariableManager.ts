@@ -54,7 +54,6 @@ export function useVariableManager(): UseVariableManagerReturn {
   // Load variables from API
   const refreshVariables = useCallback(async () => {
     try {
-      if (loadedRef.current) return; // avoid duplicate loads in StrictMode
       if (inflightRef.current) {
         await inflightRef.current; // await ongoing request
         return;
@@ -68,7 +67,7 @@ export function useVariableManager(): UseVariableManagerReturn {
         }
         
         const data = await response.json();
-        const loadedVariables = ensureSpecialVariables(data.variaveis || []);
+        const loadedVariables = ensureSpecialVariables(data.data || []);
         setVariables(loadedVariables);
         loadedRef.current = true;
       })();

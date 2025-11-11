@@ -86,8 +86,9 @@ export async function PATCH(
     }
 
     return NextResponse.json({ 
-      message: 'Lote atualizado com sucesso',
-      lote: lotes[loteIndex]
+      success: true,
+      data: lotes[loteIndex],
+      message: 'Lote atualizado com sucesso'
     });
   } catch (error) {
     console.error('Erro ao atualizar lote:', error);
@@ -150,6 +151,7 @@ export async function DELETE(
     }
 
     return NextResponse.json({ 
+      success: true,
       message: 'Lote removido com sucesso'
     });
   } catch (error) {

@@ -139,7 +139,7 @@ export async function GET(request: NextRequest) {
     console.log(`[MTF Variables] Retornando ${todasVariaveis.length} variáveis para usuário ${session.user.id}:`, 
       todasVariaveis.map(v => `${v.chave} (${v.tipo})`));
 
-    return NextResponse.json({ success: true, variaveis: todasVariaveis });
+    return NextResponse.json({ success: true, data: todasVariaveis });
 
   } catch (error) {
     console.error("Erro em GET /variaveis:", error);
@@ -205,7 +205,7 @@ export async function POST(request: NextRequest) {
       where: { configId: config.id }
     });
 
-    return NextResponse.json({ success: true, variaveis: variaveisCriadas });
+    return NextResponse.json({ success: true, data: variaveisCriadas });
 
   } catch (error) {
     console.error("Erro em POST /variaveis:", error);

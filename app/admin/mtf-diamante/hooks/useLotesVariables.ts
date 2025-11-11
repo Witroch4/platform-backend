@@ -48,9 +48,9 @@ export const useLotesVariables = (
 
       const data = await response.json();
       
-      if (data.success && Array.isArray(data.variaveis)) {
-        // Filtrar apenas variáveis de lotes
-        const lotesVariaveis = data.variaveis.filter((v: LoteVariable) => v.tipo === 'lote');
+      if (data.success && Array.isArray(data.data)) {
+        // Filter to get only lote type variables
+        const lotesVariaveis = data.data.filter((v: LoteVariable) => v.tipo === 'lote');
         setLoteVariables(lotesVariaveis);
       } else {
         throw new Error('Formato de resposta inválido');

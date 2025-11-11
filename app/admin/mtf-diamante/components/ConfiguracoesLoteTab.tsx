@@ -20,7 +20,6 @@ import { DisparoMensagemDialog } from './DisparoMensagemDialog';
 import { LoteCardSkeleton, VariavelSkeleton } from './LoadingSkeletons';
 import { useMtfData } from '../context/SwrProvider';
 import { validateVariable, ensureSpecialVariables, SPECIAL_VARIABLES } from '@/app/lib/variable-utils';
-import { useVariableManager } from '@/hooks/useVariableManager';
 import { DateTimePicker } from '@/app/[accountid]/dashboard/agendamento/components/date-time-picker';
 
 interface WhatsAppConfig {
@@ -70,9 +69,6 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
 
   // Usando contexto de dados para cache persistente
   const { variaveis, loadingVariaveis, refreshVariaveis, lotes, loadingLotes, refreshLotes } = useMtfData();
-  
-  // Using the enhanced variable manager for better variable handling
-  const variableManager = useVariableManager();
 
   useEffect(() => {
     if (configPadrao) {
@@ -182,12 +178,64 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
   const handleVariaveisSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Use the enhanced variable manager for saving
-    const success = await variableManager.saveVariables(variaveisEditaveis);
+    // Validate all variables before saving
+    const allErrors: string[] = [];
     
-    if (success) {
-      // Refresh the cache after successful save
-      refreshVariaveis();
+    variaveisEditaveis.forEach(variavel => {
+      if (variavel.chave.trim() || variavel.valor.trim()) {
+        const validation = validateVariable(variavel);
+        if (!validation.isValid) {
+          allErrors.push(...validation.errors);
+        }
+      }
+    });
+
+    if (allErrors.length > 0) {
+      toast.error(`Erros de validação: ${allErrors.join(', ')}`);
+      return;
+    }
+
+    // Ensure special variables are present
+    const specialVariables = ['chave_pix', 'nome_do_escritorio_rodape'];
+    const missingSpecialVars = specialVariables.filter(
+      special => !variaveisEditaveis.some(v => v.chave === special && v.valor.trim())
+    );
+
+    if (missingSpecialVars.length > 0) {
+      toast.error(`Variáveis especiais obrigatórias faltando: ${missingSpecialVars.join(', ')}`);
+      return;
+    }
+
+    // Save using the MTF provider's API pattern
+    try {
+      const response = await fetch('/api/admin/mtf-diamante/variaveis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          variaveis: variaveisEditaveis
+            .filter(v => v.chave.trim() && v.valor.trim()) // Filtrar apenas variáveis com chave e valor
+            .map(v => ({
+              chave: v.chave.trim(),
+              valor: v.valor.trim()
+            }))
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Falha ao salvar variáveis');
+      }
+
+      toast.success('Variáveis salvas com sucesso!');
+      
+      // ✅ CRÍTICO: Revalidar o cache do SWR após salvar
+      // Isso garante que os dados sejam recarregados do servidor
+      await refreshVariaveis();
+      
+    } catch (error) {
+      console.error('Erro ao salvar variáveis:', error);
+      const message = error instanceof Error ? error.message : 'Erro ao salvar variáveis';
+      toast.error(message);
     }
   };
 

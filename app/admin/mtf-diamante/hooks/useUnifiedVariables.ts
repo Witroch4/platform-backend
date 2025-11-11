@@ -48,9 +48,9 @@ export const useUnifiedVariables = (
 
       const data = await response.json();
       
-      if (data.success && Array.isArray(data.variaveis)) {
+      if (data.success && Array.isArray(data.data)) {
         // Incluir tanto variáveis normais quanto o lote ativo
-        setVariables(data.variaveis);
+        setVariables(data.data);
       } else {
         throw new Error('Formato de resposta inválido');
       }
