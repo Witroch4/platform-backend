@@ -223,9 +223,21 @@ class ConfigManager {
     if (process.env.OAB_EVAL_AGENT_LOCAL !== undefined) {
       config.oab_eval.agentelocal = process.env.OAB_EVAL_AGENT_LOCAL === "true";
     }
+    
+    // ⭐ CORREÇÃO: Aplicar override para agentelocal_espelho
+    if (process.env.OAB_EVAL_AGENT_LOCAL_ESPELHO !== undefined) {
+      config.oab_eval.agentelocal_espelho = process.env.OAB_EVAL_AGENT_LOCAL_ESPELHO === "true";
+    }
+    
     if (process.env.OAB_EVAL_TRANSCRIBE_CONCURRENCY) {
       const n = parseInt(process.env.OAB_EVAL_TRANSCRIBE_CONCURRENCY, 10);
       if (!Number.isNaN(n) && n > 0) config.oab_eval.transcribe_concurrency = n;
+    }
+    
+    // Aplicar override para mirror_concurrency
+    if (process.env.OAB_EVAL_MIRROR_CONCURRENCY) {
+      const n = parseInt(process.env.OAB_EVAL_MIRROR_CONCURRENCY, 10);
+      if (!Number.isNaN(n) && n > 0) config.oab_eval.mirror_concurrency = n;
     }
 
     return config;
@@ -275,7 +287,9 @@ class ConfigManager {
       },
       oab_eval: {
         agentelocal: process.env.OAB_EVAL_AGENT_LOCAL === 'true',
-        transcribe_concurrency: parseInt(process.env.OAB_EVAL_TRANSCRIBE_CONCURRENCY || '10', 10)
+        agentelocal_espelho: process.env.OAB_EVAL_AGENT_LOCAL_ESPELHO === 'true',
+        transcribe_concurrency: parseInt(process.env.OAB_EVAL_TRANSCRIBE_CONCURRENCY || '10', 10),
+        mirror_concurrency: parseInt(process.env.OAB_EVAL_MIRROR_CONCURRENCY || '5', 10)
       }
     };
   }
@@ -303,7 +317,10 @@ class ConfigManager {
       'HEALTH_CHECK_TIMEOUT',
       'HEALTH_CHECK_INTERVAL',
       'WEBHOOK_DIRECT_PROCESSING',
-      'OAB_EVAL_AGENT_LOCAL'
+      'OAB_EVAL_AGENT_LOCAL',
+      'OAB_EVAL_AGENT_LOCAL_ESPELHO',
+      'OAB_EVAL_TRANSCRIBE_CONCURRENCY',
+      'OAB_EVAL_MIRROR_CONCURRENCY'
     ];
 
     for (const envVar of envVars) {
