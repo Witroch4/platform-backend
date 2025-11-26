@@ -831,35 +831,35 @@ export default function TemplateDetailsInternal({
                         <p className="text-sm font-medium">
                           {contactList.length} contatos selecionados
                         </p>
-                        <div className="relative">
-                          <Button
-                            onClick={handleMassSend}
-                            disabled={isMassSending}
-                            className={`w-full font-semibold text-base py-6 transition-all duration-300 ${
+                        <Button
+                          onClick={handleMassSend}
+                          disabled={isMassSending}
+                          className={`w-full font-bold text-base py-6 transition-all duration-300 !rounded-lg
+                            ${
                               isMassSending
-                                ? "bg-green-500 hover:bg-green-600 text-white shadow-lg shadow-green-500/50"
-                                : "bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-lg hover:shadow-xl hover:shadow-green-500/40"
-                            }`}
-                            style={{
-                              animation: isMassSending ? "pulse-glow 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite" : "none",
-                            }}
-                          >
-                            {isMassSending ? (
-                              <Loader2 className="animate-spin h-5 w-5 mr-2" />
-                            ) : null}
-                            {isMassSending ? "Enviando..." : "🚀 Enviar para Todos"}
-                          </Button>
-                          {!isMassSending && (
-                            <div className="absolute inset-0 bg-gradient-to-r from-green-400/20 to-emerald-400/20 rounded-md blur opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                                ? "!bg-green-500 !text-white !shadow-2xl"
+                                : "!bg-gradient-to-r !from-green-500 !to-emerald-500 !text-white !shadow-xl hover:!shadow-2xl"
+                            }
+                          `}
+                          style={{
+                            animation: isMassSending ? "pulse-glow 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite" : "none",
+                            boxShadow: isMassSending ? "0 0 30px rgba(34, 197, 94, 0.8)" : "0 10px 25px rgba(34, 197, 94, 0.4)",
+                          }}
+                        >
+                          {isMassSending ? (
+                            <Loader2 className="animate-spin h-5 w-5 mr-2" />
+                          ) : (
+                            <span className="text-xl mr-2">🚀</span>
                           )}
-                        </div>
-                        <style jsx>{`
+                          <span>{isMassSending ? "Enviando..." : "Enviar para Todos"}</span>
+                        </Button>
+                        <style jsx global>{`
                           @keyframes pulse-glow {
                             0%, 100% {
-                              box-shadow: 0 0 20px rgba(34, 197, 94, 0.5), 0 0 40px rgba(34, 197, 94, 0.3);
+                              box-shadow: 0 0 20px rgba(34, 197, 94, 0.6), 0 0 40px rgba(34, 197, 94, 0.4) !important;
                             }
                             50% {
-                              box-shadow: 0 0 30px rgba(34, 197, 94, 0.8), 0 0 60px rgba(34, 197, 94, 0.5);
+                              box-shadow: 0 0 40px rgba(34, 197, 94, 0.9), 0 0 80px rgba(34, 197, 94, 0.6) !important;
                             }
                           }
                         `}</style>
