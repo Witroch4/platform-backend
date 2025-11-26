@@ -831,35 +831,47 @@ export default function TemplateDetailsInternal({
                         <p className="text-sm font-medium">
                           {contactList.length} contatos selecionados
                         </p>
-                        <Button
-                          onClick={handleMassSend}
-                          disabled={isMassSending}
-                          className={`w-full font-bold text-base py-6 transition-all duration-300 !rounded-lg
-                            ${
-                              isMassSending
-                                ? "!bg-green-500 !text-white !shadow-2xl"
-                                : "!bg-gradient-to-r !from-green-500 !to-emerald-500 !text-white !shadow-xl hover:!shadow-2xl"
-                            }
-                          `}
+                        <div
+                          className="send-button-wrapper"
                           style={{
                             animation: isMassSending ? "pulse-glow 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite" : "none",
-                            boxShadow: isMassSending ? "0 0 30px rgba(34, 197, 94, 0.8)" : "0 10px 25px rgba(34, 197, 94, 0.4)",
                           }}
                         >
-                          {isMassSending ? (
-                            <Loader2 className="animate-spin h-5 w-5 mr-2" />
-                          ) : (
-                            <span className="text-xl mr-2">🚀</span>
-                          )}
-                          <span>{isMassSending ? "Enviando..." : "Enviar para Todos"}</span>
-                        </Button>
+                          <Button
+                            onClick={handleMassSend}
+                            disabled={isMassSending}
+                            className="w-full font-bold text-base h-12"
+                            style={{
+                              background: isMassSending
+                                ? "#22c55e"
+                                : "linear-gradient(to right, #22c55e, #10b981)",
+                              color: "white",
+                              boxShadow: isMassSending
+                                ? "0 0 30px rgba(34, 197, 94, 0.8)"
+                                : "0 10px 25px rgba(34, 197, 94, 0.4)",
+                            }}
+                          >
+                            {isMassSending ? (
+                              <Loader2 className="animate-spin h-5 w-5 mr-2" />
+                            ) : (
+                              <span className="text-xl mr-2">🚀</span>
+                            )}
+                            {isMassSending ? "Enviando..." : "Enviar para Todos"}
+                          </Button>
+                        </div>
                         <style jsx global>{`
+                          .send-button-wrapper button {
+                            background-color: unset !important;
+                            background: inherit !important;
+                            color: white !important;
+                          }
+
                           @keyframes pulse-glow {
                             0%, 100% {
-                              box-shadow: 0 0 20px rgba(34, 197, 94, 0.6), 0 0 40px rgba(34, 197, 94, 0.4) !important;
+                              filter: drop-shadow(0 0 20px rgba(34, 197, 94, 0.6)) drop-shadow(0 0 40px rgba(34, 197, 94, 0.4));
                             }
                             50% {
-                              box-shadow: 0 0 40px rgba(34, 197, 94, 0.9), 0 0 80px rgba(34, 197, 94, 0.6) !important;
+                              filter: drop-shadow(0 0 40px rgba(34, 197, 94, 0.9)) drop-shadow(0 0 80px rgba(34, 197, 94, 0.6));
                             }
                           }
                         `}</style>
