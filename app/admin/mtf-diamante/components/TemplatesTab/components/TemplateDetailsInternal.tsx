@@ -525,12 +525,14 @@ export default function TemplateDetailsInternal({
         toast.success(
           `Mensagens enviadas com sucesso para ${selectedLeads.length} leads!`
         );
-        // Limpar estado após conclusão: aguardar 2.5s (1.5s do dialog + 1s extra) e resetar
-        setTimeout(() => {
+        // Limpar estado após conclusão: aguardar 1.6s (dialog fecha em 1.5s) e resetar tudo
+        const cleanupTimer = setTimeout(() => {
+          console.log('[MassSend] Limpando estado - contacts, progress dialog, completion flag');
           setContactList([]);
           setShowSendProgress(false);
           setSendProgressComplete(false);
-        }, 2500);
+        }, 1600);
+        return () => clearTimeout(cleanupTimer);
       } else {
         setShowSendProgress(false);
         toast.error(
@@ -840,16 +842,20 @@ export default function TemplateDetailsInternal({
                           <Button
                             onClick={handleMassSend}
                             disabled={isMassSending}
-                            className="w-full font-bold text-base h-12"
+                            className="w-full font-bold text-base h-12 !bg-transparent !text-white"
                             style={{
-                              background: isMassSending
+                              backgroundColor: isMassSending
                                 ? "#22c55e"
-                                : "linear-gradient(to right, #22c55e, #10b981)",
-                              color: "white",
+                                : "#10b981" as any,
+                              backgroundImage: !isMassSending
+                                ? "linear-gradient(to right, #22c55e, #10b981)"
+                                : "none",
+                              color: "white !important" as any,
                               boxShadow: isMassSending
-                                ? "0 0 30px rgba(34, 197, 94, 0.8)"
+                                ? "0 0 30px rgba(34, 197, 94, 0.8), inset 0 0 20px rgba(255, 255, 255, 0.1)"
                                 : "0 10px 25px rgba(34, 197, 94, 0.4)",
-                            }}
+                              border: "none",
+                            } as React.CSSProperties}
                           >
                             {isMassSending ? (
                               <Loader2 className="animate-spin h-5 w-5 mr-2" />
@@ -862,8 +868,14 @@ export default function TemplateDetailsInternal({
                         <style jsx global>{`
                           .send-button-wrapper button {
                             background-color: unset !important;
-                            background: inherit !important;
+                            background-image: inherit !important;
                             color: white !important;
+                            border: none !important;
+                          }
+
+                          .send-button-wrapper button:hover:not(:disabled) {
+                            opacity: 0.9;
+                            filter: brightness(1.1);
                           }
 
                           @keyframes pulse-glow {
