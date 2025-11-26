@@ -193,6 +193,9 @@ export class ConcurrencyManager {
 
   /**
    * Execute an LLM operation with concurrency control
+   * ⚠️ DEADLINE ENFORCEMENT:
+   * - Wraps operation with Promise.race to enforce timeoutMs
+   * - Prevents operations from exceeding deadline even if Operation doesn't respect it
    */
   async executeLlmOperation<T>(
     inboxId: string,
@@ -211,10 +214,11 @@ export class ConcurrencyManager {
     try {
       // Try to acquire slot immediately
       const acquired = await this.acquireSlot(inboxId, operationId);
-      
+
       if (acquired) {
         try {
-          const result = await operation();
+          // Wrap operation with timeout race to ensure it respects deadline
+          const result = await this.executeWithTimeout(operation, timeoutMs, operationId);
           return result;
         } finally {
           await this.releaseSlot(inboxId, operationId);
@@ -233,18 +237,70 @@ export class ConcurrencyManager {
 
       // Queue the operation for later execution
       return await this.queueOperation(inboxId, operationId, operation, priority, timeoutMs);
-      
+
     } catch (error) {
       concurrencyLogger.error('Error executing LLM operation', {
         error: error instanceof Error ? error.message : String(error),
         inboxId,
         operationId
       });
-      
+
       // Release slot if it was acquired
       await this.releaseSlot(inboxId, operationId);
       throw error;
     }
+  }
+
+  /**
+   * Execute operation with timeout enforcement via Promise.race
+   * This ensures operations cannot exceed their deadline even if they ignore AbortSignal
+   */
+  private executeWithTimeout<T>(
+    operation: () => Promise<T>,
+    timeoutMs: number,
+    operationId: string
+  ): Promise<T | null> {
+    return new Promise((resolve, reject) => {
+      let completed = false;
+      let timeoutHandle: NodeJS.Timeout | null = null;
+
+      const timeoutPromise = new Promise<null>((timeoutResolve) => {
+        timeoutHandle = setTimeout(() => {
+          if (!completed) {
+            completed = true;
+            concurrencyLogger.warn('Operation timeout enforced', {
+              operationId,
+              timeoutMs
+            });
+            timeoutResolve(null);
+          }
+        }, timeoutMs);
+      });
+
+      operation()
+        .then((result) => {
+          if (!completed) {
+            completed = true;
+            if (timeoutHandle) clearTimeout(timeoutHandle);
+            resolve(result);
+          }
+        })
+        .catch((error) => {
+          if (!completed) {
+            completed = true;
+            if (timeoutHandle) clearTimeout(timeoutHandle);
+            reject(error);
+          }
+        });
+
+      Promise.race([operation(), timeoutPromise]).then((result) => {
+        if (!completed) {
+          completed = true;
+          if (timeoutHandle) clearTimeout(timeoutHandle);
+          resolve(result as T | null);
+        }
+      });
+    });
   }
 
   /**

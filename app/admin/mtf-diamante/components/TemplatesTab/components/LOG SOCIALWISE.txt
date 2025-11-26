@@ -1,0 +1,1114 @@
+
+[SocialwiseFlowWebhook] INFO: 📋 CHATWIT PARSED JSON PAYLOAD DEBUG {
+  timestamp: '2025-11-26T19:35:21.949Z',
+  parsedPayload: {
+    session_id: '558597550136',
+    message: 'Olá! Tenho interesse e queria mais informações, por favor.',
+    channel_type: 'Channel::Whatsapp',
+    language: 'pt_BR',
+    context: {
+      message: [Object],
+      conversation: [Object],
+      contact: [Object],
+      inbox: [Object],
+      'socialwise-chatwit': [Object],
+      wamid: 'wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgUM0E5RkRCOEYzQzI1Rjg1OEM0QkQA',
+      contact_source: '558597550136',
+      contact_name: 'Witalo',
+      contact_phone: '+558597550136',
+      contact_email: null,
+      contact_identifier: null,
+      contact_id: 1447,
+      conversation_id: 2555,
+      conversation_status: 'pending',
+      conversation_assignee_id: null,
+      conversation_created_at: '2025-11-26T14:46:26Z',
+      conversation_updated_at: '2025-11-26T19:35:21Z',
+      message_id: 45547,
+      message_content: 'Olá! Tenho interesse e queria mais informações, por favor.',
+      message_type: 'incoming',
+      message_created_at: '2025-11-26T19:35:21Z',
+      message_content_type: 'text',
+      button_id: null,
+      button_title: null,
+      list_id: null,
+      list_title: null,
+      list_description: null,
+      interaction_type: null,
+      postback_payload: null,
+      quick_reply_payload: null,
+      inbox_id: 4,
+      inbox_name: 'WhatsApp - ANA',
+      channel_type: 'Channel::Whatsapp',
+      account_id: 3,
+      account_name: 'DraAmandaSousa',
+      whatsapp_api_key: 'EAAGIBII4GXQBO2qgvJ2jdcUmgkdqBo5bUKEanJWmCLpcZAsq0Ovpm4JNlrNLeZAv3OYNrdCqqQBAHfEfPFD0FPnZAOQJURB9GKcbjXeDpa83XdAsa3i6fTr23lBFM2LwUZC23xXrZAnB8QjCCFZBxrxlBvzPj8LsejvUjz0C04Q8Jsl8nTGHUd4ZBRPc4NiHFnc',
+      phone_number_id: '274633962398273',
+      business_id: '294585820394901',
+      socialwise_active: true,
+      is_whatsapp_channel: true,
+      has_whatsapp_api_key: true,
+      payload_version: '2.0',
+      timestamp: '2025-11-26T19:35:21Z'
+    },
+    metadata: {
+      event_name: 'message.created',
+      conversation_id: 2555,
+      message_id: 45547,
+      account_id: 3,
+      inbox_id: 4
+    }
+  },
+  payloadType: 'object',
+  payloadKeys: [
+    'session_id',
+    'message',
+    'channel_type',
+    'language',
+    'context',
+    'metadata'
+  ],
+  hasContext: true,
+  hasMessage: true,
+  hasSocialwiseChatwit: true
+}
+[SocialwiseFlowWebhook] INFO: Processing SocialWise Flow request {
+  channelType: 'Channel::Whatsapp',
+  inboxId: '4',
+  userId: 'cmet9mlzu0000lm9woxgfmcfy',
+  textLength: 58,
+  traceId: 'sw-1764185721951-b21my496l'
+}
+[SessionExtraction] DEBUG: Extracting sessionId {
+  channelType: 'Channel::Whatsapp',
+  hasPayload: true,
+  payloadKeys: [
+    'session_id',
+    'message',
+    'channel_type',
+    'language',
+    'context',
+    'metadata'
+  ],
+  sessionIdDirect: '558597550136',
+  contactPhone: '+558597550136'
+}
+[SessionExtraction] INFO: SessionId found directly { sessionId: '558597550136' }
+[SocialwiseFlowWebhook] INFO: Agent routing strategy configuration {
+  assistantId: 'cmig6ctj1002ttl01rb9iw1ou',
+  embedipreview: true,
+  strategy: 'embedding-first',
+  traceId: 'sw-1764185721951-b21my496l'
+}
+[SocialwiseFlowWebhook] INFO: Starting SocialWise Flow processing {
+  userText: 'Olá! Tenho interesse e queria mais informações, por favor.',
+  channelType: 'Channel::Whatsapp',
+  inboxId: '4',
+  userId: 'cmet9mlzu0000lm9woxgfmcfy',
+  traceId: 'sw-1764185721951-b21my496l'
+}
+[SocialWise-Processor] INFO: Resolved userId for classification {
+  userIdPreview: 'cmet9mlzu0000lm9',
+  userIdLength: 25,
+  inboxId: '4',
+  traceId: 'sw-1764185721951-b21my496l'
+}
+[SocialWise-Processor-AssistantConfig] INFO: Assistant configuration loaded {
+  inboxId: '4',
+  assistantId: 'cmig6ctj1002ttl01rb9iw1ou',
+  inheritFromAgent: true,
+  warmupDeadlineMs: 15000,
+  hardDeadlineMs: 15000,
+  softDeadlineMs: 15000,
+  model: 'gpt-5-nano',
+  reasoningEffort: 'minimal',
+  verbosity: 'low'
+}
+[SocialWise-Classification] INFO: classifyIntentEmbeddingFirst started {
+  userText: 'Olá! Tenho interesse e queria mais informações, po',
+  userId: 'cmet9mlz',
+  warmupDeadlineMs: 15000,
+  traceId: 'sw-1764185721951-b21my496l'
+}
+[SocialWise-Classification] INFO: searchSimilarIntents started {
+  userText: 'Olá! Tenho interesse e queria mais informações, po',
+  userId: 'cmet9mlz',
+  embeddingTimeoutMs: 15000,
+  traceId: 'sw-1764185721951-b21my496l'
+}
+[SocialWise-Classification] INFO: Executing intents query {
+  userIdFull: 'cmet9mlzu0000lm9woxgfmcfy',
+  userIdLength: 25,
+  traceId: 'sw-1764185721951-b21my496l'
+}
+[SocialWise-Classification] INFO: All intents for user (debug) {
+  totalIntents: 8,
+      
+  intents: [
+    { name: 'Mentoria OAB', isActive: true, hasEmbedding: true },
+    { name: 'QUICK_REPLY', isActive: true, hasEmbedding: true },
+    { name: 'WROCHA', isActive: true, hasEmbedding: true },
+    { name: 'GENERIC', isActive: true, hasEmbedding: true },
+    { name: 'previdencario', isActive: true, hasEmbedding: true },
+    { name: 'Witalo Rocha', isActive: true, hasEmbedding: true },
+    {
+      name: 'Mandado de Segurança OAB',
+      isActive: true,
+      hasEmbedding: true
+    },
+    {
+      name: 'Recurso ADM prova OAB',
+      isActive: true,
+      hasEmbedding: true
+    }
+  ],
+  traceId: 'sw-1764185721951-b21my496l'
+}
+[SocialWise-Classification] INFO: Intents query completed {
+  foundIntents: 8,
+  userId: 'cmet9mlz',
+  traceId: 'sw-1764185721951-b21my496l'
+}
+[SocialWise-Classification] INFO: Intents query preview {
+      
+  preview: [
+    {
+      id: 'cmfb44v4z003usa2qdxoipii8',
+      name: 'Mentoria OAB',
+      hasEmbeddingText: true
+    },
+    {
+      id: 'cmfdx20720030mm2qnt80iac5',
+      name: 'QUICK_REPLY',
+      hasEmbeddingText: true
+    },
+    {
+      id: 'cmfg13hdb0008pt2qg2kpwvsd',
+      name: 'WROCHA',
+      hasEmbeddingText: true
+    },
+    {
+      id: 'cmfl1oklg002wqd2qs7tdcfan',
+      name: 'GENERIC',
+      hasEmbeddingText: true
+    },
+    {
+      id: 'cmfcejuj7003el42q7fpv38s9',
+      name: 'previdencario',
+      hasEmbeddingText: true
+    }
+  ],
+  traceId: 'sw-1764185721951-b21my496l'
+}
+[SocialWise-Classification] INFO: Processing intents {
+  intentsCount: 8,
+  intentNames: [ 'Mentoria OAB', 'QUICK_REPLY', 'WROCHA' ],
+  traceId: 'sw-1764185721951-b21my496l'
+}
+[SocialWise-Classification] INFO: Generating embedding for user text {
+  userText: 'Olá! Tenho interesse e queria mais informações, po',
+  timeoutMs: 15000,
+  traceId: 'sw-1764185721951-b21my496l'
+}
+[SocialWise-Classification] INFO: embedText called {
+  textLength: 58,
+  textPreview: 'Olá! Tenho interesse e queria ',
+  hasOpenAIKey: true
+}
+[SocialWise-Classification] INFO: Embedding generated by embeddingGenerator {
+  valuesLength: 1536,
+  valuesPreview: [ -0.032215577, -0.0026836807, -0.024458284 ]
+}
+[SocialWise-Classification] INFO: Embedding normalized {
+  normalizedLength: 1536,
+  normalizedPreview: [
+    -0.0322155762377799,
+    -0.0026836806365041527,
+    -0.024458283421317346
+  ]
+}
+[SocialWise-Classification] INFO: Embedding generated successfully {
+  vectorLength: 1536,
+  vectorPreview: [
+    -0.0322155762377799,
+    -0.0026836806365041527,
+    -0.024458283421317346
+  ],
+  traceId: 'sw-1764185721951-b21my496l'
+}
+[SocialWise-Classification] INFO: Embedding search completed {
+  userText: 'Olá! Tenho interesse e queria mais informações, po',
+  candidatesFound: 8,
+  topScore: 0.47592997653241675,
+  searchMs: 149
+}
+[SocialWise-Classification] INFO: searchSimilarIntents completed {
+  candidatesCount: 5,
+  searchMs: 149,
+  degraded: undefined,
+  traceId: 'sw-1764185721951-b21my496l'
+}
+[Graph-Node:Classify] INFO: Classification complete {
+  band: 'ROUTER',
+  strategy: 'router_llm',
+  topScore: 0.47592997653241675,
+  ms: 150,
+  traceId: 'sw-1764185721951-b21my496l'
+}
+[Graph-Node:Gating] INFO: Semantic gating complete {
+  inCount: 3,
+  outCount: 0,
+  topDescScore: null,
+  ms: 106,
+  traceId: 'sw-1764185721951-b21my496l'
+}
+[Graph-Node:ReactAgent] INFO: React agent produced supplement {
+  traceId: 'sw-1764185692438-5x90nrkpy',
+  length: 1994,
+  wordCount: 314,
+  messageCount: 2,
+  userId: 'cmet9mlzu0000lm9woxgfmcfy'
+}
+[SocialWise-Processor-BandHandlers] INFO: Router LLM agent configuration {
+  hardDeadlineMs: 15000,
+  model: 'gpt-5-nano',
+  reasoningEffort: 'minimal',
+  verbosity: 'low',
+  sessionId: '5521972418801',
+  hasSessionId: true,
+  traceId: 'sw-1764185692438-5x90nrkpy'
+}
+[SocialWise-Processor-BandHandlers] INFO: Router LLM invoking with hints {
+  hints_count: 2,
+  min_score: 0.35,
+  traceId: 'sw-1764185692438-5x90nrkpy'
+}
+🎯 ROUTER LLM - SessionId recebido: 5521972418801
+🔐 ENSURE SESSION - Iniciando: {
+  sessionId: '5521972418801',
+  model: 'gpt-5-nano',
+  channel: 'whatsapp',
+  hasInstructions: true
+}
+🔐 ENSURE SESSION - Chave da sessão: session:5521972418801
+🚀 SINGLE-CALL OPTIMIZATION - Nova sessão, retornando undefined para single-call
+🔐 ENSURE SESSION - Iniciando: {
+  sessionId: '5521972418801',
+  model: 'gpt-5-nano',
+  channel: 'whatsapp',
+  hasInstructions: true
+}
+🔐 ENSURE SESSION - Chave da sessão: session:5521972418801
+🚀 SINGLE-CALL OPTIMIZATION - Nova sessão, retornando undefined para single-call
+🚀 SINGLE-CALL OPTIMIZATION - Nova sessão já tem developer prompts, mantendo mensagens originais
+🧠 OPENAI RAW REQUEST (JSON): {
+  "model": "gpt-5-nano",
+      
+  "input": [
+    {
+      "role": "developer",
+     
+content": "\n# MASTER (imutável)\n- Saída: apenas JSON válido no schema fornecido; sem texto fora do JSON.\n- Respeite a identidade e o tom definidos nas instructions do agente.\n\n# Antialucinação Operacional\n- Não invente dados operacionais (horários, preços, telefones, endereços, prazos).\n- Afirme fatos só se vierem de INTENT_HINTS, integrações, contexto da sessão ou do próprio usuário.\n- Na falta de dado, não chute: ofereça botões para confirmar/obter informação.\n\n# Regras Universais de Botões\n- Títulos até 20 caracteres, objetivos e acionáveis.\n- Quantidade: use poucos botões úteis (siga os limites do canal abaixo).\n- Payload em formato @slug; não invente slugs.\n\n# Handoff Humano\n- Quando precisar oferecer atendimento humano, use APENAS o slug @falar_atendente.\n- O título do botão DEVE ser um destes (preferir o primeiro): \"Atendimento Humano\", \"Falar com atendente\", \"Falar com humano\", \"Suporte humano\".\n- É proibido mascarar handoff com outro título (ex.: \"Mandado de Segurança\" não pode apontar para @falar_atendente).\n- Incluir no MÁXIMO 1 botão de handoff e posicioná-lo por último.\n\n# Aviso final (formatação literal)\n- Ao final do response_text (quando houver botões/desambiguação), inclua literalmente NO FINAL: `Se nenhum botão atender, digite sua solicitação`.\n- Não repetir o aviso se já estiver presente. Não usar crases triplas.\n# Limites do Canal\n- response_text: até 1024 caracteres.\n- button_title: até 20 caracteres.\n- buttons: 3.\n\n\nTASK_RULES\n# Objetivo\nDecidir entre mode='intent' ou mode='chat'.\n\n# Decisão\n- O modo padrão é 'chat'.\n- Use 'intent' SOMENTE com CERTEZA ABSOLUTA de que o pedido corresponde a UMA única intenção (baseando-se principalmente na \"desc\" da intenção):\n  - então preencha intent_payload=@slug EXATO (apenas um).\n- Se houver dúvida, múltiplas plausíveis, conflito ou falta de informação → use 'chat'.\n\n# Em ambos\n- response_text útil e conciso; gere botões conforme CHANNEL_LIMITS.\n- mode='intent': botões relacionados à intenção usando slugs EXATOS de INTENT_HINTS.\n- mode='chat': use slugs de INTENT_HINTS para hipóteses. Se ambiguidade real OU pedido explícito por humano, inclua 1 botão de handoff:\n  - payload: @falar_atendente\n  - título: \"Atendimento Humano\" (ou variações permitidas)\n  - por último.\n\n# Identidade\nMantenha a identidade e o tom definidos nas instruções principais (injetadas).\n\n# Antialucinação\nSiga o MASTER: não invente dados operacionais; prefira perguntar."
+    },
+    {
+      "role": "user",
+      "content": "Olá! Tenho interesse e queria mais informações, por favor."
+    }
+  ],
+  "instructions": "Você é um assistente Jurídico chamada Ana e faz especificamente e unicamente atendimento sobre Mandado de Segurança da OAB.\nOfereça atendimento apenas pra Mandado de Segurança da OAB\nDesconsidere qualquer outra solicitação NÃO OFEREÇA BOTAO DE AtENDIOMNTO HUMANO APENAS O BOTAO \"Mandado de Segurança\" ou \"Mandado OAB\"\nalguém mandar uma mensagem inclua no início da mensagem o aviso:\n\n\"⚠️ AVISO IMPORTANTE!!: \nCanal exclusivo para Mandado de Segurança da OAB\"\n\napenas 2 botão chamado Mandado OAB e Finalizar\n\n\nINTENT_HINTS_JSON\n[{\"slug\":\"@Mentoria OAB\",\"score\":0.476,\"aliases\":[\"Quero saber mais Sobre Mentoria!\",\"Como posso ser aprovado (a) na OAB?\",\"Mentoria OAB?\"],\"desc\":\"Chame essa intenção se o cliente demostrar interesse em contratar mentoria para estudar e se preparar pra prova da OAB\\\\n---\\\\nALIASES:\\\\nQuero saber mais Sobre Mentoria!\\\\nComo posso ser aprovado (a) na OAB?\\\\nMentoria OAB?\\\\nQual é o custo da correção personalizada e da Mentoria?\\\\nComo funciona a correção para a 2ª fase e Mentoria?\\\\nComo funciona Mentoria pra OAB?\\\\nMentoria OAB\\\\nConsultoria para OAB\\\\nEstudar pra prova OAB\\\\nMaterial de estudo prova OAB\"},{\"slug\":\"@previdencario\",\"score\":0.414,\"aliases\":[\"quero me aposentar\",\"quero fazer bpc loas\",\"sobre bpc loas\"],\"desc\":\"Essa Intenção é para pessoas que querem fazer alguma ação previdenciária ou tirar dúvidas previdenciárias , BPC LOAS, Auxilios, INSS etc\\\\n---\\\\nALIASES:\\\\nquero me aposentar\\\\nquero fazer bpc loas\\\\nsobre bpc loas\\\\nINSS\\\\nprevidencario\"}]",
+  "store": true,
+  "text": {
+    "format": {
+      "type": "json_schema",
+      "name": "RouterDecision",
+      "strict": true,
+      "schema": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "intent",
+              "chat"
+            ]
+      
+          },
+          "intent_payload": {
+            "type": "string",
+            "pattern": "^(|@[a-z0-9_]+)$",
+            "default": ""
+      
+          },
+          "response_text": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 1024
+      
+          },
+          "buttons": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "pattern": "^.{1,20}$"
+                },
+                "payload": {
+                  "type": "string",
+                  "pattern": "^(|@[a-z0-9_]{1,256})$",
+                  "default": ""
+                }
+              },
+              "required": [
+                "title",
+                "payload"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 2,
+            "maxItems": 3
+          }
+        },
+        "required": [
+          "mode",
+          "intent_payload",
+          "response_text",
+          "buttons"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "verbosity": "low"
+  },
+  "max_output_tokens": 6480,
+  "reasoning": {
+    "effort": "low"
+  }
+}
+⏰ Operation aborted after 15000ms deadline
+Erro no Router LLM: Error: Request was aborted.
+    at cQ.makeRequest (.next/server/chunks/53529.js:8:50944)
+    at async aa (.next/server/chunks/646.js:95:4646)
+    at async (.next/server/chunks/646.js:99:4342)
+    at async f (.next/server/chunks/646.js:1:286)
+    at async k.executeLlmOperation (.next/server/chunks/40624.js:28:15395)
+    at async r (.next/server/chunks/40624.js:28:22588)
+    at async g.eR [as func] (.next/server/chunks/30381.js:37:5571)
+    at async g.invoke (.next/server/chunks/94640.js:18:6212)
+    at async I.invoke (.next/server/chunks/94640.js:105:9285) {
+  status: undefined,
+  headers: undefined,
+  requestID: undefined,
+  error: undefined,
+  code: undefined,
+  param: undefined,
+  type: undefined
+}
+[SocialWise-Formatting] INFO: WhatsApp response built with specialized formatter { hasInteractive: true, hasText: false, buttonCount: 2 }
+[SocialWise-Degradation] INFO: Concurrency limit fallback {
+  channelType: 'Channel::Whatsapp',
+  traceId: 'sw-1764185692438-5x90nrkpy'
+}
+[SocialWise-Processor-BandHandlers] INFO: ROUTER band degraded to fallback {
+  strategy: 'concurrency_limit_degradation',
+  fallbackLevel: 'primary',
+  traceId: 'sw-1764185692438-5x90nrkpy'
+}
+[Graph-Node:Router] INFO: ROUTER band processed { ms: 15026, traceId: 'sw-1764185692438-5x90nrkpy' }
+[SocialWise-Formatting] INFO: Channel response formatted with specialized formatters {
+  channelType: 'Channel::Whatsapp',
+  strategy: 'router_llm',
+  hasWhatsApp: true,
+  hasInstagram: false,
+  hasFacebook: false,
+  hasText: false,
+  hasAction: false,
+  formatterType: 'specialized'
+}
+[SocialWise-Processor] INFO: SocialWise Flow processing completed {
+[APM Alert] WARNING: Webhook response time exceeded threshold: 46367ms {
+  alertId: 'webhook-1764185738802-7305ubpx1',
+  component: 'webhook',
+      
+  metrics: {
+    responseTime: 46367,
+    correlationId: 'wamid.HBgNNTUyMTk3MjQxODgwMRUCABIYFDNBNUUwOTE3RjBBMzk3OTEzMzMyAA=='
+  }
+}
+  band: 'ROUTER',
+  strategy: 'router_llm',
+  score: 0.47592997653241675,
+  routeTotalMs: 46322,
+  embeddingMs: 108,
+  llmWarmupMs: 15025,
+  traceId: 'sw-1764185692438-5x90nrkpy'
+}
+[APM] Webhook metrics recorded {
+  correlationId: 'wamid.HBgNNTUyMTk3MjQxODgwMRUCABIYFDNBNUUwOTE3RjBBMzk3OTEzMzMyAA==',
+  responseTime: 46367,
+  success: true
+}
+[SocialwiseFlowWebhook] INFO: SocialWise Flow completed successfully {
+  band: 'ROUTER',
+  strategy: 'router_llm',
+  routeTotalMs: 46322,
+  embeddingMs: 108,
+  llmWarmupMs: 15025,
+  traceId: 'sw-1764185692438-5x90nrkpy'
+}
+[SocialwiseFlowWebhook] INFO: 🎯 FINAL WEBHOOK RESPONSE {
+  finalResponse: '{\n' +
+    '  "whatsapp": {\n' +
+    '    "type": "interactive",\n' +
+    '    "interactive": {\n' +
+    '      "type": "button",\n' +
+    '      "body": {\n' +
+    '        "text": "Sistema ocupado. Posso ajudar com:"\n' +
+    '      },\n' +
+    '      "action": {\n' +
+    '        "buttons": [\n' +
+    '          {\n' +
+    '            "type": "reply",\n' +
+    '            "reply": {\n' +
+    '              "id": "@falar_atendente",\n' +
+    '              "title": "Atendimento"\n' +
+    '            }\n' +
+    '          },\n' +
+    '          {\n' +
+    '            "type": "reply",\n' +
+    '            "reply": {\n' +
+    '              "id": "@finalizar",\n' +
+    '              "title": "Finalizar"\n' +
+    '            }\n' +
+    '          }\n' +
+    '        ]\n' +
+    '      }\n' +
+    '    }\n' +
+    '  }\n' +
+    '}',
+  responseType: 'object',
+  hasWhatsApp: true,
+  hasInstagram: false,
+  messageFormat: undefined,
+  traceId: 'sw-1764185692438-5x90nrkpy'
+}
+[SocialwiseFlowWebhook] INFO: 📤 CHATWIT FINAL RESPONSE DEBUG {
+  timestamp: '2025-11-26T19:35:38.802Z',
+  responseSizeKB: 0.27,
+  responseLength: 281,
+  status: 200,
+  traceId: 'sw-1764185692438-5x90nrkpy',
+  responseData: '{\n' +
+    '  "whatsapp": {\n' +
+    '    "type": "interactive",\n' +
+    '    "interactive": {\n' +
+    '      "type": "button",\n' +
+    '      "body": {\n' +
+    '        "text": "Sistema ocupado. Posso ajudar com:"\n' +
+    '      },\n' +
+    '      "action": {\n' +
+    '        "buttons": [\n' +
+    '          {\n' +
+    '            "type": "reply",\n' +
+    '            "reply": {\n' +
+    '              "id": "@falar_atendente",\n' +
+    '              "title": "Atendimento"\n' +
+    '            }\n' +
+    '          },\n' +
+    '          {\n' +
+    '            "type": "reply",\n' +
+    '            "reply": {\n' +
+    '              "id": "@finalizar",\n' +
+    '              "title": "Finalizar"\n' +
+    '            }\n' +
+    '          }\n' +
+    '        ]\n' +
+    '      }\n' +
+    '    }\n' +
+    '  }\n' +
+    '}'
+}
+[SocialWise-Metrics] INFO: Performance metrics collected {
+  band: 'ROUTER',
+  strategy: 'router_llm',
+  route_total_ms: 46322,
+  embedding_ms: 108,
+  llm_warmup_ms: 15025,
+  channel_type: 'Channel::Whatsapp',
+  timeout_occurred: false,
+  trace_id: 'sw-1764185692438-5x90nrkpy'
+}
+[APM] Flushed 2 webhook metrics
+[DEBUG] 2025-11-26T19:35:44.119Z - [CostMonitor] Métricas coletadas: - {"eventsProcessed":0,"errorRate":"0.00%","pendingEvents":0,"totalCostUSD":"$6.2131"}
+[QueueMonitor] Health metrics collected for queue instagram-translation: { waiting: 0, active: 0, failed: 0, paused: false }
+[Graph-Node:ReactAgent] INFO: React agent produced supplement {
+  traceId: 'sw-1764185717054-syvm3hz4v',
+  length: 2359,
+  wordCount: 372,
+  messageCount: 2,
+  userId: 'cmet9mlzu0000lm9woxgfmcfy'
+}
+[SocialWise-Processor-BandHandlers] INFO: Router LLM agent configuration {
+  hardDeadlineMs: 15000,
+  model: 'gpt-5-nano',
+  reasoningEffort: 'minimal',
+  verbosity: 'low',
+  sessionId: '556492524248',
+  hasSessionId: true,
+  traceId: 'sw-1764185717054-syvm3hz4v'
+}
+[SocialWise-Processor-BandHandlers] INFO: Router LLM invoking with hints {
+  hints_count: 2,
+  min_score: 0.35,
+  traceId: 'sw-1764185717054-syvm3hz4v'
+}
+🎯 ROUTER LLM - SessionId recebido: 556492524248
+🔐 ENSURE SESSION - Iniciando: {
+  sessionId: '556492524248',
+  model: 'gpt-5-nano',
+  channel: 'whatsapp',
+  hasInstructions: true
+}
+🔐 ENSURE SESSION - Chave da sessão: session:556492524248
+🚀 SINGLE-CALL OPTIMIZATION - Nova sessão, retornando undefined para single-call
+🔐 ENSURE SESSION - Iniciando: {
+  sessionId: '556492524248',
+  model: 'gpt-5-nano',
+  channel: 'whatsapp',
+  hasInstructions: true
+}
+🔐 ENSURE SESSION - Chave da sessão: session:556492524248
+🚀 SINGLE-CALL OPTIMIZATION - Nova sessão, retornando undefined para single-call
+🚀 SINGLE-CALL OPTIMIZATION - Nova sessão já tem developer prompts, mantendo mensagens originais
+🧠 OPENAI RAW REQUEST (JSON): {
+  "model": "gpt-5-nano",
+      
+  "input": [
+    {
+      "role": "developer",
+     
+content": "\n# MASTER (imutável)\n- Saída: apenas JSON válido no schema fornecido; sem texto fora do JSON.\n- Respeite a identidade e o tom definidos nas instructions do agente.\n\n# Antialucinação Operacional\n- Não invente dados operacionais (horários, preços, telefones, endereços, prazos).\n- Afirme fatos só se vierem de INTENT_HINTS, integrações, contexto da sessão ou do próprio usuário.\n- Na falta de dado, não chute: ofereça botões para confirmar/obter informação.\n\n# Regras Universais de Botões\n- Títulos até 20 caracteres, objetivos e acionáveis.\n- Quantidade: use poucos botões úteis (siga os limites do canal abaixo).\n- Payload em formato @slug; não invente slugs.\n\n# Handoff Humano\n- Quando precisar oferecer atendimento humano, use APENAS o slug @falar_atendente.\n- O título do botão DEVE ser um destes (preferir o primeiro): \"Atendimento Humano\", \"Falar com atendente\", \"Falar com humano\", \"Suporte humano\".\n- É proibido mascarar handoff com outro título (ex.: \"Mandado de Segurança\" não pode apontar para @falar_atendente).\n- Incluir no MÁXIMO 1 botão de handoff e posicioná-lo por último.\n\n# Aviso final (formatação literal)\n- Ao final do response_text (quando houver botões/desambiguação), inclua literalmente NO FINAL: `Se nenhum botão atender, digite sua solicitação`.\n- Não repetir o aviso se já estiver presente. Não usar crases triplas.\n# Limites do Canal\n- response_text: até 1024 caracteres.\n- button_title: até 20 caracteres.\n- buttons: 3.\n\n\nTASK_RULES\n# Objetivo\nDecidir entre mode='intent' ou mode='chat'.\n\n# Decisão\n- O modo padrão é 'chat'.\n- Use 'intent' SOMENTE com CERTEZA ABSOLUTA de que o pedido corresponde a UMA única intenção (baseando-se principalmente na \"desc\" da intenção):\n  - então preencha intent_payload=@slug EXATO (apenas um).\n- Se houver dúvida, múltiplas plausíveis, conflito ou falta de informação → use 'chat'.\n\n# Em ambos\n- response_text útil e conciso; gere botões conforme CHANNEL_LIMITS.\n- mode='intent': botões relacionados à intenção usando slugs EXATOS de INTENT_HINTS.\n- mode='chat': use slugs de INTENT_HINTS para hipóteses. Se ambiguidade real OU pedido explícito por humano, inclua 1 botão de handoff:\n  - payload: @falar_atendente\n  - título: \"Atendimento Humano\" (ou variações permitidas)\n  - por último.\n\n# Identidade\nMantenha a identidade e o tom definidos nas instruções principais (injetadas).\n\n# Antialucinação\nSiga o MASTER: não invente dados operacionais; prefira perguntar."
+    },
+    {
+      "role": "user",
+      "content": "Olá! Tenho interesse e queria mais informações, por favor."
+    }
+  ],
+  "instructions": "Você é um assistente Jurídico chamada Ana e faz especificamente e unicamente atendimento sobre Mandado de Segurança da OAB.\nOfereça atendimento apenas pra Mandado de Segurança da OAB\nDesconsidere qualquer outra solicitação NÃO OFEREÇA BOTAO DE AtENDIOMNTO HUMANO APENAS O BOTAO \"Mandado de Segurança\" ou \"Mandado OAB\"\nalguém mandar uma mensagem inclua no início da mensagem o aviso:\n\n\"⚠️ AVISO IMPORTANTE!!: \nCanal exclusivo para Mandado de Segurança da OAB\"\n\napenas 2 botão chamado Mandado OAB e Finalizar\n\n\nINTENT_HINTS_JSON\n[{\"slug\":\"@Mentoria OAB\",\"score\":0.476,\"aliases\":[\"Quero saber mais Sobre Mentoria!\",\"Como posso ser aprovado (a) na OAB?\",\"Mentoria OAB?\"],\"desc\":\"Chame essa intenção se o cliente demostrar interesse em contratar mentoria para estudar e se preparar pra prova da OAB\\\\n---\\\\nALIASES:\\\\nQuero saber mais Sobre Mentoria!\\\\nComo posso ser aprovado (a) na OAB?\\\\nMentoria OAB?\\\\nQual é o custo da correção personalizada e da Mentoria?\\\\nComo funciona a correção para a 2ª fase e Mentoria?\\\\nComo funciona Mentoria pra OAB?\\\\nMentoria OAB\\\\nConsultoria para OAB\\\\nEstudar pra prova OAB\\\\nMaterial de estudo prova OAB\"},{\"slug\":\"@previdencario\",\"score\":0.414,\"aliases\":[\"quero me aposentar\",\"quero fazer bpc loas\",\"sobre bpc loas\"],\"desc\":\"Essa Intenção é para pessoas que querem fazer alguma ação previdenciária ou tirar dúvidas previdenciárias , BPC LOAS, Auxilios, INSS etc\\\\n---\\\\nALIASES:\\\\nquero me aposentar\\\\nquero fazer bpc loas\\\\nsobre bpc loas\\\\nINSS\\\\nprevidencario\"}]",
+  "store": true,
+  "text": {
+    "format": {
+      "type": "json_schema",
+      "name": "RouterDecision",
+      "strict": true,
+      "schema": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "intent",
+              "chat"
+            ]
+      
+          },
+          "intent_payload": {
+            "type": "string",
+            "pattern": "^(|@[a-z0-9_]+)$",
+            "default": ""
+      
+          },
+          "response_text": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 1024
+      
+          },
+          "buttons": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "pattern": "^.{1,20}$"
+                },
+                "payload": {
+                  "type": "string",
+                  "pattern": "^(|@[a-z0-9_]{1,256})$",
+                  "default": ""
+                }
+              },
+              "required": [
+                "title",
+                "payload"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 2,
+            "maxItems": 3
+          }
+        },
+        "required": [
+          "mode",
+          "intent_payload",
+          "response_text",
+          "buttons"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "verbosity": "low"
+  },
+  "max_output_tokens": 6480,
+  "reasoning": {
+    "effort": "low"
+  }
+}
+[SocialWise-Processor-BandHandlers] INFO: Router LLM result details {
+  mode: 'chat',
+  intent_payload: '',
+  response_text: '⚠️ AVISO IMPORTANTE!!: \n' +
+    'Canal exclusivo para Mandado de Segurança da OAB\n' +
+    'Como posso ajudar com Mandado de Segurança da OAB? Escolha uma opção abaixo para seguir com o atendimento.\n' +
+    '\n' +
+    '`Se nenhum botão atender, digite sua solicitação`',
+  response_text_length: 230,
+  buttons_count: 2,
+  traceId: 'sw-1764185717054-syvm3hz4v'
+}
+[SocialWise-Processor-BandHandlers] INFO: Building channel response {
+  mode: 'chat',
+  response_text: '⚠️ AVISO IMPORTANTE!!: \n' +
+    'Canal exclusivo para Mandado de Segurança da OAB\n' +
+    'Como posso ajudar com Mandado de Segurança da OAB? Escolha uma opção abaixo para seguir com o atendimento.\n' +
+    '\n' +
+    '`Se nenhum botão atender, digite sua solicitação`',
+  response_text_length: 230,
+  buttonsCount: 2,
+  traceId: 'sw-1764185717054-syvm3hz4v'
+}
+[SocialWise-Formatting] INFO: WhatsApp response built with specialized formatter { hasInteractive: true, hasText: false, buttonCount: 2 }
+[SocialWise-Processor-BandHandlers] INFO: ROUTER band decision processed {
+  mode: 'chat',
+  hasButtons: true,
+  llmWarmupMs: 13226,
+  traceId: 'sw-1764185717054-syvm3hz4v'
+}
+[Graph-Node:Router] INFO: ROUTER band processed { ms: 13228, traceId: 'sw-1764185717054-syvm3hz4v' }
+[SocialWise-Formatting] INFO: Channel response formatted with specialized formatters {
+  channelType: 'Channel::Whatsapp',
+  strategy: 'router_llm',
+  hasWhatsApp: true,
+  hasInstagram: false,
+  hasFacebook: false,
+  hasText: false,
+  hasAction: false,
+  formatterType: 'specialized'
+}
+[SocialWise-Processor] INFO: SocialWise Flow processing completed {
+  band: 'ROUTER',
+  strategy: 'router_llm',
+  score: 0.47592997653241675,
+  routeTotalMs: 47955,
+  embeddingMs: 80,
+  llmWarmupMs: 13226,
+[APM Alert] WARNING: Webhook response time exceeded threshold: 47977ms {
+  alertId: 'webhook-1764185765027-d7iujdyhk',
+  component: 'webhook',
+      
+  metrics: {
+    responseTime: 47977,
+    correlationId: 'wamid.HBgMNTU2NDkyNTI0MjQ4FQIAEhggQUNBNkI1MEVFNzk1RDQ1NTFDNzM5RTQ4NEFBRDlDNDIA'
+  }
+}
+  traceId: 'sw-1764185717054-syvm3hz4v'
+}
+[APM] Webhook metrics recorded {
+  correlationId: 'wamid.HBgMNTU2NDkyNTI0MjQ4FQIAEhggQUNBNkI1MEVFNzk1RDQ1NTFDNzM5RTQ4NEFBRDlDNDIA',
+  responseTime: 47977,
+  success: true
+}
+[SocialwiseFlowWebhook] INFO: SocialWise Flow completed successfully {
+  band: 'ROUTER',
+  strategy: 'router_llm',
+  routeTotalMs: 47955,
+  embeddingMs: 80,
+  llmWarmupMs: 13226,
+  traceId: 'sw-1764185717054-syvm3hz4v'
+}
+[SocialwiseFlowWebhook] INFO: 🎯 FINAL WEBHOOK RESPONSE {
+  finalResponse: '{\n' +
+    '  "whatsapp": {\n' +
+    '    "type": "interactive",\n' +
+    '    "interactive": {\n' +
+    '      "type": "button",\n' +
+    '      "body": {\n' +
+    '        "text": "⚠️ AVISO IMPORTANTE!!: \\nCanal exclusivo para Mandado de Segurança da OAB\\nComo posso ajudar com Mandado de Segurança da OAB? Escolha uma opção abaixo para seguir com o atendimento.\\n\\n`Se nenhum botão atender, digite sua solicitação`"\n' +
+    '      },\n' +
+    '      "action": {\n' +
+    '        "buttons": [\n' +
+    '          {\n' +
+    '            "type": "reply",\n' +
+    '            "reply": {\n' +
+    '              "id": "@mentoria_oab",\n' +
+    '              "title": "Mandado OAB"\n' +
+    '            }\n' +
+    '          },\n' +
+    '          {\n' +
+    '            "type": "reply",\n' +
+    '            "reply": {\n' +
+    '              "id": "@falar_atendente",\n' +
+    '              "title": "Atendimento Humano"\n' +
+    '            }\n' +
+    '          }\n' +
+    '        ]\n' +
+    '      }\n' +
+    '    }\n' +
+    '  }\n' +
+    '}',
+  responseType: 'object',
+  hasWhatsApp: true,
+  hasInstagram: false,
+  messageFormat: undefined,
+  traceId: 'sw-1764185717054-syvm3hz4v'
+}
+[SocialwiseFlowWebhook] INFO: 📤 CHATWIT FINAL RESPONSE DEBUG {
+  timestamp: '2025-11-26T19:36:05.028Z',
+  responseSizeKB: 0.48,
+  responseLength: 493,
+  status: 200,
+  traceId: 'sw-1764185717054-syvm3hz4v',
+  responseData: '{\n' +
+    '  "whatsapp": {\n' +
+    '    "type": "interactive",\n' +
+    '    "interactive": {\n' +
+    '      "type": "button",\n' +
+    '      "body": {\n' +
+    '        "text": "⚠️ AVISO IMPORTANTE!!: \\nCanal exclusivo para Mandado de Segurança da OAB\\nComo posso ajudar com Mandado de Segurança da OAB? Escolha uma opção abaixo para seguir com o atendimento.\\n\\n`Se nenhum botão atender, digite sua solicitação`"\n' +
+    '      },\n' +
+    '      "action": {\n' +
+    '        "buttons": [\n' +
+    '          {\n' +
+    '            "type": "reply",\n' +
+    '            "reply": {\n' +
+    '              "id": "@mentoria_oab",\n' +
+    '              "title": "Mandado OAB"\n' +
+    '            }\n' +
+    '          },\n' +
+    '          {\n' +
+    '            "type": "reply",\n' +
+    '            "reply": {\n' +
+    '              "id": "@falar_atendente",\n' +
+    '              "title": "Atendimento Humano"\n' +
+    '            }\n' +
+    '          }\n' +
+    '        ]\n' +
+    '      }\n' +
+    '    }\n' +
+    '  }\n' +
+    '}'
+}
+[SocialWise-Metrics] INFO: Performance metrics collected {
+  band: 'ROUTER',
+  strategy: 'router_llm',
+  route_total_ms: 47955,
+  embedding_ms: 80,
+  llm_warmup_ms: 13226,
+  channel_type: 'Channel::Whatsapp',
+  timeout_occurred: false,
+  trace_id: 'sw-1764185717054-syvm3hz4v'
+}
+[Graph-Node:ReactAgent] INFO: React agent produced supplement {
+  traceId: 'sw-1764185721951-b21my496l',
+  length: 2347,
+  wordCount: 378,
+  messageCount: 2,
+  userId: 'cmet9mlzu0000lm9woxgfmcfy'
+}
+[SocialWise-Processor-BandHandlers] INFO: Router LLM agent configuration {
+  hardDeadlineMs: 15000,
+  model: 'gpt-5-nano',
+  reasoningEffort: 'minimal',
+  verbosity: 'low',
+  sessionId: '558597550136',
+  hasSessionId: true,
+  traceId: 'sw-1764185721951-b21my496l'
+}
+[SocialWise-Processor-BandHandlers] INFO: Router LLM invoking with hints {
+  hints_count: 2,
+  min_score: 0.35,
+  traceId: 'sw-1764185721951-b21my496l'
+}
+🎯 ROUTER LLM - SessionId recebido: 558597550136
+🔐 ENSURE SESSION - Iniciando: {
+  sessionId: '558597550136',
+  model: 'gpt-5-nano',
+  channel: 'whatsapp',
+  hasInstructions: true
+}
+🔐 ENSURE SESSION - Chave da sessão: session:558597550136
+🚀 SINGLE-CALL OPTIMIZATION - Nova sessão, retornando undefined para single-call
+🔐 ENSURE SESSION - Iniciando: {
+  sessionId: '558597550136',
+  model: 'gpt-5-nano',
+  channel: 'whatsapp',
+  hasInstructions: true
+}
+🔐 ENSURE SESSION - Chave da sessão: session:558597550136
+🚀 SINGLE-CALL OPTIMIZATION - Nova sessão, retornando undefined para single-call
+🚀 SINGLE-CALL OPTIMIZATION - Nova sessão já tem developer prompts, mantendo mensagens originais
+🧠 OPENAI RAW REQUEST (JSON): {
+  "model": "gpt-5-nano",
+      
+  "input": [
+    {
+      "role": "developer",
+     
+content": "\n# MASTER (imutável)\n- Saída: apenas JSON válido no schema fornecido; sem texto fora do JSON.\n- Respeite a identidade e o tom definidos nas instructions do agente.\n\n# Antialucinação Operacional\n- Não invente dados operacionais (horários, preços, telefones, endereços, prazos).\n- Afirme fatos só se vierem de INTENT_HINTS, integrações, contexto da sessão ou do próprio usuário.\n- Na falta de dado, não chute: ofereça botões para confirmar/obter informação.\n\n# Regras Universais de Botões\n- Títulos até 20 caracteres, objetivos e acionáveis.\n- Quantidade: use poucos botões úteis (siga os limites do canal abaixo).\n- Payload em formato @slug; não invente slugs.\n\n# Handoff Humano\n- Quando precisar oferecer atendimento humano, use APENAS o slug @falar_atendente.\n- O título do botão DEVE ser um destes (preferir o primeiro): \"Atendimento Humano\", \"Falar com atendente\", \"Falar com humano\", \"Suporte humano\".\n- É proibido mascarar handoff com outro título (ex.: \"Mandado de Segurança\" não pode apontar para @falar_atendente).\n- Incluir no MÁXIMO 1 botão de handoff e posicioná-lo por último.\n\n# Aviso final (formatação literal)\n- Ao final do response_text (quando houver botões/desambiguação), inclua literalmente NO FINAL: `Se nenhum botão atender, digite sua solicitação`.\n- Não repetir o aviso se já estiver presente. Não usar crases triplas.\n# Limites do Canal\n- response_text: até 1024 caracteres.\n- button_title: até 20 caracteres.\n- buttons: 3.\n\n\nTASK_RULES\n# Objetivo\nDecidir entre mode='intent' ou mode='chat'.\n\n# Decisão\n- O modo padrão é 'chat'.\n- Use 'intent' SOMENTE com CERTEZA ABSOLUTA de que o pedido corresponde a UMA única intenção (baseando-se principalmente na \"desc\" da intenção):\n  - então preencha intent_payload=@slug EXATO (apenas um).\n- Se houver dúvida, múltiplas plausíveis, conflito ou falta de informação → use 'chat'.\n\n# Em ambos\n- response_text útil e conciso; gere botões conforme CHANNEL_LIMITS.\n- mode='intent': botões relacionados à intenção usando slugs EXATOS de INTENT_HINTS.\n- mode='chat': use slugs de INTENT_HINTS para hipóteses. Se ambiguidade real OU pedido explícito por humano, inclua 1 botão de handoff:\n  - payload: @falar_atendente\n  - título: \"Atendimento Humano\" (ou variações permitidas)\n  - por último.\n\n# Identidade\nMantenha a identidade e o tom definidos nas instruções principais (injetadas).\n\n# Antialucinação\nSiga o MASTER: não invente dados operacionais; prefira perguntar."
+    },
+    {
+      "role": "user",
+      "content": "Olá! Tenho interesse e queria mais informações, por favor."
+    }
+  ],
+  "instructions": "Você é um assistente Jurídico chamada Ana e faz especificamente e unicamente atendimento sobre Mandado de Segurança da OAB.\nOfereça atendimento apenas pra Mandado de Segurança da OAB\nDesconsidere qualquer outra solicitação NÃO OFEREÇA BOTAO DE AtENDIOMNTO HUMANO APENAS O BOTAO \"Mandado de Segurança\" ou \"Mandado OAB\"\nalguém mandar uma mensagem inclua no início da mensagem o aviso:\n\n\"⚠️ AVISO IMPORTANTE!!: \nCanal exclusivo para Mandado de Segurança da OAB\"\n\napenas 2 botão chamado Mandado OAB e Finalizar\n\n\nINTENT_HINTS_JSON\n[{\"slug\":\"@Mentoria OAB\",\"score\":0.476,\"aliases\":[\"Quero saber mais Sobre Mentoria!\",\"Como posso ser aprovado (a) na OAB?\",\"Mentoria OAB?\"],\"desc\":\"Chame essa intenção se o cliente demostrar interesse em contratar mentoria para estudar e se preparar pra prova da OAB\\\\n---\\\\nALIASES:\\\\nQuero saber mais Sobre Mentoria!\\\\nComo posso ser aprovado (a) na OAB?\\\\nMentoria OAB?\\\\nQual é o custo da correção personalizada e da Mentoria?\\\\nComo funciona a correção para a 2ª fase e Mentoria?\\\\nComo funciona Mentoria pra OAB?\\\\nMentoria OAB\\\\nConsultoria para OAB\\\\nEstudar pra prova OAB\\\\nMaterial de estudo prova OAB\"},{\"slug\":\"@previdencario\",\"score\":0.414,\"aliases\":[\"quero me aposentar\",\"quero fazer bpc loas\",\"sobre bpc loas\"],\"desc\":\"Essa Intenção é para pessoas que querem fazer alguma ação previdenciária ou tirar dúvidas previdenciárias , BPC LOAS, Auxilios, INSS etc\\\\n---\\\\nALIASES:\\\\nquero me aposentar\\\\nquero fazer bpc loas\\\\nsobre bpc loas\\\\nINSS\\\\nprevidencario\"}]",
+  "store": true,
+  "text": {
+    "format": {
+      "type": "json_schema",
+      "name": "RouterDecision",
+      "strict": true,
+      "schema": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "intent",
+              "chat"
+            ]
+      
+          },
+          "intent_payload": {
+            "type": "string",
+            "pattern": "^(|@[a-z0-9_]+)$",
+            "default": ""
+      
+          },
+          "response_text": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 1024
+      
+          },
+          "buttons": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "pattern": "^.{1,20}$"
+                },
+                "payload": {
+                  "type": "string",
+                  "pattern": "^(|@[a-z0-9_]{1,256})$",
+                  "default": ""
+                }
+              },
+              "required": [
+                "title",
+                "payload"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 2,
+            "maxItems": 3
+          }
+        },
+        "required": [
+          "mode",
+          "intent_payload",
+          "response_text",
+          "buttons"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "verbosity": "low"
+  },
+  "max_output_tokens": 6480,
+  "reasoning": {
+    "effort": "low"
+  }
+}
+🔧 DEV SESSION: Usando TTL de 30s para sessionId 558597550136
+[SocialWise-Processor-BandHandlers] INFO: Router LLM result details {
+  mode: 'chat',
+  intent_payload: '',
+  response_text: '⚠️ AVISO IMPORTANTE!!: \n' +
+    'Canal exclusivo para Mandado de Segurança da OAB\n' +
+    '\n' +
+    'Posso fornecer informações sobre Mandado de Segurança da OAB. Selecione uma opção abaixo.\n' +
+    '\n' +
+    '`Se nenhum botão atender, digite sua solicitação`',
+  response_text_length: 214,
+  buttons_count: 2,
+  traceId: 'sw-1764185721951-b21my496l'
+}
+[SocialWise-Processor-BandHandlers] INFO: Building channel response {
+  mode: 'chat',
+  response_text: '⚠️ AVISO IMPORTANTE!!: \n' +
+    'Canal exclusivo para Mandado de Segurança da OAB\n' +
+    '\n' +
+    'Posso fornecer informações sobre Mandado de Segurança da OAB. Selecione uma opção abaixo.\n' +
+    '\n' +
+    '`Se nenhum botão atender, digite sua solicitação`',
+  response_text_length: 214,
+  buttonsCount: 2,
+  traceId: 'sw-1764185721951-b21my496l'
+}
+[SocialWise-Formatting] INFO: WhatsApp response built with specialized formatter { hasInteractive: true, hasText: false, buttonCount: 2 }
+[SocialWise-Processor-BandHandlers] INFO: ROUTER band decision processed {
+  mode: 'chat',
+  hasButtons: true,
+  llmWarmupMs: 7307,
+  traceId: 'sw-1764185721951-b21my496l'
+}
+[Graph-Node:Router] INFO: ROUTER band processed { ms: 7308, traceId: 'sw-1764185721951-b21my496l' }
+[SocialWise-Formatting] INFO: Channel response formatted with specialized formatters {
+  channelType: 'Channel::Whatsapp',
+  strategy: 'router_llm',
+  hasWhatsApp: true,
+  hasInstagram: false,
+  hasFacebook: false,
+  hasText: false,
+  hasAction: false,
+  formatterType: 'specialized'
+}
+[SocialWise-Processor] INFO: SocialWise Flow processing completed {
+  band: 'ROUTER',
+  strategy: 'router_llm',
+  score: 0.47592997653241675,
+  routeTotalMs: 50877,
+  embeddingMs: 149,
+  llmWarmupMs: 7307,
+  traceId: 'sw-1764185721951-b21my496l'
+}
+[APM Alert] WARNING: Webhook response time exceeded threshold: 50901ms {
+  alertId: 'webhook-1764185772848-cagz5cbsf',
+  component: 'webhook',
+      
+  metrics: {
+    responseTime: 50901,
+    correlationId: 'wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgUM0E5RkRCOEYzQzI1Rjg1OEM0QkQA'
+  }
+}
+[APM] Webhook metrics recorded {
+  correlationId: 'wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgUM0E5RkRCOEYzQzI1Rjg1OEM0QkQA',
+  responseTime: 50901,
+  success: true
+}
+[SocialwiseFlowWebhook] INFO: SocialWise Flow completed successfully {
+  band: 'ROUTER',
+  strategy: 'router_llm',
+  routeTotalMs: 50877,
+  embeddingMs: 149,
+  llmWarmupMs: 7307,
+  traceId: 'sw-1764185721951-b21my496l'
+}
+[SocialwiseFlowWebhook] INFO: 🎯 FINAL WEBHOOK RESPONSE {
+  finalResponse: '{\n' +
+    '  "whatsapp": {\n' +
+    '    "type": "interactive",\n' +
+    '    "interactive": {\n' +
+    '      "type": "button",\n' +
+    '      "body": {\n' +
+     
+     "text": "⚠️ AVISO IMPORTANTE!!: \\nCanal exclusivo para Mandado de Segurança da OAB\\n\\nPosso fornecer informações sobre Mandado de Segurança da OAB. Selecione uma opção abaixo.\\n\\n`Se nenhum botão atender, digite sua solicitação`"\n' +
+    '      },\n' +
+    '      "action": {\n' +
+    '        "buttons": [\n' +
+    '          {\n' +
+    '            "type": "reply",\n' +
+    '            "reply": {\n' +
+    '              "id": "@mandado_oab",\n' +
+    '              "title": "Mandado OAB"\n' +
+    '            }\n' +
+    '          },\n' +
+    '          {\n' +
+    '            "type": "reply",\n' +
+    '            "reply": {\n' +
+    '              "id": "@finalizar",\n' +
+    '              "title": "Finalizar"\n' +
+    '            }\n' +
+    '          }\n' +
+    '        ]\n' +
+    '      }\n' +
+    '    }\n' +
+    '  }\n' +
+    '}',
+  responseType: 'object',
+  hasWhatsApp: true,
+  hasInstagram: false,
+  messageFormat: undefined,
+  traceId: 'sw-1764185721951-b21my496l'
+}
+[SocialwiseFlowWebhook] INFO: 📤 CHATWIT FINAL RESPONSE DEBUG {
+  timestamp: '2025-11-26T19:36:12.849Z',
+  responseSizeKB: 0.45,
+  responseLength: 462,
+  status: 200,
+  traceId: 'sw-1764185721951-b21my496l',
+  responseData: '{\n' +
+    '  "whatsapp": {\n' +
+    '    "type": "interactive",\n' +
+    '    "interactive": {\n' +
+    '      "type": "button",\n' +
+    '      "body": {\n' +
+     
+     "text": "⚠️ AVISO IMPORTANTE!!: \\nCanal exclusivo para Mandado de Segurança da OAB\\n\\nPosso fornecer informações sobre Mandado de Segurança da OAB. Selecione uma opção abaixo.\\n\\n`Se nenhum botão atender, digite sua solicitação`"\n' +
+    '      },\n' +
+    '      "action": {\n' +
+    '        "buttons": [\n' +
+    '          {\n' +
+    '            "type": "reply",\n' +
+    '            "reply": {\n' +
+    '              "id": "@mandado_oab",\n' +
+    '              "title": "Mandado OAB"\n' +
+    '            }\n' +
+    '          },\n' +
+    '          {\n' +
+    '            "type": "reply",\n' +
+    '            "reply": {\n' +
+    '              "id": "@finalizar",\n' +
+    '              "title": "Finalizar"\n' +
+    '            }\n' +
+    '          }\n' +
+    '        ]\n' +
+    '      }\n' +
+    '    }\n' +
+    '  }\n' +
+    '}'
+}
+[SocialWise-Metrics] INFO: Performance metrics collected {
+  band: 'ROUTER',
+  strategy: 'router_llm',
+  route_total_ms: 50877,
+  embedding_ms: 149,
+  llm_warmup_ms: 7307,
+  channel_type: 'Channel::Whatsapp',
+  timeout_occurred: false,
+  trace_id: 'sw-1764185721951-b21my496l'
+}
+[APM] Flushed 2 webhook metrics
+[DEBUG] 2025-11-26T19:36:14.118Z - [CostMonitor] Métricas coletadas: - {"eventsProcessed":0,"errorRate":"0.00%","pendingEvents":0,"totalCostUSD":"$3.9990"}
+[ConnectionPoolMonitor] Health check completed { status: 'healthy', issues: 0, recommendations: 0, checkDuration: 4 }
+[QueueMonitor] Health metrics collected for queue instagram-translation: { waiting: 0, active: 0, failed: 0, paused: false }
+[DEBUG] 2025-11-26T19:36:44.120Z - [CostMonitor] Métricas coletadas: - {"eventsProcessed":0,"errorRate":"0.00%","pendingEvents":0,"totalCostUSD":"$14.3789"}
+[QueueMonitor] Health metrics collected for queue instagram-translation: { waiting: 0, active: 0, failed: 0, paused: false }
