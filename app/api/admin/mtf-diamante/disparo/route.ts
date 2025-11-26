@@ -274,6 +274,10 @@ export async function POST(request: Request) {
             // Preparar nome do lead
             const nomeDoLead = lead.name || "Cliente";
 
+            // Debug: Verificar o que foi recebido
+            console.log(`[Disparo] Lead selecionado: ${lead.name} (ID: ${lead.id}, telefone: ${lead.phone})`);
+            console.log(`[Disparo] Parameters recebidos do frontend:`, JSON.stringify(parameters, null, 2));
+
             // Converter parameters para o formato esperado por sendTemplateMessage
             const sendOpts: any = {};
 
@@ -359,25 +363,46 @@ export async function POST(request: Request) {
                   namedPlaceholders.length > 0 ? namedPlaceholders : numericPlaceholders
                 );
 
-                // Se houver placeholders nomeados, tentar preencher por nome (parameters -> example -> nomeDoLead)
+                // Se houver placeholders nomeados, tentar preencher por nome (parameters -> nomeDoLead -> example)
                 if (namedPlaceholders.length > 0) {
                   const vars: string[] = [];
                   const examplesArr: Array<{ param_name?: string; example?: string }> =
                     (bodyComponent.example?.body_text_named_params as any[]) || [];
+
+                  console.log(`[Disparo] Resolvendo ${namedPlaceholders.length} variáveis nomeadas...`);
+
                   for (const varName of namedPlaceholders) {
                     const provided = (parameters as any)?.[varName];
                     const exampleVal = examplesArr.find((e) => e?.param_name === varName)?.example;
-                    vars.push(
-                      String(
-                        (typeof provided !== "undefined" && provided !== null && provided !== "")
-                          ? provided
-                          : (exampleVal || nomeDoLead)
-                      )
-                    );
+
+                    console.log(`[Disparo] Variável "${varName}":`, {
+                      provided,
+                      exampleVal,
+                      nomeDoLead,
+                      nomeDoLeadIsProvided: typeof provided !== "undefined" && provided !== null && provided !== "",
+                      isNomeLeadVar: varName === "nome_lead"
+                    });
+
+                    // Mapear variáveis conhecidas do lead
+                    let resolvedValue: string;
+                    if (typeof provided !== "undefined" && provided !== null && provided !== "") {
+                      console.log(`[Disparo] ✅ Usando value fornecido: "${provided}"`);
+                      resolvedValue = String(provided);
+                    } else if (varName === "nome_lead") {
+                      // Variável específica: nome_lead deve ser o name do lead, não o example do template
+                      console.log(`[Disparo] ✅ É nome_lead, usando nomeDoLead: "${nomeDoLead}"`);
+                      resolvedValue = nomeDoLead;
+                    } else {
+                      // Para outras variáveis, usar example ou fallback para nomeDoLead
+                      console.log(`[Disparo] ✅ Usando example ou fallback: "${exampleVal || nomeDoLead}"`);
+                      resolvedValue = String(exampleVal || nomeDoLead);
+                    }
+
+                    vars.push(resolvedValue);
                   }
                   sendOpts.bodyVars = vars;
                   console.log(
-                    `[Disparo] Preenchendo BODY por nome: [${vars.join(", ")}], ordem: [${namedPlaceholders.join(", ")}].`
+                    `[Disparo] ✅ Preenchimento final BODY: [${vars.join(", ")}], ordem: [${namedPlaceholders.join(", ")}].`
                   );
                 } else if (numericPlaceholders.length > 0) {
                   // Placeholder numérico -> manter fallback antigo (nomeDoLead x N)

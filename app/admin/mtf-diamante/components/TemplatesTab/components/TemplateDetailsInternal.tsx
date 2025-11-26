@@ -223,6 +223,8 @@ export default function TemplateDetailsInternal({
                   exampleValue = named?.example || "";
                 }
               }
+              // Para nome_lead, não pré-preencher - deixar vazio
+              const initialValue = raw === "nome_lead" ? "" : exampleValue;
               extracted.push({
                 key: isNumeric ? `body_${pos}` : raw,
                 placeholder: match,
@@ -230,7 +232,7 @@ export default function TemplateDetailsInternal({
                 name: isNumeric ? undefined : raw,
                 index: isNumeric ? pos : undefined,
                 example: exampleValue,
-                value: exampleValue,
+                value: initialValue,
               });
             });
           }
@@ -254,6 +256,8 @@ export default function TemplateDetailsInternal({
                   exampleValue = named?.example || "";
                 }
               }
+              // Para nome_lead, não pré-preencher - deixar vazio
+              const initialValue = raw === "nome_lead" ? "" : exampleValue;
               extracted.push({
                 key: isNumeric ? `header_${pos}` : raw,
                 placeholder: match,
@@ -261,12 +265,13 @@ export default function TemplateDetailsInternal({
                 name: isNumeric ? undefined : raw,
                 index: isNumeric ? pos : undefined,
                 example: exampleValue,
-                value: exampleValue,
+                value: initialValue,
               });
             });
           }
         } catch {}
 
+        console.log(`[TemplateDetailsInternal] Variáveis extraídas:`, extracted);
         setPageVariables(extracted);
 
         // HEADER media
@@ -326,10 +331,13 @@ export default function TemplateDetailsInternal({
         // também mandar pela chave nomeada
         params[headerNamed[0].name as string] = headerVal;
       }
-      // BODY nomeadas -> mandar por nome
+      // BODY nomeadas -> mandar por nome (exceto nome_lead, que vem do lead selecionado)
       const bodyNamed = pageVariables.filter((v) => v.scope === "body" && v.name);
       for (const v of bodyNamed) {
-        params[v.name as string] = v.value || v.example || "";
+        // Não enviar nome_lead como parâmetro - vai ser preenchido pela API com o nome real do lead
+        if (v.name !== "nome_lead") {
+          params[v.name as string] = v.value || v.example || "";
+        }
       }
       // BODY numéricas -> montar bodyVars em ordem
       const bodyNumeric = pageVariables
@@ -487,7 +495,10 @@ export default function TemplateDetailsInternal({
       }
       const bodyNamed = pageVariables.filter((v) => v.scope === "body" && v.name);
       for (const v of bodyNamed) {
-        params[v.name as string] = v.value || v.example || "";
+        // Não enviar nome_lead como parâmetro - vai ser preenchido pela API com o nome real do lead
+        if (v.name !== "nome_lead") {
+          params[v.name as string] = v.value || v.example || "";
+        }
       }
       const bodyNumeric = pageVariables
         .filter((v) => v.scope === "body" && typeof v.index === "number")

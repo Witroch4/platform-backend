@@ -36,24 +36,29 @@ function getWhatsAppApiConfig() {
  */
 async function getWhatsAppTemplateDetailsFromAPI(templateId: string, userId: string, forceRefresh = false) {
   const config = getWhatsAppApiConfig();
-  const url = `${config.fbGraphApiBase}/${config.whatsappBusinessAccountId}/message_templates?fields=name,status,category,language,components,sub_category,quality_score,correct_category,cta_url_link_tracking_opted_out,library_template_name,message_send_ttl_seconds,parameter_format,previous_category&limit=1000`;
-  const response = await axios.get(url, {
+
+  // Buscar o template específico diretamente pela sua ID
+  console.log(`[TemplateInfo] Buscando template específico: ${templateId}`);
+  const directUrl = `${config.fbGraphApiBase}/${templateId}?fields=id,name,status,category,language,components,sub_category,quality_score,correct_category,cta_url_link_tracking_opted_out,library_template_name,message_send_ttl_seconds,parameter_format,previous_category`;
+
+  const response = await axios.get(directUrl, {
     headers: {
       Authorization: `Bearer ${config.whatsappToken}`,
       'Content-Type': 'application/json',
     }
   });
-  if (!response.data || !response.data.data || response.data.data.length === 0) {
-    throw new Error('Nenhum template encontrado na API');
+
+  if (!response.data || !response.data.id) {
+    throw new Error('Template não retornou dados válidos');
   }
-  const templateFromApi = response.data.data.find((t: any) => t.id === templateId);
-  if (!templateFromApi) {
-    throw new Error(`Template com ID ${templateId} não encontrado na API`);
-  }
-  
+
+  const templateFromApi = response.data;
+  console.log(`[TemplateInfo] Template encontrado diretamente: ${templateFromApi.name}`);
+  templateFromApi.id = templateFromApi.id || templateId; // Garantir que id existe
+
   // --- LÓGICA OTIMIZADA DE SINCRONIZAÇÃO DE MÍDIA ---
   let publicMediaUrl: string | null = null;
-  
+
   // Primeiro, verificar se já existe uma URL pública no banco de dados
   const existingTemplate = await prisma.template.findFirst({
     where: {
@@ -66,31 +71,31 @@ async function getWhatsAppTemplateDetailsFromAPI(templateId: string, userId: str
       whatsappOfficialInfo: true
     }
   });
-  
-  const headerComponent = templateFromApi.components.find(
+
+  const headerComponent = templateFromApi.components?.find(
     (c: any) => c.type === 'HEADER' && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(c.format)
   );
-  
+
   if (headerComponent) {
     console.log(`[TemplateInfo] Header component encontrado para template ${templateFromApi.name}:`, JSON.stringify(headerComponent, null, 2));
-    
+
     // Tentar múltiplas localizações para a URL da mídia
-    const mediaUrlFromMeta = 
+    const mediaUrlFromMeta =
       headerComponent.example?.header_handle?.[0] ||
       headerComponent.example?.header_url?.[0] ||
       headerComponent.url ||
       headerComponent.example?.url ||
       null;
-    
+
     console.log(`[TemplateInfo] URL de mídia extraída: ${mediaUrlFromMeta}`);
-    
+
     // Verificar se existe URL pública válida no banco
-    const existingPublicUrl = existingTemplate?.whatsappOfficialInfo?.components && 
+    const existingPublicUrl = existingTemplate?.whatsappOfficialInfo?.components &&
         typeof existingTemplate.whatsappOfficialInfo.components === 'object' &&
         'publicMediaUrl' in existingTemplate.whatsappOfficialInfo.components
         ? existingTemplate.whatsappOfficialInfo.components.publicMediaUrl as string | null
         : null;
-    
+
     // Se já existe uma URL pública válida no MinIO E não está sendo forçada atualização, usar ela
     if (existingPublicUrl && !isMetaMediaUrl(existingPublicUrl) && !forceRefresh) {
       publicMediaUrl = existingPublicUrl;
@@ -127,14 +132,14 @@ async function getWhatsAppTemplateDetailsFromAPI(templateId: string, userId: str
     }
   }
   // --- FIM DA LÓGICA OTIMIZADA ---
-  
+
   try {
     // Atualizar ou criar o template no banco de dados
     const componentsWithMedia = {
       ...templateFromApi.components,
       publicMediaUrl: publicMediaUrl
     };
-    
+
     if (existingTemplate) {
       // Atualizar template existente
       await prisma.template.update({
@@ -173,12 +178,12 @@ async function getWhatsAppTemplateDetailsFromAPI(templateId: string, userId: str
         }
       });
     }
-    
+
     console.log(`Template ${templateFromApi.name} sincronizado no banco de dados.`);
   } catch (dbError) {
     console.error('Erro ao salvar template no banco:', dbError);
   }
-  
+
   templateFromApi.publicMediaUrl = publicMediaUrl;
   return templateFromApi;
 }
@@ -187,7 +192,7 @@ async function getWhatsAppTemplateDetailsFromAPI(templateId: string, userId: str
  * Endpoint GET /api/admin/mtf-diamante/template-info
  * Recebe o parâmetro de query "template" (ID do template) e retorna os detalhes.
  * Apenas usuários autenticados com role ADMIN têm acesso.
- * 
+ *
  * Query params opcionais:
  * - forceRefresh: true para forçar atualização da mídia mesmo se já existir no MinIO
  */
@@ -203,7 +208,7 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const templateId = url.searchParams.get('templateId') || url.searchParams.get('template');
     const forceRefresh = url.searchParams.get('forceRefresh') === 'true';
-    
+
     if (!templateId) {
       return NextResponse.json({ error: 'ID do template não fornecido' }, { status: 400 });
     }
@@ -224,7 +229,7 @@ export async function GET(req: Request) {
       });
     }
 
-    // Se não encontrar localmente OU se forceRefresh, buscar da API (comportamento original)
+    // Se não encontrar localmente OU se forceRefresh, buscar da API
     const template = await getWhatsAppTemplateDetailsFromAPI(templateId, session.user.id, forceRefresh);
     if (!template) {
       return NextResponse.json({ error: 'Template não encontrado' }, { status: 404 });
@@ -236,8 +241,20 @@ export async function GET(req: Request) {
         publicMediaUrl: template.publicMediaUrl,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erro ao buscar informações do template:', error);
-    return NextResponse.json({ error: 'Erro ao buscar informações do template' }, { status: 500 });
+
+    // Retornar erro específico da API do WhatsApp
+    if (error.response?.status === 403) {
+      return NextResponse.json(
+        { error: 'Token do WhatsApp inválido ou sem permissão. Verifique as variáveis de ambiente.' },
+        { status: 403 }
+      );
+    }
+
+    return NextResponse.json(
+      { error: error.message || 'Erro ao buscar informações do template' },
+      { status: error.response?.status || 500 }
+    );
   }
 }

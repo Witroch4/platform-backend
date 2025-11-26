@@ -279,6 +279,8 @@ function TemplateDetailsClient({
                   exampleValue = named?.example || "";
                 }
               }
+              // Para nome_lead, não pré-preencher - deixar vazio
+              const initialValue = raw === "nome_lead" ? "" : exampleValue;
               extracted.push({
                 key: isNumeric ? `body_${pos}` : raw,
                 placeholder: match,
@@ -286,7 +288,7 @@ function TemplateDetailsClient({
                 name: isNumeric ? undefined : raw,
                 index: isNumeric ? pos : undefined,
                 example: exampleValue,
-                value: exampleValue,
+                value: initialValue,
               });
             });
           }
