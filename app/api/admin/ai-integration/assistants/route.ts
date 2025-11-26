@@ -132,8 +132,8 @@ export async function POST(request: NextRequest) {
         verbosity: ['low', 'medium', 'high'].includes(body?.verbosity) ? body.verbosity : 'low',
         temperature: typeof body?.temperature === 'number' && body.temperature >= 0 && body.temperature <= 2 ? body.temperature : 0.7,
         topP: typeof body?.topP === 'number' && body.topP >= 0 && body.topP <= 1 ? body.topP : 0.7,
-        tempSchema: typeof body?.tempSchema === 'number' && body.tempSchema >= 0 && body.tempSchema <= 0.2 ? body.tempSchema : 0.1,
-        tempCopy: typeof body?.tempCopy === 'number' && body.tempCopy >= 0.3 && body.tempCopy <= 0.5 ? body.tempCopy : 0.4,
+        tempSchema: typeof body?.tempSchema === 'number' && body.tempSchema >= 0 && body.tempSchema <= 2 ? body.tempSchema : 0.1,
+        tempCopy: typeof body?.tempCopy === 'number' && body.tempCopy >= 0 && body.tempCopy <= 2 ? body.tempCopy : 0.4,
         maxOutputTokens: typeof body?.maxOutputTokens === 'number' && body.maxOutputTokens >= 64 ? body.maxOutputTokens : 1380,
         warmupDeadlineMs: typeof body?.warmupDeadlineMs === 'number' && body.warmupDeadlineMs > 0 ? body.warmupDeadlineMs : 15000,
         hardDeadlineMs: typeof body?.hardDeadlineMs === 'number' && body.hardDeadlineMs > 0 ? body.hardDeadlineMs : 15000,
@@ -213,8 +213,8 @@ export async function PATCH(request: NextRequest) {
   if (['low', 'medium', 'high'].includes(body?.verbosity)) updateData.verbosity = body.verbosity;
   if (typeof body?.temperature === 'number' && body.temperature >= 0 && body.temperature <= 2) updateData.temperature = body.temperature;
   if (typeof body?.topP === 'number' && body.topP >= 0 && body.topP <= 1) updateData.topP = body.topP;
-  if (typeof body?.tempSchema === 'number' && body.tempSchema >= 0 && body.tempSchema <= 0.2) updateData.tempSchema = body.tempSchema;
-  if (typeof body?.tempCopy === 'number' && body.tempCopy >= 0.3 && body.tempCopy <= 0.5) updateData.tempCopy = body.tempCopy;
+  if (typeof body?.tempSchema === 'number' && body.tempSchema >= 0 && body.tempSchema <= 2) updateData.tempSchema = body.tempSchema;
+  if (typeof body?.tempCopy === 'number' && body.tempCopy >= 0 && body.tempCopy <= 2) updateData.tempCopy = body.tempCopy;
   // Max output tokens validation based on user role
   if (typeof body?.maxOutputTokens === 'number' && body.maxOutputTokens >= 64) {
     const userRole = session.user.role;
