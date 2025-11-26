@@ -134,6 +134,7 @@ export async function POST(request: NextRequest) {
         topP: typeof body?.topP === 'number' && body.topP >= 0 && body.topP <= 1 ? body.topP : 0.7,
         tempSchema: typeof body?.tempSchema === 'number' && body.tempSchema >= 0 && body.tempSchema <= 0.2 ? body.tempSchema : 0.1,
         tempCopy: typeof body?.tempCopy === 'number' && body.tempCopy >= 0.3 && body.tempCopy <= 0.5 ? body.tempCopy : 0.4,
+        maxOutputTokens: typeof body?.maxOutputTokens === 'number' && body.maxOutputTokens >= 64 ? body.maxOutputTokens : 1380,
         warmupDeadlineMs: typeof body?.warmupDeadlineMs === 'number' && body.warmupDeadlineMs > 0 ? body.warmupDeadlineMs : 15000,
         hardDeadlineMs: typeof body?.hardDeadlineMs === 'number' && body.hardDeadlineMs > 0 ? body.hardDeadlineMs : 15000,
         softDeadlineMs: typeof body?.softDeadlineMs === 'number' && body.softDeadlineMs > 0 ? body.softDeadlineMs : 15000,
