@@ -379,7 +379,8 @@ function TemplateDetailsClient({
       // HEADER nomeado
       const headerNamed = pageVariables.filter((v) => v.scope === "header" && v.name);
       if (headerNamed.length > 0) {
-        const headerVal = headerNamed[0].value || headerNamed[0].example || "";
+        // ⭐ CRÍTICO: Verificar se value foi explicitamente definido (não apenas falsy)
+        const headerVal = typeof headerNamed[0].value !== "undefined" && headerNamed[0].value !== null ? headerNamed[0].value : (headerNamed[0].example || "");
         params.headerVar = headerVal;
         // também mandar pela chave nomeada
         params[headerNamed[0].name as string] = headerVal;
@@ -387,14 +388,16 @@ function TemplateDetailsClient({
       // BODY nomeadas -> mandar por nome
       const bodyNamed = pageVariables.filter((v) => v.scope === "body" && v.name);
       for (const v of bodyNamed) {
-        params[v.name as string] = v.value || v.example || "";
+        // ⭐ CRÍTICO: Se v.value é "", deve ser enviado como "" (não substituído por example)
+        const finalValue = typeof v.value !== "undefined" && v.value !== null ? v.value : (v.example || "");
+        params[v.name as string] = finalValue;
       }
       // BODY numéricas -> montar bodyVars em ordem
       const bodyNumeric = pageVariables
         .filter((v) => v.scope === "body" && typeof v.index === "number")
         .sort((a, b) => (a.index! - b.index!));
       if (bodyNumeric.length > 0) {
-        params.bodyVars = bodyNumeric.map((v) => v.value || v.example || "");
+        params.bodyVars = bodyNumeric.map((v) => typeof v.value !== "undefined" && v.value !== null ? v.value : (v.example || ""));
       }
 
       const payload = {
@@ -535,19 +538,22 @@ function TemplateDetailsClient({
       params.couponCode = (couponVar?.value ?? couponCode) || "";
       const headerNamed = pageVariables.filter((v) => v.scope === "header" && v.name);
       if (headerNamed.length > 0) {
-        const headerVal = headerNamed[0].value || headerNamed[0].example || "";
+        // ⭐ CRÍTICO: Verificar se value foi explicitamente definido (não apenas falsy)
+        const headerVal = typeof headerNamed[0].value !== "undefined" && headerNamed[0].value !== null ? headerNamed[0].value : (headerNamed[0].example || "");
         params.headerVar = headerVal;
         params[headerNamed[0].name as string] = headerVal;
       }
       const bodyNamed = pageVariables.filter((v) => v.scope === "body" && v.name);
       for (const v of bodyNamed) {
-        params[v.name as string] = v.value || v.example || "";
+        // ⭐ CRÍTICO: Se v.value é "", deve ser enviado como "" (não substituído por example)
+        const finalValue = typeof v.value !== "undefined" && v.value !== null ? v.value : (v.example || "");
+        params[v.name as string] = finalValue;
       }
       const bodyNumeric = pageVariables
         .filter((v) => v.scope === "body" && typeof v.index === "number")
         .sort((a, b) => (a.index! - b.index!));
       if (bodyNumeric.length > 0) {
-        params.bodyVars = bodyNumeric.map((v) => v.value || v.example || "");
+        params.bodyVars = bodyNumeric.map((v) => typeof v.value !== "undefined" && v.value !== null ? v.value : (v.example || ""));
       }
 
       const payload = {
