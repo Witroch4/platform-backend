@@ -125,6 +125,20 @@ export default function TemplateDetailsInternal({
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showLeadsSelector, setShowLeadsSelector] = useState(false);
 
+  // Effect para limpar contatos quando o envio é concluído
+  useEffect(() => {
+    if (sendProgressComplete && !showSendProgress) {
+      const cleanupTimer = setTimeout(() => {
+        console.log('[MassSend] Effect cleanup: limpando contactList, sendProgressComplete, isMassSending');
+        setContactList([]);
+        setSendProgressComplete(false);
+        setIsMassSending(false);
+      }, 100); // Pequeno delay para garantir que o dialog fechou
+
+      return () => clearTimeout(cleanupTimer);
+    }
+  }, [sendProgressComplete, showSendProgress]);
+
   // Estados para reações de botões
   const [templateReactions, setTemplateReactions] = useState<ButtonReaction[]>(
     []
@@ -525,14 +539,12 @@ export default function TemplateDetailsInternal({
         toast.success(
           `Mensagens enviadas com sucesso para ${selectedLeads.length} leads!`
         );
-        // Limpar estado após conclusão: aguardar 1.6s (dialog fecha em 1.5s) e resetar tudo
-        const cleanupTimer = setTimeout(() => {
-          console.log('[MassSend] Limpando estado - contacts, progress dialog, completion flag');
-          setContactList([]);
+        // Aguardar 1.5s para o dialog fechar automaticamente (SendProgressDialog fecha em 1500ms)
+        // O useEffect de cleanup vai detectar sendProgressComplete=true e showSendProgress=false
+        // e vai limpar tudo automaticamente
+        setTimeout(() => {
           setShowSendProgress(false);
-          setSendProgressComplete(false);
         }, 1600);
-        return () => clearTimeout(cleanupTimer);
       } else {
         setShowSendProgress(false);
         toast.error(
