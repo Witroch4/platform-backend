@@ -7,7 +7,9 @@ export default defineConfig({
 	migrations: {
 		path: path.join(__dirname, "prisma", "migrations"),
 	},
-    // Nota: preferimos chamar o seed direto no script db-push-dev.mjs com `tsx prisma/seed.ts`
+	seed: {
+		file: path.join(__dirname, "prisma", "seed.ts"),
+	},
 });
 
 

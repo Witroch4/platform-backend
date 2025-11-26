@@ -27,6 +27,9 @@ export async function getAssistantForInbox(inboxId: string, chatwitAccountId?: s
     include: {
       usuarioChatwit: true,
       aiAssistantLinks: {
+        where: {
+          isActive: true,
+        },
         include: {
           assistant: { select: { id: true, model: true, instructions: true, embedipreview: true, updatedAt: true } },
         },

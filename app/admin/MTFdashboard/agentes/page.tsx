@@ -62,6 +62,34 @@ export default function MtfAgentsBuilderPage() {
   const [draft, setDraft] = useState<AgentBlueprintDraft | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [seedingNative, setSeedingNative] = useState(false);
+
+  // Seed automático de agentes nativos na montagem do componente
+  useEffect(() => {
+    const seedNativeAgents = async () => {
+      try {
+        setSeedingNative(true);
+        const response = await fetch('/api/admin/MTFdashboard/agentes/seed-native', {
+          method: 'POST',
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.created && data.created.length > 0) {
+            console.log('✅ Agentes nativos criados:', data.created);
+            // Recarregar blueprints se novos agentes foram criados
+            window.location.reload();
+          }
+        }
+      } catch (error) {
+        console.error('Erro ao fazer seed de agentes nativos:', error);
+      } finally {
+        setSeedingNative(false);
+      }
+    };
+
+    seedNativeAgents();
+  }, []);
 
   useEffect(() => {
     if (!draft && blueprints.length > 0) {
@@ -155,6 +183,12 @@ export default function MtfAgentsBuilderPage() {
 
   return (
     <div className="flex-1 space-y-6 p-2 md:p-4">
+      {seedingNative && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Verificando agentes nativos OAB/EVAL...</span>
+        </div>
+      )}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">MTF Agents Builder</h1>

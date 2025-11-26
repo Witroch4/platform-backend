@@ -199,6 +199,9 @@ export async function GET(request: Request): Promise<Response> {
     }
 
     if (searchTerm) {
+      // Remover caracteres especiais do termo de busca para melhor matching com telefones
+      const cleanedSearchTerm = searchTerm.replace(/[^\w@.-]/g, '');
+      
       const searchFilter = {
         OR: [
           {
@@ -223,12 +226,34 @@ export async function GET(request: Request): Promise<Response> {
               },
             },
           },
+          // Busca adicional por telefone sem formatação (números apenas)
+          ...(cleanedSearchTerm !== searchTerm ? [{
+            lead: {
+              phone: {
+                contains: cleanedSearchTerm,
+                mode: "insensitive",
+              },
+            },
+          }] : []),
           {
             lead: {
               email: {
                 contains: searchTerm,
                 mode: "insensitive",
               },
+            },
+          },
+          // Busca por ID do lead (útil para buscar por IDs completos)
+          {
+            id: {
+              contains: searchTerm,
+              mode: "insensitive",
+            },
+          },
+          {
+            leadId: {
+              contains: searchTerm,
+              mode: "insensitive",
             },
           },
         ],

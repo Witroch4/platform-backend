@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { RefreshCw, Search, Info, ChevronDown, BarChart, X, Shield, BookOpen, FileText } from "lucide-react";
+import { RefreshCw, Search, Info, ChevronDown, BarChart, X, Shield, BookOpen, FileText, Download } from "lucide-react";
 import { LeadsTabs } from "./components/leads-tabs";
 import { LeadsDashboard } from "./components/dashboard";
 import {
@@ -65,6 +65,7 @@ export default function LeadsChatwitPage() {
   });
   const [showEspelhosPadraoDrawer, setShowEspelhosPadraoDrawer] = useState(false);
   const [showModeloRecursoDrawer, setShowModeloRecursoDrawer] = useState(false);
+  const [isExportingCsv, setIsExportingCsv] = useState(false);
 
   useEffect(() => {
     fetchStats();
@@ -130,6 +131,52 @@ export default function LeadsChatwitPage() {
 
   const toggleDashboard = () => {
     setShowDashboard(prev => !prev);
+  };
+
+  const handleExportCsv = async () => {
+    setIsExportingCsv(true);
+    try {
+      const params = new URLSearchParams();
+      
+      // Adicionar filtros atuais
+      if (searchQuery) {
+        params.append("search", searchQuery);
+      }
+      
+      const response = await fetch(`/api/admin/leads-chatwit/export-csv?${params.toString()}`);
+      
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Erro ao exportar CSV");
+      }
+      
+      // Obter o blob do CSV
+      const blob = await response.blob();
+      
+      // Criar URL temporária e fazer download
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `leads-chatwit-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      
+      // Limpar
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      toast.success("CSV exportado", { 
+        description: "Arquivo baixado com sucesso",
+        duration: 2000
+      });
+    } catch (error: any) {
+      console.error("Erro ao exportar CSV:", error);
+      toast.error("Erro na exportação", {
+        description: error.message || "Não foi possível exportar o CSV",
+      });
+    } finally {
+      setIsExportingCsv(false);
+    }
   };
 
   return (
@@ -341,7 +388,7 @@ export default function LeadsChatwitPage() {
       
       {/* Toggles e Dashboard */}
       <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button 
             variant={showDashboard ? "default" : "outline"} 
             
@@ -370,6 +417,21 @@ export default function LeadsChatwitPage() {
           >
             <FileText className="h-4 w-4 mr-2" />
             Modelo de Recurso
+          </Button>
+          
+          <Button 
+            variant="outline" 
+            
+            onClick={handleExportCsv}
+            disabled={isExportingCsv}
+            className="border-border hover:bg-accent"
+          >
+            {isExportingCsv ? (
+              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4 mr-2" />
+            )}
+            Gerar CSV
           </Button>
         </div>
         

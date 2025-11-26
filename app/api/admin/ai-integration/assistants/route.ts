@@ -41,6 +41,9 @@ export async function GET(request: NextRequest) {
         captureMemories: true,
         proposeHumanHandoff: true,
         disableIntentSuggestion: true,
+        enableAutoRemarketing: true,
+        remarketingDelayMinutes: true,
+        remarketingMessage: true,
         instructions: true,
         intentOutputFormat: true,
         model: true,
@@ -196,6 +199,9 @@ export async function PATCH(request: NextRequest) {
   if (typeof body?.captureMemories === 'boolean') updateData.captureMemories = body.captureMemories;
   if (typeof body?.proposeHumanHandoff === 'boolean') updateData.proposeHumanHandoff = body.proposeHumanHandoff;
   if (typeof body?.disableIntentSuggestion === 'boolean') updateData.disableIntentSuggestion = body.disableIntentSuggestion;
+  if (typeof body?.enableAutoRemarketing === 'boolean') updateData.enableAutoRemarketing = body.enableAutoRemarketing;
+  if (typeof body?.remarketingDelayMinutes === 'number' && body.remarketingDelayMinutes >= 5 && body.remarketingDelayMinutes <= 1440) updateData.remarketingDelayMinutes = body.remarketingDelayMinutes;
+  if (typeof body?.remarketingMessage === 'string') updateData.remarketingMessage = body.remarketingMessage || null;
   if (typeof body?.instructions === 'string') updateData.instructions = body.instructions;
   if (typeof body?.intentOutputFormat === 'string') updateData.intentOutputFormat = body.intentOutputFormat === 'AT_SYMBOL' ? 'AT_SYMBOL' : 'JSON';
   if (typeof body?.model === 'string') updateData.model = String(body.model).trim();

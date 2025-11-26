@@ -1460,6 +1460,9 @@ model AiAssistant {
   toolChoice              String               @default("auto")
   proposeHumanHandoff     Boolean              @default(true)
   disableIntentSuggestion Boolean              @default(false)
+  enableAutoRemarketing   Boolean              @default(false)
+  remarketingDelayMinutes Int                  @default(30)
+  remarketingMessage      String?
   isActive                Boolean              @default(true)
   createdAt               DateTime             @default(now())
   updatedAt               DateTime             @updatedAt

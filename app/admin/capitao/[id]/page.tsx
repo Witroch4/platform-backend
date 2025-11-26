@@ -24,6 +24,9 @@ type Assistant = {
   captureMemories: boolean;
   proposeHumanHandoff: boolean;
   disableIntentSuggestion: boolean;
+  enableAutoRemarketing: boolean;
+  remarketingDelayMinutes: number;
+  remarketingMessage?: string | null;
   instructions?: string | null;
   intentOutputFormat: "JSON" | "AT_SYMBOL";
   model: string;
@@ -338,6 +341,81 @@ export default function EditAssistantPage() {
                   </span>
                 </span>
               </label>
+
+              {/* Remarketing Automático */}
+              <div className="border-t border-border pt-3 mt-3 space-y-3">
+                <label className="flex items-center gap-2 text-sm text-foreground">
+                  <input
+                    type="checkbox"
+                    checked={assistant.enableAutoRemarketing ?? false}
+                    onChange={(e) =>
+                      setAssistant({
+                        ...assistant,
+                        enableAutoRemarketing: e.target.checked,
+                      })
+                    }
+                    className="rounded border-border bg-background"
+                  />
+                  <span className="flex items-center gap-2">
+                    Remarketing Automático
+                    <span 
+                      className="cursor-help text-muted-foreground hover:text-foreground" 
+                      title="Quando ativo, o sistema enviará automaticamente uma mensagem de remarketing após XX minutos sem resposta do cliente, abrindo atendimento humano junto com a mensagem"
+                    >
+                      ⓘ
+                    </span>
+                  </span>
+                </label>
+
+                {assistant.enableAutoRemarketing && (
+                  <div className="ml-6 space-y-3 border-l-2 border-primary/20 pl-4">
+                    <div>
+                      <label className="text-sm font-medium text-foreground block mb-1">
+                        Tempo de espera (minutos)
+                      </label>
+                      <Input
+                        type="number"
+                        min="5"
+                        max="1440"
+                        value={assistant.remarketingDelayMinutes ?? 30}
+                        onChange={(e) =>
+                          setAssistant({
+                            ...assistant,
+                            remarketingDelayMinutes: parseInt(e.target.value) || 30,
+                          })
+                        }
+                        placeholder="30"
+                        className="bg-background border-border text-foreground w-32"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Tempo em minutos antes de enviar o remarketing (mínimo: 5, máximo: 1440)
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-medium text-foreground block mb-1">
+                        Mensagem de Remarketing
+                      </label>
+                      <Textarea
+                        value={assistant.remarketingMessage ?? ""}
+                        onChange={(e) =>
+                          setAssistant({
+                            ...assistant,
+                            remarketingMessage: e.target.value,
+                          })
+                        }
+                        placeholder="Olá! Vi que você iniciou um atendimento mas ainda não retornou. Estou disponibilizando um atendente humano para te ajudar. Como posso auxiliar?"
+                        rows={4}
+                        className="bg-background border-border text-foreground"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Esta mensagem será enviada junto com a action 'handoff', abrindo automaticamente o atendimento humano
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <Button
                 disabled={savingFlags}
                 onClick={async () => {
@@ -348,6 +426,9 @@ export default function EditAssistantPage() {
                       captureMemories: assistant.captureMemories,
                       proposeHumanHandoff: (assistant as any).proposeHumanHandoff ?? true,
                       disableIntentSuggestion: (assistant as any).disableIntentSuggestion ?? false,
+                      enableAutoRemarketing: assistant.enableAutoRemarketing ?? false,
+                      remarketingDelayMinutes: assistant.remarketingDelayMinutes ?? 30,
+                      remarketingMessage: assistant.remarketingMessage ?? null,
                     } as any);
                     toast.success("Funcionalidades salvas com sucesso!");
                     // Fechar o collapsible após salvar

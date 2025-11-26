@@ -25,21 +25,62 @@ export function FilesCell({
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const renderIcon = (fileType: string) => {
+  const getFileExtension = (fileType: string): string => {
+    // Extrair extensão do tipo MIME ou do próprio tipo
+    if (fileType.includes('/')) {
+      const parts = fileType.split('/');
+      const ext = parts[1]?.split('+')[0] || 'file';
+      
+      // Mapeamento de tipos MIME comuns para extensões legíveis
+      const mimeMap: Record<string, string> = {
+        'jpeg': 'jpg',
+        'png': 'png',
+        'gif': 'gif',
+        'webp': 'webp',
+        'svg+xml': 'svg',
+        'pdf': 'pdf',
+        'msword': 'doc',
+        'vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+        'vnd.ms-excel': 'xls',
+        'vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+        'plain': 'txt',
+        'octet-stream': 'file'
+      };
+      
+      return (mimeMap[ext] || ext).toUpperCase();
+    }
+    
+    // Se já for uma extensão, apenas formatar
+    return fileType.replace('.', '').toUpperCase().slice(0, 4);
+  };
+
+  const renderIcon = (fileType: string, extension: string) => {
     const iconData = getFileTypeIcon(fileType);
     
     if (iconData.icon === "Image") {
       return (
-        <img 
-          src="/imagicon.svg" 
-          alt="Imagem" 
-          className="w-full h-full object-contain"
-        />
+        <>
+          <img 
+            src="/imagicon.svg" 
+            alt="Imagem" 
+            className="w-full h-full object-contain"
+          />
+          <span className="absolute -top-1 -left-1 bg-primary text-primary-foreground text-[8px] font-bold px-1 py-0.5 rounded shadow-sm z-10">
+            {extension}
+          </span>
+        </>
       );
     }
     
     const IconComponent = iconData.icon === "FileText" ? FileText : File;
-    return <IconComponent className="w-full h-full" />;
+    return (
+      <>
+        <IconComponent className="w-full h-full" />
+        <span className="absolute -top-1 -left-1 bg-primary text-primary-foreground text-[8px] font-bold px-1 py-0.5 rounded shadow-sm z-10">
+          {extension}
+        </span>
+      </>
+    );
   };
 
   const handleFileUpload = async (files: FileList | null) => {
@@ -120,27 +161,30 @@ export function FilesCell({
     <TableCell className="min-w-[100px] max-w-[150px] p-2 align-middle">
       <div className="grid grid-cols-3 gap-2">
         {lead.arquivos.length > 0 ? (
-          lead.arquivos.map((arquivo) => (
-            <LeadContextMenu
-              key={arquivo.id}
-              contextType="arquivo"
-              onAction={onContextMenuAction}
-              data={{ id: arquivo.id, type: "arquivo" }}
-            >
-              <div 
-                className="relative hover:bg-accent hover:text-accent-foreground w-[36px] h-[36px] flex items-center justify-center group cursor-pointer"
-                onClick={() => openExternalUrl(arquivo.dataUrl)}
+          lead.arquivos.map((arquivo) => {
+            const extension = getFileExtension(arquivo.fileType);
+            return (
+              <LeadContextMenu
+                key={arquivo.id}
+                contextType="arquivo"
+                onAction={onContextMenuAction}
+                data={{ id: arquivo.id, type: "arquivo" }}
               >
-                {renderIcon(arquivo.fileType)}
-                <DeleteFileButton 
-                  onDelete={() => onDeleteFile(arquivo.id, "arquivo")}
-                  fileType="arquivo"
-                  fileName={arquivo.fileType}
-                  onSuccess={onReloadAfterDelete}
-                />
-              </div>
-            </LeadContextMenu>
-          ))
+                <div 
+                  className="relative hover:bg-accent hover:text-accent-foreground w-[36px] h-[36px] flex items-center justify-center group cursor-pointer"
+                  onClick={() => openExternalUrl(arquivo.dataUrl)}
+                >
+                  {renderIcon(arquivo.fileType, extension)}
+                  <DeleteFileButton 
+                    onDelete={() => onDeleteFile(arquivo.id, "arquivo")}
+                    fileType="arquivo"
+                    fileName={arquivo.fileType}
+                    onSuccess={onReloadAfterDelete}
+                  />
+                </div>
+              </LeadContextMenu>
+            );
+          })
         ) : (
           <div 
             className={`col-span-3 flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-md border-2 border-dashed transition-all cursor-pointer ${

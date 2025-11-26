@@ -21,6 +21,7 @@ import { LoteCardSkeleton, VariavelSkeleton } from './LoadingSkeletons';
 import { useMtfData } from '../context/SwrProvider';
 import { validateVariable, ensureSpecialVariables, SPECIAL_VARIABLES } from '@/app/lib/variable-utils';
 import { DateTimePicker } from '@/app/[accountid]/dashboard/agendamento/components/date-time-picker';
+import { RegisterApiKeyDialog } from '@/components/admin/register-api-key-dialog';
 
 interface WhatsAppConfig {
   id?: string;
@@ -66,6 +67,11 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
     tokenMask: ''
   });
   const [newToken, setNewToken] = useState(''); // Token digitado pelo usuário
+  
+  // Estados para integração Chatwit
+  const [chatwitToken, setChatwitToken] = useState('');
+  const [chatwitAccountId, setChatwitAccountId] = useState('');
+  const [hasChatwitToken, setHasChatwitToken] = useState(false);
 
   // Usando contexto de dados para cache persistente
   const { variaveis, loadingVariaveis, refreshVariaveis, lotes, loadingLotes, refreshLotes } = useMtfData();
@@ -74,7 +80,26 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
     if (configPadrao) {
       setConfig(configPadrao);
     }
+    
+    // Buscar configuração do Chatwit
+    fetchChatwitConfig();
   }, [configPadrao]);
+
+  const fetchChatwitConfig = async () => {
+    try {
+      const response = await fetch('/api/admin/leads-chatwit/check-token');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.hasToken) {
+          setHasChatwitToken(true);
+          setChatwitToken(data.tokenPreview || '');
+          setChatwitAccountId(data.accountId || '');
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao buscar configuração do Chatwit:', error);
+    }
+  };
 
   const handleWhatsAppChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -310,9 +335,17 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
                 )}
               </div>
             </div>
-            <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
-              Salvar Configurações WhatsApp
-            </Button>
+            <div className="flex gap-2">
+              <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
+                Salvar Configurações WhatsApp
+              </Button>
+              <RegisterApiKeyDialog
+                userHasToken={hasChatwitToken}
+                initialToken={chatwitToken}
+                initialAccountId={chatwitAccountId}
+                onTokenRegistered={fetchChatwitConfig}
+              />
+            </div>
           </form>
         </CardContent>
       </Card>
