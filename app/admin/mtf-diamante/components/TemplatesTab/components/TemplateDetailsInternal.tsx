@@ -127,9 +127,11 @@ export default function TemplateDetailsInternal({
 
   // Effect para limpar contatos quando o envio é concluído
   useEffect(() => {
+    console.log('[MassSend] Effect checking:', { sendProgressComplete, showSendProgress, contactListLength: contactList.length });
     if (sendProgressComplete && !showSendProgress) {
+      console.log('[MassSend] CONDITIONS MET - Será executado cleanup em 100ms');
       const cleanupTimer = setTimeout(() => {
-        console.log('[MassSend] Effect cleanup: limpando contactList, sendProgressComplete, isMassSending');
+        console.log('[MassSend] EXECUTING CLEANUP: limpando contactList, sendProgressComplete, isMassSending');
         setContactList([]);
         setSendProgressComplete(false);
         setIsMassSending(false);
@@ -487,7 +489,12 @@ export default function TemplateDetailsInternal({
   };
 
   const handleMassSend = async () => {
-    if (!template || contactList.length === 0) return;
+    console.log('[MassSend] handleMassSend INICIADO');
+    if (!template || contactList.length === 0) {
+      console.log('[MassSend] Cancelado: !template || contactList vazio');
+      return;
+    }
+    console.log('[MassSend] Iniciando envio com', contactList.length, 'contatos');
     setShowSendProgress(true);
     setSendProgressComplete(false);
     setIsMassSending(true);
@@ -535,6 +542,7 @@ export default function TemplateDetailsInternal({
         payload
       );
       if (response.data.success) {
+        console.log('[MassSend] ✅ Resposta sucesso recebida');
         setSendProgressComplete(true);
         toast.success(
           `Mensagens enviadas com sucesso para ${selectedLeads.length} leads!`
@@ -542,9 +550,11 @@ export default function TemplateDetailsInternal({
         // Aguardar 1.5s para o dialog fechar automaticamente (SendProgressDialog fecha em 1500ms)
         // O useEffect de cleanup vai detectar sendProgressComplete=true e showSendProgress=false
         // e vai limpar tudo automaticamente
-        setTimeout(() => {
+        const closeTimer = setTimeout(() => {
+          console.log('[MassSend] Fechando showSendProgress após 1600ms');
           setShowSendProgress(false);
         }, 1600);
+        return () => clearTimeout(closeTimer);
       } else {
         setShowSendProgress(false);
         toast.error(
@@ -851,45 +861,45 @@ export default function TemplateDetailsInternal({
                             animation: isMassSending ? "pulse-glow 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite" : "none",
                           }}
                         >
-                          <Button
+                          <button
                             onClick={handleMassSend}
                             disabled={isMassSending}
-                            className="w-full font-bold text-base h-12 !bg-transparent !text-white"
                             style={{
+                              width: "100%",
+                              padding: "12px 16px",
+                              fontSize: "16px",
+                              fontWeight: "bold",
+                              height: "48px",
+                              borderRadius: "6px",
+                              border: "none",
+                              cursor: isMassSending ? "default" : "pointer",
                               backgroundColor: isMassSending
                                 ? "#22c55e"
-                                : "#10b981" as any,
+                                : "#10b981",
                               backgroundImage: !isMassSending
                                 ? "linear-gradient(to right, #22c55e, #10b981)"
                                 : "none",
-                              color: "white !important" as any,
+                              color: "white",
                               boxShadow: isMassSending
                                 ? "0 0 30px rgba(34, 197, 94, 0.8), inset 0 0 20px rgba(255, 255, 255, 0.1)"
                                 : "0 10px 25px rgba(34, 197, 94, 0.4)",
-                              border: "none",
-                            } as React.CSSProperties}
+                              opacity: isMassSending ? 0.95 : 1,
+                              transition: "all 0.3s ease",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              gap: "8px",
+                            }}
                           >
                             {isMassSending ? (
-                              <Loader2 className="animate-spin h-5 w-5 mr-2" />
+                              <Loader2 className="animate-spin h-5 w-5" />
                             ) : (
-                              <span className="text-xl mr-2">🚀</span>
+                              <span className="text-xl">🚀</span>
                             )}
                             {isMassSending ? "Enviando..." : "Enviar para Todos"}
-                          </Button>
+                          </button>
                         </div>
                         <style jsx global>{`
-                          .send-button-wrapper button {
-                            background-color: unset !important;
-                            background-image: inherit !important;
-                            color: white !important;
-                            border: none !important;
-                          }
-
-                          .send-button-wrapper button:hover:not(:disabled) {
-                            opacity: 0.9;
-                            filter: brightness(1.1);
-                          }
-
                           @keyframes pulse-glow {
                             0%, 100% {
                               filter: drop-shadow(0 0 20px rgba(34, 197, 94, 0.6)) drop-shadow(0 0 40px rgba(34, 197, 94, 0.4));
