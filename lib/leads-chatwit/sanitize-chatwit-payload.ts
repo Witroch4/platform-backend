@@ -29,13 +29,17 @@ export interface SanitizedChatwitPayload {
 export type SanitizedOrigemLead = SanitizedChatwitPayload['origemLead'];
 
 /**
- * Extrai arquivos do histórico de mensagens com deduplicação inteligente
- * Itera sobre TODAS as mensagens da conversa e deduplica por chatwitFileId (attachment.id)
+ * Extrai arquivos do histórico de mensagens E dos attachments raiz com deduplicação inteligente
+ * Processa DUAS fontes:
+ * 1. conversation.messages[].attachments (histórico da conversa)
+ * 2. body.attachments (arquivo atual/raiz do payload)
+ *
+ * Deduplica por chatwitFileId (attachment.id)
  */
-function extractAndDeduplicateArquivos(conversation: any): SanitizedArquivo[] {
+function extractAndDeduplicateArquivos(conversation: any, rootAttachments: any[] = []): SanitizedArquivo[] {
   const arquivosMap = new Map<number, SanitizedArquivo>();
 
-  // Iterar sobre todas as mensagens do histórico
+  // ===== FONTE 1: Attachments do histórico de mensagens =====
   const messages = conversation?.messages || [];
 
   console.log(`[extractAndDeduplicateArquivos] Total de mensagens no histórico: ${messages.length}`);
@@ -65,7 +69,30 @@ function extractAndDeduplicateArquivos(conversation: any): SanitizedArquivo[] {
     });
   });
 
-  console.log(`[extractAndDeduplicateArquivos] Total de arquivos únicos após deduplicação: ${arquivosMap.size}`);
+  // ===== FONTE 2: Attachments raiz (arquivo atual do payload) =====
+  console.log(`[extractAndDeduplicateArquivos] Total de attachments raiz (payload atual): ${rootAttachments.length}`);
+
+  rootAttachments.forEach((att: any, attIndex: number) => {
+    const isNew = !arquivosMap.has(att.id);
+    console.log(`[extractAndDeduplicateArquivos] Root Attachment ${attIndex + 1}:`, {
+      chatwitFileId: att.id,
+      fileType: att.file_type || 'file',
+      dataUrl: att.data_url ? att.data_url.substring(0, 80) + (att.data_url.length > 80 ? '...' : '') : 'SEM URL',
+      isNovo: isNew,
+      jaExistia: !isNew,
+    });
+
+    // Usar att.id como chave única (chatwitFileId)
+    if (att.id && !arquivosMap.has(att.id)) {
+      arquivosMap.set(att.id, {
+        file_type: att.file_type || 'file',
+        data_url: att.data_url || '',
+        chatwitFileId: att.id
+      });
+    }
+  });
+
+  console.log(`[extractAndDeduplicateArquivos] Total de arquivos únicos após deduplicação (histórico + raiz): ${arquivosMap.size}`);
 
   return Array.from(arquivosMap.values());
 }
@@ -123,8 +150,9 @@ export function sanitizeChatwitPayload(rawPayload: any): SanitizedChatwitPayload
   // 6. Montar leadUrl dinamicamente
   const leadUrl = `https://chatwit.witdev.com.br/app/accounts/${body.account.id}/conversations/${body.conversation.id}`;
 
-  // 7. Extrair e deduplicar arquivos
-  const arquivos = extractAndDeduplicateArquivos(body.conversation);
+  // 7. Extrair e deduplicar arquivos (histórico + attachments raiz)
+  const rootAttachments = body.attachments || [];
+  const arquivos = extractAndDeduplicateArquivos(body.conversation, rootAttachments);
 
   // 8. Montar payload sanitizado
   const sanitized: SanitizedChatwitPayload = {
