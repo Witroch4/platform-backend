@@ -73,25 +73,24 @@ async function processLeadDirectly(payload: WebhookPayload) {
     });
   }
 
-  // 2) Criar ou buscar Account específica para esta conta Chatwit
+  // 2) Criar ou atualizar Account específica para esta conta Chatwit (usando upsert para evitar race condition)
   const CHATWIT_ACCOUNT_ID = `CHATWIT_${chatwitAccountId}`;
-  
-  let chatwitAccount = await getPrismaInstance().account.findUnique({
-    where: { id: CHATWIT_ACCOUNT_ID }
+
+  const chatwitAccount = await getPrismaInstance().account.upsert({
+    where: { id: CHATWIT_ACCOUNT_ID },
+    update: {
+      userId: usuarioDb.appUserId,
+    },
+    create: {
+      id: CHATWIT_ACCOUNT_ID,
+      userId: usuarioDb.appUserId,
+      type: 'chatwit',
+      provider: 'chatwit',
+      providerAccountId: chatwitAccountId,
+    }
   });
-  
-  if (!chatwitAccount) {
-    chatwitAccount = await getPrismaInstance().account.create({
-      data: {
-        id: CHATWIT_ACCOUNT_ID,
-        userId: usuarioDb.appUserId,
-        type: 'chatwit',
-        provider: 'chatwit',
-        providerAccountId: chatwitAccountId,
-      }
-    });
-    console.log(`[Webhook-Direct] Account criada para Chatwit ${chatwitAccountId}:`, chatwitAccount.id);
-  }
+
+  console.log(`[Webhook-Direct] Account gerenciada para Chatwit ${chatwitAccountId}:`, chatwitAccount.id);
   
   // 3) Criar/atualizar Lead
   const lead = await getPrismaInstance().lead.upsert({
