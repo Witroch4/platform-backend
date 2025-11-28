@@ -38,10 +38,22 @@ function extractAndDeduplicateArquivos(conversation: any): SanitizedArquivo[] {
   // Iterar sobre todas as mensagens do histórico
   const messages = conversation?.messages || [];
 
-  messages.forEach((msg: any) => {
+  console.log(`[extractAndDeduplicateArquivos] Total de mensagens no histórico: ${messages.length}`);
+
+  messages.forEach((msg: any, msgIndex: number) => {
     const attachments = msg.attachments || [];
 
-    attachments.forEach((att: any) => {
+    attachments.forEach((att: any, attIndex: number) => {
+      // Log de cada attachment encontrado
+      const isNew = !arquivosMap.has(att.id);
+      console.log(`[extractAndDeduplicateArquivos] Mensagem ${msgIndex + 1}, Attachment ${attIndex + 1}:`, {
+        chatwitFileId: att.id,
+        fileType: att.file_type || 'file',
+        dataUrl: att.data_url ? att.data_url.substring(0, 80) + (att.data_url.length > 80 ? '...' : '') : 'SEM URL',
+        isNovo: isNew,
+        jaExistia: !isNew,
+      });
+
       // Usar att.id como chave única (chatwitFileId)
       if (att.id && !arquivosMap.has(att.id)) {
         arquivosMap.set(att.id, {
@@ -52,6 +64,8 @@ function extractAndDeduplicateArquivos(conversation: any): SanitizedArquivo[] {
       }
     });
   });
+
+  console.log(`[extractAndDeduplicateArquivos] Total de arquivos únicos após deduplicação: ${arquivosMap.size}`);
 
   return Array.from(arquivosMap.values());
 }

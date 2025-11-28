@@ -158,6 +158,17 @@ async function processLeadDirectly(payload: WebhookPayload) {
   console.log(`[Webhook-Direct] Processando ${arquivos.length} arquivos diretamente`);
 
   if (arquivos.length > 0) {
+    // Log detalhado de cada arquivo
+    console.log(`[Webhook-Direct] === DETALHES DOS ARQUIVOS ===`);
+    arquivos.forEach((arquivo, index) => {
+      console.log(`[Webhook-Direct] Arquivo ${index + 1}:`, {
+        chatwitFileId: arquivo.chatwitFileId,
+        fileType: arquivo.file_type,
+        dataUrl: arquivo.data_url.substring(0, 80) + (arquivo.data_url.length > 80 ? '...' : ''),
+      });
+    });
+    console.log(`[Webhook-Direct] === FIM DOS DETALHES ===`);
+
     try {
       const result = await getPrismaInstance().arquivoLeadOab.createMany({
         data: arquivos.map(a => ({
@@ -172,12 +183,12 @@ async function processLeadDirectly(payload: WebhookPayload) {
     } catch (error) {
       console.error(`[Webhook-Direct] Erro ao inserir arquivos:`, error);
     }
-    
+
     // Verificar total de arquivos
     const totalArquivos = await getPrismaInstance().arquivoLeadOab.count({
       where: { leadOabDataId: leadOabData.id }
     });
-    
+
     console.log(`[Webhook-Direct] Total de arquivos no banco para o lead ${sourceId}: ${totalArquivos}`);
   }
 
