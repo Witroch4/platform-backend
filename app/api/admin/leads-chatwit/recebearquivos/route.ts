@@ -4,6 +4,7 @@ import { getPrismaInstance } from '@/lib/connections';
 import { addLeadJob } from '@/lib/queue/leads-chatwit.queue';
 import type { WebhookPayload } from '@/types/webhook';
 import { getWebhooksConfig } from '@/lib/config';
+import { sanitizeChatwitPayload } from '@/lib/leads-chatwit/sanitize-chatwit-payload';
 
 // Verificar se deve usar processamento direto (default: true)
 const webhooksConfig = getWebhooksConfig();
@@ -162,9 +163,10 @@ async function processLeadDirectly(payload: WebhookPayload) {
         data: arquivos.map(a => ({
           leadOabDataId: leadOabData.id,
           fileType: a.file_type,
-          dataUrl: a.data_url
+          dataUrl: a.data_url,
+          chatwitFileId: a.chatwitFileId
         })),
-        skipDuplicates: false
+        skipDuplicates: true
       });
       console.log(`[Webhook-Direct] Inseridos ${result.count} arquivos diretamente`);
     } catch (error) {
@@ -187,52 +189,45 @@ async function processLeadDirectly(payload: WebhookPayload) {
 
 export async function POST(request: Request): Promise<Response> {
   try {
-    const payloadRaw = await request.json();
+    const rawPayload = await request.json();
 
-    // se vier array, pega o primeiro objeto
-    const payload: WebhookPayload = Array.isArray(payloadRaw)
-      ? payloadRaw[0]
-      : payloadRaw;
-
-    // validações mínimas
-    if (!payload?.origemLead?.source_id) {
+    // ⭐ Sanitizar payload bruto do Chatwit
+    let payload: WebhookPayload;
+    try {
+      payload = sanitizeChatwitPayload(rawPayload);
+    } catch (sanitizeErr: any) {
+      console.error('[Webhook] Erro ao sanitizar payload:', sanitizeErr.message);
       return NextResponse.json(
-        { success: false, error: 'source_id ausente' },
+        { success: false, error: 'Erro ao processar payload: ' + sanitizeErr.message },
         { status: 400 }
       );
     }
 
-    // validação do token de acesso (obrigatório) - agora busca dentro do campo usuario
+    // validações mínimas após sanitização
+    if (!payload?.origemLead?.source_id) {
+      return NextResponse.json(
+        { success: false, error: 'source_id ausente após sanitização' },
+        { status: 400 }
+      );
+    }
+
     if (!payload?.usuario?.CHATWIT_ACCESS_TOKEN) {
       return NextResponse.json(
-        { success: false, error: 'CHATWIT_ACCESS_TOKEN ausente no campo usuario' },
+        { success: false, error: 'CHATWIT_ACCESS_TOKEN ausente' },
         { status: 400 }
       );
     }
 
     const processingMode = WEBHOOK_DIRECT_PROCESSING ? 'DIRETO' : 'FILA';
-    console.log(`[Webhook-${processingMode}] Processando lead (modo: ${processingMode}) para token: ${payload.usuario.CHATWIT_ACCESS_TOKEN}`);
-    
-    // LOG DETALHADO dos dados recebidos
-    console.log(`[Webhook-${processingMode}] === DADOS COMPLETOS DO USUARIO ===`);
-    console.log(`[Webhook-${processingMode}] usuario.account.id:`, payload.usuario?.account?.id, `(tipo: ${typeof payload.usuario?.account?.id})`);
-    console.log(`[Webhook-${processingMode}] usuario.account.name:`, payload.usuario?.account?.name);
-    console.log(`[Webhook-${processingMode}] usuario.inbox.id:`, payload.usuario?.inbox?.id, `(tipo: ${typeof payload.usuario?.inbox?.id})`);
-    console.log(`[Webhook-${processingMode}] usuario.inbox.name:`, payload.usuario?.inbox?.name);
-    console.log(`[Webhook-${processingMode}] usuario.channel:`, payload.usuario?.channel);
-    console.log(`[Webhook-${processingMode}] === DADOS DO LEAD ===`);
-    console.log(`[Webhook-${processingMode}] origemLead.source_id:`, payload.origemLead?.source_id, `(tipo: ${typeof payload.origemLead?.source_id})`);
-    console.log(`[Webhook-${processingMode}] origemLead.name:`, payload.origemLead?.name);
-    console.log(`[Webhook-${processingMode}] origemLead.phone_number:`, payload.origemLead?.phone_number);
-    console.log(`[Webhook-${processingMode}] origemLead.arquivos:`, payload.origemLead?.arquivos?.length || 0, 'arquivos');
+    console.log(`[Webhook-${processingMode}] Lead processado após sanitização - contactId: ${payload.origemLead.source_id}, Arquivos: ${payload.origemLead.arquivos.length}`);
 
     if (WEBHOOK_DIRECT_PROCESSING) {
       // PROCESSAMENTO DIRETO (sem fila)
       const result = await processLeadDirectly(payload);
 
       return NextResponse.json(
-        { 
-          success: true, 
+        {
+          success: true,
           processed: true,
           mode: 'direct',
           leadId: result.leadId,
@@ -246,8 +241,8 @@ export async function POST(request: Request): Promise<Response> {
       await addLeadJob({ payload });
 
       return NextResponse.json(
-        { 
-          success: true, 
+        {
+          success: true,
           queued: true,
           mode: 'queue',
           sourceId: payload.origemLead.source_id

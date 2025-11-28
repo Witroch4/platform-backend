@@ -184,14 +184,15 @@ model LeadOabData {
 }
 
 model ArquivoLeadOab {
-  id            String      @id @default(cuid())
-  leadOabDataId String
-  fileType      String
-  dataUrl       String
-  pdfConvertido String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  leadOabData   LeadOabData @relation(fields: [leadOabDataId], references: [id], onDelete: Cascade)
+  id              String      @id @default(cuid())
+  leadOabDataId   String
+  fileType        String
+  dataUrl         String
+  pdfConvertido   String?
+  chatwitFileId   Int?        @unique // ID único do arquivo no Chatwit para deduplicação
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  leadOabData     LeadOabData @relation(fields: [leadOabDataId], references: [id], onDelete: Cascade)
 
   @@index([leadOabDataId])
 }
