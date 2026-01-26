@@ -220,7 +220,7 @@ export async function generateFreeChatButtons(
       console.error("Erro ao gerar chat livre com botões:", error);
       return null;
     }
-  }, agent.warmupDeadlineMs || 15000);
+  }, agent.warmupDeadlineMs || 25000); // ✅ FIXED: Increased from 15s to 25s (matches warmupDeadlineMs default)
 }
 
 /**
@@ -332,7 +332,7 @@ export async function generateWarmupButtons(
       console.error("Erro ao gerar botões de aquecimento:", error);
       return null;
     }
-  }, agent.softDeadlineMs || 15000);
+  }, agent.softDeadlineMs || 30000); // ✅ FIXED: Increased from 15s to 30s (matches softDeadlineMs default)
 }
 
 /**
@@ -452,5 +452,5 @@ export async function routerLLM(
       console.error("Erro no Router LLM:", error);
       return null;
     }
-  }, agent.hardDeadlineMs || 15000);
+  }, agent.hardDeadlineMs || 35000); // ✅ FIXED: Was 15s (too short), now 35s to match softDeadline (30s) + buffer
 }

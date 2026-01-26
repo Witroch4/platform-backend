@@ -3,6 +3,12 @@
 "use server";
 
 import { signIn } from "@/auth";
+import {
+	applyProgressiveDelay,
+	checkLoginAllowed,
+	recordFailedAttempt,
+	recordSuccessfulLogin,
+} from "@/lib/auth/login-security";
 import { CredentialsSchema, MagicLinkSignInSchema } from "@/schemas/auth";
 import { findUserbyEmail } from "@/services";
 import {
@@ -12,9 +18,29 @@ import {
 	findTwoFactorAuthTokenByEmail,
 } from "@/services/auth";
 import { AuthError, CredentialsSignin } from "next-auth";
+import { headers } from "next/headers";
 import type { z } from "zod";
 import { sendAccountVerificationEmail } from "../email-verification";
 import { sendTwoFactorAuthEmail } from "../two-factor";
+
+// Mensagem genérica para evitar enumeração de usuários
+const GENERIC_ERROR_MESSAGE = "E-mail ou senha incorretos";
+
+/**
+ * Obtém o IP do cliente a partir dos headers
+ */
+async function getClientIp(): Promise<string> {
+	try {
+		const headersList = await headers();
+		return (
+			headersList.get("x-forwarded-for")?.split(",")[0].trim() ||
+			headersList.get("x-real-ip") ||
+			"unknown"
+		);
+	} catch {
+		return "unknown";
+	}
+}
 
 /**
  * This method is responsible for executing the login flow.
@@ -31,12 +57,29 @@ export const login = async (credentials: z.infer<typeof CredentialsSchema>) => {
 		};
 	}
 
+	const { email, password, code } = validCredentials.data;
+	const clientIp = await getClientIp();
+
+	// Verificar rate limiting e lockout ANTES de qualquer operação
+	const securityCheck = await checkLoginAllowed(clientIp, email);
+	if (!securityCheck.allowed) {
+		return {
+			error: securityCheck.message,
+		};
+	}
+
 	try {
-		const { email, password, code } = validCredentials.data;
 		const user = await findUserbyEmail(email);
+
+		// IMPORTANTE: Mensagem genérica para evitar enumeração de usuários
 		if (!user) {
+			// Registrar tentativa falha mesmo sem usuário (para rate limiting por IP)
+			const { shouldDelay, delayMs } = await recordFailedAttempt(clientIp, email);
+			if (shouldDelay) {
+				await applyProgressiveDelay(delayMs);
+			}
 			return {
-				error: "Usuário não encontrado",
+				error: GENERIC_ERROR_MESSAGE,
 			};
 		}
 		//Verificação de E-mail
@@ -109,22 +152,39 @@ export const login = async (credentials: z.infer<typeof CredentialsSchema>) => {
 		};
 	} catch (err) {
 		// Verificar se é um NEXT_REDIRECT (comportamento normal do NextAuth)
-		if (err instanceof Error && err.message === 'NEXT_REDIRECT') {
+		// Isso significa que o login foi bem-sucedido e está redirecionando
+		if (err instanceof Error && err.message === "NEXT_REDIRECT") {
+			// Login bem-sucedido - limpar contadores de tentativas falhas
+			// Usamos void para não bloquear o redirect
+			void recordSuccessfulLogin(clientIp, email);
 			throw err; // Re-throw para permitir o redirecionamento
 		}
 
 		// Verificar se é um erro de digest de redirecionamento (NextAuth)
-		if (err && typeof err === 'object' && 'digest' in err) {
+		if (err && typeof err === "object" && "digest" in err) {
 			const errorWithDigest = err as { digest?: string };
-			if (errorWithDigest.digest && errorWithDigest.digest.includes('NEXT_REDIRECT')) {
+			if (
+				errorWithDigest.digest &&
+				errorWithDigest.digest.includes("NEXT_REDIRECT")
+			) {
+				// Login bem-sucedido - limpar contadores de tentativas falhas
+				void recordSuccessfulLogin(clientIp, email);
 				throw err; // Re-throw para permitir o redirecionamento
 			}
 		}
-		
+
 		if (err instanceof AuthError) {
 			if (err instanceof CredentialsSignin) {
+				// Registrar tentativa falha (senha incorreta)
+				const { shouldDelay, delayMs } = await recordFailedAttempt(
+					clientIp,
+					email
+				);
+				if (shouldDelay) {
+					await applyProgressiveDelay(delayMs);
+				}
 				return {
-					error: "Credenciais inválidas",
+					error: GENERIC_ERROR_MESSAGE,
 				};
 			}
 		}

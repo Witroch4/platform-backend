@@ -2,7 +2,7 @@
 
 # Etapa 1: Use a imagem oficial do n8n como base.
 # Fixar a versão é uma boa prática para garantir a consistência do ambiente.
-FROM n8nio/n8n:1.112.1
+FROM n8nio/n8n:2.4.6
 
 # Etapa 2: Mude para o usuário 'root' temporariamente.
 # Apenas o usuário root tem permissão para instalar pacotes globalmente.
@@ -19,7 +19,7 @@ USER node
 
 
 # comando para buildar a imagem 
-#docker build -t witrocha/n8n-axios:1.112.1 -f dockerfile.n8n .
+#docker build -t witrocha/n8n-axios:2.4.6 -f dockerfile.n8n .
 #comando pra fazer o push, loguin depois push.
 #docker login
-#docker push witrocha/n8n-axios:1.112.1
+#docker push witrocha/n8n-axios:2.4.6

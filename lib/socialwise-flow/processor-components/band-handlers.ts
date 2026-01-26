@@ -19,6 +19,7 @@ import {
 import { isWhatsAppChannel, isInstagramChannel, isFacebookChannel, normalizeChannelType, computeDynamicHintThreshold } from './utils';
 import { AssistantConfig } from './assistant-config';
 import { ProcessorContext } from './button-reactions';
+import { buildTimeoutFallbackResponse } from './timeout-helpers';
 
 const bandLogger = createLogger('SocialWise-Processor-BandHandlers');
 
@@ -170,27 +171,37 @@ export async function processSoftBand(
 
       llmWarmupMs = Date.now() - startTime;
 
-      if (warmupResult) {
-        const buttons = warmupResult.buttons.map(btn => ({
-          title: btn.title,
-          payload: btn.payload
-        }));
-
-        const response = buildChannelResponse(
-          context.channelType,
-          warmupResult.response_text,
-          buttons
-        );
-
-        bandLogger.info('SOFT band warmup buttons generated', {
-          candidatesCount: classification.candidates.length,
-          buttonsGenerated: buttons.length,
+      // ✅ NEW: Check if timeout occurred
+      if (!warmupResult) {
+        bandLogger.warn('SOFT band warmup timeout - returning fallback response', {
           llmWarmupMs,
+          softDeadlineMs: agentConfig.softDeadlineMs,
           traceId: context.traceId
         });
 
-        return { response, llmWarmupMs };
+        const fallbackResponse = buildTimeoutFallbackResponse(normalizeChannelType(context.channelType));
+        return { response: fallbackResponse, llmWarmupMs };
       }
+
+      const buttons = warmupResult.buttons.map(btn => ({
+        title: btn.title,
+        payload: btn.payload
+      }));
+
+      const response = buildChannelResponse(
+        context.channelType,
+        warmupResult.response_text,
+        buttons
+      );
+
+      bandLogger.info('SOFT band warmup buttons generated', {
+        candidatesCount: classification.candidates.length,
+        buttonsGenerated: buttons.length,
+        llmWarmupMs,
+        traceId: context.traceId
+      });
+
+      return { response, llmWarmupMs };
     } else {
       // ROUTER_LITE path replacing SOFT band
       bandLogger.info('SOFT band replaced by ROUTER_LITE (flag enabled)', {
@@ -221,8 +232,19 @@ export async function processSoftBand(
 
       const llmWarmupMs = Date.now() - startTime;
 
-      if (routerResult) {
-        if (routerResult.mode === 'intent' && !routerResult.intent_payload) {
+      // ✅ NEW: Check if timeout occurred
+      if (!routerResult) {
+        bandLogger.warn('SOFT band ROUTER_LITE timeout - returning fallback response', {
+          llmWarmupMs,
+          softDeadlineMs: agentConfig.softDeadlineMs,
+          traceId: context.traceId
+        });
+
+        const fallbackResponse = buildTimeoutFallbackResponse(normalizeChannelType(context.channelType));
+        return { response: fallbackResponse, llmWarmupMs };
+      }
+
+      if (routerResult.mode === 'intent' && !routerResult.intent_payload) {
           const candidates = (classification.candidates || []).filter(c => typeof c.score === 'number');
           candidates.sort((a, b) => (b.score! - a.score!));
           const top = candidates[0];
@@ -259,32 +281,8 @@ export async function processSoftBand(
 
         return { response, llmWarmupMs };
       }
-    }
 
-    // Degradation: Use humanized titles when LLM fails or is throttled
-    const degradationContext: DegradationContext = {
-      userText: context.userText,
-      channelType: context.channelType,
-      inboxId: context.inboxId,
-      traceId: context.traceId,
-      failurePoint: 'concurrency_limit',
-      candidates: classification.candidates
-    };
-
-    const degradationResult = selectDegradationStrategy(degradationContext);
-
-    bandLogger.info('SOFT band degraded to fallback', {
-      strategy: degradationResult.strategy,
-      fallbackLevel: degradationResult.fallbackLevel,
-      degradationMs: degradationResult.degradationMs,
-      traceId: context.traceId
-    });
-
-    return {
-      response: degradationResult.response,
-      llmWarmupMs
-    };
-
+    // ✅ Degradation fallback moved to catch block - this was unreachable code
   } catch (error) {
     bandLogger.error('SOFT band processing failed', {
       error: error instanceof Error ? error.message : String(error),
@@ -369,16 +367,31 @@ export async function processRouterBand(
 
     const llmWarmupMs = Date.now() - startTime;
 
-    if (routerResult) {
-      // Debug: Log router result details
-      bandLogger.info('Router LLM result details', {
-        mode: routerResult.mode,
-        intent_payload: routerResult.intent_payload,
-        response_text: routerResult.response_text,
-        response_text_length: routerResult.response_text?.length || 0,
-        buttons_count: routerResult.buttons?.length || 0,
+    // ✅ NEW: Check if timeout occurred (routerResult is null after deadline)
+    if (!routerResult) {
+      bandLogger.warn('Router LLM timeout - returning fallback response', {
+        llmWarmupMs,
+        hardDeadlineMs: agentConfig.hardDeadlineMs,
         traceId: context.traceId
       });
+
+      // Return timeout fallback response with retry and human handoff options
+      const fallbackResponse = buildTimeoutFallbackResponse(normalizeChannelType(context.channelType));
+      return {
+        response: fallbackResponse,
+        llmWarmupMs
+      };
+    }
+
+    // Debug: Log router result details
+    bandLogger.info('Router LLM result details', {
+      mode: routerResult.mode,
+      intent_payload: routerResult.intent_payload,
+      response_text: routerResult.response_text,
+      response_text_length: routerResult.response_text?.length || 0,
+      buttons_count: routerResult.buttons?.length || 0,
+      traceId: context.traceId
+    });
 
       // Fallback: se Router retornou mode='intent' sem intent_payload, usar top-K hints
       if (routerResult.mode === 'intent' && !routerResult.intent_payload) {
@@ -456,30 +469,8 @@ export async function processRouterBand(
       });
 
       return { response, llmWarmupMs };
-    }
 
-    // Degradation: Router LLM failed or was throttled
-    const degradationContext: DegradationContext = {
-      userText: context.userText,
-      channelType: context.channelType,
-      inboxId: context.inboxId,
-      traceId: context.traceId,
-      failurePoint: 'concurrency_limit'
-    };
-
-    const degradationResult = selectDegradationStrategy(degradationContext);
-
-    bandLogger.info('ROUTER band degraded to fallback', {
-      strategy: degradationResult.strategy,
-      fallbackLevel: degradationResult.fallbackLevel,
-      traceId: context.traceId
-    });
-
-    return {
-      response: degradationResult.response,
-      llmWarmupMs
-    };
-
+    // ✅ Unreachable degradation code removed - handled in catch block
   } catch (error) {
     bandLogger.error('ROUTER band processing failed', {
       error: error instanceof Error ? error.message : String(error),
