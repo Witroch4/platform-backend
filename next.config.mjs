@@ -1,10 +1,3 @@
-import nextra from "nextra"
-
-const withNextra = nextra({
-  theme: "nextra-theme-docs",
-  themeConfig: "./theme.config.jsx"
-})
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   serverExternalPackages: ["sharp", "pdf-parse"],
@@ -51,7 +44,7 @@ const nextConfig = {
       ...config.resolve.alias,
       '@': '.'
     }
-    
+
     // Fallbacks para módulos Node.js no cliente
     if (!isServer) {
       config.resolve.fallback = {
@@ -75,7 +68,7 @@ const nextConfig = {
       config.externals = config.externals || [];
       config.externals.push('pdf-parse');
     }
-    
+
     return config
   },
 
@@ -105,4 +98,4 @@ const nextConfig = {
   }
 }
 
-export default withNextra(nextConfig)
+export default nextConfig
