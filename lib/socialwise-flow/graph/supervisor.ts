@@ -22,7 +22,12 @@ export function buildSocialWiseGraph() {
       'gating',
       (state: any) => {
         const band = state?.classification?.band;
-        if (band === 'ROUTER') {
+        // LANGGRAPH_REACT controla se o ReactAgent é executado no band ROUTER
+        // Default: false (desabilitado) - pula o ReactAgent e vai direto para RouterLLM
+        // Quando 'true', executa o ReactAgent antes do RouterLLM para enriquecer contexto com tools
+        const langgraphReactEnabled = process.env.LANGGRAPH_REACT === 'true';
+
+        if (band === 'ROUTER' && langgraphReactEnabled) {
           return 'react_agent';
         }
         return 'router';
