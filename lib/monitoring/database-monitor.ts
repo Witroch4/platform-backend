@@ -4,6 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import { apm } from './application-performance-monitor';
 import { getRedisInstance } from '../connections';
 import crypto from 'crypto';
+import { isMonitorLogEnabled } from '../config';
 
 // Database monitoring interfaces
 export interface DatabaseQueryMetrics {
@@ -358,7 +359,9 @@ export class DatabaseMonitor {
       this.analyzeQueryPatterns();
     }, this.MONITORING_INTERVAL * 5); // Every 5 minutes
 
-    console.log('[DatabaseMonitor] Database monitoring started');
+    if (isMonitorLogEnabled()) {
+      console.log('[DatabaseMonitor] Database monitoring started');
+    }
   }
 
   // Collect connection metrics (this would need to be implemented based on your database setup)
@@ -463,11 +466,13 @@ export class DatabaseMonitor {
       }
     }
 
-    console.log(`[DatabaseMonitor] Query pattern analysis completed`, {
-      totalQueries: recentQueries.length,
-      uniqueQueryTypes: queryGroups.size,
-      timeWindow: '5 minutes',
-    });
+    if (isMonitorLogEnabled()) {
+      console.log(`[DatabaseMonitor] Query pattern analysis completed`, {
+        totalQueries: recentQueries.length,
+        uniqueQueryTypes: queryGroups.size,
+        timeWindow: '5 minutes',
+      });
+    }
   }
 
   // Get query performance statistics
@@ -585,7 +590,9 @@ export class DatabaseMonitor {
       }
     }
 
-    console.log('[DatabaseMonitor] Old metrics cleaned up');
+    if (isMonitorLogEnabled()) {
+      console.log('[DatabaseMonitor] Old metrics cleaned up');
+    }
   }
 
   // Get database dashboard data

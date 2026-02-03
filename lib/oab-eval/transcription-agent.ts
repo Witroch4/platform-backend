@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { openai } from "./openai-client";
+import { processVisionRequest } from "./unified-vision-client";
 import { getOabEvalConfig } from "@/lib/config";
 import { getPrismaInstance } from "@/lib/connections";
 import type { ExtractedPage } from "./types";
@@ -27,37 +27,6 @@ const PreparedImageSchema = z.object({
 type PreparedImageState = z.infer<typeof PreparedImageSchema>;
 
 const DEFAULT_VISION_MODEL = process.env.OAB_EVAL_VISION_MODEL ?? "gpt-4.1";
-
-function extractOutputText(response: unknown): string {
-  const outputText = (response as any)?.output_text;
-  if (typeof outputText === "string" && outputText.trim()) {
-    return outputText.trim();
-  }
-
-  const outputItems = (response as any)?.output;
-  if (Array.isArray(outputItems)) {
-    const texts: string[] = [];
-    for (const item of outputItems) {
-      const content = (item as any)?.content;
-      if (Array.isArray(content)) {
-        for (const part of content) {
-          const text = (part as any)?.text;
-          if (typeof text === "string" && text.trim()) {
-            texts.push(text.trim());
-          }
-        }
-      } else {
-        const text = (item as any)?.text;
-        if (typeof text === "string" && text.trim()) {
-          texts.push(text.trim());
-        }
-      }
-    }
-    return texts.join("\n").trim();
-  }
-
-  return "";
-}
 
 function splitSegments(raw: string): string[] {
   const text = raw.replace(/\r\n/g, "\n").trim();
@@ -132,6 +101,17 @@ function organizeSegments(segments: string[]): TranscriptionSegment[] {
   ];
 }
 
+interface TranscriptionResult {
+  text: string;
+  provider: "openai" | "gemini";
+  model: string;
+  tokens?: {
+    input?: number;
+    output?: number;
+    total?: number;
+  };
+}
+
 async function transcribeSingleImage(
   image: PreparedImageState,
   page: number,
@@ -139,9 +119,7 @@ async function transcribeSingleImage(
   model: string,
   systemInstructions: string,
   maxOutputTokens: number,
-): Promise<string> {
-  const imageUrl = `data:${image.mimeType ?? "image/png"};base64,${image.base64}`;
-
+): Promise<TranscriptionResult> {
   const userPrompt = [
     `Transcreva a página ${page} de ${total}. Formato obrigatório:`,
     "Questão: <número> (quando aplicável) OU Peça Pagina: <número/total se visível>",
@@ -153,22 +131,26 @@ async function transcribeSingleImage(
     "Se houver mais de um bloco (ex: Questão e Peça na mesma página), inicie um novo cabeçalho para cada bloco.",
   ].join("\n");
 
-  const response = await openai.responses.create({
+  // Cliente unificado: suporta OpenAI e Gemini automaticamente
+  const response = await processVisionRequest({
     model,
-    instructions: systemInstructions,
-    max_output_tokens: maxOutputTokens,
-    input: [
-      {
-        role: "user",
-        content: [
-          { type: "input_text", text: userPrompt },
-          { type: "input_image", image_url: imageUrl, detail: "high" },
-        ],
-      },
-    ],
+    systemInstructions,
+    userPrompt,
+    imageBase64: image.base64,
+    imageMimeType: image.mimeType,
+    maxOutputTokens,
   });
 
-  return extractOutputText(response);
+  return {
+    text: response.text,
+    provider: response.provider,
+    model: response.model,
+    tokens: response.usage ? {
+      input: response.usage.inputTokens,
+      output: response.usage.outputTokens,
+      total: response.usage.totalTokens,
+    } : undefined,
+  };
 }
 
 async function fetchImageAsBase64(descriptor: ManuscriptImageDescriptor): Promise<PreparedImageState> {
@@ -307,22 +289,39 @@ export async function transcribeManuscriptLocally(input: TranscriptionAgentInput
   console.log(`  - Max Output Tokens: ${maxOutputTokens}`);
   console.log(`  - System Prompt (preview): ${systemInstructions.substring(0, 150)}...`);
 
+  // Acumuladores para estatísticas
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let providerUsed = "";
+
   const results = await mapConcurrent(preparedImages, concurrency, async (image, index) => {
     const pageNumber = image.page ?? index + 1;
     const startTime = Date.now();
 
-    console.log(
-      `[TranscriptionAgent] 🖼️ Processando página ${index + 1}/${total} (page label: ${pageNumber})`,
-    );
-
-    const text = await transcribeSingleImage(image, pageNumber, total, model, systemInstructions, maxOutputTokens);
-    const trimmed = text.trim();
+    const result = await transcribeSingleImage(image, pageNumber, total, model, systemInstructions, maxOutputTokens);
+    const trimmed = result.text.trim();
     const newSegments = splitSegments(trimmed);
 
     const elapsedMs = Date.now() - startTime;
+    providerUsed = result.provider;
+
+    // Acumular tokens
+    if (result.tokens) {
+      totalInputTokens += result.tokens.input ?? 0;
+      totalOutputTokens += result.tokens.output ?? 0;
+    }
+
+    // Preview do texto (primeiras 80 chars)
+    const textPreview = trimmed.length > 80 ? `${trimmed.substring(0, 80)}...` : trimmed;
+
+    // Log informativo por página
+    const tokenInfo = result.tokens
+      ? `tokens: ${result.tokens.input ?? '?'}→${result.tokens.output ?? '?'}`
+      : '';
     console.log(
-      `[TranscriptionAgent] ✅ Página ${index + 1}/${total} concluída em ${(elapsedMs / 1000).toFixed(1)}s (${trimmed.length} chars, ${newSegments.length} blocos)`,
+      `[TranscriptionAgent] ✅ Pág ${index + 1}/${total} | ${result.provider.toUpperCase()} ${result.model} | ${(elapsedMs / 1000).toFixed(1)}s | ${trimmed.length} chars ${tokenInfo}`,
     );
+    console.log(`[TranscriptionAgent]    📄 "${textPreview.replace(/\n/g, ' ')}"`);
 
     // Callback de progresso
     if (input.onPageComplete) {
@@ -357,8 +356,12 @@ export async function transcribeManuscriptLocally(input: TranscriptionAgentInput
     .map((page) => `[[PÁGINA ${page.page}]]\n${page.text}`.trim())
     .join("\n\n");
 
+  // Log final com estatísticas
+  const tokenSummary = totalInputTokens > 0 || totalOutputTokens > 0
+    ? ` | Tokens: ${totalInputTokens} in → ${totalOutputTokens} out (${totalInputTokens + totalOutputTokens} total)`
+    : '';
   console.log(
-    `[TranscriptionAgent] Finalizado: ${pages.length} páginas processadas, ${textoDAprova.length} blocos prontos`,
+    `[TranscriptionAgent] ✅ CONCLUÍDO | ${providerUsed.toUpperCase() || model} | ${pages.length} páginas | ${textoDAprova.length} blocos${tokenSummary}`,
   );
 
   return {
@@ -412,7 +415,8 @@ async function getTranscriberConfig(): Promise<{ model: string; systemInstructio
 
     if (blueprint) {
       const model = blueprint.model || DEFAULT_VISION_MODEL;
-      const maxOutputTokens = Number(blueprint.maxOutputTokens || 5000);
+      // 0 = ilimitado (omite parâmetro na chamada da API)
+      const maxOutputTokens = Number(blueprint.maxOutputTokens ?? 0);
       const sys = (blueprint.systemPrompt || blueprint.instructions || baseInstructions).toString();
       const systemInstructions = sys.replace(/\s+/g, ' ');
       return { model, systemInstructions, maxOutputTokens };
@@ -447,7 +451,8 @@ async function getTranscriberConfig(): Promise<{ model: string; systemInstructio
     }
     if (assistant) {
       const model = assistant.model || DEFAULT_VISION_MODEL;
-      const maxOutputTokens = Number(assistant.maxOutputTokens || 5000);
+      // 0 = ilimitado (omite parâmetro na chamada da API)
+      const maxOutputTokens = Number(assistant.maxOutputTokens ?? 0);
       const systemInstructions = (assistant.instructions?.trim() || baseInstructions).replace(/\s+/g, ' ');
       return { model, systemInstructions, maxOutputTokens };
     }
@@ -455,6 +460,6 @@ async function getTranscriberConfig(): Promise<{ model: string; systemInstructio
     console.warn('[TranscriptionAgent] Falha ao consultar AiAssistant:', err);
   }
 
-  // 3) Último recurso: defaults
-  return { model: DEFAULT_VISION_MODEL, systemInstructions: baseInstructions, maxOutputTokens: 5000 };
+  // 3) Último recurso: defaults (0 = ilimitado)
+  return { model: DEFAULT_VISION_MODEL, systemInstructions: baseInstructions, maxOutputTokens: 0 };
 }

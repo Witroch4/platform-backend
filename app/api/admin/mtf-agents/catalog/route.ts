@@ -4,6 +4,7 @@ import { AiAgentType } from '@prisma/client';
 import { RetrievalToolsSchema } from '@/lib/ai-tools/retrieval-tools';
 import { DEFAULT_MODELS } from '@/services/openai-components/types';
 import { openai } from '@/lib/oab-eval/openai-client';
+import { getAvailableVisionModels, isGeminiAvailable } from '@/lib/oab-eval/unified-vision-client';
 
 const agentTypeCatalog = [
   {
@@ -52,15 +53,31 @@ const defaultModels = [
 ];
 
 /**
- * Carrega lista dinâmica de modelos disponíveis da API OpenAI
+ * Carrega lista dinâmica de modelos disponíveis da API OpenAI e Gemini
  * Categoriza modelos por capacidade (chat, vision, embedding, audio, etc)
  */
 async function loadDynamicModels(): Promise<Array<{ value: string; label: string; category?: string }>> {
   try {
+    const formattedModels: Array<{ value: string; label: string; category?: string }> = [];
+
+    // 1. GEMINI MODELS (Mais avançados - aparecem primeiro se disponíveis)
+    if (isGeminiAvailable()) {
+      const geminiModels = getAvailableVisionModels()
+        .filter(m => m.provider === 'gemini')
+        .map(m => ({
+          value: m.id,
+          label: `${m.name} [Gemini]`,
+          category: m.tier === 'flagship' ? 'flagship' : 'vision',
+        }));
+      formattedModels.push(...geminiModels);
+      console.log(`[MTF Catalog] ✅ ${geminiModels.length} modelos Gemini adicionados`);
+    }
+
+    // 2. OPENAI MODELS
     const modelsList = await openai.models.list();
     const models = modelsList.data || [];
 
-    // Categorias de modelos
+    // Categorias de modelos OpenAI
     const categories: Record<string, Array<{ id: string; created?: number }>> = {
       vision: [],
       chat: [],
@@ -115,10 +132,9 @@ async function loadDynamicModels(): Promise<Array<{ value: string; label: string
       categories.other.push(model);
     }
 
-    // Construir lista formatada priorizando modelos vision
-    const formattedModels: Array<{ value: string; label: string; category?: string }> = [];
+    // Adicionar modelos OpenAI (Gemini já foi adicionado acima se disponível)
 
-    // 1. Vision models primeiro (os mais importantes para o agente OAB)
+    // 3. Vision models OpenAI
     const visionModels = categories.vision
       .sort((a, b) => (b.created || 0) - (a.created || 0))
       .map(m => ({
@@ -128,7 +144,7 @@ async function loadDynamicModels(): Promise<Array<{ value: string; label: string
       }));
     formattedModels.push(...visionModels);
 
-    // 2. Chat models
+    // 4. Chat models OpenAI
     const chatModels = categories.chat
       .sort((a, b) => (b.created || 0) - (a.created || 0))
       .map(m => ({
@@ -138,7 +154,7 @@ async function loadDynamicModels(): Promise<Array<{ value: string; label: string
       }));
     formattedModels.push(...chatModels);
 
-    // 3. Reasoning models
+    // 5. Reasoning models OpenAI
     const reasoningModels = categories.reasoning
       .sort((a, b) => (b.created || 0) - (a.created || 0))
       .map(m => ({
@@ -148,8 +164,9 @@ async function loadDynamicModels(): Promise<Array<{ value: string; label: string
       }));
     formattedModels.push(...reasoningModels);
 
-    console.log(`[MTF Catalog] ✅ ${formattedModels.length} modelos carregados dinamicamente da OpenAI`);
-    console.log(`[MTF Catalog] 📊 Vision: ${visionModels.length}, Chat: ${chatModels.length}, Reasoning: ${reasoningModels.length}`);
+    const geminiCount = isGeminiAvailable() ? getAvailableVisionModels().filter(m => m.provider === 'gemini').length : 0;
+    console.log(`[MTF Catalog] ✅ ${formattedModels.length} modelos carregados`);
+    console.log(`[MTF Catalog] 📊 Gemini: ${geminiCount}, Vision: ${visionModels.length}, Chat: ${chatModels.length}, Reasoning: ${reasoningModels.length}`);
 
     return formattedModels;
   } catch (error) {

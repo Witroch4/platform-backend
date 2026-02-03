@@ -8,16 +8,16 @@ import sharp from 'sharp';
 // Configuração do cliente S3 para MinIO
 const s3Client = new S3Client({
   region: 'us-east-1', // Região padrão, pode ser qualquer uma para MinIO
-  endpoint: `https://${process.env.S3Endpoint || 'objstoreapi.witdev.com.br'}`,
+  endpoint: `https://${process.env.S3_ENDPOINT || 'objstoreapi.witdev.com.br'}`,
   credentials: {
-    accessKeyId: process.env.S3AccessKey || 'WOmhXdGA7q45h6eUd76E',
-    secretAccessKey: process.env.S3SecretKey || 'VBFbOh6VMW1flrwyzWS4CoR4dtibpfeSRwYhjkbs',
+    accessKeyId: process.env.S3_ACCESS_KEY || 'WOmhXdGA7q45h6eUd76E',
+    secretAccessKey: process.env.S3_SECRET_KEY || 'VBFbOh6VMW1flrwyzWS4CoR4dtibpfeSRwYhjkbs',
   },
   forcePathStyle: true, // Necessário para MinIO
 });
 
-const BUCKET_NAME = process.env.S3Bucket || 'chatwit-social';
-const HOST = process.env.S3Endpoint || 'objstoreapi.witdev.com.br';
+const BUCKET_NAME = process.env.S3_BUCKET || 'chatwit-social';
+const HOST = process.env.S3_ENDPOINT || 'objstoreapi.witdev.com.br';
 
 /**
  * Sanitiza o nome do arquivo removendo caracteres não suportados pelo MinIO
@@ -311,7 +311,7 @@ export function extractObjectKeyFromUrl(url: string): string {
     const pathParts = urlObj.pathname.split('/');
 
     // Remove a primeira parte vazia e o nome do bucket
-    const bucketName = process.env.S3Bucket || 'chatwit-social';
+    const bucketName = process.env.S3_BUCKET || 'chatwit-social';
     const bucketIndex = pathParts.findIndex(part => part === bucketName);
 
     if (bucketIndex === -1) {

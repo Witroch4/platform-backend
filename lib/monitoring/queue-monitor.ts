@@ -1,6 +1,7 @@
 import { Queue, Job, QueueEvents } from 'bullmq';
 import { getRedisInstance } from '../connections';
 import { apm } from './application-performance-monitor';
+import { isMonitorLogEnabled } from '../config';
 
 // Queue monitoring interfaces
 export interface QueueHealthMetrics {
@@ -98,7 +99,9 @@ export class QueueMonitor {
     // Set up queue event listeners
     this.setupQueueEventListeners(queue, events, name);
 
-    console.log(`[QueueMonitor] Registered queue for monitoring: ${name}`);
+    if (isMonitorLogEnabled()) {
+      console.log(`[QueueMonitor] Registered queue for monitoring: ${name}`);
+    }
   }
 
   // Set up event listeners for a queue
@@ -220,13 +223,15 @@ export class QueueMonitor {
     // Check for performance alerts
     this.checkJobPerformanceAlerts(jobMetrics);
 
-    console.log(`[QueueMonitor] Job ${status} in queue ${queueName}:`, {
-      jobId: jobMetrics.jobId,
-      jobName: jobMetrics.jobName,
-      processingTime,
-      waitTime,
-      attempts: jobMetrics.attempts,
-    });
+    if (isMonitorLogEnabled()) {
+      console.log(`[QueueMonitor] Job ${status} in queue ${queueName}:`, {
+        jobId: jobMetrics.jobId,
+        jobName: jobMetrics.jobName,
+        processingTime,
+        waitTime,
+        attempts: jobMetrics.attempts,
+      });
+    }
   }
 
   // Record job start
@@ -235,20 +240,24 @@ export class QueueMonitor {
       ? job.processedOn - job.timestamp 
       : undefined;
 
-    console.log(`[QueueMonitor] Job started in queue ${queueName}:`, {
-      jobId: job.id,
-      jobName: job.name,
-      waitTime,
-    });
+    if (isMonitorLogEnabled()) {
+      console.log(`[QueueMonitor] Job started in queue ${queueName}:`, {
+        jobId: job.id,
+        jobName: job.name,
+        waitTime,
+      });
+    }
   }
 
   // Record job waiting
   private recordJobWaiting(job: Job, queueName: string): void {
-    console.log(`[QueueMonitor] Job waiting in queue ${queueName}:`, {
-      jobId: job.id,
-      jobName: job.name,
-      timestamp: new Date(job.timestamp || Date.now()),
-    });
+    if (isMonitorLogEnabled()) {
+      console.log(`[QueueMonitor] Job waiting in queue ${queueName}:`, {
+        jobId: job.id,
+        jobName: job.name,
+        timestamp: new Date(job.timestamp || Date.now()),
+      });
+    }
   }
 
   // Extract correlation ID from job data
@@ -335,7 +344,9 @@ export class QueueMonitor {
       this.cleanupOldMetrics();
     }, this.CLEANUP_INTERVAL);
 
-    console.log('[QueueMonitor] Queue monitoring started');
+    if (isMonitorLogEnabled()) {
+      console.log('[QueueMonitor] Queue monitoring started');
+    }
   }
 
   // Collect health metrics for all monitored queues
@@ -375,12 +386,14 @@ export class QueueMonitor {
         // Check for alerts
         this.checkQueueHealthAlerts(metrics);
 
-        console.log(`[QueueMonitor] Health metrics collected for queue ${queueName}:`, {
-          waiting: metrics.waiting,
-          active: metrics.active,
-          failed: metrics.failed,
-          paused: metrics.paused,
-        });
+        if (isMonitorLogEnabled()) {
+          console.log(`[QueueMonitor] Health metrics collected for queue ${queueName}:`, {
+            waiting: metrics.waiting,
+            active: metrics.active,
+            failed: metrics.failed,
+            paused: metrics.paused,
+          });
+        }
 
       } catch (error) {
         console.error(`[QueueMonitor] Error collecting metrics for queue ${queueName}:`, error);
@@ -557,7 +570,9 @@ export class QueueMonitor {
       this.jobMetricsHistory.set(queueName, filteredHistory);
     }
 
-    console.log('[QueueMonitor] Old metrics cleaned up');
+    if (isMonitorLogEnabled()) {
+      console.log('[QueueMonitor] Old metrics cleaned up');
+    }
   }
 
   // Get comprehensive queue dashboard data

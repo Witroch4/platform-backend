@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { openai } from "./openai-client";
+import { processMultiImageUrlVisionRequest } from "./unified-vision-client";
 import { getOabEvalConfig } from "@/lib/config";
 import { getPrismaInstance } from "@/lib/connections";
 import type { RubricPayload, RubricGroup, StudentMirrorPayload } from "./types";
@@ -533,40 +533,6 @@ function normalizeImageUrl(descriptor: MirrorImageDescriptor): string {
 }
 
 /**
- * Extrai texto de resposta da API OpenAI
- */
-function extractOutputText(response: unknown): string {
-  const outputText = (response as any)?.output_text;
-  if (typeof outputText === "string" && outputText.trim()) {
-    return outputText.trim();
-  }
-
-  const outputItems = (response as any)?.output;
-  if (Array.isArray(outputItems)) {
-    const texts: string[] = [];
-    for (const item of outputItems) {
-      const content = (item as any)?.content;
-      if (Array.isArray(content)) {
-        for (const part of content) {
-          const text = (part as any)?.text;
-          if (typeof text === "string" && text.trim()) {
-            texts.push(text.trim());
-          }
-        }
-      } else {
-        const text = (item as any)?.text;
-        if (typeof text === "string" && text.trim()) {
-          texts.push(text.trim());
-        }
-      }
-    }
-    return texts.join("\n").trim();
-  }
-
-  return "";
-}
-
-/**
  * Carrega configuração do blueprint do agente extrator de espelho
  */
 async function getMirrorExtractorConfig(): Promise<{
@@ -615,7 +581,8 @@ async function getMirrorExtractorConfig(): Promise<{
 
     if (blueprint) {
       const model = blueprint.model || DEFAULT_VISION_MODEL;
-      const maxOutputTokens = Number(blueprint.maxOutputTokens || 4000);
+      // 0 = ilimitado (omite parâmetro na chamada da API)
+      const maxOutputTokens = Number(blueprint.maxOutputTokens ?? 0);
       const sys = (blueprint.systemPrompt || blueprint.instructions || baseInstructions).toString();
       const systemInstructions = sys.replace(/\s+/g, ' ');
       return { model, systemInstructions, maxOutputTokens };
@@ -624,8 +591,8 @@ async function getMirrorExtractorConfig(): Promise<{
     console.warn('[MirrorGenerator] Falha ao consultar AiAgentBlueprint:', err);
   }
 
-  // 2) Fallback: defaults
-  return { model: DEFAULT_VISION_MODEL, systemInstructions: baseInstructions, maxOutputTokens: 4000 };
+  // 2) Fallback: defaults (0 = ilimitado)
+  return { model: DEFAULT_VISION_MODEL, systemInstructions: baseInstructions, maxOutputTokens: 0 };
 }
 
 /**
@@ -795,34 +762,23 @@ async function extractMirrorDataFromImages(
   ].join("\n");
 
   // 📝 LOG: Prompt completo sendo enviado
-  console.log(`[MirrorGenerator::Prompt] 📤 Enviando prompt para OpenAI (${userPrompt.length} chars):`);
+  console.log(`[MirrorGenerator::Prompt] 📤 Enviando prompt para Vision AI (${userPrompt.length} chars):`);
   console.log(`[MirrorGenerator::Prompt] ───────────────────────────────────────────`);
   console.log(userPrompt);
   console.log(`[MirrorGenerator::Prompt] ───────────────────────────────────────────`);
 
-  // ✅ Usar URLs diretas - API OpenAI aceita HTTP/HTTPS, data URIs e file IDs
-  const imageContents = imageUrls.map(url => ({
-    type: "input_image" as const,
-    image_url: url,
-    detail: "high" as const,
-  }));
-
-  const response = await openai.responses.create({
+  // Cliente unificado: suporta OpenAI e Gemini automaticamente
+  const response = await processMultiImageUrlVisionRequest({
     model,
-    instructions: systemInstructions,
-    max_output_tokens: maxOutputTokens,
-    input: [
-      {
-        role: "user",
-        content: [
-          { type: "input_text", text: userPrompt },
-          ...imageContents,
-        ],
-      },
-    ],
+    systemInstructions,
+    userPrompt,
+    imageUrls,
+    maxOutputTokens,
   });
 
-  const rawText = extractOutputText(response);
+  console.log(`[MirrorGenerator] 🤖 Provider utilizado: ${response.provider}`);
+
+  const rawText = response.text;
 
   // Tentar parsear JSON
   try {

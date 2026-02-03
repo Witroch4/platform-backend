@@ -11,7 +11,10 @@
       "Bash(git push:*)",
       "Bash(pnpm install:*)",
       "Bash(pnpm list:*)",
-      "Bash(pnpm audit:*)"
+      "Bash(pnpm audit:*)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__query-docs",
+      "Bash(pnpm add:*)"
     ],
     "deny": [],
     "ask": []

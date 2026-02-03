@@ -8,6 +8,7 @@
 import { withPrismaReconnect } from "@/lib/connections";
 import { getRedisInstance } from '../connections';
 import { PrismaClient, Prisma } from '@prisma/client';
+import { isMonitorLogEnabled } from '@/lib/config';
 
 // Connection pool configuration
 export interface ConnectionPoolConfig {
@@ -113,7 +114,9 @@ class ConnectionPoolMonitor {
       });
     }, this.config.healthCheckIntervalMs);
 
-    console.log('[ConnectionPoolMonitor] Health checking started');
+    if (isMonitorLogEnabled()) {
+      console.log('[ConnectionPoolMonitor] Health checking started');
+    }
   }
 
   // Record query execution
@@ -244,7 +247,7 @@ class ConnectionPoolMonitor {
       };
 
       // Log health status periodically
-      if (this.metrics.totalQueries % 1000 === 0 || issues.length > 0) {
+      if ((this.metrics.totalQueries % 1000 === 0 || issues.length > 0) && isMonitorLogEnabled()) {
         console.log('[ConnectionPoolMonitor] Health check completed', {
           status,
           issues: issues.length,

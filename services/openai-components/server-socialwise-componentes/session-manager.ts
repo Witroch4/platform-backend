@@ -3,6 +3,38 @@ import OpenAI from "openai";
 import { getRedisInstance } from "@/lib/connections";
 import { AgentConfig, ChannelType } from "../types";
 
+// ============ CONVERSATION HISTORY STRATEGY ============
+/**
+ * Estratégia de gerenciamento de histórico de conversa:
+ *
+ * - "manual": Histórico salvo no Redis, reconstruído manualmente em cada chamada.
+ *   Funciona com qualquer LLM (OpenAI, Gemini, Claude, Groq, etc.)
+ *
+ * - "openai_native": Usa previous_response_id da OpenAI Responses API.
+ *   OpenAI gerencia contexto internamente, menos tokens enviados.
+ *   SOMENTE funciona com OpenAI Responses API.
+ */
+export type HistoryStrategy = 'manual' | 'openai_native';
+
+/**
+ * Obtém a estratégia de histórico configurada via ENV.
+ * Default: "manual" (compatível com qualquer LLM)
+ */
+export function getHistoryStrategy(): HistoryStrategy {
+  const strategy = process.env.CONVERSATION_HISTORY_STRATEGY as HistoryStrategy;
+  if (strategy === 'openai_native') {
+    return 'openai_native';
+  }
+  return 'manual'; // default
+}
+
+/**
+ * Verifica se deve usar o modo nativo da OpenAI (previous_response_id)
+ */
+export function isOpenAINativeStrategy(): boolean {
+  return getHistoryStrategy() === 'openai_native';
+}
+
 // Pequeno hash determinístico (FNV-1a) para derivar a sessão de (modelo+capitão)
 function hashShort(s: string): string {
   let h = 2166136261;
@@ -14,9 +46,19 @@ function hashShort(s: string): string {
 }
 
 const sessionState = new Map<string, string>(); // Fallback local — dev/CI
+const historyState = new Map<string, ConversationMessage[]>(); // Fallback local para histórico
 const SESSION_TTL_SECONDS = 60 * 60 * 24; // 24h
-const SESSION_TTL_DEV_SECONDS = 30; // 30 segundos para devs
+const SESSION_TTL_DEV_SECONDS = 30; // 30 segundos para devs (sessionPointer)
+const HISTORY_TTL_DEV_SECONDS = 60 * 5; // 5 minutos para histórico em dev (mais tempo para testar)
 const LOCK_TTL_SECONDS = 5; // lock curto
+const MAX_HISTORY_MESSAGES = 20; // Limite de mensagens no histórico
+
+// Interface para mensagens do histórico de conversa
+export interface ConversationMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number;
+}
 
 // Session IDs dos desenvolvedores para TTL reduzido
 const DEV_SESSION_IDS = new Set([
@@ -129,6 +171,142 @@ export async function hasSessionPointer(sessionId: string): Promise<boolean> {
   const sessionKey = `session:${sessionId}`;
   const existing = await getSessionPointer(sessionKey);
   return !!existing;
+}
+
+// ============ GERENCIAMENTO DE HISTÓRICO DE CONVERSA ============
+
+/**
+ * Recupera o histórico de conversa de uma sessão.
+ *
+ * Comportamento por estratégia:
+ * - "manual": Carrega histórico do Redis/memória
+ * - "openai_native": Retorna array vazio (OpenAI gerencia via previous_response_id)
+ */
+export async function getSessionHistory(
+  sessionId: string,
+  maxMessages: number = MAX_HISTORY_MESSAGES
+): Promise<ConversationMessage[]> {
+  // No modo openai_native, não carregamos histórico manual
+  // A OpenAI recupera contexto via previous_response_id
+  if (isOpenAINativeStrategy()) {
+    console.log(`📚 [${getHistoryStrategy()}] Modo OpenAI nativo - histórico gerenciado via previous_response_id`);
+    return [];
+  }
+
+  const historyKey = `sessionHistory:${sessionId}`;
+  const redis = getRedisInstance?.();
+
+  if (redis) {
+    try {
+      const data = await redis.get(historyKey);
+      if (data) {
+        const history: ConversationMessage[] = JSON.parse(data);
+        // Retorna as últimas maxMessages mensagens
+        return history.slice(-maxMessages);
+      }
+    } catch (error) {
+      console.warn("[SessionHistory] Redis get failed, using fallback:", error);
+    }
+  }
+
+  // Fallback para memória local
+  const localHistory = historyState.get(historyKey) ?? [];
+  return localHistory.slice(-maxMessages);
+}
+
+/**
+ * Adiciona uma mensagem ao histórico da sessão.
+ *
+ * Comportamento por estratégia:
+ * - "manual": Salva no Redis/memória
+ * - "openai_native": Apenas salva session pointer (OpenAI gerencia histórico)
+ */
+export async function appendToHistory(
+  sessionId: string,
+  message: ConversationMessage
+): Promise<void> {
+  // No modo openai_native, não salvamos histórico manual
+  // A OpenAI mantém contexto via previous_response_id
+  if (isOpenAINativeStrategy()) {
+    // Log silencioso - o histórico está sendo gerenciado pela OpenAI
+    return;
+  }
+
+  const historyKey = `sessionHistory:${sessionId}`;
+  const isDevSession = DEV_SESSION_IDS.has(sessionId);
+  // Histórico usa TTL maior que sessionPointer para persistir contexto
+  const ttl = isDevSession ? HISTORY_TTL_DEV_SECONDS : SESSION_TTL_SECONDS;
+
+  // Recupera histórico existente (força busca direta, não usa getSessionHistory que verifica estratégia)
+  let history = await getSessionHistoryDirect(sessionId, MAX_HISTORY_MESSAGES * 2);
+
+  // Adiciona nova mensagem
+  history.push(message);
+
+  // Mantém apenas as últimas MAX_HISTORY_MESSAGES mensagens
+  if (history.length > MAX_HISTORY_MESSAGES) {
+    history = history.slice(-MAX_HISTORY_MESSAGES);
+  }
+
+  const redis = getRedisInstance?.();
+  if (redis) {
+    try {
+      await redis.setex(historyKey, ttl, JSON.stringify(history));
+      if (isDevSession) {
+        console.log(`🔧 DEV SESSION HISTORY: Salvo ${history.length} mensagens com TTL ${ttl}s`);
+      }
+    } catch (error) {
+      console.warn("[SessionHistory] Redis set failed, using fallback:", error);
+    }
+  }
+
+  // Sempre atualiza fallback local também
+  historyState.set(historyKey, history);
+}
+
+/**
+ * Busca direta do histórico (ignora estratégia).
+ * Usado internamente por appendToHistory no modo manual.
+ */
+async function getSessionHistoryDirect(
+  sessionId: string,
+  maxMessages: number = MAX_HISTORY_MESSAGES
+): Promise<ConversationMessage[]> {
+  const historyKey = `sessionHistory:${sessionId}`;
+  const redis = getRedisInstance?.();
+
+  if (redis) {
+    try {
+      const data = await redis.get(historyKey);
+      if (data) {
+        const history: ConversationMessage[] = JSON.parse(data);
+        return history.slice(-maxMessages);
+      }
+    } catch (error) {
+      console.warn("[SessionHistory] Redis get failed, using fallback:", error);
+    }
+  }
+
+  const localHistory = historyState.get(historyKey) ?? [];
+  return localHistory.slice(-maxMessages);
+}
+
+/**
+ * Limpa o histórico de uma sessão
+ */
+export async function clearSessionHistory(sessionId: string): Promise<void> {
+  const historyKey = `sessionHistory:${sessionId}`;
+  const redis = getRedisInstance?.();
+
+  if (redis) {
+    try {
+      await redis.del(historyKey);
+    } catch (error) {
+      console.warn("[SessionHistory] Redis del failed:", error);
+    }
+  }
+
+  historyState.delete(historyKey);
 }
 
 

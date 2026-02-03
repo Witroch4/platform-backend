@@ -12,6 +12,7 @@ import { withPrismaReconnect } from '@/lib/connections';
 // SocialWise Flow optimized components
 import { processSocialWiseFlow, extractSessionId } from '@/lib/socialwise-flow/processor';
 import { buildChannelResponse } from '@/lib/socialwise-flow/channel-formatting';
+import { isDebounceEnabled, addToDebounceBuffer, getDebounceConfig } from '@/lib/socialwise-flow/message-debouncer';
 import { SocialWiseFlowPayloadSchema, SanitizedTextSchema, validateSocialWisePayloadWithPreprocessing, type SocialWiseFlowPayloadType, type SocialWiseChatwitData } from '@/lib/socialwise-flow/schemas/payload';
 import { SocialWiseIdempotencyService } from '@/lib/socialwise-flow/services/idempotency';
 import { SocialWiseRateLimiterService } from '@/lib/socialwise-flow/services/rate-limiter';
@@ -532,6 +533,74 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
         const syntheticText = String(legacyButtonTitle || textInput || '').trim();
         // Process as regular text input through optimized flow
         textInput = syntheticText;
+      }
+    }
+
+    // Step 13.5: Message Debounce (aggregates rapid-fire messages)
+    const sessionIdForDebounce = extractSessionId(payload, channelType);
+
+    if (isDebounceEnabled() && sessionIdForDebounce && !unmappedButtonId) {
+      // Only debounce regular text messages, not button interactions
+      const debounceConfig = getDebounceConfig();
+
+      webhookLogger.info('Debounce check', {
+        sessionId: sessionIdForDebounce,
+        debounceMs: debounceConfig.debounceMs,
+        isButtonInteraction: !!unmappedButtonId,
+        traceId
+      });
+
+      const debounceResult = await addToDebounceBuffer(
+        sessionIdForDebounce,
+        {
+          text: textInput,
+          timestamp: Date.now(),
+          messageId: String(validPayload.context.message?.id || correlationId),
+          wamid,
+          traceId
+        },
+        {
+          channelType,
+          inboxId,
+          chatwitAccountId: String(chatwitAccountId),
+          userId,
+          contactName,
+          contactPhone: typeof contactPhone === 'string' ? contactPhone : undefined,
+          originalPayload: payload
+        }
+      );
+
+      if (!debounceResult.shouldProcess) {
+        // This message was debounced - another request will process it
+        webhookLogger.info('Message debounced, awaiting aggregation', {
+          sessionId: sessionIdForDebounce,
+          isDebounced: debounceResult.isDebounced,
+          messageCount: debounceResult.messageCount,
+          traceId
+        });
+
+        // Return 202 Accepted to indicate the message was received but processing is deferred
+        const debouncedResponse = {
+          ok: true,
+          debounced: true,
+          message: 'Mensagem recebida, aguardando agregação'
+        };
+        logFinalResponse(debouncedResponse, 202, traceId);
+        return NextResponse.json(debouncedResponse, { status: 202 });
+      }
+
+      // This request should process the aggregated messages
+      if (debounceResult.isDebounced && debounceResult.aggregatedText) {
+        webhookLogger.info('Processing debounced messages', {
+          sessionId: sessionIdForDebounce,
+          messageCount: debounceResult.messageCount,
+          originalText: textInput,
+          aggregatedTextLength: debounceResult.aggregatedText.length,
+          traceId
+        });
+
+        // Use aggregated text instead of single message
+        textInput = debounceResult.aggregatedText;
       }
     }
 

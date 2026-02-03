@@ -194,7 +194,7 @@ export async function downloadUrlAsBuffer(url: string): Promise<Buffer> {
     }
     if (url.includes('objstore.witdev.com.br')) {
       console.warn(`[iLovePDF] URL com endpoint incorreto detectada: ${url}`);
-      url = url.replace('objstore.witdev.com.br', process.env.S3Endpoint || 'objstoreapi.witdev.com.br');
+      url = url.replace('objstore.witdev.com.br', process.env.S3_ENDPOINT || 'objstoreapi.witdev.com.br');
       console.log(`[iLovePDF] URL corrigida: ${url}`);
     }
     const resp = await fetch(url, {

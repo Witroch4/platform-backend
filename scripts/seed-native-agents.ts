@@ -4,15 +4,29 @@ import { getPrismaInstance } from "../lib/connections";
 
 const prisma = getPrismaInstance();
 
+/**
+ * Modelos de Vision disponíveis (ordenados por capacidade):
+ *
+ * GEMINI (requer GEMINI_API_KEY):
+ * - gemini-3-pro-preview    → Mais avançado, melhor para código e raciocínio
+ * - gemini-3-flash-preview  → Rápido e multimodal
+ * - gemini-2.5-pro          → Pro com thinking nativo
+ * - gemini-2.5-flash        → Flash com thinking
+ *
+ * OPENAI (requer OPENAI_API_KEY):
+ * - gpt-4.1                 → Melhor OpenAI para visão
+ * - gpt-4.1-mini            → Balanceado custo/qualidade
+ * - gpt-4o                  → Multimodal avançado
+ */
 const NATIVE_AGENTS = [
   {
     name: 'OAB — Transcritor de Provas (Blueprint)',
-    description: 'Agente nativo para transcrever e extrair texto de provas OAB usando visão computacional',
+    description: 'Agente nativo para transcrever e extrair texto de provas OAB usando visão computacional. Suporta OpenAI e Gemini.',
     agentType: 'CUSTOM' as const,
     icon: 'file-text',
-    model: 'gpt-4.1',
+    model: 'gemini-3-pro-preview', // Mais avançado - detecta automaticamente OpenAI ou Gemini
     temperature: 0,
-    maxOutputTokens: 5000,
+    maxOutputTokens: 0, // 0 = ilimitado (usa padrão máximo do modelo)
     systemPrompt: [
       'Você é um agente especializado em transcrição de provas da OAB.',
       'Sua tarefa é extrair com precisão todo o texto visível nas imagens de provas.',
@@ -33,12 +47,12 @@ const NATIVE_AGENTS = [
   },
   {
     name: 'OAB — Extrator de Espelho (Blueprint)',
-    description: 'Agente nativo para extrair dados de espelhos de correção OAB usando vision',
+    description: 'Agente nativo para extrair dados de espelhos de correção OAB usando vision. Suporta OpenAI e Gemini.',
     agentType: 'CUSTOM' as const,
     icon: 'mirror',
-    model: 'gpt-4.1',
+    model: 'gemini-3-pro-preview', // Mais avançado - detecta automaticamente OpenAI ou Gemini
     temperature: 0,
-    maxOutputTokens: 4000,
+    maxOutputTokens: 0, // 0 = ilimitado (usa padrão máximo do modelo)
     systemPrompt: [
       'Você é um agente especializado em extrair dados de espelhos de correção da OAB.',
       'Sua tarefa é identificar e extrair com precisão máxima:',

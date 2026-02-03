@@ -7,6 +7,7 @@ import { Queue, QueueEvents } from "bullmq";
 import { getRedisInstance } from "../connections";
 import { apm } from "../monitoring/application-performance-monitor";
 import log from "../log";
+import { isMonitorLogEnabled } from "../config";
 
 // Interfaces para métricas de custo
 export interface CostMetrics {
@@ -330,12 +331,14 @@ export class CostMonitor {
       // Verificar alertas
       await this.checkMetricsAlerts(metrics);
 
-      log.debug("[CostMonitor] Métricas coletadas:", {
-        eventsProcessed,
-        errorRate: `${errorRate.toFixed(2)}%`,
-        pendingEvents: metrics.pendingEvents,
-        totalCostUSD: `$${totalCostUSD.toFixed(4)}`,
-      });
+      if (isMonitorLogEnabled()) {
+        log.debug("[CostMonitor] Métricas coletadas:", {
+          eventsProcessed,
+          errorRate: `${errorRate.toFixed(2)}%`,
+          pendingEvents: metrics.pendingEvents,
+          totalCostUSD: `$${totalCostUSD.toFixed(4)}`,
+        });
+      }
 
       return metrics;
     } catch (error) {

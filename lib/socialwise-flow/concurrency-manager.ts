@@ -277,12 +277,15 @@ export class ConcurrencyManager {
         }, timeoutMs);
       });
 
-      operation()
+      // FIX: Chamar operation() apenas UMA vez e reutilizar a promise
+      const operationPromise = operation();
+
+      Promise.race([operationPromise, timeoutPromise])
         .then((result) => {
           if (!completed) {
             completed = true;
             if (timeoutHandle) clearTimeout(timeoutHandle);
-            resolve(result);
+            resolve(result as T | null);
           }
         })
         .catch((error) => {
@@ -292,14 +295,6 @@ export class ConcurrencyManager {
             reject(error);
           }
         });
-
-      Promise.race([operation(), timeoutPromise]).then((result) => {
-        if (!completed) {
-          completed = true;
-          if (timeoutHandle) clearTimeout(timeoutHandle);
-          resolve(result as T | null);
-        }
-      });
     });
   }
 

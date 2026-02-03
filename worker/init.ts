@@ -185,7 +185,9 @@ if (require.main === module) {
         
         // Manter o processo vivo
         setInterval(() => {
-          console.log('[Worker] 💓 Heartbeat - Todos os workers ativos');
+          if (process.env.MONITOR_LOG === 'true') {
+            console.log('[Worker] 💓 Heartbeat - Todos os workers ativos');
+          }
         }, 60000); // Log a cada minuto
       } else {
         console.error('[Worker] ❌ Falha na inicialização:', result.error);

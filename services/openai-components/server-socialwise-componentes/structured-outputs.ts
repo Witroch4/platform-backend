@@ -2,7 +2,15 @@
 import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import { AgentConfig, ChannelType } from "../types";
-import { ensureSession, updateSessionPointer } from "./session-manager";
+import {
+  ensureSession,
+  updateSessionPointer,
+  getSessionHistory,
+  appendToHistory,
+  getHistoryStrategy,
+  isOpenAINativeStrategy,
+  type ConversationMessage
+} from "./session-manager";
 import { createMasterPrompt } from "./prompt-manager";
 import { getModelCaps, isGPT5, resolveSamplingPrefs } from "./model-capabilities";
 import { getConstraintsForChannel } from "./channel-constraints";
@@ -126,6 +134,10 @@ export interface StructuredOrJsonArgs<T> {
   disableEnsureSession?: boolean;
   // Stable identifier for session pointer (avoid dynamic content like hints)
   pointerKey?: string;
+  // Texto original do usuário para salvar no histórico
+  userText?: string;
+  // Histórico de conversa pré-carregado (se já foi buscado externamente)
+  conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
 }
 
 export async function structuredOrJson<T>(args: StructuredOrJsonArgs<T>): Promise<StructuredOrJsonResult<T>> {
@@ -156,12 +168,21 @@ export async function structuredOrJson<T>(args: StructuredOrJsonArgs<T>): Promis
   // Se temos sessionId e channel, tenta garantir previous_response_id da sessão
   let finalPreviousResponseId = previous_response_id;
   let finalMessages = messages;
-  
+
+  // Log da estratégia de histórico em uso (apenas na primeira chamada com sessionId)
+  const historyStrategy = getHistoryStrategy();
+  const useNativeHistory = isOpenAINativeStrategy();
+
   if (sessionId && channel && !previous_response_id && !args.disableEnsureSession) {
     // console.log("🔍 STRUCTURED OR JSON - Tentando obter sessão:", { sessionId, channel, hasPreviousId: !!previous_response_id }); // Log desabilitado temporariamente
     try {
       const sessionResult = await ensureSession({ sessionId, agent, channel }, createMasterPrompt, signal);
       finalPreviousResponseId = sessionResult.responseId;
+
+      // Log da estratégia de histórico (útil para debug)
+      if (sessionResult.isNewSession) {
+        console.log(`📚 [HistoryStrategy: ${historyStrategy}] Nova sessão iniciada. ${useNativeHistory ? 'OpenAI gerenciará contexto via previous_response_id' : 'Histórico manual via Redis'}`);
+      }
       
       // Se é nova sessão, inclui master prompt nas mensagens para single-call
       if (sessionResult.isNewSession && !finalPreviousResponseId) {
@@ -242,6 +263,26 @@ export async function structuredOrJson<T>(args: StructuredOrJsonArgs<T>): Promis
       if (sessionId && result.id && channel) {
         const stableKey = args.pointerKey ?? instructions ?? 'default';
         await updateSessionPointer(sessionId, model, channel, stableKey, result.id);
+
+        // Salvar no histórico de conversa
+        if (args.userText) {
+          // Salva mensagem do usuário
+          await appendToHistory(sessionId, {
+            role: 'user',
+            content: args.userText,
+            timestamp: Date.now()
+          });
+          // Salva resposta do assistente (extrair response_text se disponível)
+          const assistantResponse = (result.parsed as any)?.response_text || raw_text || '';
+          if (assistantResponse) {
+            await appendToHistory(sessionId, {
+              role: 'assistant',
+              content: assistantResponse,
+              timestamp: Date.now()
+            });
+          }
+          console.log("📝 HISTORY: Salvo user + assistant no histórico da sessão", sessionId);
+        }
       }
 
       return result;
@@ -400,6 +441,26 @@ export async function structuredOrJson<T>(args: StructuredOrJsonArgs<T>): Promis
   if (sessionId && result.id && channel) {
     const stableKey = args.pointerKey ?? instructions ?? 'default';
     await updateSessionPointer(sessionId, model, channel, stableKey, result.id);
+
+    // Salvar no histórico de conversa
+    if (args.userText) {
+      // Salva mensagem do usuário
+      await appendToHistory(sessionId, {
+        role: 'user',
+        content: args.userText,
+        timestamp: Date.now()
+      });
+      // Salva resposta do assistente (extrair response_text se disponível)
+      const assistantResponse = (result.parsed as any)?.response_text || rawText || '';
+      if (assistantResponse) {
+        await appendToHistory(sessionId, {
+          role: 'assistant',
+          content: assistantResponse,
+          timestamp: Date.now()
+        });
+      }
+      console.log("📝 HISTORY: Salvo user + assistant no histórico da sessão (fallback)", sessionId);
+    }
   }
 
   return result;

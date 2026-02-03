@@ -112,23 +112,37 @@ export interface PromptBuilderOptions {
   disableIntentSuggestion?: boolean;
 }
 
+// Interface para histórico de conversa
+export interface HistoryMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 // Constrói 'messages' no formato esperado pelos clientes que usam developer+user
 export function buildMessages(
   options: PromptBuilderOptions,
-  userContent: string
-): Array<{ role: "developer" | "user"; content: string }> {
-  const messages: Array<{ role: "developer" | "user"; content: string }> = [];
+  userContent: string,
+  history?: HistoryMessage[]
+): Array<{ role: "developer" | "user" | "assistant"; content: string }> {
+  const messages: Array<{ role: "developer" | "user" | "assistant"; content: string }> = [];
 
   // Adiciona apenas MASTER nas developer messages (nova sessão).
   // Task rules e hints ficam em `instructions` (evita duplicação).
   if (options.statelessInit !== false) {
-    messages.push({ 
-      role: "developer", 
-      content: createMasterPrompt(options.channel, options.proposeHumanHandoff ?? true) 
+    messages.push({
+      role: "developer",
+      content: createMasterPrompt(options.channel, options.proposeHumanHandoff ?? true)
     });
   }
 
-  // Texto cru do usuário (sem molduras).
+  // Adiciona histórico de conversa (se existir)
+  if (history && history.length > 0) {
+    for (const msg of history) {
+      messages.push({ role: msg.role, content: msg.content });
+    }
+  }
+
+  // Texto cru do usuário atual (sem molduras).
   messages.push({ role: "user", content: userContent });
 
   return messages;

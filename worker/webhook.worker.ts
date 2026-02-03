@@ -20,7 +20,7 @@ import {
 import cron from "node-cron";
 import { LEADS_QUEUE_NAME } from "@/lib/queue/leads-chatwit.queue";
 import { processLeadChatwitTask } from "./WebhookWorkerTasks/leads-chatwit.task";
-import { getWorkersConfig } from '@/lib/config';
+import { getWorkersConfig, isMonitorLogEnabled } from '@/lib/config';
 
 import { processInstagramTranslationTask } from "./WebhookWorkerTasks/instagram-translation.task";
 import { INSTAGRAM_TRANSLATION_QUEUE_NAME } from "@/lib/queue/instagram-translation.queue";
@@ -640,23 +640,25 @@ function startInstagramResourceMonitoring(): void {
     console.log('[Instagram Worker] 🔄 Starting resource monitoring...');
     
     resourceMonitoringInterval = setInterval(() => {
-      const memoryUsage = process.memoryUsage();
-      const cpuUsage = process.cpuUsage();
+      if (isMonitorLogEnabled()) {
+        const memoryUsage = process.memoryUsage();
+        const cpuUsage = process.cpuUsage();
 
-      // Log resource usage periodically
-      console.log("[Instagram Worker] Resource usage report:", {
-        memory: {
-          heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
-          heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`,
-          external: `${Math.round(memoryUsage.external / 1024 / 1024)}MB`,
-        },
-        cpu: {
-          user: `${Math.round(cpuUsage.user / 1000)}ms`,
-          system: `${Math.round(cpuUsage.system / 1000)}ms`,
-        },
-        uptime: `${Math.round(process.uptime())}s`,
-        timestamp: new Date().toISOString(),
-      });
+        // Log resource usage periodically
+        console.log("[Instagram Worker] Resource usage report:", {
+          memory: {
+            heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
+            heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`,
+            external: `${Math.round(memoryUsage.external / 1024 / 1024)}MB`,
+          },
+          cpu: {
+            user: `${Math.round(cpuUsage.user / 1000)}ms`,
+            system: `${Math.round(cpuUsage.system / 1000)}ms`,
+          },
+          uptime: `${Math.round(process.uptime())}s`,
+          timestamp: new Date().toISOString(),
+        });
+      }
     }, instagramWorkerConfig.monitoring.metricsInterval);
 
     console.log('[Instagram Worker] ✅ Resource monitoring started');

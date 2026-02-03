@@ -212,7 +212,9 @@ function startPrismaHeartbeat() {
       const prisma = globalThis.prisma;
       if (prisma) {
         await prisma.$queryRaw`SELECT 1`;
-        console.log('💓 Prisma heartbeat - conexão mantida viva');
+        if (process.env.MONITOR_LOG === 'true') {
+          console.log('💓 Prisma heartbeat - conexão mantida viva');
+        }
       }
     } catch (error: any) {
       console.warn('⚠️ Prisma heartbeat falhou - conexão pode estar morta:', error.message);

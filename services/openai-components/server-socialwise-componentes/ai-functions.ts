@@ -16,7 +16,7 @@ import {
 } from "./channel-constraints";
 import { buildMessages, buildEphemeralInstructions, TASK_PROMPTS } from "./prompt-manager";
 import { structuredOrJson } from "./structured-outputs";
-import { ensureSession } from "./session-manager";
+import { ensureSession, getSessionHistory, getHistoryStrategy, isOpenAINativeStrategy } from "./session-manager";
 import { createMasterPrompt } from "./prompt-manager";
 import { getModelCaps, isGPT5, normVerb, normEffort } from "./model-capabilities";
 import { normalizeHandoffButtons, ensureFinalNotice } from "./text-normalizers";
@@ -152,6 +152,8 @@ export async function generateFreeChatButtons(
       // Detectar se precisa enviar developer prompts (MASTER) — nova sessão
       const hasSessionId = !!opts?.sessionId;
       let isNewSession = true;
+      let conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+      let previousResponseId: string | undefined;
 
       if (hasSessionId) {
         try {
@@ -161,9 +163,27 @@ export async function generateFreeChatButtons(
             signal
           );
           isNewSession = sessionResult.isNewSession;
+          previousResponseId = sessionResult.responseId;
         } catch (error) {
           console.warn("[Session] Erro ao obter sessão:", error);
           isNewSession = true;
+        }
+
+        // SEMPRE tentar carregar histórico (independente de isNewSession)
+        // No modo openai_native, getSessionHistory retorna [] (OpenAI gerencia via previous_response_id)
+        try {
+          conversationHistory = (await getSessionHistory(opts!.sessionId as string)).map(h => ({
+            role: h.role,
+            content: h.content
+          }));
+          if (conversationHistory.length > 0) {
+            console.log(`📚 FREE CHAT [${getHistoryStrategy()}]: Carregado histórico com ${conversationHistory.length} mensagens`);
+            isNewSession = false;
+          } else if (isOpenAINativeStrategy()) {
+            console.log(`📚 FREE CHAT [openai_native]: Histórico gerenciado via previous_response_id`);
+          }
+        } catch (error) {
+          console.warn("[SessionHistory] Erro ao carregar histórico:", error);
         }
       }
 
@@ -173,7 +193,8 @@ export async function generateFreeChatButtons(
           taskType: "FREE_CHAT",
           statelessInit: isNewSession, // MASTER só em nova sessão
         },
-        user
+        user,
+        conversationHistory // Passar histórico
       );
 
       // instructions-only: task rules + limits (sem hints)
@@ -193,6 +214,8 @@ export async function generateFreeChatButtons(
         model: agent.model,
         messages,
         instructions: combinedInstructions,
+        // FIX: Passar previous_response_id para modo openai_native
+        previous_response_id: previousResponseId,
         max_output_tokens:
           agent.maxOutputTokens ||
           Math.min(256, Math.max(128, Math.round(c.bodyMax * 1.5))),
@@ -209,6 +232,11 @@ export async function generateFreeChatButtons(
         sessionId: opts?.sessionId,
         channel,
         signal,
+        // FIX: Evitar chamada duplicada - ensureSession já foi chamado acima
+        disableEnsureSession: true,
+        // Passar userText para salvar no histórico
+        userText: user,
+        conversationHistory,
       });
 
       // Normalizações simples e determinísticas
@@ -256,6 +284,8 @@ export async function generateWarmupButtons(
       // DETECÇÃO DE NOVA SESSÃO
       const hasSessionId = !!opts?.sessionId;
       let isNewSession = true;
+      let conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+      let previousResponseId: string | undefined;
 
       if (hasSessionId) {
         try {
@@ -265,9 +295,27 @@ export async function generateWarmupButtons(
             signal
           );
           isNewSession = sessionResult.isNewSession;
+          previousResponseId = sessionResult.responseId;
         } catch (error) {
           console.warn("[Session] Erro ao obter sessão:", error);
           isNewSession = true;
+        }
+
+        // SEMPRE tentar carregar histórico (independente de isNewSession)
+        // No modo openai_native, getSessionHistory retorna [] (OpenAI gerencia via previous_response_id)
+        try {
+          conversationHistory = (await getSessionHistory(opts!.sessionId as string)).map(h => ({
+            role: h.role,
+            content: h.content
+          }));
+          if (conversationHistory.length > 0) {
+            console.log(`📚 WARMUP BUTTONS [${getHistoryStrategy()}]: Carregado histórico com ${conversationHistory.length} mensagens`);
+            isNewSession = false;
+          } else if (isOpenAINativeStrategy()) {
+            console.log(`📚 WARMUP BUTTONS [openai_native]: Histórico gerenciado via previous_response_id`);
+          }
+        } catch (error) {
+          console.warn("[SessionHistory] Erro ao carregar histórico:", error);
         }
       }
 
@@ -278,7 +326,8 @@ export async function generateWarmupButtons(
           taskType: "WARMUP_BUTTONS",
           statelessInit: isNewSession,
         },
-        user
+        user,
+        conversationHistory // Passar histórico
       );
 
       // instructions-only: task rules + limits + hints JSON (com desc completo)
@@ -306,6 +355,8 @@ export async function generateWarmupButtons(
         model: agent.model,
         messages,
         instructions: combinedInstructions,
+        // FIX: Passar previous_response_id para modo openai_native
+        previous_response_id: previousResponseId,
         max_output_tokens:
           agent.maxOutputTokens ||
           Math.min(256, Math.max(128, Math.round(c.bodyMax * 1.5))),
@@ -322,6 +373,11 @@ export async function generateWarmupButtons(
         sessionId: opts?.sessionId,
         channel,
         signal,
+        // FIX: Evitar chamada duplicada - ensureSession já foi chamado acima
+        disableEnsureSession: true,
+        // Passar userText para salvar no histórico
+        userText: user,
+        conversationHistory,
       });
 
       const parsed = result.parsed;
@@ -368,6 +424,8 @@ export async function routerLLM(
       // Detectar nova sessão para decidir se envia MASTER (developer)
       const hasSessionId = !!opts?.sessionId;
       let isNewSession = true;
+      let conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+      let previousResponseId: string | undefined;
 
       if (hasSessionId) {
         try {
@@ -377,9 +435,29 @@ export async function routerLLM(
             signal
           );
           isNewSession = sessionResult.isNewSession;
+          previousResponseId = sessionResult.responseId;
         } catch (error) {
           console.warn("[Session] Erro ao obter sessão:", error);
           isNewSession = true;
+        }
+
+        // SEMPRE tentar carregar histórico (independente de isNewSession)
+        // O histórico pode existir mesmo se o sessionPointer expirou
+        // No modo openai_native, getSessionHistory retorna [] (OpenAI gerencia via previous_response_id)
+        try {
+          conversationHistory = (await getSessionHistory(opts!.sessionId as string)).map(h => ({
+            role: h.role,
+            content: h.content
+          }));
+          if (conversationHistory.length > 0) {
+            console.log(`📚 ROUTER LLM [${getHistoryStrategy()}]: Carregado histórico com ${conversationHistory.length} mensagens`);
+            // Se temos histórico, não é realmente uma sessão nova para o modelo
+            isNewSession = false;
+          } else if (isOpenAINativeStrategy()) {
+            console.log(`📚 ROUTER LLM [openai_native]: Histórico gerenciado via previous_response_id`);
+          }
+        } catch (error) {
+          console.warn("[SessionHistory] Erro ao carregar histórico:", error);
         }
       }
 
@@ -394,12 +472,20 @@ export async function routerLLM(
       );
 
       // Prompt persistente em developer: MASTER + TASK (ROUTER LLM)
-      const messages: Array<{ role: 'developer' | 'user'; content: string }> = [];
+      const messages: Array<{ role: 'developer' | 'user' | 'assistant'; content: string }> = [];
       if (isNewSession) {
         const routerTask = TASK_PROMPTS.ROUTER_LLM(!!agent.instructions, agent.proposeHumanHandoff ?? true);
         const developerFixed = createMasterPrompt(channel, agent.proposeHumanHandoff ?? true) + "\n\nTASK_RULES\n" + routerTask.trim();
         messages.push({ role: 'developer', content: developerFixed });
       }
+
+      // Adicionar histórico de conversa (se existir)
+      if (conversationHistory.length > 0) {
+        for (const msg of conversationHistory) {
+          messages.push({ role: msg.role, content: msg.content });
+        }
+      }
+
       messages.push({ role: 'user', content: user });
 
       // Instruções efêmeras: prompt do agente + HINTS (apenas conteúdos que mudam)
@@ -418,6 +504,8 @@ export async function routerLLM(
         model: agent.model,
         messages,
         instructions: ephemeralInstructions,
+        // FIX: Passar previous_response_id para modo openai_native
+        previous_response_id: previousResponseId,
         max_output_tokens:
           agent.maxOutputTokens ||
           (profile === 'lite'
@@ -432,6 +520,11 @@ export async function routerLLM(
         sessionId: opts?.sessionId,
         channel,
         signal,
+        // FIX: Evitar chamada duplicada - ensureSession já foi chamado acima
+        disableEnsureSession: true,
+        // Passar userText para salvar no histórico
+        userText: user,
+        conversationHistory,
       });
 
       // Validate the response structure
