@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { LeadItem } from "./lead-item/lead-item";
 import { RefreshCw, FileUp, Edit3, Zap, Play, Trash2 } from "lucide-react";
+import { ProviderSwitchHeader, type AiProviderType, type LinkedColumnType } from "./provider-switch";
 import { 
   Dialog, 
   DialogContent, 
@@ -862,8 +863,12 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
                 <TableHead className="min-w-[100px] align-middle text-card-foreground px-2 text-sm">Arquivos</TableHead>
                 <TableHead className="min-w-[70px] align-middle text-card-foreground px-1 text-sm">PDF</TableHead>
                 <TableHead className="min-w-[70px] align-middle text-card-foreground px-1 text-sm">Imagens</TableHead>
-                <TableHead className="min-w-[90px] align-middle text-card-foreground px-1 text-sm">Prova</TableHead>
-                <TableHead className="min-w-[110px] align-middle text-card-foreground px-1 text-sm">Espelho</TableHead>
+                <TableHead className="min-w-[130px] align-middle text-card-foreground px-1 text-sm">
+                  <ProviderSwitchHeader column="PROVA_CELL" label="Prova" defaultProvider="GEMINI" />
+                </TableHead>
+                <TableHead className="min-w-[130px] align-middle text-card-foreground px-1 text-sm">
+                  <ProviderSwitchHeader column="ESPELHO_CELL" label="Espelho" defaultProvider="GEMINI" />
+                </TableHead>
                 <TableHead className="min-w-[120px] align-middle text-card-foreground px-1 text-sm">Padrão</TableHead>
                 <TableHead className="min-w-[100px] align-middle text-card-foreground px-1 text-sm">Análise</TableHead>
                 <TableHead className="min-w-[100px] align-middle text-card-foreground px-1 text-sm">Recurso</TableHead>

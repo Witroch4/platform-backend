@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { AiAgentType } from '@prisma/client';
+import { AiAgentType, LinkedColumn, AiProvider } from '@prisma/client';
 import {
   AgentBlueprintPayload,
   AgentToolConfig,
@@ -20,6 +20,26 @@ function coerceAgentType(value: unknown): AiAgentType | undefined {
     return AiAgentType[upper];
   }
   return undefined;
+}
+
+function coerceLinkedColumn(value: unknown): LinkedColumn | null {
+  if (value === null || value === undefined || value === '_none') return null;
+  if (typeof value !== 'string') return null;
+  const upper = value.toUpperCase() as keyof typeof LinkedColumn;
+  if (upper in LinkedColumn) {
+    return LinkedColumn[upper];
+  }
+  return null;
+}
+
+function coerceAiProvider(value: unknown): AiProvider | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'string') return null;
+  const upper = value.toUpperCase() as keyof typeof AiProvider;
+  if (upper in AiProvider) {
+    return AiProvider[upper];
+  }
+  return null;
 }
 
 function parseMaybeJson<T>(value: unknown): T | undefined {
@@ -131,6 +151,15 @@ function parseUpdatePayload(body: any): Partial<AgentBlueprintPayload> | null {
       if (parsed === undefined) return null;
       payload.metadata = parsed;
     }
+  }
+
+  // Engine Híbrida: linkedColumn e defaultProvider
+  if ('linkedColumn' in body) {
+    payload.linkedColumn = coerceLinkedColumn(body.linkedColumn);
+  }
+
+  if ('defaultProvider' in body) {
+    payload.defaultProvider = coerceAiProvider(body.defaultProvider);
   }
 
   return Object.keys(payload).length > 0 ? payload : null;

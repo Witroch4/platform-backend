@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { AiAgentType } from '@prisma/client';
+import { AiAgentType, LinkedColumn, AiProvider } from '@prisma/client';
 import {
   AgentBlueprintPayload,
   AgentToolConfig,
@@ -23,6 +23,26 @@ function coerceAgentType(value: unknown): AiAgentType {
     return AiAgentType[upper];
   }
   return AiAgentType.CUSTOM;
+}
+
+function coerceLinkedColumn(value: unknown): LinkedColumn | null {
+  if (value === null || value === undefined || value === '_none') return null;
+  if (typeof value !== 'string') return null;
+  const upper = value.toUpperCase() as keyof typeof LinkedColumn;
+  if (upper in LinkedColumn) {
+    return LinkedColumn[upper];
+  }
+  return null;
+}
+
+function coerceAiProvider(value: unknown): AiProvider | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'string') return null;
+  const upper = value.toUpperCase() as keyof typeof AiProvider;
+  if (upper in AiProvider) {
+    return AiProvider[upper];
+  }
+  return null;
 }
 
 function parseMaybeJson<T>(value: unknown): T | undefined {
@@ -102,6 +122,10 @@ async function readPayload(request: NextRequest): Promise<AgentBlueprintPayload 
     }
   }
 
+  // Engine Híbrida: linkedColumn e defaultProvider
+  const linkedColumn = 'linkedColumn' in body ? coerceLinkedColumn(body['linkedColumn']) : undefined;
+  const defaultProvider = 'defaultProvider' in body ? coerceAiProvider(body['defaultProvider']) : undefined;
+
   const payload: AgentBlueprintPayload = {
     name,
     description: typeof body['description'] === 'string' ? body['description'].trim() : undefined,
@@ -118,6 +142,8 @@ async function readPayload(request: NextRequest): Promise<AgentBlueprintPayload 
     memory,
     canvasState,
     metadata,
+    linkedColumn,
+    defaultProvider,
   };
 
   return payload;
