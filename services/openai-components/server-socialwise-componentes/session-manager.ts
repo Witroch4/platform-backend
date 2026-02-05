@@ -309,4 +309,76 @@ export async function clearSessionHistory(sessionId: string): Promise<void> {
   historyState.delete(historyKey);
 }
 
+// ============ INTERACTIVE MESSAGE CONTEXT ============
+/**
+ * Armazena o contexto da última mensagem interativa enviada para uma sessão.
+ * Usado para enriquecer interações subsequentes (cliques de botão ou texto digitado).
+ */
+
+const INTERACTIVE_CONTEXT_TTL_SECONDS = 60 * 60; // 1 hora
+const INTERACTIVE_CONTEXT_TTL_DEV_SECONDS = 60 * 5; // 5 min para dev
+
+export interface InteractiveMessageContext {
+  bodyText: string;
+  intentSlug?: string;
+  timestamp: number;
+  buttons?: Array<{ title: string; payload: string }>;
+}
+
+export async function storeInteractiveMessageContext(
+  sessionId: string,
+  context: InteractiveMessageContext
+): Promise<void> {
+  const key = `session:${sessionId}:interactiveContext`;
+  const isDevSession = DEV_SESSION_IDS.has(sessionId);
+  const ttl = isDevSession ? INTERACTIVE_CONTEXT_TTL_DEV_SECONDS : INTERACTIVE_CONTEXT_TTL_SECONDS;
+
+  const redis = getRedisInstance?.();
+  if (redis) {
+    try {
+      await redis.setex(key, ttl, JSON.stringify(context));
+      if (isDevSession) {
+        console.log(`🔧 DEV INTERACTIVE CONTEXT: Stored for ${sessionId}`);
+      }
+    } catch (error) {
+      console.warn('[InteractiveContext] Redis set failed:', error);
+    }
+  }
+}
+
+export async function getInteractiveMessageContext(
+  sessionId: string
+): Promise<InteractiveMessageContext | null> {
+  const key = `session:${sessionId}:interactiveContext`;
+  const redis = getRedisInstance?.();
+
+  if (redis) {
+    try {
+      const data = await redis.get(key);
+      if (data) {
+        return JSON.parse(data) as InteractiveMessageContext;
+      }
+    } catch (error) {
+      console.warn('[InteractiveContext] Redis get failed:', error);
+    }
+  }
+
+  return null;
+}
+
+export async function clearInteractiveMessageContext(
+  sessionId: string
+): Promise<void> {
+  const key = `session:${sessionId}:interactiveContext`;
+  const redis = getRedisInstance?.();
+
+  if (redis) {
+    try {
+      await redis.del(key);
+    } catch (error) {
+      console.warn('[InteractiveContext] Redis del failed:', error);
+    }
+  }
+}
+
 

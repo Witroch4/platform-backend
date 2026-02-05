@@ -20,12 +20,59 @@ import { isWhatsAppChannel, isInstagramChannel, isFacebookChannel, normalizeChan
 import { AssistantConfig } from './assistant-config';
 import { ProcessorContext } from './button-reactions';
 import { buildTimeoutFallbackResponse } from './timeout-helpers';
+import { storeInteractiveMessageContext } from '@/services/openai-components/server-socialwise-componentes/session-manager';
 
 const bandLogger = createLogger('SocialWise-Processor-BandHandlers');
 
 export interface BandProcessingResult {
   response: ChannelResponse;
   llmWarmupMs?: number;
+}
+
+// ============ HELPERS FOR INTERACTIVE CONTEXT STORAGE ============
+
+function extractBodyTextFromResponse(response: ChannelResponse): string {
+  // Cast to any to access dynamic properties
+  const r = response as any;
+
+  // WhatsApp interactive
+  if (r.whatsapp?.interactive?.body?.text) {
+    return r.whatsapp.interactive.body.text;
+  }
+  // Instagram
+  if (r.instagram?.text) {
+    return r.instagram.text;
+  }
+  // Facebook
+  if (r.facebook?.text) {
+    return r.facebook.text;
+  }
+  // Simple text
+  if (r.text) {
+    return r.text;
+  }
+  return '';
+}
+
+function extractButtonsFromResponse(response: ChannelResponse): Array<{title: string; payload: string}> {
+  // Cast to any to access dynamic properties
+  const r = response as any;
+
+  // WhatsApp
+  if (r.whatsapp?.interactive?.action?.buttons) {
+    return r.whatsapp.interactive.action.buttons.map((b: any) => ({
+      title: b.reply?.title || '',
+      payload: b.reply?.id || ''
+    }));
+  }
+  // Instagram quick_replies
+  if (r.instagram?.quick_replies) {
+    return r.instagram.quick_replies.map((b: any) => ({
+      title: b.title || '',
+      payload: b.payload || ''
+    }));
+  }
+  return [];
 }
 
 /**
@@ -53,6 +100,21 @@ export async function processHardBand(
       }
 
       if (mapped) {
+        // 🆕 Armazenar contexto da mensagem interativa para enriquecer futuras interações
+        if (context.sessionId) {
+          const bodyText = extractBodyTextFromResponse(mapped);
+          if (bodyText) {
+            storeInteractiveMessageContext(context.sessionId, {
+              bodyText,
+              intentSlug: topIntent.slug,
+              timestamp: Date.now(),
+              buttons: extractButtonsFromResponse(mapped)
+            }).catch(err => {
+              bandLogger.warn('Failed to store interactive context', { error: err, traceId: context.traceId });
+            });
+          }
+        }
+
         bandLogger.info('HARD band WhatsApp direct mapping successful', {
           intent: topIntent.slug,
           score: topIntent.score,
@@ -91,6 +153,21 @@ export async function processHardBand(
       }
 
       if (mapped) {
+        // 🆕 Armazenar contexto da mensagem interativa para enriquecer futuras interações
+        if (context.sessionId) {
+          const bodyText = extractBodyTextFromResponse(mapped);
+          if (bodyText) {
+            storeInteractiveMessageContext(context.sessionId, {
+              bodyText,
+              intentSlug: topIntent.slug,
+              timestamp: Date.now(),
+              buttons: extractButtonsFromResponse(mapped)
+            }).catch(err => {
+              bandLogger.warn('Failed to store interactive context', { error: err, traceId: context.traceId });
+            });
+          }
+        }
+
         bandLogger.info(`HARD band ${platformName} direct mapping successful`, {
           intent: topIntent.slug,
           score: topIntent.score,

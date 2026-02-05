@@ -29,6 +29,7 @@ import {
   // Reaction metadata
   applyReactionMetadata
 } from './processor-components';
+import { getInteractiveMessageContext } from '@/services/openai-components/server-socialwise-componentes/session-manager';
 
 // Re-export for external use
 export { extractSessionId } from './processor-components';
@@ -60,6 +61,33 @@ export async function processSocialWiseFlow(
   const startTime = Date.now();
   
   try {
+    // 🆕 SEMPRE recuperar contexto da sessão para enriquecer qualquer interação
+    if (context.sessionId) {
+      const interactiveContext = await getInteractiveMessageContext(context.sessionId);
+      if (interactiveContext?.bodyText) {
+        // Determinar tipo de mensagem para contextualização adequada
+        const isButtonClick = context.originalPayload?.context?.interaction_type === 'postback' ||
+                             context.originalPayload?.context?.interaction_type === 'quick_reply' ||
+                             context.originalPayload?.context?.interaction_type === 'button_reply' ||
+                             context.originalPayload?.context?.message?.content_attributes?.interaction_type === 'button_reply';
+
+        const contextPrefix = isButtonClick
+          ? `O usuário clicou em um botão de uma mensagem interativa anterior.`
+          : `O usuário está respondendo a uma conversa onde foi enviada a seguinte mensagem interativa:`;
+
+        context.agentSupplement = `${contextPrefix}\n\nContexto da última mensagem interativa enviada:\n"${interactiveContext.bodyText}"`;
+
+        processorLogger.info('Session interactive context injected', {
+          sessionId: context.sessionId,
+          isButtonClick,
+          contextLength: interactiveContext.bodyText.length,
+          intentSlug: interactiveContext.intentSlug,
+          contextAge: Date.now() - interactiveContext.timestamp,
+          traceId: context.traceId
+        });
+      }
+    }
+
     // 1. Check for button reactions first (for both WhatsApp and Instagram)
     let buttonReactionMeta: ButtonReactionMeta | undefined;
     let shouldProcessLLM = true; // Por padrão, processa LLM
