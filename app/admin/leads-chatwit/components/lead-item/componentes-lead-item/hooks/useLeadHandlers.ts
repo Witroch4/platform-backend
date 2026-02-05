@@ -4,6 +4,7 @@ import type { LeadChatwit } from "@/app/admin/leads-chatwit/types";
 import type { ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
 import { Prisma } from "@prisma/client";
 import { useOptimisticFileDeletion } from "./useOptimisticFileDeletion";
+import { getColumnProvider } from "@/app/admin/leads-chatwit/components/provider-switch";
 
 interface UseLeadHandlersProps {
   lead: LeadChatwit;
@@ -1140,10 +1141,15 @@ export function useLeadHandlers({
       await new Promise(resolve => setTimeout(resolve, 2000));
       console.log('✅ [Pre-Send] Aguardo de conexão SSE concluído');
 
+      // ⭐ Obter provider selecionado pelo switch no topo da coluna ESPELHO_CELL
+      const selectedProvider = getColumnProvider('ESPELHO_CELL', 'GEMINI');
+      console.log(`[Envio] 🎛️ Provider selecionado para ESPELHO_CELL: ${selectedProvider}`);
+
       const payload = {
         leadID: lead.id,
         nome: lead.nomeReal || lead.name || "Lead sem nome",
         telefone: lead.phoneNumber,
+        selectedProvider, // ⭐ NOVO: Passa o provider selecionado pelo usuário
         ...(consultoriaAtiva ? { espelhoparabiblioteca: true } : { espelho: true }),
         ...((lead as any).espelhoPadraoId && { espelhoPadraoId: (lead as any).espelhoPadraoId }),
         arquivos: lead.arquivos.map((a: any) => ({
@@ -1153,7 +1159,7 @@ export function useLeadHandlers({
           id: `${lead.id}-pdf-unificado`, url: lead.pdfUnificado, nome: "PDF Unificado"
         }] : [],
         arquivos_imagens_espelho: images.map((url: string, index: number) => ({
-          id: `<span class="math-inline">\{lead\.id\}\-espelho\-</span>{index}`, url: url, nome: `Espelho ${index + 1}`
+          id: `${lead.id}-espelho-${index}`, url: url, nome: `Espelho ${index + 1}`
         })),
         metadata: {
           leadUrl: lead.leadUrl, sourceId: lead.sourceId, concluido: lead.concluido, fezRecurso: lead.fezRecurso

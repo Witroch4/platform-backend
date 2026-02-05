@@ -119,9 +119,14 @@ const AgentDetailsNode = memo(function AgentDetailsNodeComponent(props: NodeProp
 });
 AgentDetailsNode.displayName = 'AgentDetailsNode';
 
-const ModelConfigNode = memo(function ModelConfigNodeComponent(props: NodeProps) {
+function ModelConfigNode(props: NodeProps) {
   const data = props.data as unknown as ModelNodeData;
   const config = NODE_TYPE_CONFIG.modelConfig;
+
+  // Exibir "ilimitado" quando maxOutputTokens é 0
+  const maxTokensDisplay = data.draft.maxOutputTokens === 0
+    ? '∞'
+    : (data.draft.maxOutputTokens ?? 1024);
 
   return (
     <Card className="w-[320px] shadow-lg border-2 transition-all hover:shadow-xl cursor-pointer" style={{ borderColor: config.color }}>
@@ -142,7 +147,7 @@ const ModelConfigNode = memo(function ModelConfigNodeComponent(props: NodeProps)
           </div>
           <div className="space-y-1">
             <div className="text-muted-foreground">Max Tokens</div>
-            <div className="font-medium font-mono text-base">{data.draft.maxOutputTokens ?? 1024}</div>
+            <div className="font-medium font-mono text-base">{maxTokensDisplay}</div>
           </div>
         </div>
         <div className="pt-2 border-t text-xs text-muted-foreground flex items-center justify-center gap-1.5">
@@ -154,8 +159,7 @@ const ModelConfigNode = memo(function ModelConfigNodeComponent(props: NodeProps)
       <Handle type="source" position={Position.Bottom} className="!w-4 !h-4 !bg-primary !border-2 !border-background" />
     </Card>
   );
-});
-ModelConfigNode.displayName = 'ModelConfigNode';
+}
 
 const ToolsConfigNode = memo(function ToolsConfigNodeComponent(props: NodeProps) {
   const data = props.data as unknown as ToolsNodeData;

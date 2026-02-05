@@ -2,6 +2,7 @@ import { z } from "zod";
 import { processMultiImageUrlVisionRequest } from "./unified-vision-client";
 import { getOabEvalConfig } from "@/lib/config";
 import { getPrismaInstance } from "@/lib/connections";
+import { getAgentBlueprintByLinkedColumn, isGeminiModel, GEMINI_AGENTIC_VISION_INSTRUCTIONS } from "@/lib/ai-agents/blueprints";
 import type { RubricPayload, RubricGroup, StudentMirrorPayload } from "./types";
 import { prepareRubricScoring } from "./rubric-scoring";
 
@@ -47,6 +48,7 @@ export interface MirrorGeneratorInput {
   telefone?: string;
   nome?: string;
   onProgress?: (message: string) => Promise<void> | void;
+  selectedProvider?: 'OPENAI' | 'GEMINI'; // Provider selecionado pelo switch no frontend
 }
 
 export interface MirrorGeneratorOutput {
@@ -533,12 +535,41 @@ function normalizeImageUrl(descriptor: MirrorImageDescriptor): string {
 }
 
 /**
- * Carrega configuração do blueprint do agente extrator de espelho
+ * Modelos padrão por provider
  */
-async function getMirrorExtractorConfig(): Promise<{
+const DEFAULT_MODELS_BY_PROVIDER: Record<'OPENAI' | 'GEMINI', string> = {
+  OPENAI: 'gpt-4.1',
+  GEMINI: 'gemini-3-flash-preview',
+};
+
+/**
+ * Verifica se um modelo pertence ao provider especificado
+ */
+function isModelMatchingProvider(model: string, provider: 'OPENAI' | 'GEMINI'): boolean {
+  const lowerModel = model.toLowerCase();
+  if (provider === 'GEMINI') {
+    return lowerModel.includes('gemini');
+  }
+  // OpenAI: gpt-*, o1-*, etc
+  return lowerModel.includes('gpt') || lowerModel.includes('o1');
+}
+
+/**
+ * Carrega configuração do blueprint do agente extrator de espelho.
+ * Prioriza blueprint vinculado à coluna ESPELHO_CELL.
+ * IMPORTANTE: Se o modelo for Gemini, injeta instruções técnicas para Agentic Vision.
+ *
+ * @param selectedProvider - Provider selecionado pelo usuário no switch (OPENAI ou GEMINI)
+ *                           Se fornecido, força o uso do modelo correspondente
+ */
+async function getMirrorExtractorConfig(
+  selectedProvider?: 'OPENAI' | 'GEMINI',
+): Promise<{
   model: string;
   systemInstructions: string;
   maxOutputTokens: number;
+  enableCodeExecution: boolean;
+  thinkingLevel: 'minimal' | 'low' | 'medium' | 'high';
 }> {
   const prisma = getPrismaInstance();
 
@@ -555,7 +586,55 @@ async function getMirrorExtractorConfig(): Promise<{
     "- IDs dos itens devem manter o formato exato da rubrica",
   ].join(" ");
 
-  // 1) Tentar AiAgentBlueprint (MTF Agents Builder)
+  // ⭐ FALLBACK: Garantir que selectedProvider sempre tenha um valor válido
+  const effectiveProvider = selectedProvider || 'GEMINI';
+  console.log(`[MirrorGenerator] 🎛️ Provider efetivo: ${effectiveProvider} (original: ${selectedProvider || 'undefined'})`);
+
+  // 1) NOVA ESTRATÉGIA: Buscar AiAgentBlueprint vinculado à coluna ESPELHO_CELL
+  try {
+    const blueprint = await getAgentBlueprintByLinkedColumn('ESPELHO_CELL');
+
+    if (blueprint) {
+      let model = blueprint.model || DEFAULT_VISION_MODEL;
+      const maxOutputTokens = Number(blueprint.maxOutputTokens ?? 0);
+      let systemInstructions = (blueprint.systemPrompt || blueprint.instructions || baseInstructions).toString();
+
+      // ⭐ SEMPRE verificar se o modelo do blueprint corresponde ao provider selecionado
+      const blueprintMatchesProvider = isModelMatchingProvider(model, effectiveProvider);
+
+      if (!blueprintMatchesProvider) {
+        // O blueprint tem um modelo diferente do provider selecionado
+        // Usar o modelo padrão do provider selecionado
+        const previousModel = model;
+        model = DEFAULT_MODELS_BY_PROVIDER[effectiveProvider];
+        console.log(`[MirrorGenerator] 🔄 Provider switch ativado: ${previousModel} → ${model} (provider: ${effectiveProvider})`);
+      } else {
+        console.log(`[MirrorGenerator] ✅ Blueprint ${blueprint.name} já usa modelo ${effectiveProvider}: ${model}`);
+      }
+
+      // INJEÇÃO DE DEPENDÊNCIA DE PROMPT: Se Gemini, adiciona instruções técnicas para Agentic Vision
+      if (isGeminiModel(model)) {
+        systemInstructions = `${GEMINI_AGENTIC_VISION_INSTRUCTIONS}\n\n---\n\n${systemInstructions}`;
+        console.log('[MirrorGenerator] 🔬 Injetando instruções Gemini Agentic Vision para extração de espelho');
+      }
+
+      systemInstructions = systemInstructions.replace(/\s+/g, ' ');
+
+      console.log(`[MirrorGenerator] ✅ Blueprint vinculado à ESPELHO_CELL encontrado: ${blueprint.name} (${model})`);
+
+      return {
+        model,
+        systemInstructions,
+        maxOutputTokens,
+        enableCodeExecution: isGeminiModel(model),
+        thinkingLevel: 'high',
+      };
+    }
+  } catch (err) {
+    console.warn('[MirrorGenerator] Falha ao consultar blueprint por linkedColumn:', err);
+  }
+
+  // 2) Fallback: Buscar por ID ou nome (compatibilidade)
   try {
     const bpId = process.env.OAB_MIRROR_EXTRACTOR_BLUEPRINT_ID;
     let blueprint: any = null;
@@ -581,18 +660,37 @@ async function getMirrorExtractorConfig(): Promise<{
 
     if (blueprint) {
       const model = blueprint.model || DEFAULT_VISION_MODEL;
-      // 0 = ilimitado (omite parâmetro na chamada da API)
       const maxOutputTokens = Number(blueprint.maxOutputTokens ?? 0);
-      const sys = (blueprint.systemPrompt || blueprint.instructions || baseInstructions).toString();
-      const systemInstructions = sys.replace(/\s+/g, ' ');
-      return { model, systemInstructions, maxOutputTokens };
+      let systemInstructions = (blueprint.systemPrompt || blueprint.instructions || baseInstructions).toString();
+
+      // INJEÇÃO DE DEPENDÊNCIA DE PROMPT: Se Gemini, adiciona instruções técnicas
+      if (isGeminiModel(model)) {
+        systemInstructions = `${GEMINI_AGENTIC_VISION_INSTRUCTIONS}\n\n---\n\n${systemInstructions}`;
+        console.log('[MirrorGenerator] 🔬 Injetando instruções Gemini Agentic Vision (fallback)');
+      }
+
+      systemInstructions = systemInstructions.replace(/\s+/g, ' ');
+
+      return {
+        model,
+        systemInstructions,
+        maxOutputTokens,
+        enableCodeExecution: isGeminiModel(model),
+        thinkingLevel: 'high',
+      };
     }
   } catch (err) {
     console.warn('[MirrorGenerator] Falha ao consultar AiAgentBlueprint:', err);
   }
 
-  // 2) Fallback: defaults (0 = ilimitado)
-  return { model: DEFAULT_VISION_MODEL, systemInstructions: baseInstructions, maxOutputTokens: 0 };
+  // 3) Último recurso: defaults
+  return {
+    model: DEFAULT_VISION_MODEL,
+    systemInstructions: baseInstructions,
+    maxOutputTokens: 0,
+    enableCodeExecution: false,
+    thinkingLevel: 'high',
+  };
 }
 
 /**
@@ -652,7 +750,91 @@ async function loadRubric(especialidade: string, espelhoPadraoId?: string): Prom
 }
 
 /**
+ * Normaliza a resposta da LLM que pode vir aninhada para formato flat
+ *
+ * A LLM pode retornar dados aninhados como:
+ * {
+ *   dados_do_candidato: { nome_do_examinando: "...", nota_final: "..." },
+ *   totais: { pontuacao_total_peca: "...", pontuacao_total_questoes: "..." },
+ *   notas_dos_itens: { nota_obtida_1: "0.00", ... }
+ * }
+ *
+ * Mas o parser espera tudo no root:
+ * { nome_do_examinando: "...", nota_final: "...", nota_obtida_1: "..." }
+ */
+function flattenExtractedResponse(parsed: Record<string, unknown>): ExtractedMirrorData {
+  const result: Record<string, string | undefined> = {};
+
+  // Mapeamento de campos aninhados conhecidos para campos flat
+  const nestedMappings: Record<string, Record<string, string>> = {
+    dados_do_candidato: {
+      nome_do_examinando: 'nome_do_examinando',
+      inscricao: 'inscricao',
+      nota_final: 'nota_final',
+      situacao: 'situacao',
+    },
+    totais: {
+      pontuacao_total_peca: 'pontuacao_total_peca',
+      pontuacao_total_questoes: 'pontuacao_total_questoes',
+    },
+  };
+
+  // Processar campos conhecidos com mapeamento específico
+  for (const [nestedKey, fieldMap] of Object.entries(nestedMappings)) {
+    const nestedObj = parsed[nestedKey];
+    if (nestedObj && typeof nestedObj === 'object' && !Array.isArray(nestedObj)) {
+      for (const [srcKey, destKey] of Object.entries(fieldMap)) {
+        const value = (nestedObj as Record<string, unknown>)[srcKey];
+        if (value !== undefined) {
+          result[destKey] = String(value);
+        }
+      }
+    }
+  }
+
+  // Processar notas_dos_itens: flatten todas as chaves para root
+  const notasItens = parsed.notas_dos_itens;
+  if (notasItens && typeof notasItens === 'object' && !Array.isArray(notasItens)) {
+    for (const [key, value] of Object.entries(notasItens as Record<string, unknown>)) {
+      if (value !== undefined) {
+        result[key] = String(value);
+      }
+    }
+  }
+
+  // Processar totais_por_questao: flatten todas as chaves para root
+  const totaisQuestao = parsed.totais_por_questao;
+  if (totaisQuestao && typeof totaisQuestao === 'object' && !Array.isArray(totaisQuestao)) {
+    for (const [key, value] of Object.entries(totaisQuestao as Record<string, unknown>)) {
+      if (value !== undefined) {
+        result[key] = String(value);
+      }
+    }
+  }
+
+  // Processar campos que já estão no root (formato esperado)
+  for (const [key, value] of Object.entries(parsed)) {
+    // Pular objetos aninhados já processados
+    if (typeof value === 'object' && value !== null) {
+      continue;
+    }
+    // Incluir campos primitivos diretos
+    if (value !== undefined && value !== null) {
+      result[key] = String(value);
+    }
+  }
+
+  // Log de debug para verificar normalização
+  const totalKeys = Object.keys(result).length;
+  const notaKeys = Object.keys(result).filter(k => k.startsWith('nota_obtida_') || k.startsWith('nota_total_')).length;
+  console.log(`[MirrorGenerator::Flatten] ✅ Normalização: ${totalKeys} chaves totais, ${notaKeys} chaves de notas`);
+
+  return result as ExtractedMirrorData;
+}
+
+/**
  * Extrai dados do espelho usando LLM vision
+ * Suporta Gemini 3 Agentic Vision com code execution e thinking
  */
 async function extractMirrorDataFromImages(
   imageUrls: string[],
@@ -660,6 +842,10 @@ async function extractMirrorDataFromImages(
   model: string,
   systemInstructions: string,
   maxOutputTokens: number,
+  options?: {
+    enableCodeExecution?: boolean;
+    thinkingLevel?: 'minimal' | 'low' | 'medium' | 'high';
+  },
 ): Promise<ExtractedMirrorData> {
   console.log(`[MirrorGenerator] 🖼️ Extraindo dados de ${imageUrls.length} imagem(ns) do espelho`);
 
@@ -768,12 +954,15 @@ async function extractMirrorDataFromImages(
   console.log(`[MirrorGenerator::Prompt] ───────────────────────────────────────────`);
 
   // Cliente unificado: suporta OpenAI e Gemini automaticamente
+  // Para Gemini 3, habilita code execution e thinking para Agentic Vision
   const response = await processMultiImageUrlVisionRequest({
     model,
     systemInstructions,
     userPrompt,
     imageUrls,
     maxOutputTokens,
+    enableCodeExecution: options?.enableCodeExecution,
+    thinkingLevel: options?.thinkingLevel,
   });
 
   console.log(`[MirrorGenerator] 🤖 Provider utilizado: ${response.provider}`);
@@ -784,7 +973,14 @@ async function extractMirrorDataFromImages(
   try {
     // Limpar possíveis markdown code blocks
     const cleanedText = rawText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    const extracted = JSON.parse(cleanedText);
+    const parsedJson = JSON.parse(cleanedText);
+
+    // ⭐ NORMALIZAÇÃO: Flatten de estrutura aninhada para flat
+    // A LLM pode retornar dados aninhados como:
+    // { dados_do_candidato: { nome_do_examinando: "..." }, notas_dos_itens: { nota_obtida_1: "..." } }
+    // Mas o parser espera tudo no root:
+    // { nome_do_examinando: "...", nota_obtida_1: "..." }
+    const extracted = flattenExtractedResponse(parsedJson);
 
     console.log(`[MirrorGenerator] ✅ Dados extraídos com sucesso`);
     console.log(`[MirrorGenerator] 📊 Aluno: ${extracted.nome_do_examinando || 'N/A'}, Nota: ${extracted.nota_final || 'N/A'}`);
@@ -1107,6 +1303,9 @@ function buildStructuredMirror(
       computed: computedQuestaoTotal,
       max: maximo,
       reference: somaItens,
+      // ⭐ IMPORTANTE: Quando a soma dos itens é 0 (itens não extraídos) mas o total
+      // da questão foi extraído corretamente, preferir o valor extraído
+      preferExtractedWhenComputedZero: true,
     });
 
     return { questao, itens, total: selection.value, pontuacaoMaxima: maximo };
@@ -1247,12 +1446,14 @@ export async function generateMirrorLocally(input: MirrorGeneratorInput): Promis
     await input.onProgress("Extraindo dados com LLM vision...");
   }
 
-  // 3. Carregar config do blueprint
-  const { model, systemInstructions, maxOutputTokens } = await getMirrorExtractorConfig();
+  // 3. Carregar config do blueprint (considerando provider selecionado pelo usuário)
+  const { model, systemInstructions, maxOutputTokens, enableCodeExecution, thinkingLevel } = await getMirrorExtractorConfig(input.selectedProvider);
 
   console.log('[MirrorGenerator] 📝 Configuração do Blueprint:');
   console.log(`  - Modelo: ${model}`);
   console.log(`  - Max Output Tokens: ${maxOutputTokens}`);
+  console.log(`  - Code Execution: ${enableCodeExecution ? '✅ Habilitado (Gemini Agentic Vision)' : '❌ Desabilitado'}`);
+  console.log(`  - Thinking Level: ${thinkingLevel}`);
 
   // 4. Extrair dados das imagens (usando URLs diretas)
   const extractedData = await extractMirrorDataFromImages(
@@ -1261,6 +1462,7 @@ export async function generateMirrorLocally(input: MirrorGeneratorInput): Promis
     model,
     systemInstructions,
     maxOutputTokens,
+    { enableCodeExecution, thinkingLevel },
   );
 
   if (input.onProgress) {

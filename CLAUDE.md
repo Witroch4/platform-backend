@@ -17,6 +17,7 @@ This file provides comprehensive guidance to Claude Code (claude.ai/code) and Cu
 11. **Edição no front deve ser olhar com a tool de navegação o resutado**
 12. **Sempre que adicionar uma feature adicione sem necessidade de controle global só controle de acesso pagina que controla acesso as features admin/features**
 13. **BFF como Fonte Única (UI)**: telas devem **ler** do BFF e **mutar** usando a **mesma SWR key**; CRUD puro fica para domínio/serviços
+14. **Prisma: NUNCA use `db push` para produção** → use `prisma migrate dev --name ...` para criar migração incremental
 
 ## 🚀 Project Overview
 
@@ -406,26 +407,61 @@ await prisma.someModel.update({
 });
 ```
 
+### ⚠️ CRÍTICO: Migrations vs db push
+
+**NUNCA use `db push` para mudanças que vão para produção!**
+
+| Comando | Uso | O que faz |
+|---------|-----|-----------|
+| `prisma db push` | **Só protótipo/dev local** | Sincroniza schema direto no banco, **SEM criar arquivo de migração** |
+| `prisma migrate dev` | **Desenvolvimento** | Cria arquivo de migração incremental + aplica |
+| `prisma migrate deploy` | **Produção** | Aplica migrações pendentes |
+
+**Fluxo correto ao modificar `schema.prisma`:**
+
+```bash
+# 1. Edita prisma/schema.prisma (adiciona campo, enum, tabela, etc)
+
+# 2. Cria migração incremental (gera SQL apenas da mudança)
+pnpm exec prisma migrate dev --name descricao_da_mudanca
+
+# 3. Isso cria: prisma/migrations/[timestamp]_descricao_da_mudanca/migration.sql
+
+# 4. Commita a migração junto com o schema.prisma
+
+# 5. Em produção, aplica apenas as migrações pendentes:
+pnpm exec prisma migrate deploy
+```
+
+**Por que isso é crítico?**
+- `db push` **não gera arquivo de migração** → produção fica dessincronizada
+- Sem arquivo de migração, não há como aplicar a mudança em produção
+- Resulta em erros como "type already exists" ou tabelas faltando
+
+**Regra de ouro:**
+- Protótipo rápido local → `db push` é OK
+- **Qualquer mudança que vai para produção → `migrate dev --name ...`**
+
 ## 🛠️ Development Commands
 
 ### Database Operations
 ```bash
-# Development database setup
-pnpm run db:push              # Push schema changes to dev database
+# ⚠️ APENAS para desenvolvimento local/protótipo
+pnpm run db:push              # Push schema changes (SEM migração!)
+
+# ✅ CORRETO para mudanças que vão para produção
+pnpm exec prisma migrate dev --name descricao   # Cria migração incremental
+pnpm exec prisma migrate deploy                  # Aplica em produção
+
+# Outros comandos
 pnpm run db:prepare           # Prepare database for deployment
 pnpm run db:reset:dev         # Reset development database
-pnpm run db:migrate           # Run Prisma migrations
 pnpm run db:generate          # Generate Prisma client
 pnpm run db:studio            # Open Prisma Studio
 
 # Seeding
 pnpm run db:seed              # Populate initial data
 pnpm run db:seed-prices       # Seed subscription price cards
-
-# Prisma CLI commands
-pnpm exec prisma migrate dev       # Create migration in development
-pnpm exec prisma migrate deploy    # Apply migrations in production
-pnpm exec prisma studio           # Visual database editor
 ```
 
 ### Testing

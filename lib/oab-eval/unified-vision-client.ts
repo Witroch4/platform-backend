@@ -9,6 +9,79 @@
 import { openai } from "./openai-client";
 import { getGeminiClient, isGeminiModel, isGeminiAvailable } from "./gemini-client";
 
+// ===== RETRY E FALLBACK CONFIGURATION =====
+
+/** Status codes que devem ser retried (erros temporários) */
+const RETRYABLE_STATUS_CODES = [429, 500, 502, 503, 504];
+
+/** Número máximo de retries antes de fallback */
+const MAX_RETRIES = 4;
+
+/** Delay base em ms (exponential backoff: 2s, 4s, 8s, 16s) */
+const BASE_DELAY_MS = 2000;
+
+/** Modelo OpenAI usado como fallback quando Gemini falha */
+const OPENAI_FALLBACK_MODEL = 'gpt-4.1';
+
+/** Regex para remover instruções técnicas do Gemini do prompt */
+const GEMINI_INSTRUCTIONS_PATTERN = /\[INSTRUÇÕES TÉCNICAS DO MODELO - GEMINI.*?---\s*/s;
+
+/**
+ * Executa uma função com retry automático para erros temporários
+ * Usa exponential backoff: 2s → 4s → 8s → 16s
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  context: string
+): Promise<T> {
+  let lastError: any;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES + 1; attempt++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      lastError = error;
+      const status = error?.status || error?.response?.status;
+      const isRetryable = RETRYABLE_STATUS_CODES.includes(status);
+
+      if (!isRetryable || attempt > MAX_RETRIES) {
+        throw error;
+      }
+
+      // Exponential backoff: 2s, 4s, 8s, 16s
+      const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
+      console.log(`[UnifiedVision] ⚠️ ${context} falhou (${status}), retry ${attempt}/${MAX_RETRIES} em ${delay}ms`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+
+  throw lastError;
+}
+
+/**
+ * Remove instruções específicas do Gemini do system prompt
+ * CRÍTICO: Evita confundir o GPT com referências a code_execution, etc.
+ */
+function cleanPromptForOpenAI(systemInstructions: string): string {
+  // Remove bloco completo de instruções técnicas do Gemini Agentic Vision
+  let cleaned = systemInstructions.replace(GEMINI_INSTRUCTIONS_PATTERN, '');
+
+  // Remove referências específicas que podem confundir o GPT
+  cleaned = cleaned
+    .replace(/code_execution/gi, '')
+    .replace(/execução de código Python/gi, '')
+    .replace(/ferramenta 'code_ex[^']*'/gi, '')
+    .replace(/Gemini 3 Agentic Vision/gi, '')
+    .replace(/GEMINI_AGENTIC_VISION/gi, '')
+    .replace(/\s+/g, ' ') // Normaliza espaços
+    .trim();
+
+  return cleaned;
+}
+
+// Tipo para nível de raciocínio do Gemini 3 (deve ser minúsculo para o SDK)
+export type GeminiThinkingLevel = 'minimal' | 'low' | 'medium' | 'high';
+
 export interface VisionRequest {
   model: string;
   systemInstructions: string;
@@ -17,6 +90,10 @@ export interface VisionRequest {
   imageMimeType?: string;
   maxOutputTokens?: number;
   temperature?: number;
+  // Gemini 3 Agentic Vision options
+  enableCodeExecution?: boolean;
+  thinkingLevel?: GeminiThinkingLevel;
+  includeThoughts?: boolean;
 }
 
 export interface VisionResponse {
@@ -32,16 +109,18 @@ export interface VisionResponse {
 
 /**
  * Processa uma imagem com Vision AI (OpenAI ou Gemini)
+ * Inclui retry automático (4x) e fallback Gemini → OpenAI
  */
 export async function processVisionRequest(request: VisionRequest): Promise<VisionResponse> {
-  const { model, systemInstructions, userPrompt, imageBase64, imageMimeType, maxOutputTokens, temperature } = request;
+  const { model } = request;
 
-  // Detectar provedor baseado no modelo
+  // Gemini: usa retry + fallback para OpenAI se falhar
   if (isGeminiModel(model)) {
-    return processWithGemini(request);
+    return processWithGeminiWithFallback(request);
   }
 
-  return processWithOpenAI(request);
+  // OpenAI: usa apenas retry (sem fallback)
+  return withRetry(() => processWithOpenAI(request), 'OpenAI');
 }
 
 /**
@@ -86,10 +165,29 @@ async function processWithOpenAI(request: VisionRequest): Promise<VisionResponse
 }
 
 /**
+ * Verifica se é um modelo Gemini 3 (suporta Agentic Vision)
+ */
+function isGemini3Model(model: string): boolean {
+  return model.toLowerCase().includes('gemini-3');
+}
+
+/**
  * Processa com Google Gemini Vision API
+ * Suporta Gemini 3 Agentic Vision com code execution e thinking
  */
 async function processWithGemini(request: VisionRequest): Promise<VisionResponse> {
-  const { model, systemInstructions, userPrompt, imageBase64, imageMimeType, maxOutputTokens, temperature } = request;
+  const {
+    model,
+    systemInstructions,
+    userPrompt,
+    imageBase64,
+    imageMimeType,
+    maxOutputTokens,
+    temperature,
+    enableCodeExecution,
+    thinkingLevel,
+    includeThoughts,
+  } = request;
 
   const gemini = getGeminiClient();
   if (!gemini) {
@@ -97,6 +195,31 @@ async function processWithGemini(request: VisionRequest): Promise<VisionResponse
       "Gemini API não configurada. Defina GEMINI_API_KEY ou GOOGLE_AI_API_KEY no ambiente."
     );
   }
+
+  // Configurar tools para Gemini 3 Agentic Vision
+  const tools: Array<Record<string, unknown>> = [];
+  if (enableCodeExecution || isGemini3Model(model)) {
+    // Habilitar code execution para manipulação de imagem (zoom/crop)
+    tools.push({ codeExecution: {} });
+  }
+
+  // Configurar thinking para Gemini 3
+  const thinkingConfig = isGemini3Model(model) ? {
+    thinkingConfig: {
+      includeThoughts: includeThoughts ?? false,
+      thinkingLevel: thinkingLevel ?? 'high', // Máximo raciocínio para OCR de manuscritos
+    },
+  } : {};
+
+  // Cast para contornar problemas de compatibilidade de tipos com versões do SDK
+  const config = {
+    systemInstruction: systemInstructions,
+    // 0 = ilimitado (omitir parâmetro para usar padrão máximo do modelo)
+    ...(maxOutputTokens && maxOutputTokens > 0 && { maxOutputTokens }),
+    ...(temperature !== undefined && { temperature }),
+    ...(tools.length > 0 && { tools }),
+    ...thinkingConfig,
+  } as any;
 
   const response = await gemini.models.generateContent({
     model,
@@ -109,16 +232,16 @@ async function processWithGemini(request: VisionRequest): Promise<VisionResponse
       },
       userPrompt,
     ],
-    config: {
-      systemInstruction: systemInstructions,
-      // 0 = ilimitado (omitir parâmetro para usar padrão máximo do modelo)
-      ...(maxOutputTokens && maxOutputTokens > 0 && { maxOutputTokens }),
-      ...(temperature !== undefined && { temperature }),
-    },
+    config,
   });
 
   const text = response.text ?? "";
   const usage = response.usageMetadata;
+
+  // Log se usou code execution (para debugging)
+  if (isGemini3Model(model) && (response as any).codeExecutionResult) {
+    console.log('[UnifiedVision] 🔬 Gemini 3 usou code execution para análise de imagem');
+  }
 
   return {
     text,
@@ -132,6 +255,34 @@ async function processWithGemini(request: VisionRequest): Promise<VisionResponse
         }
       : undefined,
   };
+}
+
+/**
+ * Processa com Gemini + retry + fallback para OpenAI
+ * Se Gemini falhar após 4 retries, usa gpt-4.1 com prompt limpo
+ */
+async function processWithGeminiWithFallback(request: VisionRequest): Promise<VisionResponse> {
+  try {
+    return await withRetry(() => processWithGemini(request), 'Gemini');
+  } catch (error: any) {
+    const status = error?.status || error?.response?.status || 'unknown';
+    console.log(`[UnifiedVision] 🔄 Gemini falhou após ${MAX_RETRIES} retries (${status}), usando fallback OpenAI (${OPENAI_FALLBACK_MODEL})`);
+
+    // LIMPEZA DE PROMPT CRÍTICA
+    // Removemos instruções específicas de code_execution do Gemini para não confundir o GPT
+    const cleanedInstructions = cleanPromptForOpenAI(request.systemInstructions);
+
+    console.log('[UnifiedVision] 🧹 Prompt limpo para OpenAI (removidas instruções Gemini-específicas)');
+
+    return processWithOpenAI({
+      ...request,
+      model: OPENAI_FALLBACK_MODEL,
+      systemInstructions: cleanedInstructions,
+      // Desabilitar opções específicas do Gemini
+      enableCodeExecution: false,
+      thinkingLevel: undefined,
+    });
+  }
 }
 
 /**
@@ -194,6 +345,7 @@ async function processMultiImageWithOpenAI(request: {
 
 /**
  * Processa múltiplas imagens com Gemini
+ * Suporta Gemini 3 Agentic Vision com code execution e thinking
  */
 async function processMultiImageWithGemini(request: {
   model: string;
@@ -202,8 +354,10 @@ async function processMultiImageWithGemini(request: {
   images: Array<{ base64: string; mimeType?: string }>;
   maxOutputTokens?: number;
   temperature?: number;
+  enableCodeExecution?: boolean;
+  thinkingLevel?: GeminiThinkingLevel;
 }): Promise<VisionResponse> {
-  const { model, systemInstructions, userPrompt, images, maxOutputTokens, temperature } = request;
+  const { model, systemInstructions, userPrompt, images, maxOutputTokens, temperature, enableCodeExecution, thinkingLevel } = request;
 
   const gemini = getGeminiClient();
   if (!gemini) {
@@ -219,19 +373,42 @@ async function processMultiImageWithGemini(request: {
     },
   }));
 
+  // Configurar tools para Gemini 3 Agentic Vision
+  const tools: Array<Record<string, unknown>> = [];
+  if (enableCodeExecution || isGemini3Model(model)) {
+    tools.push({ codeExecution: {} });
+  }
+
+  // Configurar thinking para Gemini 3
+  const thinkingConfig = isGemini3Model(model) ? {
+    thinkingConfig: {
+      includeThoughts: false,
+      thinkingLevel: thinkingLevel ?? 'high',
+    },
+  } : {};
+
+  // Cast para contornar problemas de compatibilidade de tipos com versões do SDK
+  const config = {
+    systemInstruction: systemInstructions,
+    // 0 = ilimitado (omitir parâmetro para usar padrão máximo do modelo)
+    ...(maxOutputTokens && maxOutputTokens > 0 && { maxOutputTokens }),
+    ...(temperature !== undefined && { temperature }),
+    ...(tools.length > 0 && { tools }),
+    ...thinkingConfig,
+  } as any;
+
   const response = await gemini.models.generateContent({
     model,
     contents: [...imageContents, userPrompt],
-    config: {
-      systemInstruction: systemInstructions,
-      // 0 = ilimitado (omitir parâmetro para usar padrão máximo do modelo)
-      ...(maxOutputTokens && maxOutputTokens > 0 && { maxOutputTokens }),
-      ...(temperature !== undefined && { temperature }),
-    },
+    config,
   });
 
   const text = response.text ?? "";
   const usage = response.usageMetadata;
+
+  if (isGemini3Model(model) && (response as any).codeExecutionResult) {
+    console.log('[UnifiedVision] 🔬 Gemini 3 usou code execution para análise de múltiplas imagens');
+  }
 
   return {
     text,
@@ -249,6 +426,7 @@ async function processMultiImageWithGemini(request: {
 
 /**
  * Processa múltiplas imagens via URL (Gemini suporta URL direta)
+ * Suporta Gemini 3 Agentic Vision com code execution e thinking
  */
 export async function processMultiImageUrlVisionRequest(request: {
   model: string;
@@ -257,6 +435,8 @@ export async function processMultiImageUrlVisionRequest(request: {
   imageUrls: string[];
   maxOutputTokens?: number;
   temperature?: number;
+  enableCodeExecution?: boolean;
+  thinkingLevel?: GeminiThinkingLevel;
 }): Promise<VisionResponse> {
   const { model } = request;
 
@@ -309,6 +489,7 @@ async function processMultiImageUrlWithOpenAI(request: {
 
 /**
  * Processa múltiplas imagens via URL com Gemini
+ * Suporta Gemini 3 Agentic Vision com code execution e thinking
  */
 async function processMultiImageUrlWithGemini(request: {
   model: string;
@@ -317,8 +498,10 @@ async function processMultiImageUrlWithGemini(request: {
   imageUrls: string[];
   maxOutputTokens?: number;
   temperature?: number;
+  enableCodeExecution?: boolean;
+  thinkingLevel?: GeminiThinkingLevel;
 }): Promise<VisionResponse> {
-  const { model, systemInstructions, userPrompt, imageUrls, maxOutputTokens, temperature } = request;
+  const { model, systemInstructions, userPrompt, imageUrls, maxOutputTokens, temperature, enableCodeExecution, thinkingLevel } = request;
 
   const gemini = getGeminiClient();
   if (!gemini) {
@@ -335,19 +518,42 @@ async function processMultiImageUrlWithGemini(request: {
     },
   }));
 
+  // Configurar tools para Gemini 3 Agentic Vision
+  const tools: Array<Record<string, unknown>> = [];
+  if (enableCodeExecution || isGemini3Model(model)) {
+    tools.push({ codeExecution: {} });
+  }
+
+  // Configurar thinking para Gemini 3
+  const thinkingConfig = isGemini3Model(model) ? {
+    thinkingConfig: {
+      includeThoughts: false,
+      thinkingLevel: thinkingLevel ?? 'high',
+    },
+  } : {};
+
+  // Config com cast para evitar incompatibilidade de tipos do SDK
+  const config = {
+    systemInstruction: systemInstructions,
+    // 0 = ilimitado (omitir parâmetro para usar padrão máximo do modelo)
+    ...(maxOutputTokens && maxOutputTokens > 0 && { maxOutputTokens }),
+    ...(temperature !== undefined && { temperature }),
+    ...(tools.length > 0 && { tools }),
+    ...thinkingConfig,
+  } as any;
+
   const response = await gemini.models.generateContent({
     model,
     contents: [...imageContents, userPrompt],
-    config: {
-      systemInstruction: systemInstructions,
-      // 0 = ilimitado (omitir parâmetro para usar padrão máximo do modelo)
-      ...(maxOutputTokens && maxOutputTokens > 0 && { maxOutputTokens }),
-      ...(temperature !== undefined && { temperature }),
-    },
+    config,
   });
 
   const text = response.text ?? "";
   const usage = response.usageMetadata;
+
+  if (isGemini3Model(model) && (response as any).codeExecutionResult) {
+    console.log('[UnifiedVision] 🔬 Gemini 3 usou code execution para análise de imagens via URL');
+  }
 
   return {
     text,

@@ -14,7 +14,9 @@
       "Bash(pnpm audit:*)",
       "mcp__context7__resolve-library-id",
       "mcp__context7__query-docs",
-      "Bash(pnpm add:*)"
+      "Bash(pnpm add:*)",
+      "Bash(pnpm exec prisma generate:*)",
+      "Bash(pnpm exec prisma:*)"
     ],
     "deny": [],
     "ask": []

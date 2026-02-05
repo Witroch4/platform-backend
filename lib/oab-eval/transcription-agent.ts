@@ -2,6 +2,7 @@ import { z } from "zod";
 import { processVisionRequest } from "./unified-vision-client";
 import { getOabEvalConfig } from "@/lib/config";
 import { getPrismaInstance } from "@/lib/connections";
+import { getAgentBlueprintByLinkedColumn, isGeminiModel, GEMINI_AGENTIC_VISION_INSTRUCTIONS } from "@/lib/ai-agents/blueprints";
 import type { ExtractedPage } from "./types";
 
 interface ManuscriptImageDescriptor {
@@ -119,6 +120,10 @@ async function transcribeSingleImage(
   model: string,
   systemInstructions: string,
   maxOutputTokens: number,
+  options?: {
+    enableCodeExecution?: boolean;
+    thinkingLevel?: 'minimal' | 'low' | 'medium' | 'high';
+  },
 ): Promise<TranscriptionResult> {
   const userPrompt = [
     `Transcreva a página ${page} de ${total}. Formato obrigatório:`,
@@ -132,6 +137,7 @@ async function transcribeSingleImage(
   ].join("\n");
 
   // Cliente unificado: suporta OpenAI e Gemini automaticamente
+  // Para Gemini 3, habilita code execution e thinking para Agentic Vision
   const response = await processVisionRequest({
     model,
     systemInstructions,
@@ -139,6 +145,8 @@ async function transcribeSingleImage(
     imageBase64: image.base64,
     imageMimeType: image.mimeType,
     maxOutputTokens,
+    enableCodeExecution: options?.enableCodeExecution,
+    thinkingLevel: options?.thinkingLevel,
   });
 
   return {
@@ -282,11 +290,13 @@ export async function transcribeManuscriptLocally(input: TranscriptionAgentInput
     return results;
   }
 
-  const { model, systemInstructions, maxOutputTokens } = await getTranscriberConfig();
+  const { model, systemInstructions, maxOutputTokens, enableCodeExecution, thinkingLevel } = await getTranscriberConfig();
 
   console.log('[TranscriptionAgent] 📝 Configuração do Blueprint:');
   console.log(`  - Modelo: ${model}`);
   console.log(`  - Max Output Tokens: ${maxOutputTokens}`);
+  console.log(`  - Code Execution: ${enableCodeExecution ? '✅ Habilitado (Gemini Agentic Vision)' : '❌ Desabilitado'}`);
+  console.log(`  - Thinking Level: ${thinkingLevel}`);
   console.log(`  - System Prompt (preview): ${systemInstructions.substring(0, 150)}...`);
 
   // Acumuladores para estatísticas
@@ -298,7 +308,15 @@ export async function transcribeManuscriptLocally(input: TranscriptionAgentInput
     const pageNumber = image.page ?? index + 1;
     const startTime = Date.now();
 
-    const result = await transcribeSingleImage(image, pageNumber, total, model, systemInstructions, maxOutputTokens);
+    const result = await transcribeSingleImage(
+      image,
+      pageNumber,
+      total,
+      model,
+      systemInstructions,
+      maxOutputTokens,
+      { enableCodeExecution, thinkingLevel },
+    );
     const trimmed = result.text.trim();
     const newSegments = splitSegments(trimmed);
 
@@ -322,6 +340,11 @@ export async function transcribeManuscriptLocally(input: TranscriptionAgentInput
       `[TranscriptionAgent] ✅ Pág ${index + 1}/${total} | ${result.provider.toUpperCase()} ${result.model} | ${(elapsedMs / 1000).toFixed(1)}s | ${trimmed.length} chars ${tokenInfo}`,
     );
     console.log(`[TranscriptionAgent]    📄 "${textPreview.replace(/\n/g, ' ')}"`);
+
+    // Log de fallback quando Gemini falhou e OpenAI foi usado
+    if (result.provider === 'openai' && isGeminiModel(model)) {
+      console.log(`[TranscriptionAgent] ⚠️ Pág ${index + 1}/${total} usou fallback OpenAI (prompt limpo)`);
+    }
 
     // Callback de progresso
     if (input.onPageComplete) {
@@ -372,9 +395,16 @@ export async function transcribeManuscriptLocally(input: TranscriptionAgentInput
   };
 }
 
-// Carrega modelo/instruções/tokens preferencialmente de AiAgentBlueprint (Builder MTF),
-// com fallback para AiAssistant. Tudo editável via front.
-async function getTranscriberConfig(): Promise<{ model: string; systemInstructions: string; maxOutputTokens: number }> {
+// Carrega modelo/instruções/tokens preferencialmente de AiAgentBlueprint vinculado à coluna PROVA_CELL,
+// com fallback para busca por nome/metadata. Tudo editável via front.
+// IMPORTANTE: Se o modelo for Gemini, injeta instruções técnicas para Agentic Vision.
+async function getTranscriberConfig(): Promise<{
+  model: string;
+  systemInstructions: string;
+  maxOutputTokens: number;
+  enableCodeExecution: boolean;
+  thinkingLevel: 'minimal' | 'low' | 'medium' | 'high';
+}> {
   const prisma = getPrismaInstance();
   const baseInstructions = [
     "Você é um assistente jurídico especializado em transcrever provas manuscritas com o máximo de fidelidade.",
@@ -389,7 +419,38 @@ async function getTranscriberConfig(): Promise<{ model: string; systemInstructio
     "8. Não faça qualquer análise ou resumo; apenas digite exatamente o texto identificável.",
   ].join(" ");
 
-  // 1) Tentar AiAgentBlueprint (MTF Agents Builder)
+  // 1) NOVA ESTRATÉGIA: Buscar AiAgentBlueprint vinculado à coluna PROVA_CELL
+  try {
+    const blueprint = await getAgentBlueprintByLinkedColumn('PROVA_CELL');
+
+    if (blueprint) {
+      const model = blueprint.model || DEFAULT_VISION_MODEL;
+      const maxOutputTokens = Number(blueprint.maxOutputTokens ?? 0);
+      let systemInstructions = (blueprint.systemPrompt || blueprint.instructions || baseInstructions).toString();
+
+      // INJEÇÃO DE DEPENDÊNCIA DE PROMPT: Se Gemini, adiciona instruções técnicas para Agentic Vision
+      if (isGeminiModel(model)) {
+        systemInstructions = `${GEMINI_AGENTIC_VISION_INSTRUCTIONS}\n\n---\n\n${systemInstructions}`;
+        console.log('[TranscriptionAgent] 🔬 Injetando instruções Gemini Agentic Vision para OCR de manuscritos');
+      }
+
+      systemInstructions = systemInstructions.replace(/\s+/g, ' ');
+
+      console.log(`[TranscriptionAgent] ✅ Blueprint vinculado à PROVA_CELL encontrado: ${blueprint.name} (${model})`);
+
+      return {
+        model,
+        systemInstructions,
+        maxOutputTokens,
+        enableCodeExecution: isGeminiModel(model), // Habilita code execution para Gemini
+        thinkingLevel: 'high', // Máximo raciocínio para OCR de manuscritos
+      };
+    }
+  } catch (err) {
+    console.warn('[TranscriptionAgent] Falha ao consultar blueprint por linkedColumn:', err);
+  }
+
+  // 2) Fallback: Buscar por ID ou nome (compatibilidade)
   try {
     const bpId = process.env.OAB_TRANSCRIBER_BLUEPRINT_ID;
     let blueprint: any = null;
@@ -415,17 +476,30 @@ async function getTranscriberConfig(): Promise<{ model: string; systemInstructio
 
     if (blueprint) {
       const model = blueprint.model || DEFAULT_VISION_MODEL;
-      // 0 = ilimitado (omite parâmetro na chamada da API)
       const maxOutputTokens = Number(blueprint.maxOutputTokens ?? 0);
-      const sys = (blueprint.systemPrompt || blueprint.instructions || baseInstructions).toString();
-      const systemInstructions = sys.replace(/\s+/g, ' ');
-      return { model, systemInstructions, maxOutputTokens };
+      let systemInstructions = (blueprint.systemPrompt || blueprint.instructions || baseInstructions).toString();
+
+      // INJEÇÃO DE DEPENDÊNCIA DE PROMPT: Se Gemini, adiciona instruções técnicas
+      if (isGeminiModel(model)) {
+        systemInstructions = `${GEMINI_AGENTIC_VISION_INSTRUCTIONS}\n\n---\n\n${systemInstructions}`;
+        console.log('[TranscriptionAgent] 🔬 Injetando instruções Gemini Agentic Vision (fallback)');
+      }
+
+      systemInstructions = systemInstructions.replace(/\s+/g, ' ');
+
+      return {
+        model,
+        systemInstructions,
+        maxOutputTokens,
+        enableCodeExecution: isGeminiModel(model),
+        thinkingLevel: 'high',
+      };
     }
   } catch (err) {
     console.warn('[TranscriptionAgent] Falha ao consultar AiAgentBlueprint:', err);
   }
 
-  // 2) Fallback: AiAssistant
+  // 3) Fallback: AiAssistant
   try {
     const assistantId = process.env.OAB_TRANSCRIBER_ASSISTANT_ID;
     let assistant: any = null;
@@ -451,15 +525,33 @@ async function getTranscriberConfig(): Promise<{ model: string; systemInstructio
     }
     if (assistant) {
       const model = assistant.model || DEFAULT_VISION_MODEL;
-      // 0 = ilimitado (omite parâmetro na chamada da API)
       const maxOutputTokens = Number(assistant.maxOutputTokens ?? 0);
-      const systemInstructions = (assistant.instructions?.trim() || baseInstructions).replace(/\s+/g, ' ');
-      return { model, systemInstructions, maxOutputTokens };
+      let systemInstructions = (assistant.instructions?.trim() || baseInstructions);
+
+      if (isGeminiModel(model)) {
+        systemInstructions = `${GEMINI_AGENTIC_VISION_INSTRUCTIONS}\n\n---\n\n${systemInstructions}`;
+      }
+
+      systemInstructions = systemInstructions.replace(/\s+/g, ' ');
+
+      return {
+        model,
+        systemInstructions,
+        maxOutputTokens,
+        enableCodeExecution: isGeminiModel(model),
+        thinkingLevel: 'high',
+      };
     }
   } catch (err) {
     console.warn('[TranscriptionAgent] Falha ao consultar AiAssistant:', err);
   }
 
-  // 3) Último recurso: defaults (0 = ilimitado)
-  return { model: DEFAULT_VISION_MODEL, systemInstructions: baseInstructions, maxOutputTokens: 0 };
+  // 4) Último recurso: defaults
+  return {
+    model: DEFAULT_VISION_MODEL,
+    systemInstructions: baseInstructions,
+    maxOutputTokens: 0,
+    enableCodeExecution: false,
+    thinkingLevel: 'high',
+  };
 }

@@ -6,6 +6,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import sharp from 'sharp';
 
 // Configuração do cliente S3 para MinIO
+// Nota: O AWS SDK v3 já usa keep-alive por padrão internamente
 const s3Client = new S3Client({
   region: 'us-east-1', // Região padrão, pode ser qualquer uma para MinIO
   endpoint: `https://${process.env.S3_ENDPOINT || 'objstoreapi.witdev.com.br'}`,
@@ -14,9 +15,10 @@ const s3Client = new S3Client({
     secretAccessKey: process.env.S3_SECRET_KEY || 'VBFbOh6VMW1flrwyzWS4CoR4dtibpfeSRwYhjkbs',
   },
   forcePathStyle: true, // Necessário para MinIO
+  maxAttempts: 3, // Retry automático do SDK
 });
 
-const BUCKET_NAME = process.env.S3_BUCKET || 'chatwit-social';
+const BUCKET_NAME = process.env.S3_BUCKET || 'socialwise';
 const HOST = process.env.S3_ENDPOINT || 'objstoreapi.witdev.com.br';
 
 /**
@@ -203,8 +205,28 @@ export async function uploadToMinIO(
       ContentLength: fileSize, // IMPORTANTE para evitar erro de x-amz-decoded-content-length
     });
 
-    // Executa o upload e obtém a resposta completa do S3/MinIO
-    const response = await s3Client.send(command);
+    // Converte ArrayBuffer para Buffer se necessário (para thumbnail)
+    const imageBuffer = file instanceof Buffer ? file : Buffer.from(new Uint8Array(file));
+
+    // OTIMIZAÇÃO: Gera thumbnail EM PARALELO com upload principal
+    const shouldGenerateThumbnail = generateThumbnail && mimeType && mimeType.startsWith('image/');
+
+    const [response, thumbnailBuffer] = await Promise.all([
+      // Upload principal
+      s3Client.send(command),
+      // Geração de thumbnail (em paralelo)
+      shouldGenerateThumbnail
+        ? sharp(imageBuffer)
+            .resize(150, null, { fit: 'inside' })
+            .png({ compressionLevel: 6 }) // Compressão balanceada
+            .toBuffer()
+            .catch(err => {
+              console.error('[MinIO] Erro ao gerar thumbnail buffer:', err);
+              return null;
+            })
+        : Promise.resolve(null),
+    ]);
+
     console.log('MinIO Upload Response:', response);
 
     // Monta a URL final com protocolo garantido
@@ -217,32 +239,19 @@ export async function uploadToMinIO(
       s3RawResponse: response,
     };
 
-    // Gera e faz upload da thumbnail se for uma imagem e a flag estiver ativada
-    if (generateThumbnail && mimeType && mimeType.startsWith('image/')) {
+    // Faz upload da thumbnail se foi gerada com sucesso
+    if (thumbnailBuffer) {
       try {
-        // Converte ArrayBuffer para Buffer se necessário
-        const imageBuffer = file instanceof Buffer ? file : Buffer.from(new Uint8Array(file));
-
-        // Gera thumbnail com 150px de largura (como no código original)
-        const thumbnailBuffer = await sharp(imageBuffer)
-          .resize(150, null, { fit: 'inside' })
-          .toBuffer();
-
-        // Nome da thumbnail com prefixo específico
         const thumbnailFileName = `thumb_${uniqueFileName}`;
-
-        // Usa o método direto para evitar recursão
         const thumbnailResult = await uploadFileDirectToMinIO(
           thumbnailBuffer,
           thumbnailFileName,
-          mimeType
+          mimeType || 'image/png'
         );
-
-        // Adiciona a URL da thumbnail ao resultado
         result.thumbnail_url = thumbnailResult.url;
         console.log(`[MinIO] Thumbnail gerada e enviada: ${thumbnailResult.url}`);
       } catch (thumbError) {
-        console.error('[MinIO] Erro ao gerar thumbnail:', thumbError);
+        console.error('[MinIO] Erro ao fazer upload da thumbnail:', thumbError);
         // Continua sem thumbnail em caso de erro
       }
     }
@@ -255,18 +264,67 @@ export async function uploadToMinIO(
 }
 
 /**
- * Faz upload de múltiplos arquivos para o MinIO
+ * Faz upload com retry e backoff exponencial
+ * @param file Arquivo a ser enviado
+ * @param fileName Nome do arquivo
+ * @param mimeType Tipo MIME
+ * @param maxRetries Número máximo de tentativas (padrão: 3)
+ * @param generateThumbnail Flag para gerar thumbnail (padrão: true)
+ */
+export async function uploadToMinIOWithRetry(
+  file: Buffer | ArrayBuffer,
+  fileName?: string,
+  mimeType?: string,
+  maxRetries = 3,
+  generateThumbnail = true
+): Promise<UploadResponse> {
+  let lastError: Error | null = null;
+  const initialDelayMs = 100;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await uploadToMinIO(file, fileName, mimeType, generateThumbnail);
+    } catch (error) {
+      lastError = error as Error;
+      if (attempt < maxRetries - 1) {
+        const delay = initialDelayMs * Math.pow(2, attempt);
+        console.warn(`[MinIO] Tentativa ${attempt + 1} falhou, retry em ${delay}ms: ${lastError.message}`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  throw lastError || new Error('Upload failed after max retries');
+}
+
+/**
+ * Faz upload de múltiplos arquivos para o MinIO com limite de concorrência
  * @param files Array de arquivos a serem enviados
+ * @param concurrency Número máximo de uploads simultâneos (padrão: 6)
  * @returns Array de objetos com URL, tipo MIME e resposta completa de cada upload
  */
 export async function uploadMultipleToMinIO(
-  files: Array<{ buffer: Buffer | ArrayBuffer; fileName?: string; mimeType?: string }>
+  files: Array<{ buffer: Buffer | ArrayBuffer; fileName?: string; mimeType?: string }>,
+  concurrency = 6
 ): Promise<Array<UploadResponse>> {
   try {
-    const uploadPromises = files.map(file =>
-      uploadToMinIO(file.buffer, file.fileName, file.mimeType)
-    );
-    return await Promise.all(uploadPromises);
+    const results: UploadResponse[] = [];
+
+    // Processa em batches para limitar concorrência
+    for (let i = 0; i < files.length; i += concurrency) {
+      const batch = files.slice(i, i + concurrency);
+      const batchResults = await Promise.all(
+        batch.map(file => uploadToMinIOWithRetry(file.buffer, file.fileName, file.mimeType))
+      );
+      results.push(...batchResults);
+
+      // Log de progresso para batches grandes
+      if (files.length > concurrency) {
+        console.log(`[MinIO] Upload batch ${Math.floor(i / concurrency) + 1}/${Math.ceil(files.length / concurrency)} concluído`);
+      }
+    }
+
+    return results;
   } catch (error) {
     console.error('Erro ao fazer upload múltiplo para o MinIO:', error);
     throw new Error(`Falha ao fazer upload múltiplo para o MinIO: ${error}`);
@@ -311,7 +369,7 @@ export function extractObjectKeyFromUrl(url: string): string {
     const pathParts = urlObj.pathname.split('/');
 
     // Remove a primeira parte vazia e o nome do bucket
-    const bucketName = process.env.S3_BUCKET || 'chatwit-social';
+    const bucketName = process.env.S3_BUCKET || 'socialwise';
     const bucketIndex = pathParts.findIndex(part => part === bucketName);
 
     if (bucketIndex === -1) {

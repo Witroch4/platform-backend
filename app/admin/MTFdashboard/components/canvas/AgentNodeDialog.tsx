@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -20,7 +20,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { InfoIcon, Sparkles, Settings2, Wrench, FileJson } from 'lucide-react';
+import { InfoIcon, Sparkles, Settings2, Wrench, FileJson, Link2, AlertCircle } from 'lucide-react';
+import Image from 'next/image';
 import type {
   AgentBlueprintDraft,
   AgentTypeDescriptor,
@@ -28,6 +29,10 @@ import type {
   OutputParserTemplate,
   OutputParserConfig,
   AgentToolConfig,
+  LinkedColumnType,
+  AiProviderType,
+  GeminiThinkingLevel,
+  OpenAIReasoningEffort,
 } from '../../types';
 
 interface AgentNodeDialogProps {
@@ -41,20 +46,70 @@ interface AgentNodeDialogProps {
   onSave: (patch: Partial<AgentBlueprintDraft>) => void;
 }
 
+// Modelos disponíveis por provedor
+const GEMINI_MODELS = [
+  { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash (Visão Agêntica)', recommended: true },
+  { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro' },
+  { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+  { value: 'gemini-2.0-flash-001', label: 'Gemini 2.0 Flash' },
+];
+
+const OPENAI_MODELS = [
+  { value: 'gpt-4.1', label: 'GPT-4.1 (Vision)', recommended: true, supportsReasoning: false },
+  { value: 'gpt-4.1-mini', label: 'GPT-4.1 Mini', supportsReasoning: false },
+  { value: 'gpt-4.1-nano', label: 'GPT-4.1 Nano', supportsReasoning: false },
+  { value: 'gpt-4o', label: 'GPT-4o', supportsReasoning: false },
+  { value: 'gpt-4o-mini', label: 'GPT-4o Mini', supportsReasoning: false },
+  { value: 'gpt-5', label: 'GPT-5', supportsReasoning: true },
+  { value: 'gpt-5-mini', label: 'GPT-5 Mini', supportsReasoning: true },
+  { value: 'gpt-5.1', label: 'GPT-5.1', supportsReasoning: true },
+  { value: 'gpt-5.2', label: 'GPT-5.2', supportsReasoning: true },
+  { value: 'gpt-5-pro', label: 'GPT-5 Pro', supportsReasoning: true, fixedReasoning: 'high' },
+];
+
+// Opções de Raciocínio Gemini (thinkingLevel)
+const GEMINI_THINKING_LEVELS: Array<{ value: GeminiThinkingLevel; label: string; description: string }> = [
+  { value: 'high', label: 'Alto', description: 'Máximo raciocínio - respostas mais elaboradas' },
+  { value: 'medium', label: 'Médio', description: 'Balanceado para maioria das tarefas' },
+  { value: 'low', label: 'Baixo', description: 'Raciocínio leve - menor latência' },
+  { value: 'minimal', label: 'Mínimo', description: 'Quase sem thinking - máxima velocidade' },
+];
+
+// Opções de Raciocínio OpenAI (reasoningEffort)
+const OPENAI_REASONING_EFFORTS: Array<{ value: OpenAIReasoningEffort; label: string; description: string }> = [
+  { value: 'high', label: 'Alto', description: 'Máximo raciocínio - respostas mais elaboradas' },
+  { value: 'medium', label: 'Médio', description: 'Balanceado para maioria das tarefas' },
+  { value: 'low', label: 'Baixo', description: 'Raciocínio leve - menor latência' },
+  { value: 'none', label: 'Nenhum', description: 'Sem raciocínio - máxima velocidade (padrão GPT-5.1+)' },
+];
+
 export function AgentNodeDialog({
   open,
   onOpenChange,
   draft,
   agentTypes,
   tools,
-  modelOptions,
   structuredTemplates,
   onSave,
 }: AgentNodeDialogProps) {
   const [localDraft, setLocalDraft] = useState<AgentBlueprintDraft>(draft);
 
+  // Sincroniza o estado local quando o dialog abre ou o draft muda
+  useEffect(() => {
+    if (open) {
+      setLocalDraft(draft);
+    }
+  }, [open, draft]);
+
   const currentType = agentTypes.find((t) => t.id === localDraft.agentType);
   const activeTools = new Set((localDraft.toolset || []).map((tool) => tool.key));
+
+  // Detectar provedor baseado no modelo selecionado
+  const isGeminiModel = (model: string) => model.toLowerCase().includes('gemini');
+
+  const currentProvider: AiProviderType = localDraft.defaultProvider ||
+    (isGeminiModel(localDraft.model) ? 'GEMINI' : 'OPENAI');
 
   const handleSave = () => {
     onSave(localDraft);
@@ -91,6 +146,26 @@ export function AgentNodeDialog({
       },
     });
   };
+
+  const selectProvider = (provider: AiProviderType) => {
+    const defaultModel = provider === 'GEMINI' ? 'gemini-3-flash-preview' : 'gpt-4.1';
+    // Gemini: temperatura 1 | OpenAI GPT-4.x: temperatura 0.1 (vision)
+    const defaultTemp = provider === 'GEMINI' ? 1 : 0.1;
+    updateLocal({
+      defaultProvider: provider,
+      model: defaultModel,
+      temperature: defaultTemp,
+      maxOutputTokens: 0, // 0 = ilimitado
+      // Raciocínio padrão (null para GPT-4.x que não suporta)
+      thinkingLevel: provider === 'GEMINI' ? 'high' : null,
+      reasoningEffort: null, // será definido ao selecionar modelo GPT-5+
+    });
+  };
+
+  // Verifica se o modelo OpenAI selecionado suporta raciocínio
+  const currentOpenAIModel = OPENAI_MODELS.find(m => m.value === localDraft.model);
+  const supportsReasoning = currentOpenAIModel?.supportsReasoning ?? false;
+  const fixedReasoning = (currentOpenAIModel as any)?.fixedReasoning as OpenAIReasoningEffort | undefined;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -182,6 +257,56 @@ export function AgentNodeDialog({
 
                 <Separator />
 
+                {/* COLUNA VINCULADA (Lead Chatwit) */}
+                <div className="space-y-4 p-4 rounded-lg border border-dashed border-primary/30 bg-primary/5">
+                  <div className="flex items-center gap-2 text-primary">
+                    <Link2 className="h-4 w-4" />
+                    <span className="text-sm font-medium">Vinculação com Lead Chatwit</span>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Coluna da Tabela</Label>
+                    <Select
+                      value={localDraft.linkedColumn || '_none'}
+                      onValueChange={(value) =>
+                        updateLocal({ linkedColumn: value === '_none' ? null : (value as LinkedColumnType) })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Nenhuma" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_none">Nenhuma vinculação</SelectItem>
+                        <SelectItem value="PROVA_CELL">
+                          <span className="flex items-center gap-2">
+                            📝 Prova (Transcrição de manuscritos)
+                          </span>
+                        </SelectItem>
+                        <SelectItem value="ESPELHO_CELL">
+                          <span className="flex items-center gap-2">
+                            📋 Espelho (Extração de dados)
+                          </span>
+                        </SelectItem>
+                        <SelectItem value="ANALISE_CELL">
+                          <span className="flex items-center gap-2">
+                            🔍 Análise (Comparação prova x espelho)
+                          </span>
+                        </SelectItem>
+                        <SelectItem value="RECURSO_CELL">
+                          <span className="flex items-center gap-2">
+                            📄 Recurso (Geração automática)
+                          </span>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Este agente será executado automaticamente quando a coluna for acionada na tabela de Leads
+                    </p>
+                  </div>
+                </div>
+
+                <Separator />
+
                 <div className="space-y-2">
                   <Label htmlFor="system-prompt" className="text-sm font-medium">
                     Prompt do Sistema
@@ -214,46 +339,178 @@ export function AgentNodeDialog({
               </div>
             </TabsContent>
 
-            {/* MODEL TAB */}
+            {/* MODEL TAB - REDESENHADA */}
             <TabsContent value="model" className="space-y-6 mt-0">
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Modelo LLM</Label>
-                  <Select value={localDraft.model} onValueChange={(value) => updateLocal({ model: value })}>
-                    <SelectTrigger className="font-mono">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {modelOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value} className="font-mono">
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                {/* Seleção de Provedor */}
+                <div className="grid grid-cols-2 gap-4">
+                  {/* GEMINI */}
+                  <div
+                    onClick={() => selectProvider('GEMINI')}
+                    className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                      currentProvider === 'GEMINI'
+                        ? 'border-blue-500 bg-blue-500/10'
+                        : 'border-muted hover:border-blue-500/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 mb-4">
+                      <Image
+                        src="/assets/Google-gemini-icon.svg"
+                        alt="Gemini"
+                        width={32}
+                        height={32}
+                      />
+                      <div>
+                        <h3 className="font-semibold">Google Gemini</h3>
+                        <p className="text-xs text-muted-foreground">Visão Agêntica com Code Execution</p>
+                      </div>
+                      {currentProvider === 'GEMINI' && (
+                        <Badge className="ml-auto bg-blue-500">Ativo</Badge>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-xs">Modelo</Label>
+                      <Select
+                        value={currentProvider === 'GEMINI' ? localDraft.model : GEMINI_MODELS[0].value}
+                        onValueChange={(value) => {
+                          if (currentProvider === 'GEMINI') {
+                            updateLocal({ model: value });
+                          }
+                        }}
+                        disabled={currentProvider !== 'GEMINI'}
+                      >
+                        <SelectTrigger className="text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {GEMINI_MODELS.map((model) => (
+                            <SelectItem key={model.value} value={model.value}>
+                              <span className="flex items-center gap-2">
+                                {model.label}
+                                {model.recommended && (
+                                  <Badge variant="secondary" className="text-[10px]">Recomendado</Badge>
+                                )}
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {currentProvider === 'GEMINI' && (
+                      <p className="text-xs text-blue-600 dark:text-blue-400 mt-3 flex items-start gap-1.5">
+                        <InfoIcon className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                        Instruções de Agentic Vision serão injetadas automaticamente
+                      </p>
+                    )}
+                  </div>
+
+                  {/* OPENAI */}
+                  <div
+                    onClick={() => selectProvider('OPENAI')}
+                    className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                      currentProvider === 'OPENAI'
+                        ? 'border-emerald-500 bg-emerald-500/10'
+                        : 'border-muted hover:border-emerald-500/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 mb-4">
+                      <Image
+                        src="/assets/ChatGPT_logo.svg"
+                        alt="OpenAI"
+                        width={32}
+                        height={32}
+                      />
+                      <div>
+                        <h3 className="font-semibold">OpenAI GPT</h3>
+                        <p className="text-xs text-muted-foreground">Modelos GPT-4 e GPT-5</p>
+                      </div>
+                      {currentProvider === 'OPENAI' && (
+                        <Badge className="ml-auto bg-emerald-500">Ativo</Badge>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-xs">Modelo</Label>
+                      <Select
+                        value={currentProvider === 'OPENAI' ? localDraft.model : OPENAI_MODELS[0].value}
+                        onValueChange={(value) => {
+                          if (currentProvider === 'OPENAI') {
+                            const selectedModel = OPENAI_MODELS.find(m => m.value === value);
+                            const modelSupportsReasoning = selectedModel?.supportsReasoning ?? false;
+                            // GPT-5+: temperatura 1 + raciocínio | GPT-4.x: temperatura editável (mantém atual ou 0.1)
+                            updateLocal({
+                              model: value,
+                              temperature: modelSupportsReasoning ? 1 : (localDraft.temperature ?? 0.1),
+                              reasoningEffort: modelSupportsReasoning ? (localDraft.reasoningEffort || 'medium') : null,
+                            });
+                          }
+                        }}
+                        disabled={currentProvider !== 'OPENAI'}
+                      >
+                        <SelectTrigger className="text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {OPENAI_MODELS.map((model) => (
+                            <SelectItem key={model.value} value={model.value}>
+                              <span className="flex items-center gap-2">
+                                {model.label}
+                                {model.recommended && (
+                                  <Badge variant="secondary" className="text-[10px]">Recomendado</Badge>
+                                )}
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                 </div>
 
                 <Separator />
 
+                {/* Configurações de Modelo */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="temperature" className="text-sm font-medium">
                       Temperature
                     </Label>
-                    <Input
-                      id="temperature"
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      max="2"
-                      value={localDraft.temperature ?? 0.7}
-                      onChange={(e) => updateLocal({ temperature: parseFloat(e.target.value) })}
-                      className="font-mono"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      0 = mais preciso e determinístico
-                      <br />2 = mais criativo e variado
-                    </p>
+                    {/* GPT-4.x: temperatura editável | Gemini e GPT-5+: temperatura fixa em 1 */}
+                    {currentProvider === 'OPENAI' && !supportsReasoning ? (
+                      <>
+                        <Input
+                          id="temperature"
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          max="2"
+                          value={localDraft.temperature ?? 0.1}
+                          onChange={(e) => updateLocal({ temperature: parseFloat(e.target.value) })}
+                          className="font-mono"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Vision: use <strong>0.1</strong> (mais preciso)
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <Input
+                          id="temperature"
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          max="2"
+                          value={1}
+                          disabled
+                          className="font-mono bg-muted cursor-not-allowed"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Fixo em <strong>1</strong> (recomendação oficial para modelos com raciocínio)
+                        </p>
+                      </>
+                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -263,17 +520,112 @@ export function AgentNodeDialog({
                     <Input
                       id="max-tokens"
                       type="number"
-                      min="64"
-                      max="16384"
-                      value={localDraft.maxOutputTokens ?? 1024}
+                      min="0"
+                      max="128000"
+                      value={localDraft.maxOutputTokens ?? 0}
                       onChange={(e) => updateLocal({ maxOutputTokens: parseInt(e.target.value, 10) })}
                       className="font-mono"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Limite máximo de tokens na resposta
+                      <strong>0 = ilimitado</strong> (usa máximo do modelo)
                     </p>
                   </div>
                 </div>
+
+                {/* Raciocínio - Gemini */}
+                {currentProvider === 'GEMINI' && (
+                  <div className="space-y-2 p-4 rounded-lg border border-blue-500/30 bg-blue-500/5">
+                    <Label className="text-sm font-medium flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-blue-500" />
+                      Nível de Raciocínio (Thinking)
+                    </Label>
+                    <Select
+                      value={localDraft.thinkingLevel || 'high'}
+                      onValueChange={(value) => updateLocal({ thinkingLevel: value as GeminiThinkingLevel })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {GEMINI_THINKING_LEVELS.map((level) => (
+                          <SelectItem key={level.value} value={level.value}>
+                            <div className="flex flex-col">
+                              <span>{level.label}</span>
+                              <span className="text-xs text-muted-foreground">{level.description}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Controla a profundidade do raciocínio do Gemini 3 antes de responder
+                    </p>
+                  </div>
+                )}
+
+                {/* Raciocínio - OpenAI GPT-5+ */}
+                {currentProvider === 'OPENAI' && supportsReasoning && (
+                  <div className="space-y-2 p-4 rounded-lg border border-emerald-500/30 bg-emerald-500/5">
+                    <Label className="text-sm font-medium flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-emerald-500" />
+                      Esforço de Raciocínio (Reasoning)
+                    </Label>
+                    {fixedReasoning ? (
+                      <>
+                        <Input
+                          value={fixedReasoning === 'high' ? 'Alto' : fixedReasoning}
+                          disabled
+                          className="bg-muted cursor-not-allowed"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          GPT-5 Pro usa raciocínio fixo em <strong>alto</strong>
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <Select
+                          value={localDraft.reasoningEffort || 'medium'}
+                          onValueChange={(value) => updateLocal({ reasoningEffort: value as OpenAIReasoningEffort })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {OPENAI_REASONING_EFFORTS.map((effort) => (
+                              <SelectItem key={effort.value} value={effort.value}>
+                                <div className="flex flex-col">
+                                  <span>{effort.label}</span>
+                                  <span className="text-xs text-muted-foreground">{effort.description}</span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Controla quantos tokens de raciocínio o GPT-5 gera antes de responder
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* Raciocínio desabilitado para GPT-4.x */}
+                {currentProvider === 'OPENAI' && !supportsReasoning && (
+                  <div className="space-y-2 p-4 rounded-lg border border-muted bg-muted/30">
+                    <Label className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+                      <Sparkles className="h-4 w-4" />
+                      Esforço de Raciocínio (Reasoning)
+                    </Label>
+                    <Input
+                      value="Não disponível"
+                      disabled
+                      className="bg-muted cursor-not-allowed text-muted-foreground"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Modelos GPT-4.x não suportam configuração de raciocínio
+                    </p>
+                  </div>
+                )}
               </div>
             </TabsContent>
 
@@ -443,10 +795,14 @@ export function AgentNodeDialog({
         </Tabs>
 
         <DialogFooter className="px-6 py-4 border-t bg-muted/30">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mr-auto">
+            <AlertCircle className="h-3.5 w-3.5" />
+            Clique em "Salvar blueprint" no topo da página para persistir
+          </div>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
-          <Button onClick={handleSave}>Salvar Alterações</Button>
+          <Button onClick={handleSave}>Aplicar</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getPrismaInstance } from "@/lib/connections";
 const prisma = getPrismaInstance();
-import { uploadToMinIO } from "@/lib/minio";
+import { uploadToMinIOWithRetry } from "@/lib/minio";
 import axios from "axios";
 import type { Readable } from "stream";
 import { randomUUID } from 'crypto';
@@ -12,6 +12,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+
+// Constantes de otimização
+const UPLOAD_CONCURRENCY = 6; // Uploads simultâneos
 
 const execPromise = promisify(exec);
 
@@ -89,9 +92,12 @@ async function convertPdfToImagesWithImageMagick(pdfBuffer: Buffer, options: PDF
     // Nome base para os arquivos de saída (sem extensão)
     const outputBaseName = path.join(outputDir, `page`);
     
-    // Comando para converter PDF em imagens usando ImageMagick
-    // Tentativa 1: Abordagem com ghostscript diretamente
-    const gsCommand = `gs -dSAFER -dBATCH -dNOPAUSE -sDEVICE=png16m -r${density} -dGraphicsAlphaBits=4 -dTextAlphaBits=4 -sOutputFile=${outputBaseName}-%d.${format} ${pdfPath}`;
+    // Comando para converter PDF em imagens usando GhostScript com otimizações
+    // Flags de otimização:
+    // -dNumRenderingThreads=4: Paraleliza rendering em múltiplos cores
+    // -c "100000000 setvirtualmemory": Aloca memória virtual (evita swap)
+    // -dBufferSpace=500000000: Buffer de 500MB para melhor performance
+    const gsCommand = `gs -dSAFER -dBATCH -dNOPAUSE -sDEVICE=png16m -r${density} -dGraphicsAlphaBits=4 -dTextAlphaBits=4 -dNumRenderingThreads=4 -dBufferSpace=500000000 -sOutputFile=${outputBaseName}-%d.${format} ${pdfPath}`;
     log.info(`Executando comando GhostScript: ${gsCommand}`);
     
     try {
@@ -147,35 +153,54 @@ async function convertPdfToImagesWithImageMagick(pdfBuffer: Buffer, options: PDF
       throw new Error("Nenhum arquivo foi gerado durante a conversão do PDF para imagem");
     }
     
-    // Salvar arquivos no MinIO
+    // Salvar arquivos no MinIO - UPLOAD PARALELO COM LIMITE DE CONCORRÊNCIA
     const convertedImagesUrls: string[] = [];
-    
-    for (const file of files) {
-      if (file.endsWith(`.${format}`)) {
-        const filePath = path.join(outputDir, file);
-        const fileBuffer = await fs.promises.readFile(filePath);
-        
-        // Upload para MinIO
-        const fileName = `${baseName}_${file.replace(/%d/, Date.now().toString())}`;
-        log.info(`Fazendo upload da imagem para MinIO: ${fileName} (${fileBuffer.length} bytes)`);
-        
-        const uploadResult = await uploadToMinIO(
-          fileBuffer,
-          fileName,
-          `image/${format}`
-        );
-        
-        log.info(`Imagem carregada no MinIO: ${uploadResult.url}`);
-        convertedImagesUrls.push(uploadResult.url);
-        
-        // Remover arquivo temporário
-        try {
-          await fs.promises.unlink(filePath);
-          log.info(`Arquivo temporário removido: ${filePath}`);
-        } catch (unlinkError) {
-          log.warn(`Não foi possível excluir arquivo temporário ${filePath}: ${unlinkError}`);
-        }
-      }
+
+    // Filtrar apenas arquivos de imagem e preparar para upload
+    const imageFiles = files.filter(file => file.endsWith(`.${format}`));
+    log.info(`Preparando upload paralelo de ${imageFiles.length} imagens (concorrência: ${UPLOAD_CONCURRENCY})`);
+
+    // Processar uploads em batches para limitar concorrência
+    for (let i = 0; i < imageFiles.length; i += UPLOAD_CONCURRENCY) {
+      const batch = imageFiles.slice(i, i + UPLOAD_CONCURRENCY);
+
+      // Preparar arquivos do batch
+      const batchUploads = await Promise.all(
+        batch.map(async (file) => {
+          const filePath = path.join(outputDir, file);
+          const fileBuffer = await fs.promises.readFile(filePath);
+          const fileName = `${baseName}_${file.replace(/%d/, Date.now().toString())}`;
+          return { filePath, fileBuffer, fileName, file };
+        })
+      );
+
+      // Upload paralelo do batch
+      const batchResults = await Promise.all(
+        batchUploads.map(async ({ filePath, fileBuffer, fileName }) => {
+          log.info(`Fazendo upload da imagem para MinIO: ${fileName} (${fileBuffer.length} bytes)`);
+          const uploadResult = await uploadToMinIOWithRetry(
+            fileBuffer,
+            fileName,
+            `image/${format}`,
+            3, // maxRetries
+            true // generateThumbnail
+          );
+          log.info(`Imagem carregada no MinIO: ${uploadResult.url}`);
+
+          // Remover arquivo temporário
+          try {
+            await fs.promises.unlink(filePath);
+            log.info(`Arquivo temporário removido: ${filePath}`);
+          } catch (unlinkError) {
+            log.warn(`Não foi possível excluir arquivo temporário ${filePath}: ${unlinkError}`);
+          }
+
+          return uploadResult.url;
+        })
+      );
+
+      convertedImagesUrls.push(...batchResults);
+      log.info(`Batch ${Math.floor(i / UPLOAD_CONCURRENCY) + 1}/${Math.ceil(imageFiles.length / UPLOAD_CONCURRENCY)} concluído`);
     }
     
     // Remover o PDF temporário
@@ -234,7 +259,7 @@ async function convertPdfToImages(pdfBuffer: Buffer, options: PDF2PicOptions): P
       
       // Upload para MinIO
       const fileName = `${options.savename}_page1_${Date.now()}.${pdf2picOptions.format}`;
-      const uploadResult = await uploadToMinIO(
+      const uploadResult = await uploadToMinIOWithRetry(
         result.buffer,
         fileName,
         `image/${pdf2picOptions.format}`

@@ -7,7 +7,7 @@ import log from '@/lib/log';
 // const prismaClient = new PrismaClient(); // Comentado para usar singleton
 
 // Constante para o nome do bucket do MinIO
-const BUCKET_NAME = process.env.S3_BUCKET || 'chatwit-social';
+const BUCKET_NAME = process.env.S3_BUCKET || 'socialwise';
 
 // Interface para representar um arquivo
 interface ArquivoDTO {

@@ -1410,16 +1410,16 @@ model AiAgentConfig {
 }
 
 model AiAgentBlueprint {
-  id              String      @id @default(cuid())
+  id              String        @id @default(cuid())
   ownerId         String
   name            String
   description     String?
-  agentType       AiAgentType @default(TOOLS)
+  agentType       AiAgentType   @default(TOOLS)
   icon            String?
-  model           String      @default("gpt-4o-mini")
-  temperature     Float?      @default(0.7)
+  model           String        @default("gpt-4o-mini")
+  temperature     Float?        @default(0.7)
   topP            Float?
-  maxOutputTokens Int?        @default(1024)
+  maxOutputTokens Int?          @default(1024)
   systemPrompt    String?
   instructions    String?
   toolset         Json?
@@ -1427,12 +1427,16 @@ model AiAgentBlueprint {
   memory          Json?
   canvasState     Json?
   metadata        Json?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  owner           User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  // Engine Híbrida: vinculação de agente a coluna da tabela
+  linkedColumn    LinkedColumn? // Coluna da tabela que este agente executa
+  defaultProvider AiProvider?   // Provedor padrão (OPENAI ou GEMINI)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  owner           User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([ownerId])
   @@index([agentType])
+  @@index([linkedColumn])
 }
 
 model AiAssistant {
@@ -1739,6 +1743,20 @@ enum AiAgentType {
   PLAN_AND_EXECUTE
   REACT
   CUSTOM
+}
+
+// Colunas da tabela que podem ter agentes vinculados
+enum LinkedColumn {
+  PROVA_CELL    // Transcrição de provas manuscritas
+  ESPELHO_CELL  // Extração de dados do espelho de correção
+  ANALISE_CELL  // Análise comparativa (futuro)
+  RECURSO_CELL  // Geração de recursos (futuro)
+}
+
+// Provedores de IA disponíveis
+enum AiProvider {
+  OPENAI  // GPT-4.1, GPT-5, etc
+  GEMINI  // Gemini 3 Flash/Pro
 }
 
 enum AiFaqStatus {

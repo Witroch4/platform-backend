@@ -21,6 +21,7 @@ export interface MirrorGenerationJobData {
   nome?: string;
   userId?: string;
   priority?: number;
+  selectedProvider?: 'OPENAI' | 'GEMINI'; // Provider selecionado pelo switch no frontend
 }
 
 export interface MirrorGenerationJobResult {
@@ -92,6 +93,7 @@ export async function enqueueMirrorGeneration(
   console.log(`[MirrorQueue] 📥 Enfileirando geração de espelho para lead ${data.leadId}`);
   console.log(`[MirrorQueue] 📋 Especialidade: ${data.especialidade}`);
   console.log(`[MirrorQueue] 🖼️ Total de imagens: ${data.images.length}`);
+  console.log(`[MirrorQueue] 🎛️ Provider recebido: ${data.selectedProvider || 'undefined (será GEMINI)'}`);
 
   // Validações
   if (!data.leadId) {
@@ -106,19 +108,25 @@ export async function enqueueMirrorGeneration(
     throw new Error('Pelo menos uma imagem é obrigatória para geração de espelho');
   }
 
+  // ⭐ GARANTIR que selectedProvider sempre tenha um valor válido
+  const normalizedData: MirrorGenerationJobData = {
+    ...data,
+    selectedProvider: data.selectedProvider || 'GEMINI',
+  };
+
   // Determinar prioridade (menor = maior prioridade)
-  const priority = data.priority ?? 2; // Prioridade 2 (entre manuscrito=1 e análise=3)
+  const priority = normalizedData.priority ?? 2; // Prioridade 2 (entre manuscrito=1 e análise=3)
 
   const job = await mirrorGenerationQueue.add(
     'generateMirror',
-    data,
+    normalizedData, // ← Usa dados normalizados com selectedProvider garantido
     {
-      jobId: `mirror-${data.leadId}-${Date.now()}`,
+      jobId: `mirror-${normalizedData.leadId}-${Date.now()}`,
       priority,
     },
   );
 
-  console.log(`[MirrorQueue] ✅ Job ${job.id} criado com sucesso (prioridade: ${priority})`);
+  console.log(`[MirrorQueue] ✅ Job ${job.id} criado com sucesso (prioridade: ${priority}, provider: ${normalizedData.selectedProvider})`);
 
   return job;
 }

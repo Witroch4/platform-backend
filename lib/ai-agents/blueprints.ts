@@ -1,4 +1,4 @@
-import { Prisma, AiAgentType } from '@prisma/client';
+import { Prisma, AiAgentType, LinkedColumn, AiProvider } from '@prisma/client';
 import { getPrismaInstance } from '@/lib/connections';
 
 const prisma = getPrismaInstance();
@@ -42,11 +42,16 @@ export interface AgentBlueprintPayload {
   memory?: Record<string, unknown> | null;
   canvasState?: AgentCanvasState | null;
   metadata?: Record<string, unknown> | null;
+  // Engine Híbrida: vinculação de agente a coluna da tabela
+  linkedColumn?: LinkedColumn | null;
+  defaultProvider?: AiProvider | null;
 }
 
 export interface AgentBlueprint extends AgentBlueprintPayload {
   id: string;
   ownerId: string;
+  linkedColumn?: LinkedColumn | null;
+  defaultProvider?: AiProvider | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -69,6 +74,8 @@ const selectBlueprint = {
   memory: true,
   canvasState: true,
   metadata: true,
+  linkedColumn: true,
+  defaultProvider: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.AiAgentBlueprintSelect;
@@ -111,6 +118,8 @@ function mapBlueprint(raw: RawBlueprint): AgentBlueprint {
     memory: asJson<Record<string, unknown>>(raw.memory) ?? undefined,
     canvasState: asJson<AgentCanvasState>(raw.canvasState) ?? undefined,
     metadata: asJson<Record<string, unknown>>(raw.metadata) ?? undefined,
+    linkedColumn: raw.linkedColumn ?? undefined,
+    defaultProvider: raw.defaultProvider ?? undefined,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
   };
@@ -158,6 +167,8 @@ export async function createAgentBlueprint(ownerId: string, payload: AgentBluepr
     memory: serializeJson(payload.memory) ?? Prisma.JsonNull,
     canvasState: serializeJson(payload.canvasState) ?? Prisma.JsonNull,
     metadata: serializeJson(payload.metadata) ?? Prisma.JsonNull,
+    linkedColumn: payload.linkedColumn ?? null,
+    defaultProvider: payload.defaultProvider ?? null,
   };
 
   const created = await prisma.aiAgentBlueprint.create({ data, select: selectBlueprint });
@@ -185,6 +196,8 @@ export async function updateAgentBlueprint(ownerId: string, id: string, payload:
   if (payload.memory !== undefined) data.memory = serializeJson(payload.memory) ?? Prisma.JsonNull;
   if (payload.canvasState !== undefined) data.canvasState = serializeJson(payload.canvasState) ?? Prisma.JsonNull;
   if (payload.metadata !== undefined) data.metadata = serializeJson(payload.metadata) ?? Prisma.JsonNull;
+  if (payload.linkedColumn !== undefined) data.linkedColumn = payload.linkedColumn;
+  if (payload.defaultProvider !== undefined) data.defaultProvider = payload.defaultProvider;
 
   const updated = await prisma.aiAgentBlueprint.update({
     where: { id: existing.id },
@@ -201,3 +214,106 @@ export async function deleteAgentBlueprint(ownerId: string, id: string): Promise
   await prisma.aiAgentBlueprint.delete({ where: { id: existing.id } });
   return true;
 }
+
+// ============================================================================
+// ENGINE HÍBRIDA: Funções para busca de agentes por coluna vinculada
+// ============================================================================
+
+/**
+ * Busca o blueprint ativo vinculado a uma coluna específica.
+ * Prioridade: 1) Blueprint com linkedColumn definido, 2) Fallback por nome/metadata
+ */
+export async function getAgentBlueprintByLinkedColumn(
+  linkedColumn: LinkedColumn
+): Promise<AgentBlueprint | null> {
+  // 1) Buscar por linkedColumn diretamente
+  const directMatch = await prisma.aiAgentBlueprint.findFirst({
+    where: { linkedColumn },
+    orderBy: { updatedAt: 'desc' },
+    select: selectBlueprint,
+  });
+
+  if (directMatch) {
+    return mapBlueprint(directMatch);
+  }
+
+  // 2) Fallback: buscar por metadata ou nome (compatibilidade com agentes existentes)
+  const roleMap: Record<LinkedColumn, string> = {
+    PROVA_CELL: 'transcriber',
+    ESPELHO_CELL: 'mirror_extractor',
+    ANALISE_CELL: 'analyzer',
+    RECURSO_CELL: 'resource_generator',
+  };
+  const namePatterns: Record<LinkedColumn, string[]> = {
+    PROVA_CELL: ['Transcrição', 'Transcricao', 'Transcritor', 'Prova'],
+    ESPELHO_CELL: ['Espelho', 'Mirror', 'Extrator'],
+    ANALISE_CELL: ['Análise', 'Analise', 'Analyzer'],
+    RECURSO_CELL: ['Recurso', 'Resource'],
+  };
+
+  const role = roleMap[linkedColumn];
+  const patterns = namePatterns[linkedColumn] || [];
+
+  const fallback = await prisma.aiAgentBlueprint.findFirst({
+    where: {
+      OR: [
+        // Buscar por role na metadata
+        ...(role ? [{ metadata: { path: ['role'], equals: role } }] : []),
+        // Buscar por padrões de nome
+        ...patterns.map((pattern) => ({
+          name: { contains: pattern, mode: 'insensitive' as const },
+        })),
+      ],
+    },
+    orderBy: { updatedAt: 'desc' },
+    select: selectBlueprint,
+  });
+
+  return fallback ? mapBlueprint(fallback) : null;
+}
+
+/**
+ * Lista todos os blueprints disponíveis para uma coluna específica.
+ */
+export async function listAgentBlueprintsForColumn(
+  linkedColumn: LinkedColumn
+): Promise<AgentBlueprint[]> {
+  const rows = await prisma.aiAgentBlueprint.findMany({
+    where: { linkedColumn },
+    orderBy: { updatedAt: 'desc' },
+    select: selectBlueprint,
+  });
+  return rows.map(mapBlueprint);
+}
+
+/**
+ * Verifica se um modelo é do Gemini (para injeção de instruções técnicas)
+ */
+export function isGeminiModel(model: string): boolean {
+  return model.toLowerCase().startsWith('gemini');
+}
+
+/**
+ * Instruções técnicas para Gemini 3 com Agentic Vision
+ * Injeta automaticamente quando o modelo selecionado é Gemini
+ */
+export const GEMINI_AGENTIC_VISION_INSTRUCTIONS = `
+[INSTRUÇÕES TÉCNICAS DO MODELO - GEMINI 3 AGENTIC VISION]
+
+Fase de Visão Ativa:
+- Você TEM acesso à execução de código Python via a ferramenta 'code_execution'.
+- É OBRIGATÓRIO: Se houver trechos de caligrafia ilegível, borrada ou duvidosa, você DEVE gerar e executar um script Python para:
+  1. Recortar (crop) a área específica da imagem
+  2. Aplicar zoom na região problemática
+  3. Reanalisar com maior resolução
+- Não tente adivinhar sem investigar. Use a ferramenta de execução de código para manipular a imagem.
+- Para cada região duvidosa, execute o loop: Pensar → Agir (crop/zoom) → Observar → Decidir
+
+Comportamento do "Escrivão":
+1. Fase de Visão: Identifique todas as regiões de texto
+2. Fase de Investigação: Para regiões difíceis, use code_execution para zoom
+3. Fase de Transcrição: Transcreva 100% Ipsis Litteris - se o aluno errou, mantenha o erro
+4. Fase de Verificação: Revise a transcrição final
+
+IMPORTANTE: A precisão é mais importante que a velocidade. Investigue cada caractere duvidoso.
+`.trim();

@@ -85,7 +85,7 @@ services:
     image: pgvector/pgvector:pg17
     container_name: chatwit_postgres
     environment:
-      POSTGRES_DB: socialWise
+      POSTGRES_DB: socialwise
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:

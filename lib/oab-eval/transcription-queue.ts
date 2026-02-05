@@ -254,15 +254,34 @@ async function sendSSEEvent(leadID: string, event: TranscriptionEvent): Promise<
 
 /**
  * Adiciona um job de transcrição à fila
+ * DEDUPLICAÇÃO: Se já existir um job ativo/pendente para o lead, retorna o existente
  */
 export async function enqueueTranscription(data: TranscriptionJobData): Promise<Job<TranscriptionJobData>> {
   const priority = data.priority || 5;
+  const jobId = `transcribe-${data.leadID}`;
+
+  // DEDUPLICAÇÃO: Verificar se já existe um job ativo ou pendente para este lead
+  const existingJobs = await transcriptionQueue.getJobs(['waiting', 'active', 'delayed']);
+  const activeJob = existingJobs.find((j) => j.data.leadID === data.leadID);
+
+  if (activeJob) {
+    const state = await activeJob.getState();
+    console.log(`[TranscriptionQueue] ⚠️ Job já existe para lead ${data.leadID} (${activeJob.id}, estado: ${state}) - ignorando duplicata`);
+
+    // Notificar que já está na fila
+    await sendSSEEvent(data.leadID, {
+      type: 'queued',
+      position: 0,
+    });
+
+    return activeJob;
+  }
 
   console.log(`[TranscriptionQueue] ➕ Enfileirando transcrição - Lead: ${data.leadID}, Páginas: ${data.images.length}, Prioridade: ${priority}`);
 
   const job = await transcriptionQueue.add('transcribe', data, {
     priority: 10 - priority, // BullMQ usa ordem inversa (menor valor = maior prioridade)
-    jobId: `transcribe-${data.leadID}-${Date.now()}`,
+    jobId: `${jobId}-${Date.now()}`, // Mantém timestamp para histórico, mas dedup é por verificação acima
   });
 
   // Notificar posição na fila

@@ -15,7 +15,7 @@ export async function processMirrorGenerationTask(
   const startTime = Date.now();
 
   try {
-    const { leadId, especialidade, espelhoPadraoId, images, nome, telefone } = job.data;
+    const { leadId, especialidade, espelhoPadraoId, images, nome, telefone, selectedProvider } = job.data;
 
     // Callback de progresso que atualiza o job
     const onProgress = async (message: string) => {
@@ -37,6 +37,7 @@ export async function processMirrorGenerationTask(
 
     // Executar agente de geração de espelho
     console.log(`[MirrorWorker] 🤖 Chamando agente local para lead ${leadId}...`);
+    console.log(`[MirrorWorker] 🎛️ Provider selecionado: ${selectedProvider || 'GEMINI (padrão)'}`);
     if (espelhoPadraoId) {
       console.log(`[MirrorWorker] 📋 Usando espelho padrão: ${espelhoPadraoId}`);
     }
@@ -44,11 +45,12 @@ export async function processMirrorGenerationTask(
     const result = await generateMirrorLocally({
       leadId,
       especialidade,
-      espelhoPadraoId, // ⭐ NOVO
+      espelhoPadraoId,
       images,
       telefone,
       nome,
       onProgress,
+      selectedProvider, // ⭐ NOVO: Passa o provider selecionado pelo usuário
     });
 
     await job.updateProgress(95);
