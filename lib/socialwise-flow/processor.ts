@@ -75,7 +75,17 @@ export async function processSocialWiseFlow(
           ? `O usuário clicou em um botão de uma mensagem interativa anterior.`
           : `O usuário está respondendo a uma conversa onde foi enviada a seguinte mensagem interativa:`;
 
-        context.agentSupplement = `${contextPrefix}\n\nContexto da última mensagem interativa enviada:\n"${interactiveContext.bodyText}"`;
+        // 🛡️ BLINDAGEM ANTI-LOOP: Instruir LLM a usar chat mode quando contexto já foi enviado
+        const antiLoopInstruction = `
+
+⚠️ REGRA CRÍTICA ANTI-LOOP:
+- O usuário JÁ RECEBEU esta mensagem interativa acima.
+- Se ele clicar em "Saber Mais", "Continuar", "Mais informações" ou similar: USE mode="chat" para explicar detalhadamente.
+- NÃO reative a mesma intenção (mode="intent") pois isso causará loop e repetição do mesmo template.
+- Forneça a explicação detalhada no response_text e ofereça botões de PRÓXIMOS PASSOS (não os mesmos botões).
+- Exceção: só use mode="intent" se o usuário claramente mudar de assunto para OUTRA intenção diferente.`;
+
+        context.agentSupplement = `${contextPrefix}\n\nContexto da última mensagem interativa enviada:\n"${interactiveContext.bodyText}"${antiLoopInstruction}`;
 
         processorLogger.info('Session interactive context injected', {
           sessionId: context.sessionId,
