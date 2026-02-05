@@ -6,7 +6,7 @@ import { processHardBand, processSoftBand, processRouterBand } from '@/lib/socia
 const log = createLogger('Graph-Node:Router');
 
 export async function routerNode(state: AgentStateSchema): Promise<Partial<AgentStateSchema>> {
-  const { classification, context, agent, gatedHints, agentSupplement } = state;
+  const { classification, context, agent, gatedHints, agentSupplement, activeIntentSlug } = state;
   const t0 = Date.now();
 
   if (!classification) {
@@ -40,13 +40,36 @@ export async function routerNode(state: AgentStateSchema): Promise<Partial<Agent
   }
 
   // ROUTER: invoke with gated hints when available
+  // 🛡️ ANTI-LOOP: Filtrar a intenção ativa dos hints para evitar re-disparo
+  let hintsToUse = gatedHints && gatedHints.length ? gatedHints : classification.candidates;
+
+  if (activeIntentSlug) {
+    const originalCount = hintsToUse.length;
+    // Normalizar slug para comparação (remover @ se existir, lowercase)
+    const normalizedActiveSlug = activeIntentSlug.replace(/^@/, '').toLowerCase().replace(/\s+/g, '_');
+
+    hintsToUse = hintsToUse.filter(hint => {
+      const hintSlug = (hint.slug || '').replace(/^@/, '').toLowerCase().replace(/\s+/g, '_');
+      return hintSlug !== normalizedActiveSlug;
+    });
+
+    if (hintsToUse.length < originalCount) {
+      log.info('🛡️ ANTI-LOOP: Filtered active intent from hints', {
+        activeIntentSlug,
+        filteredOut: originalCount - hintsToUse.length,
+        remainingHints: hintsToUse.length,
+        traceId: context.traceId
+      });
+    }
+  }
+
   const routerRes = await processRouterBand(
     {
       ...context,
       agentSupplement,
     },
     agent,
-    (gatedHints && gatedHints.length ? gatedHints : classification.candidates)
+    hintsToUse
   );
   log.info('ROUTER band processed', { ms: Date.now() - t0, traceId: context.traceId });
   return {

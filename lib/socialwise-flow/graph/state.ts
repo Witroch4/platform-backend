@@ -53,6 +53,9 @@ export interface AgentStateSchema {
   response?: ChannelResponse;
   agentSupplement?: string;
 
+  // 🛡️ Anti-loop: slug da intenção ativa (já enviada) para filtrar dos hints
+  activeIntentSlug?: string;
+
   // Metrics + tracing
   metrics?: OrchestratorMetrics;
   traceId?: string;
@@ -71,6 +74,7 @@ export const AgentState = Annotation.Root({
   routerResult: Annotation<any>({ value: (_x: any, y: any) => y, default: () => undefined }),
   response: Annotation<any>({ value: (_x: any, y: any) => y, default: () => undefined }),
   agentSupplement: Annotation<any>({ value: (_x: any, y: any) => y, default: () => undefined }),
+  activeIntentSlug: Annotation<string>({ value: (_x: string, y: string) => y, default: () => '' }),
 
   metrics: Annotation<any>({ value: (_x: any, y: any) => y, default: () => undefined }),
   traceId: Annotation<string>({ value: (_x: string, y: string) => y, default: () => '' })

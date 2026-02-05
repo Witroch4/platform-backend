@@ -60,11 +60,17 @@ export async function processSocialWiseFlow(
 ): Promise<ProcessorResult> {
   const startTime = Date.now();
   
+  // 🛡️ ANTI-LOOP: Variável para armazenar o slug ativo e filtrar dos hints
+  let activeIntentSlug: string | undefined;
+
   try {
     // 🆕 SEMPRE recuperar contexto da sessão para enriquecer qualquer interação
     if (context.sessionId) {
       const interactiveContext = await getInteractiveMessageContext(context.sessionId);
       if (interactiveContext?.bodyText) {
+        // 🛡️ Guardar o slug ativo para filtrar dos hints (solução determinística anti-loop)
+        activeIntentSlug = interactiveContext.intentSlug;
+
         // Determinar tipo de mensagem para contextualização adequada
         const isButtonClick = context.originalPayload?.context?.interaction_type === 'postback' ||
                              context.originalPayload?.context?.interaction_type === 'quick_reply' ||
@@ -75,15 +81,27 @@ export async function processSocialWiseFlow(
           ? `O usuário clicou em um botão de uma mensagem interativa anterior.`
           : `O usuário está respondendo a uma conversa onde foi enviada a seguinte mensagem interativa:`;
 
-        // 🛡️ BLINDAGEM ANTI-LOOP: Instruir LLM a usar chat mode quando contexto já foi enviado
+        // 🛡️ PROTOCOLO ANTI-LOOP (PRIORIDADE MÁXIMA)
         const antiLoopInstruction = `
 
-⚠️ REGRA CRÍTICA ANTI-LOOP:
-- O usuário JÁ RECEBEU esta mensagem interativa acima.
-- Se ele clicar em "Saber Mais", "Continuar", "Mais informações" ou similar: USE mode="chat" para explicar detalhadamente.
-- NÃO reative a mesma intenção (mode="intent") pois isso causará loop e repetição do mesmo template.
-- Forneça a explicação detalhada no response_text e ofereça botões de PRÓXIMOS PASSOS (não os mesmos botões).
-- Exceção: só use mode="intent" se o usuário claramente mudar de assunto para OUTRA intenção diferente.`;
+# 🛡️ PROTOCOLO ANTI-LOOP (PRIORIDADE MÁXIMA)
+
+Você possui acesso ao contexto da conversa. O usuário já está dentro de um fluxo específico (já recebeu o menu acima).
+
+**REGRA DE OURO:**
+Se o usuário responder a um menu clicando em opções de aprofundamento (como "Requisitos", "Prazos", "Valores", "Saber Mais", "Como funciona") referente ao assunto que JÁ ESTÁ SENDO TRATADO:
+
+1. **PROIBIDO:** Jamais use mode='intent' apontando para a mesma intenção que gerou o menu anterior. Isso cria um loop infinito.
+2. **OBRIGATÓRIO:** Use mode='chat'.
+3. **AÇÃO:** No campo response_text, forneça a explicação direta e detalhada que o usuário pediu.
+
+**Exemplo de Decisão Correta:**
+- Contexto: Usuário viu menu de Mandado de Segurança.
+- Input: "Quais os requisitos?" ou clicou em "Requisitos e Prazos"
+- Decisão: mode='chat' (Explico os requisitos técnicos no response_text).
+- Erro Comum: mode='intent' (Isso reenviaria o menu inicial sem explicar nada).
+
+Só use mode='intent' se o usuário quiser **TROCAR** explicitamente de assunto (ex: sair de "Mandado de Segurança" para perguntar de "Direito Previdenciário").`;
 
         context.agentSupplement = `${contextPrefix}\n\nContexto da última mensagem interativa enviada:\n"${interactiveContext.bodyText}"${antiLoopInstruction}`;
 
@@ -92,6 +110,7 @@ export async function processSocialWiseFlow(
           isButtonClick,
           contextLength: interactiveContext.bodyText.length,
           intentSlug: interactiveContext.intentSlug,
+          activeIntentSlugSet: !!activeIntentSlug,
           contextAge: Date.now() - interactiveContext.timestamp,
           traceId: context.traceId
         });
@@ -277,7 +296,9 @@ export async function processSocialWiseFlow(
       agent: agentConfig,
       userId,
       embedipreview: !!embedipreview,
-      traceId: context.traceId
+      traceId: context.traceId,
+      // 🛡️ ANTI-LOOP: Passar slug ativo para filtrar dos hints no router
+      activeIntentSlug
     } as any);
 
     let response: ChannelResponse = graphResult.response || buildFallbackResponse(context.channelType, context.userText);
