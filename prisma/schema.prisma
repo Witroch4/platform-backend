@@ -1468,6 +1468,8 @@ model AiAssistant {
   enableAutoRemarketing   Boolean              @default(false)
   remarketingDelayMinutes Int                  @default(30)
   remarketingMessage      String?
+  sessionTtlSeconds       Int                  @default(86400)  // 24h default
+  sessionTtlDevSeconds    Int                  @default(300)    // 5min default
   isActive                Boolean              @default(true)
   createdAt               DateTime             @default(now())
   updatedAt               DateTime             @updatedAt

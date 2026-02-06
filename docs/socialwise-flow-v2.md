@@ -42,8 +42,10 @@ session:{sessionId}:interactiveContext
   buttons: [{title, payload}]  // Botões disponíveis
 }
 
-// TTL: 1h produção | 5min dev
+// TTL: Configurável por agente (padrão: 24h geral | 5min dev)
 ```
+
+> **Nota:** O TTL da sessão é agora configurável por agente de IA via painel admin.
 
 ### Recuperação (em toda iteração)
 
@@ -91,13 +93,15 @@ if (activeIntentSlug) {
 
 ```typescript
 interface ProcessorContext {
-  userText: string;           // Mensagem do usuário
-  channelType: string;        // Channel::Instagram, Channel::WhatsApp, etc
-  sessionId: string;          // ID da sessão (contato)
-  inboxId: string;            // ID da caixa de entrada
-  traceId: string;            // ID para rastreamento
-  agentSupplement?: string;   // Contexto injetado para LLM
-  originalPayload: any;       // Payload completo do webhook
+  userText: string;              // Mensagem do usuário
+  channelType: string;           // Channel::Instagram, Channel::WhatsApp, etc
+  sessionId: string;             // ID da sessão (contato)
+  inboxId: string;               // ID da caixa de entrada
+  traceId: string;               // ID para rastreamento
+  agentSupplement?: string;      // Contexto injetado para LLM
+  originalPayload: any;          // Payload completo do webhook
+  sessionTtlSeconds?: number;    // TTL geral da sessão (do agente)
+  sessionTtlDevSeconds?: number; // TTL de sessão para devs (do agente)
 }
 ```
 
@@ -159,8 +163,26 @@ interface AssistantConfig {
   hardDeadlineMs: number;     // Timeout para LLM
   warmupDeadlineMs: number;   // Timeout para warmup
   instructions: string;       // Prompt do sistema
+  sessionTtlSeconds: number;    // Duração da sessão geral (segundos)
+  sessionTtlDevSeconds: number; // Duração da sessão para devs (segundos)
 }
 ```
+
+### Configuração de TTL de Sessão
+
+Cada agente de IA pode ter sua própria configuração de duração de sessão:
+
+| Campo | Descrição | Padrão |
+|-------|-----------|--------|
+| `sessionTtlSeconds` | Duração geral da sessão para usuários normais | 86400 (24h) |
+| `sessionTtlDevSeconds` | Duração reduzida para sessões de teste/dev | 300 (5min) |
+
+**Configuração via Admin:**
+1. Acesse `/admin/capitao/[id]`
+2. Abra "SocialWise Flow - Otimizações"
+3. Configure os campos em "Duração da Sessão"
+
+> **Nota:** Use 0 para sessão infinita (sem expiração).
 
 ## Redis Keys
 

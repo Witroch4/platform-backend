@@ -44,6 +44,9 @@ type Assistant = {
   softDeadlineMs: number;
   shortTitleLLM: boolean;
   toolChoice: "none" | "auto";
+  // Session TTL configuration
+  sessionTtlSeconds: number;
+  sessionTtlDevSeconds: number;
 };
 
 export default function EditAssistantPage() {
@@ -1170,6 +1173,8 @@ function SocialWiseFlowSettings({
         softDeadlineMs: assistant.softDeadlineMs,
         shortTitleLLM: assistant.shortTitleLLM,
         toolChoice: assistant.toolChoice,
+        sessionTtlSeconds: assistant.sessionTtlSeconds ?? 86400,
+        sessionTtlDevSeconds: assistant.sessionTtlDevSeconds ?? 300,
       });
       toast.success("Otimizações salvas com sucesso!");
       // Fechar o collapsible após salvar
@@ -1490,6 +1495,63 @@ function SocialWiseFlowSettings({
               <option value="auto">Automático</option>
               <option value="none">Nenhuma</option>
             </select>
+          </div>
+        </div>
+
+        {/* Session Duration (TTL) */}
+        <div className="border-t border-border pt-4 mt-4">
+          <div className="text-sm font-medium text-foreground mb-3">
+            Duração da Sessão
+            <span className="ml-2 text-xs text-muted-foreground font-normal">
+              (deixe 0 para infinita)
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium text-foreground">
+                Duração Geral (segundos)
+              </label>
+              <Input
+                type="number"
+                min="0"
+                max="604800"
+                step="60"
+                value={assistant.sessionTtlSeconds ?? 86400}
+                onChange={(e) =>
+                  setAssistant({
+                    ...assistant,
+                    sessionTtlSeconds: parseInt(e.target.value) || 0,
+                  })
+                }
+                className="bg-background border-border text-foreground"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Tempo de vida da sessão para usuários normais. Padrão: 86400s (24h)
+              </p>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-foreground">
+                Duração para Devs (segundos)
+              </label>
+              <Input
+                type="number"
+                min="0"
+                max="86400"
+                step="30"
+                value={assistant.sessionTtlDevSeconds ?? 300}
+                onChange={(e) =>
+                  setAssistant({
+                    ...assistant,
+                    sessionTtlDevSeconds: parseInt(e.target.value) || 0,
+                  })
+                }
+                className="bg-background border-border text-foreground"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Tempo de vida reduzido para sessões de teste. Padrão: 300s (5min)
+              </p>
+            </div>
           </div>
         </div>
 

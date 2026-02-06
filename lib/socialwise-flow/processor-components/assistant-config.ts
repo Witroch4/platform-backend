@@ -29,6 +29,9 @@ export interface AssistantConfig {
   proposeHumanHandoff: boolean;
   disableIntentSuggestion: boolean;
   inheritFromAgent: boolean;
+  // Session TTL configuration
+  sessionTtlSeconds: number;
+  sessionTtlDevSeconds: number;
 }
 
 /**
@@ -88,7 +91,9 @@ export async function loadAssistantConfiguration(
         toolChoice: true,
         embedipreview: true,
         proposeHumanHandoff: true,
-        disableIntentSuggestion: true
+        disableIntentSuggestion: true,
+        sessionTtlSeconds: true,
+        sessionTtlDevSeconds: true
       }
     });
 
@@ -170,6 +175,10 @@ export async function loadAssistantConfiguration(
       // New fields for human handoff and intent suggestion control
       proposeHumanHandoff: fullAssistant.proposeHumanHandoff ?? true,
       disableIntentSuggestion: fullAssistant.disableIntentSuggestion ?? false,
+
+      // Session TTL configuration (per agent)
+      sessionTtlSeconds: fullAssistant.sessionTtlSeconds ?? 86400,     // 24h default
+      sessionTtlDevSeconds: fullAssistant.sessionTtlDevSeconds ?? 300, // 5min default
 
       inheritFromAgent
     };

@@ -289,6 +289,10 @@ Só use mode='intent' se o usuário quiser **TROCAR** explicitamente de assunto 
     // Override embedipreview if provided explicitly
     agentConfig.embedipreview = embedipreview;
 
+    // Populate context with session TTL values from agent config
+    context.sessionTtlSeconds = agentConfig.sessionTtlSeconds;
+    context.sessionTtlDevSeconds = agentConfig.sessionTtlDevSeconds;
+
     // Delegate core decisioning to LangGraph orchestrator (preserving existing logic)
     const { runSocialWiseGraph } = await import('./graph/supervisor');
     const graphResult = await runSocialWiseGraph({

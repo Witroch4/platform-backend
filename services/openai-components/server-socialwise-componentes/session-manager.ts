@@ -47,11 +47,18 @@ function hashShort(s: string): string {
 
 const sessionState = new Map<string, string>(); // Fallback local — dev/CI
 const historyState = new Map<string, ConversationMessage[]>(); // Fallback local para histórico
-const SESSION_TTL_SECONDS = 60 * 60 * 24; // 24h
-const SESSION_TTL_DEV_SECONDS = 30; // 30 segundos para devs (sessionPointer)
+// Default TTL values (used when agent config is not available)
+const DEFAULT_SESSION_TTL_SECONDS = 60 * 60 * 24; // 24h
+const DEFAULT_SESSION_TTL_DEV_SECONDS = 30; // 30 segundos para devs (sessionPointer)
 const HISTORY_TTL_DEV_SECONDS = 60 * 5; // 5 minutos para histórico em dev (mais tempo para testar)
 const LOCK_TTL_SECONDS = 5; // lock curto
 const MAX_HISTORY_MESSAGES = 20; // Limite de mensagens no histórico
+
+// Session TTL configuration from agent
+export interface SessionTtlConfig {
+  sessionTtlSeconds?: number;   // General TTL (default 24h)
+  sessionTtlDevSeconds?: number; // Dev TTL (default 5min)
+}
 
 // Interface para mensagens do histórico de conversa
 export interface ConversationMessage {
@@ -79,15 +86,19 @@ async function getSessionPointer(key: string): Promise<string | undefined> {
   return sessionState.get(key);
 }
 
-async function setSessionPointer(key: string, value: string, sessionId?: string): Promise<void> {
-  // Determinar TTL baseado se é dev ou não
+async function setSessionPointer(key: string, value: string, sessionId?: string, ttlConfig?: SessionTtlConfig): Promise<void> {
+  // Determinar TTL baseado se é dev ou não + config do agente
   const isDevSession = sessionId && DEV_SESSION_IDS.has(sessionId);
-  const ttl = isDevSession ? SESSION_TTL_DEV_SECONDS : SESSION_TTL_SECONDS;
-  
+
+  // Use agent config TTL if provided, otherwise use defaults
+  const generalTtl = ttlConfig?.sessionTtlSeconds ?? DEFAULT_SESSION_TTL_SECONDS;
+  const devTtl = ttlConfig?.sessionTtlDevSeconds ?? DEFAULT_SESSION_TTL_DEV_SECONDS;
+  const ttl = isDevSession ? devTtl : generalTtl;
+
   if (isDevSession) {
-    console.log(`🔧 DEV SESSION: Usando TTL de ${SESSION_TTL_DEV_SECONDS}s para sessionId ${sessionId}`);
+    console.log(`🔧 DEV SESSION: Usando TTL de ${devTtl}s para sessionId ${sessionId} (config do agente)`);
   }
-  
+
   const redis = getRedisInstance?.();
   if (redis) {
     try {
@@ -235,7 +246,7 @@ export async function appendToHistory(
   const historyKey = `sessionHistory:${sessionId}`;
   const isDevSession = DEV_SESSION_IDS.has(sessionId);
   // Histórico usa TTL maior que sessionPointer para persistir contexto
-  const ttl = isDevSession ? HISTORY_TTL_DEV_SECONDS : SESSION_TTL_SECONDS;
+  const ttl = isDevSession ? HISTORY_TTL_DEV_SECONDS : DEFAULT_SESSION_TTL_SECONDS;
 
   // Recupera histórico existente (força busca direta, não usa getSessionHistory que verifica estratégia)
   let history = await getSessionHistoryDirect(sessionId, MAX_HISTORY_MESSAGES * 2);
@@ -315,8 +326,9 @@ export async function clearSessionHistory(sessionId: string): Promise<void> {
  * Usado para enriquecer interações subsequentes (cliques de botão ou texto digitado).
  */
 
-const INTERACTIVE_CONTEXT_TTL_SECONDS = 60 * 60; // 1 hora
-const INTERACTIVE_CONTEXT_TTL_DEV_SECONDS = 60 * 5; // 5 min para dev
+// Default interactive context TTL (used when agent config not available)
+const DEFAULT_INTERACTIVE_CONTEXT_TTL_SECONDS = 60 * 60; // 1 hora
+const DEFAULT_INTERACTIVE_CONTEXT_TTL_DEV_SECONDS = 60 * 5; // 5 min para dev
 
 export interface InteractiveMessageContext {
   bodyText: string;
@@ -325,20 +337,31 @@ export interface InteractiveMessageContext {
   buttons?: Array<{ title: string; payload: string }>;
 }
 
+/**
+ * Store interactive message context with configurable TTL from agent settings.
+ * @param sessionId - The session identifier
+ * @param context - The interactive message context to store
+ * @param ttlConfig - Optional TTL configuration from agent (sessionTtlSeconds, sessionTtlDevSeconds)
+ */
 export async function storeInteractiveMessageContext(
   sessionId: string,
-  context: InteractiveMessageContext
+  context: InteractiveMessageContext,
+  ttlConfig?: SessionTtlConfig
 ): Promise<void> {
   const key = `session:${sessionId}:interactiveContext`;
   const isDevSession = DEV_SESSION_IDS.has(sessionId);
-  const ttl = isDevSession ? INTERACTIVE_CONTEXT_TTL_DEV_SECONDS : INTERACTIVE_CONTEXT_TTL_SECONDS;
+
+  // Use agent config TTL if provided, otherwise use defaults
+  const generalTtl = ttlConfig?.sessionTtlSeconds ?? DEFAULT_INTERACTIVE_CONTEXT_TTL_SECONDS;
+  const devTtl = ttlConfig?.sessionTtlDevSeconds ?? DEFAULT_INTERACTIVE_CONTEXT_TTL_DEV_SECONDS;
+  const ttl = isDevSession ? devTtl : generalTtl;
 
   const redis = getRedisInstance?.();
   if (redis) {
     try {
       await redis.setex(key, ttl, JSON.stringify(context));
       if (isDevSession) {
-        console.log(`🔧 DEV INTERACTIVE CONTEXT: Stored for ${sessionId}`);
+        console.log(`🔧 DEV INTERACTIVE CONTEXT: Stored for ${sessionId} with TTL ${ttl}s (agent config)`);
       }
     } catch (error) {
       console.warn('[InteractiveContext] Redis set failed:', error);

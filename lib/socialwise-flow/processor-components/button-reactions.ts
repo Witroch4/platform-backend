@@ -23,6 +23,9 @@ export interface ProcessorContext {
   originalPayload?: any;
   sessionId?: string;
   agentSupplement?: string;
+  // Session TTL configuration from agent
+  sessionTtlSeconds?: number;
+  sessionTtlDevSeconds?: number;
 }
 
 export interface ButtonReactionMeta {

@@ -98,6 +98,9 @@ export interface AgentConfig {
   embedipreview?: boolean;
   proposeHumanHandoff?: boolean;
   disableIntentSuggestion?: boolean;
+  // Session TTL configuration
+  sessionTtlSeconds?: number;
+  sessionTtlDevSeconds?: number;
 }
 
 // Interface para as opções de configuração de chat

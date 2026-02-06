@@ -453,10 +453,11 @@ async function buildActionSendPayload(
     const builder = new METAPayloadBuilder();
 
     // Extract webhook context for variable resolution
+    // Payload structure: context.contact.name / context.contact.phone_number
     const webhookContext = {
-      contactPhone: validPayload?.context?.contact_phone || validPayload?.context?.contact_source,
-      contactName: validPayload?.context?.contact_name,
-      wamid: validPayload?.context?.wamid,
+      contactPhone: validPayload?.context?.contact?.phone_number || validPayload?.context?.contact_phone || validPayload?.context?.contact_source,
+      contactName: validPayload?.context?.contact?.name || validPayload?.context?.contact_name,
+      wamid: validPayload?.context?.wamid || validPayload?.context?.message?.source_id,
     };
 
     if (inboxId) {

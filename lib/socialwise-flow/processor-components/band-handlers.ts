@@ -109,6 +109,9 @@ export async function processHardBand(
               intentSlug: topIntent.slug,
               timestamp: Date.now(),
               buttons: extractButtonsFromResponse(mapped)
+            }, {
+              sessionTtlSeconds: context.sessionTtlSeconds,
+              sessionTtlDevSeconds: context.sessionTtlDevSeconds
             }).catch(err => {
               bandLogger.warn('Failed to store interactive context', { error: err, traceId: context.traceId });
             });
@@ -162,6 +165,9 @@ export async function processHardBand(
               intentSlug: topIntent.slug,
               timestamp: Date.now(),
               buttons: extractButtonsFromResponse(mapped)
+            }, {
+              sessionTtlSeconds: context.sessionTtlSeconds,
+              sessionTtlDevSeconds: context.sessionTtlDevSeconds
             }).catch(err => {
               bandLogger.warn('Failed to store interactive context', { error: err, traceId: context.traceId });
             });
