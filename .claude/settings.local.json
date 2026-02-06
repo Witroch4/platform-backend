@@ -16,7 +16,8 @@
       "mcp__context7__query-docs",
       "Bash(pnpm add:*)",
       "Bash(pnpm exec prisma generate:*)",
-      "Bash(pnpm exec prisma:*)"
+      "Bash(pnpm exec prisma:*)",
+      "Bash(xargs cat:*)"
     ],
     "deny": [],
     "ask": []

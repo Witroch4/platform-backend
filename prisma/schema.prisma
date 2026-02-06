@@ -319,6 +319,7 @@ model ChatwitInbox {
   fallbackDeInboxes          ChatwitInbox[]       @relation("FallbackInbox")
   usuarioChatwit             UsuarioChatwit       @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
   configHistory              InboxConfigHistory[]
+  flowCanvas                 InboxFlowCanvas?
   mapeamentosBotoes          MapeamentoBotao[]
   mapeamentosIntencao        MapeamentoIntencao[]
   templates                  Template[]
@@ -382,6 +383,17 @@ model MapeamentoBotao {
   inbox         ChatwitInbox @relation(fields: [inboxId], references: [id], onDelete: Cascade)
 
   @@index([inboxId])
+}
+
+model InboxFlowCanvas {
+  id        String       @id @default(cuid())
+  inboxId   String       @unique
+  canvas    Json // { nodes: FlowNode[], edges: FlowEdge[], viewport: { x, y, zoom } }
+  version   Int          @default(1)
+  isActive  Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  inbox     ChatwitInbox @relation(fields: [inboxId], references: [id], onDelete: Cascade)
 }
 
 model InteractiveContent {

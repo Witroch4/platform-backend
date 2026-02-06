@@ -5,9 +5,10 @@ import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import MensagensInterativasTab from '@/app/admin/mtf-diamante/components/MensagensInterativasTab';
 import MapeamentoTab from '@/app/admin/mtf-diamante/components/MapeamentoTab';
+import { FlowBuilderTab } from '@/app/admin/mtf-diamante/components/FlowBuilderTab';
 import { DialogflowCaixasAgentes } from '@/app/admin/mtf-diamante/components/DialogflowCaixasAgentes';
 import SafeBoundary from '@/components/SafeBoundary';
-import { Loader2, Settings, BarChart3 } from 'lucide-react';
+import { Loader2, Settings, BarChart3, GitBranch } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -26,7 +27,7 @@ export default function InboxDashboardPage() {
   const caixaId = params?.id ?? '';
   const sp = useSearchParams();
   const router = useRouter();
-  const initialTab = sp?.get('tab') || 'interativas';
+  const initialTab = sp?.get('tab') || 'flow-builder';
   const [tab, setTab] = useState(initialTab);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
@@ -80,6 +81,10 @@ export default function InboxDashboardPage() {
       <div className="p-4 md:p-6">
         <Tabs value={tab} onValueChange={setTab} className="space-y-4">
           <TabsList >
+            <TabsTrigger value="flow-builder">
+              <GitBranch className="w-4 h-4 mr-2" />
+              Flow Builder
+            </TabsTrigger>
             <TabsTrigger value="interativas">Mensagens Interativas</TabsTrigger>
             <TabsTrigger value="mapeamento">Mapeamento</TabsTrigger>
             <TabsTrigger value="agentes">Agentes</TabsTrigger>
@@ -92,6 +97,9 @@ export default function InboxDashboardPage() {
               Métricas
             </TabsTrigger>
           </TabsList>
+          <TabsContent value="flow-builder">
+            <FlowBuilderTab caixaId={caixaId} />
+          </TabsContent>
           <TabsContent value="interativas">
             <MensagensInterativasTab caixaId={caixaId} />
           </TabsContent>
