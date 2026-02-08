@@ -465,26 +465,844 @@ console.log('[Debug] hasAnyHeader:', currentElements.some(e =>
 
 ---
 
-## 11. Roadmap Futuro
+## 11. Limites por Canal (WhatsApp, Instagram, Facebook)
 
-### 11.1 Features Planejadas
-- [ ] Undo/Redo para operações de elemento
-- [ ] Keyboard shortcuts (Ctrl+D para duplicar, Del para deletar)
-- [ ] Validação em tempo real de limites
-- [ ] Preview de mensagem em diferentes plataformas (WhatsApp/Instagram)
-- [ ] Templates salvos de mensagens interativas
-- [ ] Arrastar para reordenar botões dentro do nó
+Esta seção documenta os limites oficiais de caracteres e quantidade de elementos para cada plataforma suportada.
 
-### 11.2 Melhorias UX
-- [ ] Drag handles visuais em cada elemento
-- [ ] Animações de transição ao adicionar/remover elementos
-- [ ] Tooltips com atalhos de teclado
-- [ ] Indicador visual de limite de botões (ex: 2/3)
-- [ ] Collapse/expand de elementos longos
+### 11.1 WhatsApp Business API
+
+| Componente | Limite | Observação |
+|------------|--------|------------|
+| **Body (texto principal)** | 1024 caracteres | Obrigatório para tipos não-carousel |
+| **Header (texto)** | 60 caracteres | Opcional |
+| **Footer** | 60 caracteres | Opcional |
+| **Título do botão** | 20 caracteres | Máximo 4 palavras recomendado |
+| **ID/Payload do botão** | 256 caracteres | Formato `@slug` recomendado |
+| **Quantidade de botões** | 3 máximo | Para tipo `button` |
+| **Seções de lista** | 10 máximo | Para tipo `list` |
+| **Itens por seção** | 10 máximo | Para tipo `list` |
+| **Título de item de lista** | 24 caracteres | |
+| **Descrição de item de lista** | 72 caracteres | Opcional |
+
+**Tipos suportados**: `button`, `list`, `cta_url`, `flow`, `location_request`, `location`, `reaction`, `sticker`
+
+### 11.2 Instagram Messaging API
+
+| Tipo | Componente | Limite | Observação |
+|------|------------|--------|------------|
+| **Quick Replies** | Texto (prompt) | 1000 caracteres | Obrigatório |
+| | Quantidade de opções | 13 máximo | Mínimo 1 |
+| | Título da opção | 20 caracteres | |
+| **Generic Template (Carrossel)** | Quantidade de elementos | 10 máximo | |
+| | Título do elemento | 80 caracteres | Obrigatório |
+| | Subtítulo | 80 caracteres | Opcional |
+| | Botões por elemento | 3 máximo | |
+| **Button Template** | Texto principal | 640 caracteres | Obrigatório |
+| | Quantidade de botões | 1-3 | Obrigatório |
+
+**Tipos suportados**: `quick_replies`, `generic`, `button_template`
+
+### 11.3 Facebook Messenger API
+
+| Componente | Limite | Observação |
+|------------|--------|------------|
+| **Body (texto)** | 1000 caracteres | Mesmo limite do Instagram |
+| **Título do botão** | 20 caracteres | |
+| **Payload** | 1000 caracteres | Maior que WhatsApp |
+| **Quantidade de botões** | 13 máximo | Mesmo limite do Instagram |
+
+**Nota**: Facebook Messenger e Instagram utilizam a mesma API (Meta Platform), portanto compartilham os mesmos limites para Generic Template e Quick Replies.
+
+### 11.4 Tabela Comparativa Rápida
+
+| Componente | WhatsApp | Instagram | Facebook |
+|------------|----------|-----------|----------|
+| Body máx | 1024 chars | 1000 chars | 1000 chars |
+| Botões máx | 3 | 13 (QR) / 3 (BT) | 13 |
+| Título botão | 20 chars | 20 chars | 20 chars |
+| Payload/ID | 256 chars | 1000 chars | 1000 chars |
+| Carousel elementos | N/A | 10 | 10 |
+
+**Arquivos de referência**:
+- Constantes: `types/interactive-messages.ts` → `MESSAGE_LIMITS`
+- Validações por canal: `services/openai-components/server-socialwise-componentes/channel-constraints.ts`
+- Clamping: `lib/socialwise/clamps.ts`
 
 ---
 
-## 12. Changelog de Implementações
+## 12. Sistema de Validações
+
+### 12.1 Validação ao Salvar Flow (`validateFlowCanvas`)
+
+**Localização**: `types/flow-builder.ts`
+
+| Validação | Tipo | Mensagem |
+|-----------|------|----------|
+| Nenhum ponto de início | ❌ Erro | "O fluxo deve ter pelo menos um ponto de início" |
+| Nó raiz inválido | ❌ Erro | "X nó(s) sem conexão de entrada não são válidos como início de fluxo" |
+| Nós órfãos | ❌ Erro | "Existem X nó(s) sem conexão de entrada" |
+| Múltiplos nós START | ⚠️ Warning | "O fluxo tem múltiplos nós de início" |
+| Nós não configurados | ⚠️ Warning | "Existem X nó(s) não configurado(s)" |
+
+**Nós raiz válidos**: `START` ou `INTERACTIVE_MESSAGE`
+
+### 12.2 Validação ao Adicionar Elementos (`FlowBuilderTab`)
+
+**Localização**: `app/admin/mtf-diamante/components/FlowBuilderTab.tsx`
+
+| Validação | Mensagem |
+|-----------|----------|
+| Drop fora de nó | "Solte o bloco dentro da mensagem" |
+| Drop em nó não-interativo | "Os elementos só podem ser soltos dentro de uma Mensagem Interativa" |
+| Mensagem vinculada | "Troque para 'Criar mensagem' no editor para usar blocos" |
+| Header duplicado | "Apenas UM header por mensagem (texto OU imagem, não os dois)" |
+| Elemento duplicado | "Este tipo de elemento já está na mensagem" |
+| Limite de botões | "Máximo de 3 botões por mensagem" |
+
+### 12.3 Validação de Mensagens Interativas
+
+**Localização**: `lib/validation/interactive-message-validation.ts`
+
+#### Campos Obrigatórios
+- **Nome da mensagem**: Obrigatório, máx 255 caracteres
+- **Body.text**: Obrigatório (exceto para tipo `generic`/carousel)
+
+#### Validação de Botões
+- IDs devem ser únicos
+- Títulos devem ser únicos
+- Título obrigatório e máx 20 caracteres
+- ID obrigatório
+
+#### Validações por Tipo de Mensagem
+
+| Tipo | Validação Específica |
+|------|---------------------|
+| `button` | 1-3 botões obrigatórios |
+| `quick_replies` | 1-13 botões, body máx 1000 chars |
+| `button_template` | 1-3 botões, body máx 640 chars |
+| `generic` | Body opcional, validação nos elementos |
+| `list` | Seções e rows obrigatórios |
+
+### 12.4 Validação de Reações de Botões
+
+- Botão deve existir na mensagem
+- Tipo de reação deve ter conteúdo apropriado:
+  - `emoji`: emoji não-vazio
+  - `text`: texto de resposta não-vazio
+  - `action`: ação não-vazia
+
+---
+
+## 13. Mapeamento de Intents e Disparo do Flow
+
+### 13.1 Visão Geral do Sistema
+
+O sistema de mapeamento conecta **Intents da IA** com **respostas automáticas** (templates ou mensagens interativas).
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    FLUXO DE MAPEAMENTO                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     │
+│  │ IA Detecta   │────▶│ Busca        │────▶│ Envia        │     │
+│  │ Intent       │     │ Mapeamento   │     │ Resposta     │     │
+│  └──────────────┘     └──────────────┘     └──────────────┘     │
+│         │                    │                    │              │
+│         ▼                    ▼                    ▼              │
+│    intentName         MapeamentoIntencao    Template ou         │
+│    inboxId            templateId            Interactive Msg     │
+│                       customVariables                           │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 13.2 Configuração via MapeamentoTab
+
+**Localização**: `app/admin/mtf-diamante/components/MapeamentoTab.tsx`
+
+O formulário permite:
+1. **Selecionar uma Intenção**: Lista carregada de `/api/admin/ai-integration/intents`
+2. **Escolher Tipo de Resposta**:
+   - **Template**: Templates oficiais WhatsApp ou customizados
+   - **Mensagem Interativa**: Mensagens criadas no MTF Diamante
+
+**Campos salvos**:
+```typescript
+{
+  intentName: string;      // Nome da intent (ex: "menu_principal")
+  templateId: string;      // ID do template ou mensagem interativa
+  inboxId: string;         // ID da caixa de entrada
+  customVariables?: {      // Variáveis customizadas (opcional)
+    [key: string]: string;
+  };
+}
+```
+
+### 13.3 Processamento de Intent
+
+**Localização**: `worker/processors/intent.processor.ts`
+
+Quando a IA detecta uma intent:
+
+1. **Busca Mapeamento**:
+   ```typescript
+   const mapping = await prisma.mapeamentoIntencao.findFirst({
+     where: { intentName, inbox: { inboxId } },
+     include: { template: { ... } }
+   });
+   ```
+
+2. **Resolve Template** por prioridade:
+   - **WHATSAPP_OFFICIAL**: Template oficial aprovado pela Meta
+   - **INTERACTIVE_MESSAGE**: Mensagem interativa criada no sistema
+   - **AUTOMATION_REPLY**: Resposta de texto simples
+
+3. **Constrói Payload** usando `METAPayloadBuilder`
+
+4. **Envia Mensagem** via WhatsApp API
+
+### 13.4 Integração com Flow Builder
+
+**Status Atual**: O Flow Builder cria mensagens interativas visuais que podem ser vinculadas no mapeamento.
+
+| Componente | Função |
+|------------|--------|
+| **Nó START** | Ponto de início do fluxo, `label` define o nome da mensagem |
+| **Nó INTERACTIVE_MESSAGE** | Container para elementos (header, body, footer, botões) |
+| **Nós de Reação** | Ações após clique de botão (emoji, texto, handoff, tag) |
+
+**Como vincular um Flow ao Mapeamento**:
+1. Crie a mensagem interativa no Flow Builder
+2. Salve o flow (valida automaticamente)
+3. No MapeamentoTab, selecione "Responder com Mensagem Interativa"
+4. A mensagem aparecerá na lista pelo nome do nó START
+
+### 13.5 Exemplo de Configuração Completa
+
+```
+1. Criar Flow no Flow Builder:
+   - Nó START: label = "Menu Principal"
+   - Nó INTERACTIVE_MESSAGE conectado
+   - Configurar body: "Como posso ajudar?"
+   - Adicionar botões: "Suporte", "Vendas", "Outros"
+
+2. Salvar o Flow
+
+3. No MapeamentoTab:
+   - Selecionar intent: "saudacao_inicial"
+   - Responder com Mensagem Interativa: "Menu Principal"
+   - Salvar Mapeamento
+
+4. Resultado:
+   - Quando usuário envia "Olá" → IA detecta intent "saudacao_inicial"
+   - Sistema busca mapeamento → encontra "Menu Principal"
+   - Envia mensagem interativa com os 3 botões
+```
+
+### 13.6 Fluxo de Processamento de Clique de Botão
+
+Quando o usuário clica em um botão da mensagem interativa, o sistema processa automaticamente:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                FLUXO COMPLETO: INTENT → BOTÃO → AÇÃO                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  1. ENTRADA (Usuário envia mensagem)                                        │
+│     ┌──────────────┐                                                         │
+│     │ "Olá"        │                                                         │
+│     └──────┬───────┘                                                         │
+│            ▼                                                                 │
+│  2. IA CLASSIFICA                                                            │
+│     ┌──────────────┐                                                         │
+│     │ intentName:  │                                                         │
+│     │ "saudacao"   │                                                         │
+│     └──────┬───────┘                                                         │
+│            ▼                                                                 │
+│  3. INTENT PROCESSOR busca MapeamentoIntencao                               │
+│     ┌──────────────┐     ┌──────────────────────┐                           │
+│     │ intentName   │────▶│ Template/Mensagem    │                           │
+│     │ "saudacao"   │     │ "Menu Principal"     │                           │
+│     └──────────────┘     └──────────┬───────────┘                           │
+│                                     ▼                                        │
+│  4. ENVIA MENSAGEM INTERATIVA (com botões)                                  │
+│     ┌─────────────────────────────────────┐                                 │
+│     │ "Como posso ajudar?"                │                                 │
+│     │ [Suporte] [Vendas] [Outros]         │  ← cada botão tem payload único │
+│     └─────────────────────────────────────┘                                 │
+│                    │                                                         │
+│                    ▼                                                         │
+│  5. USUÁRIO CLICA NO BOTÃO "Suporte"                                        │
+│     ┌──────────────────────────────┐                                        │
+│     │ buttonId/payload recebido:   │                                        │
+│     │ "btn_1738850000_1_12345_xyz" │                                        │
+│     └──────────────┬───────────────┘                                        │
+│                    ▼                                                         │
+│  6. BUTTON PROCESSOR busca MapeamentoBotao                                  │
+│     ┌──────────────┐     ┌──────────────────────┐                           │
+│     │ buttonId     │────▶│ actionType:          │                           │
+│     │              │     │ SEND_TEMPLATE        │                           │
+│     └──────────────┘     │ actionPayload: {...} │                           │
+│                          └──────────┬───────────┘                           │
+│                                     ▼                                        │
+│  7. EXECUTA AÇÃO MAPEADA                                                    │
+│     ┌─────────────────────────────────────┐                                 │
+│     │ • SEND_TEMPLATE → Envia template    │                                 │
+│     │ • ADD_TAG → Adiciona tag ao lead    │                                 │
+│     │ • START_FLOW → Inicia WhatsApp Flow │                                 │
+│     │ • ASSIGN_TO_AGENT → Transfere       │                                 │
+│     └─────────────────────────────────────┘                                 │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 13.7 Sistema de Geração Automática de Payload
+
+O sistema legado já possui geração automática de payloads únicos para botões:
+
+**Localização**: `app/admin/mtf-diamante/components/interactive-message-creator/unified-editing-step/utils.ts`
+
+```typescript
+// Geração de ID único para botões
+generateUniqueButtonId(): string
+// Formato: btn_{timestamp}_{counter}_{performance}_{random}
+// Exemplo: btn_1738850000_1_12345_abc123
+
+// Geração com prefixo por canal
+generatePrefixedId(channelType, fallbackSuffix): string
+// Exemplos:
+// - Instagram: ig_btn_1738850000_1_12345_abc123
+// - Facebook:  fb_btn_1738850000_1_12345_abc123
+// - WhatsApp:  btn_1738850000_1_12345_abc123 (sem prefixo)
+```
+
+**Vantagens do sistema**:
+- IDs únicos garantidos (timestamp + counter + performance + random)
+- Prefixo por canal facilita debug e identificação
+- Evita colisões mesmo com criação simultânea
+- Compatível com limites de payload por canal (256 chars WhatsApp, 1000 chars Instagram)
+
+---
+
+## 14. Roadmap v3.0: Arquitetura de Entrega Unificada
+
+> **Arquitetura final de execução de flows** — Síncrono primeiro, assíncrono automático.
+
+---
+
+### 14.1 A Decisão: Deadline-First
+
+```
+REGRA ÚNICA:
+  Tenta entregar na ponte síncrona (< 30s).
+  Se a ponte vai fechar → migra automaticamente pro assíncrono.
+  Sem decisão prévia. Sem analyzeFlowComplexity().
+  Um único caminho. Um único FlowExecutor.
+```
+
+#### Por que isso é melhor
+
+| Problema | Solução com 2 modos (anterior) | Solução com deadline (NOVA) |
+|----------|-------------------------------|----------------------------|
+| Flow simples (1 msg) | Precisa de `analyzeFlowComplexity()` | Responde na ponte, nem pensa |
+| Flow complexo (delay+pdf) | Precisa decidir ANTES de executar | Começa na ponte, migra quando precisa |
+| IA sobrecarregada (demora 25s) | Não coberto! Timeout! | Migra pro assíncrono antes dos 30s |
+| IA rápida + flow grande | Decide assíncrono antes de tentar | Começa síncrono, aproveita o que puder |
+| Código para manter | 2 caminhos, 2 lógicas | 1 caminho, 1 lógica |
+| Bug de classificação errada | Flow "simples" pode ter HTTP lento | Impossível — deadline é factual |
+
+---
+
+### 14.2 Arquitetura: DeadlineGuard + FlowExecutor Unificado
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    FLUXO UNIFICADO COM DEADLINE                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  Meta ──webhook──▶ Chatwit ──POST──▶ Socialwise                        │
+│                                           │                              │
+│                                     ┌─────┴─────┐                       │
+│                                     │ CRONÔMETRO │ ← Inicia: 30s        │
+│                                     │ (deadline) │                       │
+│                                     └─────┬─────┘                       │
+│                                           │                              │
+│                                     ┌─────▼─────────────────────┐       │
+│                                     │  FlowOrchestrator          │       │
+│                                     │                            │       │
+│                                     │  1. Classifica intent (IA) │       │
+│                                     │     ⏱️ Gastou Xs...        │       │
+│                                     │                            │       │
+│                                     │  2. Busca mapeamento       │       │
+│                                     │     ⏱️ Gastou Ys...        │       │
+│                                     │                            │       │
+│                                     │  3. Inicia FlowExecutor    │       │
+│                                     └─────┬─────────────────────┘       │
+│                                           │                              │
+│                              ┌────────────▼────────────┐                │
+│                              │     FlowExecutor         │                │
+│                              │     (executa nó a nó)    │                │
+│                              │                          │                │
+│                              │  A cada nó de ENVIO:     │                │
+│                              │  ┌─────────────────────┐ │                │
+│                              │  │ Ainda dá tempo?      │ │                │
+│                              │  │ restante > 5s?       │ │                │
+│                              │  └────────┬────────────┘ │                │
+│                              │           │              │                │
+│                              │     SIM   │    NÃO       │                │
+│                              │     ▼     │    ▼         │                │
+│                              │  ┌──────┐ │ ┌─────────┐  │                │
+│                              │  │PONTE │ │ │API      │  │                │
+│                              │  │(sync)│ │ │CHATWIT  │  │                │
+│                              │  │      │ │ │(async)  │  │                │
+│                              │  └──────┘ │ └─────────┘  │                │
+│                              │           │              │                │
+│                              │  Uma vez que migrou pra  │                │
+│                              │  async, NUNCA volta pro  │                │
+│                              │  sync. Tudo via API.     │                │
+│                              └──────────────────────────┘                │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Regra do Ponto Sem Retorno
+
+```
+PONTE SÍNCRONA (pode acumular múltiplas msgs se der tempo)
+    │
+    │  msg 1 ← cabe? sim → acumula na resposta da ponte
+    │  msg 2 ← cabe? sim → acumula na resposta da ponte
+    │  msg 3 ← cabe? NÃO (restante < 5s ou já passou)
+    │
+    ▼
+PONTO SEM RETORNO ← a partir daqui, tudo é API Chatwit
+    │
+    │  1. Responde a ponte HTTP com o que já acumulou (ou vazio)
+    │  2. msg 3 → API Chatwit
+    │  3. msg 4 → API Chatwit
+    │  4. ... tudo via API até o fim
+    │
+    ▼
+FIM DO FLUXO (ou WAITING_INPUT)
+```
+
+---
+
+### 14.3 Componentes Principais
+
+#### DeadlineGuard — O Cronômetro
+
+**Localização**: `services/flow-engine/deadline-guard.ts`
+
+```typescript
+class DeadlineGuard {
+  private readonly startTime: number;
+  private readonly deadlineMs: number;       // Padrão: 28000ms
+  private readonly safetyMarginMs: number;   // Padrão: 5000ms
+  private bridgeResponded: boolean = false;
+  private pendingSyncPayload: SynchronousResponse | null = null;
+
+  /** Tempo restante em ms */
+  get remaining(): number;
+
+  /** PODE executar algo síncrono? */
+  canSync(): boolean;
+
+  /** Marca que a ponte já foi respondida */
+  markBridgeResponded(): void;
+
+  /** Acumula payload para responder na ponte */
+  setSyncPayload(payload: SynchronousResponse): void;
+
+  /** Retorna o payload e marca como respondida */
+  consumeSyncPayload(): SynchronousResponse | null;
+}
+```
+
+#### FlowOrchestrator — Endpoint Unificado
+
+**Localização**: `services/flow-engine/flow-orchestrator.ts`
+
+```typescript
+class FlowOrchestrator {
+  async handle(payload: ChatwitWebhookPayload): Promise<SynchronousResponse | null> {
+    // 1. Cronômetro começa
+    const deadline = new DeadlineGuard(28000, 5000);
+
+    // 2. Extrai contexto
+    const context = this.extractDeliveryContext(payload);
+
+    // 3. Verifica FlowSession ativo (esperando botão)
+    const activeSession = await this.findActiveSession(context);
+    if (activeSession) {
+      this.executor.resumeFromButton(activeSession, payload, context, deadline);
+      return deadline.consumeSyncPayload();
+    }
+
+    // 4. Classifica intent via IA ← PODE DEMORAR
+    const intent = await this.classifyIntent(payload);
+
+    // 5. Busca mapeamento
+    const mapping = await this.findMapping(intent, context.inboxId);
+
+    // 6. Carrega e executa flow
+    const flow = await this.loadFlow(mapping.flowId);
+    await this.executor.execute(flow, context, deadline);
+
+    // 7. Retorna payload da ponte (ou null)
+    return deadline.consumeSyncPayload();
+  }
+}
+```
+
+#### FlowExecutor — Motor Unificado
+
+**Localização**: `services/flow-engine/flow-executor.ts`
+
+O executor percorre o flow nó a nó, usando `smartDeliver()` para decidir automaticamente se entrega via ponte síncrona ou API Chatwit.
+
+```typescript
+private async smartDeliver(
+  deadline: DeadlineGuard,
+  context: DeliveryContext,
+  payload: DeliveryPayload
+): Promise<void> {
+  if (deadline.canSync() && payload.type !== 'media') {
+    // ✅ PONTE ABERTA e tempo suficiente
+    if (!deadline.isBridgeClosed) {
+      deadline.setSyncPayload(this.toSyncResponse(payload));
+      return;
+    }
+  }
+
+  // ❌ PONTE FECHADA ou sem tempo → API Chatwit
+  if (!deadline.isBridgeClosed) {
+    deadline.markBridgeResponded();
+  }
+  await this.delivery.deliver(context, payload);
+}
+```
+
+---
+
+### 14.4 Nós que Forçam Modo Assíncrono
+
+| Nó | Por quê força async | Método |
+|----|---------------------|--------|
+| **DELAY** | Segurar a ponte dormindo desperdiça tempo | `ensureAsyncMode()` |
+| **MEDIA** | Multipart/form-data não cabe na ponte JSON | `ensureAsyncMode()` |
+| **HTTP_REQUEST** | Tempo imprevisível da API externa | `ensureAsyncMode()` |
+| **ADD_TAG** | Usa API do Chatwit (não a ponte) | Já é async por natureza |
+| **REMOVE_TAG** | Idem | Idem |
+| **TRANSFER** | Idem | Idem |
+
+Nós que PODEM usar a ponte (se houver tempo):
+
+| Nó | Comportamento |
+|----|---------------|
+| **TEXT_MESSAGE** | `smartDeliver()` decide |
+| **INTERACTIVE_MESSAGE** | `smartDeliver()` decide, depois STOP |
+| **REACTION** | `smartDeliver()` decide |
+
+---
+
+### 14.5 Cenários de Execução
+
+#### Cenário 1: IA rápida + Flow simples (melhor caso)
+```
+T+0ms    Webhook chega. Deadline: 28000ms
+T+800ms  IA classifica: "saudacao" (rápida)
+T+870ms  INTERACTIVE_MESSAGE → setSyncPayload()
+T+875ms  Retorna interactive na ponte HTTP ✅
+
+RESULTADO: Tudo síncrono. Execução em ~875ms.
+```
+
+#### Cenário 2: IA lenta + Flow simples (ainda cabe)
+```
+T+0ms      Webhook chega. Deadline: 28000ms
+T+22000ms  IA classifica: "saudacao" (DEMOROU 22s!)
+T+22120ms  INTERACTIVE_MESSAGE
+           canSync()? SIM (restam 5880ms, > 5000ms margem)
+           → setSyncPayload() ✅
+
+RESULTADO: Ainda cabeu! A IA demorou mas o flow era simples.
+```
+
+#### Cenário 3: IA lenta + Deadline estourou
+```
+T+0ms      Webhook chega. Deadline: 28000ms
+T+25000ms  IA classifica: "saudacao" (DEMOROU 25s!)
+T+25120ms  INTERACTIVE_MESSAGE
+           canSync()? NÃO (restam 2880ms, < 5000ms margem)
+           → ensureAsyncMode() → delivery.deliver() via API
+
+RESULTADO: Migrou pra async automaticamente! Sem timeout. 🎉
+```
+
+#### Cenário 4: Flow complexo (Texto → Delay → PDF)
+```
+T+0ms    Webhook chega (clique de botão "Sim")
+T+110ms  TEXT_MESSAGE → setSyncPayload("Gerando boleto...")
+T+115ms  DELAY: 3s → ensureAsyncMode() → Ponte fecha
+T+3120ms MEDIA: boleto.pdf → delivery.deliver() via API
+T+3600ms END
+
+RESULTADO:
+  Ponte: "Gerando seu boleto..." (instantâneo)
+  API: PDF + texto final (3s depois)
+```
+
+---
+
+### 14.6 Mudanças Necessárias no Chatwit (Fork)
+
+#### Obrigatório
+
+| # | Mudança | Onde | Complexidade |
+|---|---------|------|-------------|
+| 1 | **Criar Agent Bot** para o Socialwise | Admin panel | Configuração |
+| 2 | **Repassar `button_reply.id`** no webhook | Channel dispatcher | Baixa |
+| 3 | **Aceitar `content_type: interactive`** na API de messages | Messages controller | Média |
+| 4 | **Rotear interactive pro Meta API** no dispatcher de saída | Channel dispatcher | Média |
+
+#### Opcional (melhora a experiência)
+
+| # | Mudança | Benefício |
+|---|---------|-----------|
+| 5 | Endpoint dedicado `/interactive_messages` | API mais limpa |
+| 6 | Exibir preview de mensagens interativas no chat | Operador vê o que foi enviado |
+| 7 | Marcar mensagens enviadas pelo Agent Bot com ícone | Distinguir bot vs humano |
+
+---
+
+### 14.7 Fases de Implementação
+
+#### FASE 1: Infraestrutura de Entrega
+- [ ] Criar Agent Bot no Chatwit, obter `api_access_token`
+- [ ] `ChatwitDeliveryService` com `deliverText()` e `deliverMedia()`
+- [ ] `DeadlineGuard` com cronômetro e `canSync()`
+- [ ] Testar: Socialwise envia texto via API Chatwit → chega no WA
+- [ ] Testar: Socialwise envia PDF via API Chatwit → chega no WA
+- [ ] Modelos Prisma: `Flow`, `FlowNode`, `FlowEdge`, `FlowSession`
+
+#### FASE 2: Motor Unificado
+- [ ] `FlowOrchestrator.handle()` com deadline integrado
+- [ ] `FlowExecutor.executeChain()` com `smartDeliver()`
+- [ ] `FlowExecutor.resumeFromButton()`
+- [ ] Zustand Store + Auto-Save no frontend
+- [ ] Novos nós no canvas: Delay, Media, Text, End
+- [ ] Distinção visual de edges (sólida vs tracejada)
+- [ ] `syncFlowToMapeamentos()` ao salvar flow
+
+#### FASE 3: Chatwit — Suporte Interactive via API
+- [ ] `content_type: interactive` no controller de messages
+- [ ] Dispatcher: rotear interactive payload pra Meta API
+- [ ] Verificar que `button_reply.id` chega no webhook
+- [ ] `deliverInteractive()` no `ChatwitDeliveryService`
+- [ ] Teste E2E: intent → interactive → botão → texto → delay → PDF
+
+#### FASE 4: Nós Avançados
+- [ ] Condition Node (IF/ELSE)
+- [ ] Set Variable + Variable Resolver + `{{variáveis}}`
+- [ ] HTTP Request Node
+- [ ] Transfer Node + nota interna
+- [ ] Add/Remove Tag via API Chatwit
+- [ ] Highlight de variáveis no editor do canvas
+
+#### FASE 5: Observabilidade e Polish
+- [ ] Painel de FlowSessions (admin)
+- [ ] Log de execução por sessão
+- [ ] Cron: expirar sessões > 24h sem atividade
+- [ ] Paleta de nós reorganizada
+- [ ] Validação completa antes de publicar flow
+
+---
+
+### 14.8 Modelos Prisma para o Flow Engine
+
+```prisma
+model Flow {
+  id          String     @id @default(uuid())
+  name        String
+  inboxId     String
+  isActive    Boolean    @default(true)
+  nodes       FlowNode[]
+  sessions    FlowSession[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model FlowNode {
+  id        String     @id @default(uuid())
+  flowId    String
+  flow      Flow       @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  nodeType  String     // START, TEXT_MESSAGE, INTERACTIVE_MESSAGE, DELAY, CONDITION, etc.
+  config    Json       // Configuração específica do nó
+  positionX Float
+  positionY Float
+  outEdges  FlowEdge[] @relation("SourceNode")
+  inEdges   FlowEdge[] @relation("TargetNode")
+}
+
+model FlowEdge {
+  id              String   @id @default(uuid())
+  sourceNodeId    String
+  targetNodeId    String
+  sourceNode      FlowNode @relation("SourceNode", fields: [sourceNodeId], references: [id], onDelete: Cascade)
+  targetNode      FlowNode @relation("TargetNode", fields: [targetNodeId], references: [id], onDelete: Cascade)
+  buttonId        String?  // Para edges que saem de botões
+  conditionBranch String?  // "true" ou "false" para CONDITION nodes
+}
+
+model FlowSession {
+  id             String   @id @default(uuid())
+  flowId         String
+  flow           Flow     @relation(fields: [flowId], references: [id])
+  conversationId String
+  contactId      String
+  inboxId        String
+  status         String   // ACTIVE, WAITING_INPUT, COMPLETED, ERROR
+  currentNodeId  String?  // Nó atual (para WAITING_INPUT)
+  variables      Json     @default("{}")
+  executionLog   Json     @default("[]")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  completedAt    DateTime?
+
+  @@index([conversationId])
+  @@index([status])
+}
+```
+
+---
+
+### 14.9 Tipos TypeScript do Flow Engine
+
+```typescript
+// types/flow-engine.ts
+
+type FlowNodeType =
+  | 'START'
+  | 'END'
+  | 'TEXT_MESSAGE'
+  | 'INTERACTIVE_MESSAGE'
+  | 'MEDIA'
+  | 'DELAY'
+  | 'CONDITION'
+  | 'SET_VARIABLE'
+  | 'HTTP_REQUEST'
+  | 'ADD_TAG'
+  | 'REMOVE_TAG'
+  | 'TRANSFER'
+  | 'REACTION';
+
+type FlowSessionStatus = 'ACTIVE' | 'WAITING_INPUT' | 'COMPLETED' | 'ERROR';
+
+interface DeliveryContext {
+  accountId: number;
+  conversationId: number;
+  inboxId: number;
+  contactId: number;
+  contactName: string;
+  contactPhone: string;
+  channelType: 'whatsapp' | 'instagram' | 'facebook';
+  sourceMessageId?: string;
+}
+
+interface DeliveryPayload {
+  type: 'text' | 'media' | 'interactive';
+  content?: string;
+  mediaUrl?: string;
+  filename?: string;
+  interactivePayload?: object;
+  private?: boolean;
+}
+
+interface SynchronousResponse {
+  content?: string;
+  type?: 'interactive';
+  payload?: object;
+}
+```
+
+---
+
+### 14.10 Features Adicionais (Pós v3.0)
+
+#### Alta Prioridade
+- [ ] **Refatorar NodeDetailDialog**: Remover aba "Criar mensagem", integrar PreviewSection
+- [ ] **Preview multi-plataforma**: Mostrar como a mensagem aparece no WhatsApp vs Instagram
+- [ ] **Migração de ButtonReactions para Flow**: Importar configurações existentes
+
+#### Média Prioridade
+- [ ] Undo/Redo para operações de elemento
+- [ ] Keyboard shortcuts (Ctrl+D para duplicar, Del para deletar)
+- [ ] Validação em tempo real de limites por caractere
+- [ ] Templates salvos de mensagens interativas (biblioteca)
+- [ ] Arrastar para reordenar botões dentro do nó
+
+#### Baixa Prioridade
+- [ ] Exportar/Importar flows em JSON
+- [ ] Versionamento de flows
+- [ ] Estatísticas de uso por flow
+- [ ] A/B Testing de Flows
+- [ ] Integração com CRM
+
+---
+
+### 14.11 Resumo da Arquitetura
+
+```
+┌─────────────────────────────────────────────────┐
+│                                                  │
+│   TENTA NA PONTE.                               │
+│   SE NÃO DÁ TEMPO → API DO CHATWIT.            │
+│   UMA VEZ QUE MIGROU, NÃO VOLTA.               │
+│                                                  │
+│   É isso. Sem complexity analysis.              │
+│   Sem dois caminhos. Sem decisão prévia.        │
+│   O relógio decide.                             │
+│                                                  │
+└─────────────────────────────────────────────────┘
+```
+
+---
+
+## 15. Changelog de Implementações
+
+### v3.0 - Arquitetura de Entrega Unificada (Fevereiro 2026)
+**Documentado**:
+- ✅ Arquitetura Deadline-First para entrega de mensagens
+- ✅ DeadlineGuard — cronômetro de ponte síncrona
+- ✅ FlowOrchestrator — endpoint unificado de entrada
+- ✅ FlowExecutor — motor de execução com `smartDeliver()`
+- ✅ Cenários de execução detalhados (IA rápida/lenta, flows simples/complexos)
+- ✅ Modelos Prisma: Flow, FlowNode, FlowEdge, FlowSession
+- ✅ Tipos TypeScript do Flow Engine
+- ✅ Fases de implementação (5 fases)
+- ✅ Mudanças necessárias no Chatwit (fork)
+
+**Arquivos planejados**:
+- `services/flow-engine/deadline-guard.ts` → DeadlineGuard class
+- `services/flow-engine/flow-orchestrator.ts` → FlowOrchestrator class
+- `services/flow-engine/flow-executor.ts` → FlowExecutor class
+- `services/flow-engine/chatwit-delivery-service.ts` → API Chatwit
+
+### v1.5 - Documentação de Limites e Mapeamento (Fevereiro 2026)
+**Documentado**:
+- ✅ Limites completos por canal (WhatsApp, Instagram, Facebook)
+- ✅ Sistema de validações detalhado
+- ✅ Fluxo de mapeamento de intents
+- ✅ Integração Flow Builder com sistema de resposta automática
+- ✅ Roadmap de melhorias técnicas
+
+**Arquivos de referência documentados**:
+- `types/interactive-messages.ts` → `MESSAGE_LIMITS`
+- `lib/validation/interactive-message-validation.ts`
+- `worker/processors/intent.processor.ts`
+- `app/admin/mtf-diamante/components/MapeamentoTab.tsx`
 
 ### v1.4 - Context Menus e Validação de Headers (Fevereiro 2026)
 **Implementado**:
@@ -530,6 +1348,64 @@ console.log('[Debug] hasAnyHeader:', currentElements.some(e =>
 
 ---
 
-**Última atualização**: Fevereiro 2026  
+## 16. Arquivos de Referência por Funcionalidade
+
+### 16.1 Flow Builder (Canvas Visual)
+
+| Funcionalidade | Arquivo Principal | Descrição |
+|----------------|-------------------|-----------|
+| **Flow Builder Tab** | `app/admin/mtf-diamante/components/FlowBuilderTab.tsx` | Canvas principal |
+| **Hook do Canvas** | `app/.../flow-builder/hooks/useFlowCanvas.ts` | Estado e operações do flow |
+| **Dialog de Detalhes** | `app/.../flow-builder/panels/NodeDetailDialog.tsx` | Dialog de config do nó |
+| **Validação de Flow** | `types/flow-builder.ts` | `validateFlowCanvas()` |
+| **Preview Section** | `app/.../interactive-message-creator/.../PreviewSection.tsx` | Preview reutilizável |
+| **Interactive Preview** | `app/.../components/shared/InteractivePreview.tsx` | Componente visual |
+
+### 16.2 Flow Engine (Execução)
+
+| Funcionalidade | Arquivo Principal | Descrição |
+|----------------|-------------------|-----------|
+| **DeadlineGuard** | `services/flow-engine/deadline-guard.ts` | Cronômetro de ponte síncrona |
+| **FlowOrchestrator** | `services/flow-engine/flow-orchestrator.ts` | Endpoint unificado de entrada |
+| **FlowExecutor** | `services/flow-engine/flow-executor.ts` | Motor de execução com `smartDeliver()` |
+| **ChatwitDeliveryService** | `services/flow-engine/chatwit-delivery-service.ts` | Entrega via API Chatwit |
+| **VariableResolver** | `services/flow-engine/variable-resolver.ts` | Resolução de `{{variáveis}}` |
+| **Tipos do Engine** | `types/flow-engine.ts` | Interfaces e types |
+
+### 16.3 Mensagens Interativas
+
+| Funcionalidade | Arquivo Principal | Descrição |
+|----------------|-------------------|-----------|
+| **Limites de Mensagem** | `types/interactive-messages.ts` | Constantes `MESSAGE_LIMITS` |
+| **Validação de Mensagens** | `lib/validation/interactive-message-validation.ts` | Schemas Zod e validadores |
+| **Restrições por Canal** | `services/.../channel-constraints.ts` | `getConstraintsForChannel()` |
+| **Clamping de Texto** | `lib/socialwise/clamps.ts` | `clampTitle()`, `clampBody()` |
+| **Geração de Payload** | `app/.../unified-editing-step/utils.ts` | `generateUniqueButtonId()` |
+
+### 16.4 Processamento e Mapeamento
+
+| Funcionalidade | Arquivo Principal | Descrição |
+|----------------|-------------------|-----------|
+| **Processamento de Intent** | `worker/processors/intent.processor.ts` | `IntentProcessor` class |
+| **Processamento de Botão** | `worker/processors/button.processor.ts` | `ButtonProcessor` class |
+| **API de Mapeamento** | `app/api/admin/mtf-diamante/mapeamentos/[caixaId]/route.ts` | CRUD de mapeamentos |
+| **UI de Mapeamento** | `app/admin/mtf-diamante/components/MapeamentoTab.tsx` | Formulário de configuração |
+| **Mapeamento de Botão** | Tabela `MapeamentoBotao` (Prisma) | buttonId → actionType + actionPayload |
+
+### 16.5 Modelos Prisma
+
+| Modelo | Descrição |
+|--------|-----------|
+| `Flow` | Definição do flow (nome, inboxId, isActive) |
+| `FlowNode` | Nós do flow (nodeType, config, posição) |
+| `FlowEdge` | Conexões entre nós (buttonId, conditionBranch) |
+| `FlowSession` | Execução ativa (status, variables, currentNodeId) |
+| `MapeamentoBotao` | Reações de botões legado |
+| `MapeamentoIntencao` | Mapeamento intent → template |
+
+---
+
+**Última atualização**: Fevereiro 2026
+**Versão**: 3.0 (Arquitetura Unificada com Deadline)
 **Mantido por**: Equipe MTF Diamante
 
