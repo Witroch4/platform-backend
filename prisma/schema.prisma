@@ -320,6 +320,7 @@ model ChatwitInbox {
   usuarioChatwit             UsuarioChatwit       @relation(fields: [usuarioChatwitId], references: [id], onDelete: Cascade)
   configHistory              InboxConfigHistory[]
   flowCanvas                 InboxFlowCanvas?
+  flows                      Flow[]
   mapeamentosBotoes          MapeamentoBotao[]
   mapeamentosIntencao        MapeamentoIntencao[]
   templates                  Template[]
@@ -511,14 +512,17 @@ model MapeamentoIntencao {
   id              String       @id @default(cuid())
   intentName      String
   inboxId         String
-  templateId      String
+  templateId      String?      // Opcional: pode ser template OU flow
+  flowId          String?      // Opcional: ID do Flow associado
   customVariables Json?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
   inbox           ChatwitInbox @relation(fields: [inboxId], references: [id], onDelete: Cascade)
-  template        Template     @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  template        Template?    @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  flow            Flow?        @relation(fields: [flowId], references: [id], onDelete: SetNull)
 
   @@unique([intentName, inboxId])
+  @@index([flowId])
 }
 
 model Automacao {
@@ -1557,6 +1561,84 @@ model IframeAuthorizedDomain {
   @@index([createdBy])
 }
 
+// =============================================================================
+// FLOW ENGINE — Motor de execução de flows de mensagens interativas
+// =============================================================================
+
+model Flow {
+  id          String               @id @default(cuid())
+  name        String
+  inboxId     String
+  isActive    Boolean              @default(true)
+  nodes       FlowNode[]
+  edges       FlowEdge[]
+  sessions    FlowSession[]
+  mapeamentos MapeamentoIntencao[] // Mapeamentos de intent que apontam para este flow
+  inbox       ChatwitInbox         @relation(fields: [inboxId], references: [id], onDelete: Cascade)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@index([inboxId, isActive])
+}
+
+model FlowNode {
+  id        String     @id @default(cuid())
+  flowId    String
+  flow      Flow       @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  nodeType  String     // START, TEXT_MESSAGE, INTERACTIVE_MESSAGE, DELAY, CONDITION, etc.
+  config    Json       // Configuração específica do nó
+  positionX Float
+  positionY Float
+  outEdges  FlowEdge[] @relation("SourceNode")
+  inEdges   FlowEdge[] @relation("TargetNode")
+
+  @@index([flowId])
+}
+
+model FlowEdge {
+  id              String   @id @default(cuid())
+  flowId          String
+  flow            Flow     @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  sourceNodeId    String
+  targetNodeId    String
+  sourceNode      FlowNode @relation("SourceNode", fields: [sourceNodeId], references: [id], onDelete: Cascade)
+  targetNode      FlowNode @relation("TargetNode", fields: [targetNodeId], references: [id], onDelete: Cascade)
+  buttonId        String?  // Para edges que saem de botões
+  conditionBranch String?  // "true" ou "false" para CONDITION nodes
+
+  @@index([flowId])
+  @@index([sourceNodeId])
+  @@index([targetNodeId])
+}
+
+model FlowSession {
+  id             String            @id @default(cuid())
+  flowId         String
+  flow           Flow              @relation(fields: [flowId], references: [id])
+  conversationId String
+  contactId      String
+  inboxId        String
+  status         FlowSessionStatus @default(ACTIVE)
+  currentNodeId  String?           // Nó atual (para WAITING_INPUT)
+  variables      Json              @default("{}")
+  executionLog   Json              @default("[]")
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  completedAt    DateTime?
+
+  @@index([conversationId])
+  @@index([status])
+  @@index([flowId])
+  @@index([inboxId, status])
+}
+
+enum FlowSessionStatus {
+  ACTIVE
+  WAITING_INPUT
+  COMPLETED
+  ERROR
+}
+
 enum Provider {
   OPENAI
   META_WHATSAPP
@@ -1644,6 +1726,7 @@ enum TemplateStatus {
 enum ActionType {
   SEND_TEMPLATE
   ADD_TAG
+  REMOVE_TAG
   START_FLOW
   ASSIGN_TO_AGENT
   BUTTON_REACTION

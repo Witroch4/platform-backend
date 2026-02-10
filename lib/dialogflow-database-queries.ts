@@ -203,6 +203,14 @@ export async function findCompleteMessageMappingByIntent(
       return null;
     }
 
+    // Se não há template associado (pode ser um flow), retornar null
+    if (!mapping.template) {
+      console.log(
+        `[DB Query] MapeamentoIntencao found but no template associated (may have flowId): ${mapping.id}`
+      );
+      return null;
+    }
+
     // STEP 3: Get WhatsApp configuration with fallback logic
     const whatsappConfig = await getWhatsAppConfigWithFallback(chatwitInbox);
 

@@ -1080,17 +1080,17 @@ RESULTADO:
 ### 14.7 Fases de Implementação
 
 #### FASE 1: Infraestrutura de Entrega
-- [ ] Criar Agent Bot no Chatwit, obter `api_access_token`
-- [ ] `ChatwitDeliveryService` com `deliverText()` e `deliverMedia()`
-- [ ] `DeadlineGuard` com cronômetro e `canSync()`
-- [ ] Testar: Socialwise envia texto via API Chatwit → chega no WA
-- [ ] Testar: Socialwise envia PDF via API Chatwit → chega no WA
-- [ ] Modelos Prisma: `Flow`, `FlowNode`, `FlowEdge`, `FlowSession`
+- [ ] Criar Agent Bot no Chatwit, obter `api_access_token` *(config manual — pendente)*
+- [x] `ChatwitDeliveryService` com `deliverText()` e `deliverMedia()` — ✅ 2026-02-08
+- [x] `DeadlineGuard` com cronômetro e `canSync()` — ✅ 2026-02-08
+- [ ] Testar: Socialwise envia texto via API Chatwit → chega no WA *(requer Agent Bot)*
+- [ ] Testar: Socialwise envia PDF via API Chatwit → chega no WA *(requer Agent Bot)*
+- [x] Modelos Prisma: `Flow`, `FlowNode`, `FlowEdge`, `FlowSession` — ✅ 2026-02-08
 
 #### FASE 2: Motor Unificado
-- [ ] `FlowOrchestrator.handle()` com deadline integrado
-- [ ] `FlowExecutor.executeChain()` com `smartDeliver()`
-- [ ] `FlowExecutor.resumeFromButton()`
+- [x] `FlowOrchestrator.handle()` com deadline integrado — ✅ 2026-02-08
+- [x] `FlowExecutor.executeChain()` com `smartDeliver()` — ✅ 2026-02-08
+- [x] `FlowExecutor.resumeFromButton()` — ✅ 2026-02-08
 - [ ] Zustand Store + Auto-Save no frontend
 - [ ] Novos nós no canvas: Delay, Media, Text, End
 - [ ] Distinção visual de edges (sólida vs tracejada)
@@ -1100,20 +1100,20 @@ RESULTADO:
 - [ ] `content_type: interactive` no controller de messages
 - [ ] Dispatcher: rotear interactive payload pra Meta API
 - [ ] Verificar que `button_reply.id` chega no webhook
-- [ ] `deliverInteractive()` no `ChatwitDeliveryService`
+- [x] `deliverInteractive()` no `ChatwitDeliveryService` — ✅ 2026-02-08
 - [ ] Teste E2E: intent → interactive → botão → texto → delay → PDF
 
 #### FASE 4: Nós Avançados
-- [ ] Condition Node (IF/ELSE)
-- [ ] Set Variable + Variable Resolver + `{{variáveis}}`
-- [ ] HTTP Request Node
-- [ ] Transfer Node + nota interna
-- [ ] Add/Remove Tag via API Chatwit
-- [ ] Highlight de variáveis no editor do canvas
+- [x] Condition Node (IF/ELSE) — ✅ 2026-02-08 *(handler implementado no FlowExecutor)*
+- [x] Set Variable + Variable Resolver + `{{variáveis}}` — ✅ 2026-02-08
+- [x] HTTP Request Node — ✅ 2026-02-08 *(handler implementado no FlowExecutor)*
+- [x] Transfer Node + nota interna — ✅ 2026-02-08 *(handler implementado no FlowExecutor)*
+- [x] Add/Remove Tag via API Chatwit — ✅ 2026-02-08 *(handler + enum REMOVE_TAG adicionado)*
+- [ ] Highlight de variáveis no editor do canvas *(frontend — pendente)*
 
 #### FASE 5: Observabilidade e Polish
 - [ ] Painel de FlowSessions (admin)
-- [ ] Log de execução por sessão
+- [x] Log de execução por sessão — ✅ 2026-02-08 *(executionLog no FlowExecutor + FlowSession)*
 - [ ] Cron: expirar sessões > 24h sem atividade
 - [ ] Paleta de nós reorganizada
 - [ ] Validação completa antes de publicar flow
@@ -1235,6 +1235,9 @@ interface SynchronousResponse {
 - [ ] **Refatorar NodeDetailDialog**: Remover aba "Criar mensagem", integrar PreviewSection
 - [ ] **Preview multi-plataforma**: Mostrar como a mensagem aparece no WhatsApp vs Instagram
 - [ ] **Migração de ButtonReactions para Flow**: Importar configurações existentes
+- [x] **Types do Flow Engine (`types/flow-engine.ts`)**: Interfaces completas para runtime — ✅ 2026-02-08
+- [x] **VariableResolver**: Resolução de `{{variáveis}}` com dot notation + system/contact/session — ✅ 2026-02-08
+- [x] **Barrel export (`services/flow-engine/index.ts`)**: Re-exports centralizados — ✅ 2026-02-08
 
 #### Média Prioridade
 - [ ] Undo/Redo para operações de elemento
@@ -1284,11 +1287,25 @@ interface SynchronousResponse {
 - ✅ Fases de implementação (5 fases)
 - ✅ Mudanças necessárias no Chatwit (fork)
 
-**Arquivos planejados**:
-- `services/flow-engine/deadline-guard.ts` → DeadlineGuard class
-- `services/flow-engine/flow-orchestrator.ts` → FlowOrchestrator class
-- `services/flow-engine/flow-executor.ts` → FlowExecutor class
-- `services/flow-engine/chatwit-delivery-service.ts` → API Chatwit
+**Implementado (2026-02-08)**:
+- ✅ `types/flow-engine.ts` — Interfaces completas (DeliveryContext, DeliveryPayload, RuntimeFlow, FlowSessionData, configs de nós)
+- ✅ `services/flow-engine/deadline-guard.ts` — DeadlineGuard class com `canSync()`, `ensureAsyncMode()`, merge de payloads
+- ✅ `services/flow-engine/chatwit-delivery-service.ts` — `deliverText()`, `deliverMedia()`, `deliverInteractive()` com retry + backoff
+- ✅ `services/flow-engine/flow-executor.ts` — FlowExecutor com `executeChain()`, `resumeFromButton()`, `smartDeliver()`, handlers para todos os nó types
+- ✅ `services/flow-engine/flow-orchestrator.ts` — FlowOrchestrator com `handle()`, session management, button resume, flow loading
+- ✅ `services/flow-engine/variable-resolver.ts` — VariableResolver com dot notation, system/contact/session vars, `resolveObject()`
+- ✅ `services/flow-engine/index.ts` — Barrel export
+- ✅ `prisma/schema.prisma` — Models: `Flow`, `FlowNode`, `FlowEdge`, `FlowSession` + enum `FlowSessionStatus` + `REMOVE_TAG` em ActionType
+- ✅ Relação `ChatwitInbox.flows` adicionada
+
+**Arquivos criados**:
+- `services/flow-engine/deadline-guard.ts`
+- `services/flow-engine/flow-orchestrator.ts`
+- `services/flow-engine/flow-executor.ts`
+- `services/flow-engine/chatwit-delivery-service.ts`
+- `services/flow-engine/variable-resolver.ts`
+- `services/flow-engine/index.ts`
+- `types/flow-engine.ts`
 
 ### v1.5 - Documentação de Limites e Mapeamento (Fevereiro 2026)
 **Documentado**:
@@ -1405,7 +1422,146 @@ interface SynchronousResponse {
 
 ---
 
-**Última atualização**: Fevereiro 2026
-**Versão**: 3.0 (Arquitetura Unificada com Deadline)
+## 17. Requisitos para o Chatwit (Fork do Chatwoot)
+
+> ⚠️ Esta seção é o contrato entre Socialwise e Chatwit.
+> Tudo que o Chatwit precisa fazer para o Flow Engine funcionar.
+>
+> 📄 **Doc consolidada com análise completa do código Ruby e plano de implementação**:
+> [`docs/chatwit-contrato-async-30s.md`](chatwit-contrato-async-30s.md)
+
+### 17.1 Agent Bot para o Socialwise (FASE 1)
+
+**O que**: Criar um Agent Bot no Chatwit que o Socialwise usa para enviar mensagens via API REST quando a ponte de 30s fecha.
+
+**Como**: No painel de admin do Chatwit (`/super_admin/agent_bots`), criar:
+- **Nome**: "Socialwise Bot"
+- **Acesso**: Global ou por inbox
+- **Resultado**: Gera um `api_access_token`
+
+**Uso pelo Socialwise**:
+```http
+POST /api/v1/accounts/{account_id}/conversations/{conversation_id}/messages
+Headers:
+  api_access_token: {token_gerado_acima}
+Body:
+  { "content": "texto", "message_type": "outgoing" }
+```
+
+**O que já funciona no Chatwoot padrão**: Envio de texto e attachments (multipart/form-data) pela API. Não requer mudança no código.
+
+**Complexidade**: Apenas configuração. Zero código.
+
+---
+
+### 17.2 Suporte a Mensagens Interativas via API REST (FASE 3)
+
+**O que**: Hoje a API REST do Chatwit (`POST .../messages`) aceita texto e attachments, mas não aceita mensagens interativas (com botões, listas, etc). O Socialwise precisa enviar interativas via API quando a ponte fecha.
+
+**Situação**: Quando o Socialwise devolve na ponte síncrona, o Chatwit já sabe montar o payload Meta porque ele controla esse fluxo. Mas quando o Socialwise envia via API REST, o Chatwit recebe um JSON genérico e não sabe que é interativo.
+
+**Solução proposta — Aceitar campo `content_attributes.interactive`**:
+
+```ruby
+# O Socialwise vai enviar:
+# POST /api/v1/accounts/:id/conversations/:id/messages
+# {
+#   "content": "Olá, como posso ajudar?",
+#   "message_type": "outgoing",
+#   "content_type": "interactive",
+#   "content_attributes": {
+#     "interactive": {
+#       "type": "button",
+#       "body": { "text": "Olá, como posso ajudar?" },
+#       "action": {
+#         "buttons": [
+#           { "type": "reply", "reply": { "id": "btn_123", "title": "Suporte" } },
+#           { "type": "reply", "reply": { "id": "btn_456", "title": "Vendas" } }
+#         ]
+#       }
+#     }
+#   }
+# }
+```
+
+**Mudanças necessárias no Chatwit**:
+
+1. **Messages Controller** (`app/controllers/api/v1/accounts/conversations/messages_controller.rb`):
+   - Aceitar `content_type` e `content_attributes` nos params permitidos
+   - Salvar no modelo `Message`
+
+2. **Channel Dispatcher** (onde o Chatwit decide como enviar pra Meta):
+   - Se `content_type == 'interactive'` e `content_attributes.interactive` existe:
+     - Usar o payload de `content_attributes.interactive` para montar a requisição pra Meta API
+     - Em vez de enviar como texto simples
+
+3. **Modelo Message** — provavelmente não precisa mudar, porque o Chatwoot já tem `content_type` e `content_attributes` como campos existentes.
+
+**Complexidade**: Média. Requer entender o dispatcher de saída do Chatwit.
+
+**Alternativa** (se preferir não mexer no dispatcher): Criar endpoint separado:
+```
+POST /api/v1/accounts/:id/conversations/:id/interactive_messages
+```
+Mais trabalho inicial, mas mais limpo a longo prazo.
+
+---
+
+### 17.3 Repassar `button_reply.id` no Webhook (FASE 3)
+
+**O que**: Quando um usuário clica um botão no WhatsApp, a Meta envia um webhook com:
+
+```json
+{
+  "type": "interactive",
+  "interactive": {
+    "type": "button_reply",
+    "button_reply": {
+      "id": "btn_1738850000_1_12345_abc123",
+      "title": "Suporte"
+    }
+  }
+}
+```
+
+O Chatwit precisa repassar o `button_reply.id` para o Socialwise no webhook, para que o Socialwise saiba qual botão foi clicado e retome o fluxo correto.
+
+**Verificar**: Como o `content_attributes` da mensagem chega no webhook do Socialwise. Se o campo `interactive.button_reply.id` já está incluído no payload que o Chatwit envia, não precisa mudar nada.
+
+**Se não chega**: Incluir `content_attributes` no payload do webhook que o Chatwit manda pro Socialwise.
+
+**Complexidade**: Baixa. Provavelmente já funciona.
+
+---
+
+### 17.4 Resumo de Mudanças no Chatwit
+
+| # | O quê | Quando | Complexidade | Tipo |
+|---|-------|--------|--------------|------|
+| 1 | Criar Agent Bot + token | FASE 1 | Nenhuma (config) | Configuração |
+| 2 | Aceitar `content_type: interactive` na API | FASE 3 | Média | Código Ruby |
+| 3 | Rotear interactive payload pra Meta API | FASE 3 | Média | Código Ruby |
+| 4 | Verificar que `button_reply.id` chega no webhook | FASE 3 | Baixa (verificar) | Verificação |
+
+**O que NÃO muda no Chatwit**:
+- ❌ Webhook de entrada (Meta → Chatwit) — já funciona
+- ❌ Dispatcher de texto/mídia — já funciona
+- ❌ Modelo Message — reutiliza campos existentes
+- ❌ API REST para texto e attachments — já funciona
+
+---
+
+### 17.5 Mudanças Opcionais (Nice-to-Have)
+
+| # | O quê | Benefício |
+|---|-------|-----------|
+| 5 | Exibir preview de mensagens interativas no chat | Operador vê botões no histórico |
+| 6 | Ícone diferente para mensagens do Agent Bot | Distinguir bot vs humano |
+| 7 | Endpoint dedicado `/interactive_messages` | API mais limpa (alternativa ao item 2) |
+
+---
+
+**Última atualização**: 08 de Fevereiro de 2026
+**Versão**: 3.0.1 (Implementação da Infraestrutura + Motor Unificado)
 **Mantido por**: Equipe MTF Diamante
 

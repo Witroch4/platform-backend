@@ -16,7 +16,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const mapeamentos = await getPrismaInstance().mapeamentoIntencao.findMany({
       where: { inboxId: caixaId },
       include: {
-        template: { select: { id: true, name: true } },
+        template: { select: { id: true, name: true, type: true } },
+        flow: { select: { id: true, name: true } },
         inbox: { select: { id: true, nome: true } },
       },
       orderBy: { intentName: 'asc' },
@@ -42,24 +43,29 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     console.log("=== DEBUG API ===");
     console.log("Body recebido:", body);
     console.log("caixaId from params:", caixaId);
-    
+
     const {
       id: mappingId,
       intentName,
       templateId,
+      flowId,
       customVariables,
     } = body;
-    
+
     console.log("Campos extraídos:");
     console.log("- mappingId:", mappingId);
     console.log("- intentName:", intentName);
     console.log("- templateId:", templateId);
+    console.log("- flowId:", flowId);
 
-    if (!intentName || !templateId) {
-      console.log("Validação falhou:");
-      console.log("- intentName existe:", !!intentName);
-      console.log("- templateId existe:", !!templateId);
-      return NextResponse.json({ error: 'Intenção e template são obrigatórios.' }, { status: 400 });
+    if (!intentName) {
+      console.log("Validação falhou: intentName ausente");
+      return NextResponse.json({ error: 'Intenção é obrigatória.' }, { status: 400 });
+    }
+
+    if (!templateId && !flowId) {
+      console.log("Validação falhou: nem templateId nem flowId fornecidos");
+      return NextResponse.json({ error: 'Template ou Flow é obrigatório.' }, { status: 400 });
     }
 
     const normalizedCustom: Record<string, string> = {};
@@ -79,7 +85,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const data = {
       intentName,
       inboxId: caixaId,
-      templateId,
+      templateId: templateId || null,
+      flowId: flowId || null,
       customVariables: Object.keys(normalizedCustom).length > 0 ? normalizedCustom : Prisma.JsonNull,
     };
     

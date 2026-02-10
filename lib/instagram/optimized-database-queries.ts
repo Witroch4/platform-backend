@@ -458,6 +458,17 @@ export async function findOptimizedCompleteMessageMapping(
       return null;
     }
 
+    // Se não há template associado (pode ser um flow), retornar null
+    if (!mapping.template) {
+      console.log(`[Instagram DB] [INFO] MapeamentoIntencao found but no template (may have flowId):`, {
+        userContext: { usuarioChatwitId: chatwitInbox.usuarioChatwit.id, inboxId: inboxIdString },
+        intentName,
+        mappingId: mapping.id,
+        step: 'template_check'
+      });
+      return null;
+    }
+
     // Build optimized WhatsApp config
     const whatsappConfig = buildOptimizedWhatsAppConfig(chatwitInbox);
 

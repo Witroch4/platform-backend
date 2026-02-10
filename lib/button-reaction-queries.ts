@@ -674,7 +674,7 @@ export async function getIntentMappingByButtonId(
         intentName: intentMapping.intentName,
         mappingId: intentMapping.id,
         templateId: intentMapping.templateId,
-        templateName: intentMapping.template.name
+        templateName: intentMapping.template?.name ?? 'N/A'
       });
 
       // Convert MapeamentoIntencao to ButtonReactionData format
@@ -686,7 +686,7 @@ export async function getIntentMappingByButtonId(
           templateId: intentMapping.templateId,
           customVariables: intentMapping.customVariables
         } as any,
-        description: `Intent mapping: ${intentName} -> ${intentMapping.template.name}`,
+        description: `Intent mapping: ${intentName} -> ${intentMapping.template?.name ?? 'N/A'}`,
         inboxId: intentMapping.inboxId,
         createdAt: intentMapping.createdAt,
         updatedAt: intentMapping.updatedAt,

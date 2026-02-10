@@ -17,7 +17,49 @@ This file provides comprehensive guidance to Claude Code (claude.ai/code) and Cu
 11. **Edição no front deve ser olhar com a tool de navegação o resutado**
 12. **Sempre que adicionar uma feature adicione sem necessidade de controle global só controle de acesso pagina que controla acesso as features admin/features**
 13. **BFF como Fonte Única (UI)**: telas devem **ler** do BFF e **mutar** usando a **mesma SWR key**; CRUD puro fica para domínio/serviços
-14. **Prisma: NUNCA use `db push` para produção** → use `prisma migrate dev --name ...` para criar migração incremental
+
+## 🚨 REGRA CRÍTICA: MIGRATIONS SÃO OBRIGATÓRIAS
+
+> **NUNCA use `prisma db push` para mudanças que vão para produção!**
+>
+> `db push` sincroniza o schema mas **NÃO CRIA ARQUIVO DE MIGRATION**.
+> Em produção, apenas `prisma migrate deploy` é executado - se não houver migration, as tabelas/campos NÃO SERÃO CRIADOS!
+
+### Fluxo OBRIGATÓRIO para mudanças no schema:
+
+```bash
+# 1. Editar prisma/schema.prisma
+
+# 2. SEMPRE criar migration (OBRIGATÓRIO!)
+pnpm exec prisma migrate dev --name descricao_da_mudanca
+
+# 3. Isso cria: prisma/migrations/[timestamp]_descricao/migration.sql
+
+# 4. Commitar a migration JUNTO com o schema.prisma
+
+# 5. Em produção, aplicar:
+pnpm exec prisma migrate deploy
+```
+
+### Quando usar cada comando:
+
+| Comando | Quando usar | O que faz |
+|---------|-------------|-----------|
+| `prisma migrate dev --name ...` | **SEMPRE** ao modificar schema | Cria arquivo SQL + aplica |
+| `prisma migrate deploy` | **Produção** | Aplica migrations pendentes |
+| `prisma db push` | **NUNCA para prod** | Sincroniza sem criar migration |
+
+### Checklist antes de fazer deploy:
+
+- [ ] Verifiquei se há arquivos novos em `prisma/migrations/`?
+- [ ] A migration foi commitada junto com o `schema.prisma`?
+- [ ] Rodei `prisma migrate deploy` em staging primeiro?
+
+**Se você usou `db push` por engano**, crie a migration manualmente:
+```bash
+mkdir -p prisma/migrations/[timestamp]_nome
+# Escreva o SQL manualmente baseado nas mudanças do schema
+```
 
 ## 🚀 Project Overview
 
@@ -406,41 +448,6 @@ await prisma.someModel.update({
   },
 });
 ```
-
-### ⚠️ CRÍTICO: Migrations vs db push
-
-**NUNCA use `db push` para mudanças que vão para produção!**
-
-| Comando | Uso | O que faz |
-|---------|-----|-----------|
-| `prisma db push` | **Só protótipo/dev local** | Sincroniza schema direto no banco, **SEM criar arquivo de migração** |
-| `prisma migrate dev` | **Desenvolvimento** | Cria arquivo de migração incremental + aplica |
-| `prisma migrate deploy` | **Produção** | Aplica migrações pendentes |
-
-**Fluxo correto ao modificar `schema.prisma`:**
-
-```bash
-# 1. Edita prisma/schema.prisma (adiciona campo, enum, tabela, etc)
-
-# 2. Cria migração incremental (gera SQL apenas da mudança)
-pnpm exec prisma migrate dev --name descricao_da_mudanca
-
-# 3. Isso cria: prisma/migrations/[timestamp]_descricao_da_mudanca/migration.sql
-
-# 4. Commita a migração junto com o schema.prisma
-
-# 5. Em produção, aplica apenas as migrações pendentes:
-pnpm exec prisma migrate deploy
-```
-
-**Por que isso é crítico?**
-- `db push` **não gera arquivo de migração** → produção fica dessincronizada
-- Sem arquivo de migração, não há como aplicar a mudança em produção
-- Resulta em erros como "type already exists" ou tabelas faltando
-
-**Regra de ouro:**
-- Protótipo rápido local → `db push` é OK
-- **Qualquer mudança que vai para produção → `migrate dev --name ...`**
 
 ## 🛠️ Development Commands
 

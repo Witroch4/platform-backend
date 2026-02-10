@@ -48,13 +48,21 @@ interface MapeamentoTabProps {
 interface Mapeamento {
   id: string;
   intentName: string;
-  templateId: string;
-  template?: { id: string; name: string; type: string };
+  templateId: string | null;
+  flowId?: string | null;
+  template?: { id: string; name: string; type: string } | null;
+  flow?: { id: string; name: string } | null;
   // Campos de exibição para compatibilidade (não usados na API)
   mensagemInterativaId?: string | null;
   interactiveMessageId?: string | null;
   mensagemInterativa?: { id: string; nome: string };
   interactiveMessage?: { id: string; name: string };
+}
+
+interface Flow {
+  id: string;
+  name: string;
+  isActive: boolean;
 }
 
 interface Template {
@@ -110,11 +118,23 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
   const [loading, setLoading] = useState(false);
   const [usingGlobalTemplates, setUsingGlobalTemplates] = useState(false);
 
+  // Usar SWR para flows da inbox
+  const { data: flows = [], error: flowsError } = useSWR(
+    caixaId ? `/api/admin/mtf-diamante/flows/${caixaId}` : null,
+    async (url) => {
+      const response = await fetch(url);
+      if (!response.ok) return [];
+      const data = await response.json();
+      return data.flows ?? data ?? [];
+    }
+  );
+
   // Form state
   const [id, setId] = useState<string | null>(null);
   const [aiName, setAiName] = useState("");
   const [aiSelectedTemplate, setAiSelectedTemplate] = useState<string | null>(null);
   const [aiSelectedMensagem, setAiSelectedMensagem] = useState<string | null>(null);
+  const [aiSelectedFlow, setAiSelectedFlow] = useState<string | null>(null);
   
   // Button reactions state
   const [showReactionConfig, setShowReactionConfig] = useState<string | null>(null);
@@ -147,19 +167,25 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
     setAiName("");
     setAiSelectedTemplate(null);
     setAiSelectedMensagem(null);
+    setAiSelectedFlow(null);
   };
 
   const handleEdit = (mapeamento: Mapeamento) => {
     setId(mapeamento.id);
     setAiName(mapeamento.intentName);
 
-    // Verificar se é template ou mensagem interativa baseado no tipo
-    if (mapeamento.template?.type === 'INTERACTIVE_MESSAGE') {
+    // Reset all selections first
+    setAiSelectedTemplate(null);
+    setAiSelectedMensagem(null);
+    setAiSelectedFlow(null);
+
+    // Verificar se é flow, template ou mensagem interativa
+    if (mapeamento.flowId) {
+      setAiSelectedFlow(mapeamento.flowId);
+    } else if (mapeamento.template?.type === 'INTERACTIVE_MESSAGE') {
       setAiSelectedMensagem(mapeamento.templateId);
-      setAiSelectedTemplate(null);
-    } else {
+    } else if (mapeamento.templateId) {
       setAiSelectedTemplate(mapeamento.templateId);
-      setAiSelectedMensagem(null);
     }
   };
 
@@ -260,7 +286,19 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
   const handleAiIntentSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!aiName.trim()) { toast.error('Selecione uma intenção'); return; }
-    if (!aiSelectedTemplate && !aiSelectedMensagem) { toast.error('Selecione um template ou mensagem interativa'); return; }
+    if (!aiSelectedTemplate && !aiSelectedMensagem && !aiSelectedFlow) {
+      toast.error('Selecione um template, mensagem interativa ou flow');
+      return;
+    }
+
+    // Se for flow, salvar diretamente sem verificar variáveis
+    if (aiSelectedFlow) {
+      await saveMappingData({ id: null, intentName: aiName.trim(), flowId: aiSelectedFlow, caixaId });
+      resetForm();
+      mutateTemplates();
+      mutateMapeamentos();
+      return;
+    }
 
     const templateId = aiSelectedTemplate || aiSelectedMensagem;
 
@@ -283,7 +321,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
     }
 
     await saveMappingData({ id: null, intentName: aiName.trim(), templateId, caixaId });
-    setAiName(""); setAiSelectedTemplate(null); setAiSelectedMensagem(null);
+    resetForm();
     // Refresh dos dados SWR
     mutateTemplates();
     mutateMapeamentos();
@@ -297,7 +335,8 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
         body: JSON.stringify({
           id: mappingData.id,
           intentName: mappingData.intentName,
-          templateId: mappingData.templateId,
+          templateId: mappingData.templateId || null,
+          flowId: mappingData.flowId || null,
           customVariables, // Adicionar variáveis customizadas se existirem
         }),
       });
@@ -307,7 +346,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
         throw new Error(errorData.error || `Falha ao salvar mapeamento.`);
       }
       const saved = await response.json();
-      
+
       toast.success("Mapeamento salvo com sucesso!");
       resetForm();
       // Refresh dos dados SWR
@@ -451,15 +490,15 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
               </SelectContent>
             </Select>
           </div>
-          <div className="flex items-center space-x-4">
-            <div className="flex-1">
+          <div className="flex items-center space-x-4 flex-wrap gap-y-4">
+            <div className="flex-1 min-w-[200px]">
               <div className="flex items-center gap-2 mb-2">
                 <Label>Responder com Template</Label>
               </div>
               <Select
-                onValueChange={(value) => { setAiSelectedTemplate(value); setAiSelectedMensagem(null); }}
+                onValueChange={(value) => { setAiSelectedTemplate(value); setAiSelectedMensagem(null); setAiSelectedFlow(null); }}
                 value={aiSelectedTemplate || ""}
-                disabled={!!aiSelectedMensagem}
+                disabled={!!aiSelectedMensagem || !!aiSelectedFlow}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione um Template" />
@@ -472,12 +511,12 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
               </Select>
             </div>
             <span className="text-sm font-medium self-end pb-2">OU</span>
-            <div className="flex-1">
+            <div className="flex-1 min-w-[200px]">
               <div className="flex items-center gap-2 mb-2">
                 <Label>Responder com Mensagem Interativa</Label>
               </div>
               <Select
-                onValueChange={(value) => { setAiSelectedMensagem(value); setAiSelectedTemplate(null); }}
+                onValueChange={(value) => { setAiSelectedMensagem(value); setAiSelectedTemplate(null); setAiSelectedFlow(null); }}
                 value={aiSelectedMensagem || ""}
                 disabled={!!aiSelectedTemplate}
               >
@@ -491,6 +530,30 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
                 </SelectContent>
               </Select>
             </div>
+            {flows.length > 0 && (
+              <>
+                <span className="text-sm font-medium self-end pb-2">OU</span>
+                <div className="flex-1 min-w-[200px]">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Label>Executar Flow</Label>
+                  </div>
+                  <Select
+                    onValueChange={(value) => { setAiSelectedFlow(value); setAiSelectedTemplate(null); setAiSelectedMensagem(null); }}
+                    value={aiSelectedFlow || ""}
+                    disabled={!!aiSelectedTemplate || !!aiSelectedMensagem}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um Flow" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {flows.filter((f: Flow) => f.isActive).map((f: Flow) => (
+                        <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
           </div>
           <div className="flex gap-2">
             <Button type="submit">Salvar Mapeamento</Button>
@@ -518,7 +581,9 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
                 <TableRow key={map.id}>
                   <TableCell className="font-medium">{map.intentName}</TableCell>
                   <TableCell>
-                    {map.template ? (
+                    {map.flow ? (
+                      <span className="text-xs font-semibold bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 p-1 rounded">FLOW: {map.flow.name}</span>
+                    ) : map.template ? (
                       <span className="text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 p-1 rounded">TEMPLATE: {map.template.name}</span>
                     ) : map.mensagemInterativa ? (
                       <span className="text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 p-1 rounded">MENSAGEM: {map.mensagemInterativa.nome}</span>

@@ -25,6 +25,10 @@ import { getAssistantForInbox } from '@/lib/socialwise/assistant';
 // 🔧 CORREÇÃO: Usar button-processor centralizado
 import { handleButtonInteraction } from '@/lib/socialwise-flow/button-processor';
 
+// Flow Engine para execução de flows visuais
+import { FlowOrchestrator } from '@/services/flow-engine';
+import type { ChatwitWebhookPayload, DeliveryContext } from '@/types/flow-engine';
+
 // Constants
 const MAX_PAYLOAD_SIZE_KB = 256;
 const WEBHOOK_TIMEOUT_MS = 400; // P95 SLA target
@@ -602,6 +606,88 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
         // Use aggregated text instead of single message
         textInput = debounceResult.aggregatedText;
       }
+    }
+
+    // Step 13.6: Flow Engine - Executa flows visuais se houver mapeamento
+    try {
+      const flowOrchestrator = new FlowOrchestrator();
+
+      // Extrair metadata do payload para contexto de entrega
+      const socialwiseMetadata = getSocialWiseChatwitData(validPayload.context);
+
+      // Obter chatwitBaseUrl do metadata (enviado pelo Chatwit no payload)
+      const chatwitBaseUrl = (socialwiseMetadata as Record<string, unknown>)?.chatwit_base_url as string
+        || process.env.CHATWIT_BASE_URL
+        || '';
+
+      // Token do Agent Bot para entrega async
+      const chatwitAccessToken = process.env.CHATWIT_AGENT_BOT_TOKEN || '';
+
+      // Construir DeliveryContext para o FlowOrchestrator
+      const deliveryContext: DeliveryContext = {
+        accountId: Number(chatwitAccountId) || 0,
+        conversationId: Number(socialwiseMetadata?.conversation_data?.id) || 0,
+        inboxId: Number(inboxRow?.inboxId || externalInboxNumeric) || 0,
+        contactId: Number(socialwiseMetadata?.contact_data?.id) || 0,
+        contactName: contactName || '',
+        contactPhone: (typeof contactPhone === 'string' ? contactPhone : '') || '',
+        channelType: channelType.toLowerCase().includes('whatsapp') ? 'whatsapp'
+          : channelType.toLowerCase().includes('instagram') ? 'instagram'
+          : channelType.toLowerCase().includes('facebook') ? 'facebook'
+          : 'whatsapp',
+        sourceMessageId: wamid || undefined,
+        chatwitAccessToken,
+        chatwitBaseUrl,
+      };
+
+      // Construir payload para o FlowOrchestrator
+      const flowPayload: ChatwitWebhookPayload = {
+        session_id: validPayload.session_id,
+        text: textInput,
+        channel_type: validPayload.channel_type,
+        language: validPayload.language,
+        metadata: socialwiseMetadata as Record<string, unknown>,
+        content_attributes: validPayload.context?.message?.content_attributes as {
+          button_reply?: { id: string; title?: string };
+          list_reply?: { id: string; title?: string };
+        },
+        message: {
+          content: textInput,
+          content_attributes: validPayload.context?.message?.content_attributes as Record<string, unknown>,
+        },
+      };
+
+      const flowResult = await flowOrchestrator.handle(flowPayload, deliveryContext);
+
+      if (flowResult.error) {
+        webhookLogger.warn('[FlowEngine] Erro ao processar flow', {
+          error: flowResult.error,
+          traceId
+        });
+        // Continua para Flash Intent como fallback
+      } else if (flowResult.syncResponse) {
+        webhookLogger.info('[FlowEngine] Flow executado com sucesso (sync)', {
+          waitingInput: flowResult.waitingInput,
+          traceId
+        });
+        logFinalResponse(flowResult.syncResponse, 200, traceId);
+        return NextResponse.json(flowResult.syncResponse, { status: 200 });
+      } else if (flowResult.waitingInput) {
+        // Flow está aguardando input (botão clicado posteriormente)
+        // O FlowExecutor já enviou as mensagens via API async
+        webhookLogger.info('[FlowEngine] Flow aguardando input (async)', { traceId });
+        const asyncResponse = { status: 'accepted', async: true };
+        logFinalResponse(asyncResponse, 200, traceId);
+        return NextResponse.json(asyncResponse, { status: 200 });
+      }
+      // Se flowResult.syncResponse é null e não está waitingInput,
+      // significa que não há flow mapeado - continua para Flash Intent
+    } catch (flowError) {
+      webhookLogger.error('[FlowEngine] Erro crítico no FlowOrchestrator', {
+        error: flowError instanceof Error ? flowError.message : String(flowError),
+        traceId
+      });
+      // Continua para Flash Intent como fallback
     }
 
     // Step 14: Main SocialWise Flow Processing
