@@ -29,9 +29,12 @@ export enum FlowNodeType {
   ADD_TAG = 'add_tag',
   END_CONVERSATION = 'end',
 
-  // Logic (futuro)
+  // Logic
   CONDITION = 'condition',
   DELAY = 'delay',
+
+  // Media
+  MEDIA = 'media',
 }
 
 /**
@@ -245,6 +248,35 @@ export interface EndConversationNodeData extends FlowNodeDataBase {
 }
 
 /**
+ * Dados específicos para nó de delay/espera
+ */
+export interface DelayNodeData extends FlowNodeDataBase {
+  /** Tempo de espera em segundos (1-30) */
+  delaySeconds: number;
+}
+
+/**
+ * Tipo de mídia suportado
+ */
+export type MediaType = 'image' | 'video' | 'document' | 'audio';
+
+/**
+ * Dados específicos para nó de mídia
+ */
+export interface MediaNodeData extends FlowNodeDataBase {
+  /** Tipo de mídia */
+  mediaType: MediaType;
+  /** URL do arquivo no MinIO */
+  mediaUrl?: string;
+  /** Nome do arquivo */
+  filename?: string;
+  /** MIME type */
+  mimeType?: string;
+  /** Legenda/caption (para imagens e vídeos) */
+  caption?: string;
+}
+
+/**
  * União de todos os tipos de dados de nós
  */
 export type FlowNodeData =
@@ -255,7 +287,9 @@ export type FlowNodeData =
   | TextReactionNodeData
   | HandoffNodeData
   | AddTagNodeData
-  | EndConversationNodeData;
+  | EndConversationNodeData
+  | DelayNodeData
+  | MediaNodeData;
 
 // =============================================================================
 // NODE INTERFACES
@@ -457,6 +491,22 @@ export const PALETTE_ITEMS: PaletteItem[] = [
     description: 'Mensagem de texto sem botões',
     category: 'message',
   },
+  {
+    type: FlowNodeType.MEDIA,
+    icon: '📎',
+    label: 'Mídia',
+    description: 'Enviar imagem, vídeo, PDF ou documento',
+    category: 'message',
+  },
+
+  // Logic
+  {
+    type: FlowNodeType.DELAY,
+    icon: '⏳',
+    label: 'Esperar',
+    description: 'Aguardar X segundos antes de continuar',
+    category: 'logic',
+  },
 
   // Reactions
   {
@@ -501,6 +551,51 @@ export const PALETTE_ITEMS: PaletteItem[] = [
 // =============================================================================
 // CONSTANTS
 // =============================================================================
+
+/**
+ * Limites de caracteres por canal (WhatsApp vs Instagram/Facebook)
+ * Referência: docs/interative_message_flow_builder.md
+ */
+export const CHANNEL_CHAR_LIMITS = {
+  whatsapp: {
+    body: 1024,
+    headerText: 60,
+    footer: 60,
+    buttonTitle: 20,
+    payloadId: 256,
+    maxButtons: 3,
+    listItemTitle: 24,
+    listItemDescription: 72,
+  },
+  instagram: {
+    body: 1000,
+    headerText: null, // N/A
+    footer: null, // N/A
+    buttonTitle: 20,
+    payloadId: 1000,
+    maxButtons: 3, // Para BT (botões); QR pode ter até 13
+    maxQuickReplies: 13,
+    carousel: 10,
+    buttonTemplateBody: 640,
+  },
+} as const;
+
+/**
+ * Tipo do canal para limites de caracteres
+ */
+export type ChannelType = keyof typeof CHANNEL_CHAR_LIMITS;
+
+/**
+ * Retorna o limite de caracteres para um campo específico
+ * Por padrão usa WhatsApp que é mais restritivo
+ */
+export function getCharLimit(
+  field: 'body' | 'headerText' | 'footer' | 'buttonTitle' | 'listItemTitle' | 'listItemDescription',
+  channel: ChannelType = 'whatsapp'
+): number | null {
+  const limits = CHANNEL_CHAR_LIMITS[channel];
+  return limits[field as keyof typeof limits] ?? null;
+}
 
 /**
  * Constantes do canvas
@@ -570,6 +665,11 @@ export const NODE_COLORS = {
     bg: 'bg-cyan-50 dark:bg-cyan-950',
     border: 'border-cyan-500',
     icon: 'text-cyan-600',
+  },
+  [FlowNodeType.MEDIA]: {
+    bg: 'bg-teal-50 dark:bg-teal-950',
+    border: 'border-teal-500',
+    icon: 'text-teal-600',
   },
 } as const;
 

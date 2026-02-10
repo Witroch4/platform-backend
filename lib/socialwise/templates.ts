@@ -70,6 +70,14 @@ export async function buildWhatsAppByIntentRaw(intentRaw: string, inboxId: strin
           whatsappOfficialInfo: true,
         },
       },
+      // Flow do Flow Builder (novo padrão)
+      flow: {
+        select: {
+          id: true,
+          name: true,
+          isActive: true,
+        },
+      },
     },
   });
 
@@ -95,9 +103,26 @@ export async function buildWhatsAppByIntentRaw(intentRaw: string, inboxId: strin
             whatsappOfficialInfo: true,
           },
         },
+        // Flow do Flow Builder (novo padrão)
+        flow: {
+          select: {
+            id: true,
+            name: true,
+            isActive: true,
+          },
+        },
       },
     });
     mapping = candidates.find((m: any) => slugify(m.intentName) === norm.slug) || null as any;
+  }
+
+  // NOVO: Se tem flow mapeado e ativo, retornar indicador especial para execução
+  if (mapping?.flowId && (mapping as any).flow?.isActive) {
+    return {
+      _type: 'execute_flow' as const,
+      flowId: mapping.flowId,
+      flowName: (mapping as any).flow.name,
+    };
   }
 
   if (!mapping || !mapping.template) return null;
@@ -741,7 +766,7 @@ class InstagramTemplateConverter {
 export async function buildInstagramByIntentRaw(intentRaw: string, inboxId: string, contactContext?: { contactName?: string; contactPhone?: string }): Promise<any> {
   const intentName = String(intentRaw || '').trim();
   if (!intentName || !inboxId) return null;
-  
+
   const prisma = getPrismaInstance();
   const norm = normalizeIntentRaw(intentName);
 
@@ -772,6 +797,14 @@ export async function buildInstagramByIntentRaw(intentRaw: string, inboxId: stri
           whatsappOfficialInfo: true,
         },
       },
+      // Flow do Flow Builder (novo padrão)
+      flow: {
+        select: {
+          id: true,
+          name: true,
+          isActive: true,
+        },
+      },
     },
   });
 
@@ -797,9 +830,26 @@ export async function buildInstagramByIntentRaw(intentRaw: string, inboxId: stri
             whatsappOfficialInfo: true,
           },
         },
+        // Flow do Flow Builder (novo padrão)
+        flow: {
+          select: {
+            id: true,
+            name: true,
+            isActive: true,
+          },
+        },
       },
     });
     mapping = candidates.find((m: any) => slugify(m.intentName) === norm.slug) || null as any;
+  }
+
+  // NOVO: Se tem flow mapeado e ativo, retornar indicador especial para execução
+  if (mapping?.flowId && (mapping as any).flow?.isActive) {
+    return {
+      _type: 'execute_flow' as const,
+      flowId: mapping.flowId,
+      flowName: (mapping as any).flow.name,
+    };
   }
 
   if (!mapping || !mapping.template) return null;
@@ -973,7 +1023,7 @@ export async function buildInstagramByGlobalIntent(intentRaw: string, inboxId: s
 export async function buildFacebookPageByIntentRaw(intentRaw: string, inboxId: string, contactContext?: { contactName?: string; contactPhone?: string }): Promise<any> {
   const intentName = String(intentRaw || '').trim();
   if (!intentName || !inboxId) return null;
-  
+
   const prisma = getPrismaInstance();
   const norm = normalizeIntentRaw(intentName);
 
@@ -1004,6 +1054,14 @@ export async function buildFacebookPageByIntentRaw(intentRaw: string, inboxId: s
           whatsappOfficialInfo: true,
         },
       },
+      // Flow do Flow Builder (novo padrão)
+      flow: {
+        select: {
+          id: true,
+          name: true,
+          isActive: true,
+        },
+      },
     },
   });
 
@@ -1029,9 +1087,26 @@ export async function buildFacebookPageByIntentRaw(intentRaw: string, inboxId: s
             whatsappOfficialInfo: true,
           },
         },
+        // Flow do Flow Builder (novo padrão)
+        flow: {
+          select: {
+            id: true,
+            name: true,
+            isActive: true,
+          },
+        },
       },
     });
     mapping = candidates.find((m: any) => slugify(m.intentName) === norm.slug) || null as any;
+  }
+
+  // NOVO: Se tem flow mapeado e ativo, retornar indicador especial para execução
+  if (mapping?.flowId && (mapping as any).flow?.isActive) {
+    return {
+      _type: 'execute_flow' as const,
+      flowId: mapping.flowId,
+      flowName: (mapping as any).flow.name,
+    };
   }
 
   if (!mapping || !mapping.template) return null;

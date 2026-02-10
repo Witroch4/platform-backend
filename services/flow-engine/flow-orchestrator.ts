@@ -55,6 +55,41 @@ export class FlowOrchestrator {
   // Main entry point
   // ---------------------------------------------------------------------------
 
+  /**
+   * Executa um flow diretamente pelo ID (bypass de lookup).
+   * Usado quando já sabemos qual flow executar (ex: intent mapping com flowId).
+   */
+  async executeFlowById(
+    flowId: string,
+    deliveryContext: DeliveryContext,
+  ): Promise<OrchestratorResult> {
+    const deadline = new DeadlineGuard(this.deadlineMs, this.safetyMarginMs);
+
+    try {
+      const flow = await this.loadFlow(flowId);
+      if (!flow) {
+        log.warn('[FlowOrchestrator] Flow não encontrado para execução direta', { flowId });
+        return {
+          syncResponse: null,
+          waitingInput: false,
+          error: `Flow ${flowId} não encontrado ou inativo`,
+        };
+      }
+
+      log.info('[FlowOrchestrator] Executando flow por ID', {
+        flowId,
+        flowName: flow.name,
+        conversationId: deliveryContext.conversationId,
+      });
+
+      return this.executeNewFlow(flow, deliveryContext, deadline);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      log.error('[FlowOrchestrator] Erro ao executar flow por ID', { flowId, error: errorMsg });
+      return { syncResponse: null, waitingInput: false, error: errorMsg };
+    }
+  }
+
   async handle(
     payload: ChatwitWebhookPayload,
     deliveryContext: DeliveryContext,

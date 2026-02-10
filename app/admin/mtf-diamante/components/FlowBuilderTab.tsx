@@ -1,11 +1,12 @@
 'use client';
 
-import { useCallback, useState, useMemo, useRef } from 'react';
+import { useCallback, useState, useMemo, useRef, useEffect } from 'react';
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react';
 import type { Node } from '@xyflow/react';
 import { FlowCanvas } from './flow-builder/FlowCanvas';
 import { NodePalette } from './flow-builder/panels/NodePalette';
 import { NodeDetailDialog } from './flow-builder/panels/NodeDetailDialog';
+import { FlowSelector } from './flow-builder/panels/FlowSelector';
 import {
   HandlePopover,
   useHandlePopover,
@@ -15,6 +16,7 @@ import { useMtfData } from '@/app/admin/mtf-diamante/context/SwrProvider';
 import {
   FlowNodeType,
   validateFlowCanvas,
+  createEmptyFlowCanvas,
   type FlowCanvas as FlowCanvasType,
   type FlowNodeData,
   type InteractiveMessageElementType,
@@ -29,7 +31,17 @@ import {
 } from '@/lib/flow-builder/interactiveMessageElements';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Save, RotateCcw, AlertTriangle, Loader2, LayoutGrid, Import, FileJson } from 'lucide-react';
+import {
+  Save,
+  RotateCcw,
+  AlertTriangle,
+  Loader2,
+  LayoutGrid,
+  Import,
+  FileJson,
+  ChevronLeft,
+  Workflow,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import dagre from '@dagrejs/dagre';
 import useSWR from 'swr';
@@ -43,6 +55,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Separator } from '@/components/ui/separator';
+import { cn } from '@/lib/utils';
 
 // =============================================================================
 // INNER CANVAS (needs ReactFlowProvider parent)
@@ -53,6 +67,10 @@ interface FlowBuilderInnerProps {
 }
 
 function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
+  // Estado do flow selecionado
+  const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+
   const {
     nodes,
     edges,
@@ -64,12 +82,14 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
     deleteNode,
     saveFlow,
     resetCanvas,
+    loadCanvas,
     isLoading,
     isSaving,
     error,
     canvasVersion,
+    currentFlowMeta,
     setNodes,
-  } = useFlowCanvas(caixaId);
+  } = useFlowCanvas(caixaId, { flowId: selectedFlowId });
 
   const { interactiveMessages } = useMtfData();
   const reactFlowInstance = useReactFlow();
@@ -89,7 +109,7 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
       stats: { messages: number; reactions: number };
     };
   }>(
-    canvasVersion === 0
+    canvasVersion === 0 && !selectedFlowId
       ? `/api/admin/mtf-diamante/flow-canvas/import?inboxId=${caixaId}`
       : null,
     async (url: string) => {
@@ -131,6 +151,32 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
   );
 
   // ---------------------------------------------------------------------------
+  // Flow Selection Handlers
+  // ---------------------------------------------------------------------------
+
+  /** Selecionar um flow para edição */
+  const handleSelectFlow = useCallback((flowId: string | null) => {
+    setSelectedFlowId(flowId);
+    if (flowId) {
+      setIsEditing(true);
+    }
+  }, []);
+
+  /** Criar novo flow - inicia edição com canvas vazio */
+  const handleCreateNew = useCallback(() => {
+    setIsEditing(true);
+    // O canvas será inicializado pelo useFlowCanvas quando o flow for criado
+  }, []);
+
+  /** Voltar para a lista de flows */
+  const handleBackToList = useCallback(() => {
+    setIsEditing(false);
+    setSelectedFlowId(null);
+    setSelectedNodeId(null);
+    setDialogOpen(false);
+  }, []);
+
+  // ---------------------------------------------------------------------------
   // Handlers
   // ---------------------------------------------------------------------------
 
@@ -167,7 +213,7 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
       const targetData = targetNode.data as unknown as InteractiveMessageNodeData;
       if (targetData.messageId) {
         toast.error('Mensagem vinculada', {
-          description: 'Troque para “Criar mensagem” no editor para usar blocos.',
+          description: 'Troque para "Criar mensagem" no editor para usar blocos.',
         });
         return;
       }
@@ -420,7 +466,42 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
   }
 
   // ---------------------------------------------------------------------------
-  // Render
+  // Render: Flow Selection View (quando não está editando)
+  // ---------------------------------------------------------------------------
+
+  if (!isEditing) {
+    return (
+      <div className="px-1">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-medium">Flow Builder</h3>
+        </div>
+
+        <div className="max-w-md">
+          <FlowSelector
+            inboxId={caixaId}
+            selectedFlowId={selectedFlowId}
+            onSelectFlow={handleSelectFlow}
+            onCreateNew={handleCreateNew}
+          />
+
+          {selectedFlowId && (
+            <div className="mt-4">
+              <Button
+                onClick={() => setIsEditing(true)}
+                className="w-full"
+              >
+                <Workflow className="h-4 w-4 mr-2" />
+                Editar flow selecionado
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Render: Flow Editor View (quando está editando)
   // ---------------------------------------------------------------------------
 
   return (
@@ -428,12 +509,29 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
       {/* Toolbar */}
       <div className="flex items-center justify-between px-1 pb-3">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-medium">Flow Builder</h3>
-          {canvasVersion > 0 && (
-            <Badge variant="secondary" className="text-[10px]">
-              v{canvasVersion}
-            </Badge>
-          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 px-2"
+            onClick={handleBackToList}
+          >
+            <ChevronLeft className="h-4 w-4 mr-1" />
+            Voltar
+          </Button>
+
+          <Separator orientation="vertical" className="h-5" />
+
+          <div className="flex items-center gap-2">
+            <Workflow className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium">
+              {currentFlowMeta?.name || 'Novo Flow'}
+            </span>
+            {canvasVersion > 0 && (
+              <Badge variant="secondary" className="text-[10px]">
+                v{canvasVersion}
+              </Badge>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2">

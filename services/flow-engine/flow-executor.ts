@@ -15,6 +15,8 @@ import log from '@/lib/log';
 import { DeadlineGuard } from './deadline-guard';
 import { ChatwitDeliveryService, createDeliveryService } from './chatwit-delivery-service';
 import { VariableResolver } from './variable-resolver';
+import { elementsToLegacyFields } from '@/lib/flow-builder/interactiveMessageElements';
+import type { InteractiveMessageElement } from '@/types/flow-builder';
 import type {
   DeliveryContext,
   DeliveryPayload,
@@ -292,16 +294,30 @@ export class FlowExecutor {
   ): Promise<string> {
     const config = node.config as {
       interactivePayload?: Record<string, unknown>;
+      elements?: InteractiveMessageElement[];
       body?: string;
       header?: string;
       footer?: string;
       buttons?: Array<{ id: string; title: string }>;
     };
 
+    // Se tem elements (formato novo), converter para campos legados
+    let effectiveConfig = config;
+    if (config.elements?.length && !config.body) {
+      const legacy = elementsToLegacyFields(config.elements);
+      effectiveConfig = {
+        ...config,
+        body: legacy.body,
+        header: legacy.header,
+        footer: legacy.footer,
+        buttons: legacy.buttons,
+      };
+    }
+
     // Resolve variáveis no body/header/footer
-    const resolvedPayload = config.interactivePayload
-      ? JSON.parse(this.resolver.resolve(JSON.stringify(config.interactivePayload)))
-      : this.buildInteractivePayload(config);
+    const resolvedPayload = effectiveConfig.interactivePayload
+      ? JSON.parse(this.resolver.resolve(JSON.stringify(effectiveConfig.interactivePayload)))
+      : this.buildInteractivePayload(effectiveConfig);
 
     await this.smartDeliver(deadline, {
       type: 'interactive',

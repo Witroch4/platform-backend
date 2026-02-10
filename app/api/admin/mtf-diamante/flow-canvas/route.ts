@@ -280,6 +280,159 @@ async function syncFlowToButtonReactions(
 }
 
 // =============================================================================
+// SYNC Canvas → Flow Normalizado (para mapeamento de intenções)
+// =============================================================================
+
+/**
+ * Mapeamento de tipos de nó do canvas visual para tipos do runtime
+ */
+const NODE_TYPE_MAP: Record<string, string> = {
+  'start': 'START',
+  'interactive_message': 'INTERACTIVE_MESSAGE',
+  'text_message': 'TEXT_MESSAGE',
+  'emoji_reaction': 'REACTION',
+  'text_reaction': 'REACTION',
+  'handoff': 'TRANSFER',
+  'add_tag': 'ADD_TAG',
+  'end': 'END',
+  'condition': 'CONDITION',
+  'delay': 'DELAY',
+  'media': 'MEDIA',
+};
+
+/**
+ * Extrai configuração específica de um nó para armazenar no banco
+ */
+function buildNodeConfig(node: FlowNode): object {
+  const data = node.data as unknown as Record<string, unknown>;
+
+  switch (node.type) {
+    case 'interactive_message':
+      return {
+        messageId: data.messageId,
+        elements: data.elements,
+        body: data.body,
+        header: data.header,
+        footer: data.footer,
+        buttons: data.buttons,
+        label: data.label,
+      };
+    case 'text_message':
+      return { text: data.text };
+    case 'emoji_reaction':
+      return { emoji: data.emoji };
+    case 'text_reaction':
+      return { text: data.textReaction };
+    case 'handoff':
+      return { assigneeType: 'team', internalNote: data.targetTeam };
+    case 'add_tag':
+      return { tagName: data.tagName };
+    case 'delay':
+      // Canvas usa delaySeconds, engine usa delayMs
+      const seconds = (data.delaySeconds as number) || 5;
+      return { delayMs: seconds * 1000 };
+    case 'media':
+      return {
+        mediaUrl: data.mediaUrl,
+        filename: data.filename,
+        caption: data.caption,
+        mediaType: data.mediaType,
+        mimeType: data.mimeType,
+      };
+    case 'end':
+      return { endMessage: data.endMessage };
+    case 'start':
+      return { label: data.label, triggerType: data.triggerType };
+    default:
+      return data;
+  }
+}
+
+/**
+ * Sincroniza o canvas visual com um Flow normalizado (tabelas Flow, FlowNode, FlowEdge).
+ * Isso permite que o flow seja mapeado a intenções e executado pelo FlowOrchestrator.
+ */
+async function syncCanvasToNormalizedFlow(
+  inboxId: string,
+  canvas: FlowCanvas,
+  flowName?: string
+): Promise<string> {
+  const prisma = getPrismaInstance();
+
+  return await prisma.$transaction(async (tx) => {
+    // 1. Buscar ou criar Flow para esta inbox
+    let flow = await tx.flow.findFirst({
+      where: { inboxId },
+    });
+
+    // Extrair nome do nó START se disponível
+    const startNode = canvas.nodes.find(n => n.type === 'start');
+    const extractedName = flowName || (startNode?.data as unknown as Record<string, unknown>)?.label as string || null;
+
+    if (!flow) {
+      const inbox = await tx.chatwitInbox.findUnique({
+        where: { id: inboxId },
+        select: { nome: true }
+      });
+      flow = await tx.flow.create({
+        data: {
+          name: extractedName || `Flow - ${inbox?.nome || 'Sem nome'}`,
+          inboxId,
+          isActive: true,
+        }
+      });
+    } else if (extractedName && flow.name !== extractedName) {
+      // Atualizar nome se mudou
+      flow = await tx.flow.update({
+        where: { id: flow.id },
+        data: { name: extractedName }
+      });
+    }
+
+    // 2. Deletar nodes e edges antigos
+    await tx.flowEdge.deleteMany({ where: { flowId: flow.id } });
+    await tx.flowNode.deleteMany({ where: { flowId: flow.id } });
+
+    // 3. Criar novos nodes e mapear IDs (canvas ID → DB ID)
+    const nodeIdMap = new Map<string, string>();
+
+    for (const node of canvas.nodes) {
+      const dbNode = await tx.flowNode.create({
+        data: {
+          flowId: flow.id,
+          nodeType: NODE_TYPE_MAP[node.type] || node.type.toUpperCase(),
+          config: buildNodeConfig(node),
+          positionX: node.position.x,
+          positionY: node.position.y,
+        }
+      });
+      nodeIdMap.set(node.id, dbNode.id);
+    }
+
+    // 4. Criar edges com IDs mapeados
+    for (const edge of canvas.edges) {
+      const sourceId = nodeIdMap.get(edge.source);
+      const targetId = nodeIdMap.get(edge.target);
+
+      if (!sourceId || !targetId) continue;
+
+      await tx.flowEdge.create({
+        data: {
+          flowId: flow.id,
+          sourceNodeId: sourceId,
+          targetNodeId: targetId,
+          buttonId: edge.sourceHandle || null,
+          conditionBranch: (edge.data as Record<string, unknown> | undefined)?.conditionBranch as string || null,
+        }
+      });
+    }
+
+    console.log(`[flow-canvas] Sincronizado Flow ${flow.id} (${flow.name}) com ${canvas.nodes.length} nós`);
+    return flow.id;
+  });
+}
+
+// =============================================================================
 // GET - Buscar canvas por inboxId
 // =============================================================================
 
@@ -415,7 +568,16 @@ export async function POST(request: NextRequest) {
     try {
       await syncFlowToButtonReactions(inboxId, canvas as unknown as FlowCanvas);
     } catch (syncError) {
-      console.error('[flow-canvas] Sync error (non-fatal):', syncError);
+      console.error('[flow-canvas] Sync button reactions error (non-fatal):', syncError);
+      // Non-fatal: canvas is saved, sync failed
+    }
+
+    // Sync canvas → Flow normalizado (para mapeamento de intenções)
+    try {
+      const flowId = await syncCanvasToNormalizedFlow(inboxId, canvas as unknown as FlowCanvas);
+      console.log(`[flow-canvas] Flow normalizado criado/atualizado: ${flowId}`);
+    } catch (syncError) {
+      console.error('[flow-canvas] Sync Flow normalizado error (non-fatal):', syncError);
       // Non-fatal: canvas is saved, sync failed
     }
 

@@ -120,7 +120,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
 
   // Usar SWR para flows da inbox
   const { data: flows = [], error: flowsError } = useSWR(
-    caixaId ? `/api/admin/mtf-diamante/flows/${caixaId}` : null,
+    caixaId ? `/api/admin/mtf-diamante/flows?inboxId=${caixaId}` : null,
     async (url) => {
       const response = await fetch(url);
       if (!response.ok) return [];

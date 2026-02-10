@@ -1,889 +1,260 @@
-# copilot-instructions.md - Socialwise Chatwit Development Guide
+# CLAUDE.md — Socialwise Chatwit
 
-This file provides comprehensive guidance to Claude Code (claude.ai/code) and Cursor AI when working with the Socialwise Chatwit repository.
+> Backup completo: `CLAUDE.md.bak`
 
-## ⚠️ Critical Notes
+## Regras Críticas
 
-1. **You are in the project root directory**
-2. **Use PowerShell commands on Windows**
-3. **Path errors with "@" outside Next.js scope don't need fixing**
-4. **In Next.js 15, route params are Promises - always use await**
-5. **Always run `npx tsc --noEmit` after edits**
-6. **Use Shadcn/UI Dialog instead of native confirm()/alert()**
-7. **Optimistic UI updates are preferred**
-8. **User-facing strings in Portuguese BR, code in English**
-9. **Front linguagem clara e direta sem termos tecnicos**
-10. **Tudo deve ser compativel com thema dark e light do shadcn**
-11. **Edição no front deve ser olhar com a tool de navegação o resutado**
-12. **Sempre que adicionar uma feature adicione sem necessidade de controle global só controle de acesso pagina que controla acesso as features admin/features**
-13. **BFF como Fonte Única (UI)**: telas devem **ler** do BFF e **mutar** usando a **mesma SWR key**; CRUD puro fica para domínio/serviços
+1. Já está no root do projeto
+2. `pnpm exec tsc --noEmit` após toda edição
+3. Next.js 15: `params` é Promise → sempre `await params`
+4. Strings UI em PT-BR, código/variáveis em inglês
+5. Shadcn/UI Dialog (nunca `confirm()`/`alert()`)
+6. Optimistic UI updates preferidos
+7. Dark/Light theme compatível (Shadcn)
+8. BFF como fonte única da UI (mesma SWR key para leitura e mutação)
+9. Features sem controle global — acesso via `admin/features`
+10. Front: linguagem clara, sem termos técnicos
 
-## 🚀 Project Overview
+## Migrations (OBRIGATÓRIO)
 
-**Socialwise Chatwit** is a comprehensive AI-powered customer service platform specializing in social media automation and legal support for lawyers. Built with Next.js 15, TypeScript, and Prisma, this full-stack application integrates OpenAI APIs (GPT-5, GPT-5-mini, GPT-5-nano, GPT-4.1-nano, DALL-E, Whisper), Instagram/WhatsApp Business APIs, and provides advanced document processing capabilities.
+**NUNCA `prisma db push` para produção.** Só `migrate dev` cria arquivo SQL.
 
-### Target Audience
-- **Lawyers**: Complete client management, automated proof correction, legal specialization support
-- **Businesses**: 24/7 automated customer service, lead generation, sales automation
-- **Agencies**: Multi-client management, white-label solutions, scalable automation
-
-### Value Propositions
-- AI-powered automation reducing manual work by 80%
-- Specialized legal document processing and analysis
-- Multi-platform social media management
-- Real-time monitoring and analytics
-- Scalable architecture supporting thousands of simultaneous interactions
-
-## 💻 Technology Stack
-
-### Core Technologies
-- **Frontend**: Next.js 15+ (App Router), React 18+, TypeScript
-- **Backend**: Node.js with Next.js API routes, Express.js, Prisma ORM
-- **Database**: PostgreSQL 17 with pgvector extension
-- **Cache/Queue**: Redis 7+ with BullMQ for job processing
-- **State Management**: SWR 2.3.6 for data fetching and caching
-- **UI Framework**: Tailwind CSS, Shadcn/UI components, Framer Motion
-- **Authentication**: NextAuth.js v5 with Prisma adapter
-- **File Storage**: MinIO (S3-compatible) for document management
-
-### AI & External Integrations
-- **AI Services**: OpenAI (GPT-5, DALL-E, Whisper), Anthropic Claude
-- **Social Media**: Instagram Graph API, WhatsApp Business API
-- **Payments**: Stripe for subscriptions and billing
-- **Email**: Resend for transactional emails
-- **Monitoring**: Prometheus metrics, Grafana dashboards
-
-### Development Tools
-- **Code Quality**: Biome (linting/formatting), TypeScript strict mode
-- **Testing**: Jest with React Testing Library, Supertest for API testing
-- **Build**: Next.js build system, Docker multi-stage builds
-- **Package Manager**: npm with lock file
-
-## 📋 Critical Development Rules
-
-### Mandatory Rules
-```typescript
-// 1. ALWAYS run after any file edit or creation
-npx tsc --noEmit
-
-// 2. All new code MUST be TypeScript
-// 3. User-facing strings in Brazilian Portuguese
-// 4. Identifiers (variables, functions, files) in English
-// 5. You are already in the project root directory
-// 6. Use PowerShell commands on Windows
+```bash
+pnpm exec prisma migrate dev --name descricao  # DEV: cria migration + aplica
+pnpm exec prisma migrate deploy                 # PROD: aplica migrations pendentes
 ```
 
-### Authentication Pattern (NextAuth.js v5)
-```typescript
-// REQUIRED pattern for protected routes
-import { auth } from "@/auth";
-import { NextResponse } from "next/server";
+Committar `prisma/migrations/` JUNTO com `schema.prisma`. Se usou `db push` por engano, crie migration manualmente.
 
-export async function POST(request: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json(
-      { error: "Usuário não autenticado." },
-      { status: 401 }
-    );
-  }
-  // ... rest of logic
-}
+## Stack
+
+| Camada | Tech |
+|---|---|
+| Frontend | Next.js 15 (App Router), React 18, TypeScript, Tailwind, Shadcn/UI, Framer Motion |
+| Backend | Next.js API Routes, Express.js, Prisma ORM |
+| DB | PostgreSQL 17 + pgvector |
+| Cache/Queue | Redis 7 + BullMQ |
+| State | SWR 2.3.6 |
+| Auth | NextAuth.js v5 + Prisma adapter |
+| Storage | MinIO (S3-compatible) |
+| AI | OpenAI (GPT-5, DALL-E, Whisper), Anthropic Claude |
+| Social | Instagram Graph API, WhatsApp Business API |
+| Payments | Stripe |
+| Email | Resend |
+| Monitoring | Prometheus, Grafana |
+| Lint/Format | Biome, TypeScript strict |
+| Test | Jest, React Testing Library, Supertest |
+| Package | pnpm |
+
+## Patterns Obrigatórios
+
+### Auth (todas as API routes protegidas)
+```typescript
+import { auth } from "@/auth";
+const session = await auth();
+if (!session?.user?.id) return NextResponse.json({ error: "Usuário não autenticado." }, { status: 401 });
 ```
 
 ### Dynamic Routes (Next.js 15)
 ```typescript
-// IMPORTANT: params is a Promise in Next.js 15
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ accountid: string }> }
-): Promise<NextResponse> {
-  const { accountid } = await params; // AWAIT is mandatory
-  // ...
+export async function POST(req: NextRequest, { params }: { params: Promise<{ accountid: string }> }) {
+  const { accountid } = await params; // AWAIT obrigatório
 }
 ```
 
-## 🧭 GUIA DEFINITIVO — SWR 2.3.6 para Socialwise/Chatwit
-
-> Padrões oficiais e opinionados para telas **rápidas, estáveis e sem flicker** em React/Next.js com **SWR 2.3.6**.
-
-### 0) Decisões do Projeto (TL;DR)
-- **Fetcher único** (JSON + erro se `!res.ok`), validação opcional (Zod) **no hook**
-- **SWRConfig global**: `revalidateOnFocus:true`, `revalidateOnReconnect:true`, `revalidateIfStale:true`, `dedupingInterval: 1000–2000ms`
-- **Listas/filtros**: `keepPreviousData:true` (sem "piscar")
-- **Mutations**: **`useSWRMutation` para rede** + **`mutate` para cache** (optimistic/rollback/populateCache)
-- **Prefetch**: `preload`
-- **Tempo real**: `useSWRSubscription` (WS/SSE), evitar polling quando possível
-- **Next.js App Router**: buscar no **Server** e injetar **Promise em `SWRConfig.fallback`**; no Client usar SWR + Suspense
-- **Observabilidade**: middlewares para métricas/retry/tracing
-
-### 1) SWR + BFF = Fonte Única de Verdade (UI)
-
-**Regra de ouro**: a UI **lê** sempre do **BFF** e todas as mutações **atualizam a mesma SWR key** que abastece a tela.
-
-#### Por quê?
-- Evita estado dividido entre endpoints diferentes (flicker/race)
-- Um único formato/DTO para UI (o BFF agrega/normaliza)
-- Cache consistente: `mutate(key)` atualiza exatamente o que a UI lê
-
-#### No MTF Diamante (Caixas/Agentes)
-- **Leitura/Lista**: `GET /api/admin/mtf-diamante/inbox-view?dataType=caixas`
-  - ⚠️ **Cache BYPASS** quando `dataType=caixas` (servidor manda `no-store`): dado sempre fresco
-- **Mutations (create/update/delete)**: chamadas de domínio (CRUD) podem existir, **mas a UI SEMPRE muta a mesma key do BFF** via `mutate('/api/admin/mtf-diamante/inbox-view?dataType=caixas', ...)` com **optimistic + rollback** e **`revalidate:false`**
-- **Resultado**: **sem "aparece→some→volta"**, sem desencontro entre CRUD e BFF
-
-> **Pode apagar o CRUD?** Não. **Boa prática**: manter CRUD para serviços/integradores e o **BFF para a UI**. O BFF pode internamente usar o CRUD/Prisma, mas a tela conversa só com o BFF.
-
-### 2) SWRConfig (client)
-
-```tsx
-'use client'
-import { SWRConfig } from 'swr';
-
-export function SWRProvider({ children }: { children: React.ReactNode }) {
-  return (
-    <SWRConfig value={{
-      fetcher: async (url: string) => {
-        const r = await fetch(url);
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      },
-      revalidateOnFocus: true,
-      revalidateOnReconnect: true,
-      revalidateIfStale: true,
-      dedupingInterval: 1500,
-      errorRetryInterval: 3000,
-      shouldRetryOnError: (err: any) => !String(err?.message).includes('401'),
-      provider: () => new Map(),
-    }}>
-      {children}
-    </SWRConfig>
-  );
-}
-```
-
-### 3) Hook de Dados (única fonte + sem flash)
-
-```ts
-import useSWR from 'swr';
-import type { ChatwitInbox } from '@/types/dialogflow';
-
-const KEY = '/api/admin/mtf-diamante/inbox-view?dataType=caixas';
-
-export function useCaixas(isPaused = false) {
-  const { data, error, isLoading, mutate } = useSWR<ChatwitInbox[]>(
-    isPaused ? null : KEY,
-    // fetcher global
-    {
-      keepPreviousData: true,
-      revalidateOnFocus: !isPaused,
-      revalidateOnReconnect: !isPaused,
-      refreshInterval: isPaused ? 0 : 30000,
-      dedupingInterval: 25000,
-    }
-  );
-  return { caixas: data ?? [], isLoading, error, mutate, KEY };
-}
-```
-
-### 4) Playbook de Mutations (optimistic + rollback)
-
-> **Padrão oficial** da equipe: **`useSWRMutation` faz a chamada remota**; **`mutate(KEY, promise, { ... })` orquestra o cache**.
-
-#### Create (append no final, sem revalidate)
-
-```ts
-import useSWRMutation from 'swr/mutation';
-import type { ChatwitInbox, CreateCaixaPayload } from '@/types/dialogflow';
-
-export function useCreateCaixa() {
-  return useSWRMutation('/api/admin/mtf-diamante/caixas', async (_url, { arg }: { arg: CreateCaixaPayload }) => {
-    const r = await fetch(_url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(arg) });
-    if (!r.ok) throw new Error('Falha ao criar');
-    return r.json();
-  });
-}
-
-export async function addCaixaOptimistic({
-  optimistic,
-  payload,
-  mutate,
-  KEY
-}: {
-  optimistic: ChatwitInbox; 
-  payload: CreateCaixaPayload; 
-  mutate: any; 
-  KEY: string;
-}) {
-  await mutate(
-    (async () => {
-      const r = await fetch('/api/admin/mtf-diamante/caixas', { 
-        method:'POST', 
-        headers:{'Content-Type':'application/json'}, 
-        body: JSON.stringify(payload) 
-      });
-      if (!r.ok) throw new Error('Falha ao criar');
-      const { data: created } = await r.json();
-      return (curr: ChatwitInbox[] = []) => [...curr.filter(c => c.id !== optimistic.id), created];
-    })(),
-    {
-      optimisticData: (curr: ChatwitInbox[] = []) => [...curr, optimistic],
-      rollbackOnError: true,
-      populateCache: (updater, curr: ChatwitInbox[]) => (typeof updater === 'function' ? updater(curr) : curr),
-      revalidate: false,
-    }
-  );
-}
-```
-
-#### Update (replace por id)
-
-```ts
-export async function updateCaixaOptimistic({
-  updated,
-  payload,
-  mutate
-}: {
-  updated: ChatwitInbox; 
-  payload: { caixaId: string } & Record<string, any>; 
-  mutate: any;
-}) {
-  await mutate(
-    (async () => {
-      const r = await fetch(`/api/admin/mtf-diamante/caixas/${payload.caixaId}`, { 
-        method:'PUT', 
-        headers:{'Content-Type':'application/json'}, 
-        body: JSON.stringify(payload) 
-      });
-      if (!r.ok) throw new Error('Falha ao atualizar');
-      const { data: result } = await r.json();
-      return (curr: ChatwitInbox[] = []) => curr.map(c => c.id === result.id ? result : c);
-    })(),
-    {
-      optimisticData: (curr: ChatwitInbox[] = []) => curr.map(c => c.id === updated.id ? updated : c),
-      rollbackOnError: true,
-      populateCache: (updater, curr: ChatwitInbox[]) => (typeof updater === 'function' ? updater(curr) : curr),
-      revalidate: false,
-    }
-  );
-}
-```
-
-#### Delete (filter por id)
-
-```ts
-export async function deleteCaixaOptimistic({ id, mutate }: { id: string; mutate: any }) {
-  await mutate(
-    (async () => {
-      const r = await fetch(`/api/admin/mtf-diamante/caixas/${id}`, { method:'DELETE' });
-      if (!r.ok) throw new Error('Falha ao excluir');
-      return (curr: any[] = []) => curr.filter(c => c.id !== id);
-    })(),
-    {
-      optimisticData: (curr: any[] = []) => curr.filter(c => c.id !== id),
-      rollbackOnError: true,
-      populateCache: (updater, curr: any[]) => (typeof updater === 'function' ? updater(curr) : curr),
-      revalidate: false,
-    }
-  );
-}
-```
-
-### 5) Evitando "flicker" (flash) e corridas
-- **`keepPreviousData:true`** em listas/paginação
-- **Uma única key** para a lista: `'/api/admin/mtf-diamante/inbox-view?dataType=caixas'`
-- **Não** misturar leitura (CRUD) e mutação (BFF) — **sempre a mesma key** do BFF
-- **Bypass de cache no BFF** para `dataType=caixas` (servidor responde `no-store`)
-
-### 6) Post-mortem (bug "aparece → some → volta")
-**Causa raiz**: UI lia lista de um endpoint e mutava por outro (CRUD vs BFF), com cache intermediário → estado divergente e re-render com "sumir/voltar".
-
-**Correção**:
-1) UI **lê apenas** do BFF `/inbox-view?dataType=caixas`
-2) **Todas as mutações** usam `mutate` **na mesma key**
-3) **Bypass** de cache para `dataType=caixas`
-4) **Optimistic + rollback** com `revalidate:false`
-
-**Resultado**: lista estável, sem flicker, agentes/assistentes visíveis e previsíveis.
-
-### 7) Snippets úteis
-- **Invalidate múltiplas páginas**: `mutate((key) => typeof key==='string' && key.startsWith('/api/posts?page='), undefined, { revalidate:true })`
-- **Prefetch**: `preload(KEY, fetcher)`
-- **Subscription**: `useSWRSubscription(KEY, (k,{next}) => { const ws=new WebSocket(...); ws.onmessage=e=>next(null,JSON.parse(e.data)); return ()=>ws.close(); })`
-
-### 8) Checklist por tela
-- [ ] Usa BFF como fonte única?
-- [ ] Mesma **SWR key** para leitura e mutate?
-- [ ] `keepPreviousData:true`?
-- [ ] Optimistic + rollback + `revalidate:false`?
-- [ ] Sem misturar CRUD puro na UI?
-- [ ] Prefetch/Subscription quando fizer sentido?
-
-## 🎨 UI/UX Standards
-
-### Optimistic Updates
-- Atualize o estado da UI **antes** da resposta da API e reverta só em caso de erro
-- Prefira `startTransition` (UI local) e/ou React Query/Server Actions para conciliar cache e rollback
-- Combine com `toast.promise` para feedback transparente da operação
-
-### Toasts (sonner)
-- Use **sonner** (o toast do shadcn foi **depreciado**). Renderize `<Toaster />` no layout raiz e chame `toast` em clientes
-- Para chamadas de API, padronize **`toast.promise`** (loading → success/error)
-
-```tsx
-// app/layout.tsx
-import { Toaster } from "sonner";
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="pt-BR">
-      <body>
-        {children}
-        <Toaster richColors closeButton />
-      </body>
-    </html>
-  );
-}
-```
-
-```tsx
-"use client";
-import { toast } from "sonner";
-
-async function save(data: FormData) {
-  // sua chamada de API/Server Action aqui
-}
-
-export function SaveButton() {
-  const onClick = () => {
-    const promise = save(new FormData());
-    toast.promise(promise, {
-      loading: "Salvando...",
-      success: (result) => `Salvo com sucesso`,
-      error: (err) => err?.message ?? "Erro ao salvar",
-    });
-  };
-  return <button onClick={onClick}>Salvar</button>;
-}
-```
-
-### Dialogs
-- Use **`Dialog`** para modais gerais e **`AlertDialog`** para ações destrutivas (confirm/deny)
-- Evite `confirm()/alert()`
-- Garanta foco inicial e fechamento por `Esc`
-- **Responsive Design**: Use Tailwind responsive classes (w-[96vw] sm:max-w-2xl)
-- **Scroll Areas**: For extensive content, use ScrollArea with defined height
-
-### Responsive Dialog Example
-```tsx
-// Dialog with scroll and responsiveness
-<Dialog>
-  <DialogContent className="w-[96vw] sm:max-w-2xl max-h-[85vh]">
-    <DialogHeader>
-      <DialogTitle>Título</DialogTitle>
-    </DialogHeader>
-    <ScrollArea className="h-[58vh] sm:h-[62vh]">
-      {/* Scrollable content */}
-    </ScrollArea>
-    <DialogFooter>
-      {/* Actions */}
-    </DialogFooter>
-  </DialogContent>
-</Dialog>
-```
-
-## Database Operations (Prisma)
+### Prisma: JSON null
 ```typescript
-// All database interactions through Prisma ORM
-import { getPrismaInstance } from '@/lib/connections';
-import { Prisma } from '@prisma/client';
-
-// To set JSON field as null
-await prisma.someModel.update({
-  where: { id: 1 },
-  data: {
-    someJsonField: Prisma.JsonNull, // Use Prisma.JsonNull
-  },
-});
+await prisma.model.update({ where: { id }, data: { jsonField: Prisma.JsonNull } });
 ```
 
-## 🛠️ Development Commands
+## SWR 2.3.6 — Guia Compacto
 
-### Database Operations
+### Regras
+- **Fetcher global**: JSON + throw se `!res.ok`
+- **SWRConfig**: `revalidateOnFocus:true`, `revalidateOnReconnect:true`, `revalidateIfStale:true`, `dedupingInterval:1500`
+- **Listas**: `keepPreviousData:true` (sem flicker)
+- **Mutations**: `useSWRMutation` para rede + `mutate(KEY)` para cache (optimistic + rollback + `revalidate:false`)
+- **Prefetch**: `preload(KEY, fetcher)`
+- **Tempo real**: `useSWRSubscription` (WS/SSE)
+
+### BFF = Fonte Única (UI)
+UI **lê** do BFF e **muta** a mesma SWR key. CRUD puro fica para serviços/integradores.
+
+Exemplo MTF Diamante:
+- Leitura: `GET /api/admin/mtf-diamante/inbox-view?dataType=caixas` (cache bypass: `no-store`)
+- Mutações: `mutate('/api/admin/mtf-diamante/inbox-view?dataType=caixas', ...)` com optimistic + rollback + `revalidate:false`
+
+### Padrão de Mutation Optimistic (Create/Update/Delete seguem mesmo modelo)
+```typescript
+await mutate(
+  (async () => {
+    const r = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    if (!r.ok) throw new Error('Falha');
+    const { data } = await r.json();
+    return (curr: T[] = []) => /* merge data no array */;
+  })(),
+  {
+    optimisticData: (curr: T[] = []) => /* UI imediata */,
+    rollbackOnError: true,
+    populateCache: (updater, curr) => (typeof updater === 'function' ? updater(curr) : curr),
+    revalidate: false,
+  }
+);
+```
+- **Create**: `[...curr, optimistic]` → merge com `created`
+- **Update**: `curr.map(c => c.id === id ? updated : c)`
+- **Delete**: `curr.filter(c => c.id !== id)`
+
+### Snippets
+```typescript
+// Invalidar múltiplas páginas
+mutate((key) => typeof key==='string' && key.startsWith('/api/posts?page='), undefined, { revalidate:true })
+// Subscription
+useSWRSubscription(KEY, (k,{next}) => { const ws=new WebSocket(...); ws.onmessage=e=>next(null,JSON.parse(e.data)); return ()=>ws.close(); })
+```
+
+### Checklist por Tela
+- [ ] BFF como fonte única? Mesma SWR key leitura/mutate?
+- [ ] `keepPreviousData:true`? Optimistic + rollback + `revalidate:false`?
+- [ ] Sem misturar CRUD puro na UI?
+
+## UI/UX
+
+- **Toasts**: `sonner` (shadcn toast depreciado). Usar `toast.promise(promise, { loading, success, error })`
+- **Dialogs**: `Dialog` para modais, `AlertDialog` para ações destrutivas. Responsive: `w-[96vw] sm:max-w-2xl max-h-[85vh]` + `ScrollArea`
+- **Optimistic**: atualizar UI antes da API, reverter em erro. Combinar com `toast.promise`
+
+## Acesso a Dados do genericPayload (MTF)
+
+**Regra**: para edição, usar dados **originais** do provedor (`interactiveMessages` via `useMtfData()`), NUNCA os normalizados (`mensagens`).
+
+```
+useMtfData() → interactiveMessages (completo) → normalizeMessage() (só lista)
+handleEdit() → DEVE usar interactiveMessages?.find(m => m.id === msg.id)
+```
+
+**Preservar**: `content` (contém `genericPayload`, `action`). Verificar dados em 3 locais:
+- `message.action.elements`
+- `message.content.action.elements`
+- `message.content.genericPayload.elements`
+
+**Red flags**: usar `msg.nome`/`msg.texto` (normalizados) para edição, perder `content` no `setEditingMessage`.
+
+## Commands
+
 ```bash
-# Development database setup
-npm run db:push              # Push schema changes to dev database
-npm run db:prepare           # Prepare database for deployment
-npm run db:reset:dev         # Reset development database
-npm run db:migrate           # Run Prisma migrations
-npm run db:generate          # Generate Prisma client
-npm run db:studio            # Open Prisma Studio
+# Dev
+pnpm run dev | build | start | lint | lint-apply | format-apply
+pnpm exec tsc --noEmit
 
-# Seeding
-npm run db:seed              # Populate initial data
-npm run db:seed-prices       # Seed subscription price cards
+# DB
+pnpm exec prisma migrate dev --name X  # ✅ criar migration
+pnpm exec prisma migrate deploy         # ✅ produção
+pnpm run db:push                        # ⚠️ só local/protótipo
+pnpm run db:generate | db:studio | db:reset:dev | db:seed | db:seed-prices
 
-# Prisma CLI commands
-npx prisma migrate dev       # Create migration in development
-npx prisma migrate deploy    # Apply migrations in production
-npx prisma studio           # Visual database editor
+# Workers
+pnpm run start:worker | worker | start:ai-worker | build:workers
+
+# Test
+pnpm test | test:unit | test:integration | test:e2e | test:performance
+
+# Specialized
+pnpm run flash-intent | rollout | init-monitoring | fx-rates:init
+
+# Docker
+docker compose build | up | down
+
+# Git: conventional commits (feat: | fix: | chore:)
 ```
 
-### Testing
-```bash
-npm test                     # Run all tests
-npm run test:unit            # Run unit tests only
-npm run test:integration     # Run integration tests only
-npm run test:e2e             # Run end-to-end tests
-npm run test:performance     # Run performance tests
-npm run test:comprehensive   # Run comprehensive test suite
-npm run test:targeted        # Run targeted tests
-```
+## Project Structure
 
-### Background Workers
-```bash
-npm run start:worker         # Start webhook worker
-npm run worker               # Start webhook worker (alternative)
-npm run start:ai-worker      # Start AI integration worker
-npm run build:workers        # Build workers for production
-```
-
-### Development
-```bash
-npm run dev                  # Start development server
-npm run build                # Build for production
-npm run start                # Start production server
-npm run lint                 # Run Biome linter
-npm run lint-apply           # Apply lint fixes
-npm run format-apply         # Apply formatting fixes
-npx tsc --noEmit            # Check TypeScript types
-```
-
-### Specialized Commands
-```bash
-npm run flash-intent         # Manage flash intent system
-npm run rollout              # Manage feature rollouts
-npm run init-monitoring      # Initialize monitoring
-npm run fx-rates:init        # Initialize FX rate system
-```
-
-### Git Workflow
-```bash
-git add .
-git commit -m 'feat: description'  # Use conventional commits
-git push origin <branch-name>
-```
-
-### Docker
-```bash
-docker compose build         # Build services
-docker compose up           # Start services
-docker compose down         # Stop services
-```
-
-## 📁 Project Structure
-
-### Root Directory
 ```
 /
-├── app/                    # Next.js App Router (main application)
-├── components/             # Reusable React components
-├── lib/                   # Core libraries and utilities
-├── worker/                # Background job processors
-├── scripts/               # Database and deployment scripts
-├── prisma/                # Database schema and migrations
-├── types/                 # TypeScript type definitions
-├── hooks/                 # Custom React hooks
-├── public/                # Static assets
-├── docs/                  # Documentation
-└── __tests__/             # Test files
+├── app/                    # Next.js App Router
+│   ├── api/admin/          # Admin API endpoints
+│   ├── api/chatwitia/      # AI chat endpoints
+│   ├── api/integrations/webhooks/socialwiseflow/
+│   ├── admin/capitao/      # IA Capitão
+│   ├── admin/mtf-diamante/ # MTF Diamante (mensagens interativas)
+│   ├── admin/queue-management | monitoring | leads | leads-chatwit
+│   ├── admin/credentials | notifications | disparo-em-massa | disparo-oab | users
+│   ├── [accountid]/dashboard/
+│   └── auth/
+├── components/             # Shadcn/UI + custom
+├── lib/
+│   ├── ai-integration/     # AI services, types, schemas, workers, queues
+│   ├── socialwise-flow/    # processor.ts, metrics.ts, services/
+│   ├── cost/               # cost-worker, budget-system, pricing-service, fx-rate-service
+│   ├── monitoring/         # APM, queue-monitor, database-monitor
+│   ├── queue/ | queue-management/
+│   ├── auth/ | cache/ | webhook/ | whatsapp/ | instagram/
+│   ├── connections.ts | redis.ts | utils.ts
+├── worker/
+│   ├── webhook.worker.ts | automacao.worker.ts | ai-integration.worker.ts
+│   ├── processors/ | WebhookWorkerTasks/ | services/ | queues/
+├── services/flow-engine/   # ⭐ Flow Engine (deadline-first)
+├── types/                  # TypeScript definitions
+├── hooks/                  # Custom React hooks
+├── prisma/                 # Schema + migrations
+├── docs/                   # ⭐ Docs técnicas de features
+│   ├── interative_message_flow_builder.md  # Flow Builder roadmap + arquitetura
+│   └── chatwit-contrato-async-30s.md       # Contrato async Chatwit
+└── __tests__/
 ```
 
-### App Directory (Next.js App Router)
+> **📌 Consulte `docs/` antes de implementar melhorias no Flow Builder / Flow Engine.**
+
+## SocialWise Flow Pipeline
+
 ```
-app/
-├── api/                   # API routes
-│   ├── admin/            # Admin-only endpoints
-│   ├── chatwitia/        # AI chat endpoints
-│   ├── integrations/     # Third-party integrations
-│   │   └── webhooks/     # Webhook endpoints
-│   │       └── socialwiseflow/ # SocialWise Flow webhook
-│   └── [feature]/        # Feature-specific APIs
-├── admin/                # Admin dashboard pages
-│   ├── capitao/          # IA Capitão - AI Assistant Management
-│   ├── ai-integration/   # AI Integration Management
-│   ├── mtf-diamante/     # MTF Diamante - Advanced Messaging
-│   ├── queue-management/ # Queue Management System
-│   ├── monitoring/       # System Monitoring
-│   ├── leads/            # Lead Management
-│   ├── leads-chatwit/    # Chatwit Lead Integration
-│   ├── credentials/      # Credential Management
-│   ├── notifications/    # Notification System
-│   ├── disparo-em-massa/ # Bulk Message Dispatch
-│   ├── disparo-oab/      # OAB Message Dispatch
-│   └── users/            # User Management
-├── [accountid]/          # Dynamic account routes
-│   └── dashboard/        # User dashboard
-├── auth/                 # Authentication pages
-└── layout.tsx           # Root layout
+Webhook → Auth → Validation → Idempotency/Rate Limit → Classification (Embedding) → Performance Bands → Response
 ```
 
-### Library Organization
-```
-lib/
-├── ai-integration/       # AI service integrations
-│   ├── services/         # Core AI services
-│   ├── types/            # AI integration types
-│   ├── schemas/          # Data schemas
-│   ├── workers/          # Worker processes
-│   └── queues/           # Queue management
-├── socialwise-flow/      # SocialWise Flow Processing System
-│   ├── processor.ts      # Main flow processor
-│   ├── metrics.ts        # Performance metrics
-│   └── services/         # SocialWise services
-├── cost/                 # Cost Management System
-│   ├── cost-worker.ts    # Main cost processing worker
-│   ├── budget-system.ts  # Budget management system
-│   ├── pricing-service.ts # Dynamic pricing resolution
-│   └── fx-rate-service.ts # Foreign exchange rates
-├── monitoring/           # System Monitoring & Observability
-│   ├── application-performance-monitor.ts # APM
-│   ├── queue-monitor.ts  # Queue health monitoring
-│   └── database-monitor.ts # Database performance
-├── queue/                # Queue Definitions & Configuration
-├── queue-management/     # Advanced Queue Management System
-├── auth/                # Authentication utilities
-├── cache/               # Caching mechanisms
-├── webhook/             # Webhook processing
-├── whatsapp/            # WhatsApp API integration
-├── instagram/           # Instagram API integration
-├── connections.ts       # Database connections
-├── redis.ts            # Redis configuration
-└── utils.ts            # General utilities
-```
+| Band | Confiança | Comportamento |
+|---|---|---|
+| HARD | ≥0.80 | Direct mapping, <120ms |
+| SOFT | 0.65-0.79 | Warmup buttons, candidates |
+| LOW | 0.50-0.64 | Domain topics, educational |
+| ROUTER | <0.50 | LLM routing, handoff |
 
-### Worker Architecture
-```
-worker/
-├── webhook.worker.ts     # Main webhook processor (Parent Worker)
-├── automacao.worker.ts   # Automation worker
-├── ai-integration.worker.ts # AI processing worker
-├── processors/           # Individual job processors
-├── WebhookWorkerTasks/  # Webhook-specific tasks
-├── services/            # Worker services
-└── queues/              # Queue definitions
-```
+## Business Logic
 
-## 🔄 SocialWise Flow Processing Pipeline
+| Sistema | Função |
+|---|---|
+| **MTF Diamante** | Templates WA, mensagens interativas, button reactions, bulk dispatch |
+| **IA Capitão** | Intents, FAQ, document processing (OCR), routing dinâmico |
+| **Leads (Legal)** | Unificação docs, análise jurídica IA, batch processing, LGPD |
+| **Queue Management** | Priorização, dead letter, monitoring, alertas |
+| **Cost** | Event → idempotency → pricing → cálculo → DB → audit |
 
-### Processing Chain
-```
-1. Webhook Entry → Authentication & Security
-2. Payload Processing → Validation & Sanitization
-3. Idempotency & Rate Limiting → Duplicate Detection
-4. Classification Engine → Embedding Generation & Classification
-5. Performance Bands → Confidence-based Processing
-6. Response Generation → Channel-specific Formatting
-```
+## Security
 
-### Performance Bands System
-- **HARD (≥0.80)**: Direct mapping, <120ms response
-- **SOFT (0.65-0.79)**: Warmup buttons, intent candidates
-- **LOW (0.50-0.64)**: Domain topics, educational content
-- **ROUTER (<0.50)**: LLM routing, handoff detection
+- Payload máx: 256KB | XSS/injection sanitization | Zod validation
+- Rate limiting: per-session, per-account, burst protection
+- Replay protection: nonce + timestamp + dedup
 
-## 🎯 Key Business Logic Areas
+## Code Conventions
 
-### 1. MTF Diamante System
-Advanced template management for WhatsApp automation:
-- Interactive message creation with variable substitution
-- Button reaction mapping with dynamic routing
-- Bulk processing capabilities with progress tracking
-- Template library with version control
+| Tipo | Formato | Exemplo |
+|---|---|---|
+| Components | PascalCase | `UserProfile.tsx` |
+| Pages | kebab-case | `user-settings/page.tsx` |
+| Utilities | camelCase | `formatDate.ts` |
+| API Routes | `route.ts` | sempre |
+| Types | PascalCase `.ts` | `FlowEngine.ts` |
 
-### 2. IA Capitão (AI Captain)
-Complete AI assistant management:
-- Intent management with configurable responses
-- FAQ automation with context awareness
-- Document processing with OCR capabilities
-- Dynamic routing based on conversation context
+Imports: 1) externos → 2) `@/` internos → 3) relativos
 
-### 3. Lead Management (Legal)
-Specialized system for lawyers:
-- Document unification and PDF processing
-- Automated legal analysis using specialized AI
-- Batch processing workflows for multiple cases
-- LGPD compliance tracking and audit logs
-
-### 4. Queue Management System
-Enterprise-grade queue system:
-- Job prioritization with dynamic routing
-- Dead letter queue handling with retry logic
-- Performance monitoring with real-time metrics
-- Alert management with configurable thresholds
-
-## 🔧 Critical Frontend Data Access Patterns
-
-### ⚠️ IMPORTANTE: Acesso aos Dados do genericPayload
-
-**PROBLEMA COMUM**: Dados salvos no banco (`genericPayload`) não aparecem no frontend de edição.
-
-#### Root Cause Identificado
-O problema ocorre quando o frontend usa dados "normalizados" ao invés dos dados originais do **provedor de dados MTF** que contêm toda a estrutura do `genericPayload`.
-
-#### Localização do Problema
-- **File**: `app/admin/mtf-diamante/components/MensagensInterativasTab.tsx`
-- **Function**: `handleEdit()` - linha ~263
-- **Data Source**: ✅ `useMtfData()` - **USANDO PROVEDOR CORRETAMENTE**
-- **Issue**: A função usa `normalizeMessage()` apenas para exibição, mas no edit perdeu a referência aos dados originais do provedor
-
-#### Como o Provedor MTF Funciona
-
-```typescript
-const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
-  // ✅ USANDO PROVEDOR DE DADOS MTF - NÃO É CONSULTA DIRETA
-  const {
-    interactiveMessages,    // ⭐ DADOS ORIGINAIS DA API COM genericPayload
-    caixas,
-    refreshCaixas,
-    buttonReactions,
-    refreshButtonReactions,
-    deleteMessage,
-    isLoadingMessages,
-    addMessage,
-    updateMessage,
-    addButtonReaction,
-    updateButtonReaction
-  } = useMtfData();
-
-  // ⚠️ PROBLEMA: normalizeMessage() apenas para EXIBIÇÃO na lista
-  const mensagens = useMemo<Mensagem[]>(
-    () => (interactiveMessages ?? []).map(normalizeMessage),
-    [interactiveMessages]
-  );
-};
-```
-
-#### Solução Implementada
-
-```typescript
-const handleEdit = (msg: any) => {
-  // ✅ CORRIGIDO: Buscar mensagem original com dados completos
-  const originalMessage = interactiveMessages?.find(m => m.id === msg.id);
-
-  if (originalMessage) {
-    // ✅ Preservar estrutura original + garantir campos obrigatórios
-    const normalizedOriginal = {
-      ...originalMessage,
-      // Garantir body.text existe (fallback para dados normalizados)
-      body: originalMessage.body || { text: msg.texto || '' },
-      // ⭐ CRÍTICO: Preservar content para acesso ao genericPayload
-      content: originalMessage.content,
-      // Garantir name e type existem
-      name: originalMessage.name || msg.nome,
-      type: originalMessage.type || msg.type || 'button'
-    };
-
-    setEditingMessage(normalizedOriginal);
-    setCurrentView("edit");
-    return;
-  }
-
-  // Fallback para reconstrução (só quando necessário)
-  // ... resto da lógica original
-};
-```
-
-#### Como o CarouselSection Acessa os Dados
-
-**File**: `app/admin/mtf-diamante/components/interactive-message-creator/unified-editing-step/CarouselSection.tsx`
-
-```typescript
-const carouselElements = React.useMemo(() => {
-  if (message.type === 'generic') {
-    const a: any = message.action || {};
-    let elements = a.elements || a.action?.elements || [];
-
-    // ⭐ CRÍTICO: Verificar content.action (formato da API)
-    if (elements.length === 0 && (message as any).content?.action?.elements) {
-      elements = (message as any).content.action.elements;
-    }
-
-    // ⭐ CRÍTICO: Verificar genericPayload diretamente
-    if (elements.length === 0 && (message as any).content?.genericPayload) {
-      if ((message as any).content.genericPayload.elements) {
-        elements = (message as any).content.genericPayload.elements;
-      }
-    }
-
-    return elements.map((el: any, index: number) => ({
-      ...el,
-      id: el.id || generatePrefixedId(channelType || null, `element_${index}_${Date.now()}`),
-      buttons: el.buttons?.map((btn: any, btnIndex: number) => ({
-        ...btn,
-        id: btn.id || btn.payload || generatePrefixedId(channelType || null, `btn_${index}_${btnIndex}_${Date.now()}`)
-      })) || []
-    }));
-  }
-  return [];
-}, [message.type, message.action, (message as any).content?.action, channelType]);
-```
-
-#### ✅ Padrão para Futuras Implementações
-
-**SEMPRE que precisar acessar dados completos via Provedor MTF:**
-
-1. **✅ USE o provedor MTF**: `const { interactiveMessages } = useMtfData()`
-2. **❌ NÃO use dados normalizados para edição**: `mensagens` são só para lista
-3. **✅ ACESSE dados originais do provedor**: `interactiveMessages?.find(m => m.id === msg.id)`
-4. **✅ PRESERVE a estrutura `content`**: contém `genericPayload`, `action`, etc.
-5. **✅ NORMALIZE apenas campos obrigatórios**: `body.text`, `name`, `type`
-6. **✅ VERIFIQUE múltiplas localizações dos dados**:
-   - `message.action.elements`
-   - `message.content.action.elements`
-   - `message.content.genericPayload.elements`
-
-#### 🏗️ Arquitetura Correta do MTF Data Provider
-
-```typescript
-// ✅ CORRETO: Provedor MTF gerencia tudo
-useMtfData() → SWR → API → Database (genericPayload)
-     ↓
-interactiveMessages (dados completos)
-     ↓
-normalizeMessage() (só para exibição na lista)
-     ↓
-handleEdit() → DEVE usar interactiveMessages originais
-```
-
-#### 🚨 Red Flags a Evitar
-
-- ❌ **Usar apenas `msg.nome`, `msg.texto`** (dados normalizados)
-- ❌ **Perder referência ao `originalMessage`**
-- ❌ **Não preservar `content` no `setEditingMessage`**
-- ❌ **Assumir que dados estão em apenas uma localização**
-
-#### Debug Steps para Problemas Similares
-
-1. **Verificar console logs**: `[MensagensInterativasTab] Using original message for edit:`
-2. **Inspecionar estrutura da mensagem**: `console.log('[Debug] message structure:', JSON.stringify(message, null, 2))`
-3. **Verificar se `content` existe**: `console.log('[Debug] message.content:', message.content)`
-4. **Verificar elementos encontrados**: `console.log('[Debug] elements found:', elements)`
-
-#### Files Modificados na Correção
-
-- ✅ `app/admin/mtf-diamante/components/MensagensInterativasTab.tsx:263-287`
-- ✅ `app/admin/mtf-diamante/components/interactive-message-creator/unified-editing-step/CarouselSection.tsx:51-67`
-
-**Resultado**: Carousel agora exibe "3/10 elementos" ao invés de "0/10 elementos" e todos os dados do `genericPayload` são acessíveis na edição.
-
-## 💰 Cost Management System
-
-### Components
-- **Cost Worker**: Event processing and calculation
-- **Budget System**: Allocation and enforcement
-- **Pricing Service**: Dynamic pricing with caching
-- **FX Rate Service**: Currency conversion
-
-### Processing Flow
-```
-Cost Event → Idempotency Check → Price Resolution 
-→ Cost Calculation → Database Storage → Audit Logging
-```
-
-## 📊 Monitoring & Observability
-
-### Application Performance Monitor (APM)
-- Real-time metrics (webhook, worker, database, cache)
-- Performance tracking (response times, throughput, error rates)
-- Configurable alert system
-- Historical data retention and analysis
-
-### Queue Monitoring
-- Queue health (waiting, active, completed, failed)
-- Performance statistics
-- Automatic anomaly detection
-- Configurable monitoring thresholds
-
-## 🔒 Security & Validation
-
-### Input Validation
-- Maximum payload size: 256KB
-- XSS and injection sanitization
-- Schema validation with Zod
-
-### Rate Limiting
-- Per-session limits
-- Per-account limits
-- Burst protection
-- Rate limit headers
-
-### Replay Protection
-- Nonce validation
-- Timestamp verification
-- Duplicate prevention
-
-## 📝 Code Conventions
-
-### File Naming
-- **Components**: PascalCase (`UserProfile.tsx`)
-- **Pages**: kebab-case (`user-settings/page.tsx`)
-- **Utilities**: camelCase (`formatDate.ts`)
-- **API Routes**: Always `route.ts`
-- **Types**: PascalCase with `.ts` extension
-
-### Import Patterns
-```typescript
-// 1. External libraries
-import { useState } from 'react';
-
-// 2. Internal modules with @/ alias
-import { auth } from '@/auth';
-
-// 3. Relative imports
-import { Button } from './components';
-```
-
-### API Route Structure
-```
-app/api/[feature]/
-├── route.ts              # GET, POST for collection
-├── [id]/
-│   └── route.ts         # GET, PUT, DELETE for item
-└── [id]/[action]/
-    └── route.ts         # Custom actions
-```
-
-## 🚦 Environment Variables
+## Env Vars
 
 ```bash
-# Configuration by environment
-.env.development    # Development
-.env.production     # Production
-.env.local         # Local (gitignored)
-.env.docker.example # Docker example
-
-# Required variables
-DATABASE_URL        # PostgreSQL connection
-REDIS_URL          # Redis connection
-NEXTAUTH_SECRET    # NextAuth secret
-OPENAI_API_KEY     # OpenAI API key
+DATABASE_URL | REDIS_URL | NEXTAUTH_SECRET | OPENAI_API_KEY
+# .env.development | .env.production | .env.local (gitignored)
 ```
 
-## 🧪 Testing Strategy
+## Key Insights
 
-- **Unit Tests**: Business logic components
-- **Integration Tests**: API endpoints and workflows
-- **E2E Tests**: Critical user journeys
-- **Performance Tests**: Queue and AI systems
-- **Comprehensive Coverage**: Legal compliance requirements
-
-## 💡 Key Insights
-
-Como bugs de foco/input em React geralmente são causados por:
-- Keys instáveis em listas
-- IDs que mudam entre renders
-- Referencias de objetos que quebram igualdade
-
-Sua solução demonstra que às vezes a correção mais eficaz é a mais simples: manter a identidade dos elementos estável para que React possa otimizar corretamente.
-
-No projeto MTF Diamante, houve um bug de "aparece → some → volta" nas caixas por usar listagem do BFF (/inbox-view) com cache e mutações no CRUD (/caixas). A solução foi tornar o BFF (/inbox-view?dataType=caixas) a fonte única da lista para a UI, desabilitar cache para esse dataType, alinhar a SWR key das mutações com a mesma key da lista e evitar misturar endpoints. Manter CRUD puro para uso interno/serviços e BFF para a UI.
+- Bugs de foco/input React: keys instáveis, IDs que mudam entre renders, refs que quebram igualdade → manter identidade estável
+- Bug MTF "aparece→some→volta": UI lia BFF e mutava CRUD (keys diferentes) → solução: BFF como fonte única, mesma SWR key, bypass cache, optimistic+rollback

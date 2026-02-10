@@ -29,6 +29,87 @@ export interface BandProcessingResult {
   llmWarmupMs?: number;
 }
 
+// ============ FLOW EXECUTION HELPER ============
+
+/**
+ * Executa um flow do Flow Builder para uma intenção mapeada.
+ * Retorna ChannelResponse se bem-sucedido, ou null para fallback.
+ */
+async function executeFlowForIntent(
+  flowId: string,
+  context: ProcessorContext,
+  intentName: string
+): Promise<ChannelResponse | null> {
+  try {
+    // Import dinâmico para evitar dependência circular
+    const { FlowOrchestrator } = await import('@/services/flow-engine');
+
+    const orchestrator = new FlowOrchestrator();
+
+    // Extrair conversationId e contactId do payload original
+    const payload = context.originalPayload || {};
+    const conversationId = payload.conversation?.id || payload.conversation_id || 0;
+    const contactId = payload.sender?.id || payload.contact_id || 0;
+
+    const deliveryContext = {
+      accountId: parseInt(context.chatwitAccountId || '0'),
+      conversationId: typeof conversationId === 'string' ? parseInt(conversationId) : conversationId,
+      inboxId: parseInt(context.inboxId || '0'),
+      contactId: typeof contactId === 'string' ? parseInt(contactId) : contactId,
+      contactName: context.contactName || '',
+      contactPhone: context.contactPhone || '',
+      channelType: normalizeChannelType(context.channelType) as 'whatsapp' | 'instagram' | 'facebook',
+      sourceMessageId: context.wamid,
+      chatwitAccessToken: process.env.CHATWIT_API_TOKEN || '',
+      chatwitBaseUrl: process.env.CHATWIT_BASE_URL || 'https://app.chatwit.io',
+    };
+
+    bandLogger.info('[Flow] Executando flow para intent', {
+      flowId,
+      intentName,
+      conversationId: deliveryContext.conversationId,
+      traceId: context.traceId,
+    });
+
+    const result = await orchestrator.executeFlowById(flowId, deliveryContext);
+
+    if (result.syncResponse) {
+      // Converter SynchronousResponse para ChannelResponse
+      if (result.syncResponse.type === 'interactive') {
+        return {
+          whatsapp: {
+            type: 'interactive',
+            interactive: result.syncResponse.payload as any,
+          }
+        } as any;
+      }
+      return buildChannelResponse(context.channelType, result.syncResponse.content || '');
+    }
+
+    // Flow executou async ou aguarda input - retornar indicador
+    bandLogger.info('[Flow] Flow executado (async ou waiting input)', {
+      flowId,
+      waitingInput: result.waitingInput,
+      traceId: context.traceId,
+    });
+
+    // Se o flow está aguardando input, não temos uma resposta para retornar agora
+    // A entrega já foi feita pelo FlowExecutor via API Chatwit
+    return { _flowExecuted: true, flowId } as any;
+
+  } catch (error) {
+    bandLogger.error('[Flow] Falha ao executar flow', {
+      flowId,
+      intentName,
+      error: error instanceof Error ? error.message : String(error),
+      traceId: context.traceId,
+    });
+
+    // Retornar null para que o sistema use fallback
+    return null;
+  }
+}
+
 // ============ HELPERS FOR INTERACTIVE CONTEXT STORAGE ============
 
 function extractBodyTextFromResponse(response: ChannelResponse): string {
@@ -95,6 +176,27 @@ export async function processHardBand(
     if (isWhatsAppChannel(context.channelType)) {
       const contactContext = { contactName: context.contactName, contactPhone: context.contactPhone };
       let mapped = await buildWhatsAppByIntentRaw(topIntent.slug, context.inboxId, context.wamid, contactContext);
+
+      // NOVO: Verificar se deve executar flow do Flow Builder
+      if (mapped && (mapped as any)._type === 'execute_flow') {
+        bandLogger.info('HARD band WhatsApp intent mapeado para Flow', {
+          intent: topIntent.slug,
+          flowId: (mapped as any).flowId,
+          flowName: (mapped as any).flowName,
+          traceId: context.traceId
+        });
+
+        const flowResult = await executeFlowForIntent(
+          (mapped as any).flowId,
+          context,
+          topIntent.slug
+        );
+        if (flowResult) return flowResult;
+
+        // Se flow falhou, continuar com fallback
+        mapped = null;
+      }
+
       if (!mapped) {
         mapped = await buildWhatsAppByGlobalIntent(topIntent.slug, context.inboxId, context.wamid, contactContext);
       }
@@ -138,6 +240,27 @@ export async function processHardBand(
       let mapped = isInsta
         ? await buildInstagramByIntentRaw(topIntent.slug, context.inboxId, { contactName: context.contactName, contactPhone: context.contactPhone })
         : await buildFacebookPageByIntentRaw(topIntent.slug, context.inboxId, { contactName: context.contactName, contactPhone: context.contactPhone });
+
+      // NOVO: Verificar se deve executar flow do Flow Builder
+      if (mapped && (mapped as any)._type === 'execute_flow') {
+        bandLogger.info(`HARD band ${platformName} intent mapeado para Flow`, {
+          intent: topIntent.slug,
+          flowId: (mapped as any).flowId,
+          flowName: (mapped as any).flowName,
+          traceId: context.traceId
+        });
+
+        const flowResult = await executeFlowForIntent(
+          (mapped as any).flowId,
+          context,
+          topIntent.slug
+        );
+        if (flowResult) return flowResult;
+
+        // Se flow falhou, continuar com fallback
+        mapped = null;
+      }
+
       bandLogger.info(`HARD band ${platformName} intent raw result`, {
         intent: topIntent.slug,
         found: !!mapped,

@@ -254,6 +254,8 @@ export class ConcurrencyManager {
   /**
    * Execute operation with timeout enforcement via Promise.race
    * This ensures operations cannot exceed their deadline even if they ignore AbortSignal
+   *
+   * ✅ FIXED: Deadlock where timeout callback set completed=true but didn't resolve the outer promise
    */
   private executeWithTimeout<T>(
     operation: () => Promise<T>,
@@ -264,35 +266,44 @@ export class ConcurrencyManager {
       let completed = false;
       let timeoutHandle: NodeJS.Timeout | null = null;
 
-      const timeoutPromise = new Promise<null>((timeoutResolve) => {
-        timeoutHandle = setTimeout(() => {
-          if (!completed) {
-            completed = true;
-            concurrencyLogger.warn('Operation timeout enforced', {
-              operationId,
-              timeoutMs
-            });
-            timeoutResolve(null);
-          }
-        }, timeoutMs);
-      });
+      // Timeout handler - resolves with null when deadline is exceeded
+      timeoutHandle = setTimeout(() => {
+        if (!completed) {
+          completed = true;
+          concurrencyLogger.warn('Operation timeout enforced', {
+            operationId,
+            timeoutMs
+          });
+          // ✅ FIX: Resolve the outer promise directly, not via Promise.race
+          resolve(null);
+        }
+      }, timeoutMs);
 
-      // FIX: Chamar operation() apenas UMA vez e reutilizar a promise
+      // Execute the operation
       const operationPromise = operation();
 
-      Promise.race([operationPromise, timeoutPromise])
+      // Handle operation completion
+      operationPromise
         .then((result) => {
           if (!completed) {
             completed = true;
             if (timeoutHandle) clearTimeout(timeoutHandle);
             resolve(result as T | null);
           }
+          // If already completed (timeout happened), result is discarded
         })
         .catch((error) => {
           if (!completed) {
             completed = true;
             if (timeoutHandle) clearTimeout(timeoutHandle);
             reject(error);
+          }
+          // If already completed (timeout happened), error is logged but discarded
+          else {
+            concurrencyLogger.debug('Operation error after timeout (discarded)', {
+              operationId,
+              error: error instanceof Error ? error.message : String(error)
+            });
           }
         });
     });

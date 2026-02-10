@@ -29,6 +29,8 @@ import {
 import { StartNode } from './nodes/StartNode';
 import { InteractiveMessageNode } from './nodes/InteractiveMessageNode';
 import { TextMessageNode } from './nodes/TextMessageNode';
+import { DelayNode } from './nodes/DelayNode';
+import { MediaNode } from './nodes/MediaNode';
 import {
   EmojiReactionNode,
   TextReactionNode,
@@ -48,6 +50,8 @@ const nodeTypes: NodeTypes = {
   [FlowNodeType.START]: StartNode as unknown as NodeTypes[string],
   [FlowNodeType.INTERACTIVE_MESSAGE]: InteractiveMessageNode as unknown as NodeTypes[string],
   [FlowNodeType.TEXT_MESSAGE]: TextMessageNode as unknown as NodeTypes[string],
+  [FlowNodeType.DELAY]: DelayNode as unknown as NodeTypes[string],
+  [FlowNodeType.MEDIA]: MediaNode as unknown as NodeTypes[string],
   [FlowNodeType.EMOJI_REACTION]: EmojiReactionNode as unknown as NodeTypes[string],
   [FlowNodeType.TEXT_REACTION]: TextReactionNode as unknown as NodeTypes[string],
   [FlowNodeType.HANDOFF]: HandoffNode as unknown as NodeTypes[string],

@@ -4,13 +4,14 @@ import { memo, useMemo, useState, DragEvent, useCallback } from 'react';
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react';
 import { MessageSquare, Settings, GripVertical, Plus, Upload, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { 
-  InteractiveMessageNodeData, 
+import type {
+  InteractiveMessageNodeData,
   InteractiveMessageElement,
   InteractiveMessageHeaderTextElement,
   InteractiveMessageBodyElement,
   InteractiveMessageFooterElement
 } from '@/types/flow-builder';
+import { CHANNEL_CHAR_LIMITS } from '@/types/flow-builder';
 import {
   getInteractiveMessageElements,
   hasConfiguredBody,
@@ -396,13 +397,14 @@ export const InteractiveMessageNode = memo(
                     )}>
                       <div className="flex items-start gap-2">
                         <div className="flex-1 min-w-0">
-                          <EditableText 
+                          <EditableText
                             value={headerTextElement.text}
                             onChange={(val) => updateElementContent(headerTextElement.id, { text: val })}
                             label="Cabeçalho Texto"
                             placeholder="Cabeçalho (vazio)"
                             className="text-xs font-bold text-foreground/90 uppercase tracking-wide"
                             minRows={1}
+                            maxLength={CHANNEL_CHAR_LIMITS.whatsapp.headerText}
                           />
                         </div>
                         <button
@@ -542,13 +544,14 @@ export const InteractiveMessageNode = memo(
                   <div className="relative group rounded-md border bg-white dark:bg-card px-3 py-3 shadow-sm min-h-[40px]">
                     <div className="flex items-start gap-2">
                       <div className="flex-1 min-w-0">
-                        <EditableText 
+                        <EditableText
                           value={bodyElement.text}
                           onChange={(val) => updateElementContent(bodyElement.id, { text: val })}
                           label="Corpo da mensagem"
                           placeholder="Digite a mensagem..."
                           className="text-sm"
                           minRows={2}
+                          maxLength={CHANNEL_CHAR_LIMITS.whatsapp.body}
                         />
                       </div>
                       <button
@@ -574,13 +577,14 @@ export const InteractiveMessageNode = memo(
                   <div className="relative group rounded-md border bg-white dark:bg-card px-3 py-2 shadow-sm">
                     <div className="flex items-start gap-2">
                       <div className="flex-1 min-w-0">
-                        <EditableText 
+                        <EditableText
                           value={footerElement.text}
                           onChange={(val) => updateElementContent(footerElement.id, { text: val })}
                           label="Rodapé"
                           placeholder="Rodapé (opcional)"
                           className="text-xs text-muted-foreground italic"
                           minRows={1}
+                          maxLength={CHANNEL_CHAR_LIMITS.whatsapp.footer}
                         />
                       </div>
                       <button
@@ -625,41 +629,77 @@ export const InteractiveMessageNode = memo(
                               </div>
                           </div>
 
-                        <div className="flex items-center rounded-md border bg-white dark:bg-card px-3 py-2 shadow-sm transition-colors hover:border-blue-300 focus-within:ring-2 focus-within:ring-blue-400 focus-within:border-transparent">
-                           <div className="flex items-center justify-center text-center flex-1">
-                             <input
-                               type="text"
-                               className="nodrag w-full bg-transparent border-none p-0 text-sm font-semibold text-blue-600 dark:text-blue-400 focus:outline-none focus:ring-0 text-center placeholder:text-blue-300"
-                               value={'title' in btn ? btn.title : ''}
-                               onChange={(e) => updateButtonTitle(btn.id, e.target.value)}
-                               placeholder="Nome do botão"
-                               autoFocus={('title' in btn && btn.title === 'Novo botão')}
-                               onKeyDown={(e) => {
-                                 e.stopPropagation(); // Impede delete do node ao teclar backspace/delete
-                                 if (e.key === 'Enter') e.currentTarget.blur();
-                               }}
-                               onClick={(e) => {
-                                 e.stopPropagation();
-                                 e.currentTarget.focus();
-                               }}
-                             />
-                           </div>
-                           <button
-                             onClick={(e) => {
-                               e.stopPropagation();
-                               handleRemoveElement(btn.id);
-                             }}
-                             className="ml-2 p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/20 text-muted-foreground hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
-                             title="Remover botão"
-                           >
-                             <X className="h-3 w-3" />
-                           </button>
-                           {'description' in btn && btn.description && (
-                              <p className="text-[10px] text-muted-foreground text-center mt-0.5 truncate">
-                                {btn.description}
-                              </p>
-                            )}
+                        <div className="rounded-md border bg-white dark:bg-card px-3 py-2 shadow-sm transition-colors hover:border-blue-300 focus-within:ring-2 focus-within:ring-blue-400 focus-within:border-transparent">
+                          <div className="flex items-center">
+                            <div className="flex items-center justify-center text-center flex-1">
+                              <input
+                                type="text"
+                                className={cn(
+                                  "nodrag w-full bg-transparent border-none p-0 text-sm font-semibold focus:outline-none focus:ring-0 text-center placeholder:text-blue-300",
+                                  ('title' in btn ? btn.title.length : 0) > CHANNEL_CHAR_LIMITS.whatsapp.buttonTitle
+                                    ? "text-red-500 dark:text-red-400"
+                                    : "text-blue-600 dark:text-blue-400"
+                                )}
+                                value={'title' in btn ? btn.title : ''}
+                                onChange={(e) => updateButtonTitle(btn.id, e.target.value)}
+                                placeholder="Nome do botão"
+                                autoFocus={('title' in btn && btn.title === 'Novo botão')}
+                                onKeyDown={(e) => {
+                                  e.stopPropagation(); // Impede delete do node ao teclar backspace/delete
+                                  if (e.key === 'Enter') e.currentTarget.blur();
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.currentTarget.focus();
+                                }}
+                              />
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveElement(btn.id);
+                              }}
+                              className="ml-2 p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/20 text-muted-foreground hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                              title="Remover botão"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
                           </div>
+                          {/* Contador de caracteres do botão */}
+                          {(() => {
+                            const btnTitle = 'title' in btn ? btn.title : '';
+                            const btnLength = btnTitle.length;
+                            const btnLimit = CHANNEL_CHAR_LIMITS.whatsapp.buttonTitle;
+                            const isOver = btnLength > btnLimit;
+                            const isNear = btnLength >= btnLimit * 0.9;
+                            return (
+                              <div className="flex items-center gap-1 mt-1">
+                                <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
+                                  <div
+                                    className={cn(
+                                      "h-full transition-all duration-200 rounded-full",
+                                      isOver ? "bg-red-500" : isNear ? "bg-amber-500" : "bg-blue-400"
+                                    )}
+                                    style={{ width: `${Math.min((btnLength / btnLimit) * 100, 100)}%` }}
+                                  />
+                                </div>
+                                <span
+                                  className={cn(
+                                    "text-[10px] tabular-nums",
+                                    isOver ? "text-red-500 font-bold" : isNear ? "text-amber-500" : "text-muted-foreground/60"
+                                  )}
+                                >
+                                  {btnLength}/{btnLimit}
+                                </span>
+                              </div>
+                            );
+                          })()}
+                          {'description' in btn && btn.description && (
+                            <p className="text-[10px] text-muted-foreground text-center mt-1 truncate">
+                              {btn.description}
+                            </p>
+                          )}
+                        </div>
 
                           {/* Handle de saída por botão */}
                           <Handle
