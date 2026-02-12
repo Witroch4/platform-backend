@@ -365,12 +365,19 @@ export async function DELETE(
         {
           success: false,
           error: `Não é possível deletar o flow. Existem ${activeSessions} sessão(ões) ativa(s).`,
+          hint: 'Use o painel de Métricas > Flow Admin para forçar a deleção ou abortar sessões.',
+          activeSessions,
         },
         { status: 400 }
       );
     }
 
-    // Deletar flow (cascade deleta nodes, edges e sessions)
+    // Deletar sessions primeiro (schema não tem onDelete: Cascade para FlowSession)
+    await getPrismaInstance().flowSession.deleteMany({
+      where: { flowId },
+    });
+
+    // Deletar flow (cascade deleta nodes e edges)
     await getPrismaInstance().flow.delete({
       where: { id: flowId },
     });

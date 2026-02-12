@@ -53,24 +53,28 @@ export async function processButtonReaction(context: ProcessorContext): Promise<
   if (isWhatsAppChannel(context.channelType)) {
     // WhatsApp: verifica button_reply em content_attributes ou na raiz
     isButton = !!(payload.context?.message?.content_attributes?.button_reply?.id ||
-                  payload.button_id);
+      payload.button_id);
     buttonId = payload.context?.message?.content_attributes?.button_reply?.id ||
-               payload.button_id;
+      payload.button_id;
   } else if (isInstagramChannel(context.channelType) || isFacebookChannel(context.channelType)) {
     // Instagram/Facebook: verifica postback_payload em content_attributes ou na raiz
     isButton = !!(payload.context?.message?.content_attributes?.postback_payload ||
-                  payload.postback_payload) &&
-               (payload.interaction_type === 'postback');
+      payload.postback_payload) &&
+      (payload.interaction_type === 'postback');
     buttonId = payload.context?.message?.content_attributes?.postback_payload ||
-               payload.postback_payload;
+      payload.postback_payload;
   }
 
   if (!isButton || !buttonId) return undefined;
 
+  // Botões do Flow Builder (prefixo flow_) são processados pelo FlowOrchestrator
+  // Não devem ser interceptados pelo sistema legado de button reactions
+  if (buttonId.startsWith('flow_')) return undefined;
+
   // Para reply context, usar source_id da mensagem original
   const replyToMessageId = payload.context?.message?.source_id ||
-                          payload.context?.wamid ||
-                          payload.wamid;
+    payload.context?.wamid ||
+    payload.wamid;
 
   if (!context.inboxId) return {
     replyToMessageId,

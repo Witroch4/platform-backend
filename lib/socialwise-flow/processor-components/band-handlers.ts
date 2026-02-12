@@ -4,6 +4,7 @@
  */
 
 import { createLogger } from '@/lib/utils/logger';
+import { getPrismaInstance } from '@/lib/connections';
 import { openaiService } from '@/services/openai';
 import type { IntentCandidate } from '@/services/openai-components/types';
 import { ClassificationResult } from '../classification';
@@ -34,6 +35,10 @@ export interface BandProcessingResult {
 /**
  * Executa um flow do Flow Builder para uma intenção mapeada.
  * Retorna ChannelResponse se bem-sucedido, ou null para fallback.
+ *
+ * O syncResponse do FlowExecutor já vem no formato correto do canal
+ * (ex: { whatsapp: { type: 'interactive', interactive: {...} } }),
+ * então é retornado diretamente como ChannelResponse.
  */
 async function executeFlowForIntent(
   flowId: string,
@@ -46,55 +51,95 @@ async function executeFlowForIntent(
 
     const orchestrator = new FlowOrchestrator();
 
-    // Extrair conversationId e contactId do payload original
+    // Extrair dados do payload original (formato Chatwit)
+    // Estrutura: { context: { conversation: {id}, contact: {id} }, metadata: { chatwit_base_url, chatwit_agent_bot_token, conversation_display_id } }
     const payload = context.originalPayload || {};
-    const conversationId = payload.conversation?.id || payload.conversation_id || 0;
-    const contactId = payload.sender?.id || payload.contact_id || 0;
+    const payloadContext = payload.context || {};
+    const payloadMetadata = payload.metadata || {};
+
+    const conversationId =
+      payloadContext.conversation?.id ||
+      payloadMetadata.conversation_id ||
+      payload.conversation?.id ||
+      0;
+
+    const conversationDisplayId =
+      payloadMetadata.conversation_display_id ||
+      payloadContext.conversation?.display_id ||
+      undefined;
+
+    const contactId =
+      payloadContext.contact?.id ||
+      payloadMetadata.contact_id ||
+      payload.sender?.id ||
+      0;
+
+    const chatwitAccessToken =
+      payloadMetadata.chatwit_agent_bot_token as string ||
+      process.env.CHATWIT_AGENT_BOT_TOKEN ||
+      '';
+
+    const chatwitBaseUrl =
+      payloadMetadata.chatwit_base_url as string ||
+      process.env.CHATWIT_BASE_URL ||
+      '';
+
+    // Resolver prismaInboxId (CUID) a partir do inboxId numérico do Chatwit
+    // Necessário para que findActiveSession encontre a sessão no button resume
+    const prisma = getPrismaInstance();
+    const prismaInbox = await prisma.chatwitInbox.findFirst({
+      where: { inboxId: context.inboxId },
+      select: { id: true },
+    });
 
     const deliveryContext = {
       accountId: parseInt(context.chatwitAccountId || '0'),
       conversationId: typeof conversationId === 'string' ? parseInt(conversationId) : conversationId,
+      conversationDisplayId: conversationDisplayId ? Number(conversationDisplayId) : undefined,
       inboxId: parseInt(context.inboxId || '0'),
       contactId: typeof contactId === 'string' ? parseInt(contactId) : contactId,
       contactName: context.contactName || '',
       contactPhone: context.contactPhone || '',
       channelType: normalizeChannelType(context.channelType) as 'whatsapp' | 'instagram' | 'facebook',
       sourceMessageId: context.wamid,
-      chatwitAccessToken: process.env.CHATWIT_API_TOKEN || '',
-      chatwitBaseUrl: process.env.CHATWIT_BASE_URL || 'https://app.chatwit.io',
+      prismaInboxId: prismaInbox?.id || undefined,
+      chatwitAccessToken,
+      chatwitBaseUrl,
     };
 
     bandLogger.info('[Flow] Executando flow para intent', {
       flowId,
       intentName,
       conversationId: deliveryContext.conversationId,
+      conversationDisplayId: deliveryContext.conversationDisplayId,
       traceId: context.traceId,
     });
 
     const result = await orchestrator.executeFlowById(flowId, deliveryContext);
 
     if (result.syncResponse) {
-      // Converter SynchronousResponse para ChannelResponse
-      if (result.syncResponse.type === 'interactive') {
-        return {
-          whatsapp: {
-            type: 'interactive',
-            interactive: result.syncResponse.payload as any,
-          }
-        } as any;
-      }
-      return buildChannelResponse(context.channelType, result.syncResponse.content || '');
+      // syncResponse do FlowExecutor já está no formato correto do canal
+      // Ex: { whatsapp: { type: 'interactive', interactive: {...} } } ou { text: '...' }
+      // Retornar diretamente como ChannelResponse
+      bandLogger.info('[Flow] Flow executado com syncResponse', {
+        flowId,
+        hasWhatsapp: !!(result.syncResponse as any).whatsapp,
+        hasText: !!(result.syncResponse as any).text,
+        waitingInput: result.waitingInput,
+        traceId: context.traceId,
+      });
+      return result.syncResponse as unknown as ChannelResponse;
     }
 
-    // Flow executou async ou aguarda input - retornar indicador
+    // Flow executou async ou aguarda input — a entrega já foi feita pelo FlowExecutor
     bandLogger.info('[Flow] Flow executado (async ou waiting input)', {
       flowId,
       waitingInput: result.waitingInput,
       traceId: context.traceId,
     });
 
-    // Se o flow está aguardando input, não temos uma resposta para retornar agora
-    // A entrega já foi feita pelo FlowExecutor via API Chatwit
+    // Sinalizar que o flow foi executado e a entrega já aconteceu
+    // O caller (processHardBand) deve tratar este marcador como "não enviar nada mais"
     return { _flowExecuted: true, flowId } as any;
 
   } catch (error) {
@@ -135,7 +180,7 @@ function extractBodyTextFromResponse(response: ChannelResponse): string {
   return '';
 }
 
-function extractButtonsFromResponse(response: ChannelResponse): Array<{title: string; payload: string}> {
+function extractButtonsFromResponse(response: ChannelResponse): Array<{ title: string; payload: string }> {
   // Cast to any to access dynamic properties
   const r = response as any;
 
@@ -451,42 +496,42 @@ export async function processSoftBand(
       }
 
       if (routerResult.mode === 'intent' && !routerResult.intent_payload) {
-          const candidates = (classification.candidates || []).filter(c => typeof c.score === 'number');
-          candidates.sort((a, b) => (b.score! - a.score!));
-          const top = candidates[0];
-          const dynThreshold = computeDynamicHintThreshold(candidates);
+        const candidates = (classification.candidates || []).filter(c => typeof c.score === 'number');
+        candidates.sort((a, b) => (b.score! - a.score!));
+        const top = candidates[0];
+        const dynThreshold = computeDynamicHintThreshold(candidates);
 
-          if (top && (top.score ?? 0) >= dynThreshold) {
-            routerResult.intent_payload = `@${top.slug}`;
-            bandLogger.warn('ROUTER_LITE fallback applied: intent_payload filled from hints', {
-              filled_payload: routerResult.intent_payload,
-              top_score: Number((top.score ?? 0).toFixed(3)),
-              threshold: dynThreshold,
-              traceId: context.traceId
-            });
-          } else {
-            bandLogger.warn('ROUTER_LITE fallback applied: degraded to chat (low confidence, no valid intent)', {
-              top_slug: top?.slug,
-              top_score: top?.score ?? null,
-              threshold: dynThreshold,
-              traceId: context.traceId
-            });
-            routerResult.mode = 'chat';
-          }
+        if (top && (top.score ?? 0) >= dynThreshold) {
+          routerResult.intent_payload = `@${top.slug}`;
+          bandLogger.warn('ROUTER_LITE fallback applied: intent_payload filled from hints', {
+            filled_payload: routerResult.intent_payload,
+            top_score: Number((top.score ?? 0).toFixed(3)),
+            threshold: dynThreshold,
+            traceId: context.traceId
+          });
+        } else {
+          bandLogger.warn('ROUTER_LITE fallback applied: degraded to chat (low confidence, no valid intent)', {
+            top_slug: top?.slug,
+            top_score: top?.score ?? null,
+            threshold: dynThreshold,
+            traceId: context.traceId
+          });
+          routerResult.mode = 'chat';
         }
-
-        const buttons = routerResult.buttons?.map(btn => ({ title: btn.title, payload: btn.payload }));
-        const response = buildChannelResponse(context.channelType, routerResult.response_text, buttons);
-
-        bandLogger.info('SOFT band via ROUTER_LITE processed', {
-          mode: routerResult.mode,
-          hasButtons: !!buttons?.length,
-          llmWarmupMs,
-          traceId: context.traceId
-        });
-
-        return { response, llmWarmupMs };
       }
+
+      const buttons = routerResult.buttons?.map(btn => ({ title: btn.title, payload: btn.payload }));
+      const response = buildChannelResponse(context.channelType, routerResult.response_text, buttons);
+
+      bandLogger.info('SOFT band via ROUTER_LITE processed', {
+        mode: routerResult.mode,
+        hasButtons: !!buttons?.length,
+        llmWarmupMs,
+        traceId: context.traceId
+      });
+
+      return { response, llmWarmupMs };
+    }
 
     // ✅ Degradation fallback moved to catch block - this was unreachable code
   } catch (error) {
@@ -599,82 +644,82 @@ export async function processRouterBand(
       traceId: context.traceId
     });
 
-      // Fallback: se Router retornou mode='intent' sem intent_payload, usar top-K hints
-      if (routerResult.mode === 'intent' && !routerResult.intent_payload) {
-        const candidates = (intentHints || []).filter(c => typeof c.score === 'number');
-        candidates.sort((a, b) => (b.score! - a.score!));
-        const top = candidates[0];
-        const dynThreshold = computeDynamicHintThreshold(candidates);
+    // Fallback: se Router retornou mode='intent' sem intent_payload, usar top-K hints
+    if (routerResult.mode === 'intent' && !routerResult.intent_payload) {
+      const candidates = (intentHints || []).filter(c => typeof c.score === 'number');
+      candidates.sort((a, b) => (b.score! - a.score!));
+      const top = candidates[0];
+      const dynThreshold = computeDynamicHintThreshold(candidates);
 
-        if (top && (top.score ?? 0) >= dynThreshold) {
-          routerResult.intent_payload = `@${top.slug}`;
-          bandLogger.warn('ROUTER fallback applied: intent_payload filled from hints', {
-            filled_payload: routerResult.intent_payload,
-            top_score: Number((top.score ?? 0).toFixed(3)),
-            threshold: dynThreshold,
-            traceId: context.traceId
-          });
-        } else {
-          // Degrada para chat por baixa confiança
-          bandLogger.warn('ROUTER fallback applied: degraded to chat (low confidence, no valid intent)', {
-            top_slug: top?.slug,
-            top_score: top?.score ?? null,
-            threshold: dynThreshold,
-            traceId: context.traceId
-          });
-          routerResult.mode = 'chat';
-        }
+      if (top && (top.score ?? 0) >= dynThreshold) {
+        routerResult.intent_payload = `@${top.slug}`;
+        bandLogger.warn('ROUTER fallback applied: intent_payload filled from hints', {
+          filled_payload: routerResult.intent_payload,
+          top_score: Number((top.score ?? 0).toFixed(3)),
+          threshold: dynThreshold,
+          traceId: context.traceId
+        });
+      } else {
+        // Degrada para chat por baixa confiança
+        bandLogger.warn('ROUTER fallback applied: degraded to chat (low confidence, no valid intent)', {
+          top_slug: top?.slug,
+          top_score: top?.score ?? null,
+          threshold: dynThreshold,
+          traceId: context.traceId
+        });
+        routerResult.mode = 'chat';
       }
+    }
 
-      if (routerResult.mode === 'intent' && routerResult.intent_payload) {
-        // Try to map the intent based on channel
-        const intentName = routerResult.intent_payload.replace(/^@/, '');
-        if (isWhatsAppChannel(context.channelType)) {
-          const contactContext = { contactName: context.contactName, contactPhone: context.contactPhone };
-          let mapped = await buildWhatsAppByIntentRaw(intentName, context.inboxId, context.wamid, contactContext);
-          if (!mapped) mapped = await buildWhatsAppByGlobalIntent(intentName, context.inboxId, context.wamid, contactContext);
-          if (mapped) return { response: mapped, llmWarmupMs };
-        } else if (isFacebookChannel(context.channelType)) {
-          const contactContext = { contactName: context.contactName, contactPhone: context.contactPhone };
-          let mapped = await buildFacebookPageByIntentRaw(intentName, context.inboxId, contactContext);
-          if (!mapped) mapped = await buildFacebookPageByGlobalIntent(intentName, context.inboxId, contactContext);
-          if (mapped) return { response: mapped, llmWarmupMs };
-        } else if (isInstagramChannel(context.channelType)) {
-          const contactContext = { contactName: context.contactName, contactPhone: context.contactPhone };
-          let mapped = await buildInstagramByIntentRaw(intentName, context.inboxId, contactContext);
-          if (!mapped) mapped = await buildInstagramByGlobalIntent(intentName, context.inboxId, contactContext);
-          if (mapped) return { response: mapped, llmWarmupMs };
-        }
+    if (routerResult.mode === 'intent' && routerResult.intent_payload) {
+      // Try to map the intent based on channel
+      const intentName = routerResult.intent_payload.replace(/^@/, '');
+      if (isWhatsAppChannel(context.channelType)) {
+        const contactContext = { contactName: context.contactName, contactPhone: context.contactPhone };
+        let mapped = await buildWhatsAppByIntentRaw(intentName, context.inboxId, context.wamid, contactContext);
+        if (!mapped) mapped = await buildWhatsAppByGlobalIntent(intentName, context.inboxId, context.wamid, contactContext);
+        if (mapped) return { response: mapped, llmWarmupMs };
+      } else if (isFacebookChannel(context.channelType)) {
+        const contactContext = { contactName: context.contactName, contactPhone: context.contactPhone };
+        let mapped = await buildFacebookPageByIntentRaw(intentName, context.inboxId, contactContext);
+        if (!mapped) mapped = await buildFacebookPageByGlobalIntent(intentName, context.inboxId, contactContext);
+        if (mapped) return { response: mapped, llmWarmupMs };
+      } else if (isInstagramChannel(context.channelType)) {
+        const contactContext = { contactName: context.contactName, contactPhone: context.contactPhone };
+        let mapped = await buildInstagramByIntentRaw(intentName, context.inboxId, contactContext);
+        if (!mapped) mapped = await buildInstagramByGlobalIntent(intentName, context.inboxId, contactContext);
+        if (mapped) return { response: mapped, llmWarmupMs };
       }
+    }
 
-      // Chat mode or intent mapping failed - build conversational response
-      const buttons = routerResult.buttons?.map(btn => ({
-        title: btn.title,
-        payload: btn.payload
-      }));
+    // Chat mode or intent mapping failed - build conversational response
+    const buttons = routerResult.buttons?.map(btn => ({
+      title: btn.title,
+      payload: btn.payload
+    }));
 
-      // O Router LLM sempre deve retornar response_text válido
-      const responseText = routerResult.response_text;
+    // O Router LLM sempre deve retornar response_text válido
+    const responseText = routerResult.response_text;
 
-      // Debug: Log response construction details
-      bandLogger.info('Building channel response', {
-        mode: routerResult.mode,
-        response_text: routerResult.response_text,
-        response_text_length: routerResult.response_text?.length || 0,
-        buttonsCount: buttons?.length || 0,
-        traceId: context.traceId
-      });
+    // Debug: Log response construction details
+    bandLogger.info('Building channel response', {
+      mode: routerResult.mode,
+      response_text: routerResult.response_text,
+      response_text_length: routerResult.response_text?.length || 0,
+      buttonsCount: buttons?.length || 0,
+      traceId: context.traceId
+    });
 
-      const response = buildChannelResponse(context.channelType, responseText, buttons);
+    const response = buildChannelResponse(context.channelType, responseText, buttons);
 
-      bandLogger.info('ROUTER band decision processed', {
-        mode: routerResult.mode,
-        hasButtons: !!buttons?.length,
-        llmWarmupMs,
-        traceId: context.traceId
-      });
+    bandLogger.info('ROUTER band decision processed', {
+      mode: routerResult.mode,
+      hasButtons: !!buttons?.length,
+      llmWarmupMs,
+      traceId: context.traceId
+    });
 
-      return { response, llmWarmupMs };
+    return { response, llmWarmupMs };
 
     // ✅ Unreachable degradation code removed - handled in catch block
   } catch (error) {

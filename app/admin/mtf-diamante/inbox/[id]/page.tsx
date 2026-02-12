@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import MensagensInterativasTab from '@/app/admin/mtf-diamante/components/MensagensInterativasTab';
 import MapeamentoTab from '@/app/admin/mtf-diamante/components/MapeamentoTab';
 import { FlowBuilderTab } from '@/app/admin/mtf-diamante/components/FlowBuilderTab';
+import { FlowAdminDashboard } from '@/app/admin/mtf-diamante/components/FlowAdminDashboard';
 import { DialogflowCaixasAgentes } from '@/app/admin/mtf-diamante/components/DialogflowCaixasAgentes';
 import SafeBoundary from '@/components/SafeBoundary';
 import { Loader2, Settings, BarChart3, GitBranch } from 'lucide-react';
@@ -107,7 +108,7 @@ export default function InboxDashboardPage() {
             <MapeamentoTab caixaId={caixaId} />
           </TabsContent>
           <TabsContent value="agentes">
-            <DialogflowCaixasAgentes onCaixaSelected={() => {}} filterCaixaId={caixaId} hideToolbar />
+            <DialogflowCaixasAgentes onCaixaSelected={() => { }} filterCaixaId={caixaId} hideToolbar />
           </TabsContent>
           <TabsContent value="configuracoes">
             <Card>
@@ -123,6 +124,32 @@ export default function InboxDashboardPage() {
               <CardContent>
                 <div className="space-y-4">
                   <div className="p-4 border border-border rounded-lg bg-muted/20">
+                    <h3 className="font-medium mb-3">Informações da Caixa</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">ID Interno (Prisma):</span>
+                        <code className="ml-2 px-2 py-0.5 rounded bg-muted font-mono text-xs select-all">
+                          {caixaId}
+                        </code>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">ID Chatwit (Externo):</span>
+                        <code className="ml-2 px-2 py-0.5 rounded bg-muted font-mono text-xs select-all">
+                          {currentCaixa?.inboxId ?? '—'}
+                        </code>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Nome:</span>
+                        <span className="ml-2 font-medium">{currentCaixa?.nome ?? '—'}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Canal:</span>
+                        <span className="ml-2 font-medium">{currentCaixa?.channelType ?? '—'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-4 border border-border rounded-lg bg-muted/20">
                     <h3 className="font-medium mb-2">Configurações de AI</h3>
                     <p className="text-sm text-muted-foreground mb-3">
                       Configure o comportamento da inteligência artificial para esta caixa
@@ -131,7 +158,7 @@ export default function InboxDashboardPage() {
                       Abrir Configurações IA
                     </Button>
                   </div>
-                  
+
                   <div className="p-4 border border-border rounded-lg bg-muted/20">
                     <h3 className="font-medium mb-2">Configurações de Canal</h3>
                     <p className="text-sm text-muted-foreground mb-3">
@@ -141,7 +168,7 @@ export default function InboxDashboardPage() {
                       Configurar Canal
                     </Button>
                   </div>
-                  
+
                   <div className="p-4 border border-destructive/50 rounded-lg bg-destructive/5">
                     <h3 className="font-medium mb-2 text-destructive">Zona de Perigo</h3>
                     <p className="text-sm text-muted-foreground mb-3">
@@ -149,7 +176,7 @@ export default function InboxDashboardPage() {
                     </p>
                     <Button
                       variant="destructive"
-                      
+
                       onClick={handleDeleteClick}
                     >
                       Excluir Caixa
@@ -160,71 +187,7 @@ export default function InboxDashboardPage() {
             </Card>
           </TabsContent>
           <TabsContent value="metricas">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="w-5 h-5" />
-                  Métricas e Analytics
-                </CardTitle>
-                <CardDescription>
-                  Acompanhe o desempenho e estatísticas desta caixa de entrada
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div className="p-4 border border-border rounded-lg">
-                    <h4 className="font-medium text-sm text-muted-foreground">Total de Mensagens</h4>
-                    <p className="text-2xl font-bold">1,234</p>
-                    <p className="text-xs text-green-600">+12% este mês</p>
-                  </div>
-                  
-                  <div className="p-4 border border-border rounded-lg">
-                    <h4 className="font-medium text-sm text-muted-foreground">Tempo de Resposta</h4>
-                    <p className="text-2xl font-bold">2.3s</p>
-                    <p className="text-xs text-green-600">-15% este mês</p>
-                  </div>
-                  
-                  <div className="p-4 border border-border rounded-lg">
-                    <h4 className="font-medium text-sm text-muted-foreground">Taxa de Sucesso</h4>
-                    <p className="text-2xl font-bold">94.2%</p>
-                    <p className="text-xs text-green-600">+3% este mês</p>
-                  </div>
-                  
-                  <div className="p-4 border border-border rounded-lg">
-                    <h4 className="font-medium text-sm text-muted-foreground">Conversas Ativas</h4>
-                    <p className="text-2xl font-bold">48</p>
-                    <p className="text-xs text-blue-600">Agora</p>
-                  </div>
-                  
-                  <div className="p-4 border border-border rounded-lg">
-                    <h4 className="font-medium text-sm text-muted-foreground">Intents Detectados</h4>
-                    <p className="text-2xl font-bold">892</p>
-                    <p className="text-xs text-green-600">+8% este mês</p>
-                  </div>
-                  
-                  <div className="p-4 border border-border rounded-lg">
-                    <h4 className="font-medium text-sm text-muted-foreground">Handoffs</h4>
-                    <p className="text-2xl font-bold">23</p>
-                    <p className="text-xs text-orange-600">+2 hoje</p>
-                  </div>
-                </div>
-                
-                <div className="mt-6 p-4 border border-border rounded-lg bg-muted/20">
-                  <h3 className="font-medium mb-3">Relatórios Detalhados</h3>
-                  <div className="flex gap-2">
-                    <Button variant="outline" >
-                      Exportar Dados
-                    </Button>
-                    <Button variant="outline" >
-                      Relatório Semanal
-                    </Button>
-                    <Button variant="outline" >
-                      Análise de Performance
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <FlowAdminDashboard inboxId={caixaId} />
           </TabsContent>
         </Tabs>
       </div>

@@ -17,7 +17,16 @@
       "Bash(pnpm add:*)",
       "Bash(pnpm exec prisma generate:*)",
       "Bash(pnpm exec prisma:*)",
-      "Bash(xargs cat:*)"
+      "Bash(xargs cat:*)",
+      "Bash(curl:*)",
+      "Bash(python3:*)",
+      "Bash(sudo mv:*)",
+      "Bash(sudo chmod:*)",
+      "Bash(portainer-mcp:*)",
+      "Bash(echo:*)",
+      "mcp__portainer__listStacks",
+      "mcp__portainer__listEnvironments",
+      "mcp__portainer__dockerProxy"
     ],
     "deny": [],
     "ask": []

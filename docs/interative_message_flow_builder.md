@@ -1,6 +1,6 @@
 # Interactive Message Flow Builder — Referência Técnica Compacta
 
-> v3.4.0 | Última atualização: 10/02/2026 | Backup completo: `interative_message_flow_builder.md.bak`
+> v3.6.0 | Última atualização: 11/02/2026 | Backup completo: `interative_message_flow_builder.md.bak`
 
 ---
 
@@ -261,11 +261,24 @@ emoji → não-vazio | text → não-vazio | action → não-vazia
 2. No MapeamentoTab, seleciona "Mensagem Interativa" → aparece pelo nome do nó START
 
 ### Clique de Botão
-Usuário clica botão → webhook com `button_reply.id` → `ButtonProcessor` busca `MapeamentoBotao` → executa ação mapeada (SEND_TEMPLATE, ADD_TAG, START_FLOW, ASSIGN_TO_AGENT...)
+
+**Priorização de Pipeline (v3.5):**
+1. Webhook detecta botão clicado (`button_reply.id`)
+2. Se `buttonId.startsWith('flow_')` → **FlowOrchestrator** (Flow Engine)
+   - Busca `FlowSession` ativa (status `WAITING_INPUT`)
+   - Encontra `FlowEdge` com `buttonId` correspondente
+   - Resume execução via `FlowExecutor.resumeFromButton()`
+3. Senão → `ButtonProcessor` busca `MapeamentoBotao` (legado)
+   - Executa ação mapeada (SEND_TEMPLATE, ADD_TAG, START_FLOW, ASSIGN_TO_AGENT...)
+
+**Constante de prefixo:** `FLOW_BUTTON_PREFIX = 'flow_'` em `lib/flow-builder/interactiveMessageElements.ts`
 
 ### Geração de Payload
+`lib/flow-builder/interactiveMessageElements.ts`:
+- `safeId('button')` → `flow_button_{timestamp}_{random}` (Flow Builder)
+
 `app/.../unified-editing-step/utils.ts`:
-- `generateUniqueButtonId()` → `btn_{timestamp}_{counter}_{perf}_{random}`
+- `generateUniqueButtonId()` → `btn_{timestamp}_{counter}_{perf}_{random}` (MTF legado)
 - `generatePrefixedId(channel, suffix)` → `ig_btn_...` / `fb_btn_...` / `btn_...`
 
 ---
@@ -290,13 +303,19 @@ Cronômetro com `deadlineMs=28000`, `safetyMarginMs=5000`.
 
 #### FlowExecutor (`services/flow-engine/flow-executor.ts`) ✅
 Percorre nó a nó com `smartDeliver()`:
-- `canSync()` + não é media → `setSyncPayload()` (ponte)
-- Senão → `markBridgeResponded()` + `delivery.deliver()` (API Chatwit)
+- `canSync()` + não é media/reaction → `setSyncPayload()` (ponte)
+- `reaction` → só via ponte síncrona (API Chatwit não suporta reactions async)
+- Senão → `delivery.deliver()` (API Chatwit)
+
+**Importante:** `markBridgeResponded()` é chamado exclusivamente pelo `FlowOrchestrator` via `setImmediate`, NUNCA dentro do `smartDeliver()`.
 
 Handlers implementados: START, END, TEXT_MESSAGE, INTERACTIVE_MESSAGE, MEDIA, DELAY, CONDITION (IF/ELSE), SET_VARIABLE, HTTP_REQUEST, ADD_TAG, REMOVE_TAG, TRANSFER, REACTION.
 
 #### ChatwitDeliveryService (`services/flow-engine/chatwit-delivery-service.ts`) ✅
-`deliverText()`, `deliverMedia()`, `deliverInteractive()` com retry + backoff.
+- `deliverText()` — texto simples
+- `deliverMedia()` — fluxo 2 etapas: `POST /upload` com `external_url` → `blob_id`, depois `POST /messages` com `attachments: [blob_id]`
+- `deliverInteractive()` — `content_type: 'integrations'`, payload em `content_attributes.interactive`
+- Retry com exponential backoff (3 tentativas, base 500ms)
 
 #### VariableResolver (`services/flow-engine/variable-resolver.ts`) ✅
 `{{variáveis}}` com dot notation. Scopes: system, contact, session. `resolveObject()` para templates.
@@ -307,6 +326,35 @@ DELAY, MEDIA, HTTP_REQUEST, ADD_TAG, REMOVE_TAG, TRANSFER
 ### Nós que Usam `smartDeliver()`
 TEXT_MESSAGE, INTERACTIVE_MESSAGE (depois STOP), REACTION
 
+### Comportamento de DELAY: Yield Mechanism ✅
+Quando o executor encontra um DELAY com a ponte ainda aberta:
+1. `deadline.ensureAsyncMode()` — migra para modo async
+2. `deadline.requestYield()` — sinaliza retorno imediato
+3. `deadline.scheduleBackgroundContinuation(fn)` — agenda continuação pós-HTTP
+4. Retorna `'YIELD_FOR_DELAY'` para `executeChain`
+5. `FlowOrchestrator` usa `setImmediate` para executar a continuação APÓS enviar a resposta HTTP
+6. `deadline.markBridgeResponded()` é chamado ANTES da continuação → DELAYs subsequentes executam inline
+
+### Comportamento de REACTION e TEXT contextual ✅
+
+**Regra: nó diretamente após botão clicado** (detectado por `isDirectlyConnectedToButton()` — verifica se alguma edge de entrada tem `buttonId`)
+
+#### REACTION node
+| Canal | Direto após botão + wamid | Outros casos |
+|---|---|---|
+| WhatsApp | `{ whatsapp: { message_id, reaction_emoji } }` — qualquer emoji |  Emoji enviado como **texto normal** |
+| Instagram | `{ instagram: { message_id, reaction_emoji: '❤️' } }` — força heart | Emoji enviado como **texto normal** |
+| Facebook | `{ facebook: { message_id, reaction_emoji } }` | Emoji enviado como **texto normal** |
+
+Reactions são sempre síncronas (ponte). Se a ponte já fechou, a reaction é ignorada com warning no log.
+
+#### TEXT_MESSAGE node
+| Canal | Direto após botão + wamid | Outros casos |
+|---|---|---|
+| WhatsApp | `{ whatsapp: { type:'text', text:{body:...}, context:{message_id:wamid} } }` — quoted reply | `{ content: "texto" }` — texto simples |
+| Instagram | `{ instagram: { message:{text:...}, reply_to:{mid:wamid} } }` — reply | `{ content: "texto" }` — texto simples |
+| Facebook | `{ content: "texto" }` — sem suporte a quoted reply | `{ content: "texto" }` — texto simples |
+
 ### Cenários
 
 | Cenário | Resultado |
@@ -314,7 +362,9 @@ TEXT_MESSAGE, INTERACTIVE_MESSAGE (depois STOP), REACTION
 | IA rápida (800ms) + flow simples | 100% síncrono ~875ms ✅ |
 | IA lenta (22s) + flow simples | Ainda cabe (restam 5.8s > 5s margem) ✅ |
 | IA lenta (25s) + flow simples | Migra async (restam 2.8s < 5s) ✅ |
-| Texto + Delay 3s + PDF | Ponte: texto imediato. API: PDF 3s depois ✅ |
+| Texto + Delay 3s + PDF | Ponte: texto imediato → yield → API: PDF 3s depois ✅ |
+| Botão → REACTION + TEXT | Reaction (emoji) + quoted reply na ponte ✅ |
+| REACTION sem botão anterior | Emoji como texto normal ✅ |
 
 ---
 
@@ -573,6 +623,7 @@ Body: { "content": "texto", "message_type": "outgoing" }
 
 | Versão | Data | Destaques |
 |---|---|---|
+| v3.5 | 10/02/2026 | **Priorização de Pipeline para Botões do Flow**: botões criados no Flow Builder recebem prefixo `flow_` (`FLOW_BUTTON_PREFIX`). Webhook detecta botões `flow_*` e roteia para `FlowOrchestrator.resumeSession()` em vez do processamento legado de `MapeamentoBotao`. Fix: `hasButtons` agora usa `effectiveConfig` para detectar botões de `elements`. Fix: `extractButtonId` agora busca em `metadata.button_id` e payloads Meta. |
 | v3.4 | 10/02/2026 | **Nós de Delay e Mídia**: `DelayNode` (espera 1-30s com controles visuais), `MediaNode` (upload MinIO para imagem/vídeo/documento/áudio com preview). Tipos `DelayNodeData`, `MediaNodeData`, `MediaType`. Integração com `FlowExecutor` (DELAY força async, MEDIA envia URL). |
 | v3.3 | 10/02/2026 | **Sistema de edição de flows**: listagem de flows por inbox, criação/renomeação/exclusão via FlowSelector, carregamento de flow existente para edição, APIs `/api/admin/mtf-diamante/flows` e `/flows/[flowId]`, `useFlowCanvas` com suporte a `flowId`. |
 | v3.2 | 10/02/2026 | **Limites de caracteres visuais no canvas**: contador em tempo real (X/Y) + barra de progresso + indicador de excesso (vermelho) para Header (60), Body (1024), Footer (60), Botões (20). Constantes em `CHANNEL_CHAR_LIMITS` (`types/flow-builder.ts`). `EditableText` com props `maxLength` + `showCounter`. |

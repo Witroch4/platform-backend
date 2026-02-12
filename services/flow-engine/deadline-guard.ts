@@ -1,5 +1,9 @@
 /**
- * DeadlineGuard — Cronômetro de ponte síncrona
+ * @deprecated Use SyncBridge em vez deste módulo.
+ * Este arquivo é mantido apenas para referência/rollback.
+ * Nenhum código ativo importa este módulo.
+ *
+ * DeadlineGuard — Cronômetro de ponte síncrona (OBSOLETO)
  *
  * Controla quando a resposta HTTP pode ser acumulada na ponte síncrona
  * e quando o flow deve migrar para entrega assíncrona via API Chatwit.
@@ -11,7 +15,7 @@
  */
 
 import log from '@/lib/log';
-import type { SynchronousResponse } from '@/types/flow-engine';
+import type { SynchronousResponse, ExecuteResult } from '@/types/flow-engine';
 
 export class DeadlineGuard {
   private readonly startTime: number;
@@ -20,6 +24,12 @@ export class DeadlineGuard {
   private bridgeResponded: boolean = false;
   private asyncMode: boolean = false;
   private pendingSyncPayloads: SynchronousResponse[] = [];
+  /** Flag para sinalizar que o executor deve retornar imediatamente (yield) */
+  private shouldYield: boolean = false;
+  /** Callback para continuar execução em background após yield */
+  private backgroundContinuation: (() => Promise<ExecuteResult | void>) | null = null;
+  /** Reação pendente para combinar com o próximo texto (formato button_reaction do Chatwit) */
+  private pendingReaction: { emoji: string; targetMessageId: string } | null = null;
 
   /**
    * @param deadlineMs      Tempo total disponível para a ponte (padrão: 28 000 ms)
@@ -61,6 +71,11 @@ export class DeadlineGuard {
     return this.asyncMode;
   }
 
+  /** O executor deve retornar imediatamente para liberar a resposta HTTP? */
+  get shouldYieldToResponse(): boolean {
+    return this.shouldYield;
+  }
+
   // ---------------------------------------------------------------------------
   // Decision methods
   // ---------------------------------------------------------------------------
@@ -93,6 +108,52 @@ export class DeadlineGuard {
     });
   }
 
+  /**
+   * Sinaliza que o executor deve retornar imediatamente (yield).
+   * Usado quando há um DELAY que não pode bloquear a resposta HTTP.
+   */
+  requestYield(): void {
+    this.shouldYield = true;
+    log.debug('[DeadlineGuard] Yield solicitado - executor deve retornar', {
+      elapsedMs: this.elapsed,
+    });
+  }
+
+  /**
+   * Reseta o flag de yield após o executor ter retornado.
+   */
+  clearYield(): void {
+    this.shouldYield = false;
+  }
+
+  /**
+   * Agenda uma função para continuar em background após o yield.
+   */
+  scheduleBackgroundContinuation(continuation: () => Promise<ExecuteResult | void>): void {
+    this.backgroundContinuation = continuation;
+  }
+
+  /**
+   * Executa a continuação em background (se houver).
+   * Deve ser chamado APÓS a resposta HTTP ter sido enviada.
+   * Retorna o ExecuteResult para que o orquestrador possa salvar o estado correto.
+   */
+  async executeBackgroundContinuation(): Promise<ExecuteResult | void> {
+    if (this.backgroundContinuation) {
+      const continuation = this.backgroundContinuation;
+      this.backgroundContinuation = null;
+      log.debug('[DeadlineGuard] Executando continuação em background');
+      return continuation();
+    }
+  }
+
+  /**
+   * Verifica se há continuação pendente.
+   */
+  hasBackgroundContinuation(): boolean {
+    return this.backgroundContinuation !== null;
+  }
+
   // ---------------------------------------------------------------------------
   // Sync payload accumulation
   // ---------------------------------------------------------------------------
@@ -119,6 +180,59 @@ export class DeadlineGuard {
       return;
     }
     this.pendingSyncPayloads.push(payload);
+  }
+
+  /**
+   * Verifica se há payload pendente na ponte.
+   */
+  hasPendingSyncPayload(): boolean {
+    return this.pendingSyncPayloads.length > 0;
+  }
+
+  /**
+   * Lê o payload pendente sem consumir (para flush antes de sobrescrever).
+   */
+  peekSyncPayload(): SynchronousResponse | null {
+    return this.pendingSyncPayloads.length > 0 ? this.pendingSyncPayloads[0] : null;
+  }
+
+  /**
+   * Limpa os payloads pendentes sem marcar a ponte como respondida.
+   * Usado após flush manual via API.
+   */
+  clearSyncPayload(): void {
+    this.pendingSyncPayloads = [];
+  }
+
+  // ---------------------------------------------------------------------------
+  // Pending Reaction (para combinar REACTION + TEXT em um único payload)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Armazena uma reação pendente para ser combinada com o próximo texto.
+   * Usado quando REACTION é executada directlyAfterButton e deve ser
+   * enviada junto com o texto subsequente no formato button_reaction.
+   */
+  setPendingReaction(emoji: string, targetMessageId: string): void {
+    this.pendingReaction = { emoji, targetMessageId };
+    log.debug('[DeadlineGuard] Reação pendente armazenada', { emoji, targetMessageId });
+  }
+
+  /**
+   * Consome e retorna a reação pendente (se houver).
+   * Após consumir, a reação é limpa.
+   */
+  consumePendingReaction(): { emoji: string; targetMessageId: string } | null {
+    const reaction = this.pendingReaction;
+    this.pendingReaction = null;
+    return reaction;
+  }
+
+  /**
+   * Verifica se há reação pendente para combinar.
+   */
+  hasPendingReaction(): boolean {
+    return this.pendingReaction !== null;
   }
 
   // ---------------------------------------------------------------------------
@@ -157,13 +271,24 @@ export class DeadlineGuard {
 
     for (const p of this.pendingSyncPayloads) {
       if (p.content) textParts.push(p.content);
+      // Formato novo: channel-specific (whatsapp/instagram/facebook)
+      if (p.whatsapp) {
+        merged.whatsapp = p.whatsapp;
+      }
+      if (p.instagram) {
+        merged.instagram = p.instagram;
+      }
+      if (p.facebook) {
+        merged.facebook = p.facebook;
+      }
+      // Formato legado: type+payload
       if (p.type === 'interactive' && p.payload) {
         merged.type = 'interactive';
         merged.payload = p.payload;
       }
     }
 
-    if (textParts.length > 0 && !merged.type) {
+    if (textParts.length > 0 && !merged.whatsapp && !merged.instagram && !merged.facebook && !merged.type) {
       merged.content = textParts.join('\n\n');
     }
 

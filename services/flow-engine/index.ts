@@ -2,11 +2,10 @@
  * Flow Engine — Barrel export
  *
  * Motor de execução de flows de mensagens interativas.
- * Arquitetura Deadline-First: tenta na ponte síncrona,
- * migra pra async quando o relógio manda.
+ * Primeira mensagem interativa → sync, tudo depois → async.
  */
 
-export { DeadlineGuard } from './deadline-guard';
+export { SyncBridge } from './sync-bridge';
 export { FlowExecutor } from './flow-executor';
 export type { ExecuteResult } from './flow-executor';
 export { FlowOrchestrator } from './flow-orchestrator';

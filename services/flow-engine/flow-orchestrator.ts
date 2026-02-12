@@ -4,14 +4,16 @@
  * Recebe webhooks do Chatwit, decide se é um novo fluxo ou
  * continuação de sessão (clique de botão), e executa o flow.
  *
- * Integra DeadlineGuard + FlowExecutor para a arquitetura
- * "deadline-first": tenta na ponte; se não dá tempo, migra pra async.
+ * Modelo simples:
+ *   - Primeira mensagem interativa → resposta síncrona (ponte HTTP)
+ *   - Chatwoot fecha a ponte automaticamente ao receber
+ *   - Tudo depois → async via API Chatwit
  *
  * @see docs/interative_message_flow_builder.md §14.2
  */
 
 import log from '@/lib/log';
-import { DeadlineGuard } from './deadline-guard';
+import { SyncBridge } from './sync-bridge';
 import { FlowExecutor } from './flow-executor';
 import { getPrismaInstance } from '@/lib/connections';
 import type {
@@ -20,7 +22,6 @@ import type {
   SynchronousResponse,
   RuntimeFlow,
   RuntimeFlowNode,
-  RuntimeFlowEdge,
   FlowSessionData,
   FlowNodeType,
 } from '@/types/flow-engine';
@@ -43,12 +44,8 @@ interface OrchestratorResult {
 // =============================================================================
 
 export class FlowOrchestrator {
-  private readonly deadlineMs: number;
-  private readonly safetyMarginMs: number;
-
-  constructor(options?: { deadlineMs?: number; safetyMarginMs?: number }) {
-    this.deadlineMs = options?.deadlineMs ?? 28_000;
-    this.safetyMarginMs = options?.safetyMarginMs ?? 5_000;
+  constructor() {
+    // SyncBridge não precisa de parâmetros — sem cronômetro, sem margem
   }
 
   // ---------------------------------------------------------------------------
@@ -63,7 +60,7 @@ export class FlowOrchestrator {
     flowId: string,
     deliveryContext: DeliveryContext,
   ): Promise<OrchestratorResult> {
-    const deadline = new DeadlineGuard(this.deadlineMs, this.safetyMarginMs);
+    const bridge = new SyncBridge();
 
     try {
       const flow = await this.loadFlow(flowId);
@@ -82,7 +79,7 @@ export class FlowOrchestrator {
         conversationId: deliveryContext.conversationId,
       });
 
-      return this.executeNewFlow(flow, deliveryContext, deadline);
+      return this.executeNewFlow(flow, deliveryContext, bridge);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       log.error('[FlowOrchestrator] Erro ao executar flow por ID', { flowId, error: errorMsg });
@@ -94,8 +91,7 @@ export class FlowOrchestrator {
     payload: ChatwitWebhookPayload,
     deliveryContext: DeliveryContext,
   ): Promise<OrchestratorResult> {
-    // 1. Cronômetro começa
-    const deadline = new DeadlineGuard(this.deadlineMs, this.safetyMarginMs);
+    const bridge = new SyncBridge();
 
     try {
       // 2. Extrair buttonId (se for clique de botão)
@@ -105,7 +101,7 @@ export class FlowOrchestrator {
       if (buttonId) {
         const session = await this.findActiveSession(deliveryContext);
         if (session) {
-          return this.resumeSession(session, buttonId, deliveryContext, deadline);
+          return this.resumeSession(session, buttonId, deliveryContext, bridge);
         }
       }
 
@@ -126,7 +122,7 @@ export class FlowOrchestrator {
         };
       }
 
-      return this.executeNewFlow(flow, deliveryContext, deadline);
+      return this.executeNewFlow(flow, deliveryContext, bridge);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       log.error('[FlowOrchestrator] Erro no handle', { error: errorMsg });
@@ -141,7 +137,7 @@ export class FlowOrchestrator {
   private async executeNewFlow(
     flow: RuntimeFlow,
     ctx: DeliveryContext,
-    deadline: DeadlineGuard,
+    bridge: SyncBridge,
   ): Promise<OrchestratorResult> {
     const prisma = getPrismaInstance();
     const executor = new FlowExecutor(ctx);
@@ -152,14 +148,14 @@ export class FlowOrchestrator {
         flowId: flow.id,
         conversationId: String(ctx.conversationId),
         contactId: String(ctx.contactId),
-        inboxId: String(ctx.inboxId),
+        inboxId: ctx.prismaInboxId || String(ctx.inboxId),
         status: 'ACTIVE',
         variables: {},
         executionLog: [],
       },
     });
 
-    const result = await executor.execute(flow, deadline);
+    const result = await executor.execute(flow, bridge);
 
     // Atualizar sessão
     await prisma.flowSession.update({
@@ -173,8 +169,10 @@ export class FlowOrchestrator {
       },
     });
 
+    const syncResponse = bridge.consumeSyncPayload();
+
     return {
-      syncResponse: deadline.consumeSyncPayload(),
+      syncResponse,
       waitingInput: result.status === 'WAITING_INPUT',
       error: result.status === 'ERROR' ? 'Erro na execução do flow' : undefined,
     };
@@ -188,7 +186,7 @@ export class FlowOrchestrator {
     session: FlowSessionData,
     buttonId: string,
     ctx: DeliveryContext,
-    deadline: DeadlineGuard,
+    bridge: SyncBridge,
   ): Promise<OrchestratorResult> {
     const prisma = getPrismaInstance();
 
@@ -202,7 +200,7 @@ export class FlowOrchestrator {
     }
 
     const executor = new FlowExecutor(ctx, session.variables);
-    const result = await executor.resumeFromButton(flow, session, buttonId, deadline);
+    const result = await executor.resumeFromButton(flow, session, buttonId, bridge);
 
     // Atualizar sessão
     await prisma.flowSession.update({
@@ -216,8 +214,10 @@ export class FlowOrchestrator {
       },
     });
 
+    const syncResponse = bridge.consumeSyncPayload();
+
     return {
-      syncResponse: deadline.consumeSyncPayload(),
+      syncResponse,
       waitingInput: result.status === 'WAITING_INPUT',
       error: result.status === 'ERROR' ? 'Erro ao retomar flow' : undefined,
     };
@@ -235,7 +235,7 @@ export class FlowOrchestrator {
     const session = await prisma.flowSession.findFirst({
       where: {
         conversationId: String(ctx.conversationId),
-        inboxId: String(ctx.inboxId),
+        inboxId: ctx.prismaInboxId || String(ctx.inboxId),
         status: 'WAITING_INPUT',
       },
       orderBy: { updatedAt: 'desc' },
@@ -319,8 +319,8 @@ export class FlowOrchestrator {
     const intentName = (payload as Record<string, unknown>).intent_name as string | undefined
       || (payload as Record<string, unknown>).detected_intent as string | undefined;
 
-    // inboxId no Prisma é string, mas DeliveryContext usa number
-    const inboxIdStr = String(ctx.inboxId);
+    // Usar prismaInboxId (ID interno do Prisma) em vez do numérico externo
+    const inboxIdStr = ctx.prismaInboxId || String(ctx.inboxId);
 
     if (intentName && inboxIdStr) {
       const intentMapping = await prisma.mapeamentoIntencao.findFirst({
@@ -338,26 +338,6 @@ export class FlowOrchestrator {
           flowId: intentMapping.flowId,
         });
         return intentMapping.flowId;
-      }
-    }
-
-    // 3. Fallback: Flow default ativo da inbox (se existir)
-    if (inboxIdStr) {
-      const defaultFlow = await prisma.flow.findFirst({
-        where: {
-          inboxId: inboxIdStr,
-          isActive: true,
-        },
-        orderBy: { createdAt: 'desc' },
-        select: { id: true },
-      });
-
-      if (defaultFlow?.id) {
-        log.debug('[FlowOrchestrator] Flow default encontrado para inbox', {
-          inboxId: inboxIdStr,
-          flowId: defaultFlow.id,
-        });
-        return defaultFlow.id;
       }
     }
 
@@ -382,6 +362,22 @@ export class FlowOrchestrator {
     if (msgAttrs?.button_reply) {
       const br = msgAttrs.button_reply as { id?: string };
       if (br.id) return br.id;
+    }
+
+    // Fallback: button_id direto no metadata (formato Chatwit)
+    const metadata = payload.metadata as Record<string, unknown> | undefined;
+    if (metadata?.button_id && typeof metadata.button_id === 'string') {
+      return metadata.button_id;
+    }
+
+    // Fallback: postback_payload (Instagram/Facebook)
+    if (msgAttrs?.postback_payload && typeof msgAttrs.postback_payload === 'string') {
+      return msgAttrs.postback_payload;
+    }
+
+    // Fallback: quick_reply_payload (Instagram/Facebook)
+    if (msgAttrs?.quick_reply_payload && typeof msgAttrs.quick_reply_payload === 'string') {
+      return msgAttrs.quick_reply_payload;
     }
 
     return null;

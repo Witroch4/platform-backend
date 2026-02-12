@@ -127,13 +127,16 @@ async function syncFlowToButtonReactions(
     nodesMap.set(node.id, node as FlowNode);
   }
 
-  // Collect all button reactions from flow edges
-  const buttonReactions: Array<{
+  // Aggregate all edge targets per buttonId into a single combined payload.
+  // This is critical because MapeamentoBotao has @unique on buttonId —
+  // multiple edges from the same button (e.g. text + emoji + tag) must be
+  // merged into one record.
+  const reactionMap = new Map<string, {
     buttonId: string;
     actionType: ActionType;
     actionPayload: Record<string, unknown>;
-    description: string | null;
-  }> = [];
+    descriptions: string[];
+  }>();
 
   for (const edge of canvas.edges) {
     // Only process edges with a sourceHandle (= button ID)
@@ -146,40 +149,45 @@ async function syncFlowToButtonReactions(
     // Source must be an interactive_message
     if (sourceNode.type !== 'interactive_message') continue;
 
+    const buttonId = edge.sourceHandle;
     const targetData = targetNode.data as unknown as Record<string, unknown>;
-    let actionType: ActionType = ActionType.BUTTON_REACTION;
-    const actionPayload: Record<string, unknown> = {};
-    let description: string | null = null;
+
+    // Get or create the aggregated entry for this buttonId
+    let entry = reactionMap.get(buttonId);
+    if (!entry) {
+      entry = {
+        buttonId,
+        actionType: ActionType.BUTTON_REACTION,
+        actionPayload: {},
+        descriptions: [],
+      };
+      reactionMap.set(buttonId, entry);
+    }
 
     switch (targetNode.type) {
       case 'emoji_reaction':
-        actionType = ActionType.BUTTON_REACTION;
-        actionPayload.emoji = targetData.emoji ?? null;
-        description = `Emoji: ${targetData.emoji ?? ''}`;
+        entry.actionPayload.emoji = targetData.emoji ?? null;
+        entry.descriptions.push(`Emoji: ${targetData.emoji ?? ''}`);
         break;
 
       case 'text_reaction':
-        actionType = ActionType.BUTTON_REACTION;
-        actionPayload.textReaction = targetData.textReaction ?? null;
-        description = String(targetData.textReaction ?? '');
+        entry.actionPayload.textReaction = targetData.textReaction ?? null;
+        entry.descriptions.push(String(targetData.textReaction ?? ''));
         break;
 
       case 'text_message':
-        actionType = ActionType.BUTTON_REACTION;
-        actionPayload.textReaction = targetData.text ?? null;
-        description = String(targetData.text ?? '');
+        entry.actionPayload.textReaction = targetData.text ?? null;
+        entry.descriptions.push(String(targetData.text ?? ''));
         break;
 
       case 'interactive_message':
         // Se tem messageId, é uma mensagem existente
         if (targetData.messageId) {
-          actionType = ActionType.SEND_TEMPLATE;
-          actionPayload.messageId = targetData.messageId;
-          description = `Enviar: ${targetData.label ?? 'mensagem'}`;
+          entry.actionType = ActionType.SEND_TEMPLATE;
+          entry.actionPayload.messageId = targetData.messageId;
+          entry.descriptions.push(`Enviar: ${targetData.label ?? 'mensagem'}`);
         } else {
           // Mensagem criada diretamente no flow - armazenar inline
-          actionType = ActionType.BUTTON_REACTION;
-
           const rawElements = (targetData as { elements?: unknown }).elements;
           const elements = Array.isArray(rawElements)
             ? (rawElements as Array<Record<string, unknown>>)
@@ -197,11 +205,9 @@ async function syncFlowToButtonReactions(
                 description: (e as any).description ? String((e as any).description) : undefined,
               })) ?? null;
 
-          actionPayload.inlineMessage = {
+          entry.actionPayload.inlineMessage = {
             label: targetData.label,
-            // Novo formato (blocos)
             elements: elements ?? undefined,
-            // Compatibilidade com formato antigo
             header:
               (headerFromElements as any)?.text ?? (targetData as any).header,
             body: (bodyFromElements as any)?.text ?? (targetData as any).body,
@@ -209,47 +215,41 @@ async function syncFlowToButtonReactions(
               (footerFromElements as any)?.text ?? (targetData as any).footer,
             buttons: buttonsFromElements ?? (targetData as any).buttons,
           };
-          description = `Mensagem inline: ${targetData.label ?? 'mensagem'}`;
+          entry.descriptions.push(`Mensagem inline: ${targetData.label ?? 'mensagem'}`);
         }
         break;
 
       case 'handoff':
-        actionType = ActionType.ASSIGN_TO_AGENT;
-        actionPayload.targetTeam = targetData.targetTeam ?? null;
-        description = `Transferir: ${targetData.targetTeam ?? ''}`;
+        entry.actionType = ActionType.ASSIGN_TO_AGENT;
+        entry.actionPayload.targetTeam = targetData.targetTeam ?? null;
+        entry.descriptions.push(`Transferir: ${targetData.targetTeam ?? ''}`);
         break;
 
       case 'add_tag':
-        actionType = ActionType.ADD_TAG;
-        actionPayload.tagName = targetData.tagName ?? null;
-        actionPayload.tagColor = targetData.tagColor ?? null;
-        description = `Tag: ${targetData.tagName ?? ''}`;
+        // Merge tag into the combined payload (keeps actionType as BUTTON_REACTION)
+        entry.actionPayload.tagName = targetData.tagName ?? null;
+        entry.actionPayload.tagColor = targetData.tagColor ?? null;
+        entry.descriptions.push(`Tag: ${targetData.tagName ?? ''}`);
         break;
 
       case 'end':
-        actionType = ActionType.BUTTON_REACTION;
-        actionPayload.action = 'end_conversation';
-        actionPayload.endMessage = targetData.endMessage ?? null;
-        description = 'Encerrar conversa';
+        entry.actionPayload.action = 'end_conversation';
+        entry.actionPayload.endMessage = targetData.endMessage ?? null;
+        entry.descriptions.push('Encerrar conversa');
         break;
 
       default:
         continue;
     }
-
-    buttonReactions.push({
-      buttonId: edge.sourceHandle,
-      actionType,
-      actionPayload,
-      description,
-    });
   }
 
+  const aggregatedReactions = Array.from(reactionMap.values());
+
   // Only sync if there are button reactions from interactive_message nodes
-  if (buttonReactions.length === 0) return;
+  if (aggregatedReactions.length === 0) return;
 
   // Collect all buttonIds managed by this flow
-  const flowButtonIds = buttonReactions.map((r) => r.buttonId);
+  const flowButtonIds = aggregatedReactions.map((r) => r.buttonId);
 
   await prisma.$transaction(async (tx) => {
     // Delete existing reactions for these buttonIds in this inbox
@@ -260,22 +260,22 @@ async function syncFlowToButtonReactions(
       },
     });
 
-    // Create new reactions
-    for (const reaction of buttonReactions) {
+    // Create one aggregated record per buttonId
+    for (const reaction of aggregatedReactions) {
       await tx.mapeamentoBotao.create({
         data: {
           buttonId: reaction.buttonId,
           inboxId,
           actionType: reaction.actionType,
           actionPayload: reaction.actionPayload as unknown as object,
-          description: reaction.description,
+          description: reaction.descriptions.filter(Boolean).join(' | '),
         },
       });
     }
   });
 
   console.log(
-    `[flow-canvas] Synced ${buttonReactions.length} button reactions for inbox ${inboxId}`
+    `[flow-canvas] Synced ${aggregatedReactions.length} aggregated button reactions (from ${flowButtonIds.length} edges) for inbox ${inboxId}`
   );
 }
 

@@ -264,11 +264,17 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
     [nodes, updateNodeData]
   );
 
-  /** Double-click → open detail dialog */
+  /** Double-click → open detail dialog (skip nodes with inline-only editing) */
   const handleNodeDoubleClick = useCallback((nodeId: string) => {
+    const node = nodes.find((n) => n.id === nodeId);
+    if (!node) return;
+
+    // Delay nodes have full inline editing — no detail dialog needed
+    if (node.type === FlowNodeType.DELAY) return;
+
     setSelectedNodeId(nodeId);
     setDialogOpen(true);
-  }, []);
+  }, [nodes]);
 
   const handleNodeSelect = useCallback((nodeId: string | null) => {
     setSelectedNodeId(nodeId);

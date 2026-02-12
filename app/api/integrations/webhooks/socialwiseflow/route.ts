@@ -23,10 +23,13 @@ import { getAssistantForInbox } from '@/lib/socialwise/assistant';
 // Template functions removed - now using full SocialWise Flow for all button processing
 
 // 🔧 CORREÇÃO: Usar button-processor centralizado
-import { handleButtonInteraction } from '@/lib/socialwise-flow/button-processor';
+import { handleButtonInteraction, detectButtonClick } from '@/lib/socialwise-flow/button-processor';
 
 // Flow Engine para execução de flows visuais
 import { FlowOrchestrator } from '@/services/flow-engine';
+
+// Prefixo de botões do Flow Builder (para priorização)
+import { FLOW_BUTTON_PREFIX } from '@/lib/flow-builder/interactiveMessageElements';
 import type { ChatwitWebhookPayload, DeliveryContext } from '@/types/flow-engine';
 
 // Constants
@@ -71,7 +74,7 @@ function normalizeIntentId(raw: string): { plain: string; standardId: string } {
 function logFinalResponse(responseData: any, status: number, traceId?: string) {
   const responseSize = JSON.stringify(responseData).length;
   const responseSizeKB = Math.round((responseSize / 1024) * 100) / 100;
-  
+
   webhookLogger.info('📤 CHATWIT FINAL RESPONSE DEBUG', {
     timestamp: new Date().toISOString(),
     responseSizeKB,
@@ -105,7 +108,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
     // Step 2: Read and validate payload size
     const rawBody = await request.text();
     const payloadSizeKB = Buffer.byteLength(rawBody, 'utf8') / 1024;
-    
+
     // 🐛 DEBUG: Log do payload RAW original exato que o Chatwit envia
     webhookLogger.info('🔍 CHATWIT ORIGINAL RAW PAYLOAD DEBUG', {
       timestamp: new Date().toISOString(),
@@ -121,11 +124,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
       method: request.method,
       url: request.url
     });
-    
+
     if (payloadSizeKB > MAX_PAYLOAD_SIZE_KB) {
-      webhookLogger.error('Payload too large', { 
-        sizeKB: payloadSizeKB, 
-        maxSizeKB: MAX_PAYLOAD_SIZE_KB 
+      webhookLogger.error('Payload too large', {
+        sizeKB: payloadSizeKB,
+        maxSizeKB: MAX_PAYLOAD_SIZE_KB
       });
       return NextResponse.json(
         { error: 'Payload too large' },
@@ -137,7 +140,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
     let payload: any;
     try {
       payload = JSON.parse(rawBody);
-      
+
       // 🐛 DEBUG: Log do payload JSON parseado para comparação
       webhookLogger.info('📋 CHATWIT PARSED JSON PAYLOAD DEBUG', {
         timestamp: new Date().toISOString(),
@@ -148,9 +151,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
         hasMessage: payload?.context?.message ? true : false,
         hasSocialwiseChatwit: payload?.context?.['socialwise-chatwit'] ? true : false
       });
-      
+
     } catch (error) {
-      webhookLogger.error('Invalid JSON payload', { 
+      webhookLogger.error('Invalid JSON payload', {
         error: error instanceof Error ? error.message : String(error),
         rawBodyPreview: rawBody.substring(0, 200) + (rawBody.length > 200 ? '...' : '')
       });
@@ -163,7 +166,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
     // Step 4: Validate SocialWise Flow payload structure with preprocessing
     const payloadValidation = validateSocialWisePayloadWithPreprocessing(payload);
     if (!payloadValidation.success) {
-      webhookLogger.error('Invalid payload schema', { 
+      webhookLogger.error('Invalid payload schema', {
         errors: payloadValidation.error?.errors?.map(err => ({
           code: err.code,
           path: err.path,
@@ -182,7 +185,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
       );
     }
     const validPayload = payloadValidation.data!;
-    
+
     webhookLogger.debug('Payload validation successful', {
       originalHadNumbers: JSON.stringify(payload) !== JSON.stringify(payloadValidation.preprocessed),
       traceId
@@ -194,7 +197,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
     const socialwiseDataForCorrelation = getSocialWiseChatwitData(validPayload.context);
     correlationId = String(
       validPayload.context.message?.source_id ||
-      socialwiseDataForCorrelation?.wamid || 
+      socialwiseDataForCorrelation?.wamid ||
       socialwiseDataForCorrelation?.message_data?.id ||
       validPayload.context.message?.id ||
       traceId
@@ -211,10 +214,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
       if (nonce) {
         const replayResult = await socialWiseReplayProtection.checkAndMarkNonce(nonce);
         if (!replayResult.allowed) {
-          webhookLogger.warn('Replay protection triggered', { 
-            nonce, 
+          webhookLogger.warn('Replay protection triggered', {
+            nonce,
             error: replayResult.error,
-            traceId 
+            traceId
           });
           return NextResponse.json(
             { error: 'Replay detected', details: replayResult.error },
@@ -252,10 +255,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
         remaining: rateLimitResult.remaining,
         traceId
       });
-      
+
       return NextResponse.json(
         { error: 'Rate limit exceeded', throttled: true },
-        { 
+        {
           status: 429,
           headers: {
             'X-RateLimit-Limit': rateLimitResult.limit.toString(),
@@ -270,9 +273,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
     // Step 10: Sanitize user input
     const sanitizedText = sanitizeUserText(validPayload.message);
     if (!sanitizedText.success) {
-      webhookLogger.error('Input sanitization failed', { 
+      webhookLogger.error('Input sanitization failed', {
         error: sanitizedText.error,
-        traceId 
+        traceId
       });
       return NextResponse.json(
         { error: 'Invalid message content', details: sanitizedText.error },
@@ -285,7 +288,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
     const contentAttrs = (validPayload.context?.message?.content_attributes || {}) as any;
     const quickReplyPayload = contentAttrs.quick_reply_payload;
     const postbackPayload = contentAttrs.postback_payload;
-    
+
     // Check quick_reply_payload for handoff
     if (quickReplyPayload && quickReplyPayload.toLowerCase() === '@falar_atendente') {
       webhookLogger.info('🚨 NATIVE HANDOFF detected in quick_reply_payload', {
@@ -297,7 +300,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
       logFinalResponse(handoffResponse, 200, traceId);
       return NextResponse.json(handoffResponse, { status: 200 });
     }
-    
+
     // Check postback_payload for handoff
     if (postbackPayload && postbackPayload.toLowerCase() === '@falar_atendente') {
       webhookLogger.info('🚨 NATIVE HANDOFF detected in postback_payload', {
@@ -319,19 +322,19 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
     const chatwitAccountId = socialwiseData?.account_data?.id || validPayload.context.inbox?.account_id || 0;
     // Priority order: context.message.source_id > socialwise-chatwit.wamid > socialwise-chatwit.message_data.id
     const wamid = String(validPayload.context.message?.source_id ||
-                  socialwiseData?.wamid || 
-                  socialwiseData?.message_data?.id || '');
-    
+      socialwiseData?.wamid ||
+      socialwiseData?.message_data?.id || '');
+
     // Extract contact information for variable resolution with fallbacks
     const igUserName = validPayload.context?.contact?.additional_attributes?.social_instagram_user_name
-                    || validPayload.context?.contact?.additional_attributes?.social_profiles?.instagram;
-    const contactName = socialwiseData?.contact_data?.name 
-                     || validPayload.context?.contact?.name 
-                     || igUserName 
-                     || socialwiseData?.contact_name;
-    const contactPhone = socialwiseData?.contact_data?.phone_number || 
-                        validPayload.context.contact?.phone_number ||
-                        socialwiseData?.contact_phone;
+      || validPayload.context?.contact?.additional_attributes?.social_profiles?.instagram;
+    const contactName = socialwiseData?.contact_data?.name
+      || validPayload.context?.contact?.name
+      || igUserName
+      || socialwiseData?.contact_name;
+    const contactPhone = socialwiseData?.contact_data?.phone_number ||
+      validPayload.context.contact?.phone_number ||
+      socialwiseData?.contact_phone;
 
     // Step 12: Resolve inbox and user information
     const inboxRow = await withPrismaReconnect(async (prisma) => {
@@ -348,11 +351,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
         },
       });
     });
-    
+
     const inboxId = String(inboxRow?.inboxId || externalInboxNumeric || '');
     const userId = (inboxRow as any)?.usuarioChatwit?.appUserId;
 
-    webhookLogger.info('Processing SocialWise Flow request', { 
+    webhookLogger.info('Processing SocialWise Flow request', {
       channelType,
       inboxId,
       userId,
@@ -361,13 +364,28 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
     });
 
     // Step 13: Enhanced button interaction detection and processing
-    const buttonReactionResponse = await handleButtonInteraction(
-      validPayload,
-      channelType,
-      userId,
-      wamid,
-      traceId!
-    );
+    // 🔥 PRIORIDADE: Botões do Flow Builder (prefixo flow_) são processados pelo FlowOrchestrator
+    const buttonDetection = detectButtonClick(validPayload, channelType);
+    const isFlowBuilderButton = buttonDetection.isButtonClick &&
+      buttonDetection.buttonId?.startsWith(FLOW_BUTTON_PREFIX);
+
+    // Se NÃO for botão do Flow Builder, usar processamento legado de button reactions
+    let buttonReactionResponse = null;
+    if (!isFlowBuilderButton) {
+      buttonReactionResponse = await handleButtonInteraction(
+        validPayload,
+        channelType,
+        userId,
+        wamid,
+        traceId!
+      );
+    } else {
+      webhookLogger.info('🚀 Flow Builder button detected, routing to FlowOrchestrator', {
+        buttonId: buttonDetection.buttonId,
+        channelType,
+        traceId
+      });
+    }
 
     if (buttonReactionResponse) {
       webhookLogger.info('🎯 Button interaction processed successfully', {
@@ -387,18 +405,18 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
     const socialwiseForButtons = getSocialWiseChatwitData(validPayload.context);
     const swInteractive = socialwiseForButtons?.message_data?.interactive_data || {};
     const swInstagram = socialwiseForButtons?.message_data?.instagram_data || {};
-    
+
     // Detect unmapped button clicks
     let unmappedButtonId: string | null = null;
     if (channelType.toLowerCase().includes('whatsapp')) {
       unmappedButtonId = ca?.button_reply?.id || (validPayload.context as any)?.button_id || null;
     } else if (channelType.toLowerCase().includes('instagram') || channelType.toLowerCase().includes('facebook')) {
       // Meta Platforms (Instagram + Facebook) usam a mesma estrutura
-      unmappedButtonId = ca?.postback_payload || ca?.quick_reply_payload || 
-                        (validPayload.context as any)?.postback_payload || 
-                        (validPayload.context as any)?.quick_reply_payload || null;
+      unmappedButtonId = ca?.postback_payload || ca?.quick_reply_payload ||
+        (validPayload.context as any)?.postback_payload ||
+        (validPayload.context as any)?.quick_reply_payload || null;
     }
-    
+
     webhookLogger.debug('🔍 Debug unmapped button detection', {
       channelType,
       unmappedButtonId,
@@ -408,17 +426,17 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
       caInteractionType: ca?.interaction_type,
       traceId
     });
-    
+
     // If it's an unmapped button, use the real button text (message field) as input for LLM
     const isWhatsAppButton = unmappedButtonId && (validPayload.context as any)?.interaction_type === 'button_reply';
-    const isMetaButton = unmappedButtonId && (channelType.toLowerCase().includes('instagram') || channelType.toLowerCase().includes('facebook')) && 
-                        (ca?.postback_payload || ca?.quick_reply_payload);
-    
+    const isMetaButton = unmappedButtonId && (channelType.toLowerCase().includes('instagram') || channelType.toLowerCase().includes('facebook')) &&
+      (ca?.postback_payload || ca?.quick_reply_payload);
+
     if (unmappedButtonId && (isWhatsAppButton || isMetaButton)) {
       // Usar o campo 'message' que contém o texto real do botão
       // Isso é padronizado entre WhatsApp e Meta Platforms (Instagram/Facebook)
       const realButtonText = validPayload.message || validPayload.context?.message?.content;
-      
+
       webhookLogger.debug('🔍 Debug button text extraction', {
         unmappedButtonId,
         isWhatsAppButton,
@@ -430,11 +448,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
         interactionType: (validPayload.context as any)?.interaction_type,
         traceId
       });
-      
+
       if (realButtonText) {
         // Se temos o texto real do botão, usar ele (mesmo que seja igual ao textInput atual)
         textInput = realButtonText;
-        
+
         webhookLogger.info('🔄 Unmapped button detected, using real button text for LLM processing', {
           originalButtonId: unmappedButtonId,
           realButtonText: realButtonText,
@@ -444,7 +462,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
         // Fallback: usar buttonId se não houver campo message
         const buttonText = unmappedButtonId.startsWith('@') ? unmappedButtonId.substring(1) : unmappedButtonId;
         textInput = buttonText;
-        
+
         webhookLogger.info('🔄 Unmapped button detected, using buttonId as fallback for LLM processing', {
           originalButtonId: unmappedButtonId,
           fallbackText: buttonText,
@@ -489,22 +507,22 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
     if ((interactionType === 'button_reply' || interactionType === 'postback') && legacyDerivedButtonId && !buttonReactionResponse && (!unmappedButtonId || isHandoffButton)) {
       const idLower = String(legacyDerivedButtonId).toLowerCase();
       const titleLower = String(legacyButtonTitle || '').toLowerCase();
-      
+
       // Direct automations: btn_* or ig_* or fb_*
       if (idLower.startsWith('btn_') || idLower.startsWith('ig_') || idLower.startsWith('fb_')) {
         // Handoff shortcuts
-        if (idLower.includes('handoff') || titleLower.includes('falar') || 
-            titleLower.includes('atendente') || titleLower.includes('humano')) {
+        if (idLower.includes('handoff') || titleLower.includes('falar') ||
+          titleLower.includes('atendente') || titleLower.includes('humano')) {
           const handoffResponse = { action: 'handoff' };
-        logFinalResponse(handoffResponse, 200, traceId);
-        return NextResponse.json(handoffResponse, { status: 200 });
+          logFinalResponse(handoffResponse, 200, traceId);
+          return NextResponse.json(handoffResponse, { status: 200 });
         }
         // No IA processing needed for direct automations
         const emptyResponse = {};
         logFinalResponse(emptyResponse, 200, traceId);
         return NextResponse.json(emptyResponse, { status: 200 });
       }
-      
+
       // Intent mapping: intent:<name> or @<name>
       if (idLower.startsWith('intent:') || idLower.startsWith('@')) {
         // Direct handoff for specific button IDs only
@@ -513,25 +531,25 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
           logFinalResponse(handoffResponse, 200, traceId);
           return NextResponse.json(handoffResponse, { status: 200 });
         }
-        
+
         // For all other intent buttons, let them go through the full SocialWise Flow
         // This ensures proper direct alias hit → embedding → classification process
         const norm = normalizeIntentId(String(legacyDerivedButtonId));
         const rawIntent = norm.plain;
-        
+
         // Use the raw intent text as input for the full flow processing
         textInput = rawIntent;
-        
-        webhookLogger.info('Legacy button will be processed through full SocialWise Flow', { 
+
+        webhookLogger.info('Legacy button will be processed through full SocialWise Flow', {
           buttonId: legacyDerivedButtonId,
           rawIntent,
           channelType,
-          traceId 
+          traceId
         });
-        
+
         // Continue to Step 14 for full flow processing
       }
-      
+
       // Conversational continuation: ia_* - treat button title as user message
       if (idLower.startsWith('ia_')) {
         const syntheticText = String(legacyButtonTitle || textInput || '').trim();
@@ -608,86 +626,113 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
       }
     }
 
-    // Step 13.6: Flow Engine - Executa flows visuais se houver mapeamento
-    try {
-      const flowOrchestrator = new FlowOrchestrator();
+    // Step 13.6: Flow Engine - Resume de sessões para botões do Flow Builder (prefixo flow_)
+    // NOTA: Flows ativados por intent mapping são executados em band-handlers.ts, NÃO aqui.
+    if (isFlowBuilderButton) {
+      try {
+        const flowOrchestrator = new FlowOrchestrator();
 
-      // Extrair metadata do payload para contexto de entrega
-      const socialwiseMetadata = getSocialWiseChatwitData(validPayload.context);
+        // Extrair metadata do payload para contexto de entrega
+        const socialwiseMetadata = getSocialWiseChatwitData(validPayload.context);
 
-      // Obter chatwitBaseUrl do metadata (enviado pelo Chatwit no payload)
-      const chatwitBaseUrl = (socialwiseMetadata as Record<string, unknown>)?.chatwit_base_url as string
-        || process.env.CHATWIT_BASE_URL
-        || '';
+        // Obter chatwitBaseUrl do metadata (enviado pelo Chatwit no payload)
+        const chatwitBaseUrl = (socialwiseMetadata as Record<string, unknown>)?.chatwit_base_url as string
+          || (validPayload.metadata as Record<string, unknown>)?.chatwit_base_url as string
+          || process.env.CHATWIT_BASE_URL
+          || '';
 
-      // Token do Agent Bot para entrega async
-      const chatwitAccessToken = process.env.CHATWIT_AGENT_BOT_TOKEN || '';
+        // Token do Agent Bot para entrega async
+        const chatwitAccessToken =
+          (validPayload.metadata as Record<string, unknown>)?.chatwit_agent_bot_token as string
+          || process.env.CHATWIT_AGENT_BOT_TOKEN
+          || '';
 
-      // Construir DeliveryContext para o FlowOrchestrator
-      const deliveryContext: DeliveryContext = {
-        accountId: Number(chatwitAccountId) || 0,
-        conversationId: Number(socialwiseMetadata?.conversation_data?.id) || 0,
-        inboxId: Number(inboxRow?.inboxId || externalInboxNumeric) || 0,
-        contactId: Number(socialwiseMetadata?.contact_data?.id) || 0,
-        contactName: contactName || '',
-        contactPhone: (typeof contactPhone === 'string' ? contactPhone : '') || '',
-        channelType: channelType.toLowerCase().includes('whatsapp') ? 'whatsapp'
-          : channelType.toLowerCase().includes('instagram') ? 'instagram'
-          : channelType.toLowerCase().includes('facebook') ? 'facebook'
-          : 'whatsapp',
-        sourceMessageId: wamid || undefined,
-        chatwitAccessToken,
-        chatwitBaseUrl,
-      };
+        // Tenta obter conversation_display_id (essencial para API async)
+        const conversationDisplayId = Number(
+          (validPayload.metadata as Record<string, unknown>)?.conversation_display_id ||
+          (validPayload.context?.conversation as Record<string, unknown>)?.display_id
+        ) || undefined;
 
-      // Construir payload para o FlowOrchestrator
-      const flowPayload: ChatwitWebhookPayload = {
-        session_id: validPayload.session_id,
-        text: textInput,
-        channel_type: validPayload.channel_type,
-        language: validPayload.language,
-        metadata: socialwiseMetadata as Record<string, unknown>,
-        content_attributes: validPayload.context?.message?.content_attributes as {
-          button_reply?: { id: string; title?: string };
-          list_reply?: { id: string; title?: string };
-        },
-        message: {
-          content: textInput,
-          content_attributes: validPayload.context?.message?.content_attributes as Record<string, unknown>,
-        },
-      };
+        // Construir DeliveryContext para o FlowOrchestrator
+        const deliveryContext: DeliveryContext = {
+          accountId: Number(chatwitAccountId) || 0,
+          conversationId: Number(socialwiseMetadata?.conversation_data?.id || validPayload.context?.conversation?.id) || 0,
+          conversationDisplayId,
+          inboxId: Number(inboxRow?.inboxId || externalInboxNumeric) || 0,
+          contactId: Number(socialwiseMetadata?.contact_data?.id || validPayload.context?.contact?.id) || 0,
+          contactName: contactName || '',
+          contactPhone: (typeof contactPhone === 'string' ? contactPhone : '') || '',
+          channelType: channelType.toLowerCase().includes('whatsapp') ? 'whatsapp'
+            : channelType.toLowerCase().includes('instagram') ? 'instagram'
+              : channelType.toLowerCase().includes('facebook') ? 'facebook'
+                : 'whatsapp',
+          sourceMessageId: wamid || undefined,
+          prismaInboxId: inboxRow?.id || undefined,
+          chatwitAccessToken,
+          chatwitBaseUrl,
+        };
 
-      const flowResult = await flowOrchestrator.handle(flowPayload, deliveryContext);
+        webhookLogger.info('🔧 CHATWIT CONFIG RESOLVED (Flow Builder button)', {
+          chatwitBaseUrl,
+          hasAccessToken: !!chatwitAccessToken,
+          accountId: deliveryContext.accountId,
+          conversationId: deliveryContext.conversationId,
+          buttonId: buttonDetection.buttonId,
+        });
 
-      if (flowResult.error) {
-        webhookLogger.warn('[FlowEngine] Erro ao processar flow', {
-          error: flowResult.error,
+        // Construir payload para o FlowOrchestrator (somente para resume de botão)
+        const flowPayload: ChatwitWebhookPayload = {
+          session_id: validPayload.session_id,
+          text: textInput,
+          channel_type: validPayload.channel_type,
+          language: validPayload.language,
+          metadata: {
+            ...(validPayload.metadata as Record<string, unknown>),
+            ...(socialwiseMetadata as Record<string, unknown>),
+            button_id: buttonDetection.buttonId,
+            chatwit_base_url: chatwitBaseUrl,
+            chatwit_agent_bot_token: chatwitAccessToken,
+          },
+          content_attributes: validPayload.context?.message?.content_attributes as {
+            button_reply?: { id: string; title?: string };
+            list_reply?: { id: string; title?: string };
+          },
+          message: {
+            content: textInput,
+            content_attributes: validPayload.context?.message?.content_attributes as Record<string, unknown>,
+          },
+        };
+
+        const flowResult = await flowOrchestrator.handle(flowPayload, deliveryContext);
+
+        if (flowResult.error) {
+          webhookLogger.warn('[FlowEngine] Erro ao processar botão do flow', {
+            error: flowResult.error,
+            buttonId: buttonDetection.buttonId,
+            traceId
+          });
+          // Continua para Flash Intent como fallback
+        } else if (flowResult.syncResponse) {
+          webhookLogger.info('[FlowEngine] Flow button resumido com sucesso (sync)', {
+            waitingInput: flowResult.waitingInput,
+            traceId
+          });
+          logFinalResponse(flowResult.syncResponse, 200, traceId);
+          return NextResponse.json(flowResult.syncResponse, { status: 200 });
+        } else if (flowResult.waitingInput) {
+          webhookLogger.info('[FlowEngine] Flow aguardando input (async)', { traceId });
+          const asyncResponse = { status: 'accepted', async: true };
+          logFinalResponse(asyncResponse, 200, traceId);
+          return NextResponse.json(asyncResponse, { status: 200 });
+        }
+      } catch (flowError) {
+        webhookLogger.error('[FlowEngine] Erro crítico no FlowOrchestrator (button resume)', {
+          error: flowError instanceof Error ? flowError.message : String(flowError),
+          buttonId: buttonDetection.buttonId,
           traceId
         });
         // Continua para Flash Intent como fallback
-      } else if (flowResult.syncResponse) {
-        webhookLogger.info('[FlowEngine] Flow executado com sucesso (sync)', {
-          waitingInput: flowResult.waitingInput,
-          traceId
-        });
-        logFinalResponse(flowResult.syncResponse, 200, traceId);
-        return NextResponse.json(flowResult.syncResponse, { status: 200 });
-      } else if (flowResult.waitingInput) {
-        // Flow está aguardando input (botão clicado posteriormente)
-        // O FlowExecutor já enviou as mensagens via API async
-        webhookLogger.info('[FlowEngine] Flow aguardando input (async)', { traceId });
-        const asyncResponse = { status: 'accepted', async: true };
-        logFinalResponse(asyncResponse, 200, traceId);
-        return NextResponse.json(asyncResponse, { status: 200 });
       }
-      // Se flowResult.syncResponse é null e não está waitingInput,
-      // significa que não há flow mapeado - continua para Flash Intent
-    } catch (flowError) {
-      webhookLogger.error('[FlowEngine] Erro crítico no FlowOrchestrator', {
-        error: flowError instanceof Error ? flowError.message : String(flowError),
-        traceId
-      });
-      // Continua para Flash Intent como fallback
     }
 
     // Step 14: Main SocialWise Flow Processing
@@ -709,7 +754,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
       // Get agent configuration for embedipreview setting
       const assistant = await getAssistantForInbox(inboxId, String(chatwitAccountId));
       const embedipreview = assistant?.embedipreview ?? true; // Default: embedding-first if assistant not found
-      
+
       webhookLogger.info('Agent routing strategy configuration', {
         assistantId: assistant?.id || 'not-found',
         embedipreview,
@@ -727,15 +772,15 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 
       // Process through optimized SocialWise Flow
       const result = await processSocialWiseFlow(processorContext, embedipreview);
-      
+
       const routeTotalMs = Date.now() - startTime;
 
       // Record performance metrics
       const coldStart = process.uptime() < 120; // 2 min pós-boot/deploy
-        const aliasHit = result.metrics.band === 'HARD'
-          && result.metrics.strategy === 'direct_map'
-          && (result.metrics.embeddingMs ?? 0) <= 15
-          && (result.metrics.score ?? 0) >= 0.95;
+      const aliasHit = result.metrics.band === 'HARD'
+        && result.metrics.strategy === 'direct_map'
+        && (result.metrics.embeddingMs ?? 0) <= 15
+        && (result.metrics.score ?? 0) >= 0.95;
 
       recordWebhookMetrics({
         responseTime: routeTotalMs,
@@ -834,7 +879,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 
     } catch (processingError) {
       const routeTotalMs = Date.now() - startTime;
-      
+
       webhookLogger.error('SocialWise Flow processing failed', {
         error: processingError instanceof Error ? processingError.message : String(processingError),
         routeTotalMs,
@@ -860,7 +905,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 
   } catch (error) {
     const routeTotalMs = Date.now() - startTime;
-    
+
     webhookLogger.error('Webhook processing failed', {
       error: error instanceof Error ? error.message : String(error),
       routeTotalMs,
@@ -895,7 +940,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 export async function GET(): Promise<NextResponse> {
   try {
     const startTime = Date.now();
-    
+
     // Basic health check - verify core services are available
     const healthStatus = {
       status: 'healthy',
@@ -927,12 +972,12 @@ export async function GET(): Promise<NextResponse> {
     return NextResponse.json(healthStatus, {
       status: healthStatus.status === 'healthy' ? 200 : 503
     });
-    
+
   } catch (error) {
     webhookLogger.error('Health check failed', {
       error: error instanceof Error ? error.message : String(error)
     });
-    
+
     return NextResponse.json(
       {
         status: 'unhealthy',

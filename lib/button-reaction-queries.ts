@@ -102,7 +102,7 @@ export async function getReactionByButtonId(
   userId: string
 ): Promise<ButtonReactionData | null> {
   const prisma = getPrismaInstance()
-  
+
   const reaction = await prisma.mapeamentoBotao.findFirst({
     where: {
       buttonId: buttonId,
@@ -163,12 +163,12 @@ export async function getUserReactions(
     include: {
       inbox: includeInbox
         ? {
-            select: {
-              id: true,
-              nome: true,
-              inboxId: true,
-            },
-          }
+          select: {
+            id: true,
+            nome: true,
+            inboxId: true,
+          },
+        }
         : false,
     },
     orderBy: {
@@ -287,7 +287,7 @@ export function formatReactionData(
   wamid: string
 ): any {
   const actionPayload = reaction.actionPayload
-  
+
   const response: any = {
     action_type: 'button_reaction',
     buttonId: reaction.buttonId,
@@ -310,12 +310,21 @@ export function formatReactionData(
     response.action = actionPayload.action
   }
 
+  // Adicionar tag se disponível (agregado de nó add_tag no flow)
+  if (actionPayload.tagName) {
+    response.tag = {
+      name: actionPayload.tagName,
+      color: actionPayload.tagColor ?? null,
+    }
+  }
+
   // Metadados específicos por canal
   if (channelType.toLowerCase().includes('whatsapp')) {
     response.whatsapp = {
       message_id: wamid,
       reaction_emoji: actionPayload.emoji || undefined,
       response_text: actionPayload.textReaction || undefined,
+      tag: actionPayload.tagName ? { name: actionPayload.tagName, color: actionPayload.tagColor } : undefined,
     }
   }
 
@@ -324,6 +333,7 @@ export function formatReactionData(
       message_id: wamid,
       reaction_emoji: actionPayload.emoji || undefined,
       response_text: actionPayload.textReaction || undefined,
+      tag: actionPayload.tagName ? { name: actionPayload.tagName, color: actionPayload.tagColor } : undefined,
     }
   }
 
@@ -332,6 +342,7 @@ export function formatReactionData(
       message_id: wamid,
       reaction_emoji: actionPayload.emoji || undefined,
       response_text: actionPayload.textReaction || undefined,
+      tag: actionPayload.tagName ? { name: actionPayload.tagName, color: actionPayload.tagColor } : undefined,
     }
   }
 
@@ -353,7 +364,7 @@ export async function updateReaction(id: string, data: any): Promise<ButtonReact
 
 export async function deleteReaction(id: string, userId: string): Promise<boolean> {
   const prisma = getPrismaInstance()
-  
+
   try {
     await prisma.mapeamentoBotao.delete({
       where: {
@@ -435,7 +446,7 @@ export async function updateReactionConfig(
 
 export async function getReactionForReactionsModal(buttonId: string, userId: string) {
   const reaction = await getReactionByButtonId(buttonId, userId)
-  
+
   if (!reaction) {
     return null
   }
@@ -473,14 +484,14 @@ export async function getIntentMappingByButtonId(
   inboxId?: string
 ): Promise<ButtonReactionData | null> {
   const prisma = getPrismaInstance()
-  
+
   console.log('[INTENT MAPPING DEBUG] Searching for intent mapping', {
     buttonId,
     userId,
     inboxId,
     timestamp: new Date().toISOString()
   });
-  
+
   // 🔒 ISOLAMENTO POR CAIXA: Construir where clause com inboxId obrigatório
   const whereClause: any = {
     buttonId: buttonId,
@@ -500,7 +511,7 @@ export async function getIntentMappingByButtonId(
     whereClause.inbox.inboxId = inboxId;
     console.log('[INTENT MAPPING DEBUG] 🔒 Filtering by inboxId', { inboxId });
   }
-  
+
   const mapping = await prisma.mapeamentoBotao.findFirst({
     where: whereClause,
     include: {
@@ -550,7 +561,7 @@ export async function getIntentMappingByButtonId(
   const normalizedIntent = buildIntentSearchInfo(buttonId)
   const intentName = normalizedIntent.plain
   const searchCandidates = normalizedIntent.candidates
-  
+
   console.log('[INTENT MAPPING DEBUG] Searching in MapeamentoIntencao', {
     buttonId,
     intentName,

@@ -4,8 +4,17 @@ import type {
   InteractiveMessageNodeData,
 } from '@/types/flow-builder';
 
+/**
+ * Prefixo para botões do Flow Builder.
+ * Usado para identificar botões que fazem parte de um flow visual
+ * e devem ser processados pelo FlowOrchestrator em vez do button-processor legado.
+ */
+export const FLOW_BUTTON_PREFIX = 'flow_';
+
 function safeId(prefix: string) {
-  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  // Botões do Flow Builder recebem prefixo 'flow_' para priorização no webhook
+  const finalPrefix = prefix === 'button' ? `${FLOW_BUTTON_PREFIX}${prefix}` : prefix;
+  return `${finalPrefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export function createInteractiveMessageElement(

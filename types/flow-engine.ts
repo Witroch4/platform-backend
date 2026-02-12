@@ -67,12 +67,16 @@ export interface ExecutionLogEntry {
 export interface DeliveryContext {
   accountId: number;
   conversationId: number;
+  /** ID de exibição da conversa (display_id), necessário para API Chatwit */
+  conversationDisplayId?: number;
   inboxId: number;
   contactId: number;
   contactName: string;
   contactPhone: string;
   channelType: 'whatsapp' | 'instagram' | 'facebook';
   sourceMessageId?: string;
+  /** ID interno da ChatwitInbox no Prisma (ex.: `cmlap0ved0056rw0imzyinfia`) */
+  prismaInboxId?: string;
   /** Token da API Chatwit (ex.: `UsuarioChatwit.chatwitAccessToken`) */
   chatwitAccessToken: string;
   /** Base URL da instância Chatwit (ex.: `https://app.chatwit.io`) */
@@ -84,13 +88,19 @@ export interface DeliveryContext {
 // =============================================================================
 
 export interface DeliveryPayload {
-  type: 'text' | 'media' | 'interactive';
+  type: 'text' | 'media' | 'interactive' | 'reaction';
   content?: string;
   mediaUrl?: string;
   filename?: string;
   interactivePayload?: Record<string, unknown>;
   /** Se `true`, envia como nota interna (private note) */
   private?: boolean;
+  /** Para REACTION: emoji a enviar (ex: "👍", "❤️") */
+  emoji?: string;
+  /** Para REACTION: ID da mensagem alvo (wamid / source_id) */
+  targetMessageId?: string;
+  /** Para TEXT em contexto (reply): ID da mensagem original (wamid) a citar */
+  contextMessageId?: string;
 }
 
 // =============================================================================
@@ -98,8 +108,32 @@ export interface DeliveryPayload {
 // =============================================================================
 
 export interface SynchronousResponse {
+  /**
+   * Texto simples — aceito por todos os canais no Chatwit processor como `response['text']`.
+   * Usar este campo em vez de `content` para garantia de entrega via ponte síncrona.
+   */
+  text?: string;
+  /** @deprecated use `text`. Não é reconhecido pelo Chatwit processor para WhatsApp/Instagram. */
   content?: string;
+  /** Resposta nativa WhatsApp (ex: { type: 'interactive', interactive: { ... } }) */
+  whatsapp?: Record<string, unknown>;
+  /** Resposta nativa Instagram */
+  instagram?: Record<string, unknown>;
+  /** Resposta nativa Facebook */
+  facebook?: Record<string, unknown>;
+  /**
+   * Tipo de ação para o Chatwit processor.
+   * Use `'button_reaction'` para enviar emoji reaction via `process_button_reaction`.
+   */
+  action_type?: 'button_reaction';
+  /**
+   * Emoji para reaction via `process_button_reaction`.
+   * Lido diretamente de `response['emoji']` no Chatwit processor.
+   */
+  emoji?: string;
+  /** @deprecated Use whatsapp/instagram/facebook. Formato genérico legado. */
   type?: 'interactive';
+  /** @deprecated Use whatsapp/instagram/facebook. Formato genérico legado. */
   payload?: Record<string, unknown>;
 }
 
@@ -281,4 +315,22 @@ export interface MediaConfig {
   filename?: string;
   /** Caption (texto que acompanha o arquivo) */
   caption?: string;
+}
+
+// =============================================================================
+// EXECUTE RESULT — resultado da execução do executor
+// =============================================================================
+
+export interface ExecuteResult {
+  /**
+   * Status da execução:
+   * - COMPLETED: Flow terminou
+   * - WAITING_INPUT: Aguardando clique de botão
+   * - ERROR: Erro na execução
+   * - ACTIVE: Flow continua em background (após yield para delay)
+   */
+  status: 'COMPLETED' | 'WAITING_INPUT' | 'ERROR' | 'ACTIVE';
+  currentNodeId?: string;
+  variables: Record<string, unknown>;
+  executionLog: ExecutionLogEntry[];
 }

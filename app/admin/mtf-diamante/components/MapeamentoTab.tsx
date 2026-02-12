@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { useMtfData } from "../context/SwrProvider";
 import useSWR from 'swr';
@@ -73,7 +73,7 @@ interface Template {
 const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
   // Usar o provider SWR para obter as mensagens interativas
   const { interactiveMessages, isLoadingMessages } = useMtfData();
-  
+
   // Usar SWR para mapeamentos
   const { data: mapeamentos = [], error: mapeamentosError, mutate: mutateMapeamentos } = useSWR(
     caixaId ? `/api/admin/mtf-diamante/mapeamentos/${caixaId}` : null,
@@ -83,7 +83,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
       return response.json();
     }
   );
-  
+
   // Usar SWR para templates (primeiro tentar específicos da caixa, depois globais)
   const { data: templates = [], error: templatesError, mutate: mutateTemplates } = useSWR(
     caixaId ? [`templates`, caixaId] : null,
@@ -99,7 +99,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
       } catch (error) {
         console.log("Falha ao buscar templates da caixa, tentando fallback...");
       }
-      
+
       // Fallback: buscar templates globais da conta
       const globalTemplateResponse = await fetch(`/api/admin/mtf-diamante/templates`);
       if (globalTemplateResponse.ok) {
@@ -110,24 +110,28 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
         setUsingGlobalTemplates(true);
         return templates;
       }
-      
+
       throw new Error("Falha ao buscar templates.");
     }
   );
-  
+
   const [loading, setLoading] = useState(false);
   const [usingGlobalTemplates, setUsingGlobalTemplates] = useState(false);
 
   // Usar SWR para flows da inbox
-  const { data: flows = [], error: flowsError } = useSWR(
-    caixaId ? `/api/admin/mtf-diamante/flows?inboxId=${caixaId}` : null,
-    async (url) => {
-      const response = await fetch(url);
-      if (!response.ok) return [];
-      const data = await response.json();
-      return data.flows ?? data ?? [];
-    }
+  // Nota: o fetcher global do SWRConfig retorna JSON cru { success, data }
+  const { data: rawFlows, error: flowsError } = useSWR<any>(
+    caixaId ? `/api/admin/mtf-diamante/flows?inboxId=${caixaId}` : null
   );
+
+  // Normalizar: o fetcher global retorna { success, data: Flow[] }, não o array direto
+  const flows: Flow[] = useMemo(() => {
+    if (!rawFlows) return [];
+    if (Array.isArray(rawFlows)) return rawFlows;
+    if (Array.isArray(rawFlows?.data)) return rawFlows.data;
+    if (Array.isArray(rawFlows?.flows)) return rawFlows.flows;
+    return [];
+  }, [rawFlows]);
 
   // Form state
   const [id, setId] = useState<string | null>(null);
@@ -135,11 +139,11 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
   const [aiSelectedTemplate, setAiSelectedTemplate] = useState<string | null>(null);
   const [aiSelectedMensagem, setAiSelectedMensagem] = useState<string | null>(null);
   const [aiSelectedFlow, setAiSelectedFlow] = useState<string | null>(null);
-  
+
   // Button reactions state
   const [showReactionConfig, setShowReactionConfig] = useState<string | null>(null);
   const [selectedTemplateDetails, setSelectedTemplateDetails] = useState<any>(null);
-  
+
   // Template variables dialog state
   const [showVariablesDialog, setShowVariablesDialog] = useState(false);
   const [selectedTemplateForVariables, setSelectedTemplateForVariables] = useState<any>(null);
@@ -226,7 +230,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
       const response = await fetch(`/api/admin/mtf-diamante/template-info?templateId=${templateId}`);
       if (response.ok) {
         const templateInfo = await response.json();
-        
+
         // Verificar se é template oficial do WhatsApp e tem variáveis
         if (templateInfo.type === 'WHATSAPP_OFFICIAL' && templateInfo.whatsappOfficialInfo) {
           const rawComponents = templateInfo.whatsappOfficialInfo.components;
@@ -234,11 +238,11 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
             ? rawComponents
             : (rawComponents && typeof rawComponents === 'object')
               ? Object.keys(rawComponents)
-                  .filter((k) => /^\d+$/.test(k))
-                  .sort((a, b) => Number(a) - Number(b))
-                  .map((k) => rawComponents[k])
+                .filter((k) => /^\d+$/.test(k))
+                .sort((a, b) => Number(a) - Number(b))
+                .map((k) => rawComponents[k])
               : [];
-          
+
           // Verificar se há variáveis nos componentes
           const hasVariablesInTexts = components.some((comp: any) => {
             // Detectar placeholders numéricos ou nomeados: {{...}}
@@ -278,7 +282,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
     } catch (error) {
       console.error('Erro ao verificar variáveis do template:', error);
     }
-    
+
     return { hasVariables: false, templateInfo: null };
   };
 
@@ -309,7 +313,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ templateId })
         });
         if (!ensureRes.ok) { await ensureRes.json().catch(() => ({})); }
-      } catch {}
+      } catch { }
 
       const { hasVariables, templateInfo } = await checkTemplateVariables(templateId!);
       if (hasVariables) {
@@ -329,7 +333,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
 
   const saveMappingData = async (mappingData: any, customVariables?: Record<string, string>) => {
     try {
-      const response = await fetch(`/api/admin/mtf-diamante/mapeamentos/${encodeURIComponent(mappingData.caixaId)}` , {
+      const response = await fetch(`/api/admin/mtf-diamante/mapeamentos/${encodeURIComponent(mappingData.caixaId)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -358,7 +362,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
   };
 
   const handleVariablesSave = (customVariables: Record<string, string>) => {
-    
+
     if (pendingMappingData) {
       saveMappingData(pendingMappingData, customVariables);
       setPendingMappingData(null);
@@ -472,7 +476,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
           </div>
         </div>
         <CardDescription>
-          Associe uma intenção da IA a uma resposta automática (template ou mensagem interativa).
+          Associe uma intenção da IA a uma resposta automática (template, mensagem interativa ou flow).
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -530,30 +534,26 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
                 </SelectContent>
               </Select>
             </div>
-            {flows.length > 0 && (
-              <>
-                <span className="text-sm font-medium self-end pb-2">OU</span>
-                <div className="flex-1 min-w-[200px]">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Label>Executar Flow</Label>
-                  </div>
-                  <Select
-                    onValueChange={(value) => { setAiSelectedFlow(value); setAiSelectedTemplate(null); setAiSelectedMensagem(null); }}
-                    value={aiSelectedFlow || ""}
-                    disabled={!!aiSelectedTemplate || !!aiSelectedMensagem}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um Flow" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {flows.filter((f: Flow) => f.isActive).map((f: Flow) => (
-                        <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </>
-            )}
+            <span className="text-sm font-medium self-end pb-2">OU</span>
+            <div className="flex-1 min-w-[200px]">
+              <div className="flex items-center gap-2 mb-2">
+                <Label>Executar Flow</Label>
+              </div>
+              <Select
+                onValueChange={(value) => { setAiSelectedFlow(value); setAiSelectedTemplate(null); setAiSelectedMensagem(null); }}
+                value={aiSelectedFlow || ""}
+                disabled={!!aiSelectedTemplate || !!aiSelectedMensagem || flows.length === 0}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={flows.length === 0 ? "Nenhum flow salvo" : "Selecione um Flow"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {flows.filter((f: Flow) => f.isActive).map((f: Flow) => (
+                    <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <div className="flex gap-2">
             <Button type="submit">Salvar Mapeamento</Button>
@@ -621,7 +621,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
                   <h2 className="text-xl font-semibold">Configurar Reações dos Botões</h2>
                   <Button
                     variant="ghost"
-                    
+
                     onClick={() => {
                       setShowReactionConfig(null);
                       setSelectedTemplateDetails(null);
@@ -697,7 +697,7 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
             templateName={selectedTemplateForVariables.name}
             components={selectedTemplateForVariables.whatsappOfficialInfo?.components || []}
             accountId={caixaId} // Usando caixaId como accountId por enquanto
-            
+
           />
         )}
 

@@ -48,6 +48,7 @@ export default function WebhookTestPage() {
   const [response, setResponse] = useState<any>(null);
   const [customPayload, setCustomPayload] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("+558597550136");
+  const [inboxId, setInboxId] = useState("4");
   const [flashIntentStatus, setFlashIntentStatus] = useState<any>(null);
   const [savedPayloads, setSavedPayloads] = useState<SavedPayload[]>([]);
   const [payloadName, setPayloadName] = useState("");
@@ -96,11 +97,13 @@ export default function WebhookTestPage() {
       const savedUserMessage = localStorage.getItem("webhook-user-message");
       const savedButtonPayload = localStorage.getItem("webhook-button-payload");
       const savedExternalDest = localStorage.getItem("webhook-external-dest");
+      const savedInboxId = localStorage.getItem("webhook-inbox-id");
 
       // Definir valores salvos ou padrões
       setUserMessage(savedUserMessage || "VCS SÃO ESPECIALISTAS?");
       setButtonPayload(savedButtonPayload || "btn_1754993780819_0_tqji");
       if (savedExternalDest) setExternalDest(savedExternalDest);
+      if (savedInboxId) setInboxId(savedInboxId);
     } catch (error) {
       console.error("Erro ao carregar configurações:", error);
       // Valores padrão em caso de erro
@@ -138,6 +141,16 @@ export default function WebhookTestPage() {
       }
     }
   }, [buttonPayload, isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded && inboxId.trim()) {
+      try {
+        localStorage.setItem("webhook-inbox-id", inboxId);
+      } catch (error) {
+        console.error("Erro ao salvar inbox ID:", error);
+      }
+    }
+  }, [inboxId, isLoaded]);
 
 
   const loadSavedPayloads = () => {
@@ -228,23 +241,23 @@ export default function WebhookTestPage() {
 
   const startInfiniteTest = async () => {
     if (infiniteTestRunning) return;
-    
+
     setInfiniteTestRunning(true);
     setInfiniteTestMode(true);
-    
+
     const runTest = async () => {
       if (!infiniteTestRunning) return;
-      
+
       try {
         // Limpar cache antes de cada teste se habilitado
         if (clearCache) {
           await clearWebhookCache();
         }
-        
+
         // Executar o teste
         await sendWebhookTest(realPayload);
         setTestCount(prev => prev + 1);
-        
+
         // Agendar próximo teste
         setTimeout(runTest, infiniteTestInterval);
       } catch (error) {
@@ -253,7 +266,7 @@ export default function WebhookTestPage() {
         stopInfiniteTest();
       }
     };
-    
+
     runTest();
   };
 
@@ -540,6 +553,16 @@ export default function WebhookTestPage() {
   };
 
   // FONTE ÚNICA DA VERDADE: Funções que usam apenas userMessage e buttonPayload
+  const applyInboxId = (payload: any) => {
+    const id = Number(inboxId) || 4;
+    if (payload.context?.message) payload.context.message.inbox_id = id;
+    if (payload.context?.inbox) payload.context.inbox.id = id;
+    if (payload.context?.conversation) payload.context.conversation.inbox_id = id;
+    if (payload.context?.inbox_id !== undefined) payload.context.inbox_id = id;
+    if (payload.context?.["socialwise-chatwit"]?.inbox_data) payload.context["socialwise-chatwit"].inbox_data.id = id;
+    return payload;
+  };
+
   const createWhatsappTextPayload = () => {
     const payload = JSON.parse(JSON.stringify(socialwiseWhatsappPayload));
     const finalSourceId = randomizeSourceId ? generateRandomSourceId('whatsapp') : "wamid.HBgMNTU4NTk3NTUwMTM2FQIAEhgUM0FCNDNFNUMzMTJGQjc5RjcyOEQA";
@@ -554,7 +577,7 @@ export default function WebhookTestPage() {
     payload.context.message.source_id = finalSourceId;
     payload.context["socialwise-chatwit"].contact_data.phone_number = phoneNumber;
     payload.context["socialwise-chatwit"].whatsapp_identifiers.contact_source = phoneNumber.replace("+", "");
-    return payload;
+    return applyInboxId(payload);
   };
 
   const createWhatsappButtonPayload = () => {
@@ -578,7 +601,7 @@ export default function WebhookTestPage() {
     payload.context.message.source_id = finalSourceId;
     payload.context["socialwise-chatwit"].contact_data.phone_number = phoneNumber;
     payload.context["socialwise-chatwit"].whatsapp_identifiers.contact_source = phoneNumber.replace("+", "");
-    return payload;
+    return applyInboxId(payload);
   };
 
   const createInstagramTextPayload = () => {
@@ -590,7 +613,7 @@ export default function WebhookTestPage() {
     payload.context.message.processed_message_content = userMessage;
     payload.context.message_content = userMessage;
     payload.context.message.source_id = finalSourceId;
-    return payload;
+    return applyInboxId(payload);
   };
 
   const createInstagramButtonPayload = () => {
@@ -605,7 +628,7 @@ export default function WebhookTestPage() {
     payload.context.interaction_type = "postback";
     payload.context.postback_payload = buttonPayload;
     payload.context.message.source_id = finalSourceId;
-    return payload;
+    return applyInboxId(payload);
   };
 
   const createFacebookTextPayload = () => {
@@ -622,7 +645,7 @@ export default function WebhookTestPage() {
     payload.context.contact_source = finalSessionId;
     payload.context["socialwise-chatwit"].whatsapp_identifiers.contact_source = finalSessionId;
     payload.wamid = finalSourceId;
-    return payload;
+    return applyInboxId(payload);
   };
 
   const createFacebookQuickReplyPayload = () => {
@@ -640,7 +663,7 @@ export default function WebhookTestPage() {
     payload.context.message.content_attributes.quick_reply_payload = buttonPayload;
     payload.context["socialwise-chatwit"].message_data.instagram_data.quick_reply_payload = buttonPayload;
     payload.quick_reply_payload = buttonPayload;
-    return payload;
+    return applyInboxId(payload);
   };
 
   const createInstagramQuickReplyPayload = () => {
@@ -655,7 +678,7 @@ export default function WebhookTestPage() {
     payload.context.message.content_attributes.quick_reply_payload = buttonPayload;
     payload.context["socialwise-chatwit"].message_data.instagram_data.quick_reply_payload = buttonPayload;
     payload.quick_reply_payload = buttonPayload;
-    return payload;
+    return applyInboxId(payload);
   };
 
   const sendToExternal = async (payload: any) => {
@@ -669,7 +692,7 @@ export default function WebhookTestPage() {
       const dest = getExternalDestination();
       try {
         localStorage.setItem("webhook-external-dest", externalDest);
-      } catch {}
+      } catch { }
 
       const res = await fetch(dest, {
         method: "POST",
@@ -724,14 +747,14 @@ export default function WebhookTestPage() {
             </p>
           </div>
         </div>
-        
+
         {/* Botão de limpeza rápida de cache */}
         <div className="flex items-center gap-2">
           <Button
             onClick={clearWebhookCache}
             disabled={clearingCache}
             variant="outline"
-            
+
             className="flex items-center gap-2"
           >
             {clearingCache ? (
@@ -741,7 +764,7 @@ export default function WebhookTestPage() {
             )}
             {clearingCache ? "Limpando..." : "Limpar Cache"}
           </Button>
-          
+
           {infiniteTestRunning && (
             <Badge variant="destructive" className="animate-pulse">
               Teste Infinito Ativo
@@ -809,6 +832,22 @@ export default function WebhookTestPage() {
               </p>
             </div>
 
+            <div>
+              <label htmlFor="inboxId" className="text-sm font-medium">
+                ID da Caixa (Chatwit inbox_id externo)
+              </label>
+              <Input
+                id="inboxId"
+                value={inboxId}
+                onChange={(e) => setInboxId(e.target.value)}
+                placeholder="4"
+                className="max-w-md"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                ID numérico externo da caixa no Chatwit (ex: 4, 5). Usado em todos os payloads de teste.
+              </p>
+            </div>
+
             {/* Controle de Cache */}
             <div className="space-y-3">
               <div className="flex items-center space-x-2">
@@ -833,7 +872,7 @@ export default function WebhookTestPage() {
                   onClick={clearWebhookCache}
                   disabled={clearingCache}
                   variant="outline"
-                  
+
                   className="flex items-center gap-2"
                 >
                   {clearingCache ? (
@@ -854,7 +893,7 @@ export default function WebhookTestPage() {
               <h4 className="text-sm font-medium flex items-center gap-2">
                 <Shield className="h-4 w-4" /> Controle de Idempotência
               </h4>
-              
+
               <div className="flex items-center gap-4">
                 <div className="flex items-center space-x-2">
                   <input
@@ -868,7 +907,7 @@ export default function WebhookTestPage() {
                     Desabilitar detecção de duplicatas
                   </label>
                 </div>
-                
+
                 {idempotencyStatus && (
                   <div className="flex items-center gap-2">
                     <Badge variant={idempotencyDisabled ? "destructive" : "secondary"}>
@@ -882,7 +921,7 @@ export default function WebhookTestPage() {
                   </div>
                 )}
               </div>
-              
+
               <p className="text-xs text-muted-foreground">
                 ⚠️ Desabilitar permite enviar mensagens duplicadas para testes. Reabilita automaticamente em 5 minutos.
               </p>
@@ -893,7 +932,7 @@ export default function WebhookTestPage() {
               <h4 className="text-sm font-medium flex items-center gap-2">
                 <Zap className="h-4 w-4" /> Modo de Teste Infinito
               </h4>
-              
+
               <div className="flex items-center gap-4">
                 <div className="flex items-center space-x-2">
                   <input
@@ -907,7 +946,7 @@ export default function WebhookTestPage() {
                     Ativar teste infinito
                   </label>
                 </div>
-                
+
                 <div className="flex items-center gap-2">
                   <label htmlFor="testInterval" className="text-xs text-muted-foreground">
                     Intervalo (ms):
@@ -930,7 +969,7 @@ export default function WebhookTestPage() {
                   onClick={startInfiniteTest}
                   disabled={infiniteTestRunning || !infiniteTestMode}
                   variant="destructive"
-                  
+
                   className="flex items-center gap-2"
                 >
                   {infiniteTestRunning ? (
@@ -940,25 +979,25 @@ export default function WebhookTestPage() {
                   )}
                   {infiniteTestRunning ? "Teste Infinito Ativo..." : "Iniciar Teste Infinito"}
                 </Button>
-                
+
                 <Button
                   onClick={stopInfiniteTest}
                   disabled={!infiniteTestRunning}
                   variant="outline"
-                  
+
                   className="flex items-center gap-2"
                 >
                   <XCircle className="h-4 w-4" />
                   Parar Teste
                 </Button>
-                
+
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary">
                     Testes: {testCount}
                   </Badge>
                 </div>
               </div>
-              
+
               <p className="text-xs text-muted-foreground">
                 ⚠️ Use com cuidado! O teste infinito enviará webhooks continuamente até ser parado.
               </p>
@@ -1006,12 +1045,12 @@ export default function WebhookTestPage() {
                     />
                     <Button
                       variant="ghost"
-                      
+
                       onClick={() => {
                         setUserMessage("");
                         try {
                           localStorage.removeItem("webhook-user-message");
-                        } catch {}
+                        } catch { }
                       }}
                       className="h-8 w-8 p-0"
                       title="Limpar mensagem"
@@ -1038,12 +1077,12 @@ export default function WebhookTestPage() {
                     />
                     <Button
                       variant="ghost"
-                      
+
                       onClick={() => {
                         setButtonPayload("");
                         try {
                           localStorage.removeItem("webhook-button-payload");
-                        } catch {}
+                        } catch { }
                       }}
                       className="h-8 w-8 p-0"
                       title="Limpar payload"
@@ -1168,7 +1207,7 @@ export default function WebhookTestPage() {
                   onClick={() => sendToExternal(createWhatsappTextPayload())}
                   disabled={loading}
                   variant="outline"
-                  
+
                 >
                   Texto Simples
                 </Button>
@@ -1176,7 +1215,7 @@ export default function WebhookTestPage() {
                   onClick={() => sendToExternal(createWhatsappButtonPayload())}
                   disabled={loading}
                   variant="outline"
-                  
+
                 >
                   Com Botão
                 </Button>
@@ -1190,7 +1229,7 @@ export default function WebhookTestPage() {
                   onClick={() => sendToExternal(createInstagramTextPayload())}
                   disabled={loading}
                   variant="outline"
-                  
+
                 >
                   Texto Simples
                 </Button>
@@ -1198,7 +1237,7 @@ export default function WebhookTestPage() {
                   onClick={() => sendToExternal(createInstagramButtonPayload())}
                   disabled={loading}
                   variant="outline"
-                  
+
                 >
                   Com Botão
                 </Button>
@@ -1206,7 +1245,7 @@ export default function WebhookTestPage() {
                   onClick={() => sendToExternal(createInstagramQuickReplyPayload())}
                   disabled={loading}
                   variant="outline"
-                  
+
                 >
                   Quick Reply
                 </Button>
@@ -1220,7 +1259,7 @@ export default function WebhookTestPage() {
                   onClick={() => sendToExternal(createFacebookTextPayload())}
                   disabled={loading}
                   variant="outline"
-                  
+
                 >
                   Texto Simples
                 </Button>
@@ -1228,7 +1267,7 @@ export default function WebhookTestPage() {
                   onClick={() => sendToExternal(createFacebookQuickReplyPayload())}
                   disabled={loading}
                   variant="outline"
-                  
+
                 >
                   Quick Reply
                 </Button>
@@ -1321,14 +1360,14 @@ export default function WebhookTestPage() {
                     <Button
                       onClick={() => loadPayload(payload)}
                       variant="outline"
-                      
+
                     >
                       Carregar
                     </Button>
                     <Button
                       onClick={() => deletePayload(payload.id)}
                       variant="outline"
-                      
+
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -1403,7 +1442,7 @@ export default function WebhookTestPage() {
         <CardHeader>
           <CardTitle>Informações do Payload Real</CardTitle>
           <CardDescription>
-            {lastSentPayload 
+            {lastSentPayload
               ? "Último payload enviado para teste (com modificações aplicadas)"
               : "Estrutura do payload base (será modificado antes do envio)"
             }

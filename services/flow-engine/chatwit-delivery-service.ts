@@ -38,12 +38,11 @@ interface ChatwitMessagePayload {
   content_attributes?: Record<string, unknown>;
   message_type: 'outgoing';
   private?: boolean;
-  /** Para mídia */
-  attachments?: Array<{
-    content: string; // URL
-    data_type: string; // 'image', 'file', etc.
-    file_type?: string;
-  }>;
+  /**
+   * Para mídia: array de blob_ids (signed_ids) retornados pelo endpoint /upload
+   * @see docs/chatwit-contrato-async-30s.md
+   */
+  attachments?: string[];
 }
 
 // =============================================================================
@@ -91,6 +90,15 @@ export class ChatwitDeliveryService {
           ctx,
           payload.interactivePayload ?? {},
         );
+      case 'reaction':
+        // ⚠️ LIMITAÇÃO: Chatwit só suporta button_reaction na resposta síncrona.
+        // Via API async, não é possível enviar uma reaction real no WhatsApp.
+        // Enviamos o emoji como texto para pelo menos mostrar a intenção.
+        log.warn('[ChatwitDelivery] Reaction via API async - enviando como texto (emoji)', {
+          emoji: payload.emoji,
+          targetMessageId: payload.targetMessageId,
+        });
+        return this.deliverText(ctx, payload.emoji ?? '👍', false);
       default:
         log.warn('[ChatwitDelivery] Tipo de payload desconhecido', { type: payload.type });
         return { success: false, error: `Tipo desconhecido: ${payload.type}`, attempts: 0 };
@@ -116,6 +124,10 @@ export class ChatwitDeliveryService {
 
   /**
    * Envia arquivo/mídia (PDF, imagem, áudio, etc.).
+   * Usa fluxo de 2 etapas conforme contrato Chatwit v1.3.0:
+   * 1. POST /upload com external_url → retorna blob_id
+   * 2. POST /messages com blob_id como attachment
+   * @see docs/chatwit-contrato-async-30s.md
    */
   async deliverMedia(
     ctx: DeliveryContext,
@@ -123,19 +135,56 @@ export class ChatwitDeliveryService {
     filename?: string,
     caption?: string,
   ): Promise<DeliveryResult> {
-    const ext = (filename ?? mediaUrl).split('.').pop()?.toLowerCase() ?? '';
-    const dataType = this.resolveDataType(ext);
+    // Etapa 1: Upload via URL externa
+    const uploadUrl = `/api/v1/accounts/${ctx.accountId}/upload`;
 
+    log.debug('[ChatwitDelivery] Iniciando upload de mídia', {
+      uploadUrl,
+      mediaUrl,
+      filename,
+    });
+
+    let blobId: string;
+    try {
+      const uploadRes = await this.client.post(uploadUrl, {
+        external_url: mediaUrl,
+      });
+      blobId = uploadRes.data?.blob_id;
+
+      if (!blobId) {
+        log.error('[ChatwitDelivery] Upload retornou sem blob_id', {
+          response: uploadRes.data,
+        });
+        return {
+          success: false,
+          error: 'Upload falhou: blob_id não retornado',
+          attempts: 1,
+        };
+      }
+
+      log.debug('[ChatwitDelivery] Upload concluído', {
+        blobId: blobId.substring(0, 20) + '...',
+        fileUrl: uploadRes.data?.file_url,
+      });
+    } catch (err) {
+      const axiosErr = err as AxiosError;
+      log.error('[ChatwitDelivery] Erro no upload de mídia', {
+        status: axiosErr.response?.status,
+        message: axiosErr.message,
+        mediaUrl,
+      });
+      return {
+        success: false,
+        error: `Upload falhou: ${axiosErr.message}`,
+        attempts: 1,
+      };
+    }
+
+    // Etapa 2: Criar mensagem com blob_id como attachment
     const body: ChatwitMessagePayload = {
       content: caption ?? '',
       message_type: 'outgoing',
-      attachments: [
-        {
-          content: mediaUrl,
-          data_type: dataType,
-          file_type: ext,
-        },
-      ],
+      attachments: [blobId], // Array de strings (signed_ids), não objetos
     };
 
     return this.postMessage(ctx, body);
@@ -143,16 +192,22 @@ export class ChatwitDeliveryService {
 
   /**
    * Envia mensagem interativa (botões, lista, etc.).
-   * Requer que o Chatwit suporte `content_type: interactive`.
+   * Usa `content_type: integrations` conforme contrato Chatwit v1.2.0+
+   * @see docs/chatwit-contrato-async-30s.md
    */
   async deliverInteractive(
     ctx: DeliveryContext,
     interactivePayload: Record<string, unknown>,
   ): Promise<DeliveryResult> {
+    // Extrair texto do body para o campo content (usado como preview no chat)
+    const bodyText = (interactivePayload as { body?: { text?: string } })?.body?.text || '';
+
     const body: ChatwitMessagePayload = {
-      content: '',
-      content_type: 'interactive',
-      content_attributes: interactivePayload,
+      content: bodyText,
+      content_type: 'integrations', // ✅ Formato correto para Chatwit
+      content_attributes: {
+        interactive: interactivePayload, // Payload dentro de "interactive"
+      },
       message_type: 'outgoing',
     };
 
@@ -167,7 +222,19 @@ export class ChatwitDeliveryService {
     ctx: DeliveryContext,
     body: ChatwitMessagePayload,
   ): Promise<DeliveryResult> {
-    const url = `/api/v1/accounts/${ctx.accountId}/conversations/${ctx.conversationId}/messages`;
+    // 🔧 FIX: API usa display_id, não id interno
+    const targetConversationId = ctx.conversationDisplayId || ctx.conversationId;
+    const url = `/api/v1/accounts/${ctx.accountId}/conversations/${targetConversationId}/messages`;
+
+    log.debug('[ChatwitDelivery] Configuração do request', {
+      baseURL: this.client.defaults.baseURL,
+      url,
+      fullUrl: `${this.client.defaults.baseURL}${url}`,
+      accountId: ctx.accountId,
+      conversationId: ctx.conversationId,
+      conversationDisplayId: ctx.conversationDisplayId,
+      usedId: targetConversationId,
+    });
 
     let lastError = '';
     for (let attempt = 1; attempt <= RETRY_ATTEMPTS; attempt++) {
@@ -216,16 +283,8 @@ export class ChatwitDeliveryService {
     return { success: false, error: lastError, attempts: RETRY_ATTEMPTS };
   }
 
-  private resolveDataType(ext: string): string {
-    const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
-    const audioExts = ['mp3', 'wav', 'ogg', 'aac', 'm4a', 'opus'];
-    const videoExts = ['mp4', 'webm', 'mov', 'avi'];
-
-    if (imageExts.includes(ext)) return 'image';
-    if (audioExts.includes(ext)) return 'audio';
-    if (videoExts.includes(ext)) return 'video';
-    return 'file';
-  }
+  // resolveDataType removido - não mais necessário com o fluxo de upload blob_id
+  // O Chatwit detecta o tipo automaticamente a partir do Content-Type da URL
 
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
