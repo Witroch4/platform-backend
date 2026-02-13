@@ -1,6 +1,9 @@
 //app/chatwitia/page.tsx
 'use client';
 
+// Forçar renderização dinâmica para evitar erro de DOMMatrix no build
+export const dynamic = 'force-dynamic';
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';

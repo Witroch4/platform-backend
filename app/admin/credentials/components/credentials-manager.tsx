@@ -236,7 +236,7 @@ export function CredentialsManager() {
     setTestResult(null);
   };
 
-  const renderFallbackChain = (inbox: ChatwitInbox, visited: Set<string> = new Set()): JSX.Element[] => {
+  const renderFallbackChain = (inbox: ChatwitInbox, visited: Set<string> = new Set()): React.JSX.Element[] => {
     if (visited.has(inbox.id)) {
       return [
         <div key={`loop-${inbox.id}`} className="flex items-center gap-2 text-red-600">
@@ -247,7 +247,7 @@ export function CredentialsManager() {
     }
 
     visited.add(inbox.id);
-    const elements: JSX.Element[] = [];
+    const elements: React.JSX.Element[] = [];
 
     // Inbox atual
     elements.push(

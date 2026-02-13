@@ -1,13 +1,11 @@
 // lib/subscription-access.ts
+// Este arquivo é server-only (usa Prisma)
 import { auth } from "@/auth";
 import { getPrismaInstance } from "@/lib/connections";
+import { EXEMPTED_EMAILS, isExemptedEmail } from "@/lib/exempted-emails";
 
-// Lista de emails com acesso liberado
-const EXEMPTED_EMAILS = [
-  "amandasousa22.adv@gmail.com",
-  "witalorocha216@gmail.com",
-  "witalo_rocha@outlook.com"
-];
+// Re-exportar para manter compatibilidade
+export { isExemptedEmail };
 
 /**
  * Verifica se o usuário tem acesso baseado em assinatura ativa ou se está na lista de exceções
@@ -72,9 +70,4 @@ export async function checkSubscriptionAccess(): Promise<{
   }
 }
 
-/**
- * Versão client-side que verifica apenas se o email está na lista de exceções
- */
-export function isExemptedEmail(email: string): boolean {
-  return EXEMPTED_EMAILS.includes(email);
-}
+// isExemptedEmail é re-exportado de @/lib/exempted-emails

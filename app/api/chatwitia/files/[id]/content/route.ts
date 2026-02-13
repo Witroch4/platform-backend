@@ -3,11 +3,9 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { openaiService } from '@/services/openai'
 import { auth } from '@/auth'
 
-/** ⬇︎ Route-segment config (substitui api.responseLimit) */
-export const config = {
-  /** avisa o linter para não disparar o warning de 4 MB */
-  responseLimit: '30mb',
-}
+/** ⬇︎ Route-segment config (Next.js 16) */
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 // GET /api/chatwitia/files/[id]/content – recupera o conteúdo do arquivo
 export async function GET(

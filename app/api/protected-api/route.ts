@@ -22,6 +22,5 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ message: "Não Autenticado" }, { status: 401 });
 }
 
-export const config = {
-  runtime: 'nodejs',
-};
+// Next.js 16: use exports individuais
+export const runtime = 'nodejs'

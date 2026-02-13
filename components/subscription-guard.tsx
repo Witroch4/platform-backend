@@ -4,7 +4,7 @@
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { isExemptedEmail } from "@/lib/subscription-access";
+import { isExemptedEmail } from "@/lib/exempted-emails";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Crown, Mail, CheckCircle } from "lucide-react";

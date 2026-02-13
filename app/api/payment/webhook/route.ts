@@ -16,10 +16,8 @@ const stripe = new Stripe(stripeSecretKey, {
   apiVersion: "2025-02-24.acacia",
 });
 
-// Altere o runtime para "nodejs" para evitar problemas com APIs do Node.js no Edge Runtime
-export const config = {
-  runtime: "nodejs",
-};
+// Next.js 16: use exports individuais
+export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
   try {

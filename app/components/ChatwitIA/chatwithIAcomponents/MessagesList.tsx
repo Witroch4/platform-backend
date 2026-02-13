@@ -7,8 +7,8 @@ interface MessagesListProps {
   messages: any[];
   isLoading: boolean;
   error: string | null;
-  containerRef: React.RefObject<HTMLDivElement>;
-  endRef: React.RefObject<HTMLDivElement>;
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  endRef: React.RefObject<HTMLDivElement | null>;
   onImageReference?: (imageUrl: string, prompt?: string, openaiFileId?: string) => void;
 }
 

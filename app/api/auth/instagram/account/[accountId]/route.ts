@@ -4,7 +4,10 @@ import { auth } from "@/auth";
 import { getPrismaInstance } from "@/lib/connections";
 const prisma = getPrismaInstance();
 
-export async function GET(request: NextRequest, context: any) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ accountId: string }> }
+) {
   try {
     const session = await auth();
 
@@ -12,8 +15,7 @@ export async function GET(request: NextRequest, context: any) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
 
-    const { params } = context; // extrai `params`
-    const { accountId } = params || {};
+    const { accountId } = await params; // Next.js 16: params é Promise
 
     if (!accountId) {
       return NextResponse.json(

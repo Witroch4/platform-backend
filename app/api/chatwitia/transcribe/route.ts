@@ -5,11 +5,8 @@ import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { mkdir } from 'fs/promises';
 
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+// Next.js 16: use exports individuais em vez de config object
+export const runtime = 'nodejs'
 
 // Configurar o OpenAI
 const openai = new OpenAI({

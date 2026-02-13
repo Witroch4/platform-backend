@@ -1,8 +1,8 @@
-// middleware.ts
+// proxy.ts - Next.js 16
 import { NextResponse } from "next/server";
 import { configRoutes } from "./config/routes/index";
 
-export default async function middleware(req: any) {
+export default async function proxy(req: any) {
   try {
     const { nextUrl } = req;
     const pathName = nextUrl.pathname;
