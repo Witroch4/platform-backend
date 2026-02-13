@@ -8,7 +8,7 @@
 
 1. Já está no root do projeto
 2. `pnpm exec tsc --noEmit` após toda edição
-3. Next.js 15: `params` é Promise → sempre `await params`
+3. Next.js 16: `params` é Promise → sempre `await params`
 4. Strings UI em PT-BR, código/variáveis em inglês
 5. Shadcn/UI Dialog (nunca `confirm()`/`alert()`)
 6. Optimistic UI updates preferidos
@@ -35,7 +35,7 @@ Committar `prisma/migrations/` JUNTO com `schema.prisma`.
 
 | Camada | Tech |
 |---|---|
-| Frontend | Next.js 15 (App Router), React 18, TypeScript, Tailwind, Shadcn/UI, Framer Motion |
+| Frontend | Next.js 16 (App Router), React 19, TypeScript, Tailwind, Shadcn/UI, Framer Motion |
 | Backend | Next.js API Routes, Express.js, Prisma ORM |
 | DB | PostgreSQL 17 + pgvector |
 | Cache/Queue | Redis 7 + BullMQ |
@@ -60,10 +60,18 @@ const session = await auth();
 if (!session?.user?.id) return NextResponse.json({ error: "Usuário não autenticado." }, { status: 401 });
 ```
 
-### Dynamic Routes (Next.js 15)
+### Dynamic Routes (Next.js 16)
 ```typescript
 export async function POST(req: NextRequest, { params }: { params: Promise<{ accountid: string }> }) {
   const { accountid } = await params; // AWAIT obrigatório
+}
+```
+
+### Proxy (antes middleware.ts)
+```typescript
+// proxy.ts - Next.js 16 renomeou middleware.ts para proxy.ts
+export default async function proxy(req: any) {
+  // lógica de roteamento/proteção
 }
 ```
 
