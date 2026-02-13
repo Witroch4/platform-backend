@@ -7,9 +7,10 @@ import MensagensInterativasTab from '@/app/admin/mtf-diamante/components/Mensage
 import MapeamentoTab from '@/app/admin/mtf-diamante/components/MapeamentoTab';
 import { FlowBuilderTab } from '@/app/admin/mtf-diamante/components/FlowBuilderTab';
 import { FlowAdminDashboard } from '@/app/admin/mtf-diamante/components/FlowAdminDashboard';
+import { FlowAnalyticsDashboard } from '@/app/admin/mtf-diamante/components/FlowAnalyticsDashboard';
 import { DialogflowCaixasAgentes } from '@/app/admin/mtf-diamante/components/DialogflowCaixasAgentes';
 import SafeBoundary from '@/components/SafeBoundary';
-import { Loader2, Settings, BarChart3, GitBranch } from 'lucide-react';
+import { Loader2, Settings, BarChart3, GitBranch, LineChart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -89,13 +90,17 @@ export default function InboxDashboardPage() {
             <TabsTrigger value="interativas">Mensagens Interativas</TabsTrigger>
             <TabsTrigger value="mapeamento">Mapeamento</TabsTrigger>
             <TabsTrigger value="agentes">Agentes</TabsTrigger>
-            <TabsTrigger value="configuracoes">
-              <Settings className="w-4 h-4 mr-2" />
-              Configurações
+            <TabsTrigger value="analytics">
+              <LineChart className="w-4 h-4 mr-2" />
+              Analytics
             </TabsTrigger>
             <TabsTrigger value="metricas">
               <BarChart3 className="w-4 h-4 mr-2" />
               Métricas
+            </TabsTrigger>
+            <TabsTrigger value="configuracoes">
+              <Settings className="w-4 h-4 mr-2" />
+              Configurações
             </TabsTrigger>
           </TabsList>
           <TabsContent value="flow-builder">
@@ -109,6 +114,12 @@ export default function InboxDashboardPage() {
           </TabsContent>
           <TabsContent value="agentes">
             <DialogflowCaixasAgentes onCaixaSelected={() => { }} filterCaixaId={caixaId} hideToolbar />
+          </TabsContent>
+          <TabsContent value="analytics">
+            <FlowAnalyticsDashboard inboxId={caixaId} />
+          </TabsContent>
+          <TabsContent value="metricas">
+            <FlowAdminDashboard inboxId={caixaId} />
           </TabsContent>
           <TabsContent value="configuracoes">
             <Card>
