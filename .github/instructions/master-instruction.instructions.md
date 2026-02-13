@@ -1,514 +1,358 @@
-# CLAUDE.md
+# CLAUDE.md — Socialwise Chatwit
 
-This file provides comprehensive guidance to Claude Code (claude.ai/code) and Cursor AI when working with the Socialwise Chatwit repository.
+> Backup completo: `CLAUDE.md.bak`
 
-## ⚠️ Critical Notes
+## Regras Críticas
 
-1. **You are in the project root directory**
-2. **Use PowerShell commands on Windows**
-3. **Path errors with "@" outside Next.js scope don't need fixing**
-4. **In Next.js 15, route params are Promises - always use await**
-5. **Always run `npx tsc --noEmit` after edits**
-6. **Use Shadcn/UI Dialog instead of native confirm()/alert()**
-7. **Optimistic UI updates are preferred**
-8. **User-facing strings in Portuguese BR, code in English**
-9. **Front linguagem clara e direta sem termos tecnicos**
-10. **Tudo deve ser compativel com thema dark e light do shadcn**
-11. **Edição no front deve ser olhar com a tool de navegação o resutado**
+1. Já está no root do projeto
+2. `pnpm exec tsc --noEmit` após toda edição
+3. Next.js 15: `params` é Promise → sempre `await params`
+4. Strings UI em PT-BR, código/variáveis em inglês
+5. Shadcn/UI Dialog (nunca `confirm()`/`alert()`)
+6. Optimistic UI updates preferidos
+7. Dark/Light theme compatível (Shadcn)
+8. BFF como fonte única da UI (mesma SWR key para leitura e mutação)
+9. Features sem controle global — acesso via `admin/features`
+10. Front: linguagem clara, sem termos técnicos
+11. se precisa que ochatwit/chatwoot modifique alguma coisa colque em /home/wital/chatwitv4.10/chatwitdocs/chatwit-contrato-async-30s.md (a equipe deles vai verificar)
 
-## 🚀 Project Overview
+## Migrations (OBRIGATÓRIO)
 
-**Socialwise Chatwit** is a comprehensive AI-powered customer service platform specializing in social media automation and legal support for lawyers. Built with Next.js 15, TypeScript, and Prisma, this full-stack application integrates OpenAI APIs (GPT-5, GPT-5-mini, GPT-5-nano, GPT-4.1-nano, DALL-E, Whisper), Instagram/WhatsApp Business APIs, and provides advanced document processing capabilities.
+**NUNCA usar `prisma db push` — NEM em dev, NEM em produção, NEM em protótipo.**  
+`db push` apaga o histórico de migrations, causa drift e pode destruir dados.  
+SEMPRE usar `migrate dev` para criar arquivos SQL versionados.
 
-### Target Audience
-- **Lawyers**: Complete client management, automated proof correction, legal specialization support
-- **Businesses**: 24/7 automated customer service, lead generation, sales automation
-- **Agencies**: Multi-client management, white-label solutions, scalable automation
-
-### Value Propositions
-- AI-powered automation reducing manual work by 80%
-- Specialized legal document processing and analysis
-- Multi-platform social media management
-- Real-time monitoring and analytics
-- Scalable architecture supporting thousands of simultaneous interactions
-
-## 💻 Technology Stack
-
-### Core Technologies
-- **Frontend**: Next.js 15+ (App Router), React 18+, TypeScript
-- **Backend**: Node.js with Next.js API routes, Express.js, Prisma ORM
-- **Database**: PostgreSQL 17 with pgvector extension
-- **Cache/Queue**: Redis 7+ with BullMQ for job processing
-- **UI Framework**: Tailwind CSS, Shadcn/UI components, Framer Motion
-- **Authentication**: NextAuth.js v5 with Prisma adapter
-- **File Storage**: MinIO (S3-compatible) for document management
-
-### AI & External Integrations
-- **AI Services**: OpenAI (GPT-5, DALL-E, Whisper), Anthropic Claude
-- **Social Media**: Instagram Graph API, WhatsApp Business API
-- **Payments**: Stripe for subscriptions and billing
-- **Email**: Resend for transactional emails
-- **Monitoring**: Prometheus metrics, Grafana dashboards
-
-### Development Tools
-- **Code Quality**: Biome (linting/formatting), TypeScript strict mode
-- **Testing**: Jest with React Testing Library, Supertest for API testing
-- **Build**: Next.js build system, Docker multi-stage builds
-- **Package Manager**: npm with lock file
-
-## 📋 Critical Development Rules
-
-### Mandatory Rules
-```typescript
-// 1. ALWAYS run after any file edit or creation
-npx tsc --noEmit
-
-// 2. All new code MUST be TypeScript
-// 3. User-facing strings in Brazilian Portuguese
-// 4. Identifiers (variables, functions, files) in English
-// 5. You are already in the project root directory
-// 6. Use PowerShell commands on Windows
+```bash
+pnpm exec prisma migrate dev --name descricao  # DEV: cria migration + aplica
+pnpm exec prisma migrate deploy                 # PROD: aplica migrations pendentes
 ```
 
-### Authentication Pattern (NextAuth.js v5)
-```typescript
-// REQUIRED pattern for protected routes
-import { auth } from "@/auth";
-import { NextResponse } from "next/server";
+Committar `prisma/migrations/` JUNTO com `schema.prisma`.
 
-export async function POST(request: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json(
-      { error: "Usuário não autenticado." },
-      { status: 401 }
-    );
-  }
-  // ... rest of logic
-}
+## Stack
+
+| Camada | Tech |
+|---|---|
+| Frontend | Next.js 15 (App Router), React 18, TypeScript, Tailwind, Shadcn/UI, Framer Motion |
+| Backend | Next.js API Routes, Express.js, Prisma ORM |
+| DB | PostgreSQL 17 + pgvector |
+| Cache/Queue | Redis 7 + BullMQ |
+| State | SWR 2.3.6 |
+| Auth | NextAuth.js v5 + Prisma adapter |
+| Storage | MinIO (S3-compatible) |
+| AI | OpenAI (GPT-5, DALL-E, Whisper), Anthropic Claude |
+| Social | Instagram Graph API, WhatsApp Business API |
+| Payments | Stripe |
+| Email | Resend |
+| Monitoring | Prometheus, Grafana |
+| Lint/Format | Biome, TypeScript strict |
+| Test | Jest, React Testing Library, Supertest |
+| Package | pnpm |
+
+## Patterns Obrigatórios
+
+### Auth (todas as API routes protegidas)
+```typescript
+import { auth } from "@/auth";
+const session = await auth();
+if (!session?.user?.id) return NextResponse.json({ error: "Usuário não autenticado." }, { status: 401 });
 ```
 
 ### Dynamic Routes (Next.js 15)
 ```typescript
-// IMPORTANT: params is a Promise in Next.js 15
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ accountid: string }> }
-): Promise<NextResponse> {
-  const { accountid } = await params; // AWAIT is mandatory
-  // ...
+export async function POST(req: NextRequest, { params }: { params: Promise<{ accountid: string }> }) {
+  const { accountid } = await params; // AWAIT obrigatório
 }
 ```
 
-### Database Operations (Prisma)
+### Prisma: JSON null
 ```typescript
-// All database interactions through Prisma ORM
-import { getPrismaInstance } from '@/lib/connections';
-import { Prisma } from '@prisma/client';
-
-// To set JSON field as null
-await prisma.someModel.update({
-  where: { id: 1 },
-  data: {
-    someJsonField: Prisma.JsonNull, // Use Prisma.JsonNull
-  },
-});
+await prisma.model.update({ where: { id }, data: { jsonField: Prisma.JsonNull } });
 ```
 
-### UI/UX Standards
+## SWR 2.3.6 — Guia Compacto
 
-* **Optimistic updates**
+### Regras
+- **Fetcher global**: JSON + throw se `!res.ok`
+- **SWRConfig**: `revalidateOnFocus:true`, `revalidateOnReconnect:true`, `revalidateIfStale:true`, `dedupingInterval:1500`
+- **Listas**: `keepPreviousData:true` (sem flicker)
+- **Mutations**: `useSWRMutation` para rede + `mutate(KEY)` para cache (optimistic + rollback + `revalidate:false`)
+- **Prefetch**: `preload(KEY, fetcher)`
+- **Tempo real**: `useSWRSubscription` (WS/SSE)
 
-  * Atualize o estado da UI **antes** da resposta da API e reverta só em caso de erro.
-  * Prefira `startTransition` (UI local) e/ou React Query/Server Actions para conciliar cache e rollback.
-  * Combine com `toast.promise` para feedback transparente da operação. ([strapi.io][1], [Medium][2])
+### BFF = Fonte Única (UI)
+UI **lê** do BFF e **muta** a mesma SWR key. CRUD puro fica para serviços/integradores.
 
-* **Toasts (sonner)**
+Exemplo MTF Diamante:
+- Leitura: `GET /api/admin/mtf-diamante/inbox-view?dataType=caixas` (cache bypass: `no-store`)
+- Mutações: `mutate('/api/admin/mtf-diamante/inbox-view?dataType=caixas', ...)` com optimistic + rollback + `revalidate:false`
 
-  * Use **sonner** (o toast do shadcn foi **depreciado**). Renderize `<Toaster />` no layout raiz e chame `toast` em clientes.
-  * Para chamadas de API, padronize **`toast.promise`** (loading → success/error).
-
-  ```tsx
-  // app/layout.tsx
-  import { Toaster } from "sonner";
-  export default function RootLayout({ children }: { children: React.ReactNode }) {
-    return (
-      <html lang="pt-BR">
-        <body>
-          {children}
-          <Toaster richColors closeButton />
-        </body>
-      </html>
-    );
+### Padrão de Mutation Optimistic (Create/Update/Delete seguem mesmo modelo)
+```typescript
+await mutate(
+  (async () => {
+    const r = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    if (!r.ok) throw new Error('Falha');
+    const { data } = await r.json();
+    return (curr: T[] = []) => /* merge data no array */;
+  })(),
+  {
+    optimisticData: (curr: T[] = []) => /* UI imediata */,
+    rollbackOnError: true,
+    populateCache: (updater, curr) => (typeof updater === 'function' ? updater(curr) : curr),
+    revalidate: false,
   }
-  ```
-  ```tsx
-  "use client";
-  import { toast } from "sonner";
+);
+```
+- **Create**: `[...curr, optimistic]` → merge com `created`
+- **Update**: `curr.map(c => c.id === id ? updated : c)`
+- **Delete**: `curr.filter(c => c.id !== id)`
 
-  async function save(data: FormData) {
-    // sua chamada de API/Server Action aqui
-  }
-
-  export function SaveButton() {
-    const onClick = () => {
-      const promise = save(new FormData());
-      toast.promise(promise, {
-        loading: "Salvando...",
-        success: (result) => `Salvo com sucesso`,
-        error: (err) => err?.message ?? "Erro ao salvar",
-      });
-    };
-    return <button onClick={onClick}>Salvar</button>;
-  }
-  ```
-
-* **Dialogs**
-
-  * Use **`Dialog`** para modais gerais e **`AlertDialog`** para ações destrutivas (confirm/deny). Evite `confirm()/alert()`. Garanta foco inicial e fechamento por `Esc`.
-
-- **Responsive Design**: Use Tailwind responsive classes (w-[96vw] sm:max-w-2xl)
-- **Scroll Areas**: For extensive content, use ScrollArea with defined height
-
-## 🛠️ Development Commands
-
-### Database Operations
-```bash
-# Development database setup
-npm run db:push              # Push schema changes to dev database
-npm run db:prepare           # Prepare database for deployment
-npm run db:reset:dev         # Reset development database
-npm run db:migrate           # Run Prisma migrations
-npm run db:generate          # Generate Prisma client
-npm run db:studio            # Open Prisma Studio
-
-# Seeding
-npm run db:seed              # Populate initial data
-npm run db:seed-prices       # Seed subscription price cards
-
-# Prisma CLI commands
-npx prisma migrate dev       # Create migration in development
-npx prisma migrate deploy    # Apply migrations in production
-npx prisma studio           # Visual database editor
+### Snippets
+```typescript
+// Invalidar múltiplas páginas
+mutate((key) => typeof key==='string' && key.startsWith('/api/posts?page='), undefined, { revalidate:true })
+// Subscription
+useSWRSubscription(KEY, (k,{next}) => { const ws=new WebSocket(...); ws.onmessage=e=>next(null,JSON.parse(e.data)); return ()=>ws.close(); })
 ```
 
-### Testing
-```bash
-npm test                     # Run all tests
-npm run test:unit            # Run unit tests only
-npm run test:integration     # Run integration tests only
-npm run test:e2e             # Run end-to-end tests
-npm run test:performance     # Run performance tests
-npm run test:comprehensive   # Run comprehensive test suite
-npm run test:targeted        # Run targeted tests
+### Checklist por Tela
+- [ ] BFF como fonte única? Mesma SWR key leitura/mutate?
+- [ ] `keepPreviousData:true`? Optimistic + rollback + `revalidate:false`?
+- [ ] Sem misturar CRUD puro na UI?
+
+## UI/UX
+
+- **Toasts**: `sonner` (shadcn toast depreciado). Usar `toast.promise(promise, { loading, success, error })`
+- **Dialogs**: `Dialog` para modais, `AlertDialog` para ações destrutivas. Responsive: `w-[96vw] sm:max-w-2xl max-h-[85vh]` + `ScrollArea`
+- **Optimistic**: atualizar UI antes da API, reverter em erro. Combinar com `toast.promise`
+
+## Acesso a Dados do genericPayload (MTF)
+
+**Regra**: para edição, usar dados **originais** do provedor (`interactiveMessages` via `useMtfData()`), NUNCA os normalizados (`mensagens`).
+
+```
+useMtfData() → interactiveMessages (completo) → normalizeMessage() (só lista)
+handleEdit() → DEVE usar interactiveMessages?.find(m => m.id === msg.id)
 ```
 
-### Background Workers
+**Preservar**: `content` (contém `genericPayload`, `action`). Verificar dados em 3 locais:
+- `message.action.elements`
+- `message.content.action.elements`
+- `message.content.genericPayload.elements`
+
+**Red flags**: usar `msg.nome`/`msg.texto` (normalizados) para edição, perder `content` no `setEditingMessage`.
+
+## Commands
+
 ```bash
-npm run start:worker         # Start webhook worker
-npm run worker               # Start webhook worker (alternative)
-npm run start:ai-worker      # Start AI integration worker
-npm run build:workers        # Build workers for production
+# Dev
+pnpm run dev | build | start | lint | lint-apply | format-apply
+pnpm exec tsc --noEmit
+
+# DB
+pnpm exec prisma migrate dev --name X  # ✅ criar migration
+pnpm exec prisma migrate deploy         # ✅ produção
+# ❌ NUNCA: pnpm run db:push (REMOVIDO — causa drift e perda de migrations)
+pnpm run db:generate | db:studio | db:reset:dev | db:seed | db:seed-prices
+
+# Workers
+pnpm run start:worker | worker | start:ai-worker | build:workers
+
+# Test
+pnpm test | test:unit | test:integration | test:e2e | test:performance
+
+# Specialized
+pnpm run flash-intent | rollout | init-monitoring | fx-rates:init
+
+# Docker
+docker compose build | up | down
+
+# Git: conventional commits (feat: | fix: | chore:)
 ```
 
-### Development
-```bash
-npm run dev                  # Start development server
-npm run build                # Build for production
-npm run start                # Start production server
-npm run lint                 # Run Biome linter
-npm run lint-apply           # Apply lint fixes
-npm run format-apply         # Apply formatting fixes
-npx tsc --noEmit            # Check TypeScript types
-```
+## Project Structure
 
-### Specialized Commands
-```bash
-npm run flash-intent         # Manage flash intent system
-npm run rollout              # Manage feature rollouts
-npm run init-monitoring      # Initialize monitoring
-npm run fx-rates:init        # Initialize FX rate system
-```
-
-### Git Workflow
-```bash
-git add .
-git commit -m 'feat: description'  # Use conventional commits
-git push origin <branch-name>
-```
-
-### Docker
-```bash
-docker compose build         # Build services
-docker compose up           # Start services
-docker compose down         # Stop services
-```
-
-## 📁 Project Structure
-
-### Root Directory
 ```
 /
-├── app/                    # Next.js App Router (main application)
-├── components/             # Reusable React components
-├── lib/                   # Core libraries and utilities
-├── worker/                # Background job processors
-├── scripts/               # Database and deployment scripts
-├── prisma/                # Database schema and migrations
-├── types/                 # TypeScript type definitions
-├── hooks/                 # Custom React hooks
-├── public/                # Static assets
-├── docs/                  # Documentation
-└── __tests__/             # Test files
+├── app/                    # Next.js App Router
+│   ├── api/admin/          # Admin API endpoints
+│   ├── api/chatwitia/      # AI chat endpoints
+│   ├── api/integrations/webhooks/socialwiseflow/
+│   ├── admin/capitao/      # IA Capitão
+│   ├── admin/mtf-diamante/ # MTF Diamante (mensagens interativas)
+│   ├── admin/queue-management | monitoring | leads | leads-chatwit
+│   ├── admin/credentials | notifications | disparo-em-massa | disparo-oab | users
+│   ├── [accountid]/dashboard/
+│   └── auth/
+├── components/             # Shadcn/UI + custom
+├── lib/
+│   ├── ai-integration/     # AI services, types, schemas, workers, queues
+│   ├── socialwise-flow/    # processor.ts, metrics.ts, services/
+│   ├── cost/               # cost-worker, budget-system, pricing-service, fx-rate-service
+│   ├── monitoring/         # APM, queue-monitor, database-monitor
+│   ├── queue/ | queue-management/
+│   ├── auth/ | cache/ | webhook/ | whatsapp/ | instagram/
+│   ├── connections.ts | redis.ts | utils.ts
+├── worker/
+│   ├── webhook.worker.ts | automacao.worker.ts | ai-integration.worker.ts
+│   ├── processors/ | WebhookWorkerTasks/ | services/ | queues/
+├── services/flow-engine/   # ⭐ Flow Engine (deadline-first)
+├── types/                  # TypeScript definitions
+├── hooks/                  # Custom React hooks
+├── prisma/                 # Schema + migrations
+├── docs/                   # ⭐ Docs técnicas de features
+│   ├── interative_message_flow_builder.md  # Flow Builder roadmap + arquitetura
+│   └── chatwit-contrato-async-30s.md       # Contrato async Chatwit
+└── __tests__/
 ```
 
-### App Directory (Next.js App Router)
-```
-app/
-├── api/                   # API routes
-│   ├── admin/            # Admin-only endpoints
-│   ├── chatwitia/        # AI chat endpoints
-│   ├── integrations/     # Third-party integrations
-│   │   └── webhooks/     # Webhook endpoints
-│   │       └── socialwiseflow/ # SocialWise Flow webhook
-│   └── [feature]/        # Feature-specific APIs
-├── admin/                # Admin dashboard pages
-│   ├── capitao/          # IA Capitão - AI Assistant Management
-│   ├── ai-integration/   # AI Integration Management
-│   ├── mtf-diamante/     # MTF Diamante - Advanced Messaging
-│   ├── queue-management/ # Queue Management System
-│   ├── monitoring/       # System Monitoring
-│   ├── leads/            # Lead Management
-│   ├── leads-chatwit/    # Chatwit Lead Integration
-│   ├── credentials/      # Credential Management
-│   ├── notifications/    # Notification System
-│   ├── disparo-em-massa/ # Bulk Message Dispatch
-│   ├── disparo-oab/      # OAB Message Dispatch
-│   └── users/            # User Management
-├── [accountid]/          # Dynamic account routes
-│   └── dashboard/        # User dashboard
-├── auth/                 # Authentication pages
-└── layout.tsx           # Root layout
-```
+> **📌 Consulte `docs/` antes de implementar melhorias no Flow Builder / Flow Engine.**
 
-### Library Organization
+## SocialWise Flow Pipeline (v3.4+)
+
+
 ```
-lib/
-├── ai-integration/       # AI service integrations
-│   ├── services/         # Core AI services
-│   ├── types/            # AI integration types
-
-│   ├── schemas/          # Data schemas
-│   ├── workers/          # Worker processes
-│   └── queues/           # Queue management
-├── socialwise-flow/      # SocialWise Flow Processing System
-│   ├── processor.ts      # Main flow processor
-
-│   ├── metrics.ts            # Performance metrics
-│   └── services/             # SocialWise services
-├── cost/                 # Cost Management System
-│   ├── cost-worker.ts    # Main cost processing worker
-│   ├── budget-system.ts  # Budget management system
-│   ├── pricing-service.ts # Dynamic pricing resolution
-│   └── fx-rate-service.ts # Foreign exchange rates
-├── monitoring/           # System Monitoring & Observability
-│   ├── application-performance-monitor.ts # APM
-│   ├── queue-monitor.ts  # Queue health monitoring
-│   └── database-monitor.ts # Database performance
-├── queue/                # Queue Definitions & Configuration
-├── queue-management/     # Advanced Queue Management System
-├── auth/                # Authentication utilities
-├── cache/               # Caching mechanisms
-├── webhook/             # Webhook processing
-├── whatsapp/            # WhatsApp API integration
-├── instagram/           # Instagram API integration
-├── connections.ts       # Database connections
-├── redis.ts            # Redis configuration
-└── utils.ts            # General utilities
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│  WEBHOOK (/api/integrations/webhooks/socialwiseflow)                            │
+│  Auth → Validation → Deduplication → Rate Limit                                 │
+└──────────────────────────────────────┬──────────────────────────────────────────┘
+                                       ↓
+                         ┌─────────────────────────────┐
+                         │  Handoff Detection          │
+                         │  @falar_atendente?          │
+                         └──────────────┬──────────────┘
+                                       ↓ (NO)
+┌──────────────────────────────────────┴──────────────────────────────────────────┐
+│  BUTTON INTERACTION DETECTION                                                    │
+├──────────────────────────────────────────────────────────────────────────────────┤
+│  buttonId.startsWith('flow_')?                                                   │
+│  ├─ YES → FlowOrchestrator.handle() → Resume FlowSession (WAITING_INPUT)         │
+│  └─ NO  → Legacy Button Reaction Check → MapeamentoBotao lookup                  │
+│           └─ Not mapped? → Extract button text → Continue to LLM                 │
+└──────────────────────────────────────┬──────────────────────────────────────────┘
+                                       ↓
+┌──────────────────────────────────────┴──────────────────────────────────────────┐
+│  LANGGRAPH ORCHESTRATION: classify → gating → router                             │
+├──────────────────────────────────────────────────────────────────────────────────┤
+│  [classifyNode] Direct alias hit? → HARD (1.0) │ Embedding search → score        │
+│  [gatingNode]   Filter hints by semantic description alignment                   │
+│  [routerNode]   Conditional dispatch by band                                     │
+└──────────────────────────────────────┬──────────────────────────────────────────┘
+                                       ↓
+                    ┌──────────────────┼──────────────────┐
+                    ↓                  ↓                  ↓
+            ┌───────────────┐  ┌───────────────┐  ┌───────────────┐
+            │  HARD ≥0.80   │  │  SOFT 0.65-79 │  │  ROUTER <0.65 │
+            ├───────────────┤  ├───────────────┤  ├───────────────┤
+            │ Direct intent │  │ LLM warmup    │  │ Full LLM      │
+            │ mapping       │  │ buttons       │  │ routing       │
+            │ <120ms        │  │ 300ms timeout │  │ 400ms timeout │
+            └───────┬───────┘  └───────┬───────┘  └───────┬───────┘
+                    ↓                  ↓                  ↓
+            ┌───────────────────────────────────────────────────┐
+            │  Intent Resolution: buildWhatsAppByIntentRaw()    │
+            │  ├─ MapeamentoIntencao.flowId exists + active?    │
+            │  │  └─ YES → { _type: 'execute_flow', flowId }    │
+            │  │           → FlowOrchestrator.executeFlowById() │
+            │  └─ NO  → Return template/interactive message     │
+            └───────────────────────────────────────────────────┘
 ```
 
-### Worker Architecture
+### Performance Bands (3 bandas ativas)
+
+| Band | Score | Estratégia | Comportamento | Timeout |
+|---|---|---|---|---|
+| **HARD** | ≥0.80 | `direct_map` | Intent → Template/Flow direto | <120ms |
+| **SOFT** | 0.65-0.79 | `warmup_buttons` | LLM gera buttons com candidatos | 300ms |
+| **ROUTER** | <0.65 | `router_llm` | LLM decide: intent ou chat | 400ms |
+
+> **LOW band foi removida** — scores 0.50-0.65 vão para ROUTER.
+
+### Flow Builder Integration (v3.4+)
+
+**Entry Point 1: Via Intent Mapping (HARD band)**
 ```
-worker/
-├── webhook.worker.ts     # Main webhook processor (Parent Worker)
-├── automacao.worker.ts   # Automation worker
-├── ai-integration.worker.ts # AI processing worker
-├── processors/           # Individual job processors
-├── WebhookWorkerTasks/  # Webhook-specific tasks
-├── services/            # Worker services
-└── queues/              # Queue definitions
-```
-
-## 🔄 SocialWise Flow Processing Pipeline
-
-### Processing Chain
-```
-1. Webhook Entry → Authentication & Security
-2. Payload Processing → Validation & Sanitization
-3. Idempotency & Rate Limiting → Duplicate Detection
-4. Classification Engine → Embedding Generation & Classification
-5. Performance Bands → Confidence-based Processing
-6. Response Generation → Channel-specific Formatting
-```
-
-### Performance Bands System
-- **HARD (≥0.80)**: Direct mapping, <120ms response
-- **SOFT (0.65-0.79)**: Warmup buttons, intent candidates
-- **LOW (0.50-0.64)**: Domain topics, educational content
-- **ROUTER (<0.50)**: LLM routing, handoff detection
-
-## 🎯 Key Business Logic Areas
-
-### 1. MTF Diamante System
-Advanced template management for WhatsApp automation:
-- Interactive message creation with variable substitution
-- Button reaction mapping with dynamic routing
-- Bulk processing capabilities with progress tracking
-- Template library with version control
-
-### 2. IA Capitão (AI Captain)
-Complete AI assistant management:
-- Intent management with configurable responses
-- FAQ automation with context awareness
-- Document processing with OCR capabilities
-- Dynamic routing based on conversation context
-
-### 3. Lead Management (Legal)
-Specialized system for lawyers:
-- Document unification and PDF processing
-- Automated legal analysis using specialized AI
-- Batch processing workflows for multiple cases
-- LGPD compliance tracking and audit logs
-
-### 4. Queue Management System
-Enterprise-grade queue system:
-- Job prioritization with dynamic routing
-- Dead letter queue handling with retry logic
-- Performance monitoring with real-time metrics
-- Alert management with configurable thresholds
-
-## 💰 Cost Management System
-
-### Components
-- **Cost Worker**: Event processing and calculation
-- **Budget System**: Allocation and enforcement
-- **Pricing Service**: Dynamic pricing with caching
-- **FX Rate Service**: Currency conversion
-
-### Processing Flow
-```
-Cost Event → Idempotency Check → Price Resolution 
-→ Cost Calculation → Database Storage → Audit Logging
+User message → HARD band (≥0.80) → Intent "xyz"
+    ↓
+MapeamentoIntencao query → flowId exists + flow.isActive?
+    ├─ YES → executeFlowForIntent(flowId, context)
+    │        → FlowOrchestrator.executeFlowById()
+    │        → Execute from START node
+    │        → Return syncResponse (interactive message)
+    └─ NO  → Return legacy template
 ```
 
-## 📊 Monitoring & Observability
-
-### Application Performance Monitor (APM)
-- Real-time metrics (webhook, worker, database, cache)
-- Performance tracking (response times, throughput, error rates)
-- Configurable alert system
-- Historical data retention and analysis
-
-### Queue Monitoring
-- Queue health (waiting, active, completed, failed)
-- Performance statistics
-- Automatic anomaly detection
-- Configurable monitoring thresholds
-
-## 🔒 Security & Validation
-
-### Input Validation
-- Maximum payload size: 256KB
-- XSS and injection sanitization
-- Schema validation with Zod
-
-### Rate Limiting
-- Per-session limits
-- Per-account limits
-- Burst protection
-- Rate limit headers
-
-### Replay Protection
-- Nonce validation
-- Timestamp verification
-- Duplicate prevention
-
-## 📝 Code Conventions
-
-### File Naming
-- **Components**: PascalCase (`UserProfile.tsx`)
-- **Pages**: kebab-case (`user-settings/page.tsx`)
-- **Utilities**: camelCase (`formatDate.ts`)
-- **API Routes**: Always `route.ts`
-- **Types**: PascalCase with `.ts` extension
-
-### Import Patterns
-```typescript
-// 1. External libraries
-import { useState } from 'react';
-
-// 2. Internal modules with @/ alias
-import { auth } from '@/auth';
-
-// 3. Relative imports
-import { Button } from './components';
+**Entry Point 2: Via Button Click (flow_ prefix)**
+```
+User clicks button → buttonId.startsWith('flow_')?
+    ├─ YES → FlowOrchestrator.handle()
+    │        → Find FlowSession (WAITING_INPUT)
+    │        → FlowExecutor.resumeFromButton()
+    │        → Continue execution from edge
+    └─ NO  → Legacy MapeamentoBotao lookup
 ```
 
-### API Route Structure
-```
-app/api/[feature]/
-├── route.ts              # GET, POST for collection
-├── [id]/
-│   └── route.ts         # GET, PUT, DELETE for item
-└── [id]/[action]/
-    └── route.ts         # Custom actions
-```
+### Prioridade de Roteamento de Botões
+1. `flow_*` prefix → **FlowOrchestrator** (Flow Engine)
+2. Else → **MapeamentoBotao** lookup (Legacy button reactions)
+3. Not mapped → **SocialWise Flow** (LLM classification)
 
-## 🎨 Responsive Dialog Example
-```tsx
-// Dialog with scroll and responsiveness
-<Dialog>
-  <DialogContent className="w-[96vw] sm:max-w-2xl max-h-[85vh]">
-    <DialogHeader>
-      <DialogTitle>Título</DialogTitle>
-    </DialogHeader>
-    <ScrollArea className="h-[58vh] sm:h-[62vh]">
-      {/* Scrollable content */}
-    </ScrollArea>
-    <DialogFooter>
-      {/* Actions */}
-    </DialogFooter>
-  </DialogContent>
-</Dialog>
-```
+### Anti-Loop Protocol
+- Session injeta `activeIntentSlug` no context
+- Router LLM filtra hint do intent ativo (evita re-oferecer mesmo menu)
 
+### Deadline-First Architecture (Flow Engine)
+- **Sync window**: 28s (com 5s margem)
+- **Estratégia**: sync até deadline → migra para async (Chatwit API delivery)
+- **Regra**: uma vez async, nunca volta para sync
 
+## Business Logic
 
-## 🚦 Environment Variables
+| Sistema | Função |
+|---|---|
+| **MTF Diamante** | Templates WA, mensagens interativas, button reactions, bulk dispatch |
+| **IA Capitão** | Intents, FAQ, document processing (OCR), routing dinâmico |
+| **Leads (Legal)** | Unificação docs, análise jurídica IA, batch processing, LGPD |
+| **Queue Management** | Priorização, dead letter, monitoring, alertas |
+| **Cost** | Event → idempotency → pricing → cálculo → DB → audit |
+
+## Security
+
+- Payload máx: 256KB | XSS/injection sanitization | Zod validation
+- Rate limiting: per-session, per-account, burst protection
+- Replay protection: nonce + timestamp + dedup
+
+## Code Conventions
+
+| Tipo | Formato | Exemplo |
+|---|---|---|
+| Components | PascalCase | `UserProfile.tsx` |
+| Pages | kebab-case | `user-settings/page.tsx` |
+| Utilities | camelCase | `formatDate.ts` |
+| API Routes | `route.ts` | sempre |
+| Types | PascalCase `.ts` | `FlowEngine.ts` |
+
+Imports: 1) externos → 2) `@/` internos → 3) relativos
+
+## Env Vars
 
 ```bash
-# Configuration by environment
-.env.development    # Development
-.env.production     # Production
-.env.local         # Local (gitignored)
-.env.docker.example # Docker example
-
-# Required variables
-DATABASE_URL        # PostgreSQL connection
-REDIS_URL          # Redis connection
-NEXTAUTH_SECRET    # NextAuth secret
-OPENAI_API_KEY     # OpenAI API key
+DATABASE_URL | REDIS_URL | NEXTAUTH_SECRET | OPENAI_API_KEY
+# .env.development | .env.production | .env.local (gitignored)
 ```
 
-## 🧪 Testing Strategy
+## Key Insights
 
-- **Unit Tests**: Business logic components
-- **Integration Tests**: API endpoints and workflows
-- **E2E Tests**: Critical user journeys
-- **Performance Tests**: Queue and AI systems
-- **Comprehensive Coverage**: Legal compliance requirements
+- Bugs de foco/input React: keys instáveis, IDs que mudam entre renders, refs que quebram igualdade → manter identidade estável
+- Bug MTF "aparece→some→volta": UI lia BFF e mutava CRUD (keys diferentes) → solução: BFF como fonte única, mesma SWR key, bypass cache, optimistic+rollback
+- **Flow Engine vs Intents (Regressão)**: NUNCA interceptar todas as mensagens no webhook. Flow só executa se:
+  1. Botão `flow_` clicado → `FlowOrchestrator.handle()` resume session
+  2. Intent classificada (HARD band ≥0.80) mapeada para Flow via `MapeamentoIntencao.flowId`
 
+  O pipeline de classificação (alias/embedding → bands) SEMPRE tem prioridade sobre FlowOrchestrator default.
 
----
+## Portainer MCP
 
-*This document is the single source of truth for Socialwise Chatwit development. Keep it updated as the project evolves.*
+**Regra crítica**: as ferramentas de alto nível (`listStacks`, `createStack`, etc.) são para **Edge Stacks** — não funcionam no ambiente Swarm normal (retornam 503). Usar sempre Portainer [dockerProxy]
+

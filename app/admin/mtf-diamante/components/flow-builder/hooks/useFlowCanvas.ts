@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useEffect, useRef } from 'react';
+import { useCallback, useMemo, useEffect, useRef, useState } from 'react';
 import useSWR from 'swr';
 import useSWRMutation from 'swr/mutation';
 import {
@@ -21,6 +21,7 @@ import type {
   FlowNodeType,
   FlowNodeData,
   FlowCanvasState,
+  FlowExportFormat,
 } from '@/types/flow-builder';
 import {
   createFlowNode,
@@ -28,6 +29,7 @@ import {
   createEmptyFlowCanvas,
   FLOW_CANVAS_CONSTANTS,
 } from '@/types/flow-builder';
+import { canvasToN8nFormat } from '@/lib/flow-builder/exportImport';
 
 // =============================================================================
 // TYPES
@@ -82,15 +84,23 @@ interface UseFlowCanvasOptions {
   flowId?: string | null; // ID do flow específico para carregar
 }
 
+// Default auto-save delay: 3 seconds
+const DEFAULT_AUTO_SAVE_DELAY = 3000;
+
 export function useFlowCanvas(
   inboxId: string | null,
   options: UseFlowCanvasOptions = {}
 ) {
-  const { autoSave = false, flowId = null } = options;
+  const { autoSave = false, autoSaveDelay = DEFAULT_AUTO_SAVE_DELAY, flowId = null } = options;
 
   // Ref para controlar sincronização inicial
   const initializedRef = useRef(false);
   const flowIdRef = useRef(flowId);
+
+  // Refs para auto-save
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSavedRef = useRef<string>(''); // JSON hash do último estado salvo
+  const isAutoSavingRef = useRef(false);
 
   // SWR key para canvas visual (mantido para compatibilidade)
   const canvasSwrKey = inboxId
@@ -114,6 +124,7 @@ export function useFlowCanvas(
     {
       revalidateOnFocus: false,
       dedupingInterval: 5000,
+      keepPreviousData: false, // ⚠️ CRÍTICO: não reutilizar dados antigos
     }
   );
 
@@ -129,6 +140,7 @@ export function useFlowCanvas(
     {
       revalidateOnFocus: false,
       dedupingInterval: 5000,
+      keepPreviousData: false, // ⚠️ CRÍTICO: não reutilizar dados antigos
     }
   );
 
@@ -138,16 +150,11 @@ export function useFlowCanvas(
     saveCanvas
   );
 
-  // Determinar dados iniciais baseado no modo (canvas vs flow)
+  // SEMPRE inicializar com canvas vazio para evitar mostrar dados antigos
+  // O useEffect sincroniza os dados corretos após o carregamento
   const initialCanvas = useMemo(() => {
-    if (flowId && flowResponse?.data?.canvas) {
-      return flowResponse.data.canvas;
-    }
-    if (!flowId && canvasResponse?.data?.canvas) {
-      return canvasResponse.data.canvas;
-    }
     return createEmptyFlowCanvas();
-  }, [flowId, flowResponse?.data?.canvas, canvasResponse?.data?.canvas]);
+  }, []); // Dependências vazias - só roda uma vez
 
   // Metadados do flow atual
   const currentFlowMeta = useMemo(() => {
@@ -171,46 +178,151 @@ export function useFlowCanvas(
 
   // Sincronizar estado quando o flowId muda ou quando os dados carregam
   useEffect(() => {
-    // Se mudou o flowId, resetar flag de inicialização
+    // ⚠️ CRÍTICO: Se mudou o flowId, RESETAR completamente
     if (flowIdRef.current !== flowId) {
+      console.log('[useFlowCanvas] FlowId mudou:', flowIdRef.current, '->', flowId);
       initializedRef.current = false;
       flowIdRef.current = flowId;
+      
+      // SEMPRE limpar canvas ao mudar flowId
+      const empty = createEmptyFlowCanvas();
+      setNodes(empty.nodes as unknown as Node[]);
+      setEdges(empty.edges as unknown as Edge[]);
+      
+      // Se não tem flowId (voltou para lista), já está limpo e inicializado
+      if (!flowId) {
+        initializedRef.current = true;
+        return;
+      }
+      
+      // Se tem flowId, NÃO marcar como initialized ainda - esperar dados carregarem
+      return;
     }
 
     // Evitar sincronização duplicada
     if (initializedRef.current) return;
 
-    // Se tem flowId e os dados do flow carregaram
-    if (flowId && flowResponse?.data?.canvas) {
-      const canvas = flowResponse.data.canvas;
-      setNodes(canvas.nodes as unknown as Node[]);
-      setEdges(canvas.edges as unknown as Edge[]);
+    //============================================================================
+    // SINCRONIZAÇÃO: só executar se os dados estiverem carregados
+    //============================================================================
+
+    // Se tem flowId, AGUARDAR os dados carregarem do servidor
+    if (flowId && !isLoadingFlow && flowResponse) {
+      console.log('[useFlowCanvas] Sincronizando flow:', flowId, '- tem canvas?', !!flowResponse.data?.canvas);
+      
+      if (flowResponse.data?.canvas) {
+        // Flow tem canvas salvo - carregar
+        const canvas = flowResponse.data.canvas;
+        setNodes(canvas.nodes as unknown as Node[]);
+        setEdges(canvas.edges as unknown as Edge[]);
+        console.log('[useFlowCanvas] Canvas carregado - nós:', canvas.nodes.length);
+      } else {
+        // Flow novo sem canvas - deixar vazio (já está do reset acima)
+        console.log('[useFlowCanvas] Flow novo sem canvas - mantendo vazio');
+      }
       initializedRef.current = true;
       return;
     }
 
     // Se não tem flowId e os dados do canvas carregaram
-    if (!flowId && canvasResponse?.data?.canvas) {
+    if (!flowId && !isLoadingCanvas && canvasResponse?.data?.canvas) {
+      console.log('[useFlowCanvas] Sincronizando canvas visual');
       const canvas = canvasResponse.data.canvas;
       setNodes(canvas.nodes as unknown as Node[]);
       setEdges(canvas.edges as unknown as Edge[]);
       initializedRef.current = true;
       return;
     }
-
-    // Se não tem dados, inicializar com canvas vazio (apenas uma vez)
-    if (!flowId && canvasResponse && !canvasResponse.data && !initializedRef.current) {
-      const empty = createEmptyFlowCanvas();
-      setNodes(empty.nodes as unknown as Node[]);
-      setEdges(empty.edges as unknown as Edge[]);
-      initializedRef.current = true;
-    }
-  }, [flowId, flowResponse, canvasResponse, setNodes, setEdges]);
+  }, [flowId, flowResponse, canvasResponse, isLoadingFlow, isLoadingCanvas, setNodes, setEdges]);
 
   // Computed states
   const isLoading = isLoadingCanvas || isLoadingFlow;
   const error = canvasError || flowError;
   const canvasVersion = canvasResponse?.data?.version ?? 0;
+
+  // Auto-save state
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
+  const [lastAutoSaveTime, setLastAutoSaveTime] = useState<Date | null>(null);
+
+  // ==========================================================================
+  // AUTO-SAVE LOGIC
+  // ==========================================================================
+
+  // Função interna de save para auto-save (sem validação)
+  const performAutoSave = useCallback(async () => {
+    if (!inboxId || !flowId || !initializedRef.current) return;
+    if (isAutoSavingRef.current) return; // Evitar saves simultâneos
+
+    const currentState = JSON.stringify({ nodes, edges });
+
+    // Só salvar se houver mudanças reais
+    if (currentState === lastSavedRef.current) return;
+
+    try {
+      isAutoSavingRef.current = true;
+      setIsAutoSaving(true);
+
+      const defaultViewport = flowResponse?.data?.canvas?.viewport;
+      const canvas: FlowCanvas = {
+        nodes: nodes as unknown as FlowNode[],
+        edges: edges as unknown as FlowEdge[],
+        viewport: defaultViewport ?? FLOW_CANVAS_CONSTANTS.DEFAULT_VIEWPORT,
+      };
+
+      const response = await fetch(`/api/admin/mtf-diamante/flows/${flowId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ canvas }),
+      });
+
+      if (response.ok) {
+        lastSavedRef.current = currentState;
+        setLastAutoSaveTime(new Date());
+        console.log('[useFlowCanvas] Auto-save concluído');
+      }
+    } catch (err) {
+      console.error('[useFlowCanvas] Auto-save error:', err);
+    } finally {
+      isAutoSavingRef.current = false;
+      setIsAutoSaving(false);
+    }
+  }, [inboxId, flowId, nodes, edges, flowResponse?.data?.canvas?.viewport]);
+
+  // Efeito para disparar auto-save com debounce
+  useEffect(() => {
+    // Não ativar auto-save se:
+    // - autoSave está desabilitado
+    // - não há flowId (canvas visual legacy)
+    // - canvas ainda não foi inicializado
+    // - está carregando
+    if (!autoSave || !flowId || !initializedRef.current || isLoading) {
+      return;
+    }
+
+    // Limpar timeout anterior
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    // Agendar novo auto-save
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      performAutoSave();
+    }, autoSaveDelay);
+
+    // Cleanup
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [autoSave, flowId, nodes, edges, autoSaveDelay, isLoading, performAutoSave]);
+
+  // Atualizar lastSavedRef quando dados são carregados do servidor
+  useEffect(() => {
+    if (initializedRef.current && flowId) {
+      lastSavedRef.current = JSON.stringify({ nodes, edges });
+    }
+  }, [flowId]); // Só quando flowId muda (dados carregados)
 
   // Handle connection
   const onConnect: OnConnect = useCallback(
@@ -307,19 +419,36 @@ export function useFlowCanvas(
       const canvas = getCanvasState(viewport);
 
       try {
-        const result = await triggerSave({ inboxId, canvas });
-        // Atualizar cache local
-        await mutateCanvas();
+        // Se estiver editando um flow específico, salvar no Flow.canvasJson
         if (flowId) {
+          const response = await fetch(`/api/admin/mtf-diamante/flows/${flowId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ canvas }),
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Falha ao salvar canvas do flow');
+          }
+
+          // Atualizar cache do flow específico
           await mutateFlow();
+          console.log('[useFlowCanvas] Canvas salvo no flow', flowId);
+          return await response.json();
         }
+
+        // Se não tem flowId, usar API antiga (canvas visual da inbox)
+        const result = await triggerSave({ inboxId, canvas });
+        await mutateCanvas();
+        console.log('[useFlowCanvas] Canvas visual salvo na inbox', inboxId);
         return result;
       } catch (err) {
         console.error('[useFlowCanvas] Save error:', err);
         throw err;
       }
     },
-    [inboxId, getCanvasState, triggerSave, mutateCanvas, mutateFlow, flowId]
+    [inboxId, flowId, getCanvasState, triggerSave, mutateCanvas, mutateFlow]
   );
 
   // Reset canvas
@@ -358,12 +487,107 @@ export function useFlowCanvas(
     [edges]
   );
 
+  // ==========================================================================
+  // EXPORT/IMPORT FUNCTIONS
+  // ==========================================================================
+
+  /**
+   * Exporta o flow atual como JSON n8n-style (dispara download)
+   */
+  const exportFlowAsJson = useCallback(async () => {
+    if (!flowId) {
+      throw new Error('Nenhum flow selecionado para exportar');
+    }
+
+    const response = await fetch(
+      `/api/admin/mtf-diamante/flows/${flowId}/export`
+    );
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Falha ao exportar flow');
+    }
+
+    // Extrair filename do header Content-Disposition
+    const contentDisposition = response.headers.get('Content-Disposition');
+    const filenameMatch = contentDisposition?.match(/filename="(.+)"/);
+    const filename = filenameMatch?.[1] || `flow-export-${Date.now()}.json`;
+
+    // Criar blob e disparar download
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [flowId]);
+
+  /**
+   * Importa flow a partir de arquivo JSON
+   */
+  const importFlowFromJson = useCallback(
+    async (
+      file: File,
+      options?: { newName?: string }
+    ): Promise<{ id: string; name: string; nodeCount: number; connectionCount: number }> => {
+      if (!inboxId) {
+        throw new Error('Nenhuma inbox selecionada');
+      }
+
+      const text = await file.text();
+      let flowData: unknown;
+
+      try {
+        flowData = JSON.parse(text);
+      } catch {
+        throw new Error('Arquivo JSON inválido');
+      }
+
+      const response = await fetch('/api/admin/mtf-diamante/flows/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inboxId,
+          flowData,
+          newName: options?.newName,
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Falha ao importar flow');
+      }
+
+      // Revalidar lista de flows
+      await mutateCanvas();
+
+      return result.data;
+    },
+    [inboxId, mutateCanvas]
+  );
+
+  /**
+   * Retorna o canvas atual em formato n8n (para preview/debug)
+   */
+  const getCanvasAsN8nFormat = useCallback((): FlowExportFormat => {
+    const canvas = getCanvasState();
+    return canvasToN8nFormat(canvas, {
+      flowId: flowId || undefined,
+      flowName: currentFlowMeta?.name || 'Untitled',
+      inboxId: inboxId || undefined,
+    });
+  }, [getCanvasState, flowId, currentFlowMeta?.name, inboxId]);
+
   return {
     // State
     nodes,
     edges,
     isLoading,
     isSaving,
+    isAutoSaving,
+    lastAutoSaveTime,
     error,
     canvasVersion,
     currentFlowMeta, // Metadados do flow atual (id, name, isActive)
@@ -389,6 +613,11 @@ export function useFlowCanvas(
     resetCanvas,
     loadCanvas, // Nova função para carregar canvas manualmente
     mutate: mutateCanvas,
+
+    // Export/Import operations
+    exportFlowAsJson,
+    importFlowFromJson,
+    getCanvasAsN8nFormat,
   };
 }
 

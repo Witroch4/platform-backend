@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { getPrismaInstance } from '@/lib/connections';
 import { auth } from '@/auth';
 import { z } from 'zod';
-import { ActionType } from '@prisma/client';
+import { ActionType, Prisma } from '@prisma/client';
 import type {
   FlowCanvas,
   FlowCanvasState,
@@ -351,6 +351,9 @@ function buildNodeConfig(node: FlowNode): object {
 /**
  * Sincroniza o canvas visual com um Flow normalizado (tabelas Flow, FlowNode, FlowEdge).
  * Isso permite que o flow seja mapeado a intenções e executado pelo FlowOrchestrator.
+ *
+ * NOTA: Esta função é usada APENAS pela rota legacy (POST /flow-canvas).
+ * Flows individuais salvam via PUT /flows/[flowId] diretamente no Flow.canvasJson.
  */
 async function syncCanvasToNormalizedFlow(
   inboxId: string,
@@ -360,9 +363,12 @@ async function syncCanvasToNormalizedFlow(
   const prisma = getPrismaInstance();
 
   return await prisma.$transaction(async (tx) => {
-    // 1. Buscar ou criar Flow para esta inbox
+    // 1. Buscar Flow existente para esta inbox.
+    // Se houver múltiplos flows, pegar o mais antigo (o "principal" legacy).
+    // NUNCA deve sobrescrever um flow recém-criado que ainda não tem canvas.
     let flow = await tx.flow.findFirst({
       where: { inboxId },
+      orderBy: { createdAt: 'asc' },
     });
 
     // Extrair nome do nó START se disponível
@@ -428,6 +434,13 @@ async function syncCanvasToNormalizedFlow(
     }
 
     console.log(`[flow-canvas] Sincronizado Flow ${flow.id} (${flow.name}) com ${canvas.nodes.length} nós`);
+
+    // 5. Salvar canvasJson no Flow para que GET /flows/[flowId] retorne correto
+    await tx.flow.update({
+      where: { id: flow.id },
+      data: { canvasJson: canvas as unknown as Prisma.InputJsonValue },
+    });
+
     return flow.id;
   });
 }

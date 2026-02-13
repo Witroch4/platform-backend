@@ -1570,6 +1570,7 @@ model Flow {
   name        String
   inboxId     String
   isActive    Boolean              @default(true)
+  canvasJson  Json?                // Canvas visual (nodes/edges/viewport) específico deste flow
   nodes       FlowNode[]
   edges       FlowEdge[]
   sessions    FlowSession[]

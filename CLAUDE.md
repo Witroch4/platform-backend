@@ -18,14 +18,16 @@
 
 ## Migrations (OBRIGATÓRIO)
 
-**NUNCA `prisma db push` para produção.** Só `migrate dev` cria arquivo SQL.
+**NUNCA usar `prisma db push` — NEM em dev, NEM em produção, NEM em protótipo.**  
+`db push` apaga o histórico de migrations, causa drift e pode destruir dados.  
+SEMPRE usar `migrate dev` para criar arquivos SQL versionados.
 
 ```bash
 pnpm exec prisma migrate dev --name descricao  # DEV: cria migration + aplica
 pnpm exec prisma migrate deploy                 # PROD: aplica migrations pendentes
 ```
 
-Committar `prisma/migrations/` JUNTO com `schema.prisma`. Se usou `db push` por engano, crie migration manualmente.
+Committar `prisma/migrations/` JUNTO com `schema.prisma`.
 
 ## Stack
 
@@ -151,7 +153,7 @@ pnpm exec tsc --noEmit
 # DB
 pnpm exec prisma migrate dev --name X  # ✅ criar migration
 pnpm exec prisma migrate deploy         # ✅ produção
-pnpm run db:push                        # ⚠️ só local/protótipo
+# ❌ NUNCA: pnpm run db:push (REMOVIDO — causa drift e perda de migrations)
 pnpm run db:generate | db:studio | db:reset:dev | db:seed | db:seed-prices
 
 # Workers

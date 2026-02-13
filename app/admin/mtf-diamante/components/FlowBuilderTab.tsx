@@ -7,6 +7,7 @@ import { FlowCanvas } from './flow-builder/FlowCanvas';
 import { NodePalette } from './flow-builder/panels/NodePalette';
 import { NodeDetailDialog } from './flow-builder/panels/NodeDetailDialog';
 import { FlowSelector } from './flow-builder/panels/FlowSelector';
+import { ExportImportPanel } from './flow-builder/panels/ExportImportPanel';
 import {
   HandlePopover,
   useHandlePopover,
@@ -41,6 +42,8 @@ import {
   FileJson,
   ChevronLeft,
   Workflow,
+  Cloud,
+  CloudOff,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import dagre from '@dagrejs/dagre';
@@ -85,11 +88,17 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
     loadCanvas,
     isLoading,
     isSaving,
+    isAutoSaving,
+    lastAutoSaveTime,
     error,
     canvasVersion,
     currentFlowMeta,
     setNodes,
-  } = useFlowCanvas(caixaId, { flowId: selectedFlowId });
+    // Export/Import
+    exportFlowAsJson,
+    importFlowFromJson,
+    getCanvasAsN8nFormat,
+  } = useFlowCanvas(caixaId, { flowId: selectedFlowId, autoSave: true });
 
   const { interactiveMessages } = useMtfData();
   const reactFlowInstance = useReactFlow();
@@ -538,9 +547,46 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
               </Badge>
             )}
           </div>
+
+          {/* Auto-save indicator */}
+          {selectedFlowId && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              {isAutoSaving ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <span>Salvando...</span>
+                </>
+              ) : lastAutoSaveTime ? (
+                <>
+                  <Cloud className="h-3 w-3 text-green-500" />
+                  <span>Salvo</span>
+                </>
+              ) : (
+                <>
+                  <CloudOff className="h-3 w-3" />
+                  <span>Não salvo</span>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Export/Import JSON */}
+          <ExportImportPanel
+            onExport={exportFlowAsJson}
+            onImport={importFlowFromJson}
+            getN8nPreview={getCanvasAsN8nFormat}
+            hasSelectedFlow={!!selectedFlowId}
+            disabled={isSaving}
+            onImportSuccess={(flowId) => {
+              setSelectedFlowId(flowId);
+              setIsEditing(true);
+            }}
+          />
+
+          <Separator orientation="vertical" className="h-5" />
+
           {/* Import button - only shows when canvas is empty and there are reactions */}
           {canImport && (
             <Button

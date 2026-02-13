@@ -16,6 +16,7 @@ import log from '@/lib/log';
 import { SyncBridge } from './sync-bridge';
 import { FlowExecutor } from './flow-executor';
 import { getPrismaInstance } from '@/lib/connections';
+import { debugLogRuntimeFlow } from '@/lib/flow-builder/exportImport';
 import type {
   ChatwitWebhookPayload,
   DeliveryContext,
@@ -139,6 +140,9 @@ export class FlowOrchestrator {
     ctx: DeliveryContext,
     bridge: SyncBridge,
   ): Promise<OrchestratorResult> {
+    // DEBUG: Log do grafo de conexões quando DEBUG=1
+    debugLogRuntimeFlow(flow, `FlowOrchestrator.executeNewFlow() - conversationId: ${ctx.conversationId}`);
+
     const prisma = getPrismaInstance();
     const executor = new FlowExecutor(ctx);
 
@@ -198,6 +202,9 @@ export class FlowOrchestrator {
         error: `Flow ${session.flowId} não encontrado`,
       };
     }
+
+    // DEBUG: Log do grafo de conexões quando DEBUG=1
+    debugLogRuntimeFlow(flow, `FlowOrchestrator.resumeSession(${buttonId}) - sessionId: ${session.id}`);
 
     const executor = new FlowExecutor(ctx, session.variables);
     const result = await executor.resumeFromButton(flow, session, buttonId, bridge);

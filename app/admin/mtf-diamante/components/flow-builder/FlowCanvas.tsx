@@ -120,8 +120,12 @@ export function FlowCanvas({
     handleId: string;
   } | null>(null);
 
+  // Track if a connection was successfully made (to avoid showing popover)
+  const connectionMadeRef = React.useRef(false);
+
   const handleConnectStart = useCallback(
     (_event: MouseEvent | TouchEvent, params: { nodeId: string | null; handleId: string | null }) => {
+      connectionMadeRef.current = false; // Reset flag when starting a new connection
       if (params.nodeId && params.handleId) {
         connectStartRef.current = {
           nodeId: params.nodeId,
@@ -132,16 +136,27 @@ export function FlowCanvas({
     []
   );
 
+  // Wrap onConnect to track successful connections
+  const handleConnect = useCallback(
+    (connection: Parameters<OnConnect>[0]) => {
+      connectionMadeRef.current = true; // Mark that connection was successful
+      onConnect(connection);
+    },
+    [onConnect]
+  );
+
   const handleConnectEnd = useCallback(
     (event: MouseEvent | TouchEvent) => {
       const start = connectStartRef.current;
       connectStartRef.current = null;
 
-      if (!start || !onConnectEnd) return;
+      // If connection was successfully made, don't show popover
+      if (connectionMadeRef.current) {
+        connectionMadeRef.current = false;
+        return;
+      }
 
-      // Check if the connection ended on a valid target (another handle)
-      const target = (event as MouseEvent).target as HTMLElement;
-      if (target?.closest('.react-flow__handle')) return;
+      if (!start || !onConnectEnd) return;
 
       // Get mouse position
       const clientX =
@@ -149,8 +164,17 @@ export function FlowCanvas({
       const clientY =
         'clientY' in event ? event.clientY : event.changedTouches?.[0]?.clientY ?? 0;
 
-      const flowPos = screenToFlowPosition({ x: clientX, y: clientY });
+      // Check if connection ended on a valid target (handle or node)
+      const target = document.elementFromPoint(clientX, clientY);
 
+      // If dropped on a handle, let the default connection behavior happen
+      if (target?.closest('.react-flow__handle')) return;
+
+      // If dropped on an existing node (not handle), let default connection attempt
+      if (target?.closest('.react-flow__node')) return;
+
+      // Only show popover if dropped on empty canvas
+      const flowPos = screenToFlowPosition({ x: clientX, y: clientY });
       onConnectEnd(start.nodeId, start.handleId, clientX, clientY, flowPos);
     },
     [onConnectEnd, screenToFlowPosition]
@@ -274,7 +298,7 @@ export function FlowCanvas({
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
+        onConnect={handleConnect}
         onConnectStart={handleConnectStart}
         onConnectEnd={handleConnectEnd}
         nodeTypes={nodeTypes}

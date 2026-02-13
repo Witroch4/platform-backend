@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { getPrismaInstance } from '@/lib/connections';
 import { auth } from '@/auth';
+import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import type { FlowCanvas } from '@/types/flow-builder';
 
@@ -25,6 +26,18 @@ export interface FlowDetail {
 const UpdateFlowSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   isActive: z.boolean().optional(),
+});
+
+const UpdateCanvasSchema = z.object({
+  canvas: z.object({
+    nodes: z.array(z.any()),
+    edges: z.array(z.any()),
+    viewport: z.object({
+      x: z.number(),
+      y: z.number(),
+      zoom: z.number(),
+    }),
+  }),
 });
 
 // =============================================================================
@@ -192,21 +205,20 @@ export async function GET(
       );
     }
 
-    // Tentar buscar o canvas visual primeiro (InboxFlowCanvas)
-    // Se não existir, reconstruir a partir do Flow normalizado
-    const inboxCanvas = await getPrismaInstance().inboxFlowCanvas.findUnique({
-      where: { inboxId: flow.inboxId },
-    });
-
+    // 1. Prioridade: usar canvasJson do Flow (fonte per-flow, específica)
+    // 2. Fallback: reconstruir a partir dos nós normalizados
+    // NUNCA usar InboxFlowCanvas aqui — é global per-inbox e causaria
+    // um flow novo mostrar o canvas do flow anterior.
     let canvas: FlowCanvas | null = null;
 
-    if (inboxCanvas) {
-      // Usar canvas visual existente
-      canvas = inboxCanvas.canvas as unknown as FlowCanvas;
+    if (flow.canvasJson) {
+      // Canvas visual salvo direto no Flow — fonte correta
+      canvas = flow.canvasJson as unknown as FlowCanvas;
     } else if (flow.nodes.length > 0) {
-      // Reconstruir canvas a partir do flow normalizado
+      // Fallback: reconstruir canvas a partir do flow normalizado
       canvas = flowToCanvas(flow);
     }
+    // Se ambos estão vazios → flow novo, canvas permanece null
 
     const flowDetail: FlowDetail = {
       id: flow.id,
@@ -307,6 +319,83 @@ export async function PATCH(
     });
   } catch (error) {
     console.error('[flows/[flowId]] PATCH error:', error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Erro interno',
+      },
+      { status: 500 }
+    );
+  }
+}
+
+// =============================================================================
+// PUT - Atualizar canvas do flow
+// =============================================================================
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ flowId: string }> }
+) {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { success: false, error: 'Não autorizado' },
+        { status: 401 }
+      );
+    }
+
+    const { flowId } = await params;
+    const body = await request.json();
+
+    if (!flowId) {
+      return NextResponse.json(
+        { success: false, error: 'flowId é obrigatório' },
+        { status: 400 }
+      );
+    }
+
+    // Validar canvas
+    const validation = UpdateCanvasSchema.safeParse(body);
+    if (!validation.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Canvas inválido',
+          details: validation.error.flatten(),
+        },
+        { status: 400 }
+      );
+    }
+
+    // Verificar acesso
+    const { hasAccess } = await verifyFlowAccess(flowId, session.user.id);
+    if (!hasAccess) {
+      return NextResponse.json(
+        { success: false, error: 'Flow não encontrado ou acesso negado' },
+        { status: 404 }
+      );
+    }
+
+    // Atualizar canvas do flow (salva DIRETAMENTE no Flow.canvasJson)
+    const flow = await getPrismaInstance().flow.update({
+      where: { id: flowId },
+      data: {
+        canvasJson: validation.data.canvas as Prisma.InputJsonValue,
+        updatedAt: new Date(),
+      },
+    });
+
+    console.log(`[flows/${flowId}] Canvas atualizado - nós: ${validation.data.canvas.nodes.length}`);
+
+    return NextResponse.json({
+      success: true,
+      data: flow,
+      message: 'Canvas atualizado com sucesso',
+    });
+  } catch (error) {
+    console.error('[flows/[flowId]] PUT error:', error);
     return NextResponse.json(
       {
         success: false,

@@ -27,7 +27,6 @@
   },
   "scripts": {
     "preinstall": "npx only-allow pnpm",
-    "db:push": "node scripts/db-push-dev.mjs",
     "db:prepare": "node scripts/db-prepare.js --mode=deploy",
     "db:reset:dev": "node scripts/db-prepare.js --mode=reset",
     "db:deploy": "node scripts/db-prepare.js --mode=deploy",

@@ -14,6 +14,7 @@
 8. BFF como fonte única da UI (mesma SWR key para leitura e mutação)
 9. Features sem controle global — acesso via `admin/features`
 10. Front: linguagem clara, sem termos técnicos
+11. se precisa que ochatwit/chatwoot modifique alguma coisa colque em /home/wital/chatwitv4.10/chatwitdocs/chatwit-contrato-async-30s.md (a equipe deles vai verificar)
 
 ## Migrations (OBRIGATÓRIO)
 
@@ -206,18 +207,103 @@ docker compose build | up | down
 
 > **📌 Consulte `docs/` antes de implementar melhorias no Flow Builder / Flow Engine.**
 
-## SocialWise Flow Pipeline
+## SocialWise Flow Pipeline (v3.4+)
+
 
 ```
-Webhook → Auth → Validation → Idempotency/Rate Limit → Classification (Embedding) → Performance Bands → Response
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│  WEBHOOK (/api/integrations/webhooks/socialwiseflow)                            │
+│  Auth → Validation → Deduplication → Rate Limit                                 │
+└──────────────────────────────────────┬──────────────────────────────────────────┘
+                                       ↓
+                         ┌─────────────────────────────┐
+                         │  Handoff Detection          │
+                         │  @falar_atendente?          │
+                         └──────────────┬──────────────┘
+                                       ↓ (NO)
+┌──────────────────────────────────────┴──────────────────────────────────────────┐
+│  BUTTON INTERACTION DETECTION                                                    │
+├──────────────────────────────────────────────────────────────────────────────────┤
+│  buttonId.startsWith('flow_')?                                                   │
+│  ├─ YES → FlowOrchestrator.handle() → Resume FlowSession (WAITING_INPUT)         │
+│  └─ NO  → Legacy Button Reaction Check → MapeamentoBotao lookup                  │
+│           └─ Not mapped? → Extract button text → Continue to LLM                 │
+└──────────────────────────────────────┬──────────────────────────────────────────┘
+                                       ↓
+┌──────────────────────────────────────┴──────────────────────────────────────────┐
+│  LANGGRAPH ORCHESTRATION: classify → gating → router                             │
+├──────────────────────────────────────────────────────────────────────────────────┤
+│  [classifyNode] Direct alias hit? → HARD (1.0) │ Embedding search → score        │
+│  [gatingNode]   Filter hints by semantic description alignment                   │
+│  [routerNode]   Conditional dispatch by band                                     │
+└──────────────────────────────────────┬──────────────────────────────────────────┘
+                                       ↓
+                    ┌──────────────────┼──────────────────┐
+                    ↓                  ↓                  ↓
+            ┌───────────────┐  ┌───────────────┐  ┌───────────────┐
+            │  HARD ≥0.80   │  │  SOFT 0.65-79 │  │  ROUTER <0.65 │
+            ├───────────────┤  ├───────────────┤  ├───────────────┤
+            │ Direct intent │  │ LLM warmup    │  │ Full LLM      │
+            │ mapping       │  │ buttons       │  │ routing       │
+            │ <120ms        │  │ 300ms timeout │  │ 400ms timeout │
+            └───────┬───────┘  └───────┬───────┘  └───────┬───────┘
+                    ↓                  ↓                  ↓
+            ┌───────────────────────────────────────────────────┐
+            │  Intent Resolution: buildWhatsAppByIntentRaw()    │
+            │  ├─ MapeamentoIntencao.flowId exists + active?    │
+            │  │  └─ YES → { _type: 'execute_flow', flowId }    │
+            │  │           → FlowOrchestrator.executeFlowById() │
+            │  └─ NO  → Return template/interactive message     │
+            └───────────────────────────────────────────────────┘
 ```
 
-| Band | Confiança | Comportamento |
-|---|---|---|
-| HARD | ≥0.80 | Direct mapping, <120ms |
-| SOFT | 0.65-0.79 | Warmup buttons, candidates |
-| LOW | 0.50-0.64 | Domain topics, educational |
-| ROUTER | <0.50 | LLM routing, handoff |
+### Performance Bands (3 bandas ativas)
+
+| Band | Score | Estratégia | Comportamento | Timeout |
+|---|---|---|---|---|
+| **HARD** | ≥0.80 | `direct_map` | Intent → Template/Flow direto | <120ms |
+| **SOFT** | 0.65-0.79 | `warmup_buttons` | LLM gera buttons com candidatos | 300ms |
+| **ROUTER** | <0.65 | `router_llm` | LLM decide: intent ou chat | 400ms |
+
+> **LOW band foi removida** — scores 0.50-0.65 vão para ROUTER.
+
+### Flow Builder Integration (v3.4+)
+
+**Entry Point 1: Via Intent Mapping (HARD band)**
+```
+User message → HARD band (≥0.80) → Intent "xyz"
+    ↓
+MapeamentoIntencao query → flowId exists + flow.isActive?
+    ├─ YES → executeFlowForIntent(flowId, context)
+    │        → FlowOrchestrator.executeFlowById()
+    │        → Execute from START node
+    │        → Return syncResponse (interactive message)
+    └─ NO  → Return legacy template
+```
+
+**Entry Point 2: Via Button Click (flow_ prefix)**
+```
+User clicks button → buttonId.startsWith('flow_')?
+    ├─ YES → FlowOrchestrator.handle()
+    │        → Find FlowSession (WAITING_INPUT)
+    │        → FlowExecutor.resumeFromButton()
+    │        → Continue execution from edge
+    └─ NO  → Legacy MapeamentoBotao lookup
+```
+
+### Prioridade de Roteamento de Botões
+1. `flow_*` prefix → **FlowOrchestrator** (Flow Engine)
+2. Else → **MapeamentoBotao** lookup (Legacy button reactions)
+3. Not mapped → **SocialWise Flow** (LLM classification)
+
+### Anti-Loop Protocol
+- Session injeta `activeIntentSlug` no context
+- Router LLM filtra hint do intent ativo (evita re-oferecer mesmo menu)
+
+### Deadline-First Architecture (Flow Engine)
+- **Sync window**: 28s (com 5s margem)
+- **Estratégia**: sync até deadline → migra para async (Chatwit API delivery)
+- **Regra**: uma vez async, nunca volta para sync
 
 ## Business Logic
 
@@ -258,3 +344,13 @@ DATABASE_URL | REDIS_URL | NEXTAUTH_SECRET | OPENAI_API_KEY
 
 - Bugs de foco/input React: keys instáveis, IDs que mudam entre renders, refs que quebram igualdade → manter identidade estável
 - Bug MTF "aparece→some→volta": UI lia BFF e mutava CRUD (keys diferentes) → solução: BFF como fonte única, mesma SWR key, bypass cache, optimistic+rollback
+- **Flow Engine vs Intents (Regressão)**: NUNCA interceptar todas as mensagens no webhook. Flow só executa se:
+  1. Botão `flow_` clicado → `FlowOrchestrator.handle()` resume session
+  2. Intent classificada (HARD band ≥0.80) mapeada para Flow via `MapeamentoIntencao.flowId`
+
+  O pipeline de classificação (alias/embedding → bands) SEMPRE tem prioridade sobre FlowOrchestrator default.
+
+## Portainer MCP
+
+**Regra crítica**: as ferramentas de alto nível (`listStacks`, `createStack`, etc.) são para **Edge Stacks** — não funcionam no ambiente Swarm normal (retornam 503). Usar sempre Portainer [dockerProxy]
+

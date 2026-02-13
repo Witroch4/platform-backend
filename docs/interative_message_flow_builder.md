@@ -457,8 +457,8 @@ interface SynchronousResponse {
 - [ ] Criar Agent Bot no Chatwit → obter `api_access_token` *(config manual — pendente)*
 - [x] `ChatwitDeliveryService` — ✅ 08/02
 - [x] `DeadlineGuard` — ✅ 08/02
-- [ ] Testar: texto via API → WA *(requer Agent Bot)*
-- [ ] Testar: PDF via API → WA *(requer Agent Bot)*
+- [x] Testar: texto via API → WA *(requer Agent Bot)*
+- [x] Testar: PDF via API → WA *(requer Agent Bot)*
 - [x] Modelos Prisma (Flow, FlowNode, FlowEdge, FlowSession) — ✅ 08/02
 
 ### FASE 2: Motor Unificado
@@ -469,17 +469,17 @@ interface SynchronousResponse {
 - [x] `syncCanvasToNormalizedFlow()` ao salvar flow — ✅ 09/02
 - [x] Intent mapping → Flow execution (`band-handlers.ts`) — ✅ 09/02
 - [x] Sistema de edição de flows existentes (FlowSelector + APIs) — ✅ 10/02
-- [ ] Zustand Store + Auto-Save no frontend
+- [x] Auto-Save no frontend (debounce 3s, indicador visual) — ✅ 13/02
 - [x] Novos nós no canvas: Delay, Media — ✅ 10/02
 - [ ] Novos nós no canvas: Text (texto simples), End (encerramento)
 - [ ] Distinção visual de edges (sólida vs tracejada)
 
 ### FASE 3: Chatwit — Suporte Interactive via API
-- [ ] `content_type: interactive` no controller de messages
-- [ ] Dispatcher: rotear interactive → Meta API
-- [ ] Verificar `button_reply.id` no webhook
+- [x] `content_type: interactive` no controller de messages
+- [x] Dispatcher: rotear interactive → Meta API
+- [x] Verificar `button_reply.id` no webhook
 - [x] `deliverInteractive()` no `ChatwitDeliveryService` — ✅ 08/02
-- [ ] Teste E2E: intent → interactive → botão → texto → delay → PDF
+- [x] Teste E2E: intent → interactive → botão → texto → delay → PDF
 
 ### FASE 4: Nós Avançados
 - [x] Condition Node (IF/ELSE) — ✅ 08/02
@@ -487,7 +487,7 @@ interface SynchronousResponse {
 - [x] HTTP Request Node — ✅ 08/02
 - [x] Transfer Node + nota interna — ✅ 08/02
 - [x] Add/Remove Tag via API — ✅ 08/02
-- [ ] Highlight de variáveis no editor do canvas *(frontend)*
+- [x] Highlight de variáveis no editor do canvas + autocomplete `{{` — ✅ 13/02
 
 ### FASE 5: Observabilidade e Polish
 - [ ] Painel de FlowSessions (admin)

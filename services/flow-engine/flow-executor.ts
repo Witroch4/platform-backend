@@ -14,6 +14,7 @@ import { SyncBridge } from './sync-bridge';
 import { ChatwitDeliveryService, createDeliveryService } from './chatwit-delivery-service';
 import { VariableResolver } from './variable-resolver';
 import { elementsToLegacyFields } from '@/lib/flow-builder/interactiveMessageElements';
+import { debugLogRuntimeFlow } from '@/lib/flow-builder/exportImport';
 import type { InteractiveMessageElement } from '@/types/flow-builder';
 import type {
   DeliveryContext,
@@ -33,6 +34,26 @@ import type {
   MediaConfig,
   ExecuteResult,
 } from '@/types/flow-engine';
+
+// =============================================================================
+// Tipos internos para Harvest
+// =============================================================================
+
+/** Nós leves que podem ir na ponte sync */
+type LightNodeType = 'TEXT_MESSAGE' | 'REACTION' | 'INTERACTIVE_MESSAGE';
+
+/** Nós que são barreiras (forçam transição para async) */
+type BarrierNodeType = 'MEDIA' | 'DELAY';
+
+/** Resultado do harvest de nós leves */
+interface HarvestedContent {
+  /** Nós leves coletados (em ordem) */
+  lightNodes: RuntimeFlowNode[];
+  /** Nó de barreira encontrado (MEDIA ou DELAY) */
+  barrierNode: RuntimeFlowNode | null;
+  /** Nós após a barreira (para continuar async) */
+  remainingStartNode: RuntimeFlowNode | null;
+}
 
 // Re-export ExecuteResult from types for backwards compatibility
 export type { ExecuteResult } from '@/types/flow-engine';
@@ -62,6 +83,9 @@ export class FlowExecutor {
     flow: RuntimeFlow,
     bridge: SyncBridge,
   ): Promise<ExecuteResult> {
+    // DEBUG: Log do grafo de conexões quando DEBUG=1
+    debugLogRuntimeFlow(flow, `FlowExecutor.execute() - Starting flow`);
+
     const startNode = flow.nodes.find((n) => n.nodeType === 'START');
     if (!startNode) {
       log.error('[FlowExecutor] Flow sem nó START', { flowId: flow.id });
@@ -85,6 +109,9 @@ export class FlowExecutor {
     buttonId: string,
     bridge: SyncBridge,
   ): Promise<ExecuteResult> {
+    // DEBUG: Log do grafo de conexões quando DEBUG=1
+    debugLogRuntimeFlow(flow, `FlowExecutor.resumeFromButton(${buttonId}) - currentNode: ${session.currentNodeId}`);
+
     if (!session.currentNodeId) {
       return {
         status: 'ERROR',
@@ -94,9 +121,22 @@ export class FlowExecutor {
     }
 
     // Buscar TODAS as edges com este buttonId (suporte a branches paralelos)
-    const edges = flow.edges.filter(
+    let edges = flow.edges.filter(
       (e) => e.sourceNodeId === session.currentNodeId && e.buttonId === buttonId,
     );
+
+    // Se não encontrou no currentNode, buscar em QUALQUER nó do flow
+    // (usuário clicou botão de uma mensagem interativa anterior — "rewind")
+    if (edges.length === 0) {
+      edges = flow.edges.filter((e) => e.buttonId === buttonId);
+      if (edges.length > 0) {
+        log.info('[FlowExecutor] Botão encontrado em nó anterior, executando rewind', {
+          currentNodeId: session.currentNodeId,
+          actualSourceNodeId: edges[0].sourceNodeId,
+          buttonId,
+        });
+      }
+    }
 
     if (edges.length === 0) {
       log.warn('[FlowExecutor] Nenhuma edge encontrada para botão', {
@@ -136,13 +176,13 @@ export class FlowExecutor {
     });
 
     // -------------------------------------------------------------------------
-    // Separação inteligente de branches:
-    //   REACTIONs → fire-and-forget (definem pending reaction, sempre primeiro)
-    //   Conteúdo → cadeia principal (o com continuação) + branches paralelos
-    //   Se REACTION tem continuação, a continuação vira candidata a main chain
+    // HARVEST + BARRIER: Coletar nós leves até encontrar barreira
+    //
+    // Modelo: Olhar para frente, coletar tudo que cabe na ponte sync,
+    // e só depois continuar async a partir da barreira.
     // -------------------------------------------------------------------------
 
-    // 1. Separar REACTIONs (setup) de nós de conteúdo
+    // 1. Separar REACTIONs de nós de conteúdo
     const reactionBranches: RuntimeFlowNode[] = [];
     const contentTargets: RuntimeFlowNode[] = [];
 
@@ -154,8 +194,7 @@ export class FlowExecutor {
       }
     }
 
-    // 2. Coletar continuações de REACTIONs que têm cadeia após elas
-    //    (ex: REACTION → INTERACTIVE_MESSAGE → ...)
+    // 2. Processar REACTIONs e suas continuações
     const reactionContinuations: RuntimeFlowNode[] = [];
     for (const reaction of reactionBranches) {
       const nextEdge = flow.edges.find(
@@ -167,10 +206,8 @@ export class FlowExecutor {
       }
     }
 
-    // 3. Todos os candidatos a cadeia principal = content targets + reaction continuations
+    // 3. Escolher main chain
     const allCandidates = [...contentTargets, ...reactionContinuations];
-
-    // 4. Escolher cadeia principal: preferir nó com continuação ou INTERACTIVE_MESSAGE
     let mainChainNode: RuntimeFlowNode | null = null;
     const parallelContent: RuntimeFlowNode[] = [];
 
@@ -191,7 +228,6 @@ export class FlowExecutor {
         const mainHasContinuation = mainHasNextEdge || mainIsInteractive;
 
         if (hasContinuation && !mainHasContinuation) {
-          // Novo candidato com continuação substitui folha
           parallelContent.push(mainChainNode);
           mainChainNode = node;
         } else {
@@ -200,63 +236,146 @@ export class FlowExecutor {
       }
     }
 
-    // Fallback: se nenhum candidato, usar primeiro target
     if (!mainChainNode && targetNodes.length > 0) {
       mainChainNode = targetNodes[0];
     }
 
-    log.debug('[FlowExecutor] Branch separation result', {
-      reactionCount: reactionBranches.length,
-      parallelContentCount: parallelContent.length,
-      mainChainType: mainChainNode?.nodeType,
+    // -------------------------------------------------------------------------
+    // 4. HARVEST: Coletar nós leves da main chain até encontrar barreira
+    // -------------------------------------------------------------------------
+    const harvested = this.harvestLightNodes(flow, mainChainNode);
+
+    log.debug('[FlowExecutor] Harvest result', {
+      lightNodesCount: harvested.lightNodes.length,
+      lightTypes: harvested.lightNodes.map(n => n.nodeType),
+      hasBarrier: !!harvested.barrierNode,
+      barrierType: harvested.barrierNode?.nodeType,
     });
 
-    // ---- EXECUÇÃO ----
+    // ---- EXECUÇÃO (HARVEST MODE) ----
 
-    // 5. REACTIONs primeiro (fire-and-forget, definem pending reaction)
-    for (const reaction of reactionBranches) {
-      log.debug('[FlowExecutor] Executando branch paralelo', {
-        nodeId: reaction.id,
-        nodeType: reaction.nodeType,
-      });
-      await this.executeNode(reaction, flow, bridge, true);
-      this.pushLog(reaction, Date.now(), bridge.isBridgeClosed() ? 'async' : 'sync', 'ok', 'reaction branch');
+    // 4.5 Propagar wamid do botão clicado como contexto (fallback para text-only)
+    const wamid = this.context.sourceMessageId;
+    if (wamid) {
+      bridge.setContextMessageId(wamid);
     }
 
-    // 6. Conteúdo paralelo (TEXT folhas, emojis soltos, etc.)
+    // 5. REACTIONs primeiro - coletar no harvest
+    for (const reaction of reactionBranches) {
+      log.debug('[FlowExecutor] Coletando REACTION (harvest)', {
+        nodeId: reaction.id,
+      });
+      await this.harvestNode(reaction, flow, bridge);
+      this.pushLog(reaction, Date.now(), 'sync', 'ok', 'reaction harvested');
+    }
+
+    // 6. Coletar conteúdo dos nós leves no harvest
+    for (const lightNode of harvested.lightNodes) {
+      log.debug('[FlowExecutor] Coletando light node (harvest)', {
+        nodeId: lightNode.id,
+        nodeType: lightNode.nodeType,
+      });
+      await this.harvestNode(lightNode, flow, bridge);
+      this.pushLog(lightNode, Date.now(), 'sync', 'ok', 'harvested');
+    }
+
+    // 7. Conteúdo paralelo (branches que não são main chain) - também harvest
     for (const branch of parallelContent) {
-      log.debug('[FlowExecutor] Executando branch paralelo', {
+      log.debug('[FlowExecutor] Coletando branch paralelo (harvest)', {
         nodeId: branch.id,
         nodeType: branch.nodeType,
       });
-      await this.executeNode(branch, flow, bridge, true);
-      this.pushLog(branch, Date.now(), bridge.isBridgeClosed() ? 'async' : 'sync', 'ok', 'branch paralelo');
+      await this.harvestNode(branch, flow, bridge);
+      this.pushLog(branch, Date.now(), 'sync', 'ok', 'branch paralelo harvested');
     }
 
-    // 7. Se há pending reaction não consumida (sem TEXT para combinar),
-    //    e a main chain NÃO é TEXT_MESSAGE (que consumiria no seu handler),
-    //    gerar sync payload só com emoji
-    const mainWillConsumeReaction = mainChainNode?.nodeType === 'TEXT_MESSAGE';
-    if (bridge.hasPendingReaction() && bridge.canSync() && !mainWillConsumeReaction) {
-      const pendingReaction = bridge.consumePendingReaction();
-      if (pendingReaction) {
-        const channel = this.context.channelType;
-        const reactionPayload = this.buildCombinedReactionTextPayload(
-          pendingReaction.emoji,
-          undefined,
-          pendingReaction.targetMessageId,
-          channel,
-        );
-        bridge.setSyncPayload(reactionPayload);
-        log.debug('[FlowExecutor] Pending reaction enviada como sync (emoji-only)', {
-          emoji: pendingReaction.emoji,
-        });
+    // 8. Construir payload combinado e definir no sync
+    if (bridge.canSync() && (bridge.hasHarvestedContent() || bridge.hasPendingReaction())) {
+      const channel = this.context.channelType;
+      const combinedPayload = bridge.buildCombinedPayload(channel);
+      if (combinedPayload) {
+        bridge.setSyncPayload(combinedPayload);
+        log.debug('[FlowExecutor] Payload combinado definido no sync');
       }
     }
 
-    // 8. Executar cadeia principal (com directlyAfterButton=true)
-    if (mainChainNode) {
-      return this.executeChain(flow, mainChainNode, bridge, true);
+    // 9. Se encontrou barreira, agendar execução async em BACKGROUND e retornar IMEDIATAMENTE
+    if (harvested.barrierNode) {
+      log.debug('[FlowExecutor] Barrier encontrada - agendando async em background', {
+        barrierType: harvested.barrierNode.nodeType,
+        barrierNodeId: harvested.barrierNode.id,
+      });
+
+      // Capturar referências para o closure
+      const barrierNode = harvested.barrierNode;
+      const flowRef = flow;
+      const bridgeRef = bridge;
+
+      // Executar em background (não bloqueante) - resposta sync retorna imediatamente
+      setImmediate(async () => {
+        try {
+          log.debug('[FlowExecutor] Iniciando execução async em background', {
+            barrierNodeId: barrierNode.id,
+          });
+          await this.executeChain(flowRef, barrierNode, bridgeRef, false);
+          log.debug('[FlowExecutor] Execução async em background concluída');
+        } catch (err) {
+          log.error('[FlowExecutor] Erro na execução async em background', {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      });
+
+      // Retornar imediatamente - NÃO bloqueia esperando DELAY/MEDIA
+      const lastHarvested = harvested.lightNodes[harvested.lightNodes.length - 1];
+      if (lastHarvested?.nodeType === 'INTERACTIVE_MESSAGE') {
+        return {
+          status: 'WAITING_INPUT',
+          currentNodeId: lastHarvested.id,
+          variables: this.resolver.getSessionVariables(),
+          executionLog: this.executionLog,
+        };
+      }
+
+      return {
+        status: 'COMPLETED',
+        variables: this.resolver.getSessionVariables(),
+        executionLog: this.executionLog,
+      };
+    }
+
+    // 10. Sem barreira: se há remaining node após harvest, executar em background também
+    if (harvested.remainingStartNode) {
+      const remainingNode = harvested.remainingStartNode;
+      const flowRef = flow;
+      const bridgeRef = bridge;
+
+      setImmediate(async () => {
+        try {
+          await this.executeChain(flowRef, remainingNode, bridgeRef, false);
+        } catch (err) {
+          log.error('[FlowExecutor] Erro na execução remaining em background', {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      });
+
+      return {
+        status: 'COMPLETED',
+        variables: this.resolver.getSessionVariables(),
+        executionLog: this.executionLog,
+      };
+    }
+
+    // 11. Nenhum remaining - check se último nó era INTERACTIVE (WAITING_INPUT)
+    const lastHarvested = harvested.lightNodes[harvested.lightNodes.length - 1];
+    if (lastHarvested?.nodeType === 'INTERACTIVE_MESSAGE') {
+      return {
+        status: 'WAITING_INPUT',
+        currentNodeId: lastHarvested.id,
+        variables: this.resolver.getSessionVariables(),
+        executionLog: this.executionLog,
+      };
     }
 
     return {
@@ -264,6 +383,145 @@ export class FlowExecutor {
       variables: this.resolver.getSessionVariables(),
       executionLog: this.executionLog,
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Harvest: coletar nós leves até encontrar barreira
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Coleta o conteúdo de um nó leve no SyncBridge (em vez de enviar).
+   * Usado durante a fase de harvest para combinar múltiplos itens.
+   */
+  private async harvestNode(
+    node: RuntimeFlowNode,
+    _flow: RuntimeFlow,
+    bridge: SyncBridge,
+  ): Promise<void> {
+    const nodeType = node.nodeType as FlowNodeType;
+    const wamid = this.context.sourceMessageId;
+
+    switch (nodeType) {
+      case 'TEXT_MESSAGE': {
+        const config = node.config as { text?: string };
+        const text = this.resolver.resolve(config.text ?? '');
+        bridge.addHarvestedText(text);
+        break;
+      }
+
+      case 'REACTION': {
+        const config = node.config as { emoji?: string; text?: string };
+        if (config.emoji && wamid) {
+          const channel = this.context.channelType;
+          const reactionEmoji = channel === 'instagram' ? '❤️' : config.emoji;
+          bridge.setHarvestedEmoji(reactionEmoji, wamid);
+        }
+        if (config.text) {
+          const text = this.resolver.resolve(config.text);
+          bridge.addHarvestedText(text);
+        }
+        break;
+      }
+
+      case 'INTERACTIVE_MESSAGE': {
+        const config = node.config as {
+          interactivePayload?: Record<string, unknown>;
+          elements?: InteractiveMessageElement[];
+          body?: string;
+          header?: string;
+          footer?: string;
+          buttons?: Array<{ id: string; title: string }>;
+        };
+
+        // Converter elements para formato legado se necessário
+        let effectiveConfig = config;
+        if (config.elements?.length) {
+          const legacy = elementsToLegacyFields(config.elements);
+          effectiveConfig = {
+            ...config,
+            body: legacy.body,
+            header: legacy.header,
+            footer: legacy.footer,
+            buttons: legacy.buttons,
+          };
+        }
+
+        const resolvedPayload = effectiveConfig.interactivePayload
+          ? JSON.parse(this.resolver.resolve(JSON.stringify(effectiveConfig.interactivePayload)))
+          : this.buildInteractivePayload(effectiveConfig);
+
+        bridge.setHarvestedInteractive(resolvedPayload);
+        break;
+      }
+
+      default:
+        log.warn('[FlowExecutor] harvestNode: tipo inesperado', { nodeType });
+    }
+  }
+
+  /**
+   * Faz look-ahead a partir de um nó, coletando nós "leves" que podem ir
+   * na ponte sync até encontrar uma barreira (MEDIA ou DELAY).
+   */
+  private harvestLightNodes(
+    flow: RuntimeFlow,
+    startNode: RuntimeFlowNode | null,
+  ): HarvestedContent {
+    const result: HarvestedContent = {
+      lightNodes: [],
+      barrierNode: null,
+      remainingStartNode: null,
+    };
+
+    if (!startNode) return result;
+
+    const lightTypes: LightNodeType[] = ['TEXT_MESSAGE', 'REACTION', 'INTERACTIVE_MESSAGE'];
+    const barrierTypes: BarrierNodeType[] = ['MEDIA', 'DELAY'];
+
+    let current: RuntimeFlowNode | null = startNode;
+
+    while (current) {
+      const nodeType = current.nodeType as FlowNodeType;
+
+      // É uma barreira? Para aqui.
+      if (barrierTypes.includes(nodeType as BarrierNodeType)) {
+        result.barrierNode = current;
+        break;
+      }
+
+      // É um nó leve? Coleta.
+      if (lightTypes.includes(nodeType as LightNodeType)) {
+        result.lightNodes.push(current);
+
+        // INTERACTIVE_MESSAGE com botões = fim do harvest (espera input)
+        if (nodeType === 'INTERACTIVE_MESSAGE') {
+          const config = current.config as { buttons?: unknown[]; elements?: unknown[] };
+          const hasButtons = config.buttons?.length || config.elements?.some(
+            (e: unknown) => (e as { type?: string }).type === 'button'
+          );
+          if (hasButtons) {
+            // Não tem remaining - vai esperar input
+            break;
+          }
+        }
+      } else {
+        // Nó de controle (CONDITION, SET_VARIABLE, etc) - não é harvest nem barrier
+        // Marca como remaining e para
+        result.remainingStartNode = current;
+        break;
+      }
+
+      // Próximo nó na cadeia
+      const nextEdge = flow.edges.find(
+        (e) => e.sourceNodeId === current!.id && !e.buttonId && !e.conditionBranch,
+      );
+
+      if (!nextEdge) break;
+
+      current = flow.nodes.find((n) => n.id === nextEdge.targetNodeId) ?? null;
+    }
+
+    return result;
   }
 
   // ---------------------------------------------------------------------------
