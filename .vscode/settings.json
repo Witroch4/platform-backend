@@ -3,5 +3,6 @@
     "typescript.autoClosingTags": false,
     "chatgpt.config": {
         
-    }
+    },
+    "kiroAgent.configureMCP": "Disabled"
 }

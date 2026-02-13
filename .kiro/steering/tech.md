@@ -18,6 +18,7 @@ This file provides comprehensive guidance to Claude Code (claude.ai/code) and Cu
 11. **Edição no front deve ser olhar com a tool de navegação o resutado**
 12. **Sempre que adicionar uma feature adicione sem necessidade de controle global só controle de acesso pagina que controla acesso as features admin/features**
 13. **BFF como Fonte Única (UI)**: telas devem **ler** do BFF e **mutar** usando a **mesma SWR key**; CRUD puro fica para domínio/serviços
+redis e prisma de lib\connections.ts
 
 ## 🚀 Project Overview
 
@@ -540,7 +541,12 @@ lib/
 ├── socialwise-flow/      # SocialWise Flow Processing System
 │   ├── processor.ts      # Main flow processor
 │   ├── metrics.ts        # Performance metrics
+│   ├── processor-components/ # Band handlers, button reactions, timeouts
 │   └── services/         # SocialWise services
+├── flow-builder/         # Flow Builder utilities
+│   ├── exportImport.ts   # Export/Import flows
+│   ├── interactiveMessageElements.ts # Message element helpers
+│   └── index.ts          # Barrel export
 ├── cost/                 # Cost Management System
 │   ├── cost-worker.ts    # Main cost processing worker
 │   ├── budget-system.ts  # Budget management system
@@ -560,6 +566,31 @@ lib/
 ├── connections.ts       # Database connections
 ├── redis.ts            # Redis configuration
 └── utils.ts            # General utilities
+```
+
+### Services Directory
+```
+services/
+├── flow-engine/          # ⭐ Flow Engine (deadline-first execution)
+│   ├── deadline-guard.ts # 28s sync window monitor
+│   ├── flow-orchestrator.ts # Flow coordination & session management
+│   ├── flow-executor.ts  # Node-by-node execution
+│   ├── chatwit-delivery-service.ts # Async delivery via Chatwit API
+│   ├── variable-resolver.ts # Variable substitution
+│   ├── sync-bridge.ts    # Sync/async bridge
+│   └── index.ts          # Barrel export
+└── openai-components/    # OpenAI integration services
+    └── server-socialwise-componentes/ # SocialWise-specific AI components
+```
+
+### Types Directory
+```
+types/
+├── flow-builder.ts       # Flow canvas types & validation
+├── flow-engine.ts        # Flow execution types
+├── interactive-messages.ts # Message limits & constraints
+├── dialogflow.ts         # Dialogflow/Chatwit types
+└── webhook.ts            # Webhook payload types
 ```
 
 ### Worker Architecture
@@ -598,6 +629,17 @@ worker/
 Advanced template management for WhatsApp automation:
 - Interactive message creation with variable substitution
 - Button reaction mapping with dynamic routing
+- **Flow Builder**: Visual canvas for creating conversational flows
+  - Drag-and-drop interface with React Flow
+  - Multiple node types (Start, Interactive, Text, Media, Delay, Reaction)
+  - Real-time validation and preview
+  - Export/Import flows
+- **Flow Engine**: Deadline-first execution system
+  - 28s sync window with automatic async migration
+  - Session management for multi-step conversations
+  - Variable resolution and template substitution
+  - Integration with Intent classification (HARD band ≥0.80)
+  - Button-based flow resumption (flow_ prefix)
 - Bulk processing capabilities with progress tracking
 - Template library with version control
 
@@ -888,3 +930,84 @@ Como bugs de foco/input em React geralmente são causados por:
 Sua solução demonstra que às vezes a correção mais eficaz é a mais simples: manter a identidade dos elementos estável para que React possa otimizar corretamente.
 
 No projeto MTF Diamante, houve um bug de "aparece → some → volta" nas caixas por usar listagem do BFF (/inbox-view) com cache e mutações no CRUD (/caixas). A solução foi tornar o BFF (/inbox-view?dataType=caixas) a fonte única da lista para a UI, desabilitar cache para esse dataType, alinhar a SWR key das mutações com a mesma key da lista e evitar misturar endpoints. Manter CRUD puro para uso interno/serviços e BFF para a UI.
+
+## 🎨 Flow Builder & Flow Engine
+
+### Flow Builder (Canvas Visual)
+Sistema de criação visual de fluxos conversacionais com drag-and-drop baseado em React Flow.
+
+**Arquitetura:**
+- Canvas visual com nós e conexões
+- Validação em tempo real
+- Export/Import de flows
+- Preview integrado de mensagens interativas
+
+**Tipos de Nós:**
+- **Start Node**: Ponto de entrada único
+- **Interactive Message Node**: Botões, listas, carrossel
+- **Text Message Node**: Mensagens de texto simples
+- **Media Node**: Imagens, vídeos, documentos
+- **Delay Node**: Pausas temporais configuráveis
+- **Reaction Nodes**: Nós de reação a botões específicos
+
+**Validações:**
+- Nó START obrigatório e único
+- Sem nós órfãos (desconectados)
+- Sem ciclos infinitos
+- Limites por canal (WhatsApp, Instagram, Facebook)
+
+### Flow Engine (Execução Deadline-First)
+
+**Estratégia de Execução:**
+```
+Sync Window (28s) → Deadline Guard → Async Migration
+```
+
+**Componentes:**
+1. **DeadlineGuard**: Monitora tempo restante (28s com 5s margem)
+2. **FlowOrchestrator**: Coordena execução e sessões
+3. **FlowExecutor**: Executa nós sequencialmente
+4. **ChatwitDeliveryService**: Entrega async via Chatwit API
+5. **VariableResolver**: Substitui variáveis em templates
+
+**Regras Críticas:**
+- Uma vez async, nunca volta para sync
+- Session state persiste entre interações
+- Anti-loop: filtra intent ativo do context
+
+### Integração com SocialWise Flow
+
+**Entry Point 1: Via Intent (HARD band ≥0.80)**
+```
+User message → HARD band → Intent "xyz"
+    ↓
+MapeamentoIntencao.flowId exists + flow.isActive?
+    ├─ YES → executeFlowForIntent(flowId, context)
+    │        → FlowOrchestrator.executeFlowById()
+    │        → Execute from START node
+    └─ NO  → Return legacy template
+```
+
+**Entry Point 2: Via Button Click (flow_ prefix)**
+```
+User clicks button → buttonId.startsWith('flow_')?
+    ├─ YES → FlowOrchestrator.handle()
+    │        → Find FlowSession (WAITING_INPUT)
+    │        → FlowExecutor.resumeFromButton()
+    └─ NO  → Legacy MapeamentoBotao lookup
+```
+
+**Prioridade de Roteamento de Botões:**
+1. `flow_*` prefix → FlowOrchestrator (Flow Engine)
+2. Else → MapeamentoBotao (Legacy button reactions)
+3. Not mapped → SocialWise Flow (LLM classification)
+
+**⚠️ IMPORTANTE: Flow Engine vs Intents (Regressão)**
+NUNCA interceptar todas as mensagens no webhook. Flow só executa se:
+1. Botão `flow_` clicado → `FlowOrchestrator.handle()` resume session
+2. Intent classificada (HARD band ≥0.80) mapeada para Flow via `MapeamentoIntencao.flowId`
+
+O pipeline de classificação (alias/embedding → bands) SEMPRE tem prioridade sobre FlowOrchestrator default.
+
+### Documentação Técnica
+Consulte `docs/interative_message_flow_builder.md` antes de implementar melhorias no Flow Builder / Flow Engine.

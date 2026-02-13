@@ -290,6 +290,7 @@
     "dotenv-cli": "^9.0.0",
     "eslint": "^9.16.0",
     "eslint-config-next": "15.5.10",
+    "fast-check": "^4.5.3",
     "jest": "^30.0.4",
     "jest-environment-jsdom": "^30.0.4",
     "nock": "^14.0.8",
