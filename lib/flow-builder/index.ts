@@ -14,3 +14,9 @@ export {
   debugLogFlowGraph,
   debugLogRuntimeFlow,
 } from './exportImport';
+
+export {
+  syncCanvasToNormalizedFlow,
+  buildNodeConfig,
+  NODE_TYPE_MAP,
+} from './syncFlow';

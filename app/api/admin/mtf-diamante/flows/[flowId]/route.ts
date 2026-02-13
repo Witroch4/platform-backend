@@ -4,6 +4,7 @@ import { auth } from '@/auth';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import type { FlowCanvas } from '@/types/flow-builder';
+import { syncCanvasToNormalizedFlow } from '@/lib/flow-builder';
 
 // =============================================================================
 // TYPES
@@ -388,6 +389,19 @@ export async function PUT(
     });
 
     console.log(`[flows/${flowId}] Canvas atualizado - nós: ${validation.data.canvas.nodes.length}`);
+
+    // Sincronizar canvas para tabelas normalizadas (FlowNode/FlowEdge)
+    // Isso permite que FlowExecutor e Flow Analytics leiam os dados
+    try {
+      await syncCanvasToNormalizedFlow(
+        flowId,
+        validation.data.canvas as unknown as FlowCanvas
+      );
+      console.log(`[flows/${flowId}] Tabelas FlowNode/FlowEdge sincronizadas`);
+    } catch (syncError) {
+      // Log error but don't fail the request - canvasJson is saved
+      console.error(`[flows/${flowId}] Sync error (non-fatal):`, syncError);
+    }
 
     return NextResponse.json({
       success: true,
