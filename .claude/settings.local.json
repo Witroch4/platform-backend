@@ -26,7 +26,13 @@
       "Bash(echo:*)",
       "mcp__portainer__listStacks",
       "mcp__portainer__listEnvironments",
-      "mcp__portainer__dockerProxy"
+      "mcp__portainer__dockerProxy",
+      "Bash(npx skills:*)",
+      "Bash(ln:*)",
+      "Bash(git checkout:*)",
+      "Bash(npm view:*)",
+      "Bash(npx @next/codemod@latest upgrade:*)",
+      "Bash(pnpm build:*)"
     ],
     "deny": [],
     "ask": []
