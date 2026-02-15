@@ -740,31 +740,29 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
   // Render create/edit view
   if (currentView === "create" || currentView === "edit") {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             <Button
               variant="ghost"
               size="icon"
               onClick={handleBackToList}
-              className="hover:bg-accent hover:text-accent-foreground"
+              className="hover:bg-accent hover:text-accent-foreground min-h-[44px] min-w-[44px]"
+              aria-label="Voltar para lista"
             >
               ←
             </Button>
-            <div>
-              <h2 className="text-2xl font-bold text-foreground">
+            <div className="min-w-0">
+              <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-foreground truncate">
                 {currentView === "edit" ? "Editar" : "Criar"} Mensagem
-                Interativa
               </h2>
-              <p className="text-muted-foreground">
-                Crie mensagens interativas avançadas com todos os tipos
-                suportados pelo WhatsApp Business
+              <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2">
+                Mensagens interativas com botões, listas e mais
               </p>
             </div>
           </div>
         </div>
 
-        {/* PONTO-CHAVE 3: Passe a função simplificada. */}
         <InteractiveMessageCreator
           inboxId={caixaId}
           onSave={handleSaveMessage}
@@ -776,52 +774,61 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
 
   // Render main list view
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <MessageSquare className="h-6 w-6 text-muted-foreground" />
-          <div>
-            <h2 className="text-2xl font-bold text-foreground">
+    <div className="space-y-4 sm:space-y-6">
+      {/* Header - Mobile responsive */}
+      <div className="flex flex-col gap-3 sm:gap-4">
+        <div className="flex items-start gap-2 sm:gap-3">
+          <MessageSquare className="h-5 w-5 sm:h-6 sm:w-6 text-muted-foreground shrink-0 mt-0.5" />
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-foreground">
               Mensagens Interativas
             </h2>
-            <p className="text-muted-foreground">
-              Gerencie mensagens interativas com botões, listas, localização e
-              mais funcionalidades avançadas.
+            <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2">
+              Gerencie mensagens com botões, listas e mais funcionalidades
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            onClick={handleExportAll}
-            variant="outline"
-            className="gap-2"
-          >
-            <Download className="h-4 w-4" /> Exportar JSON
-          </Button>
-          <Button
-            onClick={() => setImportDialogOpen(true)}
-            variant="outline"
-            className="gap-2"
-          >
-            <Upload className="h-4 w-4" /> Importar JSON
-          </Button>
+
+        {/* Ações - Stack em mobile, row em desktop */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={handleExportAll}
+              variant="outline"
+              size="sm"
+              className="gap-1.5 min-h-[40px] flex-1 sm:flex-none"
+            >
+              <Download className="h-4 w-4" />
+              <span className="hidden xs:inline">Exportar</span>
+            </Button>
+            <Button
+              onClick={() => setImportDialogOpen(true)}
+              variant="outline"
+              size="sm"
+              className="gap-1.5 min-h-[40px] flex-1 sm:flex-none"
+            >
+              <Upload className="h-4 w-4" />
+              <span className="hidden xs:inline">Importar</span>
+            </Button>
+          </div>
           <Button
             onClick={() => setCurrentView("create")}
-            className="bg-primary text-primary-foreground hover:bg-primary/90"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 min-h-[44px] w-full sm:w-auto sm:ml-auto"
           >
-            <Plus className="h-4 w-4 mr-2" /> Nova Mensagem Interativa
+            <Plus className="h-4 w-4 mr-2" />
+            Nova Mensagem
           </Button>
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Mensagens Salvas</CardTitle>
-          <CardDescription>
+      <Card className="border-border">
+        <CardHeader className="px-3 sm:px-6 py-3 sm:py-4">
+          <CardTitle className="text-base sm:text-lg">Mensagens Salvas</CardTitle>
+          <CardDescription className="text-xs sm:text-sm">
             Gerencie suas mensagens interativas salvas
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
           {loading && (
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
@@ -872,77 +879,74 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
                     </div>
                   )}
 
-                  {/* Card com conteúdo na frente */}
-                  <div className="relative z-10 border border-border p-4 rounded-lg flex justify-between items-start hover:bg-accent/20 transition-all duration-300 bg-background dark:bg-background">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="font-medium text-foreground">
-                      {(msg.nome || "").trim() || "(sem nome)"}
-                    </span>
-                    <Badge variant="outline" className="text-xs">
-                      {msg.headerTipo
-                        ? `${msg.headerTipo.toUpperCase()} + `
-                        : ""}
-                      {((msg.botoes ?? []).length || 0) > 0
-                        ? `${(msg.botoes ?? []).length || 0} BOTÕES`
-                        : "TEXTO"}
-                    </Badge>
-                  </div>
-                  <p className="text-sm text-muted-foreground line-clamp-2 mb-2 max-w-[80ch] break-words whitespace-normal">
-                    {(msg.texto || "").trim() || "—"}
-                  </p>
-                  {((msg.botoes ?? []).length || 0) > 0 && (
-                    <div className="flex gap-1 flex-wrap">
-                      {(msg.botoes ?? []).map((botao, idx) => {
-                        // Verificar se este botão tem ação de handoff
-                        const botaoReaction = buttonReactions.find(reaction => 
-                          reaction.buttonId === botao.id && reaction.action === 'handoff'
-                        );
-                        
-                        
-                        return (
-                          <div key={idx} className="flex items-center gap-1">
-                            <Badge
-                              variant="secondary"
-                              className="text-xs"
-                            >
-                              {botao.titulo}
-                            </Badge>
-                            {botaoReaction && (
-                              <Badge
-                                variant="outline"
-                                className="text-xs bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800"
-                              >
-                                👤 Atendimento Humano
-                              </Badge>
-                            )}
-                          </div>
-                        );
-                      })}
+                  {/* Card com conteúdo na frente - Mobile optimizado */}
+                  <div className="relative z-10 border border-border p-3 sm:p-4 rounded-lg flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 hover:bg-accent/20 transition-all duration-300 bg-background dark:bg-background">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start sm:items-center gap-2 mb-2 flex-wrap">
+                        <span className="font-medium text-sm sm:text-base text-foreground break-words">
+                          {(msg.nome || "").trim() || "(sem nome)"}
+                        </span>
+                        <Badge variant="outline" className="text-[10px] sm:text-xs shrink-0">
+                          {msg.headerTipo
+                            ? `${msg.headerTipo.toUpperCase()} + `
+                            : ""}
+                          {((msg.botoes ?? []).length || 0) > 0
+                            ? `${(msg.botoes ?? []).length || 0} BOTÕES`
+                            : "TEXTO"}
+                        </Badge>
+                      </div>
+                      <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2 mb-2 break-words whitespace-normal">
+                        {(msg.texto || "").trim() || "—"}
+                      </p>
+                      {((msg.botoes ?? []).length || 0) > 0 && (
+                        <div className="flex gap-1 flex-wrap">
+                          {(msg.botoes ?? []).map((botao, idx) => {
+                            const botaoReaction = buttonReactions.find(reaction =>
+                              reaction.buttonId === botao.id && reaction.action === 'handoff'
+                            );
+                            return (
+                              <div key={idx} className="flex items-center gap-1">
+                                <Badge variant="secondary" className="text-[10px] sm:text-xs">
+                                  {botao.titulo}
+                                </Badge>
+                                {botaoReaction && (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[10px] sm:text-xs bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800"
+                                  >
+                                    👤 Humano
+                                  </Badge>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-                <div className="flex gap-1 ml-4">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleEdit(msg)}
-                    title="Editar mensagem"
-                    className="hover:bg-accent"
-                  >
-                    <PencilIcon className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => openDeleteDialog(msg.id)}
-                    title="Excluir mensagem"
-                    className="hover:bg-destructive/10 hover:text-destructive"
-                  >
-                    <TrashIcon className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
+                    {/* Botões de ação - Fixed na direita em mobile */}
+                    <div className="flex gap-1 sm:ml-4 self-end sm:self-start">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEdit(msg)}
+                        title="Editar mensagem"
+                        className="hover:bg-accent min-h-[40px] min-w-[40px]"
+                        aria-label="Editar mensagem"
+                      >
+                        <PencilIcon className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => openDeleteDialog(msg.id)}
+                        title="Excluir mensagem"
+                        className="hover:bg-destructive/10 hover:text-destructive min-h-[40px] min-w-[40px]"
+                        aria-label="Excluir mensagem"
+                      >
+                        <TrashIcon className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
                 </div>
             );
             })}

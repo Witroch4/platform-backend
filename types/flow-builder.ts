@@ -20,6 +20,16 @@ export enum FlowNodeType {
   INTERACTIVE_MESSAGE = 'interactive_message',
   TEXT_MESSAGE = 'text_message',
 
+  // WhatsApp Official Templates
+  /** @deprecated Use specific template types (BUTTON_TEMPLATE, COUPON_TEMPLATE, etc.) */
+  TEMPLATE = 'template',
+
+  // WhatsApp Template Containers (specific types)
+  BUTTON_TEMPLATE = 'button_template',
+  COUPON_TEMPLATE = 'coupon_template',
+  CALL_TEMPLATE = 'call_template',
+  URL_TEMPLATE = 'url_template',
+
   // Reactions
   EMOJI_REACTION = 'emoji_reaction',
   TEXT_REACTION = 'text_reaction',
@@ -35,6 +45,10 @@ export enum FlowNodeType {
 
   // Media
   MEDIA = 'media',
+
+  // Instagram/Facebook Specific
+  QUICK_REPLIES = 'quick_replies',
+  CAROUSEL = 'carousel',
 }
 
 /**
@@ -276,6 +290,411 @@ export interface MediaNodeData extends FlowNodeDataBase {
   caption?: string;
 }
 
+// =============================================================================
+// INSTAGRAM/FACEBOOK SPECIFIC NODE DATA
+// =============================================================================
+
+/**
+ * Item de Quick Reply para Instagram/Facebook
+ */
+export interface QuickReplyItem {
+  id: string;
+  /** Título do quick reply (max 20 chars) */
+  title: string;
+  /** Payload enviado quando clicado */
+  payload: string;
+  /** URL de ícone opcional */
+  imageUrl?: string;
+}
+
+/**
+ * Dados específicos para nó de Quick Replies (Instagram/Facebook)
+ * Suporta até 13 quick replies
+ */
+export interface QuickRepliesNodeData extends FlowNodeDataBase {
+  /** Texto da pergunta/prompt (max 1000 chars) */
+  promptText: string;
+  /** Lista de quick replies (max 13) */
+  quickReplies: QuickReplyItem[];
+}
+
+/**
+ * Tipo de botão para Instagram/Facebook
+ */
+export type InstagramButtonType = 'web_url' | 'postback';
+
+/**
+ * Botão de card do carrossel
+ */
+export interface CarouselCardButton {
+  id: string;
+  /** Tipo: web_url abre link, postback envia payload */
+  type: InstagramButtonType;
+  /** Título do botão (max 20 chars) */
+  title: string;
+  /** URL para web_url */
+  url?: string;
+  /** Payload para postback */
+  payload?: string;
+}
+
+/**
+ * Card do carrossel (Generic Template)
+ */
+export interface CarouselCard {
+  id: string;
+  /** Título do card (max 80 chars) */
+  title: string;
+  /** Subtítulo opcional (max 80 chars) */
+  subtitle?: string;
+  /** URL da imagem do card */
+  imageUrl?: string;
+  /** Ação padrão ao clicar no card */
+  defaultAction?: {
+    type: 'web_url';
+    url: string;
+    messengerExtensions?: boolean;
+    webviewHeightRatio?: 'compact' | 'tall' | 'full';
+  };
+  /** Botões do card (max 3) */
+  buttons?: CarouselCardButton[];
+}
+
+/**
+ * Dados específicos para nó de Carrossel (Generic Template)
+ * Suporta até 10 cards
+ */
+export interface CarouselNodeData extends FlowNodeDataBase {
+  /** Cards do carrossel (max 10) */
+  cards: CarouselCard[];
+}
+
+// =============================================================================
+// WHATSAPP OFFICIAL TEMPLATE NODE
+// =============================================================================
+
+/**
+ * Status de aprovação do template WhatsApp
+ */
+export type TemplateApprovalStatus = 'APPROVED' | 'PENDING' | 'REJECTED' | 'DRAFT';
+
+/**
+ * Modo de operação do nó de template
+ */
+export type TemplateNodeMode = 'import' | 'create' | 'draft';
+
+/**
+ * Categoria do template WhatsApp
+ */
+export type TemplateCategory = 'MARKETING' | 'UTILITY' | 'AUTHENTICATION';
+
+/**
+ * Tipo de botão do template WhatsApp (até 10 botões misturados)
+ */
+export type TemplateButtonType =
+  | 'QUICK_REPLY'
+  | 'URL'
+  | 'PHONE_NUMBER'
+  | 'COPY_CODE'
+  | 'FLOW'
+  | 'SPM'
+  | 'MPM';
+
+/**
+ * Botão de template WhatsApp
+ */
+export interface TemplateButton {
+  /** ID único do botão (flow_tpl_btn_*) */
+  id: string;
+  /** Tipo do botão */
+  type: TemplateButtonType;
+  /** Texto do botão (max 25 chars) */
+  text: string;
+  /** URL para botão URL */
+  url?: string;
+  /** Número de telefone para botão PHONE_NUMBER */
+  phoneNumber?: string;
+  /** Código de exemplo para COPY_CODE (max 15 chars) */
+  exampleCode?: string;
+  /** ID do WhatsApp Flow para botão FLOW */
+  flowId?: string;
+  /** ID do produto para SPM/MPM */
+  productId?: string;
+}
+
+/**
+ * Header do template WhatsApp
+ */
+export interface TemplateHeader {
+  /** Tipo de header */
+  type: 'NONE' | 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT';
+  /** Conteúdo textual (para TEXT) */
+  content?: string;
+  /** URL da mídia (para IMAGE/VIDEO/DOCUMENT) */
+  mediaUrl?: string;
+  /** Variáveis extraídas do header */
+  variables?: string[];
+}
+
+/**
+ * Body do template WhatsApp
+ */
+export interface TemplateBody {
+  /** Texto do body (max 1024 chars) */
+  text: string;
+  /** Variáveis extraídas ({{nome}}, {{data}}, etc.) */
+  variables?: string[];
+  /** Parâmetros nomeados com exemplos para Meta API */
+  namedParams?: Array<{ name: string; example: string }>;
+}
+
+/**
+ * Footer do template WhatsApp
+ */
+export interface TemplateFooter {
+  /** Texto do footer (max 60 chars) */
+  text: string;
+}
+
+/**
+ * Componentes importados da Meta API
+ */
+export interface MetaTemplateComponents {
+  header?: unknown;
+  body?: unknown;
+  footer?: unknown;
+  buttons?: unknown[];
+}
+
+/**
+ * Dados específicos para nó de Template WhatsApp Oficial
+ * Suporta dois modos: Import (templates aprovados) e Create (criar e enviar para aprovação)
+ */
+export interface TemplateNodeData extends FlowNodeDataBase {
+  /** Modo de operação do nó */
+  mode: TemplateNodeMode;
+
+  /** Status de aprovação do template */
+  status: TemplateApprovalStatus;
+
+  /** ID do Template no banco de dados */
+  templateId?: string;
+
+  /** ID do template na Meta Graph API */
+  metaTemplateId?: string;
+
+  /** Nome do template (lowercase + underscore) */
+  templateName?: string;
+
+  /** Categoria do template */
+  category?: TemplateCategory;
+
+  /** Idioma do template */
+  language?: string;
+
+  // -------------------------------------------------------------------------
+  // CREATE MODE: Definição completa do template
+  // -------------------------------------------------------------------------
+
+  /** Header do template */
+  header?: TemplateHeader;
+
+  /** Body do template (obrigatório) */
+  body?: TemplateBody;
+
+  /** Footer do template */
+  footer?: TemplateFooter;
+
+  /** Botões do template (até 10 misturados) */
+  buttons?: TemplateButton[];
+
+  // -------------------------------------------------------------------------
+  // IMPORT MODE: Componentes da Meta API (cache)
+  // -------------------------------------------------------------------------
+
+  /** Componentes JSON importados da Meta API */
+  importedComponents?: MetaTemplateComponents;
+}
+
+// =============================================================================
+// TEMPLATE CONTAINER NODE DATA (Specific Types)
+// =============================================================================
+
+/**
+ * Limites de validação para Button Template
+ */
+export const BUTTON_TEMPLATE_LIMITS = {
+  bodyMaxLength: 1024,
+  buttonTextMaxLength: 20,
+  maxButtons: 3,
+  buttonType: 'QUICK_REPLY' as const,
+} as const;
+
+/**
+ * Limites de validação para Coupon Template
+ */
+export const COUPON_TEMPLATE_LIMITS = {
+  bodyMaxLength: 1024,
+  couponCodeMaxLength: 15,
+  buttonTextMaxLength: 25,
+  maxButtons: 1,
+  buttonType: 'COPY_CODE' as const,
+} as const;
+
+/**
+ * Limites de validação para Call Template
+ */
+export const CALL_TEMPLATE_LIMITS = {
+  bodyMaxLength: 1024,
+  buttonTextMaxLength: 25,
+  phoneNumberPattern: /^\+[1-9]\d{1,14}$/,
+  maxButtons: 1,
+  buttonType: 'PHONE_NUMBER' as const,
+} as const;
+
+/**
+ * Limites de validação para URL Template
+ */
+export const URL_TEMPLATE_LIMITS = {
+  bodyMaxLength: 1024,
+  buttonTextMaxLength: 25,
+  maxButtons: 2,
+  buttonType: 'URL' as const,
+} as const;
+
+/**
+ * Dados específicos para nó Button Template
+ * Mensagem com 1-3 botões QUICK_REPLY
+ */
+export interface ButtonTemplateNodeData extends FlowNodeDataBase {
+  /** Status de aprovação do template */
+  status: TemplateApprovalStatus;
+
+  /** Nome do template (para envio à Meta) */
+  templateName?: string;
+
+  /** ID do template na Meta */
+  metaTemplateId?: string;
+
+  /** Categoria do template */
+  category?: TemplateCategory;
+
+  /** Idioma */
+  language?: string;
+
+  /** Corpo da mensagem (obrigatório) */
+  body: {
+    text: string;
+    variables?: string[];
+  };
+
+  /** Botões QUICK_REPLY (max 3) */
+  buttons: Array<{
+    id: string;
+    text: string; // Max 20 chars
+  }>;
+}
+
+/**
+ * Dados específicos para nó Coupon Template
+ * Mensagem com botão COPY_CODE (PIX, cupons)
+ */
+export interface CouponTemplateNodeData extends FlowNodeDataBase {
+  /** Status de aprovação do template */
+  status: TemplateApprovalStatus;
+
+  /** Nome do template */
+  templateName?: string;
+
+  /** ID do template na Meta */
+  metaTemplateId?: string;
+
+  /** Categoria do template */
+  category?: TemplateCategory;
+
+  /** Idioma */
+  language?: string;
+
+  /** Corpo da mensagem */
+  body: {
+    text: string;
+    variables?: string[];
+  };
+
+  /** Código do cupom/PIX (max 15 chars) */
+  couponCode: string;
+
+  /** Texto do botão de copiar */
+  buttonText: string;
+}
+
+/**
+ * Dados específicos para nó Call Template
+ * Mensagem com botão PHONE_NUMBER
+ */
+export interface CallTemplateNodeData extends FlowNodeDataBase {
+  /** Status de aprovação do template */
+  status: TemplateApprovalStatus;
+
+  /** Nome do template */
+  templateName?: string;
+
+  /** ID do template na Meta */
+  metaTemplateId?: string;
+
+  /** Categoria do template */
+  category?: TemplateCategory;
+
+  /** Idioma */
+  language?: string;
+
+  /** Corpo da mensagem */
+  body: {
+    text: string;
+    variables?: string[];
+  };
+
+  /** Número de telefone (formato E.164: +5511999999999) */
+  phoneNumber: string;
+
+  /** Texto do botão de ligar */
+  buttonText: string;
+}
+
+/**
+ * Dados específicos para nó URL Template
+ * Mensagem com 1-2 botões URL
+ */
+export interface UrlTemplateNodeData extends FlowNodeDataBase {
+  /** Status de aprovação do template */
+  status: TemplateApprovalStatus;
+
+  /** Nome do template */
+  templateName?: string;
+
+  /** ID do template na Meta */
+  metaTemplateId?: string;
+
+  /** Categoria do template */
+  category?: TemplateCategory;
+
+  /** Idioma */
+  language?: string;
+
+  /** Corpo da mensagem */
+  body: {
+    text: string;
+    variables?: string[];
+  };
+
+  /** Botões URL (max 2) */
+  buttons: Array<{
+    id: string;
+    text: string; // Max 25 chars
+    url: string;
+  }>;
+}
+
 /**
  * União de todos os tipos de dados de nós
  */
@@ -289,7 +708,14 @@ export type FlowNodeData =
   | AddTagNodeData
   | EndConversationNodeData
   | DelayNodeData
-  | MediaNodeData;
+  | MediaNodeData
+  | QuickRepliesNodeData
+  | CarouselNodeData
+  | TemplateNodeData
+  | ButtonTemplateNodeData
+  | CouponTemplateNodeData
+  | CallTemplateNodeData
+  | UrlTemplateNodeData;
 
 // =============================================================================
 // NODE INTERFACES
@@ -498,6 +924,13 @@ export const PALETTE_ITEMS: PaletteItem[] = [
     description: 'Enviar imagem, vídeo, PDF ou documento',
     category: 'message',
   },
+  {
+    type: FlowNodeType.TEMPLATE,
+    icon: '📋',
+    label: 'Template Oficial',
+    description: 'Template WhatsApp aprovado pela Meta',
+    category: 'message',
+  },
 
   // Logic
   {
@@ -548,6 +981,228 @@ export const PALETTE_ITEMS: PaletteItem[] = [
   },
 ];
 
+/**
+ * Itens da paleta para Instagram/Facebook
+ * Inclui Quick Replies e Carrossel, oculta header/footer
+ */
+export const INSTAGRAM_PALETTE_ITEMS: PaletteItem[] = [
+  // Triggers
+  {
+    type: FlowNodeType.START,
+    icon: '🚀',
+    label: 'Início',
+    description: 'Ponto de entrada do fluxo',
+    category: 'trigger',
+  },
+
+  // Messages
+  {
+    type: FlowNodeType.QUICK_REPLIES,
+    icon: '⚡',
+    label: 'Quick Replies',
+    description: 'Até 13 respostas rápidas',
+    category: 'message',
+  },
+  {
+    type: FlowNodeType.INTERACTIVE_MESSAGE,
+    icon: '📱',
+    label: 'Button Template',
+    description: 'Mensagem com 1-3 botões',
+    category: 'message',
+  },
+  {
+    type: FlowNodeType.CAROUSEL,
+    icon: '🎠',
+    label: 'Carrossel',
+    description: 'Até 10 cards com imagem e botões',
+    category: 'message',
+  },
+  {
+    type: FlowNodeType.TEXT_MESSAGE,
+    icon: '💬',
+    label: 'Texto Simples',
+    description: 'Mensagem de texto (max 1000 chars)',
+    category: 'message',
+  },
+  {
+    type: FlowNodeType.MEDIA,
+    icon: '📎',
+    label: 'Mídia',
+    description: 'Enviar imagem, vídeo ou áudio',
+    category: 'message',
+  },
+
+  // Logic
+  {
+    type: FlowNodeType.DELAY,
+    icon: '⏳',
+    label: 'Esperar',
+    description: 'Aguardar X segundos antes de continuar',
+    category: 'logic',
+  },
+
+  // Reactions
+  {
+    type: FlowNodeType.EMOJI_REACTION,
+    icon: '❤️',
+    label: 'Reagir',
+    description: 'Reagir com love (único emoji disponível)',
+    category: 'reaction',
+  },
+
+  // Actions
+  {
+    type: FlowNodeType.HANDOFF,
+    icon: '👤',
+    label: 'Transferir',
+    description: 'Transferir para agente humano',
+    category: 'action',
+  },
+  {
+    type: FlowNodeType.ADD_TAG,
+    icon: '🏷️',
+    label: 'Adicionar Tag',
+    description: 'Adiciona tag ao contato',
+    category: 'action',
+  },
+  {
+    type: FlowNodeType.END_CONVERSATION,
+    icon: '✅',
+    label: 'Finalizar',
+    description: 'Encerrar conversa',
+    category: 'action',
+  },
+];
+
+// =============================================================================
+// TEMPLATE PALETTE (WhatsApp Templates - Containers)
+// =============================================================================
+
+/**
+ * Item da paleta de templates
+ */
+export interface TemplatePaletteItem {
+  type: FlowNodeType;
+  icon: string;
+  label: string;
+  description: string;
+  category: 'template';
+  /** Tipo de botão aceito neste container */
+  buttonType: TemplateButtonType;
+  /** Número máximo de botões */
+  maxButtons: number;
+}
+
+/**
+ * Itens da paleta de Templates WhatsApp (containers específicos)
+ */
+export const TEMPLATE_PALETTE_ITEMS: TemplatePaletteItem[] = [
+  {
+    type: FlowNodeType.BUTTON_TEMPLATE,
+    icon: '📋',
+    label: 'Button Template',
+    description: 'Mensagem com 1-3 botões',
+    category: 'template',
+    buttonType: 'QUICK_REPLY',
+    maxButtons: 3,
+  },
+  {
+    type: FlowNodeType.COUPON_TEMPLATE,
+    icon: '🎟️',
+    label: 'Coupon Template',
+    description: 'Chave PIX ou cupom copiável',
+    category: 'template',
+    buttonType: 'COPY_CODE',
+    maxButtons: 1,
+  },
+  {
+    type: FlowNodeType.CALL_TEMPLATE,
+    icon: '📞',
+    label: 'Call Template',
+    description: 'Botão para ligação',
+    category: 'template',
+    buttonType: 'PHONE_NUMBER',
+    maxButtons: 1,
+  },
+  {
+    type: FlowNodeType.URL_TEMPLATE,
+    icon: '🔗',
+    label: 'URL Template',
+    description: 'Mensagem com links',
+    category: 'template',
+    buttonType: 'URL',
+    maxButtons: 2,
+  },
+];
+
+/**
+ * Tipo de elemento para templates
+ */
+export type TemplateElementType = 'body' | 'button_quick_reply' | 'button_url' | 'button_phone' | 'button_copy_code';
+
+/**
+ * Item de elemento para templates
+ */
+export interface TemplateElementItem {
+  type: TemplateElementType;
+  icon: string;
+  label: string;
+  description: string;
+  /** Tipos de container que aceitam este elemento */
+  validContainers: FlowNodeType[];
+}
+
+/**
+ * Elementos arrastáveis para dentro dos containers de template
+ */
+export const TEMPLATE_ELEMENT_ITEMS: TemplateElementItem[] = [
+  {
+    type: 'body',
+    icon: '📝',
+    label: 'Body',
+    description: 'Texto principal (obrigatório)',
+    validContainers: [
+      FlowNodeType.BUTTON_TEMPLATE,
+      FlowNodeType.COUPON_TEMPLATE,
+      FlowNodeType.CALL_TEMPLATE,
+      FlowNodeType.URL_TEMPLATE,
+    ],
+  },
+  {
+    type: 'button_quick_reply',
+    icon: '🔘',
+    label: 'Botão',
+    description: 'Botão de resposta rápida',
+    validContainers: [FlowNodeType.BUTTON_TEMPLATE],
+  },
+  {
+    type: 'button_url',
+    icon: '🔗',
+    label: 'Botão URL',
+    description: 'Botão com link externo',
+    validContainers: [FlowNodeType.URL_TEMPLATE],
+  },
+  {
+    type: 'button_phone',
+    icon: '📞',
+    label: 'Botão Ligar',
+    description: 'Botão para ligação',
+    validContainers: [FlowNodeType.CALL_TEMPLATE],
+  },
+  {
+    type: 'button_copy_code',
+    icon: '📋',
+    label: 'Botão Copiar',
+    description: 'Botão para copiar código/PIX',
+    validContainers: [FlowNodeType.COUPON_TEMPLATE],
+  },
+];
+
+/**
+ * MIME type para drag & drop de elementos de template
+ */
+export const TEMPLATE_ELEMENT_MIME = 'application/flowbuilder-template-element';
+
 // =============================================================================
 // CONSTANTS
 // =============================================================================
@@ -577,6 +1232,28 @@ export const CHANNEL_CHAR_LIMITS = {
     maxQuickReplies: 13,
     carousel: 10,
     buttonTemplateBody: 640,
+  },
+} as const;
+
+/**
+ * Regras de validação para nós Instagram/Facebook
+ */
+export const INSTAGRAM_VALIDATION = {
+  quickReplies: {
+    maxCount: 13,
+    titleMaxLength: 20,
+    promptMaxLength: 1000,
+  },
+  buttonTemplate: {
+    maxButtons: 3,
+    textMaxLength: 640,
+    buttonTitleMaxLength: 20,
+  },
+  genericTemplate: {
+    maxElements: 10,
+    titleMaxLength: 80,
+    subtitleMaxLength: 80,
+    maxButtonsPerElement: 3,
   },
 } as const;
 
@@ -671,6 +1348,41 @@ export const NODE_COLORS = {
     border: 'border-teal-500',
     icon: 'text-teal-600',
   },
+  [FlowNodeType.QUICK_REPLIES]: {
+    bg: 'bg-violet-50 dark:bg-violet-950',
+    border: 'border-violet-500',
+    icon: 'text-violet-600',
+  },
+  [FlowNodeType.CAROUSEL]: {
+    bg: 'bg-amber-50 dark:bg-amber-950',
+    border: 'border-amber-500',
+    icon: 'text-amber-600',
+  },
+  [FlowNodeType.TEMPLATE]: {
+    bg: 'bg-emerald-50 dark:bg-emerald-950',
+    border: 'border-emerald-500',
+    icon: 'text-emerald-600',
+  },
+  [FlowNodeType.BUTTON_TEMPLATE]: {
+    bg: 'bg-sky-50 dark:bg-sky-950',
+    border: 'border-sky-500',
+    icon: 'text-sky-600',
+  },
+  [FlowNodeType.COUPON_TEMPLATE]: {
+    bg: 'bg-lime-50 dark:bg-lime-950',
+    border: 'border-lime-500',
+    icon: 'text-lime-600',
+  },
+  [FlowNodeType.CALL_TEMPLATE]: {
+    bg: 'bg-fuchsia-50 dark:bg-fuchsia-950',
+    border: 'border-fuchsia-500',
+    icon: 'text-fuchsia-600',
+  },
+  [FlowNodeType.URL_TEMPLATE]: {
+    bg: 'bg-rose-50 dark:bg-rose-950',
+    border: 'border-rose-500',
+    icon: 'text-rose-600',
+  },
 } as const;
 
 // =============================================================================
@@ -705,7 +1417,9 @@ export function createFlowNode(
  * Retorna o label padrão para um tipo de nó
  */
 function getDefaultLabel(type: FlowNodeType): string {
-  const item = PALETTE_ITEMS.find((p) => p.type === type);
+  // Procura primeiro no PALETTE_ITEMS (WhatsApp), depois em INSTAGRAM_PALETTE_ITEMS
+  const item = PALETTE_ITEMS.find((p) => p.type === type)
+    ?? INSTAGRAM_PALETTE_ITEMS.find((p) => p.type === type);
   return item?.label ?? 'Nó';
 }
 
@@ -752,8 +1466,13 @@ export function validateFlowCanvas(canvas: FlowCanvas): {
   const nodesWithIncomingEdges = new Set(canvas.edges.map((e) => e.target));
   const rootNodes = canvas.nodes.filter((n) => !nodesWithIncomingEdges.has(n.id));
 
-  // Nós raiz válidos: START ou INTERACTIVE_MESSAGE
-  const validRootTypes = [FlowNodeType.START, FlowNodeType.INTERACTIVE_MESSAGE];
+  // Nós raiz válidos: START, INTERACTIVE_MESSAGE, QUICK_REPLIES ou CAROUSEL
+  const validRootTypes = [
+    FlowNodeType.START,
+    FlowNodeType.INTERACTIVE_MESSAGE,
+    FlowNodeType.QUICK_REPLIES,
+    FlowNodeType.CAROUSEL,
+  ];
   const invalidRootNodes = rootNodes.filter((n) => !validRootTypes.includes(n.type as FlowNodeType));
 
   if (rootNodes.length === 0) {

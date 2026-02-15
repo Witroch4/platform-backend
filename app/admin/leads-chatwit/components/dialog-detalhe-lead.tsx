@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Edit, MessageSquare, RefreshCw } from "lucide-react";
+import { Edit, MessageSquare, RefreshCw, Info } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +20,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { LeadChatwit } from "../types";
+import { MessageHistoryTab } from "./message-history-tab";
 
 interface DialogDetalheLeadProps {
   lead: LeadChatwit;
@@ -244,9 +246,21 @@ export function DialogDetalheLead({
             <DialogDescription>Informações detalhadas do lead</DialogDescription>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto pr-2">
-            <div className="grid grid-cols-2 gap-6">
-            {/* COLUNA ESQUERDA */}
+          <Tabs defaultValue="info" className="flex-1 flex flex-col overflow-hidden">
+            <TabsList className="grid grid-cols-2 w-full shrink-0 mb-4">
+              <TabsTrigger value="info" className="flex items-center gap-2">
+                <Info className="h-4 w-4" />
+                Informações
+              </TabsTrigger>
+              <TabsTrigger value="messages" className="flex items-center gap-2">
+                <MessageSquare className="h-4 w-4" />
+                Mensagens
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="info" className="flex-1 overflow-y-auto pr-2 mt-0">
+              <div className="grid grid-cols-2 gap-6">
+              {/* COLUNA ESQUERDA */}
             <div className="space-y-4">
               <div>
                 <div className="text-sm font-medium text-muted-foreground mb-1 flex items-center gap-1">
@@ -579,9 +593,14 @@ export function DialogDetalheLead({
                   </div>
                 )}
               </div>
+              </div>
             </div>
-            </div>
-          </div>
+            </TabsContent>
+
+            <TabsContent value="messages" className="flex-1 overflow-hidden mt-0">
+              <MessageHistoryTab leadId={lead.id} />
+            </TabsContent>
+          </Tabs>
 
           <DialogFooter className="flex-shrink-0 mt-4">
             <Button

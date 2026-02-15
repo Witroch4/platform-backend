@@ -17,6 +17,15 @@ function safeId(prefix: string) {
   return `${finalPrefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/**
+ * Gera ID único para elemento do Flow Builder.
+ * Garante prefixo 'flow_button_' para botões (necessário para roteamento no webhook).
+ * Usar ao duplicar nós/elementos para evitar buttonIds duplicados no flow.
+ */
+export function generateElementId(type: string): string {
+  return safeId(type);
+}
+
 export function createInteractiveMessageElement(
   type: InteractiveMessageElementType
 ): InteractiveMessageElement {

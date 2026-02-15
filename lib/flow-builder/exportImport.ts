@@ -64,7 +64,8 @@ export function getNodeOutputCount(node: FlowNode): number {
  * Extrai o índice do output a partir do sourceHandle
  *
  * Formatos suportados:
- * - "btn_0", "btn_1", etc. → índice numérico
+ * - "flow_button_*" → resolve pelo ID do botão no array elements/buttons
+ * - "btn_0", "btn_1", etc. → índice numérico (formato legado)
  * - "true" → 0 (para condition)
  * - "false" → 1 (para condition)
  * - null/undefined → 0 (output padrão)
@@ -72,13 +73,13 @@ export function getNodeOutputCount(node: FlowNode): number {
 function getOutputIndexFromHandle(
   sourceHandle: string | undefined | null,
   node: FlowNode,
-  edge: FlowEdge
+  _edge: FlowEdge
 ): number {
   if (!sourceHandle) {
     return 0;
   }
 
-  // Formato btn_N (interactive_message)
+  // Formato btn_N (legado)
   const btnMatch = sourceHandle.match(/^btn_(\d+)$/);
   if (btnMatch) {
     return Number.parseInt(btnMatch[1], 10);
@@ -92,15 +93,15 @@ function getOutputIndexFromHandle(
     return 1;
   }
 
-  // Tenta encontrar pelo buttonId nos dados do edge
-  if (edge.data?.buttonId && node.type === 'interactive_message') {
+  // Resolver pelo sourceHandle que é o button ID real (flow_button_* ou qualquer ID)
+  if (node.type === 'interactive_message') {
     const data = node.data as InteractiveMessageNodeData;
 
     // Busca no array elements
     const elementsButtons =
       data.elements?.filter((e) => e.type === 'button') ?? [];
     const elementsIndex = elementsButtons.findIndex(
-      (b) => b.id === edge.data?.buttonId
+      (b) => b.id === sourceHandle
     );
     if (elementsIndex >= 0) {
       return elementsIndex;
@@ -108,7 +109,7 @@ function getOutputIndexFromHandle(
 
     // Busca no array buttons (legado)
     const legacyIndex =
-      data.buttons?.findIndex((b) => b.id === edge.data?.buttonId) ?? -1;
+      data.buttons?.findIndex((b) => b.id === sourceHandle) ?? -1;
     if (legacyIndex >= 0) {
       return legacyIndex;
     }
@@ -118,13 +119,31 @@ function getOutputIndexFromHandle(
 }
 
 /**
- * Gera o sourceHandle a partir do índice do output
+ * Gera o sourceHandle a partir do índice do output.
+ *
+ * Para interactive_message, resolve o índice de volta para o button ID real
+ * do nó (flow_button_*), necessário para que React Flow conecte a edge
+ * ao Handle correto. Fallback para btn_N se o nó não tiver botões.
  */
 function getHandleFromOutputIndex(
   outputIndex: number,
-  nodeType: string
+  nodeType: string,
+  sourceNode?: FlowNodeExport | FlowNode | null
 ): string | undefined {
   if (nodeType === 'interactive_message') {
+    // Resolver para o button ID real (flow_button_*)
+    if (sourceNode) {
+      const data = sourceNode.data as InteractiveMessageNodeData;
+      const elementButtons = data.elements?.filter((e) => e.type === 'button') ?? [];
+      if (elementButtons.length > outputIndex && elementButtons[outputIndex]?.id) {
+        return elementButtons[outputIndex].id;
+      }
+      // Fallback: array buttons legado
+      if (data.buttons && data.buttons.length > outputIndex && data.buttons[outputIndex]?.id) {
+        return data.buttons[outputIndex].id;
+      }
+    }
+    // Último fallback se não conseguir resolver
     return `btn_${outputIndex}`;
   }
 
@@ -243,7 +262,8 @@ export function n8nFormatToCanvas(exportData: FlowExportFormat): FlowCanvas {
       for (const target of targets) {
         const sourceHandle = getHandleFromOutputIndex(
           outputIdx,
-          sourceNode.type as string
+          sourceNode.type as string,
+          sourceNode
         );
 
         const edge: FlowEdge = {

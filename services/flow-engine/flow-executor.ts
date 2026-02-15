@@ -14,8 +14,9 @@ import { SyncBridge } from './sync-bridge';
 import { ChatwitDeliveryService, createDeliveryService } from './chatwit-delivery-service';
 import { VariableResolver } from './variable-resolver';
 import { elementsToLegacyFields } from '@/lib/flow-builder/interactiveMessageElements';
+import { buildTemplateDispatchPayload } from '@/lib/flow-builder/templateElements';
 import { debugLogRuntimeFlow } from '@/lib/flow-builder/exportImport';
-import type { InteractiveMessageElement } from '@/types/flow-builder';
+import type { InteractiveMessageElement, TemplateNodeData } from '@/types/flow-builder';
 import type {
   DeliveryContext,
   DeliveryPayload,
@@ -128,13 +129,57 @@ export class FlowExecutor {
     // Se não encontrou no currentNode, buscar em QUALQUER nó do flow
     // (usuário clicou botão de uma mensagem interativa anterior — "rewind")
     if (edges.length === 0) {
-      edges = flow.edges.filter((e) => e.buttonId === buttonId);
-      if (edges.length > 0) {
-        log.info('[FlowExecutor] Botão encontrado em nó anterior, executando rewind', {
-          currentNodeId: session.currentNodeId,
-          actualSourceNodeId: edges[0].sourceNodeId,
-          buttonId,
-        });
+      const allMatchingEdges = flow.edges.filter((e) => e.buttonId === buttonId);
+
+      if (allMatchingEdges.length > 0) {
+        // Agrupar por sourceNodeId: NUNCA misturar edges de sources diferentes
+        // (previne contaminação cruzada quando botões duplicados existem no flow)
+        const sourceNodeIds = [...new Set(allMatchingEdges.map((e) => e.sourceNodeId))];
+
+        if (sourceNodeIds.length > 1) {
+          // Múltiplas fontes com mesmo buttonId — tentar desambiguar pelo config do nó
+          let matchedSourceId: string | null = null;
+
+          for (const sourceId of sourceNodeIds) {
+            const sourceNode = flow.nodes.find((n) => n.id === sourceId);
+            if (!sourceNode || sourceNode.nodeType !== 'INTERACTIVE_MESSAGE') continue;
+
+            const config = sourceNode.config as Record<string, unknown>;
+            const buttons = config.buttons as Array<{ id: string }> | undefined;
+            const configElements = config.elements as Array<{ id: string; type: string }> | undefined;
+
+            const hasButton = buttons?.some((b) => b.id === buttonId)
+              || configElements?.some((e) => e.type === 'button' && e.id === buttonId);
+
+            if (hasButton) {
+              matchedSourceId = sourceId;
+              break;
+            }
+          }
+
+          if (!matchedSourceId) {
+            // Fallback: usar primeiro source (prevenir mistura de paths)
+            matchedSourceId = sourceNodeIds[0];
+            log.warn('[FlowExecutor] Rewind: buttonId duplicado sem match por config', {
+              buttonId,
+              sourceCount: sourceNodeIds.length,
+            });
+          }
+
+          edges = allMatchingEdges.filter((e) => e.sourceNodeId === matchedSourceId);
+        } else {
+          // Source único — sem ambiguidade
+          edges = allMatchingEdges;
+        }
+
+        if (edges.length > 0) {
+          log.info('[FlowExecutor] Botão encontrado em nó anterior, executando rewind', {
+            currentNodeId: session.currentNodeId,
+            actualSourceNodeId: edges[0].sourceNodeId,
+            buttonId,
+            ambiguous: sourceNodeIds.length > 1,
+          });
+        }
       }
     }
 
@@ -650,6 +695,15 @@ export class FlowExecutor {
       case 'REACTION':
         return this.handleReaction(node, flow, bridge, directlyAfterButton);
 
+      case 'QUICK_REPLIES':
+        return this.handleQuickReplies(node, flow, bridge);
+
+      case 'CAROUSEL':
+        return this.handleCarousel(node, flow, bridge);
+
+      case 'TEMPLATE':
+        return this.handleTemplate(node, flow, bridge, directlyAfterButton);
+
       default:
         log.warn('[FlowExecutor] Tipo de nó desconhecido', { nodeType });
         return this.findNextNodeId(flow, node);
@@ -784,6 +838,189 @@ export class FlowExecutor {
     // Se tem botões, STOP e espera resposta
     const hasButtons = effectiveConfig.buttons?.length || (resolvedPayload as Record<string, unknown>)?.action;
     if (hasButtons) {
+      return 'WAITING_INPUT';
+    }
+
+    return this.findNextNodeId(flow, node);
+  }
+
+  /**
+   * Handler para Quick Replies (Instagram/Facebook)
+   * Gera mensagem com até 13 quick reply buttons
+   */
+  private async handleQuickReplies(
+    node: RuntimeFlowNode,
+    flow: RuntimeFlow,
+    bridge: SyncBridge,
+  ): Promise<string> {
+    const config = node.config as {
+      promptText?: string;
+      quickReplies?: Array<{ id: string; title: string; payload?: string; imageUrl?: string }>;
+    };
+
+    const promptText = this.resolver.resolve(config.promptText ?? '');
+    const quickReplies = config.quickReplies ?? [];
+
+    // Build Instagram Quick Replies payload
+    const payload = {
+      text: promptText,
+      quick_replies: quickReplies.map((qr) => ({
+        content_type: 'text',
+        title: qr.title,
+        payload: qr.id, // Use ID as payload for flow routing
+        image_url: qr.imageUrl,
+      })),
+    };
+
+    log.debug('[FlowExecutor] QUICK_REPLIES', {
+      promptText: promptText.slice(0, 50),
+      quickRepliesCount: quickReplies.length,
+    });
+
+    await this.deliver(bridge, {
+      type: 'interactive',
+      interactivePayload: { instagram: payload },
+    });
+
+    // Quick replies sempre esperam input do usuário
+    return 'WAITING_INPUT';
+  }
+
+  /**
+   * Handler para Carousel (Generic Template - Instagram/Facebook)
+   * Gera mensagem com até 10 cards
+   */
+  private async handleCarousel(
+    node: RuntimeFlowNode,
+    flow: RuntimeFlow,
+    bridge: SyncBridge,
+  ): Promise<string> {
+    const config = node.config as {
+      cards?: Array<{
+        id: string;
+        title: string;
+        subtitle?: string;
+        imageUrl?: string;
+        defaultAction?: { type: 'web_url'; url: string };
+        buttons?: Array<{
+          id: string;
+          type: 'web_url' | 'postback';
+          title: string;
+          url?: string;
+          payload?: string;
+        }>;
+      }>;
+    };
+
+    const cards = config.cards ?? [];
+
+    // Build Instagram Generic Template payload
+    const payload = {
+      attachment: {
+        type: 'template',
+        payload: {
+          template_type: 'generic',
+          elements: cards.map((card) => ({
+            title: this.resolver.resolve(card.title),
+            subtitle: card.subtitle ? this.resolver.resolve(card.subtitle) : undefined,
+            image_url: card.imageUrl,
+            default_action: card.defaultAction,
+            buttons: card.buttons?.map((btn) => ({
+              type: btn.type,
+              title: btn.title,
+              url: btn.type === 'web_url' ? btn.url : undefined,
+              payload: btn.type === 'postback' ? btn.id : undefined,
+            })),
+          })),
+        },
+      },
+    };
+
+    log.debug('[FlowExecutor] CAROUSEL', {
+      cardsCount: cards.length,
+    });
+
+    await this.deliver(bridge, {
+      type: 'interactive',
+      interactivePayload: { instagram: payload },
+    });
+
+    // Verifica se algum card tem botão postback (espera input)
+    const hasPostbackButton = cards.some(
+      (card) => card.buttons?.some((btn) => btn.type === 'postback')
+    );
+
+    if (hasPostbackButton) {
+      return 'WAITING_INPUT';
+    }
+
+    return this.findNextNodeId(flow, node);
+  }
+
+  /**
+   * Handler para Template WhatsApp Oficial
+   * Envia templates aprovados pela Meta com resolução de variáveis
+   */
+  private async handleTemplate(
+    node: RuntimeFlowNode,
+    flow: RuntimeFlow,
+    bridge: SyncBridge,
+    _directlyAfterButton = false,
+  ): Promise<string> {
+    const config = node.config as unknown as TemplateNodeData;
+
+    // Verificar se o template está aprovado
+    if (config.status !== 'APPROVED') {
+      log.warn('[FlowExecutor] TEMPLATE não aprovado, pulando', {
+        nodeId: node.id,
+        status: config.status,
+        templateName: config.templateName,
+      });
+      return this.findNextNodeId(flow, node);
+    }
+
+    // Verificar se tem nome do template
+    if (!config.templateName) {
+      log.warn('[FlowExecutor] TEMPLATE sem nome, pulando', { nodeId: node.id });
+      return this.findNextNodeId(flow, node);
+    }
+
+    // Resolver variáveis do body
+    const variableValues: Record<string, string> = {};
+    const bodyVariables = config.body?.variables ?? [];
+    for (const varName of bodyVariables) {
+      variableValues[varName] = this.resolver.resolve(`{{${varName}}}`);
+    }
+
+    // Resolver variáveis do header (se TEXT)
+    const headerVariables = config.header?.variables ?? [];
+    for (const varName of headerVariables) {
+      variableValues[varName] = this.resolver.resolve(`{{${varName}}}`);
+    }
+
+    // Construir payload do template
+    const templatePayload = buildTemplateDispatchPayload(
+      config,
+      this.context.contactPhone ?? '',
+      variableValues,
+    );
+
+    log.debug('[FlowExecutor] TEMPLATE', {
+      templateName: config.templateName,
+      variablesResolved: Object.keys(variableValues).length,
+      hasButtons: (config.buttons?.length ?? 0) > 0,
+    });
+
+    // Enviar template via delivery service
+    await this.deliver(bridge, {
+      type: 'template',
+      templatePayload: templatePayload as unknown as Record<string, unknown>,
+    });
+
+    // Verificar se tem botões QUICK_REPLY (espera input)
+    const hasQuickReplyButtons = config.buttons?.some((btn) => btn.type === 'QUICK_REPLY');
+
+    if (hasQuickReplyButtons) {
       return 'WAITING_INPUT';
     }
 
@@ -1049,14 +1286,23 @@ export class FlowExecutor {
       payload.footer = { text: this.resolver.resolve(config.footer) };
     }
     if (config.buttons?.length) {
+      // Dedup títulos — WhatsApp rejeita botões com mesmo título
+      const seenTitles = new Map<string, number>();
       payload.action = {
-        buttons: config.buttons.map((b) => ({
-          type: 'reply',
-          reply: {
-            id: b.id,
-            title: this.resolver.resolve(b.title),
-          },
-        })),
+        buttons: config.buttons.map((b) => {
+          let title = this.resolver.resolve(b.title);
+          const normalizedTitle = title.trim();
+          const count = seenTitles.get(normalizedTitle) ?? 0;
+          seenTitles.set(normalizedTitle, count + 1);
+          if (count > 0) {
+            title = `${normalizedTitle} (${count + 1})`;
+            console.warn(`[FlowExecutor] Título de botão duplicado detectado: "${normalizedTitle}" → renomeado para "${title}"`);
+          }
+          return {
+            type: 'reply',
+            reply: { id: b.id, title },
+          };
+        }),
       };
     }
 

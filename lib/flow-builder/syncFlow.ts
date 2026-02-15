@@ -137,32 +137,79 @@ export async function syncCanvasToNormalizedFlow(
       });
     }
 
-    // 2. Deletar nodes e edges antigos
-    await tx.flowEdge.deleteMany({ where: { flowId: flow.id } });
-    await tx.flowNode.deleteMany({ where: { flowId: flow.id } });
-
-    // 3. Criar novos nodes e mapear IDs (canvas ID → DB ID)
-    const nodeIdMap = new Map<string, string>();
-
-    for (const node of canvas.nodes) {
-      const dbNode = await tx.flowNode.create({
-        data: {
-          flowId: flow.id,
-          nodeType: NODE_TYPE_MAP[node.type] || node.type.toUpperCase(),
-          config: buildNodeConfig(node),
-          positionX: node.position.x,
-          positionY: node.position.y,
-        },
-      });
-      nodeIdMap.set(node.id, dbNode.id);
+    // 2. Buscar nós existentes e mapear por _canvasId para preservar DB IDs
+    //    Isso evita que session.currentNodeId fique stale após cada save
+    const existingNodes = await tx.flowNode.findMany({ where: { flowId: flow.id } });
+    const existingByCanvasId = new Map<string, (typeof existingNodes)[0]>();
+    for (const node of existingNodes) {
+      const config = node.config as Record<string, unknown>;
+      if (config?._canvasId && typeof config._canvasId === 'string') {
+        existingByCanvasId.set(config._canvasId, node);
+      }
     }
 
-    // 4. Criar edges com IDs mapeados
+    // 3. Deletar TODAS as edges (serão recriadas; edges não são referenciadas por sessões)
+    await tx.flowEdge.deleteMany({ where: { flowId: flow.id } });
+
+    // 4. Upsert nós: preservar DB ID quando _canvasId já existe, criar se novo
+    const nodeIdMap = new Map<string, string>();
+    const matchedExistingIds = new Set<string>();
+
+    for (const node of canvas.nodes) {
+      const config = { ...buildNodeConfig(node), _canvasId: node.id };
+      const nodeType = NODE_TYPE_MAP[node.type] || node.type.toUpperCase();
+      const existing = existingByCanvasId.get(node.id);
+
+      if (existing) {
+        // Nó existente: atualizar config/posição, preservar DB ID
+        matchedExistingIds.add(existing.id);
+        await tx.flowNode.update({
+          where: { id: existing.id },
+          data: {
+            nodeType,
+            config,
+            positionX: node.position.x,
+            positionY: node.position.y,
+          },
+        });
+        nodeIdMap.set(node.id, existing.id);
+      } else {
+        // Nó novo: criar com novo DB ID
+        const dbNode = await tx.flowNode.create({
+          data: {
+            flowId: flow.id,
+            nodeType,
+            config,
+            positionX: node.position.x,
+            positionY: node.position.y,
+          },
+        });
+        nodeIdMap.set(node.id, dbNode.id);
+      }
+    }
+
+    // 5. Deletar nós que não existem mais no canvas
+    const nodesToDelete = existingNodes.filter((n) => !matchedExistingIds.has(n.id));
+    if (nodesToDelete.length > 0) {
+      await tx.flowNode.deleteMany({
+        where: { id: { in: nodesToDelete.map((n) => n.id) } },
+      });
+    }
+
+    // 6. Criar edges com IDs mapeados (com dedup por source+target+handle)
+    const edgeDedup = new Set<string>();
+    let edgesCreated = 0;
+
     for (const edge of canvas.edges) {
       const sourceId = nodeIdMap.get(edge.source);
       const targetId = nodeIdMap.get(edge.target);
 
       if (!sourceId || !targetId) continue;
+
+      const dedupKey = `${sourceId}|${targetId}|${edge.sourceHandle || ''}`;
+      if (edgeDedup.has(dedupKey)) continue;
+      edgeDedup.add(dedupKey);
+      edgesCreated++;
 
       await tx.flowEdge.create({
         data: {
@@ -175,6 +222,13 @@ export async function syncCanvasToNormalizedFlow(
             null,
         },
       });
+    }
+
+    const duplicatesRemoved = canvas.edges.length - edgesCreated;
+    if (duplicatesRemoved > 0) {
+      console.log(
+        `[syncFlow] ⚠️ ${duplicatesRemoved} edges duplicadas removidas no sync`
+      );
     }
 
     console.log(

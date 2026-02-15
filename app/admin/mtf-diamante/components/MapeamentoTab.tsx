@@ -548,8 +548,10 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
                   <SelectValue placeholder={flows.length === 0 ? "Nenhum flow salvo" : "Selecione um Flow"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {flows.filter((f: Flow) => f.isActive).map((f: Flow) => (
-                    <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                  {flows.map((f: Flow) => (
+                    <SelectItem key={f.id} value={f.id}>
+                      {f.name}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>

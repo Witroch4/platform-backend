@@ -717,6 +717,7 @@ export class UnifiedLeadManager {
         [LeadSource.INSTAGRAM]: 0,
         [LeadSource.CHATWIT_OAB]: 0,
         [LeadSource.MANUAL]: 0,
+        [LeadSource.WHATSAPP_SOCIAL_FLOW]: 0,
       };
 
       bySource.forEach(group => {

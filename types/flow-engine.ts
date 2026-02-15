@@ -15,6 +15,7 @@ export type FlowNodeType =
   | 'END'
   | 'TEXT_MESSAGE'
   | 'INTERACTIVE_MESSAGE'
+  | 'TEMPLATE'
   | 'MEDIA'
   | 'DELAY'
   | 'CONDITION'
@@ -23,7 +24,9 @@ export type FlowNodeType =
   | 'ADD_TAG'
   | 'REMOVE_TAG'
   | 'TRANSFER'
-  | 'REACTION';
+  | 'REACTION'
+  | 'QUICK_REPLIES'
+  | 'CAROUSEL';
 
 // =============================================================================
 // SESSION
@@ -88,11 +91,13 @@ export interface DeliveryContext {
 // =============================================================================
 
 export interface DeliveryPayload {
-  type: 'text' | 'media' | 'interactive' | 'reaction';
+  type: 'text' | 'media' | 'interactive' | 'reaction' | 'template';
   content?: string;
   mediaUrl?: string;
   filename?: string;
   interactivePayload?: Record<string, unknown>;
+  /** Payload para template WhatsApp oficial */
+  templatePayload?: Record<string, unknown>;
   /** Se `true`, envia como nota interna (private note) */
   private?: boolean;
   /** Para REACTION: emoji a enviar (ex: "👍", "❤️") */

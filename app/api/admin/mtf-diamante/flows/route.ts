@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Buscar flows com contagem de nós
+    // Buscar flows — canvasJson contém a fonte de verdade para contagem de nós
     const flows = await getPrismaInstance().flow.findMany({
       where: { inboxId },
       select: {
@@ -92,22 +92,26 @@ export async function GET(request: NextRequest) {
         isActive: true,
         createdAt: true,
         updatedAt: true,
-        _count: {
-          select: { nodes: true },
-        },
+        canvasJson: true, // Fonte de verdade para contagem de nós
       },
       orderBy: { updatedAt: 'desc' },
     });
 
-    const formattedFlows: FlowListItem[] = flows.map((flow) => ({
-      id: flow.id,
-      name: flow.name,
-      inboxId: flow.inboxId,
-      isActive: flow.isActive,
-      nodeCount: flow._count.nodes,
-      createdAt: flow.createdAt,
-      updatedAt: flow.updatedAt,
-    }));
+    const formattedFlows: FlowListItem[] = flows.map((flow) => {
+      // Contar nós do canvasJson (fonte de verdade) em vez de FlowNode table
+      const canvas = flow.canvasJson as unknown as { nodes?: unknown[] } | null;
+      const nodeCount = canvas?.nodes?.length ?? 0;
+
+      return {
+        id: flow.id,
+        name: flow.name,
+        inboxId: flow.inboxId,
+        isActive: flow.isActive,
+        nodeCount,
+        createdAt: flow.createdAt,
+        updatedAt: flow.updatedAt,
+      };
+    });
 
     return NextResponse.json({
       success: true,

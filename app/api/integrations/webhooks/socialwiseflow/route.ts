@@ -32,6 +32,10 @@ import { FlowOrchestrator } from '@/services/flow-engine';
 import { FLOW_BUTTON_PREFIX } from '@/lib/flow-builder/interactiveMessageElements';
 import type { ChatwitWebhookPayload, DeliveryContext } from '@/types/flow-engine';
 
+// Lead e Message services para persistência de histórico
+import { leadService } from '@/lib/services/lead-service';
+import { messageService } from '@/lib/services/message-service';
+
 // Constants
 const MAX_PAYLOAD_SIZE_KB = 256;
 const WEBHOOK_TIMEOUT_MS = 400; // P95 SLA target
@@ -66,8 +70,39 @@ function normalizeIntentId(raw: string): { plain: string; standardId: string } {
 }
 
 /**
- * Build channel-specific response for legacy compatibility
+ * Extract text content from channel response for message history
  */
+function extractResponseText(response: any): string | null {
+  if (!response) return null;
+
+  // WhatsApp interactive message
+  if (response.whatsapp?.interactive?.body?.text) {
+    return response.whatsapp.interactive.body.text;
+  }
+
+  // WhatsApp text message
+  if (response.whatsapp?.text?.body) {
+    return response.whatsapp.text.body;
+  }
+
+  // Instagram message
+  if (response.instagram?.text) {
+    return response.instagram.text;
+  }
+
+  // Facebook message
+  if (response.facebook?.text) {
+    return response.facebook.text;
+  }
+
+  // Plain text
+  if (response.text) {
+    return response.text;
+  }
+
+  return null;
+}
+
 /**
  * Log humanizado da resposta final enviada para o Chatwit
  */
@@ -825,6 +860,90 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
         embeddingMs: result.metrics.embeddingMs,
         llmWarmupMs: result.metrics.llmWarmupMs,
         traceId
+      });
+
+      // ━━━ MESSAGE HISTORY PERSISTENCE (non-blocking) ━━━
+      // Extrair contactId do contexto
+      const contactId = String(
+        socialwiseData?.contact_data?.id ||
+        validPayload.context?.contact?.id ||
+        ''
+      );
+
+      // Persistir lead e mensagens em background (não bloqueia resposta)
+      setImmediate(async () => {
+        try {
+          // 1. Criar/encontrar lead e chat
+          const { chat, created } = await leadService.findOrCreateLead({
+            phoneNumber: typeof contactPhone === 'string' ? contactPhone : undefined,
+            chatwitContactId: contactId || undefined,
+            chatwitAccountId: String(chatwitAccountId),
+            inboxId,
+            name: contactName,
+          });
+
+          if (created) {
+            webhookLogger.info('[MessageHistory] Novo lead criado', {
+              chatId: chat.id,
+              contactPhone,
+              traceId,
+            });
+          }
+
+          // 2. Salvar mensagem do lead (incoming)
+          const incomingMsg = await messageService.saveMessage({
+            chatId: chat.id,
+            content: textInput,
+            isFromLead: true,
+            externalId: wamid || undefined,
+            messageType: 'text',
+            metadata: {
+              channelType,
+              inboxId,
+              traceId,
+              band: result.metrics.band,
+            },
+          });
+
+          if (incomingMsg) {
+            webhookLogger.debug('[MessageHistory] Mensagem do lead salva', {
+              messageId: incomingMsg.id,
+              traceId,
+            });
+          }
+
+          // 3. Salvar resposta do assistente (outgoing)
+          const responseText = extractResponseText(result.response);
+          if (responseText) {
+            const outgoingMsg = await messageService.saveMessage({
+              chatId: chat.id,
+              content: responseText,
+              isFromLead: false,
+              externalId: `assistant_${traceId}`,
+              messageType: 'assistant',
+              metadata: {
+                band: result.metrics.band,
+                strategy: result.metrics.strategy,
+                traceId,
+              },
+            });
+
+            if (outgoingMsg) {
+              webhookLogger.debug('[MessageHistory] Resposta do bot salva', {
+                messageId: outgoingMsg.id,
+                traceId,
+              });
+            }
+          }
+
+          // 4. Atualizar timestamp do lead
+          await leadService.touchLead(chat.leadId);
+        } catch (persistError) {
+          webhookLogger.error('[MessageHistory] Erro na persistência (non-blocking)', {
+            error: persistError instanceof Error ? persistError.message : String(persistError),
+            traceId,
+          });
+        }
       });
 
       // Handle handoff action

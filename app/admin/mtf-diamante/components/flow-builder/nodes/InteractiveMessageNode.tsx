@@ -16,6 +16,7 @@ import {
   getInteractiveMessageElements,
   hasConfiguredBody,
   elementsToLegacyFields,
+  generateElementId,
 } from '@/lib/flow-builder/interactiveMessageElements';
 import { EditableText } from '../ui/EditableText';
 import { NodeContextMenu } from '../ui/NodeContextMenu';
@@ -52,6 +53,18 @@ export const InteractiveMessageNode = memo(
 
       const newId = `${currentNode.type}-${Date.now()}`;
       const currentData = currentNode.data as unknown as InteractiveMessageNodeData;
+
+      // Deep-clone elements com IDs novos para evitar buttonIds duplicados no flow
+      const sourceElements = getInteractiveMessageElements(currentData);
+      const clonedElements = sourceElements.map(el => ({
+        ...el,
+        id: generateElementId(el.type),
+      }));
+
+      // Regenera campos legados (buttons, header, body, footer) a partir dos elements clonados
+      // para garantir que os IDs do array buttons correspondam aos IDs dos elements
+      const legacyFields = elementsToLegacyFields(clonedElements);
+
       const newNode = {
         ...currentNode,
         id: newId,
@@ -61,7 +74,9 @@ export const InteractiveMessageNode = memo(
         },
         data: {
           ...currentNode.data,
-          label: `${currentData.label || 'Cópia'} (cópia)`,
+          label: `${currentData.label || 'Mensagem Interativa'} (cópia)`,
+          elements: clonedElements,
+          ...legacyFields, // Sobrescreve buttons/header/body/footer com IDs novos
         },
         selected: false,
       };
@@ -189,15 +204,26 @@ export const InteractiveMessageNode = memo(
               return node;
             }
 
-            // Create duplicate with new ID
+            // Create duplicate with new ID (safeId garante prefixo flow_button_ para botões)
             const duplicatedElement: InteractiveMessageElement = {
               ...elementToDuplicate,
-              id: `${elementToDuplicate.type}-${Date.now()}`,
+              id: generateElementId(elementToDuplicate.type),
             };
             
-            // Add (cópia) to title if it's a button
+            // Add (cópia) to title if it's a button — garante título único
             if (duplicatedElement.type === 'button' && 'title' in duplicatedElement && duplicatedElement.title) {
-              duplicatedElement.title = `${duplicatedElement.title} (cópia)`;
+              const existingTitles = new Set(
+                currentElements
+                  .filter((e): e is typeof e & { title: string } => e.type === 'button' && 'title' in e && typeof (e as unknown as { title: string }).title === 'string')
+                  .map(e => (e as unknown as { title: string }).title)
+              );
+              let candidate = `${duplicatedElement.title} (cópia)`;
+              let suffix = 2;
+              while (existingTitles.has(candidate)) {
+                candidate = `${duplicatedElement.title} (cópia ${suffix})`;
+                suffix++;
+              }
+              duplicatedElement.title = candidate;
             }
 
             const elementIndex = currentElements.findIndex(el => el.id === elementId);
@@ -665,6 +691,19 @@ export const InteractiveMessageNode = memo(
                               <X className="h-3 w-3" />
                             </button>
                           </div>
+                          {/* Alerta de título duplicado */}
+                          {(() => {
+                            const btnTitle = 'title' in btn ? btn.title : '';
+                            const isDuplicate = btnTitle.trim() !== '' && buttons.filter(b => {
+                              const t = 'title' in b ? b.title : '';
+                              return t.trim() === btnTitle.trim();
+                            }).length > 1;
+                            return isDuplicate ? (
+                              <p className="text-[10px] text-red-500 font-medium text-center mt-0.5">
+                                Título duplicado — WhatsApp rejeita
+                              </p>
+                            ) : null;
+                          })()}
                           {/* Contador de caracteres do botão */}
                           {(() => {
                             const btnTitle = 'title' in btn ? btn.title : '';

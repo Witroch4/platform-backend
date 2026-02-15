@@ -722,15 +722,20 @@ model Chat {
 }
 
 model Message {
-  id         String   @id @default(cuid())
-  chatId     String
-  content    String
-  isFromLead Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  chat       Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  id          String   @id @default(cuid())
+  chatId      String
+  content     String
+  isFromLead  Boolean  @default(true)
+  externalId  String?  // wamid para idempotência
+  messageType String   @default("text") // text, image, audio, assistant
+  metadata    Json?    // payload raw opcional
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  chat        Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
 
+  @@unique([chatId, externalId])
   @@index([chatId])
+  @@index([externalId])
 }
 
 model ChatSession {
@@ -1706,6 +1711,7 @@ enum LeadSource {
   INSTAGRAM
   CHATWIT_OAB
   MANUAL
+  WHATSAPP_SOCIAL_FLOW
 }
 
 enum TemplateType {

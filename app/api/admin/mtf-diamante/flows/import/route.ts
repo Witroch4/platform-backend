@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
       data: {
         name: finalName,
         inboxId,
-        isActive: false, // Importado como inativo por segurança
+        isActive: true,
         canvasJson: canvas as unknown as Prisma.InputJsonValue,
       },
     });

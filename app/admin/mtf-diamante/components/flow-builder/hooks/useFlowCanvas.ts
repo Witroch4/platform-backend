@@ -93,21 +93,29 @@ export function useFlowCanvas(
 ) {
   const { autoSave = false, autoSaveDelay = DEFAULT_AUTO_SAVE_DELAY, flowId = null } = options;
 
-  // Ref para controlar sincronização inicial
+  // =========================================================================
+  // REFS — valores transientes que NÃO devem causar re-render (React best practice:
+  // rerender-use-ref-transient-values)
+  // =========================================================================
   const initializedRef = useRef(false);
-  const flowIdRef = useRef(flowId);
+  const prevFlowIdRef = useRef<string | null>(flowId);
 
-  // Refs para auto-save
+  // Refs para auto-save — valores lidos dentro de callback, não precisam ser
+  // dependencies de effects (advanced-event-handler-refs / advanced-use-latest)
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const lastSavedRef = useRef<string>(''); // JSON hash do último estado salvo
+  const lastSavedRef = useRef<string>('');
   const isAutoSavingRef = useRef(false);
+  const nodesRef = useRef<Node[]>([]);
+  const edgesRef = useRef<Edge[]>([]);
+  const viewportRef = useRef<FlowCanvas['viewport'] | undefined>(undefined);
 
   // SWR key para canvas visual (mantido para compatibilidade)
   const canvasSwrKey = inboxId
     ? `/api/admin/mtf-diamante/flow-canvas?inboxId=${inboxId}`
     : null;
 
-  // SWR key para flow específico (quando flowId fornecido)
+  // SWR key para flow específico — derivado de primitive `flowId`
+  // (rerender-dependencies: usar primitivo, não objeto)
   const flowSwrKey = flowId
     ? `/api/admin/mtf-diamante/flows/${flowId}`
     : null;
@@ -124,7 +132,7 @@ export function useFlowCanvas(
     {
       revalidateOnFocus: false,
       dedupingInterval: 5000,
-      keepPreviousData: false, // ⚠️ CRÍTICO: não reutilizar dados antigos
+      keepPreviousData: false,
     }
   );
 
@@ -140,7 +148,7 @@ export function useFlowCanvas(
     {
       revalidateOnFocus: false,
       dedupingInterval: 5000,
-      keepPreviousData: false, // ⚠️ CRÍTICO: não reutilizar dados antigos
+      keepPreviousData: false,
     }
   );
 
@@ -150,25 +158,28 @@ export function useFlowCanvas(
     saveCanvas
   );
 
-  // SEMPRE inicializar com canvas vazio para evitar mostrar dados antigos
-  // O useEffect sincroniza os dados corretos após o carregamento
+  // Canvas vazio estável (memo sem deps = singleton)
   const initialCanvas = useMemo(() => {
     return createEmptyFlowCanvas();
-  }, []); // Dependências vazias - só roda uma vez
+  }, []);
 
-  // Metadados do flow atual
+  // Metadados do flow atual — derivados de primitivos
+  // (rerender-dependencies: evitar comparação de objeto inteiro)
+  const flowDataId = flowResponse?.data?.id;
+  const flowDataName = flowResponse?.data?.name;
+  const flowDataIsActive = flowResponse?.data?.isActive;
   const currentFlowMeta = useMemo(() => {
-    if (flowId && flowResponse?.data) {
+    if (flowId && flowDataId) {
       return {
-        id: flowResponse.data.id,
-        name: flowResponse.data.name,
-        isActive: flowResponse.data.isActive,
+        id: flowDataId,
+        name: flowDataName ?? '',
+        isActive: flowDataIsActive ?? false,
       };
     }
     return null;
-  }, [flowId, flowResponse?.data]);
+  }, [flowId, flowDataId, flowDataName, flowDataIsActive]);
 
-  // React Flow states - convertendo tipos
+  // React Flow states
   const [nodes, setNodes, onNodesChange] = useNodesState(
     initialCanvas.nodes as unknown as Node[]
   );
@@ -176,55 +187,76 @@ export function useFlowCanvas(
     initialCanvas.edges as unknown as Edge[]
   );
 
-  // Sincronizar estado quando o flowId muda ou quando os dados carregam
+  // Manter refs sincronizados com state (rerender-use-ref-transient-values)
+  // Isso evita que auto-save precise de nodes/edges como deps de useCallback
   useEffect(() => {
-    // ⚠️ CRÍTICO: Se mudou o flowId, RESETAR completamente
-    if (flowIdRef.current !== flowId) {
-      console.log('[useFlowCanvas] FlowId mudou:', flowIdRef.current, '->', flowId);
-      initializedRef.current = false;
-      flowIdRef.current = flowId;
-      
-      // SEMPRE limpar canvas ao mudar flowId
-      const empty = createEmptyFlowCanvas();
-      setNodes(empty.nodes as unknown as Node[]);
-      setEdges(empty.edges as unknown as Edge[]);
-      
-      // Se não tem flowId (voltou para lista), já está limpo e inicializado
-      if (!flowId) {
-        initializedRef.current = true;
-        return;
-      }
-      
-      // Se tem flowId, NÃO marcar como initialized ainda - esperar dados carregarem
-      return;
-    }
+    nodesRef.current = nodes;
+  }, [nodes]);
+  useEffect(() => {
+    edgesRef.current = edges;
+  }, [edges]);
 
-    // Evitar sincronização duplicada
+  // Derivar flags primitivas para deps (rerender-dependencies)
+  const hasFlowCanvas = !!flowResponse?.data?.canvas;
+  const flowCanvasNodeCount = flowResponse?.data?.canvas?.nodes?.length ?? 0;
+
+  // =========================================================================
+  // EFEITO 1: Detectar mudança de flowId → resetar estado
+  //   Dep: apenas `flowId` (primitivo). Não depende de dados SWR.
+  // =========================================================================
+  useEffect(() => {
+    // Guard: só agir quando flowId realmente mudou
+    if (prevFlowIdRef.current === flowId) return;
+
+    console.log('[useFlowCanvas] FlowId mudou:', prevFlowIdRef.current, '->', flowId);
+    prevFlowIdRef.current = flowId;
+    initializedRef.current = false;
+    lastSavedRef.current = '';
+
+    // Limpar canvas ao mudar flowId
+    const empty = createEmptyFlowCanvas();
+    setNodes(empty.nodes as unknown as Node[]);
+    setEdges(empty.edges as unknown as Edge[]);
+
+    if (!flowId) {
+      // Voltou para lista — canvas vazio já está ok
+      initializedRef.current = true;
+    }
+    // Se tem flowId, Efeito 2 cuidará de carregar quando dados chegarem
+  }, [flowId, setNodes, setEdges]);
+
+  // =========================================================================
+  // EFEITO 2: Sincronizar dados do servidor → preencher canvas
+  //   Deps: hasFlowCanvas (bool), flowCanvasNodeCount (number), isLoadingFlow (bool)
+  //   Nunca depende de flowResponse (objeto), evitando re-runs espúrios
+  // =========================================================================
+  useEffect(() => {
+    // Já inicializado — não re-sincronizar
     if (initializedRef.current) return;
 
-    //============================================================================
-    // SINCRONIZAÇÃO: só executar se os dados estiverem carregados
-    //============================================================================
-
-    // Se tem flowId, AGUARDAR os dados carregarem do servidor
+    // Se tem flowId, aguardar dados carregarem
     if (flowId && !isLoadingFlow && flowResponse) {
-      console.log('[useFlowCanvas] Sincronizando flow:', flowId, '- tem canvas?', !!flowResponse.data?.canvas);
-      
+      console.log('[useFlowCanvas] Sincronizando flow:', flowId, '- tem canvas?', hasFlowCanvas);
+
       if (flowResponse.data?.canvas) {
-        // Flow tem canvas salvo - carregar
         const canvas = flowResponse.data.canvas;
         setNodes(canvas.nodes as unknown as Node[]);
         setEdges(canvas.edges as unknown as Edge[]);
+        viewportRef.current = canvas.viewport;
+        // Snapshot inicial para auto-save não disparar imediatamente
+        lastSavedRef.current = JSON.stringify({
+          nodes: canvas.nodes,
+          edges: canvas.edges,
+        });
         console.log('[useFlowCanvas] Canvas carregado - nós:', canvas.nodes.length);
       } else {
-        // Flow novo sem canvas - deixar vazio (já está do reset acima)
         console.log('[useFlowCanvas] Flow novo sem canvas - mantendo vazio');
       }
       initializedRef.current = true;
       return;
     }
 
-    // Se não tem flowId e os dados do canvas carregaram
+    // Se não tem flowId e os dados do canvas global carregaram
     if (!flowId && !isLoadingCanvas && canvasResponse?.data?.canvas) {
       console.log('[useFlowCanvas] Sincronizando canvas visual');
       const canvas = canvasResponse.data.canvas;
@@ -233,7 +265,8 @@ export function useFlowCanvas(
       initializedRef.current = true;
       return;
     }
-  }, [flowId, flowResponse, canvasResponse, isLoadingFlow, isLoadingCanvas, setNodes, setEdges]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flowId, hasFlowCanvas, flowCanvasNodeCount, isLoadingFlow, isLoadingCanvas, setNodes, setEdges]);
 
   // Computed states
   const isLoading = isLoadingCanvas || isLoadingFlow;
@@ -246,27 +279,29 @@ export function useFlowCanvas(
 
   // ==========================================================================
   // AUTO-SAVE LOGIC
+  // Usa refs para ler valores atuais sem precisar recriá-la a cada render
+  // (advanced-event-handler-refs + rerender-use-ref-transient-values)
   // ==========================================================================
 
-  // Função interna de save para auto-save (sem validação)
   const performAutoSave = useCallback(async () => {
     if (!inboxId || !flowId || !initializedRef.current) return;
-    if (isAutoSavingRef.current) return; // Evitar saves simultâneos
+    if (isAutoSavingRef.current) return;
 
-    const currentState = JSON.stringify({ nodes, edges });
+    // Ler de refs para evitar stale closures E evitar deps que mudam sempre
+    const currentNodes = nodesRef.current;
+    const currentEdges = edgesRef.current;
+    const currentState = JSON.stringify({ nodes: currentNodes, edges: currentEdges });
 
-    // Só salvar se houver mudanças reais
     if (currentState === lastSavedRef.current) return;
 
     try {
       isAutoSavingRef.current = true;
       setIsAutoSaving(true);
 
-      const defaultViewport = flowResponse?.data?.canvas?.viewport;
       const canvas: FlowCanvas = {
-        nodes: nodes as unknown as FlowNode[],
-        edges: edges as unknown as FlowEdge[],
-        viewport: defaultViewport ?? FLOW_CANVAS_CONSTANTS.DEFAULT_VIEWPORT,
+        nodes: currentNodes as unknown as FlowNode[],
+        edges: currentEdges as unknown as FlowEdge[],
+        viewport: viewportRef.current ?? FLOW_CANVAS_CONSTANTS.DEFAULT_VIEWPORT,
       };
 
       const response = await fetch(`/api/admin/mtf-diamante/flows/${flowId}`, {
@@ -286,43 +321,34 @@ export function useFlowCanvas(
       isAutoSavingRef.current = false;
       setIsAutoSaving(false);
     }
-  }, [inboxId, flowId, nodes, edges, flowResponse?.data?.canvas?.viewport]);
+  }, [inboxId, flowId]); // ← deps mínimas (primitivos estáveis)
 
   // Efeito para disparar auto-save com debounce
+  // Deps: nodes.length e edges.length (primitivos) em vez de arrays inteiros
+  // (rerender-dependencies: narrow deps)
+  const nodesLength = nodes.length;
+  const edgesLength = edges.length;
+
   useEffect(() => {
-    // Não ativar auto-save se:
-    // - autoSave está desabilitado
-    // - não há flowId (canvas visual legacy)
-    // - canvas ainda não foi inicializado
-    // - está carregando
     if (!autoSave || !flowId || !initializedRef.current || isLoading) {
       return;
     }
 
-    // Limpar timeout anterior
     if (autoSaveTimeoutRef.current) {
       clearTimeout(autoSaveTimeoutRef.current);
     }
 
-    // Agendar novo auto-save
     autoSaveTimeoutRef.current = setTimeout(() => {
       performAutoSave();
     }, autoSaveDelay);
 
-    // Cleanup
     return () => {
       if (autoSaveTimeoutRef.current) {
         clearTimeout(autoSaveTimeoutRef.current);
       }
     };
-  }, [autoSave, flowId, nodes, edges, autoSaveDelay, isLoading, performAutoSave]);
-
-  // Atualizar lastSavedRef quando dados são carregados do servidor
-  useEffect(() => {
-    if (initializedRef.current && flowId) {
-      lastSavedRef.current = JSON.stringify({ nodes, edges });
-    }
-  }, [flowId]); // Só quando flowId muda (dados carregados)
+    // Reage a mudanças de tamanho + nodes/edges identity (useNodesState retorna novo array)
+  }, [autoSave, flowId, nodes, edges, nodesLength, edgesLength, autoSaveDelay, isLoading, performAutoSave]);
 
   // Handle connection
   const onConnect: OnConnect = useCallback(
@@ -393,28 +419,30 @@ export function useFlowCanvas(
   );
 
   // Get current canvas state
+  // Usa viewportRef em vez de flowResponse para evitar deps de objeto
   const getCanvasState = useCallback(
     (viewport?: { x: number; y: number; zoom: number }): FlowCanvas => {
-      const defaultViewport = flowId
-        ? flowResponse?.data?.canvas?.viewport
-        : canvasResponse?.data?.canvas?.viewport;
-
       return {
         nodes: nodes as unknown as FlowNode[],
         edges: edges as unknown as FlowEdge[],
         viewport:
           viewport ??
-          defaultViewport ??
+          viewportRef.current ??
           FLOW_CANVAS_CONSTANTS.DEFAULT_VIEWPORT,
       };
     },
-    [nodes, edges, flowId, flowResponse?.data?.canvas?.viewport, canvasResponse?.data?.canvas?.viewport]
+    [nodes, edges]
   );
 
-  // Save canvas
+  // Save canvas (rerender-move-effect-to-event: save é ação do usuário)
   const saveFlow = useCallback(
     async (viewport?: { x: number; y: number; zoom: number }) => {
       if (!inboxId) return;
+
+      // Atualizar viewport ref quando o usuário salva manualmente
+      if (viewport) {
+        viewportRef.current = viewport;
+      }
 
       const canvas = getCanvasState(viewport);
 
@@ -432,8 +460,14 @@ export function useFlowCanvas(
             throw new Error(error.error || 'Falha ao salvar canvas do flow');
           }
 
-          // Atualizar cache do flow específico
-          await mutateFlow();
+          // Atualizar snapshot para evitar auto-save duplicado
+          lastSavedRef.current = JSON.stringify({
+            nodes: canvas.nodes,
+            edges: canvas.edges,
+          });
+
+          // NÃO chamar mutateFlow() — evita re-fetch que causaria re-sync desnecessário
+          // O canvas local já é a fonte de verdade durante a edição
           console.log('[useFlowCanvas] Canvas salvo no flow', flowId);
           return await response.json();
         }
@@ -448,7 +482,7 @@ export function useFlowCanvas(
         throw err;
       }
     },
-    [inboxId, flowId, getCanvasState, triggerSave, mutateCanvas, mutateFlow]
+    [inboxId, flowId, getCanvasState, triggerSave, mutateCanvas]
   );
 
   // Reset canvas

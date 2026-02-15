@@ -38,6 +38,15 @@ import {
   AddTagNode,
   EndConversationNode,
 } from './nodes/ReactionNodes';
+import { QuickRepliesNode } from './nodes/QuickRepliesNode';
+import { CarouselNode } from './nodes/CarouselNode';
+import { TemplateNode } from './nodes/TemplateNode';
+import {
+  ButtonTemplateNode,
+  CouponTemplateNode,
+  CallTemplateNode,
+  UrlTemplateNode,
+} from './nodes/templates';
 
 // Edges
 import ButtonEdge from './edges/ButtonEdge';
@@ -57,6 +66,15 @@ const nodeTypes: NodeTypes = {
   [FlowNodeType.HANDOFF]: HandoffNode as unknown as NodeTypes[string],
   [FlowNodeType.ADD_TAG]: AddTagNode as unknown as NodeTypes[string],
   [FlowNodeType.END_CONVERSATION]: EndConversationNode as unknown as NodeTypes[string],
+  [FlowNodeType.QUICK_REPLIES]: QuickRepliesNode as unknown as NodeTypes[string],
+  [FlowNodeType.CAROUSEL]: CarouselNode as unknown as NodeTypes[string],
+  // Legacy template (deprecated - use specific template containers)
+  [FlowNodeType.TEMPLATE]: TemplateNode as unknown as NodeTypes[string],
+  // New template containers
+  [FlowNodeType.BUTTON_TEMPLATE]: ButtonTemplateNode as unknown as NodeTypes[string],
+  [FlowNodeType.COUPON_TEMPLATE]: CouponTemplateNode as unknown as NodeTypes[string],
+  [FlowNodeType.CALL_TEMPLATE]: CallTemplateNode as unknown as NodeTypes[string],
+  [FlowNodeType.URL_TEMPLATE]: UrlTemplateNode as unknown as NodeTypes[string],
 };
 
 const edgeTypes: EdgeTypes = {
@@ -277,6 +295,17 @@ export function FlowCanvas({
         return '#ec4899';
       case FlowNodeType.END_CONVERSATION:
         return '#ef4444';
+      // Template containers
+      case FlowNodeType.TEMPLATE:
+        return '#10b981'; // emerald
+      case FlowNodeType.BUTTON_TEMPLATE:
+        return '#0ea5e9'; // sky
+      case FlowNodeType.COUPON_TEMPLATE:
+        return '#84cc16'; // lime
+      case FlowNodeType.CALL_TEMPLATE:
+        return '#d946ef'; // fuchsia
+      case FlowNodeType.URL_TEMPLATE:
+        return '#f43f5e'; // rose
       default:
         return '#94a3b8';
     }

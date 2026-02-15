@@ -591,25 +591,6 @@ export function AppAdminDashboard() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
 
-                {/* ChatwitIA */}
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={(e) => {
-                      e.preventDefault();
-                      startTransition(() => {
-                        router.push('/chatwitia');
-                      });
-                    }}
-                    onMouseEnter={() => {
-                      try { router.prefetch('/chatwitia'); } catch {}
-                    }}
-                    className={`flex items-center transition-colors hover:bg-accent ${isPending ? 'opacity-75' : ''}`}
-                  >
-                    <Atom className="mr-2" />
-                    {state !== "collapsed" && <span>ChatwitIA</span>}
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     onClick={(e) => {

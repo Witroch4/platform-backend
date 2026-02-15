@@ -6,6 +6,7 @@ import type { Node } from '@xyflow/react';
 import { FlowCanvas } from './flow-builder/FlowCanvas';
 import { NodePalette } from './flow-builder/panels/NodePalette';
 import { NodeDetailDialog } from './flow-builder/panels/NodeDetailDialog';
+import { TemplateConfigDialog } from './flow-builder/dialogs/TemplateConfigDialog';
 import { FlowSelector } from './flow-builder/panels/FlowSelector';
 import { ExportImportPanel } from './flow-builder/panels/ExportImportPanel';
 import {
@@ -47,7 +48,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import dagre from '@dagrejs/dagre';
-import useSWR from 'swr';
+import useSWR, { useSWRConfig } from 'swr';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -73,6 +74,9 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
   // Estado do flow selecionado
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+
+  // SWR global mutate — para invalidar a lista de flows após salvar
+  const { mutate: globalMutate } = useSWRConfig();
 
   const {
     nodes,
@@ -100,11 +104,18 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
     getCanvasAsN8nFormat,
   } = useFlowCanvas(caixaId, { flowId: selectedFlowId, autoSave: true });
 
-  const { interactiveMessages } = useMtfData();
+  const { interactiveMessages, caixas } = useMtfData();
+
+  // Obtém o channelType da caixa atual
+  const channelType = useMemo(() => {
+    const currentCaixa = caixas?.find((c) => c.id === caixaId);
+    return currentCaixa?.channelType ?? 'Channel::WhatsApp';
+  }, [caixas, caixaId]);
   const reactFlowInstance = useReactFlow();
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -278,8 +289,20 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
     const node = nodes.find((n) => n.id === nodeId);
     if (!node) return;
 
-    // Delay nodes have full inline editing — no detail dialog needed
-    if (node.type === FlowNodeType.DELAY) return;
+    // Nodes with full inline editing — no detail dialog needed
+    const inlineOnlyNodes = [
+      FlowNodeType.DELAY,
+      FlowNodeType.QUICK_REPLIES,
+      FlowNodeType.CAROUSEL,
+    ];
+    if (inlineOnlyNodes.includes(node.type as FlowNodeType)) return;
+
+    // TEMPLATE nodes use a dedicated dialog
+    if (node.type === FlowNodeType.TEMPLATE) {
+      setSelectedNodeId(nodeId);
+      setTemplateDialogOpen(true);
+      return;
+    }
 
     setSelectedNodeId(nodeId);
     setDialogOpen(true);
@@ -376,13 +399,21 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
       });
     }
 
-    const promise = saveFlow(viewport);
+    const promise = saveFlow(viewport).then((result) => {
+      // Invalidar lista de flows para atualizar nodeCount
+      globalMutate(
+        (key) => typeof key === 'string' && key.startsWith('/api/admin/mtf-diamante/flows?'),
+        undefined,
+        { revalidate: true }
+      );
+      return result;
+    });
     toast.promise(promise, {
       loading: 'Salvando fluxo…',
       success: 'Fluxo salvo com sucesso!',
       error: (err) => err?.message ?? 'Erro ao salvar fluxo',
     });
-  }, [nodes, edges, saveFlow, reactFlowInstance]);
+  }, [nodes, edges, saveFlow, reactFlowInstance, globalMutate]);
 
   /** Auto-layout with Dagre */
   const handleAutoLayout = useCallback(() => {
@@ -642,7 +673,7 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
 
       {/* Main content: Palette | Canvas */}
       <div className="flex h-[calc(100vh-240px)] gap-3">
-        <NodePalette />
+        <NodePalette channelType={channelType} />
 
         <div className="flex-1 rounded-lg border bg-muted/20 overflow-hidden">
           <FlowCanvas
@@ -667,6 +698,14 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
         onOpenChange={handleCloseDialog}
         onUpdateNodeData={handleUpdateNodeData}
         interactiveMessages={messagesForDialog}
+      />
+
+      {/* Template Config Dialog (opens on double-click for TEMPLATE nodes) */}
+      <TemplateConfigDialog
+        node={selectedNode}
+        open={templateDialogOpen}
+        onOpenChange={setTemplateDialogOpen}
+        onUpdateNodeData={handleUpdateNodeData}
       />
 
       {/* Handle Popover (appears when dragging from handle to empty canvas) */}

@@ -59,6 +59,11 @@ function getNodeTypeLabel(nodeType: FlowNodeType): string {
     start: 'Início',
     interactive_message: 'Mensagem Interativa',
     text_message: 'Mensagem de Texto',
+    template: 'Template Oficial',
+    button_template: 'Button Template',
+    coupon_template: 'Coupon Template',
+    call_template: 'Call Template',
+    url_template: 'URL Template',
     emoji_reaction: 'Reação com Emoji',
     text_reaction: 'Reação com Texto',
     handoff: 'Transferência',
@@ -67,6 +72,8 @@ function getNodeTypeLabel(nodeType: FlowNodeType): string {
     condition: 'Condição',
     delay: 'Espera',
     media: 'Mídia',
+    quick_replies: 'Quick Replies',
+    carousel: 'Carrossel',
   };
   return labels[nodeType] || nodeType;
 }
