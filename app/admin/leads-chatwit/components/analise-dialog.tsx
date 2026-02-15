@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Loader2, FileText, ExternalLink, Send, AlertOctagon, Key } from "lucide-react";
+import { Loader2, FileText, ExternalLink, Send, AlertOctagon, Key, CheckCircle2 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,6 +24,7 @@ interface AnaliseDialogProps {
   argumentacaoUrl?: string | null;
   anotacoes: string | null;
   aguardandoAnalise: boolean;
+  analisePreliminar?: any;
   onSaveAnotacoes: (anotacoes: string) => Promise<void>;
   onEnviarPdf: (sourceId: string) => Promise<void>;
   onCancelarAnalise?: () => Promise<void>;
@@ -39,6 +40,7 @@ export function AnaliseDialog({
   argumentacaoUrl,
   anotacoes,
   aguardandoAnalise,
+  analisePreliminar,
   onSaveAnotacoes,
   onEnviarPdf,
   onCancelarAnalise,
@@ -48,6 +50,23 @@ export function AnaliseDialog({
   const [accessToken, setAccessToken] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isEnviando, setIsEnviando] = useState(false);
+
+  // Detectar quando a análise interna (analisePreliminar) chega enquanto o dialog está aberto
+  const [analysisJustCompleted, setAnalysisJustCompleted] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && analisePreliminar && !analiseUrl && !aguardandoAnalise) {
+      // A análise interna terminou enquanto o dialog estava aberto
+      setAnalysisJustCompleted(true);
+    }
+  }, [isOpen, analisePreliminar, analiseUrl, aguardandoAnalise]);
+
+  // Resetar estado ao fechar o dialog
+  useEffect(() => {
+    if (!isOpen) {
+      setAnalysisJustCompleted(false);
+    }
+  }, [isOpen]);
   const [isCancelando, setIsCancelando] = useState(false);
   const [isSavingToken, setIsSavingToken] = useState(false);
 
@@ -208,11 +227,13 @@ export function AnaliseDialog({
           <DialogDescription>
             {aguardandoAnalise
               ? "A análise está sendo processada. Aguarde..."
-              : analiseUrl
-                ? isAnaliseValidada 
-                  ? "Visualize o PDF de análise validada e envie para o chat do lead."
-                  : "Visualize o PDF de análise e adicione anotações."
-                : "Ainda não recebemos a análise da prova."}
+              : analysisJustCompleted
+                ? "A análise foi concluída com sucesso!"
+                : analiseUrl
+                  ? isAnaliseValidada 
+                    ? "Visualize o PDF de análise validada e envie para o chat do lead."
+                    : "Visualize o PDF de análise e adicione anotações."
+                  : "Ainda não recebemos a análise da prova."}
           </DialogDescription>
         </DialogHeader>
         <div className="py-4 space-y-6">
@@ -245,6 +266,21 @@ export function AnaliseDialog({
                     )}
                   </Button>
                 )}
+              </div>
+            ) : analysisJustCompleted ? (
+              <div className="flex flex-col items-center justify-center py-8">
+                <CheckCircle2 className="h-16 w-16 text-emerald-500 mb-4" />
+                <p className="text-lg font-medium text-emerald-600 dark:text-emerald-400">Análise Concluída!</p>
+                <p className="text-sm text-muted-foreground mt-2 text-center">
+                  Sua pré-análise está pronta. Feche este diálogo e clique novamente no botão para visualizar.
+                </p>
+                <Button
+                  variant="default"
+                  className="mt-4"
+                  onClick={handleClose}
+                >
+                  Fechar e Visualizar
+                </Button>
               </div>
             ) : analiseUrl ? (
               <div className="space-y-4">

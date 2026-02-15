@@ -126,6 +126,7 @@ export async function initializeWorkers() {
     console.log('   📱 Instagram Webhook   → Automação Instagram');
     console.log('   📝 Workers Legados     → Manuscrito, Leads, Tradução');
     console.log('   📄 Transcription OAB   → Digitação de manuscritos com LangGraph');
+    console.log('   🔍 Analysis OAB        → Análise comparativa Prova × Espelho');
     console.log('   ⏰ Jobs Recorrentes    → Configurados e ativos');
     console.log('   📊 Queue Management    → Monitorando todas as filas');
     console.log('-'.repeat(70));

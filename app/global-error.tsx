@@ -17,7 +17,7 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
       <head>
         <title>Erro | Chatwit</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link rel="icon" href="/W.svg" />
+        <link rel="icon" href="/assets/favicon/favicon.ico" />
       </head>
       <body style={{ margin: 0, padding: 0, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
         <div
@@ -41,7 +41,7 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
             {/* Logo */}
             <div style={{ marginBottom: '2rem' }}>
               <img
-                src="/W.svg"
+                src="/assets/iconssvg/logo_thumbnail_w.svg"
                 alt="Chatwit"
                 style={{ width: '4rem', height: '4rem', opacity: 0.6, margin: '0 auto' }}
               />

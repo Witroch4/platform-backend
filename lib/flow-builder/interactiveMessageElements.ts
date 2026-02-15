@@ -40,6 +40,12 @@ export function createInteractiveMessageElement(
       return { id: safeId('footer'), type: 'footer', text: '' };
     case 'button':
       return { id: safeId('button'), type: 'button', title: 'Novo botão', description: '' };
+    case 'button_copy_code':
+      return { id: safeId('button_copy_code'), type: 'button_copy_code', title: 'Copiar código', couponCode: '' };
+    case 'button_phone':
+      return { id: safeId('button_phone'), type: 'button_phone', title: 'Ligar', phoneNumber: '' };
+    case 'button_url':
+      return { id: safeId('button_url'), type: 'button_url', title: 'Acessar', url: '' };
   }
 }
 
@@ -68,24 +74,44 @@ export function elementsToLegacyFields(elements: InteractiveMessageElement[]): {
   };
 }
 
+/**
+ * Tipo genérico para dados de nó que podem conter elements.
+ * Usado para templates e mensagens interativas compartilharem o mesmo sistema de elementos.
+ */
+type NodeDataWithElements = {
+  elements?: InteractiveMessageElement[];
+  message?: InteractiveMessageNodeData['message'];
+  header?: string;
+  body?: string | { text?: string; variables?: string[] };
+  footer?: string;
+  buttons?: Array<{ id: string; title: string; description?: string; text?: string; url?: string }>;
+  // Campos específicos de templates
+  couponCode?: string;
+  buttonText?: string;
+  phoneNumber?: string;
+};
+
 export function getInteractiveMessageElements(
-  data: InteractiveMessageNodeData
+  data: NodeDataWithElements | InteractiveMessageNodeData | Record<string, unknown>
 ): InteractiveMessageElement[] {
-  if (Array.isArray(data.elements) && data.elements.length > 0) return data.elements;
+  // Type-safe access
+  const d = data as NodeDataWithElements;
+
+  if (Array.isArray(d.elements) && d.elements.length > 0) return d.elements;
 
   // 1) From linked message
-  if (data.message) {
+  if (d.message) {
     const elements: InteractiveMessageElement[] = [];
 
-    const headerText = (data.message.header as { text?: string } | undefined)?.text;
-    const bodyText = (data.message.body as { text?: string } | undefined)?.text;
-    const footerText = (data.message.footer as { text?: string } | undefined)?.text;
+    const headerText = (d.message.header as { text?: string } | undefined)?.text;
+    const bodyText = (d.message.body as { text?: string } | undefined)?.text;
+    const footerText = (d.message.footer as { text?: string } | undefined)?.text;
 
     if (headerText) elements.push({ id: safeId('header_text'), type: 'header_text', text: headerText });
     if (bodyText) elements.push({ id: safeId('body'), type: 'body', text: bodyText });
     if (footerText) elements.push({ id: safeId('footer'), type: 'footer', text: footerText });
 
-    const action = data.message.action as
+    const action = d.message.action as
       | {
           buttons?: Array<{ id: string; title: string; description?: string }>;
           sections?: Array<{ rows?: Array<{ id: string; title: string; description?: string }> }>;
@@ -113,15 +139,50 @@ export function getInteractiveMessageElements(
 
   // 2) From legacy inline fields
   const legacyElements: InteractiveMessageElement[] = [];
-  if (data.header) legacyElements.push({ id: safeId('header_text'), type: 'header_text', text: data.header });
-  if (data.body) legacyElements.push({ id: safeId('body'), type: 'body', text: data.body });
-  if (data.footer) legacyElements.push({ id: safeId('footer'), type: 'footer', text: data.footer });
-  for (const b of data.buttons ?? []) {
+  if (d.header) legacyElements.push({ id: safeId('header_text'), type: 'header_text', text: d.header });
+
+  // Body pode ser string ou objeto { text, variables }
+  const bodyText = typeof d.body === 'string' ? d.body : d.body?.text;
+  if (bodyText) legacyElements.push({ id: safeId('body'), type: 'body', text: bodyText });
+
+  if (d.footer) legacyElements.push({ id: safeId('footer'), type: 'footer', text: d.footer });
+
+  // Botões normais (QUICK_REPLY)
+  for (const b of d.buttons ?? []) {
+    // Se tiver URL, é botão URL
+    if ('url' in b && b.url) {
+      legacyElements.push({
+        id: b.id || safeId('button_url'),
+        type: 'button_url',
+        title: b.text || b.title,
+        url: b.url,
+      });
+    } else {
+      legacyElements.push({
+        id: b.id || safeId('button'),
+        type: 'button',
+        title: b.title,
+        description: b.description,
+      });
+    }
+  }
+
+  // Campos específicos de templates
+  if (d.couponCode) {
     legacyElements.push({
-      id: b.id || safeId('button'),
-      type: 'button',
-      title: b.title,
-      description: b.description,
+      id: safeId('button_copy_code'),
+      type: 'button_copy_code',
+      title: d.buttonText || 'Copiar código',
+      couponCode: d.couponCode,
+    });
+  }
+
+  if (d.phoneNumber) {
+    legacyElements.push({
+      id: safeId('button_phone'),
+      type: 'button_phone',
+      title: d.buttonText || 'Ligar',
+      phoneNumber: d.phoneNumber,
     });
   }
 

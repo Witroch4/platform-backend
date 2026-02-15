@@ -39,6 +39,8 @@ import {
   Copy,
   ChevronRight,
   AlertTriangle,
+  Lock,
+  RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -48,6 +50,8 @@ import type {
   TemplateCategory,
   TemplateButtonType,
   FlowNodeData,
+  InteractiveMessageElement,
+  TemplateApprovalStatus,
 } from '@/types/flow-builder';
 import {
   generateTemplateButtonId,
@@ -56,6 +60,73 @@ import {
   TEMPLATE_LIMITS,
   createTemplateButton,
 } from '@/lib/flow-builder/templateElements';
+import { getInteractiveMessageElements } from '@/lib/flow-builder/interactiveMessageElements';
+
+// =============================================================================
+// HELPER: Extract data from specialized template nodes (elements array)
+// =============================================================================
+
+interface ExtractedTemplateData {
+  bodyText: string;
+  headerType: 'NONE' | 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT';
+  headerContent: string;
+  buttons: TemplateButton[];
+}
+
+function extractFromElements(elements: InteractiveMessageElement[]): ExtractedTemplateData {
+  let bodyText = '';
+  let headerType: ExtractedTemplateData['headerType'] = 'NONE';
+  let headerContent = '';
+  const buttons: TemplateButton[] = [];
+
+  for (const el of elements) {
+    switch (el.type) {
+      case 'body':
+        bodyText = 'text' in el ? el.text : '';
+        break;
+      case 'header_text':
+        headerType = 'TEXT';
+        headerContent = 'text' in el ? el.text : '';
+        break;
+      case 'header_image':
+        headerType = 'IMAGE';
+        break;
+      case 'button':
+        buttons.push({
+          id: el.id || generateTemplateButtonId(),
+          type: 'QUICK_REPLY',
+          text: 'title' in el ? el.title : '',
+        });
+        break;
+      case 'button_url':
+        buttons.push({
+          id: el.id || generateTemplateButtonId(),
+          type: 'URL',
+          text: 'title' in el ? el.title : '',
+          url: 'url' in el ? el.url : '',
+        });
+        break;
+      case 'button_phone':
+        buttons.push({
+          id: el.id || generateTemplateButtonId(),
+          type: 'PHONE_NUMBER',
+          text: 'title' in el ? el.title : '',
+          phoneNumber: 'phoneNumber' in el ? el.phoneNumber : '',
+        });
+        break;
+      case 'button_copy_code':
+        buttons.push({
+          id: el.id || generateTemplateButtonId(),
+          type: 'COPY_CODE',
+          text: 'title' in el ? el.title : 'Copiar código',
+          exampleCode: 'couponCode' in el ? (el.couponCode as string) : '',
+        });
+        break;
+    }
+  }
+
+  return { bodyText, headerType, headerContent, buttons };
+}
 
 // =============================================================================
 // TYPES
@@ -319,6 +390,7 @@ export function TemplateConfigDialog({
   const [mode, setMode] = useState<'import' | 'create'>('create');
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -339,6 +411,62 @@ export function TemplateConfigDialog({
     return node.data as unknown as TemplateNodeData;
   }, [node]);
 
+  // Helper: determina se campos estruturais devem ser bloqueados
+  const isFieldLocked = useCallback((status: TemplateApprovalStatus | undefined) => {
+    return status === 'APPROVED' || status === 'PENDING';
+  }, []);
+
+  const canEdit = !isFieldLocked(nodeData?.status);
+
+  // Função para verificar status do template na Meta
+  const handleRefreshStatus = useCallback(async () => {
+    if (!nodeData?.metaTemplateId || !node) return;
+
+    setIsRefreshing(true);
+    try {
+      const res = await fetch(`/api/admin/mtf-diamante/templates/${nodeData.metaTemplateId}/status`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error(data.error || 'Erro ao verificar status');
+        return;
+      }
+
+      if (data.statusChanged) {
+        onUpdateNodeData(node.id, { status: data.status as TemplateApprovalStatus });
+        toast.success(`Status atualizado: ${getStatusLabel(data.status)}`);
+      } else {
+        toast.info(`Status atual: ${getStatusLabel(data.status)}`);
+      }
+    } catch (error) {
+      console.error('Error refreshing status:', error);
+      toast.error('Erro ao verificar status do template');
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [nodeData?.metaTemplateId, node, onUpdateNodeData]);
+
+  // Função para duplicar template como novo (rascunho editável)
+  const handleDuplicate = useCallback(() => {
+    if (!node || !nodeData) return;
+
+    const newName = templateName
+      ? `${templateName.replace(/_v\d+$/, '')}_v${Date.now() % 1000}`
+      : `template_${Date.now() % 10000}`;
+
+    onUpdateNodeData(node.id, {
+      ...nodeData,
+      status: 'DRAFT',
+      templateId: undefined,
+      metaTemplateId: undefined,
+      templateName: newName,
+      mode: 'create',
+    } as Partial<TemplateNodeData>);
+
+    setTemplateName(newName);
+    toast.success('Template duplicado como rascunho. Você pode editar e reenviar.');
+  }, [node, nodeData, templateName, onUpdateNodeData]);
+
   // Initialize form from node data
   useEffect(() => {
     if (!nodeData) return;
@@ -352,12 +480,29 @@ export function TemplateConfigDialog({
     setTemplateName(nodeData.templateName || '');
     setCategory(nodeData.category || 'MARKETING');
     setLanguage(nodeData.language || 'pt_BR');
-    setHeaderType(nodeData.header?.type || 'NONE');
-    setHeaderContent(nodeData.header?.content || '');
-    setHeaderMediaUrl(nodeData.header?.mediaUrl || '');
-    setBodyText(nodeData.body?.text || '');
-    setFooterText(nodeData.footer?.text || '');
-    setButtons(nodeData.buttons || []);
+
+    // Check if node uses elements array (specialized templates)
+    const rawData = nodeData as unknown as Record<string, unknown>;
+    const elements = rawData.elements as InteractiveMessageElement[] | undefined;
+
+    if (elements && elements.length > 0) {
+      // Extract data from elements array (ButtonTemplate, UrlTemplate, etc.)
+      const extracted = extractFromElements(elements);
+      setHeaderType(extracted.headerType);
+      setHeaderContent(extracted.headerContent);
+      setBodyText(extracted.bodyText);
+      setButtons(extracted.buttons);
+      setFooterText(''); // Footer not supported in elements yet
+      setHeaderMediaUrl('');
+    } else {
+      // Traditional format (TemplateNode)
+      setHeaderType(nodeData.header?.type || 'NONE');
+      setHeaderContent(nodeData.header?.content || '');
+      setHeaderMediaUrl(nodeData.header?.mediaUrl || '');
+      setBodyText(nodeData.body?.text || '');
+      setFooterText(nodeData.footer?.text || '');
+      setButtons(nodeData.buttons || []);
+    }
   }, [nodeData]);
 
   // Fetch approved templates when switching to import mode
@@ -420,7 +565,12 @@ export function TemplateConfigDialog({
       footer: footerText ? { text: footerText } : undefined,
       buttons,
     };
-    return validateTemplateNodeData(data);
+    const result = validateTemplateNodeData(data);
+    // Debug validation
+    if (!result.valid) {
+      console.log('[TemplateConfigDialog] Validation failed:', result.errors);
+    }
+    return result;
   }, [templateName, category, language, headerType, headerContent, headerMediaUrl, bodyText, bodyVariables, footerText, buttons]);
 
   // Handle import template
@@ -707,21 +857,38 @@ export function TemplateConfigDialog({
               {nodeData?.templateName || 'Template Oficial WhatsApp'}
             </DialogTitle>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Configure um template oficial para envio via WhatsApp
+              {nodeData?.metaTemplateId
+                ? `Meta ID: ${nodeData.metaTemplateId}`
+                : 'Configure um template oficial para envio via WhatsApp'}
             </p>
           </div>
-          {nodeData?.status && (
-            <Badge
-              variant="outline"
-              className={cn(
-                'text-[10px] px-2 py-0.5 font-medium gap-1 border',
-                getStatusColors(nodeData.status)
-              )}
-            >
-              {getStatusIcon(nodeData.status)}
-              {getStatusLabel(nodeData.status)}
-            </Badge>
-          )}
+          <div className="flex items-center gap-2">
+            {nodeData?.metaTemplateId && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleRefreshStatus}
+                disabled={isRefreshing}
+                title="Verificar status na Meta"
+                className="h-8 w-8"
+              >
+                <RefreshCw className={cn('h-4 w-4', isRefreshing && 'animate-spin')} />
+              </Button>
+            )}
+            {nodeData?.status && (
+              <Badge
+                variant="outline"
+                className={cn(
+                  'text-[10px] px-2 py-0.5 font-medium gap-1 border',
+                  getStatusColors(nodeData.status)
+                )}
+              >
+                {getStatusIcon(nodeData.status)}
+                {getStatusLabel(nodeData.status)}
+                {!canEdit && <Lock className="h-2.5 w-2.5 ml-0.5" />}
+              </Badge>
+            )}
+          </div>
         </DialogHeader>
 
         {/* Mode toggle */}
@@ -829,6 +996,19 @@ export function TemplateConfigDialog({
               ) : (
                 /* CREATE MODE */
                 <div className="space-y-5">
+                  {/* Aviso de campos bloqueados */}
+                  {!canEdit && (
+                    <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 p-3">
+                      <div className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
+                        <Lock className="h-3 w-3 shrink-0" />
+                        <span>
+                          Template {nodeData?.status === 'APPROVED' ? 'aprovado pela Meta' : 'em análise'}.
+                          {' '}Campos estruturais bloqueados. Use &quot;Duplicar como Novo&quot; para criar uma versão editável.
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Basic info */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -837,7 +1017,8 @@ export function TemplateConfigDialog({
                         value={templateName}
                         onChange={(e) => setTemplateName(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
                         placeholder="meu_template"
-                        className="text-sm"
+                        disabled={!canEdit}
+                        className={cn('text-sm', !canEdit && 'opacity-60 cursor-not-allowed')}
                       />
                       <p className="text-[10px] text-muted-foreground">
                         Apenas letras minúsculas, números e underscore
@@ -845,8 +1026,8 @@ export function TemplateConfigDialog({
                     </div>
                     <div className="space-y-2">
                       <Label className="text-sm font-medium">Categoria</Label>
-                      <Select value={category} onValueChange={(v) => setCategory(v as TemplateCategory)}>
-                        <SelectTrigger className="text-sm">
+                      <Select value={category} onValueChange={(v) => setCategory(v as TemplateCategory)} disabled={!canEdit}>
+                        <SelectTrigger className={cn('text-sm', !canEdit && 'opacity-60 cursor-not-allowed')}>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -861,8 +1042,8 @@ export function TemplateConfigDialog({
                   {/* Header */}
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">Header (opcional)</Label>
-                    <Select value={headerType} onValueChange={(v) => setHeaderType(v as typeof headerType)}>
-                      <SelectTrigger className="text-sm">
+                    <Select value={headerType} onValueChange={(v) => setHeaderType(v as typeof headerType)} disabled={!canEdit}>
+                      <SelectTrigger className={cn('text-sm', !canEdit && 'opacity-60 cursor-not-allowed')}>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -879,7 +1060,8 @@ export function TemplateConfigDialog({
                         onChange={(e) => setHeaderContent(e.target.value)}
                         placeholder="Título do template (até 60 caracteres)"
                         maxLength={60}
-                        className="text-sm mt-2"
+                        disabled={!canEdit}
+                        className={cn('text-sm mt-2', !canEdit && 'opacity-60 cursor-not-allowed')}
                       />
                     )}
                     {['IMAGE', 'VIDEO', 'DOCUMENT'].includes(headerType) && (
@@ -887,7 +1069,8 @@ export function TemplateConfigDialog({
                         value={headerMediaUrl}
                         onChange={(e) => setHeaderMediaUrl(e.target.value)}
                         placeholder="URL da mídia"
-                        className="text-sm mt-2"
+                        disabled={!canEdit}
+                        className={cn('text-sm mt-2', !canEdit && 'opacity-60 cursor-not-allowed')}
                       />
                     )}
                   </div>
@@ -912,7 +1095,8 @@ export function TemplateConfigDialog({
                       onChange={(e) => setBodyText(e.target.value)}
                       placeholder="Digite o texto da mensagem. Use {{variavel}} para parâmetros."
                       rows={4}
-                      className="text-sm resize-y"
+                      disabled={!canEdit}
+                      className={cn('text-sm resize-y', !canEdit && 'opacity-60 cursor-not-allowed')}
                     />
                     {bodyVariables.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-1">
@@ -945,7 +1129,8 @@ export function TemplateConfigDialog({
                       onChange={(e) => setFooterText(e.target.value)}
                       placeholder="Texto do rodapé"
                       maxLength={60}
-                      className="text-sm"
+                      disabled={!canEdit}
+                      className={cn('text-sm', !canEdit && 'opacity-60 cursor-not-allowed')}
                     />
                   </div>
 
@@ -959,32 +1144,36 @@ export function TemplateConfigDialog({
                     </div>
 
                     {buttons.map((btn, idx) => (
-                      <div key={btn.id} className="rounded-lg border p-3 space-y-2">
+                      <div key={btn.id} className={cn('rounded-lg border p-3 space-y-2', !canEdit && 'opacity-70')}>
                         <div className="flex items-center justify-between gap-2">
                           <Badge variant="outline" className="text-[10px]">
-                            {btn.type.replace('_', ' ')}
+                            {(btn.type || 'QUICK_REPLY').replace('_', ' ')}
                           </Badge>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveButton(idx)}
-                            className="text-red-500 hover:text-red-700"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveButton(idx)}
+                              className="text-red-500 hover:text-red-700"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                         </div>
                         <Input
                           value={btn.text}
                           onChange={(e) => handleUpdateButton(idx, { text: e.target.value })}
                           placeholder="Texto do botão"
                           maxLength={25}
-                          className="text-sm"
+                          disabled={!canEdit}
+                          className={cn('text-sm', !canEdit && 'cursor-not-allowed')}
                         />
                         {btn.type === 'URL' && (
                           <Input
                             value={btn.url || ''}
                             onChange={(e) => handleUpdateButton(idx, { url: e.target.value })}
                             placeholder="https://..."
-                            className="text-sm"
+                            disabled={!canEdit}
+                            className={cn('text-sm', !canEdit && 'cursor-not-allowed')}
                           />
                         )}
                         {btn.type === 'PHONE_NUMBER' && (
@@ -992,7 +1181,8 @@ export function TemplateConfigDialog({
                             value={btn.phoneNumber || ''}
                             onChange={(e) => handleUpdateButton(idx, { phoneNumber: e.target.value })}
                             placeholder="+5511999999999"
-                            className="text-sm"
+                            disabled={!canEdit}
+                            className={cn('text-sm', !canEdit && 'cursor-not-allowed')}
                           />
                         )}
                         {btn.type === 'COPY_CODE' && (
@@ -1001,13 +1191,14 @@ export function TemplateConfigDialog({
                             onChange={(e) => handleUpdateButton(idx, { exampleCode: e.target.value })}
                             placeholder="Código (até 15 caracteres)"
                             maxLength={15}
-                            className="text-sm"
+                            disabled={!canEdit}
+                            className={cn('text-sm', !canEdit && 'cursor-not-allowed')}
                           />
                         )}
                       </div>
                     ))}
 
-                    {buttons.length < TEMPLATE_LIMITS.maxButtons && (
+                    {buttons.length < TEMPLATE_LIMITS.maxButtons && canEdit && (
                       <div className="flex flex-wrap gap-2">
                         <Button
                           type="button"
@@ -1086,9 +1277,23 @@ export function TemplateConfigDialog({
 
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
-            Cancelar
+            Fechar
           </Button>
-          {mode === 'create' && (
+
+          {/* Botão Duplicar para templates não editáveis */}
+          {mode === 'create' && !canEdit && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleDuplicate}
+            >
+              <Copy className="h-3 w-3 mr-1" />
+              Duplicar como Novo
+            </Button>
+          )}
+
+          {/* Botões de ação para templates editáveis (DRAFT ou REJECTED) */}
+          {mode === 'create' && canEdit && (
             <>
               <Button
                 variant="secondary"
@@ -1109,6 +1314,8 @@ export function TemplateConfigDialog({
                     <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                     Enviando...
                   </>
+                ) : nodeData?.status === 'REJECTED' ? (
+                  'Reenviar para Meta'
                 ) : (
                   'Enviar para Meta'
                 )}

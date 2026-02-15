@@ -1,17 +1,25 @@
 'use client';
 
-import { memo, useCallback, type DragEvent } from 'react';
+import { memo, useMemo, useCallback, useState, type DragEvent } from 'react';
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react';
-import { Ticket, Settings, Check, Clock, XCircle, FileEdit, Copy } from 'lucide-react';
+import { Ticket, Check, Clock, XCircle, FileEdit, Plus, X, Copy, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   type CouponTemplateNodeData,
+  type InteractiveMessageElement,
+  type InteractiveMessageBodyElement,
+  type InteractiveMessageButtonCopyCodeElement,
   COUPON_TEMPLATE_LIMITS,
-  TEMPLATE_ELEMENT_MIME,
-  type TemplateElementType,
+  CHANNEL_CHAR_LIMITS,
 } from '@/types/flow-builder';
+import {
+  getInteractiveMessageElements,
+  hasConfiguredBody,
+  generateElementId,
+} from '@/lib/flow-builder/interactiveMessageElements';
 import { NodeContextMenu } from '../../ui/NodeContextMenu';
 import { Badge } from '@/components/ui/badge';
+import { EditableText } from '../../ui/EditableText';
 
 type CouponTemplateNodeProps = NodeProps & {
   data: CouponTemplateNodeData & { [key: string]: unknown };
@@ -71,75 +79,122 @@ function getStatusLabel(status: CouponTemplateNodeData['status']) {
 /**
  * CouponTemplateNode - Container para Coupon/PIX Template WhatsApp
  *
- * Mensagem com botão COPY_CODE para chaves PIX ou cupons.
+ * Edição inline igual à Mensagem Interativa.
  * Aceita drop de elementos: body, button_copy_code
+ * Limite: máximo 1 botão COPY_CODE (conforme API WhatsApp)
  */
 export const CouponTemplateNode = memo(({ id, data, selected }: CouponTemplateNodeProps) => {
   const { setNodes, getNodes, setEdges } = useReactFlow();
+  const [isDragOver, setIsDragOver] = useState(false);
 
-  // Dados do template
-  const status = data.status || 'DRAFT';
-  const templateName = data.templateName || data.label || 'Coupon Template';
-  const hasBody = data.body?.text && data.body.text.trim().length > 0;
-  const hasCoupon = data.couponCode && data.couponCode.trim().length > 0;
-  const buttonText = data.buttonText || 'Copiar código';
-  const isConfigured = data.isConfigured && hasBody && hasCoupon;
+  // Usa o sistema unificado de elements
+  const elements = useMemo(() => getInteractiveMessageElements(data as unknown as Record<string, unknown>), [data]);
 
   // Drag & Drop handlers
   const handleDragOver = useCallback((e: DragEvent) => {
     e.preventDefault();
-    e.stopPropagation();
-    const elementType = e.dataTransfer.types.includes(TEMPLATE_ELEMENT_MIME);
-    if (elementType) {
-      e.dataTransfer.dropEffect = 'copy';
-    }
+    e.dataTransfer.dropEffect = 'copy';
+    if (!isDragOver) setIsDragOver(true);
+  }, [isDragOver]);
+
+  const handleDragLeave = useCallback((e: DragEvent) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsDragOver(false);
   }, []);
 
-  const handleDrop = useCallback(
-    (e: DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
+  const handleDrop = useCallback((e: DragEvent) => {
+    setIsDragOver(false);
+  }, []);
 
-      const elementType = e.dataTransfer.getData(TEMPLATE_ELEMENT_MIME) as TemplateElementType;
-      if (!elementType) return;
+  // Dados do template
+  const status = data.status || 'DRAFT';
+  const templateName = data.templateName || data.label || 'Coupon Template';
 
-      // Validate element type for this container
-      if (elementType !== 'body' && elementType !== 'button_copy_code') {
-        return;
-      }
+  // Template bloqueado para edição (APPROVED ou PENDING)
+  const isLocked = status === 'APPROVED' || status === 'PENDING';
 
-      setNodes((nodes) =>
-        nodes.map((node) => {
-          if (node.id !== id) return node;
+  // Extrair elementos do array unificado
+  const bodyElement = useMemo(() => {
+    return elements.find((e) => e.type === 'body') as InteractiveMessageBodyElement | undefined;
+  }, [elements]);
+
+  const copyCodeElement = useMemo(() => {
+    return elements.find((e) => e.type === 'button_copy_code') as InteractiveMessageButtonCopyCodeElement | undefined;
+  }, [elements]);
+
+  const showContent = elements.length > 0;
+  const isConfigured = hasConfiguredBody(elements) && copyCodeElement?.couponCode;
+  const hasCopyCodeButton = !!copyCodeElement;
+
+  // Atualiza o conteúdo de um elemento
+  const updateElementContent = useCallback((elementId: string, newContent: Partial<InteractiveMessageElement>) => {
+    setNodes((nodes) =>
+      nodes.map((node) => {
+        if (node.id === id) {
           const currentData = node.data as unknown as CouponTemplateNodeData;
+          const currentElements = currentData.elements && currentData.elements.length > 0
+            ? [...currentData.elements]
+            : getInteractiveMessageElements(currentData as unknown as Record<string, unknown>);
 
-          if (elementType === 'body') {
-            return {
-              ...node,
-              data: {
-                ...currentData,
-                body: currentData.body || { text: '', variables: [] },
-              },
-            };
+          const elementIndex = currentElements.findIndex(el => el.id === elementId);
+          if (elementIndex !== -1) {
+            const el = currentElements[elementIndex];
+            currentElements[elementIndex] = { ...el, ...newContent } as InteractiveMessageElement;
           }
 
-          if (elementType === 'button_copy_code') {
-            return {
-              ...node,
-              data: {
-                ...currentData,
-                couponCode: currentData.couponCode || '',
-                buttonText: currentData.buttonText || 'Copiar código',
-              },
-            };
-          }
+          // Sincronizar com campos legados
+          const bodyEl = currentElements.find(e => e.type === 'body');
+          const copyCodeEl = currentElements.find(e => e.type === 'button_copy_code') as InteractiveMessageButtonCopyCodeElement | undefined;
 
-          return node;
-        })
-      );
-    },
-    [id, setNodes]
-  );
+          return {
+            ...node,
+            data: {
+              ...currentData,
+              elements: currentElements,
+              body: bodyEl && 'text' in bodyEl ? { text: bodyEl.text } : currentData.body,
+              couponCode: copyCodeEl?.couponCode ?? currentData.couponCode,
+              buttonText: copyCodeEl?.title ?? currentData.buttonText,
+              isConfigured: !!(bodyEl && 'text' in bodyEl && bodyEl.text.trim() && copyCodeEl?.couponCode),
+            },
+          };
+        }
+        return node;
+      })
+    );
+  }, [id, setNodes]);
+
+  // Remove elemento
+  const handleRemoveElement = useCallback((elementId: string) => {
+    setNodes((nodes) =>
+      nodes.map((node) => {
+        if (node.id === id) {
+          const currentData = node.data as unknown as CouponTemplateNodeData;
+          const currentElements = currentData.elements && currentData.elements.length > 0
+            ? [...currentData.elements]
+            : getInteractiveMessageElements(currentData as unknown as Record<string, unknown>);
+
+          const nextElements = currentElements.filter(el => el.id !== elementId);
+
+          // Sincronizar com campos legados
+          const bodyEl = nextElements.find(e => e.type === 'body');
+          const copyCodeEl = nextElements.find(e => e.type === 'button_copy_code') as InteractiveMessageButtonCopyCodeElement | undefined;
+
+          return {
+            ...node,
+            data: {
+              ...currentData,
+              elements: nextElements,
+              body: bodyEl && 'text' in bodyEl ? { text: bodyEl.text } : undefined,
+              couponCode: copyCodeEl?.couponCode ?? undefined,
+              buttonText: copyCodeEl?.title ?? undefined,
+              isConfigured: !!(bodyEl && 'text' in bodyEl && bodyEl.text.trim() && copyCodeEl?.couponCode),
+            },
+          };
+        }
+        return node;
+      })
+    );
+  }, [id, setNodes]);
 
   // Duplicar nó
   const handleDuplicate = useCallback(() => {
@@ -149,6 +204,12 @@ export const CouponTemplateNode = memo(({ id, data, selected }: CouponTemplateNo
 
     const newId = `coupon_template-${Date.now()}`;
     const currentData = currentNode.data as unknown as CouponTemplateNodeData;
+
+    const sourceElements = getInteractiveMessageElements(currentData as unknown as Record<string, unknown>);
+    const clonedElements = sourceElements.map(el => ({
+      ...el,
+      id: generateElementId(el.type),
+    }));
 
     const newNode = {
       ...currentNode,
@@ -163,6 +224,7 @@ export const CouponTemplateNode = memo(({ id, data, selected }: CouponTemplateNo
         templateName: currentData.templateName ? `${currentData.templateName}_copy` : undefined,
         metaTemplateId: undefined,
         status: 'DRAFT' as const,
+        elements: clonedElements,
       },
       selected: false,
     };
@@ -176,18 +238,26 @@ export const CouponTemplateNode = memo(({ id, data, selected }: CouponTemplateNo
     setEdges((edges) => edges.filter((e) => e.source !== id && e.target !== id));
   }, [id, setNodes, setEdges]);
 
+  // Impede propagação de duplo clique no corpo
+  const stopPropagation = (e: React.MouseEvent) => {
+    e.stopPropagation();
+  };
+
   return (
     <NodeContextMenu onDuplicate={handleDuplicate} onDelete={handleDelete}>
       <div
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         className={cn(
           'w-[340px] rounded-xl shadow-xl transition-all bg-card overflow-hidden',
           'border-[3px]',
           selected
             ? 'ring-2 ring-primary ring-offset-2 border-primary'
-            : 'border-lime-500/60 hover:border-lime-500'
+            : isDragOver
+              ? 'border-lime-500 scale-[1.02] shadow-2xl ring-2 ring-lime-200'
+              : 'border-lime-500/60 hover:border-lime-500'
         )}
-        onDragOver={handleDragOver}
-        onDrop={handleDrop}
       >
         {/* Handle de entrada (top) */}
         <Handle
@@ -200,79 +270,196 @@ export const CouponTemplateNode = memo(({ id, data, selected }: CouponTemplateNo
         <div className="flex items-center gap-2 px-3 py-2.5 bg-gradient-to-r from-lime-500 to-lime-600 text-white">
           <Ticket className="h-4 w-4 shrink-0" />
           <span className="font-semibold text-sm truncate flex-1 select-none">{templateName}</span>
-          {/* Status badge */}
           <Badge
             variant="outline"
             className={cn('text-[10px] px-1.5 py-0.5 font-medium gap-1 border', getStatusColors(status))}
           >
             {getStatusIcon(status)}
             {getStatusLabel(status)}
+            {isLocked && <Lock className="h-2.5 w-2.5 ml-0.5" />}
           </Badge>
         </div>
 
-        {/* Conteúdo do template */}
-        <div className="p-3 bg-slate-50 dark:bg-slate-950/20 min-h-[100px]">
-          {isConfigured ? (
-            <div className="flex flex-col gap-2">
-              {/* Body preview */}
-              {hasBody && (
-                <div className="rounded-md border bg-white dark:bg-card px-3 py-3 shadow-sm">
-                  <p className="text-sm text-foreground line-clamp-3 whitespace-pre-wrap">{data.body.text}</p>
-                  {/* Variables indicator */}
-                  {data.body.variables && data.body.variables.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {data.body.variables.map((v) => (
-                        <Badge key={v} variant="secondary" className="text-[10px] py-0">
-                          {`{{${v}}}`}
-                        </Badge>
-                      ))}
+        {/* Conteúdo do template - edição inline */}
+        <div
+          className={cn(
+            "p-0 bg-slate-50 dark:bg-slate-950/20 min-h-[60px] transition-all",
+            isDragOver ? "bg-lime-50/50 dark:bg-lime-900/10" : ""
+          )}
+          onDoubleClick={stopPropagation}
+        >
+          {showContent || isDragOver ? (
+            <div className="flex flex-col gap-1 p-2">
+              {/* Body */}
+              {bodyElement && (
+                <NodeContextMenu onDelete={isLocked ? undefined : () => handleRemoveElement(bodyElement.id)}>
+                  <div className={cn('relative group rounded-md border bg-white dark:bg-card px-3 py-3 shadow-sm min-h-[40px]', isLocked && 'opacity-80')}>
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1 min-w-0">
+                        <EditableText
+                          value={bodyElement.text}
+                          onChange={(val) => updateElementContent(bodyElement.id, { text: val })}
+                          label="Corpo da mensagem"
+                          placeholder="Digite a mensagem..."
+                          className="text-sm"
+                          minRows={2}
+                          maxLength={CHANNEL_CHAR_LIMITS.whatsapp.body}
+                          readOnly={isLocked}
+                        />
+                      </div>
+                      {!isLocked && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveElement(bodyElement.id);
+                          }}
+                          className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/20 text-muted-foreground hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
                     </div>
-                  )}
-                </div>
+                  </div>
+                </NodeContextMenu>
               )}
 
-              {/* Coupon code preview */}
-              {hasCoupon && (
-                <div className="rounded-md border-2 border-dashed border-lime-300 dark:border-lime-700 bg-lime-50 dark:bg-lime-950/30 px-3 py-2 shadow-sm">
-                  <p className="text-[10px] text-muted-foreground mb-1">Código/Chave PIX:</p>
-                  <p className="text-sm font-mono font-bold text-lime-700 dark:text-lime-400 truncate">
-                    {data.couponCode}
-                  </p>
-                  {data.couponCode.length > COUPON_TEMPLATE_LIMITS.couponCodeMaxLength && (
-                    <p className="text-[10px] text-red-500 mt-1">
-                      Excede limite de {COUPON_TEMPLATE_LIMITS.couponCodeMaxLength} caracteres
-                    </p>
-                  )}
-                </div>
+              {/* Botão COPY_CODE */}
+              {copyCodeElement && (
+                <NodeContextMenu onDelete={isLocked ? undefined : () => handleRemoveElement(copyCodeElement.id)}>
+                  <div className={cn('relative group', isLocked && 'opacity-80')}>
+                    {/* Código/PIX */}
+                    <div className="rounded-md border-2 border-dashed border-lime-300 dark:border-lime-700 bg-lime-50 dark:bg-lime-950/30 px-3 py-2 shadow-sm mb-1">
+                      <p className="text-[10px] text-muted-foreground mb-1">Código/Chave PIX:</p>
+                      <input
+                        type="text"
+                        className={cn(
+                          "nodrag w-full bg-transparent border-none p-0 text-sm font-mono font-bold focus:outline-none focus:ring-0 placeholder:text-lime-300",
+                          (copyCodeElement.couponCode?.length ?? 0) > COUPON_TEMPLATE_LIMITS.couponCodeMaxLength
+                            ? "text-red-500 dark:text-red-400"
+                            : "text-lime-700 dark:text-lime-400",
+                          isLocked && "cursor-not-allowed"
+                        )}
+                        value={copyCodeElement.couponCode || ''}
+                        onChange={(e) => updateElementContent(copyCodeElement.id, { couponCode: e.target.value })}
+                        placeholder="Digite o código/chave"
+                        disabled={isLocked}
+                        readOnly={isLocked}
+                        onKeyDown={(e) => {
+                          e.stopPropagation();
+                          if (e.key === 'Enter') e.currentTarget.blur();
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.currentTarget.focus();
+                        }}
+                      />
+                      {/* Contador de caracteres */}
+                      {(() => {
+                        const codeLength = copyCodeElement.couponCode?.length ?? 0;
+                        const codeLimit = COUPON_TEMPLATE_LIMITS.couponCodeMaxLength;
+                        const isOver = codeLength > codeLimit;
+                        const isNear = codeLength >= codeLimit * 0.8;
+                        return (
+                          <div className="flex items-center gap-1 mt-1">
+                            <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
+                              <div
+                                className={cn(
+                                  "h-full transition-all duration-200 rounded-full",
+                                  isOver ? "bg-red-500" : isNear ? "bg-amber-500" : "bg-lime-400"
+                                )}
+                                style={{ width: `${Math.min((codeLength / codeLimit) * 100, 100)}%` }}
+                              />
+                            </div>
+                            <span
+                              className={cn(
+                                "text-[10px] tabular-nums",
+                                isOver ? "text-red-500 font-bold" : isNear ? "text-amber-500" : "text-muted-foreground/60"
+                              )}
+                            >
+                              {codeLength}/{codeLimit}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Botão de copiar */}
+                    <div className="rounded-md border bg-white dark:bg-card px-3 py-2 shadow-sm transition-colors hover:border-lime-300 focus-within:ring-2 focus-within:ring-lime-400 focus-within:border-transparent">
+                      <div className="flex items-center">
+                        <Copy className="h-3 w-3 mr-2 text-lime-500" />
+                        <div className="flex items-center justify-center text-center flex-1">
+                          <input
+                            type="text"
+                            className={cn(
+                              "nodrag w-full bg-transparent border-none p-0 text-sm font-semibold focus:outline-none focus:ring-0 text-center placeholder:text-lime-300",
+                              (copyCodeElement.title?.length ?? 0) > COUPON_TEMPLATE_LIMITS.buttonTextMaxLength
+                                ? "text-red-500 dark:text-red-400"
+                                : "text-lime-600 dark:text-lime-400"
+                            )}
+                            value={copyCodeElement.title || ''}
+                            onChange={(e) => updateElementContent(copyCodeElement.id, { title: e.target.value })}
+                            placeholder="Texto do botão"
+                            onKeyDown={(e) => {
+                              e.stopPropagation();
+                              if (e.key === 'Enter') e.currentTarget.blur();
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              e.currentTarget.focus();
+                            }}
+                          />
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveElement(copyCodeElement.id);
+                          }}
+                          className="ml-2 p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/20 text-muted-foreground hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </NodeContextMenu>
               )}
 
-              {/* Button preview */}
-              <div className="rounded-md border bg-white dark:bg-card px-3 py-2 shadow-sm flex items-center justify-center gap-2">
-                <Copy className="h-3 w-3" />
-                <span className="text-sm font-semibold text-lime-600 dark:text-lime-400">{buttonText}</span>
-                <span className="text-[10px] text-muted-foreground">(copiar código)</span>
-              </div>
+              {/* Info sobre botão copy */}
+              {isConfigured && (
+                <p className="text-[10px] text-muted-foreground/60 text-center italic mt-1">
+                  O botão copia o código automaticamente no app WhatsApp
+                </p>
+              )}
 
-              {/* Info about copy button */}
-              <p className="text-[10px] text-muted-foreground/60 text-center italic">
-                O botão copia o código automaticamente no app WhatsApp
-              </p>
+              {/* Hint para adicionar elementos */}
+              {!hasCopyCodeButton && (
+                <div className={cn(
+                  "w-full transition-all duration-300 ease-in-out overflow-hidden",
+                  isDragOver ? "h-12 opacity-100 mt-1" : "h-0 opacity-0"
+                )}>
+                  <div className="h-full w-full border-2 border-dashed border-lime-400 bg-lime-100/30 rounded-md flex items-center justify-center animate-pulse">
+                    <span className="text-xs font-medium text-lime-600">Solte aqui</span>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             /* Estado não configurado */
-            <div className="p-4 text-center border-2 border-dashed border-border/40 rounded-lg">
+            <div className="p-6 text-center border-2 border-dashed border-border/40 m-2 rounded-lg pointer-events-none">
               <div className="w-10 h-10 rounded-full bg-lime-100 dark:bg-lime-900/30 mx-auto mb-2 flex items-center justify-center">
-                <Settings className="h-5 w-5 text-lime-500" />
+                <Plus className="h-5 w-5 text-lime-500" />
               </div>
-              <p className="text-xs text-muted-foreground/70 mb-1">Arraste elementos para configurar</p>
-              <p className="text-[10px] text-muted-foreground/50">
-                Body (texto) + Código PIX/Cupom (max {COUPON_TEMPLATE_LIMITS.couponCodeMaxLength} chars)
+              <p className="text-xs text-muted-foreground/70">
+                Arraste blocos aqui
+              </p>
+              <p className="text-[10px] text-muted-foreground/50 mt-1">
+                Body + Código PIX (max {COUPON_TEMPLATE_LIMITS.couponCodeMaxLength} chars)
               </p>
             </div>
           )}
         </div>
 
-        {/* Handle de saída (bottom) - Coupon templates don't branch */}
+        {/* Handle de saída (bottom) */}
         <Handle
           type="source"
           position={Position.Bottom}

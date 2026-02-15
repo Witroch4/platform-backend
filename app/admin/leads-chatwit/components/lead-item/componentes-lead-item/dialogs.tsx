@@ -363,6 +363,7 @@ export function LeadDialogs({
         argumentacaoUrl={lead.argumentacaoUrl || null}
         anotacoes={lead.anotacoes || null}
         aguardandoAnalise={localAnaliseState.aguardandoAnalise}
+        analisePreliminar={localAnaliseState.analisePreliminar}
         onSaveAnotacoes={onSaveAnotacoes}
         onEnviarPdf={onEnviarPdf}
         onCancelarAnalise={onCancelarAnalise}

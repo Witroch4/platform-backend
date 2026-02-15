@@ -870,7 +870,9 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
                   <ProviderSwitchHeader column="ESPELHO_CELL" label="Espelho" defaultProvider="GEMINI" />
                 </TableHead>
                 <TableHead className="min-w-[120px] align-middle text-card-foreground px-1 text-sm">Padrão</TableHead>
-                <TableHead className="min-w-[100px] align-middle text-card-foreground px-1 text-sm">Análise</TableHead>
+                <TableHead className="min-w-[130px] align-middle text-card-foreground px-1 text-sm">
+                  <ProviderSwitchHeader column="ANALISE_CELL" label="Análise" defaultProvider="OPENAI" />
+                </TableHead>
                 <TableHead className="min-w-[100px] align-middle text-card-foreground px-1 text-sm">Recurso</TableHead>
                 <TableHead className="min-w-[80px] align-middle text-card-foreground px-1 text-sm">Consultoria</TableHead>
               </TableRow>

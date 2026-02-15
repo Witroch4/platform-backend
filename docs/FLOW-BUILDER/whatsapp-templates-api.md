@@ -365,3 +365,182 @@ Todos os cards devem ter **mesma estrutura**:
 - [ ] Para mídia: fazer upload prévio e usar `media_id`
 - [ ] Para LTO: calcular `expiration_time_ms` dinamicamente
 - [ ] Para catálogo: ter `catalog_id` configurado
+
+---
+
+## Enviar Template para Aprovação (Flow Builder) {#envio-flow-builder}
+
+> Como enviar templates criados no Flow Builder para aprovação da Meta.
+
+### Via Interface (Double-Click)
+
+1. **Crie o template** no Flow Builder (arraste body + botões)
+2. **Double-click no nó** para abrir o `TemplateConfigDialog`
+3. **Preencha os campos obrigatórios**:
+   - Nome do template (apenas `a-z`, `0-9`, `_`)
+   - Categoria (MARKETING, UTILITY, AUTHENTICATION)
+   - Corpo da mensagem
+   - Botões (opcional)
+4. **Clique em "Enviar para Meta"**
+5. Status muda para **PENDING** → aguarda aprovação
+
+### Templates Especializados Suportados
+
+| Tipo de Nó | FlowNodeType | Double-click abre dialog? |
+|------------|--------------|---------------------------|
+| Template (genérico) | `TEMPLATE` | ✅ Sim |
+| Button Template | `BUTTON_TEMPLATE` | ✅ Sim |
+| URL Template | `URL_TEMPLATE` | ✅ Sim |
+| Call Template | `CALL_TEMPLATE` | ✅ Sim |
+| Coupon Template | `COUPON_TEMPLATE` | ✅ Sim |
+
+### Arquitetura do Fluxo
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Flow Builder Canvas (double-click no nó)                       │
+└───────────────────────────┬─────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────────┐
+│  FlowBuilderTab.tsx → handleNodeDoubleClick()                   │
+│  Detecta se é TEMPLATE, BUTTON_TEMPLATE, URL_TEMPLATE, etc.     │
+│  Abre TemplateConfigDialog                                      │
+└───────────────────────────┬─────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────────┐
+│  TemplateConfigDialog.tsx                                       │
+│  - Extrai dados do node (elements[] ou formato tradicional)     │
+│  - Valida payload                                               │
+│  - Botão "Enviar para Meta" → handleSubmitToMeta()              │
+└───────────────────────────┬─────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────────┐
+│  POST /api/admin/mtf-diamante/templates                         │
+│  - Converte variáveis (VariableConverter)                       │
+│  - Envia para Meta Graph API                                    │
+│  - Salva no banco (Template + WhatsAppOfficialInfo)             │
+└───────────────────────────┬─────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────────┐
+│  Meta Graph API                                                 │
+│  POST /{WABA_ID}/message_templates                              │
+│  Retorna: { id, status: 'PENDING' }                             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Arquivos Envolvidos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `FlowBuilderTab.tsx:543-555` | Detecta tipo de nó e abre dialog |
+| `TemplateConfigDialog.tsx` | UI de configuração + envio para Meta |
+| `TemplateConfigDialog.tsx:extractFromElements()` | Extrai dados do array `elements` |
+| `/api/admin/mtf-diamante/templates/route.ts` | API que envia para a Meta |
+| `createWhatsAppTemplate()` | Função que faz POST para Graph API |
+
+### Código: Detectar Templates no Double-Click
+
+```typescript
+// FlowBuilderTab.tsx - handleNodeDoubleClick
+const templateNodeTypes = [
+  FlowNodeType.TEMPLATE,
+  FlowNodeType.BUTTON_TEMPLATE,
+  FlowNodeType.URL_TEMPLATE,
+  FlowNodeType.CALL_TEMPLATE,
+  FlowNodeType.COUPON_TEMPLATE,
+];
+
+if (templateNodeTypes.includes(node.type as FlowNodeType)) {
+  setSelectedNodeId(nodeId);
+  setTemplateDialogOpen(true);
+  return;
+}
+```
+
+### Código: Extrair Dados de Elements
+
+```typescript
+// TemplateConfigDialog.tsx - extractFromElements()
+function extractFromElements(elements: InteractiveMessageElement[]): ExtractedTemplateData {
+  let bodyText = '';
+  let headerType = 'NONE';
+  const buttons: TemplateButton[] = [];
+
+  for (const el of elements) {
+    switch (el.type) {
+      case 'body':
+        bodyText = el.text;
+        break;
+      case 'header_text':
+        headerType = 'TEXT';
+        break;
+      case 'button':
+        buttons.push({ type: 'QUICK_REPLY', text: el.title });
+        break;
+      case 'button_url':
+        buttons.push({ type: 'URL', text: el.title, url: el.url });
+        break;
+      case 'button_phone':
+        buttons.push({ type: 'PHONE_NUMBER', text: el.title, phoneNumber: el.phoneNumber });
+        break;
+      case 'button_copy_code':
+        buttons.push({ type: 'COPY_CODE', text: el.title, exampleCode: el.couponCode });
+        break;
+    }
+  }
+  return { bodyText, headerType, buttons };
+}
+```
+
+### Para Adicionar Suporte a Novos Tipos de Template
+
+1. **Criar o tipo em `types/flow-builder.ts`**:
+   ```typescript
+   export interface MeuNovoTemplateNodeData extends FlowNodeDataBase {
+     status?: TemplateApprovalStatus;
+     templateName?: string;
+     elements?: InteractiveMessageElement[];
+     // ... campos específicos
+   }
+   ```
+
+2. **Adicionar ao enum `FlowNodeType`**:
+   ```typescript
+   export enum FlowNodeType {
+     MEU_NOVO_TEMPLATE = 'meu_novo_template',
+   }
+   ```
+
+3. **Adicionar ao array `templateNodeTypes` em `FlowBuilderTab.tsx`**:
+   ```typescript
+   const templateNodeTypes = [
+     FlowNodeType.TEMPLATE,
+     FlowNodeType.BUTTON_TEMPLATE,
+     FlowNodeType.MEU_NOVO_TEMPLATE, // ← Adicionar aqui
+   ];
+   ```
+
+4. **Se necessário, estender `extractFromElements()`** para suportar novos tipos de elementos.
+
+### Status do Template
+
+| Status | Badge | Significado |
+|--------|-------|-------------|
+| `DRAFT` | 🔘 Rascunho | Criado localmente, não enviado |
+| `PENDING` | 🟡 Pendente | Enviado, aguardando aprovação da Meta |
+| `APPROVED` | 🟢 Aprovado | Pronto para uso em mensagens |
+| `REJECTED` | 🔴 Rejeitado | Meta recusou, verificar motivo |
+
+### Troubleshooting
+
+**Dialog não abre no double-click?**
+- Verificar se o tipo está no array `templateNodeTypes`
+- Verificar se não está na lista `inlineOnlyNodes`
+
+**Erro "Credenciais inválidas"?**
+- Configurar `WhatsAppGlobalConfig` em Configurações → Credenciais
+
+**Template rejeitado pela Meta?**
+- Verificar nome (só minúsculas, números e `_`)
+- Verificar texto (sem links, sem conteúdo sensível)
+- Verificar examples das variáveis

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getPrismaInstance } from '@/lib/connections';
 import { optimizeMirrorPayload, estimateTokenSavings } from '@/lib/oab-eval/mirror-formatter';
 import type { StudentMirrorPayload } from '@/lib/oab-eval/types';
+import { isInternalAnalysisEnabled } from '@/lib/oab-eval/analysis-agent';
+import { enqueueAnalysis } from '@/lib/oab-eval/analysis-queue';
 
 const prisma = getPrismaInstance();
 
@@ -138,6 +140,73 @@ export async function POST(req: Request) {
         console.log("[Enviar Análise] ℹ️ textoDOEspelho não é JSON válido, enviando como está");
       }
     }
+
+    // =========================================================================
+    // ⭐ FEATURE FLAG: BLUEPRINT_ANALISE
+    // Se true → agente interno (BullMQ queue)
+    // Se false/ausente → agente externo (n8n webhook)
+    // =========================================================================
+
+    if (isInternalAnalysisEnabled()) {
+      console.log("[Enviar Análise] 🏠 BLUEPRINT_ANALISE=true → Usando agente interno");
+
+      // Preparar textos para o agente
+      const textoProva = typeof lead.provaManuscrita === 'string'
+        ? lead.provaManuscrita
+        : (lead.provaManuscrita ? JSON.stringify(lead.provaManuscrita) : "");
+
+      const textoEspelhoStr = typeof espelhoOtimizado === 'string'
+        ? espelhoOtimizado
+        : (espelhoOtimizado ? JSON.stringify(espelhoOtimizado) : "");
+
+      if (!textoProva || textoProva.trim().length < 10) {
+        return NextResponse.json(
+          { error: "Texto da prova manuscrita ausente ou muito curto." },
+          { status: 400 }
+        );
+      }
+
+      if (!textoEspelhoStr || textoEspelhoStr.trim().length < 10) {
+        return NextResponse.json(
+          { error: "Texto do espelho ausente ou muito curto." },
+          { status: 400 }
+        );
+      }
+
+      // Ler provider selecionado do body (frontend pode enviar)
+      const selectedProvider = body.selectedProvider as 'OPENAI' | 'GEMINI' | undefined;
+
+      // Enfileirar job de análise interna
+      const job = await enqueueAnalysis({
+        leadId,
+        textoProva,
+        textoEspelho: textoEspelhoStr,
+        selectedProvider,
+        telefone: lead.lead?.phone ?? undefined,
+        nome: lead.nomeReal || lead.lead?.name || "Lead sem nome",
+      });
+
+      // Marcar como aguardando
+      await prisma.leadOabData.update({
+        where: { id: leadId },
+        data: { aguardandoAnalise: true },
+      });
+
+      console.log(`[Enviar Análise] ✅ Job interno ${job.id} criado para lead ${leadId}`);
+
+      return NextResponse.json({
+        success: true,
+        message: "Análise enviada para processamento interno",
+        jobId: job.id,
+        internal: true,
+      });
+    }
+
+    // =========================================================================
+    // FLUXO EXTERNO (n8n webhook) — Comportamento original
+    // =========================================================================
+
+    console.log("[Enviar Análise] 🌐 BLUEPRINT_ANALISE não ativo → Usando sistema externo");
 
     // Preparar payload para o sistema externo
     const payload = {

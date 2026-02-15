@@ -126,7 +126,10 @@ export type InteractiveMessageElementType =
   | 'header_image'
   | 'body'
   | 'footer'
-  | 'button';
+  | 'button'
+  | 'button_copy_code'
+  | 'button_phone'
+  | 'button_url';
 
 export interface InteractiveMessageElementBase {
   id: string;
@@ -164,12 +167,39 @@ export interface InteractiveMessageButtonElement
   description?: string;
 }
 
+/** Botão COPY_CODE para Coupon Templates (PIX, cupons) */
+export interface InteractiveMessageButtonCopyCodeElement
+  extends InteractiveMessageElementBase {
+  type: 'button_copy_code';
+  title: string;
+  couponCode: string;
+}
+
+/** Botão PHONE_NUMBER para Call Templates (ligação direta) */
+export interface InteractiveMessageButtonPhoneElement
+  extends InteractiveMessageElementBase {
+  type: 'button_phone';
+  title: string;
+  phoneNumber: string;
+}
+
+/** Botão URL para URL Templates (links externos) */
+export interface InteractiveMessageButtonUrlElement
+  extends InteractiveMessageElementBase {
+  type: 'button_url';
+  title: string;
+  url: string;
+}
+
 export type InteractiveMessageElement =
   | InteractiveMessageHeaderTextElement
   | InteractiveMessageHeaderImageElement
   | InteractiveMessageBodyElement
   | InteractiveMessageFooterElement
-  | InteractiveMessageButtonElement;
+  | InteractiveMessageButtonElement
+  | InteractiveMessageButtonCopyCodeElement
+  | InteractiveMessageButtonPhoneElement
+  | InteractiveMessageButtonUrlElement;
 
 // =============================================================================
 // ELEMENT PALETTE
@@ -525,8 +555,8 @@ export interface TemplateNodeData extends FlowNodeDataBase {
  */
 export const BUTTON_TEMPLATE_LIMITS = {
   bodyMaxLength: 1024,
-  buttonTextMaxLength: 20,
-  maxButtons: 3,
+  buttonTextMaxLength: 25,
+  maxButtons: 10,
   buttonType: 'QUICK_REPLY' as const,
 } as const;
 
@@ -564,11 +594,11 @@ export const URL_TEMPLATE_LIMITS = {
 
 /**
  * Dados específicos para nó Button Template
- * Mensagem com 1-3 botões QUICK_REPLY
+ * Mensagem com 1-10 botões QUICK_REPLY
  */
 export interface ButtonTemplateNodeData extends FlowNodeDataBase {
   /** Status de aprovação do template */
-  status: TemplateApprovalStatus;
+  status?: TemplateApprovalStatus;
 
   /** Nome do template (para envio à Meta) */
   templateName?: string;
@@ -582,17 +612,21 @@ export interface ButtonTemplateNodeData extends FlowNodeDataBase {
   /** Idioma */
   language?: string;
 
-  /** Corpo da mensagem (obrigatório) */
-  body: {
+  /** Corpo da mensagem (legacy - usar elements) */
+  body?: {
     text: string;
     variables?: string[];
   };
 
-  /** Botões QUICK_REPLY (max 3) */
-  buttons: Array<{
+  /** Botões QUICK_REPLY (legacy - usar elements) */
+  buttons?: Array<{
     id: string;
+    type?: 'QUICK_REPLY';
     text: string; // Max 20 chars
   }>;
+
+  /** Sistema unificado de elementos (igual Mensagem Interativa) */
+  elements?: InteractiveMessageElement[];
 }
 
 /**
@@ -601,7 +635,7 @@ export interface ButtonTemplateNodeData extends FlowNodeDataBase {
  */
 export interface CouponTemplateNodeData extends FlowNodeDataBase {
   /** Status de aprovação do template */
-  status: TemplateApprovalStatus;
+  status?: TemplateApprovalStatus;
 
   /** Nome do template */
   templateName?: string;
@@ -615,17 +649,20 @@ export interface CouponTemplateNodeData extends FlowNodeDataBase {
   /** Idioma */
   language?: string;
 
-  /** Corpo da mensagem */
-  body: {
+  /** Corpo da mensagem (legacy) */
+  body?: {
     text: string;
     variables?: string[];
   };
 
   /** Código do cupom/PIX (max 15 chars) */
-  couponCode: string;
+  couponCode?: string;
 
   /** Texto do botão de copiar */
-  buttonText: string;
+  buttonText?: string;
+
+  /** Sistema unificado de elementos */
+  elements?: InteractiveMessageElement[];
 }
 
 /**
@@ -634,7 +671,7 @@ export interface CouponTemplateNodeData extends FlowNodeDataBase {
  */
 export interface CallTemplateNodeData extends FlowNodeDataBase {
   /** Status de aprovação do template */
-  status: TemplateApprovalStatus;
+  status?: TemplateApprovalStatus;
 
   /** Nome do template */
   templateName?: string;
@@ -648,17 +685,20 @@ export interface CallTemplateNodeData extends FlowNodeDataBase {
   /** Idioma */
   language?: string;
 
-  /** Corpo da mensagem */
-  body: {
+  /** Corpo da mensagem (legacy) */
+  body?: {
     text: string;
     variables?: string[];
   };
 
   /** Número de telefone (formato E.164: +5511999999999) */
-  phoneNumber: string;
+  phoneNumber?: string;
 
   /** Texto do botão de ligar */
-  buttonText: string;
+  buttonText?: string;
+
+  /** Sistema unificado de elementos */
+  elements?: InteractiveMessageElement[];
 }
 
 /**
@@ -667,7 +707,7 @@ export interface CallTemplateNodeData extends FlowNodeDataBase {
  */
 export interface UrlTemplateNodeData extends FlowNodeDataBase {
   /** Status de aprovação do template */
-  status: TemplateApprovalStatus;
+  status?: TemplateApprovalStatus;
 
   /** Nome do template */
   templateName?: string;
@@ -681,18 +721,22 @@ export interface UrlTemplateNodeData extends FlowNodeDataBase {
   /** Idioma */
   language?: string;
 
-  /** Corpo da mensagem */
-  body: {
+  /** Corpo da mensagem (legacy) */
+  body?: {
     text: string;
     variables?: string[];
   };
 
-  /** Botões URL (max 2) */
-  buttons: Array<{
+  /** Botões URL (legacy - max 2) */
+  buttons?: Array<{
     id: string;
+    type?: 'URL';
     text: string; // Max 25 chars
     url: string;
   }>;
+
+  /** Sistema unificado de elementos */
+  elements?: InteractiveMessageElement[];
 }
 
 /**
@@ -1007,7 +1051,7 @@ export const INSTAGRAM_PALETTE_ITEMS: PaletteItem[] = [
     type: FlowNodeType.INTERACTIVE_MESSAGE,
     icon: '📱',
     label: 'Button Template',
-    description: 'Mensagem com 1-3 botões',
+    description: 'Mensagem com 1-10 botões',
     category: 'message',
   },
   {
@@ -1101,7 +1145,7 @@ export const TEMPLATE_PALETTE_ITEMS: TemplatePaletteItem[] = [
     type: FlowNodeType.BUTTON_TEMPLATE,
     icon: '📋',
     label: 'Button Template',
-    description: 'Mensagem com 1-3 botões',
+    description: 'Mensagem com 1-10 botões',
     category: 'template',
     buttonType: 'QUICK_REPLY',
     maxButtons: 3,
@@ -1417,9 +1461,10 @@ export function createFlowNode(
  * Retorna o label padrão para um tipo de nó
  */
 function getDefaultLabel(type: FlowNodeType): string {
-  // Procura primeiro no PALETTE_ITEMS (WhatsApp), depois em INSTAGRAM_PALETTE_ITEMS
+  // Procura em todas as paletas: PALETTE_ITEMS, INSTAGRAM_PALETTE_ITEMS e TEMPLATE_PALETTE_ITEMS
   const item = PALETTE_ITEMS.find((p) => p.type === type)
-    ?? INSTAGRAM_PALETTE_ITEMS.find((p) => p.type === type);
+    ?? INSTAGRAM_PALETTE_ITEMS.find((p) => p.type === type)
+    ?? TEMPLATE_PALETTE_ITEMS.find((p) => p.type === type);
   return item?.label ?? 'Nó';
 }
 

@@ -637,10 +637,11 @@ export function useLeadHandlers({
       
       // Promise para o toast da análise
       const analisePromise = async () => {
+        const selectedProvider = getColumnProvider('ANALISE_CELL', 'OPENAI');
         const response = await fetch(apiEndpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ leadID: lead.id })
+          body: JSON.stringify({ leadID: lead.id, selectedProvider })
         });
         
         if (!response.ok) {

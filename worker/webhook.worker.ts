@@ -8,6 +8,7 @@ import { startRedisHealthMonitoring, checkRedisHealth } from "@/lib/redis-health
 import { processAgendamentoTask } from "./WebhookWorkerTasks/agendamento.task";
 import { processLeadCellTask } from "./WebhookWorkerTasks/leadcells.task";
 import { processMirrorGenerationTask } from "./WebhookWorkerTasks/mirror-generation.task";
+import { processAnalysisGenerationTask } from "./WebhookWorkerTasks/analysis-generation.task";
 import { MANUSCRITO_QUEUE_NAME } from "@/lib/queue/manuscrito.queue";
 import { leadCellsQueue } from "@/lib/queue/leadcells.queue";
 import { mirrorGenerationQueue } from "@/lib/oab-eval/mirror-queue";
@@ -346,6 +347,7 @@ let manuscritoWorker: Worker;
 let leadCellsWorker: Worker;
 let leadsChatwitWorker: Worker;
 let mirrorGenerationWorker: Worker;
+let analysisGenerationWorker: Worker;
 
 // Worker de leads‑chatwit 🔥 (concorrência ajustável baseada no ambiente)
 const workersConfig = getWorkersConfig();
@@ -385,6 +387,13 @@ async function initializeLegacyWorkers(): Promise<void> {
       lockDuration: 300000, // 5 minutos (pode demorar mais que manuscrito)
     });
 
+    // Worker para análise comparativa (Prova × Espelho) — BLUEPRINT_ANALISE
+    analysisGenerationWorker = new Worker("oab-analysis", processAnalysisGenerationTask, {
+      connection: getRedisInstance(),
+      concurrency: 3, // Até 3 análises simultâneas
+      lockDuration: 300000, // 5 minutos (LLM pode demorar com textos grandes)
+    });
+
     // Worker de leads‑chatwit 🔥
     leadsChatwitWorker = new Worker(
       LEADS_QUEUE_NAME,
@@ -404,6 +413,7 @@ async function initializeLegacyWorkers(): Promise<void> {
       manuscritoWorker.waitUntilReady(),
       leadCellsWorker.waitUntilReady(),
       mirrorGenerationWorker.waitUntilReady(),
+      analysisGenerationWorker.waitUntilReady(),
       leadsChatwitWorker.waitUntilReady(),
     ]);
 
@@ -551,6 +561,7 @@ function setupWorkerEventHandlers(): void {
     manuscritoWorker,
     leadCellsWorker,
     mirrorGenerationWorker,
+    analysisGenerationWorker,
     leadsChatwitWorker,
     autoNotificationsWorker,
     // mtfDiamanteAsyncWorker, // Temporariamente desabilitado
@@ -1086,6 +1097,7 @@ const gracefulShutdown = async (signal: string) => {
     if (manuscritoWorker) workersToClose.push(manuscritoWorker.close());
     if (leadCellsWorker) workersToClose.push(leadCellsWorker.close());
     if (mirrorGenerationWorker) workersToClose.push(mirrorGenerationWorker.close());
+    if (analysisGenerationWorker) workersToClose.push(analysisGenerationWorker.close());
     if (leadsChatwitWorker) workersToClose.push(leadsChatwitWorker.close());
     if (autoNotificationsWorker) workersToClose.push(autoNotificationsWorker.close());
     if (instagramTranslationWorker) workersToClose.push(instagramTranslationWorker.close());

@@ -20,9 +20,11 @@ import React, { useCallback, useMemo, type DragEvent } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import {
   FLOWBUILDER_ELEMENT_MIME,
+  TEMPLATE_ELEMENT_MIME,
   FlowNodeType,
   FLOW_CANVAS_CONSTANTS,
   type InteractiveMessageElementType,
+  type TemplateElementType,
 } from '@/types/flow-builder';
 
 // Nodes
@@ -100,6 +102,11 @@ interface FlowCanvasProps {
     position: { x: number; y: number },
     targetNodeId: string | null
   ) => void;
+  /** Called when a Template element block is dropped into a template container */
+  onDropTemplateElement?: (
+    elementType: TemplateElementType,
+    targetNodeId: string
+  ) => void;
   /** Called when user double-clicks a node (opens config) */
   onNodeDoubleClick?: (nodeId: string) => void;
   /** Called when a node is selected/deselected */
@@ -126,6 +133,7 @@ export function FlowCanvas({
   onConnect,
   onDrop,
   onDropElement,
+  onDropTemplateElement,
   onNodeDoubleClick,
   onNodeSelect,
   onConnectEnd,
@@ -203,12 +211,41 @@ export function FlowCanvas({
   // ---------------------------------------------------------------------------
   const handleDragOver = useCallback((event: DragEvent) => {
     event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
+    // Set dropEffect based on what's being dragged
+    if (event.dataTransfer.types.includes(TEMPLATE_ELEMENT_MIME)) {
+      event.dataTransfer.dropEffect = 'copy';
+    } else if (event.dataTransfer.types.includes(FLOWBUILDER_ELEMENT_MIME)) {
+      event.dataTransfer.dropEffect = 'copy';
+    } else {
+      event.dataTransfer.dropEffect = 'move';
+    }
   }, []);
 
   const handleDrop = useCallback(
     (event: DragEvent) => {
       event.preventDefault();
+
+      // Template element blocks (dropped into a Template container)
+      const templateElementType = event.dataTransfer.getData(
+        TEMPLATE_ELEMENT_MIME
+      ) as TemplateElementType;
+
+      if (templateElementType) {
+        // Find target node using elementFromPoint
+        const target = document.elementFromPoint(event.clientX, event.clientY);
+        const nodeEl = target?.closest('.react-flow__node') as HTMLElement | null;
+
+        const targetNodeId =
+          nodeEl?.getAttribute('data-id') ??
+          nodeEl?.dataset?.id ??
+          nodeEl?.getAttribute('data-nodeid') ??
+          null;
+
+        if (targetNodeId) {
+          onDropTemplateElement?.(templateElementType, targetNodeId);
+        }
+        return;
+      }
 
       // Element blocks (dropped into an Interactive Message container)
       const elementType = event.dataTransfer.getData(
@@ -225,7 +262,7 @@ export function FlowCanvas({
         // This handles cases where event.target might be the drag source or a portal
         const target = document.elementFromPoint(event.clientX, event.clientY);
         const nodeEl = target?.closest('.react-flow__node') as HTMLElement | null;
-        
+
         const targetNodeId =
           nodeEl?.getAttribute('data-id') ??
           nodeEl?.dataset?.id ??
@@ -247,7 +284,7 @@ export function FlowCanvas({
 
       onDrop?.(type, position);
     },
-    [onDrop, onDropElement, screenToFlowPosition]
+    [onDrop, onDropElement, onDropTemplateElement, screenToFlowPosition]
   );
 
   // ---------------------------------------------------------------------------

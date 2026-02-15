@@ -47,7 +47,7 @@ class ErrorBoundary extends Component<Props, State> {
             <div className="flex justify-center mb-8">
               <div className="relative w-16 h-16 opacity-60">
                 <Image
-                  src="/W.svg"
+                  src="/assets/iconssvg/logo_thumbnail_w.svg"
                   alt="Chatwit"
                   fill
                   className="object-contain"

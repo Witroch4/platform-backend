@@ -54,7 +54,7 @@ Cada tipo de template WhatsApp deve ter seu próprio container na paleta:
 
 | Container | Elementos | Max Buttons | Caso de Uso |
 |-----------|-----------|-------------|-------------|
-| **Button Template** | Body + Botões | 3 QUICK_REPLY | Respostas simples |
+| **Button Template** | Body + Botões | 10 QUICK_REPLY | Respostas simples |
 | **Coupon Template** | Body + Botão COPY_CODE | 1 COPY_CODE | Chaves PIX, cupons |
 | **Call Template** | Body + Botão PHONE | 1 PHONE_NUMBER | Ligação direta |
 | **URL Template** | Body + Botão URL | 2 URL | Links externos |
@@ -110,7 +110,7 @@ export interface ButtonTemplateNodeData extends FlowNodeDataBase {
   buttons: Array<{
     id: string;
     text: string;  // Max 20 chars
-  }>;  // Max 3 QUICK_REPLY
+  }>;  // Max 10 QUICK_REPLY
 
   // Meta API
   templateName?: string;
@@ -120,8 +120,8 @@ export interface ButtonTemplateNodeData extends FlowNodeDataBase {
 // Validação específica
 export const BUTTON_TEMPLATE_LIMITS = {
   bodyMaxLength: 1024,
-  buttonTextMaxLength: 20,
-  maxButtons: 3,
+  buttonTextMaxLength: 25,
+  maxButtons: 10,
   buttonType: 'QUICK_REPLY' as const,
 };
 ```

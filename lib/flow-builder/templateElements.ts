@@ -42,8 +42,8 @@ export const TEMPLATE_LIMITS = {
   couponCodeMaxLength: 15,
   /** Max total buttons */
   maxButtons: 10,
-  /** Max QUICK_REPLY buttons */
-  maxQuickReplyButtons: 3,
+  /** Max QUICK_REPLY buttons (templates oficiais permitem até 10) */
+  maxQuickReplyButtons: 10,
   /** Max URL buttons */
   maxUrlButtons: 2,
   /** Variable pattern */

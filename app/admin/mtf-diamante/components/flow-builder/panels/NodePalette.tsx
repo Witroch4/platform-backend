@@ -82,7 +82,7 @@ function ElementPaletteCard({ item }: ElementPaletteCardProps) {
   const onDragStart = useCallback(
     (event: DragEvent) => {
       event.dataTransfer.setData(FLOWBUILDER_ELEMENT_MIME, item.type);
-      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.effectAllowed = 'copy';
     },
     [item.type]
   );
@@ -161,7 +161,7 @@ function TemplateElementPaletteCard({ item }: TemplateElementPaletteCardProps) {
   const onDragStart = useCallback(
     (event: DragEvent) => {
       event.dataTransfer.setData(TEMPLATE_ELEMENT_MIME, item.type);
-      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.effectAllowed = 'copy';
     },
     [item.type]
   );
