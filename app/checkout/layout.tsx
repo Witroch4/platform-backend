@@ -1,12 +1,12 @@
 export const metadata = {
-  title: 'Checkout - Socialwise Chatwit',
-  description: 'Finalize sua assinatura do Socialwise Chatwit',
-}
+	title: "Checkout - Socialwise Chatwit",
+	description: "Finalize sua assinatura do Socialwise Chatwit",
+};
 
 export default function CheckoutLayout({
-  children,
+	children,
 }: {
-  children: React.ReactNode
+	children: React.ReactNode;
 }) {
-  return children;
+	return children;
 }

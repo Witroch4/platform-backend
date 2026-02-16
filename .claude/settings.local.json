@@ -34,7 +34,16 @@
       "Bash(npx @next/codemod@latest upgrade:*)",
       "Bash(pnpm build:*)",
       "Skill(web-design-guidelines)",
-      "Skill(web-design-guidelines:*)"
+      "Skill(web-design-guidelines:*)",
+      "Bash(chmod:*)",
+      "Bash(docker system prune:*)",
+      "Bash(docker system:*)",
+      "Bash(docker builder prune:*)",
+      "Bash(pnpm run lint:*)",
+      "Bash(pnpm exec biome:*)",
+      "Bash(docker logs:*)",
+      "Skill(vercel-react-best-practices)",
+      "Skill(vercel-react-best-practices:*)"
     ],
     "deny": [],
     "ask": []

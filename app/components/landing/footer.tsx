@@ -12,13 +12,7 @@ export function Footer() {
 					<div>
 						<Link href="/" className="inline-block mb-6">
 							<div className="flex items-center">
-								<Image
-									src="/01%20WitdeT.png"
-									alt="Socialwise Chatwit Logo"
-									width={50}
-									height={50}
-									className="mr-3"
-								/>
+								<Image src="/01%20WitdeT.png" alt="Socialwise Chatwit Logo" width={50} height={50} className="mr-3" />
 								<span className="text-2xl font-bold">Socialwise Chatwit</span>
 							</div>
 						</Link>
@@ -40,38 +34,86 @@ export function Footer() {
 							</a>
 						</div>
 					</div>
-					
+
 					<div>
 						<h4 className="font-bold text-lg mb-4">Funcionalidades</h4>
 						<ul className="space-y-2">
-							<li><a href="#" className="text-gray-400 hover:text-white transition-colors">ChatWit IA</a></li>
-							<li><a href="#" className="text-gray-400 hover:text-white transition-colors">Automação Social</a></li>
-							<li><a href="#" className="text-gray-400 hover:text-white transition-colors">Sistema Jurídico</a></li>
-							<li><a href="#" className="text-gray-400 hover:text-white transition-colors">Gestão de Leads</a></li>
+							<li>
+								<a href="#" className="text-gray-400 hover:text-white transition-colors">
+									ChatWit IA
+								</a>
+							</li>
+							<li>
+								<a href="#" className="text-gray-400 hover:text-white transition-colors">
+									Automação Social
+								</a>
+							</li>
+							<li>
+								<a href="#" className="text-gray-400 hover:text-white transition-colors">
+									Sistema Jurídico
+								</a>
+							</li>
+							<li>
+								<a href="#" className="text-gray-400 hover:text-white transition-colors">
+									Gestão de Leads
+								</a>
+							</li>
 						</ul>
 					</div>
-					
+
 					<div>
 						<h4 className="font-bold text-lg mb-4">Suporte</h4>
 						<ul className="space-y-2">
-							<li><a href="#" className="text-gray-400 hover:text-white transition-colors">Central de Ajuda</a></li>
-							<li><a href="#" className="text-gray-400 hover:text-white transition-colors">Documentação</a></li>
-							<li><a href="#" className="text-gray-400 hover:text-white transition-colors">Tutoriais</a></li>
-							<li><a href="#" className="text-gray-400 hover:text-white transition-colors">Contato</a></li>
+							<li>
+								<a href="#" className="text-gray-400 hover:text-white transition-colors">
+									Central de Ajuda
+								</a>
+							</li>
+							<li>
+								<a href="#" className="text-gray-400 hover:text-white transition-colors">
+									Documentação
+								</a>
+							</li>
+							<li>
+								<a href="#" className="text-gray-400 hover:text-white transition-colors">
+									Tutoriais
+								</a>
+							</li>
+							<li>
+								<a href="#" className="text-gray-400 hover:text-white transition-colors">
+									Contato
+								</a>
+							</li>
 						</ul>
 					</div>
-					
+
 					<div>
 						<h4 className="font-bold text-lg mb-4">Empresa</h4>
 						<ul className="space-y-2">
-							<li><a href="#" className="text-gray-400 hover:text-white transition-colors">Sobre Nós</a></li>
-							<li><a href="#" className="text-gray-400 hover:text-white transition-colors">Blog</a></li>
-							<li><a href="#" className="text-gray-400 hover:text-white transition-colors">Termos de Uso</a></li>
-							<li><a href="#" className="text-gray-400 hover:text-white transition-colors">Política de Privacidade</a></li>
+							<li>
+								<a href="#" className="text-gray-400 hover:text-white transition-colors">
+									Sobre Nós
+								</a>
+							</li>
+							<li>
+								<a href="#" className="text-gray-400 hover:text-white transition-colors">
+									Blog
+								</a>
+							</li>
+							<li>
+								<a href="#" className="text-gray-400 hover:text-white transition-colors">
+									Termos de Uso
+								</a>
+							</li>
+							<li>
+								<a href="#" className="text-gray-400 hover:text-white transition-colors">
+									Política de Privacidade
+								</a>
+							</li>
 						</ul>
 					</div>
 				</div>
-				
+
 				<div className="border-t border-gray-800 mt-12 pt-8 text-center text-gray-400">
 					<p>&copy; {new Date().getFullYear()} Socialwise Chatwit. Todos os direitos reservados.</p>
 					<p className="mt-2 text-sm">Desenvolvido com ❤️ para transformar o atendimento digital no Brasil</p>

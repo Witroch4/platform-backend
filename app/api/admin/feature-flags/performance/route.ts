@@ -4,215 +4,214 @@ import { getPrismaInstance, getRedisInstance } from "@/lib/connections";
 import logger from "@/lib/utils/logger";
 
 export async function GET(request: NextRequest) {
-  try {
-    const session = await auth();
-    
-    if (!session?.user?.id || session.user.role !== "SUPERADMIN") {
-      return NextResponse.json(
-        { error: "Acesso negado. Apenas SUPERADMIN pode acessar métricas de performance." },
-        { status: 403 }
-      );
-    }
+	try {
+		const session = await auth();
 
-    const { searchParams } = new URL(request.url);
-    const days = parseInt(searchParams.get("days") || "7");
-    const flagId = searchParams.get("flagId");
+		if (!session?.user?.id || session.user.role !== "SUPERADMIN") {
+			return NextResponse.json(
+				{ error: "Acesso negado. Apenas SUPERADMIN pode acessar métricas de performance." },
+				{ status: 403 },
+			);
+		}
 
-    const prisma = getPrismaInstance();
-    
-    // Calculate date range
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
+		const { searchParams } = new URL(request.url);
+		const days = parseInt(searchParams.get("days") || "7");
+		const flagId = searchParams.get("flagId");
 
-    // Build where clause
-    const whereClause: any = {
-      date: {
-        gte: startDate,
-        lte: endDate
-      }
-    };
+		const prisma = getPrismaInstance();
 
-    if (flagId) {
-      whereClause.flagId = flagId;
-    }
+		// Calculate date range
+		const endDate = new Date();
+		const startDate = new Date();
+		startDate.setDate(startDate.getDate() - days);
 
-    // Get performance metrics
-    const metrics = await prisma.featureFlagMetrics.findMany({
-      where: whereClause,
-      include: {
-        flag: {
-          select: {
-            id: true,
-            name: true,
-            category: true
-          }
-        }
-      },
-      orderBy: [
-        { date: "desc" },
-        { averageLatencyMs: "desc" }
-      ]
-    });
+		// Build where clause
+		const whereClause: any = {
+			date: {
+				gte: startDate,
+				lte: endDate,
+			},
+		};
 
-    // Calculate performance statistics
-    const performanceStats = {
-      totalEvaluations: 0,
-      totalLatency: 0,
-      minLatency: Number.MAX_VALUE,
-      maxLatency: 0,
-      flagCount: new Set<string>(),
-      dailyStats: new Map<string, {
-        date: string;
-        evaluations: number;
-        averageLatency: number;
-        flagsEvaluated: number;
-      }>()
-    };
+		if (flagId) {
+			whereClause.flagId = flagId;
+		}
 
-    // Process metrics
-    metrics.forEach(metric => {
-      performanceStats.totalEvaluations += metric.evaluations;
-      performanceStats.totalLatency += metric.averageLatencyMs * metric.evaluations;
-      performanceStats.minLatency = Math.min(performanceStats.minLatency, metric.averageLatencyMs);
-      performanceStats.maxLatency = Math.max(performanceStats.maxLatency, metric.averageLatencyMs);
-      performanceStats.flagCount.add(metric.flagId);
+		// Get performance metrics
+		const metrics = await prisma.featureFlagMetrics.findMany({
+			where: whereClause,
+			include: {
+				flag: {
+					select: {
+						id: true,
+						name: true,
+						category: true,
+					},
+				},
+			},
+			orderBy: [{ date: "desc" }, { averageLatencyMs: "desc" }],
+		});
 
-      // Daily aggregation
-      const dateKey = metric.date.toISOString().split('T')[0];
-      const existing = performanceStats.dailyStats.get(dateKey) || {
-        date: dateKey,
-        evaluations: 0,
-        averageLatency: 0,
-        flagsEvaluated: 0
-      };
+		// Calculate performance statistics
+		const performanceStats = {
+			totalEvaluations: 0,
+			totalLatency: 0,
+			minLatency: Number.MAX_VALUE,
+			maxLatency: 0,
+			flagCount: new Set<string>(),
+			dailyStats: new Map<
+				string,
+				{
+					date: string;
+					evaluations: number;
+					averageLatency: number;
+					flagsEvaluated: number;
+				}
+			>(),
+		};
 
-      existing.evaluations += metric.evaluations;
-      existing.averageLatency = (existing.averageLatency * existing.flagsEvaluated + metric.averageLatencyMs) / (existing.flagsEvaluated + 1);
-      existing.flagsEvaluated += 1;
+		// Process metrics
+		metrics.forEach((metric) => {
+			performanceStats.totalEvaluations += metric.evaluations;
+			performanceStats.totalLatency += metric.averageLatencyMs * metric.evaluations;
+			performanceStats.minLatency = Math.min(performanceStats.minLatency, metric.averageLatencyMs);
+			performanceStats.maxLatency = Math.max(performanceStats.maxLatency, metric.averageLatencyMs);
+			performanceStats.flagCount.add(metric.flagId);
 
-      performanceStats.dailyStats.set(dateKey, existing);
-    });
+			// Daily aggregation
+			const dateKey = metric.date.toISOString().split("T")[0];
+			const existing = performanceStats.dailyStats.get(dateKey) || {
+				date: dateKey,
+				evaluations: 0,
+				averageLatency: 0,
+				flagsEvaluated: 0,
+			};
 
-    // Calculate overall average latency
-    const overallAverageLatency = performanceStats.totalEvaluations > 0 
-      ? performanceStats.totalLatency / performanceStats.totalEvaluations 
-      : 0;
+			existing.evaluations += metric.evaluations;
+			existing.averageLatency =
+				(existing.averageLatency * existing.flagsEvaluated + metric.averageLatencyMs) / (existing.flagsEvaluated + 1);
+			existing.flagsEvaluated += 1;
 
-    // Get Redis performance metrics
-    let redisMetrics = null;
-    try {
-      const redis = getRedisInstance();
-      const info = await redis.info('stats');
-      const lines = info.split('\r\n');
-      
-      redisMetrics = {
-        totalCommandsProcessed: parseInt(lines.find((l: string) => l.startsWith('total_commands_processed:'))?.split(':')[1] || '0'),
-        instantaneousOpsPerSec: parseInt(lines.find((l: string) => l.startsWith('instantaneous_ops_per_sec:'))?.split(':')[1] || '0'),
-        keyspaceHits: parseInt(lines.find((l: string) => l.startsWith('keyspace_hits:'))?.split(':')[1] || '0'),
-        keyspaceMisses: parseInt(lines.find((l: string) => l.startsWith('keyspace_misses:'))?.split(':')[1] || '0'),
-        usedMemory: parseInt(lines.find((l: string) => l.startsWith('used_memory:'))?.split(':')[1] || '0'),
-        cacheHitRate: 0
-      };
+			performanceStats.dailyStats.set(dateKey, existing);
+		});
 
-      // Calculate cache hit rate
-      const totalRequests = redisMetrics.keyspaceHits + redisMetrics.keyspaceMisses;
-      redisMetrics.cacheHitRate = totalRequests > 0 ? (redisMetrics.keyspaceHits / totalRequests) * 100 : 0;
+		// Calculate overall average latency
+		const overallAverageLatency =
+			performanceStats.totalEvaluations > 0 ? performanceStats.totalLatency / performanceStats.totalEvaluations : 0;
 
-    } catch (redisError) {
-      logger.warn("Failed to get Redis metrics", {
-        error: redisError instanceof Error ? redisError.message : "Unknown error"
-      });
-    }
+		// Get Redis performance metrics
+		let redisMetrics = null;
+		try {
+			const redis = getRedisInstance();
+			const info = await redis.info("stats");
+			const lines = info.split("\r\n");
 
-    // Get slowest flags
-    const slowestFlags = metrics
-      .sort((a, b) => b.averageLatencyMs - a.averageLatencyMs)
-      .slice(0, 10)
-      .map(metric => ({
-        flagId: metric.flagId,
-        flagName: metric.flag.name,
-        category: metric.flag.category,
-        averageLatencyMs: metric.averageLatencyMs,
-        evaluations: metric.evaluations,
-        date: metric.date.toISOString().split('T')[0]
-      }));
+			redisMetrics = {
+				totalCommandsProcessed: parseInt(
+					lines.find((l: string) => l.startsWith("total_commands_processed:"))?.split(":")[1] || "0",
+				),
+				instantaneousOpsPerSec: parseInt(
+					lines.find((l: string) => l.startsWith("instantaneous_ops_per_sec:"))?.split(":")[1] || "0",
+				),
+				keyspaceHits: parseInt(lines.find((l: string) => l.startsWith("keyspace_hits:"))?.split(":")[1] || "0"),
+				keyspaceMisses: parseInt(lines.find((l: string) => l.startsWith("keyspace_misses:"))?.split(":")[1] || "0"),
+				usedMemory: parseInt(lines.find((l: string) => l.startsWith("used_memory:"))?.split(":")[1] || "0"),
+				cacheHitRate: 0,
+			};
 
-    // Performance thresholds and alerts
-    const performanceAlerts = [];
-    const HIGH_LATENCY_THRESHOLD = 100; // ms
-    const LOW_CACHE_HIT_THRESHOLD = 80; // %
+			// Calculate cache hit rate
+			const totalRequests = redisMetrics.keyspaceHits + redisMetrics.keyspaceMisses;
+			redisMetrics.cacheHitRate = totalRequests > 0 ? (redisMetrics.keyspaceHits / totalRequests) * 100 : 0;
+		} catch (redisError) {
+			logger.warn("Failed to get Redis metrics", {
+				error: redisError instanceof Error ? redisError.message : "Unknown error",
+			});
+		}
 
-    if (overallAverageLatency > HIGH_LATENCY_THRESHOLD) {
-      performanceAlerts.push({
-        type: "HIGH_LATENCY",
-        severity: "warning",
-        message: `Latência média de avaliação de flags está alta: ${overallAverageLatency.toFixed(2)}ms`,
-        threshold: HIGH_LATENCY_THRESHOLD,
-        currentValue: overallAverageLatency
-      });
-    }
+		// Get slowest flags
+		const slowestFlags = metrics
+			.sort((a, b) => b.averageLatencyMs - a.averageLatencyMs)
+			.slice(0, 10)
+			.map((metric) => ({
+				flagId: metric.flagId,
+				flagName: metric.flag.name,
+				category: metric.flag.category,
+				averageLatencyMs: metric.averageLatencyMs,
+				evaluations: metric.evaluations,
+				date: metric.date.toISOString().split("T")[0],
+			}));
 
-    if (redisMetrics && redisMetrics.cacheHitRate < LOW_CACHE_HIT_THRESHOLD) {
-      performanceAlerts.push({
-        type: "LOW_CACHE_HIT_RATE",
-        severity: "warning",
-        message: `Taxa de acerto do cache está baixa: ${redisMetrics.cacheHitRate.toFixed(2)}%`,
-        threshold: LOW_CACHE_HIT_THRESHOLD,
-        currentValue: redisMetrics.cacheHitRate
-      });
-    }
+		// Performance thresholds and alerts
+		const performanceAlerts = [];
+		const HIGH_LATENCY_THRESHOLD = 100; // ms
+		const LOW_CACHE_HIT_THRESHOLD = 80; // %
 
-    const response = {
-      period: {
-        days,
-        startDate: startDate.toISOString().split('T')[0],
-        endDate: endDate.toISOString().split('T')[0]
-      },
-      performance: {
-        totalEvaluations: performanceStats.totalEvaluations,
-        averageLatencyMs: overallAverageLatency,
-        minLatencyMs: performanceStats.minLatency === Number.MAX_VALUE ? 0 : performanceStats.minLatency,
-        maxLatencyMs: performanceStats.maxLatency,
-        uniqueFlags: performanceStats.flagCount.size
-      },
-      dailyStats: Array.from(performanceStats.dailyStats.values()).sort((a, b) => a.date.localeCompare(b.date)),
-      slowestFlags,
-      redisMetrics,
-      alerts: performanceAlerts,
-      recommendations: [] as string[]
-    };
+		if (overallAverageLatency > HIGH_LATENCY_THRESHOLD) {
+			performanceAlerts.push({
+				type: "HIGH_LATENCY",
+				severity: "warning",
+				message: `Latência média de avaliação de flags está alta: ${overallAverageLatency.toFixed(2)}ms`,
+				threshold: HIGH_LATENCY_THRESHOLD,
+				currentValue: overallAverageLatency,
+			});
+		}
 
-    // Add performance recommendations
-    if (overallAverageLatency > 50) {
-      response.recommendations.push("Considere otimizar a avaliação de feature flags ou implementar cache adicional");
-    }
+		if (redisMetrics && redisMetrics.cacheHitRate < LOW_CACHE_HIT_THRESHOLD) {
+			performanceAlerts.push({
+				type: "LOW_CACHE_HIT_RATE",
+				severity: "warning",
+				message: `Taxa de acerto do cache está baixa: ${redisMetrics.cacheHitRate.toFixed(2)}%`,
+				threshold: LOW_CACHE_HIT_THRESHOLD,
+				currentValue: redisMetrics.cacheHitRate,
+			});
+		}
 
-    if (redisMetrics && redisMetrics.cacheHitRate < 90) {
-      response.recommendations.push("Considere ajustar a estratégia de cache ou aumentar o TTL dos flags");
-    }
+		const response = {
+			period: {
+				days,
+				startDate: startDate.toISOString().split("T")[0],
+				endDate: endDate.toISOString().split("T")[0],
+			},
+			performance: {
+				totalEvaluations: performanceStats.totalEvaluations,
+				averageLatencyMs: overallAverageLatency,
+				minLatencyMs: performanceStats.minLatency === Number.MAX_VALUE ? 0 : performanceStats.minLatency,
+				maxLatencyMs: performanceStats.maxLatency,
+				uniqueFlags: performanceStats.flagCount.size,
+			},
+			dailyStats: Array.from(performanceStats.dailyStats.values()).sort((a, b) => a.date.localeCompare(b.date)),
+			slowestFlags,
+			redisMetrics,
+			alerts: performanceAlerts,
+			recommendations: [] as string[],
+		};
 
-    if (performanceStats.flagCount.size > 100) {
-      response.recommendations.push("Considere arquivar ou remover feature flags não utilizadas");
-    }
+		// Add performance recommendations
+		if (overallAverageLatency > 50) {
+			response.recommendations.push("Considere otimizar a avaliação de feature flags ou implementar cache adicional");
+		}
 
-    logger.info("Performance metrics retrieved successfully", {
-      userId: session.user.id,
-      period: days,
-      totalEvaluations: performanceStats.totalEvaluations,
-      averageLatency: overallAverageLatency
-    });
+		if (redisMetrics && redisMetrics.cacheHitRate < 90) {
+			response.recommendations.push("Considere ajustar a estratégia de cache ou aumentar o TTL dos flags");
+		}
 
-    return NextResponse.json(response);
+		if (performanceStats.flagCount.size > 100) {
+			response.recommendations.push("Considere arquivar ou remover feature flags não utilizadas");
+		}
 
-  } catch (error) {
-    logger.error("Error retrieving performance metrics", {
-      error: error instanceof Error ? error.message : "Unknown error"
-    });
+		logger.info("Performance metrics retrieved successfully", {
+			userId: session.user.id,
+			period: days,
+			totalEvaluations: performanceStats.totalEvaluations,
+			averageLatency: overallAverageLatency,
+		});
 
-    return NextResponse.json(
-      { error: "Erro interno do servidor" },
-      { status: 500 }
-    );
-  }
+		return NextResponse.json(response);
+	} catch (error) {
+		logger.error("Error retrieving performance metrics", {
+			error: error instanceof Error ? error.message : "Unknown error",
+		});
+
+		return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 });
+	}
 }

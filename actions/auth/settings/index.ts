@@ -2,7 +2,7 @@
 
 import { auth } from "@/auth";
 import { useCurrentUser } from "@/components/hooks/use-current-user";
-import { getPrismaInstance } from "@/lib/connections"
+import { getPrismaInstance } from "@/lib/connections";
 import { UserSettingsSchema } from "@/schemas/auth";
 import { findUserbyEmail, findUserbyId } from "@/services";
 import bcryptjs from "bcryptjs";
@@ -38,10 +38,10 @@ export const changeSettings = async (settings: z.infer<typeof UserSettingsSchema
 	}
 
 	//TODO: Add e-mail verification to enable two factor authentication
-const { password, newPassword } = validData.data;
-if (password && newPassword && userData?.password) {
-const validPassword = await bcryptjs.compare(password, userData.password);
-if (!validPassword) {
+	const { password, newPassword } = validData.data;
+	if (password && newPassword && userData?.password) {
+		const validPassword = await bcryptjs.compare(password, userData.password);
+		if (!validPassword) {
 			return {
 				error: "Senha atual incorreta",
 			};
@@ -51,7 +51,7 @@ if (!validPassword) {
 		settings.password = await bcryptjs.hash(newPassword, 10);
 	}
 	settings.email = undefined;
-	
+
 	try {
 		const updatedUser = await getPrismaInstance().user.update({
 			data: {

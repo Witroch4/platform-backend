@@ -3,7 +3,7 @@
  * Intelligent Intent Classification System for SocialWise Flow
  * Implements embedding-first classification with performance bands and degradation strategies
  * (versão multi-vetor: centroide + aliases do Redis, fallback DB)
- * 
+ *
  * Alteração solicitada:
  * - A banda LOW foi removida e substituída pela banda ROUTER (strategy: "router_llm").
  * - Quando score for insuficiente, ou não houver candidatos, ou ocorrer degradação/erro,
@@ -16,10 +16,10 @@ import { createLogger } from "@/lib/utils/logger";
 import { IntentCandidate, AgentConfig } from "@/services/openai";
 
 import {
-  selectDegradationStrategy,
-  shouldDegrade,
-  determineFailurePoint,
-  DegradationContext,
+	selectDegradationStrategy,
+	shouldDegrade,
+	determineFailurePoint,
+	DegradationContext,
 } from "./degradation-strategies";
 
 // -----------------------------
@@ -30,91 +30,115 @@ const OPENAI_EMBED_MODEL = "text-embedding-3-small"; // 1536 dims
 
 // Legal keywords that should force SOFT band even with low embedding scores
 const LEGAL_KEYWORDS = [
-  "mandado de segurança", "ms",
-  "habeas corpus", "habeas data",
-  "recurso", "recurso de multa", "multa de trânsito", "detran",
-  "indenização", "ação judicial", "processo", "petição", "liminar",
-  "direito", "advogado", "justiça", "tribunal", "juiz",
-  "código", "lei", "constituição", "estatuto"
+	"mandado de segurança",
+	"ms",
+	"habeas corpus",
+	"habeas data",
+	"recurso",
+	"recurso de multa",
+	"multa de trânsito",
+	"detran",
+	"indenização",
+	"ação judicial",
+	"processo",
+	"petição",
+	"liminar",
+	"direito",
+	"advogado",
+	"justiça",
+	"tribunal",
+	"juiz",
+	"código",
+	"lei",
+	"constituição",
+	"estatuto",
 ];
 
 /**
  * Check if text contains legal keywords that should promote to SOFT band
  */
 function checkLegalKeywords(text: string): boolean {
-  const t = (text || "").toLowerCase();
-  return LEGAL_KEYWORDS.some(k => t.includes(k));
+	const t = (text || "").toLowerCase();
+	return LEGAL_KEYWORDS.some((k) => t.includes(k));
 }
 
 // -----------------------------
 // Types
 // -----------------------------
 export interface ClassificationResult {
-  band: "HARD" | "SOFT" | "ROUTER";
-  score: number;
-  candidates: IntentCandidate[];
-  strategy:
-    | "direct_map"
-    | "warmup_buttons"
-    | "domain_topics"
-    | "router_llm"
-    | "router_llm_bypass"
-    | "direct_map_degraded"
-    | "warmup_buttons_degraded"
-    | "domain_topics_degraded"
-    | "domain_topics_error";
-  metrics: {
-    embedding_ms?: number;
-    llm_warmup_ms?: number;
-    route_total_ms: number;
-  };
+	band: "HARD" | "SOFT" | "ROUTER";
+	score: number;
+	candidates: IntentCandidate[];
+	strategy:
+		| "direct_map"
+		| "warmup_buttons"
+		| "domain_topics"
+		| "router_llm"
+		| "router_llm_bypass"
+		| "direct_map_degraded"
+		| "warmup_buttons_degraded"
+		| "domain_topics_degraded"
+		| "domain_topics_error";
+	metrics: {
+		embedding_ms?: number;
+		llm_warmup_ms?: number;
+		route_total_ms: number;
+	};
 }
 
 export interface EmbeddingSearchResult {
-  intent: string;
-  score: number;
-  description?: string;
-  metadata?: Record<string, any>;
+	intent: string;
+	score: number;
+	description?: string;
+	metadata?: Record<string, any>;
 }
 
 interface ScoredIntent {
-  slug: string;
-  name: string;
-  desc: string;
-  score: number;
-  threshold: number;
-  meta?: Record<string, any>;
-  aliases?: string[];
+	slug: string;
+	name: string;
+	desc: string;
+	score: number;
+	threshold: number;
+	meta?: Record<string, any>;
+	aliases?: string[];
 }
 
 // -----------------------------
 // Math & Normalization helpers
 // -----------------------------
 function cosineSimilarity(a: number[], b: number[]): number {
-  let dot = 0, na = 0, nb = 0;
-  const len = Math.min(a.length, b.length);
-  for (let i = 0; i < len; i++) {
-    const x = a[i] || 0;
-    const y = b[i] || 0;
-    dot += x * y;
-    na += x * x;
-    nb += y * y;
-  }
-  if (na === 0 || nb === 0) return 0;
-  return dot / (Math.sqrt(na) * Math.sqrt(nb));
+	let dot = 0,
+		na = 0,
+		nb = 0;
+	const len = Math.min(a.length, b.length);
+	for (let i = 0; i < len; i++) {
+		const x = a[i] || 0;
+		const y = b[i] || 0;
+		dot += x * y;
+		na += x * x;
+		nb += y * y;
+	}
+	if (na === 0 || nb === 0) return 0;
+	return dot / (Math.sqrt(na) * Math.sqrt(nb));
 }
 
-function l2norm(v: number[]) { return Math.sqrt(v.reduce((s, x) => s + x * x, 0)) || 1; }
-function l2normalize(v: number[]) { const n = l2norm(v); return v.map(x => x / n); }
+function l2norm(v: number[]) {
+	return Math.sqrt(v.reduce((s, x) => s + x * x, 0)) || 1;
+}
+function l2normalize(v: number[]) {
+	const n = l2norm(v);
+	return v.map((x) => x / n);
+}
 
 /** Normalização idêntica à da rota (para casar vetores) */
 function normalizeText(t: string) {
-  return (t || "")
-    .toLowerCase()
-    .normalize("NFD").replace(/\p{Diacritic}/gu, "")
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+	return (t || "")
+		.toLowerCase()
+		.normalize("NFD")
+		.replace(/\p{Diacritic}/gu, "")
+		.replace(/[^\p{L}\p{N}\s]/gu, " ")
+		.replace(/\s+/g, " ")
+		.trim();
 }
 
 /**
@@ -127,549 +151,552 @@ function normalizeText(t: string) {
 // Embedding generation (HTTP direto, com timeout por chamada)
 // -----------------------------
 async function embedText(
-  text: string,
-  _timeoutMs = 1000 // mantemos a assinatura; o generator já tem timeout próprio
+	text: string,
+	_timeoutMs = 1000, // mantemos a assinatura; o generator já tem timeout próprio
 ): Promise<number[] | null> {
-  classificationLogger.info("embedText called", {
-    textLength: text.length,
-    textPreview: text.substring(0, 30),
-    hasOpenAIKey: !!process.env.OPENAI_API_KEY
-  });
+	classificationLogger.info("embedText called", {
+		textLength: text.length,
+		textPreview: text.substring(0, 30),
+		hasOpenAIKey: !!process.env.OPENAI_API_KEY,
+	});
 
-  if (!process.env.OPENAI_API_KEY) {
-    classificationLogger.error("OPENAI_API_KEY not found");
-    return null;
-  }
-  
-  try {
-    const emb = await embeddingGenerator.generateEmbedding(text, {
-      normalize: true, trim: true, lowercase: true, removeExtraSpaces: true,
-    });
-    
-    classificationLogger.info("Embedding generated by embeddingGenerator", {
-      valuesLength: emb.values.length,
-      valuesPreview: emb.values.slice(0, 3)
-    });
-    
-    const normalized = l2normalize(emb.values);
-    classificationLogger.info("Embedding normalized", {
-      normalizedLength: normalized.length,
-      normalizedPreview: normalized.slice(0, 3)
-    });
-    
-    return normalized; // ← HIT/MISS automaticamente cacheado no Redis
-  } catch (error: any) {
-    classificationLogger.warn("Embedding generation failed (cached path)", {
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-    });
-    return null;
-  }
+	if (!process.env.OPENAI_API_KEY) {
+		classificationLogger.error("OPENAI_API_KEY not found");
+		return null;
+	}
+
+	try {
+		const emb = await embeddingGenerator.generateEmbedding(text, {
+			normalize: true,
+			trim: true,
+			lowercase: true,
+			removeExtraSpaces: true,
+		});
+
+		classificationLogger.info("Embedding generated by embeddingGenerator", {
+			valuesLength: emb.values.length,
+			valuesPreview: emb.values.slice(0, 3),
+		});
+
+		const normalized = l2normalize(emb.values);
+		classificationLogger.info("Embedding normalized", {
+			normalizedLength: normalized.length,
+			normalizedPreview: normalized.slice(0, 3),
+		});
+
+		return normalized; // ← HIT/MISS automaticamente cacheado no Redis
+	} catch (error: any) {
+		classificationLogger.warn("Embedding generation failed (cached path)", {
+			error: error instanceof Error ? error.message : String(error),
+			stack: error instanceof Error ? error.stack : undefined,
+		});
+		return null;
+	}
 }
 
 // -----------------------------
 // Redis loaders (centroide + aliases) com fallback DB
 // -----------------------------
 type IntentRow = {
-  id: string;
-  name: string;
-  description: string | null;
-  similarityThreshold: number | null;
-  embedding: number[] | null; // legado: centroide salvo no Postgres
+	id: string;
+	name: string;
+	description: string | null;
+	similarityThreshold: number | null;
+	embedding: number[] | null; // legado: centroide salvo no Postgres
 };
 
 async function loadIntentVectors(intent: IntentRow) {
-  const redis = getRedisInstance();
-  try {
-    const key = `ai:intent:${intent.id}:emb`;
-    const h = await redis.hgetall(key); // { model, centroid, aliases, aliases_text, updatedAt }
-    if (h && h.centroid && h.aliases) {
-      const centroid = JSON.parse(h.centroid) as number[];
-      const aliases = JSON.parse(h.aliases) as number[][];
-      const aliasTexts = h.aliases_text ? (JSON.parse(h.aliases_text) as string[]) : [];
-      if (Array.isArray(centroid) && Array.isArray(aliases)) {
-        return { centroid, aliases, aliasTexts, source: "redis" as const };
-      }
-    }
-  } catch (e: any) {
-    classificationLogger.warn("Failed to load vectors from Redis", {
-      id: intent.id,
-      err: e?.message || e,
-    });
-  }
-  // Fallback para o vetor legado do DB (centroide)
-  if (Array.isArray(intent.embedding) && intent.embedding.length) {
-    return { centroid: intent.embedding as number[], aliases: [] as number[][], aliasTexts: [], source: "db" as const };
-  }
-  return null;
+	const redis = getRedisInstance();
+	try {
+		const key = `ai:intent:${intent.id}:emb`;
+		const h = await redis.hgetall(key); // { model, centroid, aliases, aliases_text, updatedAt }
+		if (h && h.centroid && h.aliases) {
+			const centroid = JSON.parse(h.centroid) as number[];
+			const aliases = JSON.parse(h.aliases) as number[][];
+			const aliasTexts = h.aliases_text ? (JSON.parse(h.aliases_text) as string[]) : [];
+			if (Array.isArray(centroid) && Array.isArray(aliases)) {
+				return { centroid, aliases, aliasTexts, source: "redis" as const };
+			}
+		}
+	} catch (e: any) {
+		classificationLogger.warn("Failed to load vectors from Redis", {
+			id: intent.id,
+			err: e?.message || e,
+		});
+	}
+	// Fallback para o vetor legado do DB (centroide)
+	if (Array.isArray(intent.embedding) && intent.embedding.length) {
+		return { centroid: intent.embedding as number[], aliases: [] as number[][], aliasTexts: [], source: "db" as const };
+	}
+	return null;
 }
 
 // -----------------------------
 // Keyword fallback (mantido para degradação)
 // -----------------------------
-function performKeywordMatching(
-  userText: string,
-  intents: IntentRow[]
-): IntentCandidate[] {
-  const text = userText.toLowerCase();
-  const matches: Array<{ intent: IntentRow; score: number }> = [];
+function performKeywordMatching(userText: string, intents: IntentRow[]): IntentCandidate[] {
+	const text = userText.toLowerCase();
+	const matches: Array<{ intent: IntentRow; score: number }> = [];
 
-  for (const intent of intents) {
-    let score = 0;
-    const name = (intent.name || "").toLowerCase();
-    const desc = (intent.description || "").toLowerCase();
+	for (const intent of intents) {
+		let score = 0;
+		const name = (intent.name || "").toLowerCase();
+		const desc = (intent.description || "").toLowerCase();
 
-    const keywords = [...name.split(/\s+/), ...desc.split(/\s+/)].filter(k => k.length > 2);
-    for (const keyword of keywords) {
-      if (text.includes(keyword)) score += 0.1;
-    }
-    if (text.includes(name)) score += 0.3;
+		const keywords = [...name.split(/\s+/), ...desc.split(/\s+/)].filter((k) => k.length > 2);
+		for (const keyword of keywords) {
+			if (text.includes(keyword)) score += 0.1;
+		}
+		if (text.includes(name)) score += 0.3;
 
-    if (score > 0) matches.push({ intent, score });
-  }
+		if (score > 0) matches.push({ intent, score });
+	}
 
-  return matches
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3)
-    .map((m) => ({
-      slug: m.intent.name,
-      name: m.intent.name,
-      desc: m.intent.description || "",
-      score: Math.min(m.score, 0.6),
-    }));
+	return matches
+		.sort((a, b) => b.score - a.score)
+		.slice(0, 3)
+		.map((m) => ({
+			slug: m.intent.name,
+			name: m.intent.name,
+			desc: m.intent.description || "",
+			score: Math.min(m.score, 0.6),
+		}));
 }
 
 // -----------------------------
 // Embedding search (multi-vetor + degradação)
 // -----------------------------
 async function searchSimilarIntents(
-  userText: string,
-  userId: string,
-  embeddingTimeoutMs?: number,
-  context?: { channelType: string; inboxId: string; traceId?: string }
+	userText: string,
+	userId: string,
+	embeddingTimeoutMs?: number,
+	context?: { channelType: string; inboxId: string; traceId?: string },
 ): Promise<{ candidates: IntentCandidate[]; searchMs: number; degraded?: boolean }> {
-  const t0 = Date.now();
-  const prisma = getPrismaInstance();
+	const t0 = Date.now();
+	const prisma = getPrismaInstance();
 
-  classificationLogger.info("searchSimilarIntents started", {
-    userText: userText.substring(0, 50),
-    userId: userId.substring(0, 8),
-    embeddingTimeoutMs,
-    traceId: context?.traceId
-  });
+	classificationLogger.info("searchSimilarIntents started", {
+		userText: userText.substring(0, 50),
+		userId: userId.substring(0, 8),
+		embeddingTimeoutMs,
+		traceId: context?.traceId,
+	});
 
-  try {
-    // Intents ativas com *algum* embedding salvo (DB) para o usuário
-    // Usando raw SQL porque Prisma não entende o tipo "vector" nativamente
-    // Cast para TEXT porque Prisma não consegue deserializar vector automaticamente
-    
-    // Debug: log exact userId being used in query
-    classificationLogger.info("Executing intents query", {
-      userIdFull: userId,
-      userIdLength: userId.length,
-      traceId: context?.traceId
-    });
-    
-    // Debug: First check ALL intents for this user to see what's available
-    const allIntentsForUser = await prisma.$queryRaw<Array<{
-      id: string;
-      name: string;
-      isActive: boolean;
-      hasEmbedding: boolean;
-    }>>`
+	try {
+		// Intents ativas com *algum* embedding salvo (DB) para o usuário
+		// Usando raw SQL porque Prisma não entende o tipo "vector" nativamente
+		// Cast para TEXT porque Prisma não consegue deserializar vector automaticamente
+
+		// Debug: log exact userId being used in query
+		classificationLogger.info("Executing intents query", {
+			userIdFull: userId,
+			userIdLength: userId.length,
+			traceId: context?.traceId,
+		});
+
+		// Debug: First check ALL intents for this user to see what's available
+		const allIntentsForUser = await prisma.$queryRaw<
+			Array<{
+				id: string;
+				name: string;
+				isActive: boolean;
+				hasEmbedding: boolean;
+			}>
+		>`
       SELECT id, name, "isActive", (embedding IS NOT NULL) as "hasEmbedding"
       FROM "Intent"
       WHERE "createdById" = ${userId}
     `;
-    
-    classificationLogger.info("All intents for user (debug)", {
-      totalIntents: allIntentsForUser.length,
-      intents: allIntentsForUser.map(i => ({ 
-        name: i.name, 
-        isActive: i.isActive, 
-        hasEmbedding: i.hasEmbedding 
-      })),
-      traceId: context?.traceId
-    });
-    
-    const intentsRaw = await prisma.$queryRaw<Array<{
-      id: string;
-      name: string;
-      description: string | null;
-      similarityThreshold: number | null;
-      embedding: string | null; // Como TEXT para evitar erro de deserialização
-    }>>`
+
+		classificationLogger.info("All intents for user (debug)", {
+			totalIntents: allIntentsForUser.length,
+			intents: allIntentsForUser.map((i) => ({
+				name: i.name,
+				isActive: i.isActive,
+				hasEmbedding: i.hasEmbedding,
+			})),
+			traceId: context?.traceId,
+		});
+
+		const intentsRaw = await prisma.$queryRaw<
+			Array<{
+				id: string;
+				name: string;
+				description: string | null;
+				similarityThreshold: number | null;
+				embedding: string | null; // Como TEXT para evitar erro de deserialização
+			}>
+		>`
       SELECT id, name, description, "similarityThreshold", embedding::TEXT
       FROM "Intent"
       WHERE "createdById" = ${userId} AND "isActive" = true AND embedding IS NOT NULL
     `;
 
-    classificationLogger.info("Intents query completed", {
-      foundIntents: intentsRaw.length,
-      userId: userId.substring(0, 8),
-      traceId: context?.traceId
-    });
+		classificationLogger.info("Intents query completed", {
+			foundIntents: intentsRaw.length,
+			userId: userId.substring(0, 8),
+			traceId: context?.traceId,
+		});
 
-    // Debug: preview returned intents and embedding presence
-    try {
-      const preview = intentsRaw.slice(0, 5).map(r => ({ id: r.id, name: r.name, hasEmbeddingText: !!r.embedding }));
-      classificationLogger.info('Intents query preview', { preview, traceId: context?.traceId });
-    } catch (e) {
-      classificationLogger.warn('Failed to build intents preview', { err: (e as any)?.message });
-    }
+		// Debug: preview returned intents and embedding presence
+		try {
+			const preview = intentsRaw.slice(0, 5).map((r) => ({ id: r.id, name: r.name, hasEmbeddingText: !!r.embedding }));
+			classificationLogger.info("Intents query preview", { preview, traceId: context?.traceId });
+		} catch (e) {
+			classificationLogger.warn("Failed to build intents preview", { err: (e as any)?.message });
+		}
 
-    const intents: IntentRow[] = intentsRaw.map(row => {
-      let embeddingArray: number[] | null = null;
-      
-      // Parse manual do vetor de string para array
-      if (row.embedding && typeof row.embedding === 'string') {
-        try {
-          // Remove os colchetes e split por vírgula
-          const vectorStr = row.embedding.replace(/^\[|\]$/g, '');
-          embeddingArray = vectorStr.split(',').map(n => parseFloat(n.trim()));
-        } catch (e) {
-          classificationLogger.warn('Failed to parse embedding vector', { 
-            intentId: row.id, 
-            embeddingPreview: row.embedding?.substring(0, 50) 
-          });
-        }
-      }
-      
-      return {
-        id: row.id,
-        name: row.name,
-        description: row.description,
-        similarityThreshold: row.similarityThreshold,
-        embedding: embeddingArray,
-      };
-    });
+		const intents: IntentRow[] = intentsRaw.map((row) => {
+			let embeddingArray: number[] | null = null;
 
-    if (!intents.length) {
-      classificationLogger.warn("No intents found for user", {
-        userId: userId.substring(0, 8),
-        traceId: context?.traceId
-      });
-      return { candidates: [], searchMs: Date.now() - t0 };
-    }
+			// Parse manual do vetor de string para array
+			if (row.embedding && typeof row.embedding === "string") {
+				try {
+					// Remove os colchetes e split por vírgula
+					const vectorStr = row.embedding.replace(/^\[|\]$/g, "");
+					embeddingArray = vectorStr.split(",").map((n) => parseFloat(n.trim()));
+				} catch (e) {
+					classificationLogger.warn("Failed to parse embedding vector", {
+						intentId: row.id,
+						embeddingPreview: row.embedding?.substring(0, 50),
+					});
+				}
+			}
 
-    classificationLogger.info("Processing intents", {
-      intentsCount: intents.length,
-      intentNames: intents.map(i => i.name).slice(0, 3),
-      traceId: context?.traceId
-    });
+			return {
+				id: row.id,
+				name: row.name,
+				description: row.description,
+				similarityThreshold: row.similarityThreshold,
+				embedding: embeddingArray,
+			};
+		});
 
-    // 0) Alias direct hit: evita chamada de embedding quando a frase contém um alias
-    const normText = normalizeText(userText);
-    let bestHit: { intent: IntentRow; alias: string } | null = null;
-    for (const it of intents) {
-      const pack = await loadIntentVectors(it);
-      if (!pack || !Array.isArray(pack.aliasTexts) || !pack.aliasTexts.length) continue;
-      for (const a of pack.aliasTexts) {
-        const na = normalizeText(a);
-        if (na && normText.includes(na)) {
-          if (!bestHit || na.length > normalizeText(bestHit.alias).length) {
-            bestHit = { intent: it, alias: a };
-          }
-        }
-      }
-    }
-    if (bestHit) {
-      classificationLogger.info("Alias direct hit (no embedding call)", {
-        intent: bestHit.intent.name,
-        alias: bestHit.alias,
-      });
-      return {
-        candidates: [{
-          slug: bestHit.intent.name,
-          name: bestHit.intent.name,
-          desc: bestHit.intent.description || "",
-          score: 0.95, // confiança alta por match textual
-          threshold: typeof bestHit.intent.similarityThreshold === "number"
-            ? bestHit.intent.similarityThreshold : 0.8,
-        }],
-        searchMs: Date.now() - t0,
-        degraded: false,
-      };
-    }
+		if (!intents.length) {
+			classificationLogger.warn("No intents found for user", {
+				userId: userId.substring(0, 8),
+				traceId: context?.traceId,
+			});
+			return { candidates: [], searchMs: Date.now() - t0 };
+		}
 
-    // 1) (somente se não bateu alias) gerar embedding da query
-    const timeoutMs = embeddingTimeoutMs || 1500;
-    classificationLogger.info("Generating embedding for user text", {
-      userText: userText.substring(0, 50),
-      timeoutMs,
-      traceId: context?.traceId
-    });
-    
-    const qVec = await embedText(userText, timeoutMs);
+		classificationLogger.info("Processing intents", {
+			intentsCount: intents.length,
+			intentNames: intents.map((i) => i.name).slice(0, 3),
+			traceId: context?.traceId,
+		});
 
-    if (!qVec) {
-      classificationLogger.warn("Embedding generation failed, using keyword fallback", {
-        userText: userText.substring(0, 50),
-        userId,
-        traceId: context?.traceId,
-      });
-      const keywordCandidates = performKeywordMatching(userText, intents);
-      return { candidates: keywordCandidates, searchMs: Date.now() - t0, degraded: true };
-    }
+		// 0) Alias direct hit: evita chamada de embedding quando a frase contém um alias
+		const normText = normalizeText(userText);
+		let bestHit: { intent: IntentRow; alias: string } | null = null;
+		for (const it of intents) {
+			const pack = await loadIntentVectors(it);
+			if (!pack || !Array.isArray(pack.aliasTexts) || !pack.aliasTexts.length) continue;
+			for (const a of pack.aliasTexts) {
+				const na = normalizeText(a);
+				if (na && normText.includes(na)) {
+					if (!bestHit || na.length > normalizeText(bestHit.alias).length) {
+						bestHit = { intent: it, alias: a };
+					}
+				}
+			}
+		}
+		if (bestHit) {
+			classificationLogger.info("Alias direct hit (no embedding call)", {
+				intent: bestHit.intent.name,
+				alias: bestHit.alias,
+			});
+			return {
+				candidates: [
+					{
+						slug: bestHit.intent.name,
+						name: bestHit.intent.name,
+						desc: bestHit.intent.description || "",
+						score: 0.95, // confiança alta por match textual
+						threshold:
+							typeof bestHit.intent.similarityThreshold === "number" ? bestHit.intent.similarityThreshold : 0.8,
+					},
+				],
+				searchMs: Date.now() - t0,
+				degraded: false,
+			};
+		}
 
-    classificationLogger.info("Embedding generated successfully", {
-      vectorLength: qVec.length,
-      vectorPreview: qVec.slice(0, 3),
-      traceId: context?.traceId
-    });
+		// 1) (somente se não bateu alias) gerar embedding da query
+		const timeoutMs = embeddingTimeoutMs || 1500;
+		classificationLogger.info("Generating embedding for user text", {
+			userText: userText.substring(0, 50),
+			timeoutMs,
+			traceId: context?.traceId,
+		});
 
-    const scored: ScoredIntent[] = [];
-    for (const it of intents) {
-      const pack = await loadIntentVectors(it);
-      if (!pack) continue;
+		const qVec = await embedText(userText, timeoutMs);
 
-      const centroid = pack.centroid;
-      const aliases = pack.aliases || [];
-      const aliasTexts = (pack as any).aliasTexts as string[] | undefined;
+		if (!qVec) {
+			classificationLogger.warn("Embedding generation failed, using keyword fallback", {
+				userText: userText.substring(0, 50),
+				userId,
+				traceId: context?.traceId,
+			});
+			const keywordCandidates = performKeywordMatching(userText, intents);
+			return { candidates: keywordCandidates, searchMs: Date.now() - t0, degraded: true };
+		}
 
-      let base = cosineSimilarity(qVec, centroid);
-      let aliasMax = -Infinity;
-      let aliasIdx = -1;
+		classificationLogger.info("Embedding generated successfully", {
+			vectorLength: qVec.length,
+			vectorPreview: qVec.slice(0, 3),
+			traceId: context?.traceId,
+		});
 
-      for (let i = 0; i < aliases.length; i++) {
-        const s = cosineSimilarity(qVec, aliases[i]);
-        if (s > aliasMax) {
-          aliasMax = s;
-          aliasIdx = i;
-        }
-      }
+		const scored: ScoredIntent[] = [];
+		for (const it of intents) {
+			const pack = await loadIntentVectors(it);
+			if (!pack) continue;
 
-      const score = Math.max(base, aliasMax);
-      scored.push({
-        slug: it.name,
-        name: it.name,
-        desc: it.description || "",
-        score: isFinite(score) ? score : 0,
-        threshold: typeof it.similarityThreshold === "number" ? it.similarityThreshold : 0.8,
-        meta: {
-          source: (pack as any).source,
-          base,
-          aliasMax: isFinite(aliasMax) ? aliasMax : undefined,
-          aliasIdx: aliasIdx >= 0 ? aliasIdx : undefined,
-        },
-        aliases: Array.isArray(aliasTexts) ? aliasTexts : undefined,
-      });
-    }
+			const centroid = pack.centroid;
+			const aliases = pack.aliases || [];
+			const aliasTexts = (pack as any).aliasTexts as string[] | undefined;
 
-    scored.sort((a, b) => b.score - a.score);
-    const searchMs = Date.now() - t0;
+			let base = cosineSimilarity(qVec, centroid);
+			let aliasMax = -Infinity;
+			let aliasIdx = -1;
 
-    if (scored.length) {
-      const top = scored[0];
-      classificationLogger.info("Embedding search completed", {
-        userText: userText.substring(0, 50),
-        candidatesFound: scored.length,
-        topScore: top.score,
-        searchMs,
-      });
-      classificationLogger.debug("Top candidate meta", top.meta);
-    }
+			for (let i = 0; i < aliases.length; i++) {
+				const s = cosineSimilarity(qVec, aliases[i]);
+				if (s > aliasMax) {
+					aliasMax = s;
+					aliasIdx = i;
+				}
+			}
 
-    const candidates: IntentCandidate[] = scored.slice(0, 5).map(s => ({
-      slug: s.slug,
-      name: s.name,
-      desc: s.desc,
-      score: s.score,
-      threshold: s.threshold,
-      aliases: s.aliases,
-    }));
+			const score = Math.max(base, aliasMax);
+			scored.push({
+				slug: it.name,
+				name: it.name,
+				desc: it.description || "",
+				score: isFinite(score) ? score : 0,
+				threshold: typeof it.similarityThreshold === "number" ? it.similarityThreshold : 0.8,
+				meta: {
+					source: (pack as any).source,
+					base,
+					aliasMax: isFinite(aliasMax) ? aliasMax : undefined,
+					aliasIdx: aliasIdx >= 0 ? aliasIdx : undefined,
+				},
+				aliases: Array.isArray(aliasTexts) ? aliasTexts : undefined,
+			});
+		}
 
-    return { candidates, searchMs };
-  } catch (error) {
-    classificationLogger.error("Embedding search failed", {
-      error: error instanceof Error ? error.message : String(error),
-      traceId: context?.traceId,
-    });
+		scored.sort((a, b) => b.score - a.score);
+		const searchMs = Date.now() - t0;
 
-    if (shouldDegrade(error) && context) {
-      const degradationContext: DegradationContext = {
-        userText,
-        channelType: context.channelType,
-        inboxId: context.inboxId,
-        traceId: context.traceId,
-        failurePoint: determineFailurePoint(error),
-        originalError: error instanceof Error ? error : undefined,
-      };
-      classificationLogger.info("Applying degradation strategy for embedding search failure", {
-        failurePoint: degradationContext.failurePoint,
-        traceId: context.traceId,
-      });
-    }
+		if (scored.length) {
+			const top = scored[0];
+			classificationLogger.info("Embedding search completed", {
+				userText: userText.substring(0, 50),
+				candidatesFound: scored.length,
+				topScore: top.score,
+				searchMs,
+			});
+			classificationLogger.debug("Top candidate meta", top.meta);
+		}
 
-    return { candidates: [], searchMs: Date.now() - t0, degraded: true };
-  }
+		const candidates: IntentCandidate[] = scored.slice(0, 5).map((s) => ({
+			slug: s.slug,
+			name: s.name,
+			desc: s.desc,
+			score: s.score,
+			threshold: s.threshold,
+			aliases: s.aliases,
+		}));
+
+		return { candidates, searchMs };
+	} catch (error) {
+		classificationLogger.error("Embedding search failed", {
+			error: error instanceof Error ? error.message : String(error),
+			traceId: context?.traceId,
+		});
+
+		if (shouldDegrade(error) && context) {
+			const degradationContext: DegradationContext = {
+				userText,
+				channelType: context.channelType,
+				inboxId: context.inboxId,
+				traceId: context.traceId,
+				failurePoint: determineFailurePoint(error),
+				originalError: error instanceof Error ? error : undefined,
+			};
+			classificationLogger.info("Applying degradation strategy for embedding search failure", {
+				failurePoint: degradationContext.failurePoint,
+				traceId: context.traceId,
+			});
+		}
+
+		return { candidates: [], searchMs: Date.now() - t0, degraded: true };
+	}
 }
 
 // -----------------------------
 // Public API (bands + degradation)
 // -----------------------------
 export async function classifyIntentEmbeddingFirst(
-  userText: string,
-  userId: string,
-  agent: AgentConfig,
-  context?: { channelType: string; inboxId: string; traceId?: string }
+	userText: string,
+	userId: string,
+	agent: AgentConfig,
+	context?: { channelType: string; inboxId: string; traceId?: string },
 ): Promise<ClassificationResult> {
-  const startTime = Date.now();
+	const startTime = Date.now();
 
-  classificationLogger.info("classifyIntentEmbeddingFirst started", {
-    userText: userText.substring(0, 50),
-    userId: userId.substring(0, 8),
-    warmupDeadlineMs: agent.warmupDeadlineMs,
-    traceId: context?.traceId
-  });
+	classificationLogger.info("classifyIntentEmbeddingFirst started", {
+		userText: userText.substring(0, 50),
+		userId: userId.substring(0, 8),
+		warmupDeadlineMs: agent.warmupDeadlineMs,
+		traceId: context?.traceId,
+	});
 
-  try {
-    // Step 1: Embedding search with degradation support
-    const { candidates, searchMs, degraded } = await searchSimilarIntents(
-      userText,
-      userId,
-      agent.warmupDeadlineMs, // usar timeout configurável do assistente
-      context
-    );
+	try {
+		// Step 1: Embedding search with degradation support
+		const { candidates, searchMs, degraded } = await searchSimilarIntents(
+			userText,
+			userId,
+			agent.warmupDeadlineMs, // usar timeout configurável do assistente
+			context,
+		);
 
-    classificationLogger.info("searchSimilarIntents completed", {
-      candidatesCount: candidates.length,
-      searchMs,
-      degraded,
-      traceId: context?.traceId
-    });
+		classificationLogger.info("searchSimilarIntents completed", {
+			candidatesCount: candidates.length,
+			searchMs,
+			degraded,
+			traceId: context?.traceId,
+		});
 
-    // -----------------------------
-    // Alteração: SEMPRE rotear para ROUTER quando não houver intenção forte
-    // -----------------------------
-    if (candidates.length === 0) {
-      // Nenhum candidato → route to router (em vez de LOW/domain_topics)
-      return {
-        band: "ROUTER",
-        score: 0,
-        candidates: [],
-        strategy: "router_llm",
-        metrics: { embedding_ms: searchMs, route_total_ms: Date.now() - startTime },
-      };
-    }
+		// -----------------------------
+		// Alteração: SEMPRE rotear para ROUTER quando não houver intenção forte
+		// -----------------------------
+		if (candidates.length === 0) {
+			// Nenhum candidato → route to router (em vez de LOW/domain_topics)
+			return {
+				band: "ROUTER",
+				score: 0,
+				candidates: [],
+				strategy: "router_llm",
+				metrics: { embedding_ms: searchMs, route_total_ms: Date.now() - startTime },
+			};
+		}
 
-    const topCandidate = candidates[0];
-    const score = typeof topCandidate?.score === "number" ? topCandidate.score : 0;
+		const topCandidate = candidates[0];
+		const score = typeof topCandidate?.score === "number" ? topCandidate.score : 0;
 
-    // Ajuste de thresholds conforme modo
-    const scoreThresholds = degraded
-      ? { hard: 0.5, soft: 0.3 }     // keyword fallback
-      : { hard: 0.8, soft: 0.65 };   // embedding normal
+		// Ajuste de thresholds conforme modo
+		const scoreThresholds = degraded
+			? { hard: 0.5, soft: 0.3 } // keyword fallback
+			: { hard: 0.8, soft: 0.65 }; // embedding normal
 
-    // HARD band permanece igual
-    if (score >= scoreThresholds.hard) {
-      return {
-        band: "HARD",
-        score,
-        candidates: [topCandidate],
-        strategy: degraded ? "direct_map_degraded" : "direct_map",
-        metrics: { embedding_ms: searchMs, route_total_ms: Date.now() - startTime },
-      };
-    }
+		// HARD band permanece igual
+		if (score >= scoreThresholds.hard) {
+			return {
+				band: "HARD",
+				score,
+				candidates: [topCandidate],
+				strategy: degraded ? "direct_map_degraded" : "direct_map",
+				metrics: { embedding_ms: searchMs, route_total_ms: Date.now() - startTime },
+			};
+		}
 
-    // SOFT band (warmup buttons) permanece igual
-    if (score >= scoreThresholds.soft) {
-      return {
-        band: "SOFT",
-        score,
-        candidates: candidates.slice(0, 3),
-        strategy: degraded ? "warmup_buttons_degraded" : "warmup_buttons",
-        metrics: { embedding_ms: searchMs, route_total_ms: Date.now() - startTime },
-      };
-    }
+		// SOFT band (warmup buttons) permanece igual
+		if (score >= scoreThresholds.soft) {
+			return {
+				band: "SOFT",
+				score,
+				candidates: candidates.slice(0, 3),
+				strategy: degraded ? "warmup_buttons_degraded" : "warmup_buttons",
+				metrics: { embedding_ms: searchMs, route_total_ms: Date.now() - startTime },
+			};
+		}
 
-    // Promotion por palavras-chave legais continua existindo
-    const hasLegalKeywords = checkLegalKeywords(userText);
-    if (hasLegalKeywords && score >= 0.4) {
-      classificationLogger.info("Legal keywords detected - promoting to SOFT band", {
-        userText: userText.substring(0, 50),
-        score,
-        traceId: context?.traceId
-      });
-      return {
-        band: "SOFT",
-        score: Math.max(score, 0.65),
-        candidates: candidates.slice(0, 3),
-        strategy: degraded ? "warmup_buttons_degraded" : "warmup_buttons",
-        metrics: { embedding_ms: searchMs, route_total_ms: Date.now() - startTime },
-      };
-    }
+		// Promotion por palavras-chave legais continua existindo
+		const hasLegalKeywords = checkLegalKeywords(userText);
+		if (hasLegalKeywords && score >= 0.4) {
+			classificationLogger.info("Legal keywords detected - promoting to SOFT band", {
+				userText: userText.substring(0, 50),
+				score,
+				traceId: context?.traceId,
+			});
+			return {
+				band: "SOFT",
+				score: Math.max(score, 0.65),
+				candidates: candidates.slice(0, 3),
+				strategy: degraded ? "warmup_buttons_degraded" : "warmup_buttons",
+				metrics: { embedding_ms: searchMs, route_total_ms: Date.now() - startTime },
+			};
+		}
 
-    // Caso contrário → ROUTER (substitui LOW)
-    return {
-      band: "ROUTER",
-      score,
-      candidates: candidates.slice(0, 3), // passa hints para o Router LLM se desejarem
-      strategy: "router_llm",
-      metrics: { embedding_ms: searchMs, route_total_ms: Date.now() - startTime },
-    };
-  } catch (error) {
-    classificationLogger.error("Classification failed", {
-      error: error instanceof Error ? error.message : String(error),
-      traceId: context?.traceId,
-    });
+		// Caso contrário → ROUTER (substitui LOW)
+		return {
+			band: "ROUTER",
+			score,
+			candidates: candidates.slice(0, 3), // passa hints para o Router LLM se desejarem
+			strategy: "router_llm",
+			metrics: { embedding_ms: searchMs, route_total_ms: Date.now() - startTime },
+		};
+	} catch (error) {
+		classificationLogger.error("Classification failed", {
+			error: error instanceof Error ? error.message : String(error),
+			traceId: context?.traceId,
+		});
 
-    if (shouldDegrade(error) && context) {
-      const degradationContext: DegradationContext = {
-        userText,
-        channelType: context.channelType,
-        inboxId: context.inboxId,
-        traceId: context.traceId,
-        failurePoint: determineFailurePoint(error),
-        originalError: error instanceof Error ? error : undefined,
-      };
-      classificationLogger.info("Classification failed, routing to Router LLM", {
-        failurePoint: degradationContext.failurePoint,
-        traceId: context.traceId,
-      });
-    }
+		if (shouldDegrade(error) && context) {
+			const degradationContext: DegradationContext = {
+				userText,
+				channelType: context.channelType,
+				inboxId: context.inboxId,
+				traceId: context.traceId,
+				failurePoint: determineFailurePoint(error),
+				originalError: error instanceof Error ? error : undefined,
+			};
+			classificationLogger.info("Classification failed, routing to Router LLM", {
+				failurePoint: degradationContext.failurePoint,
+				traceId: context.traceId,
+			});
+		}
 
-    // Em erro → também ROUTER
-    return {
-      band: "ROUTER",
-      score: 0,
-      candidates: [],
-      strategy: "router_llm",
-      metrics: { embedding_ms: 0, route_total_ms: Date.now() - startTime },
-    };
-  }
+		// Em erro → também ROUTER
+		return {
+			band: "ROUTER",
+			score: 0,
+			candidates: [],
+			strategy: "router_llm",
+			metrics: { embedding_ms: 0, route_total_ms: Date.now() - startTime },
+		};
+	}
 }
 
 /**
  * Router LLM classification for embedipreview=false mode
  * (Mantido; pode ser usado quando você quiser bypassar embeddings)
  */
-export async function classifyIntentRouterLLM(
-  userText: string,
-  agent: AgentConfig
-): Promise<ClassificationResult> {
-  const startTime = Date.now();
-  return {
-    band: "ROUTER",
-    score: 1.0,
-    candidates: [],
-    strategy: "router_llm",
-    metrics: { route_total_ms: Date.now() - startTime },
-  };
+export async function classifyIntentRouterLLM(userText: string, agent: AgentConfig): Promise<ClassificationResult> {
+	const startTime = Date.now();
+	return {
+		band: "ROUTER",
+		score: 1.0,
+		candidates: [],
+		strategy: "router_llm",
+		metrics: { route_total_ms: Date.now() - startTime },
+	};
 }
 
 /**
  * Main classification entry point with degradation support
  */
 export async function classifyIntent(
-  userText: string,
-  userId: string,
-  agent: AgentConfig,
-  embedipreview = true,
-  context?: { channelType: string; inboxId: string; traceId?: string }
+	userText: string,
+	userId: string,
+	agent: AgentConfig,
+	embedipreview = true,
+	context?: { channelType: string; inboxId: string; traceId?: string },
 ): Promise<ClassificationResult> {
-  if (!embedipreview) {
-    return classifyIntentRouterLLM(userText, agent);
-  }
-  return classifyIntentEmbeddingFirst(userText, userId, agent, context);
+	if (!embedipreview) {
+		return classifyIntentRouterLLM(userText, agent);
+	}
+	return classifyIntentEmbeddingFirst(userText, userId, agent, context);
 }

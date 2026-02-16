@@ -1,6 +1,6 @@
 // app/api/admin/leads/route.ts
 import { auth } from "@/auth";
-import { getPrismaInstance } from "@/lib/connections"
+import { getPrismaInstance } from "@/lib/connections";
 import { LeadSource, Prisma } from "@prisma/client";
 import { type NextRequest, NextResponse } from "next/server";
 
@@ -32,9 +32,9 @@ export async function GET(request: NextRequest): Promise<Response> {
 		const sortOrder = searchParams.get("sortOrder") === "asc" ? "asc" : "desc";
 
 		// Construir condições de filtro
-                const whereConditions: Prisma.LeadWhereInput = {
-                        userId: session.user.id,
-                };
+		const whereConditions: Prisma.LeadWhereInput = {
+			userId: session.user.id,
+		};
 
 		// Filtro por source
 		if (source && Object.values(LeadSource).includes(source)) {
@@ -59,7 +59,9 @@ export async function GET(request: NextRequest): Promise<Response> {
 
 		// Validar campo de ordenação
 		const validSortFields = ["createdAt", "updatedAt", "name", "email", "phone"];
-		const orderBy = validSortFields.includes(sortBy) ? { [sortBy]: sortOrder as Prisma.SortOrder } : { createdAt: "desc" as Prisma.SortOrder };
+		const orderBy = validSortFields.includes(sortBy)
+			? { [sortBy]: sortOrder as Prisma.SortOrder }
+			: { createdAt: "desc" as Prisma.SortOrder };
 
 		console.log(
 			`[Leads API] Buscando leads - Página: ${page}, Limite: ${limit}, Source: ${source}, Busca: "${search}"`,
@@ -126,7 +128,7 @@ export async function GET(request: NextRequest): Promise<Response> {
 			stats: {
 				chatsCount: lead._count.chats,
 				automacoesCount: lead._count.automacoes,
-                                disparosCount: lead._count?.disparos ?? 0,
+				disparosCount: lead._count?.disparos ?? 0,
 			},
 		}));
 
@@ -208,10 +210,10 @@ export async function POST(request: NextRequest): Promise<Response> {
 		}
 
 		// Criar lead com dados relacionados
-                const leadData: Prisma.LeadCreateInput = {
-                        name,
-                        email,
-                        phone,
+		const leadData: Prisma.LeadCreateInput = {
+			name,
+			email,
+			phone,
 			avatarUrl,
 			source,
 			sourceIdentifier,

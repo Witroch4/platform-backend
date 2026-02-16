@@ -1,7 +1,7 @@
 // Função para obter Prisma (sempre usar versão normal)
 function getPrismaForServices() {
-  const { getPrismaInstance } = require("@/lib/connections");
-  return getPrismaInstance();
+	const { getPrismaInstance } = require("@/lib/connections");
+	return getPrismaInstance();
 }
 
 export const findUserbyEmail = async (email: string) => {

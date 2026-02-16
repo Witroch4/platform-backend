@@ -14,50 +14,50 @@ export type VariablesMap = Record<string, string | number | undefined | null>;
  * - Special: {{nome_lead}} with fallbacks
  */
 export function resolveTextWithVariables(
-  text: string,
-  vars: VariablesMap = {},
-  options?: {
-    leadName?: string;
-    defaultLeadExampleName?: string; // usado em preview
-  }
+	text: string,
+	vars: VariablesMap = {},
+	options?: {
+		leadName?: string;
+		defaultLeadExampleName?: string; // usado em preview
+	},
 ): string {
-  if (!text || typeof text !== "string") return text;
+	if (!text || typeof text !== "string") return text;
 
-  const variables: VariablesMap = { ...vars };
+	const variables: VariablesMap = { ...vars };
 
-  // Special variable fallback chain for nome_lead
-  const leadName =
-    String(
-      (variables["nome_lead"] ??
-        variables["nome"] ??
-        variables["name"] ??
-        options?.leadName ??
-        options?.defaultLeadExampleName ??
-        "João") as any
-    );
+	// Special variable fallback chain for nome_lead
+	const leadName = String(
+		(variables["nome_lead"] ??
+			variables["nome"] ??
+			variables["name"] ??
+			options?.leadName ??
+			options?.defaultLeadExampleName ??
+			"João") as any,
+	);
 
-  // Replace all {{...}} occurrences
-  return text.replace(/\{\{([^}]+)\}\}/g, (_match, rawKey: string) => {
-    const key = String(rawKey).trim();
+	// Replace all {{...}} occurrences
+	return text.replace(/\{\{([^}]+)\}\}/g, (_match, rawKey: string) => {
+		const key = String(rawKey).trim();
 
-    // Special handling
-    if (key === "nome_lead") {
-      return leadName;
-    }
+		// Special handling
+		if (key === "nome_lead") {
+			return leadName;
+		}
 
-    // Named placeholder
-    if (!/^\d+$/.test(key)) {
-      const value = variables[key];
-      if (value === undefined || value === null) return `{{${key}}}`; // keep placeholder when unknown
-      return String(value);
-    }
+		// Named placeholder
+		if (!/^\d+$/.test(key)) {
+			const value = variables[key];
+			if (value === undefined || value === null) return `{{${key}}}`; // keep placeholder when unknown
+			return String(value);
+		}
 
-    // Numeric placeholder (legacy): try to map by index (1-based)
-    const index = parseInt(key, 10);
-    const numericValue = variables[key] ?? variables[index] ?? variables[`var_${index}`] ?? variables[`variavel_${index}`];
-    if (numericValue === undefined || numericValue === null) return `{{${key}}}`;
-    return String(numericValue);
-  });
+		// Numeric placeholder (legacy): try to map by index (1-based)
+		const index = parseInt(key, 10);
+		const numericValue =
+			variables[key] ?? variables[index] ?? variables[`var_${index}`] ?? variables[`variavel_${index}`];
+		if (numericValue === undefined || numericValue === null) return `{{${key}}}`;
+		return String(numericValue);
+	});
 }
 
 /**
@@ -65,49 +65,33 @@ export function resolveTextWithVariables(
  * Mantém tipagem livre para uso tanto no client quanto no server.
  */
 export function resolveInteractiveMessagePreview(
-  message: any,
-  vars: VariablesMap = {},
-  options?: { leadName?: string; defaultLeadExampleName?: string }
+	message: any,
+	vars: VariablesMap = {},
+	options?: { leadName?: string; defaultLeadExampleName?: string },
 ): any {
-  if (!message || typeof message !== "object") return message;
+	if (!message || typeof message !== "object") return message;
 
-  const resolved: any = JSON.parse(JSON.stringify(message));
+	const resolved: any = JSON.parse(JSON.stringify(message));
 
-  if (resolved.header?.type === "text" && resolved.header?.content) {
-    resolved.header.content = resolveTextWithVariables(
-      resolved.header.content,
-      vars,
-      options
-    );
-  }
+	if (resolved.header?.type === "text" && resolved.header?.content) {
+		resolved.header.content = resolveTextWithVariables(resolved.header.content, vars, options);
+	}
 
-  if (resolved.body?.text) {
-    resolved.body.text = resolveTextWithVariables(
-      resolved.body.text,
-      vars,
-      options
-    );
-  }
+	if (resolved.body?.text) {
+		resolved.body.text = resolveTextWithVariables(resolved.body.text, vars, options);
+	}
 
-  if (resolved.footer?.text) {
-    resolved.footer.text = resolveTextWithVariables(
-      resolved.footer.text,
-      vars,
-      options
-    );
-  }
+	if (resolved.footer?.text) {
+		resolved.footer.text = resolveTextWithVariables(resolved.footer.text, vars, options);
+	}
 
-  // Buttons
-  if (resolved.action?.buttons && Array.isArray(resolved.action.buttons)) {
-    resolved.action.buttons = resolved.action.buttons.map((btn: any) => ({
-      ...btn,
-      title: btn?.title
-        ? resolveTextWithVariables(btn.title, vars, options)
-        : btn?.title,
-    }));
-  }
+	// Buttons
+	if (resolved.action?.buttons && Array.isArray(resolved.action.buttons)) {
+		resolved.action.buttons = resolved.action.buttons.map((btn: any) => ({
+			...btn,
+			title: btn?.title ? resolveTextWithVariables(btn.title, vars, options) : btn?.title,
+		}));
+	}
 
-  return resolved;
+	return resolved;
 }
-
-

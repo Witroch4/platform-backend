@@ -1,493 +1,481 @@
 /**
  * Connection Pool Monitor for Instagram Translation
- * 
+ *
  * Monitors database connection pool health, performance, and provides
  * automatic recovery mechanisms for Instagram translation operations.
  */
 
 import { withPrismaReconnect } from "@/lib/connections";
-import { getRedisInstance } from '../connections';
-import { PrismaClient, Prisma } from '@prisma/client';
-import { isMonitorLogEnabled } from '@/lib/config';
+import { getRedisInstance } from "../connections";
+import { PrismaClient, Prisma } from "@prisma/client";
+import { isMonitorLogEnabled } from "@/lib/config";
 
 // Connection pool configuration
 export interface ConnectionPoolConfig {
-  maxConnections: number;
-  minConnections: number;
-  acquireTimeoutMs: number;
-  createTimeoutMs: number;
-  destroyTimeoutMs: number;
-  idleTimeoutMs: number;
-  reapIntervalMs: number;
-  createRetryIntervalMs: number;
-  healthCheckIntervalMs: number;
-  slowQueryThresholdMs: number;
+	maxConnections: number;
+	minConnections: number;
+	acquireTimeoutMs: number;
+	createTimeoutMs: number;
+	destroyTimeoutMs: number;
+	idleTimeoutMs: number;
+	reapIntervalMs: number;
+	createRetryIntervalMs: number;
+	healthCheckIntervalMs: number;
+	slowQueryThresholdMs: number;
 }
 
 export const DEFAULT_POOL_CONFIG: ConnectionPoolConfig = {
-  maxConnections: 10,
-  minConnections: 2,
-  acquireTimeoutMs: 30000,
-  createTimeoutMs: 30000,
-  destroyTimeoutMs: 5000,
-  idleTimeoutMs: 30000,
-  reapIntervalMs: 1000,
-  createRetryIntervalMs: 200,
-  healthCheckIntervalMs: 60000, // 1 minute
-  slowQueryThresholdMs: 1000, // 1 second
+	maxConnections: 10,
+	minConnections: 2,
+	acquireTimeoutMs: 30000,
+	createTimeoutMs: 30000,
+	destroyTimeoutMs: 5000,
+	idleTimeoutMs: 30000,
+	reapIntervalMs: 1000,
+	createRetryIntervalMs: 200,
+	healthCheckIntervalMs: 60000, // 1 minute
+	slowQueryThresholdMs: 1000, // 1 second
 };
 
 // Connection pool metrics
 export interface ConnectionPoolMetrics {
-  totalConnections: number;
-  activeConnections: number;
-  idleConnections: number;
-  waitingRequests: number;
-  totalQueries: number;
-  successfulQueries: number;
-  failedQueries: number;
-  slowQueries: number;
-  averageQueryTime: number;
-  averageConnectionTime: number;
-  lastHealthCheck: Date;
-  uptime: number;
-  errors: Array<{
-    timestamp: Date;
-    error: string;
-    queryType?: string;
-  }>;
+	totalConnections: number;
+	activeConnections: number;
+	idleConnections: number;
+	waitingRequests: number;
+	totalQueries: number;
+	successfulQueries: number;
+	failedQueries: number;
+	slowQueries: number;
+	averageQueryTime: number;
+	averageConnectionTime: number;
+	lastHealthCheck: Date;
+	uptime: number;
+	errors: Array<{
+		timestamp: Date;
+		error: string;
+		queryType?: string;
+	}>;
 }
 
 // Health status
 export interface PoolHealthStatus {
-  isHealthy: boolean;
-  status: 'healthy' | 'degraded' | 'critical' | 'down';
-  issues: string[];
-  recommendations: string[];
-  metrics: ConnectionPoolMetrics;
-  lastCheck: Date;
+	isHealthy: boolean;
+	status: "healthy" | "degraded" | "critical" | "down";
+	issues: string[];
+	recommendations: string[];
+	metrics: ConnectionPoolMetrics;
+	lastCheck: Date;
 }
 
 class ConnectionPoolMonitor {
-  private config: ConnectionPoolConfig;
-  private metrics: ConnectionPoolMetrics;
-  private startTime: Date;
-  private healthCheckInterval?: NodeJS.Timeout;
-  private queryTimes: number[] = [];
-  private connectionTimes: number[] = [];
-  private readonly MAX_STORED_TIMES = 1000;
+	private config: ConnectionPoolConfig;
+	private metrics: ConnectionPoolMetrics;
+	private startTime: Date;
+	private healthCheckInterval?: NodeJS.Timeout;
+	private queryTimes: number[] = [];
+	private connectionTimes: number[] = [];
+	private readonly MAX_STORED_TIMES = 1000;
 
-  constructor(config: ConnectionPoolConfig = DEFAULT_POOL_CONFIG) {
-    this.config = config;
-    this.startTime = new Date();
-    this.metrics = this.initializeMetrics();
-    this.startHealthChecking();
-  }
+	constructor(config: ConnectionPoolConfig = DEFAULT_POOL_CONFIG) {
+		this.config = config;
+		this.startTime = new Date();
+		this.metrics = this.initializeMetrics();
+		this.startHealthChecking();
+	}
 
-  private initializeMetrics(): ConnectionPoolMetrics {
-    return {
-      totalConnections: 0,
-      activeConnections: 0,
-      idleConnections: 0,
-      waitingRequests: 0,
-      totalQueries: 0,
-      successfulQueries: 0,
-      failedQueries: 0,
-      slowQueries: 0,
-      averageQueryTime: 0,
-      averageConnectionTime: 0,
-      lastHealthCheck: new Date(),
-      uptime: 0,
-      errors: [],
-    };
-  }
+	private initializeMetrics(): ConnectionPoolMetrics {
+		return {
+			totalConnections: 0,
+			activeConnections: 0,
+			idleConnections: 0,
+			waitingRequests: 0,
+			totalQueries: 0,
+			successfulQueries: 0,
+			failedQueries: 0,
+			slowQueries: 0,
+			averageQueryTime: 0,
+			averageConnectionTime: 0,
+			lastHealthCheck: new Date(),
+			uptime: 0,
+			errors: [],
+		};
+	}
 
-  private startHealthChecking(): void {
-    // Skip health checks in test environment
-    if (process.env.NODE_ENV === 'test') {
-      return;
-    }
-    
-    this.healthCheckInterval = setInterval(() => {
-      this.performHealthCheck().catch(error => {
-        console.error('[ConnectionPoolMonitor] Health check failed:', error);
-      });
-    }, this.config.healthCheckIntervalMs);
+	private startHealthChecking(): void {
+		// Skip health checks in test environment
+		if (process.env.NODE_ENV === "test") {
+			return;
+		}
 
-    if (isMonitorLogEnabled()) {
-      console.log('[ConnectionPoolMonitor] Health checking started');
-    }
-  }
+		this.healthCheckInterval = setInterval(() => {
+			this.performHealthCheck().catch((error) => {
+				console.error("[ConnectionPoolMonitor] Health check failed:", error);
+			});
+		}, this.config.healthCheckIntervalMs);
 
-  // Record query execution
-  recordQuery(
-    queryType: string,
-    executionTime: number,
-    success: boolean,
-    error?: Error
-  ): void {
-    this.metrics.totalQueries++;
-    
-    if (success) {
-      this.metrics.successfulQueries++;
-    } else {
-      this.metrics.failedQueries++;
-      
-      if (error) {
-        this.metrics.errors.push({
-          timestamp: new Date(),
-          error: error.message,
-          queryType,
-        });
-        
-        // Keep only recent errors
-        if (this.metrics.errors.length > 100) {
-          this.metrics.errors.shift();
-        }
-      }
-    }
+		if (isMonitorLogEnabled()) {
+			console.log("[ConnectionPoolMonitor] Health checking started");
+		}
+	}
 
-    // Track query times
-    this.queryTimes.push(executionTime);
-    if (this.queryTimes.length > this.MAX_STORED_TIMES) {
-      this.queryTimes.shift();
-    }
+	// Record query execution
+	recordQuery(queryType: string, executionTime: number, success: boolean, error?: Error): void {
+		this.metrics.totalQueries++;
 
-    // Update average query time
-    this.metrics.averageQueryTime = 
-      this.queryTimes.reduce((sum, time) => sum + time, 0) / this.queryTimes.length;
+		if (success) {
+			this.metrics.successfulQueries++;
+		} else {
+			this.metrics.failedQueries++;
 
-    // Track slow queries
-    if (executionTime > this.config.slowQueryThresholdMs) {
-      this.metrics.slowQueries++;
-      console.warn(`[ConnectionPoolMonitor] Slow query detected: ${queryType}`, {
-        executionTime,
-        threshold: this.config.slowQueryThresholdMs,
-      });
-    }
+			if (error) {
+				this.metrics.errors.push({
+					timestamp: new Date(),
+					error: error.message,
+					queryType,
+				});
 
-    // Log performance warnings
-    if (this.metrics.totalQueries % 100 === 0) {
-      this.logPerformanceWarnings();
-    }
-  }
+				// Keep only recent errors
+				if (this.metrics.errors.length > 100) {
+					this.metrics.errors.shift();
+				}
+			}
+		}
 
-  // Record connection acquisition time
-  recordConnectionAcquisition(acquisitionTime: number): void {
-    this.connectionTimes.push(acquisitionTime);
-    if (this.connectionTimes.length > this.MAX_STORED_TIMES) {
-      this.connectionTimes.shift();
-    }
+		// Track query times
+		this.queryTimes.push(executionTime);
+		if (this.queryTimes.length > this.MAX_STORED_TIMES) {
+			this.queryTimes.shift();
+		}
 
-    this.metrics.averageConnectionTime = 
-      this.connectionTimes.reduce((sum, time) => sum + time, 0) / this.connectionTimes.length;
+		// Update average query time
+		this.metrics.averageQueryTime = this.queryTimes.reduce((sum, time) => sum + time, 0) / this.queryTimes.length;
 
-    if (acquisitionTime > this.config.acquireTimeoutMs / 2) {
-      console.warn(`[ConnectionPoolMonitor] Slow connection acquisition: ${acquisitionTime}ms`);
-    }
-  }
+		// Track slow queries
+		if (executionTime > this.config.slowQueryThresholdMs) {
+			this.metrics.slowQueries++;
+			console.warn(`[ConnectionPoolMonitor] Slow query detected: ${queryType}`, {
+				executionTime,
+				threshold: this.config.slowQueryThresholdMs,
+			});
+		}
 
-  // Perform comprehensive health check
-  private async performHealthCheck(): Promise<PoolHealthStatus> {
-    const checkStart = Date.now();
-    const issues: string[] = [];
-    const recommendations: string[] = [];
-    let status: PoolHealthStatus['status'] = 'healthy';
+		// Log performance warnings
+		if (this.metrics.totalQueries % 100 === 0) {
+			this.logPerformanceWarnings();
+		}
+	}
 
-    try {
-      // Update uptime
-      this.metrics.uptime = Date.now() - this.startTime.getTime();
-      this.metrics.lastHealthCheck = new Date();
+	// Record connection acquisition time
+	recordConnectionAcquisition(acquisitionTime: number): void {
+		this.connectionTimes.push(acquisitionTime);
+		if (this.connectionTimes.length > this.MAX_STORED_TIMES) {
+			this.connectionTimes.shift();
+		}
 
-      // Test database connectivity
-      const dbHealthy = await this.testDatabaseConnectivity();
-      if (!dbHealthy) {
-        issues.push('Database connectivity test failed');
-        status = 'critical';
-      }
+		this.metrics.averageConnectionTime =
+			this.connectionTimes.reduce((sum, time) => sum + time, 0) / this.connectionTimes.length;
 
-      // Test Redis connectivity
-      const redisHealthy = await this.testRedisConnectivity();
-      if (!redisHealthy) {
-        issues.push('Redis connectivity test failed');
-        status = status === 'critical' ? 'critical' : 'degraded';
-      }
+		if (acquisitionTime > this.config.acquireTimeoutMs / 2) {
+			console.warn(`[ConnectionPoolMonitor] Slow connection acquisition: ${acquisitionTime}ms`);
+		}
+	}
 
-      // Check query performance
-      const queryPerformanceIssues = this.checkQueryPerformance();
-      issues.push(...queryPerformanceIssues.issues);
-      recommendations.push(...queryPerformanceIssues.recommendations);
+	// Perform comprehensive health check
+	private async performHealthCheck(): Promise<PoolHealthStatus> {
+		const checkStart = Date.now();
+		const issues: string[] = [];
+		const recommendations: string[] = [];
+		let status: PoolHealthStatus["status"] = "healthy";
 
-      // Check error rates
-      const errorRateIssues = this.checkErrorRates();
-      issues.push(...errorRateIssues.issues);
-      recommendations.push(...errorRateIssues.recommendations);
+		try {
+			// Update uptime
+			this.metrics.uptime = Date.now() - this.startTime.getTime();
+			this.metrics.lastHealthCheck = new Date();
 
-      // Check connection pool utilization
-      const poolUtilizationIssues = this.checkPoolUtilization();
-      issues.push(...poolUtilizationIssues.issues);
-      recommendations.push(...poolUtilizationIssues.recommendations);
+			// Test database connectivity
+			const dbHealthy = await this.testDatabaseConnectivity();
+			if (!dbHealthy) {
+				issues.push("Database connectivity test failed");
+				status = "critical";
+			}
 
-      // Determine overall status
-      if (issues.length === 0) {
-        status = 'healthy';
-      } else if (status === 'healthy') {
-        status = issues.some(issue => issue.includes('critical') || issue.includes('failed')) 
-          ? 'degraded' 
-          : 'healthy';
-      }
+			// Test Redis connectivity
+			const redisHealthy = await this.testRedisConnectivity();
+			if (!redisHealthy) {
+				issues.push("Redis connectivity test failed");
+				status = status === "critical" ? "critical" : "degraded";
+			}
 
-      const healthStatus: PoolHealthStatus = {
-        isHealthy: status === 'healthy',
-        status,
-        issues,
-        recommendations,
-        metrics: { ...this.metrics },
-        lastCheck: new Date(),
-      };
+			// Check query performance
+			const queryPerformanceIssues = this.checkQueryPerformance();
+			issues.push(...queryPerformanceIssues.issues);
+			recommendations.push(...queryPerformanceIssues.recommendations);
 
-      // Log health status periodically
-      if ((this.metrics.totalQueries % 1000 === 0 || issues.length > 0) && isMonitorLogEnabled()) {
-        console.log('[ConnectionPoolMonitor] Health check completed', {
-          status,
-          issues: issues.length,
-          recommendations: recommendations.length,
-          checkDuration: Date.now() - checkStart,
-        });
-      }
+			// Check error rates
+			const errorRateIssues = this.checkErrorRates();
+			issues.push(...errorRateIssues.issues);
+			recommendations.push(...errorRateIssues.recommendations);
 
-      return healthStatus;
+			// Check connection pool utilization
+			const poolUtilizationIssues = this.checkPoolUtilization();
+			issues.push(...poolUtilizationIssues.issues);
+			recommendations.push(...poolUtilizationIssues.recommendations);
 
-    } catch (error) {
-      console.error('[ConnectionPoolMonitor] Health check error:', error);
-      
-      return {
-        isHealthy: false,
-        status: 'critical',
-        issues: [`Health check failed: ${error instanceof Error ? error.message : 'Unknown error'}`],
-        recommendations: ['Investigate health check system', 'Check system resources'],
-        metrics: { ...this.metrics },
-        lastCheck: new Date(),
-      };
-    }
-  }
+			// Determine overall status
+			if (issues.length === 0) {
+				status = "healthy";
+			} else if (status === "healthy") {
+				status = issues.some((issue) => issue.includes("critical") || issue.includes("failed"))
+					? "degraded"
+					: "healthy";
+			}
 
-  // Test database connectivity
-  private async testDatabaseConnectivity(): Promise<boolean> {
-    try {
-      const start = Date.now();
-      
-      await withPrismaReconnect(async (prisma) => {
-        return prisma.$queryRaw`SELECT 1`;
-      });
-      
-      const connectionTime = Date.now() - start;
-      this.recordConnectionAcquisition(connectionTime);
-      
-      return true;
-    } catch (error) {
-      console.error('[ConnectionPoolMonitor] Database connectivity test failed:', error);
-      return false;
-    }
-  }
+			const healthStatus: PoolHealthStatus = {
+				isHealthy: status === "healthy",
+				status,
+				issues,
+				recommendations,
+				metrics: { ...this.metrics },
+				lastCheck: new Date(),
+			};
 
-  // Test Redis connectivity
-  private async testRedisConnectivity(): Promise<boolean> {
-    try {
-      const start = Date.now();
-      await getRedisInstance().ping();
-      const latency = Date.now() - start;
-      
-      if (latency > 1000) {
-        console.warn(`[ConnectionPoolMonitor] High Redis latency: ${latency}ms`);
-      }
-      
-      return true;
-    } catch (error) {
-      console.error('[ConnectionPoolMonitor] Redis connectivity test failed:', error);
-      return false;
-    }
-  }
+			// Log health status periodically
+			if ((this.metrics.totalQueries % 1000 === 0 || issues.length > 0) && isMonitorLogEnabled()) {
+				console.log("[ConnectionPoolMonitor] Health check completed", {
+					status,
+					issues: issues.length,
+					recommendations: recommendations.length,
+					checkDuration: Date.now() - checkStart,
+				});
+			}
 
-  // Check query performance
-  private checkQueryPerformance(): { issues: string[]; recommendations: string[] } {
-    const issues: string[] = [];
-    const recommendations: string[] = [];
+			return healthStatus;
+		} catch (error) {
+			console.error("[ConnectionPoolMonitor] Health check error:", error);
 
-    // Check average query time
-    if (this.metrics.averageQueryTime > this.config.slowQueryThresholdMs) {
-      issues.push(`High average query time: ${this.metrics.averageQueryTime.toFixed(0)}ms`);
-      recommendations.push('Consider query optimization or database indexing');
-    }
+			return {
+				isHealthy: false,
+				status: "critical",
+				issues: [`Health check failed: ${error instanceof Error ? error.message : "Unknown error"}`],
+				recommendations: ["Investigate health check system", "Check system resources"],
+				metrics: { ...this.metrics },
+				lastCheck: new Date(),
+			};
+		}
+	}
 
-    // Check slow query percentage
-    const slowQueryPercentage = this.metrics.totalQueries > 0 
-      ? (this.metrics.slowQueries / this.metrics.totalQueries) * 100 
-      : 0;
-    
-    if (slowQueryPercentage > 10) {
-      issues.push(`High slow query percentage: ${slowQueryPercentage.toFixed(1)}%`);
-      recommendations.push('Investigate and optimize slow queries');
-    }
+	// Test database connectivity
+	private async testDatabaseConnectivity(): Promise<boolean> {
+		try {
+			const start = Date.now();
 
-    // Check connection acquisition time
-    if (this.metrics.averageConnectionTime > this.config.acquireTimeoutMs / 4) {
-      issues.push(`High connection acquisition time: ${this.metrics.averageConnectionTime.toFixed(0)}ms`);
-      recommendations.push('Consider increasing connection pool size');
-    }
+			await withPrismaReconnect(async (prisma) => {
+				return prisma.$queryRaw`SELECT 1`;
+			});
 
-    return { issues, recommendations };
-  }
+			const connectionTime = Date.now() - start;
+			this.recordConnectionAcquisition(connectionTime);
 
-  // Check error rates
-  private checkErrorRates(): { issues: string[]; recommendations: string[] } {
-    const issues: string[] = [];
-    const recommendations: string[] = [];
+			return true;
+		} catch (error) {
+			console.error("[ConnectionPoolMonitor] Database connectivity test failed:", error);
+			return false;
+		}
+	}
 
-    if (this.metrics.totalQueries === 0) return { issues, recommendations };
+	// Test Redis connectivity
+	private async testRedisConnectivity(): Promise<boolean> {
+		try {
+			const start = Date.now();
+			await getRedisInstance().ping();
+			const latency = Date.now() - start;
 
-    const errorRate = (this.metrics.failedQueries / this.metrics.totalQueries) * 100;
-    
-    if (errorRate > 5) {
-      issues.push(`High error rate: ${errorRate.toFixed(1)}%`);
-      recommendations.push('Investigate query failures and connection issues');
-    }
+			if (latency > 1000) {
+				console.warn(`[ConnectionPoolMonitor] High Redis latency: ${latency}ms`);
+			}
 
-    // Check recent errors
-    const recentErrors = this.metrics.errors.filter(
-      error => Date.now() - error.timestamp.getTime() < 300000 // Last 5 minutes
-    );
+			return true;
+		} catch (error) {
+			console.error("[ConnectionPoolMonitor] Redis connectivity test failed:", error);
+			return false;
+		}
+	}
 
-    if (recentErrors.length > 10) {
-      issues.push(`High recent error count: ${recentErrors.length} in last 5 minutes`);
-      recommendations.push('Check for system issues or resource constraints');
-    }
+	// Check query performance
+	private checkQueryPerformance(): { issues: string[]; recommendations: string[] } {
+		const issues: string[] = [];
+		const recommendations: string[] = [];
 
-    return { issues, recommendations };
-  }
+		// Check average query time
+		if (this.metrics.averageQueryTime > this.config.slowQueryThresholdMs) {
+			issues.push(`High average query time: ${this.metrics.averageQueryTime.toFixed(0)}ms`);
+			recommendations.push("Consider query optimization or database indexing");
+		}
 
-  // Check connection pool utilization
-  private checkPoolUtilization(): { issues: string[]; recommendations: string[] } {
-    const issues: string[] = [];
-    const recommendations: string[] = [];
+		// Check slow query percentage
+		const slowQueryPercentage =
+			this.metrics.totalQueries > 0 ? (this.metrics.slowQueries / this.metrics.totalQueries) * 100 : 0;
 
-    // This would require integration with actual connection pool metrics
-    // For now, we'll use estimated values based on query patterns
-    
-    const estimatedActiveConnections = Math.min(
-      Math.ceil(this.metrics.totalQueries / 1000), 
-      this.config.maxConnections
-    );
+		if (slowQueryPercentage > 10) {
+			issues.push(`High slow query percentage: ${slowQueryPercentage.toFixed(1)}%`);
+			recommendations.push("Investigate and optimize slow queries");
+		}
 
-    const utilizationPercentage = (estimatedActiveConnections / this.config.maxConnections) * 100;
+		// Check connection acquisition time
+		if (this.metrics.averageConnectionTime > this.config.acquireTimeoutMs / 4) {
+			issues.push(`High connection acquisition time: ${this.metrics.averageConnectionTime.toFixed(0)}ms`);
+			recommendations.push("Consider increasing connection pool size");
+		}
 
-    if (utilizationPercentage > 80) {
-      issues.push(`High connection pool utilization: ${utilizationPercentage.toFixed(1)}%`);
-      recommendations.push('Consider increasing max connections or optimizing query patterns');
-    }
+		return { issues, recommendations };
+	}
 
-    if (this.metrics.waitingRequests > 0) {
-      issues.push(`Requests waiting for connections: ${this.metrics.waitingRequests}`);
-      recommendations.push('Increase connection pool size or reduce query load');
-    }
+	// Check error rates
+	private checkErrorRates(): { issues: string[]; recommendations: string[] } {
+		const issues: string[] = [];
+		const recommendations: string[] = [];
 
-    return { issues, recommendations };
-  }
+		if (this.metrics.totalQueries === 0) return { issues, recommendations };
 
-  // Log performance warnings
-  private logPerformanceWarnings(): void {
-    const stats = this.getPerformanceStats();
-    
-    if (stats.errorRate > 5) {
-      console.warn('[ConnectionPoolMonitor] High error rate detected', stats);
-    }
-    
-    if (stats.averageQueryTime > this.config.slowQueryThresholdMs) {
-      console.warn('[ConnectionPoolMonitor] High average query time detected', stats);
-    }
-  }
+		const errorRate = (this.metrics.failedQueries / this.metrics.totalQueries) * 100;
 
-  // Get current performance statistics
-  getPerformanceStats(): {
-    totalQueries: number;
-    successRate: number;
-    errorRate: number;
-    averageQueryTime: number;
-    slowQueryPercentage: number;
-    uptime: number;
-    recentErrors: number;
-  } {
-    const successRate = this.metrics.totalQueries > 0 
-      ? (this.metrics.successfulQueries / this.metrics.totalQueries) * 100 
-      : 0;
-    
-    const errorRate = this.metrics.totalQueries > 0 
-      ? (this.metrics.failedQueries / this.metrics.totalQueries) * 100 
-      : 0;
-    
-    const slowQueryPercentage = this.metrics.totalQueries > 0 
-      ? (this.metrics.slowQueries / this.metrics.totalQueries) * 100 
-      : 0;
+		if (errorRate > 5) {
+			issues.push(`High error rate: ${errorRate.toFixed(1)}%`);
+			recommendations.push("Investigate query failures and connection issues");
+		}
 
-    const recentErrors = this.metrics.errors.filter(
-      error => Date.now() - error.timestamp.getTime() < 300000 // Last 5 minutes
-    ).length;
+		// Check recent errors
+		const recentErrors = this.metrics.errors.filter(
+			(error) => Date.now() - error.timestamp.getTime() < 300000, // Last 5 minutes
+		);
 
-    return {
-      totalQueries: this.metrics.totalQueries,
-      successRate: Math.round(successRate * 100) / 100,
-      errorRate: Math.round(errorRate * 100) / 100,
-      averageQueryTime: Math.round(this.metrics.averageQueryTime * 100) / 100,
-      slowQueryPercentage: Math.round(slowQueryPercentage * 100) / 100,
-      uptime: this.metrics.uptime,
-      recentErrors,
-    };
-  }
+		if (recentErrors.length > 10) {
+			issues.push(`High recent error count: ${recentErrors.length} in last 5 minutes`);
+			recommendations.push("Check for system issues or resource constraints");
+		}
 
-  // Get current health status
-  async getCurrentHealthStatus(): Promise<PoolHealthStatus> {
-    return this.performHealthCheck();
-  }
+		return { issues, recommendations };
+	}
 
-  // Get detailed metrics
-  getDetailedMetrics(): ConnectionPoolMetrics {
-    return { ...this.metrics };
-  }
+	// Check connection pool utilization
+	private checkPoolUtilization(): { issues: string[]; recommendations: string[] } {
+		const issues: string[] = [];
+		const recommendations: string[] = [];
 
-  // Reset metrics (useful for testing or periodic resets)
-  resetMetrics(): void {
-    const oldMetrics = { ...this.metrics };
-    this.metrics = this.initializeMetrics();
-    this.queryTimes = [];
-    this.connectionTimes = [];
-    
-    console.log('[ConnectionPoolMonitor] Metrics reset', {
-      previousTotalQueries: oldMetrics.totalQueries,
-      previousSuccessRate: oldMetrics.totalQueries > 0 
-        ? (oldMetrics.successfulQueries / oldMetrics.totalQueries) * 100 
-        : 0,
-    });
-  }
+		// This would require integration with actual connection pool metrics
+		// For now, we'll use estimated values based on query patterns
 
-  // Shutdown monitoring
-  shutdown(): void {
-    if (this.healthCheckInterval) {
-      clearInterval(this.healthCheckInterval);
-      this.healthCheckInterval = undefined;
-    }
-    
-    console.log('[ConnectionPoolMonitor] Monitoring shutdown completed');
-  }
+		const estimatedActiveConnections = Math.min(
+			Math.ceil(this.metrics.totalQueries / 1000),
+			this.config.maxConnections,
+		);
 
-  // Update configuration
-  updateConfig(newConfig: Partial<ConnectionPoolConfig>): void {
-    this.config = { ...this.config, ...newConfig };
-    
-    console.log('[ConnectionPoolMonitor] Configuration updated', {
-      newConfig,
-      currentConfig: this.config,
-    });
-  }
+		const utilizationPercentage = (estimatedActiveConnections / this.config.maxConnections) * 100;
+
+		if (utilizationPercentage > 80) {
+			issues.push(`High connection pool utilization: ${utilizationPercentage.toFixed(1)}%`);
+			recommendations.push("Consider increasing max connections or optimizing query patterns");
+		}
+
+		if (this.metrics.waitingRequests > 0) {
+			issues.push(`Requests waiting for connections: ${this.metrics.waitingRequests}`);
+			recommendations.push("Increase connection pool size or reduce query load");
+		}
+
+		return { issues, recommendations };
+	}
+
+	// Log performance warnings
+	private logPerformanceWarnings(): void {
+		const stats = this.getPerformanceStats();
+
+		if (stats.errorRate > 5) {
+			console.warn("[ConnectionPoolMonitor] High error rate detected", stats);
+		}
+
+		if (stats.averageQueryTime > this.config.slowQueryThresholdMs) {
+			console.warn("[ConnectionPoolMonitor] High average query time detected", stats);
+		}
+	}
+
+	// Get current performance statistics
+	getPerformanceStats(): {
+		totalQueries: number;
+		successRate: number;
+		errorRate: number;
+		averageQueryTime: number;
+		slowQueryPercentage: number;
+		uptime: number;
+		recentErrors: number;
+	} {
+		const successRate =
+			this.metrics.totalQueries > 0 ? (this.metrics.successfulQueries / this.metrics.totalQueries) * 100 : 0;
+
+		const errorRate =
+			this.metrics.totalQueries > 0 ? (this.metrics.failedQueries / this.metrics.totalQueries) * 100 : 0;
+
+		const slowQueryPercentage =
+			this.metrics.totalQueries > 0 ? (this.metrics.slowQueries / this.metrics.totalQueries) * 100 : 0;
+
+		const recentErrors = this.metrics.errors.filter(
+			(error) => Date.now() - error.timestamp.getTime() < 300000, // Last 5 minutes
+		).length;
+
+		return {
+			totalQueries: this.metrics.totalQueries,
+			successRate: Math.round(successRate * 100) / 100,
+			errorRate: Math.round(errorRate * 100) / 100,
+			averageQueryTime: Math.round(this.metrics.averageQueryTime * 100) / 100,
+			slowQueryPercentage: Math.round(slowQueryPercentage * 100) / 100,
+			uptime: this.metrics.uptime,
+			recentErrors,
+		};
+	}
+
+	// Get current health status
+	async getCurrentHealthStatus(): Promise<PoolHealthStatus> {
+		return this.performHealthCheck();
+	}
+
+	// Get detailed metrics
+	getDetailedMetrics(): ConnectionPoolMetrics {
+		return { ...this.metrics };
+	}
+
+	// Reset metrics (useful for testing or periodic resets)
+	resetMetrics(): void {
+		const oldMetrics = { ...this.metrics };
+		this.metrics = this.initializeMetrics();
+		this.queryTimes = [];
+		this.connectionTimes = [];
+
+		console.log("[ConnectionPoolMonitor] Metrics reset", {
+			previousTotalQueries: oldMetrics.totalQueries,
+			previousSuccessRate:
+				oldMetrics.totalQueries > 0 ? (oldMetrics.successfulQueries / oldMetrics.totalQueries) * 100 : 0,
+		});
+	}
+
+	// Shutdown monitoring
+	shutdown(): void {
+		if (this.healthCheckInterval) {
+			clearInterval(this.healthCheckInterval);
+			this.healthCheckInterval = undefined;
+		}
+
+		console.log("[ConnectionPoolMonitor] Monitoring shutdown completed");
+	}
+
+	// Update configuration
+	updateConfig(newConfig: Partial<ConnectionPoolConfig>): void {
+		this.config = { ...this.config, ...newConfig };
+
+		console.log("[ConnectionPoolMonitor] Configuration updated", {
+			newConfig,
+			currentConfig: this.config,
+		});
+	}
 }
 
 // Global monitor instance
@@ -495,61 +483,58 @@ export const connectionPoolMonitor = new ConnectionPoolMonitor();
 
 // Utility functions for external use
 export async function getConnectionPoolHealth(): Promise<PoolHealthStatus> {
-  return connectionPoolMonitor.getCurrentHealthStatus();
+	return connectionPoolMonitor.getCurrentHealthStatus();
 }
 
 export function getConnectionPoolStats(): ReturnType<typeof connectionPoolMonitor.getPerformanceStats> {
-  return connectionPoolMonitor.getPerformanceStats();
+	return connectionPoolMonitor.getPerformanceStats();
 }
 
-export function recordDatabaseQuery(
-  queryType: string,
-  executionTime: number,
-  success: boolean,
-  error?: Error
-): void {
-  connectionPoolMonitor.recordQuery(queryType, executionTime, success, error);
+export function recordDatabaseQuery(queryType: string, executionTime: number, success: boolean, error?: Error): void {
+	connectionPoolMonitor.recordQuery(queryType, executionTime, success, error);
 }
 
 export function recordConnectionAcquisition(acquisitionTime: number): void {
-  connectionPoolMonitor.recordConnectionAcquisition(acquisitionTime);
+	connectionPoolMonitor.recordConnectionAcquisition(acquisitionTime);
 }
 
 // Utility function to wrap Prisma queries with monitoring
 export function withQueryMonitoring<T>(
-  queryName: string,
-  queryPromise: Prisma.PrismaPromise<T>
+	queryName: string,
+	queryPromise: Prisma.PrismaPromise<T>,
 ): Prisma.PrismaPromise<T> {
-  const start = Date.now();
-  let success = true;
-  let error: Error | undefined;
-  
-  return queryPromise.then(
-    (result) => {
-      success = true;
-      return result;
-    },
-    (e) => {
-      success = false;
-      error = e instanceof Error ? e : new Error('Unknown error');
-      throw e;
-    }
-  ).finally(() => {
-    const executionTime = Date.now() - start;
-    connectionPoolMonitor.recordQuery(queryName, executionTime, success, error);
-  }) as Prisma.PrismaPromise<T>;
+	const start = Date.now();
+	let success = true;
+	let error: Error | undefined;
+
+	return queryPromise
+		.then(
+			(result) => {
+				success = true;
+				return result;
+			},
+			(e) => {
+				success = false;
+				error = e instanceof Error ? e : new Error("Unknown error");
+				throw e;
+			},
+		)
+		.finally(() => {
+			const executionTime = Date.now() - start;
+			connectionPoolMonitor.recordQuery(queryName, executionTime, success, error);
+		}) as Prisma.PrismaPromise<T>;
 }
 
 // Automatic monitoring startup
-console.log('[ConnectionPoolMonitor] Connection pool monitoring initialized');
+console.log("[ConnectionPoolMonitor] Connection pool monitoring initialized");
 
 // Graceful shutdown handling
-process.on('SIGTERM', () => {
-  console.log('[ConnectionPoolMonitor] Received SIGTERM, shutting down monitoring...');
-  connectionPoolMonitor.shutdown();
+process.on("SIGTERM", () => {
+	console.log("[ConnectionPoolMonitor] Received SIGTERM, shutting down monitoring...");
+	connectionPoolMonitor.shutdown();
 });
 
-process.on('SIGINT', () => {
-  console.log('[ConnectionPoolMonitor] Received SIGINT, shutting down monitoring...');
-  connectionPoolMonitor.shutdown();
+process.on("SIGINT", () => {
+	console.log("[ConnectionPoolMonitor] Received SIGINT, shutting down monitoring...");
+	connectionPoolMonitor.shutdown();
 });

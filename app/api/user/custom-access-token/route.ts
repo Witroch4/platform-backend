@@ -1,36 +1,36 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { getPrismaInstance } from "@/lib/connections"
+import { getPrismaInstance } from "@/lib/connections";
 
 export async function GET() {
-  try {
-    const session = await auth();
-    
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Usuário não autenticado" }, { status: 401 });
-    }
+	try {
+		const session = await auth();
 
-    const user = await getPrismaInstance().user.findUnique({
-      where: { id: session.user.id },
-      select: { role: true }
-    });
+		if (!session?.user?.id) {
+			return NextResponse.json({ error: "Usuário não autenticado" }, { status: 401 });
+		}
 
-    if (!user) {
-      return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
-    }
+		const user = await getPrismaInstance().user.findUnique({
+			where: { id: session.user.id },
+			select: { role: true },
+		});
 
-    // Buscar o usuário Chatwit
-    const usuarioChatwit = await getPrismaInstance().usuarioChatwit.findUnique({
-      where: { appUserId: session.user.id },
-      select: { chatwitAccessToken: true }
-    });
+		if (!user) {
+			return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
+		}
 
-    return NextResponse.json({ 
-      chatwitAccessToken: usuarioChatwit?.chatwitAccessToken,
-      role: user.role 
-    });
-  } catch (error) {
-    console.error("Erro ao buscar chatwitAccessToken:", error);
-    return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 });
-  }
-} 
+		// Buscar o usuário Chatwit
+		const usuarioChatwit = await getPrismaInstance().usuarioChatwit.findUnique({
+			where: { appUserId: session.user.id },
+			select: { chatwitAccessToken: true },
+		});
+
+		return NextResponse.json({
+			chatwitAccessToken: usuarioChatwit?.chatwitAccessToken,
+			role: user.role,
+		});
+	} catch (error) {
+		console.error("Erro ao buscar chatwitAccessToken:", error);
+		return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 });
+	}
+}

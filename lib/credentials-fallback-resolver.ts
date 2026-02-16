@@ -9,412 +9,408 @@ import { getPrismaInstance } from "@/lib/connections";
 const prisma = getPrismaInstance();
 
 export interface WhatsAppCredentials {
-  whatsappApiKey: string;
-  phoneNumberId: string;
-  whatsappBusinessAccountId: string;
-  graphApiBaseUrl: string;
-  source: 'inbox' | 'fallback_inbox' | 'global_config' | 'environment';
-  resolvedFromInboxId?: string;
+	whatsappApiKey: string;
+	phoneNumberId: string;
+	whatsappBusinessAccountId: string;
+	graphApiBaseUrl: string;
+	source: "inbox" | "fallback_inbox" | "global_config" | "environment";
+	resolvedFromInboxId?: string;
 }
 
 export interface CredentialResolutionResult {
-  credentials: WhatsAppCredentials | null;
-  fallbackChain: string[];
-  loopDetected: boolean;
-  cacheHit: boolean;
-  resolutionTimeMs: number;
+	credentials: WhatsAppCredentials | null;
+	fallbackChain: string[];
+	loopDetected: boolean;
+	cacheHit: boolean;
+	resolutionTimeMs: number;
 }
 
 export class CredentialsFallbackResolver {
-  private static readonly MAX_FALLBACK_DEPTH = 5;
-  private static readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-  private static credentialsCache = new Map<string, {
-    credentials: WhatsAppCredentials | null;
-    timestamp: number;
-    fallbackChain: string[];
-  }>();
+	private static readonly MAX_FALLBACK_DEPTH = 5;
+	private static readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+	private static credentialsCache = new Map<
+		string,
+		{
+			credentials: WhatsAppCredentials | null;
+			timestamp: number;
+			fallbackChain: string[];
+		}
+	>();
 
-  /**
-   * Resolve credentials for an inbox with comprehensive fallback logic
-   * @param inboxId - The ChatwitInbox ID (internal database ID, not external inboxId)
-   * @param visited - Set of visited inbox IDs for loop detection
-   * @returns Promise<CredentialResolutionResult>
-   */
-  static async resolveCredentials(
-    inboxId: string,
-    visited: Set<string> = new Set()
-  ): Promise<CredentialResolutionResult> {
-    const startTime = Date.now();
-    const fallbackChain: string[] = [];
-    
-    console.log(`[CredentialResolver] Starting resolution for inboxId: ${inboxId}`);
+	/**
+	 * Resolve credentials for an inbox with comprehensive fallback logic
+	 * @param inboxId - The ChatwitInbox ID (internal database ID, not external inboxId)
+	 * @param visited - Set of visited inbox IDs for loop detection
+	 * @returns Promise<CredentialResolutionResult>
+	 */
+	static async resolveCredentials(
+		inboxId: string,
+		visited: Set<string> = new Set(),
+	): Promise<CredentialResolutionResult> {
+		const startTime = Date.now();
+		const fallbackChain: string[] = [];
 
-    // Check cache first
-    const cacheKey = `credentials:${inboxId}`;
-    const cached = this.credentialsCache.get(cacheKey);
-    
-    if (cached && (Date.now() - cached.timestamp) < this.CACHE_TTL_MS) {
-      console.log(`[CredentialResolver] Cache hit for inboxId: ${inboxId}`);
-      return {
-        credentials: cached.credentials,
-        fallbackChain: cached.fallbackChain,
-        loopDetected: false,
-        cacheHit: true,
-        resolutionTimeMs: Date.now() - startTime,
-      };
-    }
+		console.log(`[CredentialResolver] Starting resolution for inboxId: ${inboxId}`);
 
-    try {
-      const result = await this.resolveCredentialsRecursive(inboxId, visited, fallbackChain);
-      
-      // Cache the result
-      this.credentialsCache.set(cacheKey, {
-        credentials: result.credentials,
-        timestamp: Date.now(),
-        fallbackChain: result.fallbackChain,
-      });
+		// Check cache first
+		const cacheKey = `credentials:${inboxId}`;
+		const cached = this.credentialsCache.get(cacheKey);
 
-      return {
-        ...result,
-        cacheHit: false,
-        resolutionTimeMs: Date.now() - startTime,
-      };
-    } catch (error) {
-      console.error(`[CredentialResolver] Error resolving credentials for inboxId: ${inboxId}`, error);
-      return {
-        credentials: null,
-        fallbackChain,
-        loopDetected: false,
-        cacheHit: false,
-        resolutionTimeMs: Date.now() - startTime,
-      };
-    }
-  }
+		if (cached && Date.now() - cached.timestamp < this.CACHE_TTL_MS) {
+			console.log(`[CredentialResolver] Cache hit for inboxId: ${inboxId}`);
+			return {
+				credentials: cached.credentials,
+				fallbackChain: cached.fallbackChain,
+				loopDetected: false,
+				cacheHit: true,
+				resolutionTimeMs: Date.now() - startTime,
+			};
+		}
 
-  /**
-   * Recursive credential resolution with loop detection
-   */
-  private static async resolveCredentialsRecursive(
-    inboxId: string,
-    visited: Set<string>,
-    fallbackChain: string[]
-  ): Promise<Omit<CredentialResolutionResult, 'cacheHit' | 'resolutionTimeMs'>> {
-    // Loop detection
-    if (visited.has(inboxId)) {
-      console.warn(`[CredentialResolver] Loop detected in fallback chain: ${Array.from(visited).join(' -> ')} -> ${inboxId}`);
-      return {
-        credentials: null,
-        fallbackChain,
-        loopDetected: true,
-      };
-    }
+		try {
+			const result = await this.resolveCredentialsRecursive(inboxId, visited, fallbackChain);
 
-    // Max depth protection
-    if (visited.size >= this.MAX_FALLBACK_DEPTH) {
-      console.warn(`[CredentialResolver] Max fallback depth (${this.MAX_FALLBACK_DEPTH}) reached for inboxId: ${inboxId}`);
-      return {
-        credentials: null,
-        fallbackChain,
-        loopDetected: false,
-      };
-    }
+			// Cache the result
+			this.credentialsCache.set(cacheKey, {
+				credentials: result.credentials,
+				timestamp: Date.now(),
+				fallbackChain: result.fallbackChain,
+			});
 
-    visited.add(inboxId);
-    fallbackChain.push(inboxId);
+			return {
+				...result,
+				cacheHit: false,
+				resolutionTimeMs: Date.now() - startTime,
+			};
+		} catch (error) {
+			console.error(`[CredentialResolver] Error resolving credentials for inboxId: ${inboxId}`, error);
+			return {
+				credentials: null,
+				fallbackChain,
+				loopDetected: false,
+				cacheHit: false,
+				resolutionTimeMs: Date.now() - startTime,
+			};
+		}
+	}
 
-    // Fetch the ChatwitInbox with related data
-    const chatwitInbox = await prisma.chatwitInbox.findUnique({
-      where: { id: inboxId },
-      include: {
-        fallbackParaInbox: true,
-        usuarioChatwit: {
-          include: {
-            configuracaoGlobalWhatsApp: true,
-          },
-        },
-      },
-    });
+	/**
+	 * Recursive credential resolution with loop detection
+	 */
+	private static async resolveCredentialsRecursive(
+		inboxId: string,
+		visited: Set<string>,
+		fallbackChain: string[],
+	): Promise<Omit<CredentialResolutionResult, "cacheHit" | "resolutionTimeMs">> {
+		// Loop detection
+		if (visited.has(inboxId)) {
+			console.warn(
+				`[CredentialResolver] Loop detected in fallback chain: ${Array.from(visited).join(" -> ")} -> ${inboxId}`,
+			);
+			return {
+				credentials: null,
+				fallbackChain,
+				loopDetected: true,
+			};
+		}
 
-    if (!chatwitInbox) {
-      console.log(`[CredentialResolver] ChatwitInbox not found: ${inboxId}`);
-      return {
-        credentials: null,
-        fallbackChain,
-        loopDetected: false,
-      };
-    }
+		// Max depth protection
+		if (visited.size >= this.MAX_FALLBACK_DEPTH) {
+			console.warn(
+				`[CredentialResolver] Max fallback depth (${this.MAX_FALLBACK_DEPTH}) reached for inboxId: ${inboxId}`,
+			);
+			return {
+				credentials: null,
+				fallbackChain,
+				loopDetected: false,
+			};
+		}
 
-    console.log(`[CredentialResolver] Processing inbox: ${chatwitInbox.nome} (${inboxId})`);
+		visited.add(inboxId);
+		fallbackChain.push(inboxId);
 
-    // Check if this inbox has its own credentials
-    if (this.hasCompleteCredentials(chatwitInbox)) {
-      console.log(`[CredentialResolver] Found complete credentials in inbox: ${inboxId}`);
-      return {
-        credentials: {
-          whatsappApiKey: chatwitInbox.whatsappApiKey!,
-          phoneNumberId: chatwitInbox.phoneNumberId!,
-          whatsappBusinessAccountId: chatwitInbox.whatsappBusinessAccountId!,
-          graphApiBaseUrl: "https://graph.facebook.com/v22.0",
-          source: 'inbox',
-          resolvedFromInboxId: inboxId,
-        },
-        fallbackChain,
-        loopDetected: false,
-      };
-    }
+		// Fetch the ChatwitInbox with related data
+		const chatwitInbox = await prisma.chatwitInbox.findUnique({
+			where: { id: inboxId },
+			include: {
+				fallbackParaInbox: true,
+				usuarioChatwit: {
+					include: {
+						configuracaoGlobalWhatsApp: true,
+					},
+				},
+			},
+		});
 
-    // Try fallback to another inbox
-    if (chatwitInbox.fallbackParaInboxId) {
-      console.log(`[CredentialResolver] Following fallback chain: ${inboxId} -> ${chatwitInbox.fallbackParaInboxId}`);
-      const fallbackResult = await this.resolveCredentialsRecursive(
-        chatwitInbox.fallbackParaInboxId,
-        new Set(visited), // Create new Set to avoid modifying the original
-        [...fallbackChain] // Create new array to avoid modifying the original
-      );
+		if (!chatwitInbox) {
+			console.log(`[CredentialResolver] ChatwitInbox not found: ${inboxId}`);
+			return {
+				credentials: null,
+				fallbackChain,
+				loopDetected: false,
+			};
+		}
 
-      if (fallbackResult.credentials) {
-        return {
-          credentials: {
-            ...fallbackResult.credentials,
-            source: 'fallback_inbox',
-            resolvedFromInboxId: chatwitInbox.fallbackParaInboxId,
-          },
-          fallbackChain: fallbackResult.fallbackChain,
-          loopDetected: fallbackResult.loopDetected,
-        };
-      }
-    }
+		console.log(`[CredentialResolver] Processing inbox: ${chatwitInbox.nome} (${inboxId})`);
 
-    // Try WhatsAppGlobalConfig
-    if (chatwitInbox.usuarioChatwit?.configuracaoGlobalWhatsApp) {
-      const globalConfig = chatwitInbox.usuarioChatwit.configuracaoGlobalWhatsApp;
-      console.log(`[CredentialResolver] Using WhatsAppGlobalConfig for user: ${chatwitInbox.usuarioChatwitId}`);
-      
-      return {
-        credentials: {
-          whatsappApiKey: globalConfig.whatsappApiKey,
-          phoneNumberId: globalConfig.phoneNumberId,
-          whatsappBusinessAccountId: globalConfig.whatsappBusinessAccountId,
-          graphApiBaseUrl: globalConfig.graphApiBaseUrl,
-          source: 'global_config',
-        },
-        fallbackChain,
-        loopDetected: false,
-      };
-    }
+		// Check if this inbox has its own credentials
+		if (this.hasCompleteCredentials(chatwitInbox)) {
+			console.log(`[CredentialResolver] Found complete credentials in inbox: ${inboxId}`);
+			return {
+				credentials: {
+					whatsappApiKey: chatwitInbox.whatsappApiKey!,
+					phoneNumberId: chatwitInbox.phoneNumberId!,
+					whatsappBusinessAccountId: chatwitInbox.whatsappBusinessAccountId!,
+					graphApiBaseUrl: "https://graph.facebook.com/v22.0",
+					source: "inbox",
+					resolvedFromInboxId: inboxId,
+				},
+				fallbackChain,
+				loopDetected: false,
+			};
+		}
 
-    // Final fallback to environment variables
-    console.log(`[CredentialResolver] Using environment variables as final fallback`);
-    const envCredentials = this.getEnvironmentCredentials();
-    
-    if (envCredentials) {
-      return {
-        credentials: envCredentials,
-        fallbackChain,
-        loopDetected: false,
-      };
-    }
+		// Try fallback to another inbox
+		if (chatwitInbox.fallbackParaInboxId) {
+			console.log(`[CredentialResolver] Following fallback chain: ${inboxId} -> ${chatwitInbox.fallbackParaInboxId}`);
+			const fallbackResult = await this.resolveCredentialsRecursive(
+				chatwitInbox.fallbackParaInboxId,
+				new Set(visited), // Create new Set to avoid modifying the original
+				[...fallbackChain], // Create new array to avoid modifying the original
+			);
 
-    // No credentials found
-    console.log(`[CredentialResolver] No credentials found for inboxId: ${inboxId}`);
-    return {
-      credentials: null,
-      fallbackChain,
-      loopDetected: false,
-    };
-  }
+			if (fallbackResult.credentials) {
+				return {
+					credentials: {
+						...fallbackResult.credentials,
+						source: "fallback_inbox",
+						resolvedFromInboxId: chatwitInbox.fallbackParaInboxId,
+					},
+					fallbackChain: fallbackResult.fallbackChain,
+					loopDetected: fallbackResult.loopDetected,
+				};
+			}
+		}
 
-  /**
-   * Check if an inbox has complete credentials
-   */
-  private static hasCompleteCredentials(inbox: any): boolean {
-    return !!(
-      inbox.whatsappApiKey &&
-      inbox.phoneNumberId &&
-      inbox.whatsappBusinessAccountId
-    );
-  }
+		// Try WhatsAppGlobalConfig
+		if (chatwitInbox.usuarioChatwit?.configuracaoGlobalWhatsApp) {
+			const globalConfig = chatwitInbox.usuarioChatwit.configuracaoGlobalWhatsApp;
+			console.log(`[CredentialResolver] Using WhatsAppGlobalConfig for user: ${chatwitInbox.usuarioChatwitId}`);
 
-  /**
-   * Get credentials from environment variables
-   */
-  private static getEnvironmentCredentials(): WhatsAppCredentials | null {
-    const whatsappApiKey = process.env.WHATSAPP_TOKEN;
-    const phoneNumberId = process.env.FROM_PHONE_NUMBER_ID;
-    const whatsappBusinessAccountId = process.env.WHATSAPP_BUSINESS_ID;
+			return {
+				credentials: {
+					whatsappApiKey: globalConfig.whatsappApiKey,
+					phoneNumberId: globalConfig.phoneNumberId,
+					whatsappBusinessAccountId: globalConfig.whatsappBusinessAccountId,
+					graphApiBaseUrl: globalConfig.graphApiBaseUrl,
+					source: "global_config",
+				},
+				fallbackChain,
+				loopDetected: false,
+			};
+		}
 
-    if (whatsappApiKey && phoneNumberId && whatsappBusinessAccountId) {
-      return {
-        whatsappApiKey,
-        phoneNumberId,
-        whatsappBusinessAccountId,
-        graphApiBaseUrl: "https://graph.facebook.com/v22.0",
-        source: 'environment',
-      };
-    }
+		// Final fallback to environment variables
+		console.log(`[CredentialResolver] Using environment variables as final fallback`);
+		const envCredentials = this.getEnvironmentCredentials();
 
-    return null;
-  }
+		if (envCredentials) {
+			return {
+				credentials: envCredentials,
+				fallbackChain,
+				loopDetected: false,
+			};
+		}
 
-  /**
-   * Resolve credentials by external inbox ID (from webhook payload)
-   * This is the main entry point for webhook processing
-   */
-  static async resolveCredentialsByExternalInboxId(
-    externalInboxId: string
-  ): Promise<CredentialResolutionResult> {
-    console.log(`[CredentialResolver] Resolving credentials for external inboxId: ${externalInboxId}`);
+		// No credentials found
+		console.log(`[CredentialResolver] No credentials found for inboxId: ${inboxId}`);
+		return {
+			credentials: null,
+			fallbackChain,
+			loopDetected: false,
+		};
+	}
 
-    try {
-      // Find the ChatwitInbox by external inboxId
-      const chatwitInbox = await prisma.chatwitInbox.findFirst({
-        where: { inboxId: externalInboxId },
-      });
+	/**
+	 * Check if an inbox has complete credentials
+	 */
+	private static hasCompleteCredentials(inbox: any): boolean {
+		return !!(inbox.whatsappApiKey && inbox.phoneNumberId && inbox.whatsappBusinessAccountId);
+	}
 
-      if (!chatwitInbox) {
-        console.log(`[CredentialResolver] No ChatwitInbox found for external inboxId: ${externalInboxId}`);
-        return {
-          credentials: null,
-          fallbackChain: [],
-          loopDetected: false,
-          cacheHit: false,
-          resolutionTimeMs: 0,
-        };
-      }
+	/**
+	 * Get credentials from environment variables
+	 */
+	private static getEnvironmentCredentials(): WhatsAppCredentials | null {
+		const whatsappApiKey = process.env.WHATSAPP_TOKEN;
+		const phoneNumberId = process.env.FROM_PHONE_NUMBER_ID;
+		const whatsappBusinessAccountId = process.env.WHATSAPP_BUSINESS_ID;
 
-      // Use the internal ID for resolution
-      return await this.resolveCredentials(chatwitInbox.id);
-    } catch (error) {
-      console.error(`[CredentialResolver] Error resolving credentials by external inboxId: ${externalInboxId}`, error);
-      return {
-        credentials: null,
-        fallbackChain: [],
-        loopDetected: false,
-        cacheHit: false,
-        resolutionTimeMs: 0,
-      };
-    }
-  }
+		if (whatsappApiKey && phoneNumberId && whatsappBusinessAccountId) {
+			return {
+				whatsappApiKey,
+				phoneNumberId,
+				whatsappBusinessAccountId,
+				graphApiBaseUrl: "https://graph.facebook.com/v22.0",
+				source: "environment",
+			};
+		}
 
-  /**
-   * Invalidate cache for a specific inbox
-   */
-  static invalidateCache(inboxId: string): void {
-    const cacheKey = `credentials:${inboxId}`;
-    this.credentialsCache.delete(cacheKey);
-    console.log(`[CredentialResolver] Cache invalidated for inboxId: ${inboxId}`);
-  }
+		return null;
+	}
 
-  /**
-   * Clear all cached credentials
-   */
-  static clearCache(): void {
-    this.credentialsCache.clear();
-    console.log(`[CredentialResolver] All credential cache cleared`);
-  }
+	/**
+	 * Resolve credentials by external inbox ID (from webhook payload)
+	 * This is the main entry point for webhook processing
+	 */
+	static async resolveCredentialsByExternalInboxId(externalInboxId: string): Promise<CredentialResolutionResult> {
+		console.log(`[CredentialResolver] Resolving credentials for external inboxId: ${externalInboxId}`);
 
-  /**
-   * Get cache statistics
-   */
-  static getCacheStats(): {
-    size: number;
-    entries: Array<{ inboxId: string; age: number; source: string }>;
-  } {
-    const now = Date.now();
-    const entries = Array.from(this.credentialsCache.entries()).map(([key, value]) => ({
-      inboxId: key.replace('credentials:', ''),
-      age: now - value.timestamp,
-      source: value.credentials?.source || 'null',
-    }));
+		try {
+			// Find the ChatwitInbox by external inboxId
+			const chatwitInbox = await prisma.chatwitInbox.findFirst({
+				where: { inboxId: externalInboxId },
+			});
 
-    return {
-      size: this.credentialsCache.size,
-      entries,
-    };
-  }
+			if (!chatwitInbox) {
+				console.log(`[CredentialResolver] No ChatwitInbox found for external inboxId: ${externalInboxId}`);
+				return {
+					credentials: null,
+					fallbackChain: [],
+					loopDetected: false,
+					cacheHit: false,
+					resolutionTimeMs: 0,
+				};
+			}
 
-  /**
-   * Validate fallback chain configuration for an inbox
-   * Useful for admin interfaces to detect potential issues
-   */
-  static async validateFallbackChain(inboxId: string): Promise<{
-    isValid: boolean;
-    issues: string[];
-    chain: string[];
-  }> {
-    const issues: string[] = [];
-    const chain: string[] = [];
-    const visited = new Set<string>();
+			// Use the internal ID for resolution
+			return await this.resolveCredentials(chatwitInbox.id);
+		} catch (error) {
+			console.error(`[CredentialResolver] Error resolving credentials by external inboxId: ${externalInboxId}`, error);
+			return {
+				credentials: null,
+				fallbackChain: [],
+				loopDetected: false,
+				cacheHit: false,
+				resolutionTimeMs: 0,
+			};
+		}
+	}
 
-    try {
-      await this.validateFallbackChainRecursive(inboxId, visited, chain, issues);
-    } catch (error) {
-      issues.push(`Error validating fallback chain: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+	/**
+	 * Invalidate cache for a specific inbox
+	 */
+	static invalidateCache(inboxId: string): void {
+		const cacheKey = `credentials:${inboxId}`;
+		this.credentialsCache.delete(cacheKey);
+		console.log(`[CredentialResolver] Cache invalidated for inboxId: ${inboxId}`);
+	}
 
-    return {
-      isValid: issues.length === 0,
-      issues,
-      chain,
-    };
-  }
+	/**
+	 * Clear all cached credentials
+	 */
+	static clearCache(): void {
+		this.credentialsCache.clear();
+		console.log(`[CredentialResolver] All credential cache cleared`);
+	}
 
-  /**
-   * Recursive fallback chain validation
-   */
-  private static async validateFallbackChainRecursive(
-    inboxId: string,
-    visited: Set<string>,
-    chain: string[],
-    issues: string[]
-  ): Promise<void> {
-    if (visited.has(inboxId)) {
-      issues.push(`Loop detected: ${chain.join(' -> ')} -> ${inboxId}`);
-      return;
-    }
+	/**
+	 * Get cache statistics
+	 */
+	static getCacheStats(): {
+		size: number;
+		entries: Array<{ inboxId: string; age: number; source: string }>;
+	} {
+		const now = Date.now();
+		const entries = Array.from(this.credentialsCache.entries()).map(([key, value]) => ({
+			inboxId: key.replace("credentials:", ""),
+			age: now - value.timestamp,
+			source: value.credentials?.source || "null",
+		}));
 
-    if (visited.size >= this.MAX_FALLBACK_DEPTH) {
-      issues.push(`Max fallback depth exceeded: ${this.MAX_FALLBACK_DEPTH}`);
-      return;
-    }
+		return {
+			size: this.credentialsCache.size,
+			entries,
+		};
+	}
 
-    visited.add(inboxId);
-    chain.push(inboxId);
+	/**
+	 * Validate fallback chain configuration for an inbox
+	 * Useful for admin interfaces to detect potential issues
+	 */
+	static async validateFallbackChain(inboxId: string): Promise<{
+		isValid: boolean;
+		issues: string[];
+		chain: string[];
+	}> {
+		const issues: string[] = [];
+		const chain: string[] = [];
+		const visited = new Set<string>();
 
-    const chatwitInbox = await prisma.chatwitInbox.findUnique({
-      where: { id: inboxId },
-      include: {
-        fallbackParaInbox: true,
-        usuarioChatwit: {
-          include: {
-            configuracaoGlobalWhatsApp: true,
-          },
-        },
-      },
-    });
+		try {
+			await this.validateFallbackChainRecursive(inboxId, visited, chain, issues);
+		} catch (error) {
+			issues.push(`Error validating fallback chain: ${error instanceof Error ? error.message : "Unknown error"}`);
+		}
 
-    if (!chatwitInbox) {
-      issues.push(`Inbox not found: ${inboxId}`);
-      return;
-    }
+		return {
+			isValid: issues.length === 0,
+			issues,
+			chain,
+		};
+	}
 
-    // Check if this inbox has credentials or valid fallback
-    const hasCredentials = this.hasCompleteCredentials(chatwitInbox);
-    const hasFallback = !!chatwitInbox.fallbackParaInboxId;
-    const hasGlobalConfig = !!chatwitInbox.usuarioChatwit?.configuracaoGlobalWhatsApp;
+	/**
+	 * Recursive fallback chain validation
+	 */
+	private static async validateFallbackChainRecursive(
+		inboxId: string,
+		visited: Set<string>,
+		chain: string[],
+		issues: string[],
+	): Promise<void> {
+		if (visited.has(inboxId)) {
+			issues.push(`Loop detected: ${chain.join(" -> ")} -> ${inboxId}`);
+			return;
+		}
 
-    if (!hasCredentials && !hasFallback && !hasGlobalConfig) {
-      issues.push(`Inbox ${inboxId} has no credentials, fallback, or global config`);
-    }
+		if (visited.size >= this.MAX_FALLBACK_DEPTH) {
+			issues.push(`Max fallback depth exceeded: ${this.MAX_FALLBACK_DEPTH}`);
+			return;
+		}
 
-    // Continue validation if there's a fallback
-    if (hasFallback && chatwitInbox.fallbackParaInboxId) {
-      await this.validateFallbackChainRecursive(
-        chatwitInbox.fallbackParaInboxId,
-        new Set(visited),
-        [...chain],
-        issues
-      );
-    }
-  }
+		visited.add(inboxId);
+		chain.push(inboxId);
+
+		const chatwitInbox = await prisma.chatwitInbox.findUnique({
+			where: { id: inboxId },
+			include: {
+				fallbackParaInbox: true,
+				usuarioChatwit: {
+					include: {
+						configuracaoGlobalWhatsApp: true,
+					},
+				},
+			},
+		});
+
+		if (!chatwitInbox) {
+			issues.push(`Inbox not found: ${inboxId}`);
+			return;
+		}
+
+		// Check if this inbox has credentials or valid fallback
+		const hasCredentials = this.hasCompleteCredentials(chatwitInbox);
+		const hasFallback = !!chatwitInbox.fallbackParaInboxId;
+		const hasGlobalConfig = !!chatwitInbox.usuarioChatwit?.configuracaoGlobalWhatsApp;
+
+		if (!hasCredentials && !hasFallback && !hasGlobalConfig) {
+			issues.push(`Inbox ${inboxId} has no credentials, fallback, or global config`);
+		}
+
+		// Continue validation if there's a fallback
+		if (hasFallback && chatwitInbox.fallbackParaInboxId) {
+			await this.validateFallbackChainRecursive(chatwitInbox.fallbackParaInboxId, new Set(visited), [...chain], issues);
+		}
+	}
 }

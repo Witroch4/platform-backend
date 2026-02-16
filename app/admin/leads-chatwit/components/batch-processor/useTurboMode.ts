@@ -1,103 +1,103 @@
 /**
  * TURBO Mode Hook - SIMPLIFICADO PARA CORRIGIR ERROS
- * 
+ *
  * NOVA FILOSOFIA: Modo Turbo é funcionalidade core sempre disponível.
  * Este hook verifica apenas se o usuário tem ACESSO.
  */
 
-import { useState, useEffect } from 'react'
-import { useSession } from 'next-auth/react'
+import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
 
 export interface TurboModeConfig {
-  maxParallelLeads: number
-  resourceThreshold: number
-  fallbackOnError: boolean
+	maxParallelLeads: number;
+	resourceThreshold: number;
+	fallbackOnError: boolean;
 }
 
 export interface TurboModeMetrics {
-  totalLeads: number
-  parallelProcessed: number
-  sequentialProcessed: number
-  timeSaved: number
-  errorRate: number
-  averageProcessingTime: number
+	totalLeads: number;
+	parallelProcessed: number;
+	sequentialProcessed: number;
+	timeSaved: number;
+	errorRate: number;
+	averageProcessingTime: number;
 }
 
 export interface UseTurboModeReturn {
-  turboModeEnabled: boolean
-  turboModeAvailable: boolean
-  hasAccess: boolean
-  turboModeConfig: TurboModeConfig
-  turboModeMetrics: TurboModeMetrics | null
-  checkTurboModeAccess: () => Promise<void>
-  checkAccess: () => Promise<void>
-  startTurboSession: (leadIds: string[]) => Promise<string | null>
-  endTurboSession: (sessionId: string, metrics?: TurboModeMetrics) => Promise<void>
-  updateMetrics: (metrics: Partial<TurboModeMetrics>) => Promise<void>
-  isLoading: boolean
-  error: string | null
+	turboModeEnabled: boolean;
+	turboModeAvailable: boolean;
+	hasAccess: boolean;
+	turboModeConfig: TurboModeConfig;
+	turboModeMetrics: TurboModeMetrics | null;
+	checkTurboModeAccess: () => Promise<void>;
+	checkAccess: () => Promise<void>;
+	startTurboSession: (leadIds: string[]) => Promise<string | null>;
+	endTurboSession: (sessionId: string, metrics?: TurboModeMetrics) => Promise<void>;
+	updateMetrics: (metrics: Partial<TurboModeMetrics>) => Promise<void>;
+	isLoading: boolean;
+	error: string | null;
 }
 
 export function useTurboMode(): UseTurboModeReturn {
-  const { data: session } = useSession()
-  const [turboModeEnabled, setTurboModeEnabled] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+	const { data: session } = useSession();
+	const [turboModeEnabled, setTurboModeEnabled] = useState(false);
+	const [isLoading, setIsLoading] = useState(false);
+	const [error, setError] = useState<string | null>(null);
 
-  const turboModeConfig: TurboModeConfig = {
-    maxParallelLeads: 10,
-    resourceThreshold: 80,
-    fallbackOnError: true
-  }
+	const turboModeConfig: TurboModeConfig = {
+		maxParallelLeads: 10,
+		resourceThreshold: 80,
+		fallbackOnError: true,
+	};
 
-  const checkTurboModeAccess = async () => {
-    if (!session?.user?.id) return
-    
-    setIsLoading(true)
-    try {
-      const response = await fetch(`/api/admin/users/${session.user.id}`)
-      if (response.ok) {
-        const data = await response.json()
-        setTurboModeEnabled(data.user?.turboModeEnabled || false)
-      }
-    } catch (err) {
-      setError('Erro ao verificar acesso')
-    } finally {
-      setIsLoading(false)
-    }
-  }
+	const checkTurboModeAccess = async () => {
+		if (!session?.user?.id) return;
 
-  const startTurboSession = async (leadIds: string[]): Promise<string | null> => {
-    // Implementação simplificada
-    return 'session-' + Date.now()
-  }
+		setIsLoading(true);
+		try {
+			const response = await fetch(`/api/admin/users/${session.user.id}`);
+			if (response.ok) {
+				const data = await response.json();
+				setTurboModeEnabled(data.user?.turboModeEnabled || false);
+			}
+		} catch (err) {
+			setError("Erro ao verificar acesso");
+		} finally {
+			setIsLoading(false);
+		}
+	};
 
-  const endTurboSession = async (sessionId: string, metrics?: TurboModeMetrics): Promise<void> => {
-    // Implementação simplificada
-  }
+	const startTurboSession = async (leadIds: string[]): Promise<string | null> => {
+		// Implementação simplificada
+		return "session-" + Date.now();
+	};
 
-  const updateMetrics = async (metrics: Partial<TurboModeMetrics>): Promise<void> => {
-    // Implementação simplificada
-  }
+	const endTurboSession = async (sessionId: string, metrics?: TurboModeMetrics): Promise<void> => {
+		// Implementação simplificada
+	};
 
-  useEffect(() => {
-    if (session?.user?.id) {
-      checkTurboModeAccess()
-    }
-  }, [session?.user?.id])
+	const updateMetrics = async (metrics: Partial<TurboModeMetrics>): Promise<void> => {
+		// Implementação simplificada
+	};
 
-  return {
-    turboModeEnabled,
-    turboModeAvailable: true, // Sempre disponível
-    hasAccess: turboModeEnabled,
-    turboModeConfig,
-    turboModeMetrics: null,
-    checkTurboModeAccess,
-    checkAccess: checkTurboModeAccess,
-    startTurboSession,
-    endTurboSession,
-    updateMetrics,
-    isLoading,
-    error
-  }
+	useEffect(() => {
+		if (session?.user?.id) {
+			checkTurboModeAccess();
+		}
+	}, [session?.user?.id]);
+
+	return {
+		turboModeEnabled,
+		turboModeAvailable: true, // Sempre disponível
+		hasAccess: turboModeEnabled,
+		turboModeConfig,
+		turboModeMetrics: null,
+		checkTurboModeAccess,
+		checkAccess: checkTurboModeAccess,
+		startTurboSession,
+		endTurboSession,
+		updateMetrics,
+		isLoading,
+		error,
+	};
 }

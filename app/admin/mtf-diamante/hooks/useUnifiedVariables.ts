@@ -1,87 +1,90 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from "react";
 
 export interface UnifiedVariable {
-  id: string;
-  chave: string;
-  valor: string;
-  valorRaw?: string;
-  tipo: 'normal' | 'lote';
-  descricao: string;
-  displayName: string;
-  isActive?: boolean;
-  loteData?: {
-    id: string;
-    numero: number;
-    nome: string;
-    valor: string;
-    dataInicio: string;
-    dataFim: string;
-  } | null;
+	id: string;
+	chave: string;
+	valor: string;
+	valorRaw?: string;
+	tipo: "normal" | "lote";
+	descricao: string;
+	displayName: string;
+	isActive?: boolean;
+	loteData?: {
+		id: string;
+		numero: number;
+		nome: string;
+		valor: string;
+		dataInicio: string;
+		dataFim: string;
+	} | null;
 }
 
 interface UseUnifiedVariablesReturn {
-  variables: UnifiedVariable[];
-  loading: boolean;
-  error: string | null;
-  refreshVariables: () => Promise<void>;
-  insertVariable: (chave: string, position?: number) => void;
+	variables: UnifiedVariable[];
+	loading: boolean;
+	error: string | null;
+	refreshVariables: () => Promise<void>;
+	insertVariable: (chave: string, position?: number) => void;
 }
 
 export const useUnifiedVariables = (
-  accountId: string,
-  onInsert?: (text: string, position?: number) => void
+	accountId: string,
+	onInsert?: (text: string, position?: number) => void,
 ): UseUnifiedVariablesReturn => {
-  const [variables, setVariables] = useState<UnifiedVariable[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+	const [variables, setVariables] = useState<UnifiedVariable[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
 
-  const fetchVariables = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
+	const fetchVariables = useCallback(async () => {
+		try {
+			setLoading(true);
+			setError(null);
 
-      const response = await fetch(`/api/admin/mtf-diamante/variaveis`);
-      
-      if (!response.ok) {
-        throw new Error('Erro ao carregar variáveis');
-      }
+			const response = await fetch(`/api/admin/mtf-diamante/variaveis`);
 
-      const data = await response.json();
-      
-      if (data.success && Array.isArray(data.data)) {
-        // Incluir tanto variáveis normais quanto o lote ativo
-        setVariables(data.data);
-      } else {
-        throw new Error('Formato de resposta inválido');
-      }
-    } catch (err) {
-      console.error('Erro ao buscar variáveis:', err);
-      setError(err instanceof Error ? err.message : 'Erro desconhecido');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+			if (!response.ok) {
+				throw new Error("Erro ao carregar variáveis");
+			}
 
-  const insertVariable = useCallback((chave: string, position?: number) => {
-    // Sempre insere o placeholder nomeado, mesmo que não esteja na lista remota
-    // (ex.: variável especial {{nome_lead}})
-    const textToInsert = `{{${chave}}}`;
-    if (onInsert) onInsert(textToInsert, position);
-  }, [onInsert]);
+			const data = await response.json();
 
-  const refreshVariables = useCallback(async () => {
-    await fetchVariables();
-  }, [fetchVariables]);
+			if (data.success && Array.isArray(data.data)) {
+				// Incluir tanto variáveis normais quanto o lote ativo
+				setVariables(data.data);
+			} else {
+				throw new Error("Formato de resposta inválido");
+			}
+		} catch (err) {
+			console.error("Erro ao buscar variáveis:", err);
+			setError(err instanceof Error ? err.message : "Erro desconhecido");
+		} finally {
+			setLoading(false);
+		}
+	}, []);
 
-  useEffect(() => {
-    fetchVariables();
-  }, [fetchVariables]);
+	const insertVariable = useCallback(
+		(chave: string, position?: number) => {
+			// Sempre insere o placeholder nomeado, mesmo que não esteja na lista remota
+			// (ex.: variável especial {{nome_lead}})
+			const textToInsert = `{{${chave}}}`;
+			if (onInsert) onInsert(textToInsert, position);
+		},
+		[onInsert],
+	);
 
-  return {
-    variables,
-    loading,
-    error,
-    refreshVariables,
-    insertVariable
-  };
+	const refreshVariables = useCallback(async () => {
+		await fetchVariables();
+	}, [fetchVariables]);
+
+	useEffect(() => {
+		fetchVariables();
+	}, [fetchVariables]);
+
+	return {
+		variables,
+		loading,
+		error,
+		refreshVariables,
+		insertVariable,
+	};
 };

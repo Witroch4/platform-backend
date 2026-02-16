@@ -4,13 +4,9 @@ import type React from "react";
 import SubscriptionGuard from "@/components/subscription-guard";
 
 export default function AutomacaoLayout({
-  children,
+	children,
 }: {
-  children: React.ReactNode;
+	children: React.ReactNode;
 }) {
-  return (
-    <SubscriptionGuard fallbackPath="/assine-agora">
-      {children}
-    </SubscriptionGuard>
-  );
+	return <SubscriptionGuard fallbackPath="/assine-agora">{children}</SubscriptionGuard>;
 }

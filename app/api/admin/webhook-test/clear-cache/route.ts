@@ -1,67 +1,63 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
-import { getRedisInstance } from '@/lib/connections';
-import { createLogger } from '@/lib/utils/logger';
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/auth";
+import { getRedisInstance } from "@/lib/connections";
+import { createLogger } from "@/lib/utils/logger";
 
-const logger = createLogger('WebhookTestCacheClear');
+const logger = createLogger("WebhookTestCacheClear");
 
 export async function POST(request: NextRequest) {
-  try {
-    // Check authentication
-    const session = await auth();
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: "Usuário não autenticado." },
-        { status: 401 }
-      );
-    }
+	try {
+		// Check authentication
+		const session = await auth();
+		if (!session?.user?.id) {
+			return NextResponse.json({ error: "Usuário não autenticado." }, { status: 401 });
+		}
 
-    const redis = getRedisInstance();
-    
-    // Clear various cache patterns related to webhook testing
-    const patterns = [
-      'socialwise:*',
-      'sw:*',
-      'chatwit:*',
-      'webhook:*',
-      'idempotency:*',
-      'replay:*',
-      'rate_limit:*',
-      'test:*'
-    ];
+		const redis = getRedisInstance();
 
-    let totalCleared = 0;
+		// Clear various cache patterns related to webhook testing
+		const patterns = [
+			"socialwise:*",
+			"sw:*",
+			"chatwit:*",
+			"webhook:*",
+			"idempotency:*",
+			"replay:*",
+			"rate_limit:*",
+			"test:*",
+		];
 
-    for (const pattern of patterns) {
-      try {
-        const keys = await redis.keys(pattern);
-        if (keys.length > 0) {
-          await redis.del(...keys);
-          totalCleared += keys.length;
-          logger.info(`Cleared ${keys.length} keys for pattern: ${pattern}`);
-        }
-      } catch (error) {
-        logger.warn(`Failed to clear pattern ${pattern}:`, error);
-      }
-    }
+		let totalCleared = 0;
 
-    logger.info(`Cache cleared successfully. Total keys cleared: ${totalCleared}`);
+		for (const pattern of patterns) {
+			try {
+				const keys = await redis.keys(pattern);
+				if (keys.length > 0) {
+					await redis.del(...keys);
+					totalCleared += keys.length;
+					logger.info(`Cleared ${keys.length} keys for pattern: ${pattern}`);
+				}
+			} catch (error) {
+				logger.warn(`Failed to clear pattern ${pattern}:`, error);
+			}
+		}
 
-    return NextResponse.json({
-      success: true,
-      message: `Cache limpo com sucesso. ${totalCleared} chaves removidas.`,
-      keysCleared: totalCleared
-    });
+		logger.info(`Cache cleared successfully. Total keys cleared: ${totalCleared}`);
 
-  } catch (error) {
-    logger.error('Failed to clear cache:', error);
-    
-    return NextResponse.json(
-      { 
-        error: "Erro interno do servidor ao limpar cache.",
-        details: error instanceof Error ? error.message : String(error)
-      },
-      { status: 500 }
-    );
-  }
+		return NextResponse.json({
+			success: true,
+			message: `Cache limpo com sucesso. ${totalCleared} chaves removidas.`,
+			keysCleared: totalCleared,
+		});
+	} catch (error) {
+		logger.error("Failed to clear cache:", error);
+
+		return NextResponse.json(
+			{
+				error: "Erro interno do servidor ao limpar cache.",
+				details: error instanceof Error ? error.message : String(error),
+			},
+			{ status: 500 },
+		);
+	}
 }

@@ -1,4 +1,4 @@
-import { getPrismaInstance } from "@/lib/connections"
+import { getPrismaInstance } from "@/lib/connections";
 import { v4 as uuid } from "uuid";
 
 export const findVerificationTokenbyEmail = async (email: string) => {

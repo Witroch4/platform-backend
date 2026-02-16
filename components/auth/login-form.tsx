@@ -79,18 +79,18 @@ export default function LoginForm() {
 				form.reset();
 			} catch (err) {
 				// Verificar se é um NEXT_REDIRECT (comportamento normal do NextAuth)
-				if (err instanceof Error && err.message === 'NEXT_REDIRECT') {
+				if (err instanceof Error && err.message === "NEXT_REDIRECT") {
 					return; // Não mostrar erro, é um redirecionamento normal
 				}
 
 				// Verificar se é um erro de digest de redirecionamento (NextAuth)
-				if (err && typeof err === 'object' && 'digest' in err) {
+				if (err && typeof err === "object" && "digest" in err) {
 					const errorWithDigest = err as { digest?: string };
-					if (errorWithDigest.digest && errorWithDigest.digest.includes('NEXT_REDIRECT')) {
+					if (errorWithDigest.digest && errorWithDigest.digest.includes("NEXT_REDIRECT")) {
 						return; // Não mostrar erro, é um redirecionamento normal
 					}
 				}
-				
+
 				setError("Algo deu errado");
 				setSuccess("");
 				form.reset();

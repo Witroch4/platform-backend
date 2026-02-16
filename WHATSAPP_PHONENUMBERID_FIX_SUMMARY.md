@@ -15,7 +15,7 @@ O erro "Object with ID 'messages' does not exist" ocorria porque o `phoneNumberI
 - ✅ Atualizado as funções para usar o `phoneNumberId` passado como parâmetro em vez de `process.env.FROM_PHONE_NUMBER_ID`
 - ✅ Adicionada validação para garantir que o `phoneNumberId` seja fornecido
 
-### 2. Biblioteca WhatsApp Reactions (`lib/whatsapp-reactions-worker.ts`)
+### 2. Biblioteca WhatsApp Reactions (`lib/whatsapp-reactions.service.ts`)
 - ✅ Adicionado `phoneNumberId?: string` à interface `ReactionMessageData`
 - ✅ Atualizado `sendReactionMessage` para usar o `phoneNumberId` passado como parâmetro
 

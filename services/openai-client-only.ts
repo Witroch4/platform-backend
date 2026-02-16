@@ -9,14 +9,14 @@ export const openaiService = clientOnlyService;
 
 // Re-export types for convenience
 export type {
-  GPTModel,
-  ImageModel,
-  ImageSize,
-  ImageQuality,
-  ImageStyle,
-  FilePurpose,
-  IntentCandidate,
-  WarmupButtonsResponse,
-  RouterDecision,
-  AgentConfig,
+	GPTModel,
+	ImageModel,
+	ImageSize,
+	ImageQuality,
+	ImageStyle,
+	FilePurpose,
+	IntentCandidate,
+	WarmupButtonsResponse,
+	RouterDecision,
+	AgentConfig,
 } from "./openai-components/types";

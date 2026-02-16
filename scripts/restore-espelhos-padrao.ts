@@ -1,106 +1,104 @@
 #!/usr/bin/env tsx
 
 import { getPrismaInstance } from "@/lib/connections";
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { readFileSync } from "fs";
+import { join } from "path";
 
 const prisma = getPrismaInstance();
 
 async function restoreEspelhosPadrao() {
-  console.log('🔄 Iniciando restauração dos espelhos padrão...');
+	console.log("🔄 Iniciando restauração dos espelhos padrão...");
 
-  try {
-    // Carregar backup
-    const backupPath = join(process.cwd(), 'backups', 'backup_simple_2025-07-12_18-25-34.json');
-    const backupData = JSON.parse(readFileSync(backupPath, 'utf8'));
-    
-    console.log('📂 Backup carregado:', backupPath);
+	try {
+		// Carregar backup
+		const backupPath = join(process.cwd(), "backups", "backup_simple_2025-07-12_18-25-34.json");
+		const backupData = JSON.parse(readFileSync(backupPath, "utf8"));
 
-    // Buscar Amanda no banco atual
-    const amanda = await prisma.usuarioChatwit.findFirst({
-      where: {
-        appUser: {
-          email: 'amandasousa22.adv@gmail.com'
-        }
-      }
-    });
+		console.log("📂 Backup carregado:", backupPath);
 
-    if (!amanda) {
-      throw new Error('❌ Amanda não encontrada no banco de dados');
-    }
+		// Buscar Amanda no banco atual
+		const amanda = await prisma.usuarioChatwit.findFirst({
+			where: {
+				appUser: {
+					email: "amandasousa22.adv@gmail.com",
+				},
+			},
+		});
 
-    console.log(`✅ Amanda encontrada: ${amanda.name} (ID: ${amanda.id})`);
+		if (!amanda) {
+			throw new Error("❌ Amanda não encontrada no banco de dados");
+		}
 
-    // Buscar espelhos padrão no backup
-    const espelhosBackup = backupData.data.espelhosPadrao || [];
+		console.log(`✅ Amanda encontrada: ${amanda.name} (ID: ${amanda.id})`);
 
-    console.log(`📊 Encontrados ${espelhosBackup.length} espelhos padrão no backup`);
+		// Buscar espelhos padrão no backup
+		const espelhosBackup = backupData.data.espelhosPadrao || [];
 
-    if (espelhosBackup.length === 0) {
-      console.log('⚠️ Nenhum espelho padrão encontrado para restaurar');
-      return;
-    }
+		console.log(`📊 Encontrados ${espelhosBackup.length} espelhos padrão no backup`);
 
-    // Restaurar espelhos padrão
-    let espelhosRestaurados = 0;
-    let erros = 0;
+		if (espelhosBackup.length === 0) {
+			console.log("⚠️ Nenhum espelho padrão encontrado para restaurar");
+			return;
+		}
 
-    for (const espelhoBackup of espelhosBackup) {
-      try {
-        // Verificar se o espelho já existe
-        const espelhoExistente = await prisma.espelhoPadrao.findFirst({
-          where: {
-            especialidade: espelhoBackup.especialidade,
-            nome: espelhoBackup.nome
-          }
-        });
+		// Restaurar espelhos padrão
+		let espelhosRestaurados = 0;
+		let erros = 0;
 
-        if (espelhoExistente) {
-          console.log(`⚠️ Espelho ${espelhoBackup.nome} já existe, pulando...`);
-          continue;
-        }
+		for (const espelhoBackup of espelhosBackup) {
+			try {
+				// Verificar se o espelho já existe
+				const espelhoExistente = await prisma.espelhoPadrao.findFirst({
+					where: {
+						especialidade: espelhoBackup.especialidade,
+						nome: espelhoBackup.nome,
+					},
+				});
 
-        // Criar espelho padrão
-        await prisma.espelhoPadrao.create({
-          data: {
-            especialidade: espelhoBackup.especialidade,
-            nome: espelhoBackup.nome,
-            descricao: espelhoBackup.descricao,
-            textoMarkdown: espelhoBackup.textoMarkdown,
-            espelhoCorrecao: espelhoBackup.espelhoCorrecao,
-            isAtivo: espelhoBackup.isAtivo,
-            totalUsos: espelhoBackup.totalUsos,
-            processado: espelhoBackup.processado,
-            aguardandoProcessamento: espelhoBackup.aguardandoProcessamento,
-            atualizadoPorId: amanda.id, // Usar Amanda como atualizado por
-          }
-        });
+				if (espelhoExistente) {
+					console.log(`⚠️ Espelho ${espelhoBackup.nome} já existe, pulando...`);
+					continue;
+				}
 
-        espelhosRestaurados++;
-        console.log(`✅ Espelho restaurado: ${espelhoBackup.nome} (${espelhoBackup.especialidade})`);
+				// Criar espelho padrão
+				await prisma.espelhoPadrao.create({
+					data: {
+						especialidade: espelhoBackup.especialidade,
+						nome: espelhoBackup.nome,
+						descricao: espelhoBackup.descricao,
+						textoMarkdown: espelhoBackup.textoMarkdown,
+						espelhoCorrecao: espelhoBackup.espelhoCorrecao,
+						isAtivo: espelhoBackup.isAtivo,
+						totalUsos: espelhoBackup.totalUsos,
+						processado: espelhoBackup.processado,
+						aguardandoProcessamento: espelhoBackup.aguardandoProcessamento,
+						atualizadoPorId: amanda.id, // Usar Amanda como atualizado por
+					},
+				});
 
-      } catch (espelhoError) {
-        console.error(`❌ Erro ao restaurar espelho ${espelhoBackup.nome}:`, espelhoError);
-        erros++;
-      }
-    }
+				espelhosRestaurados++;
+				console.log(`✅ Espelho restaurado: ${espelhoBackup.nome} (${espelhoBackup.especialidade})`);
+			} catch (espelhoError) {
+				console.error(`❌ Erro ao restaurar espelho ${espelhoBackup.nome}:`, espelhoError);
+				erros++;
+			}
+		}
 
-    console.log('\n📊 Resumo da restauração:');
-    console.log(`✅ Espelhos padrão restaurados: ${espelhosRestaurados}`);
-    console.log(`❌ Erros: ${erros}`);
-    console.log(`🎉 Restauração concluída!`);
-
-  } catch (error) {
-    console.error('❌ Erro durante a restauração:', error);
-    throw error;
-  } finally {
-    await prisma.$disconnect();
-  }
+		console.log("\n📊 Resumo da restauração:");
+		console.log(`✅ Espelhos padrão restaurados: ${espelhosRestaurados}`);
+		console.log(`❌ Erros: ${erros}`);
+		console.log(`🎉 Restauração concluída!`);
+	} catch (error) {
+		console.error("❌ Erro durante a restauração:", error);
+		throw error;
+	} finally {
+		await prisma.$disconnect();
+	}
 }
 
 // Executar se chamado diretamente
 if (require.main === module) {
-  restoreEspelhosPadrao().catch(console.error);
+	restoreEspelhosPadrao().catch(console.error);
 }
 
-export { restoreEspelhosPadrao }; 
+export { restoreEspelhosPadrao };

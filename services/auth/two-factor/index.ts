@@ -1,7 +1,7 @@
 // Função para obter Prisma (sempre usar versão normal)
 function getPrismaForTwoFactor() {
-  const { getPrismaInstance } = require("@/lib/connections");
-  return getPrismaInstance();
+	const { getPrismaInstance } = require("@/lib/connections");
+	return getPrismaInstance();
 }
 // Create a local implementation instead of importing
 function generateOTP(numberOfDigits: number) {

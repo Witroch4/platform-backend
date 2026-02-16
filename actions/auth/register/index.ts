@@ -1,6 +1,6 @@
 "use server";
 
-import { getPrismaInstance } from "@/lib/connections"
+import { getPrismaInstance } from "@/lib/connections";
 import { RegisterSchema } from "@/schemas/auth";
 import { createVerificationToken } from "@/services/auth";
 import { UserRole } from "@prisma/client";

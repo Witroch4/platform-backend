@@ -4,586 +4,552 @@
  * Based on requirements 2.6, 4.4
  */
 
-import type { ExtendedLead } from '../../types'
-import type { TurboModeConfig } from './useTurboMode'
-import type { ParallelProcessingResult } from './TurboModePDFProcessor'
-import { createLogger } from '@/lib/utils/logger'
-import { toast } from 'sonner'
+import type { ExtendedLead } from "../../types";
+import type { TurboModeConfig } from "./useTurboMode";
+import type { ParallelProcessingResult } from "./TurboModePDFProcessor";
+import { createLogger } from "@/lib/utils/logger";
+import { toast } from "sonner";
 
-const logger = createLogger('TurboModeErrorHandler')
+const logger = createLogger("TurboModeErrorHandler");
 
 export interface TurboModeError {
-  type: 'PARALLEL_PROCESSING' | 'RESOURCE_EXHAUSTION' | 'NETWORK_ERROR' | 'TIMEOUT' | 'SYSTEM_ERROR'
-  leadId?: string
-  message: string
-  originalError?: Error
-  timestamp: Date
-  recoverable: boolean
-  retryCount?: number
+	type: "PARALLEL_PROCESSING" | "RESOURCE_EXHAUSTION" | "NETWORK_ERROR" | "TIMEOUT" | "SYSTEM_ERROR";
+	leadId?: string;
+	message: string;
+	originalError?: Error;
+	timestamp: Date;
+	recoverable: boolean;
+	retryCount?: number;
 }
 
 export interface FallbackOptions {
-  enableSequentialFallback: boolean
-  maxRetries: number
-  retryDelay: number
-  notifyUser: boolean
-  logErrors: boolean
+	enableSequentialFallback: boolean;
+	maxRetries: number;
+	retryDelay: number;
+	notifyUser: boolean;
+	logErrors: boolean;
 }
 
 export interface ErrorHandlerMetrics {
-  totalErrors: number
-  errorsByType: Record<string, number>
-  fallbacksTriggered: number
-  successfulRecoveries: number
-  unrecoverableErrors: number
-  averageRecoveryTime: number
+	totalErrors: number;
+	errorsByType: Record<string, number>;
+	fallbacksTriggered: number;
+	successfulRecoveries: number;
+	unrecoverableErrors: number;
+	averageRecoveryTime: number;
 }
 
 export class TurboModeErrorHandler {
-  private config: TurboModeConfig
-  private fallbackOptions: FallbackOptions
-  private errorHistory: TurboModeError[] = []
-  private metrics: ErrorHandlerMetrics = {
-    totalErrors: 0,
-    errorsByType: {},
-    fallbacksTriggered: 0,
-    successfulRecoveries: 0,
-    unrecoverableErrors: 0,
-    averageRecoveryTime: 0
-  }
-  private onFallbackToSequential?: (leads: ExtendedLead[]) => Promise<ParallelProcessingResult[]>
-  private onUserNotification?: (message: string, type: 'error' | 'warning' | 'info') => void
+	private config: TurboModeConfig;
+	private fallbackOptions: FallbackOptions;
+	private errorHistory: TurboModeError[] = [];
+	private metrics: ErrorHandlerMetrics = {
+		totalErrors: 0,
+		errorsByType: {},
+		fallbacksTriggered: 0,
+		successfulRecoveries: 0,
+		unrecoverableErrors: 0,
+		averageRecoveryTime: 0,
+	};
+	private onFallbackToSequential?: (leads: ExtendedLead[]) => Promise<ParallelProcessingResult[]>;
+	private onUserNotification?: (message: string, type: "error" | "warning" | "info") => void;
 
-  constructor(
-    config: TurboModeConfig,
-    options: Partial<FallbackOptions> = {},
-    callbacks: {
-      onFallbackToSequential?: (leads: ExtendedLead[]) => Promise<ParallelProcessingResult[]>
-      onUserNotification?: (message: string, type: 'error' | 'warning' | 'info') => void
-    } = {}
-  ) {
-    this.config = config
-    this.fallbackOptions = {
-      enableSequentialFallback: true,
-      maxRetries: 3,
-      retryDelay: 1000,
-      notifyUser: true,
-      logErrors: true,
-      ...options
-    }
-    this.onFallbackToSequential = callbacks.onFallbackToSequential
-    this.onUserNotification = callbacks.onUserNotification
-  }
+	constructor(
+		config: TurboModeConfig,
+		options: Partial<FallbackOptions> = {},
+		callbacks: {
+			onFallbackToSequential?: (leads: ExtendedLead[]) => Promise<ParallelProcessingResult[]>;
+			onUserNotification?: (message: string, type: "error" | "warning" | "info") => void;
+		} = {},
+	) {
+		this.config = config;
+		this.fallbackOptions = {
+			enableSequentialFallback: true,
+			maxRetries: 3,
+			retryDelay: 1000,
+			notifyUser: true,
+			logErrors: true,
+			...options,
+		};
+		this.onFallbackToSequential = callbacks.onFallbackToSequential;
+		this.onUserNotification = callbacks.onUserNotification;
+	}
 
-  /**
-   * Handle parallel processing errors with automatic fallback
-   */
-  async handleParallelProcessingError(
-    error: Error,
-    leadIds: string[],
-    leads: ExtendedLead[]
-  ): Promise<ParallelProcessingResult[]> {
-    const turboError = this.createTurboError('PARALLEL_PROCESSING', error.message, error)
-    
-    logger.error('Parallel processing failed', {
-      error: error.message,
-      leadIds,
-      leadCount: leadIds.length,
-      stack: error.stack
-    })
+	/**
+	 * Handle parallel processing errors with automatic fallback
+	 */
+	async handleParallelProcessingError(
+		error: Error,
+		leadIds: string[],
+		leads: ExtendedLead[],
+	): Promise<ParallelProcessingResult[]> {
+		const turboError = this.createTurboError("PARALLEL_PROCESSING", error.message, error);
 
-    this.recordError(turboError)
+		logger.error("Parallel processing failed", {
+			error: error.message,
+			leadIds,
+			leadCount: leadIds.length,
+			stack: error.stack,
+		});
 
-    // Notify user about the error
-    if (this.fallbackOptions.notifyUser) {
-      this.notifyUser(
-        'TURBO mode encontrou um erro. Continuando com processamento padrão.',
-        'warning'
-      )
-    }
+		this.recordError(turboError);
 
-    // Attempt fallback to sequential processing
-    if (this.fallbackOptions.enableSequentialFallback) {
-      return await this.fallbackToSequential(leads, turboError)
-    }
+		// Notify user about the error
+		if (this.fallbackOptions.notifyUser) {
+			this.notifyUser("TURBO mode encontrou um erro. Continuando com processamento padrão.", "warning");
+		}
 
-    // If no fallback is available, return error results
-    return leadIds.map(leadId => ({
-      leadId,
-      success: false,
-      processingTime: 0,
-      error: `TURBO mode error: ${error.message}`
-    }))
-  }
+		// Attempt fallback to sequential processing
+		if (this.fallbackOptions.enableSequentialFallback) {
+			return await this.fallbackToSequential(leads, turboError);
+		}
 
-  /**
-   * Handle resource exhaustion errors
-   */
-  async handleResourceExhaustionError(
-    leads: ExtendedLead[],
-    resourceType: 'memory' | 'cpu' | 'network' | 'concurrent_processes'
-  ): Promise<ParallelProcessingResult[]> {
-    const turboError = this.createTurboError(
-      'RESOURCE_EXHAUSTION',
-      `System resources exhausted: ${resourceType}`,
-      undefined,
-      true // This is recoverable
-    )
+		// If no fallback is available, return error results
+		return leadIds.map((leadId) => ({
+			leadId,
+			success: false,
+			processingTime: 0,
+			error: `TURBO mode error: ${error.message}`,
+		}));
+	}
 
-    logger.warn('Resource exhaustion detected', {
-      resourceType,
-      leadCount: leads.length,
-      activeProcesses: this.getActiveProcessCount()
-    })
+	/**
+	 * Handle resource exhaustion errors
+	 */
+	async handleResourceExhaustionError(
+		leads: ExtendedLead[],
+		resourceType: "memory" | "cpu" | "network" | "concurrent_processes",
+	): Promise<ParallelProcessingResult[]> {
+		const turboError = this.createTurboError(
+			"RESOURCE_EXHAUSTION",
+			`System resources exhausted: ${resourceType}`,
+			undefined,
+			true, // This is recoverable
+		);
 
-    this.recordError(turboError)
+		logger.warn("Resource exhaustion detected", {
+			resourceType,
+			leadCount: leads.length,
+			activeProcesses: this.getActiveProcessCount(),
+		});
 
-    // Implement throttling strategy
-    const throttledResults = await this.implementThrottling(leads, resourceType)
-    
-    if (throttledResults.length > 0) {
-      this.metrics.successfulRecoveries++
-      
-      if (this.fallbackOptions.notifyUser) {
-        this.notifyUser(
-          'Sistema ajustou automaticamente a velocidade de processamento devido aos recursos disponíveis.',
-          'info'
-        )
-      }
-      
-      return throttledResults
-    }
+		this.recordError(turboError);
 
-    // If throttling fails, fallback to sequential
-    return await this.fallbackToSequential(leads, turboError)
-  }
+		// Implement throttling strategy
+		const throttledResults = await this.implementThrottling(leads, resourceType);
 
-  /**
-   * Handle network errors with retry logic
-   */
-  async handleNetworkError(
-    error: Error,
-    leadId: string,
-    retryCount: number = 0
-  ): Promise<ParallelProcessingResult> {
-    const turboError = this.createTurboError(
-      'NETWORK_ERROR',
-      `Network error for lead ${leadId}: ${error.message}`,
-      error,
-      retryCount < this.fallbackOptions.maxRetries
-    )
-    turboError.leadId = leadId
-    turboError.retryCount = retryCount
+		if (throttledResults.length > 0) {
+			this.metrics.successfulRecoveries++;
 
-    logger.error('Network error occurred', {
-      leadId,
-      error: error.message,
-      retryCount,
-      maxRetries: this.fallbackOptions.maxRetries
-    })
+			if (this.fallbackOptions.notifyUser) {
+				this.notifyUser(
+					"Sistema ajustou automaticamente a velocidade de processamento devido aos recursos disponíveis.",
+					"info",
+				);
+			}
 
-    this.recordError(turboError)
+			return throttledResults;
+		}
 
-    // Implement exponential backoff retry
-    if (retryCount < this.fallbackOptions.maxRetries) {
-      const delay = this.fallbackOptions.retryDelay * Math.pow(2, retryCount)
-      
-      logger.info('Retrying network operation', {
-        leadId,
-        retryCount: retryCount + 1,
-        delay
-      })
+		// If throttling fails, fallback to sequential
+		return await this.fallbackToSequential(leads, turboError);
+	}
 
-      await this.delay(delay)
-      
-      // This would need to be implemented by the calling code
-      // Return a retry indicator
-      return {
-        leadId,
-        success: false,
-        processingTime: 0,
-        error: `Network error - retry ${retryCount + 1}/${this.fallbackOptions.maxRetries}`
-      }
-    }
+	/**
+	 * Handle network errors with retry logic
+	 */
+	async handleNetworkError(error: Error, leadId: string, retryCount: number = 0): Promise<ParallelProcessingResult> {
+		const turboError = this.createTurboError(
+			"NETWORK_ERROR",
+			`Network error for lead ${leadId}: ${error.message}`,
+			error,
+			retryCount < this.fallbackOptions.maxRetries,
+		);
+		turboError.leadId = leadId;
+		turboError.retryCount = retryCount;
 
-    // Max retries exceeded
-    this.metrics.unrecoverableErrors++
-    
-    if (this.fallbackOptions.notifyUser) {
-      this.notifyUser(
-        `Erro de rede persistente para o lead ${leadId}. Pulando para o próximo.`,
-        'error'
-      )
-    }
+		logger.error("Network error occurred", {
+			leadId,
+			error: error.message,
+			retryCount,
+			maxRetries: this.fallbackOptions.maxRetries,
+		});
 
-    return {
-      leadId,
-      success: false,
-      processingTime: 0,
-      error: `Network error after ${retryCount} retries: ${error.message}`
-    }
-  }
+		this.recordError(turboError);
 
-  /**
-   * Handle timeout errors
-   */
-  async handleTimeoutError(
-    leadId: string,
-    timeoutDuration: number
-  ): Promise<ParallelProcessingResult> {
-    const turboError = this.createTurboError(
-      'TIMEOUT',
-      `Processing timeout for lead ${leadId} after ${timeoutDuration}ms`,
-      undefined,
-      true // Timeouts are generally recoverable
-    )
-    turboError.leadId = leadId
+		// Implement exponential backoff retry
+		if (retryCount < this.fallbackOptions.maxRetries) {
+			const delay = this.fallbackOptions.retryDelay * Math.pow(2, retryCount);
 
-    logger.warn('Processing timeout occurred', {
-      leadId,
-      timeoutDuration,
-      timestamp: new Date().toISOString()
-    })
+			logger.info("Retrying network operation", {
+				leadId,
+				retryCount: retryCount + 1,
+				delay,
+			});
 
-    this.recordError(turboError)
+			await this.delay(delay);
 
-    if (this.fallbackOptions.notifyUser) {
-      this.notifyUser(
-        `Timeout no processamento do lead ${leadId}. Continuando com os próximos.`,
-        'warning'
-      )
-    }
+			// This would need to be implemented by the calling code
+			// Return a retry indicator
+			return {
+				leadId,
+				success: false,
+				processingTime: 0,
+				error: `Network error - retry ${retryCount + 1}/${this.fallbackOptions.maxRetries}`,
+			};
+		}
 
-    return {
-      leadId,
-      success: false,
-      processingTime: timeoutDuration,
-      error: `Processing timeout after ${timeoutDuration}ms`
-    }
-  }
+		// Max retries exceeded
+		this.metrics.unrecoverableErrors++;
 
-  /**
-   * Handle general system errors
-   */
-  async handleSystemError(
-    error: Error,
-    context: string,
-    leads?: ExtendedLead[]
-  ): Promise<ParallelProcessingResult[]> {
-    const turboError = this.createTurboError(
-      'SYSTEM_ERROR',
-      `System error in ${context}: ${error.message}`,
-      error,
-      false // System errors are generally not recoverable
-    )
+		if (this.fallbackOptions.notifyUser) {
+			this.notifyUser(`Erro de rede persistente para o lead ${leadId}. Pulando para o próximo.`, "error");
+		}
 
-    logger.error('System error occurred', {
-      context,
-      error: error.message,
-      stack: error.stack,
-      leadCount: leads?.length || 0
-    })
+		return {
+			leadId,
+			success: false,
+			processingTime: 0,
+			error: `Network error after ${retryCount} retries: ${error.message}`,
+		};
+	}
 
-    this.recordError(turboError)
-    this.metrics.unrecoverableErrors++
+	/**
+	 * Handle timeout errors
+	 */
+	async handleTimeoutError(leadId: string, timeoutDuration: number): Promise<ParallelProcessingResult> {
+		const turboError = this.createTurboError(
+			"TIMEOUT",
+			`Processing timeout for lead ${leadId} after ${timeoutDuration}ms`,
+			undefined,
+			true, // Timeouts are generally recoverable
+		);
+		turboError.leadId = leadId;
 
-    if (this.fallbackOptions.notifyUser) {
-      this.notifyUser(
-        'Erro do sistema detectado. Processamento será interrompido.',
-        'error'
-      )
-    }
+		logger.warn("Processing timeout occurred", {
+			leadId,
+			timeoutDuration,
+			timestamp: new Date().toISOString(),
+		});
 
-    // For system errors, return failure for all leads
-    if (leads) {
-      return leads.map(lead => ({
-        leadId: lead.id,
-        success: false,
-        processingTime: 0,
-        error: `System error: ${error.message}`
-      }))
-    }
+		this.recordError(turboError);
 
-    return []
-  }
+		if (this.fallbackOptions.notifyUser) {
+			this.notifyUser(`Timeout no processamento do lead ${leadId}. Continuando com os próximos.`, "warning");
+		}
 
-  /**
-   * Implement fallback to sequential processing
-   */
-  private async fallbackToSequential(
-    leads: ExtendedLead[],
-    originalError: TurboModeError
-  ): Promise<ParallelProcessingResult[]> {
-    const startTime = Date.now()
-    
-    logger.info('Falling back to sequential processing', {
-      leadCount: leads.length,
-      originalError: originalError.message
-    })
+		return {
+			leadId,
+			success: false,
+			processingTime: timeoutDuration,
+			error: `Processing timeout after ${timeoutDuration}ms`,
+		};
+	}
 
-    this.metrics.fallbacksTriggered++
+	/**
+	 * Handle general system errors
+	 */
+	async handleSystemError(error: Error, context: string, leads?: ExtendedLead[]): Promise<ParallelProcessingResult[]> {
+		const turboError = this.createTurboError(
+			"SYSTEM_ERROR",
+			`System error in ${context}: ${error.message}`,
+			error,
+			false, // System errors are generally not recoverable
+		);
 
-    try {
-      let results: ParallelProcessingResult[] = []
+		logger.error("System error occurred", {
+			context,
+			error: error.message,
+			stack: error.stack,
+			leadCount: leads?.length || 0,
+		});
 
-      if (this.onFallbackToSequential) {
-        // Use provided fallback function
-        results = await this.onFallbackToSequential(leads)
-      } else {
-        // Default sequential processing simulation
-        results = leads.map(lead => ({
-          leadId: lead.id,
-          success: true,
-          processingTime: 5000, // Simulated sequential processing time
-          error: undefined
-        }))
-      }
+		this.recordError(turboError);
+		this.metrics.unrecoverableErrors++;
 
-      const recoveryTime = Date.now() - startTime
-      this.updateAverageRecoveryTime(recoveryTime)
-      this.metrics.successfulRecoveries++
+		if (this.fallbackOptions.notifyUser) {
+			this.notifyUser("Erro do sistema detectado. Processamento será interrompido.", "error");
+		}
 
-      logger.info('Sequential fallback completed successfully', {
-        leadCount: leads.length,
-        recoveryTime,
-        successCount: results.filter(r => r.success).length
-      })
+		// For system errors, return failure for all leads
+		if (leads) {
+			return leads.map((lead) => ({
+				leadId: lead.id,
+				success: false,
+				processingTime: 0,
+				error: `System error: ${error.message}`,
+			}));
+		}
 
-      if (this.fallbackOptions.notifyUser) {
-        this.notifyUser(
-          'Processamento continuado em modo padrão com sucesso.',
-          'info'
-        )
-      }
+		return [];
+	}
 
-      return results
+	/**
+	 * Implement fallback to sequential processing
+	 */
+	private async fallbackToSequential(
+		leads: ExtendedLead[],
+		originalError: TurboModeError,
+	): Promise<ParallelProcessingResult[]> {
+		const startTime = Date.now();
 
-    } catch (fallbackError) {
-      logger.error('Sequential fallback also failed', {
-        error: fallbackError instanceof Error ? fallbackError.message : 'Unknown error',
-        leadCount: leads.length
-      })
+		logger.info("Falling back to sequential processing", {
+			leadCount: leads.length,
+			originalError: originalError.message,
+		});
 
-      this.metrics.unrecoverableErrors++
+		this.metrics.fallbacksTriggered++;
 
-      if (this.fallbackOptions.notifyUser) {
-        this.notifyUser(
-          'Erro crítico: tanto o modo TURBO quanto o processamento padrão falharam.',
-          'error'
-        )
-      }
+		try {
+			let results: ParallelProcessingResult[] = [];
 
-      // Return failure for all leads
-      return leads.map(lead => ({
-        leadId: lead.id,
-        success: false,
-        processingTime: 0,
-        error: `Both TURBO and sequential processing failed: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}`
-      }))
-    }
-  }
+			if (this.onFallbackToSequential) {
+				// Use provided fallback function
+				results = await this.onFallbackToSequential(leads);
+			} else {
+				// Default sequential processing simulation
+				results = leads.map((lead) => ({
+					leadId: lead.id,
+					success: true,
+					processingTime: 5000, // Simulated sequential processing time
+					error: undefined,
+				}));
+			}
 
-  /**
-   * Implement throttling when resources are constrained
-   */
-  private async implementThrottling(
-    leads: ExtendedLead[],
-    resourceType: string
-  ): Promise<ParallelProcessingResult[]> {
-    logger.info('Implementing throttling strategy', {
-      resourceType,
-      leadCount: leads.length,
-      originalParallelLimit: this.config.maxParallelLeads
-    })
+			const recoveryTime = Date.now() - startTime;
+			this.updateAverageRecoveryTime(recoveryTime);
+			this.metrics.successfulRecoveries++;
 
-    // Reduce parallel processing by 50%
-    const throttledParallelLimit = Math.max(1, Math.floor(this.config.maxParallelLeads / 2))
-    
-    // Create smaller batches with longer delays
-    const batches = this.createBatches(leads, throttledParallelLimit)
-    const results: ParallelProcessingResult[] = []
+			logger.info("Sequential fallback completed successfully", {
+				leadCount: leads.length,
+				recoveryTime,
+				successCount: results.filter((r) => r.success).length,
+			});
 
-    for (let i = 0; i < batches.length; i++) {
-      const batch = batches[i]
-      
-      logger.debug('Processing throttled batch', {
-        batchIndex: i + 1,
-        totalBatches: batches.length,
-        batchSize: batch.length
-      })
+			if (this.fallbackOptions.notifyUser) {
+				this.notifyUser("Processamento continuado em modo padrão com sucesso.", "info");
+			}
 
-      // Simulate batch processing (this would be replaced with actual processing)
-      const batchResults = batch.map(lead => ({
-        leadId: lead.id,
-        success: true,
-        processingTime: 3000, // Throttled processing time
-        error: undefined
-      }))
+			return results;
+		} catch (fallbackError) {
+			logger.error("Sequential fallback also failed", {
+				error: fallbackError instanceof Error ? fallbackError.message : "Unknown error",
+				leadCount: leads.length,
+			});
 
-      results.push(...batchResults)
+			this.metrics.unrecoverableErrors++;
 
-      // Longer delay between batches when throttling
-      if (i < batches.length - 1) {
-        await this.delay(2000)
-      }
-    }
+			if (this.fallbackOptions.notifyUser) {
+				this.notifyUser("Erro crítico: tanto o modo TURBO quanto o processamento padrão falharam.", "error");
+			}
 
-    return results
-  }
+			// Return failure for all leads
+			return leads.map((lead) => ({
+				leadId: lead.id,
+				success: false,
+				processingTime: 0,
+				error: `Both TURBO and sequential processing failed: ${fallbackError instanceof Error ? fallbackError.message : "Unknown error"}`,
+			}));
+		}
+	}
 
-  /**
-   * Create error object with consistent structure
-   */
-  private createTurboError(
-    type: TurboModeError['type'],
-    message: string,
-    originalError?: Error,
-    recoverable: boolean = false
-  ): TurboModeError {
-    return {
-      type,
-      message,
-      originalError,
-      timestamp: new Date(),
-      recoverable
-    }
-  }
+	/**
+	 * Implement throttling when resources are constrained
+	 */
+	private async implementThrottling(leads: ExtendedLead[], resourceType: string): Promise<ParallelProcessingResult[]> {
+		logger.info("Implementing throttling strategy", {
+			resourceType,
+			leadCount: leads.length,
+			originalParallelLimit: this.config.maxParallelLeads,
+		});
 
-  /**
-   * Record error in history and update metrics
-   */
-  private recordError(error: TurboModeError): void {
-    this.errorHistory.push(error)
-    this.metrics.totalErrors++
-    
-    if (!this.metrics.errorsByType[error.type]) {
-      this.metrics.errorsByType[error.type] = 0
-    }
-    this.metrics.errorsByType[error.type]++
+		// Reduce parallel processing by 50%
+		const throttledParallelLimit = Math.max(1, Math.floor(this.config.maxParallelLeads / 2));
 
-    // Keep only last 100 errors to prevent memory issues
-    if (this.errorHistory.length > 100) {
-      this.errorHistory = this.errorHistory.slice(-100)
-    }
+		// Create smaller batches with longer delays
+		const batches = this.createBatches(leads, throttledParallelLimit);
+		const results: ParallelProcessingResult[] = [];
 
-    if (this.fallbackOptions.logErrors) {
-      logger.error('Error recorded', {
-        type: error.type,
-        message: error.message,
-        leadId: error.leadId,
-        recoverable: error.recoverable,
-        retryCount: error.retryCount
-      })
-    }
-  }
+		for (let i = 0; i < batches.length; i++) {
+			const batch = batches[i];
 
-  /**
-   * Update average recovery time
-   */
-  private updateAverageRecoveryTime(recoveryTime: number): void {
-    const totalRecoveries = this.metrics.successfulRecoveries
-    const currentAverage = this.metrics.averageRecoveryTime
-    
-    this.metrics.averageRecoveryTime = 
-      (currentAverage * (totalRecoveries - 1) + recoveryTime) / totalRecoveries
-  }
+			logger.debug("Processing throttled batch", {
+				batchIndex: i + 1,
+				totalBatches: batches.length,
+				batchSize: batch.length,
+			});
 
-  /**
-   * Notify user about errors and status
-   */
-  private notifyUser(message: string, type: 'error' | 'warning' | 'info'): void {
-    if (this.onUserNotification) {
-      this.onUserNotification(message, type)
-    } else {
-      // Default notification using toast
-      switch (type) {
-        case 'error':
-          toast.error(message)
-          break
-        case 'warning':
-          toast.warning(message)
-          break
-        case 'info':
-          toast.info(message)
-          break
-      }
-    }
-  }
+			// Simulate batch processing (this would be replaced with actual processing)
+			const batchResults = batch.map((lead) => ({
+				leadId: lead.id,
+				success: true,
+				processingTime: 3000, // Throttled processing time
+				error: undefined,
+			}));
 
-  /**
-   * Utility functions
-   */
-  private createBatches<T>(items: T[], batchSize: number): T[][] {
-    const batches: T[][] = []
-    for (let i = 0; i < items.length; i += batchSize) {
-      batches.push(items.slice(i, i + batchSize))
-    }
-    return batches
-  }
+			results.push(...batchResults);
 
-  private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms))
-  }
+			// Longer delay between batches when throttling
+			if (i < batches.length - 1) {
+				await this.delay(2000);
+			}
+		}
 
-  private getActiveProcessCount(): number {
-    // This would need to be implemented based on the actual process tracking
-    return 0
-  }
+		return results;
+	}
 
-  /**
-   * Public methods for monitoring and management
-   */
-  public getErrorHistory(): TurboModeError[] {
-    return [...this.errorHistory]
-  }
+	/**
+	 * Create error object with consistent structure
+	 */
+	private createTurboError(
+		type: TurboModeError["type"],
+		message: string,
+		originalError?: Error,
+		recoverable: boolean = false,
+	): TurboModeError {
+		return {
+			type,
+			message,
+			originalError,
+			timestamp: new Date(),
+			recoverable,
+		};
+	}
 
-  public getMetrics(): ErrorHandlerMetrics {
-    return { ...this.metrics }
-  }
+	/**
+	 * Record error in history and update metrics
+	 */
+	private recordError(error: TurboModeError): void {
+		this.errorHistory.push(error);
+		this.metrics.totalErrors++;
 
-  public clearErrorHistory(): void {
-    this.errorHistory = []
-    this.metrics = {
-      totalErrors: 0,
-      errorsByType: {},
-      fallbacksTriggered: 0,
-      successfulRecoveries: 0,
-      unrecoverableErrors: 0,
-      averageRecoveryTime: 0
-    }
-    
-    logger.info('Error history and metrics cleared')
-  }
+		if (!this.metrics.errorsByType[error.type]) {
+			this.metrics.errorsByType[error.type] = 0;
+		}
+		this.metrics.errorsByType[error.type]++;
 
-  public isHealthy(): boolean {
-    const recentErrors = this.errorHistory.filter(
-      error => Date.now() - error.timestamp.getTime() < 300000 // Last 5 minutes
-    )
-    
-    const errorRate = recentErrors.length / Math.max(1, this.metrics.totalErrors)
-    const recoveryRate = this.metrics.successfulRecoveries / Math.max(1, this.metrics.totalErrors)
-    
-    return errorRate < 0.5 && recoveryRate > 0.7
-  }
+		// Keep only last 100 errors to prevent memory issues
+		if (this.errorHistory.length > 100) {
+			this.errorHistory = this.errorHistory.slice(-100);
+		}
 
-  public getHealthStatus(): {
-    healthy: boolean
-    errorRate: number
-    recoveryRate: number
-    recentErrors: number
-  } {
-    const recentErrors = this.errorHistory.filter(
-      error => Date.now() - error.timestamp.getTime() < 300000 // Last 5 minutes
-    )
-    
-    const errorRate = recentErrors.length / Math.max(1, this.metrics.totalErrors)
-    const recoveryRate = this.metrics.successfulRecoveries / Math.max(1, this.metrics.totalErrors)
-    
-    return {
-      healthy: this.isHealthy(),
-      errorRate,
-      recoveryRate,
-      recentErrors: recentErrors.length
-    }
-  }
+		if (this.fallbackOptions.logErrors) {
+			logger.error("Error recorded", {
+				type: error.type,
+				message: error.message,
+				leadId: error.leadId,
+				recoverable: error.recoverable,
+				retryCount: error.retryCount,
+			});
+		}
+	}
+
+	/**
+	 * Update average recovery time
+	 */
+	private updateAverageRecoveryTime(recoveryTime: number): void {
+		const totalRecoveries = this.metrics.successfulRecoveries;
+		const currentAverage = this.metrics.averageRecoveryTime;
+
+		this.metrics.averageRecoveryTime = (currentAverage * (totalRecoveries - 1) + recoveryTime) / totalRecoveries;
+	}
+
+	/**
+	 * Notify user about errors and status
+	 */
+	private notifyUser(message: string, type: "error" | "warning" | "info"): void {
+		if (this.onUserNotification) {
+			this.onUserNotification(message, type);
+		} else {
+			// Default notification using toast
+			switch (type) {
+				case "error":
+					toast.error(message);
+					break;
+				case "warning":
+					toast.warning(message);
+					break;
+				case "info":
+					toast.info(message);
+					break;
+			}
+		}
+	}
+
+	/**
+	 * Utility functions
+	 */
+	private createBatches<T>(items: T[], batchSize: number): T[][] {
+		const batches: T[][] = [];
+		for (let i = 0; i < items.length; i += batchSize) {
+			batches.push(items.slice(i, i + batchSize));
+		}
+		return batches;
+	}
+
+	private delay(ms: number): Promise<void> {
+		return new Promise((resolve) => setTimeout(resolve, ms));
+	}
+
+	private getActiveProcessCount(): number {
+		// This would need to be implemented based on the actual process tracking
+		return 0;
+	}
+
+	/**
+	 * Public methods for monitoring and management
+	 */
+	public getErrorHistory(): TurboModeError[] {
+		return [...this.errorHistory];
+	}
+
+	public getMetrics(): ErrorHandlerMetrics {
+		return { ...this.metrics };
+	}
+
+	public clearErrorHistory(): void {
+		this.errorHistory = [];
+		this.metrics = {
+			totalErrors: 0,
+			errorsByType: {},
+			fallbacksTriggered: 0,
+			successfulRecoveries: 0,
+			unrecoverableErrors: 0,
+			averageRecoveryTime: 0,
+		};
+
+		logger.info("Error history and metrics cleared");
+	}
+
+	public isHealthy(): boolean {
+		const recentErrors = this.errorHistory.filter(
+			(error) => Date.now() - error.timestamp.getTime() < 300000, // Last 5 minutes
+		);
+
+		const errorRate = recentErrors.length / Math.max(1, this.metrics.totalErrors);
+		const recoveryRate = this.metrics.successfulRecoveries / Math.max(1, this.metrics.totalErrors);
+
+		return errorRate < 0.5 && recoveryRate > 0.7;
+	}
+
+	public getHealthStatus(): {
+		healthy: boolean;
+		errorRate: number;
+		recoveryRate: number;
+		recentErrors: number;
+	} {
+		const recentErrors = this.errorHistory.filter(
+			(error) => Date.now() - error.timestamp.getTime() < 300000, // Last 5 minutes
+		);
+
+		const errorRate = recentErrors.length / Math.max(1, this.metrics.totalErrors);
+		const recoveryRate = this.metrics.successfulRecoveries / Math.max(1, this.metrics.totalErrors);
+
+		return {
+			healthy: this.isHealthy(),
+			errorRate,
+			recoveryRate,
+			recentErrors: recentErrors.length,
+		};
+	}
 }

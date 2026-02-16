@@ -1,4 +1,4 @@
-const fs = require('fs');
+const fs = require("fs");
 
 // Extrair todos os valores de pontuação do texto
 const textoCompleto = `
@@ -47,43 +47,43 @@ honorários advocatícios (0,10) ou reversão dos ônus de sucumbência (0,20).
 15. Data, local, advogado, OAB. (0,10). 0,00/0,10
 `;
 
-console.log('=== ANÁLISE MANUAL DOS PONTOS DA PEÇA ===');
+console.log("=== ANÁLISE MANUAL DOS PONTOS DA PEÇA ===");
 
 // Lista esperada de pontos da PEÇA
 const pontosEsperados = [
-  { item: '1', pontos: [0.10], esperado: 0.10, descricao: 'Interposição apelação' },
-  { item: '2', pontos: [0.10], esperado: 0.10, descricao: 'Endereçamento razões' },
-  { item: '3', pontos: [0.10], esperado: 0.10, descricao: 'Apelante' },
-  { item: '4', pontos: [0.10], esperado: 0.10, descricao: 'Apelado' },
-  { item: '5', pontos: [0.30, 0.10], esperado: 0.40, descricao: 'Cabimento + art CPC' },
-  { item: '6', pontos: [0.30, 0.10], esperado: 0.40, descricao: 'Tempestividade + art CPC' },
-  { item: '7', pontos: [0.20, 0.10], esperado: 0.30, descricao: 'Preparo + art CPC' },
-  { item: '8', pontos: [0.10], esperado: 0.10, descricao: 'Descrição fatos' },
-  { item: '9', pontos: [0.70, 0.10], esperado: 0.80, descricao: 'Lei municipal + art CTN' },
-  { item: '10', pontos: [0.70, 0.10], esperado: 0.80, descricao: 'Suspensão + art CTN' },
-  { item: '11', pontos: [0.70, 0.10], esperado: 0.80, descricao: 'Depósito inconst + art' },
-  { item: '12', pontos: [0.20, 0.20], esperado: 0.40, descricao: 'Parcelamento + suspensão' },
-  { item: '13', pontos: [0.20, 0.10], esperado: 0.30, descricao: 'Intimação + art CPC' },
-  { item: '14', pontos: [0.10, 0.10, 0.20], esperadoOU: 0.20, descricao: 'Custas+honorários OU reversão' },
-  { item: '15', pontos: [0.10], esperado: 0.10, descricao: 'Fechamento' }
+	{ item: "1", pontos: [0.1], esperado: 0.1, descricao: "Interposição apelação" },
+	{ item: "2", pontos: [0.1], esperado: 0.1, descricao: "Endereçamento razões" },
+	{ item: "3", pontos: [0.1], esperado: 0.1, descricao: "Apelante" },
+	{ item: "4", pontos: [0.1], esperado: 0.1, descricao: "Apelado" },
+	{ item: "5", pontos: [0.3, 0.1], esperado: 0.4, descricao: "Cabimento + art CPC" },
+	{ item: "6", pontos: [0.3, 0.1], esperado: 0.4, descricao: "Tempestividade + art CPC" },
+	{ item: "7", pontos: [0.2, 0.1], esperado: 0.3, descricao: "Preparo + art CPC" },
+	{ item: "8", pontos: [0.1], esperado: 0.1, descricao: "Descrição fatos" },
+	{ item: "9", pontos: [0.7, 0.1], esperado: 0.8, descricao: "Lei municipal + art CTN" },
+	{ item: "10", pontos: [0.7, 0.1], esperado: 0.8, descricao: "Suspensão + art CTN" },
+	{ item: "11", pontos: [0.7, 0.1], esperado: 0.8, descricao: "Depósito inconst + art" },
+	{ item: "12", pontos: [0.2, 0.2], esperado: 0.4, descricao: "Parcelamento + suspensão" },
+	{ item: "13", pontos: [0.2, 0.1], esperado: 0.3, descricao: "Intimação + art CPC" },
+	{ item: "14", pontos: [0.1, 0.1, 0.2], esperadoOU: 0.2, descricao: "Custas+honorários OU reversão" },
+	{ item: "15", pontos: [0.1], esperado: 0.1, descricao: "Fechamento" },
 ];
 
 let somaTotal = 0;
 let somaEsperada = 0;
 
-pontosEsperados.forEach(item => {
-  const valor = item.esperadoOU || item.esperado;
-  somaTotal += valor;
-  somaEsperada += valor;
-  console.log(`Item ${item.item}: ${valor.toFixed(2)} pts - ${item.descricao}`);
+pontosEsperados.forEach((item) => {
+	const valor = item.esperadoOU || item.esperado;
+	somaTotal += valor;
+	somaEsperada += valor;
+	console.log(`Item ${item.item}: ${valor.toFixed(2)} pts - ${item.descricao}`);
 });
 
 console.log(`\nSOMA ESPERADA TOTAL: ${somaEsperada.toFixed(2)} pts`);
 
 // Item 14 especial (OU)
-console.log('\n=== ANÁLISE ITEM 14 (OU) ===');
-console.log('Opção A: custas (0,10) + honorários (0,10) = 0,20');
-console.log('Opção B: reversão (0,20) = 0,20');
-console.log('Como é OU, deve contar apenas 0,20 (máximo)');
+console.log("\n=== ANÁLISE ITEM 14 (OU) ===");
+console.log("Opção A: custas (0,10) + honorários (0,10) = 0,20");
+console.log("Opção B: reversão (0,20) = 0,20");
+console.log("Como é OU, deve contar apenas 0,20 (máximo)");
 
 console.log(`\nRESULTADO: PEÇA deve somar exatamente ${somaEsperada.toFixed(2)} pontos`);

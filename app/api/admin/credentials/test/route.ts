@@ -1,217 +1,213 @@
 // app/api/admin/credentials/test/route.ts
-import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
-import { getPrismaInstance } from '@/lib/connections';
-import axios from 'axios';
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/auth";
+import { getPrismaInstance } from "@/lib/connections";
+import axios from "axios";
 
 /**
  * POST - Testa credenciais do WhatsApp
  */
 export async function POST(request: NextRequest): Promise<Response> {
-  try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
-    }
+	try {
+		const session = await auth();
+		if (!session?.user?.id) {
+			return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+		}
 
-    const body = await request.json();
-    const {
-      whatsappApiKey,
-      phoneNumberId,
-      whatsappBusinessAccountId,
-      graphApiBaseUrl = 'https://graph.facebook.com/v22.0',
-      testType = 'basic', // 'basic' | 'templates' | 'send_test'
-      testPhoneNumber, // Para teste de envio
-    } = body;
+		const body = await request.json();
+		const {
+			whatsappApiKey,
+			phoneNumberId,
+			whatsappBusinessAccountId,
+			graphApiBaseUrl = "https://graph.facebook.com/v22.0",
+			testType = "basic", // 'basic' | 'templates' | 'send_test'
+			testPhoneNumber, // Para teste de envio
+		} = body;
 
-    // Validações básicas
-    if (!whatsappApiKey || !phoneNumberId || !whatsappBusinessAccountId) {
-      return NextResponse.json(
-        { error: 'whatsappApiKey, phoneNumberId e whatsappBusinessAccountId são obrigatórios' },
-        { status: 400 }
-      );
-    }
+		// Validações básicas
+		if (!whatsappApiKey || !phoneNumberId || !whatsappBusinessAccountId) {
+			return NextResponse.json(
+				{ error: "whatsappApiKey, phoneNumberId e whatsappBusinessAccountId são obrigatórios" },
+				{ status: 400 },
+			);
+		}
 
-    console.log(`[Credentials Test API] Testando credenciais - Tipo: ${testType}`);
+		console.log(`[Credentials Test API] Testando credenciais - Tipo: ${testType}`);
 
-    const testResults: any = {
-      testType,
-      timestamp: new Date().toISOString(),
-      results: {},
-    };
+		const testResults: any = {
+			testType,
+			timestamp: new Date().toISOString(),
+			results: {},
+		};
 
-    try {
-      // Teste básico - verificar se as credenciais são válidas
-      if (testType === 'basic' || testType === 'templates' || testType === 'send_test') {
-        console.log('[Credentials Test] Executando teste básico de conectividade...');
-        
-        const basicTestUrl = `${graphApiBaseUrl}/${phoneNumberId}`;
-        const basicResponse = await axios.get(basicTestUrl, {
-          headers: {
-            Authorization: `Bearer ${whatsappApiKey}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 10000, // 10 segundos
-        });
+		try {
+			// Teste básico - verificar se as credenciais são válidas
+			if (testType === "basic" || testType === "templates" || testType === "send_test") {
+				console.log("[Credentials Test] Executando teste básico de conectividade...");
 
-        testResults.results.basic = {
-          success: true,
-          status: basicResponse.status,
-          data: {
-            phoneNumberId: basicResponse.data.id,
-            displayPhoneNumber: basicResponse.data.display_phone_number,
-            verifiedName: basicResponse.data.verified_name,
-            qualityRating: basicResponse.data.quality_rating,
-          },
-          message: 'Credenciais válidas e número verificado',
-        };
-      }
+				const basicTestUrl = `${graphApiBaseUrl}/${phoneNumberId}`;
+				const basicResponse = await axios.get(basicTestUrl, {
+					headers: {
+						Authorization: `Bearer ${whatsappApiKey}`,
+						"Content-Type": "application/json",
+					},
+					timeout: 10000, // 10 segundos
+				});
 
-      // Teste de templates - listar templates disponíveis
-      if (testType === 'templates' || testType === 'send_test') {
-        console.log('[Credentials Test] Executando teste de templates...');
-        
-        const templatesUrl = `${graphApiBaseUrl}/${whatsappBusinessAccountId}/message_templates?limit=5`;
-        const templatesResponse = await axios.get(templatesUrl, {
-          headers: {
-            Authorization: `Bearer ${whatsappApiKey}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 15000, // 15 segundos
-        });
+				testResults.results.basic = {
+					success: true,
+					status: basicResponse.status,
+					data: {
+						phoneNumberId: basicResponse.data.id,
+						displayPhoneNumber: basicResponse.data.display_phone_number,
+						verifiedName: basicResponse.data.verified_name,
+						qualityRating: basicResponse.data.quality_rating,
+					},
+					message: "Credenciais válidas e número verificado",
+				};
+			}
 
-        testResults.results.templates = {
-          success: true,
-          status: templatesResponse.status,
-          data: {
-            totalTemplates: templatesResponse.data.data?.length || 0,
-            templates: templatesResponse.data.data?.slice(0, 3).map((template: any) => ({
-              id: template.id,
-              name: template.name,
-              status: template.status,
-              category: template.category,
-              language: template.language,
-            })) || [],
-          },
-          message: `${templatesResponse.data.data?.length || 0} templates encontrados`,
-        };
-      }
+			// Teste de templates - listar templates disponíveis
+			if (testType === "templates" || testType === "send_test") {
+				console.log("[Credentials Test] Executando teste de templates...");
 
-      // Teste de envio - enviar mensagem de teste
-      if (testType === 'send_test') {
-        if (!testPhoneNumber) {
-          testResults.results.send_test = {
-            success: false,
-            error: 'Número de telefone para teste é obrigatório',
-          };
-        } else {
-          console.log('[Credentials Test] Executando teste de envio...');
-          
-          const sendUrl = `${graphApiBaseUrl}/${phoneNumberId}/messages`;
-          const testMessage = {
-            messaging_product: 'whatsapp',
-            to: testPhoneNumber.replace(/\D/g, ''), // Remover caracteres não numéricos
-            type: 'text',
-            text: {
-              body: `🧪 Teste de credenciais realizado em ${new Date().toLocaleString('pt-BR')}. Este é um teste automático do sistema.`,
-            },
-          };
+				const templatesUrl = `${graphApiBaseUrl}/${whatsappBusinessAccountId}/message_templates?limit=5`;
+				const templatesResponse = await axios.get(templatesUrl, {
+					headers: {
+						Authorization: `Bearer ${whatsappApiKey}`,
+						"Content-Type": "application/json",
+					},
+					timeout: 15000, // 15 segundos
+				});
 
-          const sendResponse = await axios.post(sendUrl, testMessage, {
-            headers: {
-              Authorization: `Bearer ${whatsappApiKey}`,
-              'Content-Type': 'application/json',
-            },
-            timeout: 15000, // 15 segundos
-          });
+				testResults.results.templates = {
+					success: true,
+					status: templatesResponse.status,
+					data: {
+						totalTemplates: templatesResponse.data.data?.length || 0,
+						templates:
+							templatesResponse.data.data?.slice(0, 3).map((template: any) => ({
+								id: template.id,
+								name: template.name,
+								status: template.status,
+								category: template.category,
+								language: template.language,
+							})) || [],
+					},
+					message: `${templatesResponse.data.data?.length || 0} templates encontrados`,
+				};
+			}
 
-          testResults.results.send_test = {
-            success: true,
-            status: sendResponse.status,
-            data: {
-              messageId: sendResponse.data.messages?.[0]?.id,
-              to: testPhoneNumber,
-            },
-            message: 'Mensagem de teste enviada com sucesso',
-          };
-        }
-      }
+			// Teste de envio - enviar mensagem de teste
+			if (testType === "send_test") {
+				if (!testPhoneNumber) {
+					testResults.results.send_test = {
+						success: false,
+						error: "Número de telefone para teste é obrigatório",
+					};
+				} else {
+					console.log("[Credentials Test] Executando teste de envio...");
 
-      // Calcular resultado geral
-      const allTests = Object.values(testResults.results);
-      const successfulTests = allTests.filter((test: any) => test.success);
-      const overallSuccess = successfulTests.length === allTests.length;
+					const sendUrl = `${graphApiBaseUrl}/${phoneNumberId}/messages`;
+					const testMessage = {
+						messaging_product: "whatsapp",
+						to: testPhoneNumber.replace(/\D/g, ""), // Remover caracteres não numéricos
+						type: "text",
+						text: {
+							body: `🧪 Teste de credenciais realizado em ${new Date().toLocaleString("pt-BR")}. Este é um teste automático do sistema.`,
+						},
+					};
 
-      testResults.overall = {
-        success: overallSuccess,
-        testsRun: allTests.length,
-        testsSuccessful: successfulTests.length,
-        testsFailed: allTests.length - successfulTests.length,
-        message: overallSuccess 
-          ? 'Todas as credenciais foram testadas com sucesso' 
-          : 'Alguns testes falharam. Verifique os detalhes.',
-      };
+					const sendResponse = await axios.post(sendUrl, testMessage, {
+						headers: {
+							Authorization: `Bearer ${whatsappApiKey}`,
+							"Content-Type": "application/json",
+						},
+						timeout: 15000, // 15 segundos
+					});
 
-      console.log(`[Credentials Test API] Teste concluído - Sucesso: ${overallSuccess}`);
+					testResults.results.send_test = {
+						success: true,
+						status: sendResponse.status,
+						data: {
+							messageId: sendResponse.data.messages?.[0]?.id,
+							to: testPhoneNumber,
+						},
+						message: "Mensagem de teste enviada com sucesso",
+					};
+				}
+			}
 
-      return NextResponse.json(testResults);
+			// Calcular resultado geral
+			const allTests = Object.values(testResults.results);
+			const successfulTests = allTests.filter((test: any) => test.success);
+			const overallSuccess = successfulTests.length === allTests.length;
 
-    } catch (apiError: any) {
-      console.error('[Credentials Test] Erro na API do WhatsApp:', apiError.response?.data || apiError.message);
+			testResults.overall = {
+				success: overallSuccess,
+				testsRun: allTests.length,
+				testsSuccessful: successfulTests.length,
+				testsFailed: allTests.length - successfulTests.length,
+				message: overallSuccess
+					? "Todas as credenciais foram testadas com sucesso"
+					: "Alguns testes falharam. Verifique os detalhes.",
+			};
 
-      // Analisar o tipo de erro
-      let errorMessage = 'Erro desconhecido ao testar credenciais';
-      let errorCode = 'UNKNOWN_ERROR';
+			console.log(`[Credentials Test API] Teste concluído - Sucesso: ${overallSuccess}`);
 
-      if (apiError.response) {
-        const status = apiError.response.status;
-        const errorData = apiError.response.data?.error;
+			return NextResponse.json(testResults);
+		} catch (apiError: any) {
+			console.error("[Credentials Test] Erro na API do WhatsApp:", apiError.response?.data || apiError.message);
 
-        if (status === 401) {
-          errorMessage = 'Token de acesso inválido ou expirado';
-          errorCode = 'INVALID_TOKEN';
-        } else if (status === 403) {
-          errorMessage = 'Sem permissão para acessar este recurso';
-          errorCode = 'FORBIDDEN';
-        } else if (status === 404) {
-          errorMessage = 'Recurso não encontrado. Verifique o Phone Number ID ou Business Account ID';
-          errorCode = 'RESOURCE_NOT_FOUND';
-        } else if (errorData) {
-          errorMessage = `Erro da API Meta: [${errorData.code}] ${errorData.message}`;
-          errorCode = errorData.code || 'API_ERROR';
-        }
-      } else if (apiError.code === 'ECONNABORTED') {
-        errorMessage = 'Timeout na conexão com a API do WhatsApp';
-        errorCode = 'TIMEOUT';
-      } else if (apiError.code === 'ENOTFOUND' || apiError.code === 'ECONNREFUSED') {
-        errorMessage = 'Não foi possível conectar com a API do WhatsApp';
-        errorCode = 'CONNECTION_ERROR';
-      }
+			// Analisar o tipo de erro
+			let errorMessage = "Erro desconhecido ao testar credenciais";
+			let errorCode = "UNKNOWN_ERROR";
 
-      testResults.overall = {
-        success: false,
-        error: errorMessage,
-        errorCode,
-        testsRun: 1,
-        testsSuccessful: 0,
-        testsFailed: 1,
-      };
+			if (apiError.response) {
+				const status = apiError.response.status;
+				const errorData = apiError.response.data?.error;
 
-      testResults.results.error = {
-        success: false,
-        error: errorMessage,
-        errorCode,
-        details: apiError.response?.data || apiError.message,
-      };
+				if (status === 401) {
+					errorMessage = "Token de acesso inválido ou expirado";
+					errorCode = "INVALID_TOKEN";
+				} else if (status === 403) {
+					errorMessage = "Sem permissão para acessar este recurso";
+					errorCode = "FORBIDDEN";
+				} else if (status === 404) {
+					errorMessage = "Recurso não encontrado. Verifique o Phone Number ID ou Business Account ID";
+					errorCode = "RESOURCE_NOT_FOUND";
+				} else if (errorData) {
+					errorMessage = `Erro da API Meta: [${errorData.code}] ${errorData.message}`;
+					errorCode = errorData.code || "API_ERROR";
+				}
+			} else if (apiError.code === "ECONNABORTED") {
+				errorMessage = "Timeout na conexão com a API do WhatsApp";
+				errorCode = "TIMEOUT";
+			} else if (apiError.code === "ENOTFOUND" || apiError.code === "ECONNREFUSED") {
+				errorMessage = "Não foi possível conectar com a API do WhatsApp";
+				errorCode = "CONNECTION_ERROR";
+			}
 
-      return NextResponse.json(testResults, { status: 200 }); // Retorna 200 mesmo com erro para mostrar detalhes
-    }
+			testResults.overall = {
+				success: false,
+				error: errorMessage,
+				errorCode,
+				testsRun: 1,
+				testsSuccessful: 0,
+				testsFailed: 1,
+			};
 
-  } catch (error) {
-    console.error('[Credentials Test API] Erro interno:', error);
-    return NextResponse.json(
-      { error: 'Erro interno do servidor' },
-      { status: 500 }
-    );
-  }
+			testResults.results.error = {
+				success: false,
+				error: errorMessage,
+				errorCode,
+				details: apiError.response?.data || apiError.message,
+			};
+
+			return NextResponse.json(testResults, { status: 200 }); // Retorna 200 mesmo com erro para mostrar detalhes
+		}
+	} catch (error) {
+		console.error("[Credentials Test API] Erro interno:", error);
+		return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 });
+	}
 }

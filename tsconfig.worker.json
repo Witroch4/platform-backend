@@ -1,30 +1,20 @@
 {
-  "extends": "./tsconfig.base.json",
-  "compilerOptions": {
-    "module": "commonjs",
-    "moduleResolution": "node",
-    "target": "es2022",
-    "outDir": "dist",
-    "rootDir": ".",
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    "allowJs": true,
-    "declaration": false,
-    "sourceMap": false,
-    "noEmit": false,
-    "skipLibCheck": true,
-    "noImplicitAny": false
-  },
-  "include": [
-    "worker/**/*.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    ".next",
-    "**/__tests__/**",
-    "**/*.test.ts",
-    "**/*.spec.ts",
-    "**/__mocks__/**"
-  ]
+	"extends": "./tsconfig.base.json",
+	"compilerOptions": {
+		"module": "commonjs",
+		"moduleResolution": "node",
+		"target": "es2022",
+		"outDir": "dist",
+		"rootDir": ".",
+		"esModuleInterop": true,
+		"allowSyntheticDefaultImports": true,
+		"allowJs": true,
+		"declaration": false,
+		"sourceMap": false,
+		"noEmit": false,
+		"skipLibCheck": true,
+		"noImplicitAny": false
+	},
+	"include": ["worker/**/*.ts"],
+	"exclude": ["node_modules", "dist", ".next", "**/__tests__/**", "**/*.test.ts", "**/*.spec.ts", "**/__mocks__/**"]
 }

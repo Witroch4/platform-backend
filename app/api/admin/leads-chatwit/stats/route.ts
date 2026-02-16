@@ -7,200 +7,191 @@ import { auth } from "@/auth";
  * GET - Retorna estatísticas dos leads do Chatwit (filtradas por role e token)
  */
 export async function GET(request: Request): Promise<Response> {
-  try {
-    const session = await auth();
+	try {
+		const session = await auth();
 
-    if (!session || !session.user) {
-      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-    }
+		if (!session || !session.user) {
+			return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+		}
 
-    // Garantir que o usuário exista no banco (após reset pode não existir)
-    let currentUser = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { role: true, id: true },
-    });
-    if (!currentUser) {
-      const email = (session.user as any)?.email as string | undefined;
-      const name = session.user.name || undefined;
-      const syntheticEmail = `${session.user.id}@local.invalid`;
-      await prisma.user.create({
-        data: {
-          id: session.user.id,
-          email: email || syntheticEmail,
-          name,
-        },
-      });
-      currentUser = await prisma.user.findUnique({
-        where: { id: session.user.id },
-        select: { role: true, id: true },
-      });
-    }
+		// Garantir que o usuário exista no banco (após reset pode não existir)
+		let currentUser = await prisma.user.findUnique({
+			where: { id: session.user.id },
+			select: { role: true, id: true },
+		});
+		if (!currentUser) {
+			const email = (session.user as any)?.email as string | undefined;
+			const name = session.user.name || undefined;
+			const syntheticEmail = `${session.user.id}@local.invalid`;
+			await prisma.user.create({
+				data: {
+					id: session.user.id,
+					email: email || syntheticEmail,
+					name,
+				},
+			});
+			currentUser = await prisma.user.findUnique({
+				where: { id: session.user.id },
+				select: { role: true, id: true },
+			});
+		}
 
-    // Buscar o usuário Chatwit
-    const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
-      where: { appUserId: session.user.id },
-      select: { chatwitAccessToken: true },
-    });
+		// Buscar o usuário Chatwit
+		const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
+			where: { appUserId: session.user.id },
+			select: { chatwitAccessToken: true },
+		});
 
-    // Definir filtros baseados na role
-    let leadFilter: any = {};
-    let arquivoFilter: any = {};
+		// Definir filtros baseados na role
+		let leadFilter: any = {};
+		let arquivoFilter: any = {};
 
-    if (currentUser && currentUser.role !== "SUPERADMIN") {
-      // Para ADMIN, filtrar apenas leads relacionados ao token do usuário
-      if (!usuarioChatwit?.chatwitAccessToken) {
-        return NextResponse.json({
-          stats: {
-            totalLeads: 0,
-            totalArquivos: 0,
-            pendentes: 0,
-          },
-          charts: {
-            leadsPorMes: [],
-            leadsPorCanal: [],
-          },
-        });
-      }
+		if (currentUser && currentUser.role !== "SUPERADMIN") {
+			// Para ADMIN, filtrar apenas leads relacionados ao token do usuário
+			if (!usuarioChatwit?.chatwitAccessToken) {
+				return NextResponse.json({
+					stats: {
+						totalLeads: 0,
+						totalArquivos: 0,
+						pendentes: 0,
+					},
+					charts: {
+						leadsPorMes: [],
+						leadsPorCanal: [],
+					},
+				});
+			}
 
-      // Para usuários não-SUPERADMIN, filtrar apenas dados do próprio usuário
-      leadFilter = {
-        usuarioChatwit: {
-          appUserId: session.user.id,
-        },
-      };
+			// Para usuários não-SUPERADMIN, filtrar apenas dados do próprio usuário
+			leadFilter = {
+				usuarioChatwit: {
+					appUserId: session.user.id,
+				},
+			};
 
-      arquivoFilter = {
-        leadOabData: {
-          usuarioChatwit: {
-            appUserId: session.user.id,
-          },
-        },
-      };
-    }
-    // Se for SUPERADMIN, os filtros continuam vazios = mostra todos os dados
+			arquivoFilter = {
+				leadOabData: {
+					usuarioChatwit: {
+						appUserId: session.user.id,
+					},
+				},
+			};
+		}
+		// Se for SUPERADMIN, os filtros continuam vazios = mostra todos os dados
 
-    // Contar leads (filtrados ou todos) - agora em paralelo
-    const [totalLeads, totalArquivos, pendentes, aguardandoProcessamento] =
-      await Promise.all([
-        prisma.leadOabData.count({
-          where: {
-            ...leadFilter,
-          },
-        }),
-        prisma.arquivoLeadOab.count({ where: arquivoFilter }),
-        prisma.leadOabData.count({
-          where: {
-            ...leadFilter,
-            concluido: false,
-          },
-        }),
-        prisma.leadOabData.count({
-          where: {
-            ...leadFilter,
-            OR: [
-              { aguardandoManuscrito: true },
-              { aguardandoEspelho: true },
-              { aguardandoAnalise: true },
-            ],
-          },
-        }),
-      ]);
-    // Stats básicas
-    const stats: any = {
-      totalLeads,
-      totalArquivos,
-      pendentes,
-      aguardandoProcessamento,
-    };
+		// Contar leads (filtrados ou todos) - agora em paralelo
+		const [totalLeads, totalArquivos, pendentes, aguardandoProcessamento] = await Promise.all([
+			prisma.leadOabData.count({
+				where: {
+					...leadFilter,
+				},
+			}),
+			prisma.arquivoLeadOab.count({ where: arquivoFilter }),
+			prisma.leadOabData.count({
+				where: {
+					...leadFilter,
+					concluido: false,
+				},
+			}),
+			prisma.leadOabData.count({
+				where: {
+					...leadFilter,
+					OR: [{ aguardandoManuscrito: true }, { aguardandoEspelho: true }, { aguardandoAnalise: true }],
+				},
+			}),
+		]);
+		// Stats básicas
+		const stats: any = {
+			totalLeads,
+			totalArquivos,
+			pendentes,
+			aguardandoProcessamento,
+		};
 
-    // Adicionar totalUsuarios apenas para SUPERADMIN
-    if (currentUser && currentUser.role === "SUPERADMIN") {
-      stats.totalUsuarios = await prisma.usuarioChatwit.count();
-    }
+		// Adicionar totalUsuarios apenas para SUPERADMIN
+		if (currentUser && currentUser.role === "SUPERADMIN") {
+			stats.totalUsuarios = await prisma.usuarioChatwit.count();
+		}
 
-    // Estatísticas mensais para gráficos
-    const hoje = new Date();
-    const primeiroDiaMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-    const ultimosDoisMeses = Array.from({ length: 6 }, (_, i) => {
-      const date = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
-      return {
-        mes: date.toLocaleDateString("pt-BR", { month: "long" }),
-        ano: date.getFullYear(),
-        mesNumero: date.getMonth() + 1,
-        primeiroDia: new Date(date.getFullYear(), date.getMonth(), 1),
-        ultimoDia: new Date(date.getFullYear(), date.getMonth() + 1, 0),
-      };
-    });
+		// Estatísticas mensais para gráficos
+		const hoje = new Date();
+		const primeiroDiaMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+		const ultimosDoisMeses = Array.from({ length: 6 }, (_, i) => {
+			const date = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+			return {
+				mes: date.toLocaleDateString("pt-BR", { month: "long" }),
+				ano: date.getFullYear(),
+				mesNumero: date.getMonth() + 1,
+				primeiroDia: new Date(date.getFullYear(), date.getMonth(), 1),
+				ultimoDia: new Date(date.getFullYear(), date.getMonth() + 1, 0),
+			};
+		});
 
-    // Dados para gráfico de leads por mês (filtrados)
-    const dadosLeadsPorMes = await Promise.all(
-      ultimosDoisMeses.map(async (mesInfo) => {
-        const leadsCount = await prisma.leadOabData.count({
-          where: {
-            ...leadFilter,
-            lead: {
-              createdAt: {
-                gte: mesInfo.primeiroDia,
-                lte: mesInfo.ultimoDia,
-              },
-            },
-          },
-        });
+		// Dados para gráfico de leads por mês (filtrados)
+		const dadosLeadsPorMes = await Promise.all(
+			ultimosDoisMeses.map(async (mesInfo) => {
+				const leadsCount = await prisma.leadOabData.count({
+					where: {
+						...leadFilter,
+						lead: {
+							createdAt: {
+								gte: mesInfo.primeiroDia,
+								lte: mesInfo.ultimoDia,
+							},
+						},
+					},
+				});
 
-        const leadsConcluidos = await prisma.leadOabData.count({
-          where: {
-            ...leadFilter,
-            lead: {
-              createdAt: {
-                gte: mesInfo.primeiroDia,
-                lte: mesInfo.ultimoDia,
-              },
-            },
-            concluido: true,
-          },
-        });
+				const leadsConcluidos = await prisma.leadOabData.count({
+					where: {
+						...leadFilter,
+						lead: {
+							createdAt: {
+								gte: mesInfo.primeiroDia,
+								lte: mesInfo.ultimoDia,
+							},
+						},
+						concluido: true,
+					},
+				});
 
-        return {
-          month: mesInfo.mes,
-          leadsTotal: leadsCount,
-          leadsConcluidos: leadsConcluidos,
-        };
-      })
-    );
+				return {
+					month: mesInfo.mes,
+					leadsTotal: leadsCount,
+					leadsConcluidos: leadsConcluidos,
+				};
+			}),
+		);
 
-    // Dados para gráfico de leads por canal (filtrados)
-    const leadsPorCanalDb = await prisma.usuarioChatwit.findMany({
-      where:
-        currentUser && currentUser.role !== "SUPERADMIN" ? { appUserId: session.user.id } : {},
-      select: {
-        channel: true,
-        leadsOabData: {
-          select: {
-            id: true,
-          },
-        },
-      },
-    });
-    const leadsPorCanal = leadsPorCanalDb
-      .map((item: any) => ({
-        channel: item.channel,
-        leads: item.leadsOabData.length || 0,
-      }))
-      .sort((a: any, b: any) => b.leads - a.leads);
+		// Dados para gráfico de leads por canal (filtrados)
+		const leadsPorCanalDb = await prisma.usuarioChatwit.findMany({
+			where: currentUser && currentUser.role !== "SUPERADMIN" ? { appUserId: session.user.id } : {},
+			select: {
+				channel: true,
+				leadsOabData: {
+					select: {
+						id: true,
+					},
+				},
+			},
+		});
+		const leadsPorCanal = leadsPorCanalDb
+			.map((item: any) => ({
+				channel: item.channel,
+				leads: item.leadsOabData.length || 0,
+			}))
+			.sort((a: any, b: any) => b.leads - a.leads);
 
-    // Retornar todos os dados (filtrados por role)
-    return NextResponse.json({
-      stats,
-      charts: {
-        leadsPorMes: dadosLeadsPorMes.reverse(),
-        leadsPorCanal,
-      },
-    });
-  } catch (error) {
-    console.error("[API Stats] Erro ao buscar estatísticas:", error);
-    return NextResponse.json(
-      { error: "Erro interno ao buscar estatísticas" },
-      { status: 500 }
-    );
-  }
+		// Retornar todos os dados (filtrados por role)
+		return NextResponse.json({
+			stats,
+			charts: {
+				leadsPorMes: dadosLeadsPorMes.reverse(),
+				leadsPorCanal,
+			},
+		});
+	} catch (error) {
+		console.error("[API Stats] Erro ao buscar estatísticas:", error);
+		return NextResponse.json({ error: "Erro interno ao buscar estatísticas" }, { status: 500 });
+	}
 }

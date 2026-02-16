@@ -11,6 +11,3 @@ export default defineConfig({
 		file: path.join(__dirname, "prisma", "seed.ts"),
 	},
 });
-
-
-

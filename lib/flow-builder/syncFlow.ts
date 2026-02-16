@@ -12,9 +12,9 @@
  * @see docs/interative_message_flow_builder.md
  */
 
-import { getPrismaInstance } from '@/lib/connections';
-import { Prisma } from '@prisma/client';
-import type { FlowCanvas, FlowNode } from '@/types/flow-builder';
+import { getPrismaInstance } from "@/lib/connections";
+import { Prisma } from "@prisma/client";
+import type { FlowCanvas, FlowNode } from "@/types/flow-builder";
 
 // =============================================================================
 // NODE TYPE MAPPING
@@ -24,17 +24,17 @@ import type { FlowCanvas, FlowNode } from '@/types/flow-builder';
  * Mapeamento de tipos de nó do canvas visual para tipos do runtime
  */
 export const NODE_TYPE_MAP: Record<string, string> = {
-  start: 'START',
-  interactive_message: 'INTERACTIVE_MESSAGE',
-  text_message: 'TEXT_MESSAGE',
-  emoji_reaction: 'REACTION',
-  text_reaction: 'REACTION',
-  handoff: 'TRANSFER',
-  add_tag: 'ADD_TAG',
-  end: 'END',
-  condition: 'CONDITION',
-  delay: 'DELAY',
-  media: 'MEDIA',
+	start: "START",
+	interactive_message: "INTERACTIVE_MESSAGE",
+	text_message: "TEXT_MESSAGE",
+	emoji_reaction: "REACTION",
+	text_reaction: "REACTION",
+	handoff: "TRANSFER",
+	add_tag: "ADD_TAG",
+	end: "END",
+	condition: "CONDITION",
+	delay: "DELAY",
+	media: "MEDIA",
 };
 
 // =============================================================================
@@ -45,48 +45,48 @@ export const NODE_TYPE_MAP: Record<string, string> = {
  * Extrai configuração específica de um nó para armazenar no banco
  */
 export function buildNodeConfig(node: FlowNode): object {
-  const data = node.data as unknown as Record<string, unknown>;
+	const data = node.data as unknown as Record<string, unknown>;
 
-  switch (node.type) {
-    case 'interactive_message':
-      return {
-        messageId: data.messageId,
-        elements: data.elements,
-        body: data.body,
-        header: data.header,
-        footer: data.footer,
-        buttons: data.buttons,
-        label: data.label,
-      };
-    case 'text_message':
-      return { text: data.text };
-    case 'emoji_reaction':
-      return { emoji: data.emoji };
-    case 'text_reaction':
-      return { text: data.textReaction };
-    case 'handoff':
-      return { assigneeType: 'team', internalNote: data.targetTeam };
-    case 'add_tag':
-      return { tagName: data.tagName };
-    case 'delay':
-      // Canvas usa delaySeconds, engine usa delayMs
-      const seconds = (data.delaySeconds as number) || 5;
-      return { delayMs: seconds * 1000 };
-    case 'media':
-      return {
-        mediaUrl: data.mediaUrl,
-        filename: data.filename,
-        caption: data.caption,
-        mediaType: data.mediaType,
-        mimeType: data.mimeType,
-      };
-    case 'end':
-      return { endMessage: data.endMessage };
-    case 'start':
-      return { label: data.label, triggerType: data.triggerType };
-    default:
-      return data;
-  }
+	switch (node.type) {
+		case "interactive_message":
+			return {
+				messageId: data.messageId,
+				elements: data.elements,
+				body: data.body,
+				header: data.header,
+				footer: data.footer,
+				buttons: data.buttons,
+				label: data.label,
+			};
+		case "text_message":
+			return { text: data.text };
+		case "emoji_reaction":
+			return { emoji: data.emoji };
+		case "text_reaction":
+			return { text: data.textReaction };
+		case "handoff":
+			return { assigneeType: "team", internalNote: data.targetTeam };
+		case "add_tag":
+			return { tagName: data.tagName };
+		case "delay":
+			// Canvas usa delaySeconds, engine usa delayMs
+			const seconds = (data.delaySeconds as number) || 5;
+			return { delayMs: seconds * 1000 };
+		case "media":
+			return {
+				mediaUrl: data.mediaUrl,
+				filename: data.filename,
+				caption: data.caption,
+				mediaType: data.mediaType,
+				mimeType: data.mimeType,
+			};
+		case "end":
+			return { endMessage: data.endMessage };
+		case "start":
+			return { label: data.label, triggerType: data.triggerType };
+		default:
+			return data;
+	}
 }
 
 // =============================================================================
@@ -106,135 +106,129 @@ export function buildNodeConfig(node: FlowNode): object {
  * @returns ID do flow sincronizado
  */
 export async function syncCanvasToNormalizedFlow(
-  flowId: string,
-  canvas: FlowCanvas,
-  flowName?: string
+	flowId: string,
+	canvas: FlowCanvas,
+	flowName?: string,
 ): Promise<string> {
-  const prisma = getPrismaInstance();
+	const prisma = getPrismaInstance();
 
-  return await prisma.$transaction(async (tx) => {
-    // 1. Buscar Flow existente
-    const flow = await tx.flow.findUnique({
-      where: { id: flowId },
-    });
+	return await prisma.$transaction(async (tx) => {
+		// 1. Buscar Flow existente
+		const flow = await tx.flow.findUnique({
+			where: { id: flowId },
+		});
 
-    if (!flow) {
-      throw new Error(`Flow ${flowId} não encontrado`);
-    }
+		if (!flow) {
+			throw new Error(`Flow ${flowId} não encontrado`);
+		}
 
-    // Extrair nome do nó START se disponível
-    const startNode = canvas.nodes.find((n) => n.type === 'start');
-    const extractedName =
-      flowName ||
-      ((startNode?.data as unknown as Record<string, unknown>)?.label as string) ||
-      null;
+		// Extrair nome do nó START se disponível
+		const startNode = canvas.nodes.find((n) => n.type === "start");
+		const extractedName =
+			flowName || ((startNode?.data as unknown as Record<string, unknown>)?.label as string) || null;
 
-    // Atualizar nome se mudou
-    if (extractedName && flow.name !== extractedName) {
-      await tx.flow.update({
-        where: { id: flow.id },
-        data: { name: extractedName },
-      });
-    }
+		// Atualizar nome se mudou
+		if (extractedName && flow.name !== extractedName) {
+			await tx.flow.update({
+				where: { id: flow.id },
+				data: { name: extractedName },
+			});
+		}
 
-    // 2. Buscar nós existentes e mapear por _canvasId para preservar DB IDs
-    //    Isso evita que session.currentNodeId fique stale após cada save
-    const existingNodes = await tx.flowNode.findMany({ where: { flowId: flow.id } });
-    const existingByCanvasId = new Map<string, (typeof existingNodes)[0]>();
-    for (const node of existingNodes) {
-      const config = node.config as Record<string, unknown>;
-      if (config?._canvasId && typeof config._canvasId === 'string') {
-        existingByCanvasId.set(config._canvasId, node);
-      }
-    }
+		// 2. Buscar nós existentes e mapear por _canvasId para preservar DB IDs
+		//    Isso evita que session.currentNodeId fique stale após cada save
+		const existingNodes = await tx.flowNode.findMany({ where: { flowId: flow.id } });
+		const existingByCanvasId = new Map<string, (typeof existingNodes)[0]>();
+		for (const node of existingNodes) {
+			const config = node.config as Record<string, unknown>;
+			if (config?._canvasId && typeof config._canvasId === "string") {
+				existingByCanvasId.set(config._canvasId, node);
+			}
+		}
 
-    // 3. Deletar TODAS as edges (serão recriadas; edges não são referenciadas por sessões)
-    await tx.flowEdge.deleteMany({ where: { flowId: flow.id } });
+		// 3. Deletar TODAS as edges (serão recriadas; edges não são referenciadas por sessões)
+		await tx.flowEdge.deleteMany({ where: { flowId: flow.id } });
 
-    // 4. Upsert nós: preservar DB ID quando _canvasId já existe, criar se novo
-    const nodeIdMap = new Map<string, string>();
-    const matchedExistingIds = new Set<string>();
+		// 4. Upsert nós: preservar DB ID quando _canvasId já existe, criar se novo
+		const nodeIdMap = new Map<string, string>();
+		const matchedExistingIds = new Set<string>();
 
-    for (const node of canvas.nodes) {
-      const config = { ...buildNodeConfig(node), _canvasId: node.id };
-      const nodeType = NODE_TYPE_MAP[node.type] || node.type.toUpperCase();
-      const existing = existingByCanvasId.get(node.id);
+		for (const node of canvas.nodes) {
+			const config = { ...buildNodeConfig(node), _canvasId: node.id };
+			const nodeType = NODE_TYPE_MAP[node.type] || node.type.toUpperCase();
+			const existing = existingByCanvasId.get(node.id);
 
-      if (existing) {
-        // Nó existente: atualizar config/posição, preservar DB ID
-        matchedExistingIds.add(existing.id);
-        await tx.flowNode.update({
-          where: { id: existing.id },
-          data: {
-            nodeType,
-            config,
-            positionX: node.position.x,
-            positionY: node.position.y,
-          },
-        });
-        nodeIdMap.set(node.id, existing.id);
-      } else {
-        // Nó novo: criar com novo DB ID
-        const dbNode = await tx.flowNode.create({
-          data: {
-            flowId: flow.id,
-            nodeType,
-            config,
-            positionX: node.position.x,
-            positionY: node.position.y,
-          },
-        });
-        nodeIdMap.set(node.id, dbNode.id);
-      }
-    }
+			if (existing) {
+				// Nó existente: atualizar config/posição, preservar DB ID
+				matchedExistingIds.add(existing.id);
+				await tx.flowNode.update({
+					where: { id: existing.id },
+					data: {
+						nodeType,
+						config,
+						positionX: node.position.x,
+						positionY: node.position.y,
+					},
+				});
+				nodeIdMap.set(node.id, existing.id);
+			} else {
+				// Nó novo: criar com novo DB ID
+				const dbNode = await tx.flowNode.create({
+					data: {
+						flowId: flow.id,
+						nodeType,
+						config,
+						positionX: node.position.x,
+						positionY: node.position.y,
+					},
+				});
+				nodeIdMap.set(node.id, dbNode.id);
+			}
+		}
 
-    // 5. Deletar nós que não existem mais no canvas
-    const nodesToDelete = existingNodes.filter((n) => !matchedExistingIds.has(n.id));
-    if (nodesToDelete.length > 0) {
-      await tx.flowNode.deleteMany({
-        where: { id: { in: nodesToDelete.map((n) => n.id) } },
-      });
-    }
+		// 5. Deletar nós que não existem mais no canvas
+		const nodesToDelete = existingNodes.filter((n) => !matchedExistingIds.has(n.id));
+		if (nodesToDelete.length > 0) {
+			await tx.flowNode.deleteMany({
+				where: { id: { in: nodesToDelete.map((n) => n.id) } },
+			});
+		}
 
-    // 6. Criar edges com IDs mapeados (com dedup por source+target+handle)
-    const edgeDedup = new Set<string>();
-    let edgesCreated = 0;
+		// 6. Criar edges com IDs mapeados (com dedup por source+target+handle)
+		const edgeDedup = new Set<string>();
+		let edgesCreated = 0;
 
-    for (const edge of canvas.edges) {
-      const sourceId = nodeIdMap.get(edge.source);
-      const targetId = nodeIdMap.get(edge.target);
+		for (const edge of canvas.edges) {
+			const sourceId = nodeIdMap.get(edge.source);
+			const targetId = nodeIdMap.get(edge.target);
 
-      if (!sourceId || !targetId) continue;
+			if (!sourceId || !targetId) continue;
 
-      const dedupKey = `${sourceId}|${targetId}|${edge.sourceHandle || ''}`;
-      if (edgeDedup.has(dedupKey)) continue;
-      edgeDedup.add(dedupKey);
-      edgesCreated++;
+			const dedupKey = `${sourceId}|${targetId}|${edge.sourceHandle || ""}`;
+			if (edgeDedup.has(dedupKey)) continue;
+			edgeDedup.add(dedupKey);
+			edgesCreated++;
 
-      await tx.flowEdge.create({
-        data: {
-          flowId: flow.id,
-          sourceNodeId: sourceId,
-          targetNodeId: targetId,
-          buttonId: edge.sourceHandle || null,
-          conditionBranch:
-            ((edge.data as Record<string, unknown> | undefined)?.conditionBranch as string) ||
-            null,
-        },
-      });
-    }
+			await tx.flowEdge.create({
+				data: {
+					flowId: flow.id,
+					sourceNodeId: sourceId,
+					targetNodeId: targetId,
+					buttonId: edge.sourceHandle || null,
+					conditionBranch: ((edge.data as Record<string, unknown> | undefined)?.conditionBranch as string) || null,
+				},
+			});
+		}
 
-    const duplicatesRemoved = canvas.edges.length - edgesCreated;
-    if (duplicatesRemoved > 0) {
-      console.log(
-        `[syncFlow] ⚠️ ${duplicatesRemoved} edges duplicadas removidas no sync`
-      );
-    }
+		const duplicatesRemoved = canvas.edges.length - edgesCreated;
+		if (duplicatesRemoved > 0) {
+			console.log(`[syncFlow] ⚠️ ${duplicatesRemoved} edges duplicadas removidas no sync`);
+		}
 
-    console.log(
-      `[syncFlow] Sincronizado Flow ${flow.id} (${extractedName || flow.name}) com ${canvas.nodes.length} nós e ${canvas.edges.length} edges`
-    );
+		console.log(
+			`[syncFlow] Sincronizado Flow ${flow.id} (${extractedName || flow.name}) com ${canvas.nodes.length} nós e ${canvas.edges.length} edges`,
+		);
 
-    return flow.id;
-  });
+		return flow.id;
+	});
 }

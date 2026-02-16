@@ -9,367 +9,354 @@ const prisma = getPrismaInstance();
  * Interface para chave de idempotência
  */
 export interface IdempotencyKey {
-  externalId?: string;
-  provider: Provider;
-  product: string;
-  unit: string;
-  timestamp: Date;
-  fingerprint?: string;
+	externalId?: string;
+	provider: Provider;
+	product: string;
+	unit: string;
+	timestamp: Date;
+	fingerprint?: string;
 }
 
 /**
  * Interface para resultado de verificação de idempotência
  */
 export interface IdempotencyResult {
-  isDuplicate: boolean;
-  existingEventId?: string;
-  reason?: "external_id" | "fingerprint" | "temporal_duplicate";
+	isDuplicate: boolean;
+	existingEventId?: string;
+	reason?: "external_id" | "fingerprint" | "temporal_duplicate";
 }
 
 /**
  * Serviço de idempotência para eventos de custo
  */
 export class IdempotencyService {
-  private redis: any;
-  private readonly CACHE_TTL = 24 * 60 * 60; // 24 horas
-  private readonly TEMPORAL_WINDOW = 5 * 60 * 1000; // 5 minutos
+	private redis: any;
+	private readonly CACHE_TTL = 24 * 60 * 60; // 24 horas
+	private readonly TEMPORAL_WINDOW = 5 * 60 * 1000; // 5 minutos
 
-  constructor() {
-    this.redis = getRedisInstance();
-  }
+	constructor() {
+		this.redis = getRedisInstance();
+	}
 
-  /**
-   * Gera fingerprint único para um evento baseado em seus dados
-   */
-  private generateFingerprint(eventData: any): string {
-    // Remove campos que podem variar mas não afetam a unicidade
-    const { ts, raw, ...coreData } = eventData;
-    
-    // Inclui timestamp arredondado para janela temporal
-    const roundedTimestamp = Math.floor(new Date(ts).getTime() / (60 * 1000)) * 60 * 1000;
-    
-    const fingerprintData = {
-      ...coreData,
-      roundedTimestamp,
-    };
+	/**
+	 * Gera fingerprint único para um evento baseado em seus dados
+	 */
+	private generateFingerprint(eventData: any): string {
+		// Remove campos que podem variar mas não afetam a unicidade
+		const { ts, raw, ...coreData } = eventData;
 
-    // Ordena as chaves para garantir consistência
-    const sortedData = Object.keys(fingerprintData)
-      .sort()
-      .reduce((obj, key) => {
-        obj[key] = fingerprintData[key];
-        return obj;
-      }, {} as any);
+		// Inclui timestamp arredondado para janela temporal
+		const roundedTimestamp = Math.floor(new Date(ts).getTime() / (60 * 1000)) * 60 * 1000;
 
-    return createHash('sha256')
-      .update(JSON.stringify(sortedData))
-      .digest('hex');
-  }
+		const fingerprintData = {
+			...coreData,
+			roundedTimestamp,
+		};
 
-  /**
-   * Gera chave de cache Redis para idempotência
-   */
-  private getCacheKey(type: "external" | "fingerprint", value: string): string {
-    return `cost:idempotency:${type}:${value}`;
-  }
+		// Ordena as chaves para garantir consistência
+		const sortedData = Object.keys(fingerprintData)
+			.sort()
+			.reduce((obj, key) => {
+				obj[key] = fingerprintData[key];
+				return obj;
+			}, {} as any);
 
-  /**
-   * Verifica se um evento já foi processado usando múltiplas estratégias
-   */
-  async checkIdempotency(eventData: any): Promise<IdempotencyResult> {
-    const provider = eventData.provider as Provider;
-    const product = eventData.product;
-    const externalId = eventData.externalId;
+		return createHash("sha256").update(JSON.stringify(sortedData)).digest("hex");
+	}
 
-    // Estratégia 1: Verificação por externalId (mais confiável)
-    if (externalId) {
-      const existingByExternalId = await this.checkByExternalId(
-        externalId,
-        provider,
-        product
-      );
-      
-      if (existingByExternalId.isDuplicate) {
-        return existingByExternalId;
-      }
-    }
+	/**
+	 * Gera chave de cache Redis para idempotência
+	 */
+	private getCacheKey(type: "external" | "fingerprint", value: string): string {
+		return `cost:idempotency:${type}:${value}`;
+	}
 
-    // Estratégia 2: Verificação por fingerprint (para eventos sem externalId)
-    const fingerprint = this.generateFingerprint(eventData);
-    const existingByFingerprint = await this.checkByFingerprint(fingerprint);
-    
-    if (existingByFingerprint.isDuplicate) {
-      return existingByFingerprint;
-    }
+	/**
+	 * Verifica se um evento já foi processado usando múltiplas estratégias
+	 */
+	async checkIdempotency(eventData: any): Promise<IdempotencyResult> {
+		const provider = eventData.provider as Provider;
+		const product = eventData.product;
+		const externalId = eventData.externalId;
 
-    // Estratégia 3: Verificação temporal (duplicatas próximas no tempo)
-    const existingByTemporal = await this.checkTemporalDuplicates(eventData);
-    
-    if (existingByTemporal.isDuplicate) {
-      return existingByTemporal;
-    }
+		// Estratégia 1: Verificação por externalId (mais confiável)
+		if (externalId) {
+			const existingByExternalId = await this.checkByExternalId(externalId, provider, product);
 
-    return { isDuplicate: false };
-  }
+			if (existingByExternalId.isDuplicate) {
+				return existingByExternalId;
+			}
+		}
 
-  /**
-   * Verifica duplicação por externalId
-   */
-  private async checkByExternalId(
-    externalId: string,
-    provider: Provider,
-    product: string
-  ): Promise<IdempotencyResult> {
-    try {
-      // Verifica cache Redis primeiro (mais rápido)
-      const cacheKey = this.getCacheKey("external", `${provider}:${product}:${externalId}`);
-      const cached = await this.redis.get(cacheKey);
-      
-      if (cached) {
-        return {
-          isDuplicate: true,
-          existingEventId: cached,
-          reason: "external_id",
-        };
-      }
+		// Estratégia 2: Verificação por fingerprint (para eventos sem externalId)
+		const fingerprint = this.generateFingerprint(eventData);
+		const existingByFingerprint = await this.checkByFingerprint(fingerprint);
 
-      // Verifica no banco de dados
-      const existing = await prisma.costEvent.findFirst({
-        where: {
-          externalId,
-          provider,
-          product,
-        },
-        select: { id: true },
-      });
+		if (existingByFingerprint.isDuplicate) {
+			return existingByFingerprint;
+		}
 
-      if (existing) {
-        // Armazena no cache para próximas verificações
-        await this.redis.setex(cacheKey, this.CACHE_TTL, existing.id);
-        
-        return {
-          isDuplicate: true,
-          existingEventId: existing.id,
-          reason: "external_id",
-        };
-      }
+		// Estratégia 3: Verificação temporal (duplicatas próximas no tempo)
+		const existingByTemporal = await this.checkTemporalDuplicates(eventData);
 
-      return { isDuplicate: false };
-    } catch (error) {
-      console.error("Erro ao verificar duplicação por externalId:", error);
-      // Em caso de erro, assume que não é duplicata para não bloquear processamento
-      return { isDuplicate: false };
-    }
-  }
+		if (existingByTemporal.isDuplicate) {
+			return existingByTemporal;
+		}
 
-  /**
-   * Verifica duplicação por fingerprint
-   */
-  private async checkByFingerprint(fingerprint: string): Promise<IdempotencyResult> {
-    try {
-      const cacheKey = this.getCacheKey("fingerprint", fingerprint);
-      const cached = await this.redis.get(cacheKey);
-      
-      if (cached) {
-        return {
-          isDuplicate: true,
-          existingEventId: cached,
-          reason: "fingerprint",
-        };
-      }
+		return { isDuplicate: false };
+	}
 
-      return { isDuplicate: false };
-    } catch (error) {
-      console.error("Erro ao verificar duplicação por fingerprint:", error);
-      return { isDuplicate: false };
-    }
-  }
+	/**
+	 * Verifica duplicação por externalId
+	 */
+	private async checkByExternalId(externalId: string, provider: Provider, product: string): Promise<IdempotencyResult> {
+		try {
+			// Verifica cache Redis primeiro (mais rápido)
+			const cacheKey = this.getCacheKey("external", `${provider}:${product}:${externalId}`);
+			const cached = await this.redis.get(cacheKey);
 
-  /**
-   * Verifica duplicatas temporais (eventos muito similares em pouco tempo)
-   */
-  private async checkTemporalDuplicates(eventData: any): Promise<IdempotencyResult> {
-    try {
-      const eventTime = new Date(eventData.ts);
-      const windowStart = new Date(eventTime.getTime() - this.TEMPORAL_WINDOW);
-      const windowEnd = new Date(eventTime.getTime() + this.TEMPORAL_WINDOW);
+			if (cached) {
+				return {
+					isDuplicate: true,
+					existingEventId: cached,
+					reason: "external_id",
+				};
+			}
 
-      const similar = await prisma.costEvent.findFirst({
-        where: {
-          provider: eventData.provider,
-          product: eventData.product,
-          unit: eventData.unit,
-          units: eventData.units,
-          ts: {
-            gte: windowStart,
-            lte: windowEnd,
-          },
-          // Adiciona filtros opcionais se disponíveis
-          ...(eventData.inboxId && { inboxId: eventData.inboxId }),
-          ...(eventData.userId && { userId: eventData.userId }),
-          ...(eventData.sessionId && { sessionId: eventData.sessionId }),
-        },
-        select: { id: true },
-      });
+			// Verifica no banco de dados
+			const existing = await prisma.costEvent.findFirst({
+				where: {
+					externalId,
+					provider,
+					product,
+				},
+				select: { id: true },
+			});
 
-      if (similar) {
-        return {
-          isDuplicate: true,
-          existingEventId: similar.id,
-          reason: "temporal_duplicate",
-        };
-      }
+			if (existing) {
+				// Armazena no cache para próximas verificações
+				await this.redis.setex(cacheKey, this.CACHE_TTL, existing.id);
 
-      return { isDuplicate: false };
-    } catch (error) {
-      console.error("Erro ao verificar duplicatas temporais:", error);
-      return { isDuplicate: false };
-    }
-  }
+				return {
+					isDuplicate: true,
+					existingEventId: existing.id,
+					reason: "external_id",
+				};
+			}
 
-  /**
-   * Registra um evento como processado para futuras verificações de idempotência
-   */
-  async registerProcessedEvent(eventData: any, eventId: string): Promise<void> {
-    try {
-      const promises: Promise<any>[] = [];
+			return { isDuplicate: false };
+		} catch (error) {
+			console.error("Erro ao verificar duplicação por externalId:", error);
+			// Em caso de erro, assume que não é duplicata para não bloquear processamento
+			return { isDuplicate: false };
+		}
+	}
 
-      // Registra por externalId se disponível
-      if (eventData.externalId) {
-        const externalKey = this.getCacheKey(
-          "external",
-          `${eventData.provider}:${eventData.product}:${eventData.externalId}`
-        );
-        promises.push(this.redis.setex(externalKey, this.CACHE_TTL, eventId));
-      }
+	/**
+	 * Verifica duplicação por fingerprint
+	 */
+	private async checkByFingerprint(fingerprint: string): Promise<IdempotencyResult> {
+		try {
+			const cacheKey = this.getCacheKey("fingerprint", fingerprint);
+			const cached = await this.redis.get(cacheKey);
 
-      // Registra por fingerprint
-      const fingerprint = this.generateFingerprint(eventData);
-      const fingerprintKey = this.getCacheKey("fingerprint", fingerprint);
-      promises.push(this.redis.setex(fingerprintKey, this.CACHE_TTL, eventId));
+			if (cached) {
+				return {
+					isDuplicate: true,
+					existingEventId: cached,
+					reason: "fingerprint",
+				};
+			}
 
-      await Promise.all(promises);
-    } catch (error) {
-      console.error("Erro ao registrar evento processado:", error);
-      // Não falha o processamento se não conseguir registrar
-    }
-  }
+			return { isDuplicate: false };
+		} catch (error) {
+			console.error("Erro ao verificar duplicação por fingerprint:", error);
+			return { isDuplicate: false };
+		}
+	}
 
-  /**
-   * Remove registros de idempotência (para testes ou correções)
-   */
-  async removeIdempotencyRecord(
-    externalId?: string,
-    fingerprint?: string
-  ): Promise<void> {
-    try {
-      const keysToDelete: string[] = [];
+	/**
+	 * Verifica duplicatas temporais (eventos muito similares em pouco tempo)
+	 */
+	private async checkTemporalDuplicates(eventData: any): Promise<IdempotencyResult> {
+		try {
+			const eventTime = new Date(eventData.ts);
+			const windowStart = new Date(eventTime.getTime() - this.TEMPORAL_WINDOW);
+			const windowEnd = new Date(eventTime.getTime() + this.TEMPORAL_WINDOW);
 
-      if (externalId) {
-        // Precisa do provider e product para formar a chave completa
-        // Esta função é mais para casos especiais/debugging
-        const pattern = this.getCacheKey("external", `*:*:${externalId}`);
-        const keys = await this.redis.keys(pattern);
-        keysToDelete.push(...keys);
-      }
+			const similar = await prisma.costEvent.findFirst({
+				where: {
+					provider: eventData.provider,
+					product: eventData.product,
+					unit: eventData.unit,
+					units: eventData.units,
+					ts: {
+						gte: windowStart,
+						lte: windowEnd,
+					},
+					// Adiciona filtros opcionais se disponíveis
+					...(eventData.inboxId && { inboxId: eventData.inboxId }),
+					...(eventData.userId && { userId: eventData.userId }),
+					...(eventData.sessionId && { sessionId: eventData.sessionId }),
+				},
+				select: { id: true },
+			});
 
-      if (fingerprint) {
-        keysToDelete.push(this.getCacheKey("fingerprint", fingerprint));
-      }
+			if (similar) {
+				return {
+					isDuplicate: true,
+					existingEventId: similar.id,
+					reason: "temporal_duplicate",
+				};
+			}
 
-      if (keysToDelete.length > 0) {
-        await this.redis.del(...keysToDelete);
-      }
-    } catch (error) {
-      console.error("Erro ao remover registros de idempotência:", error);
-    }
-  }
+			return { isDuplicate: false };
+		} catch (error) {
+			console.error("Erro ao verificar duplicatas temporais:", error);
+			return { isDuplicate: false };
+		}
+	}
 
-  /**
-   * Obtém estatísticas de idempotência
-   */
-  async getIdempotencyStats(): Promise<{
-    totalCacheEntries: number;
-    externalIdEntries: number;
-    fingerprintEntries: number;
-    duplicatesBlocked: number;
-  }> {
-    try {
-      const [externalKeys, fingerprintKeys] = await Promise.all([
-        this.redis.keys(this.getCacheKey("external", "*")),
-        this.redis.keys(this.getCacheKey("fingerprint", "*")),
-      ]);
+	/**
+	 * Registra um evento como processado para futuras verificações de idempotência
+	 */
+	async registerProcessedEvent(eventData: any, eventId: string): Promise<void> {
+		try {
+			const promises: Promise<any>[] = [];
 
-      // Obtém contador de duplicatas bloqueadas do Redis
-      const duplicatesBlocked = parseInt(
-        await this.redis.get("cost:idempotency:duplicates_blocked") || "0"
-      );
+			// Registra por externalId se disponível
+			if (eventData.externalId) {
+				const externalKey = this.getCacheKey(
+					"external",
+					`${eventData.provider}:${eventData.product}:${eventData.externalId}`,
+				);
+				promises.push(this.redis.setex(externalKey, this.CACHE_TTL, eventId));
+			}
 
-      return {
-        totalCacheEntries: externalKeys.length + fingerprintKeys.length,
-        externalIdEntries: externalKeys.length,
-        fingerprintEntries: fingerprintKeys.length,
-        duplicatesBlocked,
-      };
-    } catch (error) {
-      console.error("Erro ao obter estatísticas de idempotência:", error);
-      return {
-        totalCacheEntries: 0,
-        externalIdEntries: 0,
-        fingerprintEntries: 0,
-        duplicatesBlocked: 0,
-      };
-    }
-  }
+			// Registra por fingerprint
+			const fingerprint = this.generateFingerprint(eventData);
+			const fingerprintKey = this.getCacheKey("fingerprint", fingerprint);
+			promises.push(this.redis.setex(fingerprintKey, this.CACHE_TTL, eventId));
 
-  /**
-   * Incrementa contador de duplicatas bloqueadas
-   */
-  async incrementDuplicatesBlocked(): Promise<void> {
-    try {
-      await this.redis.incr("cost:idempotency:duplicates_blocked");
-    } catch (error) {
-      console.error("Erro ao incrementar contador de duplicatas:", error);
-    }
-  }
+			await Promise.all(promises);
+		} catch (error) {
+			console.error("Erro ao registrar evento processado:", error);
+			// Não falha o processamento se não conseguir registrar
+		}
+	}
 
-  /**
-   * Limpa cache de idempotência expirado
-   */
-  async cleanupExpiredCache(): Promise<number> {
-    try {
-      let cleanedCount = 0;
-      
-      // Limpa entradas externas expiradas
-      const externalKeys = await this.redis.keys(this.getCacheKey("external", "*"));
-      for (const key of externalKeys) {
-        const ttl = await this.redis.ttl(key);
-        if (ttl === -1) { // Sem TTL definido
-          await this.redis.expire(key, this.CACHE_TTL);
-        } else if (ttl === -2) { // Chave expirada
-          await this.redis.del(key);
-          cleanedCount++;
-        }
-      }
+	/**
+	 * Remove registros de idempotência (para testes ou correções)
+	 */
+	async removeIdempotencyRecord(externalId?: string, fingerprint?: string): Promise<void> {
+		try {
+			const keysToDelete: string[] = [];
 
-      // Limpa entradas de fingerprint expiradas
-      const fingerprintKeys = await this.redis.keys(this.getCacheKey("fingerprint", "*"));
-      for (const key of fingerprintKeys) {
-        const ttl = await this.redis.ttl(key);
-        if (ttl === -1) {
-          await this.redis.expire(key, this.CACHE_TTL);
-        } else if (ttl === -2) {
-          await this.redis.del(key);
-          cleanedCount++;
-        }
-      }
+			if (externalId) {
+				// Precisa do provider e product para formar a chave completa
+				// Esta função é mais para casos especiais/debugging
+				const pattern = this.getCacheKey("external", `*:*:${externalId}`);
+				const keys = await this.redis.keys(pattern);
+				keysToDelete.push(...keys);
+			}
 
-      return cleanedCount;
-    } catch (error) {
-      console.error("Erro ao limpar cache de idempotência:", error);
-      return 0;
-    }
-  }
+			if (fingerprint) {
+				keysToDelete.push(this.getCacheKey("fingerprint", fingerprint));
+			}
+
+			if (keysToDelete.length > 0) {
+				await this.redis.del(...keysToDelete);
+			}
+		} catch (error) {
+			console.error("Erro ao remover registros de idempotência:", error);
+		}
+	}
+
+	/**
+	 * Obtém estatísticas de idempotência
+	 */
+	async getIdempotencyStats(): Promise<{
+		totalCacheEntries: number;
+		externalIdEntries: number;
+		fingerprintEntries: number;
+		duplicatesBlocked: number;
+	}> {
+		try {
+			const [externalKeys, fingerprintKeys] = await Promise.all([
+				this.redis.keys(this.getCacheKey("external", "*")),
+				this.redis.keys(this.getCacheKey("fingerprint", "*")),
+			]);
+
+			// Obtém contador de duplicatas bloqueadas do Redis
+			const duplicatesBlocked = parseInt((await this.redis.get("cost:idempotency:duplicates_blocked")) || "0");
+
+			return {
+				totalCacheEntries: externalKeys.length + fingerprintKeys.length,
+				externalIdEntries: externalKeys.length,
+				fingerprintEntries: fingerprintKeys.length,
+				duplicatesBlocked,
+			};
+		} catch (error) {
+			console.error("Erro ao obter estatísticas de idempotência:", error);
+			return {
+				totalCacheEntries: 0,
+				externalIdEntries: 0,
+				fingerprintEntries: 0,
+				duplicatesBlocked: 0,
+			};
+		}
+	}
+
+	/**
+	 * Incrementa contador de duplicatas bloqueadas
+	 */
+	async incrementDuplicatesBlocked(): Promise<void> {
+		try {
+			await this.redis.incr("cost:idempotency:duplicates_blocked");
+		} catch (error) {
+			console.error("Erro ao incrementar contador de duplicatas:", error);
+		}
+	}
+
+	/**
+	 * Limpa cache de idempotência expirado
+	 */
+	async cleanupExpiredCache(): Promise<number> {
+		try {
+			let cleanedCount = 0;
+
+			// Limpa entradas externas expiradas
+			const externalKeys = await this.redis.keys(this.getCacheKey("external", "*"));
+			for (const key of externalKeys) {
+				const ttl = await this.redis.ttl(key);
+				if (ttl === -1) {
+					// Sem TTL definido
+					await this.redis.expire(key, this.CACHE_TTL);
+				} else if (ttl === -2) {
+					// Chave expirada
+					await this.redis.del(key);
+					cleanedCount++;
+				}
+			}
+
+			// Limpa entradas de fingerprint expiradas
+			const fingerprintKeys = await this.redis.keys(this.getCacheKey("fingerprint", "*"));
+			for (const key of fingerprintKeys) {
+				const ttl = await this.redis.ttl(key);
+				if (ttl === -1) {
+					await this.redis.expire(key, this.CACHE_TTL);
+				} else if (ttl === -2) {
+					await this.redis.del(key);
+					cleanedCount++;
+				}
+			}
+
+			return cleanedCount;
+		} catch (error) {
+			console.error("Erro ao limpar cache de idempotência:", error);
+			return 0;
+		}
+	}
 }
 
 /**
@@ -381,24 +368,24 @@ export const idempotencyService = new IdempotencyService();
  * Função utilitária para verificar idempotência (compatibilidade)
  */
 export async function checkEventIdempotency(eventData: any): Promise<boolean> {
-  const result = await idempotencyService.checkIdempotency(eventData);
-  
-  if (result.isDuplicate) {
-    await idempotencyService.incrementDuplicatesBlocked();
-    console.log(`Evento duplicado bloqueado: ${result.reason}`, {
-      existingEventId: result.existingEventId,
-      provider: eventData.provider,
-      product: eventData.product,
-      externalId: eventData.externalId,
-    });
-  }
-  
-  return result.isDuplicate;
+	const result = await idempotencyService.checkIdempotency(eventData);
+
+	if (result.isDuplicate) {
+		await idempotencyService.incrementDuplicatesBlocked();
+		console.log(`Evento duplicado bloqueado: ${result.reason}`, {
+			existingEventId: result.existingEventId,
+			provider: eventData.provider,
+			product: eventData.product,
+			externalId: eventData.externalId,
+		});
+	}
+
+	return result.isDuplicate;
 }
 
 /**
  * Função utilitária para registrar evento processado
  */
 export async function registerProcessedEvent(eventData: any, eventId: string): Promise<void> {
-  await idempotencyService.registerProcessedEvent(eventData, eventId);
+	await idempotencyService.registerProcessedEvent(eventData, eventId);
 }

@@ -1,49 +1,44 @@
 /* tsconfig.json */
 {
-  "extends": "./tsconfig.base.json",
-  "compilerOptions": {
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
-    "jsx": "preserve",
-    /* preset Next 15 — ESM puro */
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "moduleDetection": "force",
-    "noEmit": true,
-    "target": "es2022",
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
-    "allowJs": true,
-    "esModuleInterop": true,
-    "isolatedModules": true,
-    "baseUrl": ".",
-    "paths": { "@/*": ["./*"] }
-  },
-  "include": [
-    "next-env.d.ts",
-    "middleware.ts",
-    "app/**/*",
-    "pages/**/*",
-    "components/**/*",
-    "lib/**/*",
-    "types/**/*.d.ts",
-    ".next/types/**/*.ts",
-    "hooks/useApprovalRequests.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    "**/__tests__/**",
-    "**/*.test.ts",
-    "**/*.spec.ts",
-    "worker/**/*",
-    "scripts/**/*",
-    "bull-board-server.ts",
-    "auth.ts"
-  ]
+	"extends": "./tsconfig.base.json",
+	"compilerOptions": {
+		"lib": ["dom", "dom.iterable", "esnext"],
+		"jsx": "preserve",
+		/* preset Next 15 — ESM puro */
+		"module": "esnext",
+		"moduleResolution": "bundler",
+		"moduleDetection": "force",
+		"noEmit": true,
+		"target": "es2022",
+		"plugins": [
+			{
+				"name": "next"
+			}
+		],
+		"allowJs": true,
+		"esModuleInterop": true,
+		"isolatedModules": true,
+		"baseUrl": ".",
+		"paths": { "@/*": ["./*"] }
+	},
+	"include": [
+		"next-env.d.ts",
+		"middleware.ts",
+		"app/**/*",
+		"pages/**/*",
+		"components/**/*",
+		"lib/**/*",
+		"types/**/*.d.ts",
+		".next/types/**/*.ts",
+		"hooks/useApprovalRequests.ts"
+	],
+	"exclude": [
+		"node_modules",
+		"**/__tests__/**",
+		"**/*.test.ts",
+		"**/*.spec.ts",
+		"worker/**/*",
+		"scripts/**/*",
+		"auth.ts"
+	]
 }

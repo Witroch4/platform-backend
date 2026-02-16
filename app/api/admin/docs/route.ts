@@ -1,125 +1,126 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { generateOpenAPISpec } from '../../../../lib/docs/openapi-generator';
+import { NextRequest, NextResponse } from "next/server";
+import { generateOpenAPISpec } from "../../../../lib/docs/openapi-generator";
 
 /**
  * GET /api/admin/docs
  * Serve OpenAPI/Swagger documentation
  */
 export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const format = searchParams.get('format') || 'json';
+	try {
+		const { searchParams } = new URL(request.url);
+		const format = searchParams.get("format") || "json";
 
-    const spec = generateOpenAPISpec();
+		const spec = generateOpenAPISpec();
 
-    switch (format.toLowerCase()) {
-      case 'json':
-        return NextResponse.json(spec, {
-          headers: {
-            'Content-Type': 'application/json',
-            'Cache-Control': 'public, max-age=3600' // Cache for 1 hour
-          }
-        });
+		switch (format.toLowerCase()) {
+			case "json":
+				return NextResponse.json(spec, {
+					headers: {
+						"Content-Type": "application/json",
+						"Cache-Control": "public, max-age=3600", // Cache for 1 hour
+					},
+				});
 
-      case 'yaml':
-        // Convert JSON to YAML
-        const yaml = jsonToYaml(spec);
-        return new NextResponse(yaml, {
-          headers: {
-            'Content-Type': 'application/x-yaml',
-            'Cache-Control': 'public, max-age=3600'
-          }
-        });
+			case "yaml":
+				// Convert JSON to YAML
+				const yaml = jsonToYaml(spec);
+				return new NextResponse(yaml, {
+					headers: {
+						"Content-Type": "application/x-yaml",
+						"Cache-Control": "public, max-age=3600",
+					},
+				});
 
-      case 'html':
-        // Serve Swagger UI HTML
-        const html = generateSwaggerUI();
-        return new NextResponse(html, {
-          headers: {
-            'Content-Type': 'text/html',
-            'Cache-Control': 'public, max-age=3600'
-          }
-        });
+			case "html":
+				// Serve Swagger UI HTML
+				const html = generateSwaggerUI();
+				return new NextResponse(html, {
+					headers: {
+						"Content-Type": "text/html",
+						"Cache-Control": "public, max-age=3600",
+					},
+				});
 
-      default:
-        return NextResponse.json(
-          {
-            success: false,
-            error: {
-              code: 'INVALID_FORMAT',
-              message: `Unsupported format: ${format}. Supported formats: json, yaml, html`,
-              timestamp: new Date().toISOString()
-            }
-          },
-          { status: 400 }
-        );
-    }
+			default:
+				return NextResponse.json(
+					{
+						success: false,
+						error: {
+							code: "INVALID_FORMAT",
+							message: `Unsupported format: ${format}. Supported formats: json, yaml, html`,
+							timestamp: new Date().toISOString(),
+						},
+					},
+					{ status: 400 },
+				);
+		}
+	} catch (error) {
+		console.error("[API Docs] Error generating documentation:", error);
 
-  } catch (error) {
-    console.error('[API Docs] Error generating documentation:', error);
-    
-    return NextResponse.json(
-      {
-        success: false,
-        error: {
-          code: 'DOCUMENTATION_ERROR',
-          message: 'Failed to generate API documentation',
-          timestamp: new Date().toISOString()
-        }
-      },
-      { status: 500 }
-    );
-  }
+		return NextResponse.json(
+			{
+				success: false,
+				error: {
+					code: "DOCUMENTATION_ERROR",
+					message: "Failed to generate API documentation",
+					timestamp: new Date().toISOString(),
+				},
+			},
+			{ status: 500 },
+		);
+	}
 }
 
 /**
  * Convert JSON object to YAML string
  */
 function jsonToYaml(obj: any, indent: number = 0): string {
-  const spaces = '  '.repeat(indent);
-  
-  if (obj === null) return 'null';
-  if (typeof obj === 'boolean') return obj.toString();
-  if (typeof obj === 'number') return obj.toString();
-  if (typeof obj === 'string') {
-    // Escape special characters and wrap in quotes if needed
-    if (obj.includes('\n') || obj.includes('"') || obj.includes("'")) {
-      return `"${obj.replace(/"/g, '\\"')}"`;
-    }
-    return obj;
-  }
-  
-  if (Array.isArray(obj)) {
-    if (obj.length === 0) return '[]';
-    return obj.map(item => `\n${spaces}- ${jsonToYaml(item, indent + 1)}`).join('');
-  }
-  
-  if (typeof obj === 'object') {
-    const keys = Object.keys(obj);
-    if (keys.length === 0) return '{}';
-    
-    return keys.map(key => {
-      const value = obj[key];
-      const yamlValue = jsonToYaml(value, indent + 1);
-      
-      if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-        return `\n${spaces}${key}:${yamlValue}`;
-      } else if (Array.isArray(value) && value.length > 0) {
-        return `\n${spaces}${key}:${yamlValue}`;
-      } else {
-        return `\n${spaces}${key}: ${yamlValue}`;
-      }
-    }).join('');
-  }
-  
-  return obj.toString();
+	const spaces = "  ".repeat(indent);
+
+	if (obj === null) return "null";
+	if (typeof obj === "boolean") return obj.toString();
+	if (typeof obj === "number") return obj.toString();
+	if (typeof obj === "string") {
+		// Escape special characters and wrap in quotes if needed
+		if (obj.includes("\n") || obj.includes('"') || obj.includes("'")) {
+			return `"${obj.replace(/"/g, '\\"')}"`;
+		}
+		return obj;
+	}
+
+	if (Array.isArray(obj)) {
+		if (obj.length === 0) return "[]";
+		return obj.map((item) => `\n${spaces}- ${jsonToYaml(item, indent + 1)}`).join("");
+	}
+
+	if (typeof obj === "object") {
+		const keys = Object.keys(obj);
+		if (keys.length === 0) return "{}";
+
+		return keys
+			.map((key) => {
+				const value = obj[key];
+				const yamlValue = jsonToYaml(value, indent + 1);
+
+				if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+					return `\n${spaces}${key}:${yamlValue}`;
+				} else if (Array.isArray(value) && value.length > 0) {
+					return `\n${spaces}${key}:${yamlValue}`;
+				} else {
+					return `\n${spaces}${key}: ${yamlValue}`;
+				}
+			})
+			.join("");
+	}
+
+	return obj.toString();
 }
 
 /**
  * Generate Swagger UI HTML
  */
 function generateSwaggerUI(): string {
-  return `
+	return `
 <!DOCTYPE html>
 <html lang="en">
 <head>

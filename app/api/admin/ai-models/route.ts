@@ -7,25 +7,22 @@ import { getAvailableVisionModels, isGeminiAvailable } from "@/lib/oab-eval/unif
  * Retorna lista de modelos de IA disponíveis para Vision
  */
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json(
-      { error: "Usuário não autenticado." },
-      { status: 401 }
-    );
-  }
+	const session = await auth();
+	if (!session?.user?.id) {
+		return NextResponse.json({ error: "Usuário não autenticado." }, { status: 401 });
+	}
 
-  const models = getAvailableVisionModels();
+	const models = getAvailableVisionModels();
 
-  return NextResponse.json({
-    success: true,
-    data: {
-      models,
-      providers: {
-        openai: true, // OpenAI sempre disponível (requer OPENAI_API_KEY)
-        gemini: isGeminiAvailable(),
-      },
-      recommended: isGeminiAvailable() ? "gemini-3-pro-preview" : "gpt-4.1",
-    },
-  });
+	return NextResponse.json({
+		success: true,
+		data: {
+			models,
+			providers: {
+				openai: true, // OpenAI sempre disponível (requer OPENAI_API_KEY)
+				gemini: isGeminiAvailable(),
+			},
+			recommended: isGeminiAvailable() ? "gemini-3-pro-preview" : "gpt-4.1",
+		},
+	});
 }

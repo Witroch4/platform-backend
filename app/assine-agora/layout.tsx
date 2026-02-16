@@ -1,12 +1,12 @@
 export const metadata = {
-  title: 'Assine Agora - Socialwise Chatwit',
-  description: 'Assine o Socialwise Chatwit e tenha acesso a todas as funcionalidades',
-}
+	title: "Assine Agora - Socialwise Chatwit",
+	description: "Assine o Socialwise Chatwit e tenha acesso a todas as funcionalidades",
+};
 
 export default function AssineAgoraLayout({
-  children,
+	children,
 }: {
-  children: React.ReactNode
+	children: React.ReactNode;
 }) {
-  return children;
+	return children;
 }

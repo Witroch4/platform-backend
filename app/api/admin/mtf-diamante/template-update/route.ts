@@ -1,8 +1,8 @@
-import { NextResponse } from 'next/server';
-import axios from 'axios';
-import { auth } from '@/auth';
-import { mtfDiamanteConfig } from '@/app/config/mtf-diamante';
-import { getPrismaInstance } from '@/lib/connections';
+import { NextResponse } from "next/server";
+import axios from "axios";
+import { auth } from "@/auth";
+import { mtfDiamanteConfig } from "@/app/config/mtf-diamante";
+import { getPrismaInstance } from "@/lib/connections";
 const prisma = getPrismaInstance();
 
 /**
@@ -10,110 +10,126 @@ const prisma = getPrismaInstance();
  * Método PUT /api/admin/mtf-diamante/template-update
  */
 export async function PUT(req: Request) {
-  try {
-    // Verificar autenticação
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-    }
-    
-    // Verificar se o usuário é admin
-    if (session.user.role !== "ADMIN" && session.user.role !== "SUPERADMIN") {
-      return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
-    }
+	try {
+		// Verificar autenticação
+		const session = await auth();
+		if (!session?.user) {
+			return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+		}
 
-    // Obter os dados do corpo da requisição
-    const body = await req.json();
-    const { templateId, name, components, submit_for_review } = body;
+		// Verificar se o usuário é admin
+		if (session.user.role !== "ADMIN" && session.user.role !== "SUPERADMIN") {
+			return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+		}
 
-    if (!templateId || !name || !components) {
-      return NextResponse.json({ 
-        success: false, 
-        error: "Informações incompletas do template" 
-      }, { status: 400 });
-    }
+		// Obter os dados do corpo da requisição
+		const body = await req.json();
+		const { templateId, name, components, submit_for_review } = body;
 
-    try {
-      // Verificar se o template existe no banco
-      const existingTemplate = await prisma.template.findFirst({
-        where: { 
-          whatsappOfficialInfo: {
-            metaTemplateId: templateId
-          },
-          createdById: session.user.id
-        },
-        include: {
-          whatsappOfficialInfo: true
-        }
-      });
+		if (!templateId || !name || !components) {
+			return NextResponse.json(
+				{
+					success: false,
+					error: "Informações incompletas do template",
+				},
+				{ status: 400 },
+			);
+		}
 
-      if (!existingTemplate) {
-        return NextResponse.json({ 
-          success: false, 
-          error: "Template não encontrado no banco de dados" 
-        }, { status: 404 });
-      }
+		try {
+			// Verificar se o template existe no banco
+			const existingTemplate = await prisma.template.findFirst({
+				where: {
+					whatsappOfficialInfo: {
+						metaTemplateId: templateId,
+					},
+					createdById: session.user.id,
+				},
+				include: {
+					whatsappOfficialInfo: true,
+				},
+			});
 
-      // Atualizar o template no banco de dados
-      await prisma.template.update({
-        where: { id: existingTemplate.id },
-        data: {
-          name: name,
-          updatedAt: new Date(),
-          whatsappOfficialInfo: {
-            update: {
-              components: components,
-              updatedAt: new Date()
-            }
-          }
-        }
-      });
+			if (!existingTemplate) {
+				return NextResponse.json(
+					{
+						success: false,
+						error: "Template não encontrado no banco de dados",
+					},
+					{ status: 404 },
+				);
+			}
 
-      // Se submit_for_review for true, enviar para análise no WhatsApp
-      if (submit_for_review) {
-        try {
-          const config = {
-            fbGraphApiBase: process.env.FB_GRAPH_API_BASE || 'https://graph.facebook.com/v22.0',
-            whatsappBusinessAccountId: process.env.WHATSAPP_BUSINESS_ID || '294585820394901',
-            whatsappToken: process.env.WHATSAPP_TOKEN || mtfDiamanteConfig.whatsappToken,
-          };
+			// Atualizar o template no banco de dados
+			await prisma.template.update({
+				where: { id: existingTemplate.id },
+				data: {
+					name: name,
+					updatedAt: new Date(),
+					whatsappOfficialInfo: {
+						update: {
+							components: components,
+							updatedAt: new Date(),
+						},
+					},
+				},
+			});
 
-          // Enviar template para análise no WhatsApp
-          const url = `${config.fbGraphApiBase}/${config.whatsappBusinessAccountId}/message_templates`;
-          const response = await axios.post(url, {
-            name: name,
-            category: existingTemplate.whatsappOfficialInfo?.category || 'UTILITY',
-            components: components
-          }, {
-            headers: {
-              Authorization: `Bearer ${config.whatsappToken}`,
-              'Content-Type': 'application/json',
-            }
-          });
+			// Se submit_for_review for true, enviar para análise no WhatsApp
+			if (submit_for_review) {
+				try {
+					const config = {
+						fbGraphApiBase: process.env.FB_GRAPH_API_BASE || "https://graph.facebook.com/v22.0",
+						whatsappBusinessAccountId: process.env.WHATSAPP_BUSINESS_ID || "294585820394901",
+						whatsappToken: process.env.WHATSAPP_TOKEN || mtfDiamanteConfig.whatsappToken,
+					};
 
-          console.log('Template enviado para análise no WhatsApp:', response.data);
-        } catch (whatsappError) {
-          console.error('Erro ao enviar template para análise no WhatsApp:', whatsappError);
-          // Não falhar a operação se o envio para análise falhar
-        }
-      }
+					// Enviar template para análise no WhatsApp
+					const url = `${config.fbGraphApiBase}/${config.whatsappBusinessAccountId}/message_templates`;
+					const response = await axios.post(
+						url,
+						{
+							name: name,
+							category: existingTemplate.whatsappOfficialInfo?.category || "UTILITY",
+							components: components,
+						},
+						{
+							headers: {
+								Authorization: `Bearer ${config.whatsappToken}`,
+								"Content-Type": "application/json",
+							},
+						},
+					);
 
-      return NextResponse.json({ 
-        success: true, 
-        message: "Template atualizado com sucesso" 
-      });
-    } catch (dbError) {
-      console.error("Erro ao atualizar template no banco:", dbError);
-      return NextResponse.json({ 
-        success: false, 
-        error: "Erro ao atualizar template no banco de dados" 
-      }, { status: 500 });
-    }
-  } catch (error) {
-    console.error("Erro ao processar requisição:", error);
-    return NextResponse.json({ 
-      success: false, 
-      error: "Erro interno do servidor" 
-    }, { status: 500 });
-  }
-} 
+					console.log("Template enviado para análise no WhatsApp:", response.data);
+				} catch (whatsappError) {
+					console.error("Erro ao enviar template para análise no WhatsApp:", whatsappError);
+					// Não falhar a operação se o envio para análise falhar
+				}
+			}
+
+			return NextResponse.json({
+				success: true,
+				message: "Template atualizado com sucesso",
+			});
+		} catch (dbError) {
+			console.error("Erro ao atualizar template no banco:", dbError);
+			return NextResponse.json(
+				{
+					success: false,
+					error: "Erro ao atualizar template no banco de dados",
+				},
+				{ status: 500 },
+			);
+		}
+	} catch (error) {
+		console.error("Erro ao processar requisição:", error);
+		return NextResponse.json(
+			{
+				success: false,
+				error: "Erro interno do servidor",
+			},
+			{ status: 500 },
+		);
+	}
+}

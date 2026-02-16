@@ -1,14 +1,14 @@
-import React from 'react';
+import React from "react";
 
 const Meta = () => {
-  return null;
+	return null;
 };
 
 export default Meta;
 
 export const meta = {
-  docs: {
-    type: "page",
-    title: "Get Started",
-  },
+	docs: {
+		type: "page",
+		title: "Get Started",
+	},
 };

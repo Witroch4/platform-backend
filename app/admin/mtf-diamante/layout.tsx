@@ -1,8 +1,8 @@
 export default function MtfDiamanteLayout({
-  children,
+	children,
 }: {
-  children: React.ReactNode;
+	children: React.ReactNode;
 }) {
-  // Layout simplificado - a navegação fluida agora é global via app/admin/layout.tsx
-  return <>{children}</>;
+	// Layout simplificado - a navegação fluida agora é global via app/admin/layout.tsx
+	return <>{children}</>;
 }

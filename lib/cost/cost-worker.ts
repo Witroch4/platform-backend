@@ -18,19 +18,19 @@ const prisma = getPrismaInstance();
  * Interface para dados de eventos de custo
  */
 export interface CostEventData {
-  ts: string;
-  provider: string;
-  product: string;
-  unit: string;
-  units: number;
-  region?: string;
-  externalId?: string;
-  traceId?: string;
-  sessionId?: string;
-  inboxId?: string;
-  userId?: string;
-  intent?: string;
-  raw: Record<string, any>;
+	ts: string;
+	provider: string;
+	product: string;
+	unit: string;
+	units: number;
+	region?: string;
+	externalId?: string;
+	traceId?: string;
+	sessionId?: string;
+	inboxId?: string;
+	userId?: string;
+	intent?: string;
+	raw: Record<string, any>;
 }
 
 /**
@@ -38,49 +38,45 @@ export interface CostEventData {
  * Usa o serviço de precificação com cache e fallbacks
  */
 export async function resolveUnitPrice(
-  provider: Provider,
-  product: string,
-  unit: Unit,
-  when: Date,
-  region?: string
+	provider: Provider,
+	product: string,
+	unit: Unit,
+	when: Date,
+	region?: string,
 ): Promise<{
-  pricePerUnit: number;
-  currency: string;
-  priceCardId: string;
+	pricePerUnit: number;
+	currency: string;
+	priceCardId: string;
 } | null> {
-  try {
-    const resolved = await pricingService.resolveUnitPrice(provider, product, unit, when, region);
-    
-    if (!resolved) {
-      return null;
-    }
+	try {
+		const resolved = await pricingService.resolveUnitPrice(provider, product, unit, when, region);
 
-    return {
-      pricePerUnit: resolved.pricePerUnit,
-      currency: resolved.currency,
-      priceCardId: resolved.priceCardId,
-    };
-  } catch (error) {
-    console.error("Erro ao resolver preço unitário:", error);
-    return null;
-  }
+		if (!resolved) {
+			return null;
+		}
+
+		return {
+			pricePerUnit: resolved.pricePerUnit,
+			currency: resolved.currency,
+			priceCardId: resolved.priceCardId,
+		};
+	} catch (error) {
+		console.error("Erro ao resolver preço unitário:", error);
+		return null;
+	}
 }
 
 /**
  * Calcula o custo baseado no tipo de unidade
  */
-export function calculateCost(
-  units: number,
-  unitPrice: number,
-  unit: Unit
-): number {
-  // Para tokens, o preço é por milhão (1M tokens)
-  if (unit.startsWith("TOKENS_")) {
-    return (units / 1_000_000) * unitPrice;
-  }
-  
-  // Para outros tipos (templates, imagens, etc.), preço por unidade
-  return units * unitPrice;
+export function calculateCost(units: number, unitPrice: number, unit: Unit): number {
+	// Para tokens, o preço é por milhão (1M tokens)
+	if (unit.startsWith("TOKENS_")) {
+		return (units / 1_000_000) * unitPrice;
+	}
+
+	// Para outros tipos (templates, imagens, etc.), preço por unidade
+	return units * unitPrice;
 }
 
 /**
@@ -88,470 +84,463 @@ export function calculateCost(
  * Usa o serviço de idempotência avançado
  */
 export async function isEventAlreadyProcessed(eventData: CostEventData): Promise<boolean> {
-  try {
-    return await checkEventIdempotency(eventData);
-  } catch (error) {
-    log.error("Erro ao verificar idempotência de evento", {
-      error: error?.toString(),
-      provider: eventData.provider,
-      product: eventData.product,
-      externalId: eventData.externalId,
-    });
-    return false;
-  }
+	try {
+		return await checkEventIdempotency(eventData);
+	} catch (error) {
+		log.error("Erro ao verificar idempotência de evento", {
+			error: error?.toString(),
+			provider: eventData.provider,
+			product: eventData.product,
+			externalId: eventData.externalId,
+		});
+		return false;
+	}
 }
 
 /**
  * Processa um evento de custo individual
  */
 export async function processCostEvent(eventData: CostEventData): Promise<void> {
-  const when = new Date(eventData.ts);
-  
-  // Validação de dados básicos
-  if (!eventData.provider || !eventData.product || !eventData.unit) {
-    throw new Error(`Dados de evento incompletos: provider=${eventData.provider}, product=${eventData.product}, unit=${eventData.unit}`);
-  }
+	const when = new Date(eventData.ts);
 
-  // Validação de unidades
-  if (typeof eventData.units !== 'number' || eventData.units < 0) {
-    throw new Error(`Unidades inválidas: ${eventData.units}`);
-  }
+	// Validação de dados básicos
+	if (!eventData.provider || !eventData.product || !eventData.unit) {
+		throw new Error(
+			`Dados de evento incompletos: provider=${eventData.provider}, product=${eventData.product}, unit=${eventData.unit}`,
+		);
+	}
 
-  // Converte strings para enums
-  const provider = eventData.provider as Provider;
-  const unit = eventData.unit as Unit;
+	// Validação de unidades
+	if (typeof eventData.units !== "number" || eventData.units < 0) {
+		throw new Error(`Unidades inválidas: ${eventData.units}`);
+	}
 
-  // Verifica idempotência usando serviço avançado
-  const alreadyProcessed = await isEventAlreadyProcessed(eventData);
-  
-  if (alreadyProcessed) {
-    log.info("Evento duplicado ignorado", {
-      provider: eventData.provider,
-      product: eventData.product,
-      externalId: eventData.externalId,
-      traceId: eventData.traceId,
-    });
-    return;
-  }
+	// Converte strings para enums
+	const provider = eventData.provider as Provider;
+	const unit = eventData.unit as Unit;
 
-  // Resolve preço unitário
-  const priceInfo = await resolveUnitPrice(
-    provider,
-    eventData.product,
-    unit,
-    when,
-    eventData.region
-  );
+	// Verifica idempotência usando serviço avançado
+	const alreadyProcessed = await isEventAlreadyProcessed(eventData);
 
-  let unitPrice: number | null = null;
-  let cost: number | null = null;
-  let currency = "USD";
-  let status: EventStatus = "PENDING_PRICING";
+	if (alreadyProcessed) {
+		log.info("Evento duplicado ignorado", {
+			provider: eventData.provider,
+			product: eventData.product,
+			externalId: eventData.externalId,
+			traceId: eventData.traceId,
+		});
+		return;
+	}
 
-  if (priceInfo) {
-    unitPrice = priceInfo.pricePerUnit;
-    currency = priceInfo.currency;
-    cost = calculateCost(eventData.units, unitPrice, unit);
-    status = "PRICED";
-  }
+	// Resolve preço unitário
+	const priceInfo = await resolveUnitPrice(provider, eventData.product, unit, when, eventData.region);
 
-  // Persiste o evento no banco
-  const createdEvent = await prisma.costEvent.create({
-    data: {
-      ts: when,
-      provider,
-      product: eventData.product,
-      unit,
-      units: eventData.units,
-      currency,
-      unitPrice: unitPrice,
-      cost: cost,
-      status,
-      externalId: eventData.externalId || null,
-      traceId: eventData.traceId || null,
-      sessionId: eventData.sessionId || null,
-      inboxId: eventData.inboxId || null,
-      userId: eventData.userId || null,
-      intent: eventData.intent || null,
-      raw: eventData.raw || {},
-    },
-  });
+	let unitPrice: number | null = null;
+	let cost: number | null = null;
+	let currency = "USD";
+	let status: EventStatus = "PENDING_PRICING";
 
-  // Registra evento como processado para idempotência
-  await registerProcessedEvent(eventData, createdEvent.id);
+	if (priceInfo) {
+		unitPrice = priceInfo.pricePerUnit;
+		currency = priceInfo.currency;
+		cost = calculateCost(eventData.units, unitPrice, unit);
+		status = "PRICED";
+	}
 
-  // Incrementa contador de jobs processados
-  const redis = getRedisInstance();
-  const today = new Date().toISOString().split('T')[0];
-  await redis.incr(`cost:jobs:daily:${today}`);
+	// Persiste o evento no banco
+	const createdEvent = await prisma.costEvent.create({
+		data: {
+			ts: when,
+			provider,
+			product: eventData.product,
+			unit,
+			units: eventData.units,
+			currency,
+			unitPrice: unitPrice,
+			cost: cost,
+			status,
+			externalId: eventData.externalId || null,
+			traceId: eventData.traceId || null,
+			sessionId: eventData.sessionId || null,
+			inboxId: eventData.inboxId || null,
+			userId: eventData.userId || null,
+			intent: eventData.intent || null,
+			raw: eventData.raw || {},
+		},
+	});
 
-  // Audit logging
-  const processingTime = Date.now() - when.getTime();
-  
-  if (status === "PRICED") {
-    await costAuditLogger.logCostEventPriced({
-      eventId: createdEvent.id,
-      unitPrice: unitPrice!,
-      totalCost: cost!,
-      currency,
-      processingTime,
-    });
-  } else {
-    await costAuditLogger.logCostEventCreated({
-      eventId: createdEvent.id,
-      provider: eventData.provider,
-      product: eventData.product,
-      units: eventData.units,
-      sessionId: eventData.sessionId,
-      inboxId: eventData.inboxId,
-      userId: eventData.userId,
-      correlationId: eventData.traceId,
-    });
-  }
+	// Registra evento como processado para idempotência
+	await registerProcessedEvent(eventData, createdEvent.id);
 
-  // Log estruturado para auditoria
-  log.info("Evento de custo processado", {
-    eventId: createdEvent.id,
-    provider: eventData.provider,
-    product: eventData.product,
-    unit: eventData.unit,
-    units: eventData.units,
-    cost,
-    currency,
-    status,
-    externalId: eventData.externalId,
-    traceId: eventData.traceId,
-    inboxId: eventData.inboxId,
-    userId: eventData.userId,
-    processingTimeMs: processingTime,
-  });
+	// Incrementa contador de jobs processados
+	const redis = getRedisInstance();
+	const today = new Date().toISOString().split("T")[0];
+	await redis.incr(`cost:jobs:daily:${today}`);
+
+	// Audit logging
+	const processingTime = Date.now() - when.getTime();
+
+	if (status === "PRICED") {
+		await costAuditLogger.logCostEventPriced({
+			eventId: createdEvent.id,
+			unitPrice: unitPrice!,
+			totalCost: cost!,
+			currency,
+			processingTime,
+		});
+	} else {
+		await costAuditLogger.logCostEventCreated({
+			eventId: createdEvent.id,
+			provider: eventData.provider,
+			product: eventData.product,
+			units: eventData.units,
+			sessionId: eventData.sessionId,
+			inboxId: eventData.inboxId,
+			userId: eventData.userId,
+			correlationId: eventData.traceId,
+		});
+	}
+
+	// Log estruturado para auditoria
+	log.info("Evento de custo processado", {
+		eventId: createdEvent.id,
+		provider: eventData.provider,
+		product: eventData.product,
+		unit: eventData.unit,
+		units: eventData.units,
+		cost,
+		currency,
+		status,
+		externalId: eventData.externalId,
+		traceId: eventData.traceId,
+		inboxId: eventData.inboxId,
+		userId: eventData.userId,
+		processingTimeMs: processingTime,
+	});
 }
 
 /**
  * Processa eventos PENDING_PRICING em lote usando o serviço de precificação
  */
 export async function reprocessPendingEvents(limit: number = 100): Promise<number> {
-  try {
-    const result = await processPendingPricingEvents(limit);
-    return result.processed;
-  } catch (error) {
-    console.error("Erro ao reprocessar eventos pendentes:", error);
-    return 0;
-  }
+	try {
+		const result = await processPendingPricingEvents(limit);
+		return result.processed;
+	} catch (error) {
+		console.error("Erro ao reprocessar eventos pendentes:", error);
+		return 0;
+	}
 }
 
 /**
  * Worker principal de processamento de custos
  */
 export function createCostWorker(): Worker {
-  const worker = new Worker(
-    COST_QUEUE_NAME,
-    async (job: Job) => {
-      const { name, data } = job;
-      const startTime = Date.now();
+	const worker = new Worker(
+		COST_QUEUE_NAME,
+		async (job: Job) => {
+			const { name, data } = job;
+			const startTime = Date.now();
 
-      try {
-        switch (name) {
-          case "cost-event":
-            await processCostEvent(data as CostEventData);
-            break;
+			try {
+				switch (name) {
+					case "cost-event":
+						await processCostEvent(data as CostEventData);
+						break;
 
-          case "reprocess-pending":
-            const limit = data.limit || 100;
-            await reprocessPendingEvents(limit);
-            break;
+					case "reprocess-pending":
+						const limit = data.limit || 100;
+						await reprocessPendingEvents(limit);
+						break;
 
-          case "cleanup-cache":
-            await idempotencyService.cleanupExpiredCache();
-            await costErrorHandler.cleanupOldErrors(data.daysToKeep || 30);
-            break;
+					case "cleanup-cache":
+						await idempotencyService.cleanupExpiredCache();
+						await costErrorHandler.cleanupOldErrors(data.daysToKeep || 30);
+						break;
 
-          case "quality-evaluation":
-            await runQualityEvaluationJob(data);
-            break;
+					case "quality-evaluation":
+						await runQualityEvaluationJob(data);
+						break;
 
-          case "cost-analytics":
-            await generateCostAnalyticsReport(data);
-            break;
+					case "cost-analytics":
+						await generateCostAnalyticsReport(data);
+						break;
 
-          case "budget-check":
-            await performBudgetCheck(data);
-            break;
+					case "budget-check":
+						await performBudgetCheck(data);
+						break;
 
-          default:
-            log.warn("Tipo de job desconhecido", { jobName: name, jobId: job.id });
-        }
+					default:
+						log.warn("Tipo de job desconhecido", { jobName: name, jobId: job.id });
+				}
 
-        // Log de sucesso
-        const processingTime = Date.now() - startTime;
-        log.info("Job processado com sucesso", {
-          jobId: job.id,
-          jobName: name,
-          processingTimeMs: processingTime,
-          attempts: job.attemptsMade,
-        });
+				// Log de sucesso
+				const processingTime = Date.now() - startTime;
+				log.info("Job processado com sucesso", {
+					jobId: job.id,
+					jobName: name,
+					processingTimeMs: processingTime,
+					attempts: job.attemptsMade,
+				});
+			} catch (error) {
+				const processingTime = Date.now() - startTime;
 
-      } catch (error) {
-        const processingTime = Date.now() - startTime;
-        
-        log.error("Erro ao processar job", {
-          jobId: job.id,
-          jobName: name,
-          error: error?.toString(),
-          processingTimeMs: processingTime,
-          attempts: job.attemptsMade,
-          maxAttempts: job.opts.attempts || 3,
-        });
+				log.error("Erro ao processar job", {
+					jobId: job.id,
+					jobName: name,
+					error: error?.toString(),
+					processingTimeMs: processingTime,
+					attempts: job.attemptsMade,
+					maxAttempts: job.opts.attempts || 3,
+				});
 
-        // Audit logging para falhas
-        await costAuditLogger.logCostEventFailed({
-          eventId: job.id || "unknown",
-          error: (error as Error).message,
-          attempts: job.attemptsMade || 0,
-          willRetry: (job.attemptsMade || 0) < (job.opts.attempts || 3),
-        });
+				// Audit logging para falhas
+				await costAuditLogger.logCostEventFailed({
+					eventId: job.id || "unknown",
+					error: (error as Error).message,
+					attempts: job.attemptsMade || 0,
+					willRetry: (job.attemptsMade || 0) < (job.opts.attempts || 3),
+				});
 
-        // Usa o error handler avançado
-        const errorResult = await handleJobError(
-          error as Error,
-          job.id || "unknown",
-          name,
-          data,
-          job.attemptsMade,
-          job.opts.attempts || 3
-        );
+				// Usa o error handler avançado
+				const errorResult = await handleJobError(
+					error as Error,
+					job.id || "unknown",
+					name,
+					data,
+					job.attemptsMade,
+					job.opts.attempts || 3,
+				);
 
-        // Se deve mover para DLQ, o error handler já fez isso
-        if (errorResult.shouldMoveToDeadLetter) {
-          log.warn("Job movido para Dead Letter Queue", {
-            jobId: job.id,
-            jobName: name,
-            finalAttempt: job.attemptsMade,
-          });
-        }
+				// Se deve mover para DLQ, o error handler já fez isso
+				if (errorResult.shouldMoveToDeadLetter) {
+					log.warn("Job movido para Dead Letter Queue", {
+						jobId: job.id,
+						jobName: name,
+						finalAttempt: job.attemptsMade,
+					});
+				}
 
-        // Re-throw para que o BullMQ saiba que falhou
-        throw error;
-      }
-    },
-    costWorkerOptions
-  );
+				// Re-throw para que o BullMQ saiba que falhou
+				throw error;
+			}
+		},
+		costWorkerOptions,
+	);
 
-  // Event listeners para monitoramento avançado
-  worker.on("completed", (job) => {
-    log.info("Job completado", {
-      jobId: job.id,
-      jobName: job.name,
-      attempts: job.attemptsMade,
-      processedOn: job.processedOn,
-      finishedOn: job.finishedOn,
-    });
-  });
+	// Event listeners para monitoramento avançado
+	worker.on("completed", (job) => {
+		log.info("Job completado", {
+			jobId: job.id,
+			jobName: job.name,
+			attempts: job.attemptsMade,
+			processedOn: job.processedOn,
+			finishedOn: job.finishedOn,
+		});
+	});
 
-  worker.on("failed", (job, err) => {
-    log.error("Job falhou", {
-      jobId: job?.id,
-      jobName: job?.name,
-      error: err?.toString(),
-      attempts: job?.attemptsMade,
-      failedReason: job?.failedReason,
-    });
-  });
+	worker.on("failed", (job, err) => {
+		log.error("Job falhou", {
+			jobId: job?.id,
+			jobName: job?.name,
+			error: err?.toString(),
+			attempts: job?.attemptsMade,
+			failedReason: job?.failedReason,
+		});
+	});
 
-  worker.on("error", (err) => {
-    log.error("Erro no worker de custos", {
-      error: err?.toString(),
-      workerName: COST_QUEUE_NAME,
-    });
-  });
+	worker.on("error", (err) => {
+		log.error("Erro no worker de custos", {
+			error: err?.toString(),
+			workerName: COST_QUEUE_NAME,
+		});
+	});
 
-  worker.on("stalled", (jobId) => {
-    log.warn("Job travado detectado", {
-      jobId,
-      workerName: COST_QUEUE_NAME,
-    });
-  });
+	worker.on("stalled", (jobId) => {
+		log.warn("Job travado detectado", {
+			jobId,
+			workerName: COST_QUEUE_NAME,
+		});
+	});
 
-  return worker;
+	return worker;
 }
 
 /**
  * Função para inicializar o worker de custos
  */
 export async function startCostWorker(): Promise<Worker> {
-  console.log("Iniciando worker de processamento de custos...");
-  
-  const worker = createCostWorker();
-  
-  // Aguarda o worker estar pronto
-  await worker.waitUntilReady();
-  
-  console.log("Worker de custos iniciado com sucesso");
-  
-  return worker;
+	console.log("Iniciando worker de processamento de custos...");
+
+	const worker = createCostWorker();
+
+	// Aguarda o worker estar pronto
+	await worker.waitUntilReady();
+
+	console.log("Worker de custos iniciado com sucesso");
+
+	return worker;
 }
 
 /**
  * Função para parar o worker gracefully
  */
 export async function stopCostWorker(worker: Worker): Promise<void> {
-  console.log("Parando worker de custos...");
-  
-  await worker.close();
-  
-  console.log("Worker de custos parado");
+	console.log("Parando worker de custos...");
+
+	await worker.close();
+
+	console.log("Worker de custos parado");
 }
 
 /**
  * Run quality evaluation job
  */
 async function runQualityEvaluationJob(data: {
-  agent: AgentConfig;
-  userId: string;
-  sampleSize?: number;
+	agent: AgentConfig;
+	userId: string;
+	sampleSize?: number;
 }): Promise<void> {
-  try {
-    log.info("Starting quality evaluation job", {
-      userId: data.userId,
-      sampleSize: data.sampleSize
-    });
+	try {
+		log.info("Starting quality evaluation job", {
+			userId: data.userId,
+			sampleSize: data.sampleSize,
+		});
 
-    const report = await runQualityEvaluation(data.agent, data.userId, {
-      sampleSize: data.sampleSize || 50
-    });
+		const report = await runQualityEvaluation(data.agent, data.userId, {
+			sampleSize: data.sampleSize || 50,
+		});
 
-    log.info("Quality evaluation completed", {
-      userId: data.userId,
-      totalExamples: report.totalExamples,
-      overallAccuracy: report.qualityMetrics.overallClassificationAccuracy,
-      regressionDetected: report.regressionDetected
-    });
+		log.info("Quality evaluation completed", {
+			userId: data.userId,
+			totalExamples: report.totalExamples,
+			overallAccuracy: report.qualityMetrics.overallClassificationAccuracy,
+			regressionDetected: report.regressionDetected,
+		});
 
-    // Alert if regression detected
-    if (report.regressionDetected) {
-      log.warn("Quality regression detected", {
-        userId: data.userId,
-        recommendations: report.recommendations
-      });
-    }
-  } catch (error) {
-    log.error("Quality evaluation job failed", {
-      userId: data.userId,
-      error: error instanceof Error ? error.message : String(error)
-    });
-    throw error;
-  }
+		// Alert if regression detected
+		if (report.regressionDetected) {
+			log.warn("Quality regression detected", {
+				userId: data.userId,
+				recommendations: report.recommendations,
+			});
+		}
+	} catch (error) {
+		log.error("Quality evaluation job failed", {
+			userId: data.userId,
+			error: error instanceof Error ? error.message : String(error),
+		});
+		throw error;
+	}
 }
 
 /**
  * Generate cost analytics report
  */
 async function generateCostAnalyticsReport(data: {
-  userId: string;
-  timeRange: { start: string; end: string };
+	userId: string;
+	timeRange: { start: string; end: string };
 }): Promise<void> {
-  try {
-    const costTracker = createRequestCostTracker();
-    
-    const analytics = await costTracker.getCostAnalytics(data.userId, {
-      start: new Date(data.timeRange.start),
-      end: new Date(data.timeRange.end)
-    });
+	try {
+		const costTracker = createRequestCostTracker();
 
-    log.info("Cost analytics generated", {
-      userId: data.userId,
-      totalCost: analytics.totalCost,
-      requestCount: analytics.requestCount,
-      averageCostPerRequest: analytics.averageCostPerRequest
-    });
+		const analytics = await costTracker.getCostAnalytics(data.userId, {
+			start: new Date(data.timeRange.start),
+			end: new Date(data.timeRange.end),
+		});
 
-    // Store analytics in Redis for dashboard access
-    const redis = getRedisInstance();
-    const cacheKey = `cost:analytics:${data.userId}:${Date.now()}`;
-    await redis.setex(cacheKey, 3600, JSON.stringify(analytics)); // 1h TTL
+		log.info("Cost analytics generated", {
+			userId: data.userId,
+			totalCost: analytics.totalCost,
+			requestCount: analytics.requestCount,
+			averageCostPerRequest: analytics.averageCostPerRequest,
+		});
 
-  } catch (error) {
-    log.error("Cost analytics job failed", {
-      userId: data.userId,
-      error: error instanceof Error ? error.message : String(error)
-    });
-    throw error;
-  }
+		// Store analytics in Redis for dashboard access
+		const redis = getRedisInstance();
+		const cacheKey = `cost:analytics:${data.userId}:${Date.now()}`;
+		await redis.setex(cacheKey, 3600, JSON.stringify(analytics)); // 1h TTL
+	} catch (error) {
+		log.error("Cost analytics job failed", {
+			userId: data.userId,
+			error: error instanceof Error ? error.message : String(error),
+		});
+		throw error;
+	}
 }
 
 /**
  * Perform budget check and alerts
  */
 async function performBudgetCheck(data: {
-  userId: string;
-  dailyBudget: number;
-  monthlyBudget: number;
+	userId: string;
+	dailyBudget: number;
+	monthlyBudget: number;
 }): Promise<void> {
-  try {
-    const today = new Date();
-    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+	try {
+		const today = new Date();
+		const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+		const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
-    // Get daily usage
-    const dailyUsage = await prisma.costEvent.aggregate({
-      where: {
-        userId: data.userId,
-        ts: { gte: startOfDay },
-        status: 'PRICED'
-      },
-      _sum: { cost: true }
-    });
+		// Get daily usage
+		const dailyUsage = await prisma.costEvent.aggregate({
+			where: {
+				userId: data.userId,
+				ts: { gte: startOfDay },
+				status: "PRICED",
+			},
+			_sum: { cost: true },
+		});
 
-    // Get monthly usage
-    const monthlyUsage = await prisma.costEvent.aggregate({
-      where: {
-        userId: data.userId,
-        ts: { gte: startOfMonth },
-        status: 'PRICED'
-      },
-      _sum: { cost: true }
-    });
+		// Get monthly usage
+		const monthlyUsage = await prisma.costEvent.aggregate({
+			where: {
+				userId: data.userId,
+				ts: { gte: startOfMonth },
+				status: "PRICED",
+			},
+			_sum: { cost: true },
+		});
 
-    const dailyUsed = Number(dailyUsage._sum.cost || 0);
-    const monthlyUsed = Number(monthlyUsage._sum.cost || 0);
+		const dailyUsed = Number(dailyUsage._sum.cost || 0);
+		const monthlyUsed = Number(monthlyUsage._sum.cost || 0);
 
-    const dailyPercent = (dailyUsed / data.dailyBudget) * 100;
-    const monthlyPercent = (monthlyUsed / data.monthlyBudget) * 100;
+		const dailyPercent = (dailyUsed / data.dailyBudget) * 100;
+		const monthlyPercent = (monthlyUsed / data.monthlyBudget) * 100;
 
-    log.info("Budget check completed", {
-      userId: data.userId,
-      dailyUsed,
-      dailyBudget: data.dailyBudget,
-      dailyPercent,
-      monthlyUsed,
-      monthlyBudget: data.monthlyBudget,
-      monthlyPercent
-    });
+		log.info("Budget check completed", {
+			userId: data.userId,
+			dailyUsed,
+			dailyBudget: data.dailyBudget,
+			dailyPercent,
+			monthlyUsed,
+			monthlyBudget: data.monthlyBudget,
+			monthlyPercent,
+		});
 
-    // Alert if over 80% of budget
-    if (dailyPercent >= 80) {
-      log.warn("Daily budget alert", {
-        userId: data.userId,
-        usagePercent: dailyPercent,
-        used: dailyUsed,
-        budget: data.dailyBudget
-      });
-    }
+		// Alert if over 80% of budget
+		if (dailyPercent >= 80) {
+			log.warn("Daily budget alert", {
+				userId: data.userId,
+				usagePercent: dailyPercent,
+				used: dailyUsed,
+				budget: data.dailyBudget,
+			});
+		}
 
-    if (monthlyPercent >= 80) {
-      log.warn("Monthly budget alert", {
-        userId: data.userId,
-        usagePercent: monthlyPercent,
-        used: monthlyUsed,
-        budget: data.monthlyBudget
-      });
-    }
-
-  } catch (error) {
-    log.error("Budget check job failed", {
-      userId: data.userId,
-      error: error instanceof Error ? error.message : String(error)
-    });
-    throw error;
-  }
+		if (monthlyPercent >= 80) {
+			log.warn("Monthly budget alert", {
+				userId: data.userId,
+				usagePercent: monthlyPercent,
+				used: monthlyUsed,
+				budget: data.monthlyBudget,
+			});
+		}
+	} catch (error) {
+		log.error("Budget check job failed", {
+			userId: data.userId,
+			error: error instanceof Error ? error.message : String(error),
+		});
+		throw error;
+	}
 }

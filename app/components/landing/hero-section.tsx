@@ -11,14 +11,14 @@ export function HeroSection() {
 	const [videoError, setVideoError] = useState(false);
 
 	const toggleVideo = () => {
-		const video = document.getElementById('hero-video') as HTMLVideoElement;
+		const video = document.getElementById("hero-video") as HTMLVideoElement;
 		if (video && !videoError) {
 			if (isVideoPlaying) {
 				video.pause();
 				setIsVideoPlaying(false);
 			} else {
 				video.play().catch((error) => {
-					console.error('Erro ao reproduzir vídeo:', error);
+					console.error("Erro ao reproduzir vídeo:", error);
 					setVideoError(true);
 				});
 				setIsVideoPlaying(true);
@@ -27,7 +27,7 @@ export function HeroSection() {
 	};
 
 	const toggleVideoMute = () => {
-		const video = document.getElementById('hero-video') as HTMLVideoElement;
+		const video = document.getElementById("hero-video") as HTMLVideoElement;
 		if (video) {
 			video.muted = !isVideoMuted;
 			setIsVideoMuted(!isVideoMuted);
@@ -40,13 +40,7 @@ export function HeroSection() {
 				<div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
 					<div className="text-center lg:text-left">
 						<div className="flex items-center justify-center lg:justify-start mb-6">
-							<img
-								src="/01%20WitdeT.png"
-								alt="Socialwise Chatwit Logo"
-								width={80}
-								height={80}
-								className="mr-4"
-							/>
+							<img src="/01%20WitdeT.png" alt="Socialwise Chatwit Logo" width={80} height={80} className="mr-4" />
 							<h1 className="text-4xl md:text-5xl lg:text-6xl font-bold">
 								<span className="bg-gradient-to-r from-primary via-blue-600 to-purple-600 text-transparent bg-clip-text">
 									Socialwise Chatwit
@@ -57,37 +51,20 @@ export function HeroSection() {
 							Plataforma Completa de Atendimento com IA
 						</p>
 						<p className="text-lg mb-8 text-gray-600 dark:text-gray-400">
-							Especializados em <strong>automação de redes sociais</strong> e <strong>apoio jurídico para advogados</strong>. 
-							Transforme seguidores em clientes com inteligência artificial avançada.
+							Especializados em <strong>automação de redes sociais</strong> e{" "}
+							<strong>apoio jurídico para advogados</strong>. Transforme seguidores em clientes com inteligência
+							artificial avançada.
 						</p>
-						
+
 						{/* AI Models Integration */}
 						<div className="flex items-center justify-center lg:justify-start mb-8 space-x-4">
 							<div className="flex items-center space-x-2">
-								<img
-									src="/gpt-logo.png"
-									alt="OpenAI GPT"
-									width={32}
-									height={32}
-									className="dark:hidden"
-								/>
-								<img
-									src="/gpt-dark-logo.png"
-									alt="OpenAI GPT"
-									width={32}
-									height={32}
-									className="hidden dark:block"
-								/>
+								<img src="/gpt-logo.png" alt="OpenAI GPT" width={32} height={32} className="dark:hidden" />
+								<img src="/gpt-dark-logo.png" alt="OpenAI GPT" width={32} height={32} className="hidden dark:block" />
 								<span className="text-sm text-gray-600 dark:text-gray-400">GPT-4</span>
 							</div>
 							<div className="flex items-center space-x-2">
-								<img
-									src="/gemine-logo.png"
-									alt="Google Gemini"
-									width={32}
-									height={32}
-									className="dark:hidden"
-								/>
+								<img src="/gemine-logo.png" alt="Google Gemini" width={32} height={32} className="dark:hidden" />
 								<img
 									src="/gemine-dack-logo.png"
 									alt="Google Gemini"
@@ -102,7 +79,7 @@ export function HeroSection() {
 								<span className="text-sm text-gray-600 dark:text-gray-400">Claude</span>
 							</div>
 						</div>
-						
+
 						<div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
 							<Link
 								href="/auth/login"
@@ -118,26 +95,25 @@ export function HeroSection() {
 								Ver Demonstração
 							</Link>
 						</div>
-						
+
 						<div className="mt-8 flex items-center justify-center lg:justify-start">
 							<div className="flex -space-x-2">
 								{[1, 2, 3, 4, 5].map((i) => (
-									<div key={i} className="w-12 h-12 rounded-full border-2 border-white dark:border-gray-800 bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center">
+									<div
+										key={i}
+										className="w-12 h-12 rounded-full border-2 border-white dark:border-gray-800 bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center"
+									>
 										<Star className="h-6 w-6 text-white" />
 									</div>
 								))}
 							</div>
 							<div className="ml-4">
-								<p className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-									+2.500 profissionais ativos
-								</p>
-								<p className="text-xs text-gray-600 dark:text-gray-400">
-									Advogados, influencers e empresas
-								</p>
+								<p className="text-sm font-semibold text-gray-800 dark:text-gray-200">+2.500 profissionais ativos</p>
+								<p className="text-xs text-gray-600 dark:text-gray-400">Advogados, influencers e empresas</p>
 							</div>
 						</div>
 					</div>
-					
+
 					{/* Video Section */}
 					<div className="relative">
 						<div className="relative z-10 mx-auto lg:ml-auto lg:mr-0 max-w-lg">
@@ -153,17 +129,17 @@ export function HeroSection() {
 											loop
 											playsInline
 											onLoadedData={() => {
-												console.log('Video loaded successfully');
+												console.log("Video loaded successfully");
 												setVideoError(false);
 											}}
-											onLoadStart={() => console.log('Video loading started')}
-											onCanPlay={() => console.log('Video can play')}
+											onLoadStart={() => console.log("Video loading started")}
+											onCanPlay={() => console.log("Video can play")}
 											onError={(e) => {
-												console.error('Video error:', e);
-												console.error('Video error details:', {
+												console.error("Video error:", e);
+												console.error("Video error details:", {
 													error: e,
-													src: '/Vídeo_IA_ChatWit_Social_Prompts.mp4',
-													videoElement: e.target
+													src: "/Vídeo_IA_ChatWit_Social_Prompts.mp4",
+													videoElement: e.target,
 												});
 												setVideoError(true);
 											}}
@@ -185,7 +161,7 @@ export function HeroSection() {
 											</div>
 										</div>
 									)}
-									
+
 									{/* Video Controls */}
 									<div className="absolute bottom-4 left-4 right-4 flex items-center justify-between bg-black/70 backdrop-blur-sm rounded-lg p-3">
 										{!videoError ? (
@@ -195,13 +171,10 @@ export function HeroSection() {
 													className="flex items-center space-x-2 text-white hover:text-blue-400 transition-colors"
 												>
 													{isVideoPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
-													<span className="text-sm font-medium">{isVideoPlaying ? 'Pausar' : 'Assistir Demo'}</span>
+													<span className="text-sm font-medium">{isVideoPlaying ? "Pausar" : "Assistir Demo"}</span>
 												</button>
-												
-												<button
-													onClick={toggleVideoMute}
-													className="text-white hover:text-blue-400 transition-colors"
-												>
+
+												<button onClick={toggleVideoMute} className="text-white hover:text-blue-400 transition-colors">
 													{isVideoMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
 												</button>
 											</>

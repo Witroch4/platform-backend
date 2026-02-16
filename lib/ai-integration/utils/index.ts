@@ -11,19 +11,19 @@ export * from "./synthetic-probes";
 export * from "./payload-sampling";
 export * from "./queue-lag-monitor";
 // Export text normalization functions explicitly to avoid conflicts
-export { 
-  collapseWhitespace,
-  normalizeAccents,
-  applyTitleCase,
-  smartTruncate,
-  isValidHttpsUrl,
-  isDomainAllowed,
-  normalizeText,
-  makeUniqueTitles,
-  removeDuplicateTitles,
-  // Prefix text normalization versions to avoid conflicts
-  removeInvisibleCharacters as removeInvisibleCharsBasic,
-  limitConsecutiveEmojis as limitConsecutiveEmojisBasic
+export {
+	collapseWhitespace,
+	normalizeAccents,
+	applyTitleCase,
+	smartTruncate,
+	isValidHttpsUrl,
+	isDomainAllowed,
+	normalizeText,
+	makeUniqueTitles,
+	removeDuplicateTitles,
+	// Prefix text normalization versions to avoid conflicts
+	removeInvisibleCharacters as removeInvisibleCharsBasic,
+	limitConsecutiveEmojis as limitConsecutiveEmojisBasic,
 } from "./text-normalization";
 
 export * from "./domain-validation";
@@ -33,19 +33,19 @@ export * from "./locale-normalization";
 
 // Export emoji normalization functions explicitly
 export {
-  EMOJI_CATEGORIES,
-  normalizeWhitespace,
-  countEmojis,
-  extractEmojis,
-  removeEmojis,
-  replaceEmojisWithText,
-  validateEmojiUsage,
-  normalizeForChannelUX,
-  getEmojiStats,
-  suggestEmojiReplacements,
-  // Use advanced versions as default
-  removeInvisibleCharacters,
-  limitConsecutiveEmojis
+	EMOJI_CATEGORIES,
+	normalizeWhitespace,
+	countEmojis,
+	extractEmojis,
+	removeEmojis,
+	replaceEmojisWithText,
+	validateEmojiUsage,
+	normalizeForChannelUX,
+	getEmojiStats,
+	suggestEmojiReplacements,
+	// Use advanced versions as default
+	removeInvisibleCharacters,
+	limitConsecutiveEmojis,
 } from "./emoji-normalization";
 // export * from './hmac-validator';
 // export * from './rate-limiter';

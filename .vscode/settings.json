@@ -1,8 +1,6 @@
 {
-    "cSpell.enabled": false,
-    "typescript.autoClosingTags": false,
-    "chatgpt.config": {
-        
-    },
-    "kiroAgent.configureMCP": "Disabled"
+	"cSpell.enabled": false,
+	"typescript.autoClosingTags": false,
+	"chatgpt.config": {},
+	"kiroAgent.configureMCP": "Disabled"
 }

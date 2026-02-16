@@ -4,161 +4,168 @@ import AnimatedMessage from "./AnimatedMessage";
 import { FileIcon, Sparkles, User } from "lucide-react";
 
 interface MessagesListProps {
-  messages: any[];
-  isLoading: boolean;
-  error: string | null;
-  containerRef: React.RefObject<HTMLDivElement | null>;
-  endRef: React.RefObject<HTMLDivElement | null>;
-  onImageReference?: (imageUrl: string, prompt?: string, openaiFileId?: string) => void;
+	messages: any[];
+	isLoading: boolean;
+	error: string | null;
+	containerRef: React.RefObject<HTMLDivElement | null>;
+	endRef: React.RefObject<HTMLDivElement | null>;
+	onImageReference?: (imageUrl: string, prompt?: string, openaiFileId?: string) => void;
 }
 
 const MessagesList = React.memo(function MessagesList({
-  messages,
-  isLoading,
-  error,
-  containerRef,
-  endRef,
-  onImageReference,
+	messages,
+	isLoading,
+	error,
+	containerRef,
+	endRef,
+	onImageReference,
 }: MessagesListProps) {
-  // Verificar se já temos uma resposta em progresso (stream começou) - memoizado
-  const hasResponseInProgress = useMemo(() => {
-    if (messages.length === 0) return false;
-    
-    const lastMessage = messages[messages.length - 1];
-    // Considera stream iniciado se for uma mensagem do assistente e tiver qualquer conteúdo
-    return lastMessage.role === 'assistant' && lastMessage.content !== '';
-  }, [messages]);
-  
-  // Verificar se o streaming está ativo ou se já acabou - memoizado
-  const isStreamActive = useMemo(() => {
-    return isLoading && hasResponseInProgress;
-  }, [isLoading, hasResponseInProgress]);
+	// Verificar se já temos uma resposta em progresso (stream começou) - memoizado
+	const hasResponseInProgress = useMemo(() => {
+		if (messages.length === 0) return false;
 
-  // Scroll function memoizada
-  const scrollToEnd = useCallback(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [endRef]);
+		const lastMessage = messages[messages.length - 1];
+		// Considera stream iniciado se for uma mensagem do assistente e tiver qualquer conteúdo
+		return lastMessage.role === "assistant" && lastMessage.content !== "";
+	}, [messages]);
 
-  // rolar sempre que chegar nova msg ou quando a resposta em stream mudar
-  useEffect(() => {
-    // Usar scrollIntoView com comportamento suave quando novas mensagens chegarem
-    if (messages.length) {
-      scrollToEnd();
-    }
-  }, [messages.length, hasResponseInProgress, scrollToEnd]);
+	// Verificar se o streaming está ativo ou se já acabou - memoizado
+	const isStreamActive = useMemo(() => {
+		return isLoading && hasResponseInProgress;
+	}, [isLoading, hasResponseInProgress]);
 
-  // Conteúdo vazio memoizado
-  const emptyContent = useMemo(() => (
-    <div className="h-full flex flex-col items-center justify-center px-4 text-center">
-      <h1 className="text-4xl font-bold mb-8 text-foreground">ChatwitIA</h1>
-      <p className="text-muted-foreground">Envie uma mensagem para começar.</p>
-    </div>
-  ), []);
+	// Scroll function memoizada
+	const scrollToEnd = useCallback(() => {
+		endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+	}, [endRef]);
 
-  if (!messages.length) return emptyContent;
+	// rolar sempre que chegar nova msg ou quando a resposta em stream mudar
+	useEffect(() => {
+		// Usar scrollIntoView com comportamento suave quando novas mensagens chegarem
+		if (messages.length) {
+			scrollToEnd();
+		}
+	}, [messages.length, hasResponseInProgress, scrollToEnd]);
 
-  return (
-    <section
-      ref={containerRef}
-      className="flex-1 overflow-y-auto p-4 space-y-5"
-    >
-      <div className="max-w-4xl mx-auto w-full pt-8 px-4">
-        {messages.map((m, i) => {
-          if (!m || m.role === "system") return null;
-          const isUser = m.role === "user";
-          
-          // 🔧 CORREÇÃO: Detectar apenas PDFs, não imagens
-          const hasPdfReference = typeof m.content === "string" && 
-            /\[([^\]]*\.pdf[^\]]*)\]\(file_id:([^)]+)\)/i.test(m.content);
-          
-          return (
-            <div key={i} className={`mb-6 flex ${isUser ? "justify-end" : "justify-start"}`}>
-              <AnimatedMessage isAssistant={!isUser}>
-                <div className={`
+	// Conteúdo vazio memoizado
+	const emptyContent = useMemo(
+		() => (
+			<div className="h-full flex flex-col items-center justify-center px-4 text-center">
+				<h1 className="text-4xl font-bold mb-8 text-foreground">ChatwitIA</h1>
+				<p className="text-muted-foreground">Envie uma mensagem para começar.</p>
+			</div>
+		),
+		[],
+	);
+
+	if (!messages.length) return emptyContent;
+
+	return (
+		<section ref={containerRef} className="flex-1 overflow-y-auto p-4 space-y-5">
+			<div className="max-w-4xl mx-auto w-full pt-8 px-4">
+				{messages.map((m, i) => {
+					if (!m || m.role === "system") return null;
+					const isUser = m.role === "user";
+
+					// 🔧 CORREÇÃO: Detectar apenas PDFs, não imagens
+					const hasPdfReference =
+						typeof m.content === "string" && /\[([^\]]*\.pdf[^\]]*)\]\(file_id:([^)]+)\)/i.test(m.content);
+
+					return (
+						<div key={i} className={`mb-6 flex ${isUser ? "justify-end" : "justify-start"}`}>
+							<AnimatedMessage isAssistant={!isUser}>
+								<div
+									className={`
                   w-full max-w-[85%] min-w-[200px] relative
                   ${isUser ? "bg-muted/50 rounded-lg px-4 py-3" : ""}
-                `}>
-                  {/* Ícone da IA estilo Gemini */}
-                  {!isUser && (
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                        <Sparkles className="w-4 h-4 text-white" />
-                      </div>
-                      <span className="text-sm font-medium text-muted-foreground">ChatwitIA</span>
-                    </div>
-                  )}
-                  
-                  {/* Ícone do usuário */}
-                  {isUser && (
-                    <div className="flex items-center gap-2 mb-3 justify-end">
-                      <span className="text-sm font-medium text-muted-foreground">Você</span>
-                      <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-blue-500 rounded-full flex items-center justify-center">
-                        <User className="w-4 h-4 text-white" />
-                      </div>
-                    </div>
-                  )}
-                  <div className={isUser ? "" : "pl-10"}>
-                    {typeof m.content === "string" ? (
-                      isUser ? (
-                        // 🔧 MENSAGENS DO USUÁRIO: Texto simples sem formatação markdown
-                        <div className="w-full">
-                          {hasPdfReference && (
-                            <div className="flex items-center gap-2 p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md mb-2">
-                              <FileIcon size={16} className="text-blue-500" />
-                              <span className="text-xs text-blue-700 dark:text-blue-300">Arquivo PDF anexado</span>
-                            </div>
-                          )}
-                          {/* 🔧 NOVO: Renderizar mensagem do usuário como texto simples */}
-                          <div className="text-foreground whitespace-pre-wrap break-words">
-                            {hasPdfReference ? 
-                              m.content.replace(/\[([^\]]*\.pdf[^\]]*)\]\(file_id:([^)]+)\)/gi, "**[ARQUIVO: $1]**") :
-                              m.content
-                            }
-                          </div>
-                        </div>
-                      ) : (
-                        // 🔧 MENSAGENS DO ASSISTENTE: Formatação markdown completa
-                        <div className="w-full">
-                          <MessageContent 
-                            content={m.content} 
-                            isStreaming={isLoading && i === messages.length - 1 && m.role === 'assistant'} 
-                            onImageReference={onImageReference}
-                          />
-                        </div>
-                      )
-                    ) : (
-                      <p className="text-red-500">Formato de conteúdo não suportado</p>
-                    )}
-                  </div>
-                </div>
-              </AnimatedMessage>
-            </div>
-          );
-        })}
+                `}
+								>
+									{/* Ícone da IA estilo Gemini */}
+									{!isUser && (
+										<div className="flex items-center gap-2 mb-3">
+											<div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+												<Sparkles className="w-4 h-4 text-white" />
+											</div>
+											<span className="text-sm font-medium text-muted-foreground">ChatwitIA</span>
+										</div>
+									)}
 
-        {/* Mostrar animação de carregamento apenas se estiver carregando E não tiver resposta em progresso */}
-        {isLoading && !hasResponseInProgress && (
-          <div className="mb-6 flex justify-start">
-            <div className="loading-message bg-muted/30 border border-border rounded-lg px-5 py-3 flex items-center gap-3">
-              <div className="loading-dots flex space-x-1">
-                <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '600ms' }}></div>
-              </div>
-              <span className="text-foreground font-medium text-sm">Processando sua solicitação</span>
-            </div>
-          </div>
-        )}
-        {error && (
-          <div className="bg-destructive/10 border border-destructive/20 text-destructive p-3 rounded-lg mb-6">
-            <p className="font-semibold">Erro:</p>
-            <p>{error}</p>
-          </div>
-        )}
-        <div ref={endRef} />
-      </div>
-    </section>
-  );
+									{/* Ícone do usuário */}
+									{isUser && (
+										<div className="flex items-center gap-2 mb-3 justify-end">
+											<span className="text-sm font-medium text-muted-foreground">Você</span>
+											<div className="w-8 h-8 bg-gradient-to-r from-green-500 to-blue-500 rounded-full flex items-center justify-center">
+												<User className="w-4 h-4 text-white" />
+											</div>
+										</div>
+									)}
+									<div className={isUser ? "" : "pl-10"}>
+										{typeof m.content === "string" ? (
+											isUser ? (
+												// 🔧 MENSAGENS DO USUÁRIO: Texto simples sem formatação markdown
+												<div className="w-full">
+													{hasPdfReference && (
+														<div className="flex items-center gap-2 p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md mb-2">
+															<FileIcon size={16} className="text-blue-500" />
+															<span className="text-xs text-blue-700 dark:text-blue-300">Arquivo PDF anexado</span>
+														</div>
+													)}
+													{/* 🔧 NOVO: Renderizar mensagem do usuário como texto simples */}
+													<div className="text-foreground whitespace-pre-wrap break-words">
+														{hasPdfReference
+															? m.content.replace(/\[([^\]]*\.pdf[^\]]*)\]\(file_id:([^)]+)\)/gi, "**[ARQUIVO: $1]**")
+															: m.content}
+													</div>
+												</div>
+											) : (
+												// 🔧 MENSAGENS DO ASSISTENTE: Formatação markdown completa
+												<div className="w-full">
+													<MessageContent
+														content={m.content}
+														isStreaming={isLoading && i === messages.length - 1 && m.role === "assistant"}
+														onImageReference={onImageReference}
+													/>
+												</div>
+											)
+										) : (
+											<p className="text-red-500">Formato de conteúdo não suportado</p>
+										)}
+									</div>
+								</div>
+							</AnimatedMessage>
+						</div>
+					);
+				})}
+
+				{/* Mostrar animação de carregamento apenas se estiver carregando E não tiver resposta em progresso */}
+				{isLoading && !hasResponseInProgress && (
+					<div className="mb-6 flex justify-start">
+						<div className="loading-message bg-muted/30 border border-border rounded-lg px-5 py-3 flex items-center gap-3">
+							<div className="loading-dots flex space-x-1">
+								<div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }}></div>
+								<div
+									className="w-2 h-2 bg-primary rounded-full animate-bounce"
+									style={{ animationDelay: "300ms" }}
+								></div>
+								<div
+									className="w-2 h-2 bg-primary rounded-full animate-bounce"
+									style={{ animationDelay: "600ms" }}
+								></div>
+							</div>
+							<span className="text-foreground font-medium text-sm">Processando sua solicitação</span>
+						</div>
+					</div>
+				)}
+				{error && (
+					<div className="bg-destructive/10 border border-destructive/20 text-destructive p-3 rounded-lg mb-6">
+						<p className="font-semibold">Erro:</p>
+						<p>{error}</p>
+					</div>
+				)}
+				<div ref={endRef} />
+			</div>
+		</section>
+	);
 });
 
 export default MessagesList;

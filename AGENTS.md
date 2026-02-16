@@ -3,7 +3,7 @@
 > **Universal Agent Instructions** — Compatible with Claude Code, Cursor, Copilot, Codex, Gemini CLI, and other AI coding agents.
 >
 > Backup completo: `CLAUDE.md.bak`
-
+NUNA RODE prisma db pull
 ## Regras Críticas
 
 1. Já está no root do projeto
@@ -17,6 +17,7 @@
 9. Features sem controle global — acesso via `admin/features`
 10. Front: linguagem clara, sem termos técnicos
 11. se precisa que ochatwit/chatwoot modifique alguma coisa colque em /home/wital/chatwitv4.10/chatwitdocs/chatwit-contrato-async-30s.md (a equipe deles vai verificar)
+12. criou migração o prisma nao atualizou deleta node_modules depois instala com pnpm que ele reconhece e NUNCA RODE prisma db pull
 
 ## Migrations (OBRIGATÓRIO)
 
@@ -30,6 +31,17 @@ pnpm exec prisma migrate deploy                 # PROD: aplica migrations penden
 ```
 
 Committar `prisma/migrations/` JUNTO com `schema.prisma`.
+
+### Drift no banco DEV
+
+Se `migrate dev` reportar drift (ex: índices aplicados manualmente fora do migration history), é aceitável resetar o banco de desenvolvimento:
+
+```bash
+pnpm exec prisma migrate reset --force          # DEV ONLY: apaga tudo e reaplica todas as migrations
+pnpm exec prisma migrate dev --name descricao   # Em seguida, cria a nova migration
+```
+
+**NUNCA usar `migrate reset` em produção.** Em prod, resolver drift manualmente ou com `prisma migrate resolve`.
 
 ## Stack
 

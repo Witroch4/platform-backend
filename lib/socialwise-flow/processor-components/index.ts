@@ -4,16 +4,16 @@
  */
 
 // Utility functions
-export * from './utils';
+export * from "./utils";
 
 // Button reaction processing
-export * from './button-reactions';
+export * from "./button-reactions";
 
 // Assistant configuration
-export * from './assistant-config';
+export * from "./assistant-config";
 
 // Processing band handlers
-export * from './band-handlers';
+export * from "./band-handlers";
 
 // Reaction metadata application
-export * from './reaction-metadata';
+export * from "./reaction-metadata";

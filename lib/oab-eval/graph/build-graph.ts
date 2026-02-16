@@ -7,31 +7,27 @@ import { scorerNode } from "./scorer";
 import { reporterNode } from "./reporter";
 
 export function buildEvaluationGraph() {
-  const graph = new (StateGraph as any)({
-    stateSchema: GraphStateSchema,
-  });
+	const graph = new (StateGraph as any)({
+		stateSchema: GraphStateSchema,
+	});
 
-  graph.addNode("Supervisor", supervisorNode as any);
-  graph.addNode("Matcher", matcherNode as any);
-  graph.addNode("Scorer", scorerNode as any);
-  graph.addNode("Reporter", reporterNode as any);
+	graph.addNode("Supervisor", supervisorNode as any);
+	graph.addNode("Matcher", matcherNode as any);
+	graph.addNode("Scorer", scorerNode as any);
+	graph.addNode("Reporter", reporterNode as any);
 
-  graph.setEntryPoint("Supervisor");
+	graph.setEntryPoint("Supervisor");
 
-  graph.addConditionalEdges(
-    "Supervisor",
-    (state: GraphState) => state.nextActor,
-    {
-      Matcher: "Matcher",
-      Scorer: "Scorer",
-      Reporter: "Reporter",
-      END: "__end__",
-    },
-  );
+	graph.addConditionalEdges("Supervisor", (state: GraphState) => state.nextActor, {
+		Matcher: "Matcher",
+		Scorer: "Scorer",
+		Reporter: "Reporter",
+		END: "__end__",
+	});
 
-  graph.addEdge("Matcher", "Supervisor");
-  graph.addEdge("Scorer", "Supervisor");
-  graph.addEdge("Reporter", "__end__");
+	graph.addEdge("Matcher", "Supervisor");
+	graph.addEdge("Scorer", "Supervisor");
+	graph.addEdge("Reporter", "__end__");
 
-  return graph.compile();
+	return graph.compile();
 }

@@ -43,15 +43,15 @@ export const resetPassword = async (values: z.infer<typeof ResetPasswordSchema>)
  * @returns {Promise<{error?: string, success?: string}>} The result of the email sending request.
  */
 export const sendResetPasswordEmail = async (email: string, token: string) => {
-	const { NEXT_PUBLIC_URL, RESEND_EMAIL_FROM, RESET_PASSWORD_SUBJECT, RESET_PASSWORD_URL } = process.env;
+	const { NEXT_PUBLIC_URL, MAILER_SENDER_EMAIL, RESET_PASSWORD_SUBJECT, RESET_PASSWORD_URL } = process.env;
 
-	if (!NEXT_PUBLIC_URL || !RESEND_EMAIL_FROM || !RESET_PASSWORD_SUBJECT || !RESET_PASSWORD_URL) {
+	if (!NEXT_PUBLIC_URL || !MAILER_SENDER_EMAIL || !RESET_PASSWORD_SUBJECT || !RESET_PASSWORD_URL) {
 		return { error: "Configuração de ambiente insuficiente para envio de e-mail." };
 	}
 
 	const resetUrl = `${NEXT_PUBLIC_URL}${RESET_PASSWORD_URL}?token=${token}`;
 	const { data, error } = await mail().emails.send({
-		from: RESEND_EMAIL_FROM,
+		from: MAILER_SENDER_EMAIL,
 		to: email,
 		subject: RESET_PASSWORD_SUBJECT,
 		html: `<p>Clique <a href="${resetUrl}">aqui</a> para modificar sua senha.</p>`,

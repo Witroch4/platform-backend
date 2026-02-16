@@ -3,36 +3,34 @@
 import { openaiService, AgentConfig, IntentCandidate, WarmupButtonsResponse } from "@/services/openai";
 
 export interface ClassificationResult {
-  band: 'HARD' | 'SOFT' | 'ROUTER';
-  score: number;
-  candidates: IntentCandidate[];
-  strategy: 'direct_map' | 'warmup_buttons' | 'domain_topics' | 'router_llm';
+	band: "HARD" | "SOFT" | "ROUTER";
+	score: number;
+	candidates: IntentCandidate[];
+	strategy: "direct_map" | "warmup_buttons" | "domain_topics" | "router_llm";
 }
 
 export interface HardBandResult {
-  type: 'direct_map';
-  intent_slug: string;
-  microcopy?: {
-    text: string;
-    buttons?: Array<{
-      title: string;
-      payload: string;
-    }>;
-  };
-  response_time_ms: number;
+	type: "direct_map";
+	intent_slug: string;
+	microcopy?: {
+		text: string;
+		buttons?: Array<{
+			title: string;
+			payload: string;
+		}>;
+	};
+	response_time_ms: number;
 }
 
 export interface SoftBandResult {
-  type: 'warmup_buttons';
-  response_text: string;
-  buttons: Array<{
-    title: string;
-    payload: string;
-  }>;
-  response_time_ms: number;
+	type: "warmup_buttons";
+	response_text: string;
+	buttons: Array<{
+		title: string;
+		payload: string;
+	}>;
+	response_time_ms: number;
 }
-
-
 
 export type BandProcessingResult = HardBandResult | SoftBandResult;
 
@@ -42,71 +40,67 @@ export type BandProcessingResult = HardBandResult | SoftBandResult;
  * Target: sub-120ms response time for direct mappings
  */
 export class HardBandProcessor {
-  private agent: AgentConfig;
+	private agent: AgentConfig;
 
-  constructor(agent: AgentConfig) {
-    this.agent = agent;
-  }
+	constructor(agent: AgentConfig) {
+		this.agent = agent;
+	}
 
-  /**
-   * Process HARD band classification with direct mapping
-   * @param userText Original user message
-   * @param topCandidate Highest scoring intent candidate
-   * @param enableMicrocopy Whether to enhance with LLM microcopy (non-blocking)
-   * @returns Direct mapping result with optional microcopy
-   */
-  async process(
-    userText: string,
-    topCandidate: IntentCandidate,
-    enableMicrocopy = true
-  ): Promise<HardBandResult> {
-    const startTime = Date.now();
+	/**
+	 * Process HARD band classification with direct mapping
+	 * @param userText Original user message
+	 * @param topCandidate Highest scoring intent candidate
+	 * @param enableMicrocopy Whether to enhance with LLM microcopy (non-blocking)
+	 * @returns Direct mapping result with optional microcopy
+	 */
+	async process(userText: string, topCandidate: IntentCandidate, enableMicrocopy = true): Promise<HardBandResult> {
+		const startTime = Date.now();
 
-    console.log(`🎯 HARD band processing for intent: ${topCandidate.slug} (score: ${topCandidate.score})`);
+		console.log(`🎯 HARD band processing for intent: ${topCandidate.slug} (score: ${topCandidate.score})`);
 
-    // Direct mapping - immediate response for p95 optimization
-    const directResult: HardBandResult = {
-      type: 'direct_map',
-      intent_slug: topCandidate.slug,
-      response_time_ms: Date.now() - startTime
-    };
+		// Direct mapping - immediate response for p95 optimization
+		const directResult: HardBandResult = {
+			type: "direct_map",
+			intent_slug: topCandidate.slug,
+			response_time_ms: Date.now() - startTime,
+		};
 
-    // Optional non-blocking microcopy enhancement
-    if (enableMicrocopy) {
-      // Fire and forget - don't block the 200 response
-      this.enhanceWithMicrocopy(userText, topCandidate)
-        .then(microcopy => {
-          if (microcopy) {
-            directResult.microcopy = microcopy;
-            console.log(`✨ Microcopy enhanced for ${topCandidate.slug}: "${microcopy.text.substring(0, 50)}..."`);
-          }
-        })
-        .catch(error => {
-          console.warn(`⚠️ Microcopy enhancement failed for ${topCandidate.slug}:`, error.message);
-        });
-    }
+		// Optional non-blocking microcopy enhancement
+		if (enableMicrocopy) {
+			// Fire and forget - don't block the 200 response
+			this.enhanceWithMicrocopy(userText, topCandidate)
+				.then((microcopy) => {
+					if (microcopy) {
+						directResult.microcopy = microcopy;
+						console.log(`✨ Microcopy enhanced for ${topCandidate.slug}: "${microcopy.text.substring(0, 50)}..."`);
+					}
+				})
+				.catch((error) => {
+					console.warn(`⚠️ Microcopy enhancement failed for ${topCandidate.slug}:`, error.message);
+				});
+		}
 
-    const totalTime = Date.now() - startTime;
-    console.log(`⚡ HARD band completed in ${totalTime}ms (target: <120ms)`);
+		const totalTime = Date.now() - startTime;
+		console.log(`⚡ HARD band completed in ${totalTime}ms (target: <120ms)`);
 
-    return {
-      ...directResult,
-      response_time_ms: totalTime
-    };
-  }
+		return {
+			...directResult,
+			response_time_ms: totalTime,
+		};
+	}
 
-  /**
-   * Non-blocking microcopy enhancement using structured LLM output
-   * @param userText Original user message
-   * @param intent Intent candidate to enhance
-   * @returns Enhanced microcopy or null if failed
-   */
-  private async enhanceWithMicrocopy(
-    userText: string,
-    intent: IntentCandidate
-  ): Promise<{ text: string; buttons?: Array<{ title: string; payload: string }> } | null> {
-    try {
-      const prompt = `# INSTRUÇÃO
+	/**
+	 * Non-blocking microcopy enhancement using structured LLM output
+	 * @param userText Original user message
+	 * @param intent Intent candidate to enhance
+	 * @returns Enhanced microcopy or null if failed
+	 */
+	private async enhanceWithMicrocopy(
+		userText: string,
+		intent: IntentCandidate,
+	): Promise<{ text: string; buttons?: Array<{ title: string; payload: string }> } | null> {
+		try {
+			const prompt = `# INSTRUÇÃO
 Você é um especialista em UX Writing para chatbots jurídicos.
 Confirme a intenção do usuário com uma resposta personalizada e empática.
 
@@ -134,51 +128,48 @@ Gere uma confirmação no formato JSON com:
   ]
 }`;
 
-      // Use structured output with deadline management
-      const response = await openaiService.createChatCompletion([
-        {
-          role: "user",
-          content: prompt
-        }
-      ], {
-        model: this.agent.model as any,
-        temperature: this.agent.tempCopy || 0.3,
-        max_tokens: 300
-      });
+			// Use structured output with deadline management
+			const response = await openaiService.createChatCompletion(
+				[
+					{
+						role: "user",
+						content: prompt,
+					},
+				],
+				{
+					model: this.agent.model as any,
+					temperature: this.agent.tempCopy || 0.3,
+					max_tokens: 300,
+				},
+			);
 
-      const content = response.choices[0]?.message?.content?.trim();
-      if (!content) return null;
+			const content = response.choices[0]?.message?.content?.trim();
+			if (!content) return null;
 
-      const result = JSON.parse(content);
-      
-      // Validate and clamp the response
-      if (!result.text) return null;
+			const result = JSON.parse(content);
 
-      // Clamp text to 180 characters
-      result.text = result.text.length <= 180 
-        ? result.text 
-        : result.text.slice(0, 180).trim();
+			// Validate and clamp the response
+			if (!result.text) return null;
 
-      // Validate and clamp buttons if present
-      if (result.buttons && Array.isArray(result.buttons)) {
-        result.buttons = result.buttons
-          .slice(0, 2) // Max 2 buttons for HARD band
-          .map((button: any) => ({
-            title: button.title?.length <= 20 
-              ? button.title 
-              : button.title?.slice(0, 20).trim() || "Confirmar",
-            payload: button.payload?.match(/^@[a-z0-9_]+$/) 
-              ? button.payload 
-              : `@${intent.slug}`
-          }));
-      }
+			// Clamp text to 180 characters
+			result.text = result.text.length <= 180 ? result.text : result.text.slice(0, 180).trim();
 
-      return result;
-    } catch (error) {
-      console.error("Erro ao gerar microcopy para HARD band:", error);
-      return null;
-    }
-  }
+			// Validate and clamp buttons if present
+			if (result.buttons && Array.isArray(result.buttons)) {
+				result.buttons = result.buttons
+					.slice(0, 2) // Max 2 buttons for HARD band
+					.map((button: any) => ({
+						title: button.title?.length <= 20 ? button.title : button.title?.slice(0, 20).trim() || "Confirmar",
+						payload: button.payload?.match(/^@[a-z0-9_]+$/) ? button.payload : `@${intent.slug}`,
+					}));
+			}
+
+			return result;
+		} catch (error) {
+			console.error("Erro ao gerar microcopy para HARD band:", error);
+			return null;
+		}
+	}
 }
 
 /**
@@ -187,217 +178,198 @@ Gere uma confirmação no formato JSON com:
  * Target: sub-300ms response time with proper deadline management
  */
 export class SoftBandProcessor {
-  private agent: AgentConfig;
+	private agent: AgentConfig;
 
-  constructor(agent: AgentConfig) {
-    this.agent = agent;
-  }
+	constructor(agent: AgentConfig) {
+		this.agent = agent;
+	}
 
-  /**
-   * Process SOFT band classification with warmup buttons
-   * @param userText Original user message
-   * @param candidates Intent candidates for warmup
-   * @returns Warmup buttons result
-   */
-  async process(
-    userText: string,
-    candidates: IntentCandidate[]
-  ): Promise<SoftBandResult> {
-    const startTime = Date.now();
+	/**
+	 * Process SOFT band classification with warmup buttons
+	 * @param userText Original user message
+	 * @param candidates Intent candidates for warmup
+	 * @returns Warmup buttons result
+	 */
+	async process(userText: string, candidates: IntentCandidate[]): Promise<SoftBandResult> {
+		const startTime = Date.now();
 
-    console.log(`🔥 SOFT band processing with ${candidates.length} candidates`);
+		console.log(`🔥 SOFT band processing with ${candidates.length} candidates`);
 
-    try {
-      // Step 1: Generate short titles for candidates (batch operation)
-      const shortTitles = await this.generateShortTitles(candidates);
-      
-      // Step 2: Generate warmup buttons with contextual introduction
-      const candidatesWithTitles = candidates.map((candidate, index) => ({
-        ...candidate,
-        shortTitle: shortTitles?.[index] || candidate.name || candidate.slug
-      }));
+		try {
+			// Step 1: Generate short titles for candidates (batch operation)
+			const shortTitles = await this.generateShortTitles(candidates);
 
-      const warmupResult = await openaiService.generateWarmupButtons(
-        userText,
-        candidatesWithTitles,
-        this.agent
-      );
+			// Step 2: Generate warmup buttons with contextual introduction
+			const candidatesWithTitles = candidates.map((candidate, index) => ({
+				...candidate,
+				shortTitle: shortTitles?.[index] || candidate.name || candidate.slug,
+			}));
 
-      if (!warmupResult) {
-        throw new Error("Failed to generate warmup buttons");
-      }
+			const warmupResult = await openaiService.generateWarmupButtons(userText, candidatesWithTitles, this.agent);
 
-      const totalTime = Date.now() - startTime;
-      console.log(`🔥 SOFT band completed in ${totalTime}ms (target: <300ms)`);
+			if (!warmupResult) {
+				throw new Error("Failed to generate warmup buttons");
+			}
 
-      // Additional validation and clamping (defense in depth)
-      const validatedButtons = warmupResult.buttons
-        .slice(0, 3) // Ensure max 3 buttons
-        .map(button => ({
-          title: button.title.length <= 20 
-            ? button.title 
-            : button.title.slice(0, 20).trim(),
-          payload: button.payload.match(/^@[a-z0-9_]+$/) 
-            ? button.payload 
-            : `@${button.payload.replace(/[^a-z0-9_]/g, '_').toLowerCase()}`
-        }));
+			const totalTime = Date.now() - startTime;
+			console.log(`🔥 SOFT band completed in ${totalTime}ms (target: <300ms)`);
 
-      return {
-        type: 'warmup_buttons',
-        response_text: warmupResult.response_text.length <= 180 
-          ? warmupResult.response_text 
-          : warmupResult.response_text.slice(0, 180).trim(),
-        buttons: validatedButtons,
-        response_time_ms: totalTime
-      };
-    } catch (error) {
-      console.error("Erro no processamento SOFT band:", error);
-      
-      // Fallback to deterministic buttons
-      return this.createFallbackButtons(userText, candidates, Date.now() - startTime);
-    }
-  }
+			// Additional validation and clamping (defense in depth)
+			const validatedButtons = warmupResult.buttons
+				.slice(0, 3) // Ensure max 3 buttons
+				.map((button) => ({
+					title: button.title.length <= 20 ? button.title : button.title.slice(0, 20).trim(),
+					payload: button.payload.match(/^@[a-z0-9_]+$/)
+						? button.payload
+						: `@${button.payload.replace(/[^a-z0-9_]/g, "_").toLowerCase()}`,
+				}));
 
-  /**
-   * Generate short titles for intent candidates in batch
-   * @param candidates Intent candidates
-   * @returns Array of short titles or null if failed
-   */
-  private async generateShortTitles(candidates: IntentCandidate[]): Promise<string[] | null> {
-    try {
-      console.log(`📝 Generating short titles for ${candidates.length} candidates`);
-      
-      const titles = await openaiService.generateShortTitlesBatch(candidates, this.agent);
-      
-      if (titles && titles.length === candidates.length) {
-        console.log(`✅ Generated ${titles.length} short titles successfully`);
-        return titles;
-      }
-      
-      console.warn("⚠️ Short title generation failed or incomplete, using fallback");
-      return null;
-    } catch (error) {
-      console.error("Erro ao gerar títulos curtos:", error);
-      return null;
-    }
-  }
+			return {
+				type: "warmup_buttons",
+				response_text:
+					warmupResult.response_text.length <= 180
+						? warmupResult.response_text
+						: warmupResult.response_text.slice(0, 180).trim(),
+				buttons: validatedButtons,
+				response_time_ms: totalTime,
+			};
+		} catch (error) {
+			console.error("Erro no processamento SOFT band:", error);
 
-  /**
-   * Create fallback buttons when LLM generation fails
-   * @param userText Original user message
-   * @param candidates Intent candidates
-   * @param elapsedTime Time already elapsed
-   * @returns Fallback warmup result
-   */
-  private createFallbackButtons(
-    userText: string,
-    candidates: IntentCandidate[],
-    elapsedTime: number
-  ): SoftBandResult {
-    console.log("🔄 Creating fallback buttons for SOFT band");
+			// Fallback to deterministic buttons
+			return this.createFallbackButtons(userText, candidates, Date.now() - startTime);
+		}
+	}
 
-    const fallbackButtons = candidates.slice(0, 3).map(candidate => ({
-      title: this.humanizeTitle(candidate.slug),
-      payload: `@${candidate.slug}`
-    }));
+	/**
+	 * Generate short titles for intent candidates in batch
+	 * @param candidates Intent candidates
+	 * @returns Array of short titles or null if failed
+	 */
+	private async generateShortTitles(candidates: IntentCandidate[]): Promise<string[] | null> {
+		try {
+			console.log(`📝 Generating short titles for ${candidates.length} candidates`);
 
-    return {
-      type: 'warmup_buttons',
-      response_text: "Posso ajudar com sua questão jurídica. Qual dessas opções se aproxima mais do que você precisa?",
-      buttons: fallbackButtons,
-      response_time_ms: elapsedTime
-    };
-  }
+			const titles = await openaiService.generateShortTitlesBatch(candidates, this.agent);
 
-  /**
-   * Convert slug to human-readable title
-   * @param slug Intent slug
-   * @returns Humanized title (clamped to 20 characters)
-   */
-  private humanizeTitle(slug: string): string {
-    const humanized = slug
-      .replace(/_/g, ' ')
-      .replace(/\b\w/g, l => l.toUpperCase());
-    
-    // Clamp to 20 characters at word boundaries
-    if (humanized.length <= 20) return humanized;
-    
-    const words = humanized.split(' ');
-    let result = '';
-    for (const word of words) {
-      if ((result + ' ' + word).trim().length <= 20) {
-        result = (result + ' ' + word).trim();
-      } else {
-        break;
-      }
-    }
-    
-    return result || humanized.slice(0, 20).trim();
-  }
+			if (titles && titles.length === candidates.length) {
+				console.log(`✅ Generated ${titles.length} short titles successfully`);
+				return titles;
+			}
+
+			console.warn("⚠️ Short title generation failed or incomplete, using fallback");
+			return null;
+		} catch (error) {
+			console.error("Erro ao gerar títulos curtos:", error);
+			return null;
+		}
+	}
+
+	/**
+	 * Create fallback buttons when LLM generation fails
+	 * @param userText Original user message
+	 * @param candidates Intent candidates
+	 * @param elapsedTime Time already elapsed
+	 * @returns Fallback warmup result
+	 */
+	private createFallbackButtons(userText: string, candidates: IntentCandidate[], elapsedTime: number): SoftBandResult {
+		console.log("🔄 Creating fallback buttons for SOFT band");
+
+		const fallbackButtons = candidates.slice(0, 3).map((candidate) => ({
+			title: this.humanizeTitle(candidate.slug),
+			payload: `@${candidate.slug}`,
+		}));
+
+		return {
+			type: "warmup_buttons",
+			response_text: "Posso ajudar com sua questão jurídica. Qual dessas opções se aproxima mais do que você precisa?",
+			buttons: fallbackButtons,
+			response_time_ms: elapsedTime,
+		};
+	}
+
+	/**
+	 * Convert slug to human-readable title
+	 * @param slug Intent slug
+	 * @returns Humanized title (clamped to 20 characters)
+	 */
+	private humanizeTitle(slug: string): string {
+		const humanized = slug.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+
+		// Clamp to 20 characters at word boundaries
+		if (humanized.length <= 20) return humanized;
+
+		const words = humanized.split(" ");
+		let result = "";
+		for (const word of words) {
+			if ((result + " " + word).trim().length <= 20) {
+				result = (result + " " + word).trim();
+			} else {
+				break;
+			}
+		}
+
+		return result || humanized.slice(0, 20).trim();
+	}
 }
-
-
 
 /**
  * Performance Band Processing Factory
  * Creates appropriate processor based on classification result
  */
 export class PerformanceBandProcessor {
-  private hardProcessor: HardBandProcessor;
-  private softProcessor: SoftBandProcessor;
+	private hardProcessor: HardBandProcessor;
+	private softProcessor: SoftBandProcessor;
 
-  constructor(agent: AgentConfig) {
-    this.hardProcessor = new HardBandProcessor(agent);
-    this.softProcessor = new SoftBandProcessor(agent);
-  }
+	constructor(agent: AgentConfig) {
+		this.hardProcessor = new HardBandProcessor(agent);
+		this.softProcessor = new SoftBandProcessor(agent);
+	}
 
-  /**
-   * Process classification result based on performance band
-   * @param userText Original user message
-   * @param classification Classification result with band and candidates
-   * @returns Band-specific processing result
-   */
-  async process(
-    userText: string,
-    classification: ClassificationResult
-  ): Promise<BandProcessingResult> {
-    const startTime = Date.now();
+	/**
+	 * Process classification result based on performance band
+	 * @param userText Original user message
+	 * @param classification Classification result with band and candidates
+	 * @returns Band-specific processing result
+	 */
+	async process(userText: string, classification: ClassificationResult): Promise<BandProcessingResult> {
+		const startTime = Date.now();
 
-    console.log(`🎯 Processing ${classification.band} band with strategy: ${classification.strategy}`);
+		console.log(`🎯 Processing ${classification.band} band with strategy: ${classification.strategy}`);
 
-    try {
-      switch (classification.band) {
-        case 'HARD':
-          return await this.hardProcessor.process(
-            userText,
-            classification.candidates[0], // Top candidate
-            true // Enable microcopy
-          );
+		try {
+			switch (classification.band) {
+				case "HARD":
+					return await this.hardProcessor.process(
+						userText,
+						classification.candidates[0], // Top candidate
+						true, // Enable microcopy
+					);
 
-        case 'SOFT':
-          return await this.softProcessor.process(
-            userText,
-            classification.candidates.slice(0, 3) // Top 3 candidates
-          );
+				case "SOFT":
+					return await this.softProcessor.process(
+						userText,
+						classification.candidates.slice(0, 3), // Top 3 candidates
+					);
 
-        default:
-          throw new Error(`Unsupported band: ${classification.band}`);
-      }
-    } catch (error) {
-      const totalTime = Date.now() - startTime;
-      console.error(`❌ Band processing failed for ${classification.band}:`, error);
-      
-      // Ultimate fallback
-      return {
-        type: 'warmup_buttons',
-        response_text: "Desculpe, houve um problema. Como posso ajudar com sua questão jurídica?",
-        buttons: [
-          { title: "Falar com Humano", payload: "@handoff_human" },
-          { title: "Tentar Novamente", payload: "@retry_classification" },
-          { title: "Consulta Geral", payload: "@consulta_juridica_geral" }
-        ],
-        response_time_ms: totalTime
-      };
-    }
-  }
+				default:
+					throw new Error(`Unsupported band: ${classification.band}`);
+			}
+		} catch (error) {
+			const totalTime = Date.now() - startTime;
+			console.error(`❌ Band processing failed for ${classification.band}:`, error);
+
+			// Ultimate fallback
+			return {
+				type: "warmup_buttons",
+				response_text: "Desculpe, houve um problema. Como posso ajudar com sua questão jurídica?",
+				buttons: [
+					{ title: "Falar com Humano", payload: "@handoff_human" },
+					{ title: "Tentar Novamente", payload: "@retry_classification" },
+					{ title: "Consulta Geral", payload: "@consulta_juridica_geral" },
+				],
+				response_time_ms: totalTime,
+			};
+		}
+	}
 }

@@ -7,14 +7,12 @@ export function CtaSection() {
 	return (
 		<section className="py-20 bg-gradient-to-r from-primary via-blue-600 to-purple-600">
 			<div className="container mx-auto px-4 text-center">
-				<h2 className="text-4xl md:text-5xl font-bold mb-6 text-white">
-					Revolucione Seu Atendimento com IA
-				</h2>
+				<h2 className="text-4xl md:text-5xl font-bold mb-6 text-white">Revolucione Seu Atendimento com IA</h2>
 				<p className="text-xl text-white/90 mb-8 max-w-4xl mx-auto">
-					Junte-se a milhares de advogados, influencers e empresas que já estão usando Socialwise Chatwit 
-					para automatizar atendimentos, aumentar vendas e transformar seguidores em clientes.
+					Junte-se a milhares de advogados, influencers e empresas que já estão usando Socialwise Chatwit para
+					automatizar atendimentos, aumentar vendas e transformar seguidores em clientes.
 				</p>
-				
+
 				<div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
 					<div className="text-center">
 						<div className="text-4xl font-bold text-white mb-2">2.500+</div>
@@ -29,7 +27,7 @@ export function CtaSection() {
 						<div className="text-white/80">Suporte Especializado</div>
 					</div>
 				</div>
-				
+
 				<div className="flex flex-col sm:flex-row gap-4 justify-center">
 					<Link
 						href="/auth/login"

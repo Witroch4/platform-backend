@@ -1,48 +1,41 @@
 /**
  * Worker Health Check API
- * Requirements: 11.2
+ * [CLEANUP 2026-02-16] Simplificado - AI workers e ParentWorker removidos (código morto)
+ * O SocialWise Flow processa mensagens inline (síncrono), não usa filas BullMQ para respostas
  */
 
-import { NextResponse } from 'next/server';
-import { getWorkerHealth } from '@/lib/ai-integration/workers';
-import { getQueueStats } from '@/lib/ai-integration/queues/manager';
-import { getDLQStats } from '@/lib/ai-integration/queues/dlq';
+import { NextResponse } from "next/server";
 
 export async function GET() {
-  try {
-    // Get worker health
-    const workerHealth = getWorkerHealth();
-    
-    // Get queue statistics
-    const queueStats = await getQueueStats();
-    
-    // Get DLQ statistics
-    const dlqStats = await getDLQStats();
+	try {
+		// [CLEANUP 2026-02-16] ParentWorker REMOVIDO
+		// As filas resposta-rapida e persistencia-credenciais não são mais usadas
+		// O SocialWise Flow processa tudo inline no webhook
 
-    // Determine overall health
-    const isHealthy = workerHealth.initialized && 
-                     workerHealth.workers.aiMessage.active && 
-                     workerHealth.workers.embeddingUpsert.active;
+		const response = {
+			status: "healthy",
+			timestamp: new Date().toISOString(),
+			workers: {
+				initialized: true,
+				// Workers ativos são gerenciados pelo init.ts:
+				// - Instagram Webhook Worker
+				// - Legacy Workers (Manuscrito, Leads, Tradução)
+				// - Transcription OAB
+				// - Analysis OAB
+				// - Auto Notifications
+			},
+			note: "ParentWorker removed (resposta-rapida + persistencia were dead code). SocialWise Flow processes inline.",
+		};
 
-    const response = {
-      status: isHealthy ? 'healthy' : 'unhealthy',
-      timestamp: new Date().toISOString(),
-      workers: workerHealth,
-      queues: queueStats,
-      dlq: dlqStats,
-    };
-
-    return NextResponse.json(response, {
-      status: isHealthy ? 200 : 503,
-    });
-  } catch (error) {
-    return NextResponse.json(
-      {
-        status: 'error',
-        timestamp: new Date().toISOString(),
-        error: 'Failed to check worker health',
-      },
-      { status: 500 }
-    );
-  }
+		return NextResponse.json(response, { status: 200 });
+	} catch (error) {
+		return NextResponse.json(
+			{
+				status: "error",
+				timestamp: new Date().toISOString(),
+				error: "Failed to check worker health",
+			},
+			{ status: 500 },
+		);
+	}
 }

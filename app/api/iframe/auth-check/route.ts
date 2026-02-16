@@ -2,100 +2,91 @@ import { NextRequest, NextResponse } from "next/server";
 import { getPrismaInstance } from "@/lib/connections";
 
 interface AuthorizedDomain {
-  id: string;
-  domain: string;
-  isActive: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+	id: string;
+	domain: string;
+	isActive: boolean;
+	createdAt: Date;
+	updatedAt: Date;
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  try {
-    const { referrer } = await request.json();
-    
-    if (!referrer) {
-      return NextResponse.json(
-        { authorized: false, error: "Referrer não encontrado" },
-        { status: 400 }
-      );
-    }
+	try {
+		const { referrer } = await request.json();
 
-    const prisma = getPrismaInstance();
-    
-    // URLs padrão autorizadas (incluindo a URL do Chatwit)
-    const defaultAuthorizedDomains = [
-      'https://chatwit.witdev.com.br',
-      'http://localhost:3000', // Para desenvolvimento
-      'https://localhost:3000',
-    ];
+		if (!referrer) {
+			return NextResponse.json({ authorized: false, error: "Referrer não encontrado" }, { status: 400 });
+		}
 
-    // Buscar domínios autorizados no banco
-    const authorizedDomains = await prisma.iframeAuthorizedDomain.findMany({
-      where: { isActive: true },
-      select: { domain: true }
-    });
+		const prisma = getPrismaInstance();
 
-    // Combinar domínios padrão com os cadastrados
-    const allAuthorizedDomains = [
-      ...defaultAuthorizedDomains,
-      ...authorizedDomains.map((d: { domain: string }) => d.domain)
-    ];
+		// URLs padrão autorizadas (incluindo a URL do Chatwit)
+		const defaultAuthorizedDomains = [
+			"https://chatwit.witdev.com.br",
+			"http://localhost:3000", // Para desenvolvimento
+			"https://localhost:3000",
+		];
 
-    // Verificar se o referrer está autorizado
-    const referrerUrl = new URL(referrer);
-    const referrerOrigin = `${referrerUrl.protocol}//${referrerUrl.hostname}${referrerUrl.port ? ':' + referrerUrl.port : ''}`;
-    
-    const isAuthorized = allAuthorizedDomains.some(domain => {
-      try {
-        const authorizedUrl = new URL(domain);
-        const authorizedOrigin = `${authorizedUrl.protocol}//${authorizedUrl.hostname}${authorizedUrl.port ? ':' + authorizedUrl.port : ''}`;
-        return referrerOrigin === authorizedOrigin;
-      } catch {
-        return false;
-      }
-    });
+		// Buscar domínios autorizados no banco
+		const authorizedDomains = await prisma.iframeAuthorizedDomain.findMany({
+			where: { isActive: true },
+			select: { domain: true },
+		});
 
-    if (isAuthorized) {
-      // Log do acesso autorizado para auditoria
-      await prisma.auditLog.create({
-        data: {
-          userId: "system",
-          action: "iframe_access_authorized",
-          resourceType: "iframe_access",
-          details: {
-            referrer,
-            timestamp: new Date().toISOString(),
-            userAgent: request.headers.get('user-agent') || 'unknown'
-          }
-        }
-      });
+		// Combinar domínios padrão com os cadastrados
+		const allAuthorizedDomains = [
+			...defaultAuthorizedDomains,
+			...authorizedDomains.map((d: { domain: string }) => d.domain),
+		];
 
-      return NextResponse.json({ authorized: true });
-    } else {
-      // Log da tentativa de acesso não autorizada
-      await prisma.auditLog.create({
-        data: {
-          userId: "system",
-          action: "iframe_access_denied",
-          resourceType: "iframe_access",
-          details: {
-            referrer,
-            timestamp: new Date().toISOString(),
-            userAgent: request.headers.get('user-agent') || 'unknown'
-          }
-        }
-      });
+		// Verificar se o referrer está autorizado
+		const referrerUrl = new URL(referrer);
+		const referrerOrigin = `${referrerUrl.protocol}//${referrerUrl.hostname}${referrerUrl.port ? ":" + referrerUrl.port : ""}`;
 
-      return NextResponse.json(
-        { authorized: false, error: "Domínio não autorizado" },
-        { status: 403 }
-      );
-    }
-  } catch (error) {
-    console.error("Erro na verificação de autorização iframe:", error);
-    return NextResponse.json(
-      { authorized: false, error: "Erro interno do servidor" },
-      { status: 500 }
-    );
-  }
+		const isAuthorized = allAuthorizedDomains.some((domain) => {
+			try {
+				const authorizedUrl = new URL(domain);
+				const authorizedOrigin = `${authorizedUrl.protocol}//${authorizedUrl.hostname}${authorizedUrl.port ? ":" + authorizedUrl.port : ""}`;
+				return referrerOrigin === authorizedOrigin;
+			} catch {
+				return false;
+			}
+		});
+
+		if (isAuthorized) {
+			// Log do acesso autorizado para auditoria
+			await prisma.auditLog.create({
+				data: {
+					userId: "system",
+					action: "iframe_access_authorized",
+					resourceType: "iframe_access",
+					details: {
+						referrer,
+						timestamp: new Date().toISOString(),
+						userAgent: request.headers.get("user-agent") || "unknown",
+					},
+				},
+			});
+
+			return NextResponse.json({ authorized: true });
+		} else {
+			// Log da tentativa de acesso não autorizada
+			await prisma.auditLog.create({
+				data: {
+					userId: "system",
+					action: "iframe_access_denied",
+					resourceType: "iframe_access",
+					details: {
+						referrer,
+						timestamp: new Date().toISOString(),
+						userAgent: request.headers.get("user-agent") || "unknown",
+					},
+				},
+			});
+
+			return NextResponse.json({ authorized: false, error: "Domínio não autorizado" }, { status: 403 });
+		}
+	} catch (error) {
+		console.error("Erro na verificação de autorização iframe:", error);
+		return NextResponse.json({ authorized: false, error: "Erro interno do servidor" }, { status: 500 });
+	}
 }

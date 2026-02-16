@@ -1,85 +1,85 @@
-import { type NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
-import { getPrismaInstance } from '@/lib/connections';
+import { type NextRequest, NextResponse } from "next/server";
+import { auth } from "@/auth";
+import { getPrismaInstance } from "@/lib/connections";
 
 export async function GET() {
-  try {
-    const session = await auth();
-    
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
-    }
+	try {
+		const session = await auth();
 
-    // Buscar o usuário Chatwit
-    const usuarioChatwit = await getPrismaInstance().usuarioChatwit.findUnique({
-      where: { appUserId: session.user.id },
-      select: {
-        chatwitAccountId: true,
-        chatwitAccessToken: true,
-      }
-    });
+		if (!session?.user?.id) {
+			return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+		}
 
-    if (!usuarioChatwit) {
-      return NextResponse.json({ error: 'Usuário Chatwit não encontrado' }, { status: 404 });
-    }
+		// Buscar o usuário Chatwit
+		const usuarioChatwit = await getPrismaInstance().usuarioChatwit.findUnique({
+			where: { appUserId: session.user.id },
+			select: {
+				chatwitAccountId: true,
+				chatwitAccessToken: true,
+			},
+		});
 
-    return NextResponse.json({
-      config: {
-        chatwitAccountId: usuarioChatwit.chatwitAccountId,
-        chatwitAccessToken: usuarioChatwit.chatwitAccessToken,
-      }
-    });
-  } catch (error) {
-    console.error('Erro ao buscar configuração:', error);
-    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
-  }
+		if (!usuarioChatwit) {
+			return NextResponse.json({ error: "Usuário Chatwit não encontrado" }, { status: 404 });
+		}
+
+		return NextResponse.json({
+			config: {
+				chatwitAccountId: usuarioChatwit.chatwitAccountId,
+				chatwitAccessToken: usuarioChatwit.chatwitAccessToken,
+			},
+		});
+	} catch (error) {
+		console.error("Erro ao buscar configuração:", error);
+		return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 });
+	}
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    const session = await auth();
-    
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
-    }
+	try {
+		const session = await auth();
 
-    const { chatwitAccountId, chatwitAccessToken } = await request.json();
+		if (!session?.user?.id) {
+			return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+		}
 
-    if (!chatwitAccountId || !chatwitAccessToken) {
-      return NextResponse.json({ error: 'Account ID e Token são obrigatórios' }, { status: 400 });
-    }
+		const { chatwitAccountId, chatwitAccessToken } = await request.json();
 
-    // Buscar ou criar o usuário Chatwit
-    let usuarioChatwit = await getPrismaInstance().usuarioChatwit.findUnique({
-      where: { appUserId: session.user.id }
-    });
+		if (!chatwitAccountId || !chatwitAccessToken) {
+			return NextResponse.json({ error: "Account ID e Token são obrigatórios" }, { status: 400 });
+		}
 
-    if (!usuarioChatwit) {
-      // Criar novo usuário Chatwit se não existir
-      usuarioChatwit = await getPrismaInstance().usuarioChatwit.create({
-        data: {
-          appUserId: session.user.id,
-          name: session.user.name || 'Usuário',
-          accountName: 'Conta Padrão',
-          channel: 'WhatsApp',
-          chatwitAccountId,
-          chatwitAccessToken,
-        }
-      });
-    } else {
-      // Atualizar o usuário Chatwit existente
-      await getPrismaInstance().usuarioChatwit.update({
-        where: { id: usuarioChatwit.id },
-        data: {
-          chatwitAccountId,
-          chatwitAccessToken,
-        }
-      });
-    }
+		// Buscar ou criar o usuário Chatwit
+		let usuarioChatwit = await getPrismaInstance().usuarioChatwit.findUnique({
+			where: { appUserId: session.user.id },
+		});
 
-    return NextResponse.json({ message: 'Configuração salva com sucesso' });
-  } catch (error) {
-    console.error('Erro ao salvar configuração:', error);
-    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
-  }
-} 
+		if (!usuarioChatwit) {
+			// Criar novo usuário Chatwit se não existir
+			usuarioChatwit = await getPrismaInstance().usuarioChatwit.create({
+				data: {
+					appUserId: session.user.id,
+					name: session.user.name || "Usuário",
+					accountName: "Conta Padrão",
+					channel: "WhatsApp",
+					chatwitAccountId,
+					chatwitAccessToken,
+				},
+			});
+		} else {
+			// Atualizar o usuário Chatwit existente
+			await getPrismaInstance().usuarioChatwit.update({
+				where: { id: usuarioChatwit.id },
+				data: {
+					chatwitAccountId,
+					chatwitAccessToken,
+				},
+			});
+		}
+
+		return NextResponse.json({ message: "Configuração salva com sucesso" });
+	} catch (error) {
+		console.error("Erro ao salvar configuração:", error);
+		return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 });
+	}
+}

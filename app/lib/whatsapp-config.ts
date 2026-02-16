@@ -1,4 +1,4 @@
-import { getPrismaInstance } from '@/lib/connections';
+import { getPrismaInstance } from "@/lib/connections";
 const prisma = getPrismaInstance();
 
 /**
@@ -6,65 +6,69 @@ const prisma = getPrismaInstance();
  * Retorna as configurações do banco de dados ou utiliza os valores de fallback do .env
  */
 export async function getWhatsAppConfig(userId?: string) {
-  let config;
-  
-  // Se temos um userId, tentamos obter configuração personalizada do banco
-  if (userId) {
-    // Buscar o usuário Chatwit primeiro
-    const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
-      where: { appUserId: userId }
-    });
+	let config;
 
-    if (usuarioChatwit) {
-      config = await prisma.whatsAppGlobalConfig.findFirst({
-        where: {
-          usuarioChatwitId: usuarioChatwit.id
-        }
-      });
-    }
-  }
-  
-  // Se não encontrarmos configuração no banco, usamos valores do .env
-  if (!config) {
-    return {
-      whatsappToken: process.env.WHATSAPP_TOKEN || '',
-      whatsappBusinessAccountId: process.env.WHATSAPP_BUSINESS_ID || '',
-      phoneNumberId: process.env.FROM_PHONE_NUMBER_ID || '',
-      fbGraphApiBase: 'https://graph.facebook.com/v22.0', // Forçar versão v22.0
-      isFromEnv: true
-    };
-  }
-  
-  // Forçamos a versão v22.0 mesmo para configurações do banco
-  return {
-    whatsappToken: config.whatsappApiKey,
-    whatsappBusinessAccountId: config.whatsappBusinessAccountId,
-    phoneNumberId: config.phoneNumberId || process.env.FROM_PHONE_NUMBER_ID || '', // Usar phoneNumberId do banco primeiro, depois fallback para .env
-    fbGraphApiBase: 'https://graph.facebook.com/v22.0', // Forçar versão v22.0
-    isFromEnv: false
-  };
+	// Se temos um userId, tentamos obter configuração personalizada do banco
+	if (userId) {
+		// Buscar o usuário Chatwit primeiro
+		const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
+			where: { appUserId: userId },
+		});
+
+		if (usuarioChatwit) {
+			config = await prisma.whatsAppGlobalConfig.findFirst({
+				where: {
+					usuarioChatwitId: usuarioChatwit.id,
+				},
+			});
+		}
+	}
+
+	// Se não encontrarmos configuração no banco, usamos valores do .env
+	if (!config) {
+		return {
+			whatsappToken: process.env.WHATSAPP_TOKEN || "",
+			whatsappBusinessAccountId: process.env.WHATSAPP_BUSINESS_ID || "",
+			phoneNumberId: process.env.FROM_PHONE_NUMBER_ID || "",
+			fbGraphApiBase: "https://graph.facebook.com/v22.0", // Forçar versão v22.0
+			isFromEnv: true,
+		};
+	}
+
+	// Forçamos a versão v22.0 mesmo para configurações do banco
+	return {
+		whatsappToken: config.whatsappApiKey,
+		whatsappBusinessAccountId: config.whatsappBusinessAccountId,
+		phoneNumberId: config.phoneNumberId || process.env.FROM_PHONE_NUMBER_ID || "", // Usar phoneNumberId do banco primeiro, depois fallback para .env
+		fbGraphApiBase: "https://graph.facebook.com/v22.0", // Forçar versão v22.0
+		isFromEnv: false,
+	};
 }
 
 /**
  * Monta a URL para a API do WhatsApp para envio de mensagens
  */
-export function getWhatsAppApiUrl(config: { fbGraphApiBase: string, phoneNumberId?: string, whatsappBusinessAccountId: string }) {
-  // Usar phoneNumberId se disponível (correto segundo a documentação), caso contrário usar o WABA ID
-  const id = config.phoneNumberId || config.whatsappBusinessAccountId;
-  return `${config.fbGraphApiBase}/${id}/messages`;
+export function getWhatsAppApiUrl(config: {
+	fbGraphApiBase: string;
+	phoneNumberId?: string;
+	whatsappBusinessAccountId: string;
+}) {
+	// Usar phoneNumberId se disponível (correto segundo a documentação), caso contrário usar o WABA ID
+	const id = config.phoneNumberId || config.whatsappBusinessAccountId;
+	return `${config.fbGraphApiBase}/${id}/messages`;
 }
 
 /**
  * Monta a URL para a API do WhatsApp para templates
  */
-export function getWhatsAppTemplatesUrl(config: { fbGraphApiBase: string, whatsappBusinessAccountId: string }) {
-  return `${config.fbGraphApiBase}/${config.whatsappBusinessAccountId}/message_templates`;
+export function getWhatsAppTemplatesUrl(config: { fbGraphApiBase: string; whatsappBusinessAccountId: string }) {
+	return `${config.fbGraphApiBase}/${config.whatsappBusinessAccountId}/message_templates`;
 }
 
 /**
  * Obtém a versão da API do Facebook a partir da URL base
  */
 export function getApiVersion(fbGraphApiBase: string) {
-  const version = fbGraphApiBase.split('/').pop();
-  return version || 'v22.0';
-} 
+	const version = fbGraphApiBase.split("/").pop();
+	return version || "v22.0";
+}

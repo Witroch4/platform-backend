@@ -6,12 +6,12 @@ import { useEffect } from "react";
 import { useSession } from "next-auth/react";
 
 export default function UpdateSession() {
-  const { update } = useSession();
+	const { update } = useSession();
 
-  useEffect(() => {
-    // Função para forçar a atualização da sessão
-    update();
-  }, [update]);
+	useEffect(() => {
+		// Função para forçar a atualização da sessão
+		update();
+	}, [update]);
 
-  return null;
+	return null;
 }

@@ -3,27 +3,30 @@
 import { Star } from "lucide-react";
 
 const testimonials = [
-    {
-        name: "Dra. Ana Silva",
-        role: "Advogada Criminalista",
-        testimonial: "O Socialwise Chatwit revolucionou meu escritório. Automatizei 80% dos atendimentos iniciais e aumentei minha carteira de clientes em 150% em 6 meses.",
-        avatar: "👩‍⚖️",
-        rating: 5
-    },
-    {
-        name: "Carlos Mendes",
-        role: "Influencer Digital",
-        testimonial: "Com o Socialwise Chatwit, consigo responder todos os meus seguidores automaticamente. Minhas vendas aumentaram 300% e meu engajamento triplicou.",
-        avatar: "👨‍💼",
-        rating: 5
-    },
-    {
-        name: "Mariana Costa",
-        role: "Agência de Marketing",
-        testimonial: "Gerenciamos 50+ contas de clientes com uma equipe de 3 pessoas. A automação do Socialwise Chatwit é simplesmente incrível.",
-        avatar: "👩‍💻",
-        rating: 5
-    }
+	{
+		name: "Dra. Ana Silva",
+		role: "Advogada Criminalista",
+		testimonial:
+			"O Socialwise Chatwit revolucionou meu escritório. Automatizei 80% dos atendimentos iniciais e aumentei minha carteira de clientes em 150% em 6 meses.",
+		avatar: "👩‍⚖️",
+		rating: 5,
+	},
+	{
+		name: "Carlos Mendes",
+		role: "Influencer Digital",
+		testimonial:
+			"Com o Socialwise Chatwit, consigo responder todos os meus seguidores automaticamente. Minhas vendas aumentaram 300% e meu engajamento triplicou.",
+		avatar: "👨‍💼",
+		rating: 5,
+	},
+	{
+		name: "Mariana Costa",
+		role: "Agência de Marketing",
+		testimonial:
+			"Gerenciamos 50+ contas de clientes com uma equipe de 3 pessoas. A automação do Socialwise Chatwit é simplesmente incrível.",
+		avatar: "👩‍💻",
+		rating: 5,
+	},
 ];
 
 export function TestimonialsSection() {
@@ -36,10 +39,13 @@ export function TestimonialsSection() {
 						Profissionais que transformaram seus negócios com Socialwise Chatwit
 					</p>
 				</div>
-				
+
 				<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
 					{testimonials.map((testimonial, index) => (
-						<div key={index} className="bg-gray-50 dark:bg-gray-800 p-8 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-200 dark:border-gray-700">
+						<div
+							key={index}
+							className="bg-gray-50 dark:bg-gray-800 p-8 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-200 dark:border-gray-700"
+						>
 							<div className="flex items-center mb-6">
 								<div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center text-2xl mr-4">
 									{testimonial.avatar}

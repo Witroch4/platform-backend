@@ -6,7 +6,7 @@ O sistema estava **enviando espelhos para processamento externo** (N8N webhook) 
 
 ### Log do Problema
 ```
-[Enviar Espelho] 📤 Enviando payload para processamento externo: https://autofluxofilaapi.witdev.com.br/webhook/...
+[Enviar Espelho] 📤 Enviando payload para processamento externo: https://2357witflowauto.witdev.com.br/webhook/...
 ```
 
 ## 🔍 Root Cause
@@ -151,7 +151,7 @@ O sistema usa a seguinte ordem de prioridade:
 
 **❌ Webhook Externo (incorreto):**
 ```bash
-[Enviar Espelho] 📤 Enviando payload para processamento externo: https://autofluxofilaapi.witdev.com.br/webhook/...
+[Enviar Espelho] 📤 Enviando payload para processamento externo: https://2357witflowauto.witdev.com.br/webhook/...
 ```
 
 ## 📁 Arquivos Modificados

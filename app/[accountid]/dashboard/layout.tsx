@@ -6,18 +6,18 @@ import DashboardLayoutClient from "@/components/dashboard-layout-client";
 import ErrorBoundary from "@/components/providers/error-boundary";
 
 export const metadata: Metadata = {
-  title: "Dashboard da Conta",
-  description: "Gerencie suas redes sociais",
+	title: "Dashboard da Conta",
+	description: "Gerencie suas redes sociais",
 };
 
 export default function DashboardLayout({
-  children,
+	children,
 }: {
-  children: React.ReactNode;
+	children: React.ReactNode;
 }) {
-  return (
-    <ErrorBoundary>
-      <DashboardLayoutClient>{children}</DashboardLayoutClient>
-    </ErrorBoundary>
-  );
+	return (
+		<ErrorBoundary>
+			<DashboardLayoutClient>{children}</DashboardLayoutClient>
+		</ErrorBoundary>
+	);
 }

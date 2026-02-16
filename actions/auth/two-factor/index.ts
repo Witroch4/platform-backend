@@ -1,6 +1,6 @@
 "use server";
 
-import { getPrismaInstance } from "@/lib/connections"
+import { getPrismaInstance } from "@/lib/connections";
 import mail from "@/lib/mail";
 import { findUserbyEmail } from "@/services";
 import { findTwoFactorAuthTokeByToken } from "@/services/auth";
@@ -21,9 +21,9 @@ import type { User } from "@prisma/client";
  * @returns {Promise<{ error?: string, success?: string }>} An object indicating the result of the operation.
  */
 export const sendTwoFactorAuthEmail = async (user: User, token: string) => {
-	const { RESEND_EMAIL_FROM, OTP_SUBJECT } = process.env;
+	const { MAILER_SENDER_EMAIL, OTP_SUBJECT } = process.env;
 
-	if (!RESEND_EMAIL_FROM || !OTP_SUBJECT) {
+	if (!MAILER_SENDER_EMAIL || !OTP_SUBJECT) {
 		return {
 			error: "Configuração de ambiente insuficiente para envio de e-mail.",
 		};
@@ -32,10 +32,10 @@ export const sendTwoFactorAuthEmail = async (user: User, token: string) => {
 	const { email } = user;
 	try {
 		const { error } = await mail().emails.send({
-			from: RESEND_EMAIL_FROM,
+			from: MAILER_SENDER_EMAIL,
 			to: email,
 			subject: OTP_SUBJECT,
-			html: `<p>Sue código OTP: ${token}</p>`,
+			html: `<p>Seu codigo OTP: ${token}</p>`,
 		});
 
 		if (error)

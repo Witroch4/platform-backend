@@ -1,137 +1,141 @@
-'use client';
+"use client";
 
-import { useState, useCallback, useEffect } from 'react';
-import { variableConverter } from '@/app/lib/variable-converter';
+import { useState, useCallback, useEffect } from "react";
+import { variableConverter } from "@/app/lib/variable-converter";
 
 interface MtfDiamanteVariavel {
-  id?: string;
-  chave: string;
-  valor: string;
+	id?: string;
+	chave: string;
+	valor: string;
 }
 
 interface FieldValidation {
-  isValid: boolean;
-  errors: string[];
+	isValid: boolean;
+	errors: string[];
 }
 
 interface TemplateValidationState {
-  header: FieldValidation;
-  body: FieldValidation;
-  footer: FieldValidation;
-  overall: FieldValidation;
+	header: FieldValidation;
+	body: FieldValidation;
+	footer: FieldValidation;
+	overall: FieldValidation;
 }
 
 interface UseTemplateValidationProps {
-  headerText: string;
-  bodyText: string;
-  footerText: string;
-  variables: MtfDiamanteVariavel[];
-  headerType?: 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT' | 'NONE';
+	headerText: string;
+	bodyText: string;
+	footerText: string;
+	variables: MtfDiamanteVariavel[];
+	headerType?: "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT" | "NONE";
 }
 
 export const useTemplateValidation = ({
-  headerText,
-  bodyText,
-  footerText,
-  variables,
-  headerType = 'TEXT'
+	headerText,
+	bodyText,
+	footerText,
+	variables,
+	headerType = "TEXT",
 }: UseTemplateValidationProps) => {
-  const [validation, setValidation] = useState<TemplateValidationState>({
-    header: { isValid: true, errors: [] },
-    body: { isValid: true, errors: [] },
-    footer: { isValid: true, errors: [] },
-    overall: { isValid: true, errors: [] }
-  });
+	const [validation, setValidation] = useState<TemplateValidationState>({
+		header: { isValid: true, errors: [] },
+		body: { isValid: true, errors: [] },
+		footer: { isValid: true, errors: [] },
+		overall: { isValid: true, errors: [] },
+	});
 
-  // Validate individual fields
-  const validateField = useCallback((text: string, fieldName: string, maxLength?: number): FieldValidation => {
-    const errors: string[] = [];
-    
-    // Basic validation using variable converter
-    const variableValidation = variableConverter.validateTemplate(text);
-    if (!variableValidation.isValid) {
-      errors.push(...variableValidation.errors);
-    }
+	// Validate individual fields
+	const validateField = useCallback(
+		(text: string, fieldName: string, maxLength?: number): FieldValidation => {
+			const errors: string[] = [];
 
-    // Length validation
-    if (maxLength && text.length > maxLength) {
-      errors.push(`${fieldName} excede o limite de ${maxLength} caracteres (atual: ${text.length})`);
-    }
+			// Basic validation using variable converter
+			const variableValidation = variableConverter.validateTemplate(text);
+			if (!variableValidation.isValid) {
+				errors.push(...variableValidation.errors);
+			}
 
-    // Required field validation for body
-    if (fieldName === 'Corpo' && !text.trim()) {
-      errors.push('O corpo da mensagem é obrigatório');
-    }
+			// Length validation
+			if (maxLength && text.length > maxLength) {
+				errors.push(`${fieldName} excede o limite de ${maxLength} caracteres (atual: ${text.length})`);
+			}
 
-    // Header specific validation
-    if (fieldName === 'Cabeçalho' && headerType === 'TEXT' && text.length > 0 && text.length > 60) {
-      errors.push('Cabeçalho de texto deve ter no máximo 60 caracteres');
-    }
+			// Required field validation for body
+			if (fieldName === "Corpo" && !text.trim()) {
+				errors.push("O corpo da mensagem é obrigatório");
+			}
 
-    return {
-      isValid: errors.length === 0,
-      errors
-    };
-  }, [headerType]);
+			// Header specific validation
+			if (fieldName === "Cabeçalho" && headerType === "TEXT" && text.length > 0 && text.length > 60) {
+				errors.push("Cabeçalho de texto deve ter no máximo 60 caracteres");
+			}
 
-  // Update validation when fields change
-  useEffect(() => {
-    const headerValidation = headerType === 'TEXT' 
-      ? validateField(headerText, 'Cabeçalho', 60)
-      : { isValid: true, errors: [] };
-    
-    const bodyValidation = validateField(bodyText, 'Corpo', 1024);
-    const footerValidation = validateField(footerText, 'Rodapé', 60);
+			return {
+				isValid: errors.length === 0,
+				errors,
+			};
+		},
+		[headerType],
+	);
 
-    // Overall validation
-    const allErrors = [
-      ...headerValidation.errors,
-      ...bodyValidation.errors,
-      ...footerValidation.errors
-    ];
+	// Update validation when fields change
+	useEffect(() => {
+		const headerValidation =
+			headerType === "TEXT" ? validateField(headerText, "Cabeçalho", 60) : { isValid: true, errors: [] };
 
-    const overallValidation: FieldValidation = {
-      isValid: allErrors.length === 0,
-      errors: allErrors
-    };
+		const bodyValidation = validateField(bodyText, "Corpo", 1024);
+		const footerValidation = validateField(footerText, "Rodapé", 60);
 
-    setValidation({
-      header: headerValidation,
-      body: bodyValidation,
-      footer: footerValidation,
-      overall: overallValidation
-    });
-  }, [headerText, bodyText, footerText, headerType, validateField]);
+		// Overall validation
+		const allErrors = [...headerValidation.errors, ...bodyValidation.errors, ...footerValidation.errors];
 
-  // Generate preview texts
-  const getPreviewText = useCallback((text: string, mode: 'numbered' | 'actual' = 'numbered'): string => {
-    if (!text) return '';
-    
-    if (mode === 'actual') {
-      return variableConverter.generatePreviewText(text, variables);
-    } else {
-      return variableConverter.generateNumberedPreviewText(text, variables);
-    }
-  }, [variables]);
+		const overallValidation: FieldValidation = {
+			isValid: allErrors.length === 0,
+			errors: allErrors,
+		};
 
-  // Get variable conversion for Meta API
-  const getMetaConversion = useCallback((text: string) => {
-    return variableConverter.convertToMetaFormat(text, variables);
-  }, [variables]);
+		setValidation({
+			header: headerValidation,
+			body: bodyValidation,
+			footer: footerValidation,
+			overall: overallValidation,
+		});
+	}, [headerText, bodyText, footerText, headerType, validateField]);
 
-  // Get variable statistics
-  const getVariableStats = useCallback((text: string) => {
-    return variableConverter.getVariableStats(text);
-  }, []);
+	// Generate preview texts
+	const getPreviewText = useCallback(
+		(text: string, mode: "numbered" | "actual" = "numbered"): string => {
+			if (!text) return "";
 
-  return {
-    validation,
-    getPreviewText,
-    getMetaConversion,
-    getVariableStats,
-    isValid: validation.overall.isValid,
-    errors: validation.overall.errors
-  };
+			if (mode === "actual") {
+				return variableConverter.generatePreviewText(text, variables);
+			} else {
+				return variableConverter.generateNumberedPreviewText(text, variables);
+			}
+		},
+		[variables],
+	);
+
+	// Get variable conversion for Meta API
+	const getMetaConversion = useCallback(
+		(text: string) => {
+			return variableConverter.convertToMetaFormat(text, variables);
+		},
+		[variables],
+	);
+
+	// Get variable statistics
+	const getVariableStats = useCallback((text: string) => {
+		return variableConverter.getVariableStats(text);
+	}, []);
+
+	return {
+		validation,
+		getPreviewText,
+		getMetaConversion,
+		getVariableStats,
+		isValid: validation.overall.isValid,
+		errors: validation.overall.errors,
+	};
 };
 
 export default useTemplateValidation;

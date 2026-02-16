@@ -1,50 +1,55 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Maximize2, Variable } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { FlowTextEditorDialog } from './FlowTextEditorDialog';
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { Maximize2, Variable } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { FlowTextEditorDialog } from "./FlowTextEditorDialog";
 
 // =============================================================================
 // VARIÁVEIS DISPONÍVEIS (estáticas para o editor)
 // =============================================================================
 
 interface AvailableVariable {
-  name: string;
-  label: string;
-  description: string;
-  category: 'contact' | 'conversation' | 'system' | 'custom';
+	name: string;
+	label: string;
+	description: string;
+	category: "contact" | "conversation" | "system" | "custom";
 }
 
 const AVAILABLE_VARIABLES: AvailableVariable[] = [
-  // Contato
-  { name: 'contact.name', label: 'Nome do contato', description: 'Nome do cliente', category: 'contact' },
-  { name: 'contact.phone', label: 'Telefone', description: 'Número do WhatsApp', category: 'contact' },
-  { name: 'contact.id', label: 'ID do contato', description: 'ID interno do contato', category: 'contact' },
-  // Conversa
-  { name: 'conversation.id', label: 'ID da conversa', description: 'ID da conversa atual', category: 'conversation' },
-  { name: 'conversation.channel', label: 'Canal', description: 'WhatsApp, Instagram, etc', category: 'conversation' },
-  { name: 'conversation.inbox_id', label: 'ID da caixa', description: 'ID da caixa de entrada', category: 'conversation' },
-  // Sistema
-  { name: 'system.date', label: 'Data atual', description: 'Data no formato DD/MM/YYYY', category: 'system' },
-  { name: 'system.time', label: 'Hora atual', description: 'Hora no formato HH:MM:SS', category: 'system' },
-  { name: 'system.timestamp', label: 'Timestamp', description: 'Data/hora ISO 8601', category: 'system' },
+	// Contato
+	{ name: "contact.name", label: "Nome do contato", description: "Nome do cliente", category: "contact" },
+	{ name: "contact.phone", label: "Telefone", description: "Número do WhatsApp", category: "contact" },
+	{ name: "contact.id", label: "ID do contato", description: "ID interno do contato", category: "contact" },
+	// Conversa
+	{ name: "conversation.id", label: "ID da conversa", description: "ID da conversa atual", category: "conversation" },
+	{ name: "conversation.channel", label: "Canal", description: "WhatsApp, Instagram, etc", category: "conversation" },
+	{
+		name: "conversation.inbox_id",
+		label: "ID da caixa",
+		description: "ID da caixa de entrada",
+		category: "conversation",
+	},
+	// Sistema
+	{ name: "system.date", label: "Data atual", description: "Data no formato DD/MM/YYYY", category: "system" },
+	{ name: "system.time", label: "Hora atual", description: "Hora no formato HH:MM:SS", category: "system" },
+	{ name: "system.timestamp", label: "Timestamp", description: "Data/hora ISO 8601", category: "system" },
 ];
 
 const CATEGORY_LABELS: Record<string, string> = {
-  contact: 'Contato',
-  conversation: 'Conversa',
-  system: 'Sistema',
-  custom: 'Personalizadas',
+	contact: "Contato",
+	conversation: "Conversa",
+	system: "Sistema",
+	custom: "Personalizadas",
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
-  contact: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
-  conversation: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
-  system: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
-  custom: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
+	contact: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+	conversation: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
+	system: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300",
+	custom: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
 };
 
 // Regex para encontrar variáveis {{nome}}
@@ -55,92 +60,92 @@ const VARIABLE_REGEX = /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g;
 // =============================================================================
 
 interface EditableTextProps {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  label: string;
-  className?: string;
-  minRows?: number;
-  maxRows?: number;
-  readOnly?: boolean;
-  maxLength?: number;
-  showCounter?: boolean;
-  /** Habilitar highlight e autocomplete de variáveis */
-  enableVariables?: boolean;
+	value: string;
+	onChange: (value: string) => void;
+	placeholder?: string;
+	label: string;
+	className?: string;
+	minRows?: number;
+	maxRows?: number;
+	readOnly?: boolean;
+	maxLength?: number;
+	showCounter?: boolean;
+	/** Habilitar highlight e autocomplete de variáveis */
+	enableVariables?: boolean;
 }
 
 export const EditableText = ({
-  value,
-  onChange,
-  placeholder,
-  label,
-  className,
-  minRows = 1,
-  readOnly = false,
-  maxLength,
-  showCounter = false,
-  enableVariables = true,
+	value,
+	onChange,
+	placeholder,
+	label,
+	className,
+	minRows = 1,
+	readOnly = false,
+	maxLength,
+	showCounter = false,
+	enableVariables = true,
 }: EditableTextProps) => {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const highlightRef = useRef<HTMLDivElement>(null);
-  const [internalValue, setInternalValue] = useState(value);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+	const textareaRef = useRef<HTMLTextAreaElement>(null);
+	const highlightRef = useRef<HTMLDivElement>(null);
+	const [internalValue, setInternalValue] = useState(value);
+	const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-  // Autocomplete state
-  const [showAutocomplete, setShowAutocomplete] = useState(false);
-  const [autocompletePosition, setAutocompletePosition] = useState({ top: 0, left: 0 });
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const [cursorPosition, setCursorPosition] = useState(0);
+	// Autocomplete state
+	const [showAutocomplete, setShowAutocomplete] = useState(false);
+	const [autocompletePosition, setAutocompletePosition] = useState({ top: 0, left: 0 });
+	const [searchQuery, setSearchQuery] = useState("");
+	const [selectedIndex, setSelectedIndex] = useState(0);
+	const [cursorPosition, setCursorPosition] = useState(0);
 
-  // Sync internal state if prop changes
-  useEffect(() => {
-    setInternalValue(value);
-  }, [value]);
+	// Sync internal state if prop changes
+	useEffect(() => {
+		setInternalValue(value);
+	}, [value]);
 
-  // Auto-resize + sync scroll
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    const highlight = highlightRef.current;
-    if (textarea) {
-      textarea.style.height = 'auto';
-      textarea.style.height = `${textarea.scrollHeight + 2}px`;
-    }
-    // Sync highlight scroll with textarea
-    if (highlight && textarea) {
-      highlight.scrollTop = textarea.scrollTop;
-      highlight.scrollLeft = textarea.scrollLeft;
-    }
-  }, [internalValue]);
+	// Auto-resize + sync scroll
+	useEffect(() => {
+		const textarea = textareaRef.current;
+		const highlight = highlightRef.current;
+		if (textarea) {
+			textarea.style.height = "auto";
+			textarea.style.height = `${textarea.scrollHeight + 2}px`;
+		}
+		// Sync highlight scroll with textarea
+		if (highlight && textarea) {
+			highlight.scrollTop = textarea.scrollTop;
+			highlight.scrollLeft = textarea.scrollLeft;
+		}
+	}, [internalValue]);
 
-  // Filtered variables for autocomplete
-  const filteredVariables = useMemo(() => {
-    if (!searchQuery) return AVAILABLE_VARIABLES;
-    const q = searchQuery.toLowerCase();
-    return AVAILABLE_VARIABLES.filter(
-      (v) =>
-        v.name.toLowerCase().includes(q) ||
-        v.label.toLowerCase().includes(q) ||
-        v.description.toLowerCase().includes(q)
-    );
-  }, [searchQuery]);
+	// Filtered variables for autocomplete
+	const filteredVariables = useMemo(() => {
+		if (!searchQuery) return AVAILABLE_VARIABLES;
+		const q = searchQuery.toLowerCase();
+		return AVAILABLE_VARIABLES.filter(
+			(v) =>
+				v.name.toLowerCase().includes(q) ||
+				v.label.toLowerCase().includes(q) ||
+				v.description.toLowerCase().includes(q),
+		);
+	}, [searchQuery]);
 
-  // Reset selected index when filtered list changes
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [filteredVariables.length]);
+	// Reset selected index when filtered list changes
+	useEffect(() => {
+		setSelectedIndex(0);
+	}, [filteredVariables.length]);
 
-  // Get caret position in pixels
-  const getCaretCoordinates = useCallback(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return { top: 0, left: 0 };
+	// Get caret position in pixels
+	const getCaretCoordinates = useCallback(() => {
+		const textarea = textareaRef.current;
+		if (!textarea) return { top: 0, left: 0 };
 
-    // Create a mirror div to calculate position
-    const mirror = document.createElement('div');
-    const computed = getComputedStyle(textarea);
+		// Create a mirror div to calculate position
+		const mirror = document.createElement("div");
+		const computed = getComputedStyle(textarea);
 
-    // Copy styles
-    mirror.style.cssText = `
+		// Copy styles
+		mirror.style.cssText = `
       position: absolute;
       visibility: hidden;
       white-space: pre-wrap;
@@ -154,326 +159,321 @@ export const EditableText = ({
       width: ${textarea.offsetWidth}px;
     `;
 
-    // Text before cursor
-    const textBeforeCursor = internalValue.substring(0, textarea.selectionStart);
-    mirror.textContent = textBeforeCursor;
+		// Text before cursor
+		const textBeforeCursor = internalValue.substring(0, textarea.selectionStart);
+		mirror.textContent = textBeforeCursor;
 
-    // Add span at cursor position
-    const span = document.createElement('span');
-    span.textContent = '|';
-    mirror.appendChild(span);
+		// Add span at cursor position
+		const span = document.createElement("span");
+		span.textContent = "|";
+		mirror.appendChild(span);
 
-    document.body.appendChild(mirror);
+		document.body.appendChild(mirror);
 
-    const spanRect = span.getBoundingClientRect();
-    const textareaRect = textarea.getBoundingClientRect();
+		const spanRect = span.getBoundingClientRect();
+		const textareaRect = textarea.getBoundingClientRect();
 
-    document.body.removeChild(mirror);
+		document.body.removeChild(mirror);
 
-    return {
-      top: spanRect.top - textareaRect.top + textarea.scrollTop + 20,
-      left: Math.min(spanRect.left - textareaRect.left + textarea.scrollLeft, textarea.offsetWidth - 200),
-    };
-  }, [internalValue]);
+		return {
+			top: spanRect.top - textareaRect.top + textarea.scrollTop + 20,
+			left: Math.min(spanRect.left - textareaRect.left + textarea.scrollLeft, textarea.offsetWidth - 200),
+		};
+	}, [internalValue]);
 
-  // Check if we should show autocomplete (after typing "{{")
-  const checkAutocomplete = useCallback(() => {
-    const textarea = textareaRef.current;
-    if (!textarea || !enableVariables) return;
+	// Check if we should show autocomplete (after typing "{{")
+	const checkAutocomplete = useCallback(() => {
+		const textarea = textareaRef.current;
+		if (!textarea || !enableVariables) return;
 
-    const cursorPos = textarea.selectionStart;
-    const textBeforeCursor = internalValue.substring(0, cursorPos);
+		const cursorPos = textarea.selectionStart;
+		const textBeforeCursor = internalValue.substring(0, cursorPos);
 
-    // Find last "{{" before cursor
-    const lastOpenBrace = textBeforeCursor.lastIndexOf('{{');
-    const lastCloseBrace = textBeforeCursor.lastIndexOf('}}');
+		// Find last "{{" before cursor
+		const lastOpenBrace = textBeforeCursor.lastIndexOf("{{");
+		const lastCloseBrace = textBeforeCursor.lastIndexOf("}}");
 
-    // Show autocomplete if we're inside {{ }} and haven't closed yet
-    if (lastOpenBrace !== -1 && lastOpenBrace > lastCloseBrace) {
-      const query = textBeforeCursor.substring(lastOpenBrace + 2).trim();
-      setSearchQuery(query);
-      setShowAutocomplete(true);
-      setCursorPosition(cursorPos);
+		// Show autocomplete if we're inside {{ }} and haven't closed yet
+		if (lastOpenBrace !== -1 && lastOpenBrace > lastCloseBrace) {
+			const query = textBeforeCursor.substring(lastOpenBrace + 2).trim();
+			setSearchQuery(query);
+			setShowAutocomplete(true);
+			setCursorPosition(cursorPos);
 
-      // Position the popover
-      const coords = getCaretCoordinates();
-      setAutocompletePosition(coords);
-    } else {
-      setShowAutocomplete(false);
-      setSearchQuery('');
-    }
-  }, [internalValue, enableVariables, getCaretCoordinates]);
+			// Position the popover
+			const coords = getCaretCoordinates();
+			setAutocompletePosition(coords);
+		} else {
+			setShowAutocomplete(false);
+			setSearchQuery("");
+		}
+	}, [internalValue, enableVariables, getCaretCoordinates]);
 
-  // Insert variable at cursor position
-  const insertVariable = useCallback((varName: string) => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
+	// Insert variable at cursor position
+	const insertVariable = useCallback(
+		(varName: string) => {
+			const textarea = textareaRef.current;
+			if (!textarea) return;
 
-    const textBeforeCursor = internalValue.substring(0, cursorPosition);
-    const textAfterCursor = internalValue.substring(cursorPosition);
+			const textBeforeCursor = internalValue.substring(0, cursorPosition);
+			const textAfterCursor = internalValue.substring(cursorPosition);
 
-    // Find where {{ started
-    const lastOpenBrace = textBeforeCursor.lastIndexOf('{{');
+			// Find where {{ started
+			const lastOpenBrace = textBeforeCursor.lastIndexOf("{{");
 
-    // Build new text: everything before {{ + {{varName}} + everything after cursor
-    const newText =
-      internalValue.substring(0, lastOpenBrace) +
-      `{{${varName}}}` +
-      textAfterCursor;
+			// Build new text: everything before {{ + {{varName}} + everything after cursor
+			const newText = internalValue.substring(0, lastOpenBrace) + `{{${varName}}}` + textAfterCursor;
 
-    setInternalValue(newText);
-    onChange(newText);
-    setShowAutocomplete(false);
+			setInternalValue(newText);
+			onChange(newText);
+			setShowAutocomplete(false);
 
-    // Focus back and set cursor after the inserted variable
-    setTimeout(() => {
-      if (textarea) {
-        textarea.focus();
-        const newCursorPos = lastOpenBrace + varName.length + 4; // {{ + name + }}
-        textarea.setSelectionRange(newCursorPos, newCursorPos);
-      }
-    }, 0);
-  }, [internalValue, cursorPosition, onChange]);
+			// Focus back and set cursor after the inserted variable
+			setTimeout(() => {
+				if (textarea) {
+					textarea.focus();
+					const newCursorPos = lastOpenBrace + varName.length + 4; // {{ + name + }}
+					textarea.setSelectionRange(newCursorPos, newCursorPos);
+				}
+			}, 0);
+		},
+		[internalValue, cursorPosition, onChange],
+	);
 
-  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newVal = e.target.value;
-    setInternalValue(newVal);
-    onChange(newVal);
-  };
+	const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+		const newVal = e.target.value;
+		setInternalValue(newVal);
+		onChange(newVal);
+	};
 
-  const handleKeyUp = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    checkAutocomplete();
-  };
+	const handleKeyUp = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+		checkAutocomplete();
+	};
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Handle autocomplete navigation
-    if (showAutocomplete && filteredVariables.length > 0) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setSelectedIndex((prev) => Math.min(prev + 1, filteredVariables.length - 1));
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setSelectedIndex((prev) => Math.max(prev - 1, 0));
-      } else if (e.key === 'Enter' || e.key === 'Tab') {
-        e.preventDefault();
-        insertVariable(filteredVariables[selectedIndex].name);
-      } else if (e.key === 'Escape') {
-        setShowAutocomplete(false);
-      }
-    }
+	const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+		// Handle autocomplete navigation
+		if (showAutocomplete && filteredVariables.length > 0) {
+			if (e.key === "ArrowDown") {
+				e.preventDefault();
+				setSelectedIndex((prev) => Math.min(prev + 1, filteredVariables.length - 1));
+			} else if (e.key === "ArrowUp") {
+				e.preventDefault();
+				setSelectedIndex((prev) => Math.max(prev - 1, 0));
+			} else if (e.key === "Enter" || e.key === "Tab") {
+				e.preventDefault();
+				insertVariable(filteredVariables[selectedIndex].name);
+			} else if (e.key === "Escape") {
+				setShowAutocomplete(false);
+			}
+		}
 
-    // Prevent node deletion when pressing backspace/delete
-    e.stopPropagation();
-  };
+		// Prevent node deletion when pressing backspace/delete
+		e.stopPropagation();
+	};
 
-  const handleClick = () => {
-    checkAutocomplete();
-  };
+	const handleClick = () => {
+		checkAutocomplete();
+	};
 
-  // Generate highlighted HTML
-  const highlightedHtml = useMemo(() => {
-    if (!enableVariables || !internalValue) return internalValue || '';
+	// Generate highlighted HTML
+	const highlightedHtml = useMemo(() => {
+		if (!enableVariables || !internalValue) return internalValue || "";
 
-    // Escape HTML and replace variables with styled spans
-    const escaped = internalValue
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
+		// Escape HTML and replace variables with styled spans
+		const escaped = internalValue.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-    return escaped.replace(VARIABLE_REGEX, (match, varName) => {
-      // Find the category of this variable
-      const variable = AVAILABLE_VARIABLES.find((v) => v.name === varName);
-      const category = variable?.category || 'custom';
-      const colorClass = CATEGORY_COLORS[category];
+		return escaped.replace(VARIABLE_REGEX, (match, varName) => {
+			// Find the category of this variable
+			const variable = AVAILABLE_VARIABLES.find((v) => v.name === varName);
+			const category = variable?.category || "custom";
+			const colorClass = CATEGORY_COLORS[category];
 
-      return `<span class="px-1 py-0.5 rounded ${colorClass} font-medium">${match}</span>`;
-    });
-  }, [internalValue, enableVariables]);
+			return `<span class="px-1 py-0.5 rounded ${colorClass} font-medium">${match}</span>`;
+		});
+	}, [internalValue, enableVariables]);
 
-  // Prevent drag propagation
-  const stopPropagation = (e: React.MouseEvent | React.TouchEvent | React.PointerEvent) => {
-    e.stopPropagation();
-  };
+	// Prevent drag propagation
+	const stopPropagation = (e: React.MouseEvent | React.TouchEvent | React.PointerEvent) => {
+		e.stopPropagation();
+	};
 
-  // Character counter calculations
-  const currentLength = internalValue?.length || 0;
-  const hasLimit = typeof maxLength === 'number' && maxLength > 0;
-  const isOverLimit = hasLimit && currentLength > maxLength;
-  const isNearLimit = hasLimit && currentLength >= maxLength * 0.9;
-  const shouldShowCounter = hasLimit || showCounter;
-  const limitPercentage = hasLimit ? Math.min((currentLength / maxLength) * 100, 100) : 0;
+	// Character counter calculations
+	const currentLength = internalValue?.length || 0;
+	const hasLimit = typeof maxLength === "number" && maxLength > 0;
+	const isOverLimit = hasLimit && currentLength > maxLength;
+	const isNearLimit = hasLimit && currentLength >= maxLength * 0.9;
+	const shouldShowCounter = hasLimit || showCounter;
+	const limitPercentage = hasLimit ? Math.min((currentLength / maxLength) * 100, 100) : 0;
 
-  return (
-    <div
-      className={cn("relative group w-full", className)}
-      onDoubleClick={stopPropagation}
-      onPointerDown={stopPropagation}
-    >
-      {/* Highlight layer (behind textarea) */}
-      {enableVariables && (
-        <div
-          ref={highlightRef}
-          className="absolute inset-0 pointer-events-none overflow-hidden whitespace-pre-wrap break-words text-sm"
-          style={{
-            minHeight: `${minRows * 20}px`,
-            color: 'transparent',
-            // Match textarea styles
-            padding: 0,
-            margin: 0,
-            border: 'none',
-          }}
-          dangerouslySetInnerHTML={{ __html: highlightedHtml }}
-        />
-      )}
+	return (
+		<div
+			className={cn("relative group w-full", className)}
+			onDoubleClick={stopPropagation}
+			onPointerDown={stopPropagation}
+		>
+			{/* Highlight layer (behind textarea) */}
+			{enableVariables && (
+				<div
+					ref={highlightRef}
+					className="absolute inset-0 pointer-events-none overflow-hidden whitespace-pre-wrap break-words text-sm"
+					style={{
+						minHeight: `${minRows * 20}px`,
+						color: "transparent",
+						// Match textarea styles
+						padding: 0,
+						margin: 0,
+						border: "none",
+					}}
+					dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+				/>
+			)}
 
-      <textarea
-        ref={textareaRef}
-        value={internalValue}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        onKeyUp={handleKeyUp}
-        onClick={handleClick}
-        placeholder={placeholder}
-        readOnly={readOnly}
-        rows={minRows}
-        className={cn(
-          "nodrag w-full resize-none overflow-hidden border-none p-0 text-sm focus:outline-none focus:ring-0 placeholder:text-muted-foreground/50",
-          enableVariables ? "bg-transparent" : "bg-transparent",
-          readOnly && "cursor-default select-none",
-          isOverLimit && "text-red-600 dark:text-red-400"
-        )}
-        style={{
-          minHeight: `${minRows * 20}px`,
-          caretColor: 'currentColor',
-        }}
-      />
+			<textarea
+				ref={textareaRef}
+				value={internalValue}
+				onChange={handleChange}
+				onKeyDown={handleKeyDown}
+				onKeyUp={handleKeyUp}
+				onClick={handleClick}
+				placeholder={placeholder}
+				readOnly={readOnly}
+				rows={minRows}
+				className={cn(
+					"nodrag w-full resize-none overflow-hidden border-none p-0 text-sm focus:outline-none focus:ring-0 placeholder:text-muted-foreground/50",
+					enableVariables ? "bg-transparent" : "bg-transparent",
+					readOnly && "cursor-default select-none",
+					isOverLimit && "text-red-600 dark:text-red-400",
+				)}
+				style={{
+					minHeight: `${minRows * 20}px`,
+					caretColor: "currentColor",
+				}}
+			/>
 
-      {/* Autocomplete Popover */}
-      {showAutocomplete && filteredVariables.length > 0 && (
-        <div
-          className="absolute z-50 bg-popover border rounded-lg shadow-xl overflow-hidden"
-          style={{
-            top: autocompletePosition.top,
-            left: Math.max(0, autocompletePosition.left),
-            minWidth: '220px',
-            maxWidth: '280px',
-          }}
-        >
-          <div className="px-2 py-1.5 border-b bg-muted/50">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Variable className="h-3 w-3" />
-              <span>Variáveis</span>
-              {searchQuery && (
-                <span className="text-foreground font-medium">"{searchQuery}"</span>
-              )}
-            </div>
-          </div>
-          <ScrollArea className="max-h-[200px]">
-            <div className="p-1">
-              {filteredVariables.map((variable, index) => (
-                <button
-                  key={variable.name}
-                  type="button"
-                  className={cn(
-                    "w-full text-left px-2 py-1.5 rounded text-sm transition-colors",
-                    index === selectedIndex
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-muted"
-                  )}
-                  onClick={() => insertVariable(variable.name)}
-                  onMouseEnter={() => setSelectedIndex(index)}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className={cn(
-                      "font-mono text-xs px-1 py-0.5 rounded",
-                      index === selectedIndex
-                        ? "bg-primary-foreground/20"
-                        : CATEGORY_COLORS[variable.category]
-                    )}>
-                      {`{{${variable.name}}}`}
-                    </span>
-                  </div>
-                  <p className={cn(
-                    "text-xs mt-0.5",
-                    index === selectedIndex ? "text-primary-foreground/80" : "text-muted-foreground"
-                  )}>
-                    {variable.description}
-                  </p>
-                </button>
-              ))}
-            </div>
-          </ScrollArea>
-          <div className="px-2 py-1 border-t bg-muted/30 text-[10px] text-muted-foreground">
-            <kbd className="px-1 py-0.5 bg-muted rounded">↑↓</kbd> navegar
-            <kbd className="px-1 py-0.5 bg-muted rounded ml-2">Enter</kbd> selecionar
-            <kbd className="px-1 py-0.5 bg-muted rounded ml-2">Esc</kbd> fechar
-          </div>
-        </div>
-      )}
+			{/* Autocomplete Popover */}
+			{showAutocomplete && filteredVariables.length > 0 && (
+				<div
+					className="absolute z-50 bg-popover border rounded-lg shadow-xl overflow-hidden"
+					style={{
+						top: autocompletePosition.top,
+						left: Math.max(0, autocompletePosition.left),
+						minWidth: "220px",
+						maxWidth: "280px",
+					}}
+				>
+					<div className="px-2 py-1.5 border-b bg-muted/50">
+						<div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+							<Variable className="h-3 w-3" />
+							<span>Variáveis</span>
+							{searchQuery && <span className="text-foreground font-medium">"{searchQuery}"</span>}
+						</div>
+					</div>
+					<ScrollArea className="max-h-[200px]">
+						<div className="p-1">
+							{filteredVariables.map((variable, index) => (
+								<button
+									key={variable.name}
+									type="button"
+									className={cn(
+										"w-full text-left px-2 py-1.5 rounded text-sm transition-colors",
+										index === selectedIndex ? "bg-primary text-primary-foreground" : "hover:bg-muted",
+									)}
+									onClick={() => insertVariable(variable.name)}
+									onMouseEnter={() => setSelectedIndex(index)}
+								>
+									<div className="flex items-center justify-between gap-2">
+										<span
+											className={cn(
+												"font-mono text-xs px-1 py-0.5 rounded",
+												index === selectedIndex ? "bg-primary-foreground/20" : CATEGORY_COLORS[variable.category],
+											)}
+										>
+											{`{{${variable.name}}}`}
+										</span>
+									</div>
+									<p
+										className={cn(
+											"text-xs mt-0.5",
+											index === selectedIndex ? "text-primary-foreground/80" : "text-muted-foreground",
+										)}
+									>
+										{variable.description}
+									</p>
+								</button>
+							))}
+						</div>
+					</ScrollArea>
+					<div className="px-2 py-1 border-t bg-muted/30 text-[10px] text-muted-foreground">
+						<kbd className="px-1 py-0.5 bg-muted rounded">↑↓</kbd> navegar
+						<kbd className="px-1 py-0.5 bg-muted rounded ml-2">Enter</kbd> selecionar
+						<kbd className="px-1 py-0.5 bg-muted rounded ml-2">Esc</kbd> fechar
+					</div>
+				</div>
+			)}
 
-      {/* Character counter */}
-      {shouldShowCounter && !readOnly && (
-        <div className="flex items-center justify-between mt-1 gap-2">
-          {hasLimit && (
-            <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
-              <div
-                className={cn(
-                  "h-full transition-all duration-200 rounded-full",
-                  isOverLimit ? "bg-red-500" : isNearLimit ? "bg-amber-500" : "bg-blue-500"
-                )}
-                style={{ width: `${limitPercentage}%` }}
-              />
-            </div>
-          )}
-          <span
-            className={cn(
-              "text-[10px] font-medium tabular-nums whitespace-nowrap",
-              isOverLimit ? "text-red-500 font-bold" : isNearLimit ? "text-amber-500" : "text-muted-foreground/60"
-            )}
-          >
-            {hasLimit ? (
-              <>
-                {currentLength}/{maxLength}
-                {isOverLimit && <span className="ml-1">(+{currentLength - maxLength})</span>}
-              </>
-            ) : (
-              currentLength
-            )}
-          </span>
-        </div>
-      )}
+			{/* Character counter */}
+			{shouldShowCounter && !readOnly && (
+				<div className="flex items-center justify-between mt-1 gap-2">
+					{hasLimit && (
+						<div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
+							<div
+								className={cn(
+									"h-full transition-all duration-200 rounded-full",
+									isOverLimit ? "bg-red-500" : isNearLimit ? "bg-amber-500" : "bg-blue-500",
+								)}
+								style={{ width: `${limitPercentage}%` }}
+							/>
+						</div>
+					)}
+					<span
+						className={cn(
+							"text-[10px] font-medium tabular-nums whitespace-nowrap",
+							isOverLimit ? "text-red-500 font-bold" : isNearLimit ? "text-amber-500" : "text-muted-foreground/60",
+						)}
+					>
+						{hasLimit ? (
+							<>
+								{currentLength}/{maxLength}
+								{isOverLimit && <span className="ml-1">(+{currentLength - maxLength})</span>}
+							</>
+						) : (
+							currentLength
+						)}
+					</span>
+				</div>
+			)}
 
-      {/* Expand button */}
-      {!readOnly && (
-        <>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute -top-2 -right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity bg-background/80 hover:bg-background border shadow-sm rounded-full nodrag"
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsDialogOpen(true);
-            }}
-            title="Expandir editor"
-          >
-            <Maximize2 className="h-3 w-3 text-muted-foreground" />
-          </Button>
+			{/* Expand button */}
+			{!readOnly && (
+				<>
+					<Button
+						variant="ghost"
+						size="icon"
+						className="absolute -top-2 -right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity bg-background/80 hover:bg-background border shadow-sm rounded-full nodrag"
+						onClick={(e) => {
+							e.stopPropagation();
+							setIsDialogOpen(true);
+						}}
+						title="Expandir editor"
+					>
+						<Maximize2 className="h-3 w-3 text-muted-foreground" />
+					</Button>
 
-          {/* Flow Text Editor Dialog (renderizado via portal) */}
-          <FlowTextEditorDialog
-            isOpen={isDialogOpen}
-            onClose={() => setIsDialogOpen(false)}
-            onSave={(text) => {
-              setInternalValue(text);
-              onChange(text);
-            }}
-            initialText={internalValue}
-            placeholder={placeholder}
-            maxLength={maxLength}
-            title="Editar Texto"
-          />
-        </>
-      )}
-    </div>
-  );
+					{/* Flow Text Editor Dialog (renderizado via portal) */}
+					<FlowTextEditorDialog
+						isOpen={isDialogOpen}
+						onClose={() => setIsDialogOpen(false)}
+						onSave={(text) => {
+							setInternalValue(text);
+							onChange(text);
+						}}
+						initialText={internalValue}
+						placeholder={placeholder}
+						maxLength={maxLength}
+						title="Editar Texto"
+					/>
+				</>
+			)}
+		</div>
+	);
 };

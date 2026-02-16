@@ -1,54 +1,54 @@
-import { Server as HTTPServer } from 'http';
+import { Server as HTTPServer } from "http";
 // import { Server as SocketIOServer, Socket } from 'socket.io';
-import { Alert } from '@/types/queue-management';
+import { Alert } from "@/types/queue-management";
 
 // Temporary types to allow compilation without socket.io
 type SocketIOServer = any;
 type Socket = any;
 
 export interface WebSocketMessage {
-  type: 'alert' | 'queue_update' | 'system_update';
-  data: any;
-  timestamp: Date;
+	type: "alert" | "queue_update" | "system_update";
+	data: any;
+	timestamp: Date;
 }
 
 export interface AlertNotification extends WebSocketMessage {
-  type: 'alert';
-  data: {
-    alert: Alert;
-    action: 'created' | 'updated' | 'acknowledged' | 'resolved';
-  };
+	type: "alert";
+	data: {
+		alert: Alert;
+		action: "created" | "updated" | "acknowledged" | "resolved";
+	};
 }
 
 export interface QueueUpdateNotification extends WebSocketMessage {
-  type: 'queue_update';
-  data: {
-    queueName: string;
-    metrics: any;
-    health: any;
-  };
+	type: "queue_update";
+	data: {
+		queueName: string;
+		metrics: any;
+		health: any;
+	};
 }
 
 export interface SystemUpdateNotification extends WebSocketMessage {
-  type: 'system_update';
-  data: {
-    systemMetrics: any;
-    timestamp: Date;
-  };
+	type: "system_update";
+	data: {
+		systemMetrics: any;
+		timestamp: Date;
+	};
 }
 
 class WebSocketManager {
-  private io: SocketIOServer | null = null;
-  private connectedClients = new Map<string, Socket>();
-  private userSubscriptions = new Map<string, Set<string>>(); // userId -> Set of queueNames
+	private io: SocketIOServer | null = null;
+	private connectedClients = new Map<string, Socket>();
+	private userSubscriptions = new Map<string, Set<string>>(); // userId -> Set of queueNames
 
-  initialize(server: HTTPServer) {
-    // TODO: Reinstall socket.io package to enable WebSocket functionality
-    console.log('[WebSocketManager] WebSocket functionality temporarily disabled');
-    return; // Exit early to avoid socket.io code
+	initialize(server: HTTPServer) {
+		// TODO: Reinstall socket.io package to enable WebSocket functionality
+		console.log("[WebSocketManager] WebSocket functionality temporarily disabled");
+		return; // Exit early to avoid socket.io code
 
-    // The rest of this method is commented out until socket.io is installed
-    /*
+		// The rest of this method is commented out until socket.io is installed
+		/*
     this.io = new SocketIOServer(server, {
       cors: {
         origin: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
@@ -150,104 +150,102 @@ class WebSocketManager {
 
     console.log('[WebSocket] Server initialized');
     */
-  }
+	}
 
-  // Broadcast alert to all subscribed clients
-  broadcastAlert(alert: Alert, action: 'created' | 'updated' | 'acknowledged' | 'resolved') {
-    if (!this.io) return;
+	// Broadcast alert to all subscribed clients
+	broadcastAlert(alert: Alert, action: "created" | "updated" | "acknowledged" | "resolved") {
+		if (!this.io) return;
 
-    const notification: AlertNotification = {
-      type: 'alert',
-      data: { alert, action },
-      timestamp: new Date()
-    };
+		const notification: AlertNotification = {
+			type: "alert",
+			data: { alert, action },
+			timestamp: new Date(),
+		};
 
-    // Send to global alerts subscribers
-    this.io.to('alerts').emit('alert_notification', notification);
+		// Send to global alerts subscribers
+		this.io.to("alerts").emit("alert_notification", notification);
 
-    // Send to queue-specific subscribers if alert is queue-specific
-    if (alert.queueName) {
-      this.io.to(`queue:${alert.queueName}`).emit('alert_notification', notification);
-    }
+		// Send to queue-specific subscribers if alert is queue-specific
+		if (alert.queueName) {
+			this.io.to(`queue:${alert.queueName}`).emit("alert_notification", notification);
+		}
 
-    console.log(`[WebSocket] Broadcasted ${action} alert: ${alert.title}`);
-  }
+		console.log(`[WebSocket] Broadcasted ${action} alert: ${alert.title}`);
+	}
 
-  // Broadcast queue update to subscribed clients
-  broadcastQueueUpdate(queueName: string, metrics: any, health: any) {
-    if (!this.io) return;
+	// Broadcast queue update to subscribed clients
+	broadcastQueueUpdate(queueName: string, metrics: any, health: any) {
+		if (!this.io) return;
 
-    const notification: QueueUpdateNotification = {
-      type: 'queue_update',
-      data: { queueName, metrics, health },
-      timestamp: new Date()
-    };
+		const notification: QueueUpdateNotification = {
+			type: "queue_update",
+			data: { queueName, metrics, health },
+			timestamp: new Date(),
+		};
 
-    this.io.to(`queue:${queueName}`).emit('queue_update', notification);
-    
-    console.log(`[WebSocket] Broadcasted queue update: ${queueName}`);
-  }
+		this.io.to(`queue:${queueName}`).emit("queue_update", notification);
 
-  // Broadcast system update to all connected clients
-  broadcastSystemUpdate(systemMetrics: any) {
-    if (!this.io) return;
+		console.log(`[WebSocket] Broadcasted queue update: ${queueName}`);
+	}
 
-    const notification: SystemUpdateNotification = {
-      type: 'system_update',
-      data: { systemMetrics, timestamp: new Date() },
-      timestamp: new Date()
-    };
+	// Broadcast system update to all connected clients
+	broadcastSystemUpdate(systemMetrics: any) {
+		if (!this.io) return;
 
-    this.io.emit('system_update', notification);
-    
-    console.log('[WebSocket] Broadcasted system update');
-  }
+		const notification: SystemUpdateNotification = {
+			type: "system_update",
+			data: { systemMetrics, timestamp: new Date() },
+			timestamp: new Date(),
+		};
 
-  // Send notification to specific user
-  sendToUser(userId: string, message: WebSocketMessage) {
-    if (!this.io) return;
+		this.io.emit("system_update", notification);
 
-    // Find all sockets for this user
-    const userSockets = Array.from(this.connectedClients.values())
-      .filter(socket => socket.data.userId === userId);
+		console.log("[WebSocket] Broadcasted system update");
+	}
 
-    userSockets.forEach(socket => {
-      socket.emit('notification', message);
-    });
+	// Send notification to specific user
+	sendToUser(userId: string, message: WebSocketMessage) {
+		if (!this.io) return;
 
-    console.log(`[WebSocket] Sent notification to user: ${userId}`);
-  }
+		// Find all sockets for this user
+		const userSockets = Array.from(this.connectedClients.values()).filter((socket) => socket.data.userId === userId);
 
-  // Get connection statistics
-  getStats() {
-    return {
-      connectedClients: this.connectedClients.size,
-      totalSubscriptions: Array.from(this.userSubscriptions.values())
-        .reduce((total, subscriptions) => total + subscriptions.size, 0),
-      userSubscriptions: Object.fromEntries(
-        Array.from(this.userSubscriptions.entries()).map(([userId, queues]) => [
-          userId,
-          Array.from(queues)
-        ])
-      )
-    };
-  }
+		userSockets.forEach((socket) => {
+			socket.emit("notification", message);
+		});
 
-  // Check if WebSocket server is initialized
-  isInitialized(): boolean {
-    return this.io !== null;
-  }
+		console.log(`[WebSocket] Sent notification to user: ${userId}`);
+	}
 
-  // Gracefully shutdown WebSocket server
-  shutdown() {
-    if (this.io) {
-      console.log('[WebSocket] Shutting down server...');
-      this.io.close();
-      this.io = null;
-      this.connectedClients.clear();
-      this.userSubscriptions.clear();
-    }
-  }
+	// Get connection statistics
+	getStats() {
+		return {
+			connectedClients: this.connectedClients.size,
+			totalSubscriptions: Array.from(this.userSubscriptions.values()).reduce(
+				(total, subscriptions) => total + subscriptions.size,
+				0,
+			),
+			userSubscriptions: Object.fromEntries(
+				Array.from(this.userSubscriptions.entries()).map(([userId, queues]) => [userId, Array.from(queues)]),
+			),
+		};
+	}
+
+	// Check if WebSocket server is initialized
+	isInitialized(): boolean {
+		return this.io !== null;
+	}
+
+	// Gracefully shutdown WebSocket server
+	shutdown() {
+		if (this.io) {
+			console.log("[WebSocket] Shutting down server...");
+			this.io.close();
+			this.io = null;
+			this.connectedClients.clear();
+			this.userSubscriptions.clear();
+		}
+	}
 }
 
 // Export singleton instance
@@ -255,18 +253,18 @@ export const webSocketManager = new WebSocketManager();
 
 // Helper function to initialize WebSocket with HTTP server
 export function initializeWebSocket(server: HTTPServer) {
-  webSocketManager.initialize(server);
+	webSocketManager.initialize(server);
 }
 
 // Helper functions for broadcasting
-export function broadcastAlert(alert: Alert, action: 'created' | 'updated' | 'acknowledged' | 'resolved') {
-  webSocketManager.broadcastAlert(alert, action);
+export function broadcastAlert(alert: Alert, action: "created" | "updated" | "acknowledged" | "resolved") {
+	webSocketManager.broadcastAlert(alert, action);
 }
 
 export function broadcastQueueUpdate(queueName: string, metrics: any, health: any) {
-  webSocketManager.broadcastQueueUpdate(queueName, metrics, health);
+	webSocketManager.broadcastQueueUpdate(queueName, metrics, health);
 }
 
 export function broadcastSystemUpdate(systemMetrics: any) {
-  webSocketManager.broadcastSystemUpdate(systemMetrics);
+	webSocketManager.broadcastSystemUpdate(systemMetrics);
 }

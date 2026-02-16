@@ -1,19 +1,19 @@
 {
-  "$schema": "https://json.schemastore.org/swcrc",
-  "jsc": {
-    "parser": {
-      "syntax": "typescript",
-      "tsx": true,
-      "decorators": false,
-      "dynamicImport": true
-    },
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./*"]
-    },
-    "target": "es2022"
-  },
-  "module": {
-    "type": "es6"
-  }
-} 
+	"$schema": "https://json.schemastore.org/swcrc",
+	"jsc": {
+		"parser": {
+			"syntax": "typescript",
+			"tsx": true,
+			"decorators": false,
+			"dynamicImport": true
+		},
+		"baseUrl": ".",
+		"paths": {
+			"@/*": ["./*"]
+		},
+		"target": "es2022"
+	},
+	"module": {
+		"type": "es6"
+	}
+}

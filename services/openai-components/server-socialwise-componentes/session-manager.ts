@@ -14,35 +14,35 @@ import { AgentConfig, ChannelType } from "../types";
  *   OpenAI gerencia contexto internamente, menos tokens enviados.
  *   SOMENTE funciona com OpenAI Responses API.
  */
-export type HistoryStrategy = 'manual' | 'openai_native';
+export type HistoryStrategy = "manual" | "openai_native";
 
 /**
  * Obtém a estratégia de histórico configurada via ENV.
  * Default: "manual" (compatível com qualquer LLM)
  */
 export function getHistoryStrategy(): HistoryStrategy {
-  const strategy = process.env.CONVERSATION_HISTORY_STRATEGY as HistoryStrategy;
-  if (strategy === 'openai_native') {
-    return 'openai_native';
-  }
-  return 'manual'; // default
+	const strategy = process.env.CONVERSATION_HISTORY_STRATEGY as HistoryStrategy;
+	if (strategy === "openai_native") {
+		return "openai_native";
+	}
+	return "manual"; // default
 }
 
 /**
  * Verifica se deve usar o modo nativo da OpenAI (previous_response_id)
  */
 export function isOpenAINativeStrategy(): boolean {
-  return getHistoryStrategy() === 'openai_native';
+	return getHistoryStrategy() === "openai_native";
 }
 
 // Pequeno hash determinístico (FNV-1a) para derivar a sessão de (modelo+capitão)
 function hashShort(s: string): string {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return (h >>> 0).toString(36);
+	let h = 2166136261;
+	for (let i = 0; i < s.length; i++) {
+		h ^= s.charCodeAt(i);
+		h = Math.imul(h, 16777619);
+	}
+	return (h >>> 0).toString(36);
 }
 
 const sessionState = new Map<string, string>(); // Fallback local — dev/CI
@@ -56,132 +56,133 @@ const MAX_HISTORY_MESSAGES = 20; // Limite de mensagens no histórico
 
 // Session TTL configuration from agent
 export interface SessionTtlConfig {
-  sessionTtlSeconds?: number;   // General TTL (default 24h)
-  sessionTtlDevSeconds?: number; // Dev TTL (default 5min)
+	sessionTtlSeconds?: number; // General TTL (default 24h)
+	sessionTtlDevSeconds?: number; // Dev TTL (default 5min)
 }
 
 // Interface para mensagens do histórico de conversa
 export interface ConversationMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: number;
+	role: "user" | "assistant";
+	content: string;
+	timestamp: number;
 }
 
 // Session IDs dos desenvolvedores para TTL reduzido
-const DEV_SESSION_IDS = new Set([
-  "9296550493690812",
-  "1002859634954741", 
-  "558597550136"
-]);
+const DEV_SESSION_IDS = new Set(["9296550493690812", "1002859634954741", "558597550136"]);
 
 async function getSessionPointer(key: string): Promise<string | undefined> {
-  const redis = getRedisInstance?.();
-  if (redis) {
-    try {
-      return await redis.get(key);
-    } catch (error) {
-      console.warn("Redis get failed, using fallback", error);
-    }
-  }
-  return sessionState.get(key);
+	const redis = getRedisInstance?.();
+	if (redis) {
+		try {
+			return await redis.get(key);
+		} catch (error) {
+			console.warn("Redis get failed, using fallback", error);
+		}
+	}
+	return sessionState.get(key);
 }
 
-async function setSessionPointer(key: string, value: string, sessionId?: string, ttlConfig?: SessionTtlConfig): Promise<void> {
-  // Determinar TTL baseado se é dev ou não + config do agente
-  const isDevSession = sessionId && DEV_SESSION_IDS.has(sessionId);
+async function setSessionPointer(
+	key: string,
+	value: string,
+	sessionId?: string,
+	ttlConfig?: SessionTtlConfig,
+): Promise<void> {
+	// Determinar TTL baseado se é dev ou não + config do agente
+	const isDevSession = sessionId && DEV_SESSION_IDS.has(sessionId);
 
-  // Use agent config TTL if provided, otherwise use defaults
-  const generalTtl = ttlConfig?.sessionTtlSeconds ?? DEFAULT_SESSION_TTL_SECONDS;
-  const devTtl = ttlConfig?.sessionTtlDevSeconds ?? DEFAULT_SESSION_TTL_DEV_SECONDS;
-  const ttl = isDevSession ? devTtl : generalTtl;
+	// Use agent config TTL if provided, otherwise use defaults
+	const generalTtl = ttlConfig?.sessionTtlSeconds ?? DEFAULT_SESSION_TTL_SECONDS;
+	const devTtl = ttlConfig?.sessionTtlDevSeconds ?? DEFAULT_SESSION_TTL_DEV_SECONDS;
+	const ttl = isDevSession ? devTtl : generalTtl;
 
-  if (isDevSession) {
-    console.log(`🔧 DEV SESSION: Usando TTL de ${devTtl}s para sessionId ${sessionId} (config do agente)`);
-  }
+	if (isDevSession) {
+		console.log(`🔧 DEV SESSION: Usando TTL de ${devTtl}s para sessionId ${sessionId} (config do agente)`);
+	}
 
-  const redis = getRedisInstance?.();
-  if (redis) {
-    try {
-      await redis.setex(key, ttl, value);
-    } catch (error) {
-      console.warn("Redis set failed, using fallback", error);
-    }
-  }
-  sessionState.set(key, value);
+	const redis = getRedisInstance?.();
+	if (redis) {
+		try {
+			await redis.setex(key, ttl, value);
+		} catch (error) {
+			console.warn("Redis set failed, using fallback", error);
+		}
+	}
+	sessionState.set(key, value);
 }
 
 async function withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
-  const redis = getRedisInstance?.();
-  if (!redis) return fn(); // sem Redis, executa direto
+	const redis = getRedisInstance?.();
+	if (!redis) return fn(); // sem Redis, executa direto
 
-  const lockKey = `lock:${key}`;
-  const ok = await redis.set(lockKey, "1", "NX", "EX", LOCK_TTL_SECONDS);
-  if (!ok) {
-    throw new Error(`Sessão ${key} em uso por outro processo`);
-  }
-  try {
-    return await fn();
-  } finally {
-    await redis.del(lockKey);
-  }
+	const lockKey = `lock:${key}`;
+	const ok = await redis.set(lockKey, "1", "NX", "EX", LOCK_TTL_SECONDS);
+	if (!ok) {
+		throw new Error(`Sessão ${key} em uso por outro processo`);
+	}
+	try {
+		return await fn();
+	} finally {
+		await redis.del(lockKey);
+	}
 }
 
 export interface SessionEnsureResult {
-  responseId: string | undefined;
-  isNewSession: boolean;
+	responseId: string | undefined;
+	isNewSession: boolean;
 }
 
 export interface SessionParams {
-  sessionId: string;
-  agent: AgentConfig;
-  channel: ChannelType;
+	sessionId: string;
+	agent: AgentConfig;
+	channel: ChannelType;
 }
 
 export async function ensureSession(
-  params: SessionParams,
-  createMasterPrompt: (channel: ChannelType) => string,
-  signal?: AbortSignal
+	params: SessionParams,
+	createMasterPrompt: (channel: ChannelType) => string,
+	signal?: AbortSignal,
 ): Promise<SessionEnsureResult> {
-  // 🔍 DEBUG: Log ensureSession início
-  console.log("🔐 ENSURE SESSION - Iniciando:", {
-    sessionId: params.sessionId,
-    model: params.agent.model,
-    channel: params.channel,
-    hasInstructions: !!params.agent.instructions
-  });
+	// 🔍 DEBUG: Log ensureSession início
+	console.log("🔐 ENSURE SESSION - Iniciando:", {
+		sessionId: params.sessionId,
+		model: params.agent.model,
+		channel: params.channel,
+		hasInstructions: !!params.agent.instructions,
+	});
 
-  // Chave única baseada apenas no sessionId do webhook
-  const sessionKey = `session:${params.sessionId}`;
-  
-  console.log("🔐 ENSURE SESSION - Chave da sessão:", sessionKey);
-  
-  const existing = await getSessionPointer(sessionKey);
-  if (existing) {
-    console.log("🔐 ENSURE SESSION - Sessão existente encontrada:", existing);
-    return { responseId: existing, isNewSession: false };
-  }
+	// Chave única baseada apenas no sessionId do webhook
+	const sessionKey = `session:${params.sessionId}`;
 
-  console.log("🚀 SINGLE-CALL OPTIMIZATION - Nova sessão, retornando undefined para single-call");
-  // Para otimização single-call: não criar sessão prévia, deixar que seja criada na primeira chamada real
-  return { responseId: undefined, isNewSession: true };
+	console.log("🔐 ENSURE SESSION - Chave da sessão:", sessionKey);
+
+	const existing = await getSessionPointer(sessionKey);
+	if (existing) {
+		console.log("🔐 ENSURE SESSION - Sessão existente encontrada:", existing);
+		return { responseId: existing, isNewSession: false };
+	}
+
+	console.log("🚀 SINGLE-CALL OPTIMIZATION - Nova sessão, retornando undefined para single-call");
+	// Para otimização single-call: não criar sessão prévia, deixar que seja criada na primeira chamada real
+	return { responseId: undefined, isNewSession: true };
 }
 
 export async function updateSessionPointer(
-  sessionId: string,
-  model: string,
-  channel: ChannelType,
-  instructions: string,
-  newResponseId: string
+	sessionId: string,
+	model: string,
+	channel: ChannelType,
+	instructions: string,
+	newResponseId: string,
 ): Promise<void> {
-  const sessionKey = `session:${sessionId}`;
-  await setSessionPointer(sessionKey, newResponseId, sessionId);
+	const sessionKey = `session:${sessionId}`;
+	await setSessionPointer(sessionKey, newResponseId, sessionId);
 }
 
 // Verifica se já há ponteiro de sessão para esse sessionId
 export async function hasSessionPointer(sessionId: string): Promise<boolean> {
-  const sessionKey = `session:${sessionId}`;
-  const existing = await getSessionPointer(sessionKey);
-  return !!existing;
+	const sessionKey = `session:${sessionId}`;
+	const existing = await getSessionPointer(sessionKey);
+	return !!existing;
 }
 
 // ============ GERENCIAMENTO DE HISTÓRICO DE CONVERSA ============
@@ -194,35 +195,35 @@ export async function hasSessionPointer(sessionId: string): Promise<boolean> {
  * - "openai_native": Retorna array vazio (OpenAI gerencia via previous_response_id)
  */
 export async function getSessionHistory(
-  sessionId: string,
-  maxMessages: number = MAX_HISTORY_MESSAGES
+	sessionId: string,
+	maxMessages: number = MAX_HISTORY_MESSAGES,
 ): Promise<ConversationMessage[]> {
-  // No modo openai_native, não carregamos histórico manual
-  // A OpenAI recupera contexto via previous_response_id
-  if (isOpenAINativeStrategy()) {
-    console.log(`📚 [${getHistoryStrategy()}] Modo OpenAI nativo - histórico gerenciado via previous_response_id`);
-    return [];
-  }
+	// No modo openai_native, não carregamos histórico manual
+	// A OpenAI recupera contexto via previous_response_id
+	if (isOpenAINativeStrategy()) {
+		console.log(`📚 [${getHistoryStrategy()}] Modo OpenAI nativo - histórico gerenciado via previous_response_id`);
+		return [];
+	}
 
-  const historyKey = `sessionHistory:${sessionId}`;
-  const redis = getRedisInstance?.();
+	const historyKey = `sessionHistory:${sessionId}`;
+	const redis = getRedisInstance?.();
 
-  if (redis) {
-    try {
-      const data = await redis.get(historyKey);
-      if (data) {
-        const history: ConversationMessage[] = JSON.parse(data);
-        // Retorna as últimas maxMessages mensagens
-        return history.slice(-maxMessages);
-      }
-    } catch (error) {
-      console.warn("[SessionHistory] Redis get failed, using fallback:", error);
-    }
-  }
+	if (redis) {
+		try {
+			const data = await redis.get(historyKey);
+			if (data) {
+				const history: ConversationMessage[] = JSON.parse(data);
+				// Retorna as últimas maxMessages mensagens
+				return history.slice(-maxMessages);
+			}
+		} catch (error) {
+			console.warn("[SessionHistory] Redis get failed, using fallback:", error);
+		}
+	}
 
-  // Fallback para memória local
-  const localHistory = historyState.get(historyKey) ?? [];
-  return localHistory.slice(-maxMessages);
+	// Fallback para memória local
+	const localHistory = historyState.get(historyKey) ?? [];
+	return localHistory.slice(-maxMessages);
 }
 
 /**
@@ -232,47 +233,44 @@ export async function getSessionHistory(
  * - "manual": Salva no Redis/memória
  * - "openai_native": Apenas salva session pointer (OpenAI gerencia histórico)
  */
-export async function appendToHistory(
-  sessionId: string,
-  message: ConversationMessage
-): Promise<void> {
-  // No modo openai_native, não salvamos histórico manual
-  // A OpenAI mantém contexto via previous_response_id
-  if (isOpenAINativeStrategy()) {
-    // Log silencioso - o histórico está sendo gerenciado pela OpenAI
-    return;
-  }
+export async function appendToHistory(sessionId: string, message: ConversationMessage): Promise<void> {
+	// No modo openai_native, não salvamos histórico manual
+	// A OpenAI mantém contexto via previous_response_id
+	if (isOpenAINativeStrategy()) {
+		// Log silencioso - o histórico está sendo gerenciado pela OpenAI
+		return;
+	}
 
-  const historyKey = `sessionHistory:${sessionId}`;
-  const isDevSession = DEV_SESSION_IDS.has(sessionId);
-  // Histórico usa TTL maior que sessionPointer para persistir contexto
-  const ttl = isDevSession ? HISTORY_TTL_DEV_SECONDS : DEFAULT_SESSION_TTL_SECONDS;
+	const historyKey = `sessionHistory:${sessionId}`;
+	const isDevSession = DEV_SESSION_IDS.has(sessionId);
+	// Histórico usa TTL maior que sessionPointer para persistir contexto
+	const ttl = isDevSession ? HISTORY_TTL_DEV_SECONDS : DEFAULT_SESSION_TTL_SECONDS;
 
-  // Recupera histórico existente (força busca direta, não usa getSessionHistory que verifica estratégia)
-  let history = await getSessionHistoryDirect(sessionId, MAX_HISTORY_MESSAGES * 2);
+	// Recupera histórico existente (força busca direta, não usa getSessionHistory que verifica estratégia)
+	let history = await getSessionHistoryDirect(sessionId, MAX_HISTORY_MESSAGES * 2);
 
-  // Adiciona nova mensagem
-  history.push(message);
+	// Adiciona nova mensagem
+	history.push(message);
 
-  // Mantém apenas as últimas MAX_HISTORY_MESSAGES mensagens
-  if (history.length > MAX_HISTORY_MESSAGES) {
-    history = history.slice(-MAX_HISTORY_MESSAGES);
-  }
+	// Mantém apenas as últimas MAX_HISTORY_MESSAGES mensagens
+	if (history.length > MAX_HISTORY_MESSAGES) {
+		history = history.slice(-MAX_HISTORY_MESSAGES);
+	}
 
-  const redis = getRedisInstance?.();
-  if (redis) {
-    try {
-      await redis.setex(historyKey, ttl, JSON.stringify(history));
-      if (isDevSession) {
-        console.log(`🔧 DEV SESSION HISTORY: Salvo ${history.length} mensagens com TTL ${ttl}s`);
-      }
-    } catch (error) {
-      console.warn("[SessionHistory] Redis set failed, using fallback:", error);
-    }
-  }
+	const redis = getRedisInstance?.();
+	if (redis) {
+		try {
+			await redis.setex(historyKey, ttl, JSON.stringify(history));
+			if (isDevSession) {
+				console.log(`🔧 DEV SESSION HISTORY: Salvo ${history.length} mensagens com TTL ${ttl}s`);
+			}
+		} catch (error) {
+			console.warn("[SessionHistory] Redis set failed, using fallback:", error);
+		}
+	}
 
-  // Sempre atualiza fallback local também
-  historyState.set(historyKey, history);
+	// Sempre atualiza fallback local também
+	historyState.set(historyKey, history);
 }
 
 /**
@@ -280,44 +278,44 @@ export async function appendToHistory(
  * Usado internamente por appendToHistory no modo manual.
  */
 async function getSessionHistoryDirect(
-  sessionId: string,
-  maxMessages: number = MAX_HISTORY_MESSAGES
+	sessionId: string,
+	maxMessages: number = MAX_HISTORY_MESSAGES,
 ): Promise<ConversationMessage[]> {
-  const historyKey = `sessionHistory:${sessionId}`;
-  const redis = getRedisInstance?.();
+	const historyKey = `sessionHistory:${sessionId}`;
+	const redis = getRedisInstance?.();
 
-  if (redis) {
-    try {
-      const data = await redis.get(historyKey);
-      if (data) {
-        const history: ConversationMessage[] = JSON.parse(data);
-        return history.slice(-maxMessages);
-      }
-    } catch (error) {
-      console.warn("[SessionHistory] Redis get failed, using fallback:", error);
-    }
-  }
+	if (redis) {
+		try {
+			const data = await redis.get(historyKey);
+			if (data) {
+				const history: ConversationMessage[] = JSON.parse(data);
+				return history.slice(-maxMessages);
+			}
+		} catch (error) {
+			console.warn("[SessionHistory] Redis get failed, using fallback:", error);
+		}
+	}
 
-  const localHistory = historyState.get(historyKey) ?? [];
-  return localHistory.slice(-maxMessages);
+	const localHistory = historyState.get(historyKey) ?? [];
+	return localHistory.slice(-maxMessages);
 }
 
 /**
  * Limpa o histórico de uma sessão
  */
 export async function clearSessionHistory(sessionId: string): Promise<void> {
-  const historyKey = `sessionHistory:${sessionId}`;
-  const redis = getRedisInstance?.();
+	const historyKey = `sessionHistory:${sessionId}`;
+	const redis = getRedisInstance?.();
 
-  if (redis) {
-    try {
-      await redis.del(historyKey);
-    } catch (error) {
-      console.warn("[SessionHistory] Redis del failed:", error);
-    }
-  }
+	if (redis) {
+		try {
+			await redis.del(historyKey);
+		} catch (error) {
+			console.warn("[SessionHistory] Redis del failed:", error);
+		}
+	}
 
-  historyState.delete(historyKey);
+	historyState.delete(historyKey);
 }
 
 // ============ INTERACTIVE MESSAGE CONTEXT ============
@@ -331,10 +329,10 @@ const DEFAULT_INTERACTIVE_CONTEXT_TTL_SECONDS = 60 * 60; // 1 hora
 const DEFAULT_INTERACTIVE_CONTEXT_TTL_DEV_SECONDS = 60 * 5; // 5 min para dev
 
 export interface InteractiveMessageContext {
-  bodyText: string;
-  intentSlug?: string;
-  timestamp: number;
-  buttons?: Array<{ title: string; payload: string }>;
+	bodyText: string;
+	intentSlug?: string;
+	timestamp: number;
+	buttons?: Array<{ title: string; payload: string }>;
 }
 
 /**
@@ -344,64 +342,58 @@ export interface InteractiveMessageContext {
  * @param ttlConfig - Optional TTL configuration from agent (sessionTtlSeconds, sessionTtlDevSeconds)
  */
 export async function storeInteractiveMessageContext(
-  sessionId: string,
-  context: InteractiveMessageContext,
-  ttlConfig?: SessionTtlConfig
+	sessionId: string,
+	context: InteractiveMessageContext,
+	ttlConfig?: SessionTtlConfig,
 ): Promise<void> {
-  const key = `session:${sessionId}:interactiveContext`;
-  const isDevSession = DEV_SESSION_IDS.has(sessionId);
+	const key = `session:${sessionId}:interactiveContext`;
+	const isDevSession = DEV_SESSION_IDS.has(sessionId);
 
-  // Use agent config TTL if provided, otherwise use defaults
-  const generalTtl = ttlConfig?.sessionTtlSeconds ?? DEFAULT_INTERACTIVE_CONTEXT_TTL_SECONDS;
-  const devTtl = ttlConfig?.sessionTtlDevSeconds ?? DEFAULT_INTERACTIVE_CONTEXT_TTL_DEV_SECONDS;
-  const ttl = isDevSession ? devTtl : generalTtl;
+	// Use agent config TTL if provided, otherwise use defaults
+	const generalTtl = ttlConfig?.sessionTtlSeconds ?? DEFAULT_INTERACTIVE_CONTEXT_TTL_SECONDS;
+	const devTtl = ttlConfig?.sessionTtlDevSeconds ?? DEFAULT_INTERACTIVE_CONTEXT_TTL_DEV_SECONDS;
+	const ttl = isDevSession ? devTtl : generalTtl;
 
-  const redis = getRedisInstance?.();
-  if (redis) {
-    try {
-      await redis.setex(key, ttl, JSON.stringify(context));
-      if (isDevSession) {
-        console.log(`🔧 DEV INTERACTIVE CONTEXT: Stored for ${sessionId} with TTL ${ttl}s (agent config)`);
-      }
-    } catch (error) {
-      console.warn('[InteractiveContext] Redis set failed:', error);
-    }
-  }
+	const redis = getRedisInstance?.();
+	if (redis) {
+		try {
+			await redis.setex(key, ttl, JSON.stringify(context));
+			if (isDevSession) {
+				console.log(`🔧 DEV INTERACTIVE CONTEXT: Stored for ${sessionId} with TTL ${ttl}s (agent config)`);
+			}
+		} catch (error) {
+			console.warn("[InteractiveContext] Redis set failed:", error);
+		}
+	}
 }
 
-export async function getInteractiveMessageContext(
-  sessionId: string
-): Promise<InteractiveMessageContext | null> {
-  const key = `session:${sessionId}:interactiveContext`;
-  const redis = getRedisInstance?.();
+export async function getInteractiveMessageContext(sessionId: string): Promise<InteractiveMessageContext | null> {
+	const key = `session:${sessionId}:interactiveContext`;
+	const redis = getRedisInstance?.();
 
-  if (redis) {
-    try {
-      const data = await redis.get(key);
-      if (data) {
-        return JSON.parse(data) as InteractiveMessageContext;
-      }
-    } catch (error) {
-      console.warn('[InteractiveContext] Redis get failed:', error);
-    }
-  }
+	if (redis) {
+		try {
+			const data = await redis.get(key);
+			if (data) {
+				return JSON.parse(data) as InteractiveMessageContext;
+			}
+		} catch (error) {
+			console.warn("[InteractiveContext] Redis get failed:", error);
+		}
+	}
 
-  return null;
+	return null;
 }
 
-export async function clearInteractiveMessageContext(
-  sessionId: string
-): Promise<void> {
-  const key = `session:${sessionId}:interactiveContext`;
-  const redis = getRedisInstance?.();
+export async function clearInteractiveMessageContext(sessionId: string): Promise<void> {
+	const key = `session:${sessionId}:interactiveContext`;
+	const redis = getRedisInstance?.();
 
-  if (redis) {
-    try {
-      await redis.del(key);
-    } catch (error) {
-      console.warn('[InteractiveContext] Redis del failed:', error);
-    }
-  }
+	if (redis) {
+		try {
+			await redis.del(key);
+		} catch (error) {
+			console.warn("[InteractiveContext] Redis del failed:", error);
+		}
+	}
 }
-
-

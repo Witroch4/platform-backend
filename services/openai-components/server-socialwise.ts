@@ -3,10 +3,10 @@
 
 // Re-exportar funções de AI do módulo ai-functions
 export {
-  generateShortTitlesBatch,
-  generateFreeChatButtons,
-  generateWarmupButtons,
-  routerLLM  // ← Agora usa a implementação nova do ai-functions
+	generateShortTitlesBatch,
+	generateFreeChatButtons,
+	generateWarmupButtons,
+	routerLLM, // ← Agora usa a implementação nova do ai-functions
 } from "./server-socialwise-componentes/ai-functions";
 
 // REMOVIDO: Export antigo do router-llm.ts
@@ -17,8 +17,8 @@ export { structuredOrJson } from "./server-socialwise-componentes/structured-out
 export { ensureSession } from "./server-socialwise-componentes/session-manager";
 export { buildMessages, createMasterPrompt } from "./server-socialwise-componentes/prompt-manager";
 export { getModelCaps, isGPT5, normEffort, normVerb } from "./server-socialwise-componentes/model-capabilities";
-export { 
-  getConstraintsForChannel,
-  createButtonsSchema,
-  createRouterSchema 
+export {
+	getConstraintsForChannel,
+	createButtonsSchema,
+	createRouterSchema,
 } from "./server-socialwise-componentes/channel-constraints";

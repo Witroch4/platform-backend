@@ -32,11 +32,7 @@ const GENERIC_ERROR_MESSAGE = "E-mail ou senha incorretos";
 async function getClientIp(): Promise<string> {
 	try {
 		const headersList = await headers();
-		return (
-			headersList.get("x-forwarded-for")?.split(",")[0].trim() ||
-			headersList.get("x-real-ip") ||
-			"unknown"
-		);
+		return headersList.get("x-forwarded-for")?.split(",")[0].trim() || headersList.get("x-real-ip") || "unknown";
 	} catch {
 		return "unknown";
 	}
@@ -133,12 +129,10 @@ export const login = async (credentials: z.infer<typeof CredentialsSchema>) => {
 		const baseRedirect = process.env.AUTH_LOGIN_REDIRECT || "/registro/redesocial";
 
 		// Verificar se o URL já contém parâmetros de consulta
-		const hasQueryParams = baseRedirect.includes('?');
+		const hasQueryParams = baseRedirect.includes("?");
 
 		// Adicionar o parâmetro fromLogin=true de forma adequada
-		const loginRedirect = hasQueryParams
-			? `${baseRedirect}&fromLogin=true`
-			: `${baseRedirect}?fromLogin=true`;
+		const loginRedirect = hasQueryParams ? `${baseRedirect}&fromLogin=true` : `${baseRedirect}?fromLogin=true`;
 
 		await signIn("credentials", {
 			email,
@@ -163,10 +157,7 @@ export const login = async (credentials: z.infer<typeof CredentialsSchema>) => {
 		// Verificar se é um erro de digest de redirecionamento (NextAuth)
 		if (err && typeof err === "object" && "digest" in err) {
 			const errorWithDigest = err as { digest?: string };
-			if (
-				errorWithDigest.digest &&
-				errorWithDigest.digest.includes("NEXT_REDIRECT")
-			) {
+			if (errorWithDigest.digest && errorWithDigest.digest.includes("NEXT_REDIRECT")) {
 				// Login bem-sucedido - limpar contadores de tentativas falhas
 				void recordSuccessfulLogin(clientIp, email);
 				throw err; // Re-throw para permitir o redirecionamento
@@ -176,10 +167,7 @@ export const login = async (credentials: z.infer<typeof CredentialsSchema>) => {
 		if (err instanceof AuthError) {
 			if (err instanceof CredentialsSignin) {
 				// Registrar tentativa falha (senha incorreta)
-				const { shouldDelay, delayMs } = await recordFailedAttempt(
-					clientIp,
-					email
-				);
+				const { shouldDelay, delayMs } = await recordFailedAttempt(clientIp, email);
 				if (shouldDelay) {
 					await applyProgressiveDelay(delayMs);
 				}

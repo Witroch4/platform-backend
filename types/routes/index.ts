@@ -8,4 +8,4 @@ export interface ConfigRoutes {
 	adminRoutes: string[];
 	superAdminRoutes?: string[]; // Rotas apenas para SUPERADMIN (opcional)
 	iframeRoutes?: string[]; // Rotas iframe com autenticação especial
-  }
+}
