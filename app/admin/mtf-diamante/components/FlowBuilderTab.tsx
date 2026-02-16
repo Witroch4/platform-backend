@@ -9,6 +9,7 @@ import { NodeDetailDialog } from './flow-builder/panels/NodeDetailDialog';
 import { TemplateConfigDialog } from './flow-builder/dialogs/TemplateConfigDialog';
 import { FlowSelector } from './flow-builder/panels/FlowSelector';
 import { ExportImportPanel } from './flow-builder/panels/ExportImportPanel';
+import { FlowBuilderProvider } from './flow-builder/context/FlowBuilderContext';
 import {
   HandlePopover,
   useHandlePopover,
@@ -20,6 +21,8 @@ import {
   validateFlowCanvas,
   createEmptyFlowCanvas,
   BUTTON_TEMPLATE_LIMITS,
+  COUPON_TEMPLATE_LIMITS,
+  WHATSAPP_TEMPLATE_LIMITS,
   type FlowCanvas as FlowCanvasType,
   type FlowNodeData,
   type InteractiveMessageElementType,
@@ -29,6 +32,7 @@ import {
   type CouponTemplateNodeData,
   type CallTemplateNodeData,
   type UrlTemplateNodeData,
+  type WhatsAppTemplateNodeData,
 } from '@/types/flow-builder';
 import { generateTemplateButtonId } from '@/lib/flow-builder/templateElements';
 import {
@@ -238,6 +242,7 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
       // Lista de tipos válidos (Mensagem Interativa + Templates)
       const validNodeTypes = [
         FlowNodeType.INTERACTIVE_MESSAGE,
+        FlowNodeType.WHATSAPP_TEMPLATE,
         FlowNodeType.BUTTON_TEMPLATE,
         FlowNodeType.COUPON_TEMPLATE,
         FlowNodeType.CALL_TEMPLATE,
@@ -346,7 +351,10 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
         let maxButtons = 10; // Default
         let templateName = 'Template';
 
-        if (nodeType === FlowNodeType.BUTTON_TEMPLATE) {
+        if (nodeType === FlowNodeType.WHATSAPP_TEMPLATE) {
+          maxButtons = WHATSAPP_TEMPLATE_LIMITS.maxButtons;
+          templateName = 'Template WhatsApp';
+        } else if (nodeType === FlowNodeType.BUTTON_TEMPLATE) {
           maxButtons = BUTTON_TEMPLATE_LIMITS.maxButtons;
           templateName = 'Button Template';
         } else if (nodeType === FlowNodeType.URL_TEMPLATE) {
@@ -356,7 +364,7 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
           maxButtons = 1;
           templateName = 'Call Template';
         } else if (nodeType === FlowNodeType.COUPON_TEMPLATE) {
-          maxButtons = 1;
+          maxButtons = COUPON_TEMPLATE_LIMITS.maxButtons;
           templateName = 'Coupon Template';
         }
 
@@ -392,6 +400,7 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
 
       // Validate target node is a template container
       const validTemplateTypes = [
+        FlowNodeType.WHATSAPP_TEMPLATE,
         FlowNodeType.BUTTON_TEMPLATE,
         FlowNodeType.COUPON_TEMPLATE,
         FlowNodeType.CALL_TEMPLATE,
@@ -406,7 +415,124 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
 
       const nodeType = targetNode.type as FlowNodeType;
 
-      // Handle based on element type
+      // -------------------------------------------------------------------------
+      // Elementos compartilhados (body, header_text, header_image) para WHATSAPP_TEMPLATE
+      // Usa o sistema de elements para edição inline no canvas
+      // -------------------------------------------------------------------------
+      if (nodeType === FlowNodeType.WHATSAPP_TEMPLATE) {
+        const currentData = targetNode.data as unknown as WhatsAppTemplateNodeData;
+        const currentElements = currentData.elements || getInteractiveMessageElements(currentData as unknown as Record<string, unknown>);
+
+        // body
+        if (elementType === 'body') {
+          const hasBody = currentElements.some((e: { type: string }) => e.type === 'body');
+          if (hasBody) {
+            toast.info('Body já existe', {
+              description: 'Edite o texto diretamente no canvas.',
+            });
+            return;
+          }
+          const newElement = createInteractiveMessageElement('body');
+          const nextElements = [...currentElements, newElement];
+          const legacy = elementsToLegacyFields(nextElements);
+          updateNodeData(targetNodeId, {
+            elements: nextElements,
+            ...legacy,
+            isConfigured: true,
+          } as unknown as Partial<FlowNodeData>);
+          toast.success('Body adicionado');
+          return;
+        }
+
+        // header_text
+        if (elementType === 'header_text') {
+          const hasHeader = currentElements.some((e: { type: string }) =>
+            e.type === 'header_text' || e.type === 'header_image'
+          );
+          if (hasHeader) {
+            toast.info('Header já existe', {
+              description: 'Delete o header existente primeiro.',
+            });
+            return;
+          }
+          const newElement = createInteractiveMessageElement('header_text');
+          const nextElements = [newElement, ...currentElements]; // Header no início
+          const legacy = elementsToLegacyFields(nextElements);
+          updateNodeData(targetNodeId, {
+            elements: nextElements,
+            ...legacy,
+          } as unknown as Partial<FlowNodeData>);
+          toast.success('Header texto adicionado');
+          return;
+        }
+
+        // header_image
+        if (elementType === 'header_image') {
+          const hasHeader = currentElements.some((e: { type: string }) =>
+            e.type === 'header_text' || e.type === 'header_image'
+          );
+          if (hasHeader) {
+            toast.info('Header já existe', {
+              description: 'Delete o header existente primeiro.',
+            });
+            return;
+          }
+          const newElement = createInteractiveMessageElement('header_image');
+          const nextElements = [newElement, ...currentElements]; // Header no início
+          const legacy = elementsToLegacyFields(nextElements);
+          updateNodeData(targetNodeId, {
+            elements: nextElements,
+            ...legacy,
+          } as unknown as Partial<FlowNodeData>);
+          toast.success('Header imagem adicionado');
+          return;
+        }
+
+        // footer
+        if (elementType === 'footer') {
+          const hasFooter = currentElements.some((e: { type: string }) => e.type === 'footer');
+          if (hasFooter) {
+            toast.info('Footer já existe', {
+              description: 'Edite o texto diretamente no canvas.',
+            });
+            return;
+          }
+          const newElement = createInteractiveMessageElement('footer');
+          const nextElements = [...currentElements, newElement]; // Footer no final
+          const legacy = elementsToLegacyFields(nextElements);
+          updateNodeData(targetNodeId, {
+            elements: nextElements,
+            ...legacy,
+          } as unknown as Partial<FlowNodeData>);
+          toast.success('Footer adicionado');
+          return;
+        }
+
+        // button (compartilhado) → tratado como QUICK_REPLY
+        if (elementType === 'button') {
+          const totalButtons = currentElements.filter((e: { type: string }) =>
+            e.type === 'button' || e.type === 'button_copy_code' || e.type === 'button_phone' ||
+            e.type === 'button_voice_call' || e.type === 'button_url'
+          ).length;
+          if (totalButtons >= WHATSAPP_TEMPLATE_LIMITS.maxButtons) {
+            toast.error('Limite atingido', {
+              description: `Máximo de ${WHATSAPP_TEMPLATE_LIMITS.maxButtons} botões permitidos.`,
+            });
+            return;
+          }
+          const newElement = createInteractiveMessageElement('button');
+          const nextElements = [...currentElements, newElement];
+          const legacy = elementsToLegacyFields(nextElements);
+          updateNodeData(targetNodeId, {
+            elements: nextElements,
+            ...legacy,
+          } as unknown as Partial<FlowNodeData>);
+          toast.success('Botão adicionado');
+          return;
+        }
+      }
+
+      // Handle based on element type (legacy templates)
       if (elementType === 'body') {
         // All template types accept body
         const currentData = targetNode.data as Record<string, unknown>;
@@ -426,12 +552,39 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
       }
 
       if (elementType === 'button_quick_reply') {
-        if (nodeType !== FlowNodeType.BUTTON_TEMPLATE) {
+        const validTypes = [FlowNodeType.WHATSAPP_TEMPLATE, FlowNodeType.BUTTON_TEMPLATE, FlowNodeType.COUPON_TEMPLATE];
+        if (!validTypes.includes(nodeType)) {
           toast.error('Elemento incompatível', {
-            description: 'Botões QUICK_REPLY só podem ser adicionados ao Button Template.',
+            description: 'Botões QUICK_REPLY podem ser adicionados ao Template WhatsApp, Button Template ou Coupon Template.',
           });
           return;
         }
+
+        // WHATSAPP_TEMPLATE ou COUPON_TEMPLATE: usa elements
+        if (nodeType === FlowNodeType.WHATSAPP_TEMPLATE || nodeType === FlowNodeType.COUPON_TEMPLATE) {
+          const currentData = targetNode.data as unknown as WhatsAppTemplateNodeData | CouponTemplateNodeData;
+          const currentElements = currentData.elements || getInteractiveMessageElements(currentData as unknown as Record<string, unknown>);
+          const totalButtons = currentElements.filter((e: { type: string }) =>
+            e.type === 'button' || e.type === 'button_copy_code' || e.type === 'button_phone' ||
+            e.type === 'button_voice_call' || e.type === 'button_url'
+          ).length;
+          const maxButtons = nodeType === FlowNodeType.WHATSAPP_TEMPLATE ? WHATSAPP_TEMPLATE_LIMITS.maxButtons : COUPON_TEMPLATE_LIMITS.maxButtons;
+          if (totalButtons >= maxButtons) {
+            toast.error('Limite atingido', {
+              description: `Máximo de ${maxButtons} botões permitidos.`,
+            });
+            return;
+          }
+          const newElement = createInteractiveMessageElement('button');
+          const nextElements = [...currentElements, newElement];
+          updateNodeData(targetNodeId, {
+            elements: nextElements,
+          } as unknown as Partial<FlowNodeData>);
+          toast.success('Botão adicionado');
+          return;
+        }
+
+        // Button Template: usa o campo buttons legado
         const currentData = targetNode.data as unknown as ButtonTemplateNodeData;
         const currentButtons = currentData.buttons || [];
         if (currentButtons.length >= BUTTON_TEMPLATE_LIMITS.maxButtons) {
@@ -453,17 +606,50 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
       }
 
       if (elementType === 'button_url') {
-        if (nodeType !== FlowNodeType.URL_TEMPLATE) {
+        const validTypes = [FlowNodeType.WHATSAPP_TEMPLATE, FlowNodeType.URL_TEMPLATE, FlowNodeType.COUPON_TEMPLATE];
+        if (!validTypes.includes(nodeType)) {
           toast.error('Elemento incompatível', {
-            description: 'Botões URL só podem ser adicionados ao URL Template.',
+            description: 'Botões URL só podem ser adicionados ao Template WhatsApp, URL Template ou Coupon Template.',
           });
           return;
         }
+
+        // WHATSAPP_TEMPLATE: usa elements
+        if (nodeType === FlowNodeType.WHATSAPP_TEMPLATE) {
+          const currentData = targetNode.data as unknown as WhatsAppTemplateNodeData;
+          const currentElements = currentData.elements || getInteractiveMessageElements(currentData as unknown as Record<string, unknown>);
+          const urlButtons = currentElements.filter((e: { type: string }) => e.type === 'button_url');
+          if (urlButtons.length >= WHATSAPP_TEMPLATE_LIMITS.maxUrlButtons) {
+            toast.error('Limite atingido', {
+              description: `Máximo de ${WHATSAPP_TEMPLATE_LIMITS.maxUrlButtons} botões URL permitidos.`,
+            });
+            return;
+          }
+          const totalButtons = currentElements.filter((e: { type: string }) =>
+            e.type === 'button' || e.type === 'button_copy_code' || e.type === 'button_phone' ||
+            e.type === 'button_voice_call' || e.type === 'button_url'
+          ).length;
+          if (totalButtons >= WHATSAPP_TEMPLATE_LIMITS.maxButtons) {
+            toast.error('Limite atingido', {
+              description: `Máximo de ${WHATSAPP_TEMPLATE_LIMITS.maxButtons} botões totais.`,
+            });
+            return;
+          }
+          const newElement = createInteractiveMessageElement('button_url');
+          const nextElements = [...currentElements, newElement];
+          updateNodeData(targetNodeId, {
+            elements: nextElements,
+          } as unknown as Partial<FlowNodeData>);
+          toast.success('Botão URL adicionado');
+          return;
+        }
+
         const currentData = targetNode.data as unknown as UrlTemplateNodeData;
-        const currentButtons = currentData.buttons || [];
-        if (currentButtons.length >= 2) {
+        const currentButtons = (currentData.buttons || []).filter((b: { type?: string }) => b.type === 'URL');
+        const maxUrlButtons = nodeType === FlowNodeType.COUPON_TEMPLATE ? 2 : 2;
+        if (currentButtons.length >= maxUrlButtons) {
           toast.error('Limite atingido', {
-            description: 'URL Template suporta no máximo 2 botões.',
+            description: `Máximo de ${maxUrlButtons} botões URL permitidos.`,
           });
           return;
         }
@@ -474,17 +660,73 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
           url: 'https://',
         };
         updateNodeData(targetNodeId, {
-          buttons: [...currentButtons, newButton],
+          buttons: [...(currentData.buttons || []), newButton],
         } as Partial<FlowNodeData>);
         toast.success('Botão URL adicionado');
         return;
       }
 
       if (elementType === 'button_phone') {
-        if (nodeType !== FlowNodeType.CALL_TEMPLATE) {
+        const validTypes = [FlowNodeType.WHATSAPP_TEMPLATE, FlowNodeType.CALL_TEMPLATE, FlowNodeType.COUPON_TEMPLATE];
+        if (!validTypes.includes(nodeType)) {
           toast.error('Elemento incompatível', {
-            description: 'Botão de ligação só pode ser adicionado ao Call Template.',
+            description: 'Botão de ligação só pode ser adicionado ao Template WhatsApp, Call Template ou Coupon Template.',
           });
+          return;
+        }
+
+        // WHATSAPP_TEMPLATE: usa elements
+        if (nodeType === FlowNodeType.WHATSAPP_TEMPLATE) {
+          const currentData = targetNode.data as unknown as WhatsAppTemplateNodeData;
+          const currentElements = currentData.elements || getInteractiveMessageElements(currentData as unknown as Record<string, unknown>);
+          const phoneButtons = currentElements.filter((e: { type: string }) => e.type === 'button_phone');
+          const voiceCallButtons = currentElements.filter((e: { type: string }) => e.type === 'button_voice_call');
+          if (phoneButtons.length >= WHATSAPP_TEMPLATE_LIMITS.maxPhoneButtons) {
+            toast.error('Limite atingido', {
+              description: `Máximo de ${WHATSAPP_TEMPLATE_LIMITS.maxPhoneButtons} botão de ligação.`,
+            });
+            return;
+          }
+          if (voiceCallButtons.length > 0) {
+            toast.error('Não permitido', {
+              description: 'Não é possível ter Ligar e Ligar WhatsApp no mesmo template.',
+            });
+            return;
+          }
+          const totalButtons = currentElements.filter((e: { type: string }) =>
+            e.type === 'button' || e.type === 'button_copy_code' || e.type === 'button_phone' ||
+            e.type === 'button_voice_call' || e.type === 'button_url'
+          ).length;
+          if (totalButtons >= WHATSAPP_TEMPLATE_LIMITS.maxButtons) {
+            toast.error('Limite atingido', {
+              description: `Máximo de ${WHATSAPP_TEMPLATE_LIMITS.maxButtons} botões totais.`,
+            });
+            return;
+          }
+          const newElement = createInteractiveMessageElement('button_phone');
+          const nextElements = [...currentElements, newElement];
+          updateNodeData(targetNodeId, {
+            elements: nextElements,
+          } as unknown as Partial<FlowNodeData>);
+          toast.success('Botão de ligação adicionado');
+          return;
+        }
+
+        if (nodeType === FlowNodeType.COUPON_TEMPLATE) {
+          const currentData = targetNode.data as unknown as CouponTemplateNodeData;
+          const currentElements = currentData.elements || [];
+          const phoneButtons = currentElements.filter((e: any) => e.type === 'button_phone');
+          if (phoneButtons.length >= 1) {
+            toast.error('Limite atingido', {
+              description: 'Máximo de 1 botão de ligação no Coupon Template.',
+            });
+            return;
+          }
+          updateNodeData(targetNodeId, {
+            phoneNumber: '',
+            buttonText: 'Ligar',
+          } as Partial<FlowNodeData>);
+          toast.success('Botão de ligação adicionado');
           return;
         }
         const currentData = targetNode.data as unknown as CallTemplateNodeData;
@@ -502,13 +744,88 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
         return;
       }
 
-      if (elementType === 'button_copy_code') {
-        if (nodeType !== FlowNodeType.COUPON_TEMPLATE) {
+      // NOVO: Botão Ligar via WhatsApp (VOICE_CALL)
+      if (elementType === 'button_voice_call') {
+        if (nodeType !== FlowNodeType.WHATSAPP_TEMPLATE) {
           toast.error('Elemento incompatível', {
-            description: 'Botão de copiar só pode ser adicionado ao Coupon Template.',
+            description: 'Botão Ligar WhatsApp só pode ser adicionado ao Template WhatsApp.',
           });
           return;
         }
+        const currentData = targetNode.data as unknown as WhatsAppTemplateNodeData;
+        const currentElements = currentData.elements || getInteractiveMessageElements(currentData as unknown as Record<string, unknown>);
+        const voiceCallButtons = currentElements.filter((e: { type: string }) => e.type === 'button_voice_call');
+        const phoneButtons = currentElements.filter((e: { type: string }) => e.type === 'button_phone');
+        if (voiceCallButtons.length >= WHATSAPP_TEMPLATE_LIMITS.maxVoiceCallButtons) {
+          toast.error('Limite atingido', {
+            description: `Máximo de ${WHATSAPP_TEMPLATE_LIMITS.maxVoiceCallButtons} botão Ligar WhatsApp.`,
+          });
+          return;
+        }
+        if (phoneButtons.length > 0) {
+          toast.error('Não permitido', {
+            description: 'Não é possível ter Ligar e Ligar WhatsApp no mesmo template.',
+          });
+          return;
+        }
+        const totalButtons = currentElements.filter((e: { type: string }) =>
+          e.type === 'button' || e.type === 'button_copy_code' || e.type === 'button_phone' ||
+          e.type === 'button_voice_call' || e.type === 'button_url'
+        ).length;
+        if (totalButtons >= WHATSAPP_TEMPLATE_LIMITS.maxButtons) {
+          toast.error('Limite atingido', {
+            description: `Máximo de ${WHATSAPP_TEMPLATE_LIMITS.maxButtons} botões totais.`,
+          });
+          return;
+        }
+        const newElement = createInteractiveMessageElement('button_voice_call');
+        const nextElements = [...currentElements, newElement];
+        updateNodeData(targetNodeId, {
+          elements: nextElements,
+        } as unknown as Partial<FlowNodeData>);
+        toast.success('Botão Ligar WhatsApp adicionado');
+        return;
+      }
+
+      if (elementType === 'button_copy_code') {
+        const validTypes = [FlowNodeType.WHATSAPP_TEMPLATE, FlowNodeType.COUPON_TEMPLATE];
+        if (!validTypes.includes(nodeType)) {
+          toast.error('Elemento incompatível', {
+            description: 'Botão de copiar só pode ser adicionado ao Template WhatsApp ou Coupon Template.',
+          });
+          return;
+        }
+
+        // WHATSAPP_TEMPLATE: usa elements
+        if (nodeType === FlowNodeType.WHATSAPP_TEMPLATE) {
+          const currentData = targetNode.data as unknown as WhatsAppTemplateNodeData;
+          const currentElements = currentData.elements || getInteractiveMessageElements(currentData as unknown as Record<string, unknown>);
+          const copyCodeButtons = currentElements.filter((e: { type: string }) => e.type === 'button_copy_code');
+          if (copyCodeButtons.length >= WHATSAPP_TEMPLATE_LIMITS.maxCopyCodeButtons) {
+            toast.error('Limite atingido', {
+              description: `Máximo de ${WHATSAPP_TEMPLATE_LIMITS.maxCopyCodeButtons} botão Copiar Código.`,
+            });
+            return;
+          }
+          const totalButtons = currentElements.filter((e: { type: string }) =>
+            e.type === 'button' || e.type === 'button_copy_code' || e.type === 'button_phone' ||
+            e.type === 'button_voice_call' || e.type === 'button_url'
+          ).length;
+          if (totalButtons >= WHATSAPP_TEMPLATE_LIMITS.maxButtons) {
+            toast.error('Limite atingido', {
+              description: `Máximo de ${WHATSAPP_TEMPLATE_LIMITS.maxButtons} botões totais.`,
+            });
+            return;
+          }
+          const newElement = createInteractiveMessageElement('button_copy_code');
+          const nextElements = [...currentElements, newElement];
+          updateNodeData(targetNodeId, {
+            elements: nextElements,
+          } as unknown as Partial<FlowNodeData>);
+          toast.success('Botão Copiar Código adicionado');
+          return;
+        }
+
         const currentData = targetNode.data as unknown as CouponTemplateNodeData;
         if (currentData.couponCode) {
           toast.info('Código já configurado', {
@@ -543,6 +860,7 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
     // TEMPLATE nodes (including specialized templates) use a dedicated dialog
     const templateNodeTypes = [
       FlowNodeType.TEMPLATE,
+      FlowNodeType.WHATSAPP_TEMPLATE,
       FlowNodeType.BUTTON_TEMPLATE,
       FlowNodeType.URL_TEMPLATE,
       FlowNodeType.CALL_TEMPLATE,
@@ -957,6 +1275,7 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
         open={templateDialogOpen}
         onOpenChange={setTemplateDialogOpen}
         onUpdateNodeData={handleUpdateNodeData}
+        caixaId={caixaId}
       />
 
       {/* Handle Popover (appears when dragging from handle to empty canvas) */}
@@ -1047,7 +1366,9 @@ interface FlowBuilderTabProps {
 export function FlowBuilderTab({ caixaId }: FlowBuilderTabProps) {
   return (
     <ReactFlowProvider>
-      <FlowBuilderInner caixaId={caixaId} />
+      <FlowBuilderProvider caixaId={caixaId}>
+        <FlowBuilderInner caixaId={caixaId} />
+      </FlowBuilderProvider>
     </ReactFlowProvider>
   );
 }

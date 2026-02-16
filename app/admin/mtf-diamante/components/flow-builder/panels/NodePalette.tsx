@@ -10,6 +10,8 @@ import {
   TEMPLATE_PALETTE_ITEMS,
   TEMPLATE_ELEMENT_ITEMS,
   TEMPLATE_ELEMENT_MIME,
+  SHARED_ELEMENT_ITEMS,
+  TEMPLATE_SPECIAL_BUTTON_ITEMS,
   FlowNodeType,
   type ElementPaletteItem,
   type PaletteItem,
@@ -81,7 +83,10 @@ interface ElementPaletteCardProps {
 function ElementPaletteCard({ item }: ElementPaletteCardProps) {
   const onDragStart = useCallback(
     (event: DragEvent) => {
+      // Elementos compartilhados: enviam AMBOS os MIME types
+      // Isso permite drop tanto em Mensagem Interativa quanto em Template
       event.dataTransfer.setData(FLOWBUILDER_ELEMENT_MIME, item.type);
+      event.dataTransfer.setData(TEMPLATE_ELEMENT_MIME, item.type === 'button' ? 'button_quick_reply' : item.type);
       event.dataTransfer.effectAllowed = 'copy';
     },
     [item.type]
@@ -236,35 +241,35 @@ export function NodePalette({ onAddNode, channelType }: NodePaletteProps) {
 
       <ScrollArea className="flex-1 px-2 py-2">
         <div className="space-y-4">
-          {/* 1. Destaque: Nó principal do canal */}
+          {/* 1. PRINCIPAL - Mensagem Interativa (WhatsApp) / Quick Replies (Instagram) */}
           {mainNode && (
             <div className="mb-4">
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 px-1">
-                {isInstagram ? 'Quick Replies' : 'Principal'}
+                Principal
               </p>
               <PaletteCard item={mainNode} />
             </div>
           )}
 
-          {/* 2. WhatsApp: Elementos separados */}
-          {!isInstagram && elementItems.length > 0 && (
+          {/* 2. ELEMENTOS - Compartilhados (funcionam em Mensagem Interativa E Templates) */}
+          {!isInstagram && (
             <div className="bg-muted/10 rounded-lg p-2 border border-border/50">
               <p className="text-[10px] font-bold uppercase tracking-wider text-primary mb-2 px-1 flex items-center gap-1">
                 <span className="h-1.5 w-1.5 rounded-full bg-primary" />
                 Elementos
               </p>
               <div className="space-y-1.5">
-                {elementItems.map((item) => (
+                {SHARED_ELEMENT_ITEMS.map((item) => (
                   <ElementPaletteCard key={item.type} item={item} />
                 ))}
               </div>
               <p className="text-[10px] text-muted-foreground leading-tight mt-2 px-1 italic">
-                Arraste para uma Mensagem Interativa
+                Arraste para Mensagem Interativa ou Template
               </p>
             </div>
           )}
 
-          {/* 3. WhatsApp: Templates Oficiais (Containers) */}
+          {/* 3. TEMPLATES WHATSAPP - Container + Botões Especiais */}
           {!isInstagram && (
             <div className="bg-emerald-50/50 dark:bg-emerald-950/20 rounded-lg p-2 border border-emerald-200/50 dark:border-emerald-800/50">
               <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-2 px-1 flex items-center gap-1">
@@ -277,17 +282,17 @@ export function NodePalette({ onAddNode, channelType }: NodePaletteProps) {
                 ))}
               </div>
 
-              {/* Elementos de template (subordinados) */}
+              {/* Botões Especiais - exclusivos para templates */}
               <div className="ml-3 mt-2 pl-2 border-l-2 border-emerald-300 dark:border-emerald-700 space-y-1">
                 <p className="text-[10px] text-muted-foreground italic mb-1">
-                  Elementos para templates
+                  Botões especiais
                 </p>
-                {TEMPLATE_ELEMENT_ITEMS.map((item) => (
+                {TEMPLATE_SPECIAL_BUTTON_ITEMS.map((item) => (
                   <TemplateElementPaletteCard key={item.type} item={item} />
                 ))}
               </div>
               <p className="text-[10px] text-muted-foreground leading-tight mt-2 px-1 italic">
-                Arraste elementos para dentro do template
+                Arraste botões especiais para o template
               </p>
             </div>
           )}

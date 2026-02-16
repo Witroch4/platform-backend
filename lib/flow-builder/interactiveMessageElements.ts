@@ -44,6 +44,8 @@ export function createInteractiveMessageElement(
       return { id: safeId('button_copy_code'), type: 'button_copy_code', title: 'Copiar código', couponCode: '' };
     case 'button_phone':
       return { id: safeId('button_phone'), type: 'button_phone', title: 'Ligar', phoneNumber: '' };
+    case 'button_voice_call':
+      return { id: safeId('button_voice_call'), type: 'button_voice_call', title: 'Ligar WhatsApp', ttlMinutes: 10080 };
     case 'button_url':
       return { id: safeId('button_url'), type: 'button_url', title: 'Acessar', url: '' };
   }

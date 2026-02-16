@@ -628,11 +628,43 @@ export async function POST(request: Request) {
     }
 
     // Montar o payload para a API do WhatsApp com componentes convertidos
+    // Validação: PHONE_NUMBER e VOICE_CALL são mutuamente exclusivos
+    const buttonsComponent = convertedComponents.find((c: any) => c.type === 'BUTTONS');
+    if (buttonsComponent && Array.isArray(buttonsComponent.buttons)) {
+      const hasPhoneNumber = buttonsComponent.buttons.some((b: any) => b.type === 'PHONE_NUMBER');
+      const hasVoiceCall = buttonsComponent.buttons.some((b: any) => b.type === 'VOICE_CALL');
+      if (hasPhoneNumber && hasVoiceCall) {
+        return NextResponse.json(
+          { error: 'Não é permitido ter botões PHONE_NUMBER e VOICE_CALL no mesmo template.' },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Auto-sort: Meta exige botões agrupados por tipo (CTAs primeiro, QR por último)
+    // Ordem: COPY_CODE → VOICE_CALL → PHONE_NUMBER → URL → QUICK_REPLY
+    const sortedComponents = convertedComponents.map((component: any) => {
+      if (component.type === 'BUTTONS' && Array.isArray(component.buttons)) {
+        const buttonOrder: Record<string, number> = {
+          COPY_CODE: 0,
+          VOICE_CALL: 1,
+          PHONE_NUMBER: 2,
+          URL: 3,
+          QUICK_REPLY: 4,
+        };
+        const sorted = [...component.buttons].sort(
+          (a: any, b: any) => (buttonOrder[a.type] ?? 99) - (buttonOrder[b.type] ?? 99)
+        );
+        return { ...component, buttons: sorted };
+      }
+      return component;
+    });
+
     const templatePayload: any = {
       name: body.name,
       category: body.category,
       language: body.language,
-      components: convertedComponents,
+      components: sortedComponents,
       parameter_format: 'NAMED',
     };
 

@@ -173,14 +173,37 @@ export function validateTemplateButtons(buttons?: TemplateButton[]): TemplateVal
     errors.push(`Máximo de ${TEMPLATE_LIMITS.maxButtons} botões permitido`);
   }
 
+  // Count by type
   const quickReplyCount = buttons.filter((b) => b.type === 'QUICK_REPLY').length;
+  const urlCount = buttons.filter((b) => b.type === 'URL').length;
+  const phoneCount = buttons.filter((b) => b.type === 'PHONE_NUMBER').length;
+  const voiceCallCount = buttons.filter((b) => b.type === 'VOICE_CALL').length;
+  const copyCodeCount = buttons.filter((b) => b.type === 'COPY_CODE').length;
+
   if (quickReplyCount > TEMPLATE_LIMITS.maxQuickReplyButtons) {
     errors.push(`Máximo de ${TEMPLATE_LIMITS.maxQuickReplyButtons} botões QUICK_REPLY permitido`);
   }
 
-  const urlCount = buttons.filter((b) => b.type === 'URL').length;
   if (urlCount > TEMPLATE_LIMITS.maxUrlButtons) {
     errors.push(`Máximo de ${TEMPLATE_LIMITS.maxUrlButtons} botões URL permitido`);
+  }
+
+  // CTA limits: max 1 of each
+  if (phoneCount > 1) {
+    errors.push('Máximo de 1 botão Telefone permitido');
+  }
+
+  if (voiceCallCount > 1) {
+    errors.push('Máximo de 1 botão Ligar WhatsApp permitido');
+  }
+
+  if (copyCodeCount > 1) {
+    errors.push('Máximo de 1 botão Copiar Código permitido');
+  }
+
+  // Mutual exclusivity: PHONE_NUMBER and VOICE_CALL cannot coexist
+  if (phoneCount > 0 && voiceCallCount > 0) {
+    errors.push('Não é permitido ter botões Telefone e Ligar WhatsApp juntos');
   }
 
   for (const btn of buttons) {
@@ -303,12 +326,14 @@ export interface MetaTemplateComponent {
 }
 
 export interface MetaTemplateButton {
-  type: 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER' | 'COPY_CODE' | 'FLOW' | 'SPM' | 'MPM';
+  type: 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER' | 'COPY_CODE' | 'VOICE_CALL' | 'FLOW' | 'SPM' | 'MPM';
   text: string;
   url?: string;
   phone_number?: string;
   example?: string[];
   flow_id?: string;
+  /** TTL em minutos para VOICE_CALL (padrão: 10080 = 7 dias) */
+  ttl_minutes?: number;
 }
 
 /**
@@ -392,6 +417,10 @@ export function toMetaTemplatePayload(
       }
       if (btn.type === 'COPY_CODE' && btn.exampleCode) {
         metaBtn.example = [btn.exampleCode];
+      }
+      if (btn.type === 'VOICE_CALL') {
+        // TTL padrão: 10080 minutos (7 dias)
+        metaBtn.ttl_minutes = btn.ttlMinutes ?? 10080;
       }
       if (btn.type === 'FLOW' && btn.flowId) {
         metaBtn.flow_id = btn.flowId;
@@ -546,9 +575,16 @@ export function createTemplateButton(
   type: TemplateButtonType = 'QUICK_REPLY',
   text: string = 'Novo botão'
 ): TemplateButton {
-  return {
+  const button: TemplateButton = {
     id: generateTemplateButtonId(),
     type,
     text,
   };
+
+  // Add default values for specific types
+  if (type === 'VOICE_CALL') {
+    button.ttlMinutes = 10080; // 7 days default
+  }
+
+  return button;
 }

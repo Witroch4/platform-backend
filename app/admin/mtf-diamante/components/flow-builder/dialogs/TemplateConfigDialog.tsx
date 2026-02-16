@@ -36,6 +36,7 @@ import {
   Loader2,
   Link,
   Phone,
+  PhoneCall,
   Copy,
   ChevronRight,
   AlertTriangle,
@@ -122,6 +123,14 @@ function extractFromElements(elements: InteractiveMessageElement[]): ExtractedTe
           exampleCode: 'couponCode' in el ? (el.couponCode as string) : '',
         });
         break;
+      case 'button_voice_call':
+        buttons.push({
+          id: el.id || generateTemplateButtonId(),
+          type: 'VOICE_CALL',
+          text: 'title' in el ? el.title : 'Ligar WhatsApp',
+          ttlMinutes: 'ttlMinutes' in el ? (el.ttlMinutes as number) : 10080,
+        });
+        break;
     }
   }
 
@@ -137,6 +146,7 @@ interface TemplateConfigDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onUpdateNodeData: (nodeId: string, data: Partial<FlowNodeData>) => void;
+  caixaId: string;
 }
 
 interface WhatsAppTemplate {
@@ -361,6 +371,7 @@ function TemplatePreview({ header, body, footer, buttons }: TemplatePreviewProps
                       >
                         {btn.type === 'URL' && <Link className="h-3 w-3" />}
                         {btn.type === 'PHONE_NUMBER' && <Phone className="h-3 w-3" />}
+                        {btn.type === 'VOICE_CALL' && <PhoneCall className="h-3 w-3" />}
                         {btn.type === 'COPY_CODE' && <Copy className="h-3 w-3" />}
                         {btn.type === 'QUICK_REPLY' && <ChevronRight className="h-3 w-3" />}
                         {btn.text || 'Botão'}
@@ -386,6 +397,7 @@ export function TemplateConfigDialog({
   open,
   onOpenChange,
   onUpdateNodeData,
+  caixaId,
 }: TemplateConfigDialogProps) {
   const [mode, setMode] = useState<'import' | 'create'>('create');
   const [isLoading, setIsLoading] = useState(false);
@@ -418,13 +430,40 @@ export function TemplateConfigDialog({
 
   const canEdit = !isFieldLocked(nodeData?.status);
 
+  // Recuperar metaTemplateId do banco quando não está no node data
+  // (templates criados antes do fix que salvava metaTemplateId no node)
+  useEffect(() => {
+    if (!open || !node || !nodeData?.templateName) return;
+    if (nodeData.metaTemplateId) return; // Já tem
+    if (nodeData.status !== 'PENDING' && nodeData.status !== 'APPROVED') return;
+
+    const fetchMetaId = async () => {
+      try {
+        const res = await fetch(`/api/admin/mtf-diamante/templates?caixaId=${caixaId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const templatesList = data.templates || [];
+        const match = templatesList.find(
+          (t: { name?: string; id?: string }) => t.name === nodeData.templateName && t.id
+        );
+        if (match?.id) {
+          console.log(`[TemplateConfigDialog] metaTemplateId recuperado do banco: ${match.id}`);
+          onUpdateNodeData(node.id, { metaTemplateId: match.id });
+        }
+      } catch (err) {
+        console.error('[TemplateConfigDialog] Erro ao buscar metaTemplateId:', err);
+      }
+    };
+    fetchMetaId();
+  }, [open, node, nodeData?.templateName, nodeData?.metaTemplateId, nodeData?.status, caixaId, onUpdateNodeData]);
+
   // Função para verificar status do template na Meta
   const handleRefreshStatus = useCallback(async () => {
     if (!nodeData?.metaTemplateId || !node) return;
 
     setIsRefreshing(true);
     try {
-      const res = await fetch(`/api/admin/mtf-diamante/templates/${nodeData.metaTemplateId}/status`);
+      const res = await fetch(`/api/admin/mtf-diamante/templates/${caixaId}/${nodeData.metaTemplateId}/status`);
       const data = await res.json();
 
       if (!res.ok) {
@@ -444,7 +483,7 @@ export function TemplateConfigDialog({
     } finally {
       setIsRefreshing(false);
     }
-  }, [nodeData?.metaTemplateId, node, onUpdateNodeData]);
+  }, [nodeData?.metaTemplateId, node, onUpdateNodeData, caixaId]);
 
   // Função para duplicar template como novo (rascunho editável)
   const handleDuplicate = useCallback(() => {
@@ -749,6 +788,7 @@ export function TemplateConfigDialog({
             };
             if (btn.type === 'URL' && btn.url) metaBtn.url = btn.url;
             if (btn.type === 'PHONE_NUMBER' && btn.phoneNumber) metaBtn.phone_number = btn.phoneNumber;
+            if (btn.type === 'VOICE_CALL') metaBtn.ttl_minutes = btn.ttlMinutes || 10080;
             if (btn.type === 'COPY_CODE' && btn.exampleCode) metaBtn.example = [btn.exampleCode];
             return metaBtn;
           }),
@@ -769,6 +809,13 @@ export function TemplateConfigDialog({
 
       const result = await response.json();
 
+      // Extrair o metaTemplateId da resposta da API
+      // A API retorna: { result: { id, status }, template: { id, name, status } }
+      const metaId = result.metaTemplateId
+        || result.result?.id
+        || result.template?.id
+        || result.id;
+
       // Update node with pending status and template ID
       onUpdateNodeData(node.id, {
         label: templateName,
@@ -776,7 +823,7 @@ export function TemplateConfigDialog({
         mode: 'create',
         status: 'PENDING',
         templateId: result.templateId || result.id,
-        metaTemplateId: result.metaTemplateId,
+        metaTemplateId: metaId,
         templateName,
         category,
         language,
@@ -1195,6 +1242,28 @@ export function TemplateConfigDialog({
                             className={cn('text-sm', !canEdit && 'cursor-not-allowed')}
                           />
                         )}
+                        {btn.type === 'VOICE_CALL' && (
+                          <div className="space-y-1">
+                            <span className="text-[10px] text-muted-foreground">
+                              Validade da chamada: {btn.ttlMinutes ? Math.round(btn.ttlMinutes / 1440) : 7} dias
+                            </span>
+                            <Select
+                              value={String(btn.ttlMinutes || 10080)}
+                              onValueChange={(v) => handleUpdateButton(idx, { ttlMinutes: Number(v) })}
+                              disabled={!canEdit}
+                            >
+                              <SelectTrigger className={cn('text-sm h-8', !canEdit && 'cursor-not-allowed')}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="1440">1 dia</SelectItem>
+                                <SelectItem value="4320">3 dias</SelectItem>
+                                <SelectItem value="10080">7 dias (padrão)</SelectItem>
+                                <SelectItem value="20160">14 dias</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
                       </div>
                     ))}
 
@@ -1229,6 +1298,16 @@ export function TemplateConfigDialog({
                         >
                           <Phone className="h-3 w-3 mr-1" />
                           Telefone
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleAddButton('VOICE_CALL')}
+                          className="text-xs"
+                        >
+                          <PhoneCall className="h-3 w-3 mr-1" />
+                          Ligar WhatsApp
                         </Button>
                         <Button
                           type="button"

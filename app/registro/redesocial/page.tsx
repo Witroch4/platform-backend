@@ -3,10 +3,9 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Instagram, Facebook, MessageSquare, Send, AlertCircle, Plus, Trash2, RefreshCw, CheckCircle, Users, BarChart, Calendar, Zap, Home, LogOut, Bot, FileText, Shield, Star, ArrowRight, MessageCircle } from "lucide-react";
+import { Instagram, Facebook, Send, AlertCircle, Plus, Trash2, RefreshCw, CheckCircle, Users, BarChart, Calendar, LogOut, Bot, Star, ArrowRight, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { useToast } from "@/components/ui/use-toast";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -224,14 +223,14 @@ export default function RedeSocialPage() {
           <div className="flex items-center">
             <Link href="/" className="flex items-center">
               <Image
-                				src="/01%20WitdeT.png"
-                							alt="Socialwise Chatwit Logo"
+                src="/assets/iconssvg/socialwise-logo.png"
+                alt="Socialwise Logo"
                 width={40}
                 height={40}
                 className="mr-3"
               />
               <h1 className="text-xl font-bold bg-gradient-to-r from-primary via-blue-600 to-purple-600 text-transparent bg-clip-text hidden md:block">
-                							Socialwise Chatwit
+                Socialwise
               </h1>
             </Link>
           </div>
@@ -296,50 +295,42 @@ export default function RedeSocialPage() {
 
       <div className="max-w-7xl mx-auto px-4 py-8 space-y-12">
         {/* Hero Section */}
-        <section className="relative overflow-hidden bg-gradient-to-br from-primary/10 via-blue-50 to-purple-50 dark:from-primary/20 dark:via-blue-900/20 dark:to-purple-900/20 rounded-3xl p-8 md:p-12">
-          <div className="absolute right-0 top-0 opacity-10 dark:opacity-5">
-            <Image src="/social-connection.svg" alt="Social Connection" width={400} height={400} />
-          </div>
+        <section className="relative overflow-hidden bg-gradient-to-br from-blue-600 via-purple-600 to-pink-500 rounded-3xl p-8 md:p-12">
+          <div className="absolute inset-0 bg-[url('/grid-pattern.svg')] opacity-10" />
+          <div className="absolute -right-20 -top-20 w-80 h-80 bg-white/10 rounded-full blur-3xl" />
+          <div className="absolute -left-20 -bottom-20 w-60 h-60 bg-purple-300/20 rounded-full blur-3xl" />
+
           <div className="relative z-10">
-            <div className="flex items-center gap-4 mb-6">
-              <div className="bg-white dark:bg-gray-800 rounded-2xl p-3 shadow-lg">
-                							<Image src="/01%20WitdeT.png" alt="W Logo" width={50} height={50} className="h-12 w-12" />
+            <div className="text-center md:text-left max-w-2xl">
+              <h1 className="text-4xl md:text-5xl font-bold text-white mb-4 text-wrap-balance">
+                Conecte Suas Redes Sociais
+              </h1>
+              <p className="text-lg md:text-xl text-white/90 mb-8">
+                Potencialize seu engajamento com automação inteligente.
+                Transforme seguidores em clientes com nossa IA avançada.
+              </p>
+
+              <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
+                <Button
+                  onClick={handleInstagramConnect}
+                  disabled={isConnecting}
+                  size="lg"
+                  className="bg-white text-purple-700 hover:bg-gray-100 font-semibold rounded-xl px-8 py-6 text-lg shadow-lg hover:shadow-xl transition-all duration-200"
+                >
+                  <Instagram className="h-5 w-5 mr-2" />
+                  {isConnecting ? "Conectando..." : "Conectar Instagram"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleRefresh}
+                  disabled={isRefreshing}
+                  size="lg"
+                  className="bg-white/10 backdrop-blur-sm text-white border-white/30 hover:bg-white/20 font-medium rounded-xl px-8 py-6 text-lg transition-all duration-200"
+                >
+                  <RefreshCw className={`h-5 w-5 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  Atualizar Contas
+                </Button>
               </div>
-              <div>
-                <h1 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white">
-                  <span className="bg-gradient-to-r from-primary via-blue-600 to-purple-600 text-transparent bg-clip-text">
-                    Conecte Suas Redes
-                  </span>
-                </h1>
-                <p className="text-xl text-gray-600 dark:text-gray-400 mt-2">
-                  Potencialize seu engajamento com automação inteligente
-                </p>
-              </div>
-            </div>
-            
-            <p className="text-lg text-gray-600 dark:text-gray-400 max-w-3xl mb-8">
-              Conecte suas contas de redes sociais e transforme seguidores em clientes com nossa IA avançada. 
-              Sistema completo de automação para Instagram, WhatsApp e muito mais.
-            </p>
-            
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Button
-                onClick={handleInstagramConnect}
-                disabled={isConnecting}
-                className="bg-gray-800 hover:bg-gray-700 text-white border-2 border-gray-600 hover:border-gray-500 font-medium rounded-lg px-8 py-4 text-center inline-flex items-center justify-center text-lg transition-all duration-200 shadow-sm"
-              >
-                <Instagram className="h-5 w-5 mr-2" />
-                {isConnecting ? "Conectando..." : "Conectar Instagram"}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleRefresh}
-                disabled={isRefreshing}
-                className="bg-gray-800 hover:bg-gray-700 text-white border-2 border-gray-600 hover:border-gray-500 font-medium rounded-lg px-8 py-4 text-center text-lg transition-all duration-200 shadow-sm"
-              >
-                <RefreshCw className={`h-5 w-5 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                Atualizar Contas
-              </Button>
             </div>
           </div>
         </section>
@@ -366,10 +357,19 @@ export default function RedeSocialPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {connectedAccounts.map((account) => (
-                <Card 
+                <Card
                   key={account.id}
-                  className="group cursor-pointer hover:shadow-xl transition-all duration-300 border-2 hover:border-primary/50 bg-white dark:bg-gray-800"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Gerenciar conta @${account.igUsername}`}
+                  className="group cursor-pointer hover:shadow-xl transition-all duration-300 border-2 hover:border-primary/50 bg-white dark:bg-gray-800 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                   onClick={() => navigateToDashboard(account.providerAccountId)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      navigateToDashboard(account.providerAccountId);
+                    }
+                  }}
                 >
                   <CardHeader className="pb-4">
                     <div className="flex items-center gap-4">
@@ -421,6 +421,7 @@ export default function RedeSocialPage() {
                     <Button
                       variant="ghost"
                       size="icon"
+                      aria-label={`Desconectar conta @${account.igUsername}`}
                       className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -434,9 +435,18 @@ export default function RedeSocialPage() {
               ))}
 
               {/* Card para adicionar nova conta */}
-              <Card 
-                className="group cursor-pointer border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-primary hover:shadow-xl transition-all duration-300 flex flex-col items-center justify-center py-12 bg-gray-50/50 dark:bg-gray-800/50"
+              <Card
+                role="button"
+                tabIndex={0}
+                aria-label="Adicionar nova conta do Instagram"
+                className="group cursor-pointer border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-primary hover:shadow-xl transition-all duration-300 flex flex-col items-center justify-center py-12 bg-gray-50/50 dark:bg-gray-800/50 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                 onClick={handleInstagramConnect}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleInstagramConnect();
+                  }
+                }}
               >
                 <div className="rounded-2xl bg-primary/10 p-6 mb-4 group-hover:bg-primary/20 transition-colors">
                   <Plus className="h-10 w-10 text-primary" />
@@ -602,7 +612,7 @@ export default function RedeSocialPage() {
         {/* Benefícios */}
         <section className="py-16 bg-gray-50 dark:bg-gray-800 rounded-3xl">
           <div className="text-center mb-12">
-            					<h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900 dark:text-white">Por que Socialwise Chatwit?</h2>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900 dark:text-white">Por que Socialwise?</h2>
             <p className="text-xl text-gray-600 dark:text-gray-400 max-w-3xl mx-auto">
               Ferramentas poderosas para automatizar e otimizar sua presença nas redes sociais
             </p>
@@ -656,7 +666,7 @@ export default function RedeSocialPage() {
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">Resultados Comprovados</h2>
             <p className="text-xl opacity-90 max-w-2xl mx-auto">
-              Veja o impacto que o Socialwise Chatwit pode ter na sua presença digital
+              Veja o impacto que o Socialwise pode ter na sua presença digital
             </p>
           </div>
 
@@ -685,7 +695,7 @@ export default function RedeSocialPage() {
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900 dark:text-white">Casos de Sucesso</h2>
             <p className="text-xl text-gray-600 dark:text-gray-400 max-w-3xl mx-auto">
-              Profissionais que transformaram seus negócios com Socialwise Chatwit
+              Profissionais que transformaram seus negócios com Socialwise
             </p>
           </div>
 
@@ -696,7 +706,7 @@ export default function RedeSocialPage() {
                 username: "@mariaempreendedora",
                 initial: "M",
                 color: "bg-blue-500",
-                testimonial: "O Socialwise Chatwit revolucionou minha presença no Instagram. Consigo responder a todos os comentários e mensagens em tempo recorde!"
+                testimonial: "O Socialwise revolucionou minha presença no Instagram. Consigo responder a todos os comentários e mensagens em tempo recorde!"
               },
               {
                 name: "João Mendes", 
@@ -740,7 +750,7 @@ export default function RedeSocialPage() {
         <section className="text-center py-16">
           <div className="max-w-2xl mx-auto">
             <div className="mb-8">
-              							<Image src="/01%20WitdeT.png" alt="ChatWit Logo" width={120} height={120} className="mx-auto mb-6" />
+              <Image src="/assets/iconssvg/socialwise-logo.png" alt="Socialwise Logo" width={120} height={120} className="mx-auto mb-6" />
             </div>
             <h2 className="text-3xl md:text-4xl font-bold mb-6 text-gray-900 dark:text-white">
               Transforme Sua Presença Digital Hoje

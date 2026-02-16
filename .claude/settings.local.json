@@ -32,7 +32,9 @@
       "Bash(git checkout:*)",
       "Bash(npm view:*)",
       "Bash(npx @next/codemod@latest upgrade:*)",
-      "Bash(pnpm build:*)"
+      "Bash(pnpm build:*)",
+      "Skill(web-design-guidelines)",
+      "Skill(web-design-guidelines:*)"
     ],
     "deny": [],
     "ask": []

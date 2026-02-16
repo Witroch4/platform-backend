@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Registro de Redes Sociais | Chatwit-Social",
+  title: "Registro de Redes Sociais | Socialwise",
   description: "Conecte suas contas de redes sociais para automatizar interações e mensagens.",
 };
 

@@ -44,6 +44,7 @@ import { QuickRepliesNode } from './nodes/QuickRepliesNode';
 import { CarouselNode } from './nodes/CarouselNode';
 import { TemplateNode } from './nodes/TemplateNode';
 import {
+  WhatsAppTemplateNode,
   ButtonTemplateNode,
   CouponTemplateNode,
   CallTemplateNode,
@@ -70,9 +71,11 @@ const nodeTypes: NodeTypes = {
   [FlowNodeType.END_CONVERSATION]: EndConversationNode as unknown as NodeTypes[string],
   [FlowNodeType.QUICK_REPLIES]: QuickRepliesNode as unknown as NodeTypes[string],
   [FlowNodeType.CAROUSEL]: CarouselNode as unknown as NodeTypes[string],
-  // Legacy template (deprecated - use specific template containers)
+  // Legacy template (deprecated - use WHATSAPP_TEMPLATE)
   [FlowNodeType.TEMPLATE]: TemplateNode as unknown as NodeTypes[string],
-  // New template containers
+  // Template WhatsApp Unificado (novo)
+  [FlowNodeType.WHATSAPP_TEMPLATE]: WhatsAppTemplateNode as unknown as NodeTypes[string],
+  // @deprecated - Templates antigos (manter para backward compatibility)
   [FlowNodeType.BUTTON_TEMPLATE]: ButtonTemplateNode as unknown as NodeTypes[string],
   [FlowNodeType.COUPON_TEMPLATE]: CouponTemplateNode as unknown as NodeTypes[string],
   [FlowNodeType.CALL_TEMPLATE]: CallTemplateNode as unknown as NodeTypes[string],
@@ -225,54 +228,83 @@ export function FlowCanvas({
     (event: DragEvent) => {
       event.preventDefault();
 
-      // Template element blocks (dropped into a Template container)
+      // First detect the target node (if any)
+      const target = document.elementFromPoint(event.clientX, event.clientY);
+      const nodeEl = target?.closest('.react-flow__node') as HTMLElement | null;
+      const targetNodeId =
+        nodeEl?.getAttribute('data-id') ??
+        nodeEl?.dataset?.id ??
+        nodeEl?.getAttribute('data-nodeid') ??
+        null;
+
+      // Get the target node type from the nodes array (ReactFlow doesn't add data-type)
+      const targetNode = targetNodeId ? nodes.find((n) => n.id === targetNodeId) : null;
+      const targetNodeType = targetNode?.type as FlowNodeType | undefined;
+
+      // Define which node types are template containers
+      const templateContainerTypes: FlowNodeType[] = [
+        FlowNodeType.WHATSAPP_TEMPLATE,
+        FlowNodeType.BUTTON_TEMPLATE,
+        FlowNodeType.COUPON_TEMPLATE,
+        FlowNodeType.CALL_TEMPLATE,
+        FlowNodeType.URL_TEMPLATE,
+      ];
+
+      // Check if dropping on a template container vs interactive message
+      const isTemplateContainer = targetNodeType && templateContainerTypes.includes(targetNodeType);
+      const isInteractiveMessage = targetNodeType === FlowNodeType.INTERACTIVE_MESSAGE;
+
+      // Get both MIME types (shared elements send both)
       const templateElementType = event.dataTransfer.getData(
         TEMPLATE_ELEMENT_MIME
       ) as TemplateElementType;
+      const elementType = event.dataTransfer.getData(
+        FLOWBUILDER_ELEMENT_MIME
+      ) as InteractiveMessageElementType;
 
-      if (templateElementType) {
-        // Find target node using elementFromPoint
-        const target = document.elementFromPoint(event.clientX, event.clientY);
-        const nodeEl = target?.closest('.react-flow__node') as HTMLElement | null;
+      // -------------------------------------------------------------------------
+      // ROUTING DECISION: based on TARGET NODE TYPE (not MIME type priority)
+      // -------------------------------------------------------------------------
 
-        const targetNodeId =
-          nodeEl?.getAttribute('data-id') ??
-          nodeEl?.dataset?.id ??
-          nodeEl?.getAttribute('data-nodeid') ??
-          null;
+      // Case 1: Dropping on a Template container
+      if (isTemplateContainer && targetNodeId) {
+        // Use template element type if available, otherwise fallback to element type
+        const typeToUse = templateElementType || elementType;
+        if (typeToUse) {
+          onDropTemplateElement?.(typeToUse as TemplateElementType, targetNodeId);
+          return;
+        }
+      }
 
+      // Case 2: Dropping on Interactive Message container
+      if (isInteractiveMessage && targetNodeId && elementType) {
+        const position = screenToFlowPosition({
+          x: event.clientX,
+          y: event.clientY,
+        });
+        onDropElement?.(elementType, position, targetNodeId);
+        return;
+      }
+
+      // Case 3: Template-only element (no FLOWBUILDER_ELEMENT_MIME) dropped somewhere
+      if (templateElementType && !elementType) {
         if (targetNodeId) {
           onDropTemplateElement?.(templateElementType, targetNodeId);
         }
         return;
       }
 
-      // Element blocks (dropped into an Interactive Message container)
-      const elementType = event.dataTransfer.getData(
-        FLOWBUILDER_ELEMENT_MIME
-      ) as InteractiveMessageElementType;
-
+      // Case 4: Shared element dropped on any node (let handler decide)
       if (elementType) {
         const position = screenToFlowPosition({
           x: event.clientX,
           y: event.clientY,
         });
-
-        // Robust detection using document.elementFromPoint
-        // This handles cases where event.target might be the drag source or a portal
-        const target = document.elementFromPoint(event.clientX, event.clientY);
-        const nodeEl = target?.closest('.react-flow__node') as HTMLElement | null;
-
-        const targetNodeId =
-          nodeEl?.getAttribute('data-id') ??
-          nodeEl?.dataset?.id ??
-          nodeEl?.getAttribute('data-nodeid') ??
-          null;
-
         onDropElement?.(elementType, position, targetNodeId);
         return;
       }
 
+      // Case 5: Node palette item (new node)
       const type = event.dataTransfer.getData('application/reactflow') as FlowNodeType;
       if (!type) return;
 
@@ -284,7 +316,7 @@ export function FlowCanvas({
 
       onDrop?.(type, position);
     },
-    [onDrop, onDropElement, onDropTemplateElement, screenToFlowPosition]
+    [nodes, onDrop, onDropElement, onDropTemplateElement, screenToFlowPosition]
   );
 
   // ---------------------------------------------------------------------------

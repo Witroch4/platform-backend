@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useMemo, useCallback, useState } from 'react';
+import { memo, useMemo, useCallback } from 'react';
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react';
 import {
   FileText,
@@ -21,6 +21,7 @@ import { NodeContextMenu } from '../ui/NodeContextMenu';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { generateTemplateButtonId } from '@/lib/flow-builder/templateElements';
+import { useTemplateStatusRefresh } from '../hooks/useTemplateStatusRefresh';
 
 type TemplateNodeProps = NodeProps & {
   data: TemplateNodeData & { [key: string]: unknown };
@@ -109,13 +110,20 @@ function getButtonTypeIcon(type: TemplateButton['type']) {
 export const TemplateNode = memo(
   ({ id, data, selected }: TemplateNodeProps) => {
     const { setNodes, getNodes, setEdges } = useReactFlow();
-    const [isRefreshing, setIsRefreshing] = useState(false);
 
     // Dados do template
     const status = data.status || 'DRAFT';
     const templateName = data.templateName || data.label || 'Template Oficial';
     const mode = data.mode || 'draft';
     const isConfigured = data.isConfigured && (status !== 'DRAFT' || data.body?.text);
+
+    // Hook de refresh de status (polling automático para PENDING)
+    const { isRefreshing, refreshStatus, canRefresh } = useTemplateStatusRefresh({
+      nodeId: id,
+      metaTemplateId: data.metaTemplateId,
+      templateName: data.templateName,
+      status,
+    });
 
     // Extrai botões
     const buttons = useMemo(() => data.buttons || [], [data.buttons]);
@@ -171,22 +179,6 @@ export const TemplateNode = memo(
       setNodes((nodes) => nodes.filter((n) => n.id !== id));
       setEdges((edges) => edges.filter((e) => e.source !== id && e.target !== id));
     }, [id, setNodes, setEdges]);
-
-    // Atualizar status do template (simula refresh da Meta API)
-    const handleRefreshStatus = useCallback(async () => {
-      if (!data.templateId) return;
-
-      setIsRefreshing(true);
-      try {
-        // TODO: Chamar API para atualizar status do template
-        // const response = await fetch(`/api/admin/mtf-diamante/template-details?id=${data.templateId}`);
-        // const result = await response.json();
-        // if (result.status) { ... }
-        await new Promise((resolve) => setTimeout(resolve, 1000)); // Simula delay
-      } finally {
-        setIsRefreshing(false);
-      }
-    }, [data.templateId]);
 
     // Impede propagação de duplo clique no corpo
     const stopPropagation = (e: React.MouseEvent) => {
@@ -330,15 +322,15 @@ export const TemplateNode = memo(
                   </div>
                 )}
 
-                {/* Refresh status button (only for templates with templateId) */}
-                {data.templateId && status === 'PENDING' && (
+                {/* Refresh status button (only for templates with metaTemplateId) */}
+                {canRefresh && status === 'PENDING' && (
                   <Button
                     variant="ghost"
                     size="sm"
                     className="w-full text-xs text-muted-foreground hover:text-foreground"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleRefreshStatus();
+                      refreshStatus();
                     }}
                     disabled={isRefreshing}
                   >

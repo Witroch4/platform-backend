@@ -21,13 +21,20 @@ export enum FlowNodeType {
   TEXT_MESSAGE = 'text_message',
 
   // WhatsApp Official Templates
-  /** @deprecated Use specific template types (BUTTON_TEMPLATE, COUPON_TEMPLATE, etc.) */
+  /** @deprecated Use WHATSAPP_TEMPLATE instead */
   TEMPLATE = 'template',
 
-  // WhatsApp Template Containers (specific types)
+  // WhatsApp Template Unificado (aceita todos os tipos de botão)
+  WHATSAPP_TEMPLATE = 'whatsapp_template',
+
+  // @deprecated - Templates antigos (manter para backward compatibility em flows existentes)
+  /** @deprecated Use WHATSAPP_TEMPLATE */
   BUTTON_TEMPLATE = 'button_template',
+  /** @deprecated Use WHATSAPP_TEMPLATE */
   COUPON_TEMPLATE = 'coupon_template',
+  /** @deprecated Use WHATSAPP_TEMPLATE */
   CALL_TEMPLATE = 'call_template',
+  /** @deprecated Use WHATSAPP_TEMPLATE */
   URL_TEMPLATE = 'url_template',
 
   // Reactions
@@ -129,6 +136,7 @@ export type InteractiveMessageElementType =
   | 'button'
   | 'button_copy_code'
   | 'button_phone'
+  | 'button_voice_call'
   | 'button_url';
 
 export interface InteractiveMessageElementBase {
@@ -191,6 +199,15 @@ export interface InteractiveMessageButtonUrlElement
   url: string;
 }
 
+/** Botão VOICE_CALL para ligar via WhatsApp */
+export interface InteractiveMessageButtonVoiceCallElement
+  extends InteractiveMessageElementBase {
+  type: 'button_voice_call';
+  title: string;
+  /** TTL em minutos (padrão: 10080 = 7 dias) */
+  ttlMinutes?: number;
+}
+
 export type InteractiveMessageElement =
   | InteractiveMessageHeaderTextElement
   | InteractiveMessageHeaderImageElement
@@ -199,6 +216,7 @@ export type InteractiveMessageElement =
   | InteractiveMessageButtonElement
   | InteractiveMessageButtonCopyCodeElement
   | InteractiveMessageButtonPhoneElement
+  | InteractiveMessageButtonVoiceCallElement
   | InteractiveMessageButtonUrlElement;
 
 // =============================================================================
@@ -426,6 +444,7 @@ export type TemplateButtonType =
   | 'URL'
   | 'PHONE_NUMBER'
   | 'COPY_CODE'
+  | 'VOICE_CALL'
   | 'FLOW'
   | 'SPM'
   | 'MPM';
@@ -450,6 +469,8 @@ export interface TemplateButton {
   flowId?: string;
   /** ID do produto para SPM/MPM */
   productId?: string;
+  /** TTL em minutos para VOICE_CALL (padrão: 10080 = 7 dias) */
+  ttlMinutes?: number;
 }
 
 /**
@@ -551,7 +572,38 @@ export interface TemplateNodeData extends FlowNodeDataBase {
 // =============================================================================
 
 /**
- * Limites de validação para Button Template
+ * Limites de validação para Template WhatsApp Unificado
+ *
+ * Regras descobertas via testes na Meta API:
+ * - Máximo 10 botões totais
+ * - CTAs agrupados (COPY_CODE → VOICE_CALL → PHONE_NUMBER → URL) + QUICK_REPLY no final
+ * - PHONE_NUMBER e VOICE_CALL são mutuamente exclusivos (telefone OU WhatsApp, não ambos)
+ * - FLOW nativo não é compatível com outros CTAs
+ */
+export const WHATSAPP_TEMPLATE_LIMITS = {
+  bodyMaxLength: 1024,
+  buttonTextMaxLength: 25,
+  couponCodeMaxLength: 15,
+  phoneNumberPattern: /^\+[1-9]\d{1,14}$/,  // E.164
+
+  // Limites totais
+  maxButtons: 10,
+
+  // Limites por tipo CTA
+  maxCopyCodeButtons: 1,
+  maxUrlButtons: 2,
+  maxPhoneButtons: 1,      // PHONE_NUMBER (ligar para telefone)
+  maxVoiceCallButtons: 1,  // VOICE_CALL (ligar via WhatsApp)
+
+  // Restrição especial
+  phoneAndVoiceCallMutuallyExclusive: true, // não pode ter ambos
+
+  // TTL padrão para VOICE_CALL (7 dias)
+  voiceCallDefaultTtlMinutes: 10080,
+} as const;
+
+/**
+ * @deprecated Use WHATSAPP_TEMPLATE_LIMITS
  */
 export const BUTTON_TEMPLATE_LIMITS = {
   bodyMaxLength: 1024,
@@ -561,18 +613,21 @@ export const BUTTON_TEMPLATE_LIMITS = {
 } as const;
 
 /**
- * Limites de validação para Coupon Template
+ * @deprecated Use WHATSAPP_TEMPLATE_LIMITS
  */
 export const COUPON_TEMPLATE_LIMITS = {
   bodyMaxLength: 1024,
   couponCodeMaxLength: 15,
   buttonTextMaxLength: 25,
-  maxButtons: 1,
+  maxButtons: 10,
+  maxCopyCodeButtons: 1,
+  maxUrlButtons: 2,
+  maxPhoneButtons: 1,
   buttonType: 'COPY_CODE' as const,
 } as const;
 
 /**
- * Limites de validação para Call Template
+ * @deprecated Use WHATSAPP_TEMPLATE_LIMITS
  */
 export const CALL_TEMPLATE_LIMITS = {
   bodyMaxLength: 1024,
@@ -583,7 +638,7 @@ export const CALL_TEMPLATE_LIMITS = {
 } as const;
 
 /**
- * Limites de validação para URL Template
+ * @deprecated Use WHATSAPP_TEMPLATE_LIMITS
  */
 export const URL_TEMPLATE_LIMITS = {
   bodyMaxLength: 1024,
@@ -631,7 +686,8 @@ export interface ButtonTemplateNodeData extends FlowNodeDataBase {
 
 /**
  * Dados específicos para nó Coupon Template
- * Mensagem com botão COPY_CODE (PIX, cupons)
+ * Mensagem com botão COPY_CODE (PIX, cupons) + opcionais URL, PHONE_NUMBER e QUICK_REPLY
+ * Meta aceita: COPY_CODE + URL + PHONE_NUMBER + QUICK_REPLY (agrupados por tipo)
  */
 export interface CouponTemplateNodeData extends FlowNodeDataBase {
   /** Status de aprovação do template */
@@ -660,6 +716,15 @@ export interface CouponTemplateNodeData extends FlowNodeDataBase {
 
   /** Texto do botão de copiar */
   buttonText?: string;
+
+  /** Botões adicionais: QUICK_REPLY, URL e/ou PHONE_NUMBER (legacy - usar elements) */
+  buttons?: Array<{
+    id: string;
+    type?: 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER';
+    text: string;
+    url?: string;
+    phoneNumber?: string;
+  }>;
 
   /** Sistema unificado de elementos */
   elements?: InteractiveMessageElement[];
@@ -740,6 +805,62 @@ export interface UrlTemplateNodeData extends FlowNodeDataBase {
 }
 
 /**
+ * Dados específicos para nó Template WhatsApp Unificado
+ * Aceita TODOS os tipos de botão: QUICK_REPLY, URL, PHONE_NUMBER, COPY_CODE, VOICE_CALL
+ *
+ * Regras da Meta API:
+ * - Máximo 10 botões totais
+ * - COPY_CODE: máx 1
+ * - URL: máx 2
+ * - PHONE_NUMBER: máx 1
+ * - VOICE_CALL: máx 1
+ * - PHONE_NUMBER e VOICE_CALL são mutuamente exclusivos
+ * - Botões devem ser agrupados: CTAs primeiro, QUICK_REPLY por último
+ */
+export interface WhatsAppTemplateNodeData extends FlowNodeDataBase {
+  /** Status de aprovação do template */
+  status?: TemplateApprovalStatus;
+
+  /** Nome do template (para envio à Meta) */
+  templateName?: string;
+
+  /** ID do template na Meta */
+  metaTemplateId?: string;
+
+  /** Categoria do template */
+  category?: TemplateCategory;
+
+  /** Idioma */
+  language?: string;
+
+  /** Corpo da mensagem (legacy - usar elements) */
+  body?: {
+    text: string;
+    variables?: string[];
+  };
+
+  /** Código do cupom/PIX (max 15 chars) - para COPY_CODE */
+  couponCode?: string;
+
+  /** Número de telefone (formato E.164) - para PHONE_NUMBER */
+  phoneNumber?: string;
+
+  /** Botões mistos (legacy - usar elements) */
+  buttons?: Array<{
+    id: string;
+    type: 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER' | 'COPY_CODE' | 'VOICE_CALL';
+    text: string;
+    url?: string;
+    phoneNumber?: string;
+    couponCode?: string;
+    ttlMinutes?: number; // para VOICE_CALL (padrão: 10080 = 7 dias)
+  }>;
+
+  /** Sistema unificado de elementos (igual Mensagem Interativa) */
+  elements?: InteractiveMessageElement[];
+}
+
+/**
  * União de todos os tipos de dados de nós
  */
 export type FlowNodeData =
@@ -756,6 +877,7 @@ export type FlowNodeData =
   | QuickRepliesNodeData
   | CarouselNodeData
   | TemplateNodeData
+  | WhatsAppTemplateNodeData
   | ButtonTemplateNodeData
   | CouponTemplateNodeData
   | CallTemplateNodeData
@@ -1131,58 +1253,44 @@ export interface TemplatePaletteItem {
   label: string;
   description: string;
   category: 'template';
-  /** Tipo de botão aceito neste container */
-  buttonType: TemplateButtonType;
+  /** Tipos de botão aceitos neste container (múltiplos para template unificado) */
+  buttonTypes: TemplateButtonType[];
   /** Número máximo de botões */
   maxButtons: number;
 }
 
 /**
- * Itens da paleta de Templates WhatsApp (containers específicos)
+ * Itens da paleta de Templates WhatsApp
+ * Apenas o Template WhatsApp unificado - aceita todos os tipos de botão
  */
 export const TEMPLATE_PALETTE_ITEMS: TemplatePaletteItem[] = [
   {
-    type: FlowNodeType.BUTTON_TEMPLATE,
+    type: FlowNodeType.WHATSAPP_TEMPLATE,
     icon: '📋',
-    label: 'Button Template',
-    description: 'Mensagem com 1-10 botões',
+    label: 'Template WhatsApp',
+    description: 'Mensagem oficial com até 10 botões',
     category: 'template',
-    buttonType: 'QUICK_REPLY',
-    maxButtons: 3,
-  },
-  {
-    type: FlowNodeType.COUPON_TEMPLATE,
-    icon: '🎟️',
-    label: 'Coupon Template',
-    description: 'Chave PIX ou cupom copiável',
-    category: 'template',
-    buttonType: 'COPY_CODE',
-    maxButtons: 1,
-  },
-  {
-    type: FlowNodeType.CALL_TEMPLATE,
-    icon: '📞',
-    label: 'Call Template',
-    description: 'Botão para ligação',
-    category: 'template',
-    buttonType: 'PHONE_NUMBER',
-    maxButtons: 1,
-  },
-  {
-    type: FlowNodeType.URL_TEMPLATE,
-    icon: '🔗',
-    label: 'URL Template',
-    description: 'Mensagem com links',
-    category: 'template',
-    buttonType: 'URL',
-    maxButtons: 2,
+    buttonTypes: ['QUICK_REPLY', 'URL', 'PHONE_NUMBER', 'COPY_CODE', 'VOICE_CALL'],
+    maxButtons: 10,
   },
 ];
 
 /**
  * Tipo de elemento para templates
+ * Inclui elementos compartilhados (header_text, header_image, body, footer, button)
+ * que podem ser dropados em containers de template
  */
-export type TemplateElementType = 'body' | 'button_quick_reply' | 'button_url' | 'button_phone' | 'button_copy_code';
+export type TemplateElementType =
+  | 'header_text'
+  | 'header_image'
+  | 'body'
+  | 'footer'
+  | 'button'
+  | 'button_quick_reply'
+  | 'button_url'
+  | 'button_phone'
+  | 'button_voice_call'
+  | 'button_copy_code';
 
 /**
  * Item de elemento para templates
@@ -1205,40 +1313,114 @@ export const TEMPLATE_ELEMENT_ITEMS: TemplateElementItem[] = [
     icon: '📝',
     label: 'Body',
     description: 'Texto principal (obrigatório)',
-    validContainers: [
-      FlowNodeType.BUTTON_TEMPLATE,
-      FlowNodeType.COUPON_TEMPLATE,
-      FlowNodeType.CALL_TEMPLATE,
-      FlowNodeType.URL_TEMPLATE,
-    ],
+    validContainers: [FlowNodeType.WHATSAPP_TEMPLATE],
   },
   {
     type: 'button_quick_reply',
     icon: '🔘',
     label: 'Botão',
-    description: 'Botão de resposta rápida',
-    validContainers: [FlowNodeType.BUTTON_TEMPLATE],
+    description: 'Botão de resposta rápida (máx 10 total)',
+    validContainers: [FlowNodeType.WHATSAPP_TEMPLATE],
   },
   {
     type: 'button_url',
     icon: '🔗',
     label: 'Botão URL',
-    description: 'Botão com link externo',
-    validContainers: [FlowNodeType.URL_TEMPLATE],
+    description: 'Botão com link externo (máx 2)',
+    validContainers: [FlowNodeType.WHATSAPP_TEMPLATE],
   },
   {
     type: 'button_phone',
     icon: '📞',
     label: 'Botão Ligar',
-    description: 'Botão para ligação',
-    validContainers: [FlowNodeType.CALL_TEMPLATE],
+    description: 'Ligar para telefone (máx 1)',
+    validContainers: [FlowNodeType.WHATSAPP_TEMPLATE],
+  },
+  {
+    type: 'button_voice_call',
+    icon: '📱',
+    label: 'Ligar WhatsApp',
+    description: 'Ligar via WhatsApp (máx 1)',
+    validContainers: [FlowNodeType.WHATSAPP_TEMPLATE],
   },
   {
     type: 'button_copy_code',
-    icon: '📋',
-    label: 'Botão Copiar',
-    description: 'Botão para copiar código/PIX',
-    validContainers: [FlowNodeType.COUPON_TEMPLATE],
+    icon: '🎫',
+    label: 'Copiar Código',
+    description: 'Botão para copiar código/PIX (máx 1)',
+    validContainers: [FlowNodeType.WHATSAPP_TEMPLATE],
+  },
+];
+
+/**
+ * Elementos COMPARTILHADOS - funcionam tanto para Mensagem Interativa quanto para Templates
+ * Usados na seção "Elementos" da sidebar (reorganizada)
+ */
+export const SHARED_ELEMENT_ITEMS: ElementPaletteItem[] = [
+  {
+    type: 'header_text',
+    icon: '🏷️',
+    label: 'Header (texto)',
+    description: 'Título acima do corpo da mensagem',
+  },
+  {
+    type: 'header_image',
+    icon: '🖼️',
+    label: 'Header (imagem)',
+    description: 'Imagem no topo da mensagem',
+  },
+  {
+    type: 'body',
+    icon: '📝',
+    label: 'Body',
+    description: 'Texto principal (obrigatório)',
+  },
+  {
+    type: 'footer',
+    icon: '📎',
+    label: 'Footer',
+    description: 'Texto de rodapé',
+  },
+  {
+    type: 'button',
+    icon: '🔘',
+    label: 'Botão',
+    description: 'Um botão (ponto de conexão)',
+  },
+];
+
+/**
+ * Botões ESPECIAIS - exclusivos para Templates WhatsApp
+ * Usados na subseção "Botões Especiais" dentro da seção Templates
+ */
+export const TEMPLATE_SPECIAL_BUTTON_ITEMS: TemplateElementItem[] = [
+  {
+    type: 'button_url',
+    icon: '🔗',
+    label: 'Botão URL',
+    description: 'Botão com link externo (máx 2)',
+    validContainers: [FlowNodeType.WHATSAPP_TEMPLATE],
+  },
+  {
+    type: 'button_phone',
+    icon: '📞',
+    label: 'Botão Ligar',
+    description: 'Ligar para telefone (máx 1)',
+    validContainers: [FlowNodeType.WHATSAPP_TEMPLATE],
+  },
+  {
+    type: 'button_voice_call',
+    icon: '📱',
+    label: 'Ligar WhatsApp',
+    description: 'Ligar via WhatsApp (máx 1)',
+    validContainers: [FlowNodeType.WHATSAPP_TEMPLATE],
+  },
+  {
+    type: 'button_copy_code',
+    icon: '🎫',
+    label: 'Copiar Código',
+    description: 'Botão para copiar código/PIX (máx 1)',
+    validContainers: [FlowNodeType.WHATSAPP_TEMPLATE],
   },
 ];
 

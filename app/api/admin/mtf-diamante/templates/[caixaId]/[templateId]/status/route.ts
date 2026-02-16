@@ -40,16 +40,17 @@ async function getWhatsAppApiConfig(userId: string) {
 }
 
 /**
- * GET /api/admin/mtf-diamante/templates/[templateId]/status
+ * GET /api/admin/mtf-diamante/templates/[caixaId]/[templateId]/status
  *
  * Consulta o status de um template específico na Meta API e sincroniza com o banco.
  *
+ * @param caixaId - O ID da caixa (inbox)
  * @param templateId - O ID do template na Meta (metaTemplateId)
  * @returns { success, status, name, category, qualityScore, rejectionReason, previousStatus, statusChanged }
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ templateId: string }> }
+  { params }: { params: Promise<{ caixaId: string; templateId: string }> }
 ) {
   try {
     // Autenticação

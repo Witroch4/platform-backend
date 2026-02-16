@@ -60,6 +60,7 @@ function getNodeTypeLabel(nodeType: FlowNodeType): string {
     interactive_message: 'Mensagem Interativa',
     text_message: 'Mensagem de Texto',
     template: 'Template Oficial',
+    whatsapp_template: 'Template WhatsApp',
     button_template: 'Button Template',
     coupon_template: 'Coupon Template',
     call_template: 'Call Template',
