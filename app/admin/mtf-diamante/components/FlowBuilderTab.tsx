@@ -112,7 +112,7 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
 		getCanvasAsN8nFormat,
 	} = useFlowCanvas(caixaId, { flowId: selectedFlowId, autoSave: true });
 
-	const { interactiveMessages, caixas } = useMtfData();
+	const { interactiveMessages, caixas, buttonReactions } = useMtfData();
 
 	// Obtém o channelType da caixa atual
 	const channelType = useMemo(() => {
@@ -163,16 +163,22 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
 	);
 
 	// Formatted messages for the detail dialog
+	// FIX: A API retorna os dados dentro de `content`, não no nível superior
 	const messagesForDialog = useMemo(
 		() =>
-			(interactiveMessages ?? []).map((m) => ({
-				id: m.id ?? "",
-				name: m.name ?? "Sem nome",
-				body: m.body as { text?: string } | undefined,
-				header: m.header as { type?: string; text?: string } | undefined,
-				footer: m.footer as { text?: string } | undefined,
-				action: m.action as Record<string, unknown> | undefined,
-			})),
+			(interactiveMessages ?? []).map((m) => {
+				// Extrair dados de content (onde a API realmente retorna)
+				const content = (m as unknown as Record<string, unknown>).content as Record<string, unknown> | undefined;
+				return {
+					id: m.id ?? "",
+					name: m.name ?? "Sem nome",
+					// Priorizar content.* sobre m.* para compatibilidade
+					body: (content?.body ?? m.body) as { text?: string } | undefined,
+					header: (content?.header ?? m.header) as { type?: string; text?: string; content?: string; media_url?: string } | undefined,
+					footer: (content?.footer ?? m.footer) as { text?: string } | undefined,
+					action: (content?.action ?? m.action) as Record<string, unknown> | undefined,
+				};
+			}),
 		[interactiveMessages],
 	);
 
@@ -912,6 +918,142 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
 		[updateNodeData],
 	);
 
+	/**
+	 * Ao vincular uma mensagem interativa, busca as reações dos botões
+	 * e cria automaticamente os nós de reação conectados.
+	 * Baseado na lógica original de useReactionImport.ts.bkp
+	 */
+	const handleLinkMessageWithReactions = useCallback(
+		(nodeId: string, _messageId: string, buttons: Array<{ id: string; title: string }>) => {
+			// Criar Set com os IDs dos botões desta mensagem para lookup rápido
+			const buttonIds = new Set(buttons.map((b) => b.id));
+
+			// Tipo extendido para incluir campos que existem no contexto real
+			type ExtendedReaction = {
+				id?: string;
+				messageId: string;
+				buttonId: string;
+				emoji: string;
+				label: string;
+				action: string;
+				textReaction?: string;
+				textResponse?: string;
+				linkedMessageId?: string;
+				actionPayload?: { messageId?: string };
+			};
+
+			// Filtrar reações que correspondem aos botões desta mensagem
+			const allReactions = (buttonReactions ?? []) as ExtendedReaction[];
+			const messageReactions = allReactions.filter((r) => r.buttonId && buttonIds.has(r.buttonId));
+
+			if (messageReactions.length === 0) {
+				console.log("🔍 [handleLinkMessageWithReactions] Nenhuma reação encontrada", {
+					buttonIds: Array.from(buttonIds),
+					availableReactions: allReactions.map((r) => r.buttonId),
+				});
+				return;
+			}
+
+			// Encontrar o nó atual para posicionar os novos nós
+			const currentNode = nodes.find((n) => n.id === nodeId);
+			if (!currentNode) return;
+
+			const baseX = currentNode.position.x + 400; // À direita do nó atual
+			let offsetY = currentNode.position.y - 50; // Começar um pouco acima
+
+			// Helper para criar e conectar um nó
+			const createAndConnectNode = (nodeType: FlowNodeType, nodeData: Partial<FlowNodeData>, buttonId: string) => {
+				const newNodeId = addNode(nodeType, { x: baseX, y: offsetY });
+
+				if (newNodeId && Object.keys(nodeData).length > 0) {
+					updateNodeData(newNodeId, nodeData);
+				}
+
+				if (newNodeId) {
+					onConnect({
+						source: nodeId,
+						target: newNodeId,
+						sourceHandle: buttonId,
+						targetHandle: null,
+					});
+				}
+
+				offsetY += 180; // Espaçamento vertical entre nós
+				return newNodeId;
+			};
+
+			// Para cada botão que tem reações, criar nó(s) SEPARADOS para cada campo configurado
+			for (const button of buttons) {
+				// Pegar TODAS as reações deste botão (não apenas a primeira)
+				const buttonReactionsForBtn = messageReactions.filter((r) => r.buttonId === button.id);
+				if (buttonReactionsForBtn.length === 0) continue;
+
+				// Processar cada reação - cada campo preenchido gera seu próprio nó
+				for (const reaction of buttonReactionsForBtn) {
+					// 1. Handoff → Nó de HANDOFF (transferência real)
+					if (reaction.action === "handoff") {
+						createAndConnectNode(
+							FlowNodeType.HANDOFF,
+							{ label: "Transferir para atendente", isConfigured: true },
+							button.id,
+						);
+						// NÃO usar continue - pode ter outros campos na mesma reação
+					}
+
+					// 2. Mensagem vinculada → Nó de mensagem interativa
+					const linkedMsgId = reaction.linkedMessageId || reaction.actionPayload?.messageId;
+					if (linkedMsgId) {
+						const linkedMsg = interactiveMessages?.find((m) => m.id === linkedMsgId);
+						if (linkedMsg) {
+							const content = (linkedMsg as unknown as Record<string, unknown>).content as Record<string, unknown> | undefined;
+							createAndConnectNode(
+								FlowNodeType.INTERACTIVE_MESSAGE,
+								{
+									label: linkedMsg.name ?? "Mensagem",
+									messageId: linkedMsg.id,
+									message: {
+										id: linkedMsg.id ?? "",
+										name: linkedMsg.name ?? "",
+										body: content?.body ?? linkedMsg.body,
+										header: content?.header ?? linkedMsg.header,
+										footer: content?.footer ?? linkedMsg.footer,
+										action: content?.action ?? linkedMsg.action,
+									} as InteractiveMessageNodeData["message"],
+									isConfigured: true,
+								},
+								button.id,
+							);
+						}
+						// NÃO usar continue - pode ter outros campos na mesma reação
+					}
+
+					// 3. Texto → Nó de texto separado (NÃO junta com emoji)
+					const textContent = reaction.textReaction || reaction.textResponse;
+					if (textContent) {
+						createAndConnectNode(
+							FlowNodeType.TEXT_MESSAGE,
+							{ label: button.title, text: textContent, isConfigured: true },
+							button.id,
+						);
+						// NÃO usar continue - emoji pode estar junto e precisa de nó separado
+					}
+
+					// 4. Emoji → Nó de EMOJI_REACTION (tipo correto para reação de emoji)
+					if (reaction.emoji) {
+						createAndConnectNode(
+							FlowNodeType.EMOJI_REACTION,
+							{ label: button.title, emoji: reaction.emoji, isConfigured: true },
+							button.id,
+						);
+					}
+				}
+			}
+
+			toast.success(`${messageReactions.length} reação(ões) importada(s) automaticamente`);
+		},
+		[nodes, buttonReactions, addNode, updateNodeData, onConnect, interactiveMessages],
+	);
+
 	const handleCloseDialog = useCallback((open: boolean) => {
 		setDialogOpen(open);
 		if (!open) setSelectedNodeId(null);
@@ -1270,6 +1412,7 @@ function FlowBuilderInner({ caixaId }: FlowBuilderInnerProps) {
 				onOpenChange={handleCloseDialog}
 				onUpdateNodeData={handleUpdateNodeData}
 				interactiveMessages={messagesForDialog}
+				onLinkMessageWithReactions={handleLinkMessageWithReactions}
 			/>
 
 			{/* Template Config Dialog (opens on double-click for TEMPLATE nodes) */}
