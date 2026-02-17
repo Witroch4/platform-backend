@@ -12,17 +12,22 @@ function getMailInstance() {
 				html: string;
 				replyTo?: string;
 			}) => {
+				const recipient = Array.isArray(options.to) ? options.to.join(", ") : options.to;
+				console.log(`[mail] Tentando enviar e-mail para: ${recipient}, subject: ${options.subject}`);
+
 				try {
 					const transport = getSmtpTransporter();
 					const info = await transport.sendMail({
 						from: options.from,
-						to: Array.isArray(options.to) ? options.to.join(", ") : options.to,
+						to: recipient,
 						subject: options.subject,
 						html: options.html,
 						replyTo: options.replyTo,
 					});
+					console.log(`[mail] E-mail enviado com sucesso para: ${recipient}, messageId: ${info.messageId}`);
 					return { data: { id: info.messageId }, error: null };
 				} catch (error) {
+					console.error(`[mail] ERRO ao enviar e-mail para ${recipient}:`, error);
 					return { data: null, error };
 				}
 			},

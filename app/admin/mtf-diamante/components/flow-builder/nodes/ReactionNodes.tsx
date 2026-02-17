@@ -214,18 +214,18 @@ export const HandoffNode = memo(({ id, data, selected }: HandoffNodeProps) => {
 					"min-w-[180px] rounded-lg border-2 shadow-md transition-all",
 					handoffColors.bg,
 					handoffColors.border,
-					selected && "ring-2 ring-primary ring-offset-2",
+					selected && "ring-2 ring-primary ring-offset-2 ring-offset-background",
 				)}
 			>
-				<Handle type="target" position={Position.Top} className="!h-3 !w-3 !bg-orange-500 !border-2 !border-white" />
+				<Handle type="target" position={Position.Top} className="!h-3 !w-3 !bg-orange-500 !border-2 !border-white dark:!border-gray-900" />
 
 				<div className="flex items-center gap-3 px-4 py-3">
-					<div className={cn("flex h-8 w-8 items-center justify-center rounded-full", "bg-orange-500 text-white")}>
+					<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-orange-500 text-white">
 						<UserCheck className="h-4 w-4" />
 					</div>
-					<div>
-						<p className="font-medium text-sm">{data.label || "Transferir"}</p>
-						<p className="text-xs text-muted-foreground">{data.targetTeam || "Para agente humano"}</p>
+					<div className="min-w-0">
+						<p className="font-medium text-sm text-foreground truncate">{data.label || "Transferir"}</p>
+						<p className="text-xs text-orange-700 dark:text-orange-300 truncate">{data.targetTeam || "Para agente humano"}</p>
 					</div>
 				</div>
 			</div>

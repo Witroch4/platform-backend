@@ -74,13 +74,14 @@ interface UseFlowCanvasOptions {
 	autoSave?: boolean;
 	autoSaveDelay?: number;
 	flowId?: string | null; // ID do flow específico para carregar
+	isNewFlow?: boolean; // Indica que estamos criando um flow novo (não carregar canvas legado)
 }
 
 // Default auto-save delay: 3 seconds
 const DEFAULT_AUTO_SAVE_DELAY = 3000;
 
 export function useFlowCanvas(inboxId: string | null, options: UseFlowCanvasOptions = {}) {
-	const { autoSave = false, autoSaveDelay = DEFAULT_AUTO_SAVE_DELAY, flowId = null } = options;
+	const { autoSave = false, autoSaveDelay = DEFAULT_AUTO_SAVE_DELAY, flowId = null, isNewFlow = false } = options;
 
 	// =========================================================================
 	// REFS — valores transientes que NÃO devem causar re-render (React best practice:
@@ -234,7 +235,8 @@ export function useFlowCanvas(inboxId: string | null, options: UseFlowCanvasOpti
 		}
 
 		// Se não tem flowId e os dados do canvas global carregaram
-		if (!flowId && !isLoadingCanvas && canvasResponse?.data?.canvas) {
+		// IMPORTANTE: Não carregar canvas legado se estamos criando um flow novo
+		if (!flowId && !isNewFlow && !isLoadingCanvas && canvasResponse?.data?.canvas) {
 			console.log("[useFlowCanvas] Sincronizando canvas visual");
 			const canvas = canvasResponse.data.canvas;
 			setNodes(canvas.nodes as unknown as Node[]);
@@ -242,8 +244,15 @@ export function useFlowCanvas(inboxId: string | null, options: UseFlowCanvasOpti
 			initializedRef.current = true;
 			return;
 		}
+
+		// Flow novo sem flowId - manter canvas vazio
+		if (!flowId && isNewFlow && !initializedRef.current) {
+			console.log("[useFlowCanvas] Flow novo - mantendo canvas vazio");
+			initializedRef.current = true;
+			return;
+		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [flowId, hasFlowCanvas, flowCanvasNodeCount, isLoadingFlow, isLoadingCanvas, setNodes, setEdges]);
+	}, [flowId, isNewFlow, hasFlowCanvas, flowCanvasNodeCount, isLoadingFlow, isLoadingCanvas, setNodes, setEdges]);
 
 	// Computed states
 	const isLoading = isLoadingCanvas || isLoadingFlow;

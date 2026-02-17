@@ -739,10 +739,16 @@ interface NodeDetailDialogProps {
 		id: string;
 		name: string;
 		body?: { text?: string };
-		header?: { type?: string; text?: string };
+		header?: { type?: string; text?: string; content?: string; media_url?: string };
 		footer?: { text?: string };
 		action?: Record<string, unknown>;
 	}>;
+	/** Callback para criar nós de reação automaticamente ao vincular uma mensagem */
+	onLinkMessageWithReactions?: (
+		nodeId: string,
+		messageId: string,
+		buttons: Array<{ id: string; title: string }>,
+	) => void;
 }
 
 export function NodeDetailDialog({
@@ -751,6 +757,7 @@ export function NodeDetailDialog({
 	onOpenChange,
 	onUpdateNodeData,
 	interactiveMessages = [],
+	onLinkMessageWithReactions,
 }: NodeDetailDialogProps) {
 	if (!node) return null;
 
@@ -788,6 +795,7 @@ export function NodeDetailDialog({
 								data={nodeData as InteractiveMessageNodeData}
 								onUpdate={onUpdateNodeData}
 								interactiveMessages={interactiveMessages}
+								onLinkMessageWithReactions={onLinkMessageWithReactions}
 							/>
 						)}
 
@@ -884,15 +892,21 @@ function InteractiveMessageDetailEditor({
 	data,
 	onUpdate,
 	interactiveMessages,
+	onLinkMessageWithReactions,
 }: EditorProps<InteractiveMessageNodeData> & {
 	interactiveMessages: Array<{
 		id: string;
 		name: string;
 		body?: { text?: string };
-		header?: { type?: string; text?: string };
+		header?: { type?: string; text?: string; content?: string; media_url?: string };
 		footer?: { text?: string };
 		action?: Record<string, unknown>;
 	}>;
+	onLinkMessageWithReactions?: (
+		nodeId: string,
+		messageId: string,
+		buttons: Array<{ id: string; title: string }>,
+	) => void;
 }) {
 	const [mode, setMode] = useState<"create" | "link">(data.messageId ? "link" : "create");
 	const [label, setLabel] = useState(data.label ?? "");
@@ -926,16 +940,41 @@ function InteractiveMessageDetailEditor({
 	const previewData = useMemo(() => {
 		if (mode === "link" && selectedMsg) {
 			// Preview from linked message
+			// FIX: Normalizar header (pode ser text, image, video, document) e buttons
+			const header = selectedMsg.header as
+				| { type?: string; text?: string; content?: string; media_url?: string }
+				| undefined;
+
 			const action = selectedMsg.action as
 				| {
-						buttons?: Array<{ id: string; title: string }>;
+						type?: string;
+						buttons?: Array<{ id: string; title: string; reply?: { id: string; title: string } }>;
 				  }
 				| undefined;
+
+			// Normalizar header para o formato esperado pelo WhatsAppPreview
+			let normalizedHeader: { type?: string; text?: string; url?: string; caption?: string } | undefined;
+			if (header?.type === "text") {
+				normalizedHeader = { type: "text", text: header.text || header.content || "" };
+			} else if (header?.type && ["image", "video", "document"].includes(header.type)) {
+				normalizedHeader = {
+					type: header.type,
+					url: header.media_url || header.content || "",
+					caption: header.text,
+				};
+			}
+
+			// Normalizar buttons (podem ter formato { id, title } ou { reply: { id, title } })
+			const buttons = (action?.buttons ?? []).map((btn) => ({
+				id: btn.id || btn.reply?.id || "",
+				title: btn.title || btn.reply?.title || "",
+			}));
+
 			return {
-				header: selectedMsg.header,
+				header: normalizedHeader,
 				body: selectedMsg.body?.text,
 				footer: selectedMsg.footer?.text,
-				buttons: action?.buttons ?? [],
+				buttons,
 			};
 		}
 
@@ -980,8 +1019,26 @@ function InteractiveMessageDetailEditor({
 				buttons: undefined,
 			} as Partial<InteractiveMessageNodeData>);
 			setMode("link");
+
+			// Extrair botões da mensagem e criar nós de reação automaticamente
+			if (onLinkMessageWithReactions && msg.action) {
+				const action = msg.action as {
+					buttons?: Array<{ id?: string; title?: string; reply?: { id: string; title: string } }>;
+				};
+				const buttons = (action.buttons ?? []).map((btn) => ({
+					id: btn.id || btn.reply?.id || "",
+					title: btn.title || btn.reply?.title || "",
+				})).filter((b) => b.id && b.title);
+
+				if (buttons.length > 0) {
+					// Usar setTimeout para garantir que o nó foi atualizado antes de criar os filhos
+					setTimeout(() => {
+						onLinkMessageWithReactions(node.id, msg.id, buttons);
+					}, 100);
+				}
+			}
 		},
-		[node.id, onUpdate],
+		[node.id, onUpdate, onLinkMessageWithReactions],
 	);
 
 	const handleClearMessage = useCallback(() => {

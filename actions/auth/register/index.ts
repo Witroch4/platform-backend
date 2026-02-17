@@ -15,6 +15,13 @@ import { sendAccountVerificationEmail } from "../email-verification";
  * @returns {Promise<{error?: string, success?: string}>} The result of the password change request.
  */
 export const register = async (user: z.infer<typeof RegisterSchema>) => {
+	// Verifica se o registro está desativado
+	if (process.env.DISABLE_REGISTRATION === "true") {
+		return {
+			error: "O registro de novos usuários está temporariamente desativado.",
+		};
+	}
+
 	const valid = await RegisterSchema.safeParse(user);
 
 	if (!valid.success) {

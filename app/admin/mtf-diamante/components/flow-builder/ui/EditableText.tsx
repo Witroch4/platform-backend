@@ -288,7 +288,15 @@ export const EditableText = ({
 			const category = variable?.category || "custom";
 			const colorClass = CATEGORY_COLORS[category];
 
-			return `<span class="px-1 py-0.5 rounded ${colorClass} font-medium">${match}</span>`;
+			// Extract only bg classes — text color must stay transparent
+			// because this layer sits BEHIND the textarea. If we set a visible
+			// text color here, the variable text renders twice (ghost effect).
+			const bgOnly = colorClass
+				.split(" ")
+				.filter((c) => c.startsWith("bg-") || c.startsWith("dark:bg-"))
+				.join(" ");
+
+			return `<span class="px-1 py-0.5 rounded ${bgOnly} font-medium" style="color:transparent">${match}</span>`;
 		});
 	}, [internalValue, enableVariables]);
 

@@ -103,34 +103,54 @@ export function getInteractiveMessageElements(
 	if (d.message) {
 		const elements: InteractiveMessageElement[] = [];
 
-		const headerText = (d.message.header as { text?: string } | undefined)?.text;
+		// FIX: Suportar diferentes formatos de header (text, image, video, document)
+		const header = d.message.header as
+			| { type?: string; text?: string; content?: string; media_url?: string; url?: string }
+			| undefined;
 		const bodyText = (d.message.body as { text?: string } | undefined)?.text;
 		const footerText = (d.message.footer as { text?: string } | undefined)?.text;
 
-		if (headerText) elements.push({ id: safeId("header_text"), type: "header_text", text: headerText });
+		// Header pode ser texto ou mídia (imagem/video/documento)
+		if (header?.type === "text") {
+			const headerText = header.text || header.content || "";
+			if (headerText) elements.push({ id: safeId("header_text"), type: "header_text", text: headerText });
+		} else if (header?.type && ["image", "video", "document"].includes(header.type)) {
+			const mediaUrl = header.media_url || header.content || header.url || "";
+			if (mediaUrl) elements.push({ id: safeId("header_image"), type: "header_image", url: mediaUrl, caption: header.text || "" });
+		}
+
 		if (bodyText) elements.push({ id: safeId("body"), type: "body", text: bodyText });
 		if (footerText) elements.push({ id: safeId("footer"), type: "footer", text: footerText });
 
 		const action = d.message.action as
 			| {
-					buttons?: Array<{ id: string; title: string; description?: string }>;
+					buttons?: Array<{ id?: string; title?: string; description?: string; reply?: { id: string; title: string } }>;
 					sections?: Array<{ rows?: Array<{ id: string; title: string; description?: string }> }>;
 			  }
 			| undefined;
 
-		const buttonLike = action?.buttons?.length
-			? action.buttons
-			: action?.sections?.length
-				? action.sections.flatMap((s) => s.rows ?? [])
-				: [];
-
-		for (const btn of buttonLike) {
-			elements.push({
-				id: btn.id || safeId("button"),
-				type: "button",
-				title: btn.title,
-				description: btn.description,
-			});
+		// Processar botões (podem ter formato direto ou com reply)
+		if (action?.buttons?.length) {
+			for (const btn of action.buttons) {
+				elements.push({
+					id: btn.id || btn.reply?.id || safeId("button"),
+					type: "button",
+					title: btn.title || btn.reply?.title || "",
+					description: btn.description,
+				});
+			}
+		} else if (action?.sections?.length) {
+			// List sections (rows)
+			for (const section of action.sections) {
+				for (const row of section.rows ?? []) {
+					elements.push({
+						id: row.id || safeId("button"),
+						type: "button",
+						title: row.title,
+						description: row.description,
+					});
+				}
+			}
 		}
 
 		return elements;

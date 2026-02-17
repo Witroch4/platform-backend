@@ -2,6 +2,7 @@
 
 import { getPrismaInstance } from "@/lib/connections";
 import mail from "@/lib/mail";
+import { verificationTemplate } from "@/lib/mail/templates";
 import { findUserbyEmail } from "@/services";
 import { findVerificationTokenbyToken } from "@/services/auth";
 import type { User } from "@prisma/client";
@@ -14,21 +15,25 @@ import type { User } from "@prisma/client";
  * @returns {Promise<{ error?: string, success?: string }>} An object indicating the result of the operation.
  */
 export const sendAccountVerificationEmail = async (user: User, token: string) => {
-	const { MAILER_SENDER_EMAIL, VERIFICATION_SUBJECT, NEXT_PUBLIC_URL, VERIFICATION_URL } = process.env;
-	if (!MAILER_SENDER_EMAIL || !VERIFICATION_SUBJECT || !NEXT_PUBLIC_URL || !VERIFICATION_URL) {
+	const { MAILER_SENDER_EMAIL, VERIFICATION_SUBJECT, NEXT_PUBLIC_URL, NEXTAUTH_URL, VERIFICATION_URL } = process.env;
+
+	// Usa NEXT_PUBLIC_URL ou NEXTAUTH_URL como fallback
+	const baseUrl = NEXT_PUBLIC_URL || NEXTAUTH_URL;
+
+	if (!MAILER_SENDER_EMAIL || !VERIFICATION_SUBJECT || !baseUrl || !VERIFICATION_URL) {
 		return {
 			error: "Configuração de ambiente insuficiente para envio de e-mail.",
 		};
 	}
 
-	const verificationUrl = `${NEXT_PUBLIC_URL}${VERIFICATION_URL}?token=${token}`;
-	const { email } = user;
+	const verificationUrl = `${baseUrl}${VERIFICATION_URL}?token=${token}`;
+	const { email, name } = user;
 	try {
 		const { data, error } = await mail().emails.send({
 			from: MAILER_SENDER_EMAIL,
 			to: email,
 			subject: VERIFICATION_SUBJECT,
-			html: `<p>Clique <a href="${verificationUrl}">aqui</a> para confirmar seu e-mail.</p>`,
+			html: verificationTemplate(verificationUrl, name || undefined),
 		});
 
 		if (error)

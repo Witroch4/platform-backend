@@ -1,6 +1,7 @@
 "use server";
 
 import mail from "@/lib/mail";
+import { resetPasswordTemplate } from "@/lib/mail/templates";
 import { NewPasswordSchema, ResetPasswordSchema } from "@/schemas/auth";
 import { findUserbyEmail } from "@/services";
 import {
@@ -31,7 +32,12 @@ export const resetPassword = async (values: z.infer<typeof ResetPasswordSchema>)
 	}
 
 	const resetPasswordToken = await createResetPasswordToken(email);
-	await sendResetPasswordEmail(resetPasswordToken.email, resetPasswordToken.token);
+	const emailResult = await sendResetPasswordEmail(resetPasswordToken.email, resetPasswordToken.token);
+
+	if (emailResult.error) {
+		console.error("[resetPassword] Falha ao enviar e-mail:", emailResult.error);
+		return { error: "Falha ao enviar e-mail. Tente novamente." };
+	}
 
 	return { success: "E-mail de mudança de senha enviado" };
 };
@@ -43,18 +49,28 @@ export const resetPassword = async (values: z.infer<typeof ResetPasswordSchema>)
  * @returns {Promise<{error?: string, success?: string}>} The result of the email sending request.
  */
 export const sendResetPasswordEmail = async (email: string, token: string) => {
-	const { NEXT_PUBLIC_URL, MAILER_SENDER_EMAIL, RESET_PASSWORD_SUBJECT, RESET_PASSWORD_URL } = process.env;
+	const { NEXT_PUBLIC_URL, NEXTAUTH_URL, MAILER_SENDER_EMAIL, RESET_PASSWORD_SUBJECT, RESET_PASSWORD_URL } =
+		process.env;
 
-	if (!NEXT_PUBLIC_URL || !MAILER_SENDER_EMAIL || !RESET_PASSWORD_SUBJECT || !RESET_PASSWORD_URL) {
+	// Usa NEXT_PUBLIC_URL ou NEXTAUTH_URL como fallback
+	const baseUrl = NEXT_PUBLIC_URL || NEXTAUTH_URL;
+
+	if (!baseUrl || !MAILER_SENDER_EMAIL || !RESET_PASSWORD_SUBJECT || !RESET_PASSWORD_URL) {
+		console.error("[sendResetPasswordEmail] Variáveis faltando:", {
+			baseUrl: baseUrl ? "✓" : "✗",
+			MAILER_SENDER_EMAIL: MAILER_SENDER_EMAIL ? "✓" : "✗",
+			RESET_PASSWORD_SUBJECT: RESET_PASSWORD_SUBJECT ? "✓" : "✗",
+			RESET_PASSWORD_URL: RESET_PASSWORD_URL ? "✓" : "✗",
+		});
 		return { error: "Configuração de ambiente insuficiente para envio de e-mail." };
 	}
 
-	const resetUrl = `${NEXT_PUBLIC_URL}${RESET_PASSWORD_URL}?token=${token}`;
+	const resetUrl = `${baseUrl}${RESET_PASSWORD_URL}?token=${token}`;
 	const { data, error } = await mail().emails.send({
 		from: MAILER_SENDER_EMAIL,
 		to: email,
 		subject: RESET_PASSWORD_SUBJECT,
-		html: `<p>Clique <a href="${resetUrl}">aqui</a> para modificar sua senha.</p>`,
+		html: resetPasswordTemplate(resetUrl),
 	});
 
 	if (error)
