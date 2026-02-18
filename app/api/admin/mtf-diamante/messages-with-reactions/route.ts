@@ -111,6 +111,20 @@ function formatReaction(reaction: any) {
 		type = "text";
 	}
 
+	// Extract linkedMessageId from action if it's a send_interactive:id or send_template:id
+	let linkedMessageId: string | null = null;
+	if (action && typeof action === "string") {
+		if (action.startsWith("send_interactive:")) {
+			linkedMessageId = action.replace("send_interactive:", "");
+		} else if (action.startsWith("send_template:")) {
+			linkedMessageId = action.replace("send_template:", "");
+		}
+	}
+	// Also check if actionPayload has explicit messageId
+	if (!linkedMessageId && actionPayload?.messageId) {
+		linkedMessageId = actionPayload.messageId;
+	}
+
 	return {
 		id: reaction.id,
 		buttonId: reaction.buttonId,
@@ -120,6 +134,8 @@ function formatReaction(reaction: any) {
 		textReaction: textReaction || null,
 		textResponse: textReaction || null, // Alias for compatibility
 		action: action || null,
+		linkedMessageId, // ID da mensagem interativa mapeada
+		actionPayload: actionPayload || null, // Include full actionPayload for compatibility
 		isActive: true, // MapeamentoBotao doesn't have isActive field, assume active
 		createdAt: reaction.createdAt,
 	};

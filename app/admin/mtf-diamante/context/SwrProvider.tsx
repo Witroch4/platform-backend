@@ -222,19 +222,34 @@ function SwrProviderContent({ children, initialData }: SwrProviderProps) {
 
 	// Convert button reactions to expected format
 	const convertedButtonReactions = useMemo(() => {
-		return buttonReactionsHook.reactions.map((reaction: any) => ({
-			id: reaction.id,
-			messageId: reaction.messageId || reaction.inboxId, // Use messageId first, then inboxId as fallback
-			buttonId: reaction.buttonId,
-			emoji: reaction.actionPayload?.emoji || reaction.emoji || "",
-			textResponse: reaction.actionPayload?.textReaction || reaction.textReaction || reaction.description || "",
-			textReaction: reaction.actionPayload?.textReaction || reaction.textReaction || reaction.description || "", // Alias for compatibility
-			label: reaction.description || reaction.textReaction || "", // Legacy compatibility
-			action: reaction.actionPayload?.action || reaction.action || "", // Use actionPayload.action first, then direct action field as fallback
-			actionPayload: reaction.actionPayload, // Keep original actionPayload for full data access
-			createdAt: reaction.createdAt,
-			updatedAt: reaction.updatedAt,
-		}));
+		return buttonReactionsHook.reactions.map((reaction: any) => {
+			const action = reaction.actionPayload?.action || reaction.action || "";
+
+			// Extract linkedMessageId from action if it's send_interactive:id or send_template:id
+			let linkedMessageId = reaction.linkedMessageId || reaction.actionPayload?.messageId || null;
+			if (!linkedMessageId && action && typeof action === "string") {
+				if (action.startsWith("send_interactive:")) {
+					linkedMessageId = action.replace("send_interactive:", "");
+				} else if (action.startsWith("send_template:")) {
+					linkedMessageId = action.replace("send_template:", "");
+				}
+			}
+
+			return {
+				id: reaction.id,
+				messageId: reaction.messageId || reaction.inboxId, // Use messageId first, then inboxId as fallback
+				buttonId: reaction.buttonId,
+				emoji: reaction.actionPayload?.emoji || reaction.emoji || "",
+				textResponse: reaction.actionPayload?.textReaction || reaction.textReaction || reaction.description || "",
+				textReaction: reaction.actionPayload?.textReaction || reaction.textReaction || reaction.description || "", // Alias for compatibility
+				label: reaction.description || reaction.textReaction || "", // Legacy compatibility
+				action, // Use actionPayload.action first, then direct action field as fallback
+				linkedMessageId, // ID da mensagem interativa mapeada (extraído de send_interactive:id)
+				actionPayload: reaction.actionPayload, // Keep original actionPayload for full data access
+				createdAt: reaction.createdAt,
+				updatedAt: reaction.updatedAt,
+			};
+		});
 	}, [buttonReactionsHook.reactions]);
 
 	// Computed state

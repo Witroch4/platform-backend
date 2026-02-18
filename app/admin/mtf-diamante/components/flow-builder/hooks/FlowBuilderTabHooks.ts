@@ -591,7 +591,9 @@ export function useFlowBuilderTab(caixaId: string): UseFlowBuilderTabReturn {
 				if (buttonReactionsForBtn.length === 0) continue;
 
 				for (const reaction of buttonReactionsForBtn) {
-					if (reaction.action === "handoff") {
+					// Checar handoff action (pode ser "handoff" ou "HANDOFF_ACTION")
+					const isHandoff = reaction.action === "handoff" || reaction.action === "HANDOFF_ACTION";
+					if (isHandoff) {
 						createAndConnectNode(
 							FlowNodeType.HANDOFF,
 							{ label: "Transferir para atendente", isConfigured: true },
