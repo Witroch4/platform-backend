@@ -16,7 +16,11 @@ import {
 	Phone,
 	PhoneCall,
 	Clipboard,
+	Upload,
+	RotateCcw,
 } from "lucide-react";
+import MinIOMediaUpload, { type MinIOMediaFile } from "../../../shared/MinIOMediaUpload";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTemplateStatusRefresh } from "../../hooks/useTemplateStatusRefresh";
 import { cn } from "@/lib/utils";
@@ -206,6 +210,8 @@ function validateButtonLimits(buttons: ExtendedButtonElement[]) {
 export const WhatsAppTemplateNode = memo(({ id, data, selected }: WhatsAppTemplateNodeProps) => {
 	const { setNodes, getNodes, setEdges } = useReactFlow();
 	const [isDragOver, setIsDragOver] = useState(false);
+	const [uploadedFiles, setUploadedFiles] = useState<MinIOMediaFile[]>([]);
+	const [showUpload, setShowUpload] = useState(false);
 
 	// Usa o sistema unificado de elements
 	const elements = useMemo(() => getInteractiveMessageElements(data as unknown as Record<string, unknown>), [data]);
@@ -253,6 +259,19 @@ export const WhatsAppTemplateNode = memo(({ id, data, selected }: WhatsAppTempla
 		const el = elements.find((e) => e.type === "header_image");
 		return el && "url" in el ? { url: el.url ?? "", caption: el.caption ?? "" } : null;
 	}, [elements]);
+
+	// URL original do header (salva na importação para permitir restauração)
+	const originalHeaderMediaUrl = useMemo(() => {
+		const rawData = data as unknown as Record<string, unknown>;
+		const headerData = rawData.header as { mediaUrl?: string } | undefined;
+		return (rawData.originalHeaderMediaUrl as string) || headerData?.mediaUrl || null;
+	}, [data]);
+
+	// Verifica se a imagem foi alterada (diferente da original)
+	const isImageModified = useMemo(() => {
+		if (!headerImage?.url || !originalHeaderMediaUrl) return false;
+		return headerImage.url !== originalHeaderMediaUrl;
+	}, [headerImage?.url, originalHeaderMediaUrl]);
 
 	const bodyElement = useMemo(() => {
 		return elements.find((e) => e.type === "body") as InteractiveMessageBodyElement | undefined;
@@ -314,6 +333,42 @@ export const WhatsAppTemplateNode = memo(({ id, data, selected }: WhatsAppTempla
 		},
 		[id, setNodes],
 	);
+
+	// Handle image upload complete
+	const handleUploadComplete = useCallback(
+		(file: MinIOMediaFile) => {
+			if (file.url) {
+				const headerImageElement = elements.find((e) => e.type === "header_image");
+				if (headerImageElement) {
+					updateElementContent(headerImageElement.id, { url: file.url });
+				}
+				setShowUpload(false);
+				setUploadedFiles([]);
+			}
+		},
+		[elements, updateElementContent],
+	);
+
+	// Remove header image URL (não remove o elemento, só limpa a URL para permitir novo upload)
+	const handleRemoveHeaderImage = useCallback(() => {
+		const headerImageElement = elements.find((e) => e.type === "header_image");
+		if (headerImageElement) {
+			updateElementContent(headerImageElement.id, { url: "" });
+		}
+		setUploadedFiles([]);
+		setShowUpload(false);
+	}, [elements, updateElementContent]);
+
+	// Restaura a imagem original do template
+	const handleRestoreOriginalImage = useCallback(() => {
+		if (!originalHeaderMediaUrl) return;
+		const headerImageElement = elements.find((e) => e.type === "header_image");
+		if (headerImageElement) {
+			updateElementContent(headerImageElement.id, { url: originalHeaderMediaUrl });
+		}
+		setShowUpload(false);
+		setUploadedFiles([]);
+	}, [elements, originalHeaderMediaUrl, updateElementContent]);
 
 	// Remove elemento
 	const handleRemoveElement = useCallback(
@@ -605,32 +660,123 @@ export const WhatsAppTemplateNode = memo(({ id, data, selected }: WhatsAppTempla
 							)}
 
 							{/* Header image */}
-							{headerImage && (
+							{elements.some((e) => e.type === "header_image") && (
 								<NodeContextMenu
-									onDelete={() => {
+									onDelete={isLocked ? undefined : () => {
 										const el = elements.find((e) => e.type === "header_image");
 										if (el) handleRemoveElement(el.id);
 									}}
 								>
 									<div className="relative group rounded-md border bg-white dark:bg-card overflow-hidden shadow-sm">
-										<button
-											onClick={(e) => {
-												e.stopPropagation();
-												const el = elements.find((e) => e.type === "header_image");
-												if (el) handleRemoveElement(el.id);
-											}}
-											className="absolute top-2 left-2 z-10 p-1 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
-										>
-											<X className="h-3 w-3" />
-										</button>
-										{headerImage.url ? (
-											<div
-												className="h-24 w-full bg-cover bg-center"
-												style={{ backgroundImage: `url(${headerImage.url})` }}
-											/>
+										{/* Botão remover elemento (só para drafts) */}
+										{!isLocked && (
+											<button
+												onClick={(e) => {
+													e.stopPropagation();
+													const el = elements.find((e) => e.type === "header_image");
+													if (el) handleRemoveElement(el.id);
+												}}
+												className="absolute top-2 left-2 z-10 p-1 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+												title="Remover header de imagem"
+											>
+												<X className="h-3 w-3" />
+											</button>
+										)}
+										{headerImage?.url ? (
+											<>
+												<div
+													className="h-24 w-full bg-cover bg-center relative"
+													style={{ backgroundImage: `url(${headerImage.url})` }}
+												>
+													{!headerImage.url.startsWith("http") && (
+														<div className="w-full h-full flex items-center justify-center bg-muted">
+															<span className="text-xs text-muted-foreground">URL Inválida</span>
+														</div>
+													)}
+													{/* Botões de ação da imagem */}
+													<div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+														{/* Botão restaurar imagem original (só aparece quando modificada) */}
+														{isImageModified && originalHeaderMediaUrl && (
+															<button
+																onClick={(e) => {
+																	e.stopPropagation();
+																	handleRestoreOriginalImage();
+																}}
+																className="p-1.5 rounded-full bg-amber-500 text-white hover:bg-amber-600"
+																title="Restaurar imagem original"
+															>
+																<RotateCcw className="h-3 w-3" />
+															</button>
+														)}
+														{/* Botão trocar imagem (sempre disponível) */}
+														<button
+															onClick={(e) => {
+																e.stopPropagation();
+																handleRemoveHeaderImage();
+																setShowUpload(true);
+															}}
+															className="p-1.5 rounded-full bg-emerald-500 text-white hover:bg-emerald-600"
+															title="Trocar imagem"
+														>
+															<Upload className="h-3 w-3" />
+														</button>
+													</div>
+												</div>
+												{isLocked && (
+													<div className="px-2 py-1 bg-emerald-50 dark:bg-emerald-950/30 border-t border-emerald-200">
+														<span className="text-[9px] text-emerald-600 dark:text-emerald-500">
+															{isImageModified
+																? "⟲ Imagem alterada • Clique em ⟲ para restaurar"
+																: "✓ Clique no ícone para trocar a imagem"}
+														</span>
+													</div>
+												)}
+											</>
 										) : (
-											<div className="h-16 w-full flex items-center justify-center bg-muted/30">
-												<span className="text-xs text-muted-foreground">Imagem não configurada</span>
+											<div
+												className="nodrag"
+												onDragOver={(e) => e.stopPropagation()}
+												onDragEnter={(e) => e.stopPropagation()}
+												onDragLeave={(e) => e.stopPropagation()}
+												onDrop={(e) => e.stopPropagation()}
+											>
+												{showUpload ? (
+													<div className="p-2" onClick={(e) => e.stopPropagation()}>
+														<MinIOMediaUpload
+															uploadedFiles={uploadedFiles}
+															setUploadedFiles={setUploadedFiles}
+															allowedTypes={["image/jpeg", "image/png", "image/jpg"]}
+															maxSizeMB={5}
+															title="Upload de Imagem"
+															description="Arraste uma imagem aqui"
+															maxFiles={1}
+															onUploadComplete={handleUploadComplete}
+														/>
+														<Button
+															variant="ghost"
+															size="sm"
+															onClick={(e) => {
+																e.stopPropagation();
+																setShowUpload(false);
+																setUploadedFiles([]);
+															}}
+															className="w-full mt-2 text-xs"
+														>
+															Cancelar
+														</Button>
+													</div>
+												) : (
+													<button
+														onClick={(e) => {
+															e.stopPropagation();
+															setShowUpload(true);
+														}}
+														className="h-16 w-full flex flex-col items-center justify-center bg-muted/30 border-dashed border border-muted-foreground/20 hover:bg-muted/50 transition-colors"
+													>
+														<Upload className="h-4 w-4 text-muted-foreground mb-1" />
+														<span className="text-xs text-muted-foreground">Clique para fazer upload</span>
+													</button>
+												)}
 											</div>
 										)}
 									</div>
@@ -741,39 +887,45 @@ export const WhatsAppTemplateNode = memo(({ id, data, selected }: WhatsAppTempla
 
 															{/* Input do título */}
 															<div className="flex-1">
-																<input
-																	type="text"
-																	className={cn(
-																		"nodrag w-full bg-transparent border-none p-0 text-sm font-semibold focus:outline-none focus:ring-0 placeholder:opacity-50",
-																		("title" in btn ? btn.title.length : 0) > CHANNEL_CHAR_LIMITS.whatsapp.buttonTitle
-																			? "text-red-500 dark:text-red-400"
-																			: "",
-																		isLocked && "cursor-not-allowed",
-																	)}
-																	value={"title" in btn ? btn.title : ""}
-																	onChange={(e) => updateButtonTitle(btn.id, e.target.value)}
-																	placeholder={
-																		btnType === "URL"
-																			? "Acessar site"
-																			: btnType === "PHONE_NUMBER"
-																				? "Ligar"
-																				: btnType === "VOICE_CALL"
-																					? "Ligar WhatsApp"
-																					: btnType === "COPY_CODE"
-																						? "Copiar código"
+																{btnType === "COPY_CODE" ? (
+																	/* Título do COPY_CODE é fixo pela API do WhatsApp */
+																	<span className="text-sm font-semibold text-lime-600 dark:text-lime-400">
+																		Copiar código da oferta
+																	</span>
+																) : (
+																	<input
+																		type="text"
+																		className={cn(
+																			"nodrag w-full bg-transparent border-none p-0 text-sm font-semibold focus:outline-none focus:ring-0 placeholder:opacity-50",
+																			("title" in btn ? btn.title.length : 0) > CHANNEL_CHAR_LIMITS.whatsapp.buttonTitle
+																				? "text-red-500 dark:text-red-400"
+																				: "",
+																			isLocked && "cursor-not-allowed",
+																		)}
+																		value={"title" in btn ? btn.title : ""}
+																		onChange={(e) => updateButtonTitle(btn.id, e.target.value)}
+																		placeholder={
+																			btnType === "URL"
+																				? "Acessar site"
+																				: btnType === "PHONE_NUMBER"
+																					? "Ligar"
+																					: btnType === "VOICE_CALL"
+																						? "Ligar WhatsApp"
 																						: "Nome do botão"
-																	}
-																	disabled={isLocked}
-																	readOnly={isLocked}
-																	onKeyDown={(e) => {
-																		e.stopPropagation();
-																		if (e.key === "Enter") e.currentTarget.blur();
-																	}}
-																	onClick={(e) => {
-																		e.stopPropagation();
-																		e.currentTarget.focus();
-																	}}
-																/>
+																		}
+																		maxLength={CHANNEL_CHAR_LIMITS.whatsapp.buttonTitle}
+																		disabled={isLocked}
+																		readOnly={isLocked}
+																		onKeyDown={(e) => {
+																			e.stopPropagation();
+																			if (e.key === "Enter") e.currentTarget.blur();
+																		}}
+																		onClick={(e) => {
+																			e.stopPropagation();
+																			e.currentTarget.focus();
+																		}}
+																	/>
+																)}
 															</div>
 
 															{/* Botão remover */}
@@ -820,19 +972,66 @@ export const WhatsAppTemplateNode = memo(({ id, data, selected }: WhatsAppTempla
 															/>
 														)}
 														{btnType === "COPY_CODE" && (
-															<input
-																type="text"
-																className="nodrag w-full bg-slate-50 dark:bg-slate-900 border rounded px-2 py-1.5 mt-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-lime-400"
-																value={btn.couponCode || ""}
-																onChange={(e) =>
-																	updateElementContent(btn.id, {
-																		couponCode: e.target.value,
-																	} as Partial<InteractiveMessageElement>)
-																}
-																placeholder="CUPOM123"
-																maxLength={15}
-																disabled={isLocked}
-															/>
+															<div className="space-y-1">
+																<input
+																	type="text"
+																	className={cn(
+																		"nodrag w-full border rounded px-2 py-1.5 mt-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-lime-400",
+																		isLocked
+																			? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300"
+																			: "bg-slate-50 dark:bg-slate-900",
+																		(btn.couponCode?.length || 0) > CHANNEL_CHAR_LIMITS.whatsapp.copyCode
+																			? "border-red-400 text-red-500"
+																			: "",
+																	)}
+																	value={btn.couponCode || ""}
+																	onChange={(e) =>
+																		updateElementContent(btn.id, {
+																			couponCode: e.target.value,
+																		} as Partial<InteractiveMessageElement>)
+																	}
+																	placeholder="CUPOM123 ou chave PIX"
+																	maxLength={CHANNEL_CHAR_LIMITS.whatsapp.copyCode}
+																	onClick={(e) => e.stopPropagation()}
+																/>
+																{/* Contador de caracteres do código */}
+																{(() => {
+																	const codeLength = btn.couponCode?.length || 0;
+																	const codeLimit = CHANNEL_CHAR_LIMITS.whatsapp.copyCode;
+																	const isOver = codeLength > codeLimit;
+																	const isNear = codeLength >= codeLimit * 0.8;
+																	return (
+																		<div className="flex items-center gap-1">
+																			<div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
+																				<div
+																					className={cn(
+																						"h-full transition-all duration-200 rounded-full",
+																						isOver ? "bg-red-500" : isNear ? "bg-amber-500" : "bg-lime-400",
+																					)}
+																					style={{ width: `${Math.min((codeLength / codeLimit) * 100, 100)}%` }}
+																				/>
+																			</div>
+																			<span
+																				className={cn(
+																					"text-[10px] tabular-nums",
+																					isOver
+																						? "text-red-500 font-bold"
+																						: isNear
+																							? "text-amber-500"
+																							: "text-muted-foreground/60",
+																				)}
+																			>
+																				{codeLength}/{codeLimit}
+																			</span>
+																		</div>
+																	);
+																})()}
+																{isLocked && (
+																	<span className="text-[9px] text-emerald-600 dark:text-emerald-500">
+																		✓ Editável para cada disparo
+																	</span>
+																)}
+															</div>
 														)}
 														{btnType === "VOICE_CALL" && (
 															<Select
@@ -856,8 +1055,8 @@ export const WhatsAppTemplateNode = memo(({ id, data, selected }: WhatsAppTempla
 															</Select>
 														)}
 
-														{/* Contador de caracteres */}
-														{(() => {
+														{/* Contador de caracteres do título (exceto COPY_CODE que tem título fixo) */}
+														{btnType !== "COPY_CODE" && (() => {
 															const btnTitle = "title" in btn ? btn.title : "";
 															const btnLength = btnTitle.length;
 															const btnLimit = CHANNEL_CHAR_LIMITS.whatsapp.buttonTitle;

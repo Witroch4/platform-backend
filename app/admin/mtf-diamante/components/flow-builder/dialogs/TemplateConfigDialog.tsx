@@ -30,6 +30,9 @@ import {
 	AlertTriangle,
 	Lock,
 	RefreshCw,
+	Settings2,
+	ImageIcon,
+	Variable,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -50,6 +53,7 @@ import {
 	createTemplateButton,
 } from "@/lib/flow-builder/templateElements";
 import { getInteractiveMessageElements } from "@/lib/flow-builder/interactiveMessageElements";
+import { useApprovedTemplates } from "@/app/admin/mtf-diamante/hooks/useApprovedTemplates";
 
 // =============================================================================
 // HELPER: Extract data from specialized template nodes (elements array)
@@ -123,6 +127,115 @@ function extractFromElements(elements: InteractiveMessageElement[]): ExtractedTe
 	}
 
 	return { bodyText, headerType, headerContent, buttons };
+}
+
+// =============================================================================
+// HELPERS: normalize components (array ou indexed-object com publicMediaUrl)
+// =============================================================================
+
+type RawComponent = {
+	type: string;
+	text?: string;
+	format?: string;
+	buttons?: Array<{ type: string; text: string; url?: string; phone_number?: string }>;
+	example?: Record<string, unknown>;
+};
+
+/** Normaliza components independente do formato (array ou indexed-object do DB). */
+function normalizeComponents(comps: unknown): RawComponent[] {
+	if (!comps) return [];
+	if (Array.isArray(comps)) return comps as RawComponent[];
+	if (typeof comps === "object") {
+		return Object.entries(comps as Record<string, unknown>)
+			.filter(([k]) => !Number.isNaN(Number(k)))
+			.sort(([a], [b]) => Number(a) - Number(b))
+			.map(([, v]) => v as RawComponent);
+	}
+	return [];
+}
+
+/** Verifica se o template tem header IMAGE e retorna a URL pública já armazenada, se houver. */
+function getTemplateImageInfo(template: { components?: unknown } | null): {
+	hasImage: boolean;
+	storedMediaUrl: string | null;
+} {
+	if (!template?.components) return { hasImage: false, storedMediaUrl: null };
+	const comps = template.components as Record<string, unknown>;
+	const header = normalizeComponents(comps).find((c) => c.type === "HEADER" && c.format === "IMAGE");
+	const storedMediaUrl = !Array.isArray(comps) ? (comps.publicMediaUrl as string | undefined) ?? null : null;
+	return { hasImage: !!header, storedMediaUrl };
+}
+
+/**
+ * Converte os componentes da Meta API em InteractiveMessageElement[].
+ * Botões recebem IDs com prefixo `flow_button_` para o roteamento do webhook.
+ */
+function templateCompsToElements(comps: RawComponent[], mediaUrl: string | null): InteractiveMessageElement[] {
+	const elements: InteractiveMessageElement[] = [];
+	const ts = Date.now();
+	const rand = () => Math.random().toString(36).substring(2, 8);
+
+	// Header
+	const headerComp = comps.find((c) => c.type === "HEADER");
+	if (headerComp) {
+		if (headerComp.format === "TEXT") {
+			elements.push({ id: `header_text_${ts}_${rand()}`, type: "header_text", text: headerComp.text || "" });
+		} else if (["IMAGE", "VIDEO", "DOCUMENT"].includes(headerComp.format || "")) {
+			elements.push({ id: `header_image_${ts}_${rand()}`, type: "header_image", url: mediaUrl || undefined });
+		}
+	}
+
+	// Body
+	const bodyComp = comps.find((c) => c.type === "BODY");
+	if (bodyComp?.text) {
+		elements.push({ id: `body_${ts}_${rand()}`, type: "body", text: bodyComp.text });
+	}
+
+	// Footer
+	const footerComp = comps.find((c) => c.type === "FOOTER");
+	if (footerComp?.text) {
+		elements.push({ id: `footer_${ts}_${rand()}`, type: "footer", text: footerComp.text });
+	}
+
+	// Buttons — cada botão com ID `flow_button_` para roteamento do webhook
+	const buttonsComp = comps.find((c) => c.type === "BUTTONS");
+	type MetaButton = { type: string; text: string; url?: string; phone_number?: string; example?: unknown[] };
+	const rawButtons = (buttonsComp?.buttons || []) as MetaButton[];
+
+	for (const btn of rawButtons) {
+		const btnId = `flow_button_${ts}_${rand()}`;
+		switch (btn.type) {
+			case "QUICK_REPLY":
+				elements.push({ id: btnId, type: "button", title: btn.text });
+				break;
+			case "URL":
+				elements.push({ id: btnId, type: "button_url", title: btn.text, url: btn.url || "" });
+				break;
+			case "PHONE_NUMBER":
+				elements.push({
+					id: btnId,
+					type: "button_phone",
+					title: btn.text,
+					phoneNumber: btn.phone_number || "",
+				});
+				break;
+			case "COPY_CODE":
+				elements.push({
+					id: btnId,
+					type: "button_copy_code",
+					title: btn.text,
+					couponCode: Array.isArray(btn.example) ? String(btn.example[0] ?? "") : "",
+				});
+				break;
+			case "VOICE_CALL":
+				elements.push({ id: btnId, type: "button_voice_call", title: btn.text, ttlMinutes: 10080 });
+				break;
+			default:
+				break;
+		}
+	}
+
+	return elements;
 }
 
 // =============================================================================
@@ -202,7 +315,7 @@ function getStatusLabel(status: TemplateNodeData["status"]) {
 // =============================================================================
 
 interface TemplatePreviewProps {
-	header?: { type: string; content?: string; mediaUrl?: string };
+	header?: { type: string; content?: string; mediaUrl?: string; isLoadingMedia?: boolean };
 	body?: string;
 	footer?: string;
 	buttons?: Array<{ text: string; type: string }>;
@@ -211,6 +324,12 @@ interface TemplatePreviewProps {
 function TemplatePreview({ header, body, footer, buttons }: TemplatePreviewProps) {
 	const { resolvedTheme } = useTheme();
 	const isDark = resolvedTheme === "dark";
+	const [imageError, setImageError] = useState(false);
+
+	// Reseta erro quando a URL muda
+	useEffect(() => {
+		setImageError(false);
+	}, [header?.mediaUrl]);
 
 	const hasContent = header?.content || header?.mediaUrl || body || footer || (buttons && buttons.length > 0);
 
@@ -270,8 +389,24 @@ function TemplatePreview({ header, body, footer, buttons }: TemplatePreviewProps
 									</div>
 								)}
 								{["IMAGE", "VIDEO"].includes(header?.type || "") && (
-									<div className="w-full h-28 bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
-										<span className="text-xs text-gray-400">{header?.type === "IMAGE" ? "🖼️ Imagem" : "🎬 Vídeo"}</span>
+									<div className="w-full h-28 bg-gray-200 dark:bg-gray-700 overflow-hidden flex items-center justify-center">
+										{header?.isLoadingMedia ? (
+											<div className="w-full h-full animate-pulse bg-gray-300 dark:bg-gray-600 flex items-center justify-center">
+												<Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+											</div>
+										) : header?.mediaUrl && !imageError ? (
+											// eslint-disable-next-line @next/next/no-img-element
+											<img
+												src={header.mediaUrl}
+												alt=""
+												className="w-full h-full object-cover"
+												onError={() => setImageError(true)}
+											/>
+										) : (
+											<span className="text-xs text-gray-400">
+												{header?.type === "IMAGE" ? "🖼️ Imagem" : "🎬 Vídeo"}
+											</span>
+										)}
 									</div>
 								)}
 								{header?.type === "DOCUMENT" && (
@@ -352,11 +487,50 @@ export function TemplateConfigDialog({
 	caixaId,
 }: TemplateConfigDialogProps) {
 	const [mode, setMode] = useState<"import" | "create">("create");
-	const [isLoading, setIsLoading] = useState(false);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [isRefreshing, setIsRefreshing] = useState(false);
-	const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
 	const [searchQuery, setSearchQuery] = useState("");
+	const [selectedTemplate, setSelectedTemplate] = useState<WhatsAppTemplate | null>(null);
+
+	// Use SWR hook for approved templates (only fetch when dialog is open in import mode)
+	const { templates, isLoading } = useApprovedTemplates(caixaId, !open || mode !== "import");
+
+	// Media resolution para preview de IMAGE no modo import
+	const [resolvedMediaUrl, setResolvedMediaUrl] = useState<string | null>(null);
+	const [isResolvingMedia, setIsResolvingMedia] = useState(false);
+
+	useEffect(() => {
+		if (!selectedTemplate) {
+			setResolvedMediaUrl(null);
+			setIsResolvingMedia(false);
+			return;
+		}
+
+		const { hasImage, storedMediaUrl } = getTemplateImageInfo(selectedTemplate);
+
+		if (!hasImage) {
+			setResolvedMediaUrl(null);
+			return;
+		}
+
+		if (storedMediaUrl) {
+			setResolvedMediaUrl(storedMediaUrl);
+			return;
+		}
+
+		// Sem URL pública: chamar template-info para baixar e subir pro MinIO
+		setIsResolvingMedia(true);
+		setResolvedMediaUrl(null);
+
+		// selectedTemplate.id é o metaTemplateId numérico — a Graph API exige o ID, não o nome
+		fetch(`/api/admin/mtf-diamante/template-info?template=${encodeURIComponent(selectedTemplate.id)}`)
+			.then((r) => r.json())
+			.then((data) => {
+				setResolvedMediaUrl((data?.template?.publicMediaUrl as string) || null);
+			})
+			.catch(() => setResolvedMediaUrl(null))
+			.finally(() => setIsResolvingMedia(false));
+	}, [selectedTemplate]);
 
 	// Form state
 	const [templateName, setTemplateName] = useState("");
@@ -368,6 +542,11 @@ export function TemplateConfigDialog({
 	const [bodyText, setBodyText] = useState("");
 	const [footerText, setFooterText] = useState("");
 	const [buttons, setButtons] = useState<TemplateButton[]>([]);
+
+	// Runtime parameters state (editáveis mesmo para templates aprovados)
+	const [runtimeMediaUrl, setRuntimeMediaUrl] = useState("");
+	const [runtimeVariables, setRuntimeVariables] = useState<Record<string, string>>({});
+	const [runtimeButtonParams, setRuntimeButtonParams] = useState<Record<number, { couponCode?: string }>>({});
 
 	// Extract current node data
 	const nodeData = useMemo(() => {
@@ -462,7 +641,11 @@ export function TemplateConfigDialog({
 	useEffect(() => {
 		if (!nodeData) return;
 
-		if (nodeData.templateId) {
+		// Se template já configurado (APPROVED/PENDING), mostrar form de edição de parâmetros
+		// Se não configurado, mostrar lista de importação
+		if (nodeData.templateId && (nodeData.status === "APPROVED" || nodeData.status === "PENDING")) {
+			setMode("create"); // Mostra o form com campos editáveis
+		} else if (nodeData.templateId) {
 			setMode("import");
 		} else {
 			setMode(nodeData.mode === "import" ? "import" : "create");
@@ -494,34 +677,20 @@ export function TemplateConfigDialog({
 			setFooterText(nodeData.footer?.text || "");
 			setButtons(nodeData.buttons || []);
 		}
+
+		// Initialize runtime parameters (editáveis mesmo para templates aprovados)
+		const rawNodeData = nodeData as unknown as Record<string, unknown>;
+		setRuntimeMediaUrl((rawNodeData.runtimeMediaUrl as string) || nodeData.header?.mediaUrl || "");
+		setRuntimeVariables((rawNodeData.runtimeVariables as Record<string, string>) || {});
+		setRuntimeButtonParams((rawNodeData.runtimeButtonParams as Record<number, { couponCode?: string }>) || {});
 	}, [nodeData]);
 
-	// Fetch approved templates when switching to import mode
+	// Reset selected template when dialog closes or mode changes
 	useEffect(() => {
-		if (mode === "import" && open) {
-			fetchTemplates();
+		if (!open) {
+			setSelectedTemplate(null);
 		}
-	}, [mode, open]);
-
-	const fetchTemplates = async () => {
-		setIsLoading(true);
-		try {
-			const response = await fetch("/api/admin/mtf-diamante/templates");
-			if (response.ok) {
-				const data = await response.json();
-				// Filter to show only approved templates
-				const approvedTemplates = (data.templates || data || []).filter(
-					(t: WhatsAppTemplate) => t.status === "APPROVED",
-				);
-				setTemplates(approvedTemplates);
-			}
-		} catch (error) {
-			console.error("Error fetching templates:", error);
-			toast.error("Erro ao carregar templates");
-		} finally {
-			setIsLoading(false);
-		}
-	};
+	}, [open]);
 
 	// Filter templates by search
 	const filteredTemplates = useMemo(() => {
@@ -577,13 +746,19 @@ export function TemplateConfigDialog({
 		(template: WhatsAppTemplate) => {
 			if (!node) return;
 
-			// Extract components
-			const headerComp = template.components?.find((c) => c.type === "HEADER");
-			const bodyComp = template.components?.find((c) => c.type === "BODY");
-			const footerComp = template.components?.find((c) => c.type === "FOOTER");
-			const buttonsComp = template.components?.find((c) => c.type === "BUTTONS");
+			// Suporta array e indexed-object (com publicMediaUrl)
+			const comps = normalizeComponents(template.components);
+			const headerComp = comps.find((c) => c.type === "HEADER");
+			const bodyComp = comps.find((c) => c.type === "BODY");
+			const footerComp = comps.find((c) => c.type === "FOOTER");
+			const buttonsComp = comps.find((c) => c.type === "BUTTONS");
 
-			// Build buttons with flow IDs
+			// Converter para sistema unificado de elementos (igual Mensagem Interativa)
+			// Inclui a publicMediaUrl já resolvida no header_image
+			const elements = templateCompsToElements(comps, resolvedMediaUrl);
+			const buttonIds = elements.filter((e) => e.type.startsWith("button")).map((e) => e.id);
+
+			// Legacy buttons (backward compat com TemplateNodeData)
 			const importedButtons: TemplateButton[] =
 				buttonsComp?.buttons?.map((btn) => ({
 					id: generateTemplateButtonId(),
@@ -597,25 +772,35 @@ export function TemplateConfigDialog({
 				mode: "import",
 				status: template.status as TemplateNodeData["status"],
 				templateId: template.id,
+				metaTemplateId: template.id,
 				templateName: template.name,
 				category: template.category as TemplateCategory,
 				language: template.language,
+				// Sistema unificado de elementos (renderizado no canvas)
+				elements,
+				buttonIds,
+				// Legacy fields (backward compat)
 				header:
 					headerComp?.format === "TEXT"
 						? { type: "TEXT", content: headerComp.text }
 						: headerComp?.format
-							? { type: headerComp.format as "IMAGE" | "VIDEO" | "DOCUMENT" }
+							? {
+									type: headerComp.format as "IMAGE" | "VIDEO" | "DOCUMENT",
+									mediaUrl: resolvedMediaUrl || undefined,
+								}
 							: undefined,
 				body: bodyComp?.text ? { text: bodyComp.text, variables: extractVariables(bodyComp.text) } : undefined,
 				footer: footerComp?.text ? { text: footerComp.text } : undefined,
 				buttons: importedButtons,
 				importedComponents: template.components,
-			} as Partial<TemplateNodeData>);
+				// Salvar URL original para permitir restauração posterior
+				originalHeaderMediaUrl: resolvedMediaUrl || undefined,
+			} as Partial<FlowNodeData>);
 
-			toast.success(`Template "${template.name}" importado`);
+			toast.success(`Template "${template.name}" importado com ${elements.length} elementos`);
 			onOpenChange(false);
 		},
-		[node, onUpdateNodeData, onOpenChange],
+		[node, onUpdateNodeData, onOpenChange, resolvedMediaUrl],
 	);
 
 	// Handle create/save template
@@ -845,6 +1030,57 @@ export function TemplateConfigDialog({
 		[buttons],
 	);
 
+	// Save runtime parameters (para templates aprovados)
+	const handleSaveRuntimeParams = useCallback(() => {
+		if (!node || !nodeData) return;
+
+		// Atualizar header.mediaUrl se tiver imagem e runtimeMediaUrl foi alterado
+		const updatedHeader = nodeData.header ? { ...nodeData.header } : undefined;
+		if (updatedHeader && ["IMAGE", "VIDEO", "DOCUMENT"].includes(updatedHeader.type || "")) {
+			updatedHeader.mediaUrl = runtimeMediaUrl || updatedHeader.mediaUrl;
+		}
+
+		// Atualizar elements se existirem (para atualizar a URL da imagem no canvas)
+		const rawData = nodeData as unknown as Record<string, unknown>;
+		let updatedElements = rawData.elements as InteractiveMessageElement[] | undefined;
+		if (updatedElements && runtimeMediaUrl) {
+			updatedElements = updatedElements.map((el) => {
+				if (el.type === "header_image") {
+					return { ...el, url: runtimeMediaUrl };
+				}
+				// Atualizar couponCode nos botões COPY_CODE
+				if (el.type === "button_copy_code") {
+					const btnIndex = updatedElements!.filter((e) => e.type.startsWith("button")).indexOf(el);
+					const btnParams = runtimeButtonParams[btnIndex];
+					if (btnParams?.couponCode) {
+						return { ...el, couponCode: btnParams.couponCode };
+					}
+				}
+				return el;
+			});
+		}
+
+		onUpdateNodeData(node.id, {
+			header: updatedHeader,
+			elements: updatedElements,
+			runtimeMediaUrl: runtimeMediaUrl || undefined,
+			runtimeVariables: Object.keys(runtimeVariables).length > 0 ? runtimeVariables : undefined,
+			runtimeButtonParams: Object.keys(runtimeButtonParams).length > 0 ? runtimeButtonParams : undefined,
+		} as Partial<FlowNodeData>);
+
+		toast.success("Parâmetros de envio salvos");
+		onOpenChange(false);
+	}, [node, nodeData, runtimeMediaUrl, runtimeVariables, runtimeButtonParams, onUpdateNodeData, onOpenChange]);
+
+	// Check if template has editable runtime params
+	const hasRuntimeParams = useMemo(() => {
+		if (!nodeData) return false;
+		const hasMediaHeader = ["IMAGE", "VIDEO", "DOCUMENT"].includes(nodeData.header?.type || "");
+		const hasVariables = (nodeData.body?.variables?.length || 0) > 0 || (nodeData.header?.variables?.length || 0) > 0;
+		const hasCopyCodeButton = buttons.some((btn) => btn.type === "COPY_CODE");
+		return hasMediaHeader || hasVariables || hasCopyCodeButton;
+	}, [nodeData, buttons]);
+
 	if (!node) return null;
 
 	return (
@@ -951,8 +1187,13 @@ export function TemplateConfigDialog({
 												<button
 													key={template.id}
 													type="button"
-													onClick={() => handleImportTemplate(template)}
-													className="w-full text-left rounded-lg border p-3 hover:bg-accent transition-colors"
+													onClick={() => setSelectedTemplate(template)}
+													className={cn(
+														"w-full text-left rounded-lg border p-3 transition-colors",
+														selectedTemplate?.id === template.id
+															? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30"
+															: "hover:bg-accent",
+													)}
 												>
 													<div className="flex items-center justify-between gap-2">
 														<span className="font-medium text-sm truncate">{template.name}</span>
@@ -987,6 +1228,40 @@ export function TemplateConfigDialog({
 													estruturais bloqueados. Use &quot;Duplicar como Novo&quot; para criar uma versão editável.
 												</span>
 											</div>
+										</div>
+									)}
+
+									{/* PARÂMETROS DE ENVIO - Variáveis (só aparecem se tiver variáveis) */}
+									{!canEdit && ((nodeData?.body?.variables?.length || 0) > 0 || (nodeData?.header?.variables?.length || 0) > 0) && (
+										<div className="rounded-lg border border-emerald-300 bg-emerald-50 dark:bg-emerald-950/20 p-4 space-y-4">
+											<div className="flex items-center gap-2">
+												<Variable className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+												<Label className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+													Variáveis do Template
+												</Label>
+												<span className="text-[10px] text-emerald-600 dark:text-emerald-500 ml-auto">
+													Editáveis para cada disparo
+												</span>
+											</div>
+											{[...(nodeData?.header?.variables || []), ...(nodeData?.body?.variables || [])].map((varName) => (
+												<div key={varName} className="space-y-1">
+													<Label className="text-[10px] text-muted-foreground">{`{{${varName}}}`}</Label>
+													<Input
+														value={runtimeVariables[varName] || ""}
+														onChange={(e) =>
+															setRuntimeVariables((prev) => ({
+																...prev,
+																[varName]: e.target.value,
+															}))
+														}
+														placeholder={`Valor para ${varName}`}
+														className="text-sm h-8"
+													/>
+												</div>
+											))}
+											<p className="text-[10px] text-muted-foreground">
+												Defina valores fixos ou deixe vazio para usar variáveis do contexto
+											</p>
 										</div>
 									)}
 
@@ -1054,13 +1329,19 @@ export function TemplateConfigDialog({
 											/>
 										)}
 										{["IMAGE", "VIDEO", "DOCUMENT"].includes(headerType) && (
-											<Input
-												value={headerMediaUrl}
-												onChange={(e) => setHeaderMediaUrl(e.target.value)}
-												placeholder="URL da mídia"
-												disabled={!canEdit}
-												className={cn("text-sm mt-2", !canEdit && "opacity-60 cursor-not-allowed")}
-											/>
+											<div className="space-y-1 mt-2">
+												<Input
+													value={canEdit ? headerMediaUrl : runtimeMediaUrl}
+													onChange={(e) => canEdit ? setHeaderMediaUrl(e.target.value) : setRuntimeMediaUrl(e.target.value)}
+													placeholder="URL da mídia"
+													className="text-sm"
+												/>
+												{!canEdit && (
+													<p className="text-[10px] text-emerald-600 dark:text-emerald-500">
+														Editável para cada disparo
+													</p>
+												)}
+											</div>
 										)}
 									</div>
 
@@ -1173,14 +1454,26 @@ export function TemplateConfigDialog({
 													/>
 												)}
 												{btn.type === "COPY_CODE" && (
-													<Input
-														value={btn.exampleCode || ""}
-														onChange={(e) => handleUpdateButton(idx, { exampleCode: e.target.value })}
-														placeholder="Código (até 15 caracteres)"
-														maxLength={15}
-														disabled={!canEdit}
-														className={cn("text-sm", !canEdit && "cursor-not-allowed")}
-													/>
+													<div className="space-y-1">
+														<Input
+															value={canEdit ? (btn.exampleCode || "") : (runtimeButtonParams[idx]?.couponCode || btn.exampleCode || "")}
+															onChange={(e) => canEdit
+																? handleUpdateButton(idx, { exampleCode: e.target.value })
+																: setRuntimeButtonParams((prev) => ({
+																	...prev,
+																	[idx]: { ...prev[idx], couponCode: e.target.value },
+																}))
+															}
+															placeholder="Código (até 15 caracteres)"
+															maxLength={15}
+															className="text-sm font-mono"
+														/>
+														{!canEdit && (
+															<p className="text-[10px] text-emerald-600 dark:text-emerald-500">
+																Editável para cada disparo (ex: chave PIX)
+															</p>
+														)}
+													</div>
 												)}
 												{btn.type === "VOICE_CALL" && (
 													<div className="space-y-1">
@@ -1281,16 +1574,59 @@ export function TemplateConfigDialog({
 
 					{/* Right: Preview */}
 					<div className="hidden sm:block w-[280px] shrink-0 border-l pl-6">
-						<TemplatePreview
-							header={
-								headerType !== "NONE"
-									? { type: headerType, content: headerContent, mediaUrl: headerMediaUrl }
-									: undefined
-							}
-							body={bodyText}
-							footer={footerText}
-							buttons={buttons.map((b) => ({ text: b.text, type: b.type }))}
-						/>
+						{mode === "import" ? (
+							/* Preview do template selecionado no modo import */
+							selectedTemplate ? (
+								(() => {
+									// Suporta array e indexed-object (com publicMediaUrl) vindos do banco
+									const comps = normalizeComponents(selectedTemplate.components);
+									const headerComp = comps.find((c) => c.type === "HEADER");
+									const bodyComp = comps.find((c) => c.type === "BODY");
+									const footerComp = comps.find((c) => c.type === "FOOTER");
+									const buttonsComp = comps.find((c) => c.type === "BUTTONS");
+
+									return (
+										<TemplatePreview
+											header={
+												headerComp
+													? {
+															type:
+																headerComp.format === "TEXT"
+																	? "TEXT"
+																	: (headerComp.format as "IMAGE" | "VIDEO" | "DOCUMENT") || "TEXT",
+															content: headerComp.text,
+															mediaUrl: resolvedMediaUrl ?? undefined,
+															isLoadingMedia: isResolvingMedia,
+														}
+													: undefined
+											}
+											body={bodyComp?.text}
+											footer={footerComp?.text}
+											buttons={buttonsComp?.buttons?.map((b) => ({ text: b.text, type: b.type })) || []}
+										/>
+									);
+								})()
+							) : (
+								<div className="flex flex-col items-center justify-center h-[350px] text-center">
+									<Smartphone className="h-8 w-8 text-muted-foreground/50 mb-3" />
+									<p className="text-xs text-muted-foreground px-4">
+										Selecione um template na lista para visualizar o preview
+									</p>
+								</div>
+							)
+						) : (
+							/* Preview do form no modo create */
+							<TemplatePreview
+								header={
+									headerType !== "NONE"
+										? { type: headerType, content: headerContent, mediaUrl: headerMediaUrl }
+										: undefined
+								}
+								body={bodyText}
+								footer={footerText}
+								buttons={buttons.map((b) => ({ text: b.text, type: b.type }))}
+							/>
+						)}
 					</div>
 				</div>
 
@@ -1299,12 +1635,43 @@ export function TemplateConfigDialog({
 						Fechar
 					</Button>
 
-					{/* Botão Duplicar para templates não editáveis */}
-					{mode === "create" && !canEdit && (
-						<Button variant="secondary" size="sm" onClick={handleDuplicate}>
-							<Copy className="h-3 w-3 mr-1" />
-							Duplicar como Novo
+					{/* Botão Importar no modo import */}
+					{mode === "import" && selectedTemplate && (
+						<Button
+							size="sm"
+							onClick={() => handleImportTemplate(selectedTemplate)}
+							disabled={isResolvingMedia}
+							className="bg-emerald-600 hover:bg-emerald-700"
+						>
+							{isResolvingMedia ? (
+								<>
+									<Loader2 className="h-3 w-3 mr-1 animate-spin" />
+									Carregando mídia...
+								</>
+							) : (
+								`Importar "${selectedTemplate.name}"`
+							)}
 						</Button>
+					)}
+
+					{/* Botões para templates não editáveis (APPROVED/PENDING) */}
+					{mode === "create" && !canEdit && (
+						<>
+							<Button variant="secondary" size="sm" onClick={handleDuplicate}>
+								<Copy className="h-3 w-3 mr-1" />
+								Duplicar como Novo
+							</Button>
+							{hasRuntimeParams && (
+								<Button
+									size="sm"
+									onClick={handleSaveRuntimeParams}
+									className="bg-emerald-600 hover:bg-emerald-700"
+								>
+									<Settings2 className="h-3 w-3 mr-1" />
+									Salvar Parâmetros
+								</Button>
+							)}
+						</>
 					)}
 
 					{/* Botões de ação para templates editáveis (DRAFT ou REJECTED) */}

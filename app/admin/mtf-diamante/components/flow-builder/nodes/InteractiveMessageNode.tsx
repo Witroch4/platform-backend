@@ -677,6 +677,7 @@ export const InteractiveMessageNode = memo(({ id, data, selected }: InteractiveM
 																	value={"title" in btn ? btn.title : ""}
 																	onChange={(e) => updateButtonTitle(btn.id, e.target.value)}
 																	placeholder="Nome do botão"
+																	maxLength={CHANNEL_CHAR_LIMITS.whatsapp.buttonTitle}
 																	autoFocus={"title" in btn && btn.title === "Novo botão"}
 																	onKeyDown={(e) => {
 																		e.stopPropagation(); // Impede delete do node ao teclar backspace/delete

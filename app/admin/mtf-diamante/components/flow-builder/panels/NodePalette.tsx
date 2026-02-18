@@ -45,6 +45,8 @@ interface PaletteCardProps {
 function PaletteCard({ item }: PaletteCardProps) {
 	const onDragStart = useCallback(
 		(event: DragEvent) => {
+			// Impede que o drag propague para containers pais
+			event.stopPropagation();
 			event.dataTransfer.setData("application/reactflow", item.type);
 			event.dataTransfer.effectAllowed = "move";
 		},
@@ -81,6 +83,8 @@ interface ElementPaletteCardProps {
 function ElementPaletteCard({ item }: ElementPaletteCardProps) {
 	const onDragStart = useCallback(
 		(event: DragEvent) => {
+			// Impede que o drag propague para containers pais
+			event.stopPropagation();
 			// Elementos compartilhados: enviam AMBOS os MIME types
 			// Isso permite drop tanto em Mensagem Interativa quanto em Template
 			event.dataTransfer.setData(FLOWBUILDER_ELEMENT_MIME, item.type);
@@ -120,6 +124,8 @@ interface TemplatePaletteCardProps {
 function TemplatePaletteCard({ item }: TemplatePaletteCardProps) {
 	const onDragStart = useCallback(
 		(event: DragEvent) => {
+			// Impede que o drag propague para containers pais
+			event.stopPropagation();
 			event.dataTransfer.setData("application/reactflow", item.type);
 			event.dataTransfer.effectAllowed = "move";
 		},
@@ -157,6 +163,8 @@ interface TemplateElementPaletteCardProps {
 function TemplateElementPaletteCard({ item }: TemplateElementPaletteCardProps) {
 	const onDragStart = useCallback(
 		(event: DragEvent) => {
+			// Impede que o drag propague para containers pais
+			event.stopPropagation();
 			event.dataTransfer.setData(TEMPLATE_ELEMENT_MIME, item.type);
 			event.dataTransfer.effectAllowed = "copy";
 		},
@@ -306,12 +314,7 @@ export function NodePalette({ onAddNode, channelType }: NodePaletteProps) {
 
 					{CATEGORY_ORDER.map((category) => {
 						// Filtra nós principais que já foram exibidos acima
-						// Also exclude deprecated TEMPLATE type (use specific template containers instead)
-						const excludedTypes = [
-							mainNode?.type,
-							buttonTemplateNode?.type,
-							FlowNodeType.TEMPLATE, // Deprecated - use specific template containers
-						].filter(Boolean);
+						const excludedTypes = [mainNode?.type, buttonTemplateNode?.type].filter(Boolean);
 						const items = grouped[category].filter((i) => !excludedTypes.includes(i.type));
 						if (!items?.length) return null;
 						return (

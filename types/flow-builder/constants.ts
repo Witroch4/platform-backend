@@ -19,6 +19,7 @@ export const CHANNEL_CHAR_LIMITS = {
 		headerText: 60,
 		footer: 60,
 		buttonTitle: 20,
+		copyCode: 15,
 		payloadId: 256,
 		maxButtons: 3,
 		listItemTitle: 24,

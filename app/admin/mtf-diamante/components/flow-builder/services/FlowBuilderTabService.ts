@@ -382,7 +382,7 @@ export function handleWhatsAppTemplateElementDrop(
 	}
 
 	// button (QUICK_REPLY)
-	if (elementType === "button") {
+	if (elementType === "button" || elementType === "button_quick_reply") {
 		const totalButtons = currentElements.filter(
 			(e: { type: string }) =>
 				e.type === "button" ||
@@ -401,6 +401,178 @@ export function handleWhatsAppTemplateElementDrop(
 			};
 		}
 		const newElement = createInteractiveMessageElement("button");
+		const nextElements = [...currentElements, newElement];
+		const legacy = elementsToLegacyFields(nextElements);
+		return {
+			success: true,
+			newData: { elements: nextElements, ...legacy } as unknown as Partial<FlowNodeData>,
+		};
+	}
+
+	// button_url
+	if (elementType === "button_url") {
+		const urlButtons = currentElements.filter((e: { type: string }) => e.type === "button_url");
+		if (urlButtons.length >= WHATSAPP_TEMPLATE_LIMITS.maxUrlButtons) {
+			return {
+				success: false,
+				error: {
+					title: "Limite atingido",
+					description: `Máximo de ${WHATSAPP_TEMPLATE_LIMITS.maxUrlButtons} botões URL permitidos.`,
+				},
+			};
+		}
+		const totalButtons = currentElements.filter(
+			(e: { type: string }) =>
+				e.type === "button" ||
+				e.type === "button_copy_code" ||
+				e.type === "button_phone" ||
+				e.type === "button_voice_call" ||
+				e.type === "button_url",
+		).length;
+		if (totalButtons >= WHATSAPP_TEMPLATE_LIMITS.maxButtons) {
+			return {
+				success: false,
+				error: {
+					title: "Limite atingido",
+					description: `Máximo de ${WHATSAPP_TEMPLATE_LIMITS.maxButtons} botões totais.`,
+				},
+			};
+		}
+		const newElement = createInteractiveMessageElement("button_url");
+		const nextElements = [...currentElements, newElement];
+		const legacy = elementsToLegacyFields(nextElements);
+		return {
+			success: true,
+			newData: { elements: nextElements, ...legacy } as unknown as Partial<FlowNodeData>,
+		};
+	}
+
+	// button_phone
+	if (elementType === "button_phone") {
+		const phoneButtons = currentElements.filter((e: { type: string }) => e.type === "button_phone");
+		const voiceCallButtons = currentElements.filter((e: { type: string }) => e.type === "button_voice_call");
+		if (phoneButtons.length >= WHATSAPP_TEMPLATE_LIMITS.maxPhoneButtons) {
+			return {
+				success: false,
+				error: {
+					title: "Limite atingido",
+					description: `Máximo de ${WHATSAPP_TEMPLATE_LIMITS.maxPhoneButtons} botão de ligação.`,
+				},
+			};
+		}
+		if (voiceCallButtons.length > 0) {
+			return {
+				success: false,
+				error: {
+					title: "Não permitido",
+					description: "Não é possível ter Ligar e Ligar WhatsApp no mesmo template.",
+				},
+			};
+		}
+		const totalButtons = currentElements.filter(
+			(e: { type: string }) =>
+				e.type === "button" ||
+				e.type === "button_copy_code" ||
+				e.type === "button_phone" ||
+				e.type === "button_voice_call" ||
+				e.type === "button_url",
+		).length;
+		if (totalButtons >= WHATSAPP_TEMPLATE_LIMITS.maxButtons) {
+			return {
+				success: false,
+				error: {
+					title: "Limite atingido",
+					description: `Máximo de ${WHATSAPP_TEMPLATE_LIMITS.maxButtons} botões totais.`,
+				},
+			};
+		}
+		const newElement = createInteractiveMessageElement("button_phone");
+		const nextElements = [...currentElements, newElement];
+		const legacy = elementsToLegacyFields(nextElements);
+		return {
+			success: true,
+			newData: { elements: nextElements, ...legacy } as unknown as Partial<FlowNodeData>,
+		};
+	}
+
+	// button_voice_call
+	if (elementType === "button_voice_call") {
+		const voiceCallButtons = currentElements.filter((e: { type: string }) => e.type === "button_voice_call");
+		const phoneButtons = currentElements.filter((e: { type: string }) => e.type === "button_phone");
+		if (voiceCallButtons.length >= WHATSAPP_TEMPLATE_LIMITS.maxVoiceCallButtons) {
+			return {
+				success: false,
+				error: {
+					title: "Limite atingido",
+					description: `Máximo de ${WHATSAPP_TEMPLATE_LIMITS.maxVoiceCallButtons} botão Ligar WhatsApp.`,
+				},
+			};
+		}
+		if (phoneButtons.length > 0) {
+			return {
+				success: false,
+				error: {
+					title: "Não permitido",
+					description: "Não é possível ter Ligar e Ligar WhatsApp no mesmo template.",
+				},
+			};
+		}
+		const totalButtons = currentElements.filter(
+			(e: { type: string }) =>
+				e.type === "button" ||
+				e.type === "button_copy_code" ||
+				e.type === "button_phone" ||
+				e.type === "button_voice_call" ||
+				e.type === "button_url",
+		).length;
+		if (totalButtons >= WHATSAPP_TEMPLATE_LIMITS.maxButtons) {
+			return {
+				success: false,
+				error: {
+					title: "Limite atingido",
+					description: `Máximo de ${WHATSAPP_TEMPLATE_LIMITS.maxButtons} botões totais.`,
+				},
+			};
+		}
+		const newElement = createInteractiveMessageElement("button_voice_call");
+		const nextElements = [...currentElements, newElement];
+		const legacy = elementsToLegacyFields(nextElements);
+		return {
+			success: true,
+			newData: { elements: nextElements, ...legacy } as unknown as Partial<FlowNodeData>,
+		};
+	}
+
+	// button_copy_code
+	if (elementType === "button_copy_code") {
+		const copyCodeButtons = currentElements.filter((e: { type: string }) => e.type === "button_copy_code");
+		if (copyCodeButtons.length >= WHATSAPP_TEMPLATE_LIMITS.maxCopyCodeButtons) {
+			return {
+				success: false,
+				error: {
+					title: "Limite atingido",
+					description: `Máximo de ${WHATSAPP_TEMPLATE_LIMITS.maxCopyCodeButtons} botão Copiar Código.`,
+				},
+			};
+		}
+		const totalButtons = currentElements.filter(
+			(e: { type: string }) =>
+				e.type === "button" ||
+				e.type === "button_copy_code" ||
+				e.type === "button_phone" ||
+				e.type === "button_voice_call" ||
+				e.type === "button_url",
+		).length;
+		if (totalButtons >= WHATSAPP_TEMPLATE_LIMITS.maxButtons) {
+			return {
+				success: false,
+				error: {
+					title: "Limite atingido",
+					description: `Máximo de ${WHATSAPP_TEMPLATE_LIMITS.maxButtons} botões totais.`,
+				},
+			};
+		}
+		const newElement = createInteractiveMessageElement("button_copy_code");
 		const nextElements = [...currentElements, newElement];
 		const legacy = elementsToLegacyFields(nextElements);
 		return {

@@ -391,6 +391,7 @@ export async function GET(request: Request) {
 					status: template.status,
 					category: template.category,
 					language: template.language,
+					components: template.components || [],
 				})),
 				isRealData: real,
 				fromApi: true,
@@ -440,6 +441,7 @@ export async function GET(request: Request) {
 						status: template.status,
 						category: template.category,
 						language: template.language,
+						components: template.components || [],
 					})),
 					isRealData: real,
 					fromApi: true,
@@ -455,6 +457,7 @@ export async function GET(request: Request) {
 			status: template.status,
 			category: template.tags[0] || "UTILITY",
 			language: template.language,
+			components: (template.whatsappOfficialInfo?.components as any[]) || [],
 		}));
 
 		return NextResponse.json({

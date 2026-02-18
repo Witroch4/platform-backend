@@ -114,6 +114,28 @@ export interface UseButtonReactionsReturn {
 	mutate: () => Promise<any>;
 }
 
+// WhatsApp Template types
+export interface WhatsAppTemplate {
+	id: string;
+	name: string;
+	status: "APPROVED" | "PENDING" | "REJECTED";
+	category: string;
+	language: string;
+	components?: Array<{
+		type: string;
+		text?: string;
+		format?: string;
+		buttons?: Array<{ type: string; text: string; url?: string; phone_number?: string }>;
+	}>;
+}
+
+export interface UseApprovedTemplatesReturn {
+	templates: WhatsAppTemplate[];
+	isLoading: boolean;
+	error: any;
+	mutate: () => Promise<any>;
+}
+
 // API Response types
 export interface ApiResponse<T = any> {
 	success: boolean;
@@ -262,6 +284,11 @@ export interface MtfDataContextType {
 	addButtonReaction: (optimisticReaction: ButtonReaction, apiPayload: any) => Promise<void>;
 	updateButtonReaction: (updatedReaction: ButtonReaction, apiPayload: any) => Promise<void>;
 	deleteButtonReaction: (reactionId: string) => Promise<void>;
+
+	// Approved Templates
+	approvedTemplates: WhatsAppTemplate[];
+	isLoadingTemplates: boolean;
+	refreshTemplates: () => Promise<any>;
 
 	// Controle de Pausa
 	isUpdatesPaused: boolean;

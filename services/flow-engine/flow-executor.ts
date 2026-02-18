@@ -939,7 +939,11 @@ export class FlowExecutor {
 		bridge: SyncBridge,
 		_directlyAfterButton = false,
 	): Promise<string> {
-		const config = node.config as unknown as TemplateNodeData;
+		const config = node.config as unknown as TemplateNodeData & {
+			runtimeMediaUrl?: string;
+			runtimeVariables?: Record<string, string>;
+			runtimeButtonParams?: Record<number, { couponCode?: string }>;
+		};
 
 		// Verificar se o template está aprovado
 		if (config.status !== "APPROVED") {
@@ -957,26 +961,56 @@ export class FlowExecutor {
 			return this.findNextNodeId(flow, node);
 		}
 
-		// Resolver variáveis do body
+		// Resolver variáveis do body (usa runtimeVariables como override)
 		const variableValues: Record<string, string> = {};
 		const bodyVariables = config.body?.variables ?? [];
 		for (const varName of bodyVariables) {
-			variableValues[varName] = this.resolver.resolve(`{{${varName}}}`);
+			// Prioridade: runtimeVariables > contexto do flow
+			const runtimeValue = config.runtimeVariables?.[varName];
+			variableValues[varName] = runtimeValue || this.resolver.resolve(`{{${varName}}}`);
 		}
 
 		// Resolver variáveis do header (se TEXT)
 		const headerVariables = config.header?.variables ?? [];
 		for (const varName of headerVariables) {
-			variableValues[varName] = this.resolver.resolve(`{{${varName}}}`);
+			const runtimeValue = config.runtimeVariables?.[varName];
+			variableValues[varName] = runtimeValue || this.resolver.resolve(`{{${varName}}}`);
+		}
+
+		// Override mediaUrl do header se tiver runtimeMediaUrl
+		let effectiveConfig = config;
+		if (config.runtimeMediaUrl && config.header) {
+			effectiveConfig = {
+				...config,
+				header: {
+					...config.header,
+					mediaUrl: config.runtimeMediaUrl,
+				},
+			};
+		}
+
+		// Override couponCode dos botões se tiver runtimeButtonParams
+		if (config.runtimeButtonParams && config.buttons) {
+			effectiveConfig = {
+				...effectiveConfig,
+				buttons: effectiveConfig.buttons?.map((btn, idx) => {
+					const runtimeParams = config.runtimeButtonParams?.[idx];
+					if (btn.type === "COPY_CODE" && runtimeParams?.couponCode) {
+						return { ...btn, exampleCode: runtimeParams.couponCode };
+					}
+					return btn;
+				}),
+			};
 		}
 
 		// Construir payload do template
-		const templatePayload = buildTemplateDispatchPayload(config, this.context.contactPhone ?? "", variableValues);
+		const templatePayload = buildTemplateDispatchPayload(effectiveConfig, this.context.contactPhone ?? "", variableValues);
 
 		log.debug("[FlowExecutor] TEMPLATE", {
 			templateName: config.templateName,
 			variablesResolved: Object.keys(variableValues).length,
 			hasButtons: (config.buttons?.length ?? 0) > 0,
+			hasRuntimeOverrides: !!(config.runtimeMediaUrl || config.runtimeVariables || config.runtimeButtonParams),
 		});
 
 		// Enviar template via delivery service
