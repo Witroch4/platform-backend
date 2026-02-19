@@ -28,6 +28,8 @@ import { getWorkersConfig, isMonitorLogEnabled } from "@/lib/config";
 
 import { processInstagramTranslationTask } from "./WebhookWorkerTasks/instagram-translation.task";
 import { INSTAGRAM_TRANSLATION_QUEUE_NAME } from "@/lib/queue/instagram-translation.queue";
+import { processFlowBuilderTask } from "./WebhookWorkerTasks/flow-builder-queues.task";
+import { FLOW_BUILDER_QUEUE_NAME } from "@/lib/queue/flow-builder-queues";
 
 // [CLEANUP 2026-02-16] Imports removidos:
 // - resposta-rapida.queue (código morto - SocialWise Flow é inline)
@@ -99,6 +101,7 @@ let leadCellsWorker: Worker;
 let leadsChatwitWorker: Worker;
 let mirrorGenerationWorker: Worker;
 let analysisGenerationWorker: Worker;
+let flowBuilderQueuesWorker: Worker;
 
 // Worker de leads‑chatwit 🔥 (concorrência ajustável baseada no ambiente)
 const workersConfig = getWorkersConfig();
@@ -157,6 +160,15 @@ export async function initializeLegacyWorkers(): Promise<void> {
 			maxStalledCount: 2, // Increased from 1 to 2 to handle temporary timeouts
 		});
 
+		// Worker de Flow Builder (ações assíncronas: CHATWIT_ACTION, HTTP_REQUEST, etc.)
+		flowBuilderQueuesWorker = new Worker(FLOW_BUILDER_QUEUE_NAME, processFlowBuilderTask, {
+			connection: getRedisInstance(),
+			concurrency: 10, // Ações são leves e rápidas
+			lockDuration: 30000, // 30s por job
+			stalledInterval: 60000,
+			maxStalledCount: 2,
+		});
+
 		// Wait for all workers to be ready
 		await Promise.all([
 			agendamentoWorker.waitUntilReady(),
@@ -165,6 +177,7 @@ export async function initializeLegacyWorkers(): Promise<void> {
 			mirrorGenerationWorker.waitUntilReady(),
 			analysisGenerationWorker.waitUntilReady(),
 			leadsChatwitWorker.waitUntilReady(),
+			flowBuilderQueuesWorker.waitUntilReady(),
 		]);
 
 		console.log(`[BullMQ] ✅ Worker de leads-chatwit inicializado:`, {
@@ -253,6 +266,7 @@ function setupWorkerEventHandlers(): void {
 		[mirrorGenerationWorker, "MirrorGeneration"],
 		[analysisGenerationWorker, "AnalysisGeneration"],
 		[leadsChatwitWorker, "LeadsChatwit"],
+		[flowBuilderQueuesWorker, "FlowBuilderQueues"],
 	];
 
 	for (const [worker, name] of workers) {

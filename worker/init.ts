@@ -155,6 +155,7 @@ function printStartupBanner(agendamentosCount: number) {
 	console.log("   💱 FX Rate             → Atualização diária câmbio USD/BRL");
 	console.log("   💰 Budget Monitor      → Monitoramento de orçamentos");
 	console.log("   📤 Webhook Delivery    → Entrega de webhooks com retry");
+	console.log("   🔧 Flow Builder Queues → Ações assíncronas do Flow Engine");
 	console.log("   ⏰ Jobs Recorrentes    → Configurados e ativos");
 	console.log("   📊 Queue Management    → Monitorando todas as filas");
 	console.log("-".repeat(70));

@@ -13,6 +13,7 @@ import log from "@/lib/log";
 import { SyncBridge } from "./sync-bridge";
 import { ChatwitDeliveryService, createDeliveryService } from "./chatwit-delivery-service";
 import { VariableResolver } from "./variable-resolver";
+import { addChatwitActionJob } from "@/lib/queue/flow-builder-queues";
 import { elementsToLegacyFields } from "@/lib/flow-builder/interactiveMessageElements";
 import { buildTemplateDispatchPayload } from "@/lib/flow-builder/templateElements";
 import { debugLogRuntimeFlow } from "@/lib/flow-builder/exportImport";
@@ -1325,10 +1326,14 @@ export class FlowExecutor {
 	/**
 	 * Executa ações Chatwit (resolve, assign, add/remove label).
 	 *
-	 * PIPELINE UNIFICADO: Usa o dispatcher `deliver()` para consistência com outros nós.
-	 * Isso garante retry automático (3 tentativas + exponential backoff).
+	 * FILA BULLMQ: Ações são enfileiradas para processamento assíncrono.
+	 * Isso garante:
+	 * - Retry robusto com exponential backoff (até 3 tentativas no nível do job)
+	 * - Persistência em Redis (sobrevive a crashes)
+	 * - Observabilidade via BullMQ dashboard
+	 * - Não bloqueia o fluxo principal
 	 *
-	 * @see docs/interative_message_flow_builder.md §ChatwitActionNode
+	 * @see docs/flow-builder-queue.md
 	 */
 	private async handleChatwitAction(node: RuntimeFlowNode, flow: RuntimeFlow): Promise<string> {
 		const config = node.config as {
@@ -1357,27 +1362,51 @@ export class FlowExecutor {
 			);
 		}
 
-		// Usa o dispatcher unificado para consistência com outros nós (retry automático)
-		const result = await this.delivery.deliver(this.context, {
-			type: "chatwit_action",
-			actionType,
-			assigneeId: config.assigneeId ? Number(config.assigneeId) : undefined,
-			labels: labelTitles,
-		});
+		try {
+			// Enfileira a ação para processamento assíncrono (não bloqueia)
+			// sessionId: usa conversationId como identificador de sessão
+			const jobId = await addChatwitActionJob({
+				flowId: flow.id,
+				sessionId: String(this.context.conversationId),
+				nodeId: node.id,
+				context: this.context,
+				payload: {
+					type: "chatwit_action",
+					actionType,
+					assigneeId: config.assigneeId ? Number(config.assigneeId) : undefined,
+					labels: labelTitles,
+				},
+			});
 
-		if (result.success) {
-			log.info("[FlowExecutor] Ação Chatwit executada via pipeline unificado", {
+			log.info("[FlowExecutor] Ação Chatwit enfileirada", {
+				jobId,
+				flowId: flow.id,
 				conversationId,
 				actionType,
-				attempts: result.attempts,
 			});
-		} else {
-			log.error("[FlowExecutor] Erro ao executar ação Chatwit", {
+		} catch (error) {
+			// Falha ao enfileirar — faz fallback para execução direta
+			log.warn("[FlowExecutor] Falha ao enfileirar ChatwitAction, executando diretamente", {
 				nodeId: node.id,
 				actionType,
-				error: result.error,
-				attempts: result.attempts,
+				error: error instanceof Error ? error.message : String(error),
 			});
+
+			// Fallback: executa diretamente via delivery service
+			const result = await this.delivery.deliver(this.context, {
+				type: "chatwit_action",
+				actionType,
+				assigneeId: config.assigneeId ? Number(config.assigneeId) : undefined,
+				labels: labelTitles,
+			});
+
+			if (!result.success) {
+				log.error("[FlowExecutor] Erro ao executar ação Chatwit (fallback)", {
+					nodeId: node.id,
+					actionType,
+					error: result.error,
+				});
+			}
 		}
 
 		return this.findNextNodeId(flow, node);

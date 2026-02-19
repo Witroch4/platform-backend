@@ -227,7 +227,8 @@ docker compose build | up | down
 ├── prisma/                 # Schema + migrations
 ├── docs/                   # ⭐ Docs técnicas de features
 │   ├── interative_message_flow_builder.md  # Flow Builder roadmap + arquitetura
-│   └── chatwit-contrato-async-30s.md       # Contrato async Chatwit
+│   ├── chatwit-contrato-async-30s.md       # Contrato async Chatwit
+│   └── flow-builder-queue.md               # ⭐ Fila BullMQ para ações do Flow Engine
 ├── .agents/skills/         # ⭐ Vercel Agent Skills (installed)
 │   ├── vercel-react-best-practices/
 │   ├── vercel-composition-patterns/
@@ -381,15 +382,18 @@ DATABASE_URL | REDIS_URL | NEXTAUTH_SECRET | OPENAI_API_KEY
 
   O pipeline de classificação (alias/embedding → bands) SEMPRE tem prioridade sobre FlowOrchestrator default.
 
-- **ChatwitActionNode — Pipeline Unificado**: O nó `CHATWIT_ACTION` (resolve, assign, add/remove label) agora usa o dispatcher `deliver()` padrão do pipeline, igual aos outros nós (TEXT, MEDIA, INTERACTIVE). Isso garante:
-  1. **Retry automático**: 3 tentativas com exponential backoff (antes era 1 tentativa só)
-  2. **Logs consistentes**: Mesma estrutura de log de sucesso/erro dos outros nós
-  3. **`remove_label` funciona**: Antes era `// TODO`, agora implementado via DELETE com retry
+- **ChatwitActionNode — Fila BullMQ**: O nó `CHATWIT_ACTION` (resolve, assign, add/remove label) agora é processado via fila `flow-builder-queues`. Isso garante:
+  1. **Retry robusto**: 3 tentativas com exponential backoff (2s → 4s → 8s)
+  2. **Persistência**: Jobs sobrevivem a crashes (Redis)
+  3. **Não-bloqueante**: Flow continua sem esperar ação completar
+  4. **Fallback**: Se fila falhar, executa diretamente via `deliver()`
+  5. **Extensível**: Fila genérica pronta para HTTP_REQUEST, TAG_ACTION, etc.
 
-  **Arquivos afetados:**
-  - `types/flow-engine.ts`: `DeliveryPayload.type` inclui `"chatwit_action"`
-  - `services/flow-engine/chatwit-delivery-service.ts`: `deliver()` dispatcher + `deliverChatwitAction()` + `postChatwitAction()` com retry
-  - `services/flow-engine/flow-executor.ts`: `handleChatwitAction()` usa `deliver()` em vez de chamadas diretas
+  **Arquivos:**
+  - `lib/queue/flow-builder-queues.ts`: Fila + tipos + helpers
+  - `worker/WebhookWorkerTasks/flow-builder-queues.task.ts`: Task processor
+  - `services/flow-engine/flow-executor.ts`: `handleChatwitAction()` enfileira job
+  - `docs/flow-builder-queue.md`: Documentação completa
 
 ## Portainer MCP
 
