@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import axios from "axios";
-import { Readable } from "stream";
 import { auth } from "@/auth";
-import { mtfDiamanteConfig } from "@/app/config/mtf-diamante";
+import { getWhatsAppConfig } from "@/app/lib";
 import { v4 as uuidv4 } from "uuid";
 import { uploadToMinIO } from "@/lib/minio";
 
@@ -12,16 +11,19 @@ import { uploadToMinIO } from "@/lib/minio";
  * @param fileData Buffer do arquivo
  * @param fileName Nome do arquivo
  * @param mimeType Tipo MIME do arquivo (ex: 'video/mp4', 'image/jpeg')
+ * @param userId ID do usuário para buscar credenciais do banco
  * @returns O identificador de mídia (media_handle) retornado pela API Meta
  */
-async function uploadMediaToMetaApi(fileData: Buffer, fileName: string, mimeType: string): Promise<string> {
+async function uploadMediaToMetaApi(fileData: Buffer, fileName: string, mimeType: string, userId?: string): Promise<string> {
 	try {
-		// Configurações
-		const accessToken = process.env.WHATSAPP_TOKEN || mtfDiamanteConfig.whatsappToken;
+		// Buscar configurações do usuário no banco de dados
+		const whatsappConfig = await getWhatsAppConfig(userId);
+		const accessToken = whatsappConfig.whatsappToken;
 		const metaAppId = process.env.META_APP_ID;
+		const graphApiBase = whatsappConfig.fbGraphApiBase || "https://graph.facebook.com/v22.0";
 
 		if (!accessToken) {
-			throw new Error("Token de acesso não configurado");
+			throw new Error("Token de acesso não configurado. Configure nas Configurações Globais do MTF Diamante.");
 		}
 
 		if (!metaAppId) {
@@ -32,7 +34,7 @@ async function uploadMediaToMetaApi(fileData: Buffer, fileName: string, mimeType
 
 		// Etapa 1: Iniciar sessão de carregamento
 		const sessionResponse = await axios.post(
-			`${process.env.FB_GRAPH_API_BASE || "https://graph.facebook.com/v22.0"}/${metaAppId}/uploads`,
+			`${graphApiBase}/${metaAppId}/uploads`,
 			null,
 			{
 				params: {
@@ -53,7 +55,7 @@ async function uploadMediaToMetaApi(fileData: Buffer, fileName: string, mimeType
 
 		// Etapa 2: Fazer o upload do arquivo
 		const uploadResponse = await axios.post(
-			`${process.env.FB_GRAPH_API_BASE || "https://graph.facebook.com/v22.0"}/upload:${uploadSessionId}`,
+			`${graphApiBase}/upload:${uploadSessionId}`,
 			fileData,
 			{
 				headers: {
@@ -88,9 +90,10 @@ async function uploadMediaToMetaApi(fileData: Buffer, fileName: string, mimeType
  * Função para buscar um arquivo do MinIO e fazer upload para a API Meta
  * @param minioUrl URL do arquivo no MinIO
  * @param mimeType Tipo MIME do arquivo
+ * @param userId ID do usuário para buscar credenciais
  * @returns O identificador de mídia (media_handle) retornado pela API Meta
  */
-async function uploadMinioFileToMeta(minioUrl: string, mimeType: string): Promise<string> {
+async function uploadMinioFileToMeta(minioUrl: string, mimeType: string, userId?: string): Promise<string> {
 	try {
 		// Baixar o arquivo do MinIO
 		console.log(`Baixando arquivo do MinIO: ${minioUrl}`);
@@ -104,7 +107,7 @@ async function uploadMinioFileToMeta(minioUrl: string, mimeType: string): Promis
 		console.log(`Arquivo baixado: ${fileName}, tamanho: ${fileBuffer.length} bytes`);
 
 		// Fazer upload para a API Meta
-		return await uploadMediaToMetaApi(fileBuffer, fileName, mimeType);
+		return await uploadMediaToMetaApi(fileBuffer, fileName, mimeType, userId);
 	} catch (error: any) {
 		console.error("Erro ao processar arquivo do MinIO:", error);
 		throw new Error(`Falha ao processar arquivo: ${error.message}`);
@@ -150,7 +153,7 @@ export async function POST(request: Request) {
 			// Caso 1: Temos uma URL do MinIO
 			if (fileUrl) {
 				try {
-					const mediaHandle = await uploadMinioFileToMeta(fileUrl, mimeType);
+					const mediaHandle = await uploadMinioFileToMeta(fileUrl, mimeType, session.user.id);
 					return NextResponse.json({
 						success: true,
 						mediaHandle,
@@ -173,7 +176,7 @@ export async function POST(request: Request) {
 			else if (file) {
 				try {
 					const buffer = Buffer.from(await file.arrayBuffer());
-					const mediaHandle = await uploadMediaToMetaApi(buffer, file.name, file.type || mimeType);
+					const mediaHandle = await uploadMediaToMetaApi(buffer, file.name, file.type || mimeType, session.user.id);
 
 					return NextResponse.json({
 						success: true,
