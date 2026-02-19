@@ -15,7 +15,9 @@ import type {
 	AddTagNodeData,
 	EndConversationNodeData,
 	StartNodeData,
+	ChatwitActionNodeData,
 } from "@/types/flow-builder";
+import { ChatwitActionDetailEditor } from "./editors/ChatwitActionDetailEditor";
 import {
 	elementsToLegacyFields,
 	getInteractiveMessageElements,
@@ -28,7 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { MessageSquare, Play, Smile, Type, UserRoundCog, TagIcon, CircleStop, Smartphone } from "lucide-react";
+import { MessageSquare, Play, Smile, Type, UserRoundCog, TagIcon, CircleStop, Smartphone, Workflow } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // =============================================================================
@@ -705,6 +707,8 @@ function getNodeIcon(type: FlowNodeType) {
 			return <UserRoundCog className="h-5 w-5 text-orange-500" />;
 		case FlowNodeType.ADD_TAG:
 			return <TagIcon className="h-5 w-5 text-pink-500" />;
+		case FlowNodeType.CHATWIT_ACTION:
+			return <Workflow className="h-5 w-5 text-indigo-500" />;
 		case FlowNodeType.END_CONVERSATION:
 			return <CircleStop className="h-5 w-5 text-red-500" />;
 		default:
@@ -721,6 +725,7 @@ function getNodeTypeName(type: FlowNodeType): string {
 		[FlowNodeType.TEXT_REACTION]: "Resposta de Texto",
 		[FlowNodeType.HANDOFF]: "Transferência",
 		[FlowNodeType.ADD_TAG]: "Adicionar Tag",
+		[FlowNodeType.CHATWIT_ACTION]: "Ação Chatwit",
 		[FlowNodeType.END_CONVERSATION]: "Encerrar Conversa",
 	};
 	return map[type] ?? "Nó";
@@ -831,6 +836,14 @@ export function NodeDetailDialog({
 							<EndConversationDetailEditor
 								node={node}
 								data={nodeData as EndConversationNodeData}
+								onUpdate={onUpdateNodeData}
+							/>
+						)}
+
+						{nodeType === FlowNodeType.CHATWIT_ACTION && (
+							<ChatwitActionDetailEditor
+								node={node}
+								data={nodeData as ChatwitActionNodeData}
 								onUpdate={onUpdateNodeData}
 							/>
 						)}
@@ -947,9 +960,9 @@ function InteractiveMessageDetailEditor({
 
 			const action = selectedMsg.action as
 				| {
-						type?: string;
-						buttons?: Array<{ id: string; title: string; reply?: { id: string; title: string } }>;
-				  }
+					type?: string;
+					buttons?: Array<{ id: string; title: string; reply?: { id: string; title: string } }>;
+				}
 				| undefined;
 
 			// Normalizar header para o formato esperado pelo WhatsAppPreview
@@ -1105,18 +1118,16 @@ function InteractiveMessageDetailEditor({
 							} as Partial<InteractiveMessageNodeData>);
 							setMode("create");
 						}}
-						className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-							mode === "create" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
-						}`}
+						className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${mode === "create" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+							}`}
 					>
 						Criar mensagem
 					</button>
 					<button
 						type="button"
 						onClick={() => setMode("link")}
-						className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-							mode === "link" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
-						}`}
+						className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${mode === "link" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+							}`}
 					>
 						Vincular existente
 					</button>
@@ -1297,8 +1308,8 @@ function InteractiveMessageDetailEditor({
 									{(() => {
 										const action = selectedMsg.action as
 											| {
-													buttons?: Array<{ id: string; title: string }>;
-											  }
+												buttons?: Array<{ id: string; title: string }>;
+											}
 											| undefined;
 										const btns = action?.buttons ?? [];
 										if (btns.length === 0) return null;
@@ -1435,11 +1446,10 @@ function EmojiReactionDetailEditor({ node, data, onUpdate }: EditorProps<EmojiRe
 							key={emoji}
 							type="button"
 							onClick={() => handleSelect(emoji)}
-							className={`text-2xl p-2 rounded-lg border transition-all hover:scale-110 ${
-								selected === emoji
+							className={`text-2xl p-2 rounded-lg border transition-all hover:scale-110 ${selected === emoji
 									? "border-primary bg-primary/10 ring-2 ring-primary/30"
 									: "border-transparent hover:border-border"
-							}`}
+								}`}
 						>
 							{emoji}
 						</button>

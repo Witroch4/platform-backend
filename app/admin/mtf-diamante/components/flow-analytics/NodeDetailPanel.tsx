@@ -69,6 +69,8 @@ function getNodeTypeLabel(nodeType: FlowNodeType): string {
 		media: "Mídia",
 		quick_replies: "Quick Replies",
 		carousel: "Carrossel",
+		chatwit_action: "Ação Chatwit",
+		remove_tag: "Remover Tag",
 	};
 	return labels[nodeType] || nodeType;
 }

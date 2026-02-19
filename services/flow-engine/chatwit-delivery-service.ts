@@ -197,8 +197,75 @@ export class ChatwitDeliveryService {
 	}
 
 	// ---------------------------------------------------------------------------
-	// Internal
+	// Chatwit Actions
 	// ---------------------------------------------------------------------------
+
+	/**
+	 * Resolva uma conversa.
+	 * @see https://www.chatwit.com/docs/api#toggle-status-of-a-conversation
+	 */
+	async resolveConversation(ctx: DeliveryContext): Promise<DeliveryResult> {
+		const targetId = ctx.conversationDisplayId || ctx.conversationId;
+		const url = `/api/v1/accounts/${ctx.accountId}/conversations/${targetId}/toggle_status`;
+
+		try {
+			await this.client.post(url, { status: "resolved" });
+			return { success: true, attempts: 1 };
+		} catch (err: any) {
+			log.error("[ChatwitDelivery] Falha ao resolver conversa", { error: err.message, conversationId: ctx.conversationId });
+			return { success: false, error: err.message, attempts: 1 };
+		}
+	}
+
+	/**
+	 * Resolva uma conversa (com contexto).
+	 */
+	async resolveConversationWithContext(ctx: DeliveryContext, conversationId: string): Promise<DeliveryResult> {
+		const targetId = ctx.conversationDisplayId || conversationId;
+		const url = `/api/v1/accounts/${ctx.accountId}/conversations/${targetId}/toggle_status`;
+
+		try {
+			await this.client.post(url, { status: "resolved" });
+			return { success: true, attempts: 1 };
+		} catch (err: any) {
+			log.error("[ChatwitDelivery] Falha ao resolver conversa", { error: err.message, conversationId });
+			return { success: false, error: err.message, attempts: 1 };
+		}
+	}
+
+	/**
+	 * Atribuir conversa a um agente.
+	 * @see https://www.chatwit.com/docs/api#assign-an-agent
+	 */
+	async assignAgent(ctx: DeliveryContext, agentId: number): Promise<DeliveryResult> {
+		const targetId = ctx.conversationDisplayId || ctx.conversationId;
+		const url = `/api/v1/accounts/${ctx.accountId}/conversations/${targetId}/assignments`;
+
+		try {
+			await this.client.post(url, { assignee_id: agentId });
+			return { success: true, attempts: 1 };
+		} catch (err: any) {
+			log.error("[ChatwitDelivery] Falha ao atribuir agente", { error: err.message, conversationId: ctx.conversationId, agentId });
+			return { success: false, error: err.message, attempts: 1 };
+		}
+	}
+
+	/**
+	 * Adicionar etiquetas a uma conversa.
+	 * @see https://www.chatwit.com/docs/api#add-labels
+	 */
+	async addLabels(ctx: DeliveryContext, labels: string[]): Promise<DeliveryResult> {
+		const targetId = ctx.conversationDisplayId || ctx.conversationId;
+		const url = `/api/v1/accounts/${ctx.accountId}/conversations/${targetId}/labels`;
+
+		try {
+			await this.client.post(url, { labels });
+			return { success: true, attempts: 1 };
+		} catch (err: any) {
+			log.error("[ChatwitDelivery] Falha ao adicionar etiquetas", { error: err.message, conversationId: ctx.conversationId, labels });
+			return { success: false, error: err.message, attempts: 1 };
+		}
+	}
 
 	private async postMessage(ctx: DeliveryContext, body: ChatwitMessagePayload): Promise<DeliveryResult> {
 		// 🔧 FIX: API usa display_id, não id interno

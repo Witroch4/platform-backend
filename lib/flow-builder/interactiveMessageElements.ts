@@ -81,9 +81,15 @@ export function elementsToLegacyFields(elements: InteractiveMessageElement[]): {
 type NodeDataWithElements = {
 	elements?: InteractiveMessageElement[];
 	message?: InteractiveMessageNodeData["message"];
-	header?: string;
+	header?: string | {
+		type?: string;
+		content?: string;
+		text?: string;
+		mediaUrl?: string;
+		variables?: string[];
+	};
 	body?: string | { text?: string; variables?: string[] };
-	footer?: string;
+	footer?: string | { text?: string };
 	buttons?: Array<{ id: string; title: string; description?: string; text?: string; url?: string }>;
 	// Campos específicos de templates
 	couponCode?: string;
@@ -158,13 +164,30 @@ export function getInteractiveMessageElements(
 
 	// 2) From legacy inline fields
 	const legacyElements: InteractiveMessageElement[] = [];
-	if (d.header) legacyElements.push({ id: safeId("header_text"), type: "header_text", text: d.header });
+
+	// Header pode ser string ou objeto { type, content, text, mediaUrl, variables }
+	if (d.header) {
+		if (typeof d.header === "string") {
+			legacyElements.push({ id: safeId("header_text"), type: "header_text", text: d.header });
+		} else if (d.header.type === "IMAGE" && d.header.mediaUrl) {
+			legacyElements.push({ id: safeId("header_image"), type: "header_image", url: d.header.mediaUrl, caption: "" });
+		} else if (d.header.type === "TEXT" && (d.header.content || d.header.text)) {
+			legacyElements.push({ id: safeId("header_text"), type: "header_text", text: d.header.content || d.header.text || "" });
+		} else if (d.header.type === "VIDEO" && d.header.mediaUrl) {
+			// Video também usa header_image internamente (pode ser renomeado no futuro)
+			legacyElements.push({ id: safeId("header_image"), type: "header_image", url: d.header.mediaUrl, caption: "" });
+		} else if (d.header.type === "DOCUMENT" && d.header.mediaUrl) {
+			legacyElements.push({ id: safeId("header_image"), type: "header_image", url: d.header.mediaUrl, caption: "" });
+		}
+	}
 
 	// Body pode ser string ou objeto { text, variables }
 	const bodyText = typeof d.body === "string" ? d.body : d.body?.text;
 	if (bodyText) legacyElements.push({ id: safeId("body"), type: "body", text: bodyText });
 
-	if (d.footer) legacyElements.push({ id: safeId("footer"), type: "footer", text: d.footer });
+	// Footer pode ser string ou objeto { text }
+	const footerText = typeof d.footer === "string" ? d.footer : d.footer?.text;
+	if (footerText) legacyElements.push({ id: safeId("footer"), type: "footer", text: footerText });
 
 	// Botões normais (QUICK_REPLY)
 	for (const b of d.buttons ?? []) {

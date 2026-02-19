@@ -116,6 +116,11 @@ export const NODE_COLORS = {
 		border: "border-pink-500",
 		icon: "text-pink-600",
 	},
+	[FlowNodeType.CHATWIT_ACTION]: {
+		bg: "bg-indigo-50 dark:bg-indigo-950",
+		border: "border-indigo-500",
+		icon: "text-indigo-600",
+	},
 	[FlowNodeType.END_CONVERSATION]: {
 		bg: "bg-red-50 dark:bg-red-950",
 		border: "border-red-500",

@@ -52,8 +52,14 @@ import {
 	TEMPLATE_LIMITS,
 	createTemplateButton,
 } from "@/lib/flow-builder/templateElements";
-import { getInteractiveMessageElements } from "@/lib/flow-builder/interactiveMessageElements";
+import {
+	getInteractiveMessageElements,
+	generateElementId,
+} from "@/lib/flow-builder/interactiveMessageElements";
 import { useApprovedTemplates } from "@/app/admin/mtf-diamante/hooks/useApprovedTemplates";
+import MinIOMediaUpload, { type MinIOMediaFile } from "../../shared/MinIOMediaUpload";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Upload } from "lucide-react";
 
 // =============================================================================
 // HELPER: Extract data from specialized template nodes (elements array)
@@ -63,6 +69,8 @@ interface ExtractedTemplateData {
 	bodyText: string;
 	headerType: "NONE" | "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT";
 	headerContent: string;
+	headerMediaUrl: string;
+	footerText: string;
 	buttons: TemplateButton[];
 }
 
@@ -70,6 +78,8 @@ function extractFromElements(elements: InteractiveMessageElement[]): ExtractedTe
 	let bodyText = "";
 	let headerType: ExtractedTemplateData["headerType"] = "NONE";
 	let headerContent = "";
+	let headerMediaUrl = "";
+	let footerText = "";
 	const buttons: TemplateButton[] = [];
 
 	for (const el of elements) {
@@ -77,12 +87,16 @@ function extractFromElements(elements: InteractiveMessageElement[]): ExtractedTe
 			case "body":
 				bodyText = "text" in el ? el.text : "";
 				break;
+			case "footer":
+				footerText = "text" in el ? el.text : "";
+				break;
 			case "header_text":
 				headerType = "TEXT";
 				headerContent = "text" in el ? el.text : "";
 				break;
 			case "header_image":
 				headerType = "IMAGE";
+				headerMediaUrl = "url" in el ? (el.url as string) : "";
 				break;
 			case "button":
 				buttons.push({
@@ -126,7 +140,7 @@ function extractFromElements(elements: InteractiveMessageElement[]): ExtractedTe
 		}
 	}
 
-	return { bodyText, headerType, headerContent, buttons };
+	return { bodyText, headerType, headerContent, headerMediaUrl, footerText, buttons };
 }
 
 // =============================================================================
@@ -548,6 +562,10 @@ export function TemplateConfigDialog({
 	const [runtimeVariables, setRuntimeVariables] = useState<Record<string, string>>({});
 	const [runtimeButtonParams, setRuntimeButtonParams] = useState<Record<number, { couponCode?: string }>>({});
 
+	// Upload de mídia
+	const [headerMediaMode, setHeaderMediaMode] = useState<"url" | "upload">("upload");
+	const [uploadedFiles, setUploadedFiles] = useState<MinIOMediaFile[]>([]);
+
 	// Extract current node data
 	const nodeData = useMemo(() => {
 		if (!node) return null;
@@ -666,8 +684,8 @@ export function TemplateConfigDialog({
 			setHeaderContent(extracted.headerContent);
 			setBodyText(extracted.bodyText);
 			setButtons(extracted.buttons);
-			setFooterText(""); // Footer not supported in elements yet
-			setHeaderMediaUrl("");
+			setFooterText(extracted.footerText);
+			setHeaderMediaUrl(extracted.headerMediaUrl);
 		} else {
 			// Traditional format (TemplateNode)
 			setHeaderType(nodeData.header?.type || "NONE");
@@ -785,9 +803,9 @@ export function TemplateConfigDialog({
 						? { type: "TEXT", content: headerComp.text }
 						: headerComp?.format
 							? {
-									type: headerComp.format as "IMAGE" | "VIDEO" | "DOCUMENT",
-									mediaUrl: resolvedMediaUrl || undefined,
-								}
+								type: headerComp.format as "IMAGE" | "VIDEO" | "DOCUMENT",
+								mediaUrl: resolvedMediaUrl || undefined,
+							}
 							: undefined,
 				body: bodyComp?.text ? { text: bodyComp.text, variables: extractVariables(bodyComp.text) } : undefined,
 				footer: footerComp?.text ? { text: footerComp.text } : undefined,
@@ -813,8 +831,91 @@ export function TemplateConfigDialog({
 			return;
 		}
 
+
+		// Reconstruct elements array to ensure visual consistency
+		// This fixes the issue where Footer and Header Image were not showing on canvas after save
+		// because the node prioritizes 'elements' which were going stale.
+		const newElements: InteractiveMessageElement[] = [];
+
+
+		// Header
+		if (headerType !== "NONE") {
+			if (headerType === "TEXT") {
+				newElements.push({
+					id: generateElementId("header_text"),
+					type: "header_text",
+					text: headerContent,
+				});
+			} else if (["IMAGE", "VIDEO", "DOCUMENT"].includes(headerType)) {
+				newElements.push({
+					id: generateElementId("header_image"),
+					type: "header_image",
+					url: headerMediaUrl,
+					caption: "",
+				});
+			}
+		}
+
+		// Body
+		if (bodyText) {
+			newElements.push({
+				id: generateElementId("body"),
+				type: "body",
+				text: bodyText,
+			});
+		}
+
+		// Footer
+		if (footerText) {
+			newElements.push({
+				id: generateElementId("footer"),
+				type: "footer",
+				text: footerText,
+			});
+		}
+
+		// Buttons (preserve IDs to keep connections)
+		buttons.forEach((btn) => {
+			if (btn.type === "URL") {
+				newElements.push({
+					id: btn.id,
+					type: "button_url",
+					title: btn.text,
+					url: btn.url || "",
+				});
+			} else if (btn.type === "PHONE_NUMBER") {
+				newElements.push({
+					id: btn.id,
+					type: "button_phone",
+					title: btn.text,
+					phoneNumber: btn.phoneNumber || "",
+				});
+			} else if (btn.type === "COPY_CODE") {
+				newElements.push({
+					id: btn.id,
+					type: "button_copy_code",
+					title: btn.text,
+					couponCode: btn.exampleCode || "",
+				});
+			} else if (btn.type === "VOICE_CALL") {
+				newElements.push({
+					id: btn.id,
+					type: "button_voice_call",
+					title: btn.text,
+					ttlMinutes: btn.ttlMinutes || 10080,
+				});
+			} else {
+				// QUICK_REPLY
+				newElements.push({
+					id: btn.id,
+					type: "button",
+					title: btn.text,
+				});
+			}
+		});
+
 		// Build template data
-		const templateData: Partial<TemplateNodeData> = {
+		const templateData: Partial<TemplateNodeData> & { elements?: unknown } = {
 			label: templateName || "Template",
 			isConfigured: true,
 			mode: "create",
@@ -825,11 +926,11 @@ export function TemplateConfigDialog({
 			header:
 				headerType !== "NONE"
 					? {
-							type: headerType,
-							content: headerType === "TEXT" ? headerContent : undefined,
-							mediaUrl: ["IMAGE", "VIDEO", "DOCUMENT"].includes(headerType) ? headerMediaUrl : undefined,
-							variables: headerVariables,
-						}
+						type: headerType,
+						content: headerType === "TEXT" ? headerContent : undefined,
+						mediaUrl: ["IMAGE", "VIDEO", "DOCUMENT"].includes(headerType) ? headerMediaUrl : undefined,
+						variables: headerVariables,
+					}
 					: undefined,
 			body: {
 				text: bodyText,
@@ -838,6 +939,8 @@ export function TemplateConfigDialog({
 			},
 			footer: footerText ? { text: footerText } : undefined,
 			buttons,
+			// Save explicit elements
+			elements: newElements,
 		};
 
 		onUpdateNodeData(node.id, templateData);
@@ -957,7 +1060,87 @@ export function TemplateConfigDialog({
 			const metaId = result.metaTemplateId || result.result?.id || result.template?.id || result.id;
 
 			// Update node with pending status and template ID
-			onUpdateNodeData(node.id, {
+			// Reconstruct elements array for visual consistency (same as handleSaveTemplate)
+			const newElements: InteractiveMessageElement[] = [];
+
+			// Header
+			if (headerType !== "NONE") {
+				if (headerType === "TEXT") {
+					newElements.push({
+						id: generateElementId("header_text"),
+						type: "header_text",
+						text: headerContent,
+					});
+				} else if (["IMAGE", "VIDEO", "DOCUMENT"].includes(headerType)) {
+					newElements.push({
+						id: generateElementId("header_image"),
+						type: "header_image",
+						url: headerMediaUrl,
+						caption: "",
+					});
+				}
+			}
+
+			// Body
+			if (bodyText) {
+				newElements.push({
+					id: generateElementId("body"),
+					type: "body",
+					text: bodyText,
+				});
+			}
+
+			// Footer
+			if (footerText) {
+				newElements.push({
+					id: generateElementId("footer"),
+					type: "footer",
+					text: footerText,
+				});
+			}
+
+			// Buttons (preserve IDs)
+			buttons.forEach((btn) => {
+				if (btn.type === "URL") {
+					newElements.push({
+						id: btn.id,
+						type: "button_url",
+						title: btn.text,
+						url: btn.url || "",
+					});
+				} else if (btn.type === "PHONE_NUMBER") {
+					newElements.push({
+						id: btn.id,
+						type: "button_phone",
+						title: btn.text,
+						phoneNumber: btn.phoneNumber || "",
+					});
+				} else if (btn.type === "COPY_CODE") {
+					newElements.push({
+						id: btn.id,
+						type: "button_copy_code",
+						title: btn.text,
+						couponCode: btn.exampleCode || "",
+					});
+				} else if (btn.type === "VOICE_CALL") {
+					newElements.push({
+						id: btn.id,
+						type: "button_voice_call",
+						title: btn.text,
+						ttlMinutes: btn.ttlMinutes || 10080,
+					});
+				} else {
+					// QUICK_REPLY
+					newElements.push({
+						id: btn.id,
+						type: "button",
+						title: btn.text,
+					});
+				}
+			});
+
+			// Update node with pending status and template ID
+			const updateData: Partial<TemplateNodeData> & { elements?: unknown } = {
 				label: templateName,
 				isConfigured: true,
 				mode: "create",
@@ -974,7 +1157,10 @@ export function TemplateConfigDialog({
 				body: { text: bodyText, variables: bodyVariables },
 				footer: footerText ? { text: footerText } : undefined,
 				buttons,
-			} as Partial<TemplateNodeData>);
+				elements: newElements,
+			};
+
+			onUpdateNodeData(node.id, updateData);
 
 			toast.success("Template enviado para aprovação da Meta");
 			onOpenChange(false);
@@ -1029,6 +1215,14 @@ export function TemplateConfigDialog({
 		},
 		[buttons],
 	);
+
+	// Handle media upload complete
+	const handleMediaUploadComplete = useCallback((file: MinIOMediaFile) => {
+		if (file.url) {
+			setHeaderMediaUrl(file.url);
+			toast.success("Mídia carregada com sucesso");
+		}
+	}, []);
 
 	// Save runtime parameters (para templates aprovados)
 	const handleSaveRuntimeParams = useCallback(() => {
@@ -1329,17 +1523,66 @@ export function TemplateConfigDialog({
 											/>
 										)}
 										{["IMAGE", "VIDEO", "DOCUMENT"].includes(headerType) && (
-											<div className="space-y-1 mt-2">
-												<Input
-													value={canEdit ? headerMediaUrl : runtimeMediaUrl}
-													onChange={(e) => canEdit ? setHeaderMediaUrl(e.target.value) : setRuntimeMediaUrl(e.target.value)}
-													placeholder="URL da mídia"
-													className="text-sm"
-												/>
-												{!canEdit && (
-													<p className="text-[10px] text-emerald-600 dark:text-emerald-500">
-														Editável para cada disparo
-													</p>
+											<div className="space-y-2 mt-2">
+												{canEdit ? (
+													<>
+														<Tabs value={headerMediaMode} onValueChange={(v) => setHeaderMediaMode(v as "url" | "upload")} className="w-full">
+															<TabsList className="grid w-full grid-cols-2 h-8">
+																<TabsTrigger value="upload" className="text-xs gap-1">
+																	<Upload className="h-3 w-3" />
+																	Upload
+																</TabsTrigger>
+																<TabsTrigger value="url" className="text-xs gap-1">
+																	<Link className="h-3 w-3" />
+																	URL
+																</TabsTrigger>
+															</TabsList>
+														</Tabs>
+														{headerMediaMode === "upload" ? (
+															<div className="nodrag">
+																<MinIOMediaUpload
+																	uploadedFiles={uploadedFiles}
+																	setUploadedFiles={setUploadedFiles}
+																	allowedTypes={
+																		headerType === "IMAGE"
+																			? ["image/jpeg", "image/png", "image/jpg", "image/webp"]
+																			: headerType === "VIDEO"
+																				? ["video/mp4", "video/webm"]
+																				: ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
+																	}
+																	maxSizeMB={headerType === "VIDEO" ? 16 : 5}
+																	title={`Upload de ${headerType === "IMAGE" ? "imagem" : headerType === "VIDEO" ? "vídeo" : "documento"}`}
+																	description={`Arraste ${headerType === "IMAGE" ? "uma imagem" : headerType === "VIDEO" ? "um vídeo" : "um documento"} aqui`}
+																	maxFiles={1}
+																	onUploadComplete={handleMediaUploadComplete}
+																/>
+																{headerMediaUrl && (
+																	<p className="text-[10px] text-emerald-600 dark:text-emerald-500 mt-1">
+																		Mídia carregada: {headerMediaUrl.split("/").pop()}
+																	</p>
+																)}
+															</div>
+														) : (
+															<Input
+																value={headerMediaUrl}
+																onChange={(e) => setHeaderMediaUrl(e.target.value)}
+																placeholder="URL da mídia"
+																className="text-sm"
+															/>
+														)}
+													</>
+												) : (
+													<>
+														<Input
+															value={runtimeMediaUrl}
+															onChange={(e) => setRuntimeMediaUrl(e.target.value)}
+															placeholder="URL da mídia"
+															className="text-sm"
+														/>
+														<p className="text-[10px] text-emerald-600 dark:text-emerald-500">
+															Editável para cada disparo
+														</p>
+													</>
 												)}
 											</div>
 										)}
@@ -1590,14 +1833,14 @@ export function TemplateConfigDialog({
 											header={
 												headerComp
 													? {
-															type:
-																headerComp.format === "TEXT"
-																	? "TEXT"
-																	: (headerComp.format as "IMAGE" | "VIDEO" | "DOCUMENT") || "TEXT",
-															content: headerComp.text,
-															mediaUrl: resolvedMediaUrl ?? undefined,
-															isLoadingMedia: isResolvingMedia,
-														}
+														type:
+															headerComp.format === "TEXT"
+																? "TEXT"
+																: (headerComp.format as "IMAGE" | "VIDEO" | "DOCUMENT") || "TEXT",
+														content: headerComp.text,
+														mediaUrl: resolvedMediaUrl ?? undefined,
+														isLoadingMedia: isResolvingMedia,
+													}
 													: undefined
 											}
 											body={bodyComp?.text}

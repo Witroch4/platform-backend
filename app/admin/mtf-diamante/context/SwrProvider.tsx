@@ -42,6 +42,7 @@ import { useVariaveisManager } from "../hooks/useVariaveis";
 import { useApiKeysManager } from "../hooks/useApiKeys";
 import { useInboxButtonReactions } from "../hooks/useInboxButtonReactions";
 import { useApprovedTemplates } from "../hooks/useApprovedTemplates";
+import { useChatwitAgents } from "../hooks/useChatwitAgents";
 
 // Import types
 import type { MtfDataContextType, ChatwitInbox } from "../lib/types";
@@ -113,6 +114,7 @@ function SwrProviderContent({ children, initialData }: SwrProviderProps) {
 	const apiKeysHook = useApiKeysManager(isPaused);
 	const buttonReactionsHook = useInboxButtonReactions({ inboxId, paused: isPaused });
 	const approvedTemplatesHook = useApprovedTemplates(inboxId, isPaused);
+	const chatwitAgentsHook = useChatwitAgents();
 
 	// Pause/Resume functions
 	const pauseUpdates = useCallback(() => {
@@ -322,6 +324,9 @@ function SwrProviderContent({ children, initialData }: SwrProviderProps) {
 			approvedTemplates: approvedTemplatesHook.templates,
 			isLoadingTemplates: approvedTemplatesHook.isLoading,
 			refreshTemplates: approvedTemplatesHook.mutate,
+
+			// Chatwit Agents
+			chatwitAgents: chatwitAgentsHook.chatwitAgents,
 
 			// Pause Control
 			isUpdatesPaused: isPaused,

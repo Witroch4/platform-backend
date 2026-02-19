@@ -54,11 +54,12 @@ const SHARED_ACTION_ITEMS: PaletteItem[] = [
 		description: "Transferir para agente humano",
 		category: "action",
 	},
+	// ADD_TAG removido - usar CHATWIT_ACTION com add_label (funcional via API Chatwit)
 	{
-		type: FlowNodeType.ADD_TAG,
-		icon: "🏷️",
-		label: "Adicionar Tag",
-		description: "Adiciona tag ao contato",
+		type: FlowNodeType.CHATWIT_ACTION,
+		icon: "🤖",
+		label: "Ação Chatwit",
+		description: "Resolver, Atribuir, Etiquetas",
 		category: "action",
 	},
 	{

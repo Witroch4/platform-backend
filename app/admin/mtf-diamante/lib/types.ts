@@ -4,6 +4,8 @@
 import type React from "react";
 import type { ChatwitInbox, AgenteDialogflow } from "@/types/dialogflow";
 import type { InteractiveMessage } from "@/types/interactive-messages";
+import type { KeyedMutator } from "swr";
+import { MapeamentoBotao, Template } from "@prisma/client";
 
 // Re-export commonly used types for convenience
 export type { ChatwitInbox, AgenteDialogflow, InteractiveMessage };
@@ -105,13 +107,13 @@ export interface UseApiKeysReturn {
 }
 
 export interface UseButtonReactionsReturn {
-	buttonReactions: ButtonReaction[];
+	buttonReactions: MapeamentoBotao[];
+	templates: Template[];
 	isLoading: boolean;
-	error: any;
 	addButtonReaction: (optimisticReaction: ButtonReaction, apiPayload: any) => Promise<void>;
 	updateButtonReaction: (updatedReaction: ButtonReaction, apiPayload: any) => Promise<void>;
 	deleteButtonReaction: (reactionId: string) => Promise<void>;
-	mutate: () => Promise<any>;
+	mutate: KeyedMutator<any>;
 }
 
 // WhatsApp Template types
@@ -135,6 +137,22 @@ export interface UseApprovedTemplatesReturn {
 	error: any;
 	mutate: () => Promise<any>;
 }
+
+// =============================================================================
+// CHATWIT AGENT
+// =============================================================================
+
+export interface ChatwitAgent {
+	id: number;
+	name: string;
+	email: string;
+	role: string;
+	avatar_url?: string;
+}
+
+// =============================================================================
+// PROVIDER CONTEXT
+// =============================================================================
 
 // API Response types
 export interface ApiResponse<T = any> {
@@ -289,6 +307,9 @@ export interface MtfDataContextType {
 	approvedTemplates: WhatsAppTemplate[];
 	isLoadingTemplates: boolean;
 	refreshTemplates: () => Promise<any>;
+
+	// Chatwit Agents
+	chatwitAgents: ChatwitAgent[];
 
 	// Controle de Pausa
 	isUpdatesPaused: boolean;

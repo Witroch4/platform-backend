@@ -168,6 +168,7 @@ export function useFlowBuilderTab(caixaId: string): UseFlowBuilderTabReturn {
 		exportFlowAsJson,
 		importFlowFromJson,
 		getCanvasAsN8nFormat,
+		updateFlowName,
 	} = useFlowCanvas(caixaId, { flowId: selectedFlowId, autoSave: true });
 
 	const { interactiveMessages, caixas, buttonReactions } = useMtfData();
@@ -538,8 +539,20 @@ export function useFlowBuilderTab(caixaId: string): UseFlowBuilderTabReturn {
 	const handleUpdateNodeData = useCallback(
 		(nodeId: string, data: Partial<FlowNodeData>) => {
 			updateNodeData(nodeId, data);
+
+			// Sincronizar label do nó START com o nome do flow
+			if (data.label !== undefined) {
+				const node = nodes.find((n) => n.id === nodeId);
+				if (node?.type === FlowNodeType.START) {
+					toast.promise(updateFlowName(data.label as string), {
+						loading: "Renomeando flow...",
+						success: "Flow renomeado",
+						error: (err: Error) => err.message || "Erro ao renomear flow",
+					});
+				}
+			}
 		},
-		[updateNodeData],
+		[updateNodeData, updateFlowName, nodes],
 	);
 
 	const handleLinkMessageWithReactions = useCallback(

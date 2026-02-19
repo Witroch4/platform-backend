@@ -44,11 +44,26 @@ interface PaletteCardProps {
 
 function PaletteCard({ item }: PaletteCardProps) {
 	const onDragStart = useCallback(
-		(event: DragEvent) => {
+		(event: DragEvent<HTMLDivElement>) => {
 			// Impede que o drag propague para containers pais
 			event.stopPropagation();
 			event.dataTransfer.setData("application/reactflow", item.type);
 			event.dataTransfer.effectAllowed = "move";
+
+			// Cria drag ghost customizado para evitar capturar o fundo
+			const el = event.currentTarget;
+			const clone = el.cloneNode(true) as HTMLElement;
+			clone.style.position = "absolute";
+			clone.style.top = "-9999px";
+			clone.style.left = "-9999px";
+			clone.style.width = `${el.offsetWidth}px`;
+			clone.style.backgroundColor = "hsl(var(--card))";
+			clone.style.borderRadius = "8px";
+			clone.style.opacity = "0.95";
+			document.body.appendChild(clone);
+			event.dataTransfer.setDragImage(clone, el.offsetWidth / 2, 20);
+			// Remove o clone após o drag começar
+			requestAnimationFrame(() => clone.remove());
 		},
 		[item.type],
 	);
@@ -58,15 +73,15 @@ function PaletteCard({ item }: PaletteCardProps) {
 			draggable
 			onDragStart={onDragStart}
 			className={cn(
-				"flex items-center gap-3 rounded-lg border bg-card p-3 cursor-grab",
+				"flex items-start gap-2.5 rounded-lg border bg-card px-2.5 py-2 cursor-grab",
 				"transition-all hover:shadow-md hover:border-primary/40 active:cursor-grabbing",
 				"select-none",
 			)}
 		>
-			<span className="text-xl shrink-0">{item.icon}</span>
-			<div className="min-w-0">
-				<p className="text-sm font-medium truncate">{item.label}</p>
-				<p className="text-[11px] text-muted-foreground leading-tight truncate">{item.description}</p>
+			<span className="text-lg shrink-0 mt-0.5">{item.icon}</span>
+			<div className="min-w-0 flex-1">
+				<p className="text-xs font-semibold leading-snug">{item.label}</p>
+				<p className="text-[10px] text-muted-foreground leading-snug line-clamp-2 mt-0.5">{item.description}</p>
 			</div>
 		</div>
 	);
@@ -82,7 +97,7 @@ interface ElementPaletteCardProps {
 
 function ElementPaletteCard({ item }: ElementPaletteCardProps) {
 	const onDragStart = useCallback(
-		(event: DragEvent) => {
+		(event: DragEvent<HTMLDivElement>) => {
 			// Impede que o drag propague para containers pais
 			event.stopPropagation();
 			// Elementos compartilhados: enviam AMBOS os MIME types
@@ -90,6 +105,20 @@ function ElementPaletteCard({ item }: ElementPaletteCardProps) {
 			event.dataTransfer.setData(FLOWBUILDER_ELEMENT_MIME, item.type);
 			event.dataTransfer.setData(TEMPLATE_ELEMENT_MIME, item.type === "button" ? "button_quick_reply" : item.type);
 			event.dataTransfer.effectAllowed = "copy";
+
+			// Cria drag ghost customizado para evitar capturar o fundo
+			const el = event.currentTarget;
+			const clone = el.cloneNode(true) as HTMLElement;
+			clone.style.position = "absolute";
+			clone.style.top = "-9999px";
+			clone.style.left = "-9999px";
+			clone.style.width = `${el.offsetWidth}px`;
+			clone.style.backgroundColor = "hsl(var(--card))";
+			clone.style.borderRadius = "8px";
+			clone.style.opacity = "0.95";
+			document.body.appendChild(clone);
+			event.dataTransfer.setDragImage(clone, el.offsetWidth / 2, 20);
+			requestAnimationFrame(() => clone.remove());
 		},
 		[item.type],
 	);
@@ -99,15 +128,15 @@ function ElementPaletteCard({ item }: ElementPaletteCardProps) {
 			draggable
 			onDragStart={onDragStart}
 			className={cn(
-				"flex items-center gap-3 rounded-lg border bg-card p-3 cursor-grab",
+				"flex items-start gap-2.5 rounded-lg border bg-card px-2.5 py-2 cursor-grab",
 				"transition-all hover:shadow-md hover:border-primary/40 active:cursor-grabbing",
 				"select-none",
 			)}
 		>
-			<span className="text-xl shrink-0">{item.icon}</span>
-			<div className="min-w-0">
-				<p className="text-sm font-medium truncate">{item.label}</p>
-				<p className="text-[11px] text-muted-foreground leading-tight truncate">{item.description}</p>
+			<span className="text-lg shrink-0 mt-0.5">{item.icon}</span>
+			<div className="min-w-0 flex-1">
+				<p className="text-xs font-semibold leading-snug">{item.label}</p>
+				<p className="text-[10px] text-muted-foreground leading-snug line-clamp-2 mt-0.5">{item.description}</p>
 			</div>
 		</div>
 	);
@@ -123,11 +152,25 @@ interface TemplatePaletteCardProps {
 
 function TemplatePaletteCard({ item }: TemplatePaletteCardProps) {
 	const onDragStart = useCallback(
-		(event: DragEvent) => {
+		(event: DragEvent<HTMLDivElement>) => {
 			// Impede que o drag propague para containers pais
 			event.stopPropagation();
 			event.dataTransfer.setData("application/reactflow", item.type);
 			event.dataTransfer.effectAllowed = "move";
+
+			// Cria drag ghost customizado para evitar capturar o fundo
+			const el = event.currentTarget;
+			const clone = el.cloneNode(true) as HTMLElement;
+			clone.style.position = "absolute";
+			clone.style.top = "-9999px";
+			clone.style.left = "-9999px";
+			clone.style.width = `${el.offsetWidth}px`;
+			clone.style.backgroundColor = "hsl(var(--card))";
+			clone.style.borderRadius = "8px";
+			clone.style.opacity = "0.95";
+			document.body.appendChild(clone);
+			event.dataTransfer.setDragImage(clone, el.offsetWidth / 2, 20);
+			requestAnimationFrame(() => clone.remove());
 		},
 		[item.type],
 	);
@@ -137,17 +180,17 @@ function TemplatePaletteCard({ item }: TemplatePaletteCardProps) {
 			draggable
 			onDragStart={onDragStart}
 			className={cn(
-				"flex items-center gap-3 rounded-lg border bg-card p-3 cursor-grab",
+				"flex items-start gap-2.5 rounded-lg border bg-card px-2.5 py-2 cursor-grab",
 				"transition-all hover:shadow-md hover:border-emerald-400 active:cursor-grabbing",
 				"select-none border-emerald-200 dark:border-emerald-800",
 			)}
 		>
-			<span className="text-xl shrink-0">{item.icon}</span>
+			<span className="text-lg shrink-0 mt-0.5">{item.icon}</span>
 			<div className="min-w-0 flex-1">
-				<p className="text-sm font-medium truncate">{item.label}</p>
-				<p className="text-[11px] text-muted-foreground leading-tight truncate">{item.description}</p>
+				<p className="text-xs font-semibold leading-snug">{item.label}</p>
+				<p className="text-[10px] text-muted-foreground leading-snug line-clamp-2 mt-0.5">{item.description}</p>
 			</div>
-			<span className="text-[9px] text-muted-foreground/60 shrink-0">max {item.maxButtons}</span>
+			<span className="text-[9px] text-muted-foreground/60 shrink-0 mt-0.5">max {item.maxButtons}</span>
 		</div>
 	);
 }
@@ -162,11 +205,25 @@ interface TemplateElementPaletteCardProps {
 
 function TemplateElementPaletteCard({ item }: TemplateElementPaletteCardProps) {
 	const onDragStart = useCallback(
-		(event: DragEvent) => {
+		(event: DragEvent<HTMLDivElement>) => {
 			// Impede que o drag propague para containers pais
 			event.stopPropagation();
 			event.dataTransfer.setData(TEMPLATE_ELEMENT_MIME, item.type);
 			event.dataTransfer.effectAllowed = "copy";
+
+			// Cria drag ghost customizado para evitar capturar o fundo
+			const el = event.currentTarget;
+			const clone = el.cloneNode(true) as HTMLElement;
+			clone.style.position = "absolute";
+			clone.style.top = "-9999px";
+			clone.style.left = "-9999px";
+			clone.style.width = `${el.offsetWidth}px`;
+			clone.style.backgroundColor = "hsl(var(--card))";
+			clone.style.borderRadius = "6px";
+			clone.style.opacity = "0.95";
+			document.body.appendChild(clone);
+			event.dataTransfer.setDragImage(clone, el.offsetWidth / 2, 15);
+			requestAnimationFrame(() => clone.remove());
 		},
 		[item.type],
 	);
@@ -176,14 +233,14 @@ function TemplateElementPaletteCard({ item }: TemplateElementPaletteCardProps) {
 			draggable
 			onDragStart={onDragStart}
 			className={cn(
-				"flex items-center gap-2 rounded-md border bg-card p-2 cursor-grab",
+				"flex items-center gap-2 rounded-md border bg-card px-2 py-1.5 cursor-grab",
 				"transition-all hover:shadow-sm hover:border-emerald-400 active:cursor-grabbing",
-				"select-none text-sm",
+				"select-none",
 			)}
 		>
-			<span className="text-base shrink-0">{item.icon}</span>
-			<div className="min-w-0">
-				<p className="text-xs font-medium truncate">{item.label}</p>
+			<span className="text-sm shrink-0">{item.icon}</span>
+			<div className="min-w-0 flex-1">
+				<p className="text-[11px] font-medium leading-snug">{item.label}</p>
 			</div>
 		</div>
 	);
@@ -226,7 +283,7 @@ export function NodePalette({ onAddNode, channelType }: NodePaletteProps) {
 	const buttonTemplateNode = isInstagram ? paletteItems.find((i) => i.type === "interactive_message") : null;
 
 	return (
-		<div className="w-[220px] shrink-0 rounded-lg border bg-background flex flex-col">
+		<div className="w-[240px] shrink-0 rounded-lg border bg-background flex flex-col isolate overflow-hidden">
 			<div className="px-3 py-2.5 border-b">
 				<p className="text-sm font-semibold">Blocos</p>
 				<p className="text-[11px] text-muted-foreground">Arraste para o canvas</p>

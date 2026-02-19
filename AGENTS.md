@@ -18,6 +18,8 @@ NUNA RODE prisma db pull
 10. Front: linguagem clara, sem termos técnicos
 11. se precisa que ochatwit/chatwoot modifique alguma coisa colque em /home/wital/chatwitv4.10/chatwitdocs/chatwit-contrato-async-30s.md (a equipe deles vai verificar)
 12. criou migração o prisma nao atualizou deleta node_modules depois instala com pnpm que ele reconhece e NUNCA RODE prisma db pull
+13. Context7 MCP: Always use Context7 MCP when I need library/API documentation, code generation, setup or configuration steps without me having to explicitly ask.
+14. Antigravity MCP Config: Global configuration for Antigravity MCP servers is located at `/home/wital/.gemini/antigravity/mcp_config.json`. Use this file to add custom MCP servers like Context7 manually if not present in the project's `.mcp.json`.
 
 ## Migrations (OBRIGATÓRIO)
 

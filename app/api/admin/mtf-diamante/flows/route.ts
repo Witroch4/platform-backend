@@ -151,6 +151,17 @@ export async function POST(request: NextRequest) {
 			return NextResponse.json({ success: false, error: "Acesso negado a esta caixa" }, { status: 403 });
 		}
 
+		// Verificar nome único por inbox
+		const existingFlow = await getPrismaInstance().flow.findFirst({
+			where: { inboxId, name: { equals: name, mode: "insensitive" } },
+		});
+		if (existingFlow) {
+			return NextResponse.json(
+				{ success: false, error: `Já existe um flow com o nome "${name}" nesta caixa.` },
+				{ status: 409 },
+			);
+		}
+
 		// Criar novo flow
 		const flow = await getPrismaInstance().flow.create({
 			data: {

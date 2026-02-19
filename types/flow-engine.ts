@@ -26,7 +26,8 @@ export type FlowNodeType =
 	| "TRANSFER"
 	| "REACTION"
 	| "QUICK_REPLIES"
-	| "CAROUSEL";
+	| "CAROUSEL"
+	| "CHATWIT_ACTION";
 
 // =============================================================================
 // SESSION
@@ -255,6 +256,13 @@ export interface ConditionConfig {
 // =============================================================================
 // HTTP REQUEST NODE
 // =============================================================================
+
+export interface ChatwitActionConfig {
+	actionType: "resolve_conversation" | "assign_agent" | "snooze_conversation" | "add_label" | "remove_label";
+	assigneeId?: string;
+	snoozeUntil?: string;
+	labels?: string[];
+}
 
 export interface HttpRequestConfig {
 	method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";

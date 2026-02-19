@@ -74,9 +74,9 @@ async function apiRequest<T = any>(
 			error instanceof MtfError
 				? error
 				: new MtfError(error instanceof Error ? error.message : "Erro desconhecido na API", {
-						context: context.operation || `API ${options.method || "GET"} ${endpoint}`,
-						cause: error instanceof Error ? error : undefined,
-					});
+					context: context.operation || `API ${options.method || "GET"} ${endpoint}`,
+					cause: error instanceof Error ? error : undefined,
+				});
 
 		// Log the error with additional context
 		logError(apiError, {
@@ -596,6 +596,30 @@ export const buttonReactionsApi = {
 			},
 			{ operation: `Delete Button Reaction ${reactionId}` },
 		);
+	},
+};
+
+// Chatwit Agents API
+export const chatwitAgentsApi = {
+	getAll: async (): Promise<any[]> => {
+		const response = await apiRequest<any>(
+			"/inbox-view?dataType=chatwitAgents",
+			{},
+			{ operation: "Fetch Chatwit Agents" },
+		);
+		return response.chatwitAgents || [];
+	},
+};
+
+// Chatwit Labels API
+export const chatwitLabelsApi = {
+	getAll: async (): Promise<Array<{ title: string; color: string }>> => {
+		const response = await apiRequest<any>(
+			"/inbox-view?dataType=chatwitLabels",
+			{},
+			{ operation: "Fetch Chatwit Labels" },
+		);
+		return response.chatwitLabels || [];
 	},
 };
 

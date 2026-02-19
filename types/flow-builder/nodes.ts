@@ -144,6 +144,31 @@ export interface EndConversationNodeData extends FlowNodeDataBase {
 // =============================================================================
 
 /**
+ * Etiqueta do Chatwit com cor para exibição no canvas e execução
+ */
+export interface ChatwitLabel {
+	title: string;
+	color: string;
+}
+
+/**
+ * Dados específicos para nó de ação do Chatwit
+ */
+export interface ChatwitActionNodeData extends FlowNodeDataBase {
+	actionType: "resolve_conversation" | "assign_agent" | "snooze_conversation" | "add_label" | "remove_label";
+	assigneeId?: string;
+	/** Nome do agente para exibição no canvas */
+	assigneeName?: string;
+	snoozeUntil?: string;
+	/** Etiquetas a adicionar/remover, com cor para exibição no canvas */
+	labels?: ChatwitLabel[];
+}
+
+// =============================================================================
+// LOGIC NODES
+// =============================================================================
+
+/**
  * Dados específicos para nó de delay/espera
  */
 export interface DelayNodeData extends FlowNodeDataBase {
@@ -342,4 +367,5 @@ export type FlowNodeData =
 	| ButtonTemplateNodeData
 	| CouponTemplateNodeData
 	| CallTemplateNodeData
-	| UrlTemplateNodeData;
+	| UrlTemplateNodeData
+	| ChatwitActionNodeData;

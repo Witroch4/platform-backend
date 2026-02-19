@@ -92,9 +92,58 @@ export async function GET(request: NextRequest) {
 
 		const prisma = getPrismaInstance();
 
+		// Early return: dataType=chatwitLabels → só busca etiquetas do Chatwit
+		if (dataType === "chatwitLabels") {
+			try {
+				const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
+					where: { appUserId: session.user.id },
+					select: { chatwitAccountId: true, chatwitAccessToken: true },
+				});
+
+				if (!usuarioChatwit?.chatwitAccountId || !usuarioChatwit?.chatwitAccessToken) {
+					return NextResponse.json({ chatwitLabels: [] });
+				}
+
+				const baseUrl = process.env.CHATWIT_BASE_URL;
+				if (!baseUrl) {
+					return NextResponse.json({ chatwitLabels: [] });
+				}
+
+				const res = await fetch(
+					`${baseUrl}/api/v1/accounts/${usuarioChatwit.chatwitAccountId}/labels`,
+					{
+						method: "GET",
+						headers: {
+							api_access_token: usuarioChatwit.chatwitAccessToken,
+							"Content-Type": "application/json",
+						},
+						signal: AbortSignal.timeout(5000),
+					},
+				);
+
+				if (!res.ok) {
+					console.warn(`[CHATWIT LABELS] API error: ${res.status} ${res.statusText}`);
+					return NextResponse.json({ chatwitLabels: [] });
+				}
+
+				const json = await res.json();
+				// A API do Chatwoot retorna { payload: [...] }
+				const rawLabels: any[] = Array.isArray(json) ? json : json.payload || [];
+				const chatwitLabels = rawLabels.map((l: any) => ({
+					title: l.title || l.name || "",
+					color: l.color || "#6B7280",
+				}));
+
+				return NextResponse.json({ chatwitLabels });
+			} catch (err) {
+				console.error("[CHATWIT LABELS] Falha ao buscar etiquetas:", err);
+				return NextResponse.json({ chatwitLabels: [] });
+			}
+		}
+
 		// 2) DB em paralelo (SELECT minimal + paginação)
 		const dbStart = performance.now();
-		const [variaveisData, caixasData, interactiveMessages, apiKeys, buttonReactions, allAssistants] = await Promise.all(
+		const [variaveisData, caixasData, interactiveMessages, apiKeys, buttonReactions, allAssistants, chatwitAgents] = await Promise.all(
 			[
 				// Variáveis
 				prisma.mtfDiamanteVariavel.findMany({
@@ -102,7 +151,7 @@ export async function GET(request: NextRequest) {
 					orderBy: { chave: "asc" },
 				}),
 
-				// Caixas/Inboxes - buscar apenas do usuário logado
+				// 5. CAIXAS (ChatwitInboxes) + AGENTES DIALOGFLOW + AI ASSISTANTS
 				(async () => {
 					const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
 						where: { appUserId: session.user.id },
@@ -153,117 +202,117 @@ export async function GET(request: NextRequest) {
 				// Mensagens interativas (sempre buscar se temos inboxId)
 				inboxId
 					? prisma.template.findMany({
-							where: {
-								inboxId: inboxId,
-								type: "INTERACTIVE_MESSAGE",
-								interactiveContent: {
-									isNot: null,
-								},
+						where: {
+							inboxId: inboxId,
+							type: "INTERACTIVE_MESSAGE",
+							interactiveContent: {
+								isNot: null,
 							},
-							orderBy: { createdAt: "desc" },
-							take: 100, // paginação para não estourar payload
-							select: {
-								id: true,
-								name: true, // v2
-								type: true,
-								// Campos de compatibilidade v1 (se existirem)
-								simpleReplyText: true, // pode ser usado como 'texto'
-								// Relations para conteúdo interativo
-								interactiveContent: {
-									select: {
-										id: true,
-										header: {
-											select: {
-												type: true,
-												content: true,
-											},
+						},
+						orderBy: { createdAt: "desc" },
+						take: 100, // paginação para não estourar payload
+						select: {
+							id: true,
+							name: true, // v2
+							type: true,
+							// Campos de compatibilidade v1 (se existirem)
+							simpleReplyText: true, // pode ser usado como 'texto'
+							// Relations para conteúdo interativo
+							interactiveContent: {
+								select: {
+									id: true,
+									header: {
+										select: {
+											type: true,
+											content: true,
 										},
-										body: {
-											select: {
-												text: true,
-											},
+									},
+									body: {
+										select: {
+											text: true,
 										},
-										footer: {
-											select: {
-												text: true,
-											},
+									},
+									footer: {
+										select: {
+											text: true,
 										},
-										actionReplyButton: {
-											select: {
-												buttons: true,
-											},
+									},
+									actionReplyButton: {
+										select: {
+											buttons: true,
 										},
-										actionCtaUrl: {
-											select: {
-												displayText: true,
-												url: true,
-											},
+									},
+									actionCtaUrl: {
+										select: {
+											displayText: true,
+											url: true,
 										},
-										actionList: {
-											select: {
-												buttonText: true,
-												sections: true,
-											},
+									},
+									actionList: {
+										select: {
+											buttonText: true,
+											sections: true,
 										},
-										actionFlow: {
-											select: {
-												flowId: true,
-												flowCta: true,
-												flowMode: true,
-											},
+									},
+									actionFlow: {
+										select: {
+											flowId: true,
+											flowCta: true,
+											flowMode: true,
 										},
-										actionLocationRequest: {
-											select: {
-												requestText: true,
-											},
+									},
+									actionLocationRequest: {
+										select: {
+											requestText: true,
 										},
 									},
 								},
-								createdAt: true,
 							},
-						})
+							createdAt: true,
+						},
+					})
 					: [],
 
 				// API Keys (se for admin)
 				session.user.role === "ADMIN" || session.user.role === "SUPERADMIN"
 					? prisma.apiKey.findMany({
-							where: { ownerId: session.user.id },
-							select: {
-								id: true,
-								label: true,
-								tokenPrefix: true,
-								tokenSuffix: true,
-								active: true,
-								createdAt: true,
-							},
-							orderBy: { createdAt: "desc" },
-							take: 50,
-						})
+						where: { ownerId: session.user.id },
+						select: {
+							id: true,
+							label: true,
+							tokenPrefix: true,
+							tokenSuffix: true,
+							active: true,
+							createdAt: true,
+						},
+						orderBy: { createdAt: "desc" },
+						take: 50,
+					})
 					: [],
 
 				// Reações de botões (se temos inboxId)
 				inboxId
 					? prisma.mapeamentoBotao.findMany({
-							where: {
-								inboxId: inboxId,
-								inbox: {
-									usuarioChatwit: {
-										appUserId: session.user.id,
-									},
+						where: {
+							inboxId: inboxId,
+							inbox: {
+								usuarioChatwit: {
+									appUserId: session.user.id,
 								},
 							},
-							select: {
-								id: true,
-								buttonId: true,
-								inboxId: true,
-								actionType: true,
-								actionPayload: true,
-								description: true,
-								createdAt: true,
-								updatedAt: true,
-							},
-							orderBy: { createdAt: "asc" },
-						})
+						},
+						select: {
+							id: true,
+							buttonId: true,
+							inboxId: true,
+							actionType: true,
+							actionPayload: true,
+							description: true,
+							createdAt: true,
+							updatedAt: true,
+						},
+						orderBy: { createdAt: "asc" },
+					})
 					: [],
 
 				// Buscar todos os assistentes de IA disponíveis do usuário
@@ -278,6 +327,65 @@ export async function GET(request: NextRequest) {
 					},
 					orderBy: { name: "asc" },
 				}),
+
+				// 7. CHATWIT AGENTS (Fetch agents via Chatwit API)
+				(async () => {
+					try {
+						const usuarioChatwit = await prisma.usuarioChatwit.findUnique({
+							where: { appUserId: session.user.id },
+							select: {
+								chatwitAccountId: true,
+								chatwitAccessToken: true,
+							},
+						});
+
+						if (!usuarioChatwit?.chatwitAccountId || !usuarioChatwit?.chatwitAccessToken) {
+							console.warn("[CHATWIT AGENTS] Missing chatwitAccountId or chatwitAccessToken");
+							return [];
+						}
+
+						const baseUrl = process.env.CHATWIT_BASE_URL;
+						if (!baseUrl) {
+							console.warn("[CHATWIT AGENTS] CHATWIT_BASE_URL not configured");
+							return [];
+						}
+
+						// GET /api/v1/accounts/{accountId}/agents
+						const response = await fetch(
+							`${baseUrl}/api/v1/accounts/${usuarioChatwit.chatwitAccountId}/agents`,
+							{
+								method: "GET",
+								headers: {
+									api_access_token: usuarioChatwit.chatwitAccessToken,
+									"Content-Type": "application/json",
+								},
+								// Timeout de 5 segundos para não travar a requisição
+								signal: AbortSignal.timeout(5000),
+							},
+						);
+
+						if (!response.ok) {
+							console.warn(`[CHATWIT AGENTS] API error: ${response.status} ${response.statusText}`);
+							return [];
+						}
+
+						const agents = await response.json();
+						// Normalizar resposta (pode ser array ou objeto com array)
+						const agentList = Array.isArray(agents) ? agents : agents.data || [];
+
+						return agentList.map((agent: any) => ({
+							id: agent.id,
+							name: agent.name || agent.available_name || "Agente",
+							email: agent.email,
+							role: agent.role || "agent",
+							availabilityStatus: agent.availability_status,
+							thumbnail: agent.thumbnail,
+						}));
+					} catch (error) {
+						console.error("[CHATWIT AGENTS] Failed to fetch agents:", error);
+						return [];
+					}
+				})(),
 			],
 		);
 		const dbEnd = performance.now();
@@ -370,6 +478,7 @@ export async function GET(request: NextRequest) {
 			caixas: caixasProcessadas,
 			interactiveMessages,
 			buttonReactions: formattedReactions,
+			chatwitAgents: chatwitAgents || [], // 🔥 Retornando a lista global de agentes
 			apiKeys,
 			timestamp: new Date().toISOString(),
 			inboxId,
@@ -383,7 +492,7 @@ export async function GET(request: NextRequest) {
 			try {
 				const ttl = 60 + Math.floor(Math.random() * 20);
 				await redis.setex(cacheKey, ttl, bodyString);
-			} catch {}
+			} catch { }
 		}
 
 		const tEnd = performance.now();

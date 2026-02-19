@@ -270,6 +270,23 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 			return NextResponse.json({ success: false, error: "Flow não encontrado ou acesso negado" }, { status: 404 });
 		}
 
+		// Verificar nome único por inbox (ignorar o próprio flow)
+		if (validation.data.name) {
+			const conflicting = await getPrismaInstance().flow.findFirst({
+				where: {
+					inboxId: flow.inboxId,
+					name: { equals: validation.data.name, mode: "insensitive" },
+					id: { not: flowId },
+				},
+			});
+			if (conflicting) {
+				return NextResponse.json(
+					{ success: false, error: `Já existe um flow com o nome "${validation.data.name}" nesta caixa.` },
+					{ status: 409 },
+				);
+			}
+		}
+
 		// Atualizar flow
 		const updatedFlow = await getPrismaInstance().flow.update({
 			where: { id: flowId },

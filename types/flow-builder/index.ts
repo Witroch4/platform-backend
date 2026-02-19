@@ -62,6 +62,7 @@ export {
 	type WhatsAppTemplateNodeData,
 	type ButtonTemplateNodeData,
 	type CouponTemplateNodeData,
+	type ChatwitActionNodeData,
 	type CallTemplateNodeData,
 	type UrlTemplateNodeData,
 	type FlowNodeData,

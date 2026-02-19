@@ -43,6 +43,8 @@ export enum FlowNodeType {
 	// Actions
 	HANDOFF = "handoff",
 	ADD_TAG = "add_tag",
+	REMOVE_TAG = "remove_tag",
+	CHATWIT_ACTION = "chatwit_action", // Nova ação
 	END_CONVERSATION = "end",
 
 	// Logic

@@ -228,7 +228,16 @@ export function useFlowCanvas(inboxId: string | null, options: UseFlowCanvasOpti
 				});
 				console.log("[useFlowCanvas] Canvas carregado - nós:", canvas.nodes.length);
 			} else {
-				console.log("[useFlowCanvas] Flow novo sem canvas - mantendo vazio");
+				// Flow novo sem canvas: inicializar START node com o nome do flow
+				const flowName = flowResponse.data?.name;
+				if (flowName) {
+					setNodes((nds) =>
+						nds.map((node) =>
+							node.type === "start" ? { ...node, data: { ...node.data, label: flowName } } : node,
+						),
+					);
+				}
+				console.log("[useFlowCanvas] Flow novo sem canvas - START inicializado com nome:", flowName);
 			}
 			initializedRef.current = true;
 			return;
@@ -390,6 +399,31 @@ export function useFlowCanvas(inboxId: string | null, options: UseFlowCanvasOpti
 			setEdges((eds) => eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId));
 		},
 		[setNodes, setEdges],
+	);
+
+	// Update flow name via PATCH (sincroniza quando label do START muda)
+	const updateFlowName = useCallback(
+		async (name: string): Promise<boolean> => {
+			if (!flowId || !name.trim()) return false;
+			try {
+				const res = await fetch(`/api/admin/mtf-diamante/flows/${flowId}`, {
+					method: "PATCH",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ name: name.trim() }),
+				});
+				if (!res.ok) {
+					const err = await res.json();
+					throw new Error(err.error || "Falha ao renomear flow");
+				}
+				// Atualizar cache SWR do flow
+				await mutateFlow();
+				return true;
+			} catch (err) {
+				console.error("[useFlowCanvas] updateFlowName error:", err);
+				throw err;
+			}
+		},
+		[flowId, mutateFlow],
 	);
 
 	// Delete edge
@@ -622,6 +656,7 @@ export function useFlowCanvas(inboxId: string | null, options: UseFlowCanvasOpti
 		resetCanvas,
 		loadCanvas, // Nova função para carregar canvas manualmente
 		mutate: mutateCanvas,
+		updateFlowName,
 
 		// Export/Import operations
 		exportFlowAsJson,

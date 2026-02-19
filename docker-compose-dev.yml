@@ -10,7 +10,7 @@ services:
       # Informa ao server.js que estamos dentro do Docker
       RUN_IN_DOCKER: "true"
 
-      # Dev watch
+      # Dev watch (Essencial para hot reload no Windows/WSL)
       WATCHPACK_POLLING: "true"
       CHOKIDAR_USEPOLLING: "true"
       FAST_REFRESH: "true"
@@ -21,11 +21,10 @@ services:
       REDIS_HOST: "redis"
       REDIS_PORT: "6379"
 
-      # Ngrok (se ainda quiser no app)
+      # Ngrok
       NGROK_AUTHTOKEN: "2q8n28IDz0mMwNr02MlHnLGsbKE_6ohF5ifRMgFBW867Mk5Zi"
     ports:
       - "3002:3002"
-
     volumes:
       - .:/app
       - node_modules:/app/node_modules
@@ -33,7 +32,8 @@ services:
     command: sh -c "pnpm run ${NEXT_SCRIPT:-dev}"
     networks:
       - minha_rede
-    restart: unless-stopped
+    # Alterado para não iniciar automaticamente
+    restart: "no"
     depends_on:
       - redis
       - postgres
@@ -59,7 +59,8 @@ services:
       - ./temp:/app/temp
     networks:
       - minha_rede
-    restart: unless-stopped
+    # Alterado para não iniciar automaticamente
+    restart: "no"
     depends_on:
       - redis
       - postgres
@@ -76,7 +77,8 @@ services:
       - redis_data:/data
     networks:
       - minha_rede
-    restart: unless-stopped
+    # Alterado para não iniciar automaticamente
+    restart: "no"
 
   # ───────────────────────────────────────────────────────
   # Postgres (pgvector)
@@ -94,7 +96,8 @@ services:
       - pg_data:/var/lib/postgresql/data
     networks:
       - minha_rede
-    restart: unless-stopped
+    # Alterado para não iniciar automaticamente
+    restart: "no"
 
 volumes:
   # Para pnpm, manter node_modules como volume nomeado para cache de dependências

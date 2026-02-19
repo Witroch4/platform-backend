@@ -2,7 +2,11 @@
 {
 	"extends": "./tsconfig.base.json",
 	"compilerOptions": {
-		"lib": ["dom", "dom.iterable", "esnext"],
+		"lib": [
+			"dom",
+			"dom.iterable",
+			"esnext"
+		],
 		"jsx": "preserve",
 		/* preset Next 15 — ESM puro */
 		"module": "esnext",
@@ -19,7 +23,11 @@
 		"esModuleInterop": true,
 		"isolatedModules": true,
 		"baseUrl": ".",
-		"paths": { "@/*": ["./*"] }
+		"paths": {
+			"@/*": [
+				"./*"
+			]
+		}
 	},
 	"include": [
 		"next-env.d.ts",

@@ -686,6 +686,9 @@ export class FlowExecutor {
 			case "TEMPLATE":
 				return this.handleTemplate(node, flow, bridge, directlyAfterButton);
 
+			case "CHATWIT_ACTION":
+				return this.handleChatwitAction(node, flow);
+
 			default:
 				log.warn("[FlowExecutor] Tipo de nó desconhecido", { nodeType });
 				return this.findNextNodeId(flow, node);
@@ -1311,6 +1314,72 @@ export class FlowExecutor {
 			default:
 				return false;
 		}
+	}
+
+
+
+	// ---------------------------------------------------------------------------
+	// Chatwit Actions
+	// ---------------------------------------------------------------------------
+
+	private async handleChatwitAction(node: RuntimeFlowNode, flow: RuntimeFlow): Promise<string> {
+		const config = node.config as {
+			actionType?: string;
+			assigneeId?: string;
+			labels?: Array<{ title: string; color: string }> | string[];
+		};
+
+		const actionType = config.actionType || "resolve_conversation";
+		const conversationId = this.context.conversationId;
+
+		if (!conversationId) {
+			log.warn("[FlowExecutor] ChatwitAction: conversationId não encontrado", { nodeId: node.id });
+			return this.findNextNodeId(flow, node);
+		}
+
+		try {
+			switch (actionType) {
+				case "resolve_conversation":
+					await this.delivery.resolveConversation(this.context);
+					log.info("[FlowExecutor] Conversa resolvida via nó", { conversationId });
+					break;
+
+				case "assign_agent":
+					if (config.assigneeId) {
+						await this.delivery.assignAgent(this.context, Number(config.assigneeId));
+						log.info("[FlowExecutor] Agente atribuído via nó", { conversationId, agentId: config.assigneeId });
+					}
+					break;
+
+				case "add_label":
+					if (config.labels && config.labels.length > 0) {
+						// Suporta tanto string[] (legado) quanto {title, color}[] (novo formato com cor)
+						const labelTitles = (config.labels as any[]).map((l) =>
+							typeof l === "string" ? l : l.title,
+						);
+						await this.delivery.addLabels(this.context, labelTitles);
+						log.info("[FlowExecutor] Etiquetas adicionadas via nó", { conversationId, labels: labelTitles });
+					}
+					break;
+
+				case "remove_label":
+					// TODO: Implementar removeLabels no delivery service se necessário
+					// Por enquanto, log apenas
+					log.warn("[FlowExecutor] remove_label não implementado no delivery service", { conversationId });
+					break;
+
+				default:
+					log.warn("[FlowExecutor] Tipo de ação Chatwit desconhecido", { actionType });
+			}
+		} catch (error) {
+			log.error("[FlowExecutor] Erro ao executar ação Chatwit", {
+				nodeId: node.id,
+				actionType,
+				error: error instanceof Error ? error.message : String(error),
+			});
+		}
+
+		return this.findNextNodeId(flow, node);
 	}
 
 	private pushLog(

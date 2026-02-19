@@ -42,6 +42,7 @@ import {
 } from "./nodes/ReactionNodes";
 import { QuickRepliesNode } from "./nodes/QuickRepliesNode";
 import { CarouselNode } from "./nodes/CarouselNode";
+import { ChatwitActionNode } from "./nodes/ChatwitActionNode";
 import { TemplateNode } from "./nodes/TemplateNode";
 import {
 	WhatsAppTemplateNode,
@@ -71,6 +72,7 @@ const nodeTypes: NodeTypes = {
 	[FlowNodeType.END_CONVERSATION]: EndConversationNode as unknown as NodeTypes[string],
 	[FlowNodeType.QUICK_REPLIES]: QuickRepliesNode as unknown as NodeTypes[string],
 	[FlowNodeType.CAROUSEL]: CarouselNode as unknown as NodeTypes[string],
+	[FlowNodeType.CHATWIT_ACTION]: ChatwitActionNode as unknown as NodeTypes[string],
 	// Legacy template (deprecated - use WHATSAPP_TEMPLATE)
 	[FlowNodeType.TEMPLATE]: TemplateNode as unknown as NodeTypes[string],
 	// Template WhatsApp Unificado (novo)
