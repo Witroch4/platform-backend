@@ -62,6 +62,8 @@ export interface TemplateHeader {
 	content?: string;
 	/** URL da mídia (para IMAGE/VIDEO/DOCUMENT) */
 	mediaUrl?: string;
+	/** Handle da Meta API para mídia (obtido após upload) */
+	mediaHandle?: string;
 	/** Variáveis extraídas do header */
 	variables?: string[];
 }

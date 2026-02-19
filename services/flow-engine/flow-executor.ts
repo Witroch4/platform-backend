@@ -1322,6 +1322,14 @@ export class FlowExecutor {
 	// Chatwit Actions
 	// ---------------------------------------------------------------------------
 
+	/**
+	 * Executa ações Chatwit (resolve, assign, add/remove label).
+	 *
+	 * PIPELINE UNIFICADO: Usa o dispatcher `deliver()` para consistência com outros nós.
+	 * Isso garante retry automático (3 tentativas + exponential backoff).
+	 *
+	 * @see docs/interative_message_flow_builder.md §ChatwitActionNode
+	 */
 	private async handleChatwitAction(node: RuntimeFlowNode, flow: RuntimeFlow): Promise<string> {
 		const config = node.config as {
 			actionType?: string;
@@ -1329,7 +1337,11 @@ export class FlowExecutor {
 			labels?: Array<{ title: string; color: string }> | string[];
 		};
 
-		const actionType = config.actionType || "resolve_conversation";
+		const actionType = (config.actionType || "resolve_conversation") as
+			| "resolve_conversation"
+			| "assign_agent"
+			| "add_label"
+			| "remove_label";
 		const conversationId = this.context.conversationId;
 
 		if (!conversationId) {
@@ -1337,45 +1349,34 @@ export class FlowExecutor {
 			return this.findNextNodeId(flow, node);
 		}
 
-		try {
-			switch (actionType) {
-				case "resolve_conversation":
-					await this.delivery.resolveConversation(this.context);
-					log.info("[FlowExecutor] Conversa resolvida via nó", { conversationId });
-					break;
+		// Normaliza labels: suporta tanto string[] (legado) quanto {title, color}[] (novo formato)
+		let labelTitles: string[] | undefined;
+		if (config.labels && config.labels.length > 0) {
+			labelTitles = (config.labels as Array<string | { title: string }>).map((l) =>
+				typeof l === "string" ? l : l.title,
+			);
+		}
 
-				case "assign_agent":
-					if (config.assigneeId) {
-						await this.delivery.assignAgent(this.context, Number(config.assigneeId));
-						log.info("[FlowExecutor] Agente atribuído via nó", { conversationId, agentId: config.assigneeId });
-					}
-					break;
+		// Usa o dispatcher unificado para consistência com outros nós (retry automático)
+		const result = await this.delivery.deliver(this.context, {
+			type: "chatwit_action",
+			actionType,
+			assigneeId: config.assigneeId ? Number(config.assigneeId) : undefined,
+			labels: labelTitles,
+		});
 
-				case "add_label":
-					if (config.labels && config.labels.length > 0) {
-						// Suporta tanto string[] (legado) quanto {title, color}[] (novo formato com cor)
-						const labelTitles = (config.labels as any[]).map((l) =>
-							typeof l === "string" ? l : l.title,
-						);
-						await this.delivery.addLabels(this.context, labelTitles);
-						log.info("[FlowExecutor] Etiquetas adicionadas via nó", { conversationId, labels: labelTitles });
-					}
-					break;
-
-				case "remove_label":
-					// TODO: Implementar removeLabels no delivery service se necessário
-					// Por enquanto, log apenas
-					log.warn("[FlowExecutor] remove_label não implementado no delivery service", { conversationId });
-					break;
-
-				default:
-					log.warn("[FlowExecutor] Tipo de ação Chatwit desconhecido", { actionType });
-			}
-		} catch (error) {
+		if (result.success) {
+			log.info("[FlowExecutor] Ação Chatwit executada via pipeline unificado", {
+				conversationId,
+				actionType,
+				attempts: result.attempts,
+			});
+		} else {
 			log.error("[FlowExecutor] Erro ao executar ação Chatwit", {
 				nodeId: node.id,
 				actionType,
-				error: error instanceof Error ? error.message : String(error),
+				error: result.error,
+				attempts: result.attempts,
 			});
 		}
 

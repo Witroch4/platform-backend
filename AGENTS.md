@@ -381,6 +381,16 @@ DATABASE_URL | REDIS_URL | NEXTAUTH_SECRET | OPENAI_API_KEY
 
   O pipeline de classificação (alias/embedding → bands) SEMPRE tem prioridade sobre FlowOrchestrator default.
 
+- **ChatwitActionNode — Pipeline Unificado**: O nó `CHATWIT_ACTION` (resolve, assign, add/remove label) agora usa o dispatcher `deliver()` padrão do pipeline, igual aos outros nós (TEXT, MEDIA, INTERACTIVE). Isso garante:
+  1. **Retry automático**: 3 tentativas com exponential backoff (antes era 1 tentativa só)
+  2. **Logs consistentes**: Mesma estrutura de log de sucesso/erro dos outros nós
+  3. **`remove_label` funciona**: Antes era `// TODO`, agora implementado via DELETE com retry
+
+  **Arquivos afetados:**
+  - `types/flow-engine.ts`: `DeliveryPayload.type` inclui `"chatwit_action"`
+  - `services/flow-engine/chatwit-delivery-service.ts`: `deliver()` dispatcher + `deliverChatwitAction()` + `postChatwitAction()` com retry
+  - `services/flow-engine/flow-executor.ts`: `handleChatwitAction()` usa `deliver()` em vez de chamadas diretas
+
 ## Portainer MCP
 
 **Regra crítica**: as ferramentas de alto nível (`listStacks`, `createStack`, etc.) são para **Edge Stacks** — não funcionam no ambiente Swarm normal (retornam 503). Usar sempre Portainer [dockerProxy]

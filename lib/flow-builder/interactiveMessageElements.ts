@@ -86,6 +86,7 @@ type NodeDataWithElements = {
 		content?: string;
 		text?: string;
 		mediaUrl?: string;
+		mediaHandle?: string;
 		variables?: string[];
 	};
 	body?: string | { text?: string; variables?: string[] };
@@ -165,19 +166,37 @@ export function getInteractiveMessageElements(
 	// 2) From legacy inline fields
 	const legacyElements: InteractiveMessageElement[] = [];
 
-	// Header pode ser string ou objeto { type, content, text, mediaUrl, variables }
+	// Header pode ser string ou objeto { type, content, text, mediaUrl, mediaHandle, variables }
 	if (d.header) {
 		if (typeof d.header === "string") {
 			legacyElements.push({ id: safeId("header_text"), type: "header_text", text: d.header });
 		} else if (d.header.type === "IMAGE" && d.header.mediaUrl) {
-			legacyElements.push({ id: safeId("header_image"), type: "header_image", url: d.header.mediaUrl, caption: "" });
+			legacyElements.push({
+				id: safeId("header_image"),
+				type: "header_image",
+				url: d.header.mediaUrl,
+				caption: "",
+				mediaHandle: d.header.mediaHandle || undefined,
+			});
 		} else if (d.header.type === "TEXT" && (d.header.content || d.header.text)) {
 			legacyElements.push({ id: safeId("header_text"), type: "header_text", text: d.header.content || d.header.text || "" });
 		} else if (d.header.type === "VIDEO" && d.header.mediaUrl) {
 			// Video também usa header_image internamente (pode ser renomeado no futuro)
-			legacyElements.push({ id: safeId("header_image"), type: "header_image", url: d.header.mediaUrl, caption: "" });
+			legacyElements.push({
+				id: safeId("header_image"),
+				type: "header_image",
+				url: d.header.mediaUrl,
+				caption: "",
+				mediaHandle: d.header.mediaHandle || undefined,
+			});
 		} else if (d.header.type === "DOCUMENT" && d.header.mediaUrl) {
-			legacyElements.push({ id: safeId("header_image"), type: "header_image", url: d.header.mediaUrl, caption: "" });
+			legacyElements.push({
+				id: safeId("header_image"),
+				type: "header_image",
+				url: d.header.mediaUrl,
+				caption: "",
+				mediaHandle: d.header.mediaHandle || undefined,
+			});
 		}
 	}
 

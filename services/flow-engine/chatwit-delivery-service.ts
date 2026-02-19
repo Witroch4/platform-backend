@@ -88,9 +88,73 @@ export class ChatwitDeliveryService {
 					targetMessageId: payload.targetMessageId,
 				});
 				return this.deliverText(ctx, payload.emoji ?? "👍", false);
+			case "chatwit_action":
+				return this.deliverChatwitAction(ctx, payload);
 			default:
 				log.warn("[ChatwitDelivery] Tipo de payload desconhecido", { type: payload.type });
 				return { success: false, error: `Tipo desconhecido: ${payload.type}`, attempts: 0 };
+		}
+	}
+
+	/**
+	 * Entrega ação Chatwit (resolve, assign, add/remove label).
+	 * Usa retry logic padrão do pipeline para consistência com outros nós.
+	 */
+	async deliverChatwitAction(ctx: DeliveryContext, payload: DeliveryPayload): Promise<DeliveryResult> {
+		const actionType = payload.actionType || "resolve_conversation";
+		const targetId = ctx.conversationDisplayId || ctx.conversationId;
+
+		log.debug("[ChatwitDelivery] Executando ação Chatwit", {
+			actionType,
+			conversationId: ctx.conversationId,
+			assigneeId: payload.assigneeId,
+			labels: payload.labels,
+		});
+
+		switch (actionType) {
+			case "resolve_conversation":
+				return this.postChatwitAction(
+					ctx,
+					`/api/v1/accounts/${ctx.accountId}/conversations/${targetId}/toggle_status`,
+					{ status: "resolved" },
+					"resolve_conversation",
+				);
+
+			case "assign_agent":
+				if (!payload.assigneeId) {
+					log.warn("[ChatwitDelivery] assign_agent sem assigneeId", { conversationId: ctx.conversationId });
+					return { success: false, error: "assigneeId não fornecido", attempts: 0 };
+				}
+				return this.postChatwitAction(
+					ctx,
+					`/api/v1/accounts/${ctx.accountId}/conversations/${targetId}/assignments`,
+					{ assignee_id: payload.assigneeId },
+					"assign_agent",
+				);
+
+			case "add_label":
+				if (!payload.labels || payload.labels.length === 0) {
+					log.warn("[ChatwitDelivery] add_label sem labels", { conversationId: ctx.conversationId });
+					return { success: false, error: "labels não fornecidas", attempts: 0 };
+				}
+				return this.postChatwitAction(
+					ctx,
+					`/api/v1/accounts/${ctx.accountId}/conversations/${targetId}/labels`,
+					{ labels: payload.labels },
+					"add_label",
+				);
+
+			case "remove_label":
+				if (!payload.labels || payload.labels.length === 0) {
+					log.warn("[ChatwitDelivery] remove_label sem labels", { conversationId: ctx.conversationId });
+					return { success: false, error: "labels não fornecidas", attempts: 0 };
+				}
+				// Remove labels uma a uma (API Chatwit não suporta batch delete)
+				return this.removeLabelsBatch(ctx, targetId, payload.labels);
+
+			default:
+				log.warn("[ChatwitDelivery] Tipo de ação Chatwit desconhecido", { actionType });
+				return { success: false, error: `Tipo desconhecido: ${actionType}`, attempts: 0 };
 		}
 	}
 
@@ -252,6 +316,7 @@ export class ChatwitDeliveryService {
 
 	/**
 	 * Adicionar etiquetas a uma conversa.
+	 * @deprecated Use deliver(ctx, { type: 'chatwit_action', actionType: 'add_label', labels }) para retry automático.
 	 * @see https://www.chatwit.com/docs/api#add-labels
 	 */
 	async addLabels(ctx: DeliveryContext, labels: string[]): Promise<DeliveryResult> {
@@ -265,6 +330,124 @@ export class ChatwitDeliveryService {
 			log.error("[ChatwitDelivery] Falha ao adicionar etiquetas", { error: err.message, conversationId: ctx.conversationId, labels });
 			return { success: false, error: err.message, attempts: 1 };
 		}
+	}
+
+	/**
+	 * Remove etiquetas de uma conversa em batch.
+	 * API Chatwit usa DELETE individual, então iteramos com retry.
+	 */
+	private async removeLabelsBatch(
+		ctx: DeliveryContext,
+		conversationId: number | string,
+		labels: string[],
+	): Promise<DeliveryResult> {
+		let totalAttempts = 0;
+		const errors: string[] = [];
+
+		for (const label of labels) {
+			const result = await this.postChatwitAction(
+				ctx,
+				`/api/v1/accounts/${ctx.accountId}/conversations/${conversationId}/labels`,
+				{ labels: [label] },
+				"remove_label",
+				"DELETE",
+			);
+
+			totalAttempts += result.attempts;
+
+			if (!result.success) {
+				errors.push(`${label}: ${result.error}`);
+				// Continua tentando remover as outras labels
+			}
+		}
+
+		if (errors.length > 0) {
+			log.warn("[ChatwitDelivery] Algumas etiquetas não foram removidas", {
+				conversationId: ctx.conversationId,
+				errors,
+			});
+			return {
+				success: errors.length < labels.length, // Parcialmente bem sucedido
+				error: errors.join("; "),
+				attempts: totalAttempts,
+			};
+		}
+
+		return { success: true, attempts: totalAttempts };
+	}
+
+	/**
+	 * Executa ação Chatwit com retry logic (padrão do pipeline).
+	 * Reutiliza mesma lógica de retry de postMessage para consistência.
+	 */
+	private async postChatwitAction(
+		ctx: DeliveryContext,
+		url: string,
+		body: Record<string, unknown>,
+		actionName: string,
+		method: "POST" | "DELETE" = "POST",
+	): Promise<DeliveryResult> {
+		log.debug("[ChatwitDelivery] Executando ação", {
+			action: actionName,
+			url,
+			method,
+			conversationId: ctx.conversationId,
+		});
+
+		let lastError = "";
+		for (let attempt = 1; attempt <= RETRY_ATTEMPTS; attempt++) {
+			try {
+				if (method === "DELETE") {
+					await this.client.delete(url, { data: body });
+				} else {
+					await this.client.post(url, body);
+				}
+
+				log.debug("[ChatwitDelivery] Ação executada com sucesso", {
+					action: actionName,
+					conversationId: ctx.conversationId,
+					attempt,
+				});
+
+				return { success: true, attempts: attempt };
+			} catch (err) {
+				const axiosErr = err as AxiosError;
+				lastError = axiosErr.message;
+				const status = axiosErr.response?.status;
+
+				// Não tentar de novo para erros 4xx (exceto 429 rate limit)
+				if (status && status >= 400 && status < 500 && status !== 429) {
+					log.error("[ChatwitDelivery] Erro não-retriable na ação", {
+						action: actionName,
+						status,
+						message: lastError,
+						url,
+					});
+					return { success: false, error: lastError, attempts: attempt };
+				}
+
+				// Exponential backoff
+				if (attempt < RETRY_ATTEMPTS) {
+					const delay = RETRY_BASE_MS * Math.pow(2, attempt - 1);
+					log.warn("[ChatwitDelivery] Retry na ação", {
+						action: actionName,
+						attempt,
+						delay,
+						error: lastError,
+					});
+					await this.sleep(delay);
+				}
+			}
+		}
+
+		log.error("[ChatwitDelivery] Todas as tentativas falharam para ação", {
+			action: actionName,
+			url,
+			attempts: RETRY_ATTEMPTS,
+			lastError,
+		});
+
+		return { success: false, error: lastError, attempts: RETRY_ATTEMPTS };
 	}
 
 	private async postMessage(ctx: DeliveryContext, body: ChatwitMessagePayload): Promise<DeliveryResult> {

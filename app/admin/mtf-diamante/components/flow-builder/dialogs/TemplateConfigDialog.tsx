@@ -503,6 +503,7 @@ export function TemplateConfigDialog({
 	const [mode, setMode] = useState<"import" | "create">("create");
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [isRefreshing, setIsRefreshing] = useState(false);
+	const [isEditingApproved, setIsEditingApproved] = useState(false);
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedTemplate, setSelectedTemplate] = useState<WhatsAppTemplate | null>(null);
 
@@ -578,7 +579,7 @@ export function TemplateConfigDialog({
 		return status === "APPROVED" || status === "PENDING";
 	}, []);
 
-	const canEdit = !isFieldLocked(nodeData?.status);
+	const canEdit = !isFieldLocked(nodeData?.status) || isEditingApproved;
 
 	// Recuperar metaTemplateId do banco quando não está no node data
 	// (templates criados antes do fix que salvava metaTemplateId no node)
@@ -656,6 +657,12 @@ export function TemplateConfigDialog({
 		toast.success("Template duplicado como rascunho. Você pode editar e reenviar.");
 	}, [node, nodeData, templateName, onUpdateNodeData]);
 
+	// Função para ativar modo de edição de template aprovado
+	const handleEditApproved = useCallback(() => {
+		setIsEditingApproved(true);
+		toast.info("Modo de edição ativado. Após salvar, o template será reenviado para validação da Meta.");
+	}, []);
+
 	// Initialize form from node data
 	useEffect(() => {
 		if (!nodeData) return;
@@ -706,10 +713,11 @@ export function TemplateConfigDialog({
 		setRuntimeButtonParams((rawNodeData.runtimeButtonParams as Record<number, { couponCode?: string }>) || {});
 	}, [nodeData]);
 
-	// Reset selected template when dialog closes or mode changes
+	// Reset selected template and edit mode when dialog closes
 	useEffect(() => {
 		if (!open) {
 			setSelectedTemplate(null);
+			setIsEditingApproved(false);
 		}
 	}, [open]);
 
@@ -952,6 +960,7 @@ export function TemplateConfigDialog({
 								type: hType,
 								content: hType === "TEXT" ? hContent : undefined,
 								mediaUrl: ["IMAGE", "VIDEO", "DOCUMENT"].includes(hType) ? hMediaUrl : undefined,
+								mediaHandle: ["IMAGE", "VIDEO", "DOCUMENT"].includes(hType) ? (hMediaHandle || undefined) : undefined,
 								variables: hVars,
 							}
 						: undefined,
@@ -977,6 +986,7 @@ export function TemplateConfigDialog({
 			headerType,
 			headerContent,
 			headerMediaUrl,
+			headerMediaHandle,
 			bodyText,
 			footerText,
 			buttons,
@@ -1074,16 +1084,22 @@ export function TemplateConfigDialog({
 				});
 			}
 
-			// Submit to API
-			const response = await fetch("/api/admin/mtf-diamante/templates", {
-				method: "POST",
+			// Submit to API - Use PUT if editing an existing template
+			const isEditing = isEditingApproved && nodeData?.metaTemplateId;
+			const url = isEditing
+				? `/api/admin/mtf-diamante/templates/edit/${nodeData.metaTemplateId}`
+				: "/api/admin/mtf-diamante/templates";
+			const method = isEditing ? "PUT" : "POST";
+
+			const response = await fetch(url, {
+				method,
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify(payload),
 			});
 
 			if (!response.ok) {
 				const errorData = await response.json();
-				throw new Error(errorData.error || "Erro ao criar template");
+				throw new Error(errorData.error || (isEditing ? "Erro ao editar template" : "Erro ao criar template"));
 			}
 
 			const result = await response.json();
@@ -1195,7 +1211,12 @@ export function TemplateConfigDialog({
 
 			onUpdateNodeData(node.id, updateData);
 
-			toast.success("Template enviado para aprovação da Meta");
+			// Reset edit mode and show appropriate message
+			setIsEditingApproved(false);
+			toast.success(isEditing
+				? "Template atualizado e reenviado para validação da Meta"
+				: "Template enviado para aprovação da Meta"
+			);
 			onOpenChange(false);
 		} catch (error) {
 			console.error("Error submitting template:", error);
@@ -1205,6 +1226,8 @@ export function TemplateConfigDialog({
 		}
 	}, [
 		node,
+		nodeData?.metaTemplateId,
+		isEditingApproved,
 		validation,
 		templateName,
 		category,
@@ -1743,13 +1766,14 @@ export function TemplateConfigDialog({
 													)}
 												</div>
 												<Input
-													value={btn.text}
-													onChange={(e) => handleUpdateButton(idx, { text: e.target.value })}
-													onBlur={() => commitButtonUpdate(idx, { text: btn.text })}
+													value={btn.type === "COPY_CODE" ? COPY_CODE_BUTTON_TITLE : btn.text}
+													onChange={(e) => btn.type !== "COPY_CODE" && handleUpdateButton(idx, { text: e.target.value })}
+													onBlur={() => btn.type !== "COPY_CODE" && commitButtonUpdate(idx, { text: btn.text })}
 													placeholder="Texto do botão"
 													maxLength={25}
-													disabled={!canEdit}
-													className={cn("text-sm", !canEdit && "cursor-not-allowed")}
+													disabled={!canEdit || btn.type === "COPY_CODE"}
+													className={cn("text-sm", (!canEdit || btn.type === "COPY_CODE") && "cursor-not-allowed opacity-60")}
+													title={btn.type === "COPY_CODE" ? "Título fixo exigido pela Meta API" : undefined}
 												/>
 												{btn.type === "URL" && (
 													<Input
@@ -1976,13 +2000,19 @@ export function TemplateConfigDialog({
 						</Button>
 					)}
 
-					{/* Botões para templates não editáveis (APPROVED/PENDING) */}
+					{/* Botões para templates não editáveis (APPROVED/PENDING) - quando NÃO está em modo de edição */}
 					{mode === "create" && !canEdit && (
 						<>
 							<Button variant="secondary" size="sm" onClick={handleDuplicate}>
 								<Copy className="h-3 w-3 mr-1" />
 								Duplicar como Novo
 							</Button>
+							{nodeData?.status === "APPROVED" && nodeData?.metaTemplateId && (
+								<Button variant="outline" size="sm" onClick={handleEditApproved}>
+									<FileEdit className="h-3 w-3 mr-1" />
+									Editar
+								</Button>
+							)}
 							{hasRuntimeParams && (
 								<Button
 									size="sm"
@@ -1996,25 +2026,34 @@ export function TemplateConfigDialog({
 						</>
 					)}
 
-					{/* Botões de ação para templates editáveis (DRAFT ou REJECTED) */}
+					{/* Botões de ação para templates editáveis (DRAFT, REJECTED, ou em modo de edição) */}
 					{mode === "create" && canEdit && (
-						<Button
-							size="sm"
-							onClick={handleSubmitToMeta}
-							disabled={!validation.valid || !templateName || isSubmitting}
-							className="bg-emerald-600 hover:bg-emerald-700"
-						>
-							{isSubmitting ? (
-								<>
-									<Loader2 className="h-3 w-3 mr-1 animate-spin" />
-									Enviando...
-								</>
-							) : nodeData?.status === "REJECTED" ? (
-								"Reenviar para Meta"
-							) : (
-								"Enviar para Meta"
+						<>
+							{isEditingApproved && (
+								<Button variant="ghost" size="sm" onClick={() => setIsEditingApproved(false)}>
+									Cancelar Edição
+								</Button>
 							)}
-						</Button>
+							<Button
+								size="sm"
+								onClick={handleSubmitToMeta}
+								disabled={!validation.valid || !templateName || isSubmitting}
+								className="bg-emerald-600 hover:bg-emerald-700"
+							>
+								{isSubmitting ? (
+									<>
+										<Loader2 className="h-3 w-3 mr-1 animate-spin" />
+										Enviando...
+									</>
+								) : isEditingApproved ? (
+									"Reenviar para Validação"
+								) : nodeData?.status === "REJECTED" ? (
+									"Reenviar para Meta"
+								) : (
+									"Enviar para Meta"
+								)}
+							</Button>
+						</>
 					)}
 				</DialogFooter>
 			</DialogContent>

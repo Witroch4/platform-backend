@@ -88,7 +88,7 @@ export interface DeliveryContext {
 // =============================================================================
 
 export interface DeliveryPayload {
-	type: "text" | "media" | "interactive" | "reaction" | "template";
+	type: "text" | "media" | "interactive" | "reaction" | "template" | "chatwit_action";
 	content?: string;
 	mediaUrl?: string;
 	filename?: string;
@@ -103,6 +103,18 @@ export interface DeliveryPayload {
 	targetMessageId?: string;
 	/** Para TEXT em contexto (reply): ID da mensagem original (wamid) a citar */
 	contextMessageId?: string;
+	/**
+	 * Para CHATWIT_ACTION: tipo de ação a executar
+	 * - resolve_conversation: resolver conversa
+	 * - assign_agent: atribuir a agente
+	 * - add_label: adicionar etiqueta(s)
+	 * - remove_label: remover etiqueta(s)
+	 */
+	actionType?: "resolve_conversation" | "assign_agent" | "add_label" | "remove_label";
+	/** Para assign_agent: ID do agente destino */
+	assigneeId?: number;
+	/** Para add_label/remove_label: títulos das etiquetas */
+	labels?: string[];
 }
 
 // =============================================================================
