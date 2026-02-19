@@ -31,7 +31,6 @@ import {
 	Lock,
 	RefreshCw,
 	Settings2,
-	ImageIcon,
 	Variable,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -52,10 +51,7 @@ import {
 	TEMPLATE_LIMITS,
 	createTemplateButton,
 } from "@/lib/flow-builder/templateElements";
-import {
-	getInteractiveMessageElements,
-	generateElementId,
-} from "@/lib/flow-builder/interactiveMessageElements";
+import { generateElementId } from "@/lib/flow-builder/interactiveMessageElements";
 import { useApprovedTemplates } from "@/app/admin/mtf-diamante/hooks/useApprovedTemplates";
 import MinIOMediaUpload, { type MinIOMediaFile } from "../../shared/MinIOMediaUpload";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -821,148 +817,162 @@ export function TemplateConfigDialog({
 		[node, onUpdateNodeData, onOpenChange, resolvedMediaUrl],
 	);
 
-	// Handle create/save template
-	const handleSaveTemplate = useCallback(async () => {
-		if (!node) return;
+	// =============================================================================
+	// SYNC IN REAL-TIME: commitTemplateData (similar to InteractiveMessage)
+	// =============================================================================
+	// This function is called on every field change to keep canvas in sync
+	const commitTemplateData = useCallback(
+		(overrides?: {
+			name?: string;
+			cat?: TemplateCategory;
+			lang?: string;
+			hType?: typeof headerType;
+			hContent?: string;
+			hMediaUrl?: string;
+			bText?: string;
+			fText?: string;
+			btns?: TemplateButton[];
+		}) => {
+			if (!node || !canEdit) return;
 
-		// Validate
-		if (!validation.valid) {
-			toast.error(validation.errors[0]);
-			return;
-		}
+			const name = overrides?.name ?? templateName;
+			const cat = overrides?.cat ?? category;
+			const lang = overrides?.lang ?? language;
+			const hType = overrides?.hType ?? headerType;
+			const hContent = overrides?.hContent ?? headerContent;
+			const hMediaUrl = overrides?.hMediaUrl ?? headerMediaUrl;
+			const bText = overrides?.bText ?? bodyText;
+			const fText = overrides?.fText ?? footerText;
+			const btns = overrides?.btns ?? buttons;
 
+			// Reconstruct elements array for visual consistency on canvas
+			const newElements: InteractiveMessageElement[] = [];
 
-		// Reconstruct elements array to ensure visual consistency
-		// This fixes the issue where Footer and Header Image were not showing on canvas after save
-		// because the node prioritizes 'elements' which were going stale.
-		const newElements: InteractiveMessageElement[] = [];
+			// Header
+			if (hType !== "NONE") {
+				if (hType === "TEXT") {
+					newElements.push({
+						id: generateElementId("header_text"),
+						type: "header_text",
+						text: hContent,
+					});
+				} else if (["IMAGE", "VIDEO", "DOCUMENT"].includes(hType)) {
+					newElements.push({
+						id: generateElementId("header_image"),
+						type: "header_image",
+						url: hMediaUrl,
+						caption: "",
+					});
+				}
+			}
 
-
-		// Header
-		if (headerType !== "NONE") {
-			if (headerType === "TEXT") {
+			// Body
+			if (bText) {
 				newElements.push({
-					id: generateElementId("header_text"),
-					type: "header_text",
-					text: headerContent,
-				});
-			} else if (["IMAGE", "VIDEO", "DOCUMENT"].includes(headerType)) {
-				newElements.push({
-					id: generateElementId("header_image"),
-					type: "header_image",
-					url: headerMediaUrl,
-					caption: "",
+					id: generateElementId("body"),
+					type: "body",
+					text: bText,
 				});
 			}
-		}
 
-		// Body
-		if (bodyText) {
-			newElements.push({
-				id: generateElementId("body"),
-				type: "body",
-				text: bodyText,
-			});
-		}
-
-		// Footer
-		if (footerText) {
-			newElements.push({
-				id: generateElementId("footer"),
-				type: "footer",
-				text: footerText,
-			});
-		}
-
-		// Buttons (preserve IDs to keep connections)
-		buttons.forEach((btn) => {
-			if (btn.type === "URL") {
+			// Footer
+			if (fText) {
 				newElements.push({
-					id: btn.id,
-					type: "button_url",
-					title: btn.text,
-					url: btn.url || "",
-				});
-			} else if (btn.type === "PHONE_NUMBER") {
-				newElements.push({
-					id: btn.id,
-					type: "button_phone",
-					title: btn.text,
-					phoneNumber: btn.phoneNumber || "",
-				});
-			} else if (btn.type === "COPY_CODE") {
-				newElements.push({
-					id: btn.id,
-					type: "button_copy_code",
-					title: btn.text,
-					couponCode: btn.exampleCode || "",
-				});
-			} else if (btn.type === "VOICE_CALL") {
-				newElements.push({
-					id: btn.id,
-					type: "button_voice_call",
-					title: btn.text,
-					ttlMinutes: btn.ttlMinutes || 10080,
-				});
-			} else {
-				// QUICK_REPLY
-				newElements.push({
-					id: btn.id,
-					type: "button",
-					title: btn.text,
+					id: generateElementId("footer"),
+					type: "footer",
+					text: fText,
 				});
 			}
-		});
 
-		// Build template data
-		const templateData: Partial<TemplateNodeData> & { elements?: unknown } = {
-			label: templateName || "Template",
-			isConfigured: true,
-			mode: "create",
-			status: "DRAFT",
+			// Buttons (preserve IDs to keep connections)
+			btns.forEach((btn) => {
+				if (btn.type === "URL") {
+					newElements.push({
+						id: btn.id,
+						type: "button_url",
+						title: btn.text,
+						url: btn.url || "",
+					});
+				} else if (btn.type === "PHONE_NUMBER") {
+					newElements.push({
+						id: btn.id,
+						type: "button_phone",
+						title: btn.text,
+						phoneNumber: btn.phoneNumber || "",
+					});
+				} else if (btn.type === "COPY_CODE") {
+					newElements.push({
+						id: btn.id,
+						type: "button_copy_code",
+						title: btn.text,
+						couponCode: btn.exampleCode || "",
+					});
+				} else if (btn.type === "VOICE_CALL") {
+					newElements.push({
+						id: btn.id,
+						type: "button_voice_call",
+						title: btn.text,
+						ttlMinutes: btn.ttlMinutes || 10080,
+					});
+				} else {
+					// QUICK_REPLY
+					newElements.push({
+						id: btn.id,
+						type: "button",
+						title: btn.text,
+					});
+				}
+			});
+
+			const hVars = hType === "TEXT" ? extractVariables(hContent) : [];
+			const bVars = extractVariables(bText);
+
+			// Build template data
+			const templateData: Partial<TemplateNodeData> & { elements?: unknown } = {
+				label: name || "Template",
+				isConfigured: bText.trim().length > 0,
+				mode: "create",
+				status: nodeData?.status || "DRAFT",
+				templateName: name,
+				category: cat,
+				language: lang,
+				header:
+					hType !== "NONE"
+						? {
+								type: hType,
+								content: hType === "TEXT" ? hContent : undefined,
+								mediaUrl: ["IMAGE", "VIDEO", "DOCUMENT"].includes(hType) ? hMediaUrl : undefined,
+								variables: hVars,
+							}
+						: undefined,
+				body: {
+					text: bText,
+					variables: bVars,
+					namedParams: bVars.map((v) => ({ name: v, example: `exemplo_${v}` })),
+				},
+				footer: fText ? { text: fText } : undefined,
+				buttons: btns,
+				elements: newElements,
+			};
+
+			onUpdateNodeData(node.id, templateData);
+		},
+		[
+			node,
+			canEdit,
+			nodeData?.status,
 			templateName,
 			category,
 			language,
-			header:
-				headerType !== "NONE"
-					? {
-						type: headerType,
-						content: headerType === "TEXT" ? headerContent : undefined,
-						mediaUrl: ["IMAGE", "VIDEO", "DOCUMENT"].includes(headerType) ? headerMediaUrl : undefined,
-						variables: headerVariables,
-					}
-					: undefined,
-			body: {
-				text: bodyText,
-				variables: bodyVariables,
-				namedParams: bodyVariables.map((v) => ({ name: v, example: `exemplo_${v}` })),
-			},
-			footer: footerText ? { text: footerText } : undefined,
+			headerType,
+			headerContent,
+			headerMediaUrl,
+			bodyText,
+			footerText,
 			buttons,
-			// Save explicit elements
-			elements: newElements,
-		};
-
-		onUpdateNodeData(node.id, templateData);
-		toast.success("Template salvo no fluxo");
-		onOpenChange(false);
-	}, [
-		node,
-		validation,
-		templateName,
-		category,
-		language,
-		headerType,
-		headerContent,
-		headerMediaUrl,
-		headerVariables,
-		bodyText,
-		bodyVariables,
-		footerText,
-		buttons,
-		onUpdateNodeData,
-		onOpenChange,
-	]);
+			onUpdateNodeData,
+		],
+	);
 
 	// Handle submit to Meta
 	const handleSubmitToMeta = useCallback(async () => {
@@ -1195,34 +1205,53 @@ export function TemplateConfigDialog({
 				toast.error(`Máximo de ${TEMPLATE_LIMITS.maxButtons} botões`);
 				return;
 			}
-			setButtons([...buttons, createTemplateButton(type, "Novo botão")]);
+			const newButtons = [...buttons, createTemplateButton(type, "Novo botão")];
+			setButtons(newButtons);
+			commitTemplateData({ btns: newButtons });
 		},
-		[buttons],
+		[buttons, commitTemplateData],
 	);
 
 	// Remove button
 	const handleRemoveButton = useCallback(
 		(index: number) => {
-			setButtons(buttons.filter((_, i) => i !== index));
+			const newButtons = buttons.filter((_, i) => i !== index);
+			setButtons(newButtons);
+			commitTemplateData({ btns: newButtons });
 		},
-		[buttons],
+		[buttons, commitTemplateData],
 	);
 
 	// Update button
 	const handleUpdateButton = useCallback(
 		(index: number, updates: Partial<TemplateButton>) => {
-			setButtons(buttons.map((btn, i) => (i === index ? { ...btn, ...updates } : btn)));
+			const newButtons = buttons.map((btn, i) => (i === index ? { ...btn, ...updates } : btn));
+			setButtons(newButtons);
+			return newButtons; // Return for onBlur usage
 		},
 		[buttons],
 	);
 
+	// Commit button update (called on blur)
+	const commitButtonUpdate = useCallback(
+		(index: number, updates: Partial<TemplateButton>) => {
+			const newButtons = buttons.map((btn, i) => (i === index ? { ...btn, ...updates } : btn));
+			commitTemplateData({ btns: newButtons });
+		},
+		[buttons, commitTemplateData],
+	);
+
 	// Handle media upload complete
-	const handleMediaUploadComplete = useCallback((file: MinIOMediaFile) => {
-		if (file.url) {
-			setHeaderMediaUrl(file.url);
-			toast.success("Mídia carregada com sucesso");
-		}
-	}, []);
+	const handleMediaUploadComplete = useCallback(
+		(file: MinIOMediaFile) => {
+			if (file.url) {
+				setHeaderMediaUrl(file.url);
+				commitTemplateData({ hMediaUrl: file.url });
+				toast.success("Mídia carregada com sucesso");
+			}
+		},
+		[commitTemplateData],
+	);
 
 	// Save runtime parameters (para templates aprovados)
 	const handleSaveRuntimeParams = useCallback(() => {
@@ -1466,6 +1495,7 @@ export function TemplateConfigDialog({
 											<Input
 												value={templateName}
 												onChange={(e) => setTemplateName(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_"))}
+												onBlur={() => commitTemplateData({ name: templateName })}
 												placeholder="meu_template"
 												disabled={!canEdit}
 												className={cn("text-sm", !canEdit && "opacity-60 cursor-not-allowed")}
@@ -1478,7 +1508,10 @@ export function TemplateConfigDialog({
 											<Label className="text-sm font-medium">Categoria</Label>
 											<Select
 												value={category}
-												onValueChange={(v) => setCategory(v as TemplateCategory)}
+												onValueChange={(v) => {
+													setCategory(v as TemplateCategory);
+													commitTemplateData({ cat: v as TemplateCategory });
+												}}
 												disabled={!canEdit}
 											>
 												<SelectTrigger className={cn("text-sm", !canEdit && "opacity-60 cursor-not-allowed")}>
@@ -1498,7 +1531,11 @@ export function TemplateConfigDialog({
 										<Label className="text-sm font-medium">Header (opcional)</Label>
 										<Select
 											value={headerType}
-											onValueChange={(v) => setHeaderType(v as typeof headerType)}
+											onValueChange={(v) => {
+												const newType = v as typeof headerType;
+												setHeaderType(newType);
+												commitTemplateData({ hType: newType });
+											}}
 											disabled={!canEdit}
 										>
 											<SelectTrigger className={cn("text-sm", !canEdit && "opacity-60 cursor-not-allowed")}>
@@ -1516,6 +1553,7 @@ export function TemplateConfigDialog({
 											<Input
 												value={headerContent}
 												onChange={(e) => setHeaderContent(e.target.value)}
+												onBlur={() => commitTemplateData({ hContent: headerContent })}
 												placeholder="Título do template (até 60 caracteres)"
 												maxLength={60}
 												disabled={!canEdit}
@@ -1566,6 +1604,7 @@ export function TemplateConfigDialog({
 															<Input
 																value={headerMediaUrl}
 																onChange={(e) => setHeaderMediaUrl(e.target.value)}
+																onBlur={() => commitTemplateData({ hMediaUrl: headerMediaUrl })}
 																placeholder="URL da mídia"
 																className="text-sm"
 															/>
@@ -1604,6 +1643,7 @@ export function TemplateConfigDialog({
 										<Textarea
 											value={bodyText}
 											onChange={(e) => setBodyText(e.target.value)}
+											onBlur={() => commitTemplateData({ bText: bodyText })}
 											placeholder="Digite o texto da mensagem. Use {{variavel}} para parâmetros."
 											rows={4}
 											disabled={!canEdit}
@@ -1638,6 +1678,7 @@ export function TemplateConfigDialog({
 										<Input
 											value={footerText}
 											onChange={(e) => setFooterText(e.target.value)}
+											onBlur={() => commitTemplateData({ fText: footerText })}
 											placeholder="Texto do rodapé"
 											maxLength={60}
 											disabled={!canEdit}
@@ -1673,6 +1714,7 @@ export function TemplateConfigDialog({
 												<Input
 													value={btn.text}
 													onChange={(e) => handleUpdateButton(idx, { text: e.target.value })}
+													onBlur={() => commitButtonUpdate(idx, { text: btn.text })}
 													placeholder="Texto do botão"
 													maxLength={25}
 													disabled={!canEdit}
@@ -1682,6 +1724,7 @@ export function TemplateConfigDialog({
 													<Input
 														value={btn.url || ""}
 														onChange={(e) => handleUpdateButton(idx, { url: e.target.value })}
+														onBlur={() => commitButtonUpdate(idx, { url: btn.url })}
 														placeholder="https://..."
 														disabled={!canEdit}
 														className={cn("text-sm", !canEdit && "cursor-not-allowed")}
@@ -1691,6 +1734,7 @@ export function TemplateConfigDialog({
 													<Input
 														value={btn.phoneNumber || ""}
 														onChange={(e) => handleUpdateButton(idx, { phoneNumber: e.target.value })}
+														onBlur={() => commitButtonUpdate(idx, { phoneNumber: btn.phoneNumber })}
 														placeholder="+5511999999999"
 														disabled={!canEdit}
 														className={cn("text-sm", !canEdit && "cursor-not-allowed")}
@@ -1707,6 +1751,7 @@ export function TemplateConfigDialog({
 																	[idx]: { ...prev[idx], couponCode: e.target.value },
 																}))
 															}
+															onBlur={() => canEdit && commitButtonUpdate(idx, { exampleCode: btn.exampleCode })}
 															placeholder="Código (até 15 caracteres)"
 															maxLength={15}
 															className="text-sm font-mono"
@@ -1725,7 +1770,10 @@ export function TemplateConfigDialog({
 														</span>
 														<Select
 															value={String(btn.ttlMinutes || 10080)}
-															onValueChange={(v) => handleUpdateButton(idx, { ttlMinutes: Number(v) })}
+															onValueChange={(v) => {
+																handleUpdateButton(idx, { ttlMinutes: Number(v) });
+																commitButtonUpdate(idx, { ttlMinutes: Number(v) });
+															}}
 															disabled={!canEdit}
 														>
 															<SelectTrigger className={cn("text-sm h-8", !canEdit && "cursor-not-allowed")}>
@@ -1919,28 +1967,23 @@ export function TemplateConfigDialog({
 
 					{/* Botões de ação para templates editáveis (DRAFT ou REJECTED) */}
 					{mode === "create" && canEdit && (
-						<>
-							<Button variant="secondary" size="sm" onClick={handleSaveTemplate} disabled={!validation.valid}>
-								Salvar rascunho
-							</Button>
-							<Button
-								size="sm"
-								onClick={handleSubmitToMeta}
-								disabled={!validation.valid || !templateName || isSubmitting}
-								className="bg-emerald-600 hover:bg-emerald-700"
-							>
-								{isSubmitting ? (
-									<>
-										<Loader2 className="h-3 w-3 mr-1 animate-spin" />
-										Enviando...
-									</>
-								) : nodeData?.status === "REJECTED" ? (
-									"Reenviar para Meta"
-								) : (
-									"Enviar para Meta"
-								)}
-							</Button>
-						</>
+						<Button
+							size="sm"
+							onClick={handleSubmitToMeta}
+							disabled={!validation.valid || !templateName || isSubmitting}
+							className="bg-emerald-600 hover:bg-emerald-700"
+						>
+							{isSubmitting ? (
+								<>
+									<Loader2 className="h-3 w-3 mr-1 animate-spin" />
+									Enviando...
+								</>
+							) : nodeData?.status === "REJECTED" ? (
+								"Reenviar para Meta"
+							) : (
+								"Enviar para Meta"
+							)}
+						</Button>
 					)}
 				</DialogFooter>
 			</DialogContent>
