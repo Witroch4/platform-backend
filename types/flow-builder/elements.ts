@@ -37,6 +37,8 @@ export interface InteractiveMessageHeaderImageElement extends InteractiveMessage
 	type: "header_image";
 	url?: string;
 	caption?: string;
+	/** Handle da Meta API para templates (obtido após upload via MetaMediaUpload) */
+	mediaHandle?: string;
 }
 
 export interface InteractiveMessageBodyElement extends InteractiveMessageElementBase {

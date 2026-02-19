@@ -569,16 +569,24 @@ export function createDefaultTemplateNodeData(): Partial<TemplateNodeData> {
 }
 
 /**
+ * Título fixo do botão COPY_CODE exigido pela Meta API
+ */
+export const COPY_CODE_BUTTON_TITLE = "Copiar código da oferta";
+
+/**
  * Creates a new template button with default values
  */
 export function createTemplateButton(
 	type: TemplateButtonType = "QUICK_REPLY",
 	text: string = "Novo botão",
 ): TemplateButton {
+	// COPY_CODE tem título fixo pela Meta API
+	const buttonText = type === "COPY_CODE" ? COPY_CODE_BUTTON_TITLE : text;
+
 	const button: TemplateButton = {
 		id: generateTemplateButtonId(),
 		type,
-		text,
+		text: buttonText,
 	};
 
 	// Add default values for specific types

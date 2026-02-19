@@ -50,10 +50,11 @@ import {
 	extractVariables,
 	TEMPLATE_LIMITS,
 	createTemplateButton,
+	COPY_CODE_BUTTON_TITLE,
 } from "@/lib/flow-builder/templateElements";
 import { generateElementId } from "@/lib/flow-builder/interactiveMessageElements";
 import { useApprovedTemplates } from "@/app/admin/mtf-diamante/hooks/useApprovedTemplates";
-import MinIOMediaUpload, { type MinIOMediaFile } from "../../shared/MinIOMediaUpload";
+import MetaMediaUpload, { type MetaMediaFile } from "@/components/custom/MetaMediaUpload";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Upload } from "lucide-react";
 
@@ -66,6 +67,7 @@ interface ExtractedTemplateData {
 	headerType: "NONE" | "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT";
 	headerContent: string;
 	headerMediaUrl: string;
+	headerMediaHandle: string;
 	footerText: string;
 	buttons: TemplateButton[];
 }
@@ -75,6 +77,7 @@ function extractFromElements(elements: InteractiveMessageElement[]): ExtractedTe
 	let headerType: ExtractedTemplateData["headerType"] = "NONE";
 	let headerContent = "";
 	let headerMediaUrl = "";
+	let headerMediaHandle = "";
 	let footerText = "";
 	const buttons: TemplateButton[] = [];
 
@@ -93,6 +96,7 @@ function extractFromElements(elements: InteractiveMessageElement[]): ExtractedTe
 			case "header_image":
 				headerType = "IMAGE";
 				headerMediaUrl = "url" in el ? (el.url as string) : "";
+				headerMediaHandle = "mediaHandle" in el ? (el.mediaHandle as string) : "";
 				break;
 			case "button":
 				buttons.push({
@@ -121,7 +125,7 @@ function extractFromElements(elements: InteractiveMessageElement[]): ExtractedTe
 				buttons.push({
 					id: el.id || generateTemplateButtonId(),
 					type: "COPY_CODE",
-					text: "title" in el ? el.title : "Copiar código",
+					text: COPY_CODE_BUTTON_TITLE, // Título fixo exigido pela Meta API
 					exampleCode: "couponCode" in el ? (el.couponCode as string) : "",
 				});
 				break;
@@ -136,7 +140,7 @@ function extractFromElements(elements: InteractiveMessageElement[]): ExtractedTe
 		}
 	}
 
-	return { bodyText, headerType, headerContent, headerMediaUrl, footerText, buttons };
+	return { bodyText, headerType, headerContent, headerMediaUrl, headerMediaHandle, footerText, buttons };
 }
 
 // =============================================================================
@@ -233,7 +237,7 @@ function templateCompsToElements(comps: RawComponent[], mediaUrl: string | null)
 				elements.push({
 					id: btnId,
 					type: "button_copy_code",
-					title: btn.text,
+					title: COPY_CODE_BUTTON_TITLE, // Título fixo exigido pela Meta API
 					couponCode: Array.isArray(btn.example) ? String(btn.example[0] ?? "") : "",
 				});
 				break;
@@ -560,7 +564,8 @@ export function TemplateConfigDialog({
 
 	// Upload de mídia
 	const [headerMediaMode, setHeaderMediaMode] = useState<"url" | "upload">("upload");
-	const [uploadedFiles, setUploadedFiles] = useState<MinIOMediaFile[]>([]);
+	const [uploadedFiles, setUploadedFiles] = useState<MetaMediaFile[]>([]);
+	const [headerMediaHandle, setHeaderMediaHandle] = useState<string | null>(null);
 
 	// Extract current node data
 	const nodeData = useMemo(() => {
@@ -682,11 +687,13 @@ export function TemplateConfigDialog({
 			setButtons(extracted.buttons);
 			setFooterText(extracted.footerText);
 			setHeaderMediaUrl(extracted.headerMediaUrl);
+			setHeaderMediaHandle(extracted.headerMediaHandle || null);
 		} else {
 			// Traditional format (TemplateNode)
 			setHeaderType(nodeData.header?.type || "NONE");
 			setHeaderContent(nodeData.header?.content || "");
 			setHeaderMediaUrl(nodeData.header?.mediaUrl || "");
+			setHeaderMediaHandle(null); // Não tem handle no formato tradicional
 			setBodyText(nodeData.body?.text || "");
 			setFooterText(nodeData.footer?.text || "");
 			setButtons(nodeData.buttons || []);
@@ -829,6 +836,7 @@ export function TemplateConfigDialog({
 			hType?: typeof headerType;
 			hContent?: string;
 			hMediaUrl?: string;
+			hMediaHandle?: string | null;
 			bText?: string;
 			fText?: string;
 			btns?: TemplateButton[];
@@ -841,6 +849,7 @@ export function TemplateConfigDialog({
 			const hType = overrides?.hType ?? headerType;
 			const hContent = overrides?.hContent ?? headerContent;
 			const hMediaUrl = overrides?.hMediaUrl ?? headerMediaUrl;
+			const hMediaHandle = overrides?.hMediaHandle !== undefined ? overrides.hMediaHandle : headerMediaHandle;
 			const bText = overrides?.bText ?? bodyText;
 			const fText = overrides?.fText ?? footerText;
 			const btns = overrides?.btns ?? buttons;
@@ -862,6 +871,7 @@ export function TemplateConfigDialog({
 						type: "header_image",
 						url: hMediaUrl,
 						caption: "",
+						mediaHandle: hMediaHandle || undefined,
 					});
 				}
 			}
@@ -1011,7 +1021,20 @@ export function TemplateConfigDialog({
 						headerComp.example = { header_text: headerVariables.map((v) => `exemplo_${v}`) };
 					}
 				} else {
+					// Para IMAGE, VIDEO, DOCUMENT - precisa do header_handle (obrigatório pela API Meta)
 					headerComp.format = headerType;
+					if (headerMediaHandle) {
+						headerComp.example = {
+							header_handle: [headerMediaHandle],
+							_minioUrl: headerMediaUrl, // URL do MinIO para salvar no banco
+						};
+					} else if (headerMediaUrl) {
+						// Fallback: se temos URL mas não handle, a API vai falhar
+						// mas registramos para debug
+						console.warn("[TemplateConfigDialog] Mídia sem header_handle - upload para Meta API necessário");
+						toast.error("Faça upload da mídia antes de enviar (precisa do handle da Meta)");
+						return;
+					}
 				}
 				payload.components.push(headerComp);
 			}
@@ -1189,6 +1212,7 @@ export function TemplateConfigDialog({
 		headerType,
 		headerContent,
 		headerMediaUrl,
+		headerMediaHandle,
 		headerVariables,
 		bodyText,
 		bodyVariables,
@@ -1243,11 +1267,13 @@ export function TemplateConfigDialog({
 
 	// Handle media upload complete
 	const handleMediaUploadComplete = useCallback(
-		(file: MinIOMediaFile) => {
+		(mediaHandle: string, file: MetaMediaFile) => {
 			if (file.url) {
 				setHeaderMediaUrl(file.url);
-				commitTemplateData({ hMediaUrl: file.url });
-				toast.success("Mídia carregada com sucesso");
+				setHeaderMediaHandle(mediaHandle);
+				commitTemplateData({ hMediaUrl: file.url, hMediaHandle: mediaHandle });
+				toast.success("Mídia carregada com sucesso para API Meta");
+				console.log(`[TemplateConfigDialog] Mídia carregada - URL: ${file.url}, Handle: ${mediaHandle}`);
 			}
 		},
 		[commitTemplateData],
@@ -1578,25 +1604,30 @@ export function TemplateConfigDialog({
 														</Tabs>
 														{headerMediaMode === "upload" ? (
 															<div className="nodrag">
-																<MinIOMediaUpload
+																<MetaMediaUpload
 																	uploadedFiles={uploadedFiles}
 																	setUploadedFiles={setUploadedFiles}
 																	allowedTypes={
 																		headerType === "IMAGE"
-																			? ["image/jpeg", "image/png", "image/jpg", "image/webp"]
+																			? ["image/jpeg", "image/png", "image/jpg"]
 																			: headerType === "VIDEO"
 																				? ["video/mp4", "video/webm"]
-																				: ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
+																				: ["application/pdf"]
 																	}
 																	maxSizeMB={headerType === "VIDEO" ? 16 : 5}
 																	title={`Upload de ${headerType === "IMAGE" ? "imagem" : headerType === "VIDEO" ? "vídeo" : "documento"}`}
-																	description={`Arraste ${headerType === "IMAGE" ? "uma imagem" : headerType === "VIDEO" ? "um vídeo" : "um documento"} aqui`}
+																	description={`Faça upload para a API Meta (necessário para criar template)`}
 																	maxFiles={1}
 																	onUploadComplete={handleMediaUploadComplete}
 																/>
-																{headerMediaUrl && (
+																{headerMediaUrl && headerMediaHandle && (
 																	<p className="text-[10px] text-emerald-600 dark:text-emerald-500 mt-1">
-																		Mídia carregada: {headerMediaUrl.split("/").pop()}
+																		✓ Mídia pronta: {headerMediaUrl.split("/").pop()}
+																	</p>
+																)}
+																{headerMediaUrl && !headerMediaHandle && (
+																	<p className="text-[10px] text-amber-600 dark:text-amber-500 mt-1">
+																		⚠ Mídia precisa de upload para Meta API
 																	</p>
 																)}
 															</div>

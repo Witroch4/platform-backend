@@ -19,7 +19,7 @@ import {
 	Upload,
 	RotateCcw,
 } from "lucide-react";
-import MinIOMediaUpload, { type MinIOMediaFile } from "../../../shared/MinIOMediaUpload";
+import MetaMediaUpload, { type MetaMediaFile } from "@/components/custom/MetaMediaUpload";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTemplateStatusRefresh } from "../../hooks/useTemplateStatusRefresh";
@@ -40,6 +40,7 @@ import {
 	elementsToLegacyFields,
 	generateElementId,
 } from "@/lib/flow-builder/interactiveMessageElements";
+import { COPY_CODE_BUTTON_TITLE } from "@/lib/flow-builder/templateElements";
 import { NodeContextMenu } from "../../ui/NodeContextMenu";
 import { Badge } from "@/components/ui/badge";
 import { EditableText } from "../../ui/EditableText";
@@ -210,7 +211,7 @@ function validateButtonLimits(buttons: ExtendedButtonElement[]) {
 export const WhatsAppTemplateNode = memo(({ id, data, selected }: WhatsAppTemplateNodeProps) => {
 	const { setNodes, getNodes, setEdges } = useReactFlow();
 	const [isDragOver, setIsDragOver] = useState(false);
-	const [uploadedFiles, setUploadedFiles] = useState<MinIOMediaFile[]>([]);
+	const [uploadedFiles, setUploadedFiles] = useState<MetaMediaFile[]>([]);
 	const [showUpload, setShowUpload] = useState(false);
 
 	// Usa o sistema unificado de elements
@@ -336,14 +337,19 @@ export const WhatsAppTemplateNode = memo(({ id, data, selected }: WhatsAppTempla
 
 	// Handle image upload complete
 	const handleUploadComplete = useCallback(
-		(file: MinIOMediaFile) => {
+		(mediaHandle: string, file: MetaMediaFile) => {
 			if (file.url) {
 				const headerImageElement = elements.find((e) => e.type === "header_image");
 				if (headerImageElement) {
-					updateElementContent(headerImageElement.id, { url: file.url });
+					// Salva URL e mediaHandle no elemento
+					updateElementContent(headerImageElement.id, {
+						url: file.url,
+						mediaHandle, // Salva o handle da Meta para uso no envio do template
+					});
 				}
 				setShowUpload(false);
 				setUploadedFiles([]);
+				console.log(`[WhatsAppTemplateNode] Mídia carregada - URL: ${file.url}, Handle: ${mediaHandle}`);
 			}
 		},
 		[elements, updateElementContent],
@@ -742,13 +748,13 @@ export const WhatsAppTemplateNode = memo(({ id, data, selected }: WhatsAppTempla
 											>
 												{showUpload ? (
 													<div className="p-2" onClick={(e) => e.stopPropagation()}>
-														<MinIOMediaUpload
+														<MetaMediaUpload
 															uploadedFiles={uploadedFiles}
 															setUploadedFiles={setUploadedFiles}
 															allowedTypes={["image/jpeg", "image/png", "image/jpg"]}
 															maxSizeMB={5}
 															title="Upload de Imagem"
-															description="Arraste uma imagem aqui"
+															description="Faz upload para a API Meta"
 															maxFiles={1}
 															onUploadComplete={handleUploadComplete}
 														/>
@@ -890,7 +896,7 @@ export const WhatsAppTemplateNode = memo(({ id, data, selected }: WhatsAppTempla
 																{btnType === "COPY_CODE" ? (
 																	/* Título do COPY_CODE é fixo pela API do WhatsApp */
 																	<span className="text-sm font-semibold text-lime-600 dark:text-lime-400">
-																		Copiar código da oferta
+																		{COPY_CODE_BUTTON_TITLE}
 																	</span>
 																) : (
 																	<input
