@@ -41,7 +41,7 @@ const NavbarAdmin = () => {
 					<SidebarTrigger className="h-8 w-8 mr-1" />
 					<Link href="/admin" className="flex items-center">
 						<Button variant="ghost" size="icon" className="h-8 w-8 mr-2 hover:bg-accent">
-							<Home className="h-5 w-5" />
+							<img src="/animations/home-animated-autoplay.svg" alt="Home" className="h-[22px] w-[22px] dark:invert" />
 							<span className="sr-only">Painel Admin</span>
 						</Button>
 						<h1 className="text-xl font-semibold hidden md:block text-foreground">Painel Administrativo</h1>

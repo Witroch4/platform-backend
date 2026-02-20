@@ -28,7 +28,6 @@ import {
 } from "./componentes-lead-item/cells";
 import { LeadDialogs } from "./componentes-lead-item/dialogs";
 import { BibliotecaEspelhosDrawer } from "../biblioteca-espelhos-drawer";
-import { SSEStatusIndicator } from "../sse-status-indicator";
 import { useState } from "react";
 import {
 	Dialog,
@@ -112,9 +111,8 @@ export function LeadItem({
 		<>
 			<TableRow
 				data-lead-id={lead.id}
-				className={`group hover:bg-secondary/30 relative ${
-					leadState.consultoriaAtiva ? "border-2 border-[#AFDAFE] bg-[#4BB8EB]/10 hover:bg-[#4BB8EB]/20" : ""
-				}`}
+				className={`group hover:bg-secondary/30 relative ${leadState.consultoriaAtiva ? "border-2 border-[#AFDAFE] bg-[#4BB8EB]/10 hover:bg-[#4BB8EB]/20" : ""
+					}`}
 			>
 				{/* Célula de Seleção */}
 				<SelectCell isSelected={isSelected} onSelect={onSelect} leadId={lead.id} />
@@ -242,11 +240,11 @@ export function LeadItem({
 					onDelete={() => setShowDeleteConfirm(true)}
 				/>
 
-				{/* Célula de Status - mostrar apenas se está aguardando processamento */}
+				{/* Célula de Status Absoluta - fora do fluxo da tabela para não quebrar layout */}
 				{isAwaitingProcessing && (
-					<TableCell className="w-[120px] p-2 align-middle">
-						<SSEStatusIndicator isConnected={true} error={null} className="w-full justify-center" />
-					</TableCell>
+					<td className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center z-20 pointer-events-none">
+						<img src="/animations/wifi-animated.svg" alt="Conectado" className="w-5 h-5 dark:invert opacity-70" />
+					</td>
 				)}
 			</TableRow>
 

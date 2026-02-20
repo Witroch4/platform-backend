@@ -30,6 +30,8 @@ interface IAnaliseJobData {
 	analiseSimulado?: true;
 	analiseValidada?: true;
 	analiseSimuladoValidada?: true;
+	generatePdfInternally?: boolean;
+	analiseData?: Record<string, unknown>;
 }
 
 type ILeadCellJobData = IManuscritoJobData | IEspelhoJobData | IAnaliseJobData;

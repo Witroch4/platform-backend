@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Edit3 } from "lucide-react";
 import type { ProvaCellProps } from "../types";
 import { LeadContextMenu, type ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
+import { AnimatedTypingPen } from "./animated-typing-pen";
 
 interface ProvaCellExtendedProps extends ProvaCellProps {
 	provaProcessadaLocal: boolean;
@@ -45,10 +46,7 @@ export function ProvaCell({
 					key={`prova-btn-${refreshKey}`}
 				>
 					{localProvaState.aguardandoProva ? (
-						<>
-							<Edit3 className="h-4 w-4 mr-1 animate-spin" />
-							Aguardando
-						</>
+						<AnimatedTypingPen />
 					) : localProvaState.provaProcessada ? (
 						<>
 							<Edit3 className="h-4 w-4 mr-1" />

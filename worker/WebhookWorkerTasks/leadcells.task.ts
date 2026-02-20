@@ -32,6 +32,8 @@ interface IAnaliseJobData {
 	analiseSimulado?: true;
 	analiseValidada?: true;
 	analiseSimuladoValidada?: true;
+	generatePdfInternally?: boolean;
+	analiseData?: Record<string, unknown>;
 }
 
 type ILeadCellJobData = IManuscritoJobData | IEspelhoJobData | IAnaliseJobData;
@@ -238,7 +240,7 @@ async function processAnalise(job: Job<IAnaliseJobData>) {
 	console.log(`[BullMQ] 📊 Processando análise para lead: ${job.data.leadID}`);
 
 	try {
-		const {
+		let {
 			leadID,
 			analiseUrl,
 			argumentacaoUrl,
@@ -247,9 +249,21 @@ async function processAnalise(job: Job<IAnaliseJobData>) {
 			analiseSimulado,
 			analiseValidada,
 			analiseSimuladoValidada,
+			generatePdfInternally,
+			analiseData,
 		} = job.data;
 
 		console.log(`[BullMQ] Atualizando lead ${leadID} com a análise processada`);
+
+		// Pipeline interno: gerar PDFs via Playwright + upload MinIO
+		if (generatePdfInternally && analiseData) {
+			console.log(`[BullMQ] 📄 Gerando PDFs internamente para lead: ${leadID}`);
+			const { generateAnalisePdfs } = await import("@/lib/pdf-generation/generate-analise-pdfs");
+			const pdfs = await generateAnalisePdfs(analiseData as any, leadID);
+			analiseUrl = pdfs.analiseUrl;
+			argumentacaoUrl = pdfs.argumentacaoUrl;
+			console.log(`[BullMQ] ✅ PDFs gerados: analiseUrl=${analiseUrl}, argumentacaoUrl=${argumentacaoUrl}`);
+		}
 
 		// Verificar se o lead existe
 		const leadExistente = await getPrismaInstance().leadOabData.findUnique({

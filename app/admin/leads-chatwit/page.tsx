@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { RefreshCw, Search, Info, BarChart, X, Shield, BookOpen, FileText, Download, Menu } from "lucide-react";
 import { LeadsTabs } from "./components/leads-tabs";
 import { LeadsDashboard } from "./components/dashboard";
+import { CountUp } from "@/components/ui/count-up";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -333,7 +334,7 @@ export default function LeadsChatwitPage() {
 						) : (
 							<>
 								<div className="text-xl sm:text-2xl font-bold text-card-foreground tabular-nums">
-									{stats.totalLeads.toLocaleString("pt-BR")}
+									<CountUp end={stats.totalLeads} />
 								</div>
 								<p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 line-clamp-1">
 									{isSuperAdmin ? "Todos cadastrados" : "Do seu token"}
@@ -355,7 +356,7 @@ export default function LeadsChatwitPage() {
 							) : (
 								<>
 									<div className="text-xl sm:text-2xl font-bold text-card-foreground tabular-nums">
-										{stats.totalUsuarios.toLocaleString("pt-BR")}
+										<CountUp end={stats.totalUsuarios} />
 									</div>
 									<p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 line-clamp-1">
 										Com leads cadastrados
@@ -378,7 +379,7 @@ export default function LeadsChatwitPage() {
 						) : (
 							<>
 								<div className="text-xl sm:text-2xl font-bold text-card-foreground tabular-nums">
-									{stats.totalArquivos.toLocaleString("pt-BR")}
+									<CountUp end={stats.totalArquivos} />
 								</div>
 								<p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 line-clamp-1">
 									{isSuperAdmin ? "Anexados aos leads" : "Dos seus leads"}
@@ -400,7 +401,7 @@ export default function LeadsChatwitPage() {
 						) : (
 							<>
 								<div className="text-xl sm:text-2xl font-bold text-card-foreground tabular-nums">
-									{stats.pendentes.toLocaleString("pt-BR")}
+									<CountUp end={stats.pendentes} />
 								</div>
 								<p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 line-clamp-1">
 									Aguardando processamento

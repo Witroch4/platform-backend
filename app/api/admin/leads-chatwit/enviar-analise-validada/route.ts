@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getPrismaInstance } from "@/lib/connections";
+import { addAnaliseJob } from "@/lib/queue/leadcells.queue";
+
 const prisma = getPrismaInstance();
 
 /**
@@ -9,13 +11,7 @@ export async function POST(request: Request): Promise<Response> {
 	try {
 		console.log("[Enviar Análise Validada] Recebendo requisição POST");
 
-		// Obter a URL do webhook do ambiente
-		const webhookUrl = process.env.WEBHOOK_URL;
-
-		if (!webhookUrl) {
-			console.error("[Enviar Análise Validada] URL do webhook não configurada no ambiente");
-			throw new Error("URL do webhook não configurada");
-		}
+		const useInternalPdf = process.env.ANALISE_VALIDADA_INTERNA === "true";
 
 		// Obter o payload completo
 		const payload = await request.json();
@@ -101,28 +97,52 @@ export async function POST(request: Request): Promise<Response> {
 		const limitedRequestPayload = limitAnalisePayloadForLog(requestPayload);
 		console.log("[Enviar Análise Validada] Payload final para envio:", JSON.stringify(limitedRequestPayload, null, 2));
 
-		// Enviar para o sistema externo
-		console.log("[Enviar Análise Validada] Enviando payload para processamento:", webhookUrl);
+		if (useInternalPdf) {
+			// Pipeline interno: gerar PDFs via BullMQ worker
+			console.log("[Enviar Análise Validada] Usando pipeline interno (ANALISE_VALIDADA_INTERNA=true)");
 
-		fetch(webhookUrl, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify(requestPayload),
-		})
-			.then((response) => {
-				if (!response.ok) {
-					console.error("[Enviar Análise Validada] Erro na resposta do sistema externo:", response.status);
-				} else {
-					console.log("[Enviar Análise Validada] Enviado com sucesso para o sistema externo");
-				}
-			})
-			.catch((error) => {
-				console.error("[Enviar Análise Validada] Erro ao enviar para o sistema externo:", error);
+			await addAnaliseJob({
+				leadID: leadId,
+				analiseData: requestPayload,
+				generatePdfInternally: true,
+				analiseValidada: isAnaliseSimulado ? undefined : true,
+				analiseSimuladoValidada: isAnaliseSimulado ? true : undefined,
+				nome: requestPayload.nomeExaminando,
+				telefone: lead.lead?.phone ?? undefined,
 			});
 
-		// Responder imediatamente ao cliente, independente do resultado do webhook
+			console.log("[Enviar Análise Validada] Job adicionado à fila para geração interna de PDFs");
+		} else {
+			// Pipeline externo: enviar para n8n webhook
+			const webhookUrl = process.env.WEBHOOK_URL;
+
+			if (!webhookUrl) {
+				console.error("[Enviar Análise Validada] URL do webhook não configurada no ambiente");
+				throw new Error("URL do webhook não configurada");
+			}
+
+			console.log("[Enviar Análise Validada] Enviando payload para processamento externo:", webhookUrl);
+
+			fetch(webhookUrl, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify(requestPayload),
+			})
+				.then((response) => {
+					if (!response.ok) {
+						console.error("[Enviar Análise Validada] Erro na resposta do sistema externo:", response.status);
+					} else {
+						console.log("[Enviar Análise Validada] Enviado com sucesso para o sistema externo");
+					}
+				})
+				.catch((error) => {
+					console.error("[Enviar Análise Validada] Erro ao enviar para o sistema externo:", error);
+				});
+		}
+
+		// Responder imediatamente ao cliente
 		return NextResponse.json({
 			success: true,
 			message: "Análise validada enviada com sucesso",
