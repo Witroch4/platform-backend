@@ -34,9 +34,11 @@ export const FLOW_BUILDER_QUEUE_NAME = "flow-builder-queues";
  */
 export type FlowBuilderJobType =
 	| "CHATWIT_ACTION"
-	| "HTTP_REQUEST" // futuro
-	| "TAG_ACTION" // futuro
-	| "WEBHOOK_NOTIFY"; // futuro
+	| "HTTP_REQUEST"
+	| "TAG_ACTION"
+	| "WEBHOOK_NOTIFY"
+	| "DELAY"
+	| "MEDIA_UPLOAD";
 
 /**
  * Payload base para todos os jobs da fila.
@@ -97,7 +99,7 @@ export interface TagActionJobData extends FlowBuilderJobBase {
 }
 
 /**
- * Job para notificações webhook (futuro).
+ * Job para notificações webhook.
  */
 export interface WebhookNotifyJobData extends FlowBuilderJobBase {
 	jobType: "WEBHOOK_NOTIFY";
@@ -110,13 +112,49 @@ export interface WebhookNotifyJobData extends FlowBuilderJobBase {
 }
 
 /**
+ * Job para delays longos (>5 minutos).
+ * Usa o recurso de delay do BullMQ para agendar continuação do flow.
+ */
+export interface DelayJobData extends FlowBuilderJobBase {
+	jobType: "DELAY";
+	payload: {
+		/** Delay em milissegundos */
+		delayMs: number;
+		/** ID do nó para continuar após o delay */
+		resumeNodeId: string;
+		/** Timestamp ISO de quando o delay foi agendado */
+		scheduledFor: string;
+	};
+}
+
+/**
+ * Job para upload de mídia (imagem, documento, áudio, vídeo).
+ * Processo de 2 etapas: upload do blob + envio da mensagem.
+ */
+export interface MediaUploadJobData extends FlowBuilderJobBase {
+	jobType: "MEDIA_UPLOAD";
+	payload: {
+		/** URL da mídia a ser baixada e enviada */
+		mediaUrl: string;
+		/** Nome do arquivo (opcional) */
+		filename?: string;
+		/** Legenda da mídia (opcional) */
+		caption?: string;
+		/** Tipo de mídia */
+		mediaType: "image" | "document" | "audio" | "video";
+	};
+}
+
+/**
  * Union type de todos os jobs suportados.
  */
 export type FlowBuilderJobData =
 	| ChatwitActionJobData
 	| HttpRequestJobData
 	| TagActionJobData
-	| WebhookNotifyJobData;
+	| WebhookNotifyJobData
+	| DelayJobData
+	| MediaUploadJobData;
 
 /**
  * Resultado do processamento de um job.
@@ -241,6 +279,107 @@ export async function addFlowBuilderJob(
 		jobId: job.id,
 		jobType: data.jobType,
 		flowId: data.flowId,
+	});
+
+	return job.id!;
+}
+
+/**
+ * Adiciona um job de delay longo à fila.
+ * Para delays > 5 minutos, usa o recurso de delay do BullMQ.
+ */
+export async function addDelayJob(data: {
+	flowId: string;
+	sessionId: string;
+	nodeId: string;
+	context: DeliveryContext;
+	delayMs: number;
+	resumeNodeId: string;
+}): Promise<string> {
+	const queue = getFlowBuilderQueue();
+
+	const scheduledFor = new Date(Date.now() + data.delayMs).toISOString();
+
+	const jobData: DelayJobData = {
+		jobType: "DELAY",
+		flowId: data.flowId,
+		sessionId: data.sessionId,
+		nodeId: data.nodeId,
+		context: data.context,
+		payload: {
+			delayMs: data.delayMs,
+			resumeNodeId: data.resumeNodeId,
+			scheduledFor,
+		},
+		metadata: {
+			timestamp: new Date().toISOString(),
+			correlationId: `${data.flowId}:${data.sessionId}:${data.nodeId}`,
+		},
+	};
+
+	const jobId = `delay:${data.flowId}:${data.sessionId}:${data.nodeId}:${Date.now()}`;
+
+	const job = await queue.add("delay", jobData, {
+		jobId,
+		delay: data.delayMs, // BullMQ vai agendar para execução futura
+		priority: 5,
+	});
+
+	log.info("[FlowBuilderQueue] Job DELAY enfileirado", {
+		jobId: job.id,
+		flowId: data.flowId,
+		delayMs: data.delayMs,
+		scheduledFor,
+	});
+
+	return job.id!;
+}
+
+/**
+ * Adiciona um job de upload de mídia à fila.
+ */
+export async function addMediaUploadJob(data: {
+	flowId: string;
+	sessionId: string;
+	nodeId: string;
+	context: DeliveryContext;
+	mediaUrl: string;
+	filename?: string;
+	caption?: string;
+	mediaType: "image" | "document" | "audio" | "video";
+}): Promise<string> {
+	const queue = getFlowBuilderQueue();
+
+	const jobData: MediaUploadJobData = {
+		jobType: "MEDIA_UPLOAD",
+		flowId: data.flowId,
+		sessionId: data.sessionId,
+		nodeId: data.nodeId,
+		context: data.context,
+		payload: {
+			mediaUrl: data.mediaUrl,
+			filename: data.filename,
+			caption: data.caption,
+			mediaType: data.mediaType,
+		},
+		metadata: {
+			timestamp: new Date().toISOString(),
+			correlationId: `${data.flowId}:${data.sessionId}:${data.nodeId}`,
+		},
+	};
+
+	const jobId = `media-upload:${data.flowId}:${data.sessionId}:${data.nodeId}:${Date.now()}`;
+
+	const job = await queue.add("media-upload", jobData, {
+		jobId,
+		priority: 3, // Mídia tem prioridade mais alta
+		attempts: 5, // Mais tentativas para uploads
+	});
+
+	log.info("[FlowBuilderQueue] Job MEDIA_UPLOAD enfileirado", {
+		jobId: job.id,
+		flowId: data.flowId,
+		mediaType: data.mediaType,
 	});
 
 	return job.id!;

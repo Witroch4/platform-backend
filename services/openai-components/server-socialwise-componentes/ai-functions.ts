@@ -7,11 +7,16 @@ import { createButtonsSchema, createRouterSchema, getConstraintsForChannel } fro
 import { buildMessages, buildEphemeralInstructions, TASK_PROMPTS } from "./prompt-manager";
 import { structuredOrJson } from "./structured-outputs";
 import { ensureSession, getSessionHistory, getHistoryStrategy, isOpenAINativeStrategy } from "./session-manager";
+
+// Helper: Only use OpenAI native session (ensureSession/previous_response_id) for OpenAI models
+function isOpenAIModel(model: string): boolean {
+	return !model.startsWith("gemini") && !model.startsWith("claude");
+}
 import { createMasterPrompt } from "./prompt-manager";
 import { getModelCaps, isGPT5, normVerb, normEffort } from "./model-capabilities";
 import { normalizeHandoffButtons, ensureFinalNotice } from "./text-normalizers";
 
-type HintOut = { slug: string; score?: number; aliases?: string[]; desc?: string };
+export type HintOut = { slug: string; score?: number; aliases?: string[]; desc?: string };
 
 // Helper function to safely escape strings for JSON context
 const safeString = (str: string) => {
@@ -23,7 +28,7 @@ const safeString = (str: string) => {
 		.replace(/\t/g, "\\t"); // Escape tabs
 };
 
-function sanitizeHintsWithDesc(cands: IntentCandidate[], topN = 4): HintOut[] {
+export function sanitizeHintsWithDesc(cands: IntentCandidate[], topN = 4): HintOut[] {
 	return (cands ?? [])
 		.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
 		.slice(0, topN)
@@ -135,21 +140,23 @@ export async function generateFreeChatButtons(
 			let previousResponseId: string | undefined;
 
 			if (hasSessionId) {
-				try {
-					const sessionResult = await ensureSession(
-						{ sessionId: opts!.sessionId as string, agent, channel },
-						createMasterPrompt,
-						signal,
-					);
-					isNewSession = sessionResult.isNewSession;
-					previousResponseId = sessionResult.responseId;
-				} catch (error) {
-					console.warn("[Session] Erro ao obter sessão:", error);
-					isNewSession = true;
+				// Only use OpenAI native session (previous_response_id) for OpenAI models
+				if (isOpenAIModel(agent.model)) {
+					try {
+						const sessionResult = await ensureSession(
+							{ sessionId: opts!.sessionId as string, agent, channel },
+							createMasterPrompt,
+							signal,
+						);
+						isNewSession = sessionResult.isNewSession;
+						previousResponseId = sessionResult.responseId;
+					} catch (error) {
+						console.warn("[Session] Erro ao obter sessão:", error);
+						isNewSession = true;
+					}
 				}
 
-				// SEMPRE tentar carregar histórico (independente de isNewSession)
-				// No modo openai_native, getSessionHistory retorna [] (OpenAI gerencia via previous_response_id)
+				// SEMPRE carregar histórico do Redis (independente de provider/strategy)
 				try {
 					conversationHistory = (await getSessionHistory(opts!.sessionId as string)).map((h) => ({
 						role: h.role,
@@ -160,7 +167,7 @@ export async function generateFreeChatButtons(
 							`📚 FREE CHAT [${getHistoryStrategy()}]: Carregado histórico com ${conversationHistory.length} mensagens`,
 						);
 						isNewSession = false;
-					} else if (isOpenAINativeStrategy()) {
+					} else if (isOpenAINativeStrategy() && isOpenAIModel(agent.model)) {
 						console.log(`📚 FREE CHAT [openai_native]: Histórico gerenciado via previous_response_id`);
 					}
 				} catch (error) {
@@ -262,21 +269,23 @@ export async function generateWarmupButtons(
 			let previousResponseId: string | undefined;
 
 			if (hasSessionId) {
-				try {
-					const sessionResult = await ensureSession(
-						{ sessionId: opts!.sessionId!, agent, channel },
-						createMasterPrompt,
-						signal,
-					);
-					isNewSession = sessionResult.isNewSession;
-					previousResponseId = sessionResult.responseId;
-				} catch (error) {
-					console.warn("[Session] Erro ao obter sessão:", error);
-					isNewSession = true;
+				// Only use OpenAI native session (previous_response_id) for OpenAI models
+				if (isOpenAIModel(agent.model)) {
+					try {
+						const sessionResult = await ensureSession(
+							{ sessionId: opts!.sessionId!, agent, channel },
+							createMasterPrompt,
+							signal,
+						);
+						isNewSession = sessionResult.isNewSession;
+						previousResponseId = sessionResult.responseId;
+					} catch (error) {
+						console.warn("[Session] Erro ao obter sessão:", error);
+						isNewSession = true;
+					}
 				}
 
-				// SEMPRE tentar carregar histórico (independente de isNewSession)
-				// No modo openai_native, getSessionHistory retorna [] (OpenAI gerencia via previous_response_id)
+				// SEMPRE carregar histórico do Redis (independente de provider/strategy)
 				try {
 					conversationHistory = (await getSessionHistory(opts!.sessionId as string)).map((h) => ({
 						role: h.role,
@@ -287,7 +296,7 @@ export async function generateWarmupButtons(
 							`📚 WARMUP BUTTONS [${getHistoryStrategy()}]: Carregado histórico com ${conversationHistory.length} mensagens`,
 						);
 						isNewSession = false;
-					} else if (isOpenAINativeStrategy()) {
+					} else if (isOpenAINativeStrategy() && isOpenAIModel(agent.model)) {
 						console.log(`📚 WARMUP BUTTONS [openai_native]: Histórico gerenciado via previous_response_id`);
 					}
 				} catch (error) {
@@ -397,22 +406,23 @@ export async function routerLLM(
 			let previousResponseId: string | undefined;
 
 			if (hasSessionId) {
-				try {
-					const sessionResult = await ensureSession(
-						{ sessionId: opts!.sessionId as string, agent, channel },
-						createMasterPrompt,
-						signal,
-					);
-					isNewSession = sessionResult.isNewSession;
-					previousResponseId = sessionResult.responseId;
-				} catch (error) {
-					console.warn("[Session] Erro ao obter sessão:", error);
-					isNewSession = true;
+				// Only use OpenAI native session (previous_response_id) for OpenAI models
+				if (isOpenAIModel(agent.model)) {
+					try {
+						const sessionResult = await ensureSession(
+							{ sessionId: opts!.sessionId as string, agent, channel },
+							createMasterPrompt,
+							signal,
+						);
+						isNewSession = sessionResult.isNewSession;
+						previousResponseId = sessionResult.responseId;
+					} catch (error) {
+						console.warn("[Session] Erro ao obter sessão:", error);
+						isNewSession = true;
+					}
 				}
 
-				// SEMPRE tentar carregar histórico (independente de isNewSession)
-				// O histórico pode existir mesmo se o sessionPointer expirou
-				// No modo openai_native, getSessionHistory retorna [] (OpenAI gerencia via previous_response_id)
+				// SEMPRE carregar histórico do Redis (independente de provider/strategy)
 				try {
 					conversationHistory = (await getSessionHistory(opts!.sessionId as string)).map((h) => ({
 						role: h.role,
@@ -422,9 +432,8 @@ export async function routerLLM(
 						console.log(
 							`📚 ROUTER LLM [${getHistoryStrategy()}]: Carregado histórico com ${conversationHistory.length} mensagens`,
 						);
-						// Se temos histórico, não é realmente uma sessão nova para o modelo
 						isNewSession = false;
-					} else if (isOpenAINativeStrategy()) {
+					} else if (isOpenAINativeStrategy() && isOpenAIModel(agent.model)) {
 						console.log(`📚 ROUTER LLM [openai_native]: Histórico gerenciado via previous_response_id`);
 					}
 				} catch (error) {

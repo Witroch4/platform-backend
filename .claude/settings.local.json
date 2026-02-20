@@ -47,7 +47,12 @@
       "Skill(frontend-design)",
       "Skill(frontend-design:*)",
       "Bash(docker ps:*)",
-      "Bash(PGPASSWORD=postgres psql:*)"
+      "Bash(PGPASSWORD=postgres psql:*)",
+      "Bash(pnpm why fast-xml-parser)",
+      "Bash(wc:*)",
+      "Bash(docker exec:*)",
+      "Bash(npx jest:*)",
+      "Bash(pnpm exec jest:*)"
     ],
     "deny": [],
     "ask": []

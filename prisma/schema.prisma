@@ -1471,6 +1471,9 @@ model AiAssistant {
   instructions            String?
   intentOutputFormat      AiIntentOutputFormat @default(JSON)
   model                   String               @default("gpt-5-nano")
+  provider                AiProvider           @default(OPENAI)
+  fallbackProvider        AiProvider?
+  fallbackModel           String?
   embedipreview           Boolean              @default(true)
   reasoningEffort         String               @default("minimal")
   verbosity               String               @default("low")
@@ -1579,6 +1582,7 @@ model Flow {
   nodes       FlowNode[]
   edges       FlowEdge[]
   sessions    FlowSession[]
+  campaigns   FlowCampaign[]       // Campanhas de disparo em massa
   mapeamentos MapeamentoIntencao[] // Mapeamentos de intent que apontam para este flow
   inbox       ChatwitInbox         @relation(fields: [inboxId], references: [id], onDelete: Cascade)
   createdAt   DateTime             @default(now())
@@ -1644,6 +1648,72 @@ enum FlowSessionStatus {
   WAITING_INPUT
   COMPLETED
   ERROR
+}
+
+// =============================================================================
+// FLOW CAMPAIGNS — Disparos em massa via Flow Builder
+// =============================================================================
+
+model FlowCampaign {
+  id              String                 @id @default(cuid())
+  name            String
+  flowId          String
+  flow            Flow                   @relation(fields: [flowId], references: [id])
+  inboxId         String
+  status          FlowCampaignStatus     @default(DRAFT)
+  scheduledAt     DateTime?              // Agendamento opcional
+  startedAt       DateTime?
+  completedAt     DateTime?
+  pausedAt        DateTime?
+  totalContacts   Int                    @default(0)
+  sentCount       Int                    @default(0)
+  failedCount     Int                    @default(0)
+  skippedCount    Int                    @default(0)
+  rateLimit       Int                    @default(30)  // msgs/min
+  priorityLevel   Int                    @default(8)   // 1=highest, 10=lowest
+  variables       Json                   @default("{}") // Variáveis globais da campanha
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  contacts        FlowCampaignContact[]
+
+  @@index([inboxId, status])
+  @@index([scheduledAt])
+  @@index([status])
+}
+
+model FlowCampaignContact {
+  id            String                    @id @default(cuid())
+  campaignId    String
+  campaign      FlowCampaign              @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contactId     String                    // Chatwit contact ID
+  contactPhone  String?
+  contactName   String?
+  status        FlowCampaignContactStatus @default(PENDING)
+  sessionId     String?                   // FlowSession ID quando executado
+  sentAt        DateTime?
+  errorMessage  String?
+  retryCount    Int                       @default(0)
+  variables     Json                      @default("{}") // Variáveis específicas do contato
+
+  @@index([campaignId, status])
+  @@index([contactId])
+}
+
+enum FlowCampaignStatus {
+  DRAFT
+  SCHEDULED
+  RUNNING
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum FlowCampaignContactStatus {
+  PENDING
+  QUEUED
+  SENT
+  FAILED
+  SKIPPED
 }
 
 enum Provider {
@@ -1862,6 +1932,7 @@ enum LinkedColumn {
 enum AiProvider {
   OPENAI  // GPT-4.1, GPT-5, etc
   GEMINI  // Gemini 3 Flash/Pro
+  CLAUDE  // Claude Haiku, Sonnet, Opus
 }
 
 enum AiFaqStatus {

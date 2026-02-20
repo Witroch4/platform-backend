@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { NotificationDropdown } from "@/components/notifications/notification-dropdown";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { AnimatedThemeToggle } from "@/components/animated-theme-toggle";
 import LoginBadge from "@/components/auth/login-badge";
 
 const NavbarAdmin = () => {
@@ -63,7 +63,7 @@ const NavbarAdmin = () => {
 						<span className="sr-only">Ajuda</span>
 					</Button>
 
-					<ThemeToggle />
+					<AnimatedThemeToggle />
 
 					{session?.user && (
 						<DropdownMenu>

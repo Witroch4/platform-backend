@@ -54,6 +54,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useMtfData } from "@/app/admin/mtf-diamante/context/SwrProvider";
+import { WhatsAppAnimatedIcon } from "@/components/whatsapp-animated-icon";
+import { InstagramAnimatedIcon } from "@/components/instagram-animated-icon";
+import { RobotAnimatedIcon } from "@/components/robot-animated-icon";
 
 export function AppAdminDashboard() {
 	const { data: session } = useSession();
@@ -108,7 +111,7 @@ export function AppAdminDashboard() {
 			await navigator.clipboard.writeText(newToken);
 			setCopied(true);
 			setTimeout(() => setCopied(false), 2000);
-		} catch {}
+		} catch { }
 	};
 
 	// Sem useEffect: dados já vêm do contexto com fallback + keepPreviousData (sem flicker)
@@ -208,6 +211,7 @@ export function AppAdminDashboard() {
 														).map((cx: any) => {
 															const channel = (cx.channelType || "").toLowerCase();
 															const isInstagram = channel.includes("instagram");
+															const isWhatsApp = channel.includes("whatsapp") || (cx.nome || cx.inboxName || "").toLowerCase().includes("whatsapp");
 															const Icon = isInstagram ? Instagram : MessageCircle; // WhatsApp/Outros
 															const isActive = isInboxActive(cx.id);
 															const targetHref = `/admin/mtf-diamante/inbox/${cx.id}`;
@@ -219,10 +223,10 @@ export function AppAdminDashboard() {
 															};
 
 															const handleMouseEnter = () => {
-																prefetchInbox(cx.id).catch(() => {});
+																prefetchInbox(cx.id).catch(() => { });
 																try {
 																	router.prefetch(targetHref);
-																} catch {}
+																} catch { }
 															};
 															return (
 																<SidebarMenuSubItem key={cx.id}>
@@ -237,12 +241,21 @@ export function AppAdminDashboard() {
 																			href={targetHref}
 																			onClick={handleClick}
 																			onMouseEnter={handleMouseEnter}
-																			className={`text-[0.95rem] py-2 transition-colors ${
-																				isActive ? "bg-accent" : "hover:bg-accent"
-																			} ${isPending ? "opacity-75" : ""}`}
+																			className={`text-[0.95rem] py-2 transition-colors ${isActive ? "bg-accent" : "hover:bg-accent"
+																				} ${isPending ? "opacity-75" : ""}`}
 																		>
-																			<Icon className={isInstagram ? "text-pink-500" : "text-green-500"} />
-																			<span className="font-medium">{cx.nome || cx.inboxName || "Inbox"}</span>
+																			{isWhatsApp ? (
+																				<div className="w-5 h-5 flex items-center justify-center shrink-0">
+																					<WhatsAppAnimatedIcon isActive={isActive ?? false} />
+																				</div>
+																			) : isInstagram ? (
+																				<div className="w-5 h-5 flex items-center justify-center shrink-0">
+																					<InstagramAnimatedIcon isActive={isActive ?? false} />
+																				</div>
+																			) : (
+																				<Icon className="text-gray-500" />
+																			)}
+																			<span className="font-medium ml-2">{cx.nome || cx.inboxName || "Inbox"}</span>
 																		</SidebarMenuSubButton>
 																	</InboxContextMenu>
 																</SidebarMenuSubItem>
@@ -291,7 +304,7 @@ export function AppAdminDashboard() {
 																	onMouseEnter={() => {
 																		try {
 																			router.prefetch("/admin/MTFdashboard");
-																		} catch {}
+																		} catch { }
 																	}}
 																	className={`text-[0.95rem] py-2 transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
 																>
@@ -311,7 +324,7 @@ export function AppAdminDashboard() {
 																	onMouseEnter={() => {
 																		try {
 																			router.prefetch("/admin/MTFdashboard/agentes");
-																		} catch {}
+																		} catch { }
 																	}}
 																	className={`text-[0.95rem] py-2 transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
 																>
@@ -331,7 +344,7 @@ export function AppAdminDashboard() {
 																	onMouseEnter={() => {
 																		try {
 																			router.prefetch("/admin/MTFdashboard/mtf-oab");
-																		} catch {}
+																		} catch { }
 																	}}
 																	className={`text-[0.95rem] py-2 transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
 																>
@@ -351,7 +364,7 @@ export function AppAdminDashboard() {
 																	onMouseEnter={() => {
 																		try {
 																			router.prefetch("/admin/MTFdashboard/mtf-oab/oab-eval");
-																		} catch {}
+																		} catch { }
 																	}}
 																	className={`text-[0.95rem] py-2 transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
 																>
@@ -370,7 +383,9 @@ export function AppAdminDashboard() {
 											<SidebarMenuItem>
 												<CollapsibleTrigger asChild>
 													<SidebarMenuButton className="text-base py-3">
-														<Bot className="mr-3 h-5 w-5" />
+														<div className="mr-3 h-6 w-6">
+															<RobotAnimatedIcon />
+														</div>
 														{state !== "collapsed" && <span className="font-semibold">Capitão</span>}
 													</SidebarMenuButton>
 												</CollapsibleTrigger>
@@ -389,7 +404,7 @@ export function AppAdminDashboard() {
 																	onMouseEnter={() => {
 																		try {
 																			router.prefetch("/admin/capitao");
-																		} catch {}
+																		} catch { }
 																	}}
 																	className={`text-[0.95rem] py-2 transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
 																>
@@ -409,7 +424,7 @@ export function AppAdminDashboard() {
 																	onMouseEnter={() => {
 																		try {
 																			router.prefetch("/admin/capitao/documentos");
-																		} catch {}
+																		} catch { }
 																	}}
 																	className={`text-[0.95rem] py-2 transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
 																>
@@ -429,7 +444,7 @@ export function AppAdminDashboard() {
 																	onMouseEnter={() => {
 																		try {
 																			router.prefetch("/admin/capitao/faqs");
-																		} catch {}
+																		} catch { }
 																	}}
 																	className={`text-[0.95rem] py-2 transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
 																>
@@ -449,7 +464,7 @@ export function AppAdminDashboard() {
 																	onMouseEnter={() => {
 																		try {
 																			router.prefetch("/admin/capitao/intents");
-																		} catch {}
+																		} catch { }
 																	}}
 																	className={`text-[0.95rem] py-2 transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
 																>
@@ -553,7 +568,7 @@ export function AppAdminDashboard() {
 												onMouseEnter={() => {
 													try {
 														router.prefetch("/admin/notifications");
-													} catch {}
+													} catch { }
 												}}
 												className={`flex items-center transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
 											>
@@ -573,7 +588,7 @@ export function AppAdminDashboard() {
 												onMouseEnter={() => {
 													try {
 														router.prefetch("/admin/users");
-													} catch {}
+													} catch { }
 												}}
 												className={`flex items-center transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
 											>
@@ -593,7 +608,7 @@ export function AppAdminDashboard() {
 												onMouseEnter={() => {
 													try {
 														router.prefetch("/admin/monitoring");
-													} catch {}
+													} catch { }
 												}}
 												className={`flex items-center transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
 											>
@@ -615,7 +630,7 @@ export function AppAdminDashboard() {
 										onMouseEnter={() => {
 											try {
 												router.prefetch("/admin/leads-chatwit");
-											} catch {}
+											} catch { }
 										}}
 										className={`flex items-center transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
 									>
@@ -635,7 +650,7 @@ export function AppAdminDashboard() {
 										onMouseEnter={() => {
 											try {
 												router.prefetch("/admin/disparo-oab");
-											} catch {}
+											} catch { }
 										}}
 										className={`flex items-center transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
 									>
@@ -655,7 +670,7 @@ export function AppAdminDashboard() {
 										onMouseEnter={() => {
 											try {
 												router.prefetch("/admin/templates");
-											} catch {}
+											} catch { }
 										}}
 										className={`flex items-center transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
 									>
@@ -675,7 +690,7 @@ export function AppAdminDashboard() {
 										onMouseEnter={() => {
 											try {
 												router.prefetch("/admin/disparo-em-massa");
-											} catch {}
+											} catch { }
 										}}
 										className={`flex items-center transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
 									>
@@ -696,7 +711,7 @@ export function AppAdminDashboard() {
 										onMouseEnter={() => {
 											try {
 												router.prefetch("/admin/webhook-test");
-											} catch {}
+											} catch { }
 										}}
 										className={`flex items-center transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
 									>
@@ -717,7 +732,7 @@ export function AppAdminDashboard() {
 										onMouseEnter={() => {
 											try {
 												router.prefetch("/admin/hooklist");
-											} catch {}
+											} catch { }
 										}}
 										className={`flex items-center transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
 									>
@@ -738,7 +753,7 @@ export function AppAdminDashboard() {
 										onMouseEnter={() => {
 											try {
 												router.prefetch("/admin/openai-source-test-biblia");
-											} catch {}
+											} catch { }
 										}}
 										className={`flex items-center transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
 									>
@@ -759,7 +774,7 @@ export function AppAdminDashboard() {
 										onMouseEnter={() => {
 											try {
 												router.prefetch("/admin/features");
-											} catch {}
+											} catch { }
 										}}
 										className={`flex items-center transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
 									>
@@ -779,7 +794,7 @@ export function AppAdminDashboard() {
 										onMouseEnter={() => {
 											try {
 												router.prefetch("/admin/queue");
-											} catch {}
+											} catch { }
 										}}
 										className={`flex items-center transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
 									>
@@ -801,7 +816,7 @@ export function AppAdminDashboard() {
 												onMouseEnter={() => {
 													try {
 														router.prefetch("/admin/ai-integration");
-													} catch {}
+													} catch { }
 												}}
 												className={`flex items-center transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
 											>
@@ -821,7 +836,7 @@ export function AppAdminDashboard() {
 												onMouseEnter={() => {
 													try {
 														router.prefetch("/admin/ai-integration/intents");
-													} catch {}
+													} catch { }
 												}}
 												className={`flex items-center transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
 											>
@@ -842,7 +857,7 @@ export function AppAdminDashboard() {
 												onMouseEnter={() => {
 													try {
 														router.prefetch("/admin/monitoring/queue-management");
-													} catch {}
+													} catch { }
 												}}
 												className={`flex items-center transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
 											>
@@ -862,7 +877,7 @@ export function AppAdminDashboard() {
 												onMouseEnter={() => {
 													try {
 														router.prefetch("/admin/iframe-config");
-													} catch {}
+													} catch { }
 												}}
 												className={`flex items-center transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
 											>
@@ -883,9 +898,8 @@ export function AppAdminDashboard() {
 					<DropdownMenu>
 						<DropdownMenuTrigger asChild>
 							<button
-								className={`flex items-center w-full px-2 py-1 hover:bg-accent rounded ${
-									session?.user && state === "collapsed" ? "justify-center" : "justify-start pl-2"
-								}`}
+								className={`flex items-center w-full px-2 py-1 hover:bg-accent rounded ${session?.user && state === "collapsed" ? "justify-center" : "justify-start pl-2"
+									}`}
 							>
 								{session?.user?.image ? (
 									<Avatar className="h-6 w-6">

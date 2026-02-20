@@ -16,6 +16,21 @@ import { getModelCaps, isGPT5, resolveSamplingPrefs } from "./model-capabilities
 import { getConstraintsForChannel } from "./channel-constraints";
 
 // ==== Structured Outputs with Fallback Pattern ====
+//
+// NOTE: This file is intentionally NOT migrated to Vercel AI SDK (generateObject).
+// Reasons:
+// 1. OpenAI already has native Structured Outputs via zodTextFormat — no fragile JSON parsing here
+// 2. generateObject validates Zod internally, preventing coerceLengths() from truncating BEFORE validation
+// 3. Complex session management (previous_response_id, ensureSession, updateSessionPointer) requires
+//    precise control over the OpenAI Responses API that providerOptions may not fully expose
+// 4. Retry logic (isSchemaArrayError, unsupported sampling) is OpenAI-specific and well-tested
+//
+// The Vercel AI SDK migration (Phases 1-4) unified Gemini/Claude band processors and degraded
+// processing. This file remains the OpenAI-specific path until a future migration that:
+// - Creates relaxed schemas (no .max()) for generateObject, with strict schemas for post-validation
+// - Verifies providerMetadata.openai.responseId works for session pointer updates
+// - Tests sampling rejection retry behavior with the AI SDK
+//
 export interface StructuredOrJsonResult<T> {
 	mode: "structured" | "json_mode_fallback";
 	id: string;
@@ -63,13 +78,13 @@ function isSchemaArrayError(err: any): boolean {
 }
 
 // ---------- Helpers de saneamento para saídas com "sujeira" ----------
-function stripCodeFences(s: string): string {
+export function stripCodeFences(s: string): string {
 	if (!s) return s;
 	// remove ```json ... ``` ou ``` ... ```
 	return s.replace(/^\s*```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "");
 }
 
-function removeNullBytes(s: string): string {
+export function removeNullBytes(s: string): string {
 	return s ? s.replace(/\u0000/g, "") : s;
 }
 
@@ -81,7 +96,7 @@ function trimTo(s: string, max: number): string {
 	return s.slice(0, max);
 }
 
-function coerceLengths<T extends Record<string, any>>(candidate: T, channel?: ChannelType): T {
+export function coerceLengths<T extends Record<string, any>>(candidate: T, channel?: ChannelType): T {
 	if (!channel) return candidate;
 	try {
 		const c = getConstraintsForChannel(channel);
@@ -106,7 +121,7 @@ function coerceLengths<T extends Record<string, any>>(candidate: T, channel?: Ch
 }
 
 // Tenta extrair um bloco JSON quando há texto extra antes/depois
-function extractJsonLoose(s: string): string | null {
+export function extractJsonLoose(s: string): string | null {
 	if (!s) return null;
 	const first = s.indexOf("{");
 	const last = s.lastIndexOf("}");
@@ -114,7 +129,7 @@ function extractJsonLoose(s: string): string | null {
 	return s.slice(first, last + 1);
 }
 
-function sanitizeRawTextForJson(raw: string | undefined): string {
+export function sanitizeRawTextForJson(raw: string | undefined): string {
 	let t = removeNullBytes(raw || "");
 	t = stripCodeFences(t).trim();
 	return t;

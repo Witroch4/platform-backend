@@ -36,9 +36,49 @@ import {
 	normalizeChannelType,
 	computeDynamicHintThreshold,
 } from "./utils";
-import { AssistantConfig } from "./assistant-config";
+import { AssistantConfig, type AiProviderType } from "./assistant-config";
+import { generateWarmupButtonsGemini, routerLLMGemini } from "../services/gemini-band-processor";
+import { generateWarmupButtonsClaude, routerLLMClaude } from "../services/claude-band-processor";
+import type { WarmupButtonsResponse, RouterDecision, ChannelType } from "@/services/openai-components/types";
+
+// ============ MULTI-PROVIDER DISPATCHERS ============
+
+async function dispatchWarmupButtons(
+	userText: string,
+	candidates: IntentCandidate[],
+	agentConfig: AssistantConfig,
+	opts: { channelType: string; sessionId?: string },
+): Promise<WarmupButtonsResponse | null> {
+	const provider = agentConfig.provider || "OPENAI";
+	const typedOpts = { ...opts, channelType: opts.channelType as ChannelType };
+	switch (provider) {
+		case "GEMINI":
+			return generateWarmupButtonsGemini(userText, candidates, agentConfig, opts);
+		case "CLAUDE":
+			return generateWarmupButtonsClaude(userText, candidates, agentConfig, opts);
+		default:
+			return openaiService.generateWarmupButtons(userText, candidates, agentConfig, typedOpts);
+	}
+}
+
+async function dispatchRouterLLM(
+	userText: string,
+	agentConfig: AssistantConfig,
+	opts: { channelType: string; sessionId?: string; intentHints?: IntentCandidate[]; profile?: "lite" | "full"; supplementalContext?: string },
+): Promise<RouterDecision | null> {
+	const provider = agentConfig.provider || "OPENAI";
+	const typedOpts = { ...opts, channelType: opts.channelType as ChannelType };
+	switch (provider) {
+		case "GEMINI":
+			return routerLLMGemini(userText, agentConfig, opts);
+		case "CLAUDE":
+			return routerLLMClaude(userText, agentConfig, opts);
+		default:
+			return openaiService.routerLLM(userText, agentConfig, typedOpts);
+	}
+}
 import { ProcessorContext } from "./button-reactions";
-import { buildTimeoutFallbackResponse } from "./timeout-helpers";
+import { buildTimeoutFallbackResponse, type TimeoutFallbackInput } from "./timeout-helpers";
 import { storeInteractiveMessageContext } from "@/services/openai-components/server-socialwise-componentes/session-manager";
 
 const bandLogger = createLogger("SocialWise-Processor-BandHandlers");
@@ -422,7 +462,7 @@ export async function processSoftBand(
 			const warmupResult = await concurrencyManager.executeLlmOperation(
 				context.inboxId,
 				() =>
-					openaiService.generateWarmupButtons(context.userText, classification.candidates, agentConfig, {
+					dispatchWarmupButtons(context.userText, classification.candidates, agentConfig, {
 						channelType: normalizeChannelType(context.channelType),
 						sessionId: context.sessionId,
 					}),
@@ -443,7 +483,39 @@ export async function processSoftBand(
 					traceId: context.traceId,
 				});
 
-				const fallbackResponse = buildTimeoutFallbackResponse(normalizeChannelType(context.channelType));
+				// Store retry context for @retry button
+				const retryInput: TimeoutFallbackInput = {
+					sessionId: context.sessionId || "",
+					userText: context.userText,
+					payload: context.originalPayload,
+					model: agentConfig.model,
+					deadlineMs: agentConfig.softDeadlineMs,
+					channelType: context.channelType,
+					inboxId: context.inboxId,
+					userId: context.userId,
+					contactName: context.contactName,
+					contactPhone: context.contactPhone,
+					classification: classification
+						? {
+								band: classification.band,
+								score: classification.score,
+								candidates: classification.candidates.map((c) => ({
+									id: c.slug || "",
+									name: c.name || "",
+									slug: c.slug || "",
+									score: c.score || 0,
+								})),
+							}
+						: undefined,
+					agentInstructions: agentConfig.instructions,
+					fallbackProvider: agentConfig.fallbackProvider || undefined,
+					fallbackModel: agentConfig.fallbackModel || undefined,
+				};
+
+				const fallbackResponse = await buildTimeoutFallbackResponse(
+					normalizeChannelType(context.channelType),
+					retryInput,
+				);
 				return { response: fallbackResponse, llmWarmupMs };
 			}
 
@@ -474,7 +546,7 @@ export async function processSoftBand(
 			const routerResult = await concurrencyManager.executeLlmOperation(
 				context.inboxId,
 				() =>
-					openaiService.routerLLM(context.userText, agentConfig, {
+					dispatchRouterLLM(context.userText, agentConfig, {
 						channelType: normalizeChannelType(context.channelType),
 						sessionId: context.sessionId,
 						intentHints: classification.candidates,
@@ -497,7 +569,39 @@ export async function processSoftBand(
 					traceId: context.traceId,
 				});
 
-				const fallbackResponse = buildTimeoutFallbackResponse(normalizeChannelType(context.channelType));
+				// Store retry context for @retry button
+				const retryInput: TimeoutFallbackInput = {
+					sessionId: context.sessionId || "",
+					userText: context.userText,
+					payload: context.originalPayload,
+					model: agentConfig.model,
+					deadlineMs: agentConfig.softDeadlineMs,
+					channelType: context.channelType,
+					inboxId: context.inboxId,
+					userId: context.userId,
+					contactName: context.contactName,
+					contactPhone: context.contactPhone,
+					classification: classification
+						? {
+								band: classification.band,
+								score: classification.score,
+								candidates: classification.candidates.map((c) => ({
+									id: c.slug || "",
+									name: c.name || "",
+									slug: c.slug || "",
+									score: c.score || 0,
+								})),
+							}
+						: undefined,
+					agentInstructions: agentConfig.instructions,
+					fallbackProvider: agentConfig.fallbackProvider || undefined,
+					fallbackModel: agentConfig.fallbackModel || undefined,
+				};
+
+				const fallbackResponse = await buildTimeoutFallbackResponse(
+					normalizeChannelType(context.channelType),
+					retryInput,
+				);
 				return { response: fallbackResponse, llmWarmupMs };
 			}
 
@@ -610,7 +714,7 @@ export async function processRouterBand(
 		const routerResult = await concurrencyManager.executeLlmOperation(
 			context.inboxId,
 			() =>
-				openaiService.routerLLM(context.userText, agentConfig, {
+				dispatchRouterLLM(context.userText, agentConfig, {
 					channelType: normalizeChannelType(context.channelType),
 					sessionId: context.sessionId,
 					intentHints: filteredHints,
@@ -633,8 +737,53 @@ export async function processRouterBand(
 				traceId: context.traceId,
 			});
 
+			// Store retry context for @retry button
+			const topHint = (intentHints || []).reduce(
+				(best, c) => ((c.score ?? 0) > (best?.score ?? 0) ? c : best),
+				intentHints?.[0],
+			);
+			const retryInput: TimeoutFallbackInput = {
+				sessionId: context.sessionId || "",
+				userText: context.userText,
+				payload: context.originalPayload,
+				model: agentConfig.model,
+				deadlineMs: agentConfig.hardDeadlineMs,
+				channelType: context.channelType,
+				inboxId: context.inboxId,
+				userId: context.userId,
+				contactName: context.contactName,
+				contactPhone: context.contactPhone,
+				classification: intentHints?.length
+					? {
+							band: "ROUTER",
+							score: topHint?.score ?? 0,
+							candidates: (intentHints || []).map((c) => ({
+								id: c.slug || "",
+								name: c.name || "",
+								slug: c.slug || "",
+								score: c.score || 0,
+							})),
+						}
+					: undefined,
+				agentInstructions: agentConfig.instructions,
+				intentHints: filteredHints?.length
+					? JSON.stringify(
+							filteredHints.map((h) => ({
+								slug: `@${h.slug}`,
+								score: h.score,
+								desc: h.desc?.substring(0, 200),
+							})),
+						)
+					: undefined,
+				fallbackProvider: agentConfig.fallbackProvider || undefined,
+				fallbackModel: agentConfig.fallbackModel || undefined,
+			};
+
 			// Return timeout fallback response with retry and human handoff options
-			const fallbackResponse = buildTimeoutFallbackResponse(normalizeChannelType(context.channelType));
+			const fallbackResponse = await buildTimeoutFallbackResponse(
+				normalizeChannelType(context.channelType),
+				retryInput,
+			);
 			return {
 				response: fallbackResponse,
 				llmWarmupMs,

@@ -12,6 +12,7 @@ import { withPrismaReconnect } from "@/lib/connections";
 // SocialWise Flow optimized components
 import { processSocialWiseFlow, extractSessionId } from "@/lib/socialwise-flow/processor";
 import { buildChannelResponse } from "@/lib/socialwise-flow/channel-formatting";
+import { handleRetryWithDegradation } from "@/lib/socialwise-flow/processor-components/retry-handler";
 import { isDebounceEnabled, addToDebounceBuffer, getDebounceConfig } from "@/lib/socialwise-flow/message-debouncer";
 import {
 	SocialWiseFlowPayloadSchema,
@@ -255,9 +256,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 					message: err.message,
 					...(err.code === "invalid_type" && "expected" in err && "received" in err
 						? {
-								expected: err.expected,
-								received: err.received,
-							}
+							expected: err.expected,
+							received: err.received,
+						}
 						: {}),
 				})),
 				originalPayload: payload,
@@ -281,10 +282,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 		const socialwiseDataForCorrelation = getSocialWiseChatwitData(validPayload.context);
 		correlationId = String(
 			validPayload.context.message?.source_id ||
-				socialwiseDataForCorrelation?.wamid ||
-				socialwiseDataForCorrelation?.message_data?.id ||
-				validPayload.context.message?.id ||
-				traceId,
+			socialwiseDataForCorrelation?.wamid ||
+			socialwiseDataForCorrelation?.message_data?.id ||
+			validPayload.context.message?.id ||
+			traceId,
 		);
 
 		// Step 6: Initialize security services
@@ -439,6 +440,57 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 			return NextResponse.json(exitResponse, { status: 200 });
 		}
 
+		// Check for @retry (retry with degraded model after LLM timeout)
+		// WhatsApp buttons send button_id at root level, not in content_attributes
+		const rootButtonId = (payload as any)?.button_id as string | undefined;
+		if (
+			(quickReplyPayload && quickReplyPayload.toLowerCase() === "@retry") ||
+			(postbackPayload && postbackPayload.toLowerCase() === "@retry") ||
+			(rootButtonId && rootButtonId.toLowerCase() === "@retry")
+		) {
+			// Extract channel type early (before Step 11) for @retry handling
+			const retryChannelType =
+				validPayload.channel_type ||
+				validPayload.context?.inbox?.channel_type ||
+				"Channel::Whatsapp";
+
+			webhookLogger.info("🔄 RETRY detected - processing with degraded model", {
+				payload: quickReplyPayload || postbackPayload,
+				channelType: retryChannelType,
+				traceId,
+			});
+
+			const retryResult = await handleRetryWithDegradation(validPayload, retryChannelType, traceId);
+
+			if (retryResult.success && retryResult.response) {
+				webhookLogger.info("🔄 RETRY successful", {
+					reason: retryResult.reason,
+					traceId,
+				});
+				logFinalResponse(retryResult.response, 200, traceId);
+				return NextResponse.json(retryResult.response, { status: 200 });
+			}
+
+			if (retryResult.forceHandoff) {
+				webhookLogger.info("🔄 RETRY exceeded max attempts - forcing handoff", {
+					reason: retryResult.reason,
+					traceId,
+				});
+				const handoffResponse = { action: "handoff" };
+				logFinalResponse(handoffResponse, 200, traceId);
+				return NextResponse.json(handoffResponse, { status: 200 });
+			}
+
+			// Fallback: return generic response
+			const fallbackResponse = buildChannelResponse(
+				retryChannelType,
+				"Desculpe, não conseguimos processar sua solicitação no momento.\n\nSe nenhum botão atender, digite sua solicitação",
+				[{ title: "Atendimento Humano", payload: "@falar_atendente" }],
+			);
+			logFinalResponse(fallbackResponse, 200, traceId);
+			return NextResponse.json(fallbackResponse, { status: 200 });
+		}
+
 		// Step 11: Extract context from validated payload
 		const rootChannelType = validPayload.channel_type;
 		const socialwiseData = getSocialWiseChatwitData(validPayload.context);
@@ -484,44 +536,44 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 		const inboxId = String(inboxRow?.inboxId || externalInboxNumeric || "");
 		const userId = (inboxRow as any)?.usuarioChatwit?.appUserId;
 
-	// 🚨 ALERTA CRÍTICO: userId não encontrado - sistema vai usar fallback genérico
-	if (!userId) {
-		webhookLogger.error("🚨 CONFIGURAÇÃO INCOMPLETA: userId não encontrado para inbox", {
-			problema: "Inbox não está vinculada a um usuário válido no sistema",
-			impacto: "Sistema vai usar FALLBACK GENÉRICO ao invés de IA inteligente (embedding/LLM)",
-			solucao: {
-				passo1: "Verificar se a inbox existe no banco: ChatwitInbox onde inboxId=%s",
-				passo2: "Verificar se existe UsuarioChatwit com chatwitAccountId=%s",
-				passo3: "Vincular inbox ao usuário através de usuarioChatwit.appUserId",
-				passo4: "Conferir se Account com id correspondente existe no banco",
-			},
-			dados: {
-				externalInboxNumeric,
-				chatwitAccountId,
-				inboxId,
-				inboxRowFound: !!inboxRow,
-				hasUsuarioChatwit: !!(inboxRow as any)?.usuarioChatwit,
-				appUserId: (inboxRow as any)?.usuarioChatwit?.appUserId || null,
-			},
+		// 🚨 ALERTA CRÍTICO: userId não encontrado - sistema vai usar fallback genérico
+		if (!userId) {
+			webhookLogger.error("🚨 CONFIGURAÇÃO INCOMPLETA: userId não encontrado para inbox", {
+				problema: "Inbox não está vinculada a um usuário válido no sistema",
+				impacto: "Sistema vai usar FALLBACK GENÉRICO ao invés de IA inteligente (embedding/LLM)",
+				solucao: {
+					passo1: "Verificar se a inbox existe no banco: ChatwitInbox onde inboxId=%s",
+					passo2: "Verificar se existe UsuarioChatwit com chatwitAccountId=%s",
+					passo3: "Vincular inbox ao usuário através de usuarioChatwit.appUserId",
+					passo4: "Conferir se Account com id correspondente existe no banco",
+				},
+				dados: {
+					externalInboxNumeric,
+					chatwitAccountId,
+					inboxId,
+					inboxRowFound: !!inboxRow,
+					hasUsuarioChatwit: !!(inboxRow as any)?.usuarioChatwit,
+					appUserId: (inboxRow as any)?.usuarioChatwit?.appUserId || null,
+				},
+				channelType,
+				traceId,
+			});
+		}
+
+		webhookLogger.info("Processing SocialWise Flow request", {
 			channelType,
+			inboxId,
+			userId,
+			userIdStatus: userId ? "✅ OK" : "❌ MISSING - FALLBACK MODE",
+			textLength: textInput.length,
 			traceId,
 		});
-	}
 
-	webhookLogger.info("Processing SocialWise Flow request", {
-		channelType,
-		inboxId,
-		userId,
-		userIdStatus: userId ? "✅ OK" : "❌ MISSING - FALLBACK MODE",
-		textLength: textInput.length,
-		traceId,
-	});
-
-	// Step 13: Enhanced button interaction detection and processing
-	// 🔥 PRIORIDADE: Botões do Flow Builder (prefixo flow_) são processados pelo FlowOrchestrator
-	const buttonDetection = detectButtonClick(validPayload, channelType);
-	const isFlowBuilderButton =
-		buttonDetection.isButtonClick && buttonDetection.buttonId?.startsWith(FLOW_BUTTON_PREFIX);
+		// Step 13: Enhanced button interaction detection and processing
+		// 🔥 PRIORIDADE: Botões do Flow Builder (prefixo flow_) são processados pelo FlowOrchestrator
+		const buttonDetection = detectButtonClick(validPayload, channelType);
+		const isFlowBuilderButton =
+			buttonDetection.isButtonClick && buttonDetection.buttonId?.startsWith(FLOW_BUTTON_PREFIX);
 
 		// Se NÃO for botão do Flow Builder, usar processamento legado de button reactions
 		let buttonReactionResponse = null;
@@ -629,6 +681,43 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 			const handoffResponse = { action: "handoff" };
 			logFinalResponse(handoffResponse, 200, traceId);
 			return NextResponse.json(handoffResponse, { status: 200 });
+		}
+
+		// Check for @retry (retry with degraded model) via unmapped button
+		if (unmappedButtonId && unmappedButtonId.toLowerCase() === "@retry") {
+			const retryChannelType =
+				validPayload.channel_type ||
+				validPayload.context?.inbox?.channel_type ||
+				"Channel::Whatsapp";
+
+			webhookLogger.info("🔄 RETRY detected via unmapped button - processing with degraded model", {
+				unmappedButtonId,
+				channelType: retryChannelType,
+				traceId,
+			});
+
+			const retryResult = await handleRetryWithDegradation(validPayload, retryChannelType, traceId);
+
+			if (retryResult.success && retryResult.response) {
+				webhookLogger.info("🔄 RETRY successful", { reason: retryResult.reason, traceId });
+				logFinalResponse(retryResult.response, 200, traceId);
+				return NextResponse.json(retryResult.response, { status: 200 });
+			}
+
+			if (retryResult.forceHandoff) {
+				webhookLogger.info("🔄 RETRY exceeded max attempts - forcing handoff", { reason: retryResult.reason, traceId });
+				const handoffResponse = { action: "handoff" };
+				logFinalResponse(handoffResponse, 200, traceId);
+				return NextResponse.json(handoffResponse, { status: 200 });
+			}
+
+			const fallbackResponse = buildChannelResponse(
+				retryChannelType,
+				"Desculpe, não conseguimos processar sua solicitação no momento.\n\nSe nenhum botão atender, digite sua solicitação",
+				[{ title: "Atendimento Humano", payload: "@falar_atendente" }],
+			);
+			logFinalResponse(fallbackResponse, 200, traceId);
+			return NextResponse.json(fallbackResponse, { status: 200 });
 		}
 
 		// Check for @recomecar (restart)
@@ -844,7 +933,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 				const conversationDisplayId =
 					Number(
 						(validPayload.metadata as Record<string, unknown>)?.conversation_display_id ||
-							(validPayload.context?.conversation as Record<string, unknown>)?.display_id,
+						(validPayload.context?.conversation as Record<string, unknown>)?.display_id,
 					) || undefined;
 
 				// Construir DeliveryContext para o FlowOrchestrator
@@ -1214,7 +1303,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 		}
 	} catch (error) {
 		const routeTotalMs = Date.now() - startTime;
-
+		console.error("!!! FATAL WEBHOOK ERROR !!!", error);
 		webhookLogger.error("Webhook processing failed", {
 			error: error instanceof Error ? error.message : String(error),
 			routeTotalMs,

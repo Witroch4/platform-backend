@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { RobotAnimatedIcon } from "@/components/robot-animated-icon";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -319,7 +320,9 @@ export default function CaptainAssistantsPage() {
 				<div className="flex items-center justify-between">
 					<div className="flex-1">
 						<div className="rounded-md border border-dashed p-4 bg-muted/30 flex items-center gap-4">
-							<Image src="/captain.png" alt="Capitão" width={56} height={56} />
+							<div className="w-14 h-14 shrink-0">
+								<RobotAnimatedIcon />
+							</div>
 							<div className="flex-1">
 								<h2 className="text-base font-semibold">Assistentes do Capitão</h2>
 								<p className="text-sm text-muted-foreground">

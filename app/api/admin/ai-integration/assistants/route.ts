@@ -47,6 +47,9 @@ export async function GET(request: NextRequest) {
 				instructions: true,
 				intentOutputFormat: true,
 				model: true,
+				provider: true,
+				fallbackProvider: true,
+				fallbackModel: true,
 				// SocialWise Flow optimization settings
 				embedipreview: true,
 				reasoningEffort: true,
@@ -61,6 +64,8 @@ export async function GET(request: NextRequest) {
 				softDeadlineMs: true,
 				shortTitleLLM: true,
 				toolChoice: true,
+				sessionTtlSeconds: true,
+				sessionTtlDevSeconds: true,
 				userId: true,
 				createdAt: true,
 			},
@@ -129,6 +134,9 @@ export async function POST(request: NextRequest) {
 				instructions: body?.instructions ? String(body.instructions) : null,
 				intentOutputFormat: body?.intentOutputFormat === "AT_SYMBOL" ? "AT_SYMBOL" : "JSON",
 				model: typeof body?.model === "string" && body.model.trim() ? String(body.model) : "gpt-5-nano",
+				provider: ["OPENAI", "GEMINI", "CLAUDE"].includes(body?.provider) ? body.provider : "OPENAI",
+				fallbackProvider: ["OPENAI", "GEMINI", "CLAUDE"].includes(body?.fallbackProvider) ? body.fallbackProvider : undefined,
+				fallbackModel: typeof body?.fallbackModel === "string" && body.fallbackModel.trim() ? body.fallbackModel.trim() : undefined,
 				// SocialWise Flow optimization settings with defaults
 				embedipreview: body?.embedipreview !== undefined ? !!body.embedipreview : true,
 				reasoningEffort: ["minimal", "low", "medium", "high"].includes(body?.reasoningEffort)
@@ -230,6 +238,20 @@ export async function PATCH(request: NextRequest) {
 	if (typeof body?.intentOutputFormat === "string")
 		updateData.intentOutputFormat = body.intentOutputFormat === "AT_SYMBOL" ? "AT_SYMBOL" : "JSON";
 	if (typeof body?.model === "string") updateData.model = String(body.model).trim();
+
+	// Multi-provider fields
+	const validProviders = ["OPENAI", "GEMINI", "CLAUDE"];
+	if (validProviders.includes(body?.provider)) updateData.provider = body.provider;
+	if (validProviders.includes(body?.fallbackProvider)) updateData.fallbackProvider = body.fallbackProvider;
+	if (body?.fallbackProvider === null) updateData.fallbackProvider = null;
+	if (typeof body?.fallbackModel === "string") updateData.fallbackModel = body.fallbackModel.trim() || null;
+	if (body?.fallbackModel === null) updateData.fallbackModel = null;
+
+	// Session TTL
+	if (typeof body?.sessionTtlSeconds === "number" && body.sessionTtlSeconds >= 0 && body.sessionTtlSeconds <= 604800)
+		updateData.sessionTtlSeconds = body.sessionTtlSeconds;
+	if (typeof body?.sessionTtlDevSeconds === "number" && body.sessionTtlDevSeconds >= 0 && body.sessionTtlDevSeconds <= 86400)
+		updateData.sessionTtlDevSeconds = body.sessionTtlDevSeconds;
 
 	// SocialWise Flow optimization settings
 	if (typeof body?.embedipreview === "boolean") updateData.embedipreview = body.embedipreview;

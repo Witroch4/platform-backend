@@ -21,7 +21,8 @@ export type HistoryStrategy = "manual" | "openai_native";
  * Default: "manual" (compatível com qualquer LLM)
  */
 export function getHistoryStrategy(): HistoryStrategy {
-	const strategy = process.env.CONVERSATION_HISTORY_STRATEGY as HistoryStrategy;
+	// Support both new and old env var names (old name deprecated)
+	const strategy = (process.env.OPENAI_HISTORY_STRATEGY || process.env.CONVERSATION_HISTORY_STRATEGY) as HistoryStrategy;
 	if (strategy === "openai_native") {
 		return "openai_native";
 	}
@@ -190,21 +191,14 @@ export async function hasSessionPointer(sessionId: string): Promise<boolean> {
 /**
  * Recupera o histórico de conversa de uma sessão.
  *
- * Comportamento por estratégia:
- * - "manual": Carrega histórico do Redis/memória
- * - "openai_native": Retorna array vazio (OpenAI gerencia via previous_response_id)
+ * SEMPRE lê do Redis independente da estratégia (manual ou openai_native).
+ * O Redis é a fonte universal de histórico — usado por qualquer modelo (OpenAI, Gemini, etc.)
+ * No modo openai_native, a OpenAI TAMBÉM usa previous_response_id em paralelo.
  */
 export async function getSessionHistory(
 	sessionId: string,
 	maxMessages: number = MAX_HISTORY_MESSAGES,
 ): Promise<ConversationMessage[]> {
-	// No modo openai_native, não carregamos histórico manual
-	// A OpenAI recupera contexto via previous_response_id
-	if (isOpenAINativeStrategy()) {
-		console.log(`📚 [${getHistoryStrategy()}] Modo OpenAI nativo - histórico gerenciado via previous_response_id`);
-		return [];
-	}
-
 	const historyKey = `sessionHistory:${sessionId}`;
 	const redis = getRedisInstance?.();
 
@@ -213,7 +207,6 @@ export async function getSessionHistory(
 			const data = await redis.get(historyKey);
 			if (data) {
 				const history: ConversationMessage[] = JSON.parse(data);
-				// Retorna as últimas maxMessages mensagens
 				return history.slice(-maxMessages);
 			}
 		} catch (error) {
@@ -229,18 +222,12 @@ export async function getSessionHistory(
 /**
  * Adiciona uma mensagem ao histórico da sessão.
  *
- * Comportamento por estratégia:
- * - "manual": Salva no Redis/memória
- * - "openai_native": Apenas salva session pointer (OpenAI gerencia histórico)
+ * SEMPRE salva no Redis independente da estratégia (manual ou openai_native).
+ * O Redis é a fonte universal de histórico — garante que qualquer modelo
+ * (incluindo modelos degradados como Gemini Flash) tenha acesso ao contexto.
+ * No modo openai_native, a OpenAI TAMBÉM usa previous_response_id em paralelo.
  */
 export async function appendToHistory(sessionId: string, message: ConversationMessage): Promise<void> {
-	// No modo openai_native, não salvamos histórico manual
-	// A OpenAI mantém contexto via previous_response_id
-	if (isOpenAINativeStrategy()) {
-		// Log silencioso - o histórico está sendo gerenciado pela OpenAI
-		return;
-	}
-
 	const historyKey = `sessionHistory:${sessionId}`;
 	const isDevSession = DEV_SESSION_IDS.has(sessionId);
 	// Histórico usa TTL maior que sessionPointer para persistir contexto

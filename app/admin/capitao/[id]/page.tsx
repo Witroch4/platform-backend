@@ -26,6 +26,9 @@ type Assistant = {
 	instructions?: string | null;
 	intentOutputFormat: "JSON" | "AT_SYMBOL";
 	model: string;
+	provider: "OPENAI" | "GEMINI" | "CLAUDE";
+	fallbackProvider?: "OPENAI" | "GEMINI" | "CLAUDE" | null;
+	fallbackModel?: string | null;
 	// SocialWise Flow optimization settings
 	embedipreview: boolean;
 	reasoningEffort: "minimal" | "low" | "medium" | "high";
@@ -63,7 +66,12 @@ export default function EditAssistantPage() {
 			cache: "no-store",
 		});
 		const j = await r.json();
-		if (j?.assistant) setAssistant(j.assistant);
+		if (j?.assistant) setAssistant({
+			...j.assistant,
+			provider: j.assistant.provider || "OPENAI",
+			fallbackProvider: j.assistant.fallbackProvider || null,
+			fallbackModel: j.assistant.fallbackModel || null,
+		});
 		if (j?.assistant) {
 			console.log("[Capitão] Assistente carregado", {
 				id: j.assistant.id,
@@ -137,15 +145,16 @@ export default function EditAssistantPage() {
 								/>
 							</div>
 							<div>
-								<label className="text-sm font-medium text-foreground">Modelo (OpenAI)</label>
-								<ModelSelector
-									value={assistant.model || "gpt-5-nano"}
-									onChange={async (m) => {
-										console.log("[Capitão] Modelo selecionado", m);
-										setAssistant({ ...assistant, model: m });
-										await update({ model: m });
-									}}
-								/>
+								<label className="text-sm font-medium text-foreground">Modelo Atual</label>
+								<div className="w-full h-9 border border-border rounded px-2 bg-muted text-foreground flex items-center text-sm">
+									<span className="mr-1.5 text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
+										{assistant.provider || "OPENAI"}
+									</span>
+									{assistant.model || "gpt-5-nano"}
+								</div>
+								<p className="text-xs text-muted-foreground mt-1">
+									Altere o modelo na seção &quot;SocialWise Flow - Otimizações&quot; abaixo.
+								</p>
 							</div>
 							<Button
 								disabled={savingBasic}
@@ -1011,9 +1020,73 @@ function SocialWiseFlowSettings({
 	const [saving, setSaving] = useState(false);
 	const [userRole, setUserRole] = useState<string>("DEFAULT");
 
-	// Determine if model is GPT-5 family or GPT-4 family
-	const isGPT5Family = assistant.model.toLowerCase().includes("gpt-5");
-	const isGPT4Family = assistant.model.toLowerCase().includes("gpt-4");
+	// Provider-aware model family detection — primary model
+	const provider = assistant.provider || "OPENAI";
+	const isGeminiProvider = provider === "GEMINI";
+	const isClaudeProvider = provider === "CLAUDE";
+	const isOpenAIProvider = provider === "OPENAI";
+	const isGPT5Family = isOpenAIProvider && assistant.model.toLowerCase().includes("gpt-5");
+	const isGPT4Family = isOpenAIProvider && assistant.model.toLowerCase().includes("gpt-4");
+	const isGemini3Family = isGeminiProvider && assistant.model.startsWith("gemini-3");
+	const isGemini25Family = isGeminiProvider && assistant.model.startsWith("gemini-2");
+
+	// Fallback model family detection
+	const fbProvider = assistant.fallbackProvider;
+	const isFbGemini = fbProvider === "GEMINI";
+	const isFbClaude = fbProvider === "CLAUDE";
+	const isFbOpenAI = fbProvider === "OPENAI";
+	const isFbGemini3 = isFbGemini && (assistant.fallbackModel || "").startsWith("gemini-3");
+	const isFbGemini25 = isFbGemini && (assistant.fallbackModel || "").startsWith("gemini-2");
+	const isFbGPT5 = isFbOpenAI && (assistant.fallbackModel || "").toLowerCase().includes("gpt-5");
+
+	/**
+	 * Provider capability flags:
+	 *
+	 * | Feature             | OpenAI GPT-5 | OpenAI GPT-4 | Gemini 2.5  | Gemini 3         | Claude       |
+	 * |---------------------|-------------|-------------|-------------|------------------|-------------|
+	 * | reasoningEffort     | yes         | no          | thinkingBudget | thinkingLevel    | ext. thinking |
+	 * | verbosity           | yes         | no          | no          | no               | no          |
+	 * | temperature (main)  | no (uses reasoning) | 0-2 | 0-2         | 0-2              | 0-1         |
+	 * | topP                | no          | 0-1         | 0-1         | 0-1              | 0-1         |
+	 * | toolChoice          | yes         | yes         | no          | no               | no          |
+	 * | tempSchema/tempCopy | all         | all         | all         | all              | all         |
+	 *
+	 * BANDAS ATIVAS no sistema: apenas HARD (alias direto, sem LLM) e ROUTER (LLM completo).
+	 * SOFT band (warmup buttons) NÃO está ativa. Warmup deadline é configurável mas não utilizado.
+	 */
+	const supportsReasoning = isGPT5Family || isGeminiProvider || isClaudeProvider;
+	const supportsVerbosity = isGPT5Family;
+	const supportsTemperature = !isGPT5Family; // GPT-5 usa reasoning effort em vez de temperature
+	const supportsTopP = isGPT4Family || isGeminiProvider || isClaudeProvider;
+	const supportsToolChoice = isOpenAIProvider;
+
+	const PROVIDER_MODELS: Record<string, Array<{ id: string; label: string }>> = {
+		OPENAI: [
+			{ id: "gpt-5-nano", label: "GPT-5 Nano" },
+			{ id: "gpt-5-mini", label: "GPT-5 Mini" },
+			{ id: "gpt-5", label: "GPT-5" },
+			{ id: "gpt-4.1-nano", label: "GPT-4.1 Nano" },
+			{ id: "gpt-4.1-mini", label: "GPT-4.1 Mini" },
+			{ id: "gpt-4o", label: "GPT-4o" },
+		],
+		GEMINI: [
+			{ id: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite" },
+			{ id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+			{ id: "gemini-3-flash-preview", label: "Gemini 3 Flash" },
+			{ id: "gemini-3-pro-preview", label: "Gemini 3 Pro" },
+		],
+		CLAUDE: [
+			{ id: "claude-haiku-4-5", label: "Claude Haiku 4.5" },
+			{ id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
+			{ id: "claude-opus-4-5", label: "Claude Opus 4.5" },
+		],
+	};
+
+	const PROVIDER_INFO: Record<string, { label: string; logo: string }> = {
+		OPENAI: { label: "OpenAI", logo: "/assets/ChatGPT_logo.svg" },
+		GEMINI: { label: "Gemini", logo: "/assets/Google-gemini-icon.svg" },
+		CLAUDE: { label: "Claude", logo: "/assets/Claude-logo.svg" },
+	};
 
 	// Get user role from session
 	useEffect(() => {
@@ -1048,6 +1121,10 @@ function SocialWiseFlowSettings({
 		setSaving(true);
 		try {
 			await onUpdate({
+				model: assistant.model,
+				provider: assistant.provider,
+				fallbackProvider: assistant.fallbackProvider || null,
+				fallbackModel: assistant.fallbackModel || null,
 				embedipreview: assistant.embedipreview,
 				reasoningEffort: assistant.reasoningEffort,
 				verbosity: assistant.verbosity,
@@ -1088,6 +1165,109 @@ function SocialWiseFlowSettings({
 			</div>
 			<Separator />
 			<CollapsibleContent className="p-4 space-y-4">
+				{/* ============ MODELO PADRÃO ============ */}
+				<div className="border border-border rounded-md p-4 space-y-3">
+					<div className="text-sm font-semibold text-foreground">Modelo Padrão</div>
+					<p className="text-xs text-muted-foreground">
+						Modelo principal usado pelo SocialWise Flow nas bandas HARD (alias direto) e ROUTER (LLM).
+					</p>
+					<div className="grid grid-cols-3 gap-2">
+						{(["OPENAI", "GEMINI", "CLAUDE"] as const).map((p) => (
+							<button
+								key={p}
+								type="button"
+								onClick={() => {
+									const defaultModel = PROVIDER_MODELS[p][0].id;
+									setAssistant({ ...assistant, provider: p, model: defaultModel });
+								}}
+								className={`flex flex-col items-center gap-1.5 p-3 rounded-md border transition-colors ${
+									assistant.provider === p
+										? "border-primary bg-primary/10 text-primary"
+										: "border-border bg-background text-muted-foreground hover:border-primary/50"
+								}`}
+							>
+								{/* eslint-disable-next-line @next/next/no-img-element */}
+								<img src={PROVIDER_INFO[p].logo} alt={p} className="w-6 h-6" />
+								<span className="text-xs font-medium">{PROVIDER_INFO[p].label}</span>
+							</button>
+						))}
+					</div>
+					<div>
+						<label className="text-sm font-medium text-foreground">Modelo</label>
+						<select
+							className="w-full h-9 border border-border rounded px-2 mt-1 bg-background text-foreground"
+							value={assistant.model}
+							onChange={(e) => setAssistant({ ...assistant, model: e.target.value })}
+						>
+							{PROVIDER_MODELS[assistant.provider || "OPENAI"]?.map((m) => (
+								<option key={m.id} value={m.id}>{m.label}</option>
+							))}
+						</select>
+					</div>
+					{provider === "OPENAI" && (
+						<p className="text-xs text-muted-foreground">
+							Usa estratégia de histórico configurada (OPENAI_HISTORY_STRATEGY).
+						</p>
+					)}
+					{(provider === "GEMINI" || provider === "CLAUDE") && (
+						<p className="text-xs text-muted-foreground">
+							Usa Redis para histórico de conversa (sempre). previous_response_id não é utilizado.
+						</p>
+					)}
+				</div>
+
+				{/* ============ MODELO DE FALLBACK (DEGRADADO) ============ */}
+				<div className="border border-border rounded-md p-4 space-y-3">
+					<div className="text-sm font-semibold text-foreground">Modelo para Fallback (Degradado)</div>
+					<p className="text-xs text-muted-foreground">
+						Modelo usado quando o principal atinge timeout e o usuário clica em &quot;Tentar Novamente&quot;.
+					</p>
+					<div className="grid grid-cols-3 gap-2">
+						{(["OPENAI", "GEMINI", "CLAUDE"] as const).map((p) => (
+							<button
+								key={p}
+								type="button"
+								onClick={() => {
+									const defaultModel = PROVIDER_MODELS[p][0].id;
+									setAssistant({ ...assistant, fallbackProvider: p, fallbackModel: defaultModel });
+								}}
+								className={`flex flex-col items-center gap-1.5 p-3 rounded-md border transition-colors ${
+									assistant.fallbackProvider === p
+										? "border-primary bg-primary/10 text-primary"
+										: "border-border bg-background text-muted-foreground hover:border-primary/50"
+								}`}
+							>
+								{/* eslint-disable-next-line @next/next/no-img-element */}
+								<img src={PROVIDER_INFO[p].logo} alt={p} className="w-6 h-6" />
+								<span className="text-xs font-medium">{PROVIDER_INFO[p].label}</span>
+							</button>
+						))}
+					</div>
+					{assistant.fallbackProvider && (
+						<div>
+							<label className="text-sm font-medium text-foreground">Modelo de Fallback</label>
+							<select
+								className="w-full h-9 border border-border rounded px-2 mt-1 bg-background text-foreground"
+								value={assistant.fallbackModel || ""}
+								onChange={(e) => setAssistant({ ...assistant, fallbackModel: e.target.value })}
+							>
+								{PROVIDER_MODELS[assistant.fallbackProvider]?.map((m) => (
+									<option key={m.id} value={m.id}>{m.label}</option>
+								))}
+							</select>
+						</div>
+					)}
+					<button
+						type="button"
+						onClick={() => setAssistant({ ...assistant, fallbackProvider: null, fallbackModel: null })}
+						className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+					>
+						Remover fallback personalizado (usar padrão Gemini Flash)
+					</button>
+				</div>
+
+				<Separator />
+
 				<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 					{/* Routing Strategy */}
 					<div>
@@ -1110,95 +1290,137 @@ function SocialWiseFlowSettings({
 						</p>
 					</div>
 
-					{/* Model-specific parameters */}
-					{isGPT5Family && (
-						<>
-							<div>
-								<label className="text-sm font-medium text-foreground">Esforço de Raciocínio (GPT-5)</label>
-								<select
-									className="w-full h-9 border border-border rounded px-2 mt-1 bg-background text-foreground"
-									value={assistant.reasoningEffort}
-									onChange={(e) =>
-										setAssistant({
-											...assistant,
-											reasoningEffort: e.target.value as any,
-										})
-									}
-								>
-									<option value="minimal">Mínimo</option>
-									<option value="low">Baixo</option>
-									<option value="medium">Médio</option>
-									<option value="high">Alto</option>
-								</select>
-							</div>
-
-							<div>
-								<label className="text-sm font-medium text-foreground">Verbosidade (GPT-5)</label>
-								<select
-									className="w-full h-9 border border-border rounded px-2 mt-1 bg-background text-foreground"
-									value={assistant.verbosity}
-									onChange={(e) =>
-										setAssistant({
-											...assistant,
-											verbosity: e.target.value as any,
-										})
-									}
-								>
-									<option value="low">Baixa</option>
-									<option value="medium">Média</option>
-									<option value="high">Alta</option>
-								</select>
-							</div>
-						</>
+					{/* ======= REASONING / THINKING CONFIG ======= */}
+					{supportsReasoning && (
+						<div>
+							<label className="text-sm font-medium text-foreground">
+								{isGPT5Family && "Esforço de Raciocínio (GPT-5)"}
+								{isGemini3Family && "Nível de Raciocínio (Gemini 3 Thinking)"}
+								{isGemini25Family && "Thinking Budget (Gemini 2.5)"}
+								{isClaudeProvider && "Nível de Raciocínio (Claude Thinking)"}
+							</label>
+							<select
+								className="w-full h-9 border border-border rounded px-2 mt-1 bg-background text-foreground"
+								value={assistant.reasoningEffort}
+								onChange={(e) =>
+									setAssistant({ ...assistant, reasoningEffort: e.target.value as any })
+								}
+							>
+								{/* GPT-5: reasoning_effort */}
+								{isGPT5Family && (
+									<>
+										<option value="minimal">Mínimo</option>
+										<option value="low">Baixo</option>
+										<option value="medium">Médio</option>
+										<option value="high">Alto</option>
+									</>
+								)}
+								{/* Gemini 3: thinkingLevel (minimal/low/medium/high) */}
+								{isGemini3Family && (
+									<>
+										<option value="minimal">Mínimo (quase desativado)</option>
+										<option value="low">Baixo</option>
+										<option value="medium">Médio</option>
+										<option value="high">Alto (padrão Gemini 3)</option>
+									</>
+								)}
+								{/* Gemini 2.5: thinkingBudget (integer) — mapped from reasoning effort */}
+								{isGemini25Family && (
+									<>
+										<option value="minimal">Desativado (budget: 0)</option>
+										<option value="low">Baixo (budget: 512 tokens)</option>
+										<option value="medium">Médio (budget: 1024 tokens)</option>
+										<option value="high">Alto (budget: 4096 tokens)</option>
+									</>
+								)}
+								{/* Claude: extended thinking budget */}
+								{isClaudeProvider && (
+									<>
+										<option value="minimal">Desativado (mais rápido)</option>
+										<option value="low">Baixo (budget: 512 tokens)</option>
+										<option value="medium">Médio (budget: 1024 tokens)</option>
+										<option value="high">Alto (budget: 4096 tokens)</option>
+									</>
+								)}
+							</select>
+							<p className="text-xs text-muted-foreground mt-1">
+								{isGPT5Family && "Controla a profundidade do raciocínio do GPT-5 (reasoning_effort)."}
+								{isGemini3Family && "Controla o thinkingLevel do Gemini 3 (minimal = quase desativado, high = raciocínio profundo)."}
+								{isGemini25Family && "Controla o thinkingBudget do Gemini 2.5 em tokens. 0 = desativado, ideal para baixa latência."}
+								{isClaudeProvider && "Controla o Extended Thinking do Claude (budget_tokens)."}
+							</p>
+						</div>
 					)}
 
-					{isGPT4Family && (
-						<>
-							<div>
-								<label className="text-sm font-medium text-foreground">Temperature (GPT-4)</label>
-								<Input
-									type="number"
-									min="0"
-									max="2"
-									step="0.1"
-									value={assistant.temperature || 0.7}
-									onChange={(e) =>
-										setAssistant({
-											...assistant,
-											temperature: parseFloat(e.target.value) || 0.7,
-										})
-									}
-									className="bg-background border-border text-foreground"
-								/>
-								<p className="text-xs text-muted-foreground mt-1">
-									Controla a criatividade (0.0 = determinístico, 2.0 = muito criativo)
-								</p>
-							</div>
-
-							<div>
-								<label className="text-sm font-medium text-foreground">Top P (GPT-4)</label>
-								<Input
-									type="number"
-									min="0"
-									max="1"
-									step="0.1"
-									value={assistant.topP || 0.7}
-									onChange={(e) =>
-										setAssistant({
-											...assistant,
-											topP: parseFloat(e.target.value) || 0.7,
-										})
-									}
-									className="bg-background border-border text-foreground"
-								/>
-								<p className="text-xs text-muted-foreground mt-1">
-									Controla a diversidade de tokens (0.1 = focado, 1.0 = diverso)
-								</p>
-							</div>
-						</>
+					{/* ======= VERBOSITY (GPT-5 only) ======= */}
+					{supportsVerbosity && (
+						<div>
+							<label className="text-sm font-medium text-foreground">Verbosidade (GPT-5)</label>
+							<select
+								className="w-full h-9 border border-border rounded px-2 mt-1 bg-background text-foreground"
+								value={assistant.verbosity}
+								onChange={(e) =>
+									setAssistant({ ...assistant, verbosity: e.target.value as any })
+								}
+							>
+								<option value="low">Baixa</option>
+								<option value="medium">Média</option>
+								<option value="high">Alta</option>
+							</select>
+						</div>
 					)}
 
-					{/* Temperature settings for structured outputs */}
+					{/* ======= TEMPERATURE (all except GPT-5) ======= */}
+					{supportsTemperature && (
+						<div>
+							<label className="text-sm font-medium text-foreground">
+								Temperature ({provider === "CLAUDE" ? "Claude, 0-1" : isGeminiProvider ? "Gemini, 0-2" : "GPT-4, 0-2"})
+							</label>
+							<Input
+								type="number"
+								min="0"
+								max={isClaudeProvider ? "1" : "2"}
+								step="0.1"
+								value={assistant.temperature ?? (isClaudeProvider ? 0.3 : 0.7)}
+								onChange={(e) =>
+									setAssistant({
+										...assistant,
+										temperature: parseFloat(e.target.value) || 0,
+									})
+								}
+								className="bg-background border-border text-foreground"
+							/>
+							<p className="text-xs text-muted-foreground mt-1">
+								Controla a criatividade (0.0 = determinístico{isClaudeProvider ? ", 1.0 = criativo" : ", 2.0 = muito criativo"})
+							</p>
+						</div>
+					)}
+
+					{/* ======= TOP P (GPT-4, Gemini, Claude) ======= */}
+					{supportsTopP && (
+						<div>
+							<label className="text-sm font-medium text-foreground">Top P</label>
+							<Input
+								type="number"
+								min="0"
+								max="1"
+								step="0.1"
+								value={assistant.topP ?? 0.7}
+								onChange={(e) =>
+									setAssistant({
+										...assistant,
+										topP: parseFloat(e.target.value) || 0.7,
+									})
+								}
+								className="bg-background border-border text-foreground"
+							/>
+							<p className="text-xs text-muted-foreground mt-1">
+								Controla a diversidade de tokens (0.1 = focado, 1.0 = diverso)
+							</p>
+						</div>
+					)}
+
+					{/* Temperature settings for structured outputs — all providers */}
 					<div>
 						<label className="text-sm font-medium text-foreground">Temperature - Saídas Estruturadas</label>
 						<Input
@@ -1276,7 +1498,7 @@ function SocialWiseFlowSettings({
 						<Input
 							type="number"
 							min="100"
-							max="1000"
+							max="10000"
 							value={assistant.warmupDeadlineMs}
 							onChange={(e) =>
 								setAssistant({
@@ -1286,7 +1508,7 @@ function SocialWiseFlowSettings({
 							}
 							className="bg-background border-border text-foreground"
 						/>
-						<p className="text-xs text-muted-foreground mt-1">Timeout para geração de botões de aquecimento</p>
+						<p className="text-xs text-muted-foreground mt-1">Timeout para geração de botões de aquecimento (banda SOFT inativa)</p>
 					</div>
 
 					<div>
@@ -1294,7 +1516,7 @@ function SocialWiseFlowSettings({
 						<Input
 							type="number"
 							min="50"
-							max="500"
+							max="10000"
 							value={assistant.hardDeadlineMs}
 							onChange={(e) =>
 								setAssistant({
@@ -1304,7 +1526,7 @@ function SocialWiseFlowSettings({
 							}
 							className="bg-background border-border text-foreground"
 						/>
-						<p className="text-xs text-muted-foreground mt-1">Timeout para mapeamento direto de intenções</p>
+						<p className="text-xs text-muted-foreground mt-1">Timeout para mapeamento direto de intenções (alias)</p>
 					</div>
 
 					<div>
@@ -1312,7 +1534,7 @@ function SocialWiseFlowSettings({
 						<Input
 							type="number"
 							min="100"
-							max="1000"
+							max="10000"
 							value={assistant.softDeadlineMs}
 							onChange={(e) =>
 								setAssistant({
@@ -1322,26 +1544,44 @@ function SocialWiseFlowSettings({
 							}
 							className="bg-background border-border text-foreground"
 						/>
-						<p className="text-xs text-muted-foreground mt-1">Timeout para processamento de banda intermediária</p>
+						<p className="text-xs text-muted-foreground mt-1">Timeout para processamento de banda intermediária (inativa, reservado)</p>
 					</div>
 
-					{/* Additional settings */}
-					<div>
-						<label className="text-sm font-medium text-foreground">Escolha de Ferramentas</label>
-						<select
-							className="w-full h-9 border border-border rounded px-2 mt-1 bg-background text-foreground"
-							value={assistant.toolChoice}
-							onChange={(e) =>
-								setAssistant({
-									...assistant,
-									toolChoice: e.target.value as any,
-								})
-							}
-						>
-							<option value="auto">Automático</option>
-							<option value="none">Nenhuma</option>
-						</select>
-					</div>
+					{/* Tool choice — OpenAI only */}
+					{supportsToolChoice && (
+						<div>
+							<label className="text-sm font-medium text-foreground">Escolha de Ferramentas</label>
+							<select
+								className="w-full h-9 border border-border rounded px-2 mt-1 bg-background text-foreground"
+								value={assistant.toolChoice}
+								onChange={(e) =>
+									setAssistant({
+										...assistant,
+										toolChoice: e.target.value as any,
+									})
+								}
+							>
+								<option value="auto">Automático</option>
+								<option value="none">Nenhuma</option>
+							</select>
+							<p className="text-xs text-muted-foreground mt-1">
+								Apenas OpenAI. Gemini e Claude não usam tool_choice neste fluxo.
+							</p>
+						</div>
+					)}
+
+					{/* Non-OpenAI: show tool choice disabled */}
+					{!supportsToolChoice && (
+						<div>
+							<label className="text-sm font-medium text-muted-foreground">Escolha de Ferramentas</label>
+							<div className="w-full h-9 border border-border rounded px-2 mt-1 bg-muted text-muted-foreground flex items-center text-sm">
+								Não disponível para {provider}
+							</div>
+							<p className="text-xs text-muted-foreground mt-1">
+								Gemini e Claude não suportam tool_choice neste pipeline.
+							</p>
+						</div>
+					)}
 				</div>
 
 				{/* Session Duration (TTL) */}

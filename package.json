@@ -124,6 +124,9 @@
 		"verify:turbo-mode-deployment": "tsx scripts/verify-turbo-mode-deployment.ts"
 	},
 	"dependencies": {
+		"@ai-sdk/anthropic": "^3.0.46",
+		"@ai-sdk/google": "^3.0.30",
+		"@ai-sdk/openai": "^3.0.30",
 		"@anthropic-ai/sdk": "^0.57.0",
 		"@auth/prisma-adapter": "^2.0.0",
 		"@aws-sdk/client-s3": "^3.990.0",

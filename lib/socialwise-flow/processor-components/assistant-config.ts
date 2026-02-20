@@ -9,8 +9,13 @@ import { getAssistantForInbox } from "@/lib/socialwise/assistant";
 
 const configLogger = createLogger("SocialWise-Processor-AssistantConfig");
 
+export type AiProviderType = "OPENAI" | "GEMINI" | "CLAUDE";
+
 export interface AssistantConfig {
 	model: string;
+	provider: AiProviderType;
+	fallbackProvider?: AiProviderType | null;
+	fallbackModel?: string | null;
 	instructions: string;
 	developer: string;
 	embedipreview: boolean;
@@ -32,6 +37,15 @@ export interface AssistantConfig {
 	// Session TTL configuration
 	sessionTtlSeconds: number;
 	sessionTtlDevSeconds: number;
+}
+
+/**
+ * Detects the AI provider from a model string
+ */
+export function detectProviderFromModel(model: string): AiProviderType {
+	if (model.startsWith("gemini")) return "GEMINI";
+	if (model.startsWith("claude")) return "CLAUDE";
+	return "OPENAI";
 }
 
 /**
@@ -76,6 +90,9 @@ export async function loadAssistantConfiguration(
 			select: {
 				id: true,
 				model: true,
+				provider: true,
+				fallbackProvider: true,
+				fallbackModel: true,
 				instructions: true,
 				reasoningEffort: true,
 				verbosity: true,
@@ -124,6 +141,9 @@ export async function loadAssistantConfiguration(
 
 		const finalConfig: AssistantConfig = {
 			model: fullAssistant.model,
+			provider: (fullAssistant.provider as AiProviderType) || detectProviderFromModel(fullAssistant.model),
+			fallbackProvider: (fullAssistant.fallbackProvider as AiProviderType) || null,
+			fallbackModel: fullAssistant.fallbackModel || null,
 			instructions: fullAssistant.instructions || "",
 			developer: fullAssistant.instructions || "",
 			embedipreview: fullAssistant.embedipreview,
