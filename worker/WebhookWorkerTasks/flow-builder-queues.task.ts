@@ -726,7 +726,7 @@ async function handleMediaUpload(job: Job<MediaUploadJobData>): Promise<FlowBuil
 			type: "media",
 			mediaUrl,
 			filename: finalFilename,
-			caption,
+			content: caption, // deliverMedia() recebe caption via payload.content
 		});
 
 		if (!result.success) {
