@@ -1,134 +1,136 @@
 // worker/init.ts — Single Orchestrator for all workers
 // This is the ONLY entrypoint that should be used to start workers.
+// All worker definitions live in registry.ts (single source of truth).
 
-import {
-	// [CLEANUP 2026-02-16] createParentWorker e getParentWorker REMOVIDOS
-	// ParentWorker gerenciava filas resposta-rapida e persistencia-credenciais (código morto)
-	waitForRedisConnection,
-	initializeLegacyWorkers,
-	initializeAutoNotificationsWorker,
-	initializeInstagramTranslationWorker,
-	setupWorkerEventHandlers,
-	setupInstagramWorkerEventHandlers,
-	setupLeadsWorkerEventHandlers,
-	startInstagramResourceMonitoring,
-	instagramWorkerConfig,
-	initJobs,
-} from "./webhook.worker";
-import { initializeExistingAgendamentos } from "../lib/scheduler-bullmq";
-// [CLEANUP 2026-02-16] AI Integration Workers REMOVIDOS - eram código morto (simulações, ninguém enfileirava jobs)
-import { instagramWebhookWorker } from "./automacao.worker";
-import { initializeQueueManagement, shutdownQueueManagement } from "./queue-manager-integration";
-import { startTranscriptionWorker, stopTranscriptionWorker } from "../lib/oab-eval/transcription-queue";
-import { sseManager } from "../lib/sse-manager";
-import { startRedisHealthMonitoring } from "@/lib/redis-health-check";
+import { Worker } from "bullmq";
+import { getRedisInstance } from "@/lib/connections";
 import { getPrismaInstance } from "@/lib/connections";
-import { initializeFxRateSystem, fxRateWorker } from "@/lib/cost/fx-rate-worker";
-import { scheduleBudgetMonitoring, stopBudgetMonitoring, budgetWorker } from "@/lib/cost/budget-monitor";
-import { getWebhookWorker, getWebhookQueue } from "@/lib/webhook/webhook-queue";
+import { checkRedisHealth, startRedisHealthMonitoring } from "@/lib/redis-health-check";
+import { attachStandardEventHandlers } from "./utils/worker-events";
+import { workerRegistry, type WorkerDefinition } from "./registry";
+import { initCronJobs, stopCronJobs } from "./cron-jobs";
+import { initializeExistingAgendamentos } from "../lib/scheduler-bullmq";
+import { initializeQueueManagement, shutdownQueueManagement } from "./queue-manager-integration";
+import { sseManager } from "../lib/sse-manager";
+import { initializeFxRateSystem } from "@/lib/cost/fx-rate-worker";
+import { scheduleBudgetMonitoring } from "@/lib/cost/budget-monitor";
+import { getWebhookQueue } from "@/lib/webhook/webhook-queue";
 import dotenv from "dotenv";
 
 dotenv.config();
 
 // ============================================================================
-// PHASE-BASED WORKER INITIALIZATION
+// WORKER INSTANCE TRACKING (for shutdown)
 // ============================================================================
 
-/**
- * Initialize all workers in a controlled, phased sequence.
- * Single orchestrator — no other file should trigger worker initialization.
- */
+const activeWorkers = new Map<string, Worker>();
+
+// ============================================================================
+// REDIS CONNECTION
+// ============================================================================
+
+async function waitForRedisConnection(maxAttempts = 30, delayMs = 2000): Promise<void> {
+	console.log("[Redis Health] 🔄 Waiting for Redis connection...");
+
+	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+		try {
+			const health = await checkRedisHealth();
+			if (health.healthy) {
+				console.log(`[Redis Health] ✅ Redis connected successfully (latency: ${health.latency}ms)`);
+				return;
+			}
+			console.log(`[Redis Health] ⏳ Attempt ${attempt}/${maxAttempts}: Redis not ready (status: ${health.connectionStatus})`);
+		} catch (error) {
+			console.log(`[Redis Health] ⏳ Attempt ${attempt}/${maxAttempts}: ${error instanceof Error ? error.message : "Unknown error"}`);
+		}
+		if (attempt < maxAttempts) await new Promise((r) => setTimeout(r, delayMs));
+	}
+
+	throw new Error(`Redis connection failed after ${maxAttempts} attempts`);
+}
+
+// ============================================================================
+// PHASED INITIALIZATION
+// ============================================================================
+
 export async function initializeWorkers() {
 	try {
 		console.log("[Worker] 🚀 Inicializando TODOS os workers em um único container...\n");
 
-		// ====================================================================
-		// PHASE 1: REDIS CONNECTION
-		// ====================================================================
+		// ==================================================================
+		// PHASE 1: REDIS
+		// ==================================================================
 		await waitForRedisConnection();
 		startRedisHealthMonitoring(60_000);
 		console.log("[Worker] ✅ Redis conectado e monitoramento iniciado");
 
-		// ====================================================================
-		// PHASE 2: CORE WORKERS (parallel where possible)
-		// ====================================================================
+		// ==================================================================
+		// PHASE 2: WORKERS (registry-driven loop)
+		// ==================================================================
+		console.log(`[Worker] 🔄 Criando ${workerRegistry.length} workers do registry...`);
 
-		// [CLEANUP 2026-02-16] ParentWorker REMOVIDO
-		// O ParentWorker gerenciava filas resposta-rapida e persistencia-credenciais
-		// Essas filas não são mais usadas - SocialWise Flow processa mensagens inline (síncrono)
+		const criticalWorkers: Promise<void>[] = [];
+		const nonCriticalWorkers: Promise<void>[] = [];
 
-		// 2a. Instagram Webhook Worker (automação "eu-quero")
-		await instagramWebhookWorker.waitUntilReady();
-		console.log("[Worker] ✅ Worker de Automação Instagram inicializado");
+		for (const def of workerRegistry) {
+			const promise = createAndTrackWorker(def);
+			if (def.critical === false) {
+				nonCriticalWorkers.push(
+					promise.catch((err) => {
+						console.warn(`[Worker] ⚠️ Worker não-crítico ${def.name} falhou (container continua):`, err);
+					}),
+				);
+			} else {
+				criticalWorkers.push(promise);
+			}
+		}
 
-		// [CLEANUP 2026-02-16] AI Integration Workers REMOVIDOS - eram código morto
+		// Critical workers MUST succeed
+		await Promise.all(criticalWorkers);
+		// Non-critical workers are best-effort
+		await Promise.all(nonCriticalWorkers);
 
-		// 2c. Legacy Workers + Auto Notifications + Instagram Translation (parallel)
-		await Promise.all([
-			initializeLegacyWorkers(),
-			initializeAutoNotificationsWorker(),
-			initializeInstagramTranslationWorker(),
-		]);
-		console.log("[Worker] ✅ Legacy, Auto-Notifications e Instagram Translation inicializados");
+		console.log(`[Worker] ✅ ${activeWorkers.size}/${workerRegistry.length} workers inicializados`);
 
-		// ====================================================================
-		// PHASE 3: EVENT HANDLERS & MONITORING
-		// ====================================================================
-		setupWorkerEventHandlers();
-		setupInstagramWorkerEventHandlers();
-		setupLeadsWorkerEventHandlers();
-		startInstagramResourceMonitoring();
-		console.log("[Worker] ✅ Event handlers e monitoramento configurados");
+		// ==================================================================
+		// PHASE 3: CRON JOBS
+		// ==================================================================
+		initCronJobs();
+		console.log("[Worker] ✅ Cron jobs inicializados");
 
-		// ====================================================================
-		// PHASE 4: SHARED RESOURCES
-		// ====================================================================
+		// ==================================================================
+		// PHASE 4: SCHEDULING & SHARED RESOURCES
+		// ==================================================================
 		await sseManager.ensureRedisConnected();
 		console.log("[Worker] ✅ SSE Redis conectado");
-
-		startTranscriptionWorker();
-		console.log("[Worker] ✅ Worker de Transcrição OAB inicializado");
 
 		await initializeQueueManagement();
 		console.log("[Worker] ✅ Sistema de Gerenciamento de Filas inicializado");
 
-		// 4d. FX Rate Worker (formerly orphan - auto-initialized on import)
+		// Schedule recurring BullMQ jobs (these use Queue.add with repeat, not Workers)
 		try {
 			await initializeFxRateSystem();
-			console.log("[Worker] ✅ FX Rate Worker inicializado");
+			console.log("[Worker] ✅ FX Rate scheduling inicializado");
 		} catch (error) {
-			console.warn("[Worker] ⚠️ FX Rate Worker falhou (não-crítico):", error);
+			console.warn("[Worker] ⚠️ FX Rate scheduling falhou (não-crítico):", error);
 		}
 
-		// 4e. Budget Monitor Worker (formerly orphan - auto-initialized on import)
 		try {
 			await scheduleBudgetMonitoring();
-			console.log("[Worker] ✅ Budget Monitor inicializado");
+			console.log("[Worker] ✅ Budget Monitor scheduling inicializado");
 		} catch (error) {
-			console.warn("[Worker] ⚠️ Budget Monitor falhou (não-crítico):", error);
+			console.warn("[Worker] ⚠️ Budget Monitor scheduling falhou (não-crítico):", error);
 		}
 
-		// 4f. Webhook Delivery Worker (formerly orphan - had its own SIGINT)
-		try {
-			const webhookWorker = getWebhookWorker();
-			await webhookWorker.waitUntilReady();
-			console.log("[Worker] ✅ Webhook Delivery Worker inicializado");
-		} catch (error) {
-			console.warn("[Worker] ⚠️ Webhook Delivery Worker falhou (não-crítico):", error);
-		}
-
-		// ====================================================================
-		// PHASE 5: SCHEDULING
-		// ====================================================================
-		await initJobs();
-		console.log("[Worker] ✅ Jobs recorrentes inicializados");
-
+		// ==================================================================
+		// PHASE 5: AGENDAMENTOS
+		// ==================================================================
 		const result = await initializeExistingAgendamentos();
 		console.log("[Worker] ✅ Agendamentos existentes carregados");
 
-		// ====================================================================
+		// ==================================================================
 		// STARTUP BANNER
-		// ====================================================================
+		// ==================================================================
 		printStartupBanner(result.count ?? 0);
 
 		return { success: true, count: result.count };
@@ -139,6 +141,27 @@ export async function initializeWorkers() {
 }
 
 // ============================================================================
+// WORKER CREATION (from registry definition)
+// ============================================================================
+
+async function createAndTrackWorker(def: WorkerDefinition): Promise<void> {
+	const worker = new Worker(def.queue, def.processor, {
+		connection: getRedisInstance(),
+		concurrency: def.concurrency ?? 1,
+		lockDuration: def.lockDuration ?? 30000,
+		stalledInterval: def.stalledInterval ?? 30000,
+		maxStalledCount: def.maxStalledCount ?? 1,
+		...(def.limiter ? { limiter: def.limiter } : {}),
+	});
+
+	attachStandardEventHandlers(worker, { name: def.name });
+	await worker.waitUntilReady();
+	activeWorkers.set(def.name, worker);
+
+	console.log(`[Worker]   ✅ ${def.name} (queue: ${def.queue}, concurrency: ${def.concurrency ?? 1})`);
+}
+
+// ============================================================================
 // STARTUP BANNER
 // ============================================================================
 
@@ -146,20 +169,16 @@ function printStartupBanner(agendamentosCount: number) {
 	console.log("\n" + "=".repeat(70));
 	console.log("🎉 WORKERS UNIFICADOS INICIADOS COM SUCESSO!");
 	console.log("=".repeat(70));
-	console.log("📊 Status dos Workers:");
-	// [CLEANUP 2026-02-16] Parent Worker REMOVIDO (resposta-rapida + persistencia eram código morto)
-	console.log("   📱 Instagram Webhook   → Automação Instagram");
-	console.log("   📝 Workers Legados     → Manuscrito, Leads, Tradução");
-	console.log("   📄 Transcription OAB   → Digitação de manuscritos com LangGraph");
-	console.log("   🔍 Analysis OAB        → Análise comparativa Prova × Espelho");
-	console.log("   💱 FX Rate             → Atualização diária câmbio USD/BRL");
-	console.log("   💰 Budget Monitor      → Monitoramento de orçamentos");
-	console.log("   📤 Webhook Delivery    → Entrega de webhooks com retry");
-	console.log("   🔧 Flow Builder Queues → Ações assíncronas do Flow Engine");
-	console.log("   ⏰ Jobs Recorrentes    → Configurados e ativos");
-	console.log("   📊 Queue Management    → Monitorando todas as filas");
+	console.log("📊 Workers ativos:");
+
+	for (const def of workerRegistry) {
+		const status = activeWorkers.has(def.name) ? "✅" : "❌";
+		console.log(`   ${def.icon ?? "🔹"} ${status} ${def.name.padEnd(22)} → ${def.description ?? def.queue}`);
+	}
+
 	console.log("-".repeat(70));
 	console.log(`📈 Agendamentos:  ${agendamentosCount} carregados`);
+	console.log(`🔧 Total workers: ${activeWorkers.size}/${workerRegistry.length}`);
 	console.log("=".repeat(70) + "\n");
 }
 
@@ -173,36 +192,37 @@ async function gracefulShutdown(signal: string) {
 	const shutdownTimeout = setTimeout(() => {
 		console.error("[Worker] Shutdown timeout exceeded, forcing exit");
 		process.exit(1);
-	}, instagramWorkerConfig.lifecycle.gracefulShutdownTimeout);
+	}, 30_000);
 
 	try {
-		// 1. Stop queue management
+		// 1. Stop cron jobs
+		stopCronJobs();
+
+		// 2. Stop queue management
 		await shutdownQueueManagement();
 
-		// 2. Stop transcription worker
-		await stopTranscriptionWorker();
-
-		// 3. Close all BullMQ workers
-		// [CLEANUP 2026-02-16] ParentWorker REMOVIDO do shutdown
-		const workersToClose: Promise<void>[] = [];
-		if (instagramWebhookWorker) workersToClose.push(instagramWebhookWorker.close());
-
-		// Close orphan workers now managed by orchestrator
-		try { if (fxRateWorker) workersToClose.push(fxRateWorker.close()); } catch { }
-		try { if (budgetWorker) workersToClose.push(budgetWorker.close()); } catch { }
-		try {
-			const ww = getWebhookWorker();
-			const wq = getWebhookQueue();
-			workersToClose.push(ww.close());
-			workersToClose.push(wq.close());
-		} catch { }
+		// 3. Close ALL workers (from registry — no more missing workers)
+		const closePromises = Array.from(activeWorkers.entries()).map(async ([name, worker]) => {
+			try {
+				await worker.close();
+				console.log(`[Worker]   ✅ ${name} fechado`);
+			} catch (err) {
+				console.warn(`[Worker]   ⚠️ ${name} falhou ao fechar:`, err);
+			}
+		});
 
 		await Promise.race([
-			Promise.all(workersToClose),
+			Promise.all(closePromises),
 			new Promise<void>((_, reject) => setTimeout(() => reject(new Error("Worker shutdown timeout")), 25_000)),
 		]);
 
-		// 4. Disconnect database
+		// 4. Close queues that are not managed by workers
+		try {
+			const wq = getWebhookQueue();
+			await wq.close();
+		} catch { }
+
+		// 5. Disconnect database
 		await getPrismaInstance().$disconnect();
 
 		clearTimeout(shutdownTimeout);

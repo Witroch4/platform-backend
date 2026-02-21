@@ -233,165 +233,98 @@ export async function reprocessPendingEvents(limit: number = 100): Promise<numbe
 }
 
 /**
- * Worker principal de processamento de custos
+ * Processor function — used by worker/registry.ts (Worker created by init.ts)
+ * Handles all cost job types via switch/case dispatch.
  */
-export function createCostWorker(): Worker {
-	const worker = new Worker(
-		COST_QUEUE_NAME,
-		async (job: Job) => {
-			const { name, data } = job;
-			const startTime = Date.now();
+export async function processCostJob(job: Job): Promise<void> {
+	const { name, data } = job;
+	const startTime = Date.now();
 
-			try {
-				switch (name) {
-					case "cost-event":
-						await processCostEvent(data as CostEventData);
-						break;
+	try {
+		switch (name) {
+			case "cost-event":
+				await processCostEvent(data as CostEventData);
+				break;
 
-					case "reprocess-pending":
-						const limit = data.limit || 100;
-						await reprocessPendingEvents(limit);
-						break;
+			case "reprocess-pending":
+				const limit = data.limit || 100;
+				await reprocessPendingEvents(limit);
+				break;
 
-					case "cleanup-cache":
-						await idempotencyService.cleanupExpiredCache();
-						await costErrorHandler.cleanupOldErrors(data.daysToKeep || 30);
-						break;
+			case "cleanup-cache":
+				await idempotencyService.cleanupExpiredCache();
+				await costErrorHandler.cleanupOldErrors(data.daysToKeep || 30);
+				break;
 
-					case "quality-evaluation":
-						await runQualityEvaluationJob(data);
-						break;
+			case "quality-evaluation":
+				await runQualityEvaluationJob(data);
+				break;
 
-					case "cost-analytics":
-						await generateCostAnalyticsReport(data);
-						break;
+			case "cost-analytics":
+				await generateCostAnalyticsReport(data);
+				break;
 
-					case "budget-check":
-						await performBudgetCheck(data);
-						break;
+			case "budget-check":
+				await performBudgetCheck(data);
+				break;
 
-					default:
-						log.warn("Tipo de job desconhecido", { jobName: name, jobId: job.id });
-				}
+			default:
+				log.warn("Tipo de job desconhecido", { jobName: name, jobId: job.id });
+		}
 
-				// Log de sucesso
-				const processingTime = Date.now() - startTime;
-				log.info("Job processado com sucesso", {
-					jobId: job.id,
-					jobName: name,
-					processingTimeMs: processingTime,
-					attempts: job.attemptsMade,
-				});
-			} catch (error) {
-				const processingTime = Date.now() - startTime;
-
-				log.error("Erro ao processar job", {
-					jobId: job.id,
-					jobName: name,
-					error: error?.toString(),
-					processingTimeMs: processingTime,
-					attempts: job.attemptsMade,
-					maxAttempts: job.opts.attempts || 3,
-				});
-
-				// Audit logging para falhas
-				await costAuditLogger.logCostEventFailed({
-					eventId: job.id || "unknown",
-					error: (error as Error).message,
-					attempts: job.attemptsMade || 0,
-					willRetry: (job.attemptsMade || 0) < (job.opts.attempts || 3),
-				});
-
-				// Usa o error handler avançado
-				const errorResult = await handleJobError(
-					error as Error,
-					job.id || "unknown",
-					name,
-					data,
-					job.attemptsMade,
-					job.opts.attempts || 3,
-				);
-
-				// Se deve mover para DLQ, o error handler já fez isso
-				if (errorResult.shouldMoveToDeadLetter) {
-					log.warn("Job movido para Dead Letter Queue", {
-						jobId: job.id,
-						jobName: name,
-						finalAttempt: job.attemptsMade,
-					});
-				}
-
-				// Re-throw para que o BullMQ saiba que falhou
-				throw error;
-			}
-		},
-		costWorkerOptions,
-	);
-
-	// Event listeners para monitoramento avançado
-	worker.on("completed", (job) => {
-		log.info("Job completado", {
+		// Log de sucesso
+		const processingTime = Date.now() - startTime;
+		log.info("Job processado com sucesso", {
 			jobId: job.id,
-			jobName: job.name,
+			jobName: name,
+			processingTimeMs: processingTime,
 			attempts: job.attemptsMade,
-			processedOn: job.processedOn,
-			finishedOn: job.finishedOn,
 		});
-	});
+	} catch (error) {
+		const processingTime = Date.now() - startTime;
 
-	worker.on("failed", (job, err) => {
-		log.error("Job falhou", {
-			jobId: job?.id,
-			jobName: job?.name,
-			error: err?.toString(),
-			attempts: job?.attemptsMade,
-			failedReason: job?.failedReason,
+		log.error("Erro ao processar job", {
+			jobId: job.id,
+			jobName: name,
+			error: error?.toString(),
+			processingTimeMs: processingTime,
+			attempts: job.attemptsMade,
+			maxAttempts: job.opts.attempts || 3,
 		});
-	});
 
-	worker.on("error", (err) => {
-		log.error("Erro no worker de custos", {
-			error: err?.toString(),
-			workerName: COST_QUEUE_NAME,
+		// Audit logging para falhas
+		await costAuditLogger.logCostEventFailed({
+			eventId: job.id || "unknown",
+			error: (error as Error).message,
+			attempts: job.attemptsMade || 0,
+			willRetry: (job.attemptsMade || 0) < (job.opts.attempts || 3),
 		});
-	});
 
-	worker.on("stalled", (jobId) => {
-		log.warn("Job travado detectado", {
-			jobId,
-			workerName: COST_QUEUE_NAME,
-		});
-	});
+		// Usa o error handler avançado
+		const errorResult = await handleJobError(
+			error as Error,
+			job.id || "unknown",
+			name,
+			data,
+			job.attemptsMade,
+			job.opts.attempts || 3,
+		);
 
-	return worker;
+		// Se deve mover para DLQ, o error handler já fez isso
+		if (errorResult.shouldMoveToDeadLetter) {
+			log.warn("Job movido para Dead Letter Queue", {
+				jobId: job.id,
+				jobName: name,
+				finalAttempt: job.attemptsMade,
+			});
+		}
+
+		// Re-throw para que o BullMQ saiba que falhou
+		throw error;
+	}
 }
 
-/**
- * Função para inicializar o worker de custos
- */
-export async function startCostWorker(): Promise<Worker> {
-	console.log("Iniciando worker de processamento de custos...");
-
-	const worker = createCostWorker();
-
-	// Aguarda o worker estar pronto
-	await worker.waitUntilReady();
-
-	console.log("Worker de custos iniciado com sucesso");
-
-	return worker;
-}
-
-/**
- * Função para parar o worker gracefully
- */
-export async function stopCostWorker(worker: Worker): Promise<void> {
-	console.log("Parando worker de custos...");
-
-	await worker.close();
-
-	console.log("Worker de custos parado");
-}
+// Event handlers moved to worker/init.ts via attachStandardEventHandlers (registry pattern)
 
 /**
  * Run quality evaluation job

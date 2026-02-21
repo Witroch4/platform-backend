@@ -23,46 +23,39 @@ export const fxRateQueue = new Queue(FX_RATE_QUEUE_NAME, {
 	},
 });
 
-// Worker para processar atualizações de taxa
-export const fxRateWorker = new Worker(
-	FX_RATE_QUEUE_NAME,
-	async (job) => {
-		const { name, data } = job;
+// Processor function — used by worker/registry.ts (Worker created by init.ts)
+export async function processFxRateJob(job: import("bullmq").Job): Promise<void> {
+	const { name, data } = job;
 
-		log.info(`Processando job de taxa de câmbio: ${name}`, { jobId: job.id, data });
+	log.info(`Processando job de taxa de câmbio: ${name}`, { jobId: job.id, data });
 
-		try {
-			switch (name) {
-				case "update-daily-rate":
-					await updateDailyRate();
-					break;
+	try {
+		switch (name) {
+			case "update-daily-rate":
+				await updateDailyRate();
+				break;
 
-				case "cleanup-old-rates":
-					await cleanupOldRates();
-					break;
+			case "cleanup-old-rates":
+				await cleanupOldRates();
+				break;
 
-				case "backfill-rates":
-					await backfillRates(data.startDate, data.endDate);
-					break;
+			case "backfill-rates":
+				await backfillRates(data.startDate, data.endDate);
+				break;
 
-				default:
-					throw new Error(`Tipo de job desconhecido: ${name}`);
-			}
-
-			log.info(`Job de taxa de câmbio concluído: ${name}`, { jobId: job.id });
-		} catch (error) {
-			log.error(`Erro no job de taxa de câmbio: ${name}`, {
-				jobId: job.id,
-				error: error instanceof Error ? error.message : String(error),
-			});
-			throw error;
+			default:
+				throw new Error(`Tipo de job desconhecido: ${name}`);
 		}
-	},
-	{
-		connection: getRedisInstance(),
-		concurrency: 1, // Processar um job por vez para evitar conflitos
-	},
-);
+
+		log.info(`Job de taxa de câmbio concluído: ${name}`, { jobId: job.id });
+	} catch (error) {
+		log.error(`Erro no job de taxa de câmbio: ${name}`, {
+			jobId: job.id,
+			error: error instanceof Error ? error.message : String(error),
+		});
+		throw error;
+	}
+}
 
 /**
  * Atualiza taxa diária
@@ -237,20 +230,4 @@ export async function initializeFxRateSystem(): Promise<void> {
 	}
 }
 
-// Event handlers para o worker
-fxRateWorker.on("completed", (job) => {
-	log.info(`Job de taxa de câmbio concluído: ${job.name}`, { jobId: job.id });
-});
-
-fxRateWorker.on("failed", (job, err) => {
-	log.error(`Job de taxa de câmbio falhou: ${job?.name}`, {
-		jobId: job?.id,
-		error: err.message,
-	});
-});
-
-fxRateWorker.on("error", (err) => {
-	log.error("Erro no worker de taxa de câmbio:", err);
-});
-
-export default fxRateWorker;
+// Event handlers moved to worker/init.ts via attachStandardEventHandlers (registry pattern)

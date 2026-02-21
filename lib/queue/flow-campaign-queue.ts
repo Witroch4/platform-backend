@@ -9,6 +9,10 @@
  * - Progress tracking
  *
  * @see docs/flow-builder-queue.md
+ *
+ * TODO: Worker consumer pendente — ver docs/proximo-passo-flow-campaign.md
+ * Esta fila tem producers mas NENHUM Worker processando jobs.
+ * Jobs enfileirados ficam acumulando no Redis até o worker ser implementado.
  */
 
 import { Queue, type JobsOptions } from "bullmq";

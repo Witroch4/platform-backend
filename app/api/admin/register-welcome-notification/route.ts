@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getPrismaInstance } from "@/lib/connections";
-import { addWelcomeNotificationJob } from "@/lib/queue/instagram-webhook.queue";
 
 // POST: Registrar manualmente uma notificação de boas-vindas para um usuário
 export async function POST(req: Request) {
@@ -41,12 +40,19 @@ export async function POST(req: Request) {
 			return new NextResponse("Usuário não encontrado", { status: 404 });
 		}
 
-		// Adicionar job para enviar notificação de boas-vindas
-		await addWelcomeNotificationJob(userId);
+		// Criar notificação diretamente (queue zombie removida — era deprecated)
+		await getPrismaInstance().notification.create({
+			data: {
+				userId,
+				title: "Bem-vindo ao Socialwise!",
+				message: "Bem-vindo à plataforma! Configure suas integrações para começar.",
+				isRead: false,
+			},
+		});
 
 		return NextResponse.json({
 			success: true,
-			message: `Job de notificação de boas-vindas adicionado para o usuário ${userId}`,
+			message: `Notificação de boas-vindas criada para o usuário ${userId}`,
 		});
 	} catch (error) {
 		console.error("[ADMIN_REGISTER_WELCOME_NOTIFICATION]", error);

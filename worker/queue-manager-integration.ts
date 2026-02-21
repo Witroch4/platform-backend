@@ -15,7 +15,7 @@ import { Queue } from "bullmq";
 import { INSTAGRAM_TRANSLATION_QUEUE_NAME } from "@/lib/queue/instagram-translation.queue";
 import { LEADS_QUEUE_NAME } from "@/lib/queue/leads-chatwit.queue";
 // [CLEANUP 2026-02-16] manuscrito.queue.ts DELETADO - queue zumbi sem consumidor
-import { AUTO_NOTIFICATIONS_QUEUE_NAME } from "@/lib/queue/instagram-webhook.queue";
+// [CLEANUP 2026-02-21] AUTO_NOTIFICATIONS_QUEUE_NAME REMOVIDO - queue zombie (cron direto em cron-jobs.ts)
 
 interface QueueRegistrationConfig {
 	name: string;
@@ -59,18 +59,7 @@ const QUEUE_CONFIGS: QueueRegistrationConfig[] = [
 		},
 	},
 	// [CLEANUP 2026-02-16] MANUSCRITO_QUEUE_NAME REMOVIDO - queue zumbi sem consumidor
-	{
-		name: AUTO_NOTIFICATIONS_QUEUE_NAME,
-		description: "Notificações automáticas do sistema",
-		priority: 10, // Low priority
-		concurrency: 2,
-		retryAttempts: 2,
-		alertThresholds: {
-			queueSize: { warning: 15, critical: 30 },
-			errorRate: { warning: 0.05, critical: 0.15 },
-			processingTime: { warning: 5000, critical: 12000 },
-		},
-	},
+	// [CLEANUP 2026-02-21] AUTO_NOTIFICATIONS_QUEUE_NAME REMOVIDO - queue zombie (cron direto)
 ];
 
 // [CLEANUP 2026-02-16] AI_QUEUE_CONFIGS REMOVIDO - AI workers foram deletados na Fase 4

@@ -4,7 +4,7 @@
  * com suporte a progresso granular via SSE
  */
 
-import { Queue, Worker, Job, QueueEvents } from "bullmq";
+import { Queue, Job, QueueEvents } from "bullmq";
 import { getRedisInstance } from "@/lib/connections";
 import { sseManager } from "@/lib/sse-manager";
 import { transcribeManuscript, type TranscribeManuscriptResult } from "./transcription-agent";
@@ -80,57 +80,12 @@ export const transcriptionQueueEvents = new QueueEvents(QUEUE_NAME, {
 	connection: redis,
 });
 
-// --- Worker ---
+// Worker is created by worker/init.ts via the registry
+// Event handlers are attached via attachStandardEventHandlers
 
-let worker: Worker<TranscriptionJobData, TranscriptionResult> | null = null;
+// --- Processamento do Job (exported for registry) ---
 
-export function startTranscriptionWorker() {
-	if (worker) {
-		console.log("[TranscriptionQueue] Worker já está rodando");
-		return worker;
-	}
-
-	const maxConcurrentJobs = getConfigValue("oab_eval.queue.max_concurrent_jobs", 3);
-	const concurrency = getConfigValue("oab_eval.transcribe_concurrency", 10);
-
-	console.log(
-		`[TranscriptionQueue] 🚀 Iniciando worker (max concurrent: ${maxConcurrentJobs}, page concurrency: ${concurrency})`,
-	);
-
-	worker = new Worker<TranscriptionJobData, TranscriptionResult>(
-		QUEUE_NAME,
-		async (job: Job<TranscriptionJobData>) => {
-			return processTranscriptionJob(job);
-		},
-		{
-			connection: redis,
-			concurrency: maxConcurrentJobs,
-			limiter: {
-				max: maxConcurrentJobs,
-				duration: 1000,
-			},
-		},
-	);
-
-	// Event listeners
-	worker.on("completed", (job) => {
-		console.log(`[TranscriptionQueue] ✅ Job ${job.id} concluído para lead ${job.data.leadID}`);
-	});
-
-	worker.on("failed", (job, err) => {
-		console.error(`[TranscriptionQueue] ❌ Job ${job?.id} falhou para lead ${job?.data.leadID}:`, err.message);
-	});
-
-	worker.on("error", (err) => {
-		console.error("[TranscriptionQueue] ❌ Erro no worker:", err);
-	});
-
-	return worker;
-}
-
-// --- Processamento do Job ---
-
-async function processTranscriptionJob(job: Job<TranscriptionJobData>): Promise<TranscriptionResult> {
+export async function processTranscriptionJob(job: Job<TranscriptionJobData>): Promise<TranscriptionResult> {
 	const { leadID, images, userId, selectedProvider } = job.data;
 	const totalPages = images.length;
 
@@ -399,16 +354,4 @@ export async function getQueueMetrics() {
 	};
 }
 
-// --- Cleanup ---
-
-export async function stopTranscriptionWorker() {
-	if (worker) {
-		console.log("[TranscriptionQueue] 🛑 Parando worker...");
-		await worker.close();
-		worker = null;
-		console.log("[TranscriptionQueue] ✅ Worker parado");
-	}
-}
-
-// [CLEANUP 2026-02-16] SIGTERM/SIGINT handlers REMOVIDOS
-// init.ts é o único responsável pelo graceful shutdown (já chama stopTranscriptionWorker())
+// Worker shutdown is now handled by init.ts via the registry (closes all workers in loop)

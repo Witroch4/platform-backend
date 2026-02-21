@@ -1,5 +1,5 @@
 import { PrismaClient, CostBudget } from "@prisma/client";
-import { Queue, Worker } from "bullmq";
+import { Queue } from "bullmq";
 import { getRedisInstance } from "@/lib/connections";
 import { sendBudgetAlert, applyBudgetControls, removeBudgetControls } from "./budget-controls";
 import { costAuditLogger } from "./audit-logger";
@@ -22,26 +22,19 @@ const budgetQueue = new Queue(BUDGET_MONITOR_QUEUE, {
 	},
 });
 
-// Worker para processar verificações de orçamento
-const budgetWorker = new Worker(
-	BUDGET_MONITOR_QUEUE,
-	async (job) => {
-		const { type } = job.data;
+// Processor function — used by worker/registry.ts (Worker created by init.ts)
+export async function processBudgetJob(job: import("bullmq").Job): Promise<any> {
+	const { type } = job.data;
 
-		switch (type) {
-			case "check-all-budgets":
-				return await checkAllBudgets();
-			case "check-specific-budget":
-				return await checkSpecificBudget(job.data.budgetId);
-			default:
-				throw new Error(`Tipo de job desconhecido: ${type}`);
-		}
-	},
-	{
-		connection: getRedisInstance(),
-		concurrency: 1, // Processar um por vez para evitar conflitos
-	},
-);
+	switch (type) {
+		case "check-all-budgets":
+			return await checkAllBudgets();
+		case "check-specific-budget":
+			return await checkSpecificBudget(job.data.budgetId);
+		default:
+			throw new Error(`Tipo de job desconhecido: ${type}`);
+	}
+}
 
 /**
  * Agenda verificação periódica de todos os orçamentos
@@ -331,23 +324,10 @@ export async function getBudgetMonitorStats(): Promise<{
  * Para o monitoramento de orçamentos (para testes ou manutenção)
  */
 export async function stopBudgetMonitoring(): Promise<void> {
-	await budgetWorker.close();
 	await budgetQueue.close();
 	console.log("🛑 Monitoramento de orçamentos parado");
 }
 
-// Event listeners para logging
-budgetWorker.on("completed", (job) => {
-	console.log(`✅ Job de orçamento concluído: ${job.name} (${job.id})`);
-});
+// Event handlers moved to worker/init.ts via attachStandardEventHandlers (registry pattern)
 
-budgetWorker.on("failed", (job, err) => {
-	console.error(`❌ Job de orçamento falhou: ${job?.name} (${job?.id})`, err);
-});
-
-budgetWorker.on("error", (err) => {
-	console.error("❌ Erro no worker de orçamentos:", err);
-});
-
-// Exportar instâncias para uso externo se necessário
-export { budgetQueue, budgetWorker };
+export { budgetQueue };

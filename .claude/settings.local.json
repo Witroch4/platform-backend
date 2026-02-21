@@ -52,7 +52,8 @@
       "Bash(wc:*)",
       "Bash(docker exec:*)",
       "Bash(npx jest:*)",
-      "Bash(pnpm exec jest:*)"
+      "Bash(pnpm exec jest:*)",
+      "Bash(git status:*)"
     ],
     "deny": [],
     "ask": []

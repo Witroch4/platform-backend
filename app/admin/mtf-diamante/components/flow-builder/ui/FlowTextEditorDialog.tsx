@@ -9,15 +9,15 @@ import { Bold, Italic, Strikethrough, List, ListOrdered, Quote, X, Variable, Eye
 
 // Available variables for the flow builder
 const FLOW_VARIABLES = [
-	{ name: "contact.name", label: "Nome do contato", category: "contact" },
-	{ name: "contact.phone", label: "Telefone", category: "contact" },
-	{ name: "contact.id", label: "ID do contato", category: "contact" },
-	{ name: "conversation.id", label: "ID da conversa", category: "conversation" },
-	{ name: "conversation.channel", label: "Canal", category: "conversation" },
-	{ name: "conversation.inbox_id", label: "ID da inbox", category: "conversation" },
-	{ name: "system.timestamp", label: "Timestamp", category: "system" },
-	{ name: "system.date", label: "Data", category: "system" },
-	{ name: "system.time", label: "Hora", category: "system" },
+	{ name: "contact_name", label: "Nome do contato", category: "contact" },
+	{ name: "contact_phone", label: "Telefone", category: "contact" },
+	{ name: "contact_id", label: "ID do contato", category: "contact" },
+	{ name: "conversation_id", label: "ID da conversa", category: "conversation" },
+	{ name: "conversation_channel", label: "Canal", category: "conversation" },
+	{ name: "conversation_inbox_id", label: "ID da inbox", category: "conversation" },
+	{ name: "system_timestamp", label: "Timestamp", category: "system" },
+	{ name: "system_date", label: "Data", category: "system" },
+	{ name: "system_time", label: "Hora", category: "system" },
 ] as const;
 
 interface FlowTextEditorDialogProps {

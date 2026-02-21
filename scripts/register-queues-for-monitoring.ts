@@ -12,7 +12,8 @@ import { initializeMonitoring } from "../lib/monitoring/init-monitoring";
 
 // Importar as filas existentes do seu sistema
 import { agendamentoQueue } from "../lib/queue/agendamento.queue";
-import { instagramWebhookQueue, autoNotificationsQueue } from "../lib/queue/instagram-webhook.queue";
+import { instagramWebhookQueue } from "../lib/queue/instagram-webhook.queue";
+// [CLEANUP 2026-02-21] autoNotificationsQueue REMOVIDO - queue zombie
 // [CLEANUP 2026-02-16] followUpQueue, manuscritoQueue, mtfDiamanteWebhookQueue REMOVIDOS - filas sem consumidor
 
 async function registerQueues() {
@@ -28,7 +29,7 @@ async function registerQueues() {
 		const queues = [
 			{ queue: agendamentoQueue, name: "agendamento" },
 			{ queue: instagramWebhookQueue, name: "instagram-webhook" },
-			{ queue: autoNotificationsQueue, name: "auto-notifications" },
+			// [CLEANUP 2026-02-21] autoNotificationsQueue REMOVIDO - queue zombie
 		];
 
 		console.log("2️⃣ Registrando filas...");

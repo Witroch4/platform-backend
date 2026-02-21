@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getPrismaInstance } from "@/lib/connections";
-import { addCheckExpiringTokensJob } from "@/lib/queue/instagram-webhook.queue";
+import { handleExpiringTokensNotification } from "@/worker/cron-jobs";
 
 // POST: Verificar manualmente tokens expirando
 export async function POST(req: Request) {
@@ -23,20 +23,12 @@ export async function POST(req: Request) {
 			return new NextResponse("Acesso negado", { status: 403 });
 		}
 
-		const url = new URL(req.url);
-		const daysParam = url.searchParams.get("days");
-		const days = daysParam ? Number.parseInt(daysParam, 10) : 10; // Padrão: 10 dias
-
-		if (isNaN(days) || days <= 0) {
-			return new NextResponse("O parâmetro 'days' deve ser um número positivo", { status: 400 });
-		}
-
-		// Adicionar job para verificar tokens expirando
-		await addCheckExpiringTokensJob(days);
+		// Executar verificação diretamente (sem fila BullMQ — queue zombie removida)
+		const result = await handleExpiringTokensNotification();
 
 		return NextResponse.json({
 			success: true,
-			message: `Job para verificar tokens expirando em ${days} dias adicionado com sucesso`,
+			message: `Verificação concluída: ${result.count} contas com tokens expirando encontradas.`,
 		});
 	} catch (error) {
 		console.error("[ADMIN_CHECK_EXPIRING_TOKENS]", error);

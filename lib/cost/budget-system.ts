@@ -12,7 +12,6 @@ export {
 	getBudgetMonitorStats,
 	stopBudgetMonitoring,
 	budgetQueue,
-	budgetWorker,
 	BUDGET_MONITOR_QUEUE,
 } from "./budget-monitor";
 

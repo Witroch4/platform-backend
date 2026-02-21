@@ -20,22 +20,22 @@ interface AvailableVariable {
 
 const AVAILABLE_VARIABLES: AvailableVariable[] = [
 	// Contato
-	{ name: "contact.name", label: "Nome do contato", description: "Nome do cliente", category: "contact" },
-	{ name: "contact.phone", label: "Telefone", description: "Número do WhatsApp", category: "contact" },
-	{ name: "contact.id", label: "ID do contato", description: "ID interno do contato", category: "contact" },
+	{ name: "contact_name", label: "Nome do contato", description: "Nome do cliente", category: "contact" },
+	{ name: "contact_phone", label: "Telefone", description: "Número do WhatsApp", category: "contact" },
+	{ name: "contact_id", label: "ID do contato", description: "ID interno do contato", category: "contact" },
 	// Conversa
-	{ name: "conversation.id", label: "ID da conversa", description: "ID da conversa atual", category: "conversation" },
-	{ name: "conversation.channel", label: "Canal", description: "WhatsApp, Instagram, etc", category: "conversation" },
+	{ name: "conversation_id", label: "ID da conversa", description: "ID da conversa atual", category: "conversation" },
+	{ name: "conversation_channel", label: "Canal", description: "WhatsApp, Instagram, etc", category: "conversation" },
 	{
-		name: "conversation.inbox_id",
+		name: "conversation_inbox_id",
 		label: "ID da caixa",
 		description: "ID da caixa de entrada",
 		category: "conversation",
 	},
 	// Sistema
-	{ name: "system.date", label: "Data atual", description: "Data no formato DD/MM/YYYY", category: "system" },
-	{ name: "system.time", label: "Hora atual", description: "Hora no formato HH:MM:SS", category: "system" },
-	{ name: "system.timestamp", label: "Timestamp", description: "Data/hora ISO 8601", category: "system" },
+	{ name: "system_date", label: "Data atual", description: "Data no formato DD/MM/YYYY", category: "system" },
+	{ name: "system_time", label: "Hora atual", description: "Hora no formato HH:MM:SS", category: "system" },
+	{ name: "system_timestamp", label: "Timestamp", description: "Data/hora ISO 8601", category: "system" },
 ];
 
 const CATEGORY_LABELS: Record<string, string> = {

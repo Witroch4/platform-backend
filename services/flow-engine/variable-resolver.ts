@@ -64,23 +64,23 @@ export class VariableResolver {
 
 		// Sistema
 		vars.push(
-			{ name: "system.timestamp", value: new Date().toISOString(), source: "system" },
-			{ name: "system.date", value: new Date().toLocaleDateString("pt-BR"), source: "system" },
-			{ name: "system.time", value: new Date().toLocaleTimeString("pt-BR"), source: "system" },
+			{ name: "system_timestamp", value: new Date().toISOString(), source: "system" },
+			{ name: "system_date", value: new Date().toLocaleDateString("pt-BR"), source: "system" },
+			{ name: "system_time", value: new Date().toLocaleTimeString("pt-BR"), source: "system" },
 		);
 
 		// Contato
 		vars.push(
-			{ name: "contact.name", value: this.context.contactName ?? "", source: "contact" },
-			{ name: "contact.phone", value: this.context.contactPhone ?? "", source: "contact" },
-			{ name: "contact.id", value: String(this.context.contactId), source: "contact" },
+			{ name: "contact_name", value: this.context.contactName ?? "", source: "contact" },
+			{ name: "contact_phone", value: this.context.contactPhone ?? "", source: "contact" },
+			{ name: "contact_id", value: String(this.context.contactId), source: "contact" },
 		);
 
 		// Conversa
 		vars.push(
-			{ name: "conversation.id", value: String(this.context.conversationId), source: "conversation" },
-			{ name: "conversation.channel", value: this.context.channelType ?? "", source: "conversation" },
-			{ name: "conversation.inbox_id", value: String(this.context.inboxId), source: "conversation" },
+			{ name: "conversation_id", value: String(this.context.conversationId), source: "conversation" },
+			{ name: "conversation_channel", value: this.context.channelType ?? "", source: "conversation" },
+			{ name: "conversation_inbox_id", value: String(this.context.inboxId), source: "conversation" },
 		);
 
 		// Variáveis da sessão
@@ -119,19 +119,24 @@ export class VariableResolver {
 			return this.sessionVars[varName];
 		}
 
+		// Normalizar: aceitar tanto dot notation (contact.name) quanto underscore (contact_name)
+		const normalized = varName.includes("_") && !varName.includes(".")
+			? varName.replace(/^(contact|conversation|system)_/, "$1.")
+			: varName;
+
 		// 2. Variáveis de contato (prefixo contact.)
-		if (varName.startsWith("contact.")) {
-			return this.lookupContact(varName.slice("contact.".length));
+		if (normalized.startsWith("contact.")) {
+			return this.lookupContact(normalized.slice("contact.".length));
 		}
 
 		// 3. Variáveis de conversa (prefixo conversation.)
-		if (varName.startsWith("conversation.")) {
-			return this.lookupConversation(varName.slice("conversation.".length));
+		if (normalized.startsWith("conversation.")) {
+			return this.lookupConversation(normalized.slice("conversation.".length));
 		}
 
 		// 4. Variáveis de sistema (prefixo system.)
-		if (varName.startsWith("system.")) {
-			return this.lookupSystem(varName.slice("system.".length));
+		if (normalized.startsWith("system.")) {
+			return this.lookupSystem(normalized.slice("system.".length));
 		}
 
 		// 5. Fallback: buscar sem prefixo nas variáveis de sessão com dot notation

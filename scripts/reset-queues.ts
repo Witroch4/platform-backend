@@ -3,7 +3,8 @@
 import { getRedisInstance } from "../lib/connections";
 import dotenv from "dotenv";
 import { agendamentoQueue } from "../lib/queue/agendamento.queue";
-import { instagramWebhookQueue, autoNotificationsQueue } from "../lib/queue/instagram-webhook.queue";
+import { instagramWebhookQueue } from "../lib/queue/instagram-webhook.queue";
+// [CLEANUP 2026-02-21] autoNotificationsQueue REMOVIDO - queue zombie
 // [CLEANUP 2026-02-16] followUpQueue REMOVIDO - fila sem consumidor (código morto)
 
 dotenv.config();
@@ -68,9 +69,7 @@ async function resetQueues() {
 		await instagramWebhookQueue.obliterate({ force: true });
 		console.log("Fila de webhooks do Instagram limpa com sucesso!");
 
-		// Limpa a fila de notificações automáticas
-		await autoNotificationsQueue.obliterate({ force: true });
-		console.log("Fila de notificações automáticas limpa com sucesso!");
+		// [CLEANUP 2026-02-21] autoNotificationsQueue REMOVIDO - queue zombie
 
 		// [CLEANUP 2026-02-16] followUpQueue REMOVIDO - fila sem consumidor
 
@@ -85,7 +84,7 @@ async function resetQueues() {
 		// Fecha as conexões das filas
 		await agendamentoQueue.close();
 		await instagramWebhookQueue.close();
-		await autoNotificationsQueue.close();
+		// [CLEANUP 2026-02-21] autoNotificationsQueue.close() REMOVIDO
 		// [CLEANUP 2026-02-16] followUpQueue.close() REMOVIDO
 
 		console.log("Conexões fechadas.");

@@ -1,8 +1,6 @@
 // Core worker and processing
 export {
-	createCostWorker,
-	startCostWorker,
-	stopCostWorker,
+	processCostJob,
 	processCostEvent,
 	reprocessPendingEvents,
 	resolveUnitPrice,
@@ -86,7 +84,6 @@ export {
 	getBudgetMonitorStats,
 	stopBudgetMonitoring,
 	budgetQueue,
-	budgetWorker,
 	BUDGET_MONITOR_QUEUE,
 	// Controls
 	sendBudgetAlert,

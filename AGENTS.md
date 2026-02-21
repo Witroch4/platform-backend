@@ -397,7 +397,8 @@ DATABASE_URL | REDIS_URL | NEXTAUTH_SECRET | OPENAI_API_KEY
 
 ## Portainer MCP
 
-**Regra crítica**: as ferramentas de alto nível (`listStacks`, `createStack`, etc.) são para **Edge Stacks** — não funcionam no ambiente Swarm normal (retornam 503). Usar sempre Portainer [dockerProxy]
+**Regra crítica**: as ferramentas de alto nível (`listStacks`, `createStack`, etc.) são para **Edge Stacks** — não funcionam no ambiente Swarm normal (retornam 503). Usar sempre Portainer `[dockerProxy]`.
+**Logs em Produção**: Para ver logs dos serviços principais (`socialwise_app`, `socialwise_worker`), primeiro descubra o ID do container usando `dockerProxy` com `/containers/json?all=true`. Em seguida, pegue o log específico via `/containers/{id}/logs?stdout=true&stderr=true&tail=100`. Não há um hostname global ou nome que corresponda perfeitamente nas chamadas; use a rota dos IDs e os limites `tail` para não estourar.
 
 ## Installed Agent Skills
 
