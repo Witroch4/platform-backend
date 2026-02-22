@@ -6,6 +6,7 @@ import type { CellProps } from "../types";
 import { LeadContextMenu, type ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
 import { useState } from "react";
 import { toast } from "sonner";
+import { getColumnProvider } from "@/app/admin/leads-chatwit/components/provider-switch";
 
 interface RecursoCellProps extends CellProps {
 	localAnaliseState: {
@@ -68,50 +69,30 @@ export function RecursoCell({
 		setIsProcessing(true);
 
 		try {
-			// Buscar o modelo de recurso
-			const modeloResponse = await fetch("/api/admin/leads-chatwit/modelo-recurso");
-			const modeloData = await modeloResponse.json();
+			const selectedProvider = getColumnProvider("RECURSO_CELL", "OPENAI");
 
-			if (!modeloResponse.ok) {
-				throw new Error("Erro ao buscar modelo de recurso");
-			}
-
-			const modeloRecurso = modeloData.modelo;
-
-			if (!modeloRecurso || modeloRecurso.trim() === "") {
-				throw new Error("Modelo de recurso não configurado. Configure um modelo primeiro.");
-			}
-
-			// Preparar dados para enviar ao sistema externo
+			// Preparar dados para gerar via Vercel AI SDK Interno
 			const recursoData = {
 				leadID: lead.id,
-				recurso: true,
-				RecursoFinalizado: true,
-				telefone: lead.phoneNumber,
-				nome: lead.nomeReal || lead.name || "Lead sem nome",
-				email: lead.email,
-				modeloRecurso: modeloRecurso,
-				analisePreliminar: localAnaliseState.analisePreliminar,
-				analiseUrl: localAnaliseState.analiseUrl,
-				leadData: {
-					id: lead.id,
-					nome: lead.nomeReal || lead.name,
-					telefone: lead.phoneNumber,
+				leadId: lead.id, // Adicionando ambos por segurança e alinhamento
+				analiseValidada: localAnaliseState.analisePreliminar,
+				selectedProvider,
+				dadosAdicionais: {
+					nome: lead.nomeReal || lead.name || "Lead sem nome",
 					email: lead.email,
-					especialidade: lead.especialidade,
-					usuarioId: lead.usuarioId,
-				},
+					telefone: lead.phoneNumber,
+					especialidade: lead.especialidade
+				}
 			};
 
-			console.log("[Fazer Recurso] Enviando dados:", {
+			console.log("[Fazer Recurso] Solicitando geração via AI SDK Interno:", {
 				leadId: lead.id,
-				temModelo: Boolean(modeloRecurso),
 				temAnalise: Boolean(localAnaliseState.analisePreliminar),
 				analiseValidada: analiseValidada,
 			});
 
-			// Enviar para o sistema externo
-			const response = await fetch("/api/admin/leads-chatwit/enviar-manuscrito", {
+			// Enviar para Rota Interna dedicada
+			const response = await fetch("/api/admin/leads-chatwit/gerar-recurso-interno", {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -122,29 +103,15 @@ export function RecursoCell({
 			const result = await response.json();
 
 			if (response.ok) {
-				// Marcar que o recurso foi feito
-				await fetch("/api/admin/leads-chatwit/leads", {
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-					},
-					body: JSON.stringify({
-						id: lead.id,
-						fezRecurso: true,
-						dataRecurso: new Date().toISOString(),
-						_internal: true,
-					}),
+				// Atualiza a listagem através do callback recebido
+				toast.success("Recurso gerado!", {
+					description: "O recurso estruturado via AI SDK foi salvo.",
+					duration: 4000,
 				});
 
-				toast.success("Recurso enviado", {
-					description: "Recurso processado com sucesso!",
-					duration: 3000,
-				});
-
-				// Chamar callback para atualizar o lead
 				onRecursoClick();
 			} else {
-				throw new Error(result.error || "Erro ao enviar recurso");
+				throw new Error(result.error || "Erro interno ao gerar recurso via AI SDK");
 			}
 		} catch (error: any) {
 			console.error("Erro ao fazer recurso:", error);
@@ -201,8 +168,8 @@ export function RecursoCell({
 				) : jaFezRecurso ? (
 					<Button
 						variant="outline"
-						disabled={true}
-						className="w-full bg-green-50 border-green-200 text-green-700 opacity-80 text-xs px-2 py-1 h-auto min-h-8"
+						onClick={onRecursoClick}
+						className="w-full bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:border-green-300 dark:bg-green-900/30 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-900/50 text-xs px-2 py-1 h-auto min-h-8"
 						key={`recurso-btn-${refreshKey}`}
 					>
 						<CheckCircle className="h-4 w-4 mr-1" />

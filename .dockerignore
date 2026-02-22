@@ -57,3 +57,8 @@ docker-compose*
 scripts/test-*
 scripts/backup-*
 scripts/dev-*
+
+# Secrets and sensitive files
+id_rsa.v3
+ssh-mcp/
+

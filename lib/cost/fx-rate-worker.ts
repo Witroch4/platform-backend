@@ -2,25 +2,17 @@
  * Worker para atualização diária de taxas de câmbio
  */
 
-import { Worker, Queue } from "bullmq";
+import { Queue } from "bullmq";
 import log from "@/lib/log";
 import FxRateService from "./fx-rate-service";
 import { getRedisInstance } from "@/lib/connections";
+import { getQueueJobDefaults } from "@/lib/queue/job-defaults";
 
-// Configuração da fila
 const FX_RATE_QUEUE_NAME = "fx-rate-updates";
 
 export const fxRateQueue = new Queue(FX_RATE_QUEUE_NAME, {
 	connection: getRedisInstance(),
-	defaultJobOptions: {
-		removeOnComplete: 10, // Manter apenas 10 jobs completos
-		removeOnFail: 5, // Manter apenas 5 jobs falhados
-		attempts: 3,
-		backoff: {
-			type: "exponential",
-			delay: 2000,
-		},
-	},
+	defaultJobOptions: getQueueJobDefaults(FX_RATE_QUEUE_NAME),
 });
 
 // Processor function — used by worker/registry.ts (Worker created by init.ts)
@@ -123,65 +115,7 @@ async function backfillRates(startDate: string, endDate: string): Promise<void> 
 }
 
 /**
- * Agenda job diário de atualização de taxa
- */
-export async function scheduleDailyFxRateUpdate(): Promise<void> {
-	try {
-		// Remover jobs agendados existentes
-		await fxRateQueue.removeRepeatable("update-daily-rate", {
-			pattern: "0 9 * * *", // 9:00 AM todos os dias
-		});
-
-		// Agendar novo job diário
-		await fxRateQueue.add(
-			"update-daily-rate",
-			{},
-			{
-				repeat: {
-					pattern: "0 9 * * *", // 9:00 AM todos os dias (UTC)
-				},
-				jobId: "daily-fx-rate-update", // ID fixo para evitar duplicatas
-			},
-		);
-
-		log.info("Job diário de atualização de taxa agendado para 9:00 AM UTC");
-	} catch (error) {
-		log.error("Erro ao agendar job diário de taxa:", error);
-		throw error;
-	}
-}
-
-/**
- * Agenda job semanal de limpeza
- */
-export async function scheduleWeeklyCleanup(): Promise<void> {
-	try {
-		// Remover jobs agendados existentes
-		await fxRateQueue.removeRepeatable("cleanup-old-rates", {
-			pattern: "0 2 * * 0", // 2:00 AM aos domingos
-		});
-
-		// Agendar novo job semanal
-		await fxRateQueue.add(
-			"cleanup-old-rates",
-			{},
-			{
-				repeat: {
-					pattern: "0 2 * * 0", // 2:00 AM aos domingos (UTC)
-				},
-				jobId: "weekly-fx-rate-cleanup",
-			},
-		);
-
-		log.info("Job semanal de limpeza de taxas agendado para 2:00 AM aos domingos UTC");
-	} catch (error) {
-		log.error("Erro ao agendar job semanal de limpeza:", error);
-		throw error;
-	}
-}
-
-/**
- * Executa backfill de taxas para um período
+ * Executa backfill de taxas para um período (on-demand via API route)
  */
 export async function scheduleBackfillRates(startDate: Date, endDate: Date): Promise<void> {
 	try {
@@ -192,7 +126,7 @@ export async function scheduleBackfillRates(startDate: Date, endDate: Date): Pro
 				endDate: endDate.toISOString().split("T")[0],
 			},
 			{
-				priority: 5, // Prioridade baixa
+				priority: 5,
 			},
 		);
 
@@ -206,28 +140,17 @@ export async function scheduleBackfillRates(startDate: Date, endDate: Date): Pro
 }
 
 /**
- * Inicializa o sistema de taxas de câmbio
+ * Bootstrap: busca taxa inicial se não existir nenhuma no banco.
+ * Chamado uma vez pelo init.ts. Scheduling recorrente vem do registry.
  */
-export async function initializeFxRateSystem(): Promise<void> {
-	try {
-		log.info("Inicializando sistema de taxas de câmbio...");
-
-		// Agendar jobs recorrentes
-		await scheduleDailyFxRateUpdate();
-		await scheduleWeeklyCleanup();
-
-		// Buscar taxa atual se não existir nenhuma
-		const latestRate = await FxRateService.getLatestStoredRate();
-		if (!latestRate) {
-			log.info("Nenhuma taxa encontrada, buscando taxa inicial...");
-			await FxRateService.updateCurrentRate();
-		}
-
-		log.info("Sistema de taxas de câmbio inicializado com sucesso");
-	} catch (error) {
-		log.error("Erro ao inicializar sistema de taxas de câmbio:", error);
-		throw error;
+export async function ensureInitialFxRate(): Promise<void> {
+	const latestRate = await FxRateService.getLatestStoredRate();
+	if (!latestRate) {
+		log.info("[FxRate] Nenhuma taxa encontrada, buscando taxa inicial...");
+		await FxRateService.updateCurrentRate();
+		log.info("[FxRate] Taxa inicial carregada com sucesso");
 	}
 }
 
+// Scheduling (repeat jobs) moved to worker/registry.ts (centro da verdade)
 // Event handlers moved to worker/init.ts via attachStandardEventHandlers (registry pattern)

@@ -1,25 +1,17 @@
 import { PrismaClient, CostBudget } from "@prisma/client";
 import { Queue } from "bullmq";
 import { getRedisInstance } from "@/lib/connections";
+import { getQueueJobDefaults } from "@/lib/queue/job-defaults";
 import { sendBudgetAlert, applyBudgetControls, removeBudgetControls } from "./budget-controls";
 import { costAuditLogger } from "./audit-logger";
 
 const prisma = new PrismaClient();
 
-// Configuração da fila de monitoramento de orçamentos
 export const BUDGET_MONITOR_QUEUE = "budget-monitor";
 
 const budgetQueue = new Queue(BUDGET_MONITOR_QUEUE, {
 	connection: getRedisInstance(),
-	defaultJobOptions: {
-		removeOnComplete: 10,
-		removeOnFail: 5,
-		attempts: 3,
-		backoff: {
-			type: "exponential",
-			delay: 2000,
-		},
-	},
+	defaultJobOptions: getQueueJobDefaults(BUDGET_MONITOR_QUEUE),
 });
 
 // Processor function — used by worker/registry.ts (Worker created by init.ts)
@@ -36,34 +28,7 @@ export async function processBudgetJob(job: import("bullmq").Job): Promise<any> 
 	}
 }
 
-/**
- * Agenda verificação periódica de todos os orçamentos
- * Deve ser chamado na inicialização do servidor
- */
-export async function scheduleBudgetMonitoring() {
-	try {
-		// Remove jobs existentes para evitar duplicação
-		await budgetQueue.obliterate({ force: true });
-
-		// Agenda job recorrente a cada hora
-		await budgetQueue.add(
-			"check-all-budgets",
-			{ type: "check-all-budgets" },
-			{
-				repeat: {
-					pattern: "0 * * * *", // A cada hora no minuto 0
-				},
-				jobId: "budget-monitor-hourly", // ID fixo para evitar duplicação
-			},
-		);
-
-		console.log("✅ Monitoramento de orçamentos agendado (execução a cada hora)");
-		return { success: true };
-	} catch (error) {
-		console.error("❌ Erro ao agendar monitoramento de orçamentos:", error);
-		return { success: false, error };
-	}
-}
+// Scheduling (repeat jobs) moved to worker/registry.ts (centro da verdade)
 
 /**
  * Verifica todos os orçamentos ativos

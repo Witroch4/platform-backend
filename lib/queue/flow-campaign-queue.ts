@@ -17,6 +17,7 @@
 
 import { Queue, type JobsOptions } from "bullmq";
 import { getRedisInstance } from "@/lib/connections";
+import { getQueueJobDefaults } from "@/lib/queue/job-defaults";
 import log from "@/lib/log";
 import type { DeliveryContext } from "@/types/flow-engine";
 
@@ -107,16 +108,7 @@ export interface CampaignJobResult {
 // QUEUE CONFIGURATION
 // =============================================================================
 
-const DEFAULT_JOB_OPTIONS: JobsOptions = {
-	attempts: 3,
-	backoff: {
-		type: "exponential",
-		delay: 5000, // 5s → 10s → 20s (mais espaçado para campanhas)
-	},
-	removeOnComplete: 200,
-	removeOnFail: 100,
-	priority: 8, // Baixa prioridade
-};
+const DEFAULT_JOB_OPTIONS: Partial<JobsOptions> = getQueueJobDefaults(FLOW_CAMPAIGN_QUEUE_NAME);
 
 // =============================================================================
 // QUEUE INSTANCE
@@ -173,11 +165,11 @@ export async function addExecuteContactJob(data: {
 		context: data.context,
 		metadata: {
 			timestamp: new Date().toISOString(),
-			correlationId: `${data.campaignId}:${data.contactId}`,
+			correlationId: `${data.campaignId}-${data.contactId}`,
 		},
 	};
 
-	const jobId = `campaign:${data.campaignId}:contact:${data.contactId}:${Date.now()}`;
+	const jobId = `campaign-${data.campaignId}-contact-${data.contactId}-${Date.now()}`;
 
 	const job = await queue.add("execute-contact", jobData, {
 		jobId,
@@ -213,11 +205,11 @@ export async function addProcessBatchJob(data: {
 		inboxId: data.inboxId,
 		metadata: {
 			timestamp: new Date().toISOString(),
-			correlationId: `${data.campaignId}:batch:${data.batchIndex}`,
+			correlationId: `${data.campaignId}-batch-${data.batchIndex}`,
 		},
 	};
 
-	const jobId = `campaign:${data.campaignId}:batch:${data.batchIndex}:${Date.now()}`;
+	const jobId = `campaign-${data.campaignId}-batch-${data.batchIndex}-${Date.now()}`;
 
 	const job = await queue.add("process-batch", jobData, {
 		jobId,
@@ -250,11 +242,11 @@ export async function addCampaignControlJob(data: {
 		reason: data.reason,
 		metadata: {
 			timestamp: new Date().toISOString(),
-			correlationId: `${data.campaignId}:control:${data.action}`,
+			correlationId: `${data.campaignId}-control-${data.action}`,
 		},
 	};
 
-	const jobId = `campaign:${data.campaignId}:control:${data.action}:${Date.now()}`;
+	const jobId = `campaign-${data.campaignId}-control-${data.action}-${Date.now()}`;
 
 	const job = await queue.add("campaign-control", jobData, {
 		jobId,

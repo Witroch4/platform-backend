@@ -64,14 +64,19 @@ export function createFlowEdge(source: string, target: string, sourceHandle?: st
 // =============================================================================
 
 /**
- * Cria um canvas vazio com nó START inicial
+ * Cria um canvas vazio com nó inicial.
+ * Flows normais começam com START; flows de campanha com WHATSAPP_TEMPLATE.
  */
-export function createEmptyFlowCanvas(): FlowCanvas {
-	const startNode = createFlowNode(FlowNodeType.START, { x: 250, y: 50 });
-	startNode.data.isConfigured = true;
+export function createEmptyFlowCanvas(options?: { isCampaign?: boolean }): FlowCanvas {
+	const isCampaign = options?.isCampaign ?? false;
+	const nodeType = isCampaign ? FlowNodeType.WHATSAPP_TEMPLATE : FlowNodeType.START;
+	const initialNode = createFlowNode(nodeType, { x: 250, y: 50 });
+	if (!isCampaign) {
+		initialNode.data.isConfigured = true;
+	}
 
 	return {
-		nodes: [startNode],
+		nodes: [initialNode],
 		edges: [],
 		viewport: { ...FLOW_CANVAS_CONSTANTS.DEFAULT_VIEWPORT },
 	};

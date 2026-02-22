@@ -3,16 +3,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRedisInstance } from "@/lib/connections";
 import { Queue } from "bullmq";
 
-// Known queue names from the system
+// Queue names from worker/registry.ts (single source of truth)
 const QUEUE_NAMES = [
-	"resposta-rapida",
-	"persistencia-credenciais",
-	"instagram-translation",
-	"leads-chatwit",
-	"manuscrito",
-	"instagram-webhook-auto-notifications",
-	"ai-incoming-message",
-	"ai-embedding-upsert",
+	"agendamento",
+	"leadCells",
+	"oab-mirror-generation",
+	"oab-analysis",
+	"filaLeadsChatwit",
+	"flow-builder-queues",
+	"instagram-webhooks",
+	"oab-transcription",
+	"fx-rate-updates",
+	"budget-monitor",
+	"webhook-delivery",
+	"flow-campaign",
+	"cost-events",
 ];
 
 export async function GET(request: NextRequest) {

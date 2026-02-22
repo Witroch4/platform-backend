@@ -27,21 +27,6 @@ export async function initializeMonitoring(): Promise<void> {
 		await initializeQueueMonitoring();
 		console.log("[Monitoring] ✓ Queue Monitor initialized");
 
-		// 2.1. Initialize Instagram Translation Monitoring
-		const { initializeInstagramTranslationMonitoring } = await import("./instagram-translation-monitor");
-		await initializeInstagramTranslationMonitoring();
-		console.log("[Monitoring] ✓ Instagram Translation Monitor initialized");
-
-		// 2.2. Initialize Instagram Translation Logging
-		const { initializeInstagramTranslationLogging } = await import("../logging/instagram-translation-logger");
-		await initializeInstagramTranslationLogging();
-		console.log("[Monitoring] ✓ Instagram Translation Logging initialized");
-
-		// 2.3. Initialize Instagram Error Tracking
-		const { initializeInstagramErrorTracking } = await import("./instagram-error-tracker");
-		await initializeInstagramErrorTracking();
-		console.log("[Monitoring] ✓ Instagram Error Tracking initialized");
-
 		// 2.4. Initialize Cost Monitoring
 		const { costMonitor } = await import("../cost/cost-monitor");
 		// Cost monitor initializes automatically when imported

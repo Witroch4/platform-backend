@@ -19,6 +19,18 @@
 				"/tmp/portainer-tools.yaml",
 				"-disable-version-check"
 			]
+		},
+		"ssh-mcp": {
+			"command": "npx",
+			"args": [
+				"-y",
+				"ssh-mcp",
+				"--host=49.13.155.94",
+				"--user=root",
+				"--key=/home/wital/Chatwit-Social-dev/id_rsa.v3",
+				"--timeout=60000",
+				"--maxChars=none"
+			]
 		}
 	}
 }

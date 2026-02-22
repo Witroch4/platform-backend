@@ -43,6 +43,7 @@ import {
 	FlaskConical,
 	Flag,
 	AlertCircle,
+	Megaphone,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -258,6 +259,27 @@ export function AppAdminDashboard() {
 																			<span className="font-medium ml-2">{cx.nome || cx.inboxName || "Inbox"}</span>
 																		</SidebarMenuSubButton>
 																	</InboxContextMenu>
+																	{/* Sub-link: Campanhas */}
+																	{state !== "collapsed" && (
+																		<SidebarMenuSubButton
+																			href={`/admin/mtf-diamante/inbox/${cx.id}/campanhas`}
+																			onClick={(e) => {
+																				e.preventDefault();
+																				startTransition(() => {
+																					router.push(`/admin/mtf-diamante/inbox/${cx.id}/campanhas`);
+																				});
+																			}}
+																			onMouseEnter={() => {
+																				try { router.prefetch(`/admin/mtf-diamante/inbox/${cx.id}/campanhas`); } catch {}
+																			}}
+																			className={`text-[0.85rem] py-1.5 pl-8 transition-colors ${
+																				pathname?.includes(`/inbox/${cx.id}/campanhas`) ? "bg-accent" : "hover:bg-accent"
+																			} ${isPending ? "opacity-75" : ""}`}
+																		>
+																			<Megaphone className="h-3.5 w-3.5 text-muted-foreground" />
+																			<span className="ml-2 text-muted-foreground">Campanhas</span>
+																		</SidebarMenuSubButton>
+																	)}
 																</SidebarMenuSubItem>
 															);
 														})

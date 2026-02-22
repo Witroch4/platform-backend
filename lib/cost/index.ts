@@ -77,7 +77,6 @@ export {
 // Budget system (complete budget management)
 export {
 	// Monitoring
-	scheduleBudgetMonitoring,
 	checkAllBudgets,
 	checkSpecificBudget,
 	scheduleImmediateBudgetCheck,

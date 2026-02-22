@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import useSWR from "swr";
-import { Plus, Workflow, Calendar, Edit2, Trash2, MoreVertical, CheckCircle2, XCircle } from "lucide-react";
+import { Plus, Workflow, Calendar, Edit2, Trash2, MoreVertical, CheckCircle2, XCircle, Megaphone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +42,7 @@ interface FlowListItem {
 	name: string;
 	inboxId: string;
 	isActive: boolean;
+	isCampaign: boolean;
 	nodeCount: number;
 	createdAt: string;
 	updatedAt: string;
@@ -75,10 +76,11 @@ export function FlowSelector({ inboxId, selectedFlowId, onSelectFlow, onCreateNe
 	const [newFlowName, setNewFlowName] = useState("");
 	const [editingFlow, setEditingFlow] = useState<FlowListItem | null>(null);
 	const [isLoading, setIsLoading] = useState(false);
+	const [showCampaign, setShowCampaign] = useState(false);
 
-	// Buscar lista de flows
+	// Buscar lista de flows (filtra por isCampaign)
 	const { data, error, mutate } = useSWR<{ success: boolean; data: FlowListItem[] }>(
-		inboxId ? `/api/admin/mtf-diamante/flows?inboxId=${inboxId}` : null,
+		inboxId ? `/api/admin/mtf-diamante/flows?inboxId=${inboxId}&isCampaign=${showCampaign}` : null,
 		fetcher,
 		{
 			revalidateOnFocus: false,
@@ -100,7 +102,7 @@ export function FlowSelector({ inboxId, selectedFlowId, onSelectFlow, onCreateNe
 			const res = await fetch("/api/admin/mtf-diamante/flows", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ inboxId, name: newFlowName.trim() }),
+				body: JSON.stringify({ inboxId, name: newFlowName.trim(), isCampaign: showCampaign }),
 			});
 
 			const result = await res.json();
@@ -200,9 +202,37 @@ export function FlowSelector({ inboxId, selectedFlowId, onSelectFlow, onCreateNe
 
 	return (
 		<div className="w-full">
+			{/* Toggle: Flows normais / Campanhas */}
+			<div className="flex items-center gap-1 mb-3 p-0.5 bg-muted rounded-md">
+				<button
+					type="button"
+					onClick={() => { setShowCampaign(false); onSelectFlow(null); }}
+					className={cn(
+						"flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded text-xs font-medium transition-colors",
+						!showCampaign ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground",
+					)}
+				>
+					<Workflow className="h-3.5 w-3.5" />
+					Flows
+				</button>
+				<button
+					type="button"
+					onClick={() => { setShowCampaign(true); onSelectFlow(null); }}
+					className={cn(
+						"flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded text-xs font-medium transition-colors",
+						showCampaign ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground",
+					)}
+				>
+					<Megaphone className="h-3.5 w-3.5" />
+					Campanhas
+				</button>
+			</div>
+
 			{/* Header com botão de criar */}
 			<div className="flex items-center justify-between mb-3">
-				<h3 className="text-sm font-semibold text-muted-foreground">Flows</h3>
+				<h3 className="text-sm font-semibold text-muted-foreground">
+					{showCampaign ? "Flows de Campanhas" : "Flows"}
+				</h3>
 				<Button
 					variant="outline"
 					size="sm"
@@ -250,7 +280,11 @@ export function FlowSelector({ inboxId, selectedFlowId, onSelectFlow, onCreateNe
 							>
 								<div className="flex-1 min-w-0 mr-2">
 									<div className="flex items-center gap-2">
-										<Workflow className="h-4 w-4 text-muted-foreground shrink-0" />
+										{showCampaign ? (
+											<Megaphone className="h-4 w-4 text-muted-foreground shrink-0" />
+										) : (
+											<Workflow className="h-4 w-4 text-muted-foreground shrink-0" />
+										)}
 										<span className="text-sm font-medium truncate">{flow.name}</span>
 										{flow.isActive ? (
 											<CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
@@ -313,8 +347,12 @@ export function FlowSelector({ inboxId, selectedFlowId, onSelectFlow, onCreateNe
 			<Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
 				<DialogContent className="sm:max-w-md">
 					<DialogHeader>
-						<DialogTitle>Criar novo flow</DialogTitle>
-						<DialogDescription>Digite um nome para identificar este flow de automação.</DialogDescription>
+						<DialogTitle>Criar novo {showCampaign ? "flow de campanha" : "flow"}</DialogTitle>
+						<DialogDescription>
+							{showCampaign
+								? "Flows de campanha começam com um template WhatsApp e são usados para disparos em massa."
+								: "Digite um nome para identificar este flow de automação."}
+						</DialogDescription>
 					</DialogHeader>
 					<div className="py-4">
 						<Input

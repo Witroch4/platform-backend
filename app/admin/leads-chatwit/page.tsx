@@ -23,7 +23,6 @@ import { UsuariosList } from "./components/usuarios-list";
 import { AllMessagesTab } from "./components/all-messages-tab";
 import { RegisterApiKeyDialog } from "@/components/admin/register-api-key-dialog";
 import { EspelhosPadraoDrawer } from "./components/espelhos-padrao-drawer";
-import { ModeloRecursoDrawer } from "./components/modelo-recurso-drawer";
 
 // Tipo para estatísticas - derivado do estado
 interface Stats {
@@ -68,7 +67,6 @@ export default function LeadsChatwitPage() {
 	const [activeTab, setActiveTab] = useState("leads");
 	const [userInfo, setUserInfo] = useState<UserInfo>(() => initialUserInfo);
 	const [showEspelhosPadraoDrawer, setShowEspelhosPadraoDrawer] = useState(false);
-	const [showModeloRecursoDrawer, setShowModeloRecursoDrawer] = useState(false);
 	const [isExportingCsv, setIsExportingCsv] = useState(false);
 
 	// Memoizar se é superadmin para evitar recálculos (rerender-derived-state)
@@ -188,8 +186,6 @@ export default function LeadsChatwitPage() {
 	// Callbacks para drawers
 	const openEspelhosPadrao = useCallback(() => setShowEspelhosPadraoDrawer(true), []);
 	const closeEspelhosPadrao = useCallback(() => setShowEspelhosPadraoDrawer(false), []);
-	const openModeloRecurso = useCallback(() => setShowModeloRecursoDrawer(true), []);
-	const closeModeloRecurso = useCallback(() => setShowModeloRecursoDrawer(false), []);
 	const clearSearch = useCallback(() => setSearchQuery(""), []);
 
 	// Callback para ver leads de um usuário específico
@@ -441,15 +437,6 @@ export default function LeadsChatwitPage() {
 
 							<Button
 								variant="outline"
-								onClick={openModeloRecurso}
-								className="border-border hover:bg-accent min-h-[44px]"
-							>
-								<FileText className="h-4 w-4 mr-2" />
-								Modelo de Recurso
-							</Button>
-
-							<Button
-								variant="outline"
 								onClick={handleExportCsv}
 								disabled={isExportingCsv}
 								className="border-border hover:bg-accent min-h-[44px]"
@@ -479,10 +466,6 @@ export default function LeadsChatwitPage() {
 								<DropdownMenuItem onClick={openEspelhosPadrao} className="min-h-[44px]">
 									<BookOpen className="h-4 w-4 mr-2" />
 									Espelhos Padrão
-								</DropdownMenuItem>
-								<DropdownMenuItem onClick={openModeloRecurso} className="min-h-[44px]">
-									<FileText className="h-4 w-4 mr-2" />
-									Modelo de Recurso
 								</DropdownMenuItem>
 								<DropdownMenuItem onClick={handleExportCsv} disabled={isExportingCsv} className="min-h-[44px]">
 									{isExportingCsv ? (
@@ -564,9 +547,6 @@ export default function LeadsChatwitPage() {
 
 			{/* Drawer de Espelhos Padrão */}
 			<EspelhosPadraoDrawer isOpen={showEspelhosPadraoDrawer} onClose={closeEspelhosPadrao} usuarioId="global" />
-
-			{/* Drawer de Modelo de Recurso */}
-			<ModeloRecursoDrawer isOpen={showModeloRecursoDrawer} onClose={closeModeloRecurso} />
 		</div>
 	);
 }

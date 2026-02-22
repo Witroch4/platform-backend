@@ -53,7 +53,12 @@
       "Bash(docker exec:*)",
       "Bash(npx jest:*)",
       "Bash(pnpm exec jest:*)",
-      "Bash(git status:*)"
+      "Bash(git status:*)",
+      "Bash(claude mcp add:*)",
+      "Bash(claude mcp list:*)",
+      "Bash(claude mcp get:*)",
+      "mcp__ssh-mcp__exec",
+      "Bash(psql:*)"
     ],
     "deny": [],
     "ask": []

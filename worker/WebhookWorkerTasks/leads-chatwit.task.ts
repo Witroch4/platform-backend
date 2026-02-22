@@ -1,6 +1,7 @@
 import type { Job } from "bullmq";
 import { getPrismaInstance } from "../../lib/connections";
 import type { ILeadJobData } from "../../lib/queue/leads-chatwit.queue";
+import type { WebhookPayload } from "../../types/webhook";
 
 /**
  * Processa um job da fila "filaLeadsChatwit" - Processamento individual imediato.
@@ -28,7 +29,7 @@ export async function processLeadChatwitTask(job: Job<ILeadJobData>) {
 /**
  * Processa um job individual imediatamente
  */
-async function processIndividualJob(sourceId: string, jobId: any, payload: any) {
+async function processIndividualJob(sourceId: string, jobId: string | undefined, payload: WebhookPayload) {
 	try {
 		// Extrair dados do payload atual
 		const { usuario, origemLead } = payload;

@@ -1,16 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { ErrorStatistics as BaseErrorStatistics } from "@/lib/monitoring/instagram-error-tracker";
 import { getRedisInstance, getPrismaInstance } from "@/lib/connections";
 
 interface TimeRange {
 	start: Date;
 	end: Date;
 	granularity: "minute" | "hour" | "day";
-}
-
-interface ErrorStatistics extends BaseErrorStatistics {
-	errorsByType?: Record<string, number>;
-	recentErrors?: unknown[];
 }
 
 const prisma = getPrismaInstance();
@@ -104,9 +98,6 @@ export async function GET(request: NextRequest) {
 			// Get feedback metrics
 			const feedbackMetrics = await getFeedbackMetricsSimple();
 
-			// Get Instagram translation metrics
-			const instagramTranslationMetrics = await getInstagramTranslationMetrics();
-
 			const dashboard = {
 				timestamp: new Date().toISOString(),
 				timeRange: timeRangeParam,
@@ -120,7 +111,6 @@ export async function GET(request: NextRequest) {
 					metrics: abTestMetrics,
 				},
 				feedback: feedbackMetrics,
-				instagramTranslation: instagramTranslationMetrics,
 				queues: {
 					overallHealth: { overallHealth: 0.8, issues: [] },
 					queues: [],
@@ -353,78 +343,6 @@ function getDefaultPerformanceMetrics(redisConnected = false) {
 		cacheHitRate: redisConnected ? 82 : 0,
 		errorRate: redisConnected ? 1.5 : 2.1,
 	};
-}
-
-async function getInstagramTranslationMetrics() {
-	try {
-		// Try to get Instagram translation metrics if available
-		const { instagramTranslationMonitor } = await import("@/lib/monitoring/instagram-translation-monitor");
-		const { getInstagramErrorStatistics } = await import("@/lib/monitoring/instagram-error-tracker");
-
-		const performanceSummary = await instagramTranslationMonitor.getPerformanceSummary(60); // Last hour
-		const errorStatistics = (await getInstagramErrorStatistics(1)) as ErrorStatistics; // Last hour
-
-		return {
-			status: "HEALTHY",
-			message: "Instagram translation worker operating normally",
-			worker: {
-				status: "HEALTHY",
-				concurrency: 100,
-				processing: {
-					maxProcessingTime: "4.5s",
-					lockDuration: "5s",
-				},
-				uptime: process.uptime(),
-			},
-			metrics: {
-				totalJobs: performanceSummary.translations.total || 0,
-				successRate: performanceSummary.translations.successRate || 0,
-				averageProcessingTime: performanceSummary.worker.avgProcessingTime || 0,
-				queueDepth: performanceSummary.queue.waiting || 0,
-				errorRate: errorStatistics.errorRate || 0,
-			},
-			performance: {
-				conversionTime: performanceSummary.translations.avgConversionTime || 0,
-				queueWaitTime: performanceSummary.worker.avgQueueWaitTime || 0,
-			},
-			errors: {
-				total: errorStatistics.totalErrors || 0,
-				byType: errorStatistics.errorsByType || {},
-				recent: errorStatistics.recentErrors?.slice(0, 5) || [],
-			},
-		};
-	} catch (error: unknown) {
-		console.warn("[Dashboard] Instagram translation metrics unavailable:", error);
-		return {
-			status: "LIMITED",
-			message: "Instagram translation metrics unavailable",
-			worker: {
-				status: "HEALTHY",
-				concurrency: 100,
-				processing: {
-					maxProcessingTime: "4.5s",
-					lockDuration: "5s",
-				},
-				uptime: process.uptime(),
-			},
-			metrics: {
-				totalJobs: 0,
-				successRate: 0,
-				averageProcessingTime: 0,
-				queueDepth: 0,
-				errorRate: 0,
-			},
-			performance: {
-				conversionTime: 0,
-				queueWaitTime: 0,
-			},
-			errors: {
-				total: 0,
-				byType: {},
-				recent: [],
-			},
-		};
-	}
 }
 
 function getDefaultRecommendations(redisConnected = false) {

@@ -1,13 +1,12 @@
 # AGENTS.md — Socialwise Chatwit
 
 > **Universal Agent Instructions** — Compatible with Claude Code, Cursor, Copilot, Codex, Gemini CLI, and other AI coding agents.
->
-> Backup completo: `CLAUDE.md.bak`
+
 NUNA RODE prisma db pull
 ## Regras Críticas
 
 1. Já está no root do projeto
-2. `pnpm exec tsc --noEmit` após toda edição
+2. `pnpm exec tsc --noEmit && pnpm exec tsc --noEmit -p tsconfig.worker.json` após toda edição
 3. Next.js 16: `params` é Promise → sempre `await params`
 4. Strings UI em PT-BR, código/variáveis em inglês
 5. Shadcn/UI Dialog (nunca `confirm()`/`alert()`)
@@ -44,6 +43,14 @@ pnpm exec prisma migrate dev --name descricao   # Em seguida, cria a nova migrat
 ```
 
 **NUNCA usar `migrate reset` em produção.** Em prod, resolver drift manualmente ou com `prisma migrate resolve`.
+
+## Database Backup & Restore (via SSH MCP)
+
+**Backup de produção**: `CONTAINER=$(docker ps --filter "name=postgres" --format "{{.Names}}" | head -1) && docker exec $CONTAINER pg_dump -U postgres socialwise | gzip > /tmp/socialwise_bkp_$(date +%Y%m%d).sql.gz`
+
+**Restauração em dev**: `psql $DB_URL/postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='socialwise' AND pid<>pg_backend_pid();" && psql $DB_URL/postgres -c "DROP DATABASE IF EXISTS socialwise; CREATE DATABASE socialwise OWNER postgres;" && gunzip -c ~/backup.sql.gz | psql $DB_URL/socialwise`
+
+> Arquivos ≤5MB: base64. Maiores: `rclone` → MinIO. Nunca restaurar por cima — sempre dropar/recriar.
 
 ## Stack
 
@@ -172,7 +179,7 @@ handleEdit() → DEVE usar interactiveMessages?.find(m => m.id === msg.id)
 ```bash
 # Dev
 pnpm run dev | build | start | lint | lint-apply | format-apply
-pnpm exec tsc --noEmit
+pnpm exec tsc --noEmit && pnpm exec tsc --noEmit -p tsconfig.worker.json
 
 # DB
 pnpm exec prisma migrate dev --name X  # ✅ criar migration
@@ -263,23 +270,23 @@ docker compose build | up | down
 └──────────────────────────────────────┬──────────────────────────────────────────┘
                                        ↓
 ┌──────────────────────────────────────┴──────────────────────────────────────────┐
-│  LANGGRAPH ORCHESTRATION: classify → gating → router                             │
+│  VERCEL AI SDK PIPELINE: classify → gating → router                              │
 ├──────────────────────────────────────────────────────────────────────────────────┤
-│  [classifyNode] Direct alias hit? → HARD (1.0) │ Embedding search → score        │
-│  [gatingNode]   Filter hints by semantic description alignment                   │
-│  [routerNode]   Conditional dispatch by band                                     │
+│  [classify] Direct alias hit? → HARD (1.0) │ Embedding search → score            │
+│  [gating]   Filter hints by semantic description alignment                       │
+│  [router]   Linear dispatch by band (Single-shot execution)                      │
 └──────────────────────────────────────┬──────────────────────────────────────────┘
                                        ↓
                     ┌──────────────────┼──────────────────┐
-                    ↓                  ↓                  ↓
-            ┌───────────────┐  ┌───────────────┐  ┌───────────────┐
-            │  HARD ≥0.80   │  │  SOFT 0.65-79 │  │  ROUTER <0.65 │
-            ├───────────────┤  ├───────────────┤  ├───────────────┤
-            │ Direct intent │  │ LLM warmup    │  │ Full LLM      │
-            │ mapping       │  │ buttons       │  │ routing       │
-            │ <120ms        │  │ 300ms timeout │  │ 400ms timeout │
-            └───────┬───────┘  └───────┬───────┘  └───────┬───────┘
-                    ↓                  ↓                  ↓
+                    ↓                                     ↓
+            ┌───────────────┐                     ┌───────────────┐
+            │  HARD ≥0.80   │                     │  ROUTER <0.80 │
+            ├───────────────┤                     ├───────────────┤
+            │ Direct intent │                     │ Full LLM      │
+            │ mapping       │                     │ routing       │
+            │ <120ms        │                     │ 400ms timeout │
+            └───────┬───────┘                     └───────┬───────┘
+                    ↓                                     ↓
             ┌───────────────────────────────────────────────────┐
             │  Intent Resolution: buildWhatsAppByIntentRaw()    │
             │  ├─ MapeamentoIntencao.flowId exists + active?    │
@@ -289,15 +296,21 @@ docker compose build | up | down
             └───────────────────────────────────────────────────┘
 ```
 
-### Performance Bands (3 bandas ativas)
+### Performance Bands (2 bandas ativas)
 
 | Band | Score | Estratégia | Comportamento | Timeout |
 |---|---|---|---|---|
 | **HARD** | ≥0.80 | `direct_map` | Intent → Template/Flow direto | <120ms |
-| **SOFT** | 0.65-0.79 | `warmup_buttons` | LLM gera buttons com candidatos | 300ms |
-| **ROUTER** | <0.65 | `router_llm` | LLM decide: intent ou chat | 400ms |
+| **ROUTER** | <0.80 | `router_llm` | LLM decide: intent ou chat | 400ms |
 
-> **LOW band foi removida** — scores 0.50-0.65 vão para ROUTER.
+> **SOFT (0.65-0.79) e LOW (0.50-0.65) foram descontinuadas** — todos os scores <0.80 agora vão direto para o ROUTER LLM para garantir um pipeline linear e simplificado.
+
+### Vercel AI SDK Migration (v3.6+)
+O pipeline foi migrado para **Vercel AI SDK** (`generateObject`), abandonando loops agentivos complexos (LangGraph) em favor de uma execução **linear e single-shot**:
+1. `createModel()` centralizado via `AiProviderFactory`
+2. `google("gemini-2.0-flash")` ou `anthropic("claude-3-5-sonnet")` como providers principais
+3. JSON nativo garantido via `mode: "json"` (contornando limitações de regex em schemas `auto`)
+
 
 ### Flow Builder Integration (v3.4+)
 
@@ -395,10 +408,17 @@ DATABASE_URL | REDIS_URL | NEXTAUTH_SECRET | OPENAI_API_KEY
   - `services/flow-engine/flow-executor.ts`: `handleChatwitAction()` enfileira job
   - `docs/flow-builder-queue.md`: Documentação completa
 
-## Portainer MCP
 
-**Regra crítica**: as ferramentas de alto nível (`listStacks`, `createStack`, etc.) são para **Edge Stacks** — não funcionam no ambiente Swarm normal (retornam 503). Usar sempre Portainer `[dockerProxy]`.
-**Logs em Produção**: Para ver logs dos serviços principais (`socialwise_app`, `socialwise_worker`), primeiro descubra o ID do container usando `dockerProxy` com `/containers/json?all=true`. Em seguida, pegue o log específico via `/containers/{id}/logs?stdout=true&stderr=true&tail=100`. Não há um hostname global ou nome que corresponda perfeitamente nas chamadas; use a rota dos IDs e os limites `tail` para não estourar.
+## SSH MCP
+
+**Vantagem**: Mais potente que o Portainer para debugging profundo. Permite uso de `grep`, `tail`, `awk` e comandos complexos de rede/disco direto no host.
+
+**Comandos Úteis**:
+- **Logs filtrados**: `docker service logs <service_name> --tail 500 2>&1 | grep "keyword"` (`socialwise_app`, `socialwise_worker`)
+- **Listar serviços**: `docker service ls`
+- **Status do host**: `df -h` (disco), `free -m` (memória), `uptime`
+
+**Regra**: Use SSH MCP quando precisar de filtros avançados ou comandos que a interface do Portainer (BFF/Proxy) não cobre. O SSH é a "fonte da verdade" para investigar estados do Swarm e logs extensos.
 
 ## Installed Agent Skills
 

@@ -15,6 +15,7 @@
 
 import { Queue, type JobsOptions } from "bullmq";
 import { getRedisInstance } from "@/lib/connections";
+import { getQueueJobDefaults } from "@/lib/queue/job-defaults";
 import log from "@/lib/log";
 import type { DeliveryContext, DeliveryPayload } from "@/types/flow-engine";
 
@@ -175,15 +176,7 @@ export interface FlowBuilderJobResult {
 // QUEUE CONFIGURATION
 // =============================================================================
 
-const DEFAULT_JOB_OPTIONS: JobsOptions = {
-	attempts: 3,
-	backoff: {
-		type: "exponential",
-		delay: 2000, // 2s → 4s → 8s
-	},
-	removeOnComplete: 100, // Mantém últimos 100 completados
-	removeOnFail: 50, // Mantém últimos 50 falhos
-};
+const DEFAULT_JOB_OPTIONS: Partial<JobsOptions> = getQueueJobDefaults(FLOW_BUILDER_QUEUE_NAME);
 
 // =============================================================================
 // QUEUE INSTANCE

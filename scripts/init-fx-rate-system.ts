@@ -2,14 +2,14 @@
 
 /**
  * Script para inicializar o sistema de taxas de câmbio
- * - Configura jobs recorrentes
  * - Busca taxa inicial se necessário
  * - Testa conectividade com APIs externas
+ *
+ * Nota: scheduling de jobs recorrentes agora é feito pelo worker/registry.ts
  */
 
-import { initializeFxRateSystem } from "@/lib/cost/fx-rate-worker";
+import { ensureInitialFxRate } from "@/lib/cost/fx-rate-worker";
 import FxRateService from "@/lib/cost/fx-rate-service";
-import log from "@/lib/log";
 
 async function main() {
 	console.log("🚀 Inicializando sistema de taxas de câmbio...");
@@ -28,9 +28,8 @@ async function main() {
 			console.log("📊 Nenhuma taxa encontrada no banco");
 		}
 
-		// Inicializar sistema completo
-		console.log("⚙️ Configurando jobs recorrentes...");
-		await initializeFxRateSystem();
+		// Buscar taxa inicial se necessário
+		await ensureInitialFxRate();
 
 		// Estatísticas finais
 		const finalRate = await FxRateService.getLatestStoredRate();
@@ -39,7 +38,7 @@ async function main() {
 		}
 
 		console.log("✅ Sistema de taxas de câmbio inicializado com sucesso!");
-		console.log("\n📋 Próximos passos:");
+		console.log("\n📋 Scheduling (via worker/registry.ts):");
 		console.log("  - Taxa será atualizada diariamente às 9:00 AM UTC");
 		console.log("  - Limpeza de taxas antigas aos domingos às 2:00 AM UTC");
 		console.log("  - Use a API /api/admin/cost-monitoring/fx-rates para consultas");

@@ -10,9 +10,20 @@
  *   3. Done — init.ts handles creation, event handlers, shutdown.
  */
 
-import type { Job, Processor } from "bullmq";
+import type { Job, Processor, JobsOptions } from "bullmq";
 
 // --- Types ---
+
+export interface ScheduleDefinition {
+	/** Cron pattern (e.g. "0 9 * * *") */
+	pattern: string;
+	/** BullMQ job name */
+	jobName: string;
+	/** Job data payload */
+	jobData?: Record<string, any>;
+	/** Human-readable description for startup banner */
+	description?: string;
+}
 
 export interface WorkerDefinition {
 	/** Display name for logs and startup banner */
@@ -37,6 +48,29 @@ export interface WorkerDefinition {
 	icon?: string;
 	/** Short description for startup banner */
 	description?: string;
+	/** Default job options for this queue (attempts, backoff, retention).
+	 *  Queue files import via getRegistryJobDefaults() to stay in sync. */
+	defaultJobOptions?: Partial<JobsOptions>;
+	/** Recurring BullMQ schedules (repeat jobs). Registered by init.ts on startup. */
+	schedule?: ScheduleDefinition[];
+}
+
+// --- Global Defaults (used when a worker has no explicit defaultJobOptions) ---
+
+export const GLOBAL_JOB_DEFAULTS: Partial<JobsOptions> = {
+	attempts: 3,
+	backoff: { type: "exponential", delay: 2000 },
+	removeOnComplete: 50,
+	removeOnFail: 20,
+};
+
+/**
+ * Returns defaultJobOptions for a queue from the registry.
+ * Queue files should use this instead of defining their own inline defaults.
+ */
+export function getRegistryJobDefaults(queueName: string): Partial<JobsOptions> {
+	const def = workerRegistry.find((w) => w.queue === queueName);
+	return def?.defaultJobOptions ?? GLOBAL_JOB_DEFAULTS;
 }
 
 // --- Processor Imports ---
@@ -47,7 +81,7 @@ import { processMirrorGenerationTask } from "./WebhookWorkerTasks/mirror-generat
 import { processAnalysisGenerationTask } from "./WebhookWorkerTasks/analysis-generation.task";
 import { processLeadChatwitTask } from "./WebhookWorkerTasks/leads-chatwit.task";
 import { processFlowBuilderTask } from "./WebhookWorkerTasks/flow-builder-queues.task";
-import { processInstagramTranslationTask } from "./WebhookWorkerTasks/instagram-translation.task";
+import { processFlowCampaignTask } from "./WebhookWorkerTasks/flow-campaign.task";
 import { processInstagramWebhook } from "./processors/instagram-webhook.processor";
 import { processFxRateJob } from "@/lib/cost/fx-rate-worker";
 import { processBudgetJob } from "@/lib/cost/budget-monitor";
@@ -59,17 +93,15 @@ import { processCostJob } from "@/lib/cost/cost-worker";
 
 import { INSTAGRAM_WEBHOOK_QUEUE_NAME } from "@/lib/queue/instagram-webhook.queue";
 import { LEADS_QUEUE_NAME } from "@/lib/queue/leads-chatwit.queue";
-import { INSTAGRAM_TRANSLATION_QUEUE_NAME } from "@/lib/queue/instagram-translation.queue";
 import { FLOW_BUILDER_QUEUE_NAME } from "@/lib/queue/flow-builder-queues";
+import { FLOW_CAMPAIGN_QUEUE_NAME } from "@/lib/queue/flow-campaign-queue";
 import { COST_QUEUE_NAME } from "@/lib/cost/queue-config";
 import { getWorkersConfig } from "@/lib/config";
-import { getCurrentWorkerConfig } from "./config/instagram-translation-worker.config";
 import { getConfigValue } from "@/lib/config";
 
 // --- Build Registry ---
 
 const workersConfig = getWorkersConfig();
-const instagramConfig = getCurrentWorkerConfig();
 
 export const workerRegistry: WorkerDefinition[] = [
 	// ---- Core Workers ----
@@ -115,6 +147,12 @@ export const workerRegistry: WorkerDefinition[] = [
 		lockDuration: workersConfig.leads_chatwit.lock_duration,
 		stalledInterval: 60000,
 		maxStalledCount: 2,
+		defaultJobOptions: {
+			attempts: 5,
+			backoff: { type: "exponential", delay: 1_000 },
+			removeOnComplete: 10_000,
+			removeOnFail: 5_000,
+		},
 		icon: "🔥",
 		description: "Processamento de leads",
 	},
@@ -126,6 +164,12 @@ export const workerRegistry: WorkerDefinition[] = [
 		lockDuration: 30000,
 		stalledInterval: 60000,
 		maxStalledCount: 2,
+		defaultJobOptions: {
+			attempts: 3,
+			backoff: { type: "exponential", delay: 2000 },
+			removeOnComplete: 100,
+			removeOnFail: 50,
+		},
 		icon: "🔧",
 		description: "Ações assíncronas do Flow Engine",
 	},
@@ -135,17 +179,6 @@ export const workerRegistry: WorkerDefinition[] = [
 		processor: processInstagramWebhook,
 		icon: "📱",
 		description: "Automação Instagram",
-	},
-	{
-		name: "InstagramTranslation",
-		queue: INSTAGRAM_TRANSLATION_QUEUE_NAME,
-		processor: processInstagramTranslationTask,
-		concurrency: instagramConfig.concurrency,
-		lockDuration: instagramConfig.lockDuration,
-		stalledInterval: 30000,
-		maxStalledCount: 1,
-		icon: "🌐",
-		description: "Tradução Instagram",
 	},
 	{
 		name: "Transcription",
@@ -167,6 +200,16 @@ export const workerRegistry: WorkerDefinition[] = [
 		processor: processFxRateJob,
 		concurrency: 1,
 		critical: false,
+		defaultJobOptions: {
+			removeOnComplete: 10,
+			removeOnFail: 5,
+			attempts: 3,
+			backoff: { type: "exponential", delay: 2000 },
+		},
+		schedule: [
+			{ pattern: "0 9 * * *", jobName: "update-daily-rate", jobData: {}, description: "Câmbio diário 9h UTC" },
+			{ pattern: "0 2 * * 0", jobName: "cleanup-old-rates", jobData: {}, description: "Limpeza semanal dom 2h UTC" },
+		],
 		icon: "💱",
 		description: "Atualização diária câmbio USD/BRL",
 	},
@@ -176,6 +219,15 @@ export const workerRegistry: WorkerDefinition[] = [
 		processor: processBudgetJob,
 		concurrency: 1,
 		critical: false,
+		defaultJobOptions: {
+			removeOnComplete: 10,
+			removeOnFail: 5,
+			attempts: 3,
+			backoff: { type: "exponential", delay: 2000 },
+		},
+		schedule: [
+			{ pattern: "0 * * * *", jobName: "check-all-budgets", jobData: { type: "check-all-budgets" }, description: "Verificação horária" },
+		],
 		icon: "💰",
 		description: "Monitoramento de orçamentos",
 	},
@@ -189,6 +241,25 @@ export const workerRegistry: WorkerDefinition[] = [
 		description: "Entrega de webhooks com retry",
 	},
 	{
+		name: "FlowCampaign",
+		queue: FLOW_CAMPAIGN_QUEUE_NAME,
+		processor: processFlowCampaignTask,
+		concurrency: 5,
+		lockDuration: 60000,
+		stalledInterval: 120000,
+		maxStalledCount: 2,
+		critical: false,
+		defaultJobOptions: {
+			attempts: 3,
+			backoff: { type: "exponential", delay: 5000 },
+			removeOnComplete: 200,
+			removeOnFail: 100,
+			priority: 8,
+		},
+		icon: "📢",
+		description: "Disparos de campanhas de flows",
+	},
+	{
 		name: "CostEvents",
 		queue: COST_QUEUE_NAME,
 		processor: processCostJob,
@@ -196,6 +267,13 @@ export const workerRegistry: WorkerDefinition[] = [
 		stalledInterval: 30000,
 		maxStalledCount: 1,
 		critical: false,
+		defaultJobOptions: {
+			priority: 10,
+			removeOnComplete: 100,
+			removeOnFail: 50,
+			attempts: 3,
+			backoff: { type: "exponential", delay: 2000 },
+		},
 		icon: "📊",
 		description: "Processamento de eventos de custo",
 	},

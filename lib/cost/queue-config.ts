@@ -1,5 +1,6 @@
 import { Queue, Worker, QueueOptions, WorkerOptions } from "bullmq";
 import { getRedisInstance } from "@/lib/connections";
+import { getQueueJobDefaults } from "@/lib/queue/job-defaults";
 
 /**
  * Configuração da fila de eventos de custo
@@ -9,22 +10,7 @@ export const COST_QUEUE_NAME = "cost-events";
 
 export const costQueueOptions: QueueOptions = {
 	connection: getRedisInstance(),
-	defaultJobOptions: {
-		// Configurações de prioridade e retenção
-		priority: 10, // baixa prioridade (valores maiores = menor prioridade)
-		removeOnComplete: 100, // manter apenas os 100 jobs mais recentes completos
-		removeOnFail: 50, // manter apenas os 50 jobs falhados mais recentes
-
-		// Configurações de retry
-		attempts: 3,
-		backoff: {
-			type: "exponential",
-			delay: 2000, // 2s, 4s, 8s
-		},
-
-		// Configurações de delay
-		delay: 0, // processar imediatamente por padrão
-	},
+	defaultJobOptions: getQueueJobDefaults(COST_QUEUE_NAME),
 };
 
 export const costWorkerOptions: WorkerOptions = {
@@ -130,7 +116,7 @@ export const bulkOperationConfig = {
  * Utilitário para adicionar eventos em bulk com otimização
  */
 export async function addCostEventsBulk(
-	queue: Queue,
+	queue: Queue<any, any, string>,
 	events: Array<{
 		name: string;
 		data: any;
@@ -142,7 +128,7 @@ export async function addCostEventsBulk(
 	try {
 		// Divide em batches se necessário
 		const batchSize = bulkOperationConfig.maxBatchSize;
-		const batches = [];
+		const batches: Array<typeof events> = [];
 
 		for (let i = 0; i < events.length; i += batchSize) {
 			batches.push(events.slice(i, i + batchSize));

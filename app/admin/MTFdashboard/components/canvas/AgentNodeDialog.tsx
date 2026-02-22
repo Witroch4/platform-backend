@@ -176,7 +176,7 @@ export function AgentNodeDialog({
 							<div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-xl">🤖</div>
 							<div>
 								<DialogTitle className="text-xl">Configuração do Agente</DialogTitle>
-								<DialogDescription>Configure todos os parâmetros do agente LangGraph</DialogDescription>
+								<DialogDescription>Configure todos os parâmetros do agente via Vercel AI SDK</DialogDescription>
 							</div>
 						</div>
 						<Badge variant="outline" className="font-mono">
@@ -306,11 +306,34 @@ export function AgentNodeDialog({
 									/>
 									<p className="text-xs text-muted-foreground flex items-center gap-1.5">
 										<InfoIcon className="h-3 w-3" />
-										Instruções fundamentais injetadas no LangGraph antes de cada execução
+										Instruções fundamentais injetadas no Agente antes de cada execução
 									</p>
 								</div>
 
-								<div className="space-y-2">
+								{localDraft.linkedColumn === "RECURSO_CELL" && (
+									<div className="space-y-2 p-4 rounded-lg border border-blue-500/30 bg-blue-500/5 mt-4">
+										<Label className="text-sm font-medium flex items-center gap-2">
+											<Sparkles className="h-4 w-4 text-blue-500" />
+											Variáveis Disponíveis
+										</Label>
+										<p className="text-xs text-muted-foreground mb-2">
+											Copie e cole estas marcações no seu Prompt do Sistema. O sistema irá substituí-las automaticamente pelos dados reais do Lead durante a execução:
+										</p>
+										<div className="flex flex-wrap gap-2">
+											<Badge variant="outline" className="font-mono text-xs cursor-pointer hover:bg-muted" onClick={() => navigator.clipboard.writeText('{analise_validada}')}>
+												{'{analise_validada}'}
+											</Badge>
+											<Badge variant="outline" className="font-mono text-xs cursor-pointer hover:bg-muted" onClick={() => navigator.clipboard.writeText('{modelo_recurso}')}>
+												{'{modelo_recurso}'}
+											</Badge>
+											<Badge variant="outline" className="font-mono text-xs cursor-pointer hover:bg-muted" onClick={() => navigator.clipboard.writeText('{nome}')}>
+												{'{nome}'}
+											</Badge>
+										</div>
+									</div>
+								)}
+
+								<div className="space-y-2 mt-4">
 									<Label htmlFor="instructions" className="text-sm font-medium">
 										Instruções Adicionais (Opcional)
 									</Label>
@@ -333,11 +356,10 @@ export function AgentNodeDialog({
 									{/* GEMINI */}
 									<div
 										onClick={() => selectProvider("GEMINI")}
-										className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-											currentProvider === "GEMINI"
+										className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${currentProvider === "GEMINI"
 												? "border-blue-500 bg-blue-500/10"
 												: "border-muted hover:border-blue-500/50"
-										}`}
+											}`}
 									>
 										<div className="flex items-center gap-3 mb-4">
 											<Image src="/assets/Google-gemini-icon.svg" alt="Gemini" width={32} height={32} />
@@ -390,11 +412,10 @@ export function AgentNodeDialog({
 									{/* OPENAI */}
 									<div
 										onClick={() => selectProvider("OPENAI")}
-										className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-											currentProvider === "OPENAI"
+										className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${currentProvider === "OPENAI"
 												? "border-emerald-500 bg-emerald-500/10"
 												: "border-muted hover:border-emerald-500/50"
-										}`}
+											}`}
 									>
 										<div className="flex items-center gap-3 mb-4">
 											<Image src="/assets/ChatGPT_logo.svg" alt="OpenAI" width={32} height={32} />
@@ -704,11 +725,11 @@ export function AgentNodeDialog({
 												},
 											})
 										}
-										placeholder='{"type":"object","properties":{"answer":{"type":"string"}}}'
+										placeholder={localDraft.linkedColumn === "RECURSO_CELL" ? '{\n  "type": "object",\n  "properties": {\n    "texto_recurso": {\n      "type": "string",\n      "description": "O texto final do recurso elaborado."\n    }\n  },\n  "required": ["texto_recurso"]\n}' : '{"type":"object","properties":{"answer":{"type":"string"}}}'}
 										className="min-h-[250px] font-mono text-xs"
 									/>
 									<p className="text-xs text-muted-foreground">
-										Define a estrutura exata do JSON que o agente deve retornar
+										Define a estrutura exata do JSON que o agente deve retornar. Será validadro via Vercel AI SDK generateObject.
 									</p>
 								</div>
 

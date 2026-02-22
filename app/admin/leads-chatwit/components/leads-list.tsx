@@ -464,12 +464,12 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 				})),
 				arquivos_pdf: lead.pdfUnificado
 					? [
-							{
-								id: lead.id,
-								url: lead.pdfUnificado,
-								nome: "PDF Unificado",
-							},
-						]
+						{
+							id: lead.id,
+							url: lead.pdfUnificado,
+							nome: "PDF Unificado",
+						},
+					]
 					: [],
 				arquivos_imagens_manuscrito: imagensConvertidas.map((url: string, index: number) => ({
 					id: `${lead.id}-manuscrito-${index}`,
@@ -478,11 +478,11 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 				})),
 				recursos: lead.datasRecurso
 					? JSON.parse(lead.datasRecurso).map((data: string, index: number) => ({
-							id: `${lead.id}-recurso-${index}`,
-							tipo: "recurso",
-							status: "realizado",
-							data_criacao: data,
-						}))
+						id: `${lead.id}-recurso-${index}`,
+						tipo: "recurso",
+						status: "realizado",
+						data_criacao: data,
+					}))
 					: [],
 				observacoes: lead.anotacoes || "",
 				metadata: {
@@ -651,11 +651,11 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 						aguardandoManuscrito: false,
 						...(temEspelhoIndividual && !lead.espelhoBibliotecaId
 							? {
-									textoDOEspelho: undefined,
-									espelhoCorrecao: undefined,
-									espelhoProcessado: false,
-									aguardandoEspelho: false,
-								}
+								textoDOEspelho: undefined,
+								espelhoCorrecao: undefined,
+								espelhoProcessado: false,
+								aguardandoEspelho: false,
+							}
 							: {}),
 						analiseUrl: undefined,
 						analiseProcessada: false,
@@ -822,7 +822,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 
 			{isLoading || initialLoading ? (
 				<div className="flex justify-center items-center py-8">
-					<RefreshCw className="h-8 w-8 animate-spin text-primary" />
+					<img src="/animations/broto.svg" alt="Carregando" className="h-24 w-24" />
 				</div>
 			) : leads.length === 0 ? (
 				<div className="text-center py-8 text-muted-foreground">Nenhum lead encontrado.</div>
@@ -856,7 +856,9 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 								<TableHead className="min-w-[130px] align-middle text-card-foreground px-1 text-sm">
 									<ProviderSwitchHeader column="ANALISE_CELL" label="Análise" defaultProvider="OPENAI" />
 								</TableHead>
-								<TableHead className="min-w-[100px] align-middle text-card-foreground px-1 text-sm">Recurso</TableHead>
+								<TableHead className="min-w-[130px] align-middle text-card-foreground px-1 text-sm">
+									<ProviderSwitchHeader column="RECURSO_CELL" label="Recurso" defaultProvider="OPENAI" />
+								</TableHead>
 								<TableHead className="min-w-[80px] align-middle text-card-foreground px-1 text-sm">
 									Consultoria
 								</TableHead>

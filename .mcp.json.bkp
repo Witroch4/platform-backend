@@ -15,6 +15,17 @@
 				"--api-key",
 				"ctx7sk-2c005691-02bb-44ab-a7ce-8cb0a6ce6d78"
 			]
+		},
+		"ssh-mcp": {
+			"command": "node",
+			"args": [
+				"/home/wital/Chatwit-Social-dev/ssh-mcp/build/index.js",
+				"--host=49.13.155.94",
+				"--user=root",
+				"--key=/home/wital/Chatwit-Social-dev/id_rsa.v3",
+				"--timeout=60000",
+				"--maxChars=none"
+			]
 		}
 	}
 }

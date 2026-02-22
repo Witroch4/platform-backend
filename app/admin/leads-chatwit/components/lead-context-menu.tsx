@@ -38,7 +38,8 @@ export type ContextAction =
 	| "verAnaliseValidada"
 	| "enviarEspelhoUpload"
 	| "enviarRecurso"
-	| "verRecurso";
+	| "verRecurso"
+	| "excluirRecurso";
 
 interface LeadContextMenuProps {
 	contextType: ContextType;
@@ -200,7 +201,16 @@ export function LeadContextMenu({ contextType, onAction, children, data }: LeadC
 							<ContextMenuItem onClick={() => onAction("enviarRecurso", data)}>Enviar Recurso</ContextMenuItem>
 						)}
 						{data.fezRecurso && (
-							<ContextMenuItem onClick={() => onAction("verRecurso", data)}>Ver Recurso</ContextMenuItem>
+							<>
+								<ContextMenuItem onClick={() => onAction("verRecurso", data)}>Ver Recurso</ContextMenuItem>
+								<ContextMenuSeparator />
+								<ContextMenuItem
+									onClick={() => onAction("excluirRecurso", data)}
+									className="text-red-500 focus:text-red-500 focus:bg-red-50 dark:focus:bg-red-950"
+								>
+									Excluir Recurso
+								</ContextMenuItem>
+							</>
 						)}
 					</>
 				)}

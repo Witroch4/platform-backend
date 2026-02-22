@@ -2,18 +2,17 @@
 // This is the ONLY entrypoint that should be used to start workers.
 // All worker definitions live in registry.ts (single source of truth).
 
-import { Worker } from "bullmq";
+import { Worker, Queue } from "bullmq";
 import { getRedisInstance } from "@/lib/connections";
 import { getPrismaInstance } from "@/lib/connections";
 import { checkRedisHealth, startRedisHealthMonitoring } from "@/lib/redis-health-check";
 import { attachStandardEventHandlers } from "./utils/worker-events";
-import { workerRegistry, type WorkerDefinition } from "./registry";
+import { workerRegistry, getRegistryJobDefaults, type WorkerDefinition } from "./registry";
 import { initCronJobs, stopCronJobs } from "./cron-jobs";
 import { initializeExistingAgendamentos } from "../lib/scheduler-bullmq";
 import { initializeQueueManagement, shutdownQueueManagement } from "./queue-manager-integration";
 import { sseManager } from "../lib/sse-manager";
-import { initializeFxRateSystem } from "@/lib/cost/fx-rate-worker";
-import { scheduleBudgetMonitoring } from "@/lib/cost/budget-monitor";
+import { ensureInitialFxRate } from "@/lib/cost/fx-rate-worker";
 import { getWebhookQueue } from "@/lib/webhook/webhook-queue";
 import dotenv from "dotenv";
 
@@ -24,6 +23,7 @@ dotenv.config();
 // ============================================================================
 
 const activeWorkers = new Map<string, Worker>();
+const scheduleQueues: Queue[] = []; // Queues used for recurring schedules
 
 // ============================================================================
 // REDIS CONNECTION
@@ -93,13 +93,18 @@ export async function initializeWorkers() {
 		console.log(`[Worker] ✅ ${activeWorkers.size}/${workerRegistry.length} workers inicializados`);
 
 		// ==================================================================
+		// PHASE 2b: SCHEDULE RECURRING JOBS (registry-driven)
+		// ==================================================================
+		await scheduleRecurringJobs();
+
+		// ==================================================================
 		// PHASE 3: CRON JOBS
 		// ==================================================================
 		initCronJobs();
 		console.log("[Worker] ✅ Cron jobs inicializados");
 
 		// ==================================================================
-		// PHASE 4: SCHEDULING & SHARED RESOURCES
+		// PHASE 4: SHARED RESOURCES
 		// ==================================================================
 		await sseManager.ensureRedisConnected();
 		console.log("[Worker] ✅ SSE Redis conectado");
@@ -107,19 +112,11 @@ export async function initializeWorkers() {
 		await initializeQueueManagement();
 		console.log("[Worker] ✅ Sistema de Gerenciamento de Filas inicializado");
 
-		// Schedule recurring BullMQ jobs (these use Queue.add with repeat, not Workers)
+		// Ensure initial FX rate exists (one-time bootstrap, not scheduling)
 		try {
-			await initializeFxRateSystem();
-			console.log("[Worker] ✅ FX Rate scheduling inicializado");
+			await ensureInitialFxRate();
 		} catch (error) {
-			console.warn("[Worker] ⚠️ FX Rate scheduling falhou (não-crítico):", error);
-		}
-
-		try {
-			await scheduleBudgetMonitoring();
-			console.log("[Worker] ✅ Budget Monitor scheduling inicializado");
-		} catch (error) {
-			console.warn("[Worker] ⚠️ Budget Monitor scheduling falhou (não-crítico):", error);
+			console.warn("[Worker] ⚠️ FX Rate bootstrap falhou (não-crítico):", error);
 		}
 
 		// ==================================================================
@@ -162,6 +159,41 @@ async function createAndTrackWorker(def: WorkerDefinition): Promise<void> {
 }
 
 // ============================================================================
+// RECURRING SCHEDULES (registry-driven — replaces manual scheduling calls)
+// ============================================================================
+
+async function scheduleRecurringJobs(): Promise<void> {
+	let scheduledCount = 0;
+
+	for (const def of workerRegistry) {
+		if (!def.schedule?.length) continue;
+
+		const queue = new Queue(def.queue, {
+			connection: getRedisInstance(),
+			defaultJobOptions: getRegistryJobDefaults(def.queue),
+		});
+		scheduleQueues.push(queue);
+
+		for (const sched of def.schedule) {
+			try {
+				await queue.add(sched.jobName, sched.jobData ?? {}, {
+					repeat: { pattern: sched.pattern },
+					jobId: `${def.name}-${sched.jobName}`,
+				});
+				scheduledCount++;
+				console.log(`[Worker]   📅 ${def.name}: ${sched.description ?? sched.pattern}`);
+			} catch (error) {
+				console.warn(`[Worker]   ⚠️ Schedule falhou ${def.name}/${sched.jobName}:`, error);
+			}
+		}
+	}
+
+	if (scheduledCount > 0) {
+		console.log(`[Worker] ✅ ${scheduledCount} recurring jobs agendados via registry`);
+	}
+}
+
+// ============================================================================
 // STARTUP BANNER
 // ============================================================================
 
@@ -174,9 +206,17 @@ function printStartupBanner(agendamentosCount: number) {
 	for (const def of workerRegistry) {
 		const status = activeWorkers.has(def.name) ? "✅" : "❌";
 		console.log(`   ${def.icon ?? "🔹"} ${status} ${def.name.padEnd(22)} → ${def.description ?? def.queue}`);
+
+		// Show schedules under the worker
+		if (def.schedule?.length) {
+			for (const sched of def.schedule) {
+				console.log(`      📅 ${sched.description ?? sched.pattern}`);
+			}
+		}
 	}
 
 	console.log("-".repeat(70));
+	console.log("📅 Cron jobs: Verificação tokens 8h UTC (node-cron)");
 	console.log(`📈 Agendamentos:  ${agendamentosCount} carregados`);
 	console.log(`🔧 Total workers: ${activeWorkers.size}/${workerRegistry.length}`);
 	console.log("=".repeat(70) + "\n");
@@ -216,7 +256,10 @@ async function gracefulShutdown(signal: string) {
 			new Promise<void>((_, reject) => setTimeout(() => reject(new Error("Worker shutdown timeout")), 25_000)),
 		]);
 
-		// 4. Close queues that are not managed by workers
+		// 4. Close schedule queues and other standalone queues
+		for (const q of scheduleQueues) {
+			try { await q.close(); } catch { }
+		}
 		try {
 			const wq = getWebhookQueue();
 			await wq.close();

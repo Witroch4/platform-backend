@@ -1578,6 +1578,7 @@ model Flow {
   name        String
   inboxId     String
   isActive    Boolean              @default(true)
+  isCampaign  Boolean              @default(false)
   canvasJson  Json?                // Canvas visual (nodes/edges/viewport) específico deste flow
   nodes       FlowNode[]
   edges       FlowEdge[]
@@ -1589,6 +1590,7 @@ model Flow {
   updatedAt   DateTime             @updatedAt
 
   @@index([inboxId, isActive])
+  @@index([inboxId, isCampaign, isActive])
 }
 
 model FlowNode {

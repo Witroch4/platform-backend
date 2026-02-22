@@ -1,5 +1,6 @@
 import { Queue } from "bullmq";
 import { getRedisInstance } from "@/lib/connections";
+import { getQueueJobDefaults } from "@/lib/queue/job-defaults";
 import type { WebhookPayload } from "@/types/webhook"; // mesmo tipo usado na rota
 
 export const LEADS_QUEUE_NAME = "filaLeadsChatwit";
@@ -14,12 +15,7 @@ export interface IFinalAnalysisJobData {
 
 export const leadsQueue = new Queue<ILeadJobData | IFinalAnalysisJobData>(LEADS_QUEUE_NAME, {
 	connection: getRedisInstance(),
-	defaultJobOptions: {
-		attempts: 5,
-		backoff: { type: "exponential", delay: 1_000 },
-		removeOnComplete: 10_000,
-		removeOnFail: 5_000,
-	},
+	defaultJobOptions: getQueueJobDefaults(LEADS_QUEUE_NAME),
 });
 
 export async function addLeadJob(data: ILeadJobData) {

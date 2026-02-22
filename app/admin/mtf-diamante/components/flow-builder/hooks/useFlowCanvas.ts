@@ -35,6 +35,7 @@ interface FlowDetail {
 	name: string;
 	inboxId: string;
 	isActive: boolean;
+	isCampaign: boolean;
 	canvas: FlowCanvas | null;
 	createdAt: string;
 	updatedAt: string;
@@ -75,13 +76,14 @@ interface UseFlowCanvasOptions {
 	autoSaveDelay?: number;
 	flowId?: string | null; // ID do flow específico para carregar
 	isNewFlow?: boolean; // Indica que estamos criando um flow novo (não carregar canvas legado)
+	isCampaign?: boolean; // Flow de campanha (inicia com WHATSAPP_TEMPLATE ao invés de START)
 }
 
 // Default auto-save delay: 3 seconds
 const DEFAULT_AUTO_SAVE_DELAY = 3000;
 
 export function useFlowCanvas(inboxId: string | null, options: UseFlowCanvasOptions = {}) {
-	const { autoSave = false, autoSaveDelay = DEFAULT_AUTO_SAVE_DELAY, flowId = null, isNewFlow = false } = options;
+	const { autoSave = false, autoSaveDelay = DEFAULT_AUTO_SAVE_DELAY, flowId = null, isNewFlow = false, isCampaign = false } = options;
 
 	// =========================================================================
 	// REFS — valores transientes que NÃO devem causar re-render (React best practice:
@@ -140,10 +142,10 @@ export function useFlowCanvas(inboxId: string | null, options: UseFlowCanvasOpti
 		saveCanvas,
 	);
 
-	// Canvas vazio estável (memo sem deps = singleton)
+	// Canvas vazio estável (memo depende de isCampaign para tipo do nó inicial)
 	const initialCanvas = useMemo(() => {
-		return createEmptyFlowCanvas();
-	}, []);
+		return createEmptyFlowCanvas({ isCampaign });
+	}, [isCampaign]);
 
 	// Metadados do flow atual — derivados de primitivos
 	// (rerender-dependencies: evitar comparação de objeto inteiro)
@@ -191,8 +193,8 @@ export function useFlowCanvas(inboxId: string | null, options: UseFlowCanvasOpti
 		initializedRef.current = false;
 		lastSavedRef.current = "";
 
-		// Limpar canvas ao mudar flowId
-		const empty = createEmptyFlowCanvas();
+		// Limpar canvas ao mudar flowId (campanha inicia com WHATSAPP_TEMPLATE)
+		const empty = createEmptyFlowCanvas({ isCampaign });
 		setNodes(empty.nodes as unknown as Node[]);
 		setEdges(empty.edges as unknown as Edge[]);
 
@@ -201,7 +203,7 @@ export function useFlowCanvas(inboxId: string | null, options: UseFlowCanvasOpti
 			initializedRef.current = true;
 		}
 		// Se tem flowId, Efeito 2 cuidará de carregar quando dados chegarem
-	}, [flowId, setNodes, setEdges]);
+	}, [flowId, isCampaign, setNodes, setEdges]);
 
 	// =========================================================================
 	// EFEITO 2: Sincronizar dados do servidor → preencher canvas
@@ -228,16 +230,23 @@ export function useFlowCanvas(inboxId: string | null, options: UseFlowCanvasOpti
 				});
 				console.log("[useFlowCanvas] Canvas carregado - nós:", canvas.nodes.length);
 			} else {
-				// Flow novo sem canvas: inicializar START node com o nome do flow
+				// Flow novo sem canvas: inicializar nó inicial com nome do flow
 				const flowName = flowResponse.data?.name;
-				if (flowName) {
+				const flowIsCampaign = flowResponse.data?.isCampaign ?? false;
+				if (flowIsCampaign) {
+					// Campanha: canvas vazio com WHATSAPP_TEMPLATE como primeiro nó
+					const campaignCanvas = createEmptyFlowCanvas({ isCampaign: true });
+					setNodes(campaignCanvas.nodes as unknown as Node[]);
+					setEdges(campaignCanvas.edges as unknown as Edge[]);
+					console.log("[useFlowCanvas] Flow campanha novo - WHATSAPP_TEMPLATE inicializado");
+				} else if (flowName) {
 					setNodes((nds) =>
 						nds.map((node) =>
 							node.type === "start" ? { ...node, data: { ...node.data, label: flowName } } : node,
 						),
 					);
+					console.log("[useFlowCanvas] Flow novo sem canvas - START inicializado com nome:", flowName);
 				}
-				console.log("[useFlowCanvas] Flow novo sem canvas - START inicializado com nome:", flowName);
 			}
 			initializedRef.current = true;
 			return;
@@ -500,11 +509,11 @@ export function useFlowCanvas(inboxId: string | null, options: UseFlowCanvasOpti
 
 	// Reset canvas
 	const resetCanvas = useCallback(() => {
-		const empty = createEmptyFlowCanvas();
+		const empty = createEmptyFlowCanvas({ isCampaign });
 		setNodes(empty.nodes as unknown as Node[]);
 		setEdges(empty.edges as unknown as Edge[]);
 		initializedRef.current = true; // Evitar re-sincronização
-	}, [setNodes, setEdges]);
+	}, [isCampaign, setNodes, setEdges]);
 
 	// Load canvas from flow (para trocar entre flows)
 	const loadCanvas = useCallback(

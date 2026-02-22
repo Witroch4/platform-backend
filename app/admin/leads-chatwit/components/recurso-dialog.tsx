@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Loader2, FileText, ExternalLink, Send, AlertOctagon, Key } from "lucide-react";
+import { Loader2, FileText, ExternalLink, Send, AlertOctagon, Key, Copy, Download } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -71,8 +71,8 @@ export function RecursoDialog({
 				let textoExtraido = "";
 				if (typeof recursoPreliminar === "string") {
 					textoExtraido = recursoPreliminar;
-				} else if (typeof recursoPreliminar === "object" && recursoPreliminar.textoRecurso) {
-					textoExtraido = recursoPreliminar.textoRecurso;
+				} else if (typeof recursoPreliminar === "object" && (recursoPreliminar.textoRecurso || recursoPreliminar.texto_recurso)) {
+					textoExtraido = recursoPreliminar.textoRecurso || recursoPreliminar.texto_recurso;
 				} else {
 					textoExtraido = JSON.stringify(recursoPreliminar, null, 2);
 				}
@@ -232,6 +232,53 @@ export function RecursoDialog({
 		}
 	};
 
+	const handleCopyTexto = () => {
+		navigator.clipboard.writeText(textoRecurso);
+		toast.success("Copiado!", { description: "Texto copiado para a área de transferência." });
+	};
+
+	const handleDownloadWord = () => {
+		const html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Recurso</title></head><body>${textoRecurso.replace(/\n/g, '<br>')}</body></html>`;
+		const blob = new Blob([html], { type: 'application/msword' });
+		const url = URL.createObjectURL(blob);
+		const link = document.createElement('a');
+		link.href = url;
+		link.download = `recurso_${leadId}.doc`;
+		document.body.appendChild(link);
+		link.click();
+		document.body.removeChild(link);
+		URL.revokeObjectURL(url);
+		toast.success("Download iniciado", { description: "Arquivo Word gerado com sucesso." });
+	};
+
+	const handleDownloadPdfLocally = () => {
+		const printWindow = window.open('', '_blank');
+		if (printWindow) {
+			printWindow.document.write(`
+				<html>
+				<head>
+					<title>Recurso - ${leadId}</title>
+					<style>
+						body { font-family: Arial, sans-serif; line-height: 1.6; padding: 40px; color: #333; max-width: 800px; margin: 0 auto; }
+						pre { white-space: pre-wrap; font-family: Arial, sans-serif; font-size: 14px; }
+					</style>
+				</head>
+				<body>
+					<pre>${textoRecurso}</pre>
+					<script>
+						window.onload = () => {
+							window.print();
+						};
+					</script>
+				</body>
+				</html>
+			`);
+			printWindow.document.close();
+		} else {
+			toast.error("Erro", { description: "Permita pop-ups para imprimir/salvar o PDF." });
+		}
+	};
+
 	return (
 		<Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
 			<DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -325,34 +372,61 @@ export function RecursoDialog({
 						)}
 					</div>
 
-					{/* Validação do Pré-Recurso */}
-					{recursoPreliminar && !recursoValidado && (
-						<div className="space-y-4 border p-4 rounded-md bg-orange-50">
-							<h3 className="text-lg font-medium text-orange-800">Validar Pré-Recurso</h3>
-							<p className="text-sm text-orange-700">
-								Revise o texto do recurso gerado pelo sistema e valide para continuar o processamento.
-							</p>
+					{/* Exibição do Texto do Recurso */}
+					{textoRecurso && (
+						<div className="space-y-4 border p-4 rounded-md bg-muted/30">
+							<div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+								<div>
+									<h3 className="text-lg font-medium text-foreground">Conteúdo do Recurso</h3>
+									{!recursoValidado && !recursoUrl && (
+										<p className="text-sm text-orange-600">
+											Revise o texto do recurso gerado e valide para continuar o processamento.
+										</p>
+									)}
+								</div>
+
+								{/* Botões de Ação para Exportação */}
+								<div className="flex gap-2">
+									<Button variant="outline" size="sm" onClick={handleCopyTexto} title="Copiar texto">
+										<Copy className="h-4 w-4 mr-1" />
+										Copiar
+									</Button>
+									<Button variant="outline" size="sm" onClick={handleDownloadWord} title="Baixar como Microsoft Word">
+										<Download className="h-4 w-4 mr-1" />
+										Word
+									</Button>
+									<Button variant="outline" size="sm" onClick={handleDownloadPdfLocally} title="Salvar como PDF">
+										<FileText className="h-4 w-4 mr-1" />
+										PDF
+									</Button>
+								</div>
+							</div>
+
 							<Textarea
 								value={textoRecurso}
 								onChange={(e) => setTextoRecurso(e.target.value)}
-								className="min-h-[200px] font-mono bg-white"
+								className="min-h-[250px] font-sans text-sm leading-relaxed p-4 bg-background"
 								placeholder="Texto do recurso gerado pelo sistema..."
+								readOnly={recursoValidado || Boolean(recursoUrl)}
 							/>
-							<div className="flex gap-2">
-								<Button variant="default" onClick={handleValidarRecurso} disabled={isValidando || !textoRecurso.trim()}>
-									{isValidando ? (
-										<>
-											<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-											Validando...
-										</>
-									) : (
-										<>
-											<Send className="mr-2 h-4 w-4" />
-											Validar e Processar
-										</>
-									)}
-								</Button>
-							</div>
+
+							{!recursoValidado && !recursoUrl && (
+								<div className="flex gap-2">
+									<Button variant="default" onClick={handleValidarRecurso} disabled={isValidando || !textoRecurso.trim()}>
+										{isValidando ? (
+											<>
+												<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+												Validando...
+											</>
+										) : (
+											<>
+												<Send className="mr-2 h-4 w-4" />
+												Validar e Processar
+											</>
+										)}
+									</Button>
+								</div>
+							)}
 						</div>
 					)}
 

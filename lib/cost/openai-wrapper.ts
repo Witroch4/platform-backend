@@ -166,7 +166,7 @@ export async function openaiWithCost(client: OpenAI, args: OpenAIHookArgs): Prom
 		};
 
 		// Publica eventos de custo em bulk para otimizar performance
-		const events = [];
+		const events: Array<{ name: string; data: typeof commonEventData & { unit: string; units: number } }> = [];
 
 		// Tokens de entrada (excluindo cached)
 		if (inputTokens - cachedTokens > 0) {

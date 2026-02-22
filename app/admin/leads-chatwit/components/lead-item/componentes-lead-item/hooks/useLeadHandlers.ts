@@ -57,6 +57,12 @@ interface UseLeadHandlersProps {
 		analisePreliminar?: any;
 		analiseValidada: boolean;
 	};
+	localRecursoState: {
+		recursoUrl?: string;
+		aguardandoRecurso: boolean;
+		recursoPreliminar?: any;
+		recursoValidado: boolean;
+	};
 	localManuscritoState: {
 		manuscritoProcessado: boolean;
 		aguardandoManuscrito: boolean;
@@ -73,6 +79,7 @@ interface UseLeadHandlersProps {
 	updateEspelhoState: (value: boolean | any) => void;
 	updateManuscritoState: (value: boolean | any) => void;
 	updateAnaliseState: (updates: any) => void;
+	updateRecursoState: (updates: any) => void;
 	updateConsultoriaState: (value: boolean) => void;
 	forceRefresh: () => void;
 	forceServerRefresh: () => void; // Nova função para refresh explícito do servidor
@@ -121,9 +128,11 @@ export function useLeadHandlers({
 	localAnaliseState,
 	localManuscritoState,
 	localEspelhoState,
+	localRecursoState,
 	updateEspelhoState,
 	updateManuscritoState,
 	updateAnaliseState,
+	updateRecursoState,
 	updateConsultoriaState,
 	forceRefresh,
 	forceServerRefresh,
@@ -327,12 +336,12 @@ export function useLeadHandlers({
 				})),
 				arquivos_pdf: lead.pdfUnificado
 					? [
-							{
-								id: lead.id,
-								url: lead.pdfUnificado,
-								nome: "PDF Unificado",
-							},
-						]
+						{
+							id: lead.id,
+							url: lead.pdfUnificado,
+							nome: "PDF Unificado",
+						},
+					]
 					: [],
 				arquivos_imagens_manuscrito: selectedImages.map((url: string, index: number) => ({
 					id: `${lead.id}-manuscrito-${index}`,
@@ -557,12 +566,12 @@ export function useLeadHandlers({
 				})),
 				arquivos_pdf: lead.pdfUnificado
 					? [
-							{
-								id: `${lead.id}-pdf-unificado`,
-								url: lead.pdfUnificado,
-								nome: "PDF Unificado",
-							},
-						]
+						{
+							id: `${lead.id}-pdf-unificado`,
+							url: lead.pdfUnificado,
+							nome: "PDF Unificado",
+						},
+					]
 					: [],
 				arquivos_imagens_espelho: imageUrls.map((url: string, index: number) => ({
 					id: `<span class="math-inline">\{lead\.id\}\-espelho\-</span>{index}`,
@@ -616,12 +625,12 @@ export function useLeadHandlers({
 				})),
 				arquivos_pdf: lead.pdfUnificado
 					? [
-							{
-								id: lead.id,
-								url: lead.pdfUnificado,
-								nome: "PDF Unificado",
-							},
-						]
+						{
+							id: lead.id,
+							url: lead.pdfUnificado,
+							nome: "PDF Unificado",
+						},
+					]
 					: [],
 				arquivos_imagens_espelho: imageUrls.map((url: string, index: number) => ({
 					id: `<span class="math-inline">\{lead\.id\}\-espelho\-</span>{index}`,
@@ -817,6 +826,9 @@ export function useLeadHandlers({
 				break;
 			case "excluirAnalise":
 				handleExcluirAnalise();
+				break;
+			case "excluirRecurso":
+				handleExcluirRecurso();
 				break;
 			case "verAnalise":
 				if (localAnaliseState.analiseUrl) {
@@ -1075,11 +1087,11 @@ export function useLeadHandlers({
 				aguardandoManuscrito: false,
 				...(temEspelhoIndividual && !lead.espelhoBibliotecaId
 					? {
-							textoDOEspelho: undefined,
-							espelhoCorrecao: undefined,
-							espelhoProcessado: false,
-							aguardandoEspelho: false,
-						}
+						textoDOEspelho: undefined,
+						espelhoCorrecao: undefined,
+						espelhoProcessado: false,
+						aguardandoEspelho: false,
+					}
 					: {}),
 				analiseUrl: undefined,
 				analiseProcessada: false,
@@ -1176,6 +1188,72 @@ export function useLeadHandlers({
 		}
 	};
 
+	const handleExcluirRecurso = async () => {
+		try {
+			updateRecursoState({
+				recursoUrl: undefined,
+				aguardandoRecurso: false,
+				recursoPreliminar: undefined,
+				recursoValidado: false,
+			});
+
+			forceRefresh();
+
+			const payload = {
+				id: lead.id,
+				recursoUrl: null,
+				aguardandoRecurso: false,
+				recursoPreliminar: null,
+				recursoValidado: false,
+				fezRecurso: false,
+				datasRecurso: null
+			};
+
+			const response = await fetch("/api/admin/leads-chatwit/leads", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(payload),
+			});
+
+			if (!response.ok) {
+				const data = await response.json();
+				throw new Error(data.error || "Erro ao excluir recurso");
+			}
+
+			const updatedLead = {
+				...lead,
+				recursoUrl: undefined,
+				aguardandoRecurso: false,
+				recursoPreliminar: undefined,
+				recursoValidado: false,
+				fezRecurso: false,
+				datasRecurso: null,
+				_skipDialog: true,
+				_forceUpdate: true,
+			};
+
+			await onEdit(updatedLead as any);
+
+			toast("Sucesso", { description: "Recurso excluído com sucesso!" });
+
+			setTimeout(() => {
+				forceRefresh();
+			}, 100);
+		} catch (error: any) {
+			console.error("Erro ao excluir recurso:", error);
+			toast("Erro", { description: error.message || "Não foi possível excluir o recurso. Tente novamente." });
+
+			updateRecursoState({
+				recursoUrl: lead.recursoUrl,
+				aguardandoRecurso: !!lead.aguardandoRecurso,
+				recursoPreliminar: lead.recursoPreliminar,
+				recursoValidado: !!lead.recursoValidado,
+			});
+
+			forceRefresh();
+		}
+	};
+
 	const handleSendSelectedImages = async (images: string[]) => {
 		try {
 			if (images.length === 0) {
@@ -1235,12 +1313,12 @@ export function useLeadHandlers({
 				})),
 				arquivos_pdf: lead.pdfUnificado
 					? [
-							{
-								id: `${lead.id}-pdf-unificado`,
-								url: lead.pdfUnificado,
-								nome: "PDF Unificado",
-							},
-						]
+						{
+							id: `${lead.id}-pdf-unificado`,
+							url: lead.pdfUnificado,
+							nome: "PDF Unificado",
+						},
+					]
 					: [],
 				arquivos_imagens_espelho: images.map((url: string, index: number) => ({
 					id: `${lead.id}-espelho-${index}`,

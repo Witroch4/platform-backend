@@ -5,7 +5,6 @@
 
 // Monitoramento de orçamentos
 export {
-	scheduleBudgetMonitoring,
 	checkAllBudgets,
 	checkSpecificBudget,
 	scheduleImmediateBudgetCheck,
@@ -57,33 +56,10 @@ export async function initializeBudgetSystem(): Promise<{
 	success: boolean;
 	errors: string[];
 }> {
-	const errors: string[] = [];
-
-	try {
-		// Import the function dynamically to avoid circular dependency issues
-		const { scheduleBudgetMonitoring } = await import("./budget-monitor");
-
-		// Inicializar monitoramento de orçamentos
-		const monitorResult = await scheduleBudgetMonitoring();
-		if (!monitorResult.success) {
-			errors.push(`Erro ao inicializar monitoramento: ${monitorResult.error}`);
-		}
-
-		console.log("✅ Sistema de orçamentos inicializado com sucesso");
-		return {
-			success: errors.length === 0,
-			errors,
-		};
-	} catch (error) {
-		const errorMsg = `Erro crítico na inicialização do sistema de orçamentos: ${error}`;
-		console.error(errorMsg);
-		errors.push(errorMsg);
-
-		return {
-			success: false,
-			errors,
-		};
-	}
+	// Budget scheduling is now handled by worker/registry.ts (centro da verdade).
+	// This function is kept for API compatibility but is a no-op for scheduling.
+	console.log("✅ Sistema de orçamentos inicializado (scheduling via registry)");
+	return { success: true, errors: [] };
 }
 
 /**

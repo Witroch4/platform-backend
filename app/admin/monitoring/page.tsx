@@ -139,28 +139,6 @@ type QueueDisplay = {
 	errorRate?: number;
 };
 
-type InstagramSummary = {
-	success: boolean;
-	data?: {
-		performance?: {
-			translations?: {
-				total?: number;
-				successRate?: number;
-				failed?: number;
-			};
-			worker?: {
-				avgProcessingTime?: number;
-			};
-			queue?: {
-				waiting?: number;
-				failed?: number;
-			};
-		};
-		timeWindow?: string;
-		timestamp?: string;
-	};
-};
-
 type CostOverview = {
 	summary?: {
 		today?: {
@@ -384,20 +362,6 @@ export default function MonitoringLandingPage() {
 	});
 
 	const {
-		data: instagramData,
-		error: instagramError,
-		isLoading: instagramLoading,
-		mutate: refreshInstagram,
-	} = useSWR<InstagramSummary>(
-		`/api/admin/monitoring/instagram-translation?action=summary&timeWindow=${Math.max(queueWindowMinutes, 60)}`,
-		fetcher,
-		{
-			refreshInterval: 60_000,
-			revalidateOnFocus: false,
-		},
-	);
-
-	const {
 		data: costData,
 		error: costError,
 		isLoading: costLoading,
@@ -502,14 +466,6 @@ export default function MonitoringLandingPage() {
 	const systemHealthScore = dashboardData?.systemOverview?.healthScore ?? 0;
 	const systemUptime = formatUptime(dashboardData?.systemOverview?.uptime);
 
-	const instagramSummary = instagramData?.data;
-	const instagramPerformance = instagramSummary?.performance;
-	const instagramTotal = instagramPerformance?.translations?.total ?? 0;
-	const instagramSuccessRate = instagramPerformance?.translations?.successRate ?? 0;
-	const instagramWaiting = instagramPerformance?.queue?.waiting ?? 0;
-	const instagramFailed = instagramPerformance?.translations?.failed ?? instagramPerformance?.queue?.failed ?? 0;
-	const instagramAvgTime = instagramPerformance?.worker?.avgProcessingTime;
-
 	const costSummaryToday = costData?.summary?.today;
 	const costChange = costSummaryToday?.change ?? 0;
 	const costChangePositive = costChange >= 0;
@@ -531,7 +487,6 @@ export default function MonitoringLandingPage() {
 				refreshDashboard(),
 				refreshQueueMonitoring(),
 				refreshQueueManagement(),
-				refreshInstagram(),
 				refreshCost(),
 			]);
 		} finally {
@@ -539,7 +494,7 @@ export default function MonitoringLandingPage() {
 		}
 	};
 
-	const hasAnyError = dashboardError || queueMonitoringError || queueManagementError || instagramError || costError;
+	const hasAnyError = dashboardError || queueMonitoringError || queueManagementError || costError;
 	const isQueuesLoading = queueManagementLoading && displayQueues.length === 0;
 	const filteredQueues = getFilteredQueues(queueFilter);
 
@@ -579,7 +534,7 @@ export default function MonitoringLandingPage() {
 					<Alert variant="destructive">
 						<AlertTitle>Falha ao carregar alguns dados</AlertTitle>
 						<AlertDescription>
-							{(dashboardError || queueMonitoringError || queueManagementError || instagramError || costError)
+							{(dashboardError || queueMonitoringError || queueManagementError || costError)
 								?.message || "Tente atualizar novamente ou verifique os logs."}
 						</AlertDescription>
 					</Alert>
@@ -631,24 +586,6 @@ export default function MonitoringLandingPage() {
 						</CardFooter>
 					</Card>
 
-					<Card className="@container/card" data-slot="card">
-						<CardHeader className="relative">
-							<CardDescription>Worker de Tradução Instagram</CardDescription>
-							<CardTitle className="@[250px]/card:text-3xl text-2xl font-semibold tabular-nums">
-								{numberFormatter.format(instagramTotal)}
-							</CardTitle>
-							<div className="absolute right-4 top-4">
-								<Badge variant="outline" className="flex gap-1 rounded-lg text-xs">
-									Sucesso {formatPercent(instagramSuccessRate)}
-								</Badge>
-							</div>
-						</CardHeader>
-						<CardFooter className="flex-col items-start gap-1 text-sm text-muted-foreground">
-							<div>Fila: {numberFormatter.format(instagramWaiting)} aguardando</div>
-							<div>Falhas: {numberFormatter.format(instagramFailed)}</div>
-							<div>Tempo médio: {formatDuration(instagramAvgTime)}</div>
-						</CardFooter>
-					</Card>
 
 					<Card className="@container/card" data-slot="card">
 						<CardHeader className="relative">

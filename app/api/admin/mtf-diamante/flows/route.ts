@@ -12,6 +12,7 @@ export interface FlowListItem {
 	name: string;
 	inboxId: string;
 	isActive: boolean;
+	isCampaign: boolean;
 	nodeCount: number;
 	createdAt: Date;
 	updatedAt: Date;
@@ -24,6 +25,7 @@ export interface FlowListItem {
 const CreateFlowSchema = z.object({
 	inboxId: z.string().min(1, "inboxId é obrigatório"),
 	name: z.string().min(1, "Nome é obrigatório").max(100, "Nome muito longo"),
+	isCampaign: z.boolean().optional().default(false),
 });
 
 // =============================================================================
@@ -70,14 +72,19 @@ export async function GET(request: NextRequest) {
 			return NextResponse.json({ success: false, error: "Acesso negado a esta caixa" }, { status: 403 });
 		}
 
+		// Filtro isCampaign (se não especificado, retorna apenas flows normais)
+		const isCampaignParam = searchParams.get("isCampaign");
+		const isCampaign = isCampaignParam === "true";
+
 		// Buscar flows — canvasJson contém a fonte de verdade para contagem de nós
 		const flows = await getPrismaInstance().flow.findMany({
-			where: { inboxId },
+			where: { inboxId, isCampaign },
 			select: {
 				id: true,
 				name: true,
 				inboxId: true,
 				isActive: true,
+				isCampaign: true,
 				createdAt: true,
 				updatedAt: true,
 				canvasJson: true, // Fonte de verdade para contagem de nós
@@ -95,6 +102,7 @@ export async function GET(request: NextRequest) {
 				name: flow.name,
 				inboxId: flow.inboxId,
 				isActive: flow.isActive,
+				isCampaign: flow.isCampaign,
 				nodeCount,
 				createdAt: flow.createdAt,
 				updatedAt: flow.updatedAt,
@@ -143,7 +151,7 @@ export async function POST(request: NextRequest) {
 			);
 		}
 
-		const { inboxId, name } = validation.data;
+		const { inboxId, name, isCampaign } = validation.data;
 
 		// Verificar acesso
 		const hasAccess = await verifyInboxAccess(inboxId, session.user.id);
@@ -168,6 +176,7 @@ export async function POST(request: NextRequest) {
 				name,
 				inboxId,
 				isActive: true,
+				isCampaign,
 			},
 		});
 
@@ -178,6 +187,7 @@ export async function POST(request: NextRequest) {
 				name: flow.name,
 				inboxId: flow.inboxId,
 				isActive: flow.isActive,
+				isCampaign: flow.isCampaign,
 				nodeCount: 0,
 				createdAt: flow.createdAt,
 				updatedAt: flow.updatedAt,

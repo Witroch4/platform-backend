@@ -26,6 +26,10 @@ export async function GET(request: Request): Promise<Response> {
 		// Parâmetros específicos para marketing
 		const marketingMode = url.searchParams.get("marketing") === "true";
 		const fezRecurso = url.searchParams.get("fezRecurso") === "true";
+		const semRecurso = url.searchParams.get("semRecurso") === "true";
+		const concluidoFilter = url.searchParams.get("concluido") === "true";
+		const updatedAfterParam = url.searchParams.get("updatedAfter");
+	const updatedBeforeParam = url.searchParams.get("updatedBefore");
 		const onlyWithPhone = url.searchParams.get("onlyWithPhone") === "true";
 
 		// Se um ID específico foi fornecido, buscar apenas esse lead
@@ -199,6 +203,56 @@ export async function GET(request: Request): Promise<Response> {
 				where.AND.push(recursoFilter);
 			} else {
 				where.fezRecurso = true;
+			}
+		}
+
+		// Filtro sem recurso
+		if (semRecurso) {
+			const semRecursoFilter = { fezRecurso: false };
+			if (marketingMode) {
+				where.AND.push(semRecursoFilter);
+			} else {
+				where.fezRecurso = false;
+			}
+		}
+
+		// Filtro por concluido
+		if (concluidoFilter) {
+			const cf = { concluido: true };
+			if (marketingMode) {
+				where.AND.push(cf);
+			} else {
+				where.concluido = true;
+			}
+		}
+
+		// Filtro por data de atualizacao
+		if (updatedAfterParam) {
+			try {
+				const updatedAfterDate = new Date(updatedAfterParam);
+				const dateFilter = { lead: { updatedAt: { gte: updatedAfterDate } } };
+				if (marketingMode) {
+					where.AND.push(dateFilter);
+				} else {
+					where.lead = { ...((where.lead as any) ?? {}), updatedAt: { gte: updatedAfterDate } };
+				}
+			} catch {
+				// ignora data invalida
+			}
+		}
+
+		if (updatedBeforeParam) {
+			try {
+				const updatedBeforeDate = new Date(updatedBeforeParam);
+				const dateFilter = { lead: { updatedAt: { lte: updatedBeforeDate } } };
+				if (marketingMode) {
+					where.AND.push(dateFilter);
+				} else {
+					const existingLead = (where.lead as any) ?? {};
+					where.lead = { ...existingLead, updatedAt: { ...(existingLead.updatedAt ?? {}), lte: updatedBeforeDate } };
+				}
+			} catch {
+				// ignora data invalida
 			}
 		}
 

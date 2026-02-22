@@ -1,4 +1,6 @@
-import { PDFDocument, PDFFont, PDFPage, rgb, StandardFonts, PageSizes } from "pdf-lib";
+import { readFileSync } from "fs";
+import { join } from "path";
+import { PDFDocument, PDFFont, PDFPage, rgb, StandardFonts, PageSizes, PDFImage } from "pdf-lib";
 import { uploadToMinIO } from "@/lib/minio";
 import type { AnaliseData } from "./types";
 
@@ -22,109 +24,63 @@ const COLOR_LIGHT_GRAY = rgb(0.97, 0.97, 0.97);
 
 // --- Helpers ---
 
-// --- Background Graphics (Fênix e Penas) ---
-
-/** 
- * Gera um SVG path majestoso e detalhado para a Fênix usando simetria matemática e
- * geometria procedural. Cria a aparência de um brasão complexo "toda detalhada".
- */
-function getDetailedPhoenixPath(): string {
-	const paths: string[] = [];
-
-	// Corpo central majestoso (cristalino/diamante invertido)
-	paths.push("M 50 10 C 60 5 80 5 90 20 C 100 35 70 45 50 80 C 30 45 0 35 10 20 C 20 5 40 5 50 10 Z");
-
-	// Coroa/Crista (Detalhe premium na cabeça)
-	paths.push("M 50 12 C 65 -5 85 -10 90 10 C 95 30 75 25 50 18 Z");
-	paths.push("M 50 12 C 35 -5 15 -10 10 10 C 5 30 25 25 50 18 Z");
-	paths.push("M 50 5 L 45 -10 L 50 -5 L 55 -10 Z");
-
-	// Asas - Múltiplas camadas de penas estendidas para os lados com leve curvatura
-	for (let i = 0; i < 15; i++) {
-		const yOffset = 25 + i * 3;
-		const spread = 40 + i * 5;
-		const curve = 10 + i * 2;
-		const tipY = yOffset - 15 - i * 1.5;
-
-		// Pena da asa Direita
-		paths.push(`M 50 ${yOffset} C ${50 + spread / 2} ${yOffset - curve} ${50 + spread} ${yOffset + curve} ${50 + spread + 10} ${tipY} C ${50 + spread} ${yOffset + curve + 5} ${50 + spread / 2} ${yOffset} 50 ${yOffset + 5} Z`);
-		// Pena da asa Esquerda (espelhada)
-		paths.push(`M 50 ${yOffset} C ${50 - spread / 2} ${yOffset - curve} ${50 - spread} ${yOffset + curve} ${50 - spread - 10} ${tipY} C ${50 - spread} ${yOffset + curve + 5} ${50 - spread / 2} ${yOffset} 50 ${yOffset + 5} Z`);
-	}
-
-	// Cauda - Penas longas e fluidas caindo com movimento sinuoso
-	for (let i = 0; i < 7; i++) {
-		const yOffset = 70 + i * 3;
-		const length = 40 + i * 15;
-		const width = 12 - i;
-		const flare = i % 2 === 0 ? 10 : -10; // Causa um entrelaçamento das penas da cauda
-
-		paths.push(`M 50 ${yOffset} C ${50 + width + flare} ${yOffset + length / 3} ${50 + flare * 2} ${yOffset + length * 0.8} 50 ${yOffset + length} C ${50 - flare * 2} ${yOffset + length * 0.8} ${50 - width + flare} ${yOffset + length / 3} 50 ${yOffset} Z`);
-	}
-
-	return paths.join(" ");
+function sanitizePdfText(text?: string | null): string {
+	if (!text) return "";
+	return text
+		.replace(/≥/g, ">=")
+		.replace(/≤/g, "<=")
+		.replace(/[“”]/g, '"')
+		.replace(/[‘’]/g, "'")
+		.replace(/[–—]/g, "-")
+		.replace(/…/g, "...")
+		.replace(/[\u{1F300}-\u{1F9FF}]/gu, "") // Emojis
+		.replace(/[\u{2700}-\u{27BF}]/gu, "") // Dingbats
+		.replace(/[\u{2600}-\u{26FF}]/gu, ""); // Misc symbols
 }
 
-/** 
- * Desenha silenciosas penas caindo pelo fundo da página, criando um 
- * ambiente premium e dinâmico, conforme solicitado pela UI/UX.
- */
-function drawFloatingFeathers(page: PDFPage) {
-	// Path de uma única pena leve e delicada
-	const singleFeatherPath = "M 0 0 C 15 -25 45 -30 60 -10 C 70 5 65 25 50 40 C 40 50 20 60 0 70 C 15 50 20 30 10 15 C 5 10 0 5 0 0 Z";
-
-	// Posições estáticas (pseudo-aleatórias para consistência no PDF)
-	// Espalhadas pelas margens e áreas vazias da página
-	const feathersConfig = [
-		{ x: 80, y: 150, scale: 0.3, rotation: 15, opacity: 0.03 },
-		{ x: A4_WIDTH - 120, y: 300, scale: 0.5, rotation: -45, opacity: 0.02 },
-		{ x: 100, y: 600, scale: 0.4, rotation: 70, opacity: 0.04 },
-		{ x: A4_WIDTH - 90, y: 700, scale: 0.25, rotation: -15, opacity: 0.03 },
-		{ x: A4_WIDTH / 2 + 150, y: 100, scale: 0.35, rotation: -80, opacity: 0.02 },
-		{ x: A4_WIDTH / 2 - 200, y: 800, scale: 0.45, rotation: 30, opacity: 0.025 },
-		{ x: 50, y: 400, scale: 0.2, rotation: 110, opacity: 0.02 },
-		{ x: A4_WIDTH - 60, y: 500, scale: 0.3, rotation: -130, opacity: 0.03 },
-	];
-
-	for (const f of feathersConfig) {
-		// As rotações no pdf-lib precisam ser objetos 'degrees' ou 'radians' importados, ou apenas números se for em escala manual.
-		// A sintaxe da documentação permite passar rotate: degrees(f.rotation) ... wait, vamos evitar rotate se não temos degrees importado.
-		// Vamos desenhar a pena usando drawSvgPath. Rotate não é um campo direto sem objeto de ângulo na nova API, vamos checar.
-		// Como não temos certeza de 'degrees' importado, desenharemos as penas sutilmente omitindo rotação complexa, 
-		// ou usando um loop com a Fênix principal que já é espetacular.
-		// Na verdade, podemos desenhá-las em diferentes tamanhos e posições.
-		page.drawSvgPath(singleFeatherPath, {
-			x: f.x,
-			y: f.y,
-			scale: f.scale,
-			color: COLOR_GOLD,
-			opacity: f.opacity,
-		});
-	}
+function sanitizeAnaliseData(data: AnaliseData): AnaliseData {
+	return {
+		...data,
+		exameDescricao: sanitizePdfText(data.exameDescricao),
+		inscricao: sanitizePdfText(data.inscricao),
+		nomeExaminando: sanitizePdfText(data.nomeExaminando),
+		seccional: sanitizePdfText(data.seccional),
+		areaJuridica: sanitizePdfText(data.areaJuridica),
+		notaFinal: sanitizePdfText(data.notaFinal),
+		situacao: sanitizePdfText(data.situacao),
+		subtotalPeca: sanitizePdfText(data.subtotalPeca),
+		subtotalQuestoes: sanitizePdfText(data.subtotalQuestoes),
+		conclusao: sanitizePdfText(data.conclusao),
+		pontosPeca: data.pontosPeca?.map((p) => ({ ...p, titulo: sanitizePdfText(p.titulo) })),
+		pontosQuestoes: data.pontosQuestoes?.map((q) => ({
+			...q,
+			titulo: sanitizePdfText(q.titulo),
+			valor: sanitizePdfText(q.valor),
+		})),
+		argumentacao: data.argumentacao?.map((a) => sanitizePdfText(a)),
+	};
 }
 
-/** Desenha a marca d'água principal da Fênix no centro da página juntamente com as penas soltas */
-function drawPhoenixWatermark(page: PDFPage) {
-	// Primeiro, desenha as penas soltas vazadas pelo background
-	drawFloatingFeathers(page);
+// --- Background Graphics (Fênix) ---
 
-	// Agora, a fênix central ultra detalhada
-	const scale = 3.5;
-	// Uma estimativa do centro dimensional do path gerado (em torno de x=50, y=0..150)
-	const phoenixWidth = 100 * scale;
-	const phoenixHeight = 150 * scale;
+/** Desenha a marca d'água principal da Fênix no centro da página */
+function drawPhoenixWatermark(page: PDFPage, image: PDFImage) {
+	// Queremos que a imagem cubra toda a página A4 (como um "cover" CSS).
+	// Calculamos o fator de escala necessário para cobrir a largura OU a altura (o que for maior).
+	const scale = Math.max(A4_WIDTH / image.width, A4_HEIGHT / image.height);
+	const width = image.width * scale;
+	const height = image.height * scale;
 
-	const x = (A4_WIDTH - phoenixWidth) / 2;
-	// O Y no pdf-lib começa na base (bottom) subindo, e drawSvgPath converte coordenadas.
-	// Vamos usar uma aproximação de y baseada no centro da página.
-	const y = ((A4_HEIGHT - phoenixHeight) / 2) + phoenixHeight - 50;
+	// Centralizamos a imagem; a parte que excede a A4 será ignorada (crop)
+	const x = (A4_WIDTH - width) / 2;
+	const y = (A4_HEIGHT - height) / 2;
 
-	page.drawSvgPath(getDetailedPhoenixPath(), {
-		x: x,
-		y: y,
-		scale: scale,
-		color: COLOR_GOLD, // Dourado premium
-		opacity: 0.04, // Discreto e luxuoso
+	page.drawImage(image, {
+		x,
+		y,
+		width,
+		height,
+		opacity: 0.1, // Discreto e luxuoso
 	});
 }
 
@@ -235,17 +191,18 @@ function drawFooter(page: PDFPage, font: PDFFont) {
 
 // --- Geração do Relatório (cliente) ---
 
-async function generateRelatorioPdf(data: AnaliseData): Promise<Uint8Array> {
+async function generateRelatorioPdf(data: AnaliseData, fenixImageBytes: Buffer): Promise<Uint8Array> {
 	const doc = await PDFDocument.create();
 	const fontRegular = await doc.embedFont(StandardFonts.Helvetica);
 	const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
+	const fenixImage = await doc.embedPng(fenixImageBytes);
 
 	// ========== PÁGINA 1 ==========
 	const page1 = doc.addPage(PageSizes.A4);
 	let y = A4_HEIGHT - MARGIN_TOP;
 
 	// Fênix Background Watermark
-	drawPhoenixWatermark(page1);
+	drawPhoenixWatermark(page1, fenixImage);
 
 	// Título Premium
 	page1.drawText("RELATÓRIO DE VIABILIDADE JURÍDICA", {
@@ -376,7 +333,7 @@ async function generateRelatorioPdf(data: AnaliseData): Promise<Uint8Array> {
 	let y2 = A4_HEIGHT - MARGIN_TOP;
 
 	// Fênix Background Watermark
-	drawPhoenixWatermark(page2);
+	drawPhoenixWatermark(page2, fenixImage);
 
 	// Seção II — Questões
 	page2.drawText("II. Detalhamento de Ganhos Possíveis nas Questões", {
@@ -452,16 +409,17 @@ async function generateRelatorioPdf(data: AnaliseData): Promise<Uint8Array> {
 
 // --- Geração da Argumentação (sistema) ---
 
-async function generateArgumentacaoPdf(data: AnaliseData): Promise<Uint8Array> {
+async function generateArgumentacaoPdf(data: AnaliseData, fenixImageBytes: Buffer): Promise<Uint8Array> {
 	const doc = await PDFDocument.create();
 	const fontRegular = await doc.embedFont(StandardFonts.Helvetica);
 	const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
+	const fenixImage = await doc.embedPng(fenixImageBytes);
 
 	const page = doc.addPage(PageSizes.A4);
 	let y = A4_HEIGHT - MARGIN_TOP;
 
 	// Fênix Background Watermark
-	drawPhoenixWatermark(page);
+	drawPhoenixWatermark(page, fenixImage);
 
 	// Título Premium Argumentação
 	page.drawText("DOCUMENTO JURÍDICO INTERNO", {
@@ -526,7 +484,7 @@ async function generateArgumentacaoPdf(data: AnaliseData): Promise<Uint8Array> {
 				// Nova página se necessário
 				drawFooter(page, fontRegular);
 				const newPage = doc.addPage(PageSizes.A4);
-				drawPhoenixWatermark(newPage);
+				drawPhoenixWatermark(newPage, fenixImage);
 				y = A4_HEIGHT - MARGIN_TOP;
 				// Continua desenhando na nova página
 				newPage.drawText(line, { x: MARGIN_LEFT + 10, y, size: 9, font: fontRegular, color: COLOR_BLACK });
@@ -559,10 +517,16 @@ export async function generateAnalisePdfs(
 ): Promise<{ analiseUrl: string; argumentacaoUrl: string }> {
 	console.log(`[PDF-Generation] Generating PDFs for lead: ${leadID}`);
 
+	const safeData = sanitizeAnaliseData(data);
+
+	// Ler a imagem da fênix de public/fenix.png
+	const imagePath = join(process.cwd(), "public", "fenix.png");
+	const fenixImageBytes = readFileSync(imagePath);
+
 	// Gerar os 2 PDFs em paralelo
 	const [relatorioBytes, argumentacaoBytes] = await Promise.all([
-		generateRelatorioPdf(data),
-		generateArgumentacaoPdf(data),
+		generateRelatorioPdf(safeData, fenixImageBytes),
+		generateArgumentacaoPdf(safeData, fenixImageBytes),
 	]);
 
 	console.log(

@@ -12,7 +12,6 @@ import { Queue } from "bullmq";
 // Import existing queue configurations
 // [CLEANUP 2026-02-16] RESPOSTA_RAPIDA_QUEUE_NAME e PERSISTENCIA_CREDENCIAIS_QUEUE_NAME removidos
 // Essas filas não são mais usadas - SocialWise Flow processa mensagens inline
-import { INSTAGRAM_TRANSLATION_QUEUE_NAME } from "@/lib/queue/instagram-translation.queue";
 import { LEADS_QUEUE_NAME } from "@/lib/queue/leads-chatwit.queue";
 // [CLEANUP 2026-02-16] manuscrito.queue.ts DELETADO - queue zumbi sem consumidor
 // [CLEANUP 2026-02-21] AUTO_NOTIFICATIONS_QUEUE_NAME REMOVIDO - queue zombie (cron direto em cron-jobs.ts)
@@ -34,18 +33,6 @@ interface QueueRegistrationConfig {
 // - RESPOSTA_RAPIDA_QUEUE_NAME (código morto - SocialWise Flow é inline)
 // - PERSISTENCIA_CREDENCIAIS_QUEUE_NAME (código morto - não tem produtor)
 const QUEUE_CONFIGS: QueueRegistrationConfig[] = [
-	{
-		name: INSTAGRAM_TRANSLATION_QUEUE_NAME,
-		description: "Tradução de mensagens do Instagram",
-		priority: 5, // Medium priority
-		concurrency: 5,
-		retryAttempts: 3,
-		alertThresholds: {
-			queueSize: { warning: 30, critical: 60 },
-			errorRate: { warning: 0.05, critical: 0.12 },
-			processingTime: { warning: 8000, critical: 20000 },
-		},
-	},
 	{
 		name: LEADS_QUEUE_NAME,
 		description: "Processamento de leads do ChatWit",

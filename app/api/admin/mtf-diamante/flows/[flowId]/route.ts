@@ -15,6 +15,7 @@ export interface FlowDetail {
 	name: string;
 	inboxId: string;
 	isActive: boolean;
+	isCampaign: boolean;
 	canvas: FlowCanvas | null;
 	createdAt: Date;
 	updatedAt: Date;
@@ -211,6 +212,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 			name: flow.name,
 			inboxId: flow.inboxId,
 			isActive: flow.isActive,
+			isCampaign: flow.isCampaign,
 			canvas,
 			createdAt: flow.createdAt,
 			updatedAt: flow.updatedAt,
