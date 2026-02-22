@@ -88,6 +88,8 @@ export class ChatwitDeliveryService {
 					targetMessageId: payload.targetMessageId,
 				});
 				return this.deliverText(ctx, payload.emoji ?? "👍", false);
+			case "template":
+				return this.deliverTemplate(ctx, payload.templatePayload ?? {});
 			case "chatwit_action":
 				return this.deliverChatwitAction(ctx, payload);
 			default:
@@ -253,6 +255,35 @@ export class ChatwitDeliveryService {
 			content_type: "integrations", // ✅ Formato correto para Chatwit
 			content_attributes: {
 				interactive: interactivePayload, // Payload dentro de "interactive"
+			},
+			message_type: "outgoing",
+		};
+
+		return this.postMessage(ctx, body);
+	}
+
+	/**
+	 * Envia template WhatsApp oficial via API Agent Bot do Chatwit.
+	 * Usa `content_type: "template"` com o payload completo em `content_attributes`.
+	 * O Chatwit roteia para `send_template()` no dispatcher WhatsApp.
+	 *
+	 * @see docs/chatwit-contrato-async-30s.md §13
+	 */
+	async deliverTemplate(ctx: DeliveryContext, templatePayload: Record<string, unknown>): Promise<DeliveryResult> {
+		const templateData = templatePayload.template as Record<string, unknown> | undefined;
+		const templateName = (templateData?.name as string) ?? "unknown";
+
+		log.debug("[ChatwitDelivery] Enviando template via Chatwit Agent Bot API", {
+			templateName,
+			to: templatePayload.to,
+			conversationId: ctx.conversationId,
+		});
+
+		const body: ChatwitMessagePayload = {
+			content: `[Template: ${templateName}]`,
+			content_type: "template",
+			content_attributes: {
+				template_payload: templatePayload,
 			},
 			message_type: "outgoing",
 		};

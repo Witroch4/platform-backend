@@ -16,6 +16,7 @@ export type FlowNodeType =
 	| "TEXT_MESSAGE"
 	| "INTERACTIVE_MESSAGE"
 	| "TEMPLATE"
+	| "WHATSAPP_TEMPLATE"
 	| "MEDIA"
 	| "DELAY"
 	| "CONDITION"

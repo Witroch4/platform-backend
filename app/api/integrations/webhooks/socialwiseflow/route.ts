@@ -34,6 +34,7 @@ import { handleButtonInteraction, detectButtonClick } from "@/lib/socialwise-flo
 
 // Flow Engine para execução de flows visuais
 import { FlowOrchestrator } from "@/services/flow-engine";
+import { saveChatwitSystemConfig } from "@/lib/chatwit/system-config";
 
 // Prefixo de botões do Flow Builder (para priorização)
 import { FLOW_BUTTON_PREFIX } from "@/lib/flow-builder/interactiveMessageElements";
@@ -928,6 +929,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 					((validPayload.metadata as Record<string, unknown>)?.chatwit_agent_bot_token as string) ||
 					process.env.CHATWIT_AGENT_BOT_TOKEN ||
 					"";
+
+				// Fire-and-forget: persistir bot token + URL no SystemConfig (para campanhas)
+				const metaBotToken = (validPayload.metadata as Record<string, unknown>)?.chatwit_agent_bot_token as string | undefined;
+				const metaBaseUrl = (validPayload.metadata as Record<string, unknown>)?.chatwit_base_url as string | undefined;
+				if (metaBotToken && metaBaseUrl) {
+					saveChatwitSystemConfig({ botToken: metaBotToken, baseUrl: metaBaseUrl }).catch(() => {});
+				}
 
 				// Tenta obter conversation_display_id (essencial para API async)
 				const conversationDisplayId =

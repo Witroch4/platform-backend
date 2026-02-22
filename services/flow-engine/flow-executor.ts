@@ -685,6 +685,7 @@ export class FlowExecutor {
 				return this.handleCarousel(node, flow, bridge);
 
 			case "TEMPLATE":
+			case "WHATSAPP_TEMPLATE":
 				return this.handleTemplate(node, flow, bridge, directlyAfterButton);
 
 			case "CHATWIT_ACTION":
@@ -1179,8 +1180,8 @@ export class FlowExecutor {
 	// ---------------------------------------------------------------------------
 
 	private async deliver(bridge: SyncBridge, payload: DeliveryPayload): Promise<void> {
-		// Mídia nunca na ponte
-		if (payload.type === "media") {
+		// Mídia e templates nunca na ponte — vão direto via API
+		if (payload.type === "media" || payload.type === "template") {
 			await this.delivery.deliver(this.context, payload);
 			return;
 		}

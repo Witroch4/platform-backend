@@ -26,6 +26,16 @@ export class SyncBridge {
 	private syncPayload: SynchronousResponse | null = null;
 	private syncConsumed: boolean = false;
 
+	/**
+	 * @param forceAsync Se true, a ponte começa "fechada" — tudo vai via API async.
+	 *                   Usado em campanhas onde não há HTTP request esperando.
+	 */
+	constructor(forceAsync = false) {
+		if (forceAsync) {
+			this.syncConsumed = true;
+		}
+	}
+
 	/** Reação pendente para combinar com o próximo texto (formato button_reaction) */
 	private pendingReaction: { emoji: string; targetMessageId: string } | null = null;
 

@@ -22,6 +22,8 @@ import type {
 import { pauseCampaignJobs, cancelCampaignJobs } from "@/lib/queue/flow-campaign-queue";
 import { processBatch, checkCampaignCompletion } from "@/lib/queue/campaign-orchestrator";
 import { FlowOrchestrator } from "@/services/flow-engine/flow-orchestrator";
+import { ChatwitConversationResolver } from "@/services/flow-engine/chatwit-conversation-resolver";
+import { getChatwitSystemConfig } from "@/lib/chatwit/system-config";
 import type { DeliveryContext } from "@/types/flow-engine";
 
 // =============================================================================
@@ -149,7 +151,8 @@ async function handleExecuteContact(
 		throw new Error(`Inbox ${inboxId} não encontrada ou sem conta associada`);
 	}
 
-	const chatwitBaseUrl = process.env.CHATWIT_BASE_URL || "";
+	// Bot token + base URL do sistema (persistido pelo init do Chatwit, fallback ENV)
+	const chatwitConfig = await getChatwitSystemConfig();
 
 	if (!contactPhone) {
 		// Marcar como SKIPPED
@@ -175,24 +178,42 @@ async function handleExecuteContact(
 		};
 	}
 
-	// Construir DeliveryContext
+	// Resolver contato + conversa no Chatwit (pode ser contato novo)
+	// Usa bot token global (do sistema) para resolver contato/conversa
+	const resolver = new ChatwitConversationResolver(chatwitConfig.baseUrl, chatwitConfig.botToken);
+	const resolved = await resolver.resolve(
+		Number(inbox.usuarioChatwit.chatwitAccountId),
+		Number(inbox.inboxId),
+		contactPhone,
+		contactName || undefined,
+	);
+
+	log.info("[FlowCampaignQueue:ExecuteContact] Conversa resolvida no Chatwit", {
+		contactId: resolved.contactId,
+		conversationId: resolved.conversationId,
+		displayId: resolved.displayId,
+		contactPhone,
+	});
+
+	// Construir DeliveryContext com conversa real
 	const channel = (inbox.channelType || "").toLowerCase();
 	const deliveryContext: DeliveryContext = {
 		accountId: Number(inbox.usuarioChatwit.chatwitAccountId),
-		conversationId: 0, // Campanha não tem conversa pré-existente
+		conversationId: resolved.conversationId,
 		inboxId: Number(inbox.inboxId),
-		contactId: 0,
+		contactId: resolved.contactId,
 		contactName: contactName || "",
 		contactPhone,
 		channelType: channel.includes("instagram") ? "instagram" : channel.includes("facebook") ? "facebook" : "whatsapp",
 		prismaInboxId: inbox.id,
-		chatwitAccessToken: inbox.usuarioChatwit.chatwitAccessToken || "",
-		chatwitBaseUrl,
+		chatwitAccessToken: chatwitConfig.botToken,
+		chatwitBaseUrl: chatwitConfig.baseUrl,
+		conversationDisplayId: resolved.displayId,
 	};
 
 	// Executar flow
 	const orchestrator = new FlowOrchestrator();
-	const result = await orchestrator.executeFlowById(flowId, deliveryContext);
+	const result = await orchestrator.executeFlowById(flowId, deliveryContext, { forceAsync: true });
 
 	const processingTimeMs = Date.now() - startTime;
 

@@ -57,8 +57,8 @@ export class FlowOrchestrator {
 	 * Executa um flow diretamente pelo ID (bypass de lookup).
 	 * Usado quando já sabemos qual flow executar (ex: intent mapping com flowId).
 	 */
-	async executeFlowById(flowId: string, deliveryContext: DeliveryContext): Promise<OrchestratorResult> {
-		const bridge = new SyncBridge();
+	async executeFlowById(flowId: string, deliveryContext: DeliveryContext, options?: { forceAsync?: boolean }): Promise<OrchestratorResult> {
+		const bridge = new SyncBridge(options?.forceAsync);
 
 		try {
 			const flow = await this.loadFlow(flowId);

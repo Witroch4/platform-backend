@@ -2,60 +2,90 @@
 
 > **Universal Agent Instructions** — Compatible with Claude Code, Cursor, Copilot, Codex, Gemini CLI, and other AI coding agents.
 
-NUNA RODE prisma db pull
-## Regras Críticas
+## 🚨 Regras Arquiteturais Críticas (LEITURA OBRIGATÓRIA)
 
-1. Já está no root do projeto
-2. `pnpm exec tsc --noEmit && pnpm exec tsc --noEmit -p tsconfig.worker.json` após toda edição
-3. Next.js 16: `params` é Promise → sempre `await params`
-4. Strings UI em PT-BR, código/variáveis em inglês
-5. Shadcn/UI Dialog (nunca `confirm()`/`alert()`)
-6. Optimistic UI updates preferidos
-7. Dark/Light theme compatível (Shadcn)
-8. BFF como fonte única da UI (mesma SWR key para leitura e mutação)
-9. Features sem controle global — acesso via `admin/features`
-10. Front: linguagem clara, sem termos técnicos
-11. se precisa que ochatwit/chatwoot modifique alguma coisa colque em /home/wital/chatwitv4.10/chatwitdocs/chatwit-contrato-async-30s.md (a equipe deles vai verificar)
-12. criou migração o prisma nao atualizou deleta node_modules depois instala com pnpm que ele reconhece e NUNCA RODE prisma db pull
-13. Context7 MCP: Always use Context7 MCP when I need library/API documentation, code generation, setup or configuration steps without me having to explicitly ask.
-14. Antigravity MCP Config: Global configuration for Antigravity MCP servers is located at `/home/wital/.gemini/antigravity/mcp_config.json`. Use this file to add custom MCP servers like Context7 manually if not present in the project's `.mcp.json`.
+1. **SOCIALWISE = CÉREBRO | CHATWIT/CHATWOOT = CARTEIRO:** Em todas as mensagens, integrações, Flow e Flowbuilder, o Socialwise detém 100% da inteligência e processamento. O Chatwit é estritamente o "carteiro" (apenas entrega e recebe). Garanta essa separação estrutural em qualquer código gerado. O SOCIALWISE JAMAIS entrega, só processa e repassa para o CHATWIT via sync + async (solicitações do chatwit ponte aberta por 30 seg) ou async chatwit bot (quando mandamos flows de campanha etc., usamos o bot e seu token).
+2. **RESTRIÇÃO DE APIs INTERNAS:** É terminantemente **PROIBIDO** fazer chamadas para APIs internas do Chatwit. As **ÚNICAS exceções permitidas** são chamadas para: **buscar, editar e criar templates oficiais**.
+3. **Contrato Chatwit:** Se precisar que o Chatwit/Chatwoot modifique algo em sua estrutura, NÃO tente forçar via código. Documente a necessidade em `/home/wital/chatwitv4.10/chatwitdocs/chatwit-contrato-async-30s.md` para a equipe deles verificar.
 
-## Migrations (OBRIGATÓRIO)
+## Dinâmica Socialwise ↔ Chatwit (Contrato via Documentação)
 
-**NUNCA usar `prisma db push` — NEM em dev, NEM em produção, NEM em protótipo.**
-`db push` apaga o histórico de migrations, causa drift e pode destruir dados.
-SEMPRE usar `migrate dev` para criar arquivos SQL versionados.
+O Chatwit (fork Chatwoot v4.10) é mantido por uma **equipe separada**. Qualquer mudança no lado deles é feita via **contrato documentado**, não por gambiarras no código do Socialwise.
+
+### Como funciona
+1. **Identifique** que a solução ideal requer mudança no Chatwit (novo endpoint, novo branch, nova config)
+2. **Documente** a necessidade em `/home/wital/chatwitv4.10/chatwitdocs/chatwit-contrato-async-30s.md` com: contexto, o que enviar, o que o Chatwit precisa implementar, código Ruby proposto, e complexidade estimada
+3. **Implemente o lado Socialwise** (endpoint receptor, fallback para ENV, workaround temporário se necessário)
+4. A equipe Chatwit lê o contrato e implementa — geralmente em 24-48h
+
+### Regras
+- **NUNCA** faça workarounds complexos no Socialwise para contornar limitações do Chatwit. Se é simples pedir pra eles, peça.
+- **Exemplos reais**: pedir para adicionar endpoints ao `BOT_ACCESSIBLE_ENDPOINTS` (2 linhas Ruby) é muito melhor do que usar user token como workaround; pedir para o Chatwit chamar um `/init` no startup (~15 linhas Ruby) é melhor do que inventar sincronização complexa.
+- **Sempre inclua** código Ruby proposto no contrato — facilita a implementação e reduz ida e volta.
+- O contrato tem versionamento (changelog) e índice de seções. Siga o padrão existente.
+
+### Tokens e credenciais Chatwit
+- **Agent Bot token** (global, `account_id=NULL`): persistido em `SystemConfig` via endpoint `/api/integrations/webhooks/socialwiseflow/init` (chamado pelo Chatwit no startup) + atualizado por cada webhook (fire-and-forget). Leitura via `getChatwitSystemConfig()` em `lib/chatwit/system-config.ts` (cache 5min, fallback ENV).
+- **Base URL**: mesma dinâmica — `SystemConfig` → ENV → webhook metadata.
+- **User token** (`UsuarioChatwit.chatwitAccessToken`): usado apenas para operações específicas do usuário, **nunca** para operações de sistema/campanha.
+
+### Arquivo do contrato
+`/home/wital/chatwitv4.10/chatwitdocs/chatwit-contrato-async-30s.md` — índice no topo, seções numeradas, changelog no final.
+
+## Regras de Desenvolvimento e Código
+
+* **Contexto:** Assuma que já está no root do projeto.
+* **Validação (Pós-edição):** Rode sempre `pnpm exec tsc --noEmit && pnpm exec tsc --noEmit -p tsconfig.worker.json` após toda edição.
+* **Idiomas:** Strings da UI devem ser em PT-BR (linguagem clara ). Código, variáveis e commits em Inglês.
+* **UI/UX:** Use apenas Shadcn/UI Dialog (NUNCA use `confirm()` ou `alert()`). Prefira Optimistic UI updates. Garanta compatibilidade com Dark/Light theme do Shadcn. Toasts com `sonner` (`toast.promise`).
+* **Feature Flags:** Nenhuma feature deve ter controle global direto — o acesso deve ser via `admin/features`.
+* **MCPs:** * Use Context7 MCP proativamente para documentação de bibliotecas, geração de código e setup sem eu precisar pedir.
+    * Antigravity MCP Config global está em `/home/wital/.gemini/antigravity/mcp_config.json`. Use-o para adicionar servers (como Context7) se não estiverem no `.mcp.json` do projeto.
+
+## Migrations e Banco de Dados (OBRIGATÓRIO)
+
+**NUNCA RODE `prisma db pull` e NUNCA USE `prisma db push` (nem em dev, nem em prod).** Eles apagam histórico, causam drift e destroem dados. Sempre commite a pasta `prisma/migrations/` junto com o `schema.prisma`.
 
 ```bash
 pnpm exec prisma migrate dev --name descricao  # DEV: cria migration + aplica
-pnpm exec prisma migrate deploy                 # PROD: aplica migrations pendentes
+pnpm exec prisma migrate deploy                # PROD: aplica migrations pendentes
+
 ```
 
-Committar `prisma/migrations/` JUNTO com `schema.prisma`.
-
-### Drift no banco DEV
-
-Se `migrate dev` reportar drift (ex: índices aplicados manualmente fora do migration history), é aceitável resetar o banco de desenvolvimento:
-
+* **Bug de sincronização:** Criou a migração e o Prisma não atualizou? **NÃO use db pull**. Delete a pasta `node_modules` e instale novamente com `pnpm` para ele reconhecer.
+* **Drift em DEV:** Se `migrate dev` reportar drift, é aceitável resetar o banco de desenvolvimento:
 ```bash
-pnpm exec prisma migrate reset --force          # DEV ONLY: apaga tudo e reaplica todas as migrations
-pnpm exec prisma migrate dev --name descricao   # Em seguida, cria a nova migration
+pnpm exec prisma migrate reset --force       # DEV ONLY: apaga tudo e reaplica
+pnpm exec prisma migrate dev --name descricao # Em seguida, cria a nova migration
+
 ```
 
-**NUNCA usar `migrate reset` em produção.** Em prod, resolver drift manualmente ou com `prisma migrate resolve`.
 
-## Database Backup & Restore (via SSH MCP)
+**NUNCA use `migrate reset` em PROD.** Em prod, resolva drift manualmente.
 
-**Backup de produção**: `CONTAINER=$(docker ps --filter "name=postgres" --format "{{.Names}}" | head -1) && docker exec $CONTAINER pg_dump -U postgres socialwise | gzip > /tmp/socialwise_bkp_$(date +%Y%m%d).sql.gz`
+### Backup & Restore (via SSH MCP)
 
-**Restauração em dev**: `psql $DB_URL/postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='socialwise' AND pid<>pg_backend_pid();" && psql $DB_URL/postgres -c "DROP DATABASE IF EXISTS socialwise; CREATE DATABASE socialwise OWNER postgres;" && gunzip -c ~/backup.sql.gz | psql $DB_URL/socialwise`
+* **Backup (Prod):** ```bash
+CONTAINER=$(docker ps --filter "name=postgres" --format "{{.Names}}" | head -1) && docker exec (date +%Y%m%d).sql.gz
+```
 
-> Arquivos ≤5MB: base64. Maiores: `rclone` → MinIO. Nunca restaurar por cima — sempre dropar/recriar.
+```
 
-## Stack
 
-| Camada | Tech |
-|---|---|
+* **Restore (Dev):** ```bash
+psql $DB_URL/postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='socialwise' AND pid<>pg_backend_pid();" && psql $DB_URL/postgres -c "DROP DATABASE IF EXISTS socialwise; CREATE DATABASE socialwise OWNER postgres;" && gunzip -c ~/backup.sql.gz | psql $DB_URL/socialwise
+```
+*(Arquivos ≤5MB: base64. Maiores: rclone → MinIO. Nunca restaure por cima — sempre drope/recrie).*
+
+
+```
+
+
+
+## Stack Tecnológica
+
+| Camada | Tecnologia |
+| --- | --- |
 | Frontend | Next.js 16 (App Router), React 19, TypeScript, Tailwind, Shadcn/UI, Framer Motion |
 | Backend | Next.js API Routes, Express.js, Prisma ORM |
 | DB | PostgreSQL 17 + pgvector |
@@ -63,62 +93,58 @@ pnpm exec prisma migrate dev --name descricao   # Em seguida, cria a nova migrat
 | State | SWR 2.3.6 |
 | Auth | NextAuth.js v5 + Prisma adapter |
 | Storage | MinIO (S3-compatible) |
-| AI | OpenAI (GPT-5, DALL-E, Whisper), Anthropic Claude |
-| Social | Instagram Graph API, WhatsApp Business API |
-| Payments | Stripe |
-| Email | Resend |
-| Monitoring | Prometheus, Grafana |
 | Lint/Format | Biome, TypeScript strict |
-| Test | Jest, React Testing Library, Supertest |
-| Package | pnpm |
 
 ## Patterns Obrigatórios
 
 ### Auth (todas as API routes protegidas)
+
 ```typescript
 import { auth } from "@/auth";
 const session = await auth();
 if (!session?.user?.id) return NextResponse.json({ error: "Usuário não autenticado." }, { status: 401 });
+
 ```
 
 ### Dynamic Routes (Next.js 16)
+
 ```typescript
 export async function POST(req: NextRequest, { params }: { params: Promise<{ accountid: string }> }) {
   const { accountid } = await params; // AWAIT obrigatório
 }
+
 ```
 
 ### Proxy (antes middleware.ts)
+
 ```typescript
 // proxy.ts - Next.js 16 renomeou middleware.ts para proxy.ts
 export default async function proxy(req: any) {
   // lógica de roteamento/proteção
 }
+
 ```
 
 ### Prisma: JSON null
+
 ```typescript
 await prisma.model.update({ where: { id }, data: { jsonField: Prisma.JsonNull } });
+
 ```
 
 ## SWR 2.3.6 — Guia Compacto
 
-### Regras
-- **Fetcher global**: JSON + throw se `!res.ok`
-- **SWRConfig**: `revalidateOnFocus:true`, `revalidateOnReconnect:true`, `revalidateIfStale:true`, `dedupingInterval:1500`
-- **Listas**: `keepPreviousData:true` (sem flicker)
-- **Mutations**: `useSWRMutation` para rede + `mutate(KEY)` para cache (optimistic + rollback + `revalidate:false`)
-- **Prefetch**: `preload(KEY, fetcher)`
-- **Tempo real**: `useSWRSubscription` (WS/SSE)
+**Arquitetura BFF:** O Backend For Frontend é a fonte única da UI. UI **lê** do BFF e **muta** a mesma SWR key. CRUD puro fica para serviços/integradores.
 
-### BFF = Fonte Única (UI)
-UI **lê** do BFF e **muta** a mesma SWR key. CRUD puro fica para serviços/integradores.
+### Regras & Configuração
 
-Exemplo MTF Diamante:
-- Leitura: `GET /api/admin/mtf-diamante/inbox-view?dataType=caixas` (cache bypass: `no-store`)
-- Mutações: `mutate('/api/admin/mtf-diamante/inbox-view?dataType=caixas', ...)` com optimistic + rollback + `revalidate:false`
+* **Fetcher global:** JSON + throw se `!res.ok`
+* **SWRConfig:** `revalidateOnFocus:true`, `revalidateOnReconnect:true`, `revalidateIfStale:true`, `dedupingInterval:1500`
+* **Listas:** `keepPreviousData:true` (sem flicker)
+* **Tempo real:** `useSWRSubscription` (WS/SSE)
 
-### Padrão de Mutation Optimistic (Create/Update/Delete seguem mesmo modelo)
+### Padrão de Mutation Optimistic
+
 ```typescript
 await mutate(
   (async () => {
@@ -134,45 +160,21 @@ await mutate(
     revalidate: false,
   }
 );
-```
-- **Create**: `[...curr, optimistic]` → merge com `created`
-- **Update**: `curr.map(c => c.id === id ? updated : c)`
-- **Delete**: `curr.filter(c => c.id !== id)`
 
-### Snippets
-```typescript
-// Invalidar múltiplas páginas
-mutate((key) => typeof key==='string' && key.startsWith('/api/posts?page='), undefined, { revalidate:true })
-// Subscription
-useSWRSubscription(KEY, (k,{next}) => { const ws=new WebSocket(...); ws.onmessage=e=>next(null,JSON.parse(e.data)); return ()=>ws.close(); })
 ```
 
 ### Checklist por Tela
-- [ ] BFF como fonte única? Mesma SWR key leitura/mutate?
-- [ ] `keepPreviousData:true`? Optimistic + rollback + `revalidate:false`?
-- [ ] Sem misturar CRUD puro na UI?
 
-## UI/UX
+* [ ] BFF como fonte única? Mesma SWR key leitura/mutate?
+* [ ] `keepPreviousData:true`? Optimistic + rollback + `revalidate:false`?
+* [ ] Sem misturar CRUD puro na UI?
 
-- **Toasts**: `sonner` (shadcn toast depreciado). Usar `toast.promise(promise, { loading, success, error })`
-- **Dialogs**: `Dialog` para modais, `AlertDialog` para ações destrutivas. Responsive: `w-[96vw] sm:max-w-2xl max-h-[85vh]` + `ScrollArea`
-- **Optimistic**: atualizar UI antes da API, reverter em erro. Combinar com `toast.promise`
+## Manipulação de Dados (MTF Diamante)
 
-## Acesso a Dados do genericPayload (MTF)
+**Regra**: para edição, use os dados **originais** do provedor (`interactiveMessages` via `useMtfData()`), e **NUNCA** os normalizados (`mensagens`).
 
-**Regra**: para edição, usar dados **originais** do provedor (`interactiveMessages` via `useMtfData()`), NUNCA os normalizados (`mensagens`).
-
-```
-useMtfData() → interactiveMessages (completo) → normalizeMessage() (só lista)
-handleEdit() → DEVE usar interactiveMessages?.find(m => m.id === msg.id)
-```
-
-**Preservar**: `content` (contém `genericPayload`, `action`). Verificar dados em 3 locais:
-- `message.action.elements`
-- `message.content.action.elements`
-- `message.content.genericPayload.elements`
-
-**Red flags**: usar `msg.nome`/`msg.texto` (normalizados) para edição, perder `content` no `setEditingMessage`.
+* **Preservar**: `content` (contém `genericPayload`, `action`). Verifique em 3 locais: `message.action.elements`, `message.content.action.elements` ou `message.content.genericPayload.elements`.
+* **Red flags**: usar `msg.nome`/`msg.texto` (normalizados) para edição, perder `content` no `setEditingMessage`.
 
 ## Commands
 
@@ -183,8 +185,7 @@ pnpm exec tsc --noEmit && pnpm exec tsc --noEmit -p tsconfig.worker.json
 
 # DB
 pnpm exec prisma migrate dev --name X  # ✅ criar migration
-pnpm exec prisma migrate deploy         # ✅ produção
-# ❌ NUNCA: pnpm run db:push (REMOVIDO — causa drift e perda de migrations)
+pnpm exec prisma migrate deploy        # ✅ produção
 pnpm run db:generate | db:studio | db:reset:dev | db:seed | db:seed-prices
 
 # Workers
@@ -193,242 +194,87 @@ pnpm run start:worker | worker | start:ai-worker | build:workers
 # Test
 pnpm test | test:unit | test:integration | test:e2e | test:performance
 
-# Specialized
-pnpm run flash-intent | rollout | init-monitoring | fx-rates:init
-
 # Docker
 docker compose build | up | down
 
-# Git: conventional commits (feat: | fix: | chore:)
 ```
 
-## Project Structure
+## Estrutura do Projeto
 
-```
-/
-├── app/                    # Next.js App Router
-│   ├── api/admin/          # Admin API endpoints
-│   ├── api/chatwitia/      # AI chat endpoints
-│   ├── api/integrations/webhooks/socialwiseflow/
-│   ├── admin/capitao/      # IA Capitão
-│   ├── admin/mtf-diamante/ # MTF Diamante (mensagens interativas)
-│   ├── admin/queue-management | monitoring | leads | leads-chatwit
-│   ├── admin/credentials | notifications | disparo-em-massa | disparo-oab | users
-│   ├── [accountid]/dashboard/
-│   └── auth/
-├── components/             # Shadcn/UI + custom
-├── lib/
-│   ├── ai-integration/     # AI services, types, schemas, workers, queues
-│   ├── socialwise-flow/    # processor.ts, metrics.ts, services/
-│   ├── cost/               # cost-worker, budget-system, pricing-service, fx-rate-service
-│   ├── monitoring/         # APM, queue-monitor, database-monitor
-│   ├── queue/ | queue-management/
-│   ├── auth/ | cache/ | webhook/ | whatsapp/ | instagram/
-│   ├── connections.ts | redis.ts | utils.ts
-├── worker/
-│   ├── webhook.worker.ts | automacao.worker.ts | ai-integration.worker.ts
-│   ├── processors/ | WebhookWorkerTasks/ | services/ | queues/
-├── services/flow-engine/   # ⭐ Flow Engine (deadline-first)
-├── types/                  # TypeScript definitions
-├── hooks/                  # Custom React hooks
-├── prisma/                 # Schema + migrations
-├── docs/                   # ⭐ Docs técnicas de features
-│   ├── interative_message_flow_builder.md  # Flow Builder roadmap + arquitetura
-│   ├── chatwit-contrato-async-30s.md       # Contrato async Chatwit
-│   └── flow-builder-queue.md               # ⭐ Fila BullMQ para ações do Flow Engine
-├── .agents/skills/         # ⭐ Vercel Agent Skills (installed)
-│   ├── vercel-react-best-practices/
-│   ├── vercel-composition-patterns/
-│   ├── vercel-react-native-skills/
-│   └── web-design-guidelines/
-└── __tests__/
-```
-
-> **📌 Consulte `docs/` antes de implementar melhorias no Flow Builder / Flow Engine.**
+* `/app/api/`: Endpoints (admin, integrações, webhooks, chatwitia).
+* `/app/admin/`: Dashboards administrativos (Capitão, MTF Diamante, queue-management, leads).
+* `/lib/`: Lógica core (ai-integration, socialwise-flow, cost, monitoring, queue, webhook, whatsapp).
+* `/worker/`: Background jobs (webhook, automação, ai-integration, queues).
+* `/services/flow-engine/`: ⭐ **Flow Engine (deadline-first)**.
+* `/docs/`: ⭐ Docs técnicas de features (roadmap Flow Builder, contrato Chatwit, filas). **Consulte antes de alterar o Flow.**
+* `/.agents/skills/`: Skills do Vercel Agent (boas práticas de React e UI design).
 
 ## SocialWise Flow Pipeline (v3.4+)
 
-
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │  WEBHOOK (/api/integrations/webhooks/socialwiseflow)                            │
 │  Auth → Validation → Deduplication → Rate Limit                                 │
 └──────────────────────────────────────┬──────────────────────────────────────────┘
                                        ↓
-                         ┌─────────────────────────────┐
-                         │  Handoff Detection          │
-                         │  @falar_atendente?          │
-                         └──────────────┬──────────────┘
-                                       ↓ (NO)
 ┌──────────────────────────────────────┴──────────────────────────────────────────┐
-│  BUTTON INTERACTION DETECTION                                                    │
-├──────────────────────────────────────────────────────────────────────────────────┤
-│  buttonId.startsWith('flow_')?                                                   │
-│  ├─ YES → FlowOrchestrator.handle() → Resume FlowSession (WAITING_INPUT)         │
-│  └─ NO  → Legacy Button Reaction Check → MapeamentoBotao lookup                  │
-│           └─ Not mapped? → Extract button text → Continue to LLM                 │
+│  BUTTON INTERACTION DETECTION                                                   │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│  buttonId.startsWith('flow_')?                                                  │
+│  ├─ YES → FlowOrchestrator.handle() → Resume FlowSession (WAITING_INPUT)        │
+│  └─ NO  → Legacy Button Reaction Check (MapeamentoBotao lookup)                 │
 └──────────────────────────────────────┬──────────────────────────────────────────┘
                                        ↓
 ┌──────────────────────────────────────┴──────────────────────────────────────────┐
-│  VERCEL AI SDK PIPELINE: classify → gating → router                              │
-├──────────────────────────────────────────────────────────────────────────────────┤
-│  [classify] Direct alias hit? → HARD (1.0) │ Embedding search → score            │
-│  [gating]   Filter hints by semantic description alignment                       │
-│  [router]   Linear dispatch by band (Single-shot execution)                      │
+│  VERCEL AI SDK PIPELINE: classify → gating → router (Single-shot)               │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│  HARD (Score ≥0.80): Direct intent mapping (<120ms)                             │
+│  ROUTER (Score <0.80): Full LLM routing (400ms timeout)                         │
 └──────────────────────────────────────┬──────────────────────────────────────────┘
                                        ↓
-                    ┌──────────────────┼──────────────────┐
-                    ↓                                     ↓
-            ┌───────────────┐                     ┌───────────────┐
-            │  HARD ≥0.80   │                     │  ROUTER <0.80 │
-            ├───────────────┤                     ├───────────────┤
-            │ Direct intent │                     │ Full LLM      │
-            │ mapping       │                     │ routing       │
-            │ <120ms        │                     │ 400ms timeout │
-            └───────┬───────┘                     └───────┬───────┘
-                    ↓                                     ↓
-            ┌───────────────────────────────────────────────────┐
-            │  Intent Resolution: buildWhatsAppByIntentRaw()    │
-            │  ├─ MapeamentoIntencao.flowId exists + active?    │
-            │  │  └─ YES → { _type: 'execute_flow', flowId }    │
-            │  │           → FlowOrchestrator.executeFlowById() │
-            │  └─ NO  → Return template/interactive message     │
-            └───────────────────────────────────────────────────┘
+┌──────────────────────────────────────┴──────────────────────────────────────────┐
+│  INTENT RESOLUTION: buildWhatsAppByIntentRaw()                                  │
+│  ├─ MapeamentoIntencao.flowId exists + active?                                  │
+│  │  └─ YES → Execute FlowOrchestrator (O CÉREBRO)                               │
+│  └─ NO  → Return template/interactive message ao Chatwit (O CARTEIRO)           │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
 ```
 
-### Performance Bands (2 bandas ativas)
+* **Vercel AI SDK:** Migrado para execução linear e single-shot usando `generateObject` com `mode: "json"`. Provedores: `gemini-2.0-flash` ou `claude-3-5-sonnet`.
+* **Anti-Loop Protocol:** Router LLM filtra hints de intents já ativos para evitar repetição de menus.
+* **Flow Engine:** Arquitetura deadline-first. Sincroniza até o deadline (28s). Se ultrapassar, migra para async (delivery via API do Chatwit) e não volta para sync.
+* **Flow Builder Queue:** O nó `CHATWIT_ACTION` (resolve, assign, label) é assíncrono e processado na fila `flow-builder-queues` (BullMQ/Redis) garantindo: retrys com exponential backoff, persistência e execução não-bloqueante.
 
-| Band | Score | Estratégia | Comportamento | Timeout |
-|---|---|---|---|---|
-| **HARD** | ≥0.80 | `direct_map` | Intent → Template/Flow direto | <120ms |
-| **ROUTER** | <0.80 | `router_llm` | LLM decide: intent ou chat | 400ms |
+## Business Logic & Security
 
-> **SOFT (0.65-0.79) e LOW (0.50-0.65) foram descontinuadas** — todos os scores <0.80 agora vão direto para o ROUTER LLM para garantir um pipeline linear e simplificado.
+* **Segurança:** Payload máx: 256KB | XSS/injection sanitization | Zod validation | Rate limiting (per-session, per-account, burst) | Replay protection (nonce + timestamp + dedup).
+* **Leads (Legal):** Unificação docs, análise jurídica IA, batch processing, LGPD.
+* **Cost:** Event → idempotency → pricing → cálculo → DB → audit.
 
-### Vercel AI SDK Migration (v3.6+)
-O pipeline foi migrado para **Vercel AI SDK** (`generateObject`), abandonando loops agentivos complexos (LangGraph) em favor de uma execução **linear e single-shot**:
-1. `createModel()` centralizado via `AiProviderFactory`
-2. `google("gemini-2.0-flash")` ou `anthropic("claude-3-5-sonnet")` como providers principais
-3. JSON nativo garantido via `mode: "json"` (contornando limitações de regex em schemas `auto`)
-
-
-### Flow Builder Integration (v3.4+)
-
-**Entry Point 1: Via Intent Mapping (HARD band)**
-```
-User message → HARD band (≥0.80) → Intent "xyz"
-    ↓
-MapeamentoIntencao query → flowId exists + flow.isActive?
-    ├─ YES → executeFlowForIntent(flowId, context)
-    │        → FlowOrchestrator.executeFlowById()
-    │        → Execute from START node
-    │        → Return syncResponse (interactive message)
-    └─ NO  → Return legacy template
-```
-
-**Entry Point 2: Via Button Click (flow_ prefix)**
-```
-User clicks button → buttonId.startsWith('flow_')?
-    ├─ YES → FlowOrchestrator.handle()
-    │        → Find FlowSession (WAITING_INPUT)
-    │        → FlowExecutor.resumeFromButton()
-    │        → Continue execution from edge
-    └─ NO  → Legacy MapeamentoBotao lookup
-```
-
-### Prioridade de Roteamento de Botões
-1. `flow_*` prefix → **FlowOrchestrator** (Flow Engine)
-2. Else → **MapeamentoBotao** lookup (Legacy button reactions)
-3. Not mapped → **SocialWise Flow** (LLM classification)
-
-### Anti-Loop Protocol
-- Session injeta `activeIntentSlug` no context
-- Router LLM filtra hint do intent ativo (evita re-oferecer mesmo menu)
-
-### Deadline-First Architecture (Flow Engine)
-- **Sync window**: 28s (com 5s margem)
-- **Estratégia**: sync até deadline → migra para async (Chatwit API delivery)
-- **Regra**: uma vez async, nunca volta para sync
-
-## Business Logic
-
-| Sistema | Função |
-|---|---|
-| **MTF Diamante** | Templates WA, mensagens interativas, button reactions, bulk dispatch |
-| **IA Capitão** | Intents, FAQ, document processing (OCR), routing dinâmico |
-| **Leads (Legal)** | Unificação docs, análise jurídica IA, batch processing, LGPD |
-| **Queue Management** | Priorização, dead letter, monitoring, alertas |
-| **Cost** | Event → idempotency → pricing → cálculo → DB → audit |
-
-## Security
-
-- Payload máx: 256KB | XSS/injection sanitization | Zod validation
-- Rate limiting: per-session, per-account, burst protection
-- Replay protection: nonce + timestamp + dedup
-
-## Code Conventions
+## Code Conventions & Env Vars
 
 | Tipo | Formato | Exemplo |
-|---|---|---|
+| --- | --- | --- |
 | Components | PascalCase | `UserProfile.tsx` |
 | Pages | kebab-case | `user-settings/page.tsx` |
 | Utilities | camelCase | `formatDate.ts` |
-| API Routes | `route.ts` | sempre |
+| API Routes | `route.ts` | Sempre |
 | Types | PascalCase `.ts` | `FlowEngine.ts` |
 
-Imports: 1) externos → 2) `@/` internos → 3) relativos
+**Imports:** 1) externos → 2) `@/` internos → 3) relativos.
 
-## Env Vars
+**Env Vars Necessárias:** `DATABASE_URL | REDIS_URL | NEXTAUTH_SECRET | OPENAI_API_KEY`
 
-```bash
-DATABASE_URL | REDIS_URL | NEXTAUTH_SECRET | OPENAI_API_KEY
-# .env.development | .env.production | .env.local (gitignored)
-```
+## Key Insights / Histórico de Bugs
 
-## Key Insights
+* **Bugs de foco/input React:** keys instáveis, IDs que mudam entre renders, refs que quebram igualdade → mantenha a identidade dos elementos estável.
+* **Bug MTF "aparece→some→volta":** A UI lia do BFF e mutava direto no CRUD (keys diferentes). Solução aplicada: BFF como fonte única, mesma SWR key, bypass cache, optimistic + rollback.
+* **Flow Engine vs Intents (Regressão):** NUNCA intercepte todas as mensagens no webhook. O pipeline de classificação (alias/embedding → bands) SEMPRE tem prioridade sobre o FlowOrchestrator default.
 
-- Bugs de foco/input React: keys instáveis, IDs que mudam entre renders, refs que quebram igualdade → manter identidade estável
-- Bug MTF "aparece→some→volta": UI lia BFF e mutava CRUD (keys diferentes) → solução: BFF como fonte única, mesma SWR key, bypass cache, optimistic+rollback
-- **Flow Engine vs Intents (Regressão)**: NUNCA interceptar todas as mensagens no webhook. Flow só executa se:
-  1. Botão `flow_` clicado → `FlowOrchestrator.handle()` resume session
-  2. Intent classificada (HARD band ≥0.80) mapeada para Flow via `MapeamentoIntencao.flowId`
+## Ferramentas de Debug (SSH MCP)
 
-  O pipeline de classificação (alias/embedding → bands) SEMPRE tem prioridade sobre FlowOrchestrator default.
+A interface portainer (BFF/Proxy) é limitada. Use o **SSH MCP** como "fonte da verdade" para investigar estados do Swarm e logs extensos no host.
 
-- **ChatwitActionNode — Fila BullMQ**: O nó `CHATWIT_ACTION` (resolve, assign, add/remove label) agora é processado via fila `flow-builder-queues`. Isso garante:
-  1. **Retry robusto**: 3 tentativas com exponential backoff (2s → 4s → 8s)
-  2. **Persistência**: Jobs sobrevivem a crashes (Redis)
-  3. **Não-bloqueante**: Flow continua sem esperar ação completar
-  4. **Fallback**: Se fila falhar, executa diretamente via `deliver()`
-  5. **Extensível**: Fila genérica pronta para HTTP_REQUEST, TAG_ACTION, etc.
-
-  **Arquivos:**
-  - `lib/queue/flow-builder-queues.ts`: Fila + tipos + helpers
-  - `worker/WebhookWorkerTasks/flow-builder-queues.task.ts`: Task processor
-  - `services/flow-engine/flow-executor.ts`: `handleChatwitAction()` enfileira job
-  - `docs/flow-builder-queue.md`: Documentação completa
-
-
-## SSH MCP
-
-**Vantagem**: Mais potente que o Portainer para debugging profundo. Permite uso de `grep`, `tail`, `awk` e comandos complexos de rede/disco direto no host.
-
-**Comandos Úteis**:
-- **Logs filtrados**: `docker service logs <service_name> --tail 500 2>&1 | grep "keyword"` (`socialwise_app`, `socialwise_worker`)
-- **Listar serviços**: `docker service ls`
-- **Status do host**: `df -h` (disco), `free -m` (memória), `uptime`
-
-**Regra**: Use SSH MCP quando precisar de filtros avançados ou comandos que a interface do Portainer (BFF/Proxy) não cobre. O SSH é a "fonte da verdade" para investigar estados do Swarm e logs extensos.
-
-## Installed Agent Skills
-
-This project includes Vercel Agent Skills for enhanced coding assistance:
-
-| Skill | Use Case |
-|---|---|
-| **vercel-react-best-practices** | React/Next.js performance optimization (40+ rules) |
-| **vercel-composition-patterns** | React composition patterns, compound components |
-| **web-design-guidelines** | UI accessibility, UX, 100+ rules audit |
-| **vercel-react-native-skills** | React Native/Expo best practices (if applicable) |
-
-Skills are automatically available in `.agents/skills/` and symlinked for Claude Code and other compatible agents.
+* Logs filtrados: `docker service logs <service_name> --tail 500 2>&1 | grep "keyword"` (`socialwise_app`, `socialwise_worker`)
+* Status do host: `docker service ls`, `df -h`, `free -m`.

@@ -5,6 +5,7 @@
 
 import { createLogger } from "@/lib/utils/logger";
 import { getPrismaInstance } from "@/lib/connections";
+import { saveChatwitSystemConfig } from "@/lib/chatwit/system-config";
 import { openaiService } from "@/services/openai";
 import type { IntentCandidate } from "@/services/openai-components/types";
 import { ClassificationResult } from "../classification";
@@ -127,6 +128,14 @@ async function executeFlowForIntent(
 			(payloadMetadata.chatwit_agent_bot_token as string) || process.env.CHATWIT_AGENT_BOT_TOKEN || "";
 
 		const chatwitBaseUrl = (payloadMetadata.chatwit_base_url as string) || process.env.CHATWIT_BASE_URL || "";
+
+		// Fire-and-forget: persistir bot token + URL no SystemConfig (para campanhas)
+		if (payloadMetadata.chatwit_agent_bot_token && payloadMetadata.chatwit_base_url) {
+			saveChatwitSystemConfig({
+				botToken: payloadMetadata.chatwit_agent_bot_token as string,
+				baseUrl: payloadMetadata.chatwit_base_url as string,
+			}).catch(() => {}); // silencioso — não bloqueia o fluxo
+		}
 
 		// Resolver prismaInboxId (CUID) a partir do inboxId numérico do Chatwit
 		// Necessário para que findActiveSession encontre a sessão no button resume
