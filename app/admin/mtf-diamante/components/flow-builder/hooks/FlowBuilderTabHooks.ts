@@ -243,7 +243,15 @@ export function useFlowBuilderTab(caixaId: string): UseFlowBuilderTabReturn {
 		setSelectedFlowId(null);
 		setSelectedNodeId(null);
 		setDialogOpen(false);
-	}, []);
+
+		// Revalidar a lista de flows quando volta — garante SWR sincronizado
+		globalMutate((key) => {
+			if (typeof key === 'string' && key.includes('/api/admin/mtf-diamante/flows')) {
+				return true; // Revalidar chaves de flows
+			}
+			return false;
+		});
+	}, [globalMutate]);
 
 	// ---------------------------------------------------------------------------
 	// Node Handlers

@@ -245,12 +245,22 @@ function CampaignListView({ inboxId, onSelect }: { inboxId: string; onSelect: (i
 	const { data, error } = useSWR<{ success: boolean; data: CampaignListItem[] }>(
 		campaignsKey,
 		fetcher,
-		{ keepPreviousData: true },
+		{
+			keepPreviousData: true,
+			revalidateOnFocus: false,
+			revalidateOnReconnect: false,
+			dedupingInterval: 5000,
+			fallbackData: { success: true, data: [] },
+		},
 	);
 
 	const { data: flowsData } = useSWR<{ success: boolean; data: FlowOption[] }>(
 		`/api/admin/mtf-diamante/flows?inboxId=${inboxId}&isCampaign=true`,
 		fetcher,
+		{
+			revalidateOnFocus: false,
+			dedupingInterval: 5000,
+		},
 	);
 
 	const campaigns = data?.data ?? [];

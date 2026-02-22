@@ -193,8 +193,8 @@ export function useFlowCanvas(inboxId: string | null, options: UseFlowCanvasOpti
 		initializedRef.current = false;
 		lastSavedRef.current = "";
 
-		// Limpar canvas ao mudar flowId (campanha inicia com WHATSAPP_TEMPLATE)
-		const empty = createEmptyFlowCanvas({ isCampaign });
+		// Limpar canvas ao mudar flowId
+		const empty = createEmptyFlowCanvas();
 		setNodes(empty.nodes as unknown as Node[]);
 		setEdges(empty.edges as unknown as Edge[]);
 
@@ -203,7 +203,7 @@ export function useFlowCanvas(inboxId: string | null, options: UseFlowCanvasOpti
 			initializedRef.current = true;
 		}
 		// Se tem flowId, Efeito 2 cuidará de carregar quando dados chegarem
-	}, [flowId, isCampaign, setNodes, setEdges]);
+	}, [flowId, setNodes, setEdges]);
 
 	// =========================================================================
 	// EFEITO 2: Sincronizar dados do servidor → preencher canvas
@@ -232,14 +232,8 @@ export function useFlowCanvas(inboxId: string | null, options: UseFlowCanvasOpti
 			} else {
 				// Flow novo sem canvas: inicializar nó inicial com nome do flow
 				const flowName = flowResponse.data?.name;
-				const flowIsCampaign = flowResponse.data?.isCampaign ?? false;
-				if (flowIsCampaign) {
-					// Campanha: canvas vazio com WHATSAPP_TEMPLATE como primeiro nó
-					const campaignCanvas = createEmptyFlowCanvas({ isCampaign: true });
-					setNodes(campaignCanvas.nodes as unknown as Node[]);
-					setEdges(campaignCanvas.edges as unknown as Edge[]);
-					console.log("[useFlowCanvas] Flow campanha novo - WHATSAPP_TEMPLATE inicializado");
-				} else if (flowName) {
+				// Todos os flows (normais e campanha) começam com START
+				if (flowName) {
 					setNodes((nds) =>
 						nds.map((node) =>
 							node.type === "start" ? { ...node, data: { ...node.data, label: flowName } } : node,
