@@ -153,7 +153,7 @@ export async function getVariableByKey(userId: string, chave: string): Promise<s
 /**
  * Busca o lote ativo formatado para um usuário
  */
-async function getLoteAtivoFormatado(userId: string): Promise<string> {
+export async function getLoteAtivoFormatado(userId: string): Promise<string> {
 	try {
 		const prisma = getPrismaInstance();
 

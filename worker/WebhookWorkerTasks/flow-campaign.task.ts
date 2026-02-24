@@ -211,9 +211,15 @@ async function handleExecuteContact(
 		conversationDisplayId: resolved.displayId,
 	};
 
+	// Variáveis iniciais: nome_lead + variáveis do job (campanha/contato)
+	const initialVariables: Record<string, unknown> = {
+		nome_lead: contactName || "",
+		...(job.data.variables ?? {}),
+	};
+
 	// Executar flow
 	const orchestrator = new FlowOrchestrator();
-	const result = await orchestrator.executeFlowById(flowId, deliveryContext, { forceAsync: true });
+	const result = await orchestrator.executeFlowById(flowId, deliveryContext, { forceAsync: true, initialVariables });
 
 	const processingTimeMs = Date.now() - startTime;
 

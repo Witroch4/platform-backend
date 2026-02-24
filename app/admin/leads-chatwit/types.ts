@@ -32,6 +32,15 @@ export interface LeadChatwit {
 	aguardandoAnalise?: boolean;
 	analisePreliminar?: any;
 	analiseValidada?: boolean;
+	recursoUrl?: string;
+	recursoPreliminar?: any;
+	aguardandoRecurso?: boolean;
+	recursoValidado?: boolean;
+	recursoArgumentacaoUrl?: string;
+	espelhoProcessado?: boolean;
+	aguardandoEspelho?: boolean;
+	especialidade?: string | null;
+	espelhoPadraoId?: string | null;
 	consultoriaFase2?: boolean;
 	seccional?: string;
 	areaJuridica?: string;

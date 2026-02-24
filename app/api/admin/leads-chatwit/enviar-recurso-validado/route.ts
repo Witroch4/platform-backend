@@ -1,61 +1,144 @@
 import { NextResponse } from "next/server";
 import { getPrismaInstance } from "@/lib/connections";
+import FormData from "form-data";
+import axios from "axios";
+
 const prisma = getPrismaInstance();
 
+const CHATWOOT_ACCESS_TOKEN = process.env.CHATWITACESSTOKEN;
+const CHATWOOT_BASE_URL = process.env.CHATWIT_BASE_URL ?? "https://chatwit.witdev.com.br";
+
 /**
- * Handler da rota POST para enviar recurso validado para geração do PDF.
+ * Extrai conversationId de uma URL do tipo
+ * https://.../accounts/3/conversations/1199
+ */
+function extractConversationId(leadUrl: string) {
+	const url = new URL(leadUrl);
+	const parts = url.pathname.split("/");
+	const convIdx = parts.indexOf("conversations");
+	if (convIdx === -1 || !parts[convIdx + 1]) {
+		throw new Error(`leadUrl fora do formato esperado: ${leadUrl}`);
+	}
+	return parts[convIdx + 1];
+}
+
+/**
+ * POST: Valida recurso, gera DOCX a partir do HTML e envia como anexo no chat do lead.
+ *
+ * Body: { leadID, html, textoRecurso?, message?, accessToken? }
  */
 export async function POST(request: Request): Promise<Response> {
 	try {
-		console.log("[Enviar Recurso Validado] Recebendo requisição POST");
-
-		// Obter a URL do webhook do ambiente
-		const webhookUrl = process.env.WEBHOOK_URL;
-
-		if (!webhookUrl) {
-			console.error("[Enviar Recurso Validado] URL do webhook não configurada no ambiente");
-			throw new Error("URL do webhook não configurada");
-		}
-
-		// Obter o payload completo
 		const payload = await request.json();
-		console.log("[Enviar Recurso Validado] Dados recebidos:", JSON.stringify(payload, null, 2));
-
-		// Verificar se o leadID foi fornecido
 		const leadId = payload.leadID;
 
 		if (!leadId) {
-			console.error("[Enviar Recurso Validado] leadID não fornecido");
-			throw new Error("leadID não fornecido");
+			return NextResponse.json({ error: "leadID não fornecido" }, { status: 400 });
 		}
 
-		// Buscar o lead no banco de dados
+		if (!payload.html) {
+			return NextResponse.json({ error: "html do recurso não fornecido" }, { status: 400 });
+		}
+
+		console.log(`[Enviar Recurso Validado] Iniciando para lead ${leadId}`);
+
+		// 1) Buscar lead
 		const lead = await prisma.leadOabData.findUnique({
 			where: { id: leadId },
 			include: {
-				lead: {
-					select: {
-						name: true,
-						email: true,
-						phone: true,
-						sourceIdentifier: true,
-					},
-				},
+				lead: { select: { name: true, sourceIdentifier: true } },
 			},
 		});
 
 		if (!lead) {
-			console.error("[Enviar Recurso Validado] Lead não encontrado:", leadId);
-			throw new Error("Lead não encontrado");
+			return NextResponse.json({ error: "Lead não encontrado" }, { status: 404 });
 		}
 
-		// Marcar o lead como recurso validado
-		const updateData: any = {
+		if (!lead.leadUrl) {
+			return NextResponse.json({ error: "Lead sem leadUrl (conversa não vinculada)" }, { status: 400 });
+		}
+
+		// 2) Buscar accountId do usuário Chatwit
+		const usuarioChatwit = await prisma.usuarioChatwit.findFirst({
+			where: {
+				leadsOabData: { some: { id: leadId } },
+			},
+			select: { chatwitAccountId: true },
+		});
+
+		if (!usuarioChatwit?.chatwitAccountId) {
+			return NextResponse.json({ error: "Usuário Chatwit não configurado" }, { status: 400 });
+		}
+
+		// 3) Token de acesso
+		const accessToken = payload.accessToken || CHATWOOT_ACCESS_TOKEN;
+		if (!accessToken) {
+			return NextResponse.json({ error: "Token de acesso não configurado" }, { status: 500 });
+		}
+
+		// 4) Gerar DOCX a partir do HTML
+		const HTMLtoDOCX = (await import("html-to-docx")).default;
+
+		const wrappedHtml = `
+			<html>
+			<head><style>
+				body { font-family: Arial, sans-serif; font-size: 12pt; line-height: 1.6; }
+				h1 { font-size: 16pt; font-weight: bold; }
+				h2 { font-size: 14pt; font-weight: bold; }
+				h3 { font-size: 13pt; font-weight: bold; }
+			</style></head>
+			<body>${payload.html}</body>
+			</html>
+		`;
+
+		const docxResult = await HTMLtoDOCX(wrappedHtml, null, {
+			table: { row: { cantSplit: true } },
+			footer: true,
+			pageNumber: true,
+		});
+
+		const docxBuffer =
+			docxResult instanceof Buffer
+				? docxResult
+				: Buffer.from(await (docxResult as Blob).arrayBuffer());
+
+		console.log(`[Enviar Recurso Validado] DOCX gerado: ${docxBuffer.length} bytes`);
+
+		// 5) Enviar DOCX para o chat via Chatwit API
+		const conversationId = extractConversationId(lead.leadUrl);
+		const accountId = usuarioChatwit.chatwitAccountId;
+		const message = payload.message || "Segue o nosso Recurso, qualquer dúvida estamos à disposição.";
+		const nomeReal = lead.nomeReal || lead.lead?.name || "lead";
+		const filename = `recurso_${nomeReal.replace(/[^a-zA-Z0-9]/g, "_")}.docx`;
+
+		const form = new FormData();
+		form.append("content", message);
+		form.append("message_type", "outgoing");
+		form.append("attachments[]", docxBuffer, {
+			filename,
+			contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+		});
+
+		const chatwootUrl = `${CHATWOOT_BASE_URL}/api/v1/accounts/${accountId}/conversations/${conversationId}/messages`;
+
+		const cwRes = await axios.post(chatwootUrl, form, {
+			headers: {
+				...form.getHeaders(),
+				api_access_token: accessToken,
+			},
+			maxBodyLength: Number.POSITIVE_INFINITY,
+		});
+
+		console.log(`[Enviar Recurso Validado] DOCX enviado para conversa ${conversationId}`);
+
+		// 6) Atualizar DB: recurso validado + feito + não mais aguardando
+		const updateData: Record<string, unknown> = {
 			recursoValidado: true,
-			aguardandoRecurso: true, // Aguardando o processamento do recurso validado
+			fezRecurso: true,
+			aguardandoRecurso: false,
+			anotacoes: message,
 		};
 
-		// Atualizar o texto do recurso com a versão validada apenas se fornecido
 		if (payload.textoRecurso) {
 			updateData.recursoPreliminar = { textoRecurso: payload.textoRecurso };
 		}
@@ -65,72 +148,17 @@ export async function POST(request: Request): Promise<Response> {
 			data: updateData,
 		});
 
-		console.log("[Enviar Recurso Validado] Lead marcado como recurso validado");
+		console.log(`[Enviar Recurso Validado] DB atualizado: recursoValidado=true, fezRecurso=true`);
 
-		// Preparar o payload para envio com as flags requeridas
-		const requestPayload = {
-			// Flags necessárias para o sistema externo
-			leadID: leadId,
-			telefone: lead.lead?.phone,
-			RecursoFinalizado: true, // Flag principal do recurso
-			recursoValidado: true, // Flag para indicar que foi validado
-
-			// Texto do recurso validado
-			textoRecurso: payload.textoRecurso || "",
-
-			// Dados do lead
-			nome: lead.nomeReal || lead.lead?.name || "",
-			email: lead.lead?.email || "",
-
-			// Dados da análise preliminar (necessários para o recurso)
-			analisePreliminar: lead.analisePreliminar || null,
-
-			// Modelo de recurso se fornecido
-			modeloRecurso: payload.modeloRecurso || null,
-
-			// Metadados
-			metadata: {
-				leadUrl: lead.leadUrl,
-				sourceId: lead.lead?.sourceIdentifier,
-				consultoriaFase2: lead.consultoriaFase2,
-				especialidade: lead.especialidade,
-			},
-		};
-
-		console.log("[Enviar Recurso Validado] Payload final para envio:", JSON.stringify(requestPayload, null, 2));
-
-		// Enviar para o sistema externo
-		console.log("[Enviar Recurso Validado] Enviando payload para processamento:", webhookUrl);
-
-		fetch(webhookUrl, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify(requestPayload),
-		})
-			.then((response) => {
-				if (!response.ok) {
-					console.error("[Enviar Recurso Validado] Erro na resposta do sistema externo:", response.status);
-				} else {
-					console.log("[Enviar Recurso Validado] Enviado com sucesso para o sistema externo");
-				}
-			})
-			.catch((error) => {
-				console.error("[Enviar Recurso Validado] Erro ao enviar para o sistema externo:", error);
-			});
-
-		// Responder imediatamente ao cliente, independente do resultado do webhook
 		return NextResponse.json({
 			success: true,
-			message: "Recurso validado enviado com sucesso",
+			message: "Recurso validado e enviado para o chat com sucesso",
+			chatwoot: cwRes.data,
 		});
 	} catch (error: any) {
-		console.error("[Enviar Recurso Validado] Erro ao enviar solicitação:", error);
+		console.error("[Enviar Recurso Validado] Erro:", error);
 		return NextResponse.json(
-			{
-				error: error.message || "Erro interno ao enviar recurso validado",
-			},
+			{ error: error.message || "Erro interno ao enviar recurso validado" },
 			{ status: 500 },
 		);
 	}

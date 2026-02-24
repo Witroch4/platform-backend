@@ -108,8 +108,14 @@ const DEFAULT_RECURSO_PROMPT = `
        - Verifique se as pontuações (vírgulas, aspas simples duplas \`''\`) estão formatadas corretamente e se não ficaram marcações como "[]" ou "{}" no texto final.
        - A pontuação solicitada deve usar vírgula para decimais (ex: 0,65 pontos).
 
-    5. FORMATO DE SAÍDA:
-       - Sua resposta deve ser APENAS o texto completo do recurso. O texto final já é o recurso em si que será salvo no word.
+    5. FORMATO DE SAÍDA EM MARKDOWN:
+       - Sua resposta deve ser APENAS o texto completo do recurso formatado em **Markdown**.
+       - Use títulos (## PEÇA, ## QUESTÕES, ### Questão X) para as seções principais.
+       - Use **negrito** para termos jurídicos importantes, nomes de leis, súmulas e artigos citados.
+       - Use ''aspas simples duplas'' para citações do examinando (transcrições literais da prova).
+       - Use parágrafos separados por linha em branco para cada quesito/item.
+       - NÃO use blocos de código, tabelas ou listas com bullets. Mantenha o estilo de prosa jurídica formal.
+       - O texto final em Markdown será convertido automaticamente para Word/PDF pelo sistema.
   </instructions>
 
   <outputFormat>
@@ -317,6 +323,20 @@ export async function runRecursoAgent(input: RecursoAgentInput): Promise<Recurso
 		let sdkSchema;
 		try {
 			const parsedSchemaObj = JSON.parse(config.schemaDefinition);
+			// OpenAI structured outputs exige additionalProperties: false em TODOS os objetos
+			const enforceAdditionalProperties = (node: Record<string, any>) => {
+				if (!node || typeof node !== "object") return;
+				if (node.type === "object" && node.additionalProperties === undefined) {
+					node.additionalProperties = false;
+				}
+				if (node.properties) {
+					for (const val of Object.values(node.properties)) {
+						enforceAdditionalProperties(val as Record<string, any>);
+					}
+				}
+				if (node.items) enforceAdditionalProperties(node.items);
+			};
+			enforceAdditionalProperties(parsedSchemaObj);
 			// Vercel SDK nativo a partir do 3.0+
 			sdkSchema = jsonSchema(parsedSchemaObj);
 		} catch (schemaErr) {

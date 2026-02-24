@@ -70,7 +70,7 @@ export function useLeadState(lead: LeadChatwit, onRefresh?: () => void) {
 			analisePreliminar: lead.analisePreliminar,
 			analiseValidada: !!lead.analiseValidada,
 		});
-	}, [lead.analiseUrl, lead.aguardandoAnalise, lead.analisePreliminar, lead.analiseValidada, refreshKey]);
+	}, [lead.analiseUrl, lead.aguardandoAnalise, lead.analisePreliminar, lead.analiseValidada]);
 
 	useEffect(() => {
 		setLocalRecursoState({
@@ -79,7 +79,7 @@ export function useLeadState(lead: LeadChatwit, onRefresh?: () => void) {
 			recursoPreliminar: lead.recursoPreliminar,
 			recursoValidado: !!lead.recursoValidado,
 		});
-	}, [lead.recursoUrl, lead.aguardandoRecurso, lead.recursoPreliminar, lead.recursoValidado, refreshKey]);
+	}, [lead.recursoUrl, lead.aguardandoRecurso, lead.recursoPreliminar, lead.recursoValidado]);
 
 	useEffect(() => {
 		setConsultoriaAtiva(!!lead.consultoriaFase2);

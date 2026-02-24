@@ -58,7 +58,13 @@
       "Bash(claude mcp list:*)",
       "Bash(claude mcp get:*)",
       "mcp__ssh-mcp__exec",
-      "Bash(psql:*)"
+      "Bash(psql:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(source:*)",
+      "Bash(node -e:*)",
+      "Bash(npx prisma db execute:*)",
+      "Bash(set -a)",
+      "Bash(set:*)"
     ],
     "deny": [],
     "ask": []

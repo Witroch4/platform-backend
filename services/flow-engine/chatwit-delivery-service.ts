@@ -43,6 +43,13 @@ interface ChatwitMessagePayload {
 	 * @see docs/chatwit-contrato-async-30s.md
 	 */
 	attachments?: string[];
+	/**
+	 * Para templates WhatsApp oficiais: formato nativo do Chatwit.
+	 * MessageBuilder coloca em `additional_attributes.template_params`.
+	 * SendOnWhatsappService detecta e roteia para `send_template()`.
+	 * @see chatwitv4.10/app/services/whatsapp/send_on_whatsapp_service.rb L46
+	 */
+	template_params?: Record<string, unknown>;
 }
 
 // =============================================================================
@@ -264,28 +271,30 @@ export class ChatwitDeliveryService {
 
 	/**
 	 * Envia template WhatsApp oficial via API Agent Bot do Chatwit.
-	 * Usa `content_type: "template"` com o payload completo em `content_attributes`.
-	 * O Chatwit roteia para `send_template()` no dispatcher WhatsApp.
+	 * Usa o formato NATIVO do Chatwit: `template_params` no body do POST.
+	 * O `MessageBuilder` coloca em `additional_attributes.template_params`,
+	 * o `SendOnWhatsappService` detecta e roteia para `send_template()` automaticamente.
 	 *
-	 * @see docs/chatwit-contrato-async-30s.md §13
+	 * @see chatwitv4.10/app/services/whatsapp/send_on_whatsapp_service.rb
+	 * @see chatwitv4.10/app/services/whatsapp/template_processor_service.rb
 	 */
 	async deliverTemplate(ctx: DeliveryContext, templatePayload: Record<string, unknown>): Promise<DeliveryResult> {
-		const templateData = templatePayload.template as Record<string, unknown> | undefined;
-		const templateName = (templateData?.name as string) ?? "unknown";
+		// templatePayload agora é ChatwitTemplateParams (name, language, processed_params)
+		const templateName = (templatePayload.name as string) ?? "unknown";
 
-		log.debug("[ChatwitDelivery] Enviando template via Chatwit Agent Bot API", {
+		log.debug("[ChatwitDelivery] Enviando template via padrão nativo Chatwit", {
 			templateName,
-			to: templatePayload.to,
+			language: templatePayload.language,
 			conversationId: ctx.conversationId,
+			hasProcessedParams: !!templatePayload.processed_params,
 		});
 
 		const body: ChatwitMessagePayload = {
 			content: `[Template: ${templateName}]`,
-			content_type: "template",
-			content_attributes: {
-				template_payload: templatePayload,
-			},
 			message_type: "outgoing",
+			// template_params vai no body → MessageBuilder coloca em additional_attributes
+			// → SendOnWhatsappService detecta → TemplateProcessorService normaliza → send_template()
+			template_params: templatePayload,
 		};
 
 		return this.postMessage(ctx, body);
@@ -521,6 +530,7 @@ export class ChatwitDeliveryService {
 						status,
 						message: lastError,
 						url,
+						responseBody: axiosErr.response?.data,
 					});
 					return { success: false, error: lastError, attempts: attempt };
 				}

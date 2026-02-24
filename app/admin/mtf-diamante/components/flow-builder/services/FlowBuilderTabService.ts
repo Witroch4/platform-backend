@@ -59,6 +59,7 @@ export interface ExtendedReaction {
 	textReaction?: string;
 	textResponse?: string;
 	linkedMessageId?: string | null;
+	linkedTemplateMetaId?: string | null;
 	actionPayload?: { messageId?: string; emoji?: string; textReaction?: string; action?: string } | null;
 }
 

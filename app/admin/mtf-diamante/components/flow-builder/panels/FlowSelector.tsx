@@ -79,12 +79,13 @@ export function FlowSelector({ inboxId, selectedFlowId, onSelectFlow, onCreateNe
 	const [showCampaign, setShowCampaign] = useState(false);
 
 	// Buscar lista de flows (filtra por isCampaign)
-	const { data, error, mutate } = useSWR<{ success: boolean; data: FlowListItem[] }>(
+	const { data, error, isLoading: isLoadingFlows, mutate } = useSWR<{ success: boolean; data: FlowListItem[] }>(
 		inboxId ? `/api/admin/mtf-diamante/flows?inboxId=${inboxId}&isCampaign=${showCampaign}` : null,
 		fetcher,
 		{
 			revalidateOnFocus: false,
 			dedupingInterval: 5000,
+			keepPreviousData: true,
 		},
 	);
 
@@ -248,7 +249,20 @@ export function FlowSelector({ inboxId, selectedFlowId, onSelectFlow, onCreateNe
 			</div>
 
 			{/* Lista de flows */}
-			{error ? (
+			{isLoadingFlows ? (
+				<div className="space-y-1.5">
+					{[1, 2, 3].map((i) => (
+						<div key={i} className="flex items-center gap-3 px-3 py-2 rounded-md border border-border/50 animate-pulse">
+							<div className="h-4 w-4 rounded bg-muted shrink-0" />
+							<div className="flex-1 space-y-1.5">
+								<div className="h-3 w-2/3 rounded bg-muted" />
+								<div className="h-2.5 w-1/3 rounded bg-muted/70" />
+							</div>
+							<div className="h-3.5 w-3.5 rounded-full bg-muted shrink-0" />
+						</div>
+					))}
+				</div>
+			) : error ? (
 				<div className="text-center py-4 text-sm text-destructive">Erro ao carregar flows</div>
 			) : flows.length === 0 ? (
 				<div className="text-center py-6 border border-dashed rounded-lg">

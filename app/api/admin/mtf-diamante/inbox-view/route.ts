@@ -408,14 +408,6 @@ export async function GET(request: NextRequest) {
 				const isConnected = !!conexao;
 				const isActive = conexao ? conexao.isActive : false;
 
-				// Debug log para identificar problemas
-				if (process.env.NODE_ENV === "development") {
-					console.log(
-						`[Debug Assistente] ${assistant.name}: conectado=${isConnected}, ativo=${isActive}, linkId=${conexao?.linkId}, raw_conexao=`,
-						conexao,
-					);
-				}
-
 				return {
 					id: assistant.id,
 					linkId: conexao?.linkId || null,

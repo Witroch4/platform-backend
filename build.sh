@@ -10,7 +10,8 @@ set -euo pipefail
 IMAGE="witrocha/socialwise"
 STACK_NAME="socialwise"
 # Serviços Swarm para atualizar (nomes dentro do compose)
-SWARM_SERVICES=("socialwise_app" "worker")
+# ATENÇÃO: Worker deve atualizar ANTES da App para evitar race condition de payload (BullMQ)
+SWARM_SERVICES=("worker" "socialwise_app")
 
 # Portainer config (pode vir de .env.local, .env.development ou variáveis de ambiente)
 for envfile in .env.local .env.development; do
@@ -190,6 +191,11 @@ else
   echo "==> [4/${TOTAL_STEPS}] Skipping additional push (tag is latest)"
 fi
 
+# Delay para propagação da imagem no Registry (evita pull de imagem velha/404)
+echo ""
+echo "⌛ Aguardando 5s para propagação da imagem no registry..."
+sleep 5
+
 # ===== Step 5: Force-update dos serviços em produção =====
 DEPLOY_STATUS=""
 if [ "${CAN_DEPLOY}" = true ]; then
@@ -203,6 +209,11 @@ if [ "${CAN_DEPLOY}" = true ]; then
   for svc in "${SWARM_SERVICES[@]}"; do
     if force_update_service "${svc}" "${TAG}"; then
       ((deploy_ok++))
+      # Delay defensivo: worker deve começar o rollout antes da app disparar jobs
+      if [ "${svc}" = "worker" ] && [ "${#SWARM_SERVICES[@]}" -gt 1 ]; then
+        echo "  ⌛ Aguardando 1s para worker iniciar o rolling update..."
+        sleep 1
+      fi
     else
       ((deploy_fail++))
     fi

@@ -13,6 +13,7 @@ import type {
 	TemplateFooter,
 	TemplateButtonType,
 	TemplateCategory,
+	InteractiveMessageElement,
 } from "@/types/flow-builder";
 
 // =============================================================================
@@ -474,6 +475,8 @@ export interface TemplateDispatchPayload {
 
 /**
  * Builds a template dispatch payload for sending to WhatsApp
+ * @deprecated Use `buildChatwitTemplateParams()` instead — it produces the native Chatwit format
+ * that is routed through SendOnWhatsappService → TemplateProcessorService → send_template().
  */
 export function buildTemplateDispatchPayload(
 	data: TemplateNodeData,
@@ -552,6 +555,115 @@ export function buildTemplateDispatchPayload(
 }
 
 // =============================================================================
+// CHATWIT NATIVE TEMPLATE PARAMS (alinha com SendOnWhatsappService)
+// =============================================================================
+
+/**
+ * Formato nativo que o Chatwit espera em `additional_attributes.template_params`.
+ * Detectado por `SendOnWhatsappService.template_params` (L46),
+ * normalizado por `TemplateProcessorService` e despachado via `channel.send_template()`.
+ *
+ * @see chatwitv4.10/app/services/whatsapp/send_on_whatsapp_service.rb
+ * @see chatwitv4.10/app/services/whatsapp/template_processor_service.rb
+ */
+export interface ChatwitTemplateParams {
+	name: string;
+	language: string;
+	processed_params: {
+		/** Body vars — hash { varName: resolvedValue } para NAMED format */
+		body?: Record<string, string>;
+		/** Header — { media_url, media_type } para mídia, ou { varName: value } para TEXT */
+		header?: Record<string, string>;
+		/** Buttons — array de { type, parameter } para COPY_CODE/URL */
+		buttons?: Array<{ type: string; parameter: string }>;
+	};
+}
+
+/**
+ * Converte TemplateNodeData → formato nativo `template_params` do Chatwit.
+ * Este é o ÚNICO formato que deve ser usado para enviar templates via Agent Bot API.
+ *
+ * Fluxo no Chatwit:
+ * ```
+ * MessageBuilder → additional_attributes.template_params
+ *   → SendOnWhatsappService detecta template_params
+ *   → TemplateProcessorService normaliza (suporta NAMED params)
+ *   → channel.send_template() → WhatsApp Cloud API
+ * ```
+ *
+ * @param data          Template node configuration
+ * @param variableValues Resolved variable values
+ * @param buttonPayloads Optional: maps button index → payload string (e.g. flow_button_* IDs).
+ *                       Used by Flow Engine to inject flow_button_* IDs as QUICK_REPLY payloads
+ *                       so WhatsApp returns the payload on button click instead of plain text.
+ */
+export function buildChatwitTemplateParams(
+	data: TemplateNodeData,
+	variableValues: Record<string, string>,
+	buttonPayloads?: Record<number, string>,
+): ChatwitTemplateParams {
+	const processedParams: ChatwitTemplateParams["processed_params"] = {};
+
+	// Body vars — formato NAMED: { "nome_lead": "João", "cidade": "Fortaleza" }
+	if (data.body?.variables && data.body.variables.length > 0) {
+		const bodyParams: Record<string, string> = {};
+		for (const varName of data.body.variables) {
+			bodyParams[varName] = variableValues[varName] || `{{${varName}}}`;
+		}
+		processedParams.body = bodyParams;
+	}
+
+	// Header — mídia ou texto com variáveis
+	if (data.header && data.header.type !== "NONE") {
+		if (["IMAGE", "VIDEO", "DOCUMENT"].includes(data.header.type) && data.header.mediaUrl) {
+			processedParams.header = {
+				media_url: data.header.mediaUrl,
+				media_type: data.header.type.toLowerCase(),
+			};
+		} else if (data.header.type === "TEXT" && data.header.variables?.length) {
+			const headerParams: Record<string, string> = {};
+			for (const varName of data.header.variables) {
+				headerParams[varName] = variableValues[varName] || `{{${varName}}}`;
+			}
+			processedParams.header = headerParams;
+		}
+	}
+
+	// Buttons — COPY_CODE, URL, and QUICK_REPLY (with flow payloads)
+	if (data.buttons && data.buttons.length > 0) {
+		const buttonParams: Array<{ type: string; parameter: string }> = [];
+		for (let i = 0; i < data.buttons.length; i++) {
+			const btn = data.buttons[i];
+			if (btn.type === "COPY_CODE" && btn.exampleCode) {
+				const couponValue = variableValues["coupon_code"] || variableValues["chave_pix"] || btn.exampleCode;
+				buttonParams.push({ type: "copy_code", parameter: couponValue });
+			} else if (btn.type === "URL" && btn.url) {
+				// URL dinâmica — se tem variável no suffix
+				const urlParam = variableValues["url_suffix"] || "";
+				if (urlParam) {
+					buttonParams.push({ type: "url", parameter: urlParam });
+				}
+			} else if (btn.type === "QUICK_REPLY" && buttonPayloads?.[i]) {
+				// QUICK_REPLY com payload do Flow Builder (flow_button_* ou flow_tpl_btn_* ID)
+				// A Meta API aceita payload nos botões QUICK_REPLY no momento do envio:
+				// { type: "button", sub_type: "quick_reply", index: N, parameters: [{type: "payload", payload: "..."}] }
+				// O payload é retornado no webhook quando o usuário clica.
+				buttonParams.push({ type: "quick_reply", parameter: buttonPayloads[i] });
+			}
+		}
+		if (buttonParams.length > 0) {
+			processedParams.buttons = buttonParams;
+		}
+	}
+
+	return {
+		name: data.templateName || "",
+		language: data.language || "pt_BR",
+		processed_params: processedParams,
+	};
+}
+
+// =============================================================================
 // DEFAULTS
 // =============================================================================
 
@@ -595,4 +707,101 @@ export function createTemplateButton(
 	}
 
 	return button;
+}
+
+// =============================================================================
+// META COMPONENTS → ELEMENTS CONVERSION (shared between TemplateConfigDialog & FlowBuilder)
+// =============================================================================
+
+export type RawMetaComponent = {
+	type: string;
+	text?: string;
+	format?: string;
+	buttons?: Array<{ type: string; text: string; url?: string; phone_number?: string; example?: unknown[] }>;
+	example?: Record<string, unknown>;
+};
+
+/** Normaliza components independente do formato (array ou indexed-object do DB). */
+export function normalizeMetaComponents(comps: unknown): RawMetaComponent[] {
+	if (!comps) return [];
+	if (Array.isArray(comps)) return comps as RawMetaComponent[];
+	if (typeof comps === "object") {
+		return Object.entries(comps as Record<string, unknown>)
+			.filter(([k]) => !Number.isNaN(Number(k)))
+			.sort(([a], [b]) => Number(a) - Number(b))
+			.map(([, v]) => v as RawMetaComponent);
+	}
+	return [];
+}
+
+/**
+ * Converte os componentes da Meta API em InteractiveMessageElement[].
+ * Botões recebem IDs com prefixo `flow_button_` para o roteamento do webhook.
+ */
+export function metaComponentsToElements(comps: RawMetaComponent[], mediaUrl: string | null): InteractiveMessageElement[] {
+	const elements: InteractiveMessageElement[] = [];
+	const ts = Date.now();
+	const rand = () => Math.random().toString(36).substring(2, 8);
+
+	// Header
+	const headerComp = comps.find((c) => c.type === "HEADER");
+	if (headerComp) {
+		if (headerComp.format === "TEXT") {
+			elements.push({ id: `header_text_${ts}_${rand()}`, type: "header_text", text: headerComp.text || "" });
+		} else if (["IMAGE", "VIDEO", "DOCUMENT"].includes(headerComp.format || "")) {
+			elements.push({ id: `header_image_${ts}_${rand()}`, type: "header_image", url: mediaUrl || undefined });
+		}
+	}
+
+	// Body
+	const bodyComp = comps.find((c) => c.type === "BODY");
+	if (bodyComp?.text) {
+		elements.push({ id: `body_${ts}_${rand()}`, type: "body", text: bodyComp.text });
+	}
+
+	// Footer
+	const footerComp = comps.find((c) => c.type === "FOOTER");
+	if (footerComp?.text) {
+		elements.push({ id: `footer_${ts}_${rand()}`, type: "footer", text: footerComp.text });
+	}
+
+	// Buttons — cada botão com ID `flow_button_` para roteamento do webhook
+	const buttonsComp = comps.find((c) => c.type === "BUTTONS");
+	type MetaButton = { type: string; text: string; url?: string; phone_number?: string; example?: unknown[] };
+	const rawButtons = (buttonsComp?.buttons || []) as MetaButton[];
+
+	for (const btn of rawButtons) {
+		const btnId = `flow_button_${ts}_${rand()}`;
+		switch (btn.type) {
+			case "QUICK_REPLY":
+				elements.push({ id: btnId, type: "button", title: btn.text });
+				break;
+			case "URL":
+				elements.push({ id: btnId, type: "button_url", title: btn.text, url: btn.url || "" });
+				break;
+			case "PHONE_NUMBER":
+				elements.push({
+					id: btnId,
+					type: "button_phone",
+					title: btn.text,
+					phoneNumber: btn.phone_number || "",
+				});
+				break;
+			case "COPY_CODE":
+				elements.push({
+					id: btnId,
+					type: "button_copy_code",
+					title: COPY_CODE_BUTTON_TITLE,
+					couponCode: Array.isArray(btn.example) ? String(btn.example[0] ?? "") : "",
+				});
+				break;
+			case "VOICE_CALL":
+				elements.push({ id: btnId, type: "button_voice_call", title: btn.text, ttlMinutes: 10080 });
+				break;
+			default:
+				break;
+		}
+	}
+
+	return elements;
 }

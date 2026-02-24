@@ -51,6 +51,9 @@ import {
 	TEMPLATE_LIMITS,
 	createTemplateButton,
 	COPY_CODE_BUTTON_TITLE,
+	normalizeMetaComponents,
+	metaComponentsToElements,
+	type RawMetaComponent,
 } from "@/lib/flow-builder/templateElements";
 import { generateElementId } from "@/lib/flow-builder/interactiveMessageElements";
 import { useApprovedTemplates } from "@/app/admin/mtf-diamante/hooks/useApprovedTemplates";
@@ -144,29 +147,8 @@ function extractFromElements(elements: InteractiveMessageElement[]): ExtractedTe
 }
 
 // =============================================================================
-// HELPERS: normalize components (array ou indexed-object com publicMediaUrl)
+// HELPERS: normalize components (delegates to shared utility)
 // =============================================================================
-
-type RawComponent = {
-	type: string;
-	text?: string;
-	format?: string;
-	buttons?: Array<{ type: string; text: string; url?: string; phone_number?: string }>;
-	example?: Record<string, unknown>;
-};
-
-/** Normaliza components independente do formato (array ou indexed-object do DB). */
-function normalizeComponents(comps: unknown): RawComponent[] {
-	if (!comps) return [];
-	if (Array.isArray(comps)) return comps as RawComponent[];
-	if (typeof comps === "object") {
-		return Object.entries(comps as Record<string, unknown>)
-			.filter(([k]) => !Number.isNaN(Number(k)))
-			.sort(([a], [b]) => Number(a) - Number(b))
-			.map(([, v]) => v as RawComponent);
-	}
-	return [];
-}
 
 /** Verifica se o template tem header IMAGE e retorna a URL pública já armazenada, se houver. */
 function getTemplateImageInfo(template: { components?: unknown } | null): {
@@ -175,81 +157,9 @@ function getTemplateImageInfo(template: { components?: unknown } | null): {
 } {
 	if (!template?.components) return { hasImage: false, storedMediaUrl: null };
 	const comps = template.components as Record<string, unknown>;
-	const header = normalizeComponents(comps).find((c) => c.type === "HEADER" && c.format === "IMAGE");
+	const header = normalizeMetaComponents(comps).find((c) => c.type === "HEADER" && c.format === "IMAGE");
 	const storedMediaUrl = !Array.isArray(comps) ? (comps.publicMediaUrl as string | undefined) ?? null : null;
 	return { hasImage: !!header, storedMediaUrl };
-}
-
-/**
- * Converte os componentes da Meta API em InteractiveMessageElement[].
- * Botões recebem IDs com prefixo `flow_button_` para o roteamento do webhook.
- */
-function templateCompsToElements(comps: RawComponent[], mediaUrl: string | null): InteractiveMessageElement[] {
-	const elements: InteractiveMessageElement[] = [];
-	const ts = Date.now();
-	const rand = () => Math.random().toString(36).substring(2, 8);
-
-	// Header
-	const headerComp = comps.find((c) => c.type === "HEADER");
-	if (headerComp) {
-		if (headerComp.format === "TEXT") {
-			elements.push({ id: `header_text_${ts}_${rand()}`, type: "header_text", text: headerComp.text || "" });
-		} else if (["IMAGE", "VIDEO", "DOCUMENT"].includes(headerComp.format || "")) {
-			elements.push({ id: `header_image_${ts}_${rand()}`, type: "header_image", url: mediaUrl || undefined });
-		}
-	}
-
-	// Body
-	const bodyComp = comps.find((c) => c.type === "BODY");
-	if (bodyComp?.text) {
-		elements.push({ id: `body_${ts}_${rand()}`, type: "body", text: bodyComp.text });
-	}
-
-	// Footer
-	const footerComp = comps.find((c) => c.type === "FOOTER");
-	if (footerComp?.text) {
-		elements.push({ id: `footer_${ts}_${rand()}`, type: "footer", text: footerComp.text });
-	}
-
-	// Buttons — cada botão com ID `flow_button_` para roteamento do webhook
-	const buttonsComp = comps.find((c) => c.type === "BUTTONS");
-	type MetaButton = { type: string; text: string; url?: string; phone_number?: string; example?: unknown[] };
-	const rawButtons = (buttonsComp?.buttons || []) as MetaButton[];
-
-	for (const btn of rawButtons) {
-		const btnId = `flow_button_${ts}_${rand()}`;
-		switch (btn.type) {
-			case "QUICK_REPLY":
-				elements.push({ id: btnId, type: "button", title: btn.text });
-				break;
-			case "URL":
-				elements.push({ id: btnId, type: "button_url", title: btn.text, url: btn.url || "" });
-				break;
-			case "PHONE_NUMBER":
-				elements.push({
-					id: btnId,
-					type: "button_phone",
-					title: btn.text,
-					phoneNumber: btn.phone_number || "",
-				});
-				break;
-			case "COPY_CODE":
-				elements.push({
-					id: btnId,
-					type: "button_copy_code",
-					title: COPY_CODE_BUTTON_TITLE, // Título fixo exigido pela Meta API
-					couponCode: Array.isArray(btn.example) ? String(btn.example[0] ?? "") : "",
-				});
-				break;
-			case "VOICE_CALL":
-				elements.push({ id: btnId, type: "button_voice_call", title: btn.text, ttlMinutes: 10080 });
-				break;
-			default:
-				break;
-		}
-	}
-
-	return elements;
 }
 
 // =============================================================================
@@ -776,7 +686,7 @@ export function TemplateConfigDialog({
 			if (!node) return;
 
 			// Suporta array e indexed-object (com publicMediaUrl)
-			const comps = normalizeComponents(template.components);
+			const comps = normalizeMetaComponents(template.components);
 			const headerComp = comps.find((c) => c.type === "HEADER");
 			const bodyComp = comps.find((c) => c.type === "BODY");
 			const footerComp = comps.find((c) => c.type === "FOOTER");
@@ -784,7 +694,7 @@ export function TemplateConfigDialog({
 
 			// Converter para sistema unificado de elementos (igual Mensagem Interativa)
 			// Inclui a publicMediaUrl já resolvida no header_image
-			const elements = templateCompsToElements(comps, resolvedMediaUrl);
+			const elements = metaComponentsToElements(comps, resolvedMediaUrl);
 			const buttonIds = elements.filter((e) => e.type.startsWith("button")).map((e) => e.id);
 
 			// Legacy buttons (backward compat com TemplateNodeData)
@@ -1925,7 +1835,7 @@ export function TemplateConfigDialog({
 							selectedTemplate ? (
 								(() => {
 									// Suporta array e indexed-object (com publicMediaUrl) vindos do banco
-									const comps = normalizeComponents(selectedTemplate.components);
+									const comps = normalizeMetaComponents(selectedTemplate.components);
 									const headerComp = comps.find((c) => c.type === "HEADER");
 									const bodyComp = comps.find((c) => c.type === "BODY");
 									const footerComp = comps.find((c) => c.type === "FOOTER");

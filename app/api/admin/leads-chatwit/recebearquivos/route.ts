@@ -19,16 +19,7 @@ async function processLeadDirectly(payload: WebhookPayload) {
 
 	// Converter todos os IDs para string antes de usar
 	const chatwitAccountId = String(usuario.account.id);
-	const chatwitInboxId = String(usuario.inbox.id);
 	const leadSourceId = String(origemLead.source_id);
-
-	console.log(`[Webhook-Direct] IDs convertidos para string:`, {
-		chatwitAccountId,
-		chatwitInboxId,
-		leadSourceId,
-		accountName: usuario.account.name,
-		inboxName: usuario.inbox.name,
-	});
 
 	// 1) Find or create/update do usuário
 	let usuarioDb = await getPrismaInstance().usuarioChatwit.findFirst({
@@ -76,7 +67,7 @@ async function processLeadDirectly(payload: WebhookPayload) {
 	// 2) Criar ou atualizar Account específica para esta conta Chatwit (usando upsert para evitar race condition)
 	const CHATWIT_ACCOUNT_ID = `CHATWIT_${chatwitAccountId}`;
 
-	const chatwitAccount = await getPrismaInstance().account.upsert({
+	await getPrismaInstance().account.upsert({
 		where: { id: CHATWIT_ACCOUNT_ID },
 		update: {
 			userId: usuarioDb.appUserId,
@@ -89,8 +80,6 @@ async function processLeadDirectly(payload: WebhookPayload) {
 			providerAccountId: chatwitAccountId,
 		},
 	});
-
-	console.log(`[Webhook-Direct] Account gerenciada para Chatwit ${chatwitAccountId}:`, chatwitAccount.id);
 
 	// 3) Criar/atualizar Lead
 	const lead = await getPrismaInstance().lead.upsert({
@@ -117,14 +106,6 @@ async function processLeadDirectly(payload: WebhookPayload) {
 			tags: [],
 			userId: usuarioDb.appUserId,
 		},
-	});
-
-	console.log(`[Webhook-Direct] Lead criado/atualizado:`, {
-		leadId: lead.id,
-		sourceIdentifier: leadSourceId,
-		accountId: CHATWIT_ACCOUNT_ID,
-		usuarioChatwitId: usuarioDb.id,
-		appUserId: usuarioDb.appUserId,
 	});
 
 	// 4) Criar ou atualizar o LeadOabData
@@ -154,20 +135,8 @@ async function processLeadDirectly(payload: WebhookPayload) {
 
 	// 5) Processar arquivos
 	const arquivos = origemLead.arquivos || [];
-	console.log(`[Webhook-Direct] Processando ${arquivos.length} arquivos diretamente`);
 
 	if (arquivos.length > 0) {
-		// Log detalhado de cada arquivo
-		console.log(`[Webhook-Direct] === DETALHES DOS ARQUIVOS ===`);
-		arquivos.forEach((arquivo, index) => {
-			console.log(`[Webhook-Direct] Arquivo ${index + 1}:`, {
-				chatwitFileId: arquivo.chatwitFileId,
-				fileType: arquivo.file_type,
-				dataUrl: arquivo.data_url.substring(0, 80) + (arquivo.data_url.length > 80 ? "..." : ""),
-			});
-		});
-		console.log(`[Webhook-Direct] === FIM DOS DETALHES ===`);
-
 		try {
 			const result = await getPrismaInstance().arquivoLeadOab.createMany({
 				data: arquivos.map((a) => ({
@@ -178,21 +147,11 @@ async function processLeadDirectly(payload: WebhookPayload) {
 				})),
 				skipDuplicates: true,
 			});
-			console.log(`[Webhook-Direct] Inseridos ${result.count} arquivos diretamente`);
+			console.log(`[Webhook-Direct] ${result.count} arquivo(s) inseridos para lead ${sourceId}`);
 		} catch (error) {
-			console.error(`[Webhook-Direct] Erro ao inserir arquivos:`, error);
+			console.error(`[Webhook-Direct] Erro ao inserir arquivos para lead ${sourceId}:`, error);
 		}
-
-		// Verificar total de arquivos
-		const totalArquivos = await getPrismaInstance().arquivoLeadOab.count({
-			where: { leadOabDataId: leadOabData.id },
-		});
-
-		console.log(`[Webhook-Direct] Total de arquivos no banco para o lead ${sourceId}: ${totalArquivos}`);
 	}
-
-	// Log de conclusão
-	console.log(`[Webhook-Direct] Lead processado diretamente - Lead: ${sourceId}, Arquivos: ${arquivos.length}`);
 
 	return { leadId: leadOabData.id, arquivos: arquivos.length };
 }
@@ -206,11 +165,9 @@ export async function POST(request: Request): Promise<Response> {
 		try {
 			payload = sanitizeChatwitPayload(rawPayload);
 		} catch (sanitizeErr: any) {
-			console.error("[Webhook] Erro ao sanitizar payload:", sanitizeErr.message);
-			return NextResponse.json(
-				{ success: false, error: "Erro ao processar payload: " + sanitizeErr.message },
-				{ status: 400 },
-			);
+			// O Chatwit envia todos os eventos (mensagens do bot, atualizações de conversa, etc.)
+			// Eventos sem account na raiz não são de lead — ignorar silenciosamente
+			return NextResponse.json({ success: true, skipped: true }, { status: 200 });
 		}
 
 		// validações mínimas após sanitização
@@ -221,11 +178,6 @@ export async function POST(request: Request): Promise<Response> {
 		if (!payload?.usuario?.CHATWIT_ACCESS_TOKEN) {
 			return NextResponse.json({ success: false, error: "CHATWIT_ACCESS_TOKEN ausente" }, { status: 400 });
 		}
-
-		const processingMode = WEBHOOK_DIRECT_PROCESSING ? "DIRETO" : "FILA";
-		console.log(
-			`[Webhook-${processingMode}] Lead processado após sanitização - contactId: ${payload.origemLead.source_id}, Arquivos: ${payload.origemLead.arquivos.length}`,
-		);
 
 		if (WEBHOOK_DIRECT_PROCESSING) {
 			// PROCESSAMENTO DIRETO (sem fila)

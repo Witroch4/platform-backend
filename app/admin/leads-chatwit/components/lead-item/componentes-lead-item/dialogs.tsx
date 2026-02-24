@@ -19,6 +19,7 @@ import { ProvaDialog } from "@/app/admin/leads-chatwit/components/prova-dialog";
 import { EspelhoDialog } from "@/app/admin/leads-chatwit/components/espelho-dialog";
 import { AnaliseDialog } from "@/app/admin/leads-chatwit/components/analise-dialog";
 import { AnalisePreviewDrawer } from "@/app/admin/leads-chatwit/components/analise-preliminar-drawer";
+import { RecursoDialog } from "@/app/admin/leads-chatwit/components/recurso-dialog";
 
 interface LeadDialogsProps {
 	lead: LeadChatwit;
@@ -59,6 +60,9 @@ interface LeadDialogsProps {
 
 	showAnaliseDialog: boolean;
 	setShowAnaliseDialog: (open: boolean) => void;
+
+	showRecursoDialog: boolean;
+	setShowRecursoDialog: (open: boolean) => void;
 
 	showAnalisePreviewDrawer: boolean;
 	setShowAnalisePreviewDrawer: (open: boolean) => void;
@@ -108,9 +112,20 @@ interface LeadDialogsProps {
 	onValidarAnalise: (data: any) => Promise<void>;
 	onExecuteDeleteAllFiles: () => Promise<void>;
 	onExecuteManuscritoDelete: () => Promise<void>;
+	onValidarRecurso: (data: { html: string; textoRecurso: string; message?: string; accessToken?: string }) => Promise<void>;
+	onCancelarRecurso: () => Promise<void>;
+	onGerarRecurso: () => Promise<void>;
 
 	// Dados auxiliares
 	convertedImages: string[];
+
+	// Estados locais do recurso
+	localRecursoState: {
+		recursoUrl?: string;
+		aguardandoRecurso: boolean;
+		recursoPreliminar?: any;
+		recursoValidado: boolean;
+	};
 }
 
 export function LeadDialogs({
@@ -140,6 +155,8 @@ export function LeadDialogs({
 	setConfirmDeleteEspelho,
 	showAnaliseDialog,
 	setShowAnaliseDialog,
+	showRecursoDialog,
+	setShowRecursoDialog,
 	showAnalisePreviewDrawer,
 	setShowAnalisePreviewDrawer,
 	confirmDeleteAllFiles,
@@ -167,7 +184,11 @@ export function LeadDialogs({
 	onValidarAnalise,
 	onExecuteDeleteAllFiles,
 	onExecuteManuscritoDelete,
+	onValidarRecurso,
+	onCancelarRecurso,
+	onGerarRecurso,
 	convertedImages,
+	localRecursoState,
 }: LeadDialogsProps) {
 	const displayName = getDisplayName(lead);
 
@@ -378,6 +399,27 @@ export function LeadDialogs({
 				leadId={lead.id}
 				onSave={onSaveAnalisePreliminar}
 				onValidar={onValidarAnalise}
+			/>
+
+			{/* Diálogo de Recurso (Editor Rich Text) */}
+			<RecursoDialog
+				isOpen={showRecursoDialog}
+				onClose={() => setShowRecursoDialog(false)}
+				leadId={lead.id}
+				sourceId={lead.sourceId}
+				recursoUrl={localRecursoState.recursoUrl || null}
+				recursoArgumentacaoUrl={lead.argumentacaoUrl || null}
+				anotacoes={lead.anotacoes || null}
+				aguardandoRecurso={localRecursoState.aguardandoRecurso}
+				recursoPreliminar={localRecursoState.recursoPreliminar}
+				recursoValidado={localRecursoState.recursoValidado}
+				analiseValidada={localAnaliseState.analiseValidada}
+				temAnalisePreliminar={Boolean(localAnaliseState.analisePreliminar)}
+				onSaveAnotacoes={onSaveAnotacoes}
+				onEnviarPdf={onEnviarPdf}
+				onCancelarRecurso={onCancelarRecurso}
+				onValidarRecurso={onValidarRecurso}
+				onGerarRecurso={onGerarRecurso}
 			/>
 
 			{/* Confirmação de Exclusão de Todos os Arquivos */}

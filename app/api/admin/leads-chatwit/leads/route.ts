@@ -387,7 +387,7 @@ export async function GET(request: Request): Promise<Response> {
 							phone: lead.lead.phone,
 						}
 					: "NULL",
-				nomeReal: lead.nomeReal || "undefined",
+				nomeReal: lead.nomeReal ?? null,
 			});
 		});
 
@@ -462,6 +462,15 @@ export async function GET(request: Request): Promise<Response> {
 				situacao: lead.situacao || null,
 				inscricao: lead.inscricao || null,
 				examesParticipados: lead.examesParticipados || null,
+				// Campos de recurso
+				recursoUrl: lead.recursoUrl || null,
+				recursoPreliminar: lead.recursoPreliminar || null,
+				aguardandoRecurso: lead.aguardandoRecurso || false,
+				recursoValidado: lead.recursoValidado || false,
+				recursoArgumentacaoUrl: lead.recursoArgumentacaoUrl || null,
+				// Campos de espelho processamento
+				espelhoProcessado: lead.espelhoProcessado || false,
+				aguardandoEspelho: lead.aguardandoEspelho || false,
 				// Campos de especialidade e espelho padrão
 				especialidade: lead.especialidade || null,
 				espelhoPadraoId: lead.espelhoPadraoId || null,

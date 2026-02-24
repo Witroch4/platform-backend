@@ -1030,6 +1030,87 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 			}
 		}
 
+		// Step 13.7: Template QUICK_REPLY text-match fallback
+		// Quando o Chatwit não parseia o payload de botões QUICK_REPLY de template,
+		// a mensagem chega como texto puro. Tentamos match pelo FlowOrchestrator
+		// ANTES do pipeline de classificação para evitar que o LLM processe o clique.
+		if (!isFlowBuilderButton && !buttonReactionResponse && textInput && channelType.toLowerCase().includes("whatsapp")) {
+			try {
+				const flowOrchestrator = new FlowOrchestrator();
+
+				const socialwiseMetadata = getSocialWiseChatwitData(validPayload.context);
+				const chatwitBaseUrl =
+					((socialwiseMetadata as Record<string, unknown>)?.chatwit_base_url as string) ||
+					((validPayload.metadata as Record<string, unknown>)?.chatwit_base_url as string) ||
+					process.env.CHATWIT_BASE_URL ||
+					"";
+				const chatwitAccessToken =
+					((validPayload.metadata as Record<string, unknown>)?.chatwit_agent_bot_token as string) ||
+					process.env.CHATWIT_AGENT_BOT_TOKEN ||
+					"";
+				const conversationDisplayId =
+					Number(
+						(validPayload.metadata as Record<string, unknown>)?.conversation_display_id ||
+						(validPayload.context?.conversation as Record<string, unknown>)?.display_id,
+					) || undefined;
+
+				const deliveryContext: DeliveryContext = {
+					accountId: Number(chatwitAccountId) || 0,
+					conversationId:
+						Number(socialwiseMetadata?.conversation_data?.id || validPayload.context?.conversation?.id) || 0,
+					conversationDisplayId,
+					inboxId: Number(inboxRow?.inboxId || externalInboxNumeric) || 0,
+					contactId: Number(socialwiseMetadata?.contact_data?.id || validPayload.context?.contact?.id) || 0,
+					contactName: contactName || "",
+					contactPhone: (typeof contactPhone === "string" ? contactPhone : "") || "",
+					channelType: "whatsapp",
+					sourceMessageId: wamid || undefined,
+					prismaInboxId: inboxRow?.id || undefined,
+					chatwitAccessToken,
+					chatwitBaseUrl,
+				};
+
+				const flowPayload: ChatwitWebhookPayload = {
+					session_id: validPayload.session_id,
+					text: textInput,
+					channel_type: validPayload.channel_type,
+					language: validPayload.language,
+					metadata: {
+						...(validPayload.metadata as Record<string, unknown>),
+						chatwit_base_url: chatwitBaseUrl,
+						chatwit_agent_bot_token: chatwitAccessToken,
+					},
+					message: {
+						content: textInput,
+						content_attributes: validPayload.context?.message?.content_attributes as Record<string, unknown>,
+					},
+				};
+
+				const flowResult = await flowOrchestrator.handle(flowPayload, deliveryContext);
+
+				if (flowResult.syncResponse) {
+					webhookLogger.info("[FlowEngine] Template QUICK_REPLY resumido via text-match (sync)", {
+						messageText: textInput,
+						traceId,
+					});
+					logFinalResponse(flowResult.syncResponse, 200, traceId);
+					return NextResponse.json(flowResult.syncResponse, { status: 200 });
+				} else if (flowResult.waitingInput) {
+					webhookLogger.info("[FlowEngine] Template QUICK_REPLY resumido via text-match (async)", { traceId });
+					const asyncResponse = { status: "accepted", async: true };
+					logFinalResponse(asyncResponse, 200, traceId);
+					return NextResponse.json(asyncResponse, { status: 200 });
+				}
+				// Se flowResult não tem syncResponse nem waitingInput, não houve match → continua para LLM
+			} catch (flowError) {
+				webhookLogger.warn("[FlowEngine] Erro no text-match fallback (não-bloqueante)", {
+					error: flowError instanceof Error ? flowError.message : String(flowError),
+					traceId,
+				});
+				// Continua para pipeline de classificação
+			}
+		}
+
 		// Step 14: Main SocialWise Flow Processing
 		try {
 			const processorContext = {

@@ -38,17 +38,19 @@ function formatReaction(reaction: any) {
 		type = "text";
 	}
 
-	// Extract linkedMessageId from action if it's a send_interactive:id or send_template:id
+	// Extract linkedMessageId from action if it's a send_interactive:id
+	// For send_template:id, use linkedTemplateMetaId (Meta template ID, NOT internal ID)
 	let linkedMessageId: string | null = null;
+	let linkedTemplateMetaId: string | null = null;
 	if (action && typeof action === "string") {
 		if (action.startsWith("send_interactive:")) {
 			linkedMessageId = action.replace("send_interactive:", "");
 		} else if (action.startsWith("send_template:")) {
-			linkedMessageId = action.replace("send_template:", "");
+			linkedTemplateMetaId = action.replace("send_template:", "");
 		}
 	}
 	// Also check if actionPayload has explicit messageId
-	if (!linkedMessageId && actionPayload?.messageId) {
+	if (!linkedMessageId && !linkedTemplateMetaId && actionPayload?.messageId) {
 		linkedMessageId = actionPayload.messageId;
 	}
 
@@ -61,7 +63,8 @@ function formatReaction(reaction: any) {
 		textReaction: textReaction || null,
 		textResponse: textReaction || null, // Alias for compatibility
 		action: action || null,
-		linkedMessageId, // ID da mensagem interativa mapeada
+		linkedMessageId, // ID da mensagem interativa interna (send_interactive:CUID)
+		linkedTemplateMetaId, // Meta template ID numérico (send_template:META_ID)
 		actionPayload: actionPayload || null, // Include full actionPayload for compatibility
 		description: reaction.description || null,
 		isActive: true, // MapeamentoBotao doesn't have isActive field, assume active

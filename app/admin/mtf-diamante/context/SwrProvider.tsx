@@ -229,13 +229,15 @@ function SwrProviderContent({ children, initialData }: SwrProviderProps) {
 		return buttonReactionsHook.reactions.map((reaction: any) => {
 			const action = reaction.actionPayload?.action || reaction.action || "";
 
-			// Extract linkedMessageId from action if it's send_interactive:id or send_template:id
+			// Extract linkedMessageId (interactive messages) and linkedTemplateMetaId (WP templates)
+			// Backend already separates these, but we also handle local extraction as fallback
 			let linkedMessageId = reaction.linkedMessageId || reaction.actionPayload?.messageId || null;
-			if (!linkedMessageId && action && typeof action === "string") {
+			let linkedTemplateMetaId = reaction.linkedTemplateMetaId || null;
+			if (!linkedMessageId && !linkedTemplateMetaId && action && typeof action === "string") {
 				if (action.startsWith("send_interactive:")) {
 					linkedMessageId = action.replace("send_interactive:", "");
 				} else if (action.startsWith("send_template:")) {
-					linkedMessageId = action.replace("send_template:", "");
+					linkedTemplateMetaId = action.replace("send_template:", "");
 				}
 			}
 
@@ -248,7 +250,8 @@ function SwrProviderContent({ children, initialData }: SwrProviderProps) {
 				textReaction: reaction.actionPayload?.textReaction || reaction.textReaction || reaction.description || "", // Alias for compatibility
 				label: reaction.description || reaction.textReaction || "", // Legacy compatibility
 				action, // Use actionPayload.action first, then direct action field as fallback
-				linkedMessageId, // ID da mensagem interativa mapeada (extraído de send_interactive:id)
+				linkedMessageId, // ID da mensagem interativa interna (send_interactive:CUID)
+				linkedTemplateMetaId, // Meta template ID numérico (send_template:META_ID)
 				actionPayload: reaction.actionPayload, // Keep original actionPayload for full data access
 				createdAt: reaction.createdAt,
 				updatedAt: reaction.updatedAt,

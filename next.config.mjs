@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-	serverExternalPackages: ["sharp", "pdf-parse"],
+	serverExternalPackages: ["sharp", "pdf-parse", "html-to-docx"],
 
 	// Production optimizations
 	productionBrowserSourceMaps: false,

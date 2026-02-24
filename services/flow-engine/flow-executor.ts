@@ -15,8 +15,10 @@ import { ChatwitDeliveryService, createDeliveryService } from "./chatwit-deliver
 import { VariableResolver } from "./variable-resolver";
 import { addChatwitActionJob } from "@/lib/queue/flow-builder-queues";
 import { elementsToLegacyFields } from "@/lib/flow-builder/interactiveMessageElements";
-import { buildTemplateDispatchPayload } from "@/lib/flow-builder/templateElements";
+import { buildChatwitTemplateParams } from "@/lib/flow-builder/templateElements";
 import { debugLogRuntimeFlow } from "@/lib/flow-builder/exportImport";
+import { getPrismaInstance } from "@/lib/connections";
+import { METAPayloadBuilder } from "@/lib/socialwise-flow/meta-payload-builder";
 import type { InteractiveMessageElement, TemplateNodeData } from "@/types/flow-builder";
 import type {
 	DeliveryContext,
@@ -459,6 +461,7 @@ export class FlowExecutor {
 
 			case "INTERACTIVE_MESSAGE": {
 				const config = node.config as {
+					messageId?: string;
 					interactivePayload?: Record<string, unknown>;
 					elements?: InteractiveMessageElement[];
 					body?: string;
@@ -466,6 +469,15 @@ export class FlowExecutor {
 					footer?: string;
 					buttons?: Array<{ id: string; title: string }>;
 				};
+
+				// Resolver messageId: carrega InteractiveContent do banco
+				if (config.messageId && !config.interactivePayload && !config.elements?.length && !config.body) {
+					const resolvedFromDb = await this.resolveMessageId(config.messageId);
+					if (resolvedFromDb) {
+						bridge.setHarvestedInteractive(resolvedFromDb);
+						break;
+					}
+				}
 
 				// Converter elements para formato legado se necessário
 				let effectiveConfig = config;
@@ -777,6 +789,7 @@ export class FlowExecutor {
 		directlyAfterButton = false,
 	): Promise<string> {
 		const config = node.config as {
+			messageId?: string;
 			interactivePayload?: Record<string, unknown>;
 			elements?: InteractiveMessageElement[];
 			body?: string;
@@ -796,6 +809,23 @@ export class FlowExecutor {
 				type: "reaction",
 				emoji: pendingReaction.emoji,
 				targetMessageId: pendingReaction.targetMessageId,
+			});
+		}
+
+		// Resolver messageId: carrega InteractiveContent do banco via METAPayloadBuilder
+		if (config.messageId && !config.interactivePayload && !config.elements?.length && !config.body) {
+			const resolvedFromDb = await this.resolveMessageId(config.messageId);
+			if (resolvedFromDb) {
+				await this.deliver(bridge, { type: "interactive", interactivePayload: resolvedFromDb });
+				const hasButtons = (resolvedFromDb as Record<string, unknown>)?.action;
+				if (hasButtons) {
+					return "WAITING_INPUT";
+				}
+				return this.findNextNodeId(flow, node);
+			}
+			log.warn("[FlowExecutor] INTERACTIVE_MESSAGE: messageId não resolvido, tentando config inline", {
+				messageId: config.messageId,
+				nodeId: node.id,
 			});
 		}
 
@@ -1008,13 +1038,43 @@ export class FlowExecutor {
 			};
 		}
 
-		// Construir payload do template
-		const templatePayload = buildTemplateDispatchPayload(effectiveConfig, this.context.contactPhone ?? "", variableValues);
+		// Mapear botões QUICK_REPLY → flow_button_* IDs das edges do flow
+		// As edges saindo do template node têm buttonId (ex: "flow_button_1771787428331_clbeq0")
+		// que correspondem aos botões QUICK_REPLY por ordem/índice.
+		const buttonPayloads: Record<number, string> = {};
+		if (effectiveConfig.buttons && effectiveConfig.buttons.length > 0) {
+			const templateEdges = flow.edges.filter((e) => e.sourceNodeId === node.id && e.buttonId);
+			const quickReplyButtons = effectiveConfig.buttons
+				.map((btn, idx) => ({ btn, idx }))
+				.filter(({ btn }) => btn.type === "QUICK_REPLY");
+
+			// Match edges to QUICK_REPLY buttons by order:
+			// Each edge with buttonId corresponds to a QUICK_REPLY button (in order of appearance)
+			for (let i = 0; i < quickReplyButtons.length && i < templateEdges.length; i++) {
+				const { idx: originalIndex } = quickReplyButtons[i];
+				const edge = templateEdges[i];
+				if (edge.buttonId) {
+					buttonPayloads[originalIndex] = edge.buttonId;
+				}
+			}
+
+			if (Object.keys(buttonPayloads).length > 0) {
+				log.debug("[FlowExecutor] TEMPLATE: QUICK_REPLY payloads mapeados", {
+					buttonPayloads,
+					edgesCount: templateEdges.length,
+					quickReplyCount: quickReplyButtons.length,
+				});
+			}
+		}
+
+		// Construir payload do template (com payloads dos botões QUICK_REPLY)
+		const templatePayload = buildChatwitTemplateParams(effectiveConfig, variableValues, buttonPayloads);
 
 		log.debug("[FlowExecutor] TEMPLATE", {
 			templateName: config.templateName,
 			variablesResolved: Object.keys(variableValues).length,
 			hasButtons: (config.buttons?.length ?? 0) > 0,
+			hasQuickReplyPayloads: Object.keys(buttonPayloads).length > 0,
 			hasRuntimeOverrides: !!(config.runtimeMediaUrl || config.runtimeVariables || config.runtimeButtonParams),
 		});
 
@@ -1182,7 +1242,10 @@ export class FlowExecutor {
 	private async deliver(bridge: SyncBridge, payload: DeliveryPayload): Promise<void> {
 		// Mídia e templates nunca na ponte — vão direto via API
 		if (payload.type === "media" || payload.type === "template") {
-			await this.delivery.deliver(this.context, payload);
+			const result = await this.delivery.deliver(this.context, payload);
+			if (!result.success) {
+				throw new Error(result.error ?? "Falha na entrega");
+			}
 			return;
 		}
 
@@ -1193,7 +1256,10 @@ export class FlowExecutor {
 		}
 
 		// Ponte já fechou → API
-		await this.delivery.deliver(this.context, payload);
+		const result = await this.delivery.deliver(this.context, payload);
+		if (!result.success) {
+			throw new Error(result.error ?? "Falha na entrega");
+		}
 	}
 
 	// ---------------------------------------------------------------------------
@@ -1245,6 +1311,57 @@ export class FlowExecutor {
 		}
 
 		return { text: payload.content };
+	}
+
+	/**
+	 * Resolve messageId de um nó INTERACTIVE_MESSAGE.
+	 * Carrega Template + InteractiveContent do banco e converte para WhatsApp format
+	 * usando METAPayloadBuilder (mesma lógica do MTF Diamante).
+	 */
+	private async resolveMessageId(messageId: string): Promise<Record<string, unknown> | null> {
+		try {
+			const prisma = getPrismaInstance();
+
+			const template = await prisma.template.findUnique({
+				where: { id: messageId },
+				include: {
+					interactiveContent: {
+						include: {
+							header: true,
+							body: true,
+							footer: true,
+							actionCtaUrl: true,
+							actionReplyButton: true,
+							actionList: true,
+							actionFlow: true,
+							actionLocationRequest: true,
+						},
+					},
+				},
+			});
+
+			if (!template?.interactiveContent) {
+				log.warn("[FlowExecutor] messageId não encontrado ou sem interactiveContent", { messageId });
+				return null;
+			}
+
+			const builder = new METAPayloadBuilder();
+			const payload = await builder.buildInteractiveMessagePayload(template.interactiveContent);
+
+			log.debug("[FlowExecutor] messageId resolvido via METAPayloadBuilder", {
+				messageId,
+				templateName: template.name,
+				type: payload?.type,
+			});
+
+			return payload as Record<string, unknown>;
+		} catch (err) {
+			log.error("[FlowExecutor] Erro ao resolver messageId", {
+				messageId,
+				error: err instanceof Error ? err.message : String(err),
+			});
+			return null;
+		}
 	}
 
 	private buildInteractivePayload(config: {

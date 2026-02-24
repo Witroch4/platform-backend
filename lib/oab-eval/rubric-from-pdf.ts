@@ -3,12 +3,6 @@ import { Buffer } from "node:buffer";
 import pdfParse from "pdf-parse";
 import { RubricSchema, type RubricPayload } from "./types";
 import { jsonrepair } from "jsonrepair";
-import {
-	parseGabaritoDeterministico,
-	verificarPontuacao,
-	type GabaritoAtomico,
-	type ParseMetaInput,
-} from "../oab/gabarito-parser-deterministico";
 
 interface BuildRubricOptions {
 	fileName?: string;
@@ -27,25 +21,8 @@ async function ensureOpenAIClient(): Promise<OpenAIClientModule> {
 	return openaiClientModule;
 }
 
-function composeEmbeddingText(item: RubricPayload["itens"][number], meta?: RubricPayload["meta"]) {
-	const headerParts = ["OAB"];
-	if (meta?.exam) headerParts.push(String(meta.exam));
-	if (meta?.area) headerParts.push(String(meta.area));
-	if (meta?.caderno) headerParts.push(String(meta.caderno));
-
-	const fundamentals = item.fundamentos?.length ? ` Fundamentos: ${item.fundamentos.join("; ")}.` : "";
-	const keywords = item.palavras_chave?.length ? ` Palavras-chave: ${item.palavras_chave.join(", ")}.` : "";
-	return (
-		`${headerParts.join(" ")} | ${item.escopo} | ${item.questao} | ${item.id} :: ${item.descricao}.` +
-		fundamentals +
-		keywords +
-		" Tarefa: localizar no texto do candidato trechos que atendam integral ou parcialmente a este subitem."
-	);
-}
-
 export async function extractTextFromPdf(buffer: Buffer): Promise<string> {
 	const result = await pdfParse(buffer, { pagerender: undefined });
-	// Normaliza CRLF, remove NUL chars e espaços antes da quebra de linha
 	return result.text
 		.replace(/\r\n/g, "\n")
 		.replace(/\u0000/g, "")
@@ -53,45 +30,396 @@ export async function extractTextFromPdf(buffer: Buffer): Promise<string> {
 		.replace(/[ \t]+\n/g, "\n");
 }
 
-async function buildRubricFromPdfLLM(buffer: Buffer, options: BuildRubricOptions = {}, preExtractedText?: string) {
-	const rawText = preExtractedText ?? (await extractTextFromPdf(buffer));
+// ── Helpers ──────────────────────────────────────────────────────────────
 
-	// Log do texto bruto extraído
-	console.log("[OAB::TEXT_EXTRACTION] Texto bruto extraído:", {
-		totalChars: rawText.length,
-		totalLines: rawText.split("\n").length,
-	});
-	console.log("[OAB::TEXT_EXTRACTION] Texto bruto completo:");
-	console.log(rawText);
+function convertDate(date: string | undefined) {
+	if (!date) return undefined;
+	const m = date.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+	if (!m) return date;
+	return `${m[3]}-${m[2]}-${m[1]}`;
+}
+
+function extractMeta(rawText: string) {
+	const exam = rawText.match(/\d+º Exame de Ordem Unificado/i)?.[0]?.trim() ?? "Exame OAB";
+	const area = rawText.match(/ÁREA:\s*([^\n]+)/i)?.[1]?.trim() ?? "Área não identificada";
+	const dataBruta = rawText.match(/Aplicada em\s*([^\n]+)/i)?.[1]?.trim();
+	return { exam, area, data_aplicacao: convertDate(dataBruta), fonte: "Padrão de Resposta da FGV" };
+}
+
+/** Extracts max score from a range like "0,00/0,40/0,50" → 0.50 */
+function parseScoreRange(rangeStr: string): number {
+	const scores: number[] = [];
+	const rx = /(\d{1,2})[,.](\d{2})/g;
+	let m: RegExpExecArray | null;
+	while ((m = rx.exec(rangeStr)) !== null) {
+		const n = Number(`${m[1]}.${m[2]}`);
+		if (!Number.isNaN(n)) scores.push(n);
+	}
+	return scores.length ? Math.max(...scores) : 0;
+}
+
+/** Joins multi-line text that was broken by PDF extraction */
+function joinLines(lines: string[]): string {
+	return lines
+		.join(" ")
+		.replace(/\s+/g, " ")
+		.replace(/-\s+/g, "") // rejoin hyphenated words
+		.trim();
+}
+
+/** Clean description - remove score range trailing (e.g. "0,00/0,10") but keep inline (0,xx) */
+function cleanDescTrailingRange(desc: string): string {
+	return desc.replace(/\s+0[,.]00(?:\s*\/\s*\d{1,2}[,.]\d{2})+\s*$/, "").trim();
+}
+
+// ── Simple Deterministic Parser ──────────────────────────────────────────
+
+type ParsedQuesito = {
+	questao: "PEÇA" | "Q1" | "Q2" | "Q3" | "Q4";
+	rotulo: string;
+	indice: number;
+	descricao: string;
+	descricao_bruta: string;
+	peso_maximo: number;
+	pesos_brutos: number[];
+};
+
+function parseSimpleDeterministic(rawText: string): ParsedQuesito[] | null {
+	const quesitos: ParsedQuesito[] = [];
+
+	// Normalize text
+	const text = rawText
+		.replace(/\u00a0/g, " ")
+		.replace(/-\n/g, "")        // rejoin hyphenated line breaks
+		.replace(/(\d)[,.][\s\n]*(\d{2})/g, "$1,$2"); // fix broken decimals
+
+	// Split into sections: PEÇA and Q1-Q4
+	const RX_PECA = /PADR[ÃA]O DE RESPOSTA\s*[–-]\s*PE[ÇC]A/i;
+	const RX_Q = /PADR[ÃA]O DE RESPOSTA\s*[–-]\s*QUEST[ÃA]O\s*(0?[1-4])/gi;
+	const RX_DISTR = /Distribui[çc][aã]o dos Pontos/i;
+
+	type Section = { tipo: "PEÇA" | "Q1" | "Q2" | "Q3" | "Q4"; body: string };
+	const sections: Section[] = [];
+
+	// Find PEÇA section
+	const pecaMatch = RX_PECA.exec(text);
+	if (pecaMatch) {
+		const from = pecaMatch.index;
+		// Find next section start
+		const restAfterPeca = text.slice(from + 1);
+		const nextQ = /PADR[ÃA]O DE RESPOSTA\s*[–-]\s*QUEST[ÃA]O/i.exec(restAfterPeca);
+		const end = nextQ ? from + 1 + nextQ.index : text.length;
+		const block = text.slice(from, end);
+		const distrIdx = block.search(RX_DISTR);
+		if (distrIdx >= 0) {
+			sections.push({ tipo: "PEÇA", body: block.slice(distrIdx) });
+		}
+	}
+
+	// Find Q1-Q4 sections
+	const qPositions: Array<{ tipo: "Q1" | "Q2" | "Q3" | "Q4"; index: number }> = [];
+	let qMatch: RegExpExecArray | null;
+	const rxQ = new RegExp(RX_Q.source, "gi");
+	while ((qMatch = rxQ.exec(text)) !== null) {
+		const tipo = `Q${Number(qMatch[1])}` as "Q1" | "Q2" | "Q3" | "Q4";
+		qPositions.push({ tipo, index: qMatch.index });
+	}
+	for (let i = 0; i < qPositions.length; i++) {
+		const { tipo, index } = qPositions[i];
+		const end = qPositions[i + 1] ? qPositions[i + 1].index : text.length;
+		const block = text.slice(index, end);
+		const distrIdx = block.search(RX_DISTR);
+		if (distrIdx >= 0) {
+			sections.push({ tipo, body: block.slice(distrIdx) });
+		}
+	}
+
+	if (!sections.length) return null;
+
+	// Parse each section
+	for (const section of sections) {
+		const { tipo, body } = section;
+
+		// Skip header "ITEM  PONTUAÇÃO"
+		const hdrMatch = /ITEM\s+PONTUA[ÇC][AÃ]O/i.exec(body);
+		const content = hdrMatch ? body.slice(hdrMatch.index + hdrMatch[0].length) : body;
+
+		const lines = content.split("\n").map((l) => l.trim()).filter(Boolean);
+
+		// Filter noise lines (section labels)
+		const filteredLines = lines.filter((line) => {
+			if (/^(ITEM\s+PONTUA|PONTUA[ÇC][AÃ]O|ITEM)$/i.test(line)) return false;
+			if (/^ORDEM DOS ADVOGADOS/i.test(line)) return false;
+			if (/^Padrão de Resposta/i.test(line)) return false;
+			if (/^Prova Prático/i.test(line)) return false;
+			if (/^\d+º Exame/i.test(line)) return false;
+			if (/^ÁREA:/i.test(line)) return false;
+			if (/^Aplicada em/i.test(line)) return false;
+			return true;
+		});
+
+		// For PEÇA: items start with "1.", "2.", ..., "16." etc
+		// For Questões: items start with "A.", "B.", "C.", "D."
+		const isItemStart = tipo === "PEÇA"
+			? (s: string) => /^\d+[A-Z]?\.\s+/i.test(s)
+			: (s: string) => /^[A-D]\d*\.\s+/i.test(s);
+
+		// Detect section title lines (Endereçamento, Qualificação, etc.)
+		const isSectionTitle = (s: string) =>
+			/^(Endereçamento|Qualificação das partes|Alegações iniciais|Fundamentação|Pedidos|Pedidos e requerimentos|Fechamento|Mérito)$/i.test(s);
+
+		// Detect score range line: "0,00/0,10/0,20/..."
+		const isScoreRange = (s: string) => /^0[,.]00(?:\s*\/\s*\d{1,2}[,.]\d{2})+/.test(s.trim());
+
+		// Parse items
+		type RawItem = { rotulo: string; textLines: string[]; scoreRangeLines: string[] };
+		const rawItems: RawItem[] = [];
+		let current: RawItem | null = null;
+
+		for (const line of filteredLines) {
+			if (isSectionTitle(line)) continue; // skip section titles
+
+			if (isItemStart(line)) {
+				if (current) rawItems.push(current);
+				const dotIdx = line.indexOf(".");
+				const rotulo = line.slice(0, dotIdx).trim();
+				const rest = line.slice(dotIdx + 1).trim();
+				current = { rotulo, textLines: [rest], scoreRangeLines: [] };
+			} else if (current && isScoreRange(line)) {
+				current.scoreRangeLines.push(line);
+			} else if (current) {
+				// Check if this line is a continuation or a dangling score range
+				if (/^\d{1,2}[,.]\d{2}(?:\s*\/\s*\d{1,2}[,.]\d{2})*\s*$/.test(line)) {
+					current.scoreRangeLines.push(line);
+				} else {
+					current.textLines.push(line);
+				}
+			}
+		}
+		if (current) rawItems.push(current);
+
+		// For PEÇA: merge sub-items that share the same base number (11, 11A, 11B → quesito 11)
+		type MergedItem = { baseNum: number; parts: RawItem[] };
+		const merged: MergedItem[] = [];
+
+		if (tipo === "PEÇA") {
+			for (const raw of rawItems) {
+				const baseNum = parseInt(raw.rotulo.match(/^\d+/)?.[0] ?? "0", 10);
+				const existing = merged.find((m) => m.baseNum === baseNum);
+				if (existing) {
+					existing.parts.push(raw);
+				} else {
+					merged.push({ baseNum, parts: [raw] });
+				}
+			}
+		} else {
+			// Questões: each A/B is its own item, no merging
+			for (const raw of rawItems) {
+				const idx = raw.rotulo.charCodeAt(0) - 64; // A=1, B=2
+				merged.push({ baseNum: idx, parts: [raw] });
+			}
+		}
+
+		// Convert merged items to ParsedQuesito
+		for (const group of merged) {
+			// Combine all parts into one quesito
+			const allTextLines: string[] = [];
+			const allScoreRangeLines: string[] = [];
+			for (const part of group.parts) {
+				// If multiple parts (e.g. 11, 11A, 11B), prepend the sub-label
+				if (group.parts.length > 1) {
+					allTextLines.push(`${part.rotulo}. ${joinLines(part.textLines)}`);
+				} else {
+					allTextLines.push(...part.textLines);
+				}
+				allScoreRangeLines.push(...part.scoreRangeLines);
+			}
+
+			const descBruta = group.parts.length > 1
+				? allTextLines.join(" ")
+				: joinLines(allTextLines);
+			const desc = cleanDescTrailingRange(descBruta);
+
+			// Extract peso_maximo from score range lines (take max across all parts)
+			let pesoMaximo = 0;
+			for (const part of group.parts) {
+				const rangeStr = part.scoreRangeLines.join(" ");
+				if (rangeStr) {
+					const partMax = parseScoreRange(rangeStr);
+					pesoMaximo += partMax; // sum sub-item maxes (11=0.10, 11A=0.20, 11B=0.20 → 0.50)
+				}
+			}
+
+			// If no score range lines, try inline (0,xx) tokens
+			if (!pesoMaximo) {
+				const inlinePesos: number[] = [];
+				const rx = /\([\s]*(\d{1,2})[\s]*[,.][\s]*(\d{2})[\s]*\)/g;
+				let im: RegExpExecArray | null;
+				while ((im = rx.exec(descBruta)) !== null) {
+					const n = Number(`${im[1]}.${im[2]}`);
+					if (!Number.isNaN(n) && n > 0) inlinePesos.push(n);
+				}
+				pesoMaximo = inlinePesos.reduce((a, b) => a + b, 0);
+			}
+
+			// Extract all brute weight values from description
+			const pesosBrutos: number[] = [];
+			const rxBruto = /\([\s]*(\d{1,2})[\s]*[,.][\s]*(\d{2})[\s]*\)/g;
+			let bm: RegExpExecArray | null;
+			while ((bm = rxBruto.exec(descBruta)) !== null) {
+				const n = Number(`${bm[1]}.${bm[2]}`);
+				if (!Number.isNaN(n) && n > 0) pesosBrutos.push(Number(n.toFixed(2)));
+			}
+
+			const rotulo = tipo === "PEÇA"
+				? String(group.baseNum)
+				: group.parts[0].rotulo;
+
+			quesitos.push({
+				questao: tipo,
+				rotulo,
+				indice: group.baseNum,
+				descricao: desc,
+				descricao_bruta: descBruta,
+				peso_maximo: Number(pesoMaximo.toFixed(2)),
+				pesos_brutos: pesosBrutos,
+			});
+		}
+	}
+
+	return quesitos.length ? quesitos : null;
+}
+
+// ── Convert simple parsed data to RubricPayload ──────────────────────────
+
+function buildPayloadFromQuesitos(
+	quesitos: ParsedQuesito[],
+	meta: ReturnType<typeof extractMeta>,
+	fileName?: string,
+): RubricPayload {
+	const itens: RubricPayload["itens"] = [];
+	const grupos: NonNullable<RubricPayload["grupos"]> = [];
+
+	// Numeração global: Peça quesitos 1-16, depois Questão 1A, 1B, 2A, 2B, etc.
+	let globalIdx = 0;
+
+	for (const q of quesitos) {
+		globalIdx++;
+		const escopo = q.questao === "PEÇA" ? "Peça" : "Questão";
+
+		// IDs legíveis: "Quesito 1", "Quesito 2", ..., "Quesito 17" (Q1-A), "Quesito 18" (Q1-B), etc.
+		const qLabel = `Quesito ${globalIdx}`;
+		const subitemId = qLabel;
+		const grupoId = qLabel;
+
+		// Rótulo humano: "1", "2", ..., "16" para peça | "Q1-A", "Q1-B", "Q2-A", etc. para questões
+		const rotulo = q.questao === "PEÇA"
+			? String(q.indice)
+			: `${q.questao}-${q.rotulo}`;
+
+		itens.push({
+			id: subitemId,
+			escopo,
+			questao: q.questao,
+			descricao: q.descricao,
+			peso: q.peso_maximo > 0 ? q.peso_maximo : null,
+			fundamentos: [],
+			alternativas_grupo: undefined,
+			palavras_chave: [],
+			embedding_text: "",
+		});
+
+		grupos.push({
+			id: grupoId,
+			escopo,
+			questao: q.questao,
+			indice: globalIdx,
+			rotulo,
+			segmento: null,
+			descricao: `${q.descricao}\n${q.pesos_brutos.length ? q.pesos_brutos.map((p) => p.toFixed(2).replace(".", ",")).join("/") : ""}`.trim(),
+			descricao_bruta: q.descricao_bruta,
+			descricao_limpa: q.descricao,
+			peso_maximo: q.peso_maximo,
+			pesos_opcoes: q.pesos_brutos.length ? q.pesos_brutos : (q.peso_maximo > 0 ? [q.peso_maximo] : []),
+			pesos_brutos: q.pesos_brutos,
+			subitens: [subitemId],
+		});
+	}
+
+	return {
+		meta: {
+			...meta,
+			versao_schema: "2.0",
+			gerado_em: new Date().toISOString(),
+			fileName,
+		},
+		schema_docs: {
+			subitem_fields: ["id", "escopo", "questao", "descricao", "peso", "fundamentos", "alternativas_grupo", "palavras_chave", "embedding_text"],
+			group_fields: ["id", "escopo", "questao", "indice", "rotulo", "segmento", "descricao", "descricao_bruta", "descricao_limpa", "peso_maximo", "pesos_opcoes", "pesos_brutos", "subitens"],
+			notas: [
+				"Cada quesito da peça (1-16) e cada item das questões (A/B) é um grupo com exatamente 1 subitem.",
+				"descricao preserva os tokens (0,xx) originais do padrão de resposta.",
+				"peso_maximo é o valor máximo que o quesito pode valer.",
+			],
+		},
+		itens,
+		grupos,
+	};
+}
+
+// ── AI Fallback ──────────────────────────────────────────────────────────
+
+const LLM_PROMPT_TEMPLATE = `Você receberá a transcrição de um PADRÃO DE RESPOSTA oficial da prova prático-profissional da OAB (FGV).
+
+Sua tarefa é extrair APENAS a "Distribuição dos Pontos" — ou seja, os quesitos numerados da PEÇA e das QUESTÕES.
+
+REGRAS:
+1. A PEÇA geralmente tem 16 quesitos numerados (1. a 16.). Cada quesito tem um texto descritivo com tokens de pontuação entre parênteses, ex: "(0,20)".
+2. Após a Peça, há 4 QUESTÕES (Q1 a Q4). Cada questão tem 2 itens: A e B, com seus textos e pontuações.
+3. NÃO inclua títulos de seção (Endereçamento, Qualificação, etc.) — apenas os quesitos numerados.
+4. NÃO atomize: cada número (1., 2., ... 16.) é UM quesito. Cada letra (A., B.) é UM quesito.
+5. Mantenha os tokens (0,xx) no texto da descrição.
+6. peso_maximo é o valor máximo do range de pontuação (ex: "0,00/0,40/0,50" → 0.50).
+
+Responda com JSON VÁLIDO neste formato exato:
+{
+  "quesitos": [
+    {
+      "questao": "PEÇA",
+      "rotulo": "1",
+      "indice": 1,
+      "descricao": "Ao Juízo da Vara Única da Comarca do Município Alfa.",
+      "peso_maximo": 0.10,
+      "pesos_brutos": [0.10]
+    },
+    ...
+    {
+      "questao": "Q1",
+      "rotulo": "A",
+      "indice": 1,
+      "descricao": "Sim. A decisão coordenada não pode ser aplicada aos processos administrativos em que estejam envolvidas autoridades de Poderes distintos (0,55), na forma do Art. 49-A, § 6º, inciso III, da Lei nº 9.784/1999 (0,10).",
+      "peso_maximo": 0.65,
+      "pesos_brutos": [0.55, 0.10]
+    }
+  ]
+}
+
+Texto transcrito:
+"""
+__TEXT__
+"""`;
+
+async function buildRubricFromPdfLLM(rawText: string, meta: ReturnType<typeof extractMeta>, options: BuildRubricOptions): Promise<RubricPayload> {
 	const compacted = rawText
 		.split("\n")
-		.map((line) => line.trim())
-		.filter((line) => Boolean(line))
+		.map((l) => l.trim())
+		.filter(Boolean)
 		.join("\n");
 
-	// Log do texto compactado
-	console.log("[OAB::TEXT_EXTRACTION] Texto compactado:", {
-		originalChars: rawText.length,
-		compactedChars: compacted.length,
-		originalLines: rawText.split("\n").length,
-		compactedLines: compacted.split("\n").length,
-	});
-	console.log("[OAB::TEXT_EXTRACTION] Texto compactado completo:");
-	console.log(compacted);
+	const prompt = LLM_PROMPT_TEMPLATE.replace("__TEXT__", compacted);
 
-	const prompt =
-		`Você receberá a transcrição integral de um padrão oficial de respostas da prova prático-profissional da OAB.\n` +
-		`Sua tarefa é estruturar esse conteúdo em JSON no seguinte formato: {"meta": {...}, "schema_docs": {...}, "itens": [...]}.\n` +
-		`Cada item representa um subitem de correção com os campos: id, escopo ("Peça" ou "Questão"), questao ("PEÇA" ou "Q1" etc.), descricao (texto objetivo), peso (número), fundamentos (lista de dispositivos legais em formato curto, ex.: "CPC art. 335"), alternativas_grupo (quando houver itens com OU, agrupe ids semelhantes), palavras_chave (sinônimos úteis), embedding_text (deixe vazio).\n` +
-		`Converta pesos que aparecem como frações em números decimais. Não deixe campos nulos; use null apenas quando o padrão realmente não atribui pontuação.\n` +
-		`Meta deve conter exam, area, data_aplicacao (YYYY-MM-DD) e quaisquer outros dados explícitos no cabeçalho.\n` +
-		`Responda apenas com JSON válido.\n\n` +
-		`Padrão de resposta transcrito (use todo o contexto):\n"""\n${compacted}\n"""`;
-
-	// Log das estatísticas antes do envio para LLM
-	console.log("[OAB::TEXT_EXTRACTION] Enviando para LLM:", {
+	console.info("[OAB::RUBRIC_LLM_FALLBACK] Enviando para LLM:", {
 		textLength: compacted.length,
-		promptLength: prompt.length,
 		model: options.model ?? DEFAULT_RUBRIC_MODEL,
 	});
 
@@ -102,21 +430,17 @@ async function buildRubricFromPdfLLM(buffer: Buffer, options: BuildRubricOptions
 		messages: [
 			{
 				role: "system",
-				content:
-					"Você é um analista jurídico da FGV especializado em normalizar padrões de resposta da OAB. Sempre responda com JSON válido.",
+				content: "Você é um parser especializado em extrair quesitos da Distribuição dos Pontos de provas da OAB. Responda APENAS com JSON válido.",
 			},
-			{
-				role: "user",
-				content: prompt,
-			},
+			{ role: "user", content: prompt },
 		],
 		response_format: { type: "json_object" },
-		max_tokens: 3500,
+		max_tokens: 8000,
 	});
 
 	const content = response.choices[0]?.message?.content ?? "";
 
-	// Robusto contra cercas ```json ... ``` ou texto extra
+	// Parse JSON robustly
 	const tryParsers: Array<() => any> = [
 		() => JSON.parse(content),
 		() => {
@@ -127,17 +451,10 @@ async function buildRubricFromPdfLLM(buffer: Buffer, options: BuildRubricOptions
 		() => {
 			const start = content.indexOf("{");
 			const end = content.lastIndexOf("}");
-			if (start >= 0 && end > start) {
-				return JSON.parse(content.slice(start, end + 1));
-			}
+			if (start >= 0 && end > start) return JSON.parse(content.slice(start, end + 1));
 			throw new Error("no json braces");
 		},
 		() => JSON.parse(jsonrepair(content)),
-		() => {
-			const fence = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
-			if (fence) return JSON.parse(jsonrepair(fence[1]));
-			throw new Error("no fenced block");
-		},
 	];
 
 	let rawObj: any;
@@ -151,369 +468,78 @@ async function buildRubricFromPdfLLM(buffer: Buffer, options: BuildRubricOptions
 		}
 	}
 	if (!rawObj) {
-		throw new Error(`Falha ao interpretar JSON do gabarito gerado: ${String(lastErr?.message || lastErr)}`);
+		throw new Error(`Falha ao interpretar JSON do gabarito LLM: ${String(lastErr?.message || lastErr)}`);
 	}
 
-	// Coerção branda para estabilizar a estrutura vinda do LLM
-	const coerceRubric = (raw: any) => {
-		const safe: any = { ...raw };
-		const itens = Array.isArray(raw?.itens) ? raw.itens : [];
-		safe.itens = itens.map((it: any, idx: number) => {
-			const id = typeof it?.id === "number" ? String(it.id) : String(it?.id ?? `I-${idx + 1}`);
-			const escopo = typeof it?.escopo === "string" ? it.escopo : "Peça";
-			const questao = typeof it?.questao === "string" ? it.questao : "PEÇA";
-			const descricao = typeof it?.descricao === "string" ? it.descricao : String(it?.descricao ?? "");
-			let peso = it?.peso;
-			if (typeof peso === "string") {
-				// converte "0,20" → 0.2 ou "0.20" → 0.2
-				const normalized = peso.replace(/,/g, ".");
-				const n = Number(normalized);
-				if (!Number.isNaN(n)) peso = n;
-			}
-			if (peso != null && typeof peso !== "number") peso = null;
-
-			const fundamentos = Array.isArray(it?.fundamentos)
-				? it.fundamentos.map((f: any) => String(f))
-				: it?.fundamentos
-					? [String(it.fundamentos)]
-					: [];
-
-			let alternativas = it?.alternativas_grupo;
-			if (alternativas == null) alternativas = [];
-			if (!Array.isArray(alternativas)) alternativas = [alternativas];
-			alternativas = alternativas.map((v: any) => String(v));
-
-			const keywords = Array.isArray(it?.palavras_chave)
-				? it.palavras_chave.map((k: any) => String(k))
-				: it?.palavras_chave
-					? [String(it.palavras_chave)]
-					: [];
-
-			return {
-				id,
-				escopo,
-				questao,
-				descricao,
-				peso,
-				fundamentos,
-				alternativas_grupo: alternativas,
-				palavras_chave: keywords,
-				embedding_text: "", // preenchido abaixo
-			};
-		});
-		return safe;
-	};
-
-	let parsed: RubricPayload;
-	try {
-		const coerced = coerceRubric(rawObj);
-		parsed = RubricSchema.parse(coerced);
-	} catch (error) {
-		throw new Error(`Estrutura inválida do gabarito: ${(error as Error).message}`);
+	// Coerce LLM output to ParsedQuesito[]
+	const rawQuesitos: any[] = rawObj?.quesitos ?? rawObj?.itens ?? [];
+	if (!rawQuesitos.length) {
+		throw new Error("LLM não retornou quesitos válidos");
 	}
 
-	const itens = parsed.itens.map((item) => ({
-		...item,
-		peso: typeof item.peso === "number" ? Number(item.peso.toFixed(2)) : item.peso,
-		embedding_text: composeEmbeddingText(item, parsed.meta),
-	}));
-
-	const normalized: RubricPayload = {
-		meta: {
-			...(parsed.meta ?? {}),
-			fileName: options.fileName,
-			generated_at: new Date().toISOString(),
-		},
-		schema_docs: parsed.schema_docs,
-		itens,
-	};
-
-	return normalized;
-}
-
-const DEFAULT_SCHEMA_DOCS = {
-	subitem_fields: [
-		"id",
-		"escopo",
-		"questao",
-		"descricao",
-		"peso",
-		"fundamentos",
-		"alternativas_grupo",
-		"palavras_chave",
-		"embedding_text",
-	],
-	group_fields: [
-		"id",
-		"escopo",
-		"questao",
-		"indice",
-		"rotulo",
-		"segmento",
-		"descricao",
-		"descricao_bruta",
-		"descricao_limpa",
-		"peso_maximo",
-		"pesos_opcoes",
-		"pesos_brutos",
-		"subitens",
-	],
-	notas: [
-		"Itens com OU viram 'alternativas_grupo' para permitir múltiplos caminhos válidos.",
-		"Fundamentos jurídicos listam artigos/leis/súmulas citadas no padrão.",
-		"palavras_chave inclui sinônimos comuns.",
-		"embedding_text é o texto canônico sugerido para gerar embeddings de alta qualidade.",
-		"grupos agregam os subitens exatamente como o padrão oficial apresenta cada linha da tabela.",
-	],
-};
-
-function convertDeterministicToPayload(parsed: GabaritoAtomico, fileName?: string): RubricPayload {
-	const groupMap = new Map<string, string[]>();
-	parsed.itens.forEach((item) => {
-		if (item.ou_group_id) {
-			if (!groupMap.has(item.ou_group_id)) {
-				groupMap.set(item.ou_group_id, []);
-			}
-			groupMap.get(item.ou_group_id)!.push(item.id);
+	const quesitos: ParsedQuesito[] = rawQuesitos.map((q: any, idx: number) => {
+		const questao = String(q.questao ?? "PEÇA").toUpperCase();
+		const validQuestao = ["PEÇA", "Q1", "Q2", "Q3", "Q4"].includes(questao) ? questao : "PEÇA";
+		let peso = typeof q.peso_maximo === "number" ? q.peso_maximo : 0;
+		if (typeof q.peso_maximo === "string") {
+			peso = Number(q.peso_maximo.replace(",", ".")) || 0;
 		}
+		const pesos = Array.isArray(q.pesos_brutos)
+			? q.pesos_brutos.map((p: any) => Number(String(p).replace(",", ".")) || 0).filter((p: number) => p > 0)
+			: [];
+
+		return {
+			questao: validQuestao as ParsedQuesito["questao"],
+			rotulo: String(q.rotulo ?? q.label ?? idx + 1),
+			indice: typeof q.indice === "number" ? q.indice : idx + 1,
+			descricao: String(q.descricao ?? ""),
+			descricao_bruta: String(q.descricao_bruta ?? q.descricao ?? ""),
+			peso_maximo: Number(peso.toFixed(2)),
+			pesos_brutos: pesos.map((p: number) => Number(p.toFixed(2))),
+		};
 	});
 
-	const preferredVariants: Record<string, string> = {};
-	for (const grupo of parsed.grupos ?? []) {
-		if (grupo.variant_family && grupo.variant_key && !preferredVariants[grupo.variant_family]) {
-			preferredVariants[grupo.variant_family] = grupo.variant_key;
-		}
-	}
-
-	return {
-		meta: {
-			exam: parsed.meta.exam,
-			area: parsed.meta.area,
-			data_aplicacao: parsed.meta.data_aplicacao,
-			fonte: parsed.meta.fonte,
-			versao_schema: parsed.meta.versao_schema,
-			gerado_em: parsed.meta.gerado_em,
-			fileName,
-			...(Object.keys(preferredVariants).length ? { preferred_variants: preferredVariants } : {}),
-		},
-		schema_docs: DEFAULT_SCHEMA_DOCS,
-		itens: parsed.itens.map((item) => ({
-			id: item.id,
-			escopo: item.escopo,
-			questao: item.questao,
-			descricao: item.descricao,
-			peso: item.peso,
-			fundamentos: item.fundamentos,
-			alternativas_grupo: item.ou_group_id ? groupMap.get(item.ou_group_id) : undefined,
-			palavras_chave: item.palavras_chave,
-			embedding_text: item.embedding_text,
-		})),
-		grupos: (parsed.grupos || []).map((grupo) => ({
-			id: grupo.id,
-			escopo: grupo.escopo,
-			questao: grupo.questao,
-			indice: grupo.indice,
-			rotulo: grupo.rotulo,
-			segmento: grupo.segmento ?? null,
-			descricao: grupo.descricao,
-			descricao_bruta: grupo.descricao_bruta,
-			descricao_limpa: grupo.descricao_limpa,
-			peso_maximo: Number((grupo.peso_maximo ?? 0).toFixed(2)),
-			pesos_opcoes: (grupo.pesos_opcoes || []).map((p) => Number(p.toFixed(2))),
-			pesos_brutos: (grupo.pesos_brutos || []).map((p) => Number(p.toFixed(2))),
-			subitens: grupo.subitens,
-			variant_family: grupo.variant_family,
-			variant_key: grupo.variant_key,
-			variant_label: grupo.variant_label,
-		})),
-	};
+	console.info("[OAB::RUBRIC_LLM_FALLBACK] Quesitos extraídos:", quesitos.length);
+	return buildPayloadFromQuesitos(quesitos, meta, options.fileName);
 }
 
-function convertDate(date: string | undefined) {
-	if (!date) return undefined;
-	const m = date.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-	if (!m) return date;
-	return `${m[3]}-${m[2]}-${m[1]}`;
-}
+// ── Main Entry Point ─────────────────────────────────────────────────────
 
-function extractMetaFromText(
-	rawText: string,
-	fallback: { exam?: string; area?: string; data_aplicacao?: string },
-): ParseMetaInput {
-	const exam = rawText.match(/\d+º Exame de Ordem Unificado/i)?.[0]?.trim() ?? fallback.exam ?? "Exame OAB";
-	const area = rawText.match(/ÁREA:\s*([^\n]+)/i)?.[1]?.trim() ?? fallback.area ?? "Área não identificada";
-	const dataBruta = rawText.match(/Aplicada em\s*([^\n]+)/i)?.[1]?.trim() ?? fallback.data_aplicacao;
-
-	return {
-		exam,
-		area,
-		data_aplicacao: convertDate(dataBruta),
-		fonte: "Padrão de Resposta da FGV",
-	};
-}
-
-function shouldFallback(parsed: GabaritoAtomico) {
-	if (!parsed.itens.length) return true;
-	// até 15% de pesos nulos tolerados (OCR difícil / PDF ruim)
-	const nullCount = parsed.itens.filter((it) => it.peso == null).length;
-	const ratio = parsed.itens.length ? nullCount / parsed.itens.length : 1;
-	if (ratio > 0.15) return true;
-
-	// verificação quantitativa oficial (com tolerâncias)
-	const v = verificarPontuacao(parsed.itens);
-	// só cai em fallback se alguma parte sair da faixa de tolerância
-	if (!v.peca.ok) return true;
-	if (!v.questoes.ok) return true;
-	if (!v.geral.ok) return true;
-	return false;
-}
-
-export async function buildRubricFromPdf(buffer: Buffer, options: BuildRubricOptions = {}) {
+export async function buildRubricFromPdf(buffer: Buffer, options: BuildRubricOptions = {}): Promise<RubricPayload> {
 	const rawText = await extractTextFromPdf(buffer);
+	const meta = extractMeta(rawText);
 
-	// Log sempre ativo para debug - forçar exibição do texto
-	console.log("[OAB::DEBUG_TEXT] FORÇA DEBUG - DEBUG_GABARITO =", process.env.DEBUG_GABARITO);
-	console.log("[OAB::DEBUG_TEXT] Texto completo extraído do PDF:");
-	console.log("=".repeat(80));
-	console.log(rawText);
-	console.log("=".repeat(80));
-	console.log(`[OAB::DEBUG_TEXT] Total de ${rawText.length} caracteres`);
+	console.info("[OAB::RUBRIC_UPLOAD] Texto extraído:", rawText.length, "chars");
 
-	const metaInput = extractMetaFromText(rawText, {});
+	// Try simple deterministic parser first
+	const quesitos = parseSimpleDeterministic(rawText);
 
-	const deterministic = parseGabaritoDeterministico(rawText, metaInput);
-	const fallback = shouldFallback(deterministic);
-
-	if (!fallback) {
-		const payload = convertDeterministicToPayload(deterministic, options.fileName);
-		const verificacao = verificarPontuacao(deterministic.itens);
-
-		const gruposDet = deterministic.grupos ?? [];
-		const gruposPeca = gruposDet.filter((g) => g.questao === "PEÇA");
-		const gruposQuestoes = gruposDet.filter((g) => g.questao !== "PEÇA");
-		const gruposPorVariant = gruposDet.reduce<Record<string, string[]>>((acc, grupo) => {
-			const key = `${grupo.questao}::${grupo.variant_family || "default"}::${grupo.variant_key || "default"}`;
-			if (!acc[key]) acc[key] = [];
-			acc[key].push(grupo.id);
-			return acc;
-		}, {});
+	if (quesitos && quesitos.length >= 10) {
+		// Basic validation: peça should have ~16, questões ~8 = total ~24
+		const pecaCount = quesitos.filter((q) => q.questao === "PEÇA").length;
+		const questoesCount = quesitos.filter((q) => q.questao !== "PEÇA").length;
 
 		console.info("[OAB::RUBRIC_UPLOAD::DETERMINISTIC]", {
-			itens: payload.itens.length,
-			meta: payload.meta,
-			pontuacao: {
-				peca: { total: verificacao.peca.total, ok: verificacao.peca.ok },
-				questoes: { total: verificacao.questoes.total, ok: verificacao.questoes.ok },
-				geral: { total: verificacao.geral.total, ok: verificacao.geral.ok },
-			},
-			grupos: {
-				total: gruposDet.length,
-				peca: {
-					total: gruposPeca.length,
-					ids: gruposPeca.map((g) => g.id),
-				},
-				questoes: {
-					total: gruposQuestoes.length,
-					ids: gruposQuestoes.map((g) => g.id),
-				},
-				por_variant: gruposPorVariant,
-			},
+			total: quesitos.length,
+			peca: pecaCount,
+			questoes: questoesCount,
+			pesoTotalPeca: Number(quesitos.filter((q) => q.questao === "PEÇA").reduce((a, q) => a + q.peso_maximo, 0).toFixed(2)),
+			pesoTotalQuestoes: Number(quesitos.filter((q) => q.questao !== "PEÇA").reduce((a, q) => a + q.peso_maximo, 0).toFixed(2)),
 		});
-		return payload;
+
+		return buildPayloadFromQuesitos(quesitos, meta, options.fileName);
 	}
 
-	// 🚫 FALLBACK LLM PODE SER DESABILITADO VIA ENV VAR PARA TESTES
-	// ⚠️  CONTROLE: OAB_EVAL_FORCE_DETERMINISTIC=1 força sempre parser determinístico
+	// Fallback to LLM
+	console.warn("[OAB::RUBRIC_UPLOAD::FALLBACK]", {
+		reason: !quesitos ? "parser retornou null" : `apenas ${quesitos?.length} quesitos encontrados`,
+	});
+
 	const FORCE_DETERMINISTIC = process.env.OAB_EVAL_FORCE_DETERMINISTIC === "1";
-
-	// Diagnóstico detalhado do fallback
-	const nullCount = deterministic.itens.filter((it) => it.peso == null).length;
-	const nullRatio = deterministic.itens.length ? nullCount / deterministic.itens.length : 1;
-	const hasMissingParts = deterministic.itens.some((it) => it.flags?.missingParts);
-
-	console.warn("[OAB::RUBRIC_UPLOAD::FALLBACK] Acionando LLM devido a inconsistências", {
-		itensDeterministicos: deterministic.itens.length,
-		forceDeterministic: FORCE_DETERMINISTIC,
-		diagnostico: {
-			itensComPesoNulo: nullCount,
-			ratioNulos: Number((nullRatio * 100).toFixed(1)) + "%",
-			limiteTolerado: "15%",
-			temPartesAusentes: hasMissingParts,
-			itensProblematicos: deterministic.itens
-				.filter((it) => it.peso == null)
-				.map((it) => ({
-					id: it.id,
-					questao: it.questao,
-					escopo: it.escopo,
-					descricao: it.descricao.substring(0, 150) + "...",
-					temOuGroup: !!it.ou_group_id,
-					ouGroupId: it.ou_group_id,
-				})),
-		},
-	});
-
-	// Log detalhado dos primeiros 5 itens problemáticos para análise
-	const problematicos = deterministic.itens.filter((it) => it.peso == null).slice(0, 5);
-	if (problematicos.length > 0) {
-		console.warn("[OAB::RUBRIC_UPLOAD::FALLBACK::DETAILED_ANALYSIS] Primeiros itens problemáticos:");
-		problematicos.forEach((item, idx) => {
-			console.warn(`[${idx + 1}/${problematicos.length}]`, {
-				id: item.id,
-				questao: item.questao,
-				escopo: item.escopo,
-				descricaoCompleta: item.descricao,
-				peso: item.peso,
-				temOuGroup: !!item.ou_group_id,
-				ouGroupId: item.ou_group_id,
-				fundamentos: item.fundamentos,
-				flags: item.flags,
-			});
-		});
+	if (FORCE_DETERMINISTIC && quesitos) {
+		console.warn("[OAB::RUBRIC_UPLOAD::FORCED_DETERMINISTIC] Usando resultado parcial do parser");
+		return buildPayloadFromQuesitos(quesitos, meta, options.fileName);
 	}
 
-	if (!FORCE_DETERMINISTIC) {
-		return buildRubricFromPdfLLM(buffer, options, rawText);
-	}
-
-	// 🧪 MODO TESTE: Mostra que LLM seria chamada mas foi forçado parser determinístico
-	const payload = convertDeterministicToPayload(deterministic, options.fileName);
-	const verificacao = verificarPontuacao(deterministic.itens);
-
-	const gruposDet = deterministic.grupos ?? [];
-	const gruposPeca = gruposDet.filter((g) => g.questao === "PEÇA");
-	const gruposQuestoes = gruposDet.filter((g) => g.questao !== "PEÇA");
-	const gruposPorVariant = gruposDet.reduce<Record<string, string[]>>((acc, grupo) => {
-		const key = `${grupo.questao}::${grupo.variant_family || "default"}::${grupo.variant_key || "default"}`;
-		if (!acc[key]) acc[key] = [];
-		acc[key].push(grupo.id);
-		return acc;
-	}, {});
-
-	console.error("[OAB::RUBRIC_UPLOAD::FORCED_DETERMINISTIC] LLM seria acionada mas foi forçado parser determinístico", {
-		itens: payload.itens.length,
-		meta: payload.meta,
-		pontuacao: {
-			peca: { total: verificacao.peca.total, ok: verificacao.peca.ok },
-			questoes: { total: verificacao.questoes.total, ok: verificacao.questoes.ok },
-			geral: { total: verificacao.geral.total, ok: verificacao.geral.ok },
-		},
-		grupos: {
-			total: gruposDet.length,
-			peca: {
-				total: gruposPeca.length,
-				ids: gruposPeca.map((g) => g.id),
-			},
-			questoes: {
-				total: gruposQuestoes.length,
-				ids: gruposQuestoes.map((g) => g.id),
-			},
-			por_variant: gruposPorVariant,
-		},
-		fallbackReasons: {
-			noItems: !deterministic.itens.length,
-			hasNullWeights: deterministic.itens.some((it) => it.peso == null),
-			hasMissingParts: deterministic.itens.some((it) => it.flags?.missingParts),
-		},
-	});
-	return payload;
+	return buildRubricFromPdfLLM(rawText, meta, options);
 }

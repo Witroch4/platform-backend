@@ -45,9 +45,15 @@ export async function POST(req: NextRequest) {
         }
 
         // Atualizar o banco de dados marcando que o recurso foi feito e salvando o rascunho.
-        // Precisamos converter o leadId real e pegar a relation correta
+        // leadId do frontend é LeadOabData.id (não Lead.id), então buscar diretamente por id
+        // Fallback: tentar também por leadId (Lead.id) caso venha sourceId
         const leadOabData = await prisma.leadOabData.findFirst({
-            where: { leadId: leadId }
+            where: {
+                OR: [
+                    { id: leadId },
+                    { leadId: leadId },
+                ]
+            }
         });
 
         if (leadOabData) {
@@ -58,6 +64,9 @@ export async function POST(req: NextRequest) {
                     aguardandoRecurso: false
                 }
             });
+            console.log(`[API Gerar Recurso Interno] Recurso salvo no banco para LeadOabData ${leadOabData.id}`);
+        } else {
+            console.warn(`[API Gerar Recurso Interno] LeadOabData não encontrado para leadId: ${leadId}`);
         }
 
         return NextResponse.json({

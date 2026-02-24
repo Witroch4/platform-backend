@@ -234,12 +234,12 @@ export const ButtonEditor = ({ buttons, setButtons }: ButtonEditorProps) => {
 													<div>
 														<div className="flex items-center justify-between">
 															<Label className="text-xs">Texto</Label>
-															<span className="text-[10px] text-muted-foreground">{(button.text || "").length}/20</span>
+															<span className="text-[10px] text-muted-foreground">{(button.text || "").length}/25</span>
 														</div>
 														<Input
 															value={button.text}
 															onChange={(e) => updateButtonText(index, e.target.value)}
-															maxLength={20}
+															maxLength={25}
 															onPointerDown={stopDrag}
 															className={cn(isDragging && "pointer-events-none")}
 															disabled={button.type === "COPY_CODE"}

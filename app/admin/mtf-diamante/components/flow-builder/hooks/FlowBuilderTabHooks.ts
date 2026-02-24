@@ -19,6 +19,11 @@ import {
 	getInteractiveMessageElements,
 } from "@/lib/flow-builder/interactiveMessageElements";
 import {
+	normalizeMetaComponents,
+	metaComponentsToElements,
+	extractVariables,
+} from "@/lib/flow-builder/templateElements";
+import {
 	validateCanvasForSave,
 	calculateAutoLayout,
 	validateInteractiveMessageElementDrop,
@@ -171,7 +176,7 @@ export function useFlowBuilderTab(caixaId: string): UseFlowBuilderTabReturn {
 		updateFlowName,
 	} = useFlowCanvas(caixaId, { flowId: selectedFlowId, autoSave: true });
 
-	const { interactiveMessages, caixas, buttonReactions } = useMtfData();
+	const { interactiveMessages, caixas, buttonReactions, approvedTemplates } = useMtfData();
 
 	// Obtém o channelType da caixa atual
 	const channelType = useMemo(() => {
@@ -622,6 +627,7 @@ export function useFlowBuilderTab(caixaId: string): UseFlowBuilderTabReturn {
 						);
 					}
 
+					// --- Linked Interactive Message (send_interactive:CUID) ---
 					const linkedMsgId = reaction.linkedMessageId || reaction.actionPayload?.messageId;
 					if (linkedMsgId) {
 						const linkedMsg = interactiveMessages?.find((m) => m.id === linkedMsgId);
@@ -649,6 +655,74 @@ export function useFlowBuilderTab(caixaId: string): UseFlowBuilderTabReturn {
 						}
 					}
 
+					// --- Linked WhatsApp Template (send_template:META_ID) ---
+					// Usa o mesmo padrão do TemplateConfigDialog.handleImportTemplate
+					const templateMetaId = reaction.linkedTemplateMetaId;
+					if (templateMetaId) {
+						const linkedTemplate = approvedTemplates?.find(
+							(t) => t.id === templateMetaId || t.name === templateMetaId,
+						);
+						if (linkedTemplate) {
+							const comps = normalizeMetaComponents(linkedTemplate.components);
+							const headerComp = comps.find((c) => c.type === "HEADER");
+							const bodyComp = comps.find((c) => c.type === "BODY");
+							const footerComp = comps.find((c) => c.type === "FOOTER");
+							const hasMediaHeader = headerComp && ["IMAGE", "VIDEO", "DOCUMENT"].includes(headerComp.format || "");
+							const elements = metaComponentsToElements(comps, null);
+							const buttonElementIds = elements.filter((e) => e.type.startsWith("button")).map((e) => e.id);
+
+							const newNodeId = createAndConnectNode(
+								FlowNodeType.WHATSAPP_TEMPLATE,
+								{
+									label: linkedTemplate.name,
+									isConfigured: true,
+									mode: "import",
+									status: linkedTemplate.status,
+									templateId: linkedTemplate.id,
+									metaTemplateId: linkedTemplate.id,
+									templateName: linkedTemplate.name,
+									category: linkedTemplate.category,
+									language: linkedTemplate.language,
+									elements,
+									buttonIds: buttonElementIds,
+									header: headerComp?.format === "TEXT"
+										? { type: "TEXT", content: headerComp.text }
+										: headerComp?.format
+											? { type: headerComp.format as "IMAGE" | "VIDEO" | "DOCUMENT" }
+											: undefined,
+									body: bodyComp?.text
+										? { text: bodyComp.text, variables: extractVariables(bodyComp.text) }
+										: undefined,
+									footer: footerComp?.text ? { text: footerComp.text } : undefined,
+								} as Partial<FlowNodeData>,
+								button.id,
+							);
+
+							// Resolve media URL async (same logic as TemplateConfigDialog)
+							if (hasMediaHeader && newNodeId) {
+								fetch(`/api/admin/mtf-diamante/template-info?template=${encodeURIComponent(linkedTemplate.id)}`)
+									.then((r) => r.json())
+									.then((data) => {
+										const resolvedUrl = data?.template?.publicMediaUrl as string | undefined;
+										if (resolvedUrl) {
+											const updatedElements = elements.map((el) =>
+												el.type === "header_image" ? { ...el, url: resolvedUrl } : el,
+											);
+											updateNodeData(newNodeId, { elements: updatedElements });
+										}
+									})
+									.catch(() => {
+										// Silently fail — node already created without media
+									});
+							}
+						} else {
+							console.warn(
+								"🔍 [handleLinkMessageWithReactions] Template não encontrado nos aprovados",
+								{ templateMetaId, availableIds: approvedTemplates?.map((t) => t.id) },
+							);
+						}
+					}
+
 					const textContent = reaction.textReaction || reaction.textResponse;
 					if (textContent) {
 						createAndConnectNode(
@@ -670,7 +744,7 @@ export function useFlowBuilderTab(caixaId: string): UseFlowBuilderTabReturn {
 
 			toast.success(`${messageReactions.length} reação(ões) importada(s) automaticamente`);
 		},
-		[nodes, buttonReactions, addNode, updateNodeData, onConnect, interactiveMessages],
+		[nodes, buttonReactions, addNode, updateNodeData, onConnect, interactiveMessages, approvedTemplates],
 	);
 
 	const handleCloseDialog = useCallback((open: boolean) => {

@@ -228,6 +228,7 @@ export function LeadItem({
 					refreshKey={leadState.refreshKey}
 					onContextMenuAction={handlers.handleContextMenuAction}
 					onRecursoClick={handlers.handleRecursoClick}
+					onGerarRecurso={handlers.handleGerarRecurso}
 				/>
 
 				{/* Célula de Consultoria */}
@@ -271,6 +272,9 @@ export function LeadItem({
 				onValidarAnalise={handlers.handleValidarAnalise}
 				onExecuteDeleteAllFiles={handlers.handleExecuteDeleteAllFiles}
 				onExecuteManuscritoDelete={handlers.handleExcluirManuscrito}
+				onValidarRecurso={handlers.handleValidarRecurso}
+				onCancelarRecurso={handlers.handleCancelarRecurso}
+				onGerarRecurso={handlers.handleGerarRecurso}
 			/>
 
 			{/* Biblioteca de Espelhos Drawer */}

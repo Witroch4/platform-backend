@@ -29,6 +29,7 @@ interface UseLeadHandlersProps {
 	setConfirmDeleteEspelho: (open: boolean) => void;
 	setShowAnaliseDialog: (open: boolean) => void;
 	setShowAnalisePreviewDrawer: (open: boolean) => void;
+	setShowRecursoDialog: (open: boolean) => void;
 	setConfirmDeleteAllFiles: (open: boolean) => void;
 	setConfirmDeleteManuscrito: (open: boolean) => void;
 	setManuscritoToDelete: (id: string | null) => void;
@@ -105,6 +106,7 @@ export function useLeadHandlers({
 	setConfirmDeleteEspelho,
 	setShowAnaliseDialog,
 	setShowAnalisePreviewDrawer,
+	setShowRecursoDialog,
 	setConfirmDeleteAllFiles,
 	setConfirmDeleteManuscrito,
 	setManuscritoToDelete,
@@ -1491,20 +1493,127 @@ export function useLeadHandlers({
 	};
 
 	const handleRecursoClick = async () => {
-		console.log(`[HandleRecursoClick] Atualizando lead ${lead.id} após recurso`);
+		console.log(`[HandleRecursoClick] Abrindo dialog de recurso para lead ${lead.id}`);
 
-		// Forçar atualização do servidor para obter dados atualizados
-		forceServerRefresh();
+		// Abrir o dialog de recurso (editor Rich Text)
+		// NÃO chamar forceServerRefresh() aqui — isso re-renderiza o pai, remonta o componente e reseta o useState, fechando o dialog instantaneamente
+		setShowRecursoDialog(true);
+	};
 
-		// Atualizar estado local
-		const updatedLead = {
-			...lead,
-			fezRecurso: true,
-			dataRecurso: new Date().toISOString(),
-			_internal: true,
-		};
+	const handleGerarRecurso = async () => {
+		try {
+			const selectedProvider = getColumnProvider("RECURSO_CELL", "OPENAI");
 
-		await handleEditLead(updatedLead);
+			const recursoData = {
+				leadID: lead.id,
+				leadId: lead.id,
+				analiseValidada: localAnaliseState.analisePreliminar,
+				selectedProvider,
+				dadosAdicionais: {
+					nome: lead.nomeReal || lead.name || "Lead sem nome",
+					email: lead.email,
+					telefone: lead.phoneNumber,
+					especialidade: lead.especialidade,
+				},
+			};
+
+			console.log("[Gerar Recurso] Solicitando geração via AI SDK Interno:", {
+				leadId: lead.id,
+				temAnalise: Boolean(localAnaliseState.analisePreliminar),
+				analiseValidada: localAnaliseState.analiseValidada,
+			});
+
+			updateRecursoState({ aguardandoRecurso: true });
+
+			const response = await fetch("/api/admin/leads-chatwit/gerar-recurso-interno", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(recursoData),
+			});
+
+			const result = await response.json();
+
+			if (!response.ok) {
+				updateRecursoState({ aguardandoRecurso: false });
+				toast.error("Erro ao gerar recurso", { description: result.error || "Erro interno ao gerar recurso via AI SDK" });
+				return;
+			}
+
+			// Atualizar estado local imediatamente com o output da IA
+			updateRecursoState({
+				aguardandoRecurso: false,
+				recursoPreliminar: result.recursoOutput,
+			});
+
+			toast.success("Recurso gerado!", {
+				description: "O recurso estruturado via AI SDK foi salvo.",
+				duration: 4000,
+			});
+		} catch (error: any) {
+			console.error("[Gerar Recurso] Erro:", error);
+			updateRecursoState({ aguardandoRecurso: false });
+			toast.error("Erro ao gerar recurso", { description: error.message || "Erro inesperado" });
+		}
+	};
+
+	const handleValidarRecurso = async (data: { html: string; textoRecurso: string; message?: string; accessToken?: string }) => {
+		try {
+			const response = await fetch("/api/admin/leads-chatwit/enviar-recurso-validado", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					leadID: lead.id,
+					html: data.html,
+					textoRecurso: data.textoRecurso,
+					message: data.message,
+					accessToken: data.accessToken,
+				}),
+			});
+
+			if (!response.ok) {
+				const errorData = await response.json();
+				throw new Error(errorData.error || "Erro ao validar recurso");
+			}
+
+			updateRecursoState({
+				recursoValidado: true,
+				aguardandoRecurso: false,
+			});
+		} catch (error: any) {
+			console.error("[ValidarRecurso] Erro:", error);
+			throw error;
+		}
+	};
+
+	const handleCancelarRecurso = async () => {
+		try {
+			updateRecursoState({
+				aguardandoRecurso: false,
+				recursoPreliminar: undefined,
+				recursoValidado: false,
+			});
+
+			const response = await fetch("/api/admin/leads-chatwit/leads", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					id: lead.id,
+					aguardandoRecurso: false,
+					recursoPreliminar: null,
+					recursoValidado: false,
+				}),
+			});
+
+			if (!response.ok) {
+				const errorData = await response.json();
+				throw new Error(errorData.error || "Erro ao cancelar recurso");
+			}
+
+			forceRefresh();
+		} catch (error: any) {
+			console.error("[CancelarRecurso] Erro:", error);
+			throw error;
+		}
 	};
 
 	const handleCancelarManuscrito = async () => {
@@ -1635,6 +1744,9 @@ export function useLeadHandlers({
 		handleEspelhoFileUpload,
 		handleAnaliseClick,
 		handleRecursoClick,
+		handleGerarRecurso,
+		handleValidarRecurso,
+		handleCancelarRecurso,
 		handleContextMenuAction,
 		handleConsultoriaToggle,
 		handleValidarAnalise,

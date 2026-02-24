@@ -33,6 +33,7 @@ export function useDialogState() {
 	const [isEnviandoAnaliseValidada, setIsEnviandoAnaliseValidada] = useState(false);
 
 	// Estados para recurso
+	const [showRecursoDialog, setShowRecursoDialog] = useState(false);
 	const [isEnviandoRecurso, setIsEnviandoRecurso] = useState(false);
 
 	// Estados para processo
@@ -61,6 +62,7 @@ export function useDialogState() {
 		setConfirmDeleteEspelho(false);
 		setShowAnaliseDialog(false);
 		setShowAnalisePreviewDrawer(false);
+		setShowRecursoDialog(false);
 		setShowProcessDialog(false);
 		setConfirmDeleteAllFiles(false);
 	};
@@ -111,6 +113,8 @@ export function useDialogState() {
 		setIsEnviandoPdf,
 		isEnviandoAnaliseValidada,
 		setIsEnviandoAnaliseValidada,
+		showRecursoDialog,
+		setShowRecursoDialog,
 		isEnviandoRecurso,
 		setIsEnviandoRecurso,
 		showProcessDialog,

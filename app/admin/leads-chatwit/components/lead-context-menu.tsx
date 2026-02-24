@@ -201,8 +201,10 @@ export function LeadContextMenu({ contextType, onAction, children, data }: LeadC
 							<ContextMenuItem onClick={() => onAction("enviarRecurso", data)}>Enviar Recurso</ContextMenuItem>
 						)}
 						{data.fezRecurso && (
+							<ContextMenuItem onClick={() => onAction("verRecurso", data)}>Ver Recurso</ContextMenuItem>
+						)}
+						{(data.recursoUrl || data.aguardandoRecurso || data.recursoPreliminar || data.fezRecurso) && (
 							<>
-								<ContextMenuItem onClick={() => onAction("verRecurso", data)}>Ver Recurso</ContextMenuItem>
 								<ContextMenuSeparator />
 								<ContextMenuItem
 									onClick={() => onAction("excluirRecurso", data)}

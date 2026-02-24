@@ -271,10 +271,16 @@ docker compose build | up | down
 * **Bugs de foco/input React:** keys instáveis, IDs que mudam entre renders, refs que quebram igualdade → mantenha a identidade dos elementos estável.
 * **Bug MTF "aparece→some→volta":** A UI lia do BFF e mutava direto no CRUD (keys diferentes). Solução aplicada: BFF como fonte única, mesma SWR key, bypass cache, optimistic + rollback.
 * **Flow Engine vs Intents (Regressão):** NUNCA intercepte todas as mensagens no webhook. O pipeline de classificação (alias/embedding → bands) SEMPRE tem prioridade sobre o FlowOrchestrator default.
+* **Bug 422 Template Rejection:** Resolvido ao migrar do formato customizado (`content_type: 'template'`) para o padrão nativo do Chatwit (`additional_attributes.template_params`). Ver `docs/HOTFIX-422-TEMPLATE.md`.
+* **FOEC — Flash of Empty Content (SWR):** `data?.x || []` retorna `[]` enquanto `isLoading=true`, causando flash de "estado vazio" antes dos dados chegarem. **Fix:** sempre desestruturar `isLoading` do `useSWR` e renderizar skeleton quando `isLoading`. Se houver conflito de nome com estado local, usar alias: `isLoading: isLoadingXxx`. Adicionar `keepPreviousData: true` para evitar flash ao revalidar.
 
-## Ferramentas de Debug (SSH MCP)
+## Ferramentas de Debug (SSH MCP) 
 
 A interface portainer (BFF/Proxy) é limitada. Use o **SSH MCP** como "fonte da verdade" para investigar estados do Swarm e logs extensos no host.
 
 * Logs filtrados: `docker service logs <service_name> --tail 500 2>&1 | grep "keyword"` (`socialwise_app`, `socialwise_worker`)
 * Status do host: `docker service ls`, `df -h`, `free -m`.
+
+## MCP PORTAINER USAR Portainer [dockerProxy] 
+
+USE FILTROS PQ OS LOGS NO SSH E DO PORTAINER SAO GRANDES
