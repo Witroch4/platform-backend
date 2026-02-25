@@ -1,5 +1,11 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
+# Backups de banco de dados
+*.sql.gz
+*.sql.bz2
+backup-*.sql
+backup-*.dump
+
 # Arquivos de ambiente (exceto exemplos)
 #.env
 #.env.local
