@@ -1,7 +1,7 @@
 import { TableCell } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { FileText, Shield, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
+import { FileText, Shield, CheckCircle, AlertCircle } from "lucide-react";
 import type { CellProps } from "../types";
 import { LeadContextMenu, type ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
 
@@ -29,7 +29,6 @@ export function RecursoCell({
 	lead,
 	localAnaliseState,
 	localRecursoState,
-	isEnviandoRecurso,
 	refreshKey,
 	onContextMenuAction,
 	onRecursoClick,
@@ -75,15 +74,17 @@ export function RecursoCell({
 						Ver Recurso
 					</Button>
 				) : aguardandoRecurso ? (
-					<Button
-						variant="outline"
-						onClick={onRecursoClick}
-						className="w-full text-xs px-2 py-1 h-auto min-h-8"
-						key={`recurso-btn-${refreshKey}`}
+					<div
+						className="w-full rounded-md border border-input bg-background overflow-hidden animate-in fade-in-0 zoom-in-95 duration-300"
+						key={`recurso-anim-${refreshKey}`}
 					>
-						<Loader2 className="h-4 w-4 mr-1 animate-spin" />
-						Aguardando Recurso
-					</Button>
+						<img
+							src="/animations/recursoCellanimation.svg"
+							alt="Escrevendo recurso..."
+							className="w-full h-auto"
+							style={{ minHeight: "56px" }}
+						/>
+					</div>
 				) : temRecursoPreliminar ? (
 					<Button
 						variant="outline"
@@ -147,7 +148,6 @@ export function RecursoCell({
 					<Button
 						variant="outline"
 						onClick={onGerarRecurso}
-						disabled={isEnviandoRecurso}
 						className="w-full text-xs px-2 py-1 h-auto min-h-8"
 						key={`recurso-btn-${refreshKey}`}
 					>

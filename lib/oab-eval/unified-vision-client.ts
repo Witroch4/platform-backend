@@ -168,6 +168,27 @@ function isGemini3Model(model: string): boolean {
 	return model.toLowerCase().includes("gemini-3");
 }
 
+function isGemini25Model(model: string): boolean {
+	return model.toLowerCase().includes("gemini-2.5");
+}
+
+/**
+ * Mapeia thinkingLevel string para thinkingBudget numérico (Gemini 2.5)
+ * Gemini 2.5 usa thinkingBudget em vez de thinkingLevel
+ */
+function thinkingLevelToBudget(level: string | undefined): number {
+	switch (level?.toUpperCase()) {
+		case "MINIMAL":
+		case "LOW":
+			return 1024;
+		case "MEDIUM":
+			return 8192;
+		case "HIGH":
+		default:
+			return 24576;
+	}
+}
+
 /**
  * Processa com Google Gemini Vision API
  * Suporta Gemini 3 Agentic Vision com code execution e thinking
@@ -191,22 +212,27 @@ async function processWithGemini(request: VisionRequest): Promise<VisionResponse
 		throw new Error("Gemini API não configurada. Defina GEMINI_API_KEY ou GOOGLE_AI_API_KEY no ambiente.");
 	}
 
-	// Configurar tools para Gemini 3 Agentic Vision
+	// Configurar tools — Code Execution apenas para Gemini 3+ (2.5 Flash tenta pytesseract e falha)
 	const tools: Array<Record<string, unknown>> = [];
-	if (enableCodeExecution || isGemini3Model(model)) {
-		// Habilitar code execution para manipulação de imagem (zoom/crop)
+	if (isGemini3Model(model) || (enableCodeExecution && isGemini3Model(model))) {
 		tools.push({ codeExecution: {} });
 	}
 
-	// Configurar thinking para Gemini 3
+	// Configurar thinking: Gemini 3 usa thinkingLevel, Gemini 2.5 usa thinkingBudget
 	const thinkingConfig = isGemini3Model(model)
 		? {
 				thinkingConfig: {
 					includeThoughts: includeThoughts ?? false,
-					thinkingLevel: thinkingLevel ?? "high", // Máximo raciocínio para OCR de manuscritos
+					thinkingLevel: thinkingLevel ?? "HIGH",
 				},
 			}
-		: {};
+		: isGemini25Model(model)
+			? {
+					thinkingConfig: {
+						thinkingBudget: thinkingLevelToBudget(thinkingLevel),
+					},
+				}
+			: {};
 
 	// Cast para contornar problemas de compatibilidade de tipos com versões do SDK
 	const config = {
@@ -379,21 +405,27 @@ async function processMultiImageWithGemini(request: {
 		},
 	}));
 
-	// Configurar tools para Gemini 3 Agentic Vision
+	// Configurar tools — Code Execution apenas para Gemini 3+
 	const tools: Array<Record<string, unknown>> = [];
-	if (enableCodeExecution || isGemini3Model(model)) {
+	if (isGemini3Model(model)) {
 		tools.push({ codeExecution: {} });
 	}
 
-	// Configurar thinking para Gemini 3
+	// Configurar thinking: Gemini 3 usa thinkingLevel, Gemini 2.5 usa thinkingBudget
 	const thinkingConfig = isGemini3Model(model)
 		? {
 				thinkingConfig: {
 					includeThoughts: false,
-					thinkingLevel: thinkingLevel ?? "high",
+					thinkingLevel: thinkingLevel ?? "HIGH",
 				},
 			}
-		: {};
+		: isGemini25Model(model)
+			? {
+					thinkingConfig: {
+						thinkingBudget: thinkingLevelToBudget(thinkingLevel),
+					},
+				}
+			: {};
 
 	// Cast para contornar problemas de compatibilidade de tipos com versões do SDK
 	const config = {
@@ -533,21 +565,27 @@ async function processMultiImageUrlWithGemini(request: {
 		},
 	}));
 
-	// Configurar tools para Gemini 3 Agentic Vision
+	// Configurar tools — Code Execution apenas para Gemini 3+
 	const tools: Array<Record<string, unknown>> = [];
-	if (enableCodeExecution || isGemini3Model(model)) {
+	if (isGemini3Model(model)) {
 		tools.push({ codeExecution: {} });
 	}
 
-	// Configurar thinking para Gemini 3
+	// Configurar thinking: Gemini 3 usa thinkingLevel, Gemini 2.5 usa thinkingBudget
 	const thinkingConfig = isGemini3Model(model)
 		? {
 				thinkingConfig: {
 					includeThoughts: false,
-					thinkingLevel: thinkingLevel ?? "high",
+					thinkingLevel: thinkingLevel ?? "HIGH",
 				},
 			}
-		: {};
+		: isGemini25Model(model)
+			? {
+					thinkingConfig: {
+						thinkingBudget: thinkingLevelToBudget(thinkingLevel),
+					},
+				}
+			: {};
 
 	// Config com cast para evitar incompatibilidade de tipos do SDK
 	const config = {

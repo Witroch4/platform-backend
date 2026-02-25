@@ -64,7 +64,14 @@
       "Bash(node -e:*)",
       "Bash(npx prisma db execute:*)",
       "Bash(set -a)",
-      "Bash(set:*)"
+      "Bash(set:*)",
+      "Bash(docker volume:*)",
+      "Bash(docker service ls:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=yes pnpm exec prisma migrate reset:*)",
+      "Bash(/dev/null -exec grep -l \"AiAgentBlueprint\" {} ;)",
+      "Bash(DB_URL=\"postgresql://postgres:postgres@localhost:5432\")",
+      "Bash(gunzip:*)"
     ],
     "deny": [],
     "ask": []

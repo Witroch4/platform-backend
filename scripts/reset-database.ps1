@@ -16,7 +16,7 @@ $choice = Read-Host "Digite 1 ou 2"
 if ($choice -eq "1") {
     Write-Host ""
     Write-Host "🖥️  Modo: DESENVOLVIMENTO" -ForegroundColor Green
-    Write-Host "   Banco: localhost:5432/socialWise" -ForegroundColor Gray
+    Write-Host "   Banco: localhost:5432/socialwise" -ForegroundColor Gray
     
     # Usar o .env local (desenvolvimento)
     if (Test-Path ".env") {

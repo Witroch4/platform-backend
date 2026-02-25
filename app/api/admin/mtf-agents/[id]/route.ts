@@ -162,6 +162,15 @@ function parseUpdatePayload(body: any): Partial<AgentBlueprintPayload> | null {
 		payload.defaultProvider = coerceAiProvider(body.defaultProvider);
 	}
 
+	// Reasoning / Thinking
+	if ("thinkingLevel" in body) {
+		payload.thinkingLevel = typeof body.thinkingLevel === "string" ? body.thinkingLevel : null;
+	}
+
+	if ("reasoningEffort" in body) {
+		payload.reasoningEffort = typeof body.reasoningEffort === "string" ? body.reasoningEffort : null;
+	}
+
 	return Object.keys(payload).length > 0 ? payload : null;
 }
 

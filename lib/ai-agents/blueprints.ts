@@ -45,6 +45,9 @@ export interface AgentBlueprintPayload {
 	// Engine Híbrida: vinculação de agente a coluna da tabela
 	linkedColumn?: LinkedColumn | null;
 	defaultProvider?: AiProvider | null;
+	// Reasoning / Thinking
+	thinkingLevel?: string | null;
+	reasoningEffort?: string | null;
 }
 
 export interface AgentBlueprint extends AgentBlueprintPayload {
@@ -76,6 +79,8 @@ const selectBlueprint = {
 	metadata: true,
 	linkedColumn: true,
 	defaultProvider: true,
+	thinkingLevel: true,
+	reasoningEffort: true,
 	createdAt: true,
 	updatedAt: true,
 } satisfies Prisma.AiAgentBlueprintSelect;
@@ -120,6 +125,8 @@ function mapBlueprint(raw: RawBlueprint): AgentBlueprint {
 		metadata: asJson<Record<string, unknown>>(raw.metadata) ?? undefined,
 		linkedColumn: raw.linkedColumn ?? undefined,
 		defaultProvider: raw.defaultProvider ?? undefined,
+		thinkingLevel: raw.thinkingLevel ?? undefined,
+		reasoningEffort: raw.reasoningEffort ?? undefined,
 		createdAt: raw.createdAt,
 		updatedAt: raw.updatedAt,
 	};
@@ -169,6 +176,8 @@ export async function createAgentBlueprint(ownerId: string, payload: AgentBluepr
 		metadata: serializeJson(payload.metadata) ?? Prisma.JsonNull,
 		linkedColumn: payload.linkedColumn ?? null,
 		defaultProvider: payload.defaultProvider ?? null,
+		thinkingLevel: payload.thinkingLevel ?? null,
+		reasoningEffort: payload.reasoningEffort ?? null,
 	};
 
 	const created = await prisma.aiAgentBlueprint.create({ data, select: selectBlueprint });
@@ -202,6 +211,8 @@ export async function updateAgentBlueprint(
 	if (payload.metadata !== undefined) data.metadata = serializeJson(payload.metadata) ?? Prisma.JsonNull;
 	if (payload.linkedColumn !== undefined) data.linkedColumn = payload.linkedColumn;
 	if (payload.defaultProvider !== undefined) data.defaultProvider = payload.defaultProvider;
+	if (payload.thinkingLevel !== undefined) data.thinkingLevel = payload.thinkingLevel;
+	if (payload.reasoningEffort !== undefined) data.reasoningEffort = payload.reasoningEffort;
 
 	const updated = await prisma.aiAgentBlueprint.update({
 		where: { id: existing.id },
@@ -245,12 +256,14 @@ export async function getAgentBlueprintByLinkedColumn(linkedColumn: LinkedColumn
 		ESPELHO_CELL: "mirror_extractor",
 		ANALISE_CELL: "analyzer",
 		RECURSO_CELL: "resource_generator",
+		ESPELHO_PADRAO_CELL: "rubric_extractor",
 	};
 	const namePatterns: Record<LinkedColumn, string[]> = {
 		PROVA_CELL: ["Transcrição", "Transcricao", "Transcritor", "Prova"],
 		ESPELHO_CELL: ["Espelho", "Mirror", "Extrator"],
 		ANALISE_CELL: ["Análise", "Analise", "Analyzer"],
 		RECURSO_CELL: ["Recurso", "Resource"],
+		ESPELHO_PADRAO_CELL: ["Espelho Padrão", "Gabarito", "Rubric Extractor"],
 	};
 
 	const role = roleMap[linkedColumn];

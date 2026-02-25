@@ -65,6 +65,7 @@ pnpm exec prisma migrate dev --name descricao # Em seguida, cria a nova migratio
 
 ### Backup & Restore (via SSH MCP)
 
+* **leitura obrigatoria pra Backup & Restore (via SSH MCP)**/home/wital/Chatwit-Social-dev/docs/database-backup-restore.md
 * **Backup (Prod):** ```bash
 CONTAINER=$(docker ps --filter "name=postgres" --format "{{.Names}}" | head -1) && docker exec (date +%Y%m%d).sql.gz
 ```

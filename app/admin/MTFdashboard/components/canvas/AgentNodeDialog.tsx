@@ -46,26 +46,40 @@ interface AgentNodeDialogProps {
 	onSave: (patch: Partial<AgentBlueprintDraft>) => void;
 }
 
-// Modelos disponíveis por provedor
-const GEMINI_MODELS = [
-	{ value: "gemini-3-flash-preview", label: "Gemini 3 Flash (Visão Agêntica)", recommended: true },
-	{ value: "gemini-3-pro-preview", label: "Gemini 3 Pro" },
-	{ value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
-	{ value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
-	{ value: "gemini-2.0-flash-001", label: "Gemini 2.0 Flash" },
+// Modelos disponíveis por provedor — com info de preço, descrição e cutoff
+interface ModelOption {
+	value: string;
+	label: string;
+	recommended?: boolean;
+	supportsReasoning?: boolean;
+	fixedReasoning?: string;
+	description?: string;
+	pricing?: string;
+	cutoff?: string;
+}
+
+const GEMINI_MODELS: ModelOption[] = [
+	{ value: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro Preview", description: "SOTA reasoning com profundidade e multimodal avançado", pricing: "≤200K: $2.00 / $12.00 · >200K: $4.00 / $18.00", cutoff: "Jan 2025" },
+	{ value: "gemini-3-flash-preview", label: "Gemini 3 Flash Preview", recommended: true, description: "Inteligência frontier com velocidade, search e grounding", pricing: "$0.50 / $3.00 por 1M tokens", cutoff: "Jan 2025" },
+	{ value: "gemini-3-pro-preview", label: "Gemini 3 Pro Preview", description: "Raciocínio avançado, multimodal e vibe coding", pricing: "≤200K: $2.00 / $12.00 · >200K: $4.00 / $18.00", cutoff: "Jan 2025" },
+	{ value: "gemini-2.5-pro", label: "Gemini 2.5 Pro", description: "Geração anterior, excelente em código e raciocínio complexo", pricing: "≤200K: $1.25 / $10.00 · >200K: $2.50 / $15.00", cutoff: "Jan 2025" },
+	{ value: "gemini-2.5-flash", label: "Gemini 2.5 Flash", description: "Raciocínio híbrido, 1M context, thinking budgets", pricing: "$0.30 / $2.50 por 1M tokens", cutoff: "Jan 2025" },
+	{ value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite", description: "Menor e mais econômico, feito para uso em escala", pricing: "$0.10 / $0.40 por 1M tokens", cutoff: "Jan 2025" },
+	{ value: "gemini-flash-latest", label: "Gemini Flash (latest)", description: "Alias automático → gemini-2.5-flash-preview mais recente", pricing: "$0.30 / $2.50 por 1M tokens", cutoff: "Jan 2025" },
+	{ value: "gemini-flash-lite-latest", label: "Gemini Flash Lite (latest)", description: "Alias automático → Flash Lite mais recente", pricing: "$0.10 / $0.40 por 1M tokens", cutoff: "Jan 2025" },
 ];
 
-const OPENAI_MODELS = [
-	{ value: "gpt-4.1", label: "GPT-4.1 (Vision)", recommended: true, supportsReasoning: false },
-	{ value: "gpt-4.1-mini", label: "GPT-4.1 Mini", supportsReasoning: false },
-	{ value: "gpt-4.1-nano", label: "GPT-4.1 Nano", supportsReasoning: false },
-	{ value: "gpt-4o", label: "GPT-4o", supportsReasoning: false },
-	{ value: "gpt-4o-mini", label: "GPT-4o Mini", supportsReasoning: false },
-	{ value: "gpt-5", label: "GPT-5", supportsReasoning: true },
-	{ value: "gpt-5-mini", label: "GPT-5 Mini", supportsReasoning: true },
-	{ value: "gpt-5.1", label: "GPT-5.1", supportsReasoning: true },
-	{ value: "gpt-5.2", label: "GPT-5.2", supportsReasoning: true },
-	{ value: "gpt-5-pro", label: "GPT-5 Pro", supportsReasoning: true, fixedReasoning: "high" },
+const OPENAI_MODELS: ModelOption[] = [
+	{ value: "gpt-4.1", label: "GPT-4.1 (Vision)", recommended: true, supportsReasoning: false, description: "Principal modelo de visão", pricing: "$2.00 / $8.00 por 1M tokens" },
+	{ value: "gpt-4.1-mini", label: "GPT-4.1 Mini", supportsReasoning: false, description: "Balanceado custo/qualidade", pricing: "$0.40 / $1.60 por 1M tokens" },
+	{ value: "gpt-4.1-nano", label: "GPT-4.1 Nano", supportsReasoning: false, description: "Ultra rápido, baixo custo", pricing: "$0.10 / $0.40 por 1M tokens" },
+	{ value: "gpt-4o", label: "GPT-4o", supportsReasoning: false, description: "Modelo anterior multimodal", pricing: "$2.50 / $10.00 por 1M tokens" },
+	{ value: "gpt-4o-mini", label: "GPT-4o Mini", supportsReasoning: false, description: "Versão compacta do GPT-4o", pricing: "$0.15 / $0.60 por 1M tokens" },
+	{ value: "gpt-5", label: "GPT-5", supportsReasoning: true, description: "Raciocínio avançado", pricing: "$1.25 / $10.00 por 1M tokens" },
+	{ value: "gpt-5-mini", label: "GPT-5 Mini", supportsReasoning: true, description: "Raciocínio compacto", pricing: "$0.25 / $2.00 por 1M tokens" },
+	{ value: "gpt-5.1", label: "GPT-5.1", supportsReasoning: true, description: "Evolução do GPT-5", pricing: "$1.25 / $10.00 por 1M tokens" },
+	{ value: "gpt-5.2", label: "GPT-5.2", supportsReasoning: true, description: "Última geração GPT", pricing: "$1.75 / $14.00 por 1M tokens" },
+	{ value: "gpt-5-pro", label: "GPT-5 Pro", supportsReasoning: true, fixedReasoning: "high", description: "Raciocínio máximo fixo", pricing: "$15.00 / $120.00 por 1M tokens" },
 ];
 
 // Opções de Raciocínio Gemini (thinkingLevel)
@@ -104,6 +118,12 @@ export function AgentNodeDialog({
 
 	const currentType = agentTypes.find((t) => t.id === localDraft.agentType);
 	const activeTools = new Set((localDraft.toolset || []).map((tool) => tool.key));
+
+	// Code execution toggle (Gemini) — persiste em metadata
+	const codeExecutionEnabled = (localDraft.metadata as Record<string, unknown>)?.codeExecution !== false;
+	const toggleCodeExecution = (enabled: boolean) => {
+		updateLocal({ metadata: { ...(localDraft.metadata as Record<string, unknown> ?? {}), codeExecution: enabled } });
+	};
 
 	// Detectar provedor baseado no modelo selecionado
 	const isGeminiModel = (model: string) => model.toLowerCase().includes("gemini");
@@ -162,10 +182,19 @@ export function AgentNodeDialog({
 		});
 	};
 
+	// Info do modelo selecionado
+	const currentModelInfo = currentProvider === "GEMINI"
+		? GEMINI_MODELS.find((m) => m.value === localDraft.model)
+		: OPENAI_MODELS.find((m) => m.value === localDraft.model);
+
+	// Info "default" para o provedor inativo (mostra o recomendado)
+	const geminiDefaultInfo = GEMINI_MODELS.find((m) => m.recommended) || GEMINI_MODELS[0];
+	const openaiDefaultInfo = OPENAI_MODELS.find((m) => m.recommended) || OPENAI_MODELS[0];
+
 	// Verifica se o modelo OpenAI selecionado suporta raciocínio
 	const currentOpenAIModel = OPENAI_MODELS.find((m) => m.value === localDraft.model);
 	const supportsReasoning = currentOpenAIModel?.supportsReasoning ?? false;
-	const fixedReasoning = (currentOpenAIModel as any)?.fixedReasoning as OpenAIReasoningEffort | undefined;
+	const fixedReasoning = currentOpenAIModel?.fixedReasoning as OpenAIReasoningEffort | undefined;
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
@@ -283,6 +312,9 @@ export function AgentNodeDialog({
 												<SelectItem value="RECURSO_CELL">
 													<span className="flex items-center gap-2">📄 Recurso (Geração automática)</span>
 												</SelectItem>
+												<SelectItem value="ESPELHO_PADRAO_CELL">
+													<span className="flex items-center gap-2">📐 Espelho Padrão (Extração de gabarito via IA)</span>
+												</SelectItem>
 											</SelectContent>
 										</Select>
 										<p className="text-xs text-muted-foreground">
@@ -333,6 +365,18 @@ export function AgentNodeDialog({
 									</div>
 								)}
 
+								{localDraft.linkedColumn === "ESPELHO_PADRAO_CELL" && (
+									<div className="space-y-2 p-4 rounded-lg border border-purple-500/30 bg-purple-500/5 mt-4">
+										<Label className="text-sm font-medium flex items-center gap-2">
+											<Sparkles className="h-4 w-4 text-purple-500" />
+											Extração de Gabarito Padrão
+										</Label>
+										<p className="text-xs text-muted-foreground">
+											Este blueprint será utilizado pelo sistema ao processar PDFs de gabarito via visão computacional (PDF → Imagens → IA), quando a opção &quot;Via IA (Visão)&quot; for selecionada no upload de gabaritos OAB.
+										</p>
+									</div>
+								)}
+
 								<div className="space-y-2 mt-4">
 									<Label htmlFor="instructions" className="text-sm font-medium">
 										Instruções Adicionais (Opcional)
@@ -351,15 +395,16 @@ export function AgentNodeDialog({
 						{/* MODEL TAB - REDESENHADA */}
 						<TabsContent value="model" className="space-y-6 mt-0">
 							<div className="space-y-4">
-								{/* Seleção de Provedor */}
+								{/* Seleção de Provedor — min-h garante consistência ao trocar */}
 								<div className="grid grid-cols-2 gap-4">
 									{/* GEMINI */}
 									<div
 										onClick={() => selectProvider("GEMINI")}
-										className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${currentProvider === "GEMINI"
+										className={`p-4 rounded-lg border-2 cursor-pointer transition-all min-h-[280px] flex flex-col ${
+											currentProvider === "GEMINI"
 												? "border-blue-500 bg-blue-500/10"
 												: "border-muted hover:border-blue-500/50"
-											}`}
+										}`}
 									>
 										<div className="flex items-center gap-3 mb-4">
 											<Image src="/assets/Google-gemini-icon.svg" alt="Gemini" width={32} height={32} />
@@ -401,21 +446,46 @@ export function AgentNodeDialog({
 											</Select>
 										</div>
 
-										{currentProvider === "GEMINI" && (
-											<p className="text-xs text-blue-600 dark:text-blue-400 mt-3 flex items-start gap-1.5">
-												<InfoIcon className="h-3 w-3 mt-0.5 flex-shrink-0" />
-												Instruções de Agentic Vision serão injetadas automaticamente
-											</p>
-										)}
+										{/* Info do modelo — sempre visível para manter altura consistente */}
+										{(() => {
+											const info = currentProvider === "GEMINI" ? currentModelInfo : geminiDefaultInfo;
+											return (
+												<div className={`mt-3 space-y-2 flex-1 ${currentProvider !== "GEMINI" ? "opacity-40" : ""}`}>
+													{info?.description && (
+														<p className="text-xs text-muted-foreground">{info.description}</p>
+													)}
+													{info?.pricing && (
+														<p className="text-xs text-muted-foreground">
+															💰 <span className="font-mono">{info.pricing}</span>
+														</p>
+													)}
+													{info?.cutoff && (
+														<p className="text-xs text-muted-foreground">📅 Dados até: {info.cutoff}</p>
+													)}
+													<div className="flex items-center justify-between pt-1">
+														<div>
+															<p className="text-xs font-medium text-blue-600 dark:text-blue-400">Code Execution (Visão Agêntica)</p>
+															<p className="text-[10px] text-muted-foreground">Permite ao modelo executar Python para zoom/crop em imagens</p>
+														</div>
+														<Switch
+															checked={codeExecutionEnabled}
+															onCheckedChange={toggleCodeExecution}
+															disabled={currentProvider !== "GEMINI"}
+														/>
+													</div>
+												</div>
+											);
+										})()}
 									</div>
 
 									{/* OPENAI */}
 									<div
 										onClick={() => selectProvider("OPENAI")}
-										className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${currentProvider === "OPENAI"
+										className={`p-4 rounded-lg border-2 cursor-pointer transition-all min-h-[280px] flex flex-col ${
+											currentProvider === "OPENAI"
 												? "border-emerald-500 bg-emerald-500/10"
 												: "border-muted hover:border-emerald-500/50"
-											}`}
+										}`}
 									>
 										<div className="flex items-center gap-3 mb-4">
 											<Image src="/assets/ChatGPT_logo.svg" alt="OpenAI" width={32} height={32} />
@@ -463,6 +533,23 @@ export function AgentNodeDialog({
 												</SelectContent>
 											</Select>
 										</div>
+
+										{/* Info do modelo — sempre visível para manter altura consistente */}
+										{(() => {
+											const info = currentProvider === "OPENAI" ? currentModelInfo : openaiDefaultInfo;
+											return (
+												<div className={`mt-3 space-y-1 flex-1 ${currentProvider !== "OPENAI" ? "opacity-40" : ""}`}>
+													{info?.description && (
+														<p className="text-xs text-muted-foreground">{info.description}</p>
+													)}
+													{info?.pricing && (
+														<p className="text-xs text-muted-foreground">
+															💰 <span className="font-mono">{info.pricing}</span>
+														</p>
+													)}
+												</div>
+											);
+										})()}
 									</div>
 								</div>
 

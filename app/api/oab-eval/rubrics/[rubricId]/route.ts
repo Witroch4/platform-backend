@@ -25,6 +25,7 @@ function buildResponsePayload(record: any) {
 		exam: record.exam ?? schema.meta?.exam ?? null,
 		area: record.area ?? schema.meta?.area ?? null,
 		version: record.version ?? schema.meta?.versao_schema ?? null,
+		pdfUrl: record.pdfUrl ?? null,
 		createdAt: record.createdAt,
 		updatedAt: record.updatedAt,
 		meta: record.meta ?? schema.meta ?? null,

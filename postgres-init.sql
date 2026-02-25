@@ -4,11 +4,11 @@ ALTER SYSTEM SET password_encryption = 'scram-sha-256';
 
 -- Criar usuário e banco se não existirem
 CREATE USER postgres WITH PASSWORD 'postgres' SUPERUSER;
-CREATE DATABASE socialWise OWNER postgres;
+CREATE DATABASE socialwise OWNER postgres;
 
 -- Configurar permissões
-GRANT ALL PRIVILEGES ON DATABASE socialWise TO postgres;
+GRANT ALL PRIVILEGES ON DATABASE socialwise TO postgres;
 
--- Conectar ao banco socialWise e criar extensão pgvector
+-- Conectar ao banco socialwise e criar extensão pgvector
 \c socialwise;
 CREATE EXTENSION IF NOT EXISTS vector; 

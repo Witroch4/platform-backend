@@ -1,7 +1,7 @@
 export type AgentTypeId = "TOOLS" | "OPENAI_FUNCTIONS" | "PLAN_AND_EXECUTE" | "REACT" | "CUSTOM";
 
 // Engine Híbrida: tipos de coluna vinculada e provedor de IA
-export type LinkedColumnType = "PROVA_CELL" | "ESPELHO_CELL" | "ANALISE_CELL" | "RECURSO_CELL";
+export type LinkedColumnType = "PROVA_CELL" | "ESPELHO_CELL" | "ANALISE_CELL" | "RECURSO_CELL" | "ESPELHO_PADRAO_CELL";
 export type AiProviderType = "OPENAI" | "GEMINI";
 
 // Gemini 3: Níveis de raciocínio (thinkingLevel)

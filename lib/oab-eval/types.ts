@@ -20,17 +20,9 @@ export const RubricGroupSchema = z.object({
 	questao: z.string(),
 	indice: z.number(),
 	rotulo: z.string(),
-	segmento: z.string().nullable().optional(),
 	descricao: z.string(),
-	descricao_bruta: z.string(),
-	descricao_limpa: z.string(),
 	peso_maximo: z.number(),
-	pesos_opcoes: z.array(z.number()).optional().default([]),
 	pesos_brutos: z.array(z.number()).optional().default([]),
-	subitens: z.array(z.string()),
-	variant_family: z.string().optional(),
-	variant_key: z.string().optional(),
-	variant_label: z.string().optional(),
 });
 
 export type RubricGroup = z.infer<typeof RubricGroupSchema>;

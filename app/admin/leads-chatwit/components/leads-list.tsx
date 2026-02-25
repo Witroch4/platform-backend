@@ -821,8 +821,8 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 			)}
 
 			{isLoading || initialLoading ? (
-				<div className="flex justify-center items-center py-8">
-					<img src="/animations/broto.svg" alt="Carregando" className="h-24 w-24" />
+				<div className="flex justify-center items-center py-20 min-h-[400px]">
+					<img src="/animations/broto.svg" alt="Carregando" className="h-72 w-72" />
 				</div>
 			) : leads.length === 0 ? (
 				<div className="text-center py-8 text-muted-foreground">Nenhum lead encontrado.</div>

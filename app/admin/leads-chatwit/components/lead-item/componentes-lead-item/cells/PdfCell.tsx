@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { FileUp } from "lucide-react";
 import type { PdfCellProps } from "../types";
-import { openExternalUrl } from "../utils";
+import { openMinioFile } from "../utils";
 import { LeadContextMenu, type ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
 import { DeleteFileButton } from "@/app/admin/leads-chatwit/components/delete-file-button";
 
@@ -28,7 +28,7 @@ export function PdfCell({
 				<LeadContextMenu contextType="pdf" onAction={onContextMenuAction} data={{ id: lead.id, type: "pdf" }}>
 					<div
 						className="relative hover:bg-accent hover:text-accent-foreground flex items-center w-[60px] h-[60px] justify-center group mx-auto cursor-pointer"
-						onClick={() => openExternalUrl(lead.pdfUnificado || "")}
+						onClick={() => openMinioFile(lead.pdfUnificado || "")}
 					>
 						<TooltipProvider>
 							<Tooltip>

@@ -19,7 +19,7 @@ class PostgresRestorer {
 	constructor(options: RestoreOptions = {}) {
 		this.options = {
 			dumpFile: options.dumpFile || "faceApp_backup_2025-07-28_00_00_01_1MB.sql.gz",
-			dbName: options.dbName || "socialWise",
+			dbName: options.dbName || "socialwise",
 			dbUser: options.dbUser || "postgres",
 			dbPassword: options.dbPassword || "postgres",
 			dbHost: options.dbHost || "localhost",

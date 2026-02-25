@@ -126,6 +126,10 @@ async function readPayload(request: NextRequest): Promise<AgentBlueprintPayload 
 	const linkedColumn = "linkedColumn" in body ? coerceLinkedColumn(body["linkedColumn"]) : undefined;
 	const defaultProvider = "defaultProvider" in body ? coerceAiProvider(body["defaultProvider"]) : undefined;
 
+	// Reasoning / Thinking
+	const thinkingLevel = typeof body["thinkingLevel"] === "string" ? body["thinkingLevel"] : undefined;
+	const reasoningEffort = typeof body["reasoningEffort"] === "string" ? body["reasoningEffort"] : undefined;
+
 	const payload: AgentBlueprintPayload = {
 		name,
 		description: typeof body["description"] === "string" ? body["description"].trim() : undefined,
@@ -144,6 +148,8 @@ async function readPayload(request: NextRequest): Promise<AgentBlueprintPayload 
 		metadata,
 		linkedColumn,
 		defaultProvider,
+		thinkingLevel,
+		reasoningEffort,
 	};
 
 	return payload;

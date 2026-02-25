@@ -2,7 +2,7 @@
 
 import { TableCell } from "@/components/ui/table";
 import type { FileCellProps } from "../types";
-import { getFileTypeIcon, openExternalUrl } from "../utils";
+import { getFileTypeIcon, openMinioFile } from "../utils";
 import { LeadContextMenu, type ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
 import { DeleteFileButton } from "@/app/admin/leads-chatwit/components/delete-file-button";
 import { FileText, File, Upload } from "lucide-react";
@@ -150,7 +150,7 @@ export function FilesCell({ lead, onContextMenuAction, onDeleteFile, onReloadAft
 
 	return (
 		<TableCell className="min-w-[100px] max-w-[150px] p-2 align-middle">
-			<div className="grid grid-cols-3 gap-2">
+			<div className="grid grid-cols-3 gap-2 max-h-[300px] overflow-y-auto overflow-x-hidden pr-1 items-start content-start scrollbar-blue [&::-webkit-scrollbar-button]:hidden [&::-webkit-scrollbar-button]:(w-0 h-0)">
 				{lead.arquivos.length > 0 ? (
 					lead.arquivos.map((arquivo) => {
 						const extension = getFileExtension(arquivo.fileType);
@@ -163,7 +163,7 @@ export function FilesCell({ lead, onContextMenuAction, onDeleteFile, onReloadAft
 							>
 								<div
 									className="relative hover:bg-accent hover:text-accent-foreground w-[36px] h-[36px] flex items-center justify-center group cursor-pointer"
-									onClick={() => openExternalUrl(arquivo.dataUrl)}
+									onClick={() => openMinioFile(arquivo.dataUrl)}
 								>
 									{renderIcon(arquivo.fileType, extension)}
 									<DeleteFileButton
@@ -178,11 +178,10 @@ export function FilesCell({ lead, onContextMenuAction, onDeleteFile, onReloadAft
 					})
 				) : (
 					<div
-						className={`col-span-3 flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-md border-2 border-dashed transition-all cursor-pointer ${
-							isDragging
-								? "border-primary bg-primary/10 scale-[1.02]"
-								: "border-muted-foreground/30 hover:border-primary/60 hover:bg-accent/30"
-						} ${isUploading ? "opacity-60 cursor-wait" : ""}`}
+						className={`col-span-3 flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-md border-2 border-dashed transition-all cursor-pointer ${isDragging
+							? "border-primary bg-primary/10 scale-[1.02]"
+							: "border-muted-foreground/30 hover:border-primary/60 hover:bg-accent/30"
+							} ${isUploading ? "opacity-60 cursor-wait" : ""}`}
 						onDragOver={handleDragOver}
 						onDragLeave={handleDragLeave}
 						onDrop={handleDrop}

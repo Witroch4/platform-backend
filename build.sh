@@ -166,6 +166,59 @@ fi
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 
+# ─── Garantir PostgreSQL disponível para o build ────────────────────────────
+_BUILD_DB_NAME="socialwise"        # Deve coincidir com o ARG DATABASE_URL do Dockerfile.prod
+_BUILD_DB_USER="postgres"
+_BUILD_DB_PASS="postgres"
+_BUILD_POSTGRES_STARTED=false
+
+_start_postgres_for_build() {
+  if nc -z localhost 5432 2>/dev/null; then
+    echo "  ✓ PostgreSQL disponível em localhost:5432"
+    return 0
+  fi
+  echo "  → PostgreSQL não encontrado. Iniciando serviço 'postgres' do compose..."
+  docker compose up -d postgres
+  _BUILD_POSTGRES_STARTED=true
+
+  echo "  → Aguardando PostgreSQL estar pronto..."
+  local retries=30
+  until docker compose exec -T postgres pg_isready -U "$_BUILD_DB_USER" &>/dev/null; do
+    retries=$((retries - 1))
+    [ "$retries" -le 0 ] && echo "  ✗ Timeout aguardando PostgreSQL" && return 1
+    sleep 1
+  done
+
+  # Cria o banco com o nome exato usado no build arg (case-sensitive no PostgreSQL)
+  docker compose exec -T postgres psql -U "$_BUILD_DB_USER" \
+    -tc "SELECT 1 FROM pg_database WHERE datname = '${_BUILD_DB_NAME}'" \
+    | grep -q 1 \
+    || docker compose exec -T postgres createdb -U "$_BUILD_DB_USER" "$_BUILD_DB_NAME"
+
+  # Aplica migrations para criar as tabelas (SSG precisa delas existir)
+  echo "  → Aplicando migrations em '${_BUILD_DB_NAME}'..."
+  DATABASE_URL="postgresql://${_BUILD_DB_USER}:${_BUILD_DB_PASS}@localhost:5432/${_BUILD_DB_NAME}" \
+    pnpm exec prisma migrate deploy
+
+  echo "  ✓ PostgreSQL pronto para o build"
+}
+
+_cleanup_build_postgres() {
+  if [ "$_BUILD_POSTGRES_STARTED" = "true" ]; then
+    echo ""
+    echo "==> Parando postgres de build (iniciado automaticamente)..."
+    docker compose stop postgres && echo "  ✓ postgres parado"
+  fi
+}
+
+# Garante cleanup mesmo se o build falhar
+trap '_cleanup_build_postgres' EXIT
+
+echo "==> [0] Verificando PostgreSQL para build..."
+_start_postgres_for_build
+echo ""
+# ─────────────────────────────────────────────────────────────────────────────
+
 echo "==> [1/${TOTAL_STEPS}] Building image..."
 docker compose build app
 
@@ -208,14 +261,14 @@ if [ "${CAN_DEPLOY}" = true ]; then
 
   for svc in "${SWARM_SERVICES[@]}"; do
     if force_update_service "${svc}" "${TAG}"; then
-      ((deploy_ok++))
+      deploy_ok=$((deploy_ok + 1))
       # Delay defensivo: worker deve começar o rollout antes da app disparar jobs
       if [ "${svc}" = "worker" ] && [ "${#SWARM_SERVICES[@]}" -gt 1 ]; then
         echo "  ⌛ Aguardando 1s para worker iniciar o rolling update..."
         sleep 1
       fi
     else
-      ((deploy_fail++))
+      deploy_fail=$((deploy_fail + 1))
     fi
   done
 

@@ -1,7 +1,8 @@
 //app/api/oab-eval/rubric/batch-upload/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { buildRubricFromPdf } from "@/lib/oab-eval/rubric-from-pdf";
+import { buildRubricFromPdf, buildRubricFromPdfVision } from "@/lib/oab-eval/rubric-from-pdf";
 import { createRubric } from "@/lib/oab-eval/repository";
+import { uploadToMinIOWithRetry } from "@/lib/minio";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -45,6 +46,8 @@ export async function POST(request: NextRequest) {
 		const files = form.getAll("files") as File[];
 		const withEmbeddings = String(form.get("withEmbeddings") || "false").toLowerCase() === "true";
 		const model = form.get("model")?.toString();
+		const forceAI = String(form.get("forceAI") || "false").toLowerCase() === "true";
+		const visionMode = String(form.get("visionMode") || "false").toLowerCase() === "true";
 
 		if (!files.length) {
 			return NextResponse.json(
@@ -88,7 +91,23 @@ export async function POST(request: NextRequest) {
 
 				const arrayBuffer = await file.arrayBuffer();
 				const buffer = Buffer.from(arrayBuffer);
-				let payload = await buildRubricFromPdf(buffer, { fileName: file.name, model });
+
+				// Upload PDF original ao MinIO
+				let pdfUrl: string | undefined;
+				try {
+					const minioResult = await uploadToMinIOWithRetry(buffer, file.name, "application/pdf", 3, false);
+					pdfUrl = minioResult.url;
+				} catch (e) {
+					console.warn(`[OAB-EVAL::BATCH] Falha ao salvar PDF no MinIO para ${file.name}:`, e);
+				}
+
+				let payload: Awaited<ReturnType<typeof buildRubricFromPdf>>;
+				if (visionMode) {
+					const result = await buildRubricFromPdfVision(buffer, { fileName: file.name, model });
+					payload = result.payload;
+				} else {
+					payload = await buildRubricFromPdf(buffer, { fileName: file.name, model, forceAI });
+				}
 
 				if (withEmbeddings) {
 					const { createEmbeddingLarge } = await import("@/lib/oab-eval/openai-client");
@@ -101,7 +120,11 @@ export async function POST(request: NextRequest) {
 					payload = { ...payload, itens } as typeof payload;
 				}
 
-				const record = await createRubric({ payload });
+				const record = await createRubric({ payload, pdfUrl });
+
+				// log the exact saved record and payload to make debugging easier (compact)
+				console.log(`[OAB-EVAL::BATCH] record saved for ${file.name}:`, JSON.stringify(record));
+				console.log(`[OAB-EVAL::BATCH] payload for ${file.name}:`, JSON.stringify(payload));
 
 				// Recalcular verificação de pontuação
 				const { verificarPontuacao } = await import("@/lib/oab/gabarito-parser-deterministico");

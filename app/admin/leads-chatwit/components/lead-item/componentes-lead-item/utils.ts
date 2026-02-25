@@ -75,6 +75,43 @@ export const openExternalUrl = (url: string) => {
 	window.open(url, "_blank");
 };
 
+const MINIO_HOST = process.env.NEXT_PUBLIC_S3_ENDPOINT || "objstoreapi.witdev.com.br";
+
+/**
+ * Abre arquivo gerando presigned URL on-demand via /api/presigned-url.
+ * Suporta URLs do MinIO (qualquer bucket) e URLs Active Storage do Chatwit.
+ * Para URLs externas que não são MinIO nem Active Storage, abre direto.
+ */
+export const openMinioFile = async (url: string): Promise<void> => {
+	if (!url) return;
+
+	const isMinioUrl = url.includes(MINIO_HOST);
+	const isActiveStorage = url.includes("/rails/active_storage/");
+
+	// Se não é MinIO nem Active Storage, abrir direto
+	if (!isMinioUrl && !isActiveStorage) {
+		window.open(url, "_blank");
+		return;
+	}
+
+	try {
+		const res = await fetch("/api/presigned-url", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ url }),
+		});
+
+		if (!res.ok) throw new Error("Falha ao gerar URL de acesso");
+
+		const { presigned_url } = await res.json();
+		window.open(presigned_url, "_blank");
+	} catch (error) {
+		console.error("[openMinioFile] Erro:", error);
+		// Fallback: tenta abrir URL original
+		window.open(url, "_blank");
+	}
+};
+
 export const openChatwitChat = (leadUrl: string | null) => {
 	if (!leadUrl) return false;
 	openExternalUrl(leadUrl);

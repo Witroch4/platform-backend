@@ -100,8 +100,20 @@ export function EspelhoCell({
 				}}
 			>
 				<div className="flex flex-col gap-2">
-					{/* Botão desabilitado para modo normal sem especialidade */}
-					{!consultoriaAtiva && !temEspecialidade && !temEspelhoProcessado && !estaAguardandoEspelho ? (
+					{/* Animação SVG enquanto aguarda espelho */}
+					{estaAguardandoEspelho ? (
+						<div
+							className="w-full rounded-md border border-input bg-background overflow-hidden animate-in fade-in-0 zoom-in-95 duration-300"
+							key={`espelho-anim-${refreshKey}`}
+						>
+							<img
+								src="/animations/espelhoCellAnimation.svg"
+								alt="Processando espelho..."
+								className="w-full h-auto"
+								style={{ minHeight: "56px" }}
+							/>
+						</div>
+					) : !consultoriaAtiva && !temEspecialidade && !temEspelhoProcessado ? (
 						<TooltipProvider>
 							<Tooltip>
 								<TooltipTrigger asChild>
@@ -129,15 +141,6 @@ export function EspelhoCell({
 							key={`espelho-btn-${refreshKey}-${temEspelhoProcessado ? "edit" : "select"}-${consultoriaAtiva ? "consultoria" : "normal"}`}
 						>
 							{(() => {
-								if (estaAguardandoEspelho) {
-									return (
-										<>
-											<Loader2 className="h-4 w-4 mr-1 animate-spin" />
-											Aguardando
-										</>
-									);
-								}
-
 								if (isUploadingEspelho) {
 									return (
 										<>

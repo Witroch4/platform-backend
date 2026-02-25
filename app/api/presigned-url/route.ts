@@ -1,33 +1,59 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { extractObjectKeyFromUrl, generatePresignedUrl } from "@/lib/minio";
+import { extractBucketAndKey, generatePresignedUrl } from "@/lib/minio";
+
+const MINIO_HOST = process.env.S3_ENDPOINT || "objstoreapi.witdev.com.br";
 
 /**
- * API para gerar URLs pré-assinadas para URLs existentes do MinIO
+ * Resolve URL do Chatwit Active Storage para URL direta do MinIO.
+ * Segue o redirect 302 e extrai bucket + object key, retornando URL limpa.
+ */
+async function resolveActiveStorageUrl(activeStorageUrl: string): Promise<string> {
+	const response = await fetch(activeStorageUrl, { method: "HEAD", redirect: "manual" });
+	const location = response.headers.get("location");
+
+	if (!location || !location.includes(MINIO_HOST)) {
+		throw new Error(`Redirect não aponta para MinIO: ${location}`);
+	}
+
+	// Strip query params (presigned params) — manter apenas host/bucket/key
+	return location.split("?")[0];
+}
+
+/**
+ * API para gerar URLs pré-assinadas para arquivos no MinIO.
+ * Suporta:
+ * - URLs diretas do MinIO (qualquer bucket: socialwise, chatwoot-storage, etc.)
+ * - URLs do Chatwit Active Storage (resolve redirect → MinIO → presigned)
  */
 export async function POST(request: NextRequest) {
 	try {
 		const body = await request.json();
-		const { url } = body;
+		let { url } = body;
 
 		if (!url) {
 			return NextResponse.json({ error: "URL não fornecida" }, { status: 400 });
 		}
 
-		console.log(`[PresignedURL] Gerando URL pré-assinada para: ${url}`);
+		// Se é URL Active Storage, resolver para MinIO primeiro
+		if (url.includes("/rails/active_storage/")) {
+			console.log(`[PresignedURL] Resolvendo Active Storage URL...`);
+			url = await resolveActiveStorageUrl(url);
+			console.log(`[PresignedURL] Resolvido para: ${url}`);
+		}
 
-		// Extrai a chave do objeto da URL
-		const objectKey = extractObjectKeyFromUrl(url);
-		console.log(`[PresignedURL] Chave do objeto extraída: ${objectKey}`);
+		// Extrai bucket e chave do objeto da URL MinIO
+		const { bucket, objectKey } = extractBucketAndKey(url);
+		console.log(`[PresignedURL] Bucket: ${bucket}, Key: ${objectKey}`);
 
-		// Gera a URL pré-assinada
-		const presignedUrl = await generatePresignedUrl(objectKey);
-		console.log(`[PresignedURL] URL pré-assinada gerada: ${presignedUrl}`);
+		// Gera a URL pré-assinada para o bucket correto
+		const presignedUrl = await generatePresignedUrl(objectKey, 86400, bucket);
 
 		return NextResponse.json({
-			original_url: url,
+			original_url: body.url,
 			presigned_url: presignedUrl,
 			object_key: objectKey,
-			expires_in: 86400, // 24 horas em segundos
+			bucket,
+			expires_in: 86400,
 		});
 	} catch (error: any) {
 		console.error("[PresignedURL] Erro:", error);

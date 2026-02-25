@@ -30,6 +30,7 @@ export async function GET() {
 				exam: rubric.exam ?? payload.meta?.exam ?? null,
 				area: rubric.area ?? payload.meta?.area ?? null,
 				version: rubric.version ?? payload.meta?.versao_schema ?? null,
+				pdfUrl: rubric.pdfUrl ?? null,
 				createdAt: rubric.createdAt,
 				updatedAt: rubric.updatedAt,
 				meta: payload.meta ?? rubric.meta ?? null,

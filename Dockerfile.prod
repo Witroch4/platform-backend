@@ -38,7 +38,7 @@ RUN if [ -f /etc/ImageMagick-6/policy.xml ]; then \
 # (o builder precisa falar com DB/Redis)
 # -----------------------------------------
 # Defaults seguros para build local com Docker Desktop / Compose
-ARG DATABASE_URL="postgresql://postgres:postgres@host.docker.internal:5432/socialWise?schema=public"
+ARG DATABASE_URL="postgresql://postgres:postgres@host.docker.internal:5432/socialwise?schema=public"
 ARG REDIS_HOST="host.docker.internal"
 ARG REDIS_PORT="6379"
 ARG REDIS_URL="redis://host.docker.internal:6379"

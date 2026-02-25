@@ -9,7 +9,7 @@ docker rm chatwit_postgres_dev 2>$null
 # Criar novo container PostgreSQL sem volumes persistentes
 Write-Host "Criando novo container PostgreSQL..." -ForegroundColor Yellow
 docker run --name chatwit_postgres_dev `
-    -e POSTGRES_DB=socialWise `
+    -e POSTGRES_DB=socialwise `
     -e POSTGRES_USER=postgres `
     -e POSTGRES_PASSWORD=postgres `
     -p 5432:5432 `
@@ -30,12 +30,12 @@ docker exec chatwit_postgres_dev psql -U postgres -c "SELECT pg_reload_conf();"
 
 # Testar conexão interna
 Write-Host "Testando conexão interna..." -ForegroundColor Yellow
-docker exec chatwit_postgres_dev psql -U postgres -d socialWise -c "SELECT version();"
+docker exec chatwit_postgres_dev psql -U postgres -d socialwise -c "SELECT version();"
 
 # Atualizar DATABASE_URL no .env
 Write-Host "Atualizando configuração do banco..." -ForegroundColor Yellow
 $envContent = Get-Content .env -Raw
-$envContent = $envContent -replace 'DATABASE_URL="postgresql://postgres@localhost:5432/socialWise"', 'DATABASE_URL="postgresql://postgres@localhost:5432/socialWise"'
+$envContent = $envContent -replace 'DATABASE_URL="postgresql://postgres@localhost:5432/socialwise"', 'DATABASE_URL="postgresql://postgres@localhost:5432/socialwise"'
 Set-Content .env $envContent
 
 # Executar migrações

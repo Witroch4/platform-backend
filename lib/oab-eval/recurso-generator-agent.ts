@@ -49,7 +49,7 @@ const DEFAULT_MODELS_BY_PROVIDER = {
 	CLAUDE: "claude-3-5-sonnet-latest",
 };
 
-const DEFAULT_MAX_OUTPUT_TOKENS = 8192;
+const DEFAULT_MAX_OUTPUT_TOKENS = 11192;
 const DEFAULT_TEMPERATURE = 0.3; // Um pouco de criatividade para escrita, mas não muito
 
 const IS_DEBUG = process.env.DEBUG === "1" || process.env.DEBUG === "true";
@@ -89,47 +89,47 @@ const DEFAULT_RECURSO_PROMPT = `
 
   <instructions>
     1. CABEÇALHO:
-       - Inicie obrigatoriamente com:
-         "Senhores Examinadores da Banca Recursal,
+       - Inicie obrigatoriamente com a saudação destacada:
+         "<u>**Senhores Examinadores da Banca Recursal,**</u>
          O Examinando vem pelo presente, respeitosamente requerer a reapreciação desses quesitos da sua prova:"
 
     2. SEÇÃO DA PEÇA PRÁTICO-PROFISSIONAL:
-       - Crie o subtítulo "PEÇA".
-       - Para cada quesito da peça apontado na análise como passível de recurso, utilize a seguinte estrutura base, substituindo as chaves pelos dados da análise:
-         "No quesito [NÚMERO DO QUESITO], a resposta exigida pela Banca era ''[GABARITO ESPERADO]''. O Examinando respondeu nas linhas [X-Y] conforme exigido pela banca, vejamos: ''...[TEXTO ESCRITO PELO EXAMINANDO]...''. [INSERIR BREVE ADAPTAÇÃO DO ARGUMENTO DA ANÁLISE COMPROVANDO A TESE]. Fica demonstrado que o candidato expôs a tese de forma adequada, estruturando sua argumentação em estrita observância aos requisitos delineados pela Banca Examinadora. Nesse contexto, verifica-se que a pontuação atribuída não reflete de maneira condizente o nível de conformidade da resposta. Diante disso, requer-se a devida reavaliação da nota concedida, tornando legítima a majoração da pontuação em [PONTUAÇÃO FALTANTE] pontos."
+       - Crie o subtítulo destacado "<u>**PEÇA**</u>" SOZINHO em sua própria linha, seguido de uma linha em branco antes do primeiro quesito.
+       - Para cada quesito da peça apontado na análise como passível de recurso, utilize a seguinte estrutura base, substituindo as chaves pelos dados da análise e APLICANDO O DESTAQUE (negrito e sublinhado) onde indicado. Cada quesito deve ser um parágrafo separado por linha em branco:
+         "No quesito [NÚMERO DO QUESITO], a resposta exigida pela Banca era ''[GABARITO ESPERADO]''. O Examinando respondeu nas <u>**linhas [X-Y]**</u> conforme exigido pela banca, vejamos: <u>**''...[TEXTO ESCRITO PELO EXAMINANDO]...''**</u>. [INSERIR BREVE ADAPTAÇÃO DO ARGUMENTO DA ANÁLISE COMPROVANDO A TESE]. Fica demonstrado que o candidato expôs a tese de forma adequada, estruturando sua argumentação em estrita observância aos requisitos delineados pela Banca Examinadora. Nesse contexto, verifica-se que a pontuação atribuída não reflete de maneira condizente o nível de conformidade da resposta. Diante disso, requer-se a devida reavaliação da nota concedida, tornando legítima a <u>**majoração da pontuação em [PONTUAÇÃO FALTANTE] pontos**</u>."
 
     3. SEÇÃO DAS QUESTÕES DISCURSIVAS:
-       - Crie o subtítulo "QUESTÕES".
-       - Para cada questão apontada na análise, utilize a seguinte estrutura base:
-         "Questão [NÚMERO DA QUESTÃO]
-         No item [LETRA DO ITEM], a banca exigiu a seguinte resposta ''[GABARITO ESPERADO]''. O Examinando, nas linhas [X-Y] fundamentou corretamente, inclusive com a indicação legal correspondente, vejamos: ''...[TEXTO ESCRITO PELO EXAMINANDO]...''. [INSERIR BREVE ADAPTAÇÃO DO ARGUMENTO DA ANÁLISE]. A construção argumentativa apresentada atende plenamente às diretrizes estabelecidas. Verifica-se que a pontuação atribuída não reflete de maneira condizente o nível de conformidade da resposta. Requer-se a devida reavaliação da nota concedida, tornando legítima a majoração da pontuação em [PONTUAÇÃO FALTANTE] pontos."
+       - Crie o subtítulo destacado "<u>**QUESTÕES**</u>" SOZINHO em sua própria linha, seguido de uma linha em branco.
+       - Para cada questão apontada na análise, o subtítulo "<u>**Questão [N]**</u>" deve ficar SOZINHO em sua própria linha, seguido de uma linha em branco. Utilize a seguinte estrutura base:
+         "<u>**Questão [NÚMERO DA QUESTÃO]**</u>
+         No item [LETRA DO ITEM], a banca exigiu a seguinte resposta ''[GABARITO ESPERADO]''. O Examinando, nas <u>**linhas [X-Y]**</u> fundamentou corretamente, inclusive com a indicação legal correspondente, vejamos: <u>**''...[TEXTO ESCRITO PELO EXAMINANDO]...''**</u>. [INSERIR BREVE ADAPTAÇÃO DO ARGUMENTO DA ANÁLISE]. A construção argumentativa apresentada atende plenamente às diretrizes estabelecidas. Verifica-se que a pontuação atribuída não reflete de maneira condizente o nível de conformidade da resposta. Requer-se a devida reavaliação da nota concedida, tornando legítima a <u>**majoração da pontuação em [PONTUAÇÃO FALTANTE] pontos**</u>."
 
     4. REVISÃO DE COESÃO:
        - Verifique se as pontuações (vírgulas, aspas simples duplas \`''\`) estão formatadas corretamente e se não ficaram marcações como "[]" ou "{}" no texto final.
        - A pontuação solicitada deve usar vírgula para decimais (ex: 0,65 pontos).
 
-    5. FORMATO DE SAÍDA EM MARKDOWN:
+    5. FORMATO DE SAÍDA EM MARKDOWN (DESTAQUES):
        - Sua resposta deve ser APENAS o texto completo do recurso formatado em **Markdown**.
-       - Use títulos (## PEÇA, ## QUESTÕES, ### Questão X) para as seções principais.
-       - Use **negrito** para termos jurídicos importantes, nomes de leis, súmulas e artigos citados.
-       - Use ''aspas simples duplas'' para citações do examinando (transcrições literais da prova).
+       - !important DESTAQUE VISUAL: Utilize a combinação de formatação HTML com Markdown \`<u>**texto aqui**</u>\` para sublinhar e colocar em negrito SIMULTANEAMENTE as informações mais importantes (Saudação, Títulos das seções, Linhas de referência, Transcrição da prova do aluno e Pontuação a ser majorada).
+       - Use ''aspas simples duplas'' para citações do gabarito e do examinando.
        - Use parágrafos separados por linha em branco para cada quesito/item.
        - NÃO use blocos de código, tabelas ou listas com bullets. Mantenha o estilo de prosa jurídica formal.
-       - O texto final em Markdown será convertido automaticamente para Word/PDF pelo sistema.
   </instructions>
 
   <outputFormat>
   <example><![CDATA[
-Senhores Examinadores da Banca Recursal,
+<u>**Senhores Examinadores da Banca Recursal,**</u>
 
 O Examinando vem pelo presente, respeitosamente requerer a reapreciação desses quesitos da sua prova:
 
-PEÇA
-No quesito 7, as respostas exigidas pela Banca era ''O mero inadimplemento do crédito tributário ocorrido entre janeiro a junho de 2024 não constitui infração legal capaz de ensejar a responsabilização dos sócios pelas dívidas tributárias da pessoa jurídica (0,70), cf. Súmula 430 do STJ (0,10)''. O Examinando respondeu nas linhas 61- 64 conforme exigido pela banca, vejamos: ''...Súmula 430 do STJ que o inadimplemento da obrigação tributária pela sociedade não gera, por si só, a responsabilidade solidaria...''. Fica demonstrado que o candidato expôs a tese de forma adequada, estruturando sua argumentação em estrita observância aos requisitos delineados pela Banca Examinadora. Nesse contexto, verifica-se que a pontuação atribuída não reflete de maneira condizente o nível de conformidade da resposta. Diante disso, requer-se a devida reavaliação da nota concedida, tornando legítima a majoração da pontuação em 0,80 pontos.
+<u>**PEÇA**</u>
 
-QUESTÕES 
-Questão 4 
-No item B, a banca exigiu a seguinte resposta ''Da juntada aos autos do mandado da execução da medida cautelar fiscal, quando concedida liminarmente (0,55), segundo o Art. 8º, parágrafo único, alínea b, da Lei nº 8.397/1992 (0,10)''. O Examinando, nas linhas 5-10 fundamentou corretamente, inclusive com a indicação do artigo correspondente, vejamos: ''Da execução da medida cautelar fiscal, quando concedida liminarmente. Artigo 8 paragrafo único, ...b da lei 8.397 de 06/01/1998''. A construção argumentativa apresentada atende plenamente às diretrizes estabelecidas. Verifica-se que a pontuação atribuída não reflete de maneira condizente o nível de conformidade da resposta. Requer-se a devida reavaliação da nota concedida, tornando legítima a majoração da pontuação em 0,65 pontos.
+No quesito 7, as respostas exigidas pela Banca era ''O mero inadimplemento do crédito tributário ocorrido entre janeiro a junho de 2024 não constitui infração legal capaz de ensejar a responsabilização dos sócios pelas dívidas tributárias da pessoa jurídica (0,70), cf. Súmula 430 do STJ (0,10)''. O Examinando respondeu nas <u>**linhas 61- 64**</u> conforme exigido pela banca, vejamos: <u>**''...Súmula 430 do STJ que o inadimplemento da obrigação tributária pela sociedade não gera, por si só, a responsabilidade solidaria...''**</u>. Fica demonstrado que o candidato expôs a tese de forma adequada, estruturando sua argumentação em estrita observância aos requisitos delineados pela Banca Examinadora. Nesse contexto, verifica-se que a pontuação atribuída não reflete de maneira condizente o nível de conformidade da resposta. Diante disso, requer-se a devida reavaliação da nota concedida, tornando legítima a <u>**majoração da pontuação em 0,80 pontos**</u>.
+
+<u>**QUESTÕES**</u> 
+
+<u>**Questão 4**</u> 
+No item B, a banca exigiu a seguinte resposta ''Da juntada aos autos do mandado da execução da medida cautelar fiscal, quando concedida liminarmente (0,55), segundo o Art. 8º, parágrafo único, alínea b, da Lei nº 8.397/1992 (0,10)''. O Examinando, nas <u>**linhas 5-10**</u> fundamentou corretamente, inclusive com a indicação do artigo correspondente, vejamos: <u>**''Da execução da medida cautelar fiscal, quando concedida liminarmente. Artigo 8 paragrafo único, ...b da lei 8.397 de 06/01/1998''**</u>. A construção argumentativa apresentada atende plenamente às diretrizes estabelecidas. Verifica-se que a pontuação atribuída não reflete de maneira condizente o nível de conformidade da resposta. Requer-se a devida reavaliação da nota concedida, tornando legítima a <u>**majoração da pontuação em 0,65 pontos**</u>.
   ]]></example>
   </outputFormat>
 </agent>

@@ -96,7 +96,19 @@ export function AnaliseCell({
 					analiseValidada: localAnaliseState.analiseValidada,
 				}}
 			>
-				{mensagemAviso ? (
+				{isEnviandoAnalise || localAnaliseState.aguardandoAnalise ? (
+					<div
+						className="w-full rounded-md border border-input bg-background overflow-hidden animate-in fade-in-0 zoom-in-95 duration-300"
+						key={`analise-anim-${refreshKey}`}
+					>
+						<img
+							src="/animations/analiseCellAnimation.svg"
+							alt="Analisando..."
+							className="w-full h-auto"
+							style={{ minHeight: "56px" }}
+						/>
+					</div>
+				) : mensagemAviso ? (
 					<TooltipProvider>
 						<Tooltip>
 							<TooltipTrigger asChild>
@@ -137,12 +149,7 @@ export function AnaliseCell({
 						className="w-full text-xs px-2 py-1 h-auto min-h-8 whitespace-pre-line"
 						key={`analise-btn-${refreshKey}`}
 					>
-						{isEnviandoAnalise ? (
-							<>
-								<Loader2 className="h-4 w-4 mr-1 animate-spin" />
-								Processando...
-							</>
-						) : localAnaliseState.analiseUrl ? (
+						{localAnaliseState.analiseUrl ? (
 							<>
 								<Eye className="h-4 w-4 mr-1" />
 								Ver Análise
@@ -156,11 +163,6 @@ export function AnaliseCell({
 							<>
 								<FileText className="h-4 w-4 mr-1" />
 								Pré-Análise
-							</>
-						) : localAnaliseState.aguardandoAnalise ? (
-							<>
-								<Loader2 className="h-4 w-4 mr-1" />
-								Aguardando
 							</>
 						) : (
 							<>

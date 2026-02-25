@@ -7,11 +7,12 @@ interface SaveRubricInput {
 	exam?: string;
 	area?: string;
 	version?: string;
+	pdfUrl?: string;
 	payload: RubricPayload;
 }
 
 export async function createRubric(input: SaveRubricInput) {
-	const { payload, ...meta } = input;
+	const { payload, pdfUrl, ...meta } = input;
 
 	return withPrismaReconnect((client) =>
 		client.oabRubric.create({
@@ -20,6 +21,7 @@ export async function createRubric(input: SaveRubricInput) {
 				exam: meta.exam,
 				area: meta.area,
 				version: meta.version,
+				pdfUrl,
 				meta: payload.meta as Prisma.InputJsonValue,
 				schema: payload as unknown as Prisma.InputJsonValue,
 			},

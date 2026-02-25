@@ -345,17 +345,19 @@ export async function uploadMultipleToMinIO(
  * Gera uma URL pré-assinada para acesso direto a um objeto no MinIO
  * @param objectKey Chave do objeto no bucket
  * @param expiresIn Tempo de expiração em segundos (padrão: 24 horas)
+ * @param bucket Bucket do objeto (padrão: BUCKET_NAME / "socialwise")
  * @returns URL pré-assinada
  */
-export async function generatePresignedUrl(objectKey: string, expiresIn = 86400): Promise<string> {
+export async function generatePresignedUrl(objectKey: string, expiresIn = 86400, bucket?: string): Promise<string> {
 	try {
+		const targetBucket = bucket || BUCKET_NAME;
 		const command = new GetObjectCommand({
-			Bucket: BUCKET_NAME,
+			Bucket: targetBucket,
 			Key: objectKey,
 		});
 
 		const url = await getSignedUrl(s3Client, command, { expiresIn });
-		console.log(`[MinIO] URL pré-assinada gerada para ${objectKey}:`, url);
+		console.log(`[MinIO] URL pré-assinada gerada para ${targetBucket}/${objectKey}:`, url);
 
 		return url;
 	} catch (error) {
@@ -365,29 +367,32 @@ export async function generatePresignedUrl(objectKey: string, expiresIn = 86400)
 }
 
 /**
+ * Extrai bucket e object key de uma URL do MinIO (path-style: host/bucket/key)
+ * @param url URL completa do MinIO
+ * @returns { bucket, objectKey }
+ */
+export function extractBucketAndKey(url: string): { bucket: string; objectKey: string } {
+	const fullUrl = ensureHttpsProtocol(url);
+	const urlObj = new URL(fullUrl);
+	// pathname = "/bucket-name/object-key" (path-style)
+	const pathParts = urlObj.pathname.split("/").filter(Boolean);
+	if (pathParts.length < 2) {
+		throw new Error(`URL MinIO inválida (esperado /bucket/key): ${url}`);
+	}
+	return {
+		bucket: pathParts[0],
+		objectKey: pathParts.slice(1).join("/"),
+	};
+}
+
+/**
  * Extrai a chave do objeto de uma URL do MinIO
  * @param url URL completa do MinIO
  * @returns Chave do objeto
  */
 export function extractObjectKeyFromUrl(url: string): string {
 	try {
-		// Garante que a URL tenha protocolo para evitar erros
-		const fullUrl = ensureHttpsProtocol(url);
-
-		// Remove o protocolo e o domínio para obter apenas o caminho
-		const urlObj = new URL(fullUrl);
-		const pathParts = urlObj.pathname.split("/");
-
-		// Remove a primeira parte vazia e o nome do bucket
-		const bucketName = process.env.S3_BUCKET || "socialwise";
-		const bucketIndex = pathParts.findIndex((part) => part === bucketName);
-
-		if (bucketIndex === -1) {
-			throw new Error(`Bucket ${bucketName} não encontrado na URL`);
-		}
-
-		// Junta as partes restantes do caminho para formar a chave do objeto
-		const objectKey = pathParts.slice(bucketIndex + 1).join("/");
+		const { objectKey } = extractBucketAndKey(url);
 		return objectKey;
 	} catch (error) {
 		console.error(`[MinIO] Erro ao extrair chave do objeto da URL ${url}:`, error);

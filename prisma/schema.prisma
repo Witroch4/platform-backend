@@ -203,6 +203,7 @@ model OabRubric {
   exam        String?
   area        String?
   version     String?
+  pdfUrl      String?            // URL do PDF original no MinIO
   meta        Json?
   schema      Json
   createdAt   DateTime           @default(now())
@@ -1451,6 +1452,9 @@ model AiAgentBlueprint {
   // Engine Híbrida: vinculação de agente a coluna da tabela
   linkedColumn    LinkedColumn? // Coluna da tabela que este agente executa
   defaultProvider AiProvider?   // Provedor padrão (OPENAI ou GEMINI)
+  // Reasoning / Thinking config
+  thinkingLevel   String?       // Gemini 3: "minimal" | "low" | "medium" | "high"
+  reasoningEffort String?       // OpenAI GPT-5+: "none" | "minimal" | "low" | "medium" | "high" | "xhigh"
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   owner           User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
@@ -1927,7 +1931,8 @@ enum LinkedColumn {
   PROVA_CELL    // Transcrição de provas manuscritas
   ESPELHO_CELL  // Extração de dados do espelho de correção
   ANALISE_CELL  // Análise comparativa (futuro)
-  RECURSO_CELL  // Geração de recursos (futuro)
+  RECURSO_CELL          // Geração de recursos (futuro)
+  ESPELHO_PADRAO_CELL   // Extração de gabarito padrão via IA Vision
 }
 
 // Provedores de IA disponíveis

@@ -125,115 +125,21 @@ type GroupOverrideMeta = {
 
 function filterRubricByActiveGroups(rubric: RubricPayload): ActiveGroupSelection {
 	const allGroups = rubric.grupos ?? [];
-	const variantMap = new Map<string, Map<string, RubricGroup[]>>();
-
-	const slugFromLabel = (label: string) =>
-		label
-			.normalize("NFD")
-			.replace(/[\u0300-\u036f]/g, "")
-			.replace(/[^A-Za-z0-9]+/g, "_")
-			.replace(/^_+|_+$/g, "")
-			.toUpperCase() || "__DEFAULT__";
-
-	allGroups.forEach((group) => {
-		let family = group.variant_family;
-		let key = group.variant_key;
-		let label = group.variant_label;
-
-		if (!family && group.segmento) {
-			family = `${group.questao}_SEGMENTO`;
-			key = slugFromLabel(group.segmento);
-			label = group.segmento;
-		}
-
-		if (!family) return;
-		const resolvedKey = key ?? "__DEFAULT__";
-		if (!variantMap.has(family)) variantMap.set(family, new Map());
-		const familyVariants = variantMap.get(family)!;
-		const list = familyVariants.get(resolvedKey) ?? [];
-		list.push(group);
-		if (!group.variant_family) group.variant_family = family;
-		if (!group.variant_key) group.variant_key = resolvedKey;
-		if (!group.variant_label && label) group.variant_label = label;
-		familyVariants.set(resolvedKey, list);
-	});
-
-	const selectedVariants = new Map<string, string>();
-	const metaPreferred = ((rubric.meta || {}) as any)?.preferred_variants || {};
-
-	variantMap.forEach((variants, family) => {
-		let selected: string | undefined = metaPreferred[family];
-		if (!selected) {
-			const keys = Array.from(variants.keys());
-			if (keys.length === 1) selected = keys[0];
-			else {
-				selected =
-					keys.find((key) => {
-						const groups = variants.get(key)!;
-						return groups.some((g) =>
-							/agravo/i.test(`${g.variant_label || ""} ${g.segmento || ""} ${g.descricao || ""}`),
-						);
-					}) ?? keys[0];
-			}
-		}
-
-		// LOG: Debug de seleção de variantes
-		if (process.env.DEBUG_GABARITO === "1" || true) {
-			console.log(`[FilterRubric] 🔍 Família: ${family}`);
-			console.log(`[FilterRubric]   Variantes disponíveis:`, Array.from(variants.keys()));
-			console.log(`[FilterRubric]   Variante selecionada: ${selected}`);
-			const selectedGroups = variants.get(selected!)?.map((g) => g.id) || [];
-			console.log(`[FilterRubric]   Grupos na variante selecionada (${selectedGroups.length}):`, selectedGroups);
-		}
-
-		selectedVariants.set(family, selected);
-	});
-
-	const activeGroups = allGroups.filter((group) => {
-		if (!group.variant_family) return true;
-		const selected = selectedVariants.get(group.variant_family);
-		if (!selected) return true;
-		return (group.variant_key ?? "__default__") === selected;
-	});
-
-	const inactiveGroups = allGroups.filter((group) => {
-		if (!group.variant_family) return false;
-		const selected = selectedVariants.get(group.variant_family);
-		if (!selected) return false;
-		return (group.variant_key ?? "__default__") !== selected;
-	});
+	const activeGroupIds = new Set(allGroups.map((g) => g.id));
+	const activeSubitemIds = new Set(rubric.itens.map((item) => item.id));
 
 	// LOG: Resultado da filtragem
-	if (process.env.DEBUG_GABARITO === "1" || true) {
-		console.log(`[FilterRubric] ✅ Filtragem concluída:`);
-		console.log(`[FilterRubric]   Total de grupos (bruto): ${allGroups.length}`);
-		console.log(`[FilterRubric]   Grupos ativos: ${activeGroups.length}`);
-		console.log(`[FilterRubric]   Grupos inativos: ${inactiveGroups.length}`);
-		const pecaAtivos = activeGroups.filter((g) => g.questao === "PEÇA");
-		const pecaInativos = inactiveGroups.filter((g) => g.questao === "PEÇA");
-		console.log(`[FilterRubric]   PEÇA: ${pecaAtivos.length} ativos, ${pecaInativos.length} inativos`);
-	}
-
-	const excludedSubitems = new Set<string>();
-	inactiveGroups.forEach((group) => {
-		(group.subitens || []).forEach((id) => excludedSubitems.add(id));
-	});
-
-	const activeSubitemIds = new Set<string>();
-	rubric.itens.forEach((item) => {
-		if (!excludedSubitems.has(item.id)) activeSubitemIds.add(item.id);
-	});
-
-	const filteredRubric: RubricPayload = {
-		...rubric,
-		itens: rubric.itens.filter((item) => activeSubitemIds.has(item.id)),
-		grupos: activeGroups,
-	};
+	console.log(`[FilterRubric] ✅ Filtragem concluída:`);
+	console.log(`[FilterRubric]   Total de grupos (bruto): ${allGroups.length}`);
+	console.log(`[FilterRubric]   Grupos ativos: ${allGroups.length}`);
+	console.log(`[FilterRubric]   Grupos inativos: 0`);
+	const pecaAtivos = allGroups.filter((g) => g.questao === "PEÇA");
+	console.log(`[FilterRubric]   PEÇA: ${pecaAtivos.length} ativos, 0 inativos`);
 
 	return {
-		rubric: filteredRubric,
-		selectedVariants,
-		activeGroupIds: new Set(activeGroups.map((g) => g.id)),
+		rubric,
+		selectedVariants: new Map(),
+		activeGroupIds,
 		activeSubitemIds,
 	};
 }
@@ -573,6 +479,8 @@ async function getMirrorExtractorConfig(selectedProvider?: "OPENAI" | "GEMINI"):
 		"- IDs dos itens devem manter o formato exato da rubrica",
 	].join(" ");
 
+	const isGemini3Model = (m: string) => m.toLowerCase().includes("gemini-3");
+
 	// ⭐ FALLBACK: Garantir que selectedProvider sempre tenha um valor válido
 	const effectiveProvider = selectedProvider || "GEMINI";
 	console.log(
@@ -603,8 +511,8 @@ async function getMirrorExtractorConfig(selectedProvider?: "OPENAI" | "GEMINI"):
 				console.log(`[MirrorGenerator] ✅ Blueprint ${blueprint.name} já usa modelo ${effectiveProvider}: ${model}`);
 			}
 
-			// INJEÇÃO DE DEPENDÊNCIA DE PROMPT: Se Gemini, adiciona instruções técnicas para Agentic Vision
-			if (isGeminiModel(model)) {
+			// INJEÇÃO DE DEPENDÊNCIA DE PROMPT: Apenas Gemini 3+ (2.5 Flash não tem code execution e tenta pytesseract)
+			if (isGemini3Model(model)) {
 				systemInstructions = `${GEMINI_AGENTIC_VISION_INSTRUCTIONS}\n\n---\n\n${systemInstructions}`;
 				console.log("[MirrorGenerator] 🔬 Injetando instruções Gemini Agentic Vision para extração de espelho");
 			}
@@ -617,8 +525,8 @@ async function getMirrorExtractorConfig(selectedProvider?: "OPENAI" | "GEMINI"):
 				model,
 				systemInstructions,
 				maxOutputTokens,
-				enableCodeExecution: isGeminiModel(model),
-				thinkingLevel: "high",
+				enableCodeExecution: isGemini3Model(model),
+				thinkingLevel: ((blueprint.thinkingLevel as string) || "high") as "minimal" | "low" | "medium" | "high",
 			};
 		}
 	} catch (err) {
@@ -632,7 +540,7 @@ async function getMirrorExtractorConfig(selectedProvider?: "OPENAI" | "GEMINI"):
 		if (bpId) {
 			blueprint = await (prisma as any).aiAgentBlueprint.findUnique({
 				where: { id: bpId },
-				select: { model: true, systemPrompt: true, instructions: true, maxOutputTokens: true },
+				select: { model: true, systemPrompt: true, instructions: true, maxOutputTokens: true, thinkingLevel: true },
 			});
 		}
 		if (!bpId || !blueprint) {
@@ -645,7 +553,7 @@ async function getMirrorExtractorConfig(selectedProvider?: "OPENAI" | "GEMINI"):
 					],
 				},
 				orderBy: { updatedAt: "desc" },
-				select: { model: true, systemPrompt: true, instructions: true, maxOutputTokens: true },
+				select: { model: true, systemPrompt: true, instructions: true, maxOutputTokens: true, thinkingLevel: true },
 			});
 		}
 
@@ -654,8 +562,8 @@ async function getMirrorExtractorConfig(selectedProvider?: "OPENAI" | "GEMINI"):
 			const maxOutputTokens = Number(blueprint.maxOutputTokens ?? 0);
 			let systemInstructions = (blueprint.systemPrompt || blueprint.instructions || baseInstructions).toString();
 
-			// INJEÇÃO DE DEPENDÊNCIA DE PROMPT: Se Gemini, adiciona instruções técnicas
-			if (isGeminiModel(model)) {
+			// INJEÇÃO DE DEPENDÊNCIA DE PROMPT: Apenas Gemini 3+ (fallback)
+			if (isGemini3Model(model)) {
 				systemInstructions = `${GEMINI_AGENTIC_VISION_INSTRUCTIONS}\n\n---\n\n${systemInstructions}`;
 				console.log("[MirrorGenerator] 🔬 Injetando instruções Gemini Agentic Vision (fallback)");
 			}
@@ -666,8 +574,8 @@ async function getMirrorExtractorConfig(selectedProvider?: "OPENAI" | "GEMINI"):
 				model,
 				systemInstructions,
 				maxOutputTokens,
-				enableCodeExecution: isGeminiModel(model),
-				thinkingLevel: "high",
+				enableCodeExecution: isGemini3Model(model),
+				thinkingLevel: ((blueprint.thinkingLevel as string) || "high") as "minimal" | "low" | "medium" | "high",
 			};
 		}
 	} catch (err) {
@@ -872,17 +780,17 @@ async function extractMirrorDataFromImages(
 
 	const groupPromptLines = grupos.length
 		? grupos.flatMap((grupo) => {
-				const headerParts = [] as string[];
-				if (grupo.segmento) headerParts.push(grupo.segmento);
-				const descricaoBase = grupo.descricao_bruta || grupo.descricao || `Grupo ${grupo.indice}`;
-				headerParts.push(descricaoBase);
-				const headerLabel = headerParts.join(" – ");
-				const header = `- ${headerLabel} (máx ${grupo.peso_maximo.toFixed(2)}):`;
-				const totalLine = `   - nota_total_${grupo.id}`;
-				const fonteLine = `   - fonte_nota_total_${grupo.id}`;
-				const colunaLine = `   - coluna_nota_total_${grupo.id}`;
-				return [header, totalLine, fonteLine, colunaLine];
-			})
+			const headerParts = [] as string[];
+			// segmento removido na v2.1 do schema
+			const descricaoBase = grupo.descricao || `Grupo ${grupo.indice}`;
+			headerParts.push(descricaoBase);
+			const headerLabel = headerParts.join(" – ");
+			const header = `- ${headerLabel} (máx ${grupo.peso_maximo.toFixed(2)}):`;
+			const totalLine = `   - nota_total_${grupo.id}`;
+			const fonteLine = `   - fonte_nota_total_${grupo.id}`;
+			const colunaLine = `   - coluna_nota_total_${grupo.id}`;
+			return [header, totalLine, fonteLine, colunaLine];
+		})
 		: expectedSubitemIds.map((id) => `   - nota_obtida_${id}`);
 
 	const userPrompt = [
@@ -1211,7 +1119,7 @@ function buildStructuredMirror(rubric: RubricPayload, extractedData: ExtractedMi
 
 	if (possuiGrupos) {
 		for (const grupo of gruposRubrica) {
-			const subEvaluations: SubItemEvaluation[] = grupo.subitens.map((subId) => {
+			const subEvaluations: SubItemEvaluation[] = [grupo.id].map((subId) => {
 				const subItem = subitemMap.get(subId);
 				const notaSanitizada = roundToTwo(scoreMap.get(subId) ?? 0);
 				return {
@@ -1242,8 +1150,7 @@ function buildStructuredMirror(rubric: RubricPayload, extractedData: ExtractedMi
 			}
 			const notaGrupo = override != null ? override : somaSubitens;
 			const notaCapped = roundToTwo(Math.min(notaGrupo, grupo.peso_maximo));
-			const descricaoPrincipal =
-				grupo.descricao_bruta || grupo.descricao || grupo.descricao_limpa || `Grupo ${grupo.indice}`;
+			const descricaoPrincipal = grupo.descricao || `Grupo ${grupo.indice}`;
 
 			const evaluation: ItemEvaluation = {
 				id: grupo.id,
@@ -1393,11 +1300,11 @@ function buildStructuredMirror(rubric: RubricPayload, extractedData: ExtractedMi
 			peca:
 				pecaItems.length > 0
 					? {
-							titulo: "AVALIAÇÃO DA PEÇA PROFISSIONAL",
-							pontuacaoMaxima: roundToTwo(expected.peca.esperado),
-							pontuacaoObtida: totalPeca,
-							itens: pecaItems,
-						}
+						titulo: "AVALIAÇÃO DA PEÇA PROFISSIONAL",
+						pontuacaoMaxima: roundToTwo(expected.peca.esperado),
+						pontuacaoObtida: totalPeca,
+						itens: pecaItems,
+					}
 					: undefined,
 			questoes,
 		},
