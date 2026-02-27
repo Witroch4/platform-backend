@@ -90,7 +90,7 @@ export function matcherNode(state: GraphState): Partial<GraphState> {
 		evidences.push({
 			subitemId: item.id,
 			questao: item.questao,
-			peso: item.peso,
+			nota_maxima: item.nota_maxima,
 			candidatos: scored.slice(0, Math.min(5, scored.length)),
 		});
 	}

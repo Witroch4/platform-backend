@@ -153,10 +153,10 @@ async function processWithOpenAI(request: VisionRequest): Promise<VisionResponse
 		model,
 		usage: usage
 			? {
-					inputTokens: usage.input_tokens ?? usage.prompt_tokens,
-					outputTokens: usage.output_tokens ?? usage.completion_tokens,
-					totalTokens: usage.total_tokens,
-				}
+				inputTokens: usage.input_tokens ?? usage.prompt_tokens,
+				outputTokens: usage.output_tokens ?? usage.completion_tokens,
+				totalTokens: usage.total_tokens,
+			}
 			: undefined,
 	};
 }
@@ -209,7 +209,7 @@ async function processWithGemini(request: VisionRequest): Promise<VisionResponse
 
 	const gemini = getGeminiClient();
 	if (!gemini) {
-		throw new Error("Gemini API não configurada. Defina GEMINI_API_KEY ou GOOGLE_AI_API_KEY no ambiente.");
+		throw new Error("Gemini API não configurada. Defina GOOGLE_GENERATIVE_AI_API_KEY, GEMINI_API_KEY ou GOOGLE_AI_API_KEY no ambiente.");
 	}
 
 	// Configurar tools — Code Execution apenas para Gemini 3+ (2.5 Flash tenta pytesseract e falha)
@@ -221,17 +221,17 @@ async function processWithGemini(request: VisionRequest): Promise<VisionResponse
 	// Configurar thinking: Gemini 3 usa thinkingLevel, Gemini 2.5 usa thinkingBudget
 	const thinkingConfig = isGemini3Model(model)
 		? {
-				thinkingConfig: {
-					includeThoughts: includeThoughts ?? false,
-					thinkingLevel: thinkingLevel ?? "HIGH",
-				},
-			}
+			thinkingConfig: {
+				includeThoughts: includeThoughts ?? false,
+				thinkingLevel: thinkingLevel ?? "HIGH",
+			},
+		}
 		: isGemini25Model(model)
 			? {
-					thinkingConfig: {
-						thinkingBudget: thinkingLevelToBudget(thinkingLevel),
-					},
-				}
+				thinkingConfig: {
+					thinkingBudget: thinkingLevelToBudget(thinkingLevel),
+				},
+			}
 			: {};
 
 	// Cast para contornar problemas de compatibilidade de tipos com versões do SDK
@@ -272,10 +272,10 @@ async function processWithGemini(request: VisionRequest): Promise<VisionResponse
 		model,
 		usage: usage
 			? {
-					inputTokens: usage.promptTokenCount,
-					outputTokens: usage.candidatesTokenCount,
-					totalTokens: usage.totalTokenCount,
-				}
+				inputTokens: usage.promptTokenCount,
+				outputTokens: usage.candidatesTokenCount,
+				totalTokens: usage.totalTokenCount,
+			}
 			: undefined,
 	};
 }
@@ -395,7 +395,7 @@ async function processMultiImageWithGemini(request: {
 
 	const gemini = getGeminiClient();
 	if (!gemini) {
-		throw new Error("Gemini API não configurada. Defina GEMINI_API_KEY ou GOOGLE_AI_API_KEY no ambiente.");
+		throw new Error("Gemini API não configurada. Defina GOOGLE_GENERATIVE_AI_API_KEY, GEMINI_API_KEY ou GOOGLE_AI_API_KEY no ambiente.");
 	}
 
 	const imageContents = images.map((img) => ({
@@ -414,17 +414,17 @@ async function processMultiImageWithGemini(request: {
 	// Configurar thinking: Gemini 3 usa thinkingLevel, Gemini 2.5 usa thinkingBudget
 	const thinkingConfig = isGemini3Model(model)
 		? {
-				thinkingConfig: {
-					includeThoughts: false,
-					thinkingLevel: thinkingLevel ?? "HIGH",
-				},
-			}
+			thinkingConfig: {
+				includeThoughts: false,
+				thinkingLevel: thinkingLevel ?? "HIGH",
+			},
+		}
 		: isGemini25Model(model)
 			? {
-					thinkingConfig: {
-						thinkingBudget: thinkingLevelToBudget(thinkingLevel),
-					},
-				}
+				thinkingConfig: {
+					thinkingBudget: thinkingLevelToBudget(thinkingLevel),
+				},
+			}
 			: {};
 
 	// Cast para contornar problemas de compatibilidade de tipos com versões do SDK
@@ -456,10 +456,10 @@ async function processMultiImageWithGemini(request: {
 		model,
 		usage: usage
 			? {
-					inputTokens: usage.promptTokenCount,
-					outputTokens: usage.candidatesTokenCount,
-					totalTokens: usage.totalTokenCount,
-				}
+				inputTokens: usage.promptTokenCount,
+				outputTokens: usage.candidatesTokenCount,
+				totalTokens: usage.totalTokenCount,
+			}
 			: undefined,
 	};
 }
@@ -554,7 +554,7 @@ async function processMultiImageUrlWithGemini(request: {
 
 	const gemini = getGeminiClient();
 	if (!gemini) {
-		throw new Error("Gemini API não configurada. Defina GEMINI_API_KEY ou GOOGLE_AI_API_KEY no ambiente.");
+		throw new Error("Gemini API não configurada. Defina GOOGLE_GENERATIVE_AI_API_KEY, GEMINI_API_KEY ou GOOGLE_AI_API_KEY no ambiente.");
 	}
 
 	// Gemini aceita URLs HTTP/HTTPS diretamente
@@ -574,17 +574,17 @@ async function processMultiImageUrlWithGemini(request: {
 	// Configurar thinking: Gemini 3 usa thinkingLevel, Gemini 2.5 usa thinkingBudget
 	const thinkingConfig = isGemini3Model(model)
 		? {
-				thinkingConfig: {
-					includeThoughts: false,
-					thinkingLevel: thinkingLevel ?? "HIGH",
-				},
-			}
+			thinkingConfig: {
+				includeThoughts: false,
+				thinkingLevel: thinkingLevel ?? "HIGH",
+			},
+		}
 		: isGemini25Model(model)
 			? {
-					thinkingConfig: {
-						thinkingBudget: thinkingLevelToBudget(thinkingLevel),
-					},
-				}
+				thinkingConfig: {
+					thinkingBudget: thinkingLevelToBudget(thinkingLevel),
+				},
+			}
 			: {};
 
 	// Config com cast para evitar incompatibilidade de tipos do SDK
@@ -616,10 +616,10 @@ async function processMultiImageUrlWithGemini(request: {
 		model,
 		usage: usage
 			? {
-					inputTokens: usage.promptTokenCount,
-					outputTokens: usage.candidatesTokenCount,
-					totalTokens: usage.totalTokenCount,
-				}
+				inputTokens: usage.promptTokenCount,
+				outputTokens: usage.candidatesTokenCount,
+				totalTokens: usage.totalTokenCount,
+			}
 			: undefined,
 	};
 }

@@ -8,7 +8,7 @@ export type Subitem = {
 	escopo: Escopo;
 	questao: "PEÇA" | `Q${1 | 2 | 3 | 4}`;
 	descricao: string;
-	peso: number | null;
+	nota_maxima: number | null;
 	fundamentos: string[];
 	palavras_chave: string[];
 	embedding_text: string;
@@ -30,9 +30,9 @@ export type GabaritoGrupo = {
 	descricao: string;
 	descricao_bruta: string;
 	descricao_limpa: string;
-	peso_maximo: number;
-	pesos_opcoes: number[];
-	pesos_brutos: number[];
+	nota_maxima: number;
+	opcoes_pontuacao: number[];
+	faixa_pontuacao: number[];
 	subitens: string[];
 	variant_family?: string;
 	variant_key?: string;
@@ -963,9 +963,9 @@ export function parseGabaritoDeterministico(textoBruto: string, metaIn: ParseMet
 						descricao: descricaoInicial,
 						descricao_bruta: descricaoBrutaInicial,
 						descricao_limpa: sanitizeDescricao(descricaoBrutaInicial),
-						peso_maximo: 0,
-						pesos_opcoes: [] as number[],
-						pesos_brutos: li.pesos.map((p) => Number(p.toFixed(2))),
+						nota_maxima: 0,
+						opcoes_pontuacao: [] as number[],
+						faixa_pontuacao: li.pesos.map((p) => Number(p.toFixed(2))),
 						subitens: [] as string[],
 						variant_family: variantFamily,
 						variant_key: variantKey,
@@ -987,7 +987,7 @@ export function parseGabaritoDeterministico(textoBruto: string, metaIn: ParseMet
 					grupoBuilder.group.descricao_bruta = `${grupoBuilder.group.descricao_bruta}\n${descRawTrim}`.trim();
 					grupoBuilder.group.descricao_limpa = sanitizeDescricao(grupoBuilder.group.descricao_bruta);
 				}
-				grupoBuilder.group.pesos_brutos.push(...li.pesos.map((p) => Number(p.toFixed(2))));
+				grupoBuilder.group.faixa_pontuacao.push(...li.pesos.map((p) => Number(p.toFixed(2))));
 
 				if (!grupoBuilder.group.variant_family && variantFamily) {
 					grupoBuilder.group.variant_family = variantFamily;
@@ -1045,7 +1045,7 @@ export function parseGabaritoDeterministico(textoBruto: string, metaIn: ParseMet
 				const branchTotal = Number(branchPesos.reduce((acc, p) => acc + (p ?? 0), 0).toFixed(2));
 				grupoBuilder.pesoOptions.push(branchTotal);
 				if (!Number.isNaN(branchTotal)) {
-					grupoBuilder.group.peso_maximo = Number(Math.max(grupoBuilder.group.peso_maximo, branchTotal).toFixed(2));
+					grupoBuilder.group.nota_maxima = Number(Math.max(grupoBuilder.group.nota_maxima, branchTotal).toFixed(2));
 				}
 
 				// --- GRANULARIDADE ATÔMICA NA PEÇA (genérica, sem dicionário) ---
@@ -1110,7 +1110,7 @@ export function parseGabaritoDeterministico(textoBruto: string, metaIn: ParseMet
 							escopo,
 							questao,
 							descricao: descricaoFrag,
-							peso: Number(pesoSomado.toFixed(2)),
+							nota_maxima: Number(pesoSomado.toFixed(2)),
 							fundamentos,
 							palavras_chave: palavras,
 							...(variantInfo ?? {}),
@@ -1187,7 +1187,7 @@ export function parseGabaritoDeterministico(textoBruto: string, metaIn: ParseMet
 							escopo,
 							questao,
 							descricao: descricaoFrag,
-							peso: peso > 0 ? Number(peso.toFixed(2)) : null,
+							nota_maxima: peso > 0 ? Number(peso.toFixed(2)) : null,
 							fundamentos,
 							palavras_chave: palavras,
 							...(variantInfo ?? {}),
@@ -1251,7 +1251,7 @@ export function parseGabaritoDeterministico(textoBruto: string, metaIn: ParseMet
 					escopo,
 					questao,
 					descricao: descricaoLimpa,
-					peso: pesoTotal,
+					nota_maxima: pesoTotal,
 					fundamentos,
 					palavras_chave: palavras,
 					...(ouGroupId ? { ou_group_id: ouGroupId, ou_group_mode: "pick_best" as const } : {}),
@@ -1274,13 +1274,13 @@ export function parseGabaritoDeterministico(textoBruto: string, metaIn: ParseMet
 
 			const opcoesNormalizadas = uniq(grupoBuilder.pesoOptions.map((p) => Number(p.toFixed(2))));
 			if (opcoesNormalizadas.length) {
-				grupoBuilder.group.pesos_opcoes = opcoesNormalizadas;
-				grupoBuilder.group.peso_maximo = Number(Math.max(...opcoesNormalizadas).toFixed(2));
+				grupoBuilder.group.opcoes_pontuacao = opcoesNormalizadas;
+				grupoBuilder.group.nota_maxima = Number(Math.max(...opcoesNormalizadas).toFixed(2));
 			} else {
-				const somaBruta = grupoBuilder.group.pesos_brutos.reduce((acc, p) => acc + (p ?? 0), 0);
+				const somaBruta = grupoBuilder.group.faixa_pontuacao.reduce((acc, p) => acc + (p ?? 0), 0);
 				const somaNormalizada = Number(somaBruta.toFixed(2));
-				grupoBuilder.group.pesos_opcoes = somaNormalizada ? [somaNormalizada] : [];
-				grupoBuilder.group.peso_maximo = somaNormalizada;
+				grupoBuilder.group.opcoes_pontuacao = somaNormalizada ? [somaNormalizada] : [];
+				grupoBuilder.group.nota_maxima = somaNormalizada;
 			}
 		});
 	});
@@ -1298,8 +1298,8 @@ export function parseGabaritoDeterministico(textoBruto: string, metaIn: ParseMet
 			somaPeca,
 			itensPeca: itens.filter((i) => i.questao === "PEÇA").length,
 			pesosPeca: itens
-				.filter((i) => i.questao === "PEÇA" && i.peso)
-				.map((i) => ({ id: i.id, peso: i.peso, ou_group: i.ou_group_id })),
+				.filter((i) => i.questao === "PEÇA" && i.nota_maxima)
+				.map((i) => ({ id: i.id, nota_maxima: i.nota_maxima, ou_group: i.ou_group_id })),
 		});
 
 		// Executa verificação completa da pontuação
@@ -1441,7 +1441,7 @@ export function verificarPontuacao(itens: Subitem[]): {
 
 		const processedGroups = new Set<string>();
 		for (const item of lista) {
-			if (item.peso == null || item.peso <= 0) continue;
+			if (item.nota_maxima == null || item.nota_maxima <= 0) continue;
 
 			if (item.ou_group_id) {
 				if (processedGroups.has(item.ou_group_id)) continue;
@@ -1453,7 +1453,7 @@ export function verificarPontuacao(itens: Subitem[]): {
 
 				const mode = grupo.mode ?? "pick_best";
 				const fundamentos = grupo.items.filter((g) => {
-					const peso = g.peso ?? 0;
+					const peso = g.nota_maxima ?? 0;
 					if (peso > 0 && peso <= 0.15) return true;
 					const textoRaw = g.descricao.trim().toLowerCase();
 					const texto = textoRaw.replace(/^(não|nao|sim)[\.\s]+/, "");
@@ -1470,10 +1470,10 @@ export function verificarPontuacao(itens: Subitem[]): {
 
 				let subtotal = 0;
 				if (mode === "pick_sum") {
-					subtotal = grupo.items.reduce((acc, g) => acc + (g.peso ?? 0), 0);
+					subtotal = grupo.items.reduce((acc, g) => acc + (g.nota_maxima ?? 0), 0);
 				} else {
-					const pesoFundamentos = fundamentos.reduce((acc, g) => acc + (g.peso ?? 0), 0);
-					const pesosPrincipais = principais.map((g) => g.peso ?? 0).filter((p) => p > 0);
+					const pesoFundamentos = fundamentos.reduce((acc, g) => acc + (g.nota_maxima ?? 0), 0);
+					const pesosPrincipais = principais.map((g) => g.nota_maxima ?? 0).filter((p) => p > 0);
 					const melhorPrincipal = pesosPrincipais.length ? Math.max(...pesosPrincipais) : 0;
 					subtotal = melhorPrincipal + pesoFundamentos;
 					if (!principais.length) subtotal = pesoFundamentos;
@@ -1483,8 +1483,8 @@ export function verificarPontuacao(itens: Subitem[]): {
 					console.log("[VERIF::OU_GROUP]", {
 						grupo: item.ou_group_id,
 						mode,
-						principais: principais.map((g) => ({ id: g.id, peso: g.peso, desc: g.descricao.substring(0, 60) })),
-						fundamentos: fundamentos.map((g) => ({ id: g.id, peso: g.peso, desc: g.descricao.substring(0, 60) })),
+						principais: principais.map((g) => ({ id: g.id, nota_maxima: g.nota_maxima, desc: g.descricao.substring(0, 60) })),
+						fundamentos: fundamentos.map((g) => ({ id: g.id, nota_maxima: g.nota_maxima, desc: g.descricao.substring(0, 60) })),
 						subtotal,
 					});
 				}
@@ -1492,7 +1492,7 @@ export function verificarPontuacao(itens: Subitem[]): {
 				soma += Number(subtotal.toFixed(2));
 				processedGroups.add(item.ou_group_id);
 			} else {
-				soma += item.peso;
+				soma += item.nota_maxima;
 			}
 		}
 

@@ -39,9 +39,12 @@ export function ProvaCell({
 				}}
 			>
 				{localProvaState.aguardandoProva ? (
-					<div
-						className="w-full rounded-md border border-input bg-background overflow-hidden animate-in fade-in-0 zoom-in-95 duration-300"
+					<button
+						type="button"
+						onClick={onDigitarClick}
+						className="w-full rounded-md border border-input bg-background overflow-hidden animate-in fade-in-0 zoom-in-95 duration-300 cursor-pointer hover:ring-2 hover:ring-primary/50 transition-shadow"
 						key={`prova-anim-${refreshKey}`}
+						title="Ver progresso da digitação"
 					>
 						<img
 							src="/animations/provaCellAnimation.svg"
@@ -49,7 +52,7 @@ export function ProvaCell({
 							className="w-full h-auto"
 							style={{ minHeight: "56px" }}
 						/>
-					</div>
+					</button>
 				) : (
 					<Button
 						variant="outline"

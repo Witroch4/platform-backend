@@ -32,7 +32,7 @@ function convertRubricToSubitems(rubric: RubricPayload, overrides?: Map<string, 
 		} else if (overridesProvided) {
 			pesoBase = 0;
 		} else {
-			pesoBase = normalizePeso(item.peso ?? null);
+			pesoBase = normalizePeso(item.nota_maxima ?? null);
 		}
 
 		return {
@@ -40,7 +40,7 @@ function convertRubricToSubitems(rubric: RubricPayload, overrides?: Map<string, 
 			escopo: item.escopo === "Questão" ? "Questão" : "Peça",
 			questao: item.questao as any,
 			descricao: item.descricao,
-			peso: pesoBase ?? 0,
+			nota_maxima: pesoBase ?? 0,
 			fundamentos: item.fundamentos ?? [],
 			palavras_chave: item.palavras_chave ?? [],
 			embedding_text: item.embedding_text ?? "",
@@ -81,7 +81,7 @@ export function buildScoreMap(rubric: RubricPayload, extractedData: RawExtracted
 	for (const item of rubric.itens) {
 		const notaKey = `nota_obtida_${item.id}`;
 		const rawValue = extractedData[notaKey];
-		const sanitized = sanitizeRawScore(rawValue, item.peso ?? null);
+		const sanitized = sanitizeRawScore(rawValue, item.nota_maxima ?? null);
 		if (sanitized != null) {
 			scores.set(item.id, sanitized);
 		}

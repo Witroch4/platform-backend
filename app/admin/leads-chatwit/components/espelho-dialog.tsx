@@ -261,7 +261,7 @@ function StudentMirrorViewer({ payload }: { payload: StudentMirrorPayload }) {
 											</div>
 										)}
 									</td>
-									<td className="border px-3 py-2 text-foreground">{item.peso?.toFixed(2) ?? "-"}</td>
+									<td className="border px-3 py-2 text-foreground">{item.nota_maxima?.toFixed(2) ?? "-"}</td>
 									<td className="border px-3 py-2 text-foreground">
 										{formatScoreOptional(item.nota_obtida)}
 										{item.nota_obtida_raw && (
@@ -310,7 +310,7 @@ function StudentMirrorViewer({ payload }: { payload: StudentMirrorPayload }) {
 															</div>
 														)}
 													</td>
-													<td className="border px-3 py-2 text-foreground">{item.peso?.toFixed(2) ?? "-"}</td>
+													<td className="border px-3 py-2 text-foreground">{item.nota_maxima?.toFixed(2) ?? "-"}</td>
 													<td className="border px-3 py-2 text-foreground">
 														{formatScoreOptional(item.nota_obtida)}
 														{item.nota_obtida_raw && (

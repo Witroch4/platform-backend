@@ -2,7 +2,7 @@
  * Mirror Formatter - Remove campos desnecessários do espelho
  *
  * Objetivo: Reduzir tamanho do payload enviado ao agente de revisão
- * mantendo apenas: id, peso, descricao, nota_obtida
+ * mantendo apenas: id, nota_maxima, descricao, nota_obtida
  *
  * Ganho: Economia de tokens de entrada (até 70% de redução em payloads grandes)
  */
@@ -15,7 +15,7 @@ import type { StudentMirrorItem, StudentMirrorPayload } from "./types";
  */
 export interface OptimizedMirrorItem {
 	id: string;
-	peso: number | null;
+	nota_maxima: number | null;
 	descricao: string;
 	nota_obtida: number | null;
 	subitens?: OptimizedMirrorItem[];
@@ -46,12 +46,12 @@ export interface OptimizedMirrorPayload {
 
 /**
  * Filtra um item de espelho, removendo campos desnecessários
- * Mantém apenas: id, peso, descricao, nota_obtida + subitens recursivos
+ * Mantém apenas: id, nota_maxima, descricao, nota_obtida + subitens recursivos
  */
 export function filterMirrorItem(item: StudentMirrorItem): OptimizedMirrorItem {
 	const filtered: OptimizedMirrorItem = {
 		id: item.id,
-		peso: item.peso ?? null,
+		nota_maxima: item.nota_maxima ?? null,
 		descricao: item.descricao,
 		nota_obtida: item.nota_obtida ?? null,
 	};
@@ -174,7 +174,7 @@ export function formatMirrorToJson(
 				descricao: item.descricao || rubricItem?.descricao || "",
 				escopo: "Peça",
 				questao: "",
-				peso: rubricItem?.peso_maximo || item.pesoMaximo || null,
+				nota_maxima: rubricItem?.nota_maxima || item.pesoMaximo || null,
 				nota_obtida: item.notaObtida ?? null,
 				nota_obtida_raw: String(item.notaObtida ?? "0.00"),
 				fundamentos: rubricItem?.fundamentos || [],
@@ -196,7 +196,7 @@ export function formatMirrorToJson(
 					descricao: item.descricao || rubricItem?.descricao || "",
 					escopo: "Questão",
 					questao: q.questao,
-					peso: rubricItem?.peso_maximo || item.pesoMaximo || null,
+					nota_maxima: rubricItem?.nota_maxima || item.pesoMaximo || null,
 					nota_obtida: item.notaObtida ?? null,
 					nota_obtida_raw: String(item.notaObtida ?? "0.00"),
 					fundamentos: rubricItem?.fundamentos || [],

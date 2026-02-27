@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { processVisionRequest } from "./unified-vision-client";
+import { generateText } from "ai";
+import { google } from "@ai-sdk/google";
+import { createModel, buildProviderOptions } from "@/lib/socialwise-flow/services/ai-provider-factory";
+import type { AiProviderType } from "@/lib/socialwise-flow/processor-components/assistant-config";
+import { withRetry, cleanPromptForOpenAI, OPENAI_FALLBACK_MODEL } from "./ai-retry-fallback";
 import { getOabEvalConfig } from "@/lib/config";
 import { getPrismaInstance } from "@/lib/connections";
 import {
@@ -9,6 +13,9 @@ import {
 	GEMINI_AGENTIC_VISION_INSTRUCTIONS,
 } from "@/lib/ai-agents/blueprints";
 import type { ExtractedPage } from "./types";
+
+/** Modelo OpenAI menor como último recurso (3o nível de fallback) */
+const OPENAI_LAST_RESORT_MODEL = "gpt-4.1-mini";
 
 interface ManuscriptImageDescriptor {
 	id: string;
@@ -111,10 +118,63 @@ interface TranscriptionResult {
 	text: string;
 	provider: "openai" | "gemini";
 	model: string;
+	actualModel: string; // modelo efetivamente usado (pode diferir se houve fallback)
 	tokens?: {
 		input?: number;
 		output?: number;
 		total?: number;
+	};
+	durationMs: number;
+	wasFallback: boolean;
+	retryCount: number;
+}
+
+/** Extrai token usage do resultado do Vercel AI SDK, com fallback para providerMetadata */
+function extractTokenUsage(result: any): { input?: number; output?: number; total?: number } | undefined {
+	const usage = result.usage;
+
+	let input: number | undefined;
+	let output: number | undefined;
+
+	// Path 1: Vercel AI SDK standard (promptTokens / completionTokens)
+	if (usage) {
+		input = usage.promptTokens;
+		output = usage.completionTokens;
+	}
+
+	// Path 2: Fallback para providerMetadata.google (Gemini pode não popular usage corretamente)
+	if (input === undefined || output === undefined) {
+		const googleMeta = result.experimental_providerMetadata?.google?.usageMetadata
+			?? result.providerMetadata?.google?.usageMetadata;
+		if (googleMeta) {
+			input = input ?? googleMeta.promptTokenCount;
+			output = output ?? googleMeta.candidatesTokenCount ?? googleMeta.totalTokenCount;
+		}
+	}
+
+	// Path 3: response.usageMetadata direto (Google SDK nativo via Vercel adapter)
+	if (input === undefined || output === undefined) {
+		const responseMeta = result.response?.usageMetadata ?? result.rawResponse?.usageMetadata;
+		if (responseMeta) {
+			input = input ?? responseMeta.promptTokenCount;
+			output = output ?? responseMeta.candidatesTokenCount ?? responseMeta.totalTokenCount;
+		}
+	}
+
+	if (input === undefined && output === undefined) {
+		// Debug: log para diagnosticar qual path funciona
+		console.warn("[TranscriptionAgent] ⚠️ Token usage not found.",
+			"usage:", JSON.stringify(usage),
+			"providerMetadata keys:", Object.keys(result.providerMetadata ?? {}),
+			"response keys:", Object.keys(result.response ?? {}),
+		);
+		return undefined;
+	}
+
+	return {
+		input,
+		output,
+		total: (input ?? 0) + (output ?? 0),
 	};
 }
 
@@ -125,11 +185,13 @@ async function transcribeSingleImage(
 	model: string,
 	systemInstructions: string,
 	maxOutputTokens: number,
-	options?: {
+	options: {
+		provider: AiProviderType;
 		enableCodeExecution?: boolean;
-		thinkingLevel?: "minimal" | "low" | "medium" | "high";
+		reasoningEffort?: string;
 	},
 ): Promise<TranscriptionResult> {
+	const startTime = Date.now();
 	const userPrompt = [
 		`Transcreva a página ${page} de ${total}. Formato obrigatório:`,
 		"Questão: <número> (quando aplicável) OU Peça Pagina: <número/total se visível>",
@@ -141,30 +203,152 @@ async function transcribeSingleImage(
 		"Se houver mais de um bloco (ex: Questão e Peça na mesma página), inicie um novo cabeçalho para cada bloco.",
 	].join("\n");
 
-	// Cliente unificado: suporta OpenAI e Gemini automaticamente
-	// Para Gemini 3, habilita code execution e thinking para Agentic Vision
-	const response = await processVisionRequest({
-		model,
-		systemInstructions,
-		userPrompt,
-		imageBase64: image.base64,
-		imageMimeType: image.mimeType,
-		maxOutputTokens,
-		enableCodeExecution: options?.enableCodeExecution,
-		thinkingLevel: options?.thinkingLevel,
-	});
+	// Vercel AI SDK: image content part com base64
+	const mimeType = image.mimeType ?? "image/png";
+	const dataUrl = `data:${mimeType};base64,${image.base64}`;
+	const imagePart = { type: "image" as const, image: new URL(dataUrl) };
+
+	const isGemini3 = model.toLowerCase().startsWith("gemini-3");
+	const tools = isGemini3 && options.enableCodeExecution
+		? { code_execution: google.tools.codeExecution({}) }
+		: undefined;
+
+	let rawText: string;
+	let usedProvider = options.provider;
+	let usedModel = model;
+	let tokens: { input?: number; output?: number; total?: number } | undefined;
+	let wasFallback = false;
+	let retryCount = 0;
+
+	// === NÍVEL 1: Provider primário com retry ===
+	try {
+		const result = await withRetry(async () => {
+			retryCount++;
+			const aiModel = createModel(options.provider, model);
+			const providerOptions = buildProviderOptions(options.provider, model, {
+				reasoningEffort: options.reasoningEffort ?? "medium",
+			});
+
+			return generateText({
+				model: aiModel,
+				system: systemInstructions,
+				messages: [{
+					role: "user" as const,
+					content: [
+						{ type: "text" as const, text: userPrompt },
+						imagePart,
+					],
+				}],
+				tools,
+				...(maxOutputTokens > 0 ? { maxOutputTokens } : {}),
+				temperature: 0,
+				providerOptions,
+			});
+		}, `Transcription:${options.provider}/${model}`);
+
+		rawText = result.text;
+		tokens = extractTokenUsage(result);
+	} catch (primaryError) {
+		if (options.provider === "OPENAI") {
+			// === NÍVEL 3 (direto): Se já é OpenAI, tenta modelo menor ===
+			console.warn(`[TranscriptionAgent] ⚠️ OPENAI/${model} falhou p${page}, tentando ${OPENAI_LAST_RESORT_MODEL}`);
+			try {
+				const lastResortModel = createModel("OPENAI", OPENAI_LAST_RESORT_MODEL);
+				const result = await withRetry(async () => {
+					return generateText({
+						model: lastResortModel,
+						system: cleanPromptForOpenAI(systemInstructions),
+						messages: [{
+							role: "user" as const,
+							content: [
+								{ type: "text" as const, text: userPrompt },
+								imagePart,
+							],
+						}],
+						...(maxOutputTokens > 0 ? { maxOutputTokens } : {}),
+						temperature: 0,
+					});
+				}, `Transcription:OPENAI/${OPENAI_LAST_RESORT_MODEL}`);
+				rawText = result.text;
+				tokens = extractTokenUsage(result);
+				usedModel = OPENAI_LAST_RESORT_MODEL;
+				wasFallback = true;
+			} catch {
+				throw primaryError;
+			}
+		} else {
+			// === NÍVEL 2: Fallback Gemini/Claude → OpenAI com retry ===
+			const errStatus = (primaryError as any)?.status || (primaryError as any)?.response?.status;
+			const errCode = (primaryError as any)?.code || (primaryError as any)?.error?.code;
+			const errMsg = (primaryError as any)?.message?.substring(0, 300);
+			console.warn(
+				`[TranscriptionAgent] ⚠️ ${options.provider}/${model} falhou p${page}` +
+				` | status: ${errStatus ?? "N/A"} | code: ${errCode ?? "N/A"}` +
+				` | msg: ${errMsg ?? "N/A"}` +
+				` → fallback para OpenAI/${OPENAI_FALLBACK_MODEL}`,
+			);
+			wasFallback = true;
+			try {
+				const result = await withRetry(async () => {
+					const fallbackModel = createModel("OPENAI", OPENAI_FALLBACK_MODEL);
+					return generateText({
+						model: fallbackModel,
+						system: cleanPromptForOpenAI(systemInstructions),
+						messages: [{
+							role: "user" as const,
+							content: [
+								{ type: "text" as const, text: userPrompt },
+								imagePart,
+							],
+						}],
+						...(maxOutputTokens > 0 ? { maxOutputTokens } : {}),
+						temperature: 0,
+					});
+				}, `Transcription:OPENAI/${OPENAI_FALLBACK_MODEL}`);
+				rawText = result.text;
+				tokens = extractTokenUsage(result);
+				usedProvider = "OPENAI";
+				usedModel = OPENAI_FALLBACK_MODEL;
+			} catch {
+				// === NÍVEL 3: Último recurso — modelo menor ===
+				console.warn(`[TranscriptionAgent] ⚠️ Fallback OpenAI/${OPENAI_FALLBACK_MODEL} também falhou p${page}, tentando ${OPENAI_LAST_RESORT_MODEL}`);
+				try {
+					const lastResortModel = createModel("OPENAI", OPENAI_LAST_RESORT_MODEL);
+					const result = await withRetry(async () => {
+						return generateText({
+							model: lastResortModel,
+							system: cleanPromptForOpenAI(systemInstructions),
+							messages: [{
+								role: "user" as const,
+								content: [
+									{ type: "text" as const, text: userPrompt },
+									imagePart,
+								],
+							}],
+							...(maxOutputTokens > 0 ? { maxOutputTokens } : {}),
+							temperature: 0,
+						});
+					}, `Transcription:OPENAI/${OPENAI_LAST_RESORT_MODEL}`);
+					rawText = result.text;
+					tokens = extractTokenUsage(result);
+					usedProvider = "OPENAI";
+					usedModel = OPENAI_LAST_RESORT_MODEL;
+				} catch {
+					throw primaryError; // throw original error
+				}
+			}
+		}
+	}
 
 	return {
-		text: response.text,
-		provider: response.provider,
-		model: response.model,
-		tokens: response.usage
-			? {
-					input: response.usage.inputTokens,
-					output: response.usage.outputTokens,
-					total: response.usage.totalTokens,
-				}
-			: undefined,
+		text: rawText,
+		provider: usedProvider === "GEMINI" ? "gemini" : "openai",
+		model,
+		actualModel: usedModel,
+		tokens,
+		durationMs: Date.now() - startTime,
+		wasFallback,
+		retryCount: Math.max(0, retryCount - 1), // first attempt is not a retry
 	};
 }
 
@@ -200,6 +384,15 @@ async function fetchImageAsBase64(descriptor: ManuscriptImageDescriptor): Promis
 	};
 }
 
+export interface PageCompleteDetail {
+	provider: string;
+	model: string;
+	tokensIn: number;
+	tokensOut: number;
+	durationMs: number;
+	wasFallback: boolean;
+}
+
 export interface TranscriptionAgentInput {
 	leadId: string;
 	images: ManuscriptImageDescriptor[] | string[]; // Suporta URLs diretas ou descritores
@@ -207,7 +400,23 @@ export interface TranscriptionAgentInput {
 	nome?: string;
 	selectedProvider?: "OPENAI" | "GEMINI"; // Provider selecionado pelo usuário no frontend
 	concurrency?: number;
-	onPageComplete?: (pageIndex: number, pageLabel: string) => Promise<void> | void;
+	onPageComplete?: (pageIndex: number, pageLabel: string, detail?: PageCompleteDetail) => Promise<void> | void;
+}
+
+export interface PageTokenUsage {
+	page: number;
+	input: number;
+	output: number;
+	provider: string;
+	model: string;
+	durationMs: number;
+	wasFallback: boolean;
+}
+
+export interface TranscriptionTokenUsage {
+	totalInput: number;
+	totalOutput: number;
+	perPage: PageTokenUsage[];
 }
 
 export interface TranscriptionAgentOutput {
@@ -215,6 +424,9 @@ export interface TranscriptionAgentOutput {
 	textoDAprova: TranscriptionSegment[];
 	combinedText: string;
 	segments: string[];
+	tokenUsage: TranscriptionTokenUsage;
+	primaryProvider: string;
+	primaryModel: string;
 }
 
 // Alias para compatibilidade com transcription-queue
@@ -223,6 +435,9 @@ export interface TranscribeManuscriptResult {
 	textoDAprova: TranscriptionSegment[];
 	combinedText: string;
 	segments: string[];
+	tokenUsage: TranscriptionTokenUsage;
+	primaryProvider: string;
+	primaryModel: string;
 }
 
 export async function transcribeManuscript(
@@ -247,6 +462,9 @@ export async function transcribeManuscript(
 		textoDAprova: result.textoDAprova,
 		combinedText: result.combinedText,
 		segments: result.segments,
+		tokenUsage: result.tokenUsage,
+		primaryProvider: result.primaryProvider,
+		primaryModel: result.primaryModel,
 	};
 }
 
@@ -263,81 +481,96 @@ export async function transcribeManuscriptLocally(input: TranscriptionAgentInput
 		return img;
 	});
 
-	const preparedImages: PreparedImageState[] = [];
-	for (const image of imageDescriptors) {
-		const prepared = await fetchImageAsBase64(image);
-		preparedImages.push(PreparedImageSchema.parse(prepared));
-	}
+	// Download PARALELO de imagens (antes era serial)
+	const downloadStart = Date.now();
+	const preparedImages = await Promise.all(
+		imageDescriptors.map(async (image) => {
+			const prepared = await fetchImageAsBase64(image);
+			return PreparedImageSchema.parse(prepared);
+		}),
+	);
+	console.log(`[TranscriptionAgent] 📥 ${preparedImages.length} imagens baixadas em ${Date.now() - downloadStart}ms`);
 
 	const total = preparedImages.length;
 	const { transcribe_concurrency = 10 } = getOabEvalConfig();
 	const concurrency = input.concurrency ?? Math.max(1, transcribe_concurrency || 10);
 	console.log(`[TranscriptionAgent] ⚙️ Concurrency: ${concurrency}`);
 
-	async function mapConcurrent<T, R>(
+	// mapConcurrent TOLERANTE a falhas — continua processando mesmo se uma página falhar
+	async function mapConcurrentTolerant<T, R>(
 		items: T[],
 		limit: number,
 		fn: (item: T, index: number) => Promise<R>,
-	): Promise<R[]> {
-		const results: R[] = new Array(items.length);
+	): Promise<{ results: (R | null)[]; errors: Array<{ index: number; error: any }> }> {
+		const results: (R | null)[] = new Array(items.length).fill(null);
+		const errors: Array<{ index: number; error: any }> = [];
 		let nextIndex = 0;
-		let rejected: any = null;
 
 		async function worker() {
 			while (true) {
 				const current = nextIndex++;
-				if (current >= items.length || rejected) break;
+				if (current >= items.length) break;
 				try {
 					results[current] = await fn(items[current], current);
 				} catch (err) {
-					rejected = err;
-					break;
+					errors.push({ index: current, error: err });
+					console.error(`[TranscriptionAgent] ❌ Página ${current + 1}/${items.length} falhou após todos os níveis de retry:`, (err as any)?.message || err);
 				}
 			}
 		}
 
 		const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
 		await Promise.all(workers);
-		if (rejected) throw rejected;
-		return results;
+		return { results, errors };
 	}
 
-	const { model, systemInstructions, maxOutputTokens, enableCodeExecution, thinkingLevel } =
+	const { model, systemInstructions, maxOutputTokens, enableCodeExecution, provider, reasoningEffort } =
 		await getTranscriberConfig(input.selectedProvider);
 
 	console.log("[TranscriptionAgent] 📝 Configuração do Blueprint:");
 	console.log(`  - Modelo: ${model}`);
+	console.log(`  - Provider: ${provider}`);
 	console.log(`  - Max Output Tokens: ${maxOutputTokens}`);
 	console.log(
 		`  - Code Execution: ${enableCodeExecution ? "✅ Habilitado (Gemini Agentic Vision)" : "❌ Desabilitado"}`,
 	);
-	console.log(`  - Thinking Level: ${thinkingLevel}`);
+	console.log(`  - Reasoning Effort: ${reasoningEffort}`);
 	console.log(`  - System Prompt (preview): ${systemInstructions.substring(0, 150)}...`);
 
 	// Acumuladores para estatísticas
+	const perPageTokens: PageTokenUsage[] = [];
 	let totalInputTokens = 0;
 	let totalOutputTokens = 0;
 	let providerUsed = "";
 
-	const results = await mapConcurrent(preparedImages, concurrency, async (image, index) => {
+	const { results: rawResults, errors } = await mapConcurrentTolerant(preparedImages, concurrency, async (image, index) => {
 		const pageNumber = image.page ?? index + 1;
-		const startTime = Date.now();
 
 		const result = await transcribeSingleImage(image, pageNumber, total, model, systemInstructions, maxOutputTokens, {
+			provider,
 			enableCodeExecution,
-			thinkingLevel,
+			reasoningEffort,
 		});
 		const trimmed = result.text.trim();
 		const newSegments = splitSegments(trimmed);
 
-		const elapsedMs = Date.now() - startTime;
 		providerUsed = result.provider;
 
 		// Acumular tokens
-		if (result.tokens) {
-			totalInputTokens += result.tokens.input ?? 0;
-			totalOutputTokens += result.tokens.output ?? 0;
-		}
+		const pageInput = result.tokens?.input ?? 0;
+		const pageOutput = result.tokens?.output ?? 0;
+		totalInputTokens += pageInput;
+		totalOutputTokens += pageOutput;
+
+		perPageTokens.push({
+			page: pageNumber,
+			input: pageInput,
+			output: pageOutput,
+			provider: result.provider,
+			model: result.actualModel,
+			durationMs: result.durationMs,
+			wasFallback: result.wasFallback,
+		});
 
 		// Preview do texto (primeiras 80 chars)
 		const textPreview = trimmed.length > 80 ? `${trimmed.substring(0, 80)}...` : trimmed;
@@ -345,18 +578,25 @@ export async function transcribeManuscriptLocally(input: TranscriptionAgentInput
 		// Log informativo por página
 		const tokenInfo = result.tokens ? `tokens: ${result.tokens.input ?? "?"}→${result.tokens.output ?? "?"}` : "";
 		console.log(
-			`[TranscriptionAgent] ✅ Pág ${index + 1}/${total} | ${result.provider.toUpperCase()} ${result.model} | ${(elapsedMs / 1000).toFixed(1)}s | ${trimmed.length} chars ${tokenInfo}`,
+			`[TranscriptionAgent] ✅ Pág ${index + 1}/${total} | ${result.provider.toUpperCase()} ${result.actualModel} | ${(result.durationMs / 1000).toFixed(1)}s | ${trimmed.length} chars ${tokenInfo}`,
 		);
 		console.log(`[TranscriptionAgent]    📄 "${textPreview.replace(/\n/g, " ")}"`);
 
 		// Log de fallback quando Gemini falhou e OpenAI foi usado
-		if (result.provider === "openai" && isGeminiModel(model)) {
-			console.log(`[TranscriptionAgent] ⚠️ Pág ${index + 1}/${total} usou fallback OpenAI (prompt limpo)`);
+		if (result.wasFallback) {
+			console.log(`[TranscriptionAgent] ⚠️ Pág ${index + 1}/${total} usou fallback → ${result.actualModel}`);
 		}
 
-		// Callback de progresso
+		// Callback de progresso (enriquecido)
 		if (input.onPageComplete) {
-			await input.onPageComplete(index, String(pageNumber));
+			await input.onPageComplete(index, String(pageNumber), {
+				provider: result.provider,
+				model: result.actualModel,
+				tokensIn: pageInput,
+				tokensOut: pageOutput,
+				durationMs: result.durationMs,
+				wasFallback: result.wasFallback,
+			});
 		}
 
 		return {
@@ -367,17 +607,29 @@ export async function transcribeManuscriptLocally(input: TranscriptionAgentInput
 			segments: newSegments,
 		};
 	});
+
+	// Filtrar resultados nulos (páginas que falharam)
+	const successResults = rawResults.filter((r): r is NonNullable<typeof r> => r !== null);
+
+	if (successResults.length === 0) {
+		throw new Error(`Todas as ${total} páginas falharam na transcrição. Erros: ${errors.map(e => (e.error as any)?.message || String(e.error)).join("; ")}`);
+	}
+
+	if (errors.length > 0) {
+		console.warn(`[TranscriptionAgent] ⚠️ ${errors.length}/${total} páginas falharam, ${successResults.length} páginas processadas com sucesso`);
+	}
+
 	// Ordenar por pageNumber para manter consistência
-	results.sort((a, b) => a.pageNumber - b.pageNumber);
+	successResults.sort((a, b) => a.pageNumber - b.pageNumber);
 
-	console.log(`[TranscriptionAgent] 🔢 Ordem após sort: ${results.map((r) => `p${r.pageNumber}`).join(" → ")}`);
+	console.log(`[TranscriptionAgent] 🔢 Ordem após sort: ${successResults.map((r) => `p${r.pageNumber}`).join(" → ")}`);
 
-	const pages: ExtractedPage[] = results.map((r) => ({
+	const pages: ExtractedPage[] = successResults.map((r) => ({
 		page: r.pageNumber,
 		text: r.text,
 		imageKey: r.imageId,
 	}));
-	const segments: string[] = results.flatMap((r) => r.segments);
+	const segments: string[] = successResults.flatMap((r) => r.segments);
 
 	// Ordena por número de questão e número de página da peça
 	const textoDAprova = organizeSegments(segments);
@@ -392,11 +644,20 @@ export async function transcribeManuscriptLocally(input: TranscriptionAgentInput
 		`[TranscriptionAgent] ✅ CONCLUÍDO | ${providerUsed.toUpperCase() || model} | ${pages.length} páginas | ${textoDAprova.length} blocos${tokenSummary}`,
 	);
 
+	const tokenUsage: TranscriptionTokenUsage = {
+		totalInput: totalInputTokens,
+		totalOutput: totalOutputTokens,
+		perPage: perPageTokens.sort((a, b) => a.page - b.page),
+	};
+
 	return {
 		pages,
 		textoDAprova,
 		combinedText,
 		segments,
+		tokenUsage,
+		primaryProvider: provider,
+		primaryModel: model,
 	};
 }
 
@@ -410,7 +671,8 @@ async function getTranscriberConfig(preferredProvider?: "OPENAI" | "GEMINI"): Pr
 	systemInstructions: string;
 	maxOutputTokens: number;
 	enableCodeExecution: boolean;
-	thinkingLevel: "minimal" | "low" | "medium" | "high";
+	provider: AiProviderType;
+	reasoningEffort: string;
 }> {
 	const prisma = getPrismaInstance();
 
@@ -474,12 +736,15 @@ async function getTranscriberConfig(preferredProvider?: "OPENAI" | "GEMINI"): Pr
 
 			console.log(`[TranscriptionAgent] ✅ Blueprint vinculado à PROVA_CELL encontrado: ${blueprint.name} (${model})`);
 
+			const effectiveProvider: AiProviderType = isGeminiModel(model) ? "GEMINI" : "OPENAI";
+
 			return {
 				model,
 				systemInstructions,
 				maxOutputTokens,
-				enableCodeExecution: isGeminiModel(model), // Habilita code execution para Gemini
-				thinkingLevel: "high", // Máximo raciocínio para OCR de manuscritos
+				enableCodeExecution: isGeminiModel(model) && (blueprint.metadata as any)?.codeExecution !== false,
+				provider: effectiveProvider,
+				reasoningEffort: blueprint.reasoningEffort ?? blueprint.thinkingLevel ?? "high",
 			};
 		}
 	} catch (err) {
@@ -489,11 +754,12 @@ async function getTranscriberConfig(preferredProvider?: "OPENAI" | "GEMINI"): Pr
 	// 2) Fallback: Buscar por ID ou nome (compatibilidade)
 	try {
 		const bpId = process.env.OAB_TRANSCRIBER_BLUEPRINT_ID;
+		const bpSelect = { model: true, systemPrompt: true, instructions: true, maxOutputTokens: true, metadata: true, reasoningEffort: true, thinkingLevel: true };
 		let blueprint: any = null;
 		if (bpId) {
 			blueprint = await (prisma as any).aiAgentBlueprint.findUnique({
 				where: { id: bpId },
-				select: { model: true, systemPrompt: true, instructions: true, maxOutputTokens: true },
+				select: bpSelect,
 			});
 		}
 		if (!bpId || !blueprint) {
@@ -506,7 +772,7 @@ async function getTranscriberConfig(preferredProvider?: "OPENAI" | "GEMINI"): Pr
 					],
 				},
 				orderBy: { updatedAt: "desc" },
-				select: { model: true, systemPrompt: true, instructions: true, maxOutputTokens: true },
+				select: bpSelect,
 			});
 		}
 
@@ -515,7 +781,6 @@ async function getTranscriberConfig(preferredProvider?: "OPENAI" | "GEMINI"): Pr
 			const maxOutputTokens = Number(blueprint.maxOutputTokens ?? 0);
 			let systemInstructions = (blueprint.systemPrompt || blueprint.instructions || baseInstructions).toString();
 
-			// INJEÇÃO DE DEPENDÊNCIA DE PROMPT: Se Gemini, adiciona instruções técnicas
 			if (isGeminiModel(model)) {
 				systemInstructions = `${GEMINI_AGENTIC_VISION_INSTRUCTIONS}\n\n---\n\n${systemInstructions}`;
 				console.log("[TranscriptionAgent] 🔬 Injetando instruções Gemini Agentic Vision (fallback)");
@@ -523,12 +788,16 @@ async function getTranscriberConfig(preferredProvider?: "OPENAI" | "GEMINI"): Pr
 
 			systemInstructions = systemInstructions.replace(/\s+/g, " ");
 
+			const effectiveProvider: AiProviderType = isGeminiModel(model) ? "GEMINI" : "OPENAI";
+			const bpMetadata = typeof blueprint.metadata === "object" ? blueprint.metadata : {};
+
 			return {
 				model,
 				systemInstructions,
 				maxOutputTokens,
-				enableCodeExecution: isGeminiModel(model),
-				thinkingLevel: "high",
+				enableCodeExecution: isGeminiModel(model) && bpMetadata?.codeExecution !== false,
+				provider: effectiveProvider,
+				reasoningEffort: blueprint.reasoningEffort ?? blueprint.thinkingLevel ?? "high",
 			};
 		}
 	} catch (err) {
@@ -570,12 +839,15 @@ async function getTranscriberConfig(preferredProvider?: "OPENAI" | "GEMINI"): Pr
 
 			systemInstructions = systemInstructions.replace(/\s+/g, " ");
 
+			const effectiveProvider: AiProviderType = isGeminiModel(model) ? "GEMINI" : "OPENAI";
+
 			return {
 				model,
 				systemInstructions,
 				maxOutputTokens,
 				enableCodeExecution: isGeminiModel(model),
-				thinkingLevel: "high",
+				provider: effectiveProvider,
+				reasoningEffort: "high",
 			};
 		}
 	} catch (err) {
@@ -588,6 +860,7 @@ async function getTranscriberConfig(preferredProvider?: "OPENAI" | "GEMINI"): Pr
 		systemInstructions: baseInstructions,
 		maxOutputTokens: 0,
 		enableCodeExecution: false,
-		thinkingLevel: "high",
+		provider: "OPENAI",
+		reasoningEffort: "high",
 	};
 }

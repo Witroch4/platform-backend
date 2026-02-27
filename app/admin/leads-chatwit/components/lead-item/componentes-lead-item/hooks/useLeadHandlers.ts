@@ -291,7 +291,7 @@ export function useLeadHandlers({
 	};
 
 	const handleDigitarClick = async () => {
-		if (manuscritoProcessadoLocal) {
+		if (manuscritoProcessadoLocal || localManuscritoState.aguardandoManuscrito) {
 			setShowProvaDialog(true);
 		} else {
 			setShowManuscritoImageSeletor(true);

@@ -10,6 +10,7 @@ import { sseManager } from "@/lib/sse-manager";
 import { transcribeManuscript, type TranscribeManuscriptResult } from "./transcription-agent";
 import { getConfigValue } from "@/lib/config";
 import { addManuscritoJob } from "@/lib/queue/leadcells.queue";
+import { createCostQueue, addCostEventsBulk } from "@/lib/cost/queue-config";
 
 // --- Tipos ---
 
@@ -47,8 +48,17 @@ export interface TranscriptionResult {
 export type TranscriptionEvent =
 	| { type: "queued"; position: number }
 	| { type: "started"; totalPages: number; startedAt: string }
-	| { type: "page-complete"; page: number; totalPages: number; percentage: number; estimatedTimeRemaining?: number }
-	| { type: "completed"; result: TranscriptionResult }
+	| {
+		type: "page-complete"; page: number; totalPages: number; percentage: number;
+		estimatedTimeRemaining?: number;
+		provider?: string; model?: string; tokensIn?: number; tokensOut?: number;
+		durationMs?: number; wasFallback?: boolean;
+	}
+	| {
+		type: "completed"; result: TranscriptionResult;
+		totalInputTokens?: number; totalOutputTokens?: number;
+		perPage?: Array<{ page: number; input: number; output: number; provider: string; model: string; durationMs: number; wasFallback: boolean }>;
+	}
 	| { type: "failed"; error: string };
 
 // --- Configuração da Fila ---
@@ -111,7 +121,10 @@ export async function processTranscriptionJob(job: Job<TranscriptionJobData>): P
 			leadId: leadID,
 			selectedProvider,
 			concurrency: getConfigValue("oab_eval.transcribe_concurrency", 10),
-			onPageComplete: async (pageIndex: number, pageLabel: string) => {
+			onPageComplete: async (pageIndex: number, pageLabel: string, detail?: {
+				provider: string; model: string; tokensIn: number; tokensOut: number;
+				durationMs: number; wasFallback: boolean;
+			}) => {
 				const currentPage = pageIndex + 1;
 				const percentage = Math.round((currentPage / totalPages) * 100);
 
@@ -135,13 +148,19 @@ export async function processTranscriptionJob(job: Job<TranscriptionJobData>): P
 					estimatedTimeRemaining,
 				});
 
-				// Notificar via SSE
+				// Notificar via SSE (enriquecido com tokens/provider)
 				await sendSSEEvent(leadID, {
 					type: "page-complete",
 					page: currentPage,
 					totalPages,
 					percentage,
 					estimatedTimeRemaining,
+					provider: detail?.provider,
+					model: detail?.model,
+					tokensIn: detail?.tokensIn,
+					tokensOut: detail?.tokensOut,
+					durationMs: detail?.durationMs,
+					wasFallback: detail?.wasFallback,
 				});
 			},
 		});
@@ -161,11 +180,47 @@ export async function processTranscriptionJob(job: Job<TranscriptionJobData>): P
 			combinedText: transcriptionOutput.combinedText,
 		};
 
-		// Notificar conclusão
+		// Notificar conclusão (com resumo de tokens para estimativa de custo)
 		await sendSSEEvent(leadID, {
 			type: "completed",
 			result: transcriptionResult,
+			totalInputTokens: transcriptionOutput.tokenUsage?.totalInput,
+			totalOutputTokens: transcriptionOutput.tokenUsage?.totalOutput,
+			perPage: transcriptionOutput.tokenUsage?.perPage,
 		});
+
+		// Registrar CostEvents para auditoria de custos
+		try {
+			const costQueue = createCostQueue();
+			const traceId = `transcription-${leadID}-${Date.now()}`;
+			const costEvents: Array<{ name: string; data: any }> = [];
+
+			for (const page of transcriptionOutput.tokenUsage?.perPage ?? []) {
+				const provider = page.provider?.toLowerCase().includes("gemini") ? "GEMINI" : "OPENAI";
+				const commonData = {
+					ts: new Date().toISOString(),
+					provider,
+					product: page.model,
+					traceId,
+					userId,
+					intent: "oab-transcription",
+					raw: { leadID, page: page.page, durationMs: page.durationMs, wasFallback: page.wasFallback },
+				};
+				if (page.input > 0) {
+					costEvents.push({ name: "cost-event", data: { ...commonData, unit: "TOKENS_IN", units: page.input } });
+				}
+				if (page.output > 0) {
+					costEvents.push({ name: "cost-event", data: { ...commonData, unit: "TOKENS_OUT", units: page.output } });
+				}
+			}
+
+			if (costEvents.length > 0) {
+				await addCostEventsBulk(costQueue, costEvents);
+				console.log(`[TranscriptionQueue] 💰 ${costEvents.length} CostEvents registrados (trace: ${traceId})`);
+			}
+		} catch (costError) {
+			console.warn("[TranscriptionQueue] ⚠️ Falha ao registrar CostEvents (não-bloqueante):", costError);
+		}
 
 		// Enfileirar job para atualizar o lead no banco de dados
 		console.log(`[TranscriptionQueue] 📝 Enfileirando job de manuscrito para atualização do lead ${leadID}`);

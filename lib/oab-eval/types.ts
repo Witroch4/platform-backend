@@ -5,7 +5,7 @@ export const RubricItemSchema = z.object({
 	escopo: z.string(),
 	questao: z.string(),
 	descricao: z.string(),
-	peso: z.number().nullable().optional(),
+	nota_maxima: z.number().nullable().optional(),
 	fundamentos: z.array(z.string()).optional().default([]),
 	alternativas_grupo: z.array(z.string()).optional(),
 	palavras_chave: z.array(z.string()).optional(),
@@ -21,8 +21,8 @@ export const RubricGroupSchema = z.object({
 	indice: z.number(),
 	rotulo: z.string(),
 	descricao: z.string(),
-	peso_maximo: z.number(),
-	pesos_brutos: z.array(z.number()).optional().default([]),
+	nota_maxima: z.number(),
+	faixa_pontuacao: z.array(z.number()).optional().default([]),
 });
 
 export type RubricGroup = z.infer<typeof RubricGroupSchema>;
@@ -104,7 +104,7 @@ export interface EvidenceCandidate {
 export interface EvidencePack {
 	subitemId: string;
 	questao: string;
-	peso: number | null | undefined;
+	nota_maxima: number | null | undefined;
 	candidatos: EvidenceCandidate[];
 }
 

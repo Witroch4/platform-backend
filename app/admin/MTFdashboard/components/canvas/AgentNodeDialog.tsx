@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
 	Dialog,
 	DialogContent,
@@ -109,11 +109,25 @@ export function AgentNodeDialog({
 }: AgentNodeDialogProps) {
 	const [localDraft, setLocalDraft] = useState<AgentBlueprintDraft>(draft);
 
-	// Sincroniza o estado local quando o dialog abre ou o draft muda
+	// Cache de configurações por provedor — preserva ao trocar e voltar
+	const [providerCache, setProviderCache] = useState<Record<string, {
+		model: string;
+		temperature: number;
+		maxOutputTokens: number;
+		thinkingLevel: string | null;
+		reasoningEffort: string | null;
+	}>>({});
+
+	// Sincroniza o estado local APENAS quando o dialog abre (open: false → true)
+	const prevOpen = useRef(open);
 	useEffect(() => {
-		if (open) {
+		if (open && !prevOpen.current) {
 			setLocalDraft(draft);
+			// Restaura cache de provedores do metadata (persiste entre save/reopen)
+			const savedCache = (draft.metadata as Record<string, unknown>)?.providerCache as typeof providerCache | undefined;
+			setProviderCache(savedCache ?? {});
 		}
+		prevOpen.current = open;
 	}, [open, draft]);
 
 	const currentType = agentTypes.find((t) => t.id === localDraft.agentType);
@@ -132,7 +146,13 @@ export function AgentNodeDialog({
 		localDraft.defaultProvider || (isGeminiModel(localDraft.model) ? "GEMINI" : "OPENAI");
 
 	const handleSave = () => {
-		onSave(localDraft);
+		// Persiste o cache de provedores no metadata para sobreviver ao save/reopen
+		const meta = (localDraft.metadata as Record<string, unknown>) ?? {};
+		const finalDraft = {
+			...localDraft,
+			metadata: { ...meta, providerCache },
+		};
+		onSave(finalDraft);
 		onOpenChange(false);
 	};
 
@@ -168,18 +188,43 @@ export function AgentNodeDialog({
 	};
 
 	const selectProvider = (provider: AiProviderType) => {
-		const defaultModel = provider === "GEMINI" ? "gemini-3-flash-preview" : "gpt-4.1";
-		// Gemini: temperatura 1 | OpenAI GPT-4.x: temperatura 0.1 (vision)
-		const defaultTemp = provider === "GEMINI" ? 1 : 0.1;
-		updateLocal({
-			defaultProvider: provider,
-			model: defaultModel,
-			temperature: defaultTemp,
-			maxOutputTokens: 0, // 0 = ilimitado
-			// Raciocínio padrão (null para GPT-4.x que não suporta)
-			thinkingLevel: provider === "GEMINI" ? "high" : null,
-			reasoningEffort: null, // será definido ao selecionar modelo GPT-5+
-		});
+		if (provider === currentProvider) return;
+
+		// Salva configurações atuais do provedor que está saindo
+		setProviderCache((prev) => ({
+			...prev,
+			[currentProvider]: {
+				model: localDraft.model,
+				temperature: localDraft.temperature ?? 1,
+				maxOutputTokens: localDraft.maxOutputTokens ?? 0,
+				thinkingLevel: localDraft.thinkingLevel ?? null,
+				reasoningEffort: localDraft.reasoningEffort ?? null,
+			},
+		}));
+
+		// Restaura do cache ou usa defaults
+		const cached = providerCache[provider];
+		if (cached) {
+			updateLocal({
+				defaultProvider: provider,
+				model: cached.model,
+				temperature: cached.temperature,
+				maxOutputTokens: cached.maxOutputTokens,
+				thinkingLevel: cached.thinkingLevel as GeminiThinkingLevel | null,
+				reasoningEffort: cached.reasoningEffort as OpenAIReasoningEffort | null,
+			});
+		} else {
+			const defaultModel = provider === "GEMINI" ? "gemini-3-flash-preview" : "gpt-4.1";
+			const defaultTemp = provider === "GEMINI" ? 1 : 0.1;
+			updateLocal({
+				defaultProvider: provider,
+				model: defaultModel,
+				temperature: defaultTemp,
+				maxOutputTokens: 0,
+				thinkingLevel: provider === "GEMINI" ? "high" : null,
+				reasoningEffort: null,
+			});
+		}
 	};
 
 	// Info do modelo selecionado
@@ -418,7 +463,7 @@ export function AgentNodeDialog({
 										<div className="space-y-2">
 											<Label className="text-xs">Modelo</Label>
 											<Select
-												value={currentProvider === "GEMINI" ? localDraft.model : GEMINI_MODELS[0].value}
+												value={currentProvider === "GEMINI" ? localDraft.model : (providerCache.GEMINI?.model ?? geminiDefaultInfo.value)}
 												onValueChange={(value) => {
 													if (currentProvider === "GEMINI") {
 														updateLocal({ model: value });
@@ -448,7 +493,9 @@ export function AgentNodeDialog({
 
 										{/* Info do modelo — sempre visível para manter altura consistente */}
 										{(() => {
-											const info = currentProvider === "GEMINI" ? currentModelInfo : geminiDefaultInfo;
+											const info = currentProvider === "GEMINI"
+												? currentModelInfo
+												: GEMINI_MODELS.find((m) => m.value === providerCache.GEMINI?.model) ?? geminiDefaultInfo;
 											return (
 												<div className={`mt-3 space-y-2 flex-1 ${currentProvider !== "GEMINI" ? "opacity-40" : ""}`}>
 													{info?.description && (
@@ -499,7 +546,7 @@ export function AgentNodeDialog({
 										<div className="space-y-2">
 											<Label className="text-xs">Modelo</Label>
 											<Select
-												value={currentProvider === "OPENAI" ? localDraft.model : OPENAI_MODELS[0].value}
+												value={currentProvider === "OPENAI" ? localDraft.model : (providerCache.OPENAI?.model ?? openaiDefaultInfo.value)}
 												onValueChange={(value) => {
 													if (currentProvider === "OPENAI") {
 														const selectedModel = OPENAI_MODELS.find((m) => m.value === value);
@@ -536,7 +583,9 @@ export function AgentNodeDialog({
 
 										{/* Info do modelo — sempre visível para manter altura consistente */}
 										{(() => {
-											const info = currentProvider === "OPENAI" ? currentModelInfo : openaiDefaultInfo;
+											const info = currentProvider === "OPENAI"
+												? currentModelInfo
+												: OPENAI_MODELS.find((m) => m.value === providerCache.OPENAI?.model) ?? openaiDefaultInfo;
 											return (
 												<div className={`mt-3 space-y-1 flex-1 ${currentProvider !== "OPENAI" ? "opacity-40" : ""}`}>
 													{info?.description && (

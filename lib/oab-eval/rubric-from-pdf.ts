@@ -84,8 +84,8 @@ type ParsedQuesito = {
     indice: number;
     descricao: string;
     descricao_bruta: string;
-    peso_maximo: number;
-    pesos_brutos: number[];
+    nota_maxima: number;
+    faixa_pontuacao: number[];
 };
 
 function parseSimpleDeterministic(rawText: string): ParsedQuesito[] | null {
@@ -266,18 +266,18 @@ function parseSimpleDeterministic(rawText: string): ParsedQuesito[] | null {
                 : joinLines(allTextLines);
             const desc = cleanDescTrailingRange(descBruta);
 
-            // Extract peso_maximo from score range lines (take max across all parts)
-            let pesoMaximo = 0;
+            // Extract nota_maxima from score range lines (take max across all parts)
+            let notaMaxima = 0;
             for (const part of group.parts) {
                 const rangeStr = part.scoreRangeLines.join(" ");
                 if (rangeStr) {
                     const partMax = parseScoreRange(rangeStr);
-                    pesoMaximo += partMax; // sum sub-item maxes (11=0.10, 11A=0.20, 11B=0.20 → 0.50)
+                    notaMaxima += partMax; // sum sub-item maxes (11=0.10, 11A=0.20, 11B=0.20 → 0.50)
                 }
             }
 
             // If no score range lines, try inline (0,xx) tokens
-            if (!pesoMaximo) {
+            if (!notaMaxima) {
                 const inlinePesos: number[] = [];
                 const rx = /\([\s]*(\d{1,2})[\s]*[,.][\s]*(\d{2})[\s]*\)/g;
                 let im: RegExpExecArray | null;
@@ -285,16 +285,16 @@ function parseSimpleDeterministic(rawText: string): ParsedQuesito[] | null {
                     const n = Number(`${im[1]}.${im[2]}`);
                     if (!Number.isNaN(n) && n > 0) inlinePesos.push(n);
                 }
-                pesoMaximo = inlinePesos.reduce((a, b) => a + b, 0);
+                notaMaxima = inlinePesos.reduce((a, b) => a + b, 0);
             }
 
             // Extract all brute weight values from description
-            const pesosBrutos: number[] = [];
+            const faixaPontuacao: number[] = [];
             const rxBruto = /\([\s]*(\d{1,2})[\s]*[,.][\s]*(\d{2})[\s]*\)/g;
             let bm: RegExpExecArray | null;
             while ((bm = rxBruto.exec(descBruta)) !== null) {
                 const n = Number(`${bm[1]}.${bm[2]}`);
-                if (!Number.isNaN(n) && n > 0) pesosBrutos.push(Number(n.toFixed(2)));
+                if (!Number.isNaN(n) && n > 0) faixaPontuacao.push(Number(n.toFixed(2)));
             }
 
             const rotulo = tipo === "PEÇA"
@@ -307,8 +307,8 @@ function parseSimpleDeterministic(rawText: string): ParsedQuesito[] | null {
                 indice: group.baseNum,
                 descricao: desc,
                 descricao_bruta: descBruta,
-                peso_maximo: Number(pesoMaximo.toFixed(2)),
-                pesos_brutos: pesosBrutos,
+                nota_maxima: Number(notaMaxima.toFixed(2)),
+                faixa_pontuacao: faixaPontuacao,
             });
         }
     }
@@ -358,7 +358,7 @@ function buildPayloadFromQuesitos(
             escopo,
             questao: q.questao,
             descricao: q.descricao,
-            peso: q.peso_maximo > 0 ? q.peso_maximo : null,
+            nota_maxima: q.nota_maxima > 0 ? q.nota_maxima : null,
             fundamentos: [],
             alternativas_grupo: undefined,
             palavras_chave: [],
@@ -372,26 +372,27 @@ function buildPayloadFromQuesitos(
             indice,
             rotulo,
             descricao: q.descricao,
-            peso_maximo: q.peso_maximo,
-            pesos_brutos: q.pesos_brutos,
+            nota_maxima: q.nota_maxima,
+            faixa_pontuacao: q.faixa_pontuacao,
         });
     }
 
     return {
         meta: {
             ...meta,
-            versao_schema: "2.1",
+            versao_schema: "2.2",
             gerado_em: new Date().toISOString(),
             executado_por: executadoPor ?? "parser_deterministico",
             fileName,
         },
         schema_docs: {
-            subitem_fields: ["id", "escopo", "questao", "descricao", "peso"],
-            group_fields: ["id", "escopo", "questao", "indice", "rotulo", "descricao", "peso_maximo", "pesos_brutos"],
+            subitem_fields: ["id", "escopo", "questao", "descricao", "nota_maxima"],
+            group_fields: ["id", "escopo", "questao", "indice", "rotulo", "descricao", "nota_maxima", "faixa_pontuacao"],
             notas: [
                 "Peça: Quesito 1-16. Questões: Q1-A, Q1-B, Q2-A, ..., Q4-B.",
                 "descricao preserva os tokens (0,xx) originais do padrão de resposta.",
-                "peso_maximo é o valor máximo que o item pode valer.",
+                "nota_maxima é o valor máximo que o item pode valer.",
+                "faixa_pontuacao é o detalhamento das notas parciais (ex: [0.40, 0.10]).",
             ],
         },
         itens,
@@ -468,15 +469,15 @@ REGRAS:
 3. NÃO inclua títulos de seção (Endereçamento, Qualificação, etc.) — apenas os quesitos numerados.
 4. NÃO atomize: cada número (1., 2., ... 16.) é UM quesito. Cada letra (A., B.) é UM quesito.
 5. Mantenha os tokens (0,xx) no texto da descrição.
-6. peso_maximo é o valor máximo do range de pontuação (ex: "0,00/0,40/0,50" → 0.50).
+6. nota_maxima é o valor máximo do range de pontuação (ex: "0,00/0,40/0,50" → 0.50).
 
 CASOS PARTICULARES:
-7. SUBITENS AGRUPADOS: Quesitos de peça podem ter múltiplos subitens (11, 11A, 11B). Agrupe-os como UM ÚNICO quesito com rótulo do número base ("11"). Concatene as descrições e SOME os pesos máximos dos subitens.
+7. SUBITENS AGRUPADOS: Quesitos de peça podem ter múltiplos subitens (11, 11A, 11B). Agrupe-os como UM ÚNICO quesito com rótulo do número base ("11"). Concatene as descrições e SOME as notas máximas dos subitens.
    Ex: "11. Deve ser pleiteada a ... 11A. Para a anulação... 11B. Para o ressarcimento... (0,20)" → quesito "11" com descrição unificada, mas mantenha o padrao 11. Deve..11A. Para a..11B.  etc.
-8. COLUNA PONTUAÇÃO PREVALECE: Quando a soma dos tokens inline (0,xx) diverge do range da coluna Pontuação (ex: "0,00/0,10/0,20/0,30/0,40"), use o VALOR MÁXIMO DA COLUNA como peso_maximo.
-   Ex: "3. Réu: Dante (0,10), a OSC XYZ (0,10) e o Município Alfa (0,10). 0,00/0,10/0,20/0,30/0,40" → peso_maximo = 0.40 (não 0.30).
-9. RESPOSTAS ALTERNATIVAS (OU): Alguns itens têm duas ou mais respostas corretas separadas por "OU". Trate como UM ÚNICO quesito. Inclua ambas as alternativas na descrição. O peso_maximo é o do range (não soma as alternativas).
-   Ex: "B. O Presidente... (0,50)... (0,10). OU (0,50)... (0,10). 0,00/0,50/0,60" → peso_maximo = 0.60, pesos_brutos = [0.50, 0.10].
+8. COLUNA PONTUAÇÃO PREVALECE: Quando a soma dos tokens inline (0,xx) diverge do range da coluna Pontuação (ex: "0,00/0,10/0,20/0,30/0,40"), use o VALOR MÁXIMO DA COLUNA como nota_maxima.
+   Ex: "3. Réu: Dante (0,10), a OSC XYZ (0,10) e o Município Alfa (0,10). 0,00/0,10/0,20/0,30/0,40" → nota_maxima = 0.40 (não 0.30).
+9. RESPOSTAS ALTERNATIVAS (OU): Alguns itens têm duas ou mais respostas corretas separadas por "OU". Trate como UM ÚNICO quesito. Inclua ambas as alternativas na descrição. A nota_maxima é a do range (não soma as alternativas).
+   Ex: "B. O Presidente... (0,50)... (0,10). OU (0,50)... (0,10). 0,00/0,50/0,60" → nota_maxima = 0.60, faixa_pontuacao = [0.50, 0.10].
 
 Responda com JSON VÁLIDO neste formato exato:
 {
@@ -486,8 +487,8 @@ Responda com JSON VÁLIDO neste formato exato:
       "rotulo": "1",
       "indice": 1,
       "descricao": "Ao Juízo da Vara Única da Comarca do Município Alfa.",
-      "peso_maximo": 0.10,
-      "pesos_brutos": [0.10]
+      "nota_maxima": 0.10,
+      "faixa_pontuacao": [0.10]
     },
     ...
     {
@@ -495,8 +496,8 @@ Responda com JSON VÁLIDO neste formato exato:
       "rotulo": "A",
       "indice": 1,
       "descricao": "Sim. A decisão coordenada não pode ser aplicada aos processos administrativos em que estejam envolvidas autoridades de Poderes distintos (0,55), na forma do Art. 49-A, § 6º, inciso III, da Lei nº 9.784/1999 (0,10).",
-      "peso_maximo": 0.65,
-      "pesos_brutos": [0.55, 0.10]
+      "nota_maxima": 0.65,
+      "faixa_pontuacao": [0.55, 0.10]
     }
   ]
 }
@@ -609,12 +610,15 @@ async function buildRubricFromPdfLLM(rawText: string, meta: ReturnType<typeof ex
     const quesitos: ParsedQuesito[] = rawQuesitos.map((q: any, idx: number) => {
         const questao = String(q.questao ?? "PEÇA").toUpperCase();
         const validQuestao = ["PEÇA", "Q1", "Q2", "Q3", "Q4"].includes(questao) ? questao : "PEÇA";
-        let peso = typeof q.peso_maximo === "number" ? q.peso_maximo : 0;
-        if (typeof q.peso_maximo === "string") {
-            peso = Number(q.peso_maximo.replace(",", ".")) || 0;
+        // Accept both old (peso_maximo/pesos_brutos) and new (nota_maxima/faixa_pontuacao) from LLM
+        const rawNota = q.nota_maxima ?? q.peso_maximo;
+        let peso = typeof rawNota === "number" ? rawNota : 0;
+        if (typeof rawNota === "string") {
+            peso = Number(rawNota.replace(",", ".")) || 0;
         }
-        const pesos = Array.isArray(q.pesos_brutos)
-            ? q.pesos_brutos.map((p: any) => Number(String(p).replace(",", ".")) || 0).filter((p: number) => p > 0)
+        const rawFaixa = q.faixa_pontuacao ?? q.pesos_brutos;
+        const pesos = Array.isArray(rawFaixa)
+            ? rawFaixa.map((p: any) => Number(String(p).replace(",", ".")) || 0).filter((p: number) => p > 0)
             : [];
 
         return {
@@ -623,8 +627,8 @@ async function buildRubricFromPdfLLM(rawText: string, meta: ReturnType<typeof ex
             indice: typeof q.indice === "number" ? q.indice : idx + 1,
             descricao: String(q.descricao ?? ""),
             descricao_bruta: String(q.descricao_bruta ?? q.descricao ?? ""),
-            peso_maximo: Number(peso.toFixed(2)),
-            pesos_brutos: pesos.map((p: number) => Number(p.toFixed(2))),
+            nota_maxima: Number(peso.toFixed(2)),
+            faixa_pontuacao: pesos.map((p: number) => Number(p.toFixed(2))),
         };
     });
 
@@ -658,8 +662,8 @@ export async function buildRubricFromPdf(buffer: Buffer, options: BuildRubricOpt
             total: quesitos.length,
             peca: pecaCount,
             questoes: questoesCount,
-            pesoTotalPeca: Number(quesitos.filter((q) => q.questao === "PEÇA").reduce((a, q) => a + q.peso_maximo, 0).toFixed(2)),
-            pesoTotalQuestoes: Number(quesitos.filter((q) => q.questao !== "PEÇA").reduce((a, q) => a + q.peso_maximo, 0).toFixed(2)),
+            notaMaxTotalPeca: Number(quesitos.filter((q) => q.questao === "PEÇA").reduce((a, q) => a + q.nota_maxima, 0).toFixed(2)),
+            notaMaxTotalQuestoes: Number(quesitos.filter((q) => q.questao !== "PEÇA").reduce((a, q) => a + q.nota_maxima, 0).toFixed(2)),
         });
 
         return buildPayloadFromQuesitos(quesitos, meta, options.fileName);
@@ -691,16 +695,16 @@ REGRAS:
 3. NÃO inclua títulos de seção (Endereçamento, Qualificação, etc.) — apenas quesitos numerados.
 4. NÃO atomize: cada número (1., 2., ... 16.) é UM quesito. Cada letra (A., B.) é UM quesito.
 5. Mantenha os tokens (0,xx) no texto da descrição.
-6. peso_maximo = valor máximo do range de pontuação (ex: "0,00/0,40/0,50" → 0.50).
-7. pesos_brutos = todos os valores entre parênteses no texto (ex: "(0,55)" e "(0,10)" → [0.55, 0.10]).
+6. nota_maxima = valor máximo do range de pontuação (ex: "0,00/0,40/0,50" → 0.50).
+7. faixa_pontuacao = todos os valores entre parênteses no texto (ex: "(0,55)" e "(0,10)" → [0.55, 0.10]).
 
 CASOS PARTICULARES:
-8. SUBITENS AGRUPADOS: Quesitos de peça podem ter múltiplos subitens (11, 11A, 11B). Agrupe-os como UM ÚNICO quesito com rótulo do número base ("11"). Concatene as descrições e SOME os pesos máximos dos subitens.
+8. SUBITENS AGRUPADOS: Quesitos de peça podem ter múltiplos subitens (11, 11A, 11B). Agrupe-os como UM ÚNICO quesito com rótulo do número base ("11"). Concatene as descrições e SOME as notas máximas dos subitens.
    Ex: "11. Deve ser pleiteada a ... 11A. Para a anulação... 11B. Para o ressarcimento... (0,20)" → quesito "11" com descrição unificada, mas mantenha o padrao 11. Deve..11A. Para a..11B.  etc.
-9. COLUNA PONTUAÇÃO PREVALECE: Quando a soma dos tokens inline (0,xx) diverge do range da coluna Pontuação (ex: "0,00/0,10/0,20/0,30/0,40"), use o VALOR MÁXIMO DA COLUNA como peso_maximo.
-   Ex: "3. Réu: Dante (0,10), a OSC XYZ (0,10) e o Município Alfa (0,10). 0,00/0,10/0,20/0,30/0,40" → peso_maximo = 0.40 (não 0.30).
-10. RESPOSTAS ALTERNATIVAS (OU): Alguns itens têm duas ou mais respostas corretas separadas por "OU". Trate como UM ÚNICO quesito. Inclua ambas as alternativas na descrição. O peso_maximo é o do range (não soma as alternativas).
-   Ex: "B. O Presidente... (0,50)... (0,10). OU (0,50)... (0,10). 0,00/0,50/0,60" → peso_maximo = 0.60, pesos_brutos = [0.50, 0.10].
+9. COLUNA PONTUAÇÃO PREVALECE: Quando a soma dos tokens inline (0,xx) diverge do range da coluna Pontuação (ex: "0,00/0,10/0,20/0,30/0,40"), use o VALOR MÁXIMO DA COLUNA como nota_maxima.
+   Ex: "3. Réu: Dante (0,10), a OSC XYZ (0,10) e o Município Alfa (0,10). 0,00/0,10/0,20/0,30/0,40" → nota_maxima = 0.40 (não 0.30).
+10. RESPOSTAS ALTERNATIVAS (OU): Alguns itens têm duas ou mais respostas corretas separadas por "OU". Trate como UM ÚNICO quesito. Inclua ambas as alternativas na descrição. A nota_maxima é a do range (não soma as alternativas).
+   Ex: "B. O Presidente... (0,50)... (0,10). OU (0,50)... (0,10). 0,00/0,50/0,60" → nota_maxima = 0.60, faixa_pontuacao = [0.50, 0.10].
 
 Responda com JSON VÁLIDO neste formato:
 {
@@ -710,16 +714,16 @@ Responda com JSON VÁLIDO neste formato:
       "rotulo": "1",
       "indice": 1,
       "descricao": "Ao Juízo da Vara Única da Comarca do Município Alfa.",
-      "peso_maximo": 0.10,
-      "pesos_brutos": [0.10]
+      "nota_maxima": 0.10,
+      "faixa_pontuacao": [0.10]
     },
     {
       "questao": "Q1",
       "rotulo": "A",
       "indice": 1,
       "descricao": "Sim. A decisão coordenada não pode ser aplicada... (0,55)... (0,10).",
-      "peso_maximo": 0.65,
-      "pesos_brutos": [0.55, 0.10]
+      "nota_maxima": 0.65,
+      "faixa_pontuacao": [0.55, 0.10]
     }
   ]
 }`;
@@ -914,12 +918,15 @@ export async function buildRubricFromPdfVision(
     const quesitos: ParsedQuesito[] = rawQuesitos.map((q: any, idx: number) => {
         const questao = String(q.questao ?? "PEÇA").toUpperCase();
         const validQuestao = ["PEÇA", "Q1", "Q2", "Q3", "Q4"].includes(questao) ? questao : "PEÇA";
-        let peso = typeof q.peso_maximo === "number" ? q.peso_maximo : 0;
-        if (typeof q.peso_maximo === "string") {
-            peso = Number(q.peso_maximo.replace(",", ".")) || 0;
+        // Accept both old (peso_maximo/pesos_brutos) and new (nota_maxima/faixa_pontuacao) from LLM
+        const rawNota = q.nota_maxima ?? q.peso_maximo;
+        let peso = typeof rawNota === "number" ? rawNota : 0;
+        if (typeof rawNota === "string") {
+            peso = Number(rawNota.replace(",", ".")) || 0;
         }
-        const pesos = Array.isArray(q.pesos_brutos)
-            ? q.pesos_brutos.map((p: any) => Number(String(p).replace(",", ".")) || 0).filter((p: number) => p > 0)
+        const rawFaixa = q.faixa_pontuacao ?? q.pesos_brutos;
+        const pesos = Array.isArray(rawFaixa)
+            ? rawFaixa.map((p: any) => Number(String(p).replace(",", ".")) || 0).filter((p: number) => p > 0)
             : [];
 
         return {
@@ -928,8 +935,8 @@ export async function buildRubricFromPdfVision(
             indice: typeof q.indice === "number" ? q.indice : idx + 1,
             descricao: String(q.descricao ?? ""),
             descricao_bruta: String(q.descricao_bruta ?? q.descricao ?? ""),
-            peso_maximo: Number(peso.toFixed(2)),
-            pesos_brutos: pesos.map((p: number) => Number(p.toFixed(2))),
+            nota_maxima: Number(peso.toFixed(2)),
+            faixa_pontuacao: pesos.map((p: number) => Number(p.toFixed(2))),
         };
     });
 

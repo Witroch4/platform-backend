@@ -2,7 +2,7 @@ import type { GraphState } from "./state";
 import type { EvaluationReport } from "../types";
 
 export function reporterNode(state: GraphState): Partial<GraphState> {
-	const maximo = state.rubricItems.reduce((acc, item) => acc + (item.peso ?? 0), 0);
+	const maximo = state.rubricItems.reduce((acc, item) => acc + (item.nota_maxima ?? 0), 0);
 	const obtido = state.scores.reduce((acc, score) => acc + (score.pontos ?? 0), 0);
 
 	const itens: EvaluationReport["itens"] = state.scores
@@ -20,7 +20,7 @@ export function reporterNode(state: GraphState): Partial<GraphState> {
 				questao: item.questao,
 				subitemId: item.id,
 				tese,
-				pedido: `Requer a revisão do subitem ${item.id}, com atribuição de até ${item.peso ?? 0} ponto(s).`,
+				pedido: `Requer a revisão do subitem ${item.id}, com atribuição de até ${item.nota_maxima ?? 0} ponto(s).`,
 			};
 		})
 		.filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));

@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { processMultiImageUrlVisionRequest } from "./unified-vision-client";
+import { generateText, type LanguageModel } from "ai";
+import { google } from "@ai-sdk/google";
+import { createModel, buildProviderOptions } from "@/lib/socialwise-flow/services/ai-provider-factory";
+import type { AiProviderType } from "@/lib/socialwise-flow/processor-components/assistant-config";
+import { withRetry, cleanPromptForOpenAI, OPENAI_FALLBACK_MODEL } from "./ai-retry-fallback";
 import { getOabEvalConfig } from "@/lib/config";
 import { getPrismaInstance } from "@/lib/connections";
 import {
@@ -461,8 +465,8 @@ async function getMirrorExtractorConfig(selectedProvider?: "OPENAI" | "GEMINI"):
 	model: string;
 	systemInstructions: string;
 	maxOutputTokens: number;
-	enableCodeExecution: boolean;
-	thinkingLevel: "minimal" | "low" | "medium" | "high";
+	provider: AiProviderType;
+	reasoningEffort: "minimal" | "low" | "medium" | "high";
 }> {
 	const prisma = getPrismaInstance();
 
@@ -525,8 +529,8 @@ async function getMirrorExtractorConfig(selectedProvider?: "OPENAI" | "GEMINI"):
 				model,
 				systemInstructions,
 				maxOutputTokens,
-				enableCodeExecution: isGemini3Model(model),
-				thinkingLevel: ((blueprint.thinkingLevel as string) || "high") as "minimal" | "low" | "medium" | "high",
+				provider: effectiveProvider as AiProviderType,
+				reasoningEffort: ((blueprint.thinkingLevel as string) || "high") as "minimal" | "low" | "medium" | "high",
 			};
 		}
 	} catch (err) {
@@ -574,8 +578,8 @@ async function getMirrorExtractorConfig(selectedProvider?: "OPENAI" | "GEMINI"):
 				model,
 				systemInstructions,
 				maxOutputTokens,
-				enableCodeExecution: isGemini3Model(model),
-				thinkingLevel: ((blueprint.thinkingLevel as string) || "high") as "minimal" | "low" | "medium" | "high",
+				provider: effectiveProvider as AiProviderType,
+				reasoningEffort: ((blueprint.thinkingLevel as string) || "high") as "minimal" | "low" | "medium" | "high",
 			};
 		}
 	} catch (err) {
@@ -587,8 +591,8 @@ async function getMirrorExtractorConfig(selectedProvider?: "OPENAI" | "GEMINI"):
 		model: DEFAULT_VISION_MODEL,
 		systemInstructions: baseInstructions,
 		maxOutputTokens: 0,
-		enableCodeExecution: false,
-		thinkingLevel: "high",
+		provider: effectiveProvider as AiProviderType,
+		reasoningEffort: "high",
 	};
 }
 
@@ -745,9 +749,9 @@ async function extractMirrorDataFromImages(
 	model: string,
 	systemInstructions: string,
 	maxOutputTokens: number,
-	options?: {
-		enableCodeExecution?: boolean;
-		thinkingLevel?: "minimal" | "low" | "medium" | "high";
+	options: {
+		provider: AiProviderType;
+		reasoningEffort: "minimal" | "low" | "medium" | "high";
 	},
 ): Promise<ExtractedMirrorData> {
 	console.log(`[MirrorGenerator] 🖼️ Extraindo dados de ${imageUrls.length} imagem(ns) do espelho`);
@@ -766,8 +770,8 @@ async function extractMirrorDataFromImages(
 	// Calcular totais por escopo
 	const pecaItens = rubric.itens.filter((i) => i.escopo === "Peça");
 	const questaoItens = rubric.itens.filter((i) => i.escopo === "Questão");
-	const pecaTotal = pecaItens.reduce((sum, i) => sum + (i.peso ?? 0), 0);
-	const questaoTotal = questaoItens.reduce((sum, i) => sum + (i.peso ?? 0), 0);
+	const pecaTotal = pecaItens.reduce((sum, i) => sum + (i.nota_maxima ?? 0), 0);
+	const questaoTotal = questaoItens.reduce((sum, i) => sum + (i.nota_maxima ?? 0), 0);
 
 	console.log(`[MirrorGenerator::Rubrica] 📊 Estatísticas:`);
 	console.log(`  - PEÇA: ${pecaItens.length} itens, ${pecaTotal.toFixed(2)} pontos`);
@@ -785,7 +789,7 @@ async function extractMirrorDataFromImages(
 			const descricaoBase = grupo.descricao || `Grupo ${grupo.indice}`;
 			headerParts.push(descricaoBase);
 			const headerLabel = headerParts.join(" – ");
-			const header = `- ${headerLabel} (máx ${grupo.peso_maximo.toFixed(2)}):`;
+			const header = `- ${headerLabel} (máx ${grupo.nota_maxima.toFixed(2)}):`;
 			const totalLine = `   - nota_total_${grupo.id}`;
 			const fonteLine = `   - fonte_nota_total_${grupo.id}`;
 			const colunaLine = `   - coluna_nota_total_${grupo.id}`;
@@ -850,21 +854,64 @@ async function extractMirrorDataFromImages(
 	console.log(userPrompt);
 	console.log(`[MirrorGenerator::Prompt] ───────────────────────────────────────────`);
 
-	// Cliente unificado: suporta OpenAI e Gemini automaticamente
-	// Para Gemini 3, habilita code execution e thinking para Agentic Vision
-	const response = await processMultiImageUrlVisionRequest({
-		model,
-		systemInstructions,
-		userPrompt,
-		imageUrls,
-		maxOutputTokens,
-		enableCodeExecution: options?.enableCodeExecution,
-		thinkingLevel: options?.thinkingLevel,
-	});
+	const imageParts = imageUrls.map((url) => ({ type: "image" as const, image: new URL(url) }));
+	const isGemini = options.provider === "GEMINI";
+	const isGemini3 = model.startsWith("gemini-3");
+	const tools = isGemini3 ? { code_execution: google.tools.codeExecution({}) } : undefined;
 
-	console.log(`[MirrorGenerator] 🤖 Provider utilizado: ${response.provider}`);
+	let rawText: string;
+	let usedProvider = options.provider;
 
-	const rawText = response.text;
+	try {
+		rawText = await withRetry(async () => {
+			const aiModel = createModel(options.provider, model);
+			const providerOptions = buildProviderOptions(options.provider, model, {
+				reasoningEffort: options.reasoningEffort,
+			});
+
+			const result = await generateText({
+				model: aiModel,
+				system: systemInstructions,
+				messages: [{
+					role: "user" as const,
+					content: [
+						{ type: "text" as const, text: userPrompt },
+						...imageParts,
+					],
+				}],
+				tools,
+				...(maxOutputTokens > 0 ? { maxOutputTokens } : {}),
+				temperature: 0, // Deterministic extraction
+				providerOptions,
+			});
+			return result.text;
+		}, `MirrorVision:${options.provider}/${model}`);
+	} catch (primaryError) {
+		// Fallback: Gemini/Claude → OpenAI (sem tools, prompt limpo)
+		if (options.provider !== "OPENAI") {
+			console.warn(`[MirrorGenerator] ⚠️ ${options.provider}/${model} falhou, fallback para OpenAI/${OPENAI_FALLBACK_MODEL}`);
+			const fallbackModel = createModel("OPENAI", OPENAI_FALLBACK_MODEL);
+			const result = await generateText({
+				model: fallbackModel,
+				system: cleanPromptForOpenAI(systemInstructions),
+				messages: [{
+					role: "user" as const,
+					content: [
+						{ type: "text" as const, text: userPrompt },
+						...imageParts,
+					],
+				}],
+				...(maxOutputTokens > 0 ? { maxOutputTokens } : {}),
+				temperature: 0,
+			});
+			rawText = result.text;
+			usedProvider = "OPENAI";
+		} else {
+			throw primaryError;
+		}
+	}
+
+	console.log(`[MirrorGenerator] 🤖 Provider utilizado: ${usedProvider}`);
 
 	// Tentar parsear JSON
 	try {
@@ -1125,7 +1172,7 @@ function buildStructuredMirror(rubric: RubricPayload, extractedData: ExtractedMi
 				return {
 					id: subId,
 					descricao: subItem?.descricao ?? "",
-					pesoMaximo: subItem?.peso ?? 0,
+					pesoMaximo: subItem?.nota_maxima ?? 0,
 					notaObtida: notaSanitizada,
 				};
 			});
@@ -1140,7 +1187,7 @@ function buildStructuredMirror(rubric: RubricPayload, extractedData: ExtractedMi
 						? subEvaluations.map((sub) => `${sub.id}:${sub.notaObtida.toFixed(2)}`).join(", ")
 						: "nenhum subitem com nota extraída";
 					console.warn(
-						`[MirrorGenerator::GroupTotals] ⚠️ Divergência no grupo ${grupo.id}: override=${roundToTwo(override).toFixed(2)}, soma_subitens=${roundToTwo(somaSubitens).toFixed(2)}, max=${(grupo.peso_maximo ?? 0).toFixed(2)}. Fonte=${fonteInfo?.raw ?? "[sem fonte]"} Subitens: ${subResumo}`,
+						`[MirrorGenerator::GroupTotals] ⚠️ Divergência no grupo ${grupo.id}: override=${roundToTwo(override).toFixed(2)}, soma_subitens=${roundToTwo(somaSubitens).toFixed(2)}, max=${(grupo.nota_maxima ?? 0).toFixed(2)}. Fonte=${fonteInfo?.raw ?? "[sem fonte]"} Subitens: ${subResumo}`,
 					);
 				}
 			} else if (process.env.DEBUG_MIRROR_GROUPS === "1" && subEvaluations.every((sub) => sub.notaObtida === 0)) {
@@ -1149,13 +1196,13 @@ function buildStructuredMirror(rubric: RubricPayload, extractedData: ExtractedMi
 				);
 			}
 			const notaGrupo = override != null ? override : somaSubitens;
-			const notaCapped = roundToTwo(Math.min(notaGrupo, grupo.peso_maximo));
+			const notaCapped = roundToTwo(Math.min(notaGrupo, grupo.nota_maxima));
 			const descricaoPrincipal = grupo.descricao || `Grupo ${grupo.indice}`;
 
 			const evaluation: ItemEvaluation = {
 				id: grupo.id,
 				descricao: descricaoPrincipal,
-				pesoMaximo: Number((grupo.peso_maximo ?? 0).toFixed(2)),
+				pesoMaximo: Number((grupo.nota_maxima ?? 0).toFixed(2)),
 				notaObtida: notaCapped,
 				subitens: subEvaluations,
 			};
@@ -1176,7 +1223,7 @@ function buildStructuredMirror(rubric: RubricPayload, extractedData: ExtractedMi
 			const evaluation: ItemEvaluation = {
 				id: item.id,
 				descricao: item.descricao,
-				pesoMaximo: item.peso ?? 0,
+				pesoMaximo: item.nota_maxima ?? 0,
 				notaObtida: notaSanitizada,
 			};
 
@@ -1359,16 +1406,14 @@ export async function generateMirrorLocally(input: MirrorGeneratorInput): Promis
 	}
 
 	// 3. Carregar config do blueprint (considerando provider selecionado pelo usuário)
-	const { model, systemInstructions, maxOutputTokens, enableCodeExecution, thinkingLevel } =
+	const { model, systemInstructions, maxOutputTokens, provider, reasoningEffort } =
 		await getMirrorExtractorConfig(input.selectedProvider);
 
 	console.log("[MirrorGenerator] 📝 Configuração do Blueprint:");
 	console.log(`  - Modelo: ${model}`);
 	console.log(`  - Max Output Tokens: ${maxOutputTokens}`);
-	console.log(
-		`  - Code Execution: ${enableCodeExecution ? "✅ Habilitado (Gemini Agentic Vision)" : "❌ Desabilitado"}`,
-	);
-	console.log(`  - Thinking Level: ${thinkingLevel}`);
+	console.log(`  - Provider: ${provider}`);
+	console.log(`  - Reasoning Effort: ${reasoningEffort}`);
 
 	// 4. Extrair dados das imagens (usando URLs diretas)
 	const extractedData = await extractMirrorDataFromImages(
@@ -1377,7 +1422,7 @@ export async function generateMirrorLocally(input: MirrorGeneratorInput): Promis
 		model,
 		systemInstructions,
 		maxOutputTokens,
-		{ enableCodeExecution, thinkingLevel },
+		{ provider, reasoningEffort },
 	);
 
 	if (input.onProgress) {

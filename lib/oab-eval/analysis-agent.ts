@@ -4,14 +4,15 @@
  * Compara a transcrição da prova manuscrita com o espelho de correção
  * para identificar acertos não pontuados pela banca OAB.
  *
- * Suporta OpenAI e Gemini via Engine Híbrida (blueprint → provider switch).
+ * Usa Vercel AI SDK generateObject (mesmo padrão do recurso-generator-agent).
+ * Suporta OpenAI, Gemini e Claude via Engine Híbrida (blueprint → provider switch).
  *
  * Feature flag: BLUEPRINT_ANALISE=true (se false/ausente → fluxo externo n8n)
  */
 
 import { getAgentBlueprintByLinkedColumn, isGeminiModel } from "@/lib/ai-agents/blueprints";
-import { openai } from "@/lib/oab-eval/openai-client";
-import { getGeminiClient } from "@/lib/oab-eval/gemini-client";
+import { generateObject, type LanguageModel, jsonSchema } from "ai";
+import { createModel, buildProviderOptions } from "@/lib/socialwise-flow/services/ai-provider-factory";
 import { getPrismaInstance } from "@/lib/connections";
 import { optimizeMirrorPayload, estimateTokenSavings } from "@/lib/oab-eval/mirror-formatter";
 import type { StudentMirrorPayload } from "@/lib/oab-eval/types";
@@ -24,7 +25,7 @@ export interface AnalysisAgentInput {
 	leadId: string;
 	textoProva: string;
 	textoEspelho: string;
-	selectedProvider?: "OPENAI" | "GEMINI";
+	selectedProvider?: "OPENAI" | "GEMINI" | "CLAUDE";
 	onProgress?: (message: string) => Promise<void>;
 }
 
@@ -57,7 +58,7 @@ export interface AnalysisResult {
 	rawResponse?: string;
 	error?: string;
 	model: string;
-	provider: "OPENAI" | "GEMINI";
+	provider: "OPENAI" | "GEMINI" | "CLAUDE";
 	processingTimeMs: number;
 }
 
@@ -68,6 +69,7 @@ export interface AnalysisResult {
 const DEFAULT_MODELS_BY_PROVIDER: Record<string, string> = {
 	OPENAI: "gpt-5.2",
 	GEMINI: "gemini-2.5-flash",
+	CLAUDE: "claude-3-5-sonnet-latest",
 };
 
 const DEFAULT_MAX_OUTPUT_TOKENS = 16384;
@@ -87,7 +89,7 @@ const ANALYSIS_REINFORCEMENT_PROMPT = `
 [REFORÇO INTERNO DO SISTEMA — OBRIGATÓRIO]
 
 Você é um ANALISTA JURÍDICO ESPECIALIZADO em provas da OAB (2ª Fase).
-Sua missão: comparar "TEXTO DA PROVA" × "ESPELHO DA PROVA" e identificar acertos do examinando que NÃO foram pontuados pela banca.
+Sua missão: comparar "TEXTO DA PROVA" × "ESPELHO DA PROVA" e identificar acertos do examinando que NÃO foram pontuados pela banca seja OTIMISTA se faltar poucos pontos pra media de 6 veja um agumneto provavel para alcançar os 6 pts tudo ajuda vamos tesntar achar esses 6pts do aluno.
 
 REGRAS ABSOLUTAS (sobrescrevem qualquer instrução conflitante):
 1. OTIMISMO FUNDAMENTADO: A banca frequentemente erra. Analise com viés favorável ao examinando, mas NUNCA invente pontos inexistentes.
@@ -99,31 +101,77 @@ REGRAS ABSOLUTAS (sobrescrevem qualquer instrução conflitante):
 7. ANÁLISE COMPLETA: Analise SEMPRE tanto a Peça Profissional quanto TODAS as Questões. Nunca pule seções.
 8. nota_maxima_peca = 5.00 e nota_maxima_questoes = 5.00, total máximo = 10.00.
 
-REGRAS TÉCNICAS DO JSON:
-- Escape aspas duplas internas com \\"
-- Use \\n para quebras de linha
-- Sem vírgulas pendentes no final de arrays/objetos
-- Valide mentalmente a estrutura antes de retornar
-
-SE FALTAR "TEXTO DA PROVA" OU "ESPELHO DA PROVA": retorne {"erro":"Blocos obrigatórios ausentes."}
-
-FORMATO DE SAÍDA (schema estrito):
-{
-  "exameDescricao": "string",
-  "inscricao": "string",
-  "nomeExaminando": "string",
-  "seccional": "string",
-  "areaJuridica": "string",
-  "notaFinal": "string",
-  "situacao": "string",
-  "pontosPeca": [{ "titulo": "string", "descricao": "Linhas XX-YY ...", "valor": "+0,XX" }],
-  "subtotalPeca": "+X,XX pontos.",
-  "pontosQuestoes": [{ "titulo": "string", "descricao": "Linhas XX-YY ...", "valor": "+0,XX" }],
-  "subtotalQuestoes": "+X,XX pontos.",
-  "conclusao": "string (1 parágrafo indicando se nota projetada ≥ 6,00)",
-  "argumentacao": ["string (frase objetiva para recurso, citando Linhas XX-YY)"]
-}
+O schema de saída é controlado automaticamente pelo sistema. Siga-o rigorosamente.
 `.trim();
+
+// ============================================================================
+// DEFAULT ANALYSIS SCHEMA — Fallback when blueprint has no outputParser
+// ============================================================================
+
+const DEFAULT_ANALYSIS_SCHEMA = {
+	type: "object" as const,
+	properties: {
+		exameDescricao: { type: "string", description: "Descrição do exame (ex: '42º Exame de Ordem Unificado - 2ª Fase')" },
+		inscricao: { type: "string", description: "Número de inscrição do examinando" },
+		nomeExaminando: { type: "string", description: "Nome completo do examinando" },
+		seccional: { type: "string", description: "Seccional OAB (ex: 'SP', 'RJ')" },
+		areaJuridica: { type: "string", description: "Área jurídica da prova (ex: 'Direito Tributário')" },
+		notaFinal: { type: "string", description: "Nota final original atribuída pela banca (ex: '4,75')" },
+		situacao: { type: "string", description: "Situação do examinando (ex: 'REPROVADO', 'APROVADO')" },
+		pontosPeca: {
+			type: "array",
+			description: "Pontos identificados na peça profissional que merecem recurso",
+			items: {
+				type: "object",
+				properties: {
+					titulo: { type: "string", description: "Identificador do quesito (ex: 'Quesito PECA-07')" },
+					descricao: { type: "string", description: "Descrição detalhada com referência a linhas (ex: 'Linhas 61-64: O examinando...')" },
+					valor: { type: "string", description: "Valor em pontos a ser majorado (ex: '+0,80')" },
+				},
+				required: ["titulo", "descricao", "valor"],
+				additionalProperties: false,
+			},
+		},
+		subtotalPeca: { type: "string", description: "Subtotal de pontos a majorar na peça (ex: '+1,60 pontos.')" },
+		pontosQuestoes: {
+			type: "array",
+			description: "Pontos identificados nas questões discursivas que merecem recurso",
+			items: {
+				type: "object",
+				properties: {
+					titulo: { type: "string", description: "Identificador do item (ex: 'Questão 4 - Item B')" },
+					descricao: { type: "string", description: "Descrição detalhada com referência a linhas" },
+					valor: { type: "string", description: "Valor em pontos a ser majorado (ex: '+0,65')" },
+				},
+				required: ["titulo", "descricao", "valor"],
+				additionalProperties: false,
+			},
+		},
+		subtotalQuestoes: { type: "string", description: "Subtotal de pontos a majorar nas questões (ex: '+1,30 pontos.')" },
+		conclusao: { type: "string", description: "Conclusão indicando se nota projetada atinge ou ultrapassa 6,00" },
+		argumentacao: {
+			type: "array",
+			description: "Lista de frases objetivas para recurso, cada uma citando Linhas XX-YY",
+			items: { type: "string" },
+		},
+	},
+	required: [
+		"exameDescricao",
+		"inscricao",
+		"nomeExaminando",
+		"seccional",
+		"areaJuridica",
+		"notaFinal",
+		"situacao",
+		"pontosPeca",
+		"subtotalPeca",
+		"pontosQuestoes",
+		"subtotalQuestoes",
+		"conclusao",
+		"argumentacao",
+	],
+	additionalProperties: false,
+};
 
 // ============================================================================
 // CONFIG LOADER
@@ -134,23 +182,35 @@ interface AnalyzerConfig {
 	systemPrompt: string;
 	maxOutputTokens: number;
 	temperature: number;
-	provider: "OPENAI" | "GEMINI";
+	provider: "OPENAI" | "GEMINI" | "CLAUDE";
+	schemaDefinition: string;
+	schemaStrict: boolean;
+}
+
+/**
+ * Resolve provider from model string
+ */
+function resolveProvider(model: string): "OPENAI" | "GEMINI" | "CLAUDE" {
+	if (isGeminiModel(model)) return "GEMINI";
+	if (model.startsWith("claude")) return "CLAUDE";
+	return "OPENAI";
 }
 
 /**
  * Carrega configuração do agente Analista via Engine Híbrida.
  * Prioridade: Blueprint ANALISE_CELL → env fallback → defaults
  */
-async function getAnalyzerConfig(selectedProvider?: "OPENAI" | "GEMINI"): Promise<AnalyzerConfig> {
+async function getAnalyzerConfig(selectedProvider?: "OPENAI" | "GEMINI" | "CLAUDE"): Promise<AnalyzerConfig> {
+	const defaultSchemaStr = JSON.stringify(DEFAULT_ANALYSIS_SCHEMA);
+
 	// 1) Blueprint vinculado à coluna ANALISE_CELL
 	try {
 		const blueprint = await getAgentBlueprintByLinkedColumn("ANALISE_CELL");
 
 		if (blueprint) {
 			const blueprintModel = blueprint.model || DEFAULT_MODELS_BY_PROVIDER.OPENAI;
-			const blueprintProvider = isGeminiModel(blueprintModel) ? "GEMINI" : "OPENAI";
+			const blueprintProvider = resolveProvider(blueprintModel);
 
-			// Se o provider selecionado pelo usuário difere do modelo do blueprint, trocar modelo
 			const effectiveProvider = selectedProvider || blueprintProvider;
 			const effectiveModel =
 				effectiveProvider !== blueprintProvider
@@ -163,6 +223,15 @@ async function getAnalyzerConfig(selectedProvider?: "OPENAI" | "GEMINI"): Promis
 				? `${ANALYSIS_REINFORCEMENT_PROMPT}\n\n---\n\nINSTRUÇÕES DO BLUEPRINT:\n${blueprintPrompt}`
 				: ANALYSIS_REINFORCEMENT_PROMPT;
 
+			// Recuperar schema do outputParser (configurado pelo front)
+			let schemaDefinition = defaultSchemaStr;
+			let schemaStrict = true;
+
+			if (blueprint.outputParser?.schemaType === "json_schema" && blueprint.outputParser.schema) {
+				schemaDefinition = blueprint.outputParser.schema;
+				schemaStrict = blueprint.outputParser.strict ?? true;
+			}
+
 			console.log(
 				`[AnalysisAgent] ✅ Blueprint ANALISE_CELL encontrado: "${blueprint.name}" ` +
 					`(modelo: ${effectiveModel}, provider: ${effectiveProvider})`,
@@ -173,7 +242,9 @@ async function getAnalyzerConfig(selectedProvider?: "OPENAI" | "GEMINI"): Promis
 				systemPrompt,
 				maxOutputTokens: Number(blueprint.maxOutputTokens) || DEFAULT_MAX_OUTPUT_TOKENS,
 				temperature: blueprint.temperature ?? DEFAULT_TEMPERATURE,
-				provider: effectiveProvider as "OPENAI" | "GEMINI",
+				provider: effectiveProvider as "OPENAI" | "GEMINI" | "CLAUDE",
+				schemaDefinition,
+				schemaStrict,
 			};
 		}
 	} catch (err) {
@@ -188,7 +259,7 @@ async function getAnalyzerConfig(selectedProvider?: "OPENAI" | "GEMINI"): Promis
 		if (bpId) {
 			blueprint = await prisma.aiAgentBlueprint.findUnique({
 				where: { id: bpId },
-				select: { model: true, systemPrompt: true, instructions: true, maxOutputTokens: true, temperature: true },
+				select: { model: true, systemPrompt: true, instructions: true, maxOutputTokens: true, temperature: true, outputParser: true },
 			});
 		}
 		if (!bpId || !blueprint) {
@@ -202,13 +273,13 @@ async function getAnalyzerConfig(selectedProvider?: "OPENAI" | "GEMINI"): Promis
 					],
 				},
 				orderBy: { updatedAt: "desc" },
-				select: { model: true, systemPrompt: true, instructions: true, maxOutputTokens: true, temperature: true },
+				select: { model: true, systemPrompt: true, instructions: true, maxOutputTokens: true, temperature: true, outputParser: true },
 			});
 		}
 
 		if (blueprint) {
 			const model = blueprint.model || DEFAULT_MODELS_BY_PROVIDER.OPENAI;
-			const provider = isGeminiModel(model) ? "GEMINI" : "OPENAI";
+			const provider = resolveProvider(model);
 			const effectiveProvider = selectedProvider || provider;
 			const effectiveModel =
 				effectiveProvider !== provider ? DEFAULT_MODELS_BY_PROVIDER[effectiveProvider] || model : model;
@@ -218,13 +289,23 @@ async function getAnalyzerConfig(selectedProvider?: "OPENAI" | "GEMINI"): Promis
 				? `${ANALYSIS_REINFORCEMENT_PROMPT}\n\n---\n\nINSTRUÇÕES DO BLUEPRINT:\n${blueprintPrompt}`
 				: ANALYSIS_REINFORCEMENT_PROMPT;
 
+			let schemaDefinition = defaultSchemaStr;
+			let schemaStrict = true;
+
+			if (blueprint.outputParser?.schemaType === "json_schema" && blueprint.outputParser.schema) {
+				schemaDefinition = blueprint.outputParser.schema;
+				schemaStrict = blueprint.outputParser.strict ?? true;
+			}
+
 			console.log(`[AnalysisAgent] ✅ Blueprint fallback encontrado (modelo: ${effectiveModel})`);
 			return {
 				model: effectiveModel,
 				systemPrompt,
 				maxOutputTokens: Number(blueprint.maxOutputTokens) || DEFAULT_MAX_OUTPUT_TOKENS,
 				temperature: blueprint.temperature ?? DEFAULT_TEMPERATURE,
-				provider: effectiveProvider as "OPENAI" | "GEMINI",
+				provider: effectiveProvider as "OPENAI" | "GEMINI" | "CLAUDE",
+				schemaDefinition,
+				schemaStrict,
 			};
 		}
 	} catch (err) {
@@ -239,169 +320,56 @@ async function getAnalyzerConfig(selectedProvider?: "OPENAI" | "GEMINI"): Promis
 		systemPrompt: ANALYSIS_REINFORCEMENT_PROMPT,
 		maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
 		temperature: DEFAULT_TEMPERATURE,
-		provider: finalProvider as "OPENAI" | "GEMINI",
+		provider: finalProvider as "OPENAI" | "GEMINI" | "CLAUDE",
+		schemaDefinition: defaultSchemaStr,
+		schemaStrict: true,
 	};
 }
 
 // ============================================================================
-// LLM EXECUTION
+// SCHEMA BUILDER
 // ============================================================================
 
 /**
- * Executa a análise via OpenAI Chat Completions
+ * Converte a schemaDefinition (string JSON) em um jsonSchema do Vercel AI SDK.
+ * Enforce additionalProperties: false em todos os objetos (exigido por OpenAI structured outputs).
  */
-async function executeOpenAI(userMessage: string, config: AnalyzerConfig): Promise<string> {
-	console.log(`[AnalysisAgent] 🤖 Chamando OpenAI (${config.model})...`);
+function buildSdkSchema(schemaDefinition: string) {
+	const parsedSchemaObj = JSON.parse(schemaDefinition);
 
-	const messages = [
-		{ role: "system" as const, content: config.systemPrompt },
-		{ role: "user" as const, content: userMessage },
-	];
+	const enforceAdditionalProperties = (node: Record<string, any>) => {
+		if (!node || typeof node !== "object") return;
+		if (node.type === "object" && node.additionalProperties === undefined) {
+			node.additionalProperties = false;
+		}
+		if (node.properties) {
+			for (const val of Object.values(node.properties)) {
+				enforceAdditionalProperties(val as Record<string, any>);
+			}
+		}
+		if (node.items) enforceAdditionalProperties(node.items);
+	};
 
-	if (IS_DEBUG) {
-		console.log("\n" + "=".repeat(80));
-		console.log("[AnalysisAgent] 🐛 DEBUG — PAYLOAD COMPLETO ENVIADO PARA OPENAI");
-		console.log("=".repeat(80));
-		console.log(`[DEBUG] Model: ${config.model}`);
-		console.log(`[DEBUG] Temperature: ${config.temperature}`);
-		console.log(`[DEBUG] Max Output Tokens: ${config.maxOutputTokens}`);
-		console.log(`[DEBUG] Response Format: json_object`);
-		console.log("-".repeat(80));
-		console.log("[DEBUG] SYSTEM PROMPT:");
-		console.log("-".repeat(80));
-		console.log(config.systemPrompt);
-		console.log("-".repeat(80));
-		console.log("[DEBUG] USER MESSAGE:");
-		console.log("-".repeat(80));
-		console.log(userMessage);
-		console.log("=".repeat(80) + "\n");
-	}
-
-	const response = await openai.chat.completions.create({
-		model: config.model,
-		temperature: config.temperature,
-		max_completion_tokens: config.maxOutputTokens,
-		messages,
-		response_format: { type: "json_object" },
-	});
-
-	const text = response.choices[0]?.message?.content ?? "";
-	console.log(
-		`[AnalysisAgent] ✅ OpenAI respondeu (${text.length} chars, ` + `tokens: ${response.usage?.total_tokens ?? "?"})`,
-	);
-
-	if (IS_DEBUG) {
-		console.log("\n" + "=".repeat(80));
-		console.log("[AnalysisAgent] 🐛 DEBUG — RESPOSTA COMPLETA OPENAI");
-		console.log("=".repeat(80));
-		console.log(text);
-		console.log("=".repeat(80) + "\n");
-	}
-
-	return text;
-}
-
-/**
- * Executa a análise via Gemini
- */
-async function executeGemini(userMessage: string, config: AnalyzerConfig): Promise<string> {
-	console.log(`[AnalysisAgent] 🤖 Chamando Gemini (${config.model})...`);
-
-	const gemini = getGeminiClient();
-	if (!gemini) {
-		throw new Error("[AnalysisAgent] Gemini não disponível (GEMINI_API_KEY ausente). Fallback para OpenAI.");
-	}
-
-	if (IS_DEBUG) {
-		console.log("\n" + "=".repeat(80));
-		console.log("[AnalysisAgent] 🐛 DEBUG — PAYLOAD COMPLETO ENVIADO PARA GEMINI");
-		console.log("=".repeat(80));
-		console.log(`[DEBUG] Model: ${config.model}`);
-		console.log(`[DEBUG] Temperature: ${config.temperature}`);
-		console.log(`[DEBUG] Max Output Tokens: ${config.maxOutputTokens}`);
-		console.log(`[DEBUG] Response Mime Type: application/json`);
-		console.log("-".repeat(80));
-		console.log("[DEBUG] SYSTEM INSTRUCTION:");
-		console.log("-".repeat(80));
-		console.log(config.systemPrompt);
-		console.log("-".repeat(80));
-		console.log("[DEBUG] USER MESSAGE (contents):");
-		console.log("-".repeat(80));
-		console.log(userMessage);
-		console.log("=".repeat(80) + "\n");
-	}
-
-	const response = await gemini.models.generateContent({
-		model: config.model,
-		contents: userMessage,
-		config: {
-			systemInstruction: config.systemPrompt,
-			temperature: config.temperature,
-			maxOutputTokens: config.maxOutputTokens,
-			responseMimeType: "application/json",
-		},
-	});
-
-	const text = response.text ?? "";
-	console.log(`[AnalysisAgent] ✅ Gemini respondeu (${text.length} chars)`);
-
-	if (IS_DEBUG) {
-		console.log("\n" + "=".repeat(80));
-		console.log("[AnalysisAgent] 🐛 DEBUG — RESPOSTA COMPLETA GEMINI");
-		console.log("=".repeat(80));
-		console.log(text);
-		console.log("=".repeat(80) + "\n");
-	}
-
-	return text;
+	enforceAdditionalProperties(parsedSchemaObj);
+	return jsonSchema(parsedSchemaObj);
 }
 
 // ============================================================================
-// JSON PARSING & VALIDATION
+// JSON PARSING & VALIDATION (Safety Net)
 // ============================================================================
 
 /**
- * Extrai e valida JSON da resposta do LLM.
- * Tenta múltiplas estratégias de parsing para robustez.
+ * Normaliza o objeto retornado pelo generateObject para garantir
+ * que todos os campos de AnalysisAgentOutput existam com valores seguros.
+ * Funciona como safety net caso o schema do front omita algum campo.
  */
-function parseAnalysisResponse(raw: string): AnalysisAgentOutput {
-	let text = raw.trim();
-
-	// Remover markdown code fences se presentes
-	if (text.startsWith("```json")) {
-		text = text.slice(7);
-	} else if (text.startsWith("```")) {
-		text = text.slice(3);
-	}
-	if (text.endsWith("```")) {
-		text = text.slice(0, -3);
-	}
-	text = text.trim();
-
-	// Tentar parse direto
-	let parsed: any;
-	try {
-		parsed = JSON.parse(text);
-	} catch {
-		// Tentar extrair JSON de dentro do texto
-		const jsonMatch = text.match(/\{[\s\S]*\}/);
-		if (!jsonMatch) {
-			throw new Error(`[AnalysisAgent] Resposta não contém JSON válido. Primeiros 200 chars: ${text.slice(0, 200)}`);
-		}
-		try {
-			parsed = JSON.parse(jsonMatch[0]);
-		} catch (innerErr) {
-			throw new Error(`[AnalysisAgent] JSON extraído é inválido: ${(innerErr as Error).message}`);
-		}
-	}
-
+function normalizeAnalysisOutput(parsed: any): AnalysisAgentOutput {
 	// Verificar erro retornado pelo agente
 	if (parsed.erro) {
 		throw new Error(`[AnalysisAgent] Agente retornou erro: ${parsed.erro}`);
 	}
 
-	// Validar campos obrigatórios com fallbacks amigáveis
-	const result: AnalysisAgentOutput = {
+	return {
 		exameDescricao: parsed.exameDescricao || "",
 		inscricao: parsed.inscricao || "",
 		nomeExaminando: parsed.nomeExaminando || "",
@@ -428,8 +396,6 @@ function parseAnalysisResponse(raw: string): AnalysisAgentOutput {
 		conclusao: parsed.conclusao || "",
 		argumentacao: Array.isArray(parsed.argumentacao) ? parsed.argumentacao : [],
 	};
-
-	return result;
 }
 
 // ============================================================================
@@ -486,69 +452,91 @@ export async function runAnalysisAgent(input: AnalysisAgentInput): Promise<Analy
 		textoEspelho,
 	].join("\n");
 
-	// 3) Executar LLM
-	if (onProgress) await onProgress(`Analisando prova via ${config.provider} (${config.model})...`);
-
-	let rawResponse: string;
+	// 3) Build SDK schema
+	let sdkSchema;
 	try {
-		if (config.provider === "GEMINI") {
-			try {
-				rawResponse = await executeGemini(userMessage, config);
-			} catch (geminiErr) {
-				console.warn("[AnalysisAgent] ⚠️ Gemini falhou, tentando fallback para OpenAI:", (geminiErr as Error).message);
-				const fallbackConfig: AnalyzerConfig = {
-					...config,
-					model: DEFAULT_MODELS_BY_PROVIDER.OPENAI,
-					provider: "OPENAI",
-				};
-				rawResponse = await executeOpenAI(userMessage, fallbackConfig);
-			}
-		} else {
-			rawResponse = await executeOpenAI(userMessage, config);
-		}
-	} catch (err) {
-		const elapsed = Date.now() - startTime;
-		console.error(`[AnalysisAgent] ❌ Erro na chamada LLM após ${(elapsed / 1000).toFixed(1)}s:`, err);
-		return {
-			leadId,
-			success: false,
-			error: (err as Error).message || "Erro desconhecido na chamada LLM",
-			model: config.model,
-			provider: config.provider,
-			processingTimeMs: elapsed,
-		};
+		sdkSchema = buildSdkSchema(config.schemaDefinition);
+	} catch (schemaErr) {
+		console.error("[AnalysisAgent] Erro ao instanciar Schema do Blueprint. Verifique o JSON:", schemaErr);
+		// Fallback to default schema
+		console.warn("[AnalysisAgent] ⚠️ Usando DEFAULT_ANALYSIS_SCHEMA como fallback");
+		sdkSchema = buildSdkSchema(JSON.stringify(DEFAULT_ANALYSIS_SCHEMA));
 	}
 
-	// 4) Parse e validação
-	if (onProgress) await onProgress("Processando resultado da análise...");
+	// 4) Executar LLM via Vercel AI SDK generateObject
+	if (onProgress) await onProgress(`Analisando prova via ${config.provider} (${config.model})...`);
+
+	if (IS_DEBUG) {
+		console.log("\n" + "=".repeat(80));
+		console.log("[AnalysisAgent] 🐛 DEBUG — PAYLOAD COMPLETO");
+		console.log("=".repeat(80));
+		console.log(`[DEBUG] Model: ${config.model} (${config.provider})`);
+		console.log(`[DEBUG] Temperature: ${config.temperature}`);
+		console.log(`[DEBUG] Max Output Tokens: ${config.maxOutputTokens}`);
+		console.log("-".repeat(80));
+		console.log("[DEBUG] SYSTEM PROMPT:");
+		console.log("-".repeat(80));
+		console.log(config.systemPrompt);
+		console.log("-".repeat(80));
+		console.log("[DEBUG] USER MESSAGE:");
+		console.log("-".repeat(80));
+		console.log(userMessage);
+		console.log("-".repeat(80));
+		console.log("[DEBUG] SCHEMA:");
+		console.log("-".repeat(80));
+		console.log(config.schemaDefinition);
+		console.log("=".repeat(80) + "\n");
+	}
 
 	try {
-		const analysis = parseAnalysisResponse(rawResponse);
+		const aiModel: LanguageModel = createModel(config.provider, config.model);
+		const providerOptions = buildProviderOptions(config.provider, config.model, {});
+
+		const { object, usage } = await generateObject({
+			model: aiModel,
+			schema: sdkSchema,
+			system: config.systemPrompt,
+			prompt: userMessage,
+			temperature: config.temperature,
+			providerOptions,
+		});
+
 		const elapsed = Date.now() - startTime;
+
+		if (IS_DEBUG) {
+			console.log("\n" + "=".repeat(80));
+			console.log("[AnalysisAgent] 🐛 DEBUG — RESPOSTA ESTRUTURADA");
+			console.log("=".repeat(80));
+			console.log(JSON.stringify(object, null, 2));
+			console.log("=".repeat(80) + "\n");
+		}
+
+		// Normalizar resultado (safety net para campos faltantes)
+		if (onProgress) await onProgress("Processando resultado da análise...");
+		const analysis = normalizeAnalysisOutput(object);
 
 		console.log(
 			`[AnalysisAgent] ✅ Análise concluída em ${(elapsed / 1000).toFixed(1)}s ` +
-				`(${analysis.pontosPeca.length} pontos peça, ${analysis.pontosQuestoes.length} pontos questões)`,
+				`(${analysis.pontosPeca.length} pontos peça, ${analysis.pontosQuestoes.length} pontos questões, ` +
+				`tokens: ${usage?.totalTokens ?? "?"})`,
 		);
 
 		return {
 			leadId,
 			success: true,
 			analysis,
-			rawResponse,
+			rawResponse: JSON.stringify(object),
 			model: config.model,
 			provider: config.provider,
 			processingTimeMs: elapsed,
 		};
-	} catch (parseErr) {
+	} catch (err: any) {
 		const elapsed = Date.now() - startTime;
-		console.error(`[AnalysisAgent] ❌ Erro ao parsear resposta:`, (parseErr as Error).message);
-		console.error(`[AnalysisAgent] Raw response (primeiros 500 chars):`, rawResponse.slice(0, 500));
+		console.error(`[AnalysisAgent] ❌ Erro na chamada LLM após ${(elapsed / 1000).toFixed(1)}s:`, err);
 		return {
 			leadId,
 			success: false,
-			rawResponse,
-			error: (parseErr as Error).message,
+			error: err.message || "Erro desconhecido na chamada LLM",
 			model: config.model,
 			provider: config.provider,
 			processingTimeMs: elapsed,

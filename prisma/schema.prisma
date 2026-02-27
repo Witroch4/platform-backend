@@ -1724,6 +1724,8 @@ enum FlowCampaignContactStatus {
 
 enum Provider {
   OPENAI
+  GEMINI
+  CLAUDE
   META_WHATSAPP
   INFRA
   OTHER

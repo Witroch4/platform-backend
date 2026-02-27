@@ -191,7 +191,7 @@ function cloneRubricPayload(payload: RubricPayload): RubricPayload {
 		})),
 		grupos: payload.grupos?.map((grupo) => ({
 			...grupo,
-			pesos_brutos: Array.isArray(grupo.pesos_brutos) ? [...grupo.pesos_brutos] : [],
+			faixa_pontuacao: Array.isArray(grupo.faixa_pontuacao) ? [...grupo.faixa_pontuacao] : [],
 		})),
 	};
 }
@@ -227,7 +227,7 @@ function convertRubricToSubitems(payload: RubricPayload): Subitem[] {
 		escopo: item.escopo === "Questão" ? "Questão" : "Peça",
 		questao: item.questao as Subitem["questao"],
 		descricao: item.descricao,
-		peso: typeof item.peso === "number" ? roundTwo(item.peso) : null,
+		nota_maxima: typeof item.nota_maxima === "number" ? roundTwo(item.nota_maxima) : null,
 		fundamentos: item.fundamentos ?? [],
 		palavras_chave: item.palavras_chave ?? [],
 		embedding_text: item.embedding_text ?? "",
@@ -355,7 +355,7 @@ const GroupRow = memo(function GroupRow({
 				<div className="font-medium text-sm leading-tight">{grupo.rotulo}</div>
 				<div className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{grupo.descricao}</div>
 			</td>
-			<td className="w-20 px-3 py-2.5 text-right font-mono text-xs tabular-nums">{grupo.peso_maximo.toFixed(2)}</td>
+			<td className="w-20 px-3 py-2.5 text-right font-mono text-xs tabular-nums">{grupo.nota_maxima.toFixed(2)}</td>
 			<td className="w-10 px-3 py-2.5 text-right">
 				<ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform ${isActive ? "rotate-90" : ""}`} />
 			</td>
@@ -413,7 +413,7 @@ function GroupDetailPanel({
 			</div>
 			<div className="space-y-1.5">
 				<Label className="text-xs">Peso máximo</Label>
-				<Input value={grupo.peso_maximo.toString()} onChange={(e) => onUpdate({ peso_maximo: sanitizePesoInput(e.target.value) ?? 0 })} className="h-8 text-sm font-mono" />
+				<Input value={grupo.nota_maxima.toString()} onChange={(e) => onUpdate({ nota_maxima: sanitizePesoInput(e.target.value) ?? 0 })} className="h-8 text-sm font-mono" />
 			</div>
 			<div className="space-y-1.5">
 				<Label className="text-xs">Descrição</Label>
@@ -484,10 +484,10 @@ function SubitemDetailPanel({
 					</Select>
 				</div>
 				<div className="space-y-1.5">
-					<Label className="text-xs">Peso</Label>
+					<Label className="text-xs">Nota Máxima</Label>
 					<Input
-						value={subitem.peso != null ? subitem.peso.toString() : ""}
-						onChange={(e) => onUpdate({ peso: sanitizePesoInput(e.target.value) })}
+						value={subitem.nota_maxima != null ? subitem.nota_maxima.toString() : ""}
+						onChange={(e) => onUpdate({ nota_maxima: sanitizePesoInput(e.target.value) })}
 						className="h-8 text-sm font-mono"
 						placeholder="0.00"
 					/>
@@ -941,8 +941,8 @@ export default function MTFOABPage() {
 				...principal,
 				rotulo: `${principal.rotulo} + ${restantes.map((g) => g.rotulo).join(" / ")}`,
 				descricao: [principal.descricao, ...restantes.map((g) => g.descricao)].join("\n\n---\n\n"),
-				peso_maximo: roundTwo([principal, ...restantes].reduce((acc, g) => acc + (g.peso_maximo ?? 0), 0)),
-				pesos_brutos: mergePesoArrays(principal.pesos_brutos, ...restantes.map((g) => g.pesos_brutos)),
+				nota_maxima: roundTwo([principal, ...restantes].reduce((acc, g) => acc + (g.nota_maxima ?? 0), 0)),
+				faixa_pontuacao: mergePesoArrays(principal.faixa_pontuacao, ...restantes.map((g) => g.faixa_pontuacao)),
 			};
 			const outros = gruposOriginais.filter((g) => !selectedGroupIds.has(g.id));
 			return { ...prev, grupos: reindexGroups([...(outros as GabaritoGrupo[]), merged]) };
@@ -966,7 +966,7 @@ export default function MTFOABPage() {
 			return {
 				...prev,
 				itens: prev.itens.map((item) =>
-					item.id === subitemId ? { ...item, ...changes, peso: changes.peso === undefined ? item.peso : changes.peso } : item,
+					item.id === subitemId ? { ...item, ...changes, nota_maxima: changes.nota_maxima === undefined ? item.nota_maxima : changes.nota_maxima } : item,
 				),
 			};
 		});
@@ -982,7 +982,7 @@ export default function MTFOABPage() {
 			escopo: questao === "PEÇA" ? "Peça" : "Questão",
 			questao,
 			descricao: "",
-			peso: null,
+			nota_maxima: null,
 			fundamentos: [],
 			palavras_chave: [],
 			embedding_text: "",
@@ -1010,9 +1010,9 @@ export default function MTFOABPage() {
 			descricao: "",
 			descricao_bruta: "",
 			descricao_limpa: "",
-			peso_maximo: 0,
-			pesos_opcoes: [],
-			pesos_brutos: [],
+			nota_maxima: 0,
+			opcoes_pontuacao: [],
+			faixa_pontuacao: [],
 			subitens: [],
 		};
 		setDraft((prev) => {
@@ -1779,8 +1779,8 @@ export default function MTFOABPage() {
 																			>
 																				<div className="flex items-center justify-between">
 																					<span className="font-mono font-semibold">{subId}</span>
-																					{subitem?.peso != null && (
-																						<span className="font-mono text-muted-foreground">{subitem.peso.toFixed(2)}</span>
+																					{subitem?.nota_maxima != null && (
+																						<span className="font-mono text-muted-foreground">{subitem.nota_maxima.toFixed(2)}</span>
 																					)}
 																				</div>
 																				<div className="mt-1 text-[11px] text-muted-foreground line-clamp-2">
@@ -1889,7 +1889,7 @@ export default function MTFOABPage() {
 																				</td>
 																				<td className="px-3 py-2 text-xs text-muted-foreground line-clamp-2 max-w-xs">{item.descricao.slice(0, 100)}{item.descricao.length > 100 ? "..." : ""}</td>
 																				<td className="px-3 py-2 text-right font-mono text-xs tabular-nums">
-																					{item.peso != null ? item.peso.toFixed(2) : "—"}
+																					{item.nota_maxima != null ? item.nota_maxima.toFixed(2) : "—"}
 																				</td>
 																				<td className="px-3 py-2 text-center text-xs text-muted-foreground">
 																					{(item.fundamentos ?? []).length}

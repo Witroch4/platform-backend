@@ -15,6 +15,7 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { Loader2, Save, X, Maximize2, Minimize2 } from "lucide-react";
+import { TranscriptionProgress } from "./transcription-progress";
 
 interface ProvaDialogProps {
 	isOpen: boolean;
@@ -22,6 +23,7 @@ interface ProvaDialogProps {
 	leadId: string;
 	textoProva: string;
 	aguardandoProva?: boolean;
+	totalPagesProcessing?: number;
 	onSave: (texto: string) => Promise<void>;
 	onCancelarProva?: () => Promise<void>;
 }
@@ -32,6 +34,7 @@ export function ProvaDialog({
 	leadId,
 	textoProva,
 	aguardandoProva = false,
+	totalPagesProcessing = 0,
 	onSave,
 	onCancelarProva,
 }: ProvaDialogProps) {
@@ -139,17 +142,16 @@ export function ProvaDialog({
 
 				<div className="flex-1 overflow-hidden flex flex-col">
 					{aguardandoProva ? (
-						<div className="flex-1 flex items-center justify-center">
-							<div className="text-center">
-								<Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
-								<p className="text-muted-foreground">Estamos processando a prova. Isso pode levar alguns minutos.</p>
-								{onCancelarProva && (
-									<Button variant="outline" onClick={handleCancelarProva} disabled={isCanceling} className="mt-4">
+						<div className="flex-1 flex flex-col p-4 overflow-y-auto">
+							<TranscriptionProgress leadId={leadId} totalPages={totalPagesProcessing || 1} />
+							{onCancelarProva && (
+								<div className="mt-4 flex justify-center">
+									<Button variant="outline" onClick={handleCancelarProva} disabled={isCanceling}>
 										{isCanceling ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <X className="h-4 w-4 mr-2" />}
 										Cancelar Processamento
 									</Button>
-								)}
-							</div>
+								</div>
+							)}
 						</div>
 					) : (
 						<>

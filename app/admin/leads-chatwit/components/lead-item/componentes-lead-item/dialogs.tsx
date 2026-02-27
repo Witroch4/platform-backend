@@ -266,6 +266,7 @@ export function LeadDialogs({
 				leadId={lead.id}
 				textoProva={lead.provaManuscrita || ""}
 				aguardandoProva={localManuscritoState.aguardandoManuscrito}
+				totalPagesProcessing={(() => { try { return JSON.parse(lead.imagensConvertidas || "[]").length; } catch { return 0; } })()}
 				onSave={onSaveProva}
 				onCancelarProva={onCancelarProva}
 			/>

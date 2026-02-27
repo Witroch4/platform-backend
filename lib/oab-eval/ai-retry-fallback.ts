@@ -7,10 +7,10 @@
 const RETRYABLE_STATUS_CODES = [429, 500, 502, 503, 504];
 
 /** Número máximo de retries antes de fallback */
-const MAX_RETRIES = 4;
+const MAX_RETRIES = 3;
 
-/** Delay base em ms (exponential backoff: 2s, 4s, 8s, 16s) */
-const BASE_DELAY_MS = 2000;
+/** Delays fixos em ms para cada retry: 2s → 4s → 10s */
+const RETRY_DELAYS_MS = [2000, 4000, 10000];
 
 /** Modelo OpenAI usado como fallback quando Gemini/Claude falha */
 export const OPENAI_FALLBACK_MODEL = "gpt-4.1";
@@ -20,7 +20,7 @@ const GEMINI_INSTRUCTIONS_PATTERN = /\[INSTRUÇÕES TÉCNICAS DO MODELO - GEMINI
 
 /**
  * Executa uma função com retry automático para erros temporários.
- * Usa exponential backoff: 2s → 4s → 8s → 16s
+ * Backoff fixo: 2s → 8s → 15s (3 retries antes de fallback).
  */
 export async function withRetry<T>(fn: () => Promise<T>, context: string): Promise<T> {
 	let lastError: unknown;
@@ -31,14 +31,33 @@ export async function withRetry<T>(fn: () => Promise<T>, context: string): Promi
 		} catch (error: any) {
 			lastError = error;
 			const status = error?.status || error?.response?.status;
+			const errorCode = error?.code || error?.error?.code;
+			const errorType = error?.error?.type || error?.type;
 			const isRetryable = RETRYABLE_STATUS_CODES.includes(status);
+
+			// Log detalhado do erro para diagnóstico
+			console.warn(
+				`[OAB::Retry] ${context} | attempt ${attempt}/${MAX_RETRIES + 1}` +
+				` | status: ${status ?? "N/A"}` +
+				` | code: ${errorCode ?? "N/A"}` +
+				` | type: ${errorType ?? "N/A"}` +
+				` | message: ${error?.message?.substring(0, 200) ?? "N/A"}`,
+			);
+
+			// Timeouts e aborts não melhoram com retry — fail fast para fallback
+			const isTimeout = error?.code === "ETIMEDOUT" || error?.name === "AbortError"
+				|| error?.message?.includes("timeout") || error?.message?.includes("ECONNRESET");
+			if (isTimeout) {
+				console.warn(`[OAB::Retry] ${context} timeout/abort — skipping retries para fallback rápido`);
+				throw error;
+			}
 
 			if (!isRetryable || attempt > MAX_RETRIES) {
 				throw error;
 			}
 
-			const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
-			console.warn(`[OAB::Retry] ${context} falhou (${status}), retry ${attempt}/${MAX_RETRIES} em ${delay}ms`);
+			const delay = RETRY_DELAYS_MS[attempt - 1] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1];
+			console.warn(`[OAB::Retry] ${context} retryable (${status}), retry ${attempt}/${MAX_RETRIES} em ${delay}ms`);
 			await new Promise((r) => setTimeout(r, delay));
 		}
 	}
