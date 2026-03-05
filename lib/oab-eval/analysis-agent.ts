@@ -11,7 +11,8 @@
  */
 
 import { getAgentBlueprintByLinkedColumn, isGeminiModel } from "@/lib/ai-agents/blueprints";
-import { generateObject, type LanguageModel, jsonSchema } from "ai";
+import { buildSdkSchema } from "@/lib/ai-agents/schema-utils";
+import { generateObject, type LanguageModel } from "ai";
 import { createModel, buildProviderOptions } from "@/lib/socialwise-flow/services/ai-provider-factory";
 import { getPrismaInstance } from "@/lib/connections";
 import { optimizeMirrorPayload, estimateTokenSavings } from "@/lib/oab-eval/mirror-formatter";
@@ -330,29 +331,8 @@ async function getAnalyzerConfig(selectedProvider?: "OPENAI" | "GEMINI" | "CLAUD
 // SCHEMA BUILDER
 // ============================================================================
 
-/**
- * Converte a schemaDefinition (string JSON) em um jsonSchema do Vercel AI SDK.
- * Enforce additionalProperties: false em todos os objetos (exigido por OpenAI structured outputs).
- */
-function buildSdkSchema(schemaDefinition: string) {
-	const parsedSchemaObj = JSON.parse(schemaDefinition);
-
-	const enforceAdditionalProperties = (node: Record<string, any>) => {
-		if (!node || typeof node !== "object") return;
-		if (node.type === "object" && node.additionalProperties === undefined) {
-			node.additionalProperties = false;
-		}
-		if (node.properties) {
-			for (const val of Object.values(node.properties)) {
-				enforceAdditionalProperties(val as Record<string, any>);
-			}
-		}
-		if (node.items) enforceAdditionalProperties(node.items);
-	};
-
-	enforceAdditionalProperties(parsedSchemaObj);
-	return jsonSchema(parsedSchemaObj);
-}
+// buildSdkSchema importado de @/lib/ai-agents/schema-utils
+// Suporta auto-conversão de formato simplificado → JSON Schema válido
 
 // ============================================================================
 // JSON PARSING & VALIDATION (Safety Net)
@@ -455,12 +435,12 @@ export async function runAnalysisAgent(input: AnalysisAgentInput): Promise<Analy
 	// 3) Build SDK schema
 	let sdkSchema;
 	try {
-		sdkSchema = buildSdkSchema(config.schemaDefinition);
+		sdkSchema = buildSdkSchema(config.schemaDefinition, "[AnalysisAgent]");
 	} catch (schemaErr) {
 		console.error("[AnalysisAgent] Erro ao instanciar Schema do Blueprint. Verifique o JSON:", schemaErr);
 		// Fallback to default schema
 		console.warn("[AnalysisAgent] ⚠️ Usando DEFAULT_ANALYSIS_SCHEMA como fallback");
-		sdkSchema = buildSdkSchema(JSON.stringify(DEFAULT_ANALYSIS_SCHEMA));
+		sdkSchema = buildSdkSchema(JSON.stringify(DEFAULT_ANALYSIS_SCHEMA), "[AnalysisAgent]");
 	}
 
 	// 4) Executar LLM via Vercel AI SDK generateObject

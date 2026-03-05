@@ -71,7 +71,12 @@
       "Bash(PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=yes pnpm exec prisma migrate reset:*)",
       "Bash(/dev/null -exec grep -l \"AiAgentBlueprint\" {} ;)",
       "Bash(DB_URL=\"postgresql://postgres:postgres@localhost:5432\")",
-      "Bash(gunzip:*)"
+      "Bash(gunzip:*)",
+      "Bash(npx shadcn@latest mcp init:*)",
+      "WebFetch(domain:skills.sh)",
+      "Bash(git init:*)",
+      "Bash(git branch:*)",
+      "Bash(git remote add:*)"
     ],
     "deny": [],
     "ask": []

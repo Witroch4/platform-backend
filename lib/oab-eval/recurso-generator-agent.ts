@@ -9,7 +9,8 @@
  */
 
 import { getAgentBlueprintByLinkedColumn, isGeminiModel } from "@/lib/ai-agents/blueprints";
-import { generateObject, type LanguageModel, jsonSchema } from "ai";
+import { buildSdkSchema } from "@/lib/ai-agents/schema-utils";
+import { generateObject, type LanguageModel } from "ai";
 import { createModel, buildProviderOptions } from "@/lib/socialwise-flow/services/ai-provider-factory";
 
 // ============================================================================
@@ -319,30 +320,9 @@ export async function runRecursoAgent(input: RecursoAgentInput): Promise<Recurso
 	if (onProgress) await onProgress(`Gerando recurso via \${config.provider} (\${config.model})...`);
 
 	try {
-		// Converter schema string da UI para JSON válido e dps pra JSON Schema do SDK
-		let sdkSchema;
-		try {
-			const parsedSchemaObj = JSON.parse(config.schemaDefinition);
-			// OpenAI structured outputs exige additionalProperties: false em TODOS os objetos
-			const enforceAdditionalProperties = (node: Record<string, any>) => {
-				if (!node || typeof node !== "object") return;
-				if (node.type === "object" && node.additionalProperties === undefined) {
-					node.additionalProperties = false;
-				}
-				if (node.properties) {
-					for (const val of Object.values(node.properties)) {
-						enforceAdditionalProperties(val as Record<string, any>);
-					}
-				}
-				if (node.items) enforceAdditionalProperties(node.items);
-			};
-			enforceAdditionalProperties(parsedSchemaObj);
-			// Vercel SDK nativo a partir do 3.0+
-			sdkSchema = jsonSchema(parsedSchemaObj);
-		} catch (schemaErr) {
-			console.error("[RecursoAgent] Erro ao instanciar o Schema do Blueprint. Verifique o JSON contido nas configurações:", schemaErr);
-			throw new Error("Schema configurado no Blueprint não é um JSON Schema válido.");
-		}
+		// Converter schema string da UI para JSON Schema do Vercel AI SDK
+		// buildSdkSchema auto-converte formato simplificado e enforça additionalProperties: false
+		const sdkSchema = buildSdkSchema(config.schemaDefinition, "[RecursoAgent]");
 
 		// Instanciar o provider e modelo centralizado
 		const aiModel: LanguageModel = createModel(config.provider, config.model);

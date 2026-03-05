@@ -38,6 +38,7 @@ pnpm-debug.log*
 *.swp
 *.swo
 *~
+docker-compose-produção.yaml
 
 # OS files
 .DS_Store
