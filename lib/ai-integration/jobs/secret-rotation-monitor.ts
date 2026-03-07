@@ -118,7 +118,7 @@ export async function processSecretRotationMonitorJob(
 
 		// Log audit trail for monitoring job
 		await logAuditTrail({
-			userId: "system",
+			userId: null,
 			action: "SECRET_ROTATION_MONITOR",
 			resourceType: "AI_SECRET_ROTATION",
 			details: {
@@ -150,7 +150,7 @@ export async function processSecretRotationMonitorJob(
 
 		// Log audit trail for failed job
 		await logAuditTrail({
-			userId: "system",
+			userId: null,
 			action: "SECRET_ROTATION_MONITOR_FAILED",
 			resourceType: "AI_SECRET_ROTATION",
 			details: {

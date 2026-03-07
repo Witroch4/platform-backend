@@ -1217,7 +1217,7 @@ model QueueUser {
 
 model AuditLog {
   id           String   @id @default(cuid())
-  userId       String   @db.VarChar(255)
+  userId       String?  @db.VarChar(255)
   action       String   @db.VarChar(255)
   resourceType String   @db.VarChar(100)
   resourceId   String?  @db.VarChar(255)
@@ -1226,7 +1226,7 @@ model AuditLog {
   ipAddress    String?  @db.Inet
   userAgent    String?
   createdAt    DateTime @default(now())
-  user         User     @relation(fields: [userId], references: [id])
+  user         User?    @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([createdAt(sort: Desc)])
@@ -1306,6 +1306,8 @@ model Intent {
 
   @@index([accountId, isActive])
   @@index([slug])
+  // NOTE: embedding index is managed via raw SQL migration (ivfflat, pgvector)
+  // DO NOT add @@index([embedding]) here - Prisma generates B-tree which fails for vector columns
 }
 
 model LlmAudit {

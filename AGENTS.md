@@ -1,7 +1,7 @@
 # AGENTS.md — Socialwise Chatwit
 
 > **Universal Agent Instructions** — Compatible with Claude Code, Cursor, Copilot, Codex, Gemini CLI, and other AI coding agents.
-
+SERVIDOR DE PRODUÇÃO ssh -i /home/wital/Chatwit-Social-dev/id_rsa.v3 root@49.13.155.94 "docker service ls"
 ## 🚨 Regras Arquiteturais Críticas (LEITURA OBRIGATÓRIA)
 
 1. **SOCIALWISE = CÉREBRO | CHATWIT/CHATWOOT = CARTEIRO:** Em todas as mensagens, integrações, Flow e Flowbuilder, o Socialwise detém 100% da inteligência e processamento. O Chatwit é estritamente o "carteiro" (apenas entrega e recebe). Garanta essa separação estrutural em qualquer código gerado. O SOCIALWISE JAMAIS entrega, só processa e repassa para o CHATWIT via sync + async (solicitações do chatwit ponte aberta por 30 seg) ou async chatwit bot (quando mandamos flows de campanha etc., usamos o bot e seu token).
@@ -281,6 +281,8 @@ A interface portainer (BFF/Proxy) é limitada. Use o **SSH MCP** como "fonte da 
 
 * Logs filtrados: `docker service logs <service_name> --tail 500 2>&1 | grep "keyword"` (`socialwise_app`, `socialwise_worker`)
 * Status do host: `docker service ls`, `df -h`, `free -m`.
+
+**SSH MCP vs SSH direto no terminal:** Prefira **SSH MCP** quando o agente precisa raciocinar sobre o output (o resultado chega limpo como string, sem quebra de linha por TTY). Use **SSH direto** (`ssh -i id_rsa.v3 root@49.13.155.94 "cmd"`) para comandos simples onde você quer ver o output puro no shell — ambos chegam ao mesmo resultado.
 
 ## MCP PORTAINER USAR Portainer [dockerProxy] 
 

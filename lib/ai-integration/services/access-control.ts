@@ -104,7 +104,7 @@ export interface AccessContext {
  * Interface for audit trail entry
  */
 export interface AuditTrailEntry {
-	userId: string;
+	userId: string | null;
 	action: string;
 	resourceType: string;
 	resourceId?: string;
@@ -478,7 +478,7 @@ export async function getAuditStatistics(timeframe: "day" | "week" | "month" = "
 						select: { userId: true },
 						distinct: ["userId"],
 					})
-					.then((users: { userId: string }[]) => users.length),
+					.then((users: { userId: string | null }[]) => users.length),
 				prisma.auditLog.groupBy({
 					by: ["action"],
 					where,

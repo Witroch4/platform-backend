@@ -138,6 +138,75 @@ const OPENAI_PRICES = [
 		metadata: { unit_description: "per_minute" },
 	},
 
+	// GPT-4.1 models (Abril 2025)
+	{
+		provider: "OPENAI" as Provider,
+		product: "gpt-4.1",
+		unit: "TOKENS_IN" as Unit,
+		pricePerUnit: 2.0, // $2.00 per 1M input tokens
+		effectiveFrom: new Date("2025-04-14"),
+	},
+	{
+		provider: "OPENAI" as Provider,
+		product: "gpt-4.1",
+		unit: "TOKENS_OUT" as Unit,
+		pricePerUnit: 8.0, // $8.00 per 1M output tokens
+		effectiveFrom: new Date("2025-04-14"),
+	},
+	{
+		provider: "OPENAI" as Provider,
+		product: "gpt-4.1",
+		unit: "TOKENS_CACHED" as Unit,
+		pricePerUnit: 0.5, // $0.50 per 1M cached tokens
+		effectiveFrom: new Date("2025-04-14"),
+	},
+
+	// GPT-4.1 Mini
+	{
+		provider: "OPENAI" as Provider,
+		product: "gpt-4.1-mini",
+		unit: "TOKENS_IN" as Unit,
+		pricePerUnit: 0.4, // $0.40 per 1M input tokens
+		effectiveFrom: new Date("2025-04-14"),
+	},
+	{
+		provider: "OPENAI" as Provider,
+		product: "gpt-4.1-mini",
+		unit: "TOKENS_OUT" as Unit,
+		pricePerUnit: 1.6, // $1.60 per 1M output tokens
+		effectiveFrom: new Date("2025-04-14"),
+	},
+	{
+		provider: "OPENAI" as Provider,
+		product: "gpt-4.1-mini",
+		unit: "TOKENS_CACHED" as Unit,
+		pricePerUnit: 0.1,
+		effectiveFrom: new Date("2025-04-14"),
+	},
+
+	// GPT-4.1 Nano
+	{
+		provider: "OPENAI" as Provider,
+		product: "gpt-4.1-nano",
+		unit: "TOKENS_IN" as Unit,
+		pricePerUnit: 0.1, // $0.10 per 1M input tokens
+		effectiveFrom: new Date("2025-04-14"),
+	},
+	{
+		provider: "OPENAI" as Provider,
+		product: "gpt-4.1-nano",
+		unit: "TOKENS_OUT" as Unit,
+		pricePerUnit: 0.4, // $0.40 per 1M output tokens
+		effectiveFrom: new Date("2025-04-14"),
+	},
+	{
+		provider: "OPENAI" as Provider,
+		product: "gpt-4.1-nano",
+		unit: "TOKENS_CACHED" as Unit,
+		pricePerUnit: 0.025,
+		effectiveFrom: new Date("2025-04-14"),
+	},
+
 	// Text Embedding models
 	{
 		provider: "OPENAI" as Provider,
@@ -159,6 +228,186 @@ const OPENAI_PRICES = [
 		unit: "TOKENS_IN" as Unit,
 		pricePerUnit: 0.1, // $0.10 per 1M tokens
 		effectiveFrom: new Date("2022-12-15"),
+	},
+];
+
+// Preços Gemini (Google) — Março 2026
+// Referência: https://ai.google.dev/pricing  +  valores definidos em transcription-progress.tsx
+const GEMINI_PRICES = [
+	// Gemini 3 Flash Preview
+	{
+		provider: "GEMINI" as Provider,
+		product: "gemini-3-flash-preview",
+		unit: "TOKENS_IN" as Unit,
+		pricePerUnit: 0.5, // $0.50 per 1M input tokens
+		effectiveFrom: new Date("2025-06-01"),
+	},
+	{
+		provider: "GEMINI" as Provider,
+		product: "gemini-3-flash-preview",
+		unit: "TOKENS_OUT" as Unit,
+		pricePerUnit: 3.0, // $3.00 per 1M output tokens
+		effectiveFrom: new Date("2025-06-01"),
+	},
+
+	// Gemini 3 Pro Preview
+	{
+		provider: "GEMINI" as Provider,
+		product: "gemini-3-pro-preview",
+		unit: "TOKENS_IN" as Unit,
+		pricePerUnit: 2.0, // $2.00 per 1M input tokens
+		effectiveFrom: new Date("2025-06-01"),
+	},
+	{
+		provider: "GEMINI" as Provider,
+		product: "gemini-3-pro-preview",
+		unit: "TOKENS_OUT" as Unit,
+		pricePerUnit: 12.0, // $12.00 per 1M output tokens
+		effectiveFrom: new Date("2025-06-01"),
+	},
+
+	// Gemini 3.1 Pro Preview
+	{
+		provider: "GEMINI" as Provider,
+		product: "gemini-3.1-pro-preview",
+		unit: "TOKENS_IN" as Unit,
+		pricePerUnit: 2.0,
+		effectiveFrom: new Date("2025-09-01"),
+	},
+	{
+		provider: "GEMINI" as Provider,
+		product: "gemini-3.1-pro-preview",
+		unit: "TOKENS_OUT" as Unit,
+		pricePerUnit: 12.0,
+		effectiveFrom: new Date("2025-09-01"),
+	},
+
+	// Gemini 2.5 Pro
+	{
+		provider: "GEMINI" as Provider,
+		product: "gemini-2.5-pro",
+		unit: "TOKENS_IN" as Unit,
+		pricePerUnit: 1.25, // $1.25 per 1M input tokens
+		effectiveFrom: new Date("2025-01-01"),
+	},
+	{
+		provider: "GEMINI" as Provider,
+		product: "gemini-2.5-pro",
+		unit: "TOKENS_OUT" as Unit,
+		pricePerUnit: 10.0, // $10.00 per 1M output tokens
+		effectiveFrom: new Date("2025-01-01"),
+	},
+
+	// Gemini 2.5 Flash
+	{
+		provider: "GEMINI" as Provider,
+		product: "gemini-2.5-flash",
+		unit: "TOKENS_IN" as Unit,
+		pricePerUnit: 0.3, // $0.30 per 1M input tokens
+		effectiveFrom: new Date("2025-01-01"),
+	},
+	{
+		provider: "GEMINI" as Provider,
+		product: "gemini-2.5-flash",
+		unit: "TOKENS_OUT" as Unit,
+		pricePerUnit: 2.5, // $2.50 per 1M output tokens
+		effectiveFrom: new Date("2025-01-01"),
+	},
+
+	// Gemini 2.5 Flash Lite
+	{
+		provider: "GEMINI" as Provider,
+		product: "gemini-2.5-flash-lite",
+		unit: "TOKENS_IN" as Unit,
+		pricePerUnit: 0.1,
+		effectiveFrom: new Date("2025-01-01"),
+	},
+	{
+		provider: "GEMINI" as Provider,
+		product: "gemini-2.5-flash-lite",
+		unit: "TOKENS_OUT" as Unit,
+		pricePerUnit: 0.4,
+		effectiveFrom: new Date("2025-01-01"),
+	},
+
+	// Gemini Flash Latest (alias para 2.5-flash)
+	{
+		provider: "GEMINI" as Provider,
+		product: "gemini-flash-latest",
+		unit: "TOKENS_IN" as Unit,
+		pricePerUnit: 0.3,
+		effectiveFrom: new Date("2025-01-01"),
+	},
+	{
+		provider: "GEMINI" as Provider,
+		product: "gemini-flash-latest",
+		unit: "TOKENS_OUT" as Unit,
+		pricePerUnit: 2.5,
+		effectiveFrom: new Date("2025-01-01"),
+	},
+
+	// Gemini 2.0 Flash
+	{
+		provider: "GEMINI" as Provider,
+		product: "gemini-2.0-flash",
+		unit: "TOKENS_IN" as Unit,
+		pricePerUnit: 0.1, // $0.10 per 1M input tokens
+		effectiveFrom: new Date("2025-02-01"),
+	},
+	{
+		provider: "GEMINI" as Provider,
+		product: "gemini-2.0-flash",
+		unit: "TOKENS_OUT" as Unit,
+		pricePerUnit: 0.4, // $0.40 per 1M output tokens
+		effectiveFrom: new Date("2025-02-01"),
+	},
+
+	// Gemini 2.0 Flash Lite
+	{
+		provider: "GEMINI" as Provider,
+		product: "gemini-2.0-flash-lite",
+		unit: "TOKENS_IN" as Unit,
+		pricePerUnit: 0.075,
+		effectiveFrom: new Date("2025-02-01"),
+	},
+	{
+		provider: "GEMINI" as Provider,
+		product: "gemini-2.0-flash-lite",
+		unit: "TOKENS_OUT" as Unit,
+		pricePerUnit: 0.3,
+		effectiveFrom: new Date("2025-02-01"),
+	},
+
+	// Gemini 1.5 Pro (legacy)
+	{
+		provider: "GEMINI" as Provider,
+		product: "gemini-1.5-pro",
+		unit: "TOKENS_IN" as Unit,
+		pricePerUnit: 1.25,
+		effectiveFrom: new Date("2024-05-01"),
+	},
+	{
+		provider: "GEMINI" as Provider,
+		product: "gemini-1.5-pro",
+		unit: "TOKENS_OUT" as Unit,
+		pricePerUnit: 5.0,
+		effectiveFrom: new Date("2024-05-01"),
+	},
+
+	// Gemini 1.5 Flash (legacy)
+	{
+		provider: "GEMINI" as Provider,
+		product: "gemini-1.5-flash",
+		unit: "TOKENS_IN" as Unit,
+		pricePerUnit: 0.075,
+		effectiveFrom: new Date("2024-05-01"),
+	},
+	{
+		provider: "GEMINI" as Provider,
+		product: "gemini-1.5-flash",
+		unit: "TOKENS_OUT" as Unit,
+		pricePerUnit: 0.3,
+		effectiveFrom: new Date("2024-05-01"),
 	},
 ];
 
@@ -291,6 +540,16 @@ const WHATSAPP_PRICES = [
 		pricePerUnit: 0.006, // $0.0060 per message
 		effectiveFrom: new Date("2024-02-01"),
 	},
+
+	// Fallback legado (unit genérica antes da categorização por tipo de template)
+	{
+		provider: "META_WHATSAPP" as Provider,
+		product: "WABA",
+		unit: "WHATSAPP_TEMPLATE" as Unit,
+		region: null,
+		pricePerUnit: 0.03, // $0.0300 — usa preço de marketing como fallback conservador
+		effectiveFrom: new Date("2024-01-01"),
+	},
 ];
 
 async function seedPriceCards() {
@@ -337,6 +596,24 @@ async function seedPriceCards() {
 			});
 		}
 
+		// Inserir preços Gemini
+		console.log("🤖 Inserindo preços Gemini...");
+		for (const price of GEMINI_PRICES) {
+			await prisma.priceCard.create({
+				data: {
+					provider: price.provider,
+					product: price.product,
+					unit: price.unit,
+					region: null,
+					currency: "USD",
+					pricePerUnit: price.pricePerUnit,
+					effectiveFrom: price.effectiveFrom,
+					effectiveTo: null,
+					metadata: {},
+				},
+			});
+		}
+
 		// Estatísticas finais
 		const totalPrices = await prisma.priceCard.count();
 		const openaiCount = await prisma.priceCard.count({
@@ -345,11 +622,15 @@ async function seedPriceCards() {
 		const whatsappCount = await prisma.priceCard.count({
 			where: { provider: "META_WHATSAPP" },
 		});
+		const geminiCount = await prisma.priceCard.count({
+			where: { provider: "GEMINI" },
+		});
 
 		console.log("✅ Seed de preços concluído com sucesso!");
 		console.log(`📊 Total de preços inseridos: ${totalPrices}`);
 		console.log(`🤖 OpenAI: ${openaiCount} preços`);
 		console.log(`📱 WhatsApp: ${whatsappCount} preços`);
+		console.log(`🔮 Gemini: ${geminiCount} preços`);
 
 		// Mostrar alguns exemplos
 		console.log("\n📋 Exemplos de preços inseridos:");

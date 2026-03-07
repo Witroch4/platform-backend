@@ -145,9 +145,12 @@ export class CostAuditLogger {
 	 */
 	private async logToDatabase(event: CostAuditEvent): Promise<void> {
 		try {
+			// "system" is not a real User id — store as null to avoid FK violation
+			const auditUserId =
+				event.userId && event.userId !== "system" ? event.userId : null;
 			await this.prisma.auditLog.create({
 				data: {
-					userId: event.userId || "system",
+					userId: auditUserId,
 					action: `COST_${event.action}`,
 					resourceType: event.resourceType,
 					resourceId: event.resourceId || "unknown",

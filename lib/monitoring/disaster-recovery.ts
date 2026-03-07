@@ -575,7 +575,7 @@ class DisasterRecoveryManager {
 		try {
 			await this.prisma.auditLog.create({
 				data: {
-					userId: "system",
+					userId: null,
 					action: "DISASTER_RECOVERY",
 					resourceType: "PROCEDURE",
 					resourceId: procedureId,

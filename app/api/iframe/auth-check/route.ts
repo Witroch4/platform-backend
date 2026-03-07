@@ -56,7 +56,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 			// Log do acesso autorizado para auditoria
 			await prisma.auditLog.create({
 				data: {
-					userId: "system",
+					userId: null,
 					action: "iframe_access_authorized",
 					resourceType: "iframe_access",
 					details: {
@@ -71,8 +71,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 		} else {
 			// Log da tentativa de acesso não autorizada
 			await prisma.auditLog.create({
-				data: {
-					userId: "system",
+			data: {
+					userId: null,
 					action: "iframe_access_denied",
 					resourceType: "iframe_access",
 					details: {

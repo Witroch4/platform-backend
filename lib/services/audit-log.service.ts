@@ -2,7 +2,7 @@ import { getPrismaInstance } from "@/lib/connections";
 import { Prisma } from "@prisma/client";
 
 export interface AuditLogEntry {
-	userId: string;
+	userId: string | null;
 	action: string;
 	resource: string;
 	resourceId?: string;
@@ -94,7 +94,7 @@ export class AuditLogService {
 		]);
 
 		// Buscar dados dos usuários separadamente
-		const userIds = [...new Set(logs.map((log) => log.userId))];
+		const userIds = [...new Set(logs.map((log) => log.userId).filter((id): id is string => id !== null))];
 		const users = await prisma.user.findMany({
 			where: { id: { in: userIds } },
 			select: { id: true, name: true, email: true },
@@ -104,7 +104,7 @@ export class AuditLogService {
 
 		const logsWithUsers = logs.map((log) => ({
 			...log,
-			user: userMap.get(log.userId) || { id: log.userId, name: null, email: "Usuário não encontrado" },
+			user: userMap.get(log.userId ?? "") || { id: log.userId, name: null, email: "Sistema" },
 		}));
 
 		return {

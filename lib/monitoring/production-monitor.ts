@@ -377,7 +377,7 @@ class ProductionMonitor {
 		try {
 			await this.prisma.auditLog.create({
 				data: {
-					userId: "system",
+					userId: null,
 					action: "INFRASTRUCTURE_ALERT",
 					resourceType: "MONITORING",
 					resourceId: alert.id,
