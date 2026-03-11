@@ -161,6 +161,13 @@ export class ChatwitDeliveryService {
 				// Remove labels uma a uma (API Chatwit não suporta batch delete)
 				return this.removeLabelsBatch(ctx, targetId, payload.labels);
 
+			case "update_contact":
+				if (!payload.contactId) {
+					log.warn("[ChatwitDelivery] update_contact sem contactId", { conversationId: ctx.conversationId });
+					return { success: false, error: "contactId não fornecido", attempts: 0 };
+				}
+				return this.updateContact(ctx, payload.contactId, payload.contactFields ?? {});
+
 			default:
 				log.warn("[ChatwitDelivery] Tipo de ação Chatwit desconhecido", { actionType });
 				return { success: false, error: `Tipo desconhecido: ${actionType}`, attempts: 0 };
@@ -373,6 +380,26 @@ export class ChatwitDeliveryService {
 	}
 
 	/**
+	 * Atualiza campos do contato no Chatwit.
+	 * PUT /api/v1/accounts/{account_id}/contacts/{contact_id}
+	 * @see docs/chatwit-contrato-async-30s.md §19
+	 */
+	async updateContact(
+		ctx: DeliveryContext,
+		contactId: number,
+		fields: { email?: string; name?: string; phone_number?: string; custom_attributes?: Record<string, string> },
+	): Promise<DeliveryResult> {
+		const url = `/api/v1/accounts/${ctx.accountId}/contacts/${contactId}`;
+
+		log.debug("[ChatwitDelivery] Atualizando contato", {
+			contactId,
+			fields: Object.keys(fields),
+		});
+
+		return this.postChatwitAction(ctx, url, fields, "update_contact", "PUT");
+	}
+
+	/**
 	 * Remove etiquetas de uma conversa em batch.
 	 * API Chatwit usa DELETE individual, então iteramos com retry.
 	 */
@@ -425,7 +452,7 @@ export class ChatwitDeliveryService {
 		url: string,
 		body: Record<string, unknown>,
 		actionName: string,
-		method: "POST" | "DELETE" = "POST",
+		method: "POST" | "DELETE" | "PUT" = "POST",
 	): Promise<DeliveryResult> {
 		log.debug("[ChatwitDelivery] Executando ação", {
 			action: actionName,
@@ -439,6 +466,8 @@ export class ChatwitDeliveryService {
 			try {
 				if (method === "DELETE") {
 					await this.client.delete(url, { data: body });
+				} else if (method === "PUT") {
+					await this.client.put(url, body);
 				} else {
 					await this.client.post(url, body);
 				}

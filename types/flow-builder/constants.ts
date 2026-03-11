@@ -182,4 +182,9 @@ export const NODE_COLORS = {
 		border: "border-rose-500",
 		icon: "text-rose-600",
 	},
+	[FlowNodeType.WAIT_FOR_REPLY]: {
+		bg: "bg-amber-50 dark:bg-amber-950",
+		border: "border-amber-600",
+		icon: "text-amber-600",
+	},
 } as const;

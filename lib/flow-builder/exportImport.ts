@@ -342,6 +342,7 @@ export function validateFlowImport(data: unknown): FlowImportValidation {
 		"condition",
 		"delay",
 		"media",
+		"wait_for_reply",
 	];
 
 	for (const node of exportData.nodes!) {

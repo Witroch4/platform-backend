@@ -28,7 +28,8 @@ export type FlowNodeType =
 	| "REACTION"
 	| "QUICK_REPLIES"
 	| "CAROUSEL"
-	| "CHATWIT_ACTION";
+	| "CHATWIT_ACTION"
+	| "WAIT_FOR_REPLY";
 
 // =============================================================================
 // SESSION
@@ -111,7 +112,11 @@ export interface DeliveryPayload {
 	 * - add_label: adicionar etiqueta(s)
 	 * - remove_label: remover etiqueta(s)
 	 */
-	actionType?: "resolve_conversation" | "assign_agent" | "add_label" | "remove_label";
+	actionType?: "resolve_conversation" | "assign_agent" | "add_label" | "remove_label" | "update_contact";
+	/** Para update_contact: campos a atualizar no contato Chatwit */
+	contactFields?: { email?: string; name?: string; phone_number?: string; custom_attributes?: Record<string, string> };
+	/** Para update_contact: ID do contato no Chatwit */
+	contactId?: number;
 	/** Para assign_agent: ID do agente destino */
 	assigneeId?: number;
 	/** Para add_label/remove_label: títulos das etiquetas */

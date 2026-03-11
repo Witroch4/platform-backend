@@ -43,6 +43,7 @@ import {
 import { QuickRepliesNode } from "./nodes/QuickRepliesNode";
 import { CarouselNode } from "./nodes/CarouselNode";
 import { ChatwitActionNode } from "./nodes/ChatwitActionNode";
+import { WaitForReplyNode } from "./nodes/WaitForReplyNode";
 import { TemplateNode } from "./nodes/TemplateNode";
 import {
 	WhatsAppTemplateNode,
@@ -73,6 +74,7 @@ const nodeTypes: NodeTypes = {
 	[FlowNodeType.QUICK_REPLIES]: QuickRepliesNode as unknown as NodeTypes[string],
 	[FlowNodeType.CAROUSEL]: CarouselNode as unknown as NodeTypes[string],
 	[FlowNodeType.CHATWIT_ACTION]: ChatwitActionNode as unknown as NodeTypes[string],
+	[FlowNodeType.WAIT_FOR_REPLY]: WaitForReplyNode as unknown as NodeTypes[string],
 	// Legacy template (deprecated - use WHATSAPP_TEMPLATE)
 	[FlowNodeType.TEMPLATE]: TemplateNode as unknown as NodeTypes[string],
 	// Template WhatsApp Unificado (novo)
@@ -365,6 +367,8 @@ export function FlowCanvas({
 				return "#d946ef"; // fuchsia
 			case FlowNodeType.URL_TEMPLATE:
 				return "#f43f5e"; // rose
+			case FlowNodeType.WAIT_FOR_REPLY:
+				return "#f59e0b"; // amber
 			default:
 				return "#94a3b8";
 		}

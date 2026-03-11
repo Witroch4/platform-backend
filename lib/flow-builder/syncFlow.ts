@@ -35,6 +35,7 @@ export const NODE_TYPE_MAP: Record<string, string> = {
 	condition: "CONDITION",
 	delay: "DELAY",
 	media: "MEDIA",
+	wait_for_reply: "WAIT_FOR_REPLY",
 };
 
 // =============================================================================
@@ -79,6 +80,15 @@ export function buildNodeConfig(node: FlowNode): object {
 				caption: data.caption,
 				mediaType: data.mediaType,
 				mimeType: data.mimeType,
+			};
+		case "wait_for_reply":
+			return {
+				promptText: data.promptText,
+				variableName: data.variableName,
+				validationRegex: data.validationRegex,
+				validationErrorMessage: data.validationErrorMessage,
+				maxAttempts: data.maxAttempts,
+				skipButtonLabel: data.skipButtonLabel,
 			};
 		case "end":
 			return { endMessage: data.endMessage };

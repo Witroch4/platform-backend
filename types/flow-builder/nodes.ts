@@ -155,13 +155,37 @@ export interface ChatwitLabel {
  * Dados específicos para nó de ação do Chatwit
  */
 export interface ChatwitActionNodeData extends FlowNodeDataBase {
-	actionType: "resolve_conversation" | "assign_agent" | "snooze_conversation" | "add_label" | "remove_label";
+	actionType: "resolve_conversation" | "assign_agent" | "snooze_conversation" | "add_label" | "remove_label" | "update_contact";
 	assigneeId?: string;
 	/** Nome do agente para exibição no canvas */
 	assigneeName?: string;
 	snoozeUntil?: string;
 	/** Etiquetas a adicionar/remover, com cor para exibição no canvas */
 	labels?: ChatwitLabel[];
+	/** Para update_contact: mapeamento de campo → variável (ou valor direto) */
+	contactFieldMappings?: Array<{ field: string; value: string }>;
+}
+
+// =============================================================================
+// INPUT NODES
+// =============================================================================
+
+/**
+ * Dados específicos para nó WAIT_FOR_REPLY (coleta de texto livre)
+ */
+export interface WaitForReplyNodeData extends FlowNodeDataBase {
+	/** Texto exibido como prompt ao usuário */
+	promptText: string;
+	/** Nome da variável onde o valor coletado será salvo */
+	variableName: string;
+	/** Regex de validação (ex: email, CPF) — opcional */
+	validationRegex?: string;
+	/** Mensagem de erro quando validação falha */
+	validationErrorMessage?: string;
+	/** Máximo de tentativas antes de pular (default: 2) */
+	maxAttempts?: number;
+	/** Label do botão de pular */
+	skipButtonLabel?: string;
 }
 
 // =============================================================================
@@ -368,4 +392,5 @@ export type FlowNodeData =
 	| CouponTemplateNodeData
 	| CallTemplateNodeData
 	| UrlTemplateNodeData
-	| ChatwitActionNodeData;
+	| ChatwitActionNodeData
+	| WaitForReplyNodeData;

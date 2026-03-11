@@ -48,6 +48,13 @@ const SHARED_LOGIC_ITEMS: PaletteItem[] = [
 
 const SHARED_ACTION_ITEMS: PaletteItem[] = [
 	{
+		type: FlowNodeType.WAIT_FOR_REPLY,
+		icon: "📝",
+		label: "Aguardar Resposta",
+		description: "Coletar texto livre do usuário (email, CPF, etc.)",
+		category: "action",
+	},
+	{
 		type: FlowNodeType.HANDOFF,
 		icon: "👤",
 		label: "Transferir",

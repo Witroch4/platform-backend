@@ -130,6 +130,22 @@ export class FlowOrchestrator {
 				}
 			}
 
+			// 3.6 FREE-TEXT DISPATCH: Coleta de texto livre (WAIT_FOR_REPLY)
+			// Se não é botão, verificar se há sessão WAITING_INPUT com _waitType=free_text
+			if (!buttonId) {
+				const messageText = payload.text || payload.message?.content || "";
+				if (messageText) {
+					const session = await this.findActiveSession(deliveryContext);
+					if (session?.variables?._waitType === "free_text") {
+						log.info("[FlowOrchestrator] WAIT_FOR_REPLY: resumindo via texto livre", {
+							sessionId: session.id,
+							textPreview: messageText.slice(0, 30),
+						});
+						return this.resumeFreeTextSession(session, messageText, deliveryContext, bridge);
+					}
+				}
+			}
+
 			// 4. Buscar mapeamento de intent → flow
 			const flowId = await this.findFlowForMessage(payload, deliveryContext);
 			if (!flowId) {
@@ -275,6 +291,50 @@ export class FlowOrchestrator {
 			syncResponse,
 			waitingInput: result.status === "WAITING_INPUT",
 			error: result.status === "ERROR" ? "Erro ao retomar flow" : undefined,
+		};
+	}
+
+	// ---------------------------------------------------------------------------
+	// Resume free-text session (WAIT_FOR_REPLY)
+	// ---------------------------------------------------------------------------
+
+	private async resumeFreeTextSession(
+		session: FlowSessionData,
+		userText: string,
+		ctx: DeliveryContext,
+		bridge: SyncBridge,
+	): Promise<OrchestratorResult> {
+		const prisma = getPrismaInstance();
+
+		const flow = await this.loadFlow(session.flowId);
+		if (!flow) {
+			return {
+				syncResponse: null,
+				waitingInput: false,
+				error: `Flow ${session.flowId} não encontrado`,
+			};
+		}
+
+		const executor = new FlowExecutor(ctx, session.variables);
+		const result = await executor.resumeFromFreeText(flow, session, userText, bridge);
+
+		await prisma.flowSession.update({
+			where: { id: session.id },
+			data: {
+				status: result.status,
+				currentNodeId: result.currentNodeId ?? null,
+				variables: result.variables as object,
+				executionLog: result.executionLog as object[],
+				completedAt: result.status === "COMPLETED" ? new Date() : null,
+			},
+		});
+
+		const syncResponse = bridge.consumeSyncPayload();
+
+		return {
+			syncResponse,
+			waitingInput: result.status === "WAITING_INPUT",
+			error: result.status === "ERROR" ? "Erro ao retomar flow (free-text)" : undefined,
 		};
 	}
 

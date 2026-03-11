@@ -703,6 +703,9 @@ export class FlowExecutor {
 			case "CHATWIT_ACTION":
 				return this.handleChatwitAction(node, flow);
 
+			case "WAIT_FOR_REPLY":
+				return this.handleWaitForReply(node, flow, bridge);
+
 			default:
 				log.warn("[FlowExecutor] Tipo de nó desconhecido", { nodeType });
 				return this.findNextNodeId(flow, node);
@@ -1438,6 +1441,237 @@ export class FlowExecutor {
 
 
 	// ---------------------------------------------------------------------------
+	// WAIT_FOR_REPLY — coleta texto livre do usuário
+	// ---------------------------------------------------------------------------
+
+	/**
+	 * Envia mensagem-pergunta + botão "Pular ⏭️" e aguarda texto livre.
+	 * Armazena metadados de espera nas variáveis de sessão (_wait*).
+	 */
+	private async handleWaitForReply(
+		node: RuntimeFlowNode,
+		flow: RuntimeFlow,
+		bridge: SyncBridge,
+	): Promise<string> {
+		const config = node.config as {
+			promptText?: string;
+			variableName?: string;
+			validationRegex?: string;
+			validationErrorMessage?: string;
+			maxAttempts?: number;
+			skipButtonLabel?: string;
+		};
+
+		const promptText = this.resolver.resolve(config.promptText ?? "Informe o dado solicitado:");
+		const variableName = config.variableName ?? "user_reply";
+		const maxAttempts = config.maxAttempts ?? 2;
+		const skipLabel = config.skipButtonLabel ?? "Pular ⏭️";
+		const skipButtonId = `flow_skip_${node.id}`;
+
+		// Salvar metadados de espera nas variáveis de sessão
+		this.resolver.setVariable("_waitType", "free_text");
+		this.resolver.setVariable("_waitingVariable", variableName);
+		this.resolver.setVariable("_waitNodeId", node.id);
+		this.resolver.setVariable("_waitAttempts", 0);
+		this.resolver.setVariable("_waitMaxAttempts", maxAttempts);
+		if (config.validationRegex) {
+			this.resolver.setVariable("_waitValidationRegex", config.validationRegex);
+		}
+		if (config.validationErrorMessage) {
+			this.resolver.setVariable("_waitValidationError", config.validationErrorMessage);
+		}
+
+		// Enviar interactive com botão skip (usa flow_ prefix → resolvido pelo button handler)
+		const interactivePayload = {
+			type: "button" as const,
+			body: { text: promptText },
+			action: {
+				buttons: [
+					{
+						type: "reply" as const,
+						reply: { id: skipButtonId, title: skipLabel },
+					},
+				],
+			},
+		};
+
+		await this.deliver(bridge, { type: "interactive", interactivePayload });
+
+		log.info("[FlowExecutor] WAIT_FOR_REPLY: aguardando texto livre", {
+			nodeId: node.id,
+			variableName,
+			maxAttempts,
+		});
+
+		return "WAITING_INPUT";
+	}
+
+	// ---------------------------------------------------------------------------
+	// Public: retomar de texto livre (WAITING_INPUT + _waitType=free_text)
+	// ---------------------------------------------------------------------------
+
+	async resumeFromFreeText(
+		flow: RuntimeFlow,
+		session: FlowSessionData,
+		userText: string,
+		bridge: SyncBridge,
+	): Promise<ExecuteResult> {
+		if (!session.currentNodeId) {
+			return {
+				status: "ERROR",
+				variables: session.variables,
+				executionLog: this.executionLog,
+			};
+		}
+
+		// Recarrega variáveis da sessão
+		for (const [k, v] of Object.entries(session.variables)) {
+			this.resolver.setVariable(k, v);
+		}
+
+		const variableName = String(session.variables._waitingVariable ?? "user_reply");
+		const validationRegex = session.variables._waitValidationRegex
+			? String(session.variables._waitValidationRegex)
+			: null;
+		const validationError = session.variables._waitValidationError
+			? String(session.variables._waitValidationError)
+			: "Formato inválido. Tente novamente.";
+		const attempts = Number(session.variables._waitAttempts ?? 0) + 1;
+		const maxAttempts = Number(session.variables._waitMaxAttempts ?? 2);
+
+		// Validação por regex (se configurado)
+		if (validationRegex) {
+			try {
+				const regex = new RegExp(validationRegex, "i");
+				if (!regex.test(userText)) {
+					// Falhou validação
+					if (attempts >= maxAttempts) {
+						// Excedeu tentativas: pular (seguir edge de skip/default)
+						log.info("[FlowExecutor] WAIT_FOR_REPLY: max tentativas, pulando", {
+							nodeId: session.currentNodeId,
+							attempts,
+						});
+						return this.skipWaitForReply(flow, session);
+					}
+
+					// Enviar erro e manter WAITING_INPUT
+					this.resolver.setVariable("_waitAttempts", attempts);
+					await this.deliver(bridge, { type: "text", content: validationError });
+
+					log.info("[FlowExecutor] WAIT_FOR_REPLY: validação falhou", {
+						nodeId: session.currentNodeId,
+						attempt: attempts,
+						maxAttempts,
+					});
+
+					return {
+						status: "WAITING_INPUT",
+						currentNodeId: session.currentNodeId,
+						variables: this.resolver.getSessionVariables(),
+						executionLog: this.executionLog,
+					};
+				}
+			} catch {
+				log.warn("[FlowExecutor] WAIT_FOR_REPLY: regex inválido, aceitando input", {
+					regex: validationRegex,
+				});
+			}
+		}
+
+		// Input válido: salvar na variável
+		this.resolver.setVariable(variableName, userText);
+
+		// Limpar metadados de espera
+		this.resolver.setVariable("_waitType", null);
+		this.resolver.setVariable("_waitingVariable", null);
+		this.resolver.setVariable("_waitNodeId", null);
+		this.resolver.setVariable("_waitAttempts", null);
+		this.resolver.setVariable("_waitMaxAttempts", null);
+		this.resolver.setVariable("_waitValidationRegex", null);
+		this.resolver.setVariable("_waitValidationError", null);
+
+		log.info("[FlowExecutor] WAIT_FOR_REPLY: input aceito", {
+			nodeId: session.currentNodeId,
+			variableName,
+			valuePreview: userText.slice(0, 30),
+		});
+
+		// Seguir edge default (sem buttonId/conditionBranch) para continuar o flow
+		const currentNode = flow.nodes.find((n) => n.id === session.currentNodeId);
+		if (!currentNode) {
+			return {
+				status: "ERROR",
+				variables: this.resolver.getSessionVariables(),
+				executionLog: this.executionLog,
+			};
+		}
+
+		const nextNodeId = this.findNextNodeId(flow, currentNode);
+		const nextNode = flow.nodes.find((n) => n.id === nextNodeId);
+
+		if (!nextNode || nextNodeId === "END") {
+			return {
+				status: "COMPLETED",
+				variables: this.resolver.getSessionVariables(),
+				executionLog: this.executionLog,
+			};
+		}
+
+		return this.executeChain(flow, nextNode, bridge, false);
+	}
+
+	/**
+	 * Pula o WAIT_FOR_REPLY após max tentativas ou botão "Pular".
+	 * Segue a edge "skip" (buttonId = flow_skip_{nodeId}) se existir, senão edge default.
+	 */
+	private async skipWaitForReply(
+		flow: RuntimeFlow,
+		session: FlowSessionData,
+	): Promise<ExecuteResult> {
+		const nodeId = session.currentNodeId!;
+
+		// Limpar metadados de espera
+		this.resolver.setVariable("_waitType", null);
+		this.resolver.setVariable("_waitingVariable", null);
+		this.resolver.setVariable("_waitNodeId", null);
+		this.resolver.setVariable("_waitAttempts", null);
+		this.resolver.setVariable("_waitMaxAttempts", null);
+		this.resolver.setVariable("_waitValidationRegex", null);
+		this.resolver.setVariable("_waitValidationError", null);
+
+		// Tentar edge de skip primeiro
+		const skipEdge = flow.edges.find(
+			(e) => e.sourceNodeId === nodeId && e.buttonId === `flow_skip_${nodeId}`,
+		);
+
+		// Fallback: edge default
+		const edge = skipEdge ?? flow.edges.find(
+			(e) => e.sourceNodeId === nodeId && !e.buttonId && !e.conditionBranch,
+		);
+
+		if (!edge) {
+			return {
+				status: "COMPLETED",
+				variables: this.resolver.getSessionVariables(),
+				executionLog: this.executionLog,
+			};
+		}
+
+		const nextNode = flow.nodes.find((n) => n.id === edge.targetNodeId);
+		if (!nextNode) {
+			return {
+				status: "COMPLETED",
+				variables: this.resolver.getSessionVariables(),
+				executionLog: this.executionLog,
+			};
+		}
+
+		// Use a no-op SyncBridge for the skip path since we can't sync anymore
+		const dummyBridge = new SyncBridge();
+		return this.executeChain(flow, nextNode, dummyBridge, false);
+	}
+
+	// ---------------------------------------------------------------------------
 	// Chatwit Actions
 	// ---------------------------------------------------------------------------
 
@@ -1458,13 +1692,15 @@ export class FlowExecutor {
 			actionType?: string;
 			assigneeId?: string;
 			labels?: Array<{ title: string; color: string }> | string[];
+			contactFieldMappings?: Array<{ field: string; value: string }>;
 		};
 
 		const actionType = (config.actionType || "resolve_conversation") as
 			| "resolve_conversation"
 			| "assign_agent"
 			| "add_label"
-			| "remove_label";
+			| "remove_label"
+			| "update_contact";
 		const conversationId = this.context.conversationId;
 
 		if (!conversationId) {
@@ -1480,6 +1716,34 @@ export class FlowExecutor {
 			);
 		}
 
+		// Resolve contactFieldMappings para update_contact
+		let contactFields: { email?: string; name?: string; phone_number?: string } | undefined;
+		let contactId: number | undefined;
+		if (actionType === "update_contact" && config.contactFieldMappings?.length) {
+			contactFields = {};
+			for (const mapping of config.contactFieldMappings) {
+				const resolvedValue = this.resolver.resolve(mapping.value);
+				if (resolvedValue) {
+					(contactFields as Record<string, string>)[mapping.field] = resolvedValue;
+				}
+			}
+			contactId = this.context.contactId ? Number(this.context.contactId) : undefined;
+
+			if (!contactId) {
+				log.warn("[FlowExecutor] ChatwitAction update_contact: contactId não encontrado", { nodeId: node.id });
+				return this.findNextNodeId(flow, node);
+			}
+		}
+
+		const payload: DeliveryPayload = {
+			type: "chatwit_action",
+			actionType,
+			assigneeId: config.assigneeId ? Number(config.assigneeId) : undefined,
+			labels: labelTitles,
+			...(contactFields && { contactFields }),
+			...(contactId && { contactId }),
+		};
+
 		try {
 			// Enfileira a ação para processamento assíncrono (não bloqueia)
 			// sessionId: usa conversationId como identificador de sessão
@@ -1488,12 +1752,7 @@ export class FlowExecutor {
 				sessionId: String(this.context.conversationId),
 				nodeId: node.id,
 				context: this.context,
-				payload: {
-					type: "chatwit_action",
-					actionType,
-					assigneeId: config.assigneeId ? Number(config.assigneeId) : undefined,
-					labels: labelTitles,
-				},
+				payload,
 			});
 
 			log.info("[FlowExecutor] Ação Chatwit enfileirada", {
@@ -1511,12 +1770,7 @@ export class FlowExecutor {
 			});
 
 			// Fallback: executa diretamente via delivery service
-			const result = await this.delivery.deliver(this.context, {
-				type: "chatwit_action",
-				actionType,
-				assigneeId: config.assigneeId ? Number(config.assigneeId) : undefined,
-				labels: labelTitles,
-			});
+			const result = await this.delivery.deliver(this.context, payload);
 
 			if (!result.success) {
 				log.error("[FlowExecutor] Erro ao executar ação Chatwit (fallback)", {

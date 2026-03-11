@@ -71,6 +71,7 @@ function getNodeTypeLabel(nodeType: FlowNodeType): string {
 		carousel: "Carrossel",
 		chatwit_action: "Ação Chatwit",
 		remove_tag: "Remover Tag",
+		wait_for_reply: "Aguardar Resposta",
 	};
 	return labels[nodeType] || nodeType;
 }

@@ -16,6 +16,7 @@ import type {
 	EndConversationNodeData,
 	StartNodeData,
 	ChatwitActionNodeData,
+	WaitForReplyNodeData,
 } from "@/types/flow-builder";
 import { ChatwitActionDetailEditor } from "./editors/ChatwitActionDetailEditor";
 import {
@@ -30,7 +31,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { MessageSquare, Play, Smile, Type, UserRoundCog, TagIcon, CircleStop, Smartphone, Workflow } from "lucide-react";
+import { MessageSquare, Play, Smile, Type, UserRoundCog, TagIcon, CircleStop, Smartphone, Workflow, MessageSquareText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // =============================================================================
@@ -709,6 +710,8 @@ function getNodeIcon(type: FlowNodeType) {
 			return <TagIcon className="h-5 w-5 text-pink-500" />;
 		case FlowNodeType.CHATWIT_ACTION:
 			return <Workflow className="h-5 w-5 text-indigo-500" />;
+		case FlowNodeType.WAIT_FOR_REPLY:
+			return <MessageSquareText className="h-5 w-5 text-amber-500" />;
 		case FlowNodeType.END_CONVERSATION:
 			return <CircleStop className="h-5 w-5 text-red-500" />;
 		default:
@@ -726,6 +729,7 @@ function getNodeTypeName(type: FlowNodeType): string {
 		[FlowNodeType.HANDOFF]: "Transferência",
 		[FlowNodeType.ADD_TAG]: "Adicionar Tag",
 		[FlowNodeType.CHATWIT_ACTION]: "Ação Chatwit",
+		[FlowNodeType.WAIT_FOR_REPLY]: "Aguardar Resposta",
 		[FlowNodeType.END_CONVERSATION]: "Encerrar Conversa",
 	};
 	return map[type] ?? "Nó";
@@ -844,6 +848,14 @@ export function NodeDetailDialog({
 							<ChatwitActionDetailEditor
 								node={node}
 								data={nodeData as ChatwitActionNodeData}
+								onUpdate={onUpdateNodeData}
+							/>
+						)}
+
+						{nodeType === FlowNodeType.WAIT_FOR_REPLY && (
+							<WaitForReplyDetailEditor
+								node={node}
+								data={nodeData as WaitForReplyNodeData}
 								onUpdate={onUpdateNodeData}
 							/>
 						)}
@@ -1640,6 +1652,150 @@ function EndConversationDetailEditor({ node, data, onUpdate }: EditorProps<EndCo
 			<p className="text-sm text-muted-foreground">
 				A conversa será marcada como encerrada. A mensagem acima será enviada como despedida (se preenchida).
 			</p>
+		</div>
+	);
+}
+
+// ---------------------------------------------------------------------------
+// Wait For Reply
+// ---------------------------------------------------------------------------
+function WaitForReplyDetailEditor({ node, data, onUpdate }: EditorProps<WaitForReplyNodeData>) {
+	const [promptText, setPromptText] = useState(data.promptText ?? "");
+	const [variableName, setVariableName] = useState(data.variableName ?? "user_reply");
+	const [validationRegex, setValidationRegex] = useState(data.validationRegex ?? "");
+	const [validationErrorMessage, setValidationErrorMessage] = useState(data.validationErrorMessage ?? "");
+	const [maxAttempts, setMaxAttempts] = useState(data.maxAttempts ?? 2);
+	const [skipButtonLabel, setSkipButtonLabel] = useState(data.skipButtonLabel ?? "Pular ⏭️");
+
+	useEffect(() => {
+		setPromptText(data.promptText ?? "");
+		setVariableName(data.variableName ?? "user_reply");
+		setValidationRegex(data.validationRegex ?? "");
+		setValidationErrorMessage(data.validationErrorMessage ?? "");
+		setMaxAttempts(data.maxAttempts ?? 2);
+		setSkipButtonLabel(data.skipButtonLabel ?? "Pular ⏭️");
+	}, [data]);
+
+	const save = useCallback(() => {
+		onUpdate(node.id, {
+			promptText,
+			variableName,
+			validationRegex: validationRegex || undefined,
+			validationErrorMessage: validationErrorMessage || undefined,
+			maxAttempts,
+			skipButtonLabel,
+			isConfigured: !!promptText && !!variableName,
+		} as Partial<FlowNodeData>);
+	}, [node.id, onUpdate, promptText, variableName, validationRegex, validationErrorMessage, maxAttempts, skipButtonLabel]);
+
+	const VALIDATION_PRESETS = [
+		{ label: "Email", regex: "^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$", error: "Por favor, informe um email válido." },
+		{ label: "CPF", regex: "^\\d{3}\\.?\\d{3}\\.?\\d{3}-?\\d{2}$", error: "Por favor, informe um CPF válido (000.000.000-00)." },
+		{ label: "Telefone", regex: "^\\+?\\d{10,13}$", error: "Por favor, informe um telefone válido." },
+		{ label: "Número", regex: "^\\d+$", error: "Por favor, informe apenas números." },
+	];
+
+	return (
+		<div className="space-y-4">
+			<div className="space-y-2">
+				<Label className="text-sm font-medium">Pergunta para o usuário</Label>
+				<Textarea
+					value={promptText}
+					onChange={(e) => setPromptText(e.target.value)}
+					onBlur={save}
+					placeholder="Ex: Qual é o seu email?"
+					rows={3}
+					className="text-sm resize-y"
+				/>
+			</div>
+
+			<div className="space-y-2">
+				<Label className="text-sm font-medium">Nome da variável</Label>
+				<Input
+					value={variableName}
+					onChange={(e) => setVariableName(e.target.value.replace(/[^a-zA-Z0-9_]/g, ""))}
+					onBlur={save}
+					placeholder="user_email"
+					className="text-sm font-mono"
+				/>
+				<p className="text-xs text-muted-foreground">
+					Use <code className="bg-muted px-1 rounded">{`{{${variableName || "variavel"}}}`}</code> nos nós seguintes para acessar o valor.
+				</p>
+			</div>
+
+			<div className="space-y-2">
+				<Label className="text-sm font-medium">Validação (opcional)</Label>
+				<div className="flex gap-1.5 flex-wrap">
+					{VALIDATION_PRESETS.map((preset) => (
+						<Button
+							key={preset.label}
+							size="sm"
+							variant={validationRegex === preset.regex ? "default" : "outline"}
+							className="text-xs h-7"
+							onClick={() => {
+								setValidationRegex(preset.regex);
+								setValidationErrorMessage(preset.error);
+								onUpdate(node.id, {
+									promptText,
+									variableName,
+									validationRegex: preset.regex,
+									validationErrorMessage: preset.error,
+									maxAttempts,
+									skipButtonLabel,
+									isConfigured: !!promptText && !!variableName,
+								} as Partial<FlowNodeData>);
+							}}
+						>
+							{preset.label}
+						</Button>
+					))}
+				</div>
+				<Input
+					value={validationRegex}
+					onChange={(e) => setValidationRegex(e.target.value)}
+					onBlur={save}
+					placeholder="Regex personalizado (ex: ^[\\w.-]+@...)"
+					className="text-sm font-mono"
+				/>
+			</div>
+
+			{validationRegex && (
+				<div className="space-y-2">
+					<Label className="text-sm font-medium">Mensagem de erro</Label>
+					<Input
+						value={validationErrorMessage}
+						onChange={(e) => setValidationErrorMessage(e.target.value)}
+						onBlur={save}
+						placeholder="Formato inválido. Tente novamente."
+						className="text-sm"
+					/>
+				</div>
+			)}
+
+			<div className="grid grid-cols-2 gap-4">
+				<div className="space-y-2">
+					<Label className="text-sm font-medium">Máx. tentativas</Label>
+					<Input
+						type="number"
+						min={1}
+						max={5}
+						value={maxAttempts}
+						onChange={(e) => setMaxAttempts(Number(e.target.value))}
+						onBlur={save}
+						className="text-sm"
+					/>
+				</div>
+				<div className="space-y-2">
+					<Label className="text-sm font-medium">Botão pular</Label>
+					<Input
+						value={skipButtonLabel}
+						onChange={(e) => setSkipButtonLabel(e.target.value)}
+						onBlur={save}
+						placeholder="Pular ⏭️"
+						className="text-sm"
+					/>
+				</div>
+			</div>
 		</div>
 	);
 }

@@ -1,8 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { X, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { X, Loader2, Plus, Trash2 } from "lucide-react";
 import { useMtfData } from "@/app/admin/mtf-diamante/context/SwrProvider";
 import { useChatwitLabels } from "@/app/admin/mtf-diamante/hooks/useChatwitLabels";
 import type { ChatwitActionNodeData } from "@/types/flow-builder/nodes";
@@ -21,12 +23,16 @@ export function ChatwitActionDetailEditor({ node, data, onUpdate }: EditorProps<
     const [selectedLabels, setSelectedLabels] = useState<Array<{ title: string; color: string }>>(
         data.labels || [],
     );
+    const [contactFieldMappings, setContactFieldMappings] = useState<Array<{ field: string; value: string }>>(
+        data.contactFieldMappings || [{ field: "email", value: "" }],
+    );
 
     useEffect(() => {
         setActionType(data.actionType || "resolve_conversation");
         setAssigneeId(data.assigneeId || "");
         setSnoozeUntil(data.snoozeUntil || "");
         setSelectedLabels(data.labels || []);
+        setContactFieldMappings(data.contactFieldMappings || [{ field: "email", value: "" }]);
     }, [data]);
 
     const updateNode = (updates: Partial<ChatwitActionNodeData>) => {
@@ -49,6 +55,8 @@ export function ChatwitActionDetailEditor({ node, data, onUpdate }: EditorProps<
                 return "Adicionar Etiqueta";
             case "remove_label":
                 return "Remover Etiqueta";
+            case "update_contact":
+                return "Atualizar Contato";
             default:
                 return "Ação Chatwit";
         }
@@ -90,6 +98,7 @@ export function ChatwitActionDetailEditor({ node, data, onUpdate }: EditorProps<
                         <SelectItem value="assign_agent">Atribuir a Agente</SelectItem>
                         <SelectItem value="add_label">Adicionar Etiqueta</SelectItem>
                         <SelectItem value="remove_label">Remover Etiqueta</SelectItem>
+                        <SelectItem value="update_contact">Atualizar Contato</SelectItem>
                         {/* Snooze temporarily disabled until implemented */}
                         {/* <SelectItem value="snooze_conversation">Adiar Conversa</SelectItem> */}
                     </SelectContent>
@@ -204,6 +213,81 @@ export function ChatwitActionDetailEditor({ node, data, onUpdate }: EditorProps<
                     <p className="text-[11px] text-muted-foreground">
                         Clique para selecionar ou remover etiquetas.
                     </p>
+                </div>
+            )}
+
+            {actionType === "update_contact" && (
+                <div className="space-y-3">
+                    <Label className="text-sm font-medium">Campos do Contato</Label>
+                    <p className="text-[11px] text-muted-foreground">
+                        Use variáveis do flow (ex: <code className="bg-muted px-1 rounded">{`{{user_email}}`}</code>) nos valores.
+                    </p>
+
+                    {contactFieldMappings.map((mapping, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                            <Select
+                                value={mapping.field}
+                                onValueChange={(value) => {
+                                    const newMappings = [...contactFieldMappings];
+                                    newMappings[idx] = { ...mapping, field: value };
+                                    setContactFieldMappings(newMappings);
+                                    updateNode({ contactFieldMappings: newMappings });
+                                }}
+                            >
+                                <SelectTrigger className="w-[130px]">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="email">Email</SelectItem>
+                                    <SelectItem value="name">Nome</SelectItem>
+                                    <SelectItem value="phone_number">Telefone</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <Input
+                                value={mapping.value}
+                                onChange={(e) => {
+                                    const newMappings = [...contactFieldMappings];
+                                    newMappings[idx] = { ...mapping, value: e.target.value };
+                                    setContactFieldMappings(newMappings);
+                                }}
+                                onBlur={() => updateNode({ contactFieldMappings })}
+                                placeholder={`{{${mapping.field === "email" ? "user_email" : mapping.field === "name" ? "user_name" : "user_phone"}}}`}
+                                className="text-sm font-mono flex-1"
+                            />
+                            {contactFieldMappings.length > 1 && (
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 shrink-0"
+                                    onClick={() => {
+                                        const newMappings = contactFieldMappings.filter((_, i) => i !== idx);
+                                        setContactFieldMappings(newMappings);
+                                        updateNode({ contactFieldMappings: newMappings });
+                                    }}
+                                >
+                                    <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                                </Button>
+                            )}
+                        </div>
+                    ))}
+
+                    {contactFieldMappings.length < 3 && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-xs"
+                            onClick={() => {
+                                const usedFields = contactFieldMappings.map((m) => m.field);
+                                const nextField = ["email", "name", "phone_number"].find((f) => !usedFields.includes(f)) || "email";
+                                const newMappings = [...contactFieldMappings, { field: nextField, value: "" }];
+                                setContactFieldMappings(newMappings);
+                                updateNode({ contactFieldMappings: newMappings });
+                            }}
+                        >
+                            <Plus className="h-3.5 w-3.5 mr-1" />
+                            Adicionar campo
+                        </Button>
+                    )}
                 </div>
             )}
         </div>

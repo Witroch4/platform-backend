@@ -1134,6 +1134,93 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 			}
 		}
 
+		// Step 13.8: WAIT_FOR_REPLY free-text collection (all channels)
+		// Se o usuário mandou texto livre e há sessão WAITING_INPUT com _waitType=free_text,
+		// retomar o flow coletando o texto. Roda para TODOS os canais.
+		if (!isFlowBuilderButton && !buttonReactionResponse && textInput) {
+			try {
+				const flowOrchestrator = new FlowOrchestrator();
+
+				const socialwiseMetadata = getSocialWiseChatwitData(validPayload.context);
+				const chatwitBaseUrl =
+					((socialwiseMetadata as Record<string, unknown>)?.chatwit_base_url as string) ||
+					((validPayload.metadata as Record<string, unknown>)?.chatwit_base_url as string) ||
+					process.env.CHATWIT_BASE_URL ||
+					"";
+				const chatwitAccessToken =
+					((validPayload.metadata as Record<string, unknown>)?.chatwit_agent_bot_token as string) ||
+					process.env.CHATWIT_AGENT_BOT_TOKEN ||
+					"";
+				const conversationDisplayId =
+					Number(
+						(validPayload.metadata as Record<string, unknown>)?.conversation_display_id ||
+						(validPayload.context?.conversation as Record<string, unknown>)?.display_id,
+					) || undefined;
+
+				const resolvedChannelType = channelType.toLowerCase().includes("whatsapp")
+					? "whatsapp" as const
+					: channelType.toLowerCase().includes("instagram")
+						? "instagram" as const
+						: channelType.toLowerCase().includes("facebook")
+							? "facebook" as const
+							: "whatsapp" as const;
+
+				const deliveryContext: DeliveryContext = {
+					accountId: Number(chatwitAccountId) || 0,
+					conversationId:
+						Number(socialwiseMetadata?.conversation_data?.id || validPayload.context?.conversation?.id) || 0,
+					conversationDisplayId,
+					inboxId: Number(inboxRow?.inboxId || externalInboxNumeric) || 0,
+					contactId: Number(socialwiseMetadata?.contact_data?.id || validPayload.context?.contact?.id) || 0,
+					contactName: contactName || "",
+					contactPhone: (typeof contactPhone === "string" ? contactPhone : "") || "",
+					channelType: resolvedChannelType,
+					sourceMessageId: wamid || undefined,
+					prismaInboxId: inboxRow?.id || undefined,
+					chatwitAccessToken,
+					chatwitBaseUrl,
+				};
+
+				const flowPayload: ChatwitWebhookPayload = {
+					session_id: validPayload.session_id,
+					text: textInput,
+					channel_type: validPayload.channel_type,
+					language: validPayload.language,
+					metadata: {
+						...(validPayload.metadata as Record<string, unknown>),
+						chatwit_base_url: chatwitBaseUrl,
+						chatwit_agent_bot_token: chatwitAccessToken,
+					},
+					message: {
+						content: textInput,
+						content_attributes: validPayload.context?.message?.content_attributes as Record<string, unknown>,
+					},
+				};
+
+				const flowResult = await flowOrchestrator.handle(flowPayload, deliveryContext);
+
+				if (flowResult.syncResponse) {
+					webhookLogger.info("[FlowEngine] WAIT_FOR_REPLY free-text resumido (sync)", {
+						textPreview: textInput.slice(0, 30),
+						traceId,
+					});
+					logFinalResponse(flowResult.syncResponse, 200, traceId);
+					return NextResponse.json(flowResult.syncResponse, { status: 200 });
+				} else if (flowResult.waitingInput) {
+					webhookLogger.info("[FlowEngine] WAIT_FOR_REPLY free-text (still waiting)", { traceId });
+					const asyncResponse = { status: "accepted", async: true };
+					logFinalResponse(asyncResponse, 200, traceId);
+					return NextResponse.json(asyncResponse, { status: 200 });
+				}
+				// Sem match → continua para LLM
+			} catch (flowError) {
+				webhookLogger.warn("[FlowEngine] Erro no WAIT_FOR_REPLY free-text (não-bloqueante)", {
+					error: flowError instanceof Error ? flowError.message : String(flowError),
+					traceId,
+				});
+			}
+		}
+
 		// Step 14: Main SocialWise Flow Processing
 		try {
 			const processorContext = {

@@ -65,6 +65,7 @@ export {
 	type ChatwitActionNodeData,
 	type CallTemplateNodeData,
 	type UrlTemplateNodeData,
+	type WaitForReplyNodeData,
 	type FlowNodeData,
 } from "./nodes";
 

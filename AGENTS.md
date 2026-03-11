@@ -6,7 +6,7 @@ SERVIDOR DE PRODUÇÃO ssh -i /home/wital/Chatwit-Social-dev/id_rsa.v3 root@49.1
 
 1. **SOCIALWISE = CÉREBRO | CHATWIT/CHATWOOT = CARTEIRO:** Em todas as mensagens, integrações, Flow e Flowbuilder, o Socialwise detém 100% da inteligência e processamento. O Chatwit é estritamente o "carteiro" (apenas entrega e recebe). Garanta essa separação estrutural em qualquer código gerado. O SOCIALWISE JAMAIS entrega, só processa e repassa para o CHATWIT via sync + async (solicitações do chatwit ponte aberta por 30 seg) ou async chatwit bot (quando mandamos flows de campanha etc., usamos o bot e seu token).
 2. **RESTRIÇÃO DE APIs INTERNAS:** É terminantemente **PROIBIDO** fazer chamadas para APIs internas do Chatwit. As **ÚNICAS exceções permitidas** são chamadas para: **buscar, editar e criar templates oficiais**.
-3. **Contrato Chatwit:** Se precisar que o Chatwit/Chatwoot modifique algo em sua estrutura, NÃO tente forçar via código. Documente a necessidade em `/home/wital/chatwitv4.10/chatwitdocs/chatwit-contrato-async-30s.md` para a equipe deles verificar.
+3. **Contrato Chatwit:** Se precisar que o Chatwit/Chatwoot modifique algo em sua estrutura, NÃO tente forçar via código. Documente a necessidade em `/home/wital/chatwit/chatwitdocs/chatwit-contrato-async-30s.md` (symlink: `docs/chatwit-contrato-async-30s.md`) para a equipe deles verificar.
 
 ## Dinâmica Socialwise ↔ Chatwit (Contrato via Documentação)
 
@@ -14,7 +14,7 @@ O Chatwit (fork Chatwoot v4.10) é mantido por uma **equipe separada**. Qualquer
 
 ### Como funciona
 1. **Identifique** que a solução ideal requer mudança no Chatwit (novo endpoint, novo branch, nova config)
-2. **Documente** a necessidade em `/home/wital/chatwitv4.10/chatwitdocs/chatwit-contrato-async-30s.md` com: contexto, o que enviar, o que o Chatwit precisa implementar, código Ruby proposto, e complexidade estimada
+2. **Documente** a necessidade em `/home/wital/chatwit/chatwitdocs/chatwit-contrato-async-30s.md` (symlink: `docs/chatwit-contrato-async-30s.md`) com: contexto, o que enviar, o que o Chatwit precisa implementar, código Ruby proposto, e complexidade estimada
 3. **Implemente o lado Socialwise** (endpoint receptor, fallback para ENV, workaround temporário se necessário)
 4. A equipe Chatwit lê o contrato e implementa — geralmente em 24-48h
 
@@ -30,7 +30,7 @@ O Chatwit (fork Chatwoot v4.10) é mantido por uma **equipe separada**. Qualquer
 - **User token** (`UsuarioChatwit.chatwitAccessToken`): usado apenas para operações específicas do usuário, **nunca** para operações de sistema/campanha.
 
 ### Arquivo do contrato
-`/home/wital/chatwitv4.10/chatwitdocs/chatwit-contrato-async-30s.md` — índice no topo, seções numeradas, changelog no final.
+`/home/wital/chatwit/chatwitdocs/chatwit-contrato-async-30s.md` (symlink: `docs/chatwit-contrato-async-30s.md`) — índice no topo, seções numeradas, changelog no final.
 
 ## Regras de Desenvolvimento e Código
 

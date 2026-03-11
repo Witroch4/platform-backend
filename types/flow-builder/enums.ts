@@ -51,6 +51,9 @@ export enum FlowNodeType {
 	CONDITION = "condition",
 	DELAY = "delay",
 
+	// Input
+	WAIT_FOR_REPLY = "wait_for_reply",
+
 	// Media
 	MEDIA = "media",
 
