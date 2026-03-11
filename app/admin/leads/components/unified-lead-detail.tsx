@@ -28,8 +28,14 @@ import {
 	Trash2,
 	Eye,
 	BarChart3,
+	DollarSign,
+	Plus,
+	ExternalLink,
 } from "lucide-react";
 import { LeadSource } from "@prisma/client";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 interface UnifiedLeadDetail {
 	id: string;
@@ -119,7 +125,21 @@ interface UnifiedLeadDetail {
 		chatsCount: number;
 		automacoesCount: number;
 		disparosCount: number;
+		paymentsCount?: number;
 	};
+	payments?: {
+		id: string;
+		amountCents: number;
+		paidAmountCents: number | null;
+		serviceType: string;
+		status: string;
+		captureMethod: string | null;
+		description: string | null;
+		receiptUrl: string | null;
+		confirmedAt: string | null;
+		confirmedBy: string | null;
+		createdAt: string;
+	}[];
 }
 
 interface UnifiedLeadDetailProps {
@@ -134,6 +154,15 @@ export function UnifiedLeadDetail({ leadId, onUpdate, onDelete }: UnifiedLeadDet
 	const [isLoading, setIsLoading] = useState(true);
 	const [isSaving, setIsSaving] = useState(false);
 	const [isEditing, setIsEditing] = useState(false);
+	const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+	const [isCreatingPayment, setIsCreatingPayment] = useState(false);
+	const [paymentForm, setPaymentForm] = useState({
+		amountReais: "",
+		serviceType: "OUTRO",
+		captureMethod: "manual",
+		description: "",
+		status: "CONFIRMED",
+	});
 
 	// Form state
 	const [formData, setFormData] = useState({
@@ -403,6 +432,13 @@ export function UnifiedLeadDetail({ leadId, onUpdate, onDelete }: UnifiedLeadDet
 					<TabsTrigger value="general">Informações Gerais</TabsTrigger>
 					{lead.source === LeadSource.INSTAGRAM && <TabsTrigger value="instagram">Instagram</TabsTrigger>}
 					{lead.source === LeadSource.CHATWIT_OAB && <TabsTrigger value="oab">Dados OAB</TabsTrigger>}
+					<TabsTrigger value="payments">
+						<DollarSign className="h-4 w-4 mr-1" />
+						Pagamentos
+						{(lead.payments?.length ?? 0) > 0 && (
+							<Badge variant="secondary" className="ml-1 text-xs">{lead.payments?.length}</Badge>
+						)}
+					</TabsTrigger>
 					<TabsTrigger value="interactions">Interações</TabsTrigger>
 					<TabsTrigger value="stats">Estatísticas</TabsTrigger>
 				</TabsList>
@@ -710,6 +746,256 @@ export function UnifiedLeadDetail({ leadId, onUpdate, onDelete }: UnifiedLeadDet
 						</div>
 					</TabsContent>
 				)}
+
+				{/* Payments Tab */}
+				<TabsContent value="payments">
+					<div className="space-y-6">
+						{/* Summary Cards */}
+						{(() => {
+							const payments = lead.payments || [];
+							const confirmed = payments.filter((p) => p.status === "CONFIRMED");
+							const totalPaidCents = confirmed.reduce((sum, p) => sum + (p.paidAmountCents ?? p.amountCents), 0);
+							const lastPayment = payments[0];
+							return (
+								<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+									<Card>
+										<CardContent className="pt-6">
+											<div className="text-sm text-muted-foreground">Total Pago</div>
+											<div className="text-2xl font-bold text-green-600">R$ {(totalPaidCents / 100).toFixed(2)}</div>
+										</CardContent>
+									</Card>
+									<Card>
+										<CardContent className="pt-6">
+											<div className="text-sm text-muted-foreground">Pagamentos</div>
+											<div className="text-2xl font-bold">{payments.length}</div>
+										</CardContent>
+									</Card>
+									<Card>
+										<CardContent className="pt-6">
+											<div className="text-sm text-muted-foreground">Último Pagamento</div>
+											<div className="text-2xl font-bold">
+												{lastPayment ? formatDate(lastPayment.confirmedAt || lastPayment.createdAt) : "—"}
+											</div>
+										</CardContent>
+									</Card>
+								</div>
+							);
+						})()}
+
+						{/* Register Payment Button + Dialog */}
+						<div className="flex justify-end">
+							<Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
+								<DialogTrigger asChild>
+									<Button>
+										<Plus className="h-4 w-4 mr-2" />
+										Registrar Pagamento
+									</Button>
+								</DialogTrigger>
+								<DialogContent>
+									<DialogHeader>
+										<DialogTitle>Registrar Pagamento</DialogTitle>
+									</DialogHeader>
+									<div className="space-y-4">
+										<div>
+											<Label>Valor (R$)</Label>
+											<Input
+												type="number"
+												step="0.01"
+												min="0.01"
+												placeholder="27.90"
+												value={paymentForm.amountReais}
+												onChange={(e) => setPaymentForm((prev) => ({ ...prev, amountReais: e.target.value }))}
+											/>
+										</div>
+										<div>
+											<Label>Tipo de Serviço</Label>
+											<Select
+												value={paymentForm.serviceType}
+												onValueChange={(v) => setPaymentForm((prev) => ({ ...prev, serviceType: v }))}
+											>
+												<SelectTrigger><SelectValue /></SelectTrigger>
+												<SelectContent>
+													<SelectItem value="ANALISE">Análise de Prova</SelectItem>
+													<SelectItem value="RECURSO">Recurso</SelectItem>
+													<SelectItem value="CONSULTORIA_FASE2">Consultoria Fase 2</SelectItem>
+													<SelectItem value="OUTRO">Outro</SelectItem>
+												</SelectContent>
+											</Select>
+										</div>
+										<div>
+											<Label>Método de Pagamento</Label>
+											<Select
+												value={paymentForm.captureMethod}
+												onValueChange={(v) => setPaymentForm((prev) => ({ ...prev, captureMethod: v }))}
+											>
+												<SelectTrigger><SelectValue /></SelectTrigger>
+												<SelectContent>
+													<SelectItem value="pix">PIX</SelectItem>
+													<SelectItem value="credit_card">Cartão de Crédito</SelectItem>
+													<SelectItem value="manual">Manual</SelectItem>
+												</SelectContent>
+											</Select>
+										</div>
+										<div>
+											<Label>Status</Label>
+											<Select
+												value={paymentForm.status}
+												onValueChange={(v) => setPaymentForm((prev) => ({ ...prev, status: v }))}
+											>
+												<SelectTrigger><SelectValue /></SelectTrigger>
+												<SelectContent>
+													<SelectItem value="CONFIRMED">Confirmado</SelectItem>
+													<SelectItem value="PENDING">Pendente</SelectItem>
+												</SelectContent>
+											</Select>
+										</div>
+										<div>
+											<Label>Descrição (opcional)</Label>
+											<Textarea
+												placeholder="Ex: Pagamento referente à análise de prova OAB..."
+												value={paymentForm.description}
+												onChange={(e) => setPaymentForm((prev) => ({ ...prev, description: e.target.value }))}
+												rows={2}
+											/>
+										</div>
+									</div>
+									<DialogFooter>
+										<Button variant="outline" onClick={() => setShowPaymentDialog(false)}>Cancelar</Button>
+										<Button
+											onClick={async () => {
+												const amountCents = Math.round(Number.parseFloat(paymentForm.amountReais) * 100);
+												if (!amountCents || amountCents <= 0) {
+													toast.error("Informe um valor válido");
+													return;
+												}
+												setIsCreatingPayment(true);
+												try {
+													const res = await fetch(`/api/admin/leads/${leadId}/payments`, {
+														method: "POST",
+														headers: { "Content-Type": "application/json" },
+														body: JSON.stringify({
+															amountCents,
+															serviceType: paymentForm.serviceType,
+															captureMethod: paymentForm.captureMethod,
+															description: paymentForm.description || undefined,
+															status: paymentForm.status,
+														}),
+													});
+													if (!res.ok) throw new Error("Falha ao registrar pagamento");
+													toast.success("Pagamento registrado com sucesso");
+													setShowPaymentDialog(false);
+													setPaymentForm({ amountReais: "", serviceType: "OUTRO", captureMethod: "manual", description: "", status: "CONFIRMED" });
+													fetchLead(); // Refresh data
+												} catch (err) {
+													toast.error("Erro ao registrar pagamento");
+												} finally {
+													setIsCreatingPayment(false);
+												}
+											}}
+											disabled={isCreatingPayment}
+										>
+											{isCreatingPayment ? "Registrando..." : "Registrar"}
+										</Button>
+									</DialogFooter>
+								</DialogContent>
+							</Dialog>
+						</div>
+
+						{/* Payments Table */}
+						{(lead.payments?.length ?? 0) > 0 ? (
+							<Card>
+								<CardContent className="pt-6">
+									<div className="rounded-md border">
+										<Table>
+											<TableHeader>
+												<TableRow>
+													<TableHead>Data</TableHead>
+													<TableHead>Serviço</TableHead>
+													<TableHead>Valor</TableHead>
+													<TableHead>Status</TableHead>
+													<TableHead>Método</TableHead>
+													<TableHead>Descrição</TableHead>
+													<TableHead>Comprovante</TableHead>
+												</TableRow>
+											</TableHeader>
+											<TableBody>
+												{lead.payments!.map((payment) => (
+													<TableRow key={payment.id}>
+														<TableCell className="text-sm">
+															{formatDate(payment.confirmedAt || payment.createdAt)}
+														</TableCell>
+														<TableCell>
+															<Badge variant="outline" className={{
+																ANALISE: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+																RECURSO: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+																CONSULTORIA_FASE2: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200",
+																OUTRO: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200",
+															}[payment.serviceType] || ""}>
+																{{
+																	ANALISE: "Análise",
+																	RECURSO: "Recurso",
+																	CONSULTORIA_FASE2: "Consultoria",
+																	OUTRO: "Outro",
+																}[payment.serviceType] || payment.serviceType}
+															</Badge>
+														</TableCell>
+														<TableCell className="font-medium">
+															R$ {((payment.paidAmountCents ?? payment.amountCents) / 100).toFixed(2)}
+														</TableCell>
+														<TableCell>
+															<Badge className={{
+																CONFIRMED: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+																PENDING: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+																REFUNDED: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+																FAILED: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+															}[payment.status] || ""}>
+																{{
+																	CONFIRMED: "Confirmado",
+																	PENDING: "Pendente",
+																	REFUNDED: "Reembolsado",
+																	FAILED: "Falhou",
+																}[payment.status] || payment.status}
+															</Badge>
+														</TableCell>
+														<TableCell className="text-sm text-muted-foreground">
+															{{
+																pix: "PIX",
+																credit_card: "Cartão",
+																manual: "Manual",
+															}[payment.captureMethod || ""] || payment.captureMethod || "—"}
+														</TableCell>
+														<TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">
+															{payment.description || "—"}
+														</TableCell>
+														<TableCell>
+															{payment.receiptUrl ? (
+																<a href={payment.receiptUrl} target="_blank" rel="noopener noreferrer">
+																	<Button variant="ghost" size="icon">
+																		<ExternalLink className="h-4 w-4" />
+																	</Button>
+																</a>
+															) : (
+																<span className="text-xs text-muted-foreground">—</span>
+															)}
+														</TableCell>
+													</TableRow>
+												))}
+											</TableBody>
+										</Table>
+									</div>
+								</CardContent>
+							</Card>
+						) : (
+							<Card>
+								<CardContent className="pt-6 text-center text-muted-foreground">
+									<DollarSign className="h-12 w-12 mx-auto mb-4 opacity-50" />
+									<p>Nenhum pagamento registrado para este lead.</p>
+									<p className="text-sm mt-1">Use o botão acima para registrar um pagamento manualmente.</p>
+								</CardContent>
+							</Card>
+						)}
+					</div>
+				</TabsContent>
 
 				{/* Interactions Tab */}
 				<TabsContent value="interactions">

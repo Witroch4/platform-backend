@@ -97,7 +97,12 @@ export async function GET(request: NextRequest): Promise<Response> {
 							chats: true,
 							automacoes: true,
 							disparos: true,
+							payments: true,
 						},
+					},
+					payments: {
+						where: { status: "CONFIRMED" },
+						select: { paidAmountCents: true, amountCents: true, status: true },
 					},
 				},
 				orderBy,
@@ -129,6 +134,11 @@ export async function GET(request: NextRequest): Promise<Response> {
 				chatsCount: lead._count.chats,
 				automacoesCount: lead._count.automacoes,
 				disparosCount: lead._count?.disparos ?? 0,
+			},
+			// Pagamentos
+			paymentSummary: {
+				count: lead._count.payments,
+				totalPaidCents: lead.payments.reduce((sum: number, p: any) => sum + (p.paidAmountCents ?? p.amountCents), 0),
 			},
 		}));
 

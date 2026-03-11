@@ -119,10 +119,35 @@ model Lead {
   automacoes       LeadAutomacao[]
   instagramProfile LeadInstagramProfile?
   oabData          LeadOabData?
+  payments         LeadPayment[]
 
   @@unique([source, sourceIdentifier, accountId])
   @@index([userId, accountId, email, phone])
   @@index([tags])
+}
+
+model LeadPayment {
+  id                    String             @id @default(cuid())
+  leadId                String
+  amountCents           Int
+  paidAmountCents       Int?
+  serviceType           PaymentServiceType @default(OUTRO)
+  status                PaymentStatus      @default(PENDING)
+  captureMethod         String?            // "pix", "credit_card", "manual"
+  description           String?
+  receiptUrl            String?
+  externalId            String?            @unique // order_nsu from InfinitePay for idempotency
+  confirmedAt           DateTime?
+  confirmedBy           String?            // userId for manual, "webhook" for auto
+  chatwitConversationId Int?
+  contactPhone          String?
+  metadata              Json?              // raw webhook payload for audit
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  lead                  Lead               @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId, status])
+  @@index([externalId])
 }
 
 model LeadInstagramProfile {
@@ -1775,6 +1800,20 @@ enum SubscriptionStatus {
   UNPAID
   INCOMPLETE
   INCOMPLETE_EXPIRED
+}
+
+enum PaymentServiceType {
+  ANALISE
+  RECURSO
+  CONSULTORIA_FASE2
+  OUTRO
+}
+
+enum PaymentStatus {
+  PENDING
+  CONFIRMED
+  REFUNDED
+  FAILED
 }
 
 enum EspecialidadeJuridica {

@@ -44,6 +44,9 @@ import type { ChatwitWebhookPayload, DeliveryContext } from "@/types/flow-engine
 import { leadService } from "@/lib/services/lead-service";
 import { messageService } from "@/lib/services/message-service";
 
+// Payment handler for payment.confirmed events from Chatwit/InfinitePay
+import { handlePaymentConfirmed, type PaymentConfirmedPayload } from "@/lib/leads/payment-handler";
+
 // Constants
 const MAX_PAYLOAD_SIZE_KB = 256;
 const WEBHOOK_TIMEOUT_MS = 400; // P95 SLA target
@@ -351,6 +354,26 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 					},
 				},
 			);
+		}
+
+		// Step 9.5: Handle system events (payment.confirmed from Chatwit/InfinitePay)
+		const rawPayload = validPayload as any;
+		if (rawPayload.event_type === "payment.confirmed" && rawPayload.data) {
+			webhookLogger.info("💰 PAYMENT CONFIRMED event received", {
+				orderNsu: rawPayload.data?.order_nsu,
+				amountCents: rawPayload.data?.amount_cents,
+				contactPhone: rawPayload.data?.contact?.phone_number,
+				traceId,
+			});
+			try {
+				const paymentResult = await handlePaymentConfirmed(rawPayload as PaymentConfirmedPayload, traceId);
+				const paymentResponse = { ...paymentResult, ok: true, event: "payment.confirmed" };
+				logFinalResponse(paymentResponse, 200, traceId);
+				return NextResponse.json(paymentResponse, { status: 200 });
+			} catch (err) {
+				webhookLogger.error("Payment confirmed handler error", { error: String(err), traceId });
+				return NextResponse.json({ ok: true, event: "payment.confirmed", error: "processing_failed" }, { status: 200 });
+			}
 		}
 
 		// Step 10: Sanitize user input

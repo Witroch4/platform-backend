@@ -103,6 +103,23 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 						chats: true,
 						automacoes: true,
 						disparos: true,
+						payments: true,
+					},
+				},
+				payments: {
+					orderBy: { createdAt: "desc" as const },
+					select: {
+						id: true,
+						amountCents: true,
+						paidAmountCents: true,
+						serviceType: true,
+						status: true,
+						captureMethod: true,
+						description: true,
+						receiptUrl: true,
+						confirmedAt: true,
+						confirmedBy: true,
+						createdAt: true,
 					},
 				},
 			},
@@ -130,10 +147,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 				chatsCount: lead._count.chats,
 				automacoesCount: lead._count.automacoes,
 				disparosCount: lead._count?.disparos ?? 0,
+				paymentsCount: lead._count?.payments ?? 0,
 			},
 			automacoes: lead.automacoes,
 			chats: lead.chats,
 			disparos: lead.disparos,
+			payments: lead.payments,
 		};
 
 		// Adicionar dados específicos baseados no source

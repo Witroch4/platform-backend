@@ -22,6 +22,7 @@ import {
 	User,
 	ChevronLeft,
 	ChevronRight,
+	DollarSign,
 } from "lucide-react";
 import { LeadSource } from "@prisma/client";
 
@@ -66,6 +67,10 @@ interface UnifiedLead {
 		chatsCount: number;
 		automacoesCount: number;
 		disparosCount: number;
+	};
+	paymentSummary?: {
+		count: number;
+		totalPaidCents: number;
 	};
 }
 
@@ -345,6 +350,7 @@ export function UnifiedLeadsList({ onLeadSelect, showActions = true, compact = f
 										<TableHead>Origem</TableHead>
 										<TableHead>Contato</TableHead>
 										<TableHead>Dados Específicos</TableHead>
+										<TableHead>Pagamentos</TableHead>
 										<TableHead>Estatísticas</TableHead>
 										<TableHead>Criado em</TableHead>
 										{showActions && <TableHead className="w-[100px]">Ações</TableHead>}
@@ -393,8 +399,21 @@ export function UnifiedLeadsList({ onLeadSelect, showActions = true, compact = f
 												</div>
 											</TableCell>
 											<TableCell>{renderSourceSpecificData(lead)}</TableCell>
-											<TableCell>
-												<div className="text-xs text-muted-foreground">
+											<TableCell>											{lead.paymentSummary && lead.paymentSummary.count > 0 ? (
+												<div className="flex flex-col gap-1">
+													<Badge variant="outline" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+														<DollarSign className="h-3 w-3 mr-1" />
+														R$ {(lead.paymentSummary.totalPaidCents / 100).toFixed(2)}
+													</Badge>
+													<span className="text-xs text-muted-foreground">
+														{lead.paymentSummary.count} pagamento{lead.paymentSummary.count > 1 ? "s" : ""}
+													</span>
+												</div>
+											) : (
+												<span className="text-xs text-muted-foreground">—</span>
+											)}
+										</TableCell>
+										<TableCell>												<div className="text-xs text-muted-foreground">
 													<div>Chats: {lead.stats.chatsCount}</div>
 													<div>Automações: {lead.stats.automacoesCount}</div>
 													<div>Disparos: {lead.stats.disparosCount}</div>
