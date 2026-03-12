@@ -1427,6 +1427,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 			});
 
 			// Handle handoff action
+			if (result.response.action === "async_ack") {
+				const asyncAckResponse = { ok: true, async: true };
+				logFinalResponse(asyncAckResponse, 200, traceId);
+				return NextResponse.json(asyncAckResponse, { status: 200 });
+			}
+
+			// Handle handoff action
 			if (result.response.action === "handoff") {
 				const handoffResponse = { action: "handoff" };
 				logFinalResponse(handoffResponse, 200, traceId);

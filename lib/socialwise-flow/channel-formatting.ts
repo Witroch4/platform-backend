@@ -33,7 +33,7 @@ export interface ChannelResponse {
 	instagram?: InstagramMessage;
 	facebook?: InstagramMessage | { message: { text: string } }; // Suporta estrutura complexa como Instagram OU simples
 	text?: string;
-	action?: "handoff";
+	action?: "handoff" | "async_ack";
 }
 
 /**

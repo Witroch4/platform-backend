@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getPrismaInstance } from "@/lib/connections";
 import { createLogger } from "@/lib/utils/logger";
+import { invalidateAssistantConfigurationCache } from "@/lib/socialwise-flow/processor-components/assistant-config-cache";
 import { Prisma } from "@prisma/client";
 
 const prisma = getPrismaInstance();
@@ -113,6 +114,8 @@ export async function PATCH(request: NextRequest) {
 				hasSpecificConfig: !config.inheritFromAgent,
 			},
 		});
+
+		await invalidateAssistantConfigurationCache("inbox_config_updated");
 
 		return NextResponse.json({
 			success: true,

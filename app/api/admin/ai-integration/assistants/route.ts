@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getPrismaInstance } from "@/lib/connections";
+import { invalidateAssistantConfigurationCache } from "@/lib/socialwise-flow/processor-components/assistant-config-cache";
 
 const prisma = getPrismaInstance();
 
@@ -176,6 +177,7 @@ export async function POST(request: NextRequest) {
 				createdAt: true,
 			},
 		});
+		await invalidateAssistantConfigurationCache("assistant_created");
 		return NextResponse.json({ assistant: created }, { status: 201 });
 	} catch (e: any) {
 		console.error("Erro ao criar assistente:", e);
@@ -201,6 +203,7 @@ export async function DELETE(request: NextRequest) {
 		return NextResponse.json({ error: "Não encontrado" }, { status: 404 });
 	}
 	await prisma.aiAssistant.update({ where: { id }, data: { isActive: false } });
+	await invalidateAssistantConfigurationCache("assistant_deleted");
 	return NextResponse.json({ ok: true });
 }
 
@@ -290,5 +293,6 @@ export async function PATCH(request: NextRequest) {
 	if (["none", "auto"].includes(body?.toolChoice)) updateData.toolChoice = body.toolChoice;
 
 	const updated = await prisma.aiAssistant.update({ where: { id }, data: updateData, select: { id: true } });
+	await invalidateAssistantConfigurationCache("assistant_updated");
 	return NextResponse.json({ ok: true, id: updated.id });
 }

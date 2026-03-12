@@ -6,12 +6,18 @@
 import { createLogger } from "@/lib/utils/logger";
 import { getPrismaInstance } from "@/lib/connections";
 import { getAssistantForInbox } from "@/lib/socialwise/assistant";
+import {
+	getAssistantConfigurationCache,
+	setAssistantConfigurationCache,
+} from "./assistant-config-cache";
+import { getRouterContingencyState } from "./router-contingency";
 
 const configLogger = createLogger("SocialWise-Processor-AssistantConfig");
 
 export type AiProviderType = "OPENAI" | "GEMINI" | "CLAUDE";
 
 export interface AssistantConfig {
+	assistantId?: string;
 	model: string;
 	provider: AiProviderType;
 	fallbackProvider?: AiProviderType | null;
@@ -37,6 +43,8 @@ export interface AssistantConfig {
 	// Session TTL configuration
 	sessionTtlSeconds: number;
 	sessionTtlDevSeconds: number;
+	routerContingencyActive?: boolean;
+	routerContingencyUntil?: number;
 }
 
 /**
@@ -46,6 +54,28 @@ export function detectProviderFromModel(model: string): AiProviderType {
 	if (model.startsWith("gemini")) return "GEMINI";
 	if (model.startsWith("claude")) return "CLAUDE";
 	return "OPENAI";
+}
+
+async function applyRouterContingency(
+	inboxId: string,
+	config: AssistantConfig,
+): Promise<AssistantConfig> {
+	const resolvedConfig: AssistantConfig = {
+		...config,
+		routerContingencyActive: false,
+		routerContingencyUntil: undefined,
+	};
+
+	const contingencyState = await getRouterContingencyState(inboxId, config.assistantId);
+	if (contingencyState.active && resolvedConfig.fallbackModel) {
+		resolvedConfig.model = resolvedConfig.fallbackModel;
+		resolvedConfig.provider =
+			(resolvedConfig.fallbackProvider as AiProviderType) || detectProviderFromModel(resolvedConfig.fallbackModel);
+		resolvedConfig.routerContingencyActive = true;
+		resolvedConfig.routerContingencyUntil = contingencyState.expiresAt;
+	}
+
+	return resolvedConfig;
 }
 
 /**
@@ -58,6 +88,17 @@ export async function loadAssistantConfiguration(
 	assistantId?: string,
 ): Promise<AssistantConfig | null> {
 	try {
+		const cacheKey = [
+			`inbox:${inboxId}`,
+			`account:${chatwitAccountId || "default"}`,
+			`assistant:${assistantId || "auto"}`,
+		].join(":");
+
+		const cachedConfig = await getAssistantConfigurationCache(cacheKey);
+		if (cachedConfig) {
+			return applyRouterContingency(inboxId, cachedConfig);
+		}
+
 		const prisma = getPrismaInstance();
 
 		// Get assistant configuration with full details
@@ -140,6 +181,7 @@ export async function loadAssistantConfiguration(
 		const inheritFromAgent = inbox?.socialwiseInheritFromAgent ?? true;
 
 		const finalConfig: AssistantConfig = {
+			assistantId: fullAssistant.id,
 			model: fullAssistant.model,
 			provider: (fullAssistant.provider as AiProviderType) || detectProviderFromModel(fullAssistant.model),
 			fallbackProvider: (fullAssistant.fallbackProvider as AiProviderType) || null,
@@ -197,19 +239,25 @@ export async function loadAssistantConfiguration(
 			inheritFromAgent,
 		};
 
+		const resolvedConfig = await applyRouterContingency(inboxId, finalConfig);
+
 		configLogger.info("Assistant configuration loaded", {
 			inboxId,
 			assistantId: fullAssistant.id,
 			inheritFromAgent,
-			warmupDeadlineMs: finalConfig.warmupDeadlineMs,
-			hardDeadlineMs: finalConfig.hardDeadlineMs,
-			softDeadlineMs: finalConfig.softDeadlineMs,
-			model: finalConfig.model,
-			reasoningEffort: finalConfig.reasoningEffort,
-			verbosity: finalConfig.verbosity,
+			warmupDeadlineMs: resolvedConfig.warmupDeadlineMs,
+			hardDeadlineMs: resolvedConfig.hardDeadlineMs,
+			softDeadlineMs: resolvedConfig.softDeadlineMs,
+			model: resolvedConfig.model,
+			reasoningEffort: resolvedConfig.reasoningEffort,
+			verbosity: resolvedConfig.verbosity,
+			routerContingencyActive: resolvedConfig.routerContingencyActive ?? false,
+			routerContingencyUntil: resolvedConfig.routerContingencyUntil,
 		});
 
-		return finalConfig;
+		await setAssistantConfigurationCache(cacheKey, finalConfig);
+
+		return resolvedConfig;
 	} catch (error) {
 		configLogger.error("Failed to load assistant configuration", {
 			error: error instanceof Error ? error.message : String(error),
