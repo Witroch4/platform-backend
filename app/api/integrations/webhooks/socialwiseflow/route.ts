@@ -1426,7 +1426,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 				}
 			});
 
-			// Handle handoff action
+			// async_ack = o timeout do modelo principal já foi reconhecido e a resposta final
+			// seguirá depois via entrega async do Chatwit/Flow Engine.
 			if (result.response.action === "async_ack") {
 				const asyncAckResponse = { ok: true, async: true };
 				logFinalResponse(asyncAckResponse, 200, traceId);

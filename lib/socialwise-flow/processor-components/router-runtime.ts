@@ -22,6 +22,33 @@ import type { AssistantConfig } from "./assistant-config";
 
 const logger = createLogger("SocialWise-Router-Runtime");
 
+type WhatsAppAsyncResponse = {
+	interactive?: Record<string, unknown>;
+	text?: { body?: string };
+	context?: { message_id?: string };
+};
+
+interface RouterPayloadContext {
+	conversation?: { id?: string | number; display_id?: string | number; account_id?: string | number };
+	contact?: { id?: string | number };
+	inbox?: { id?: string | number; account_id?: string | number };
+}
+
+interface RouterPayloadMetadata {
+	conversation_id?: string | number;
+	conversation_display_id?: string | number;
+	contact_id?: string | number;
+	chatwit_agent_bot_token?: string;
+	chatwit_base_url?: string;
+}
+
+interface RouterWebhookPayload {
+	context?: RouterPayloadContext;
+	metadata?: RouterPayloadMetadata;
+	conversation?: { id?: string | number };
+	sender?: { id?: string | number };
+}
+
 export async function dispatchRouterLLM(
 	userText: string,
 	agentConfig: AssistantConfig,
@@ -94,7 +121,7 @@ export async function resolveRouterDecisionResponse(
 export async function buildDeliveryContextFromProcessorContext(
 	context: ProcessorContext,
 ): Promise<DeliveryContext | null> {
-	const payload = context.originalPayload || {};
+	const payload = (context.originalPayload || {}) as RouterWebhookPayload;
 	const payloadContext = payload.context || {};
 	const payloadMetadata = payload.metadata || {};
 
@@ -155,9 +182,7 @@ function toAsyncDeliveryPayloads(channelType: string, response: ChannelResponse)
 	}
 
 	if (normalizedChannel === "whatsapp") {
-		const whatsapp = response.whatsapp as
-			| { interactive?: Record<string, unknown>; text?: { body?: string }; context?: { message_id?: string } }
-			| undefined;
+		const whatsapp = response.whatsapp as WhatsAppAsyncResponse | undefined;
 
 		if (whatsapp?.interactive) {
 			return [{ type: "interactive", interactivePayload: whatsapp.interactive }];

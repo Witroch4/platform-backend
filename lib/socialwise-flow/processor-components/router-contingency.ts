@@ -3,8 +3,14 @@ import { createLogger } from "@/lib/utils/logger";
 
 const logger = createLogger("SocialWise-Router-Contingency");
 
+/**
+ * Janela curta para detectar instabilidade repetida do provedor principal.
+ * Se 3 deadlines acontecerem em até 10 minutos, consideramos o provedor instável
+ * o bastante para trocar temporariamente para o fallback.
+ */
 export const ROUTER_DEADLINE_WINDOW_MS = 10 * 60 * 1000;
 export const ROUTER_DEADLINE_THRESHOLD = 3;
+/** Mantém o fallback como principal por 12h para evitar flapping entre provedores. */
 export const ROUTER_CONTINGENCY_TTL_MS = 12 * 60 * 60 * 1000;
 
 const DEADLINE_PREFIX = "socialwise:router:deadlines";
@@ -142,7 +148,7 @@ export async function recordRouterDeadline(
 		logger.warn("Failed to persist router deadline window", { error, inboxId, assistantId });
 	}
 
-	logger.warn("Router deadline recorded", {
+	logger.info("Router deadline recorded", {
 		inboxId,
 		assistantId,
 		count: timestamps.length,

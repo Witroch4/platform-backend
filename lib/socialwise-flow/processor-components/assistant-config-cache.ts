@@ -7,6 +7,7 @@ const logger = createLogger("SocialWise-AssistantConfig-Cache");
 const ASSISTANT_CONFIG_CACHE_TTL_SECONDS = 48 * 60 * 60;
 const ASSISTANT_CONFIG_CACHE_PREFIX = "socialwise:assistant-config";
 const ASSISTANT_CONFIG_VERSION_KEY = `${ASSISTANT_CONFIG_CACHE_PREFIX}:version`;
+const VERSION_PATTERN = /^v[\w.-]+$/;
 
 const localCache = new Map<string, { value: AssistantConfig; expiresAt: number }>();
 let localVersion = "v1";
@@ -16,9 +17,12 @@ async function readVersion(): Promise<string> {
 		const redis = getRedisInstance?.();
 		if (redis) {
 			const version = await redis.get(ASSISTANT_CONFIG_VERSION_KEY);
-			if (typeof version === "string" && version.trim()) {
-				localVersion = version;
-				return version;
+			if (typeof version === "string") {
+				const normalizedVersion = version.trim();
+				if (normalizedVersion.length > 0 && VERSION_PATTERN.test(normalizedVersion)) {
+					localVersion = normalizedVersion;
+					return normalizedVersion;
+				}
 			}
 		}
 	} catch (error) {

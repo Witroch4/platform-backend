@@ -4,6 +4,7 @@
  */
 
 import { createLogger } from "@/lib/utils/logger";
+import { openaiService } from "@/services/openai";
 import type { IntentCandidate } from "@/services/openai-components/types";
 import { ClassificationResult } from "../classification";
 import {
@@ -61,10 +62,8 @@ async function dispatchWarmupButtons(
 			return generateWarmupButtonsGemini(userText, candidates, agentConfig, opts);
 		case "CLAUDE":
 			return generateWarmupButtonsClaude(userText, candidates, agentConfig, opts);
-		default: {
-			const { openaiService } = await import("@/services/openai");
+		default:
 			return openaiService.generateWarmupButtons(userText, candidates, agentConfig, typedOpts);
-		}
 	}
 }
 import { ProcessorContext } from "./button-reactions";
@@ -72,6 +71,7 @@ import { buildTimeoutFallbackResponse, type TimeoutFallbackInput } from "./timeo
 import { storeInteractiveMessageContext } from "@/services/openai-components/server-socialwise-componentes/session-manager";
 
 const bandLogger = createLogger("SocialWise-Processor-BandHandlers");
+type AsyncDeliveryContext = NonNullable<Awaited<ReturnType<typeof buildDeliveryContextFromProcessorContext>>>;
 
 export interface BandProcessingResult {
 	response: ChannelResponse;
@@ -152,7 +152,7 @@ async function executeFlowForIntent(
 }
 
 async function runAsyncRouterFallback(
-	deliveryContext: NonNullable<Awaited<ReturnType<typeof buildDeliveryContextFromProcessorContext>>>,
+	deliveryContext: AsyncDeliveryContext,
 	context: ProcessorContext,
 	primaryConfig: AssistantConfig,
 	fallbackConfig: AssistantConfig,
@@ -819,13 +819,13 @@ export async function processRouterBand(
 					routerContingencyActive: true,
 				};
 
-				void runAsyncRouterFallback(
-					deliveryContext,
-					context,
-					routerAgentConfig,
-					fallbackConfig,
-					filteredHints,
-					retryInput,
+				void runAsyncRouterFallback(deliveryContext, context, routerAgentConfig, fallbackConfig, filteredHints, retryInput).catch(
+					(error) => {
+						bandLogger.error("Unhandled async router fallback rejection", {
+							error: error instanceof Error ? error.message : String(error),
+							traceId: context.traceId,
+						});
+					},
 				);
 
 				return {

@@ -101,4 +101,30 @@ describe("router resilience helpers", () => {
 		const state = await getRouterContingencyState("inbox-2", "assistant-2");
 		expect(state.active).toBe(false);
 	});
+
+	it("ignores stale deadlines outside the short contingency window", async () => {
+		jest.useFakeTimers();
+		jest.setSystemTime(new Date("2026-03-12T10:00:00.000Z"));
+
+		const {
+			getRouterContingencyState,
+			recordRouterDeadline,
+			ROUTER_DEADLINE_WINDOW_MS,
+			ROUTER_DEADLINE_THRESHOLD,
+		} = await import("@/lib/socialwise-flow/processor-components/router-contingency");
+
+		for (let index = 0; index < ROUTER_DEADLINE_THRESHOLD - 1; index++) {
+			await recordRouterDeadline("inbox-3", "assistant-3", true);
+		}
+
+		jest.advanceTimersByTime(ROUTER_DEADLINE_WINDOW_MS + 1);
+		const result = await recordRouterDeadline("inbox-3", "assistant-3", true);
+		expect(result.count).toBe(1);
+		expect(result.contingencyActivated).toBe(false);
+
+		const state = await getRouterContingencyState("inbox-3", "assistant-3");
+		expect(state.active).toBe(false);
+
+		jest.useRealTimers();
+	});
 });
