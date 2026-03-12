@@ -1,10 +1,11 @@
 // app/api/admin/ai-integration/assistant-links/route.ts
 // API endpoints for managing AiAssistantInbox links
 
-import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import { auth } from "@/auth";
 import { getPrismaInstance } from "@/lib/connections";
+import { invalidateAssistantConfigurationCache } from "@/lib/socialwise-flow/processor-components/assistant-config-cache";
+import { type NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 
 // Validation schemas
 const toggleLinkSchema = z.object({
@@ -92,6 +93,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 			});
 
 			console.log(`[Assistant Link] Reativado link entre assistente "${assistant.name}" e caixa "${inbox.nome}"`);
+			await invalidateAssistantConfigurationCache("assistant_link_reactivated");
 
 			return NextResponse.json({
 				success: true,
@@ -122,6 +124,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 		});
 
 		console.log(`[Assistant Link] Criado link entre assistente "${assistant.name}" e caixa "${inbox.nome}"`);
+		await invalidateAssistantConfigurationCache("assistant_link_created");
 
 		return NextResponse.json({
 			success: true,
@@ -226,6 +229,7 @@ export async function PATCH(request: NextRequest) {
 				},
 			},
 		});
+		await invalidateAssistantConfigurationCache("assistant_link_updated");
 
 		return NextResponse.json({
 			success: true,

@@ -4,8 +4,6 @@
  */
 
 import { createLogger } from "@/lib/utils/logger";
-import { getPrismaInstance } from "@/lib/connections";
-import { saveChatwitSystemConfig } from "@/lib/chatwit/system-config";
 import { openaiService } from "@/services/openai";
 import type { IntentCandidate } from "@/services/openai-components/types";
 import { ClassificationResult } from "../classification";
@@ -38,9 +36,16 @@ import {
 	computeDynamicHintThreshold,
 } from "./utils";
 import { AssistantConfig, type AiProviderType } from "./assistant-config";
-import { generateWarmupButtonsGemini, routerLLMGemini } from "../services/gemini-band-processor";
-import { generateWarmupButtonsClaude, routerLLMClaude } from "../services/claude-band-processor";
-import type { WarmupButtonsResponse, RouterDecision, ChannelType } from "@/services/openai-components/types";
+import { generateWarmupButtonsGemini } from "../services/gemini-band-processor";
+import { generateWarmupButtonsClaude } from "../services/claude-band-processor";
+import type { WarmupButtonsResponse, ChannelType } from "@/services/openai-components/types";
+import {
+	buildDeliveryContextFromProcessorContext,
+	deliverChannelResponseAsync,
+	dispatchRouterLLM,
+	resolveRouterDecisionResponse,
+} from "./router-runtime";
+import { recordRouterDeadline } from "./router-contingency";
 
 // ============ MULTI-PROVIDER DISPATCHERS ============
 
@@ -61,28 +66,12 @@ async function dispatchWarmupButtons(
 			return openaiService.generateWarmupButtons(userText, candidates, agentConfig, typedOpts);
 	}
 }
-
-async function dispatchRouterLLM(
-	userText: string,
-	agentConfig: AssistantConfig,
-	opts: { channelType: string; sessionId?: string; intentHints?: IntentCandidate[]; profile?: "lite" | "full"; supplementalContext?: string },
-): Promise<RouterDecision | null> {
-	const provider = agentConfig.provider || "OPENAI";
-	const typedOpts = { ...opts, channelType: opts.channelType as ChannelType };
-	switch (provider) {
-		case "GEMINI":
-			return routerLLMGemini(userText, agentConfig, opts);
-		case "CLAUDE":
-			return routerLLMClaude(userText, agentConfig, opts);
-		default:
-			return openaiService.routerLLM(userText, agentConfig, typedOpts);
-	}
-}
 import { ProcessorContext } from "./button-reactions";
 import { buildTimeoutFallbackResponse, type TimeoutFallbackInput } from "./timeout-helpers";
 import { storeInteractiveMessageContext } from "@/services/openai-components/server-socialwise-componentes/session-manager";
 
 const bandLogger = createLogger("SocialWise-Processor-BandHandlers");
+type AsyncDeliveryContext = NonNullable<Awaited<ReturnType<typeof buildDeliveryContextFromProcessorContext>>>;
 
 export interface BandProcessingResult {
 	response: ChannelResponse;
@@ -110,55 +99,10 @@ async function executeFlowForIntent(
 
 		const orchestrator = new FlowOrchestrator();
 
-		// Extrair dados do payload original (formato Chatwit)
-		// Estrutura: { context: { conversation: {id}, contact: {id} }, metadata: { chatwit_base_url, chatwit_agent_bot_token, conversation_display_id } }
-		const payload = context.originalPayload || {};
-		const payloadContext = payload.context || {};
-		const payloadMetadata = payload.metadata || {};
-
-		const conversationId =
-			payloadContext.conversation?.id || payloadMetadata.conversation_id || payload.conversation?.id || 0;
-
-		const conversationDisplayId =
-			payloadMetadata.conversation_display_id || payloadContext.conversation?.display_id || undefined;
-
-		const contactId = payloadContext.contact?.id || payloadMetadata.contact_id || payload.sender?.id || 0;
-
-		const chatwitAccessToken =
-			(payloadMetadata.chatwit_agent_bot_token as string) || process.env.CHATWIT_AGENT_BOT_TOKEN || "";
-
-		const chatwitBaseUrl = (payloadMetadata.chatwit_base_url as string) || process.env.CHATWIT_BASE_URL || "";
-
-		// Fire-and-forget: persistir bot token + URL no SystemConfig (para campanhas)
-		if (payloadMetadata.chatwit_agent_bot_token && payloadMetadata.chatwit_base_url) {
-			saveChatwitSystemConfig({
-				botToken: payloadMetadata.chatwit_agent_bot_token as string,
-				baseUrl: payloadMetadata.chatwit_base_url as string,
-			}).catch(() => {}); // silencioso — não bloqueia o fluxo
+		const deliveryContext = await buildDeliveryContextFromProcessorContext(context);
+		if (!deliveryContext) {
+			return null;
 		}
-
-		// Resolver prismaInboxId (CUID) a partir do inboxId numérico do Chatwit
-		// Necessário para que findActiveSession encontre a sessão no button resume
-		const prisma = getPrismaInstance();
-		const prismaInbox = await prisma.chatwitInbox.findFirst({
-			where: { inboxId: context.inboxId },
-			select: { id: true },
-		});
-
-		const deliveryContext = {
-			accountId: parseInt(context.chatwitAccountId || "0"),
-			conversationId: typeof conversationId === "string" ? parseInt(conversationId) : conversationId,
-			conversationDisplayId: conversationDisplayId ? Number(conversationDisplayId) : undefined,
-			inboxId: parseInt(context.inboxId || "0"),
-			contactId: typeof contactId === "string" ? parseInt(contactId) : contactId,
-			contactName: context.contactName || "",
-			contactPhone: context.contactPhone || "",
-			channelType: normalizeChannelType(context.channelType) as "whatsapp" | "instagram" | "facebook",
-			sourceMessageId: context.wamid,
-			prismaInboxId: prismaInbox?.id || undefined,
-			chatwitAccessToken,
-			chatwitBaseUrl,
-		};
 
 		bandLogger.info("[Flow] Executando flow para intent", {
 			flowId,
@@ -204,6 +148,57 @@ async function executeFlowForIntent(
 
 		// Retornar null para que o sistema use fallback
 		return null;
+	}
+}
+
+async function runAsyncRouterFallback(
+	deliveryContext: AsyncDeliveryContext,
+	context: ProcessorContext,
+	primaryConfig: AssistantConfig,
+	fallbackConfig: AssistantConfig,
+	intentHints: IntentCandidate[],
+	retryInput: TimeoutFallbackInput,
+): Promise<void> {
+	try {
+		const fallbackDecision = await dispatchRouterLLM(context.userText, fallbackConfig, {
+			channelType: normalizeChannelType(context.channelType),
+			sessionId: context.sessionId,
+			intentHints,
+			supplementalContext: context.agentSupplement,
+		});
+
+		if (!fallbackDecision) {
+			const timeoutFallback = await buildTimeoutFallbackResponse(
+				normalizeChannelType(context.channelType),
+				retryInput,
+			);
+			await deliverChannelResponseAsync(deliveryContext, context.channelType, timeoutFallback);
+			return;
+		}
+
+		const fallbackResponse = await resolveRouterDecisionResponse(context, fallbackDecision);
+		const delivered = await deliverChannelResponseAsync(deliveryContext, context.channelType, fallbackResponse);
+		if (!delivered) {
+			const timeoutFallback = await buildTimeoutFallbackResponse(
+				normalizeChannelType(context.channelType),
+				retryInput,
+			);
+			await deliverChannelResponseAsync(deliveryContext, context.channelType, timeoutFallback);
+			return;
+		}
+
+		bandLogger.info("Async router fallback delivered successfully", {
+			traceId: context.traceId,
+			primaryModel: primaryConfig.model,
+			fallbackModel: fallbackConfig.model,
+			sessionId: context.sessionId,
+		});
+	} catch (error) {
+		bandLogger.error("Async router fallback failed", {
+			error: error instanceof Error ? error.message : String(error),
+			traceId: context.traceId,
+			sessionId: context.sessionId,
+		});
 	}
 }
 
@@ -698,14 +693,17 @@ export async function processRouterBand(
 	const concurrencyManager = getConcurrencyManager();
 
 	try {
+		const routerAgentConfig: AssistantConfig = { ...agentConfig };
+
 		// Debug: Log agent configuration for router LLM
 		bandLogger.info("Router LLM agent configuration", {
-			hardDeadlineMs: agentConfig.hardDeadlineMs,
-			model: agentConfig.model,
-			reasoningEffort: agentConfig.reasoningEffort,
-			verbosity: agentConfig.verbosity,
+			hardDeadlineMs: routerAgentConfig.hardDeadlineMs,
+			model: routerAgentConfig.model,
+			reasoningEffort: routerAgentConfig.reasoningEffort,
+			verbosity: routerAgentConfig.verbosity,
 			sessionId: context.sessionId,
 			hasSessionId: !!context.sessionId,
+			routerContingencyActive: routerAgentConfig.routerContingencyActive ?? false,
 			traceId: context.traceId,
 		});
 
@@ -723,7 +721,7 @@ export async function processRouterBand(
 		const routerResult = await concurrencyManager.executeLlmOperation(
 			context.inboxId,
 			() =>
-				dispatchRouterLLM(context.userText, agentConfig, {
+				dispatchRouterLLM(context.userText, routerAgentConfig, {
 					channelType: normalizeChannelType(context.channelType),
 					sessionId: context.sessionId,
 					intentHints: filteredHints,
@@ -731,7 +729,7 @@ export async function processRouterBand(
 				}),
 			{
 				priority: "high", // Router decisions are high priority
-				timeoutMs: agentConfig.hardDeadlineMs || 400,
+				timeoutMs: routerAgentConfig.hardDeadlineMs || 400,
 				allowDegradation: true,
 			},
 		);
@@ -740,13 +738,13 @@ export async function processRouterBand(
 
 		// ✅ NEW: Check if timeout occurred (routerResult is null after deadline)
 		if (!routerResult) {
-			bandLogger.warn("Router LLM timeout - returning fallback response", {
+			bandLogger.warn("Router LLM timeout detected", {
 				llmWarmupMs,
-				hardDeadlineMs: agentConfig.hardDeadlineMs,
+				hardDeadlineMs: routerAgentConfig.hardDeadlineMs,
+				routerContingencyActive: routerAgentConfig.routerContingencyActive ?? false,
 				traceId: context.traceId,
 			});
 
-			// Store retry context for @retry button
 			const topHint = (intentHints || []).reduce(
 				(best, c) => ((c.score ?? 0) > (best?.score ?? 0) ? c : best),
 				intentHints?.[0],
@@ -755,8 +753,8 @@ export async function processRouterBand(
 				sessionId: context.sessionId || "",
 				userText: context.userText,
 				payload: context.originalPayload,
-				model: agentConfig.model,
-				deadlineMs: agentConfig.hardDeadlineMs,
+				model: routerAgentConfig.model,
+				deadlineMs: routerAgentConfig.hardDeadlineMs,
 				channelType: context.channelType,
 				inboxId: context.inboxId,
 				userId: context.userId,
@@ -774,7 +772,7 @@ export async function processRouterBand(
 							})),
 						}
 					: undefined,
-				agentInstructions: agentConfig.instructions,
+				agentInstructions: routerAgentConfig.instructions,
 				intentHints: filteredHints?.length
 					? JSON.stringify(
 							filteredHints.map((h) => ({
@@ -784,11 +782,58 @@ export async function processRouterBand(
 							})),
 						)
 					: undefined,
-				fallbackProvider: agentConfig.fallbackProvider || undefined,
-				fallbackModel: agentConfig.fallbackModel || undefined,
+				fallbackProvider: routerAgentConfig.fallbackProvider || undefined,
+				fallbackModel: routerAgentConfig.fallbackModel || undefined,
 			};
 
-			// Return timeout fallback response with retry and human handoff options
+			await recordRouterDeadline(
+				context.inboxId,
+				routerAgentConfig.assistantId,
+				!!routerAgentConfig.fallbackModel,
+			);
+
+			const canUseAsyncFallback =
+				!routerAgentConfig.routerContingencyActive &&
+				!!routerAgentConfig.fallbackModel &&
+				!!routerAgentConfig.fallbackProvider;
+
+			if (canUseAsyncFallback) {
+				const deliveryContext = await buildDeliveryContextFromProcessorContext(context);
+				if (!deliveryContext) {
+					const fallbackResponse = await buildTimeoutFallbackResponse(
+						normalizeChannelType(context.channelType),
+						retryInput,
+					);
+					return {
+						response: fallbackResponse,
+						llmWarmupMs,
+					};
+				}
+
+				const fallbackConfig: AssistantConfig = {
+					...routerAgentConfig,
+					model: routerAgentConfig.fallbackModel!,
+					provider:
+						(routerAgentConfig.fallbackProvider as AiProviderType) ||
+						routerAgentConfig.provider,
+					routerContingencyActive: true,
+				};
+
+				void runAsyncRouterFallback(deliveryContext, context, routerAgentConfig, fallbackConfig, filteredHints, retryInput).catch(
+					(error) => {
+						bandLogger.error("Unhandled async router fallback rejection", {
+							error: error instanceof Error ? error.message : String(error),
+							traceId: context.traceId,
+						});
+					},
+				);
+
+				return {
+					response: { action: "async_ack" } as ChannelResponse,
+					llmWarmupMs,
+				};
+			}
+
 			const fallbackResponse = await buildTimeoutFallbackResponse(
 				normalizeChannelType(context.channelType),
 				retryInput,
@@ -836,51 +881,11 @@ export async function processRouterBand(
 			}
 		}
 
-		if (routerResult.mode === "intent" && routerResult.intent_payload) {
-			// Try to map the intent based on channel
-			const intentName = routerResult.intent_payload.replace(/^@/, "");
-			if (isWhatsAppChannel(context.channelType)) {
-				const contactContext = { contactName: context.contactName, contactPhone: context.contactPhone };
-				let mapped = await buildWhatsAppByIntentRaw(intentName, context.inboxId, context.wamid, contactContext);
-				if (!mapped)
-					mapped = await buildWhatsAppByGlobalIntent(intentName, context.inboxId, context.wamid, contactContext);
-				if (mapped) return { response: mapped, llmWarmupMs };
-			} else if (isFacebookChannel(context.channelType)) {
-				const contactContext = { contactName: context.contactName, contactPhone: context.contactPhone };
-				let mapped = await buildFacebookPageByIntentRaw(intentName, context.inboxId, contactContext);
-				if (!mapped) mapped = await buildFacebookPageByGlobalIntent(intentName, context.inboxId, contactContext);
-				if (mapped) return { response: mapped, llmWarmupMs };
-			} else if (isInstagramChannel(context.channelType)) {
-				const contactContext = { contactName: context.contactName, contactPhone: context.contactPhone };
-				let mapped = await buildInstagramByIntentRaw(intentName, context.inboxId, contactContext);
-				if (!mapped) mapped = await buildInstagramByGlobalIntent(intentName, context.inboxId, contactContext);
-				if (mapped) return { response: mapped, llmWarmupMs };
-			}
-		}
-
-		// Chat mode or intent mapping failed - build conversational response
-		const buttons = routerResult.buttons?.map((btn) => ({
-			title: btn.title,
-			payload: btn.payload,
-		}));
-
-		// O Router LLM sempre deve retornar response_text válido
-		const responseText = routerResult.response_text;
-
-		// Debug: Log response construction details
-		bandLogger.info("Building channel response", {
-			mode: routerResult.mode,
-			response_text: routerResult.response_text,
-			response_text_length: routerResult.response_text?.length || 0,
-			buttonsCount: buttons?.length || 0,
-			traceId: context.traceId,
-		});
-
-		const response = buildChannelResponse(context.channelType, responseText, buttons);
+		const response = await resolveRouterDecisionResponse(context, routerResult);
 
 		bandLogger.info("ROUTER band decision processed", {
 			mode: routerResult.mode,
-			hasButtons: !!buttons?.length,
+			hasButtons: !!routerResult.buttons?.length,
 			llmWarmupMs,
 			traceId: context.traceId,
 		});

@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getPrismaInstance } from "@/lib/connections";
+import { invalidateAssistantConfigurationCache } from "@/lib/socialwise-flow/processor-components/assistant-config-cache";
 import { createLogger } from "@/lib/utils/logger";
 
 const prisma = getPrismaInstance();
@@ -538,6 +539,8 @@ export async function POST(request: NextRequest) {
 			success: result.success,
 			summary: result.summary,
 		});
+
+		await invalidateAssistantConfigurationCache("assistant_import");
 
 		return NextResponse.json(result, {
 			status: result.success ? 200 : 207, // 207 Multi-Status para sucesso parcial

@@ -1,10 +1,11 @@
 // app/api/admin/ai-integration/assistant-links/[linkId]/route.ts
 // API para gerenciar links entre assistentes IA e caixas de entrada
 
-import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import { auth } from "@/auth";
 import { getPrismaInstance } from "@/lib/connections";
+import { invalidateAssistantConfigurationCache } from "@/lib/socialwise-flow/processor-components/assistant-config-cache";
+import { type NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 
 // Schema de validação para atualizar link
 const updateLinkSchema = z.object({
@@ -81,6 +82,7 @@ export async function PATCH(
 		console.log(
 			`[Assistant Link] ${validatedData.isActive ? "Ativado" : "Desativado"} link entre assistente "${existingLink.assistant.name}" e caixa "${existingLink.inbox.nome}"`,
 		);
+		await invalidateAssistantConfigurationCache("assistant_link_status_updated");
 
 		return NextResponse.json({
 			success: true,
