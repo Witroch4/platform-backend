@@ -136,7 +136,7 @@ force_update_service() {
 # ===== Parse Arguments =====
 TAG=""
 NO_DEPLOY=false
-PUSH_LATEST=false
+PUSH_LATEST=true
 
 for arg in "$@"; do
   case "${arg}" in
