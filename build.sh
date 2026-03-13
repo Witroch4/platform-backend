@@ -31,15 +31,18 @@ show_help() {
 ║        🚀  Build & Push para Produção                       ║
 ╚══════════════════════════════════════════════════════════════╝
 
-Uso: ./build.sh [TAG] [--no-deploy]
+Uso: ./build.sh [TAG] [--latest] [--no-latest] [--no-deploy]
 
 Argumentos:
-  TAG              Tag da imagem (default: latest)
+  TAG              Tag da imagem (default: git sha curto)
+  --latest         Também publica a tag latest
+  --no-latest      Garante que latest não será publicada
   --no-deploy      Pula o force-update dos serviços em produção
 
 Exemplos:
-  ./build.sh                  # Build, push e force-update produção
+  ./build.sh                  # Build, push e update com tag baseada no commit
   ./build.sh v1.2.3           # Build, push e update com tag 'v1.2.3'
+  ./build.sh v1.2.3 --latest  # Publica v1.2.3 e também latest
   ./build.sh --no-deploy      # Só build e push, sem atualizar produção
 
 Deploy automático (Portainer):
@@ -54,6 +57,14 @@ Nota:
 
 Imagem: ${IMAGE}
 EOF
+}
+
+generate_default_tag() {
+  if git rev-parse --short HEAD >/dev/null 2>&1; then
+    git rev-parse --short HEAD
+  else
+    date +%Y%m%d%H%M%S
+  fi
 }
 
 # =============================================================================
@@ -123,14 +134,21 @@ force_update_service() {
 }
 
 # ===== Parse Arguments =====
-TAG="latest"
+TAG=""
 NO_DEPLOY=false
+PUSH_LATEST=false
 
 for arg in "$@"; do
   case "${arg}" in
     help|--help|-h)
       show_help
       exit 0
+      ;;
+    --latest)
+      PUSH_LATEST=true
+      ;;
+    --no-latest)
+      PUSH_LATEST=false
       ;;
     --no-deploy)
       NO_DEPLOY=true
@@ -140,6 +158,10 @@ for arg in "$@"; do
       ;;
   esac
 done
+
+if [ -z "${TAG}" ]; then
+  TAG="$(generate_default_tag)"
+fi
 
 FULL_TAG="${IMAGE}:${TAG}"
 
@@ -156,6 +178,11 @@ fi
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║  🚀 Build & Push: ${FULL_TAG}"
+if [ "${PUSH_LATEST}" = true ]; then
+  echo "║  🏷️  Publicar latest: ATIVO"
+else
+  echo "║  🏷️  Publicar latest: DESATIVADO"
+fi
 if [ "${CAN_DEPLOY}" = true ]; then
   echo "║  🔄 Deploy automático: ATIVO"
 elif [ "${NO_DEPLOY}" = true ]; then
@@ -222,26 +249,26 @@ echo ""
 echo "==> [1/${TOTAL_STEPS}] Building image..."
 docker compose build app
 
+echo ""
+echo "==> [2/${TOTAL_STEPS}] Tagging as: ${FULL_TAG}"
 if [ "${TAG}" != "latest" ]; then
-  echo ""
-  echo "==> [2/${TOTAL_STEPS}] Tagging as: ${FULL_TAG}"
   docker tag "${IMAGE}:latest" "${FULL_TAG}"
-else
-  echo ""
-  echo "==> [2/${TOTAL_STEPS}] Using tag: latest (skipping additional tag)"
 fi
 
 echo ""
-echo "==> [3/${TOTAL_STEPS}] Pushing: ${IMAGE}:latest"
-docker push "${IMAGE}:latest"
+echo "==> [3/${TOTAL_STEPS}] Pushing: ${FULL_TAG}"
+docker push "${FULL_TAG}"
 
-if [ "${TAG}" != "latest" ]; then
+if [ "${PUSH_LATEST}" = true ]; then
   echo ""
-  echo "==> [4/${TOTAL_STEPS}] Pushing: ${FULL_TAG}"
-  docker push "${FULL_TAG}"
+  echo "==> [4/${TOTAL_STEPS}] Pushing: ${IMAGE}:latest"
+  if [ "${TAG}" != "latest" ]; then
+    docker tag "${FULL_TAG}" "${IMAGE}:latest"
+  fi
+  docker push "${IMAGE}:latest"
 else
   echo ""
-  echo "==> [4/${TOTAL_STEPS}] Skipping additional push (tag is latest)"
+  echo "==> [4/${TOTAL_STEPS}] Skipping latest push"
 fi
 
 # Delay para propagação da imagem no Registry (evita pull de imagem velha/404)
@@ -286,9 +313,9 @@ echo "║  ✅ Build & Push completo!                                   ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 echo "  📦 Imagens disponíveis:"
-echo "     - ${IMAGE}:latest"
-if [ "${TAG}" != "latest" ]; then
-  echo "     - ${FULL_TAG}"
+echo "     - ${FULL_TAG}"
+if [ "${PUSH_LATEST}" = true ]; then
+  echo "     - ${IMAGE}:latest"
 fi
 if [ -n "${DEPLOY_STATUS}" ]; then
   echo ""
