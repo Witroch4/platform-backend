@@ -2,7 +2,7 @@
 
 import { memo, useMemo, useState, DragEvent, useCallback } from "react";
 import { Handle, Position, useReactFlow, type NodeProps } from "@xyflow/react";
-import { MessageSquare, Settings, GripVertical, Plus, Upload, X } from "lucide-react";
+import { MessageSquare, Settings, GripVertical, Plus, Upload, X, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
 	InteractiveMessageNodeData,
@@ -294,6 +294,11 @@ export const InteractiveMessageNode = memo(({ id, data, selected }: InteractiveM
 	}, [elements]);
 
 	const buttons = useMemo(() => elements.filter((e) => e.type === "button"), [elements]);
+
+	const ctaUrlElement = useMemo(
+		() => elements.find((e) => e.type === "button_url") as (InteractiveMessageElement & { title: string; url: string }) | undefined,
+		[elements],
+	);
 
 	// Show content if there are ANY elements (even empty ones) or a linked message
 	const showContent = Boolean(data.message || elements.length > 0);
@@ -774,6 +779,60 @@ export const InteractiveMessageNode = memo(({ id, data, selected }: InteractiveM
 								</div>
 							)}
 
+							{/* Botão CTA URL (link externo) — sem handle de saída (não faz branch) */}
+							{ctaUrlElement && (
+								<div className="mt-1">
+									<NodeContextMenu onDelete={() => handleRemoveElement(ctaUrlElement.id)}>
+										<div className="rounded-md border bg-white dark:bg-card px-3 py-2 shadow-sm border-emerald-300 dark:border-emerald-700">
+											<div className="flex items-center gap-2">
+												<ExternalLink className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+												<input
+													type="text"
+													className="nodrag flex-1 bg-transparent border-none p-0 text-sm font-semibold text-emerald-700 dark:text-emerald-400 focus:outline-none focus:ring-0 placeholder:text-emerald-300"
+													value={ctaUrlElement.title || ""}
+													onChange={(e) => updateElementContent(ctaUrlElement.id, { title: e.target.value })}
+													placeholder="Texto do botão"
+													maxLength={20}
+													onKeyDown={(e) => {
+														e.stopPropagation();
+														if (e.key === "Enter") e.currentTarget.blur();
+													}}
+													onClick={(e) => {
+														e.stopPropagation();
+														e.currentTarget.focus();
+													}}
+												/>
+												<button
+													onClick={(e) => {
+														e.stopPropagation();
+														handleRemoveElement(ctaUrlElement.id);
+													}}
+													className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/20 text-muted-foreground hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
+													title="Remover CTA"
+												>
+													<X className="h-3 w-3" />
+												</button>
+											</div>
+											<input
+												type="text"
+												className="nodrag w-full bg-transparent border-none p-0 mt-1 text-[11px] text-muted-foreground focus:outline-none focus:ring-0 placeholder:text-muted-foreground/40 font-mono"
+												value={ctaUrlElement.url || ""}
+												onChange={(e) => updateElementContent(ctaUrlElement.id, { url: e.target.value })}
+												placeholder="URL (ex: {{payment_url}})"
+												onKeyDown={(e) => {
+													e.stopPropagation();
+													if (e.key === "Enter") e.currentTarget.blur();
+												}}
+												onClick={(e) => {
+													e.stopPropagation();
+													e.currentTarget.focus();
+												}}
+											/>
+										</div>
+									</NodeContextMenu>
+								</div>
+							)}
+
 							{/* Drop Zone Animada (Final / Append) - Único ponto de entrada final */}
 							<div
 								className={cn(
@@ -799,8 +858,8 @@ export const InteractiveMessageNode = memo(({ id, data, selected }: InteractiveM
 					)}
 				</div>
 
-				{/* Handle de saída padrão (bottom) - só se não tiver botões (para manter fluxo sem botões) */}
-				{buttons.length === 0 && (
+				{/* Handle de saída padrão (bottom) - se não tiver botões OU se tiver CTA URL (CTA não faz branch) */}
+				{(buttons.length === 0 || ctaUrlElement) && (
 					<Handle
 						type="source"
 						position={Position.Bottom}

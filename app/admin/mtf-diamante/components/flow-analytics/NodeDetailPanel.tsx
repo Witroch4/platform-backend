@@ -72,6 +72,7 @@ function getNodeTypeLabel(nodeType: FlowNodeType): string {
 		chatwit_action: "Ação Chatwit",
 		remove_tag: "Remover Tag",
 		wait_for_reply: "Aguardar Resposta",
+		generate_payment_link: "Link de Pagamento",
 	};
 	return labels[nodeType] || nodeType;
 }

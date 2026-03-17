@@ -8,6 +8,12 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 
+function parsePositiveInteger(value: string | undefined, fallback: number): number {
+	if (!value) return fallback;
+	const parsed = Number.parseInt(value, 10);
+	return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 export interface TurboModeConfig {
 	maxParallelLeads: number;
 	resourceThreshold: number;
@@ -45,7 +51,7 @@ export function useTurboMode(): UseTurboModeReturn {
 	const [error, setError] = useState<string | null>(null);
 
 	const turboModeConfig: TurboModeConfig = {
-		maxParallelLeads: 10,
+		maxParallelLeads: parsePositiveInteger(process.env.NEXT_PUBLIC_OAB_EVAL_BATCH_DISPATCH_CONCURRENCY, 10),
 		resourceThreshold: 80,
 		fallbackOnError: true,
 	};

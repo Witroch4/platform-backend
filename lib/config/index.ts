@@ -68,6 +68,9 @@ export interface OabEvalConfig {
 		max_concurrent_jobs?: number;
 		job_timeout?: number;
 		retry_attempts?: number;
+		retry_backoff_ms?: number;
+		rate_limit_max?: number;
+		rate_limit_duration_ms?: number;
 	};
 	debug?: {
 		enabled?: boolean;
@@ -143,6 +146,10 @@ class ConfigManager {
 
 		if (!config.oab_eval) {
 			config.oab_eval = { agentelocal: false, transcribe_concurrency: 10 };
+		}
+
+		if (!config.oab_eval.queue) {
+			config.oab_eval.queue = {};
 		}
 
 		// SocialWise Flow overrides
@@ -263,6 +270,31 @@ class ConfigManager {
 			if (!Number.isNaN(n) && n > 0) config.oab_eval.mirror_concurrency = n;
 		}
 
+		if (process.env.OAB_EVAL_MAX_CONCURRENT_JOBS) {
+			const n = parseInt(process.env.OAB_EVAL_MAX_CONCURRENT_JOBS, 10);
+			if (!Number.isNaN(n) && n > 0) config.oab_eval.queue.max_concurrent_jobs = n;
+		}
+
+		if (process.env.OAB_EVAL_RETRY_ATTEMPTS) {
+			const n = parseInt(process.env.OAB_EVAL_RETRY_ATTEMPTS, 10);
+			if (!Number.isNaN(n) && n > 0) config.oab_eval.queue.retry_attempts = n;
+		}
+
+		if (process.env.OAB_EVAL_RETRY_BACKOFF_MS) {
+			const n = parseInt(process.env.OAB_EVAL_RETRY_BACKOFF_MS, 10);
+			if (!Number.isNaN(n) && n > 0) config.oab_eval.queue.retry_backoff_ms = n;
+		}
+
+		if (process.env.OAB_EVAL_RATE_LIMIT_MAX) {
+			const n = parseInt(process.env.OAB_EVAL_RATE_LIMIT_MAX, 10);
+			if (!Number.isNaN(n) && n > 0) config.oab_eval.queue.rate_limit_max = n;
+		}
+
+		if (process.env.OAB_EVAL_RATE_LIMIT_DURATION_MS) {
+			const n = parseInt(process.env.OAB_EVAL_RATE_LIMIT_DURATION_MS, 10);
+			if (!Number.isNaN(n) && n > 0) config.oab_eval.queue.rate_limit_duration_ms = n;
+		}
+
 		return config;
 	}
 
@@ -317,6 +349,15 @@ class ConfigManager {
 				agentelocal_espelho: process.env.OAB_EVAL_AGENT_LOCAL_ESPELHO === "true",
 				transcribe_concurrency: parseInt(process.env.OAB_EVAL_TRANSCRIBE_CONCURRENCY || "10", 10),
 				mirror_concurrency: parseInt(process.env.OAB_EVAL_MIRROR_CONCURRENCY || "5", 10),
+				queue: {
+					name: process.env.OAB_EVAL_QUEUE_NAME || "oab-transcription",
+					max_concurrent_jobs: parseInt(process.env.OAB_EVAL_MAX_CONCURRENT_JOBS || "10", 10),
+					job_timeout: parseInt(process.env.OAB_EVAL_JOB_TIMEOUT || "300000", 10),
+					retry_attempts: parseInt(process.env.OAB_EVAL_RETRY_ATTEMPTS || "4", 10),
+					retry_backoff_ms: parseInt(process.env.OAB_EVAL_RETRY_BACKOFF_MS || "3000", 10),
+					rate_limit_max: parseInt(process.env.OAB_EVAL_RATE_LIMIT_MAX || "10", 10),
+					rate_limit_duration_ms: parseInt(process.env.OAB_EVAL_RATE_LIMIT_DURATION_MS || "1000", 10),
+				},
 			},
 		};
 	}
@@ -350,6 +391,11 @@ class ConfigManager {
 			"OAB_EVAL_AGENT_LOCAL_ESPELHO",
 			"OAB_EVAL_TRANSCRIBE_CONCURRENCY",
 			"OAB_EVAL_MIRROR_CONCURRENCY",
+			"OAB_EVAL_MAX_CONCURRENT_JOBS",
+			"OAB_EVAL_RETRY_ATTEMPTS",
+			"OAB_EVAL_RETRY_BACKOFF_MS",
+			"OAB_EVAL_RATE_LIMIT_MAX",
+			"OAB_EVAL_RATE_LIMIT_DURATION_MS",
 		];
 
 		for (const envVar of envVars) {

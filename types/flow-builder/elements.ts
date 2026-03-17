@@ -148,6 +148,12 @@ export const INTERACTIVE_MESSAGE_ELEMENT_ITEMS: ElementPaletteItem[] = [
 		label: "Botão",
 		description: "Um botão (ponto de conexão)",
 	},
+	{
+		type: "button_url",
+		icon: "🔗",
+		label: "Botão CTA (URL)",
+		description: "Link externo (checkout, site)",
+	},
 ];
 
 /**
@@ -183,5 +189,11 @@ export const SHARED_ELEMENT_ITEMS: ElementPaletteItem[] = [
 		icon: "🔘",
 		label: "Botão",
 		description: "Um botão (ponto de conexão)",
+	},
+	{
+		type: "button_url",
+		icon: "🔗",
+		label: "Botão CTA (URL)",
+		description: "Link externo (checkout, site)",
 	},
 ];

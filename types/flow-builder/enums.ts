@@ -60,6 +60,9 @@ export enum FlowNodeType {
 	// Instagram/Facebook Specific
 	QUICK_REPLIES = "quick_replies",
 	CAROUSEL = "carousel",
+
+	// Integrations
+	GENERATE_PAYMENT_LINK = "generate_payment_link",
 }
 
 // =============================================================================

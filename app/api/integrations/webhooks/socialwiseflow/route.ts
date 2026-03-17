@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createLogger } from "@/lib/utils/logger";
-import { withPrismaReconnect } from "@/lib/connections";
+import { withPrismaReconnect, getPrismaInstance } from "@/lib/connections";
 
 // SocialWise Flow optimized components
 import { processSocialWiseFlow, extractSessionId } from "@/lib/socialwise-flow/processor";
@@ -596,8 +596,24 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 		// Step 13: Enhanced button interaction detection and processing
 		// 🔥 PRIORIDADE: Botões do Flow Builder (prefixo flow_) são processados pelo FlowOrchestrator
 		const buttonDetection = detectButtonClick(validPayload, channelType);
-		const isFlowBuilderButton =
+		let isFlowBuilderButton =
 			buttonDetection.isButtonClick && buttonDetection.buttonId?.startsWith(FLOW_BUTTON_PREFIX);
+
+		// Fallback: se o botão não tem prefixo flow_ mas existe em FlowEdge, é um botão de flow
+		// (cobre flows importados antes da correção de regeneração de IDs)
+		if (buttonDetection.isButtonClick && buttonDetection.buttonId && !isFlowBuilderButton) {
+			const edgeMatch = await getPrismaInstance().flowEdge.findFirst({
+				where: { buttonId: buttonDetection.buttonId },
+				select: { id: true },
+			});
+			if (edgeMatch) {
+				isFlowBuilderButton = true;
+				webhookLogger.info("🔀 Legacy button ID found in FlowEdge, routing to FlowOrchestrator", {
+					buttonId: buttonDetection.buttonId,
+					traceId,
+				});
+			}
+		}
 
 		// Se NÃO for botão do Flow Builder, usar processamento legado de button reactions
 		let buttonReactionResponse = null;

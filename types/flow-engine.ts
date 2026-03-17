@@ -29,7 +29,8 @@ export type FlowNodeType =
 	| "QUICK_REPLIES"
 	| "CAROUSEL"
 	| "CHATWIT_ACTION"
-	| "WAIT_FOR_REPLY";
+	| "WAIT_FOR_REPLY"
+	| "GENERATE_PAYMENT_LINK";
 
 // =============================================================================
 // SESSION

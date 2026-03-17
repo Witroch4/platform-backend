@@ -21,6 +21,9 @@ COMPOSE_FILE="$SCRIPT_DIR/docker-compose-dev.yml"
 COMPOSE_FILE_NGROK="$SCRIPT_DIR/docker-compose-dev-ngrok.yml"
 ENV_FILE="$SCRIPT_DIR/.env.development"
 ENV_EXAMPLE="$SCRIPT_DIR/.env.example"
+SHARED_INFRA_DIR="/home/wital/shared-infra"
+SHARED_INFRA_COMPOSE="$SHARED_INFRA_DIR/docker-compose.yml"
+SHARED_NETWORK="minha_rede"
 NGROK_MODE=false
 
 # Cores para output
@@ -78,10 +81,10 @@ check_dependencies() {
 
 # Garante que a rede externa existe
 ensure_network() {
-  if ! docker network ls | grep -q "minha_rede"; then
-    log_info "Criando rede Docker 'minha_rede'..."
-    docker network create minha_rede
-    log_success "Rede 'minha_rede' criada!"
+  if ! docker network inspect "$SHARED_NETWORK" &> /dev/null; then
+    log_info "Criando rede Docker '$SHARED_NETWORK'..."
+    docker network create "$SHARED_NETWORK" > /dev/null
+    log_success "Rede '$SHARED_NETWORK' criada!"
   fi
 }
 
@@ -99,6 +102,73 @@ dc() {
   fi
 }
 
+infra_dc() {
+  if docker compose version &> /dev/null 2>&1; then
+    docker compose -f "$SHARED_INFRA_COMPOSE" "$@"
+  else
+    docker-compose -f "$SHARED_INFRA_COMPOSE" "$@"
+  fi
+}
+
+container_running() {
+  local container_name="$1"
+  local running
+
+  running=$(docker inspect -f '{{.State.Running}}' "$container_name" 2>/dev/null || true)
+  [ "$running" = "true" ]
+}
+
+container_healthy() {
+  local container_name="$1"
+  local health_status
+
+  health_status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container_name" 2>/dev/null || true)
+  [ "$health_status" = "healthy" ] || [ "$health_status" = "none" ]
+}
+
+wait_for_postgres() {
+  local retries=0
+  local max_retries=30
+
+  until docker exec postgres pg_isready -U postgres -d postgres -q 2>/dev/null; do
+    retries=$((retries + 1))
+    if [ "$retries" -ge "$max_retries" ]; then
+      log_error "Postgres compartilhado não ficou pronto em ${max_retries}s"
+      exit 1
+    fi
+    sleep 1
+  done
+}
+
+wait_for_redis() {
+  local retries=0
+  local max_retries=30
+
+  until docker exec redis redis-cli ping 2>/dev/null | grep -q PONG; do
+    retries=$((retries + 1))
+    if [ "$retries" -ge "$max_retries" ]; then
+      log_error "Redis compartilhado não ficou pronto em ${max_retries}s"
+      exit 1
+    fi
+    sleep 1
+  done
+}
+
+ensure_shared_infra() {
+  ensure_network
+
+  if ! container_running postgres || ! container_running redis; then
+    log_info "Subindo infra compartilhada (postgres + redis)..."
+    infra_dc up -d postgres redis
+  else
+    log_info "Infra compartilhada já está ativa; validando saúde de postgres e redis..."
+  fi
+
+  wait_for_postgres
+  wait_for_redis
+  log_success "Infra compartilhada pronta!"
+}
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Comandos
 # ─────────────────────────────────────────────────────────────────────────────
@@ -107,12 +177,16 @@ cmd_up() {
   log_header "Subindo ambiente de desenvolvimento"
 
   ensure_env_file
-  ensure_network
+  ensure_shared_infra
 
   # Sobe containers (sem rebuild)
   dc up -d
   log_info "Aguardando serviços iniciarem..."
-  sleep 3
+  sleep 5
+
+  # Aplica migrations pendentes automaticamente
+  log_info "Aplicando migrations pendentes..."
+  dc exec -T app pnpm exec prisma migrate deploy 2>&1 | grep -v "^$" || log_warn "Migrations: verifique se o container app está pronto."
 
   print_urls
 
@@ -128,9 +202,16 @@ cmd_up_detached() {
   log_header "Subindo ambiente de desenvolvimento (detached)"
 
   ensure_env_file
-  ensure_network
+  ensure_shared_infra
 
   dc up -d
+  log_info "Aguardando serviços iniciarem..."
+  sleep 5
+
+  # Aplica migrations pendentes automaticamente
+  log_info "Aplicando migrations pendentes..."
+  dc exec -T app pnpm exec prisma migrate deploy 2>&1 | grep -v "^$" || log_warn "Migrations: verifique se o container app está pronto."
+
   log_success "Ambiente iniciado em background!"
   print_urls
 }
@@ -148,8 +229,8 @@ print_urls() {
   fi
   echo ""
   echo -e "  ${BOLD}Infraestrutura:${NC}"
-  echo -e "  ${CYAN}🐘 PostgreSQL${NC}    → localhost:5432"
-  echo -e "  ${CYAN}🔴 Redis${NC}         → localhost:6379"
+  echo -e "  ${CYAN}🐘 PostgreSQL${NC}    → localhost:5432 (container compartilhado: postgres)"
+  echo -e "  ${CYAN}🔴 Redis${NC}         → localhost:6379 (container compartilhado: redis)"
   echo ""
   echo -e "  ${BOLD}Comandos úteis:${NC}"
   echo -e "    ./dev.sh logs              Ver logs de todos os serviços"
@@ -177,7 +258,7 @@ cmd_build() {
   fi
 
   ensure_env_file
-  ensure_network
+  ensure_shared_infra
 
   # 1. Para containers
   log_info "Parando containers..."
@@ -326,18 +407,21 @@ cmd_prisma() {
 
 cmd_db_migrate() {
   log_header "Rodando migrations"
+  ensure_shared_infra
   dc exec app pnpm exec prisma migrate dev
   log_success "Migrations aplicadas!"
 }
 
 cmd_db_generate() {
   log_header "Gerando Prisma Client"
+  ensure_shared_infra
   dc exec app pnpm exec prisma generate
   log_success "Prisma Client gerado!"
 }
 
 cmd_db_reset() {
   log_header "Resetando banco de dados"
+  ensure_shared_infra
   log_warn "Isso vai APAGAR todos os dados do banco!"
   read -p "Tem certeza? (y/N): " confirm
   if [[ "$confirm" =~ ^[Yy]$ ]]; then
@@ -350,6 +434,7 @@ cmd_db_reset() {
 
 cmd_db_seed() {
   log_header "Rodando seeds"
+  ensure_shared_infra
   dc exec app pnpm exec prisma db seed
   log_success "Seeds aplicados!"
 }
@@ -397,7 +482,7 @@ cmd_install() {
 
 cmd_clean() {
   log_header "Limpeza completa"
-  log_warn "Isso vai PARAR os containers e REMOVER os volumes (dados do Postgres, Redis, node_modules)!"
+  log_warn "Isso vai PARAR os containers do Socialwise e REMOVER apenas volumes locais (node_modules). A infra compartilhada não será apagada."
   read -p "Tem certeza? (y/N): " confirm
   if [[ "$confirm" =~ ^[Yy]$ ]]; then
     dc down -v --remove-orphans
@@ -459,8 +544,8 @@ cmd_help() {
   echo -e "  ${BOLD}URLs:${NC}"
   echo -e "    🌐 Aplicação    → ${BOLD}http://localhost:3002${NC}"
 
-  echo -e "    🐘 PostgreSQL   → localhost:5432"
-  echo -e "    🔴 Redis        → localhost:6379"
+  echo -e "    🐘 PostgreSQL   → localhost:5432 (compartilhado)"
+  echo -e "    🔴 Redis        → localhost:6379 (compartilhado)"
   echo -e "    🔗 Ngrok        → ./dev.sh -n (túnel público)"
   echo -e "    🔗 Ngrok UI     → http://localhost:4040"
   echo ""

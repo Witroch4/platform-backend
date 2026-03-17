@@ -31,6 +31,7 @@ type ProcessingStep =
 	| "analyzing"
 	| "unifying-pdf"
 	| "generating-images"
+	| "dispatching-manuscripts"
 	| "manuscript"
 	| "mirror"
 	| "preliminary-analysis"
@@ -58,6 +59,17 @@ type SSENotification = {
 	timestamp: string;
 	data?: any; // Para compatibilidade com diferentes estruturas de notificação
 };
+
+type ManuscriptDispatchItem = {
+	lead: ExtendedLead;
+	selectedImages: string[];
+};
+
+function parsePositiveInteger(value: string | undefined, fallback: number): number {
+	if (!value) return fallback;
+	const parsed = Number.parseInt(value, 10);
+	return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 export const useLeadBatchProcessor = (
 	leads: ExtendedLead[],
@@ -103,6 +115,14 @@ export const useLeadBatchProcessor = (
 	const [leadsBeingProcessed, setLeadsBeingProcessed] = useState<Set<string>>(new Set());
 	const [connectionHealthCheck, setConnectionHealthCheck] = useState<NodeJS.Timeout | null>(null);
 	const [leadProcessingTimestamps, setLeadProcessingTimestamps] = useState<Map<string, number>>(new Map());
+	const batchDispatchConcurrency = useMemo(
+		() =>
+			parsePositiveInteger(
+				process.env.NEXT_PUBLIC_OAB_EVAL_BATCH_DISPATCH_CONCURRENCY,
+				turboModeConfig?.maxParallelLeads ?? 10,
+			),
+		[turboModeConfig?.maxParallelLeads],
+	);
 
 	const currentLead = useMemo(() => {
 		console.log("[useLeadBatchProcessor] Calculando currentLead:", {
@@ -221,25 +241,9 @@ export const useLeadBatchProcessor = (
 		// Atualizar estatísticas baseado na notificação
 		if (leadData.manuscritoProcessado && !leadData.aguardandoManuscrito) {
 			console.log(`[Batch SSE] ✅ Manuscrito processado para ${leadData.name || leadId}`);
-			setStats((prev) => ({
-				...prev,
-				completedTasks: {
-					...prev.completedTasks,
-					manuscriptsProcessed: prev.completedTasks.manuscriptsProcessed + 1,
-				},
-			}));
 
 			// Remover da lista de processamento e timestamps
-			setLeadsBeingProcessed((prev) => {
-				const newSet = new Set(prev);
-				newSet.delete(leadId);
-				return newSet;
-			});
-			setLeadProcessingTimestamps((prev) => {
-				const newMap = new Map(prev);
-				newMap.delete(leadId);
-				return newMap;
-			});
+			removeLeadFromTracking(leadId);
 
 			// Fechar conexão SSE após processamento concluído
 			setTimeout(() => {
@@ -261,25 +265,9 @@ export const useLeadBatchProcessor = (
 
 		if (leadData.espelhoProcessado && !leadData.aguardandoEspelho) {
 			console.log(`[Batch SSE] ✅ Espelho processado para ${leadData.name || leadId}`);
-			setStats((prev) => ({
-				...prev,
-				completedTasks: {
-					...prev.completedTasks,
-					mirrorsProcessed: prev.completedTasks.mirrorsProcessed + 1,
-				},
-			}));
 
 			// Remover da lista de processamento e timestamps
-			setLeadsBeingProcessed((prev) => {
-				const newSet = new Set(prev);
-				newSet.delete(leadId);
-				return newSet;
-			});
-			setLeadProcessingTimestamps((prev) => {
-				const newMap = new Map(prev);
-				newMap.delete(leadId);
-				return newMap;
-			});
+			removeLeadFromTracking(leadId);
 
 			// Fechar conexão SSE após processamento concluído
 			setTimeout(() => {
@@ -301,25 +289,9 @@ export const useLeadBatchProcessor = (
 
 		if (leadData.analiseProcessada && !leadData.aguardandoAnalise) {
 			console.log(`[Batch SSE] ✅ Análise processada para ${leadData.name || leadId}`);
-			setStats((prev) => ({
-				...prev,
-				completedTasks: {
-					...prev.completedTasks,
-					analysisCompleted: prev.completedTasks.analysisCompleted + 1,
-				},
-			}));
 
 			// Remover da lista de processamento e timestamps
-			setLeadsBeingProcessed((prev) => {
-				const newSet = new Set(prev);
-				newSet.delete(leadId);
-				return newSet;
-			});
-			setLeadProcessingTimestamps((prev) => {
-				const newMap = new Map(prev);
-				newMap.delete(leadId);
-				return newMap;
-			});
+			removeLeadFromTracking(leadId);
 
 			// Fechar conexão SSE após processamento concluído
 			setTimeout(() => {
@@ -362,6 +334,19 @@ export const useLeadBatchProcessor = (
 				return newMap;
 			});
 		}
+	};
+
+	const removeLeadFromTracking = (leadId: string) => {
+		setLeadsBeingProcessed((prev) => {
+			const newSet = new Set(prev);
+			newSet.delete(leadId);
+			return newSet;
+		});
+		setLeadProcessingTimestamps((prev) => {
+			const newMap = new Map(prev);
+			newMap.delete(leadId);
+			return newMap;
+		});
 	};
 
 	// Função para fechar todas as conexões SSE
@@ -532,17 +517,7 @@ export const useLeadBatchProcessor = (
 	const continueProcess = () => {
 		console.log("[useLeadBatchProcessor] Continuando processo...");
 		setShowContinueButton(false);
-
-		const temEspelhos = processingQueues.mirrorProcessing.length > 0;
-		const temAnalises = processingQueues.preliminaryAnalysis.length > 0;
-
-		if (temEspelhos) {
-			setCurrentStep("mirror");
-			setProgress({ current: 0, total: processingQueues.mirrorProcessing.length });
-			setIsOpen(true);
-		} else if (temAnalises) {
-			executePreliminaryAnalysis(processingQueues.preliminaryAnalysis);
-		}
+		finishProcessing();
 	};
 
 	// Passo 1: Análise e Enfileiramento
@@ -567,13 +542,6 @@ export const useLeadBatchProcessor = (
 				analisePreliminar: !!lead.analisePreliminar,
 			});
 
-			// Se já tem tudo pronto para análise preliminar, adicionar diretamente
-			if (!lead.analisePreliminar && lead.provaManuscrita && lead.textoDOEspelho && lead.imagensConvertidas) {
-				queues.preliminaryAnalysis.push(lead);
-				console.log(`[useLeadBatchProcessor] ✅ ${lead.nome} já está pronto para análise preliminar`);
-				continue; // Pular outras verificações para este lead
-			}
-
 			// Verificar se precisa unificar PDF
 			if (!lead.pdfUnificado) {
 				queues.pdfUnification.push(lead);
@@ -591,12 +559,6 @@ export const useLeadBatchProcessor = (
 				queues.manuscriptProcessing.push(lead);
 				console.log(`[useLeadBatchProcessor] ✅ ${lead.nome} precisa processar manuscrito`);
 			}
-
-			// Verificar se precisa processar texto do espelho (SÓ se há imagens convertidas)
-			if (!lead.textoDOEspelho && lead.imagensConvertidas) {
-				queues.mirrorProcessing.push(lead);
-				console.log(`[useLeadBatchProcessor] ✅ ${lead.nome} precisa processar espelho`);
-			}
 		}
 
 		setProcessingQueues(queues);
@@ -608,20 +570,6 @@ export const useLeadBatchProcessor = (
 			mirrorProcessing: queues.mirrorProcessing.length,
 			preliminaryAnalysis: queues.preliminaryAnalysis.length,
 		});
-
-		// Executar análise preliminar primeiro para leads que já estão prontos
-		if (queues.preliminaryAnalysis.length > 0) {
-			console.log(
-				`[useLeadBatchProcessor] 🚀 Executando análise preliminar para ${queues.preliminaryAnalysis.length} leads que já estão prontos`,
-			);
-			await executePreliminaryAnalysis(queues.preliminaryAnalysis);
-
-			// Remover os leads já processados das outras filas se estiverem duplicados
-			const processedLeadIds = queues.preliminaryAnalysis.map((l) => l.id);
-			queues.manuscriptProcessing = queues.manuscriptProcessing.filter((l) => !processedLeadIds.includes(l.id));
-			queues.mirrorProcessing = queues.mirrorProcessing.filter((l) => !processedLeadIds.includes(l.id));
-			setProcessingQueues(queues);
-		}
 
 		// Iniciar processamento automático para outros leads
 		await executeAutomatedTasks(queues);
@@ -684,16 +632,6 @@ export const useLeadBatchProcessor = (
 				console.log(`[useLeadBatchProcessor] ✅ Adicionado à fila de manuscrito: ${lead.nome}`);
 			}
 
-			// Verificar se precisa processar texto do espelho (SÓ se há imagens convertidas)
-			if (!lead.textoDOEspelho && hasImagesNow) {
-				updatedQueues.mirrorProcessing.push(lead);
-				console.log(`[useLeadBatchProcessor] ✅ Adicionado à fila de espelho: ${lead.nome}`);
-			}
-
-			// Verificar se pode executar análise preliminar
-			if (!lead.analisePreliminar && lead.provaManuscrita && lead.textoDOEspelho) {
-				updatedQueues.preliminaryAnalysis.push(lead);
-			}
 		}
 
 		console.log("[useLeadBatchProcessor] Filas atualizadas após geração de imagens:", {
@@ -969,32 +907,8 @@ export const useLeadBatchProcessor = (
 			return; // O usuário vai interagir
 		}
 
-		// Se não há manuscritos, processar espelhos
-		if (queues.mirrorProcessing.length > 0) {
-			console.log("[useLeadBatchProcessor] Definindo step como mirror para", queues.mirrorProcessing.length, "leads");
-			setCurrentStep("mirror");
-			setProgress({ current: 0, total: queues.mirrorProcessing.length });
-			return; // O usuário vai interagir
-		}
-
-		// Se não há tarefas manuais, verificar se há leads prontos para análise preliminar
-		console.log("[useLeadBatchProcessor] Verificando leads prontos para análise após tarefas manuais...");
-
-		// Buscar leads que agora estão prontos para análise (manuscrito E espelho completos)
-		const leadsReadyForAnalysis = leads.filter(
-			(lead) => !lead.analisePreliminar && lead.provaManuscrita && lead.textoDOEspelho && lead.imagensConvertidas,
-		);
-
-		if (leadsReadyForAnalysis.length > 0) {
-			console.log(
-				`[useLeadBatchProcessor] 🎯 Encontrados ${leadsReadyForAnalysis.length} leads prontos para análise:`,
-				leadsReadyForAnalysis.map((l) => l.nome),
-			);
-			await executePreliminaryAnalysis(leadsReadyForAnalysis);
-		} else {
-			console.log("[useLeadBatchProcessor] Nenhum lead está pronto para análise preliminar");
-			finishProcessing();
-		}
+		console.log("[useLeadBatchProcessor] Nenhum manuscrito pendente. Encerrando batch nesta etapa.");
+		finishProcessing();
 	};
 
 	// Passo 4: Análise Preliminar
@@ -1150,19 +1064,173 @@ export const useLeadBatchProcessor = (
 		finishProcessing();
 	};
 
+	async function mapConcurrent<T>(
+		items: T[],
+		limit: number,
+		fn: (item: T, index: number) => Promise<void>,
+	): Promise<Array<{ index: number; error: unknown }>> {
+		const errors: Array<{ index: number; error: unknown }> = [];
+		let nextIndex = 0;
+
+		async function worker() {
+			while (true) {
+				const currentIndex = nextIndex++;
+				if (currentIndex >= items.length) {
+					return;
+				}
+
+				try {
+					await fn(items[currentIndex], currentIndex);
+				} catch (error) {
+					errors.push({ index: currentIndex, error });
+				}
+			}
+		}
+
+		await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
+		return errors;
+	}
+
+	const buildManuscriptPayload = (lead: ExtendedLead, selectedImages: string[]) => ({
+		leadID: lead.id,
+		nome: lead.nome || "Lead sem nome",
+		telefone: lead.phoneNumber,
+		manuscrito: true,
+		selectedProvider: "GEMINI" as const,
+		priority: 10,
+		arquivos:
+			lead.arquivos?.map((arquivo: any) => ({
+				id: arquivo.id,
+				url: arquivo.dataUrl,
+				tipo: arquivo.fileType,
+				nome: arquivo.fileType,
+			})) || [],
+		arquivos_pdf: lead.pdfUnificado
+			? [
+					{
+						id: lead.id,
+						url: lead.pdfUnificado,
+						nome: "PDF Unificado",
+					},
+				]
+			: [],
+		arquivos_imagens_manuscrito: selectedImages.map((url: string, index: number) => ({
+			id: `${lead.id}-manuscrito-${index}`,
+			url,
+			nome: `Manuscrito ${index + 1}`,
+			page: index + 1,
+		})),
+		metadata: {
+			leadUrl: lead.leadUrl,
+			sourceId: lead.sourceId,
+			concluido: lead.concluido,
+			fezRecurso: lead.fezRecurso,
+		},
+	});
+
+	const dispatchCollectedManuscripts = async () => {
+		const dispatchItems: ManuscriptDispatchItem[] = processingQueues.manuscriptProcessing.flatMap((lead) => {
+			const selectedImages = collectedData.get(lead.id)?.manuscrito?.selectedImages || [];
+			return selectedImages.length > 0 ? [{ lead, selectedImages }] : [];
+		});
+		const skippedCount = processingQueues.manuscriptProcessing.length - dispatchItems.length;
+
+		if (dispatchItems.length === 0) {
+			if (skippedCount > 0) {
+				toast.warning(
+					`${skippedCount} lead${skippedCount > 1 ? "s foram" : " foi"} pulado${skippedCount > 1 ? "s" : ""} na etapa de digitação.`,
+				);
+			}
+			return;
+		}
+
+		console.log(
+			`[useLeadBatchProcessor] Enfileirando ${dispatchItems.length} manuscritos com concorrência ${batchDispatchConcurrency}`,
+		);
+
+		if (sseConnections.size === 0) {
+			startConnectionHealthCheck();
+		}
+
+		let completedDispatches = 0;
+		setCurrentStep("dispatching-manuscripts");
+		setShowAutomatedDialog(true);
+		setProgress({ current: 0, total: dispatchItems.length });
+
+		const errors = await mapConcurrent(dispatchItems, batchDispatchConcurrency, async ({ lead, selectedImages }, index) => {
+			setCurrentProcessingLead(lead);
+			createSSEConnection(lead.id);
+			setLeadsBeingProcessed((prev) => {
+				const newSet = new Set(prev);
+				newSet.add(lead.id);
+				return newSet;
+			});
+			setLeadProcessingTimestamps((prev) => {
+				const newMap = new Map(prev);
+				newMap.set(lead.id, Date.now());
+				return newMap;
+			});
+
+			const response = await fetch("/api/admin/leads-chatwit/enviar-manuscrito", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(buildManuscriptPayload(lead, selectedImages)),
+			});
+
+			if (!response.ok) {
+				removeLeadFromTracking(lead.id);
+				const errorData = await response.json().catch(() => null);
+				throw new Error(errorData?.error || `Erro ao enfileirar digitação para ${lead.nome || lead.id}`);
+			}
+
+			completedDispatches += 1;
+			setProgress({ current: completedDispatches, total: dispatchItems.length });
+			setStats((prev) => ({
+				...prev,
+				completedTasks: {
+					...prev.completedTasks,
+					manuscriptsProcessed: prev.completedTasks.manuscriptsProcessed + 1,
+				},
+			}));
+
+			console.log(
+				`[useLeadBatchProcessor] ✅ Digitação enfileirada para ${lead.nome || lead.id} (${index + 1}/${dispatchItems.length})`,
+			);
+		});
+
+		if (onUpdate) {
+			setTimeout(() => onUpdate(), 500);
+		}
+
+		if (skippedCount > 0) {
+			toast.warning(
+				`${skippedCount} lead${skippedCount > 1 ? "s foram" : " foi"} pulado${skippedCount > 1 ? "s" : ""} porque nenhuma imagem foi selecionada.`,
+				{ duration: 6000 },
+			);
+		}
+
+		if (errors.length > 0) {
+			toast.warning(
+				`${errors.length} lead${errors.length > 1 ? "s falharam" : " falhou"} ao entrar na fila de digitação.`,
+				{ duration: 8000 },
+			);
+		}
+
+		toast.success(
+			`Digitação enviada em lote: ${dispatchItems.length - errors.length}/${dispatchItems.length} leads aceitos na fila.`,
+			{ duration: 6000 },
+		);
+	};
+
 	const finishProcessing = () => {
 		console.log("[useLeadBatchProcessor] Processamento concluído");
 
-		// Identificar leads que não puderam ter análise preliminar
-		const skippedLeads = leads.filter(
-			(lead) => !lead.analisePreliminar && (!lead.provaManuscrita || !lead.textoDOEspelho),
-		);
-
 		setStats((prev) => {
-			const finalStats = { ...prev, skippedAnalysis: skippedLeads };
+			const finalStats = { ...prev, skippedAnalysis: [] };
 			console.log("[useLeadBatchProcessor] Stats finais:", finalStats);
 			return finalStats;
 		});
+		setShowAutomatedDialog(false);
 		setCurrentStep("done");
 
 		// Atualizar lista de leads para refletir mudanças nos botões
@@ -1171,120 +1239,15 @@ export const useLeadBatchProcessor = (
 			onUpdate();
 		}
 
-		// Mostrar relatório final
-		if (skippedLeads.length > 0) {
-			toast.warning(
-				`Processo concluído. A análise preliminar não foi executada para ${skippedLeads.length} leads. Por favor, processe o manuscrito e/ou o espelho de correção para esses leads e execute novamente.`,
-			);
-		} else {
-			toast.success("Processo concluído com sucesso!");
-		}
+		toast.success("Fluxo em lote concluído até a etapa de digitação das provas.");
 	};
 
 	const handleManuscriptSubmit = async (leadId: string, data: ManuscritoData) => {
 		console.log("[useLeadBatchProcessor] Manuscrito submetido para lead:", leadId, data);
 
-		// Criar conexão SSE apenas quando necessário
-		createSSEConnection(leadId);
-
-		// Iniciar health check se for a primeira conexão
-		if (sseConnections.size === 0) {
-			startConnectionHealthCheck();
-		}
-
-		// Adicionar lead à lista de processamento para monitoramento SSE
-		setLeadsBeingProcessed((prev) => new Set(prev.add(leadId)));
-		setLeadProcessingTimestamps((prev) => new Map(prev.set(leadId, Date.now())));
-
-		// Enviar manuscrito para o sistema externo
-		try {
-			const lead = leads.find((l) => l.id === leadId);
-			if (!lead) {
-				console.error("Lead não encontrado:", leadId);
-				return;
-			}
-
-			const payload = {
-				leadID: lead.id,
-				nome: lead.nome || "Lead sem nome",
-				telefone: lead.phoneNumber,
-				manuscrito: true,
-				arquivos:
-					lead.arquivos?.map((a: any) => ({
-						id: a.id,
-						url: a.dataUrl,
-						tipo: a.fileType,
-						nome: a.fileType,
-					})) || [],
-				arquivos_pdf: lead.pdfUnificado
-					? [
-							{
-								id: lead.id,
-								url: lead.pdfUnificado,
-								nome: "PDF Unificado",
-							},
-						]
-					: [],
-				arquivos_imagens_manuscrito: data.selectedImages.map((url: string, index: number) => ({
-					id: `${lead.id}-manuscrito-${index}`,
-					url: url,
-					nome: `Manuscrito ${index + 1}`,
-				})),
-				metadata: {
-					leadUrl: lead.leadUrl,
-					sourceId: lead.sourceId,
-					concluido: lead.concluido,
-					fezRecurso: lead.fezRecurso,
-				},
-			};
-
-			const response = await fetch("/api/admin/leads-chatwit/enviar-manuscrito", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(payload),
-			});
-
-			if (!response.ok) {
-				const errorData = await response.json();
-				throw new Error(errorData.error || "Erro ao enviar manuscrito");
-			}
-
-			console.log(`[useLeadBatchProcessor] Manuscrito de ${lead.nome} enviado com sucesso!`);
-
-			// Mostrar toast informativo sobre o processamento
-			toast.info(`🔄 Manuscrito de "${lead.nome}" enviado para processamento`, {
-				description: "Aguardando resposta do sistema de digitação...",
-				duration: 3000,
-			});
-
-			// Atualizar lista imediatamente para mostrar estado "aguardando" no botão
-			if (onUpdate) {
-				setTimeout(() => onUpdate(), 500); // Small delay para garantir que o estado foi atualizado no servidor
-			}
-		} catch (error: any) {
-			console.error(`[useLeadBatchProcessor] Erro ao enviar manuscrito:`, error);
-
-			// Remover da lista de processamento em caso de erro
-			setLeadsBeingProcessed((prev) => {
-				const newSet = new Set(prev);
-				newSet.delete(leadId);
-				return newSet;
-			});
-
-			throw error; // Re-throw para ser tratado pelo ImageGalleryDialog
-		}
-
 		const currentData = collectedData.get(leadId) || {};
 		collectedData.set(leadId, { ...currentData, manuscrito: data });
 		setCollectedData(new Map(collectedData));
-
-		setStats((prev) => ({
-			...prev,
-			completedTasks: {
-				...prev.completedTasks,
-				manuscriptsProcessed: prev.completedTasks.manuscriptsProcessed + 1,
-			},
-		}));
 
 		// Verificar se há mais manuscritos para processar
 		const hasMoreManuscripts = currentManualLeadIndex < processingQueues.manuscriptProcessing.length - 1;
@@ -1294,62 +1257,30 @@ export const useLeadBatchProcessor = (
 			console.log(
 				`[useLeadBatchProcessor] Avançando para próximo manuscrito (${currentManualLeadIndex + 1}/${processingQueues.manuscriptProcessing.length})`,
 			);
-			setCurrentManualLeadIndex((prev) => prev + 1);
+			const nextIndex = currentManualLeadIndex + 1;
+			setCurrentManualLeadIndex(nextIndex);
+			setProgress({ current: nextIndex, total: processingQueues.manuscriptProcessing.length });
 
 			// Mostrar toast de sucesso individual
 			const currentLeadName = leads.find((l) => l.id === leadId)?.nome || "Lead";
-			toast.success(`✅ Manuscrito de ${currentLeadName} enviado! Continuando para o próximo...`);
+			if (data.selectedImages.length > 0) {
+				toast.success(`Seleção de ${currentLeadName} salva. Continuando para o próximo...`);
+			} else {
+				toast.warning(`${currentLeadName} foi pulado. Continuando para o próximo...`);
+			}
 
 			// Em modo batch, não permitir que o ImageGalleryDialog feche
 			// O diálogo vai se atualizar automaticamente para o próximo lead
 		} else {
-			// Terminaram manuscritos - verificar se há espelhos para processar imediatamente
 			const totalManuscritos = processingQueues.manuscriptProcessing.length;
-			const temEspelhos = processingQueues.mirrorProcessing.length > 0;
-			const temAnalises = processingQueues.preliminaryAnalysis.length > 0;
 
-			let message = `✅ Manuscritos enviados com sucesso para ${totalManuscritos} lead${totalManuscritos > 1 ? "s" : ""}!`;
+			toast.info(
+				`Seleção concluída para ${totalManuscritos} lead${totalManuscritos > 1 ? "s" : ""}. Enfileirando digitações em paralelo...`,
+				{ duration: 4000 },
+			);
 
-			if (temEspelhos) {
-				// Mostrar mensagem de transição e continuar automaticamente para espelhos
-				message += `\n\n📋 Iniciando espelhos de correção (${processingQueues.mirrorProcessing.length} lead${processingQueues.mirrorProcessing.length > 1 ? "s" : ""})`;
-				toast.success(message, { duration: 4000 });
-
-				// Transição automática para espelhos sem fechar o modal
-				console.log("[useLeadBatchProcessor] Transição automática: manuscritos → espelhos");
-				setCurrentStep("mirror");
-				setCurrentManualLeadIndex(0); // Reset para começar os espelhos
-				setProgress({ current: 0, total: processingQueues.mirrorProcessing.length });
-
-				// Não fechar o modal - mantém o fluxo contínuo
-				// setIsOpen(false) - REMOVIDO
-				// setShowContinueButton(true) - REMOVIDO
-			} else if (temAnalises) {
-				message += `\n\n📊 Próximo passo: Análise preliminar automática (${processingQueues.preliminaryAnalysis.length} lead${processingQueues.preliminaryAnalysis.length > 1 ? "s" : ""})`;
-				message += "\n\n⏰ Continue o processo quando estiver pronto.";
-
-				toast.info(message, { duration: 8000 });
-
-				// Fechar o modal temporariamente para dar feedback
-				setIsOpen(false);
-
-				// Se há análises pendentes, mostrar botão para continuar
-				setShowContinueButton(true);
-				setCurrentManualLeadIndex(0);
-			} else {
-				message += "\n\n🎉 Processo concluído!";
-
-				toast.success(message, { duration: 6000 });
-
-				// Atualizar lista de leads para refletir mudanças nos botões
-				if (onUpdate) {
-					console.log("[useLeadBatchProcessor] Processo concluído - atualizando lista de leads...");
-					onUpdate();
-				}
-
-				// Fechar modal - processo completo
-				setIsOpen(false);
-			}
+			await dispatchCollectedManuscripts();
+			finishProcessing();
 		}
 	};
 

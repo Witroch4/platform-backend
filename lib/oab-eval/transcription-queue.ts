@@ -63,17 +63,19 @@ export type TranscriptionEvent =
 
 // --- Configuração da Fila ---
 
-const QUEUE_NAME = "oab-transcription";
+const QUEUE_NAME = getConfigValue("oab_eval.queue.name", "oab-transcription");
+const QUEUE_RETRY_ATTEMPTS = Math.max(1, getConfigValue("oab_eval.queue.retry_attempts", 4));
+const QUEUE_RETRY_BACKOFF_MS = Math.max(250, getConfigValue("oab_eval.queue.retry_backoff_ms", 3000));
 
 const redis = getRedisInstance();
 
 export const transcriptionQueue = new Queue<TranscriptionJobData>(QUEUE_NAME, {
 	connection: redis,
 	defaultJobOptions: {
-		attempts: 2,
+		attempts: QUEUE_RETRY_ATTEMPTS,
 		backoff: {
 			type: "exponential",
-			delay: 5000,
+			delay: QUEUE_RETRY_BACKOFF_MS,
 		},
 		removeOnComplete: {
 			count: 100, // Manter últimos 100 jobs completados

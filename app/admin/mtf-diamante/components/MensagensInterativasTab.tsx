@@ -257,27 +257,33 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
 			console.log("[MensagensInterativasTab] Using original message for edit:", originalMessage);
 
 			// ✅ Ensure the message has the required structure for the editor
+			// ✅ FIX: Also check content.action for buttons (API returns action inside content)
+			const contentAction = (originalMessage as any).content?.action;
 			const normalizedOriginal = {
 				...originalMessage,
 				// Ensure body.text exists (fallback to normalized data)
-				body: originalMessage.body || { text: msg.texto || "" },
+				body: originalMessage.body || (originalMessage as any).content?.body || { text: msg.texto || "" },
 				// Preserve the original content structure for genericPayload access
 				content: (originalMessage as InteractiveMessageWithContent).content,
 				// Ensure name exists
 				name: originalMessage.name || msg.nome,
 				// Ensure type exists
-				type: originalMessage.type || msg.type || "button",
+				type: originalMessage.type || (originalMessage as any).content?.type || msg.type || "button",
 				// ✅ Ensure action.type matches message type for validation and buttons exist
 				action: (() => {
-					if (originalMessage.action) {
+					// ✅ FIX: Check both top-level action AND content.action (API nests it in content)
+					const topAction = originalMessage.action;
+					const resolvedAction = topAction || contentAction;
+
+					if (resolvedAction) {
+						const resolvedType = resolvedAction.type || (originalMessage.type === "button" ? "button" : originalMessage.type);
 						return {
-							...originalMessage.action,
-							type:
-								originalMessage.action.type || (originalMessage.type === "button" ? "button" : originalMessage.type),
-							// ✅ Se não tem botões no action mas tem na normalização, adicionar
+							...resolvedAction,
+							type: resolvedType,
+							// ✅ FIX: Prefer full button data from resolved action (preserves type/url fields)
 							buttons:
-								(originalMessage.action as any).buttons?.length > 0
-									? (originalMessage.action as any).buttons
+								(resolvedAction as any).buttons?.length > 0
+									? (resolvedAction as any).buttons
 									: msg.botoes?.length > 0
 										? msg.botoes.map((btn: any) => ({
 												id: btn.id,
@@ -286,7 +292,7 @@ const MensagensInterativasTab = ({ caixaId }: MensagensInterativasTabProps) => {
 											}))
 										: undefined,
 						};
-					} else if (originalMessage.type === "button" && msg.botoes?.length > 0) {
+					} else if (["button", "button_template", "quick_replies"].includes(originalMessage.type) && msg.botoes?.length > 0) {
 						return {
 							type: "button",
 							buttons: msg.botoes.map((btn: any) => ({

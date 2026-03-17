@@ -100,6 +100,15 @@ export class SyncBridge {
 		return this.syncConsumed;
 	}
 
+	/**
+	 * Fecha a ponte sync sem consumir payload.
+	 * Usado quando o próximo passo precisa forçar entrega async.
+	 */
+	closeSyncWindow(): void {
+		this.syncConsumed = true;
+		log.debug("[SyncBridge] Ponte sync fechada manualmente");
+	}
+
 	// ---------------------------------------------------------------------------
 	// Pending Reaction (para combinar REACTION + TEXT em um único payload)
 	// ---------------------------------------------------------------------------

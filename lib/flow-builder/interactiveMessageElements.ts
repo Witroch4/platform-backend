@@ -50,12 +50,21 @@ export function createInteractiveMessageElement(type: InteractiveMessageElementT
 }
 
 export function elementsToLegacyFields(elements: InteractiveMessageElement[]): {
-	header?: string;
+	header?:
+		| string
+		| {
+				type: "IMAGE" | "VIDEO" | "DOCUMENT";
+				mediaUrl?: string;
+				mediaHandle?: string;
+				content?: string;
+			};
 	body?: string;
 	footer?: string;
 	buttons?: Array<{ id: string; title: string; description?: string }>;
+	ctaUrl?: { title: string; url: string };
 } {
-	const header = elements.find((e) => e.type === "header_text");
+	const headerText = elements.find((e) => e.type === "header_text");
+	const headerImage = elements.find((e) => e.type === "header_image");
 	const body = elements.find((e) => e.type === "body");
 	const footer = elements.find((e) => e.type === "footer");
 	const buttons = elements
@@ -66,11 +75,29 @@ export function elementsToLegacyFields(elements: InteractiveMessageElement[]): {
 			description: e.description || undefined,
 		}));
 
+	// CTA URL button (WhatsApp cta_url interactive message)
+	const ctaUrlElement = elements.find((e) => e.type === "button_url");
+	const ctaUrl =
+		ctaUrlElement && "url" in ctaUrlElement && "title" in ctaUrlElement
+			? { title: ctaUrlElement.title, url: ctaUrlElement.url }
+			: undefined;
+
 	return {
-		header: header && "text" in header ? header.text || undefined : undefined,
+		header:
+			headerText && "text" in headerText
+				? headerText.text || undefined
+				: headerImage && "url" in headerImage && (headerImage.url || headerImage.mediaHandle)
+					? {
+						type: "IMAGE",
+						mediaUrl: headerImage.url || undefined,
+						mediaHandle: headerImage.mediaHandle || undefined,
+						content: headerImage.url || undefined,
+					}
+					: undefined,
 		body: body && "text" in body ? body.text || undefined : undefined,
 		footer: footer && "text" in footer ? footer.text || undefined : undefined,
 		buttons: buttons.length ? buttons : undefined,
+		ctaUrl,
 	};
 }
 
@@ -137,10 +164,11 @@ export function getInteractiveMessageElements(
 			| undefined;
 
 		// Processar botões (podem ter formato direto ou com reply)
+		// SEMPRE regenerar IDs com prefixo flow_ para garantir roteamento correto no webhook
 		if (action?.buttons?.length) {
 			for (const btn of action.buttons) {
 				elements.push({
-					id: btn.id || btn.reply?.id || safeId("button"),
+					id: safeId("button"),
 					type: "button",
 					title: btn.title || btn.reply?.title || "",
 					description: btn.description,
@@ -151,7 +179,7 @@ export function getInteractiveMessageElements(
 			for (const section of action.sections) {
 				for (const row of section.rows ?? []) {
 					elements.push({
-						id: row.id || safeId("button"),
+						id: safeId("button"),
 						type: "button",
 						title: row.title,
 						description: row.description,
@@ -209,18 +237,19 @@ export function getInteractiveMessageElements(
 	if (footerText) legacyElements.push({ id: safeId("footer"), type: "footer", text: footerText });
 
 	// Botões normais (QUICK_REPLY)
+	// Regenerar IDs sem flow_ prefix SOMENTE se o ID original NÃO tiver o prefixo correto
 	for (const b of d.buttons ?? []) {
 		// Se tiver URL, é botão URL
 		if ("url" in b && b.url) {
 			legacyElements.push({
-				id: b.id || safeId("button_url"),
+				id: b.id?.startsWith(FLOW_BUTTON_PREFIX) ? b.id : safeId("button_url"),
 				type: "button_url",
 				title: b.text || b.title,
 				url: b.url,
 			});
 		} else {
 			legacyElements.push({
-				id: b.id || safeId("button"),
+				id: b.id?.startsWith(FLOW_BUTTON_PREFIX) ? b.id : safeId("button"),
 				type: "button",
 				title: b.title,
 				description: b.description,

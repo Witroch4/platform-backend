@@ -1,7 +1,19 @@
 # AGENTS.md — Socialwise Chatwit
 
+## Infra compartilhada local
+
+- Rede Docker: `minha_rede`
+- PostgreSQL compartilhado: host `postgres`, porta `5432`, imagem `pgvector/pgvector:pg17`
+- Redis compartilhado: host `redis`, porta `6379`, imagem `redis:8.6.1`
+- Compose da infra: `/home/wital/shared-infra/docker-compose.yml`
+- Os scripts `dev.sh` devem reutilizar essa infra e subir `postgres`/`redis` apenas se ainda não estiverem ativos
+
+## Regra para Docker Compose
+
+- Não adicionar `version:` no topo de arquivos `docker-compose*.yml`/`docker-compose*.yaml`; esse campo está deprecated no Compose atual
+
 > **Universal Agent Instructions** — Compatible with Claude Code, Cursor, Copilot, Codex, Gemini CLI, and other AI coding agents.
-SERVIDOR DE PRODUÇÃO ssh -i /home/wital/Chatwit-Social-dev/id_rsa.v3 root@49.13.155.94 "docker service ls"
+SERVIDOR DE PRODUÇÃO ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 "docker exec...
 ## 🚨 Regras Arquiteturais Críticas (LEITURA OBRIGATÓRIA)
 
 1. **SOCIALWISE = CÉREBRO | CHATWIT/CHATWOOT = CARTEIRO:** Em todas as mensagens, integrações, Flow e Flowbuilder, o Socialwise detém 100% da inteligência e processamento. O Chatwit é estritamente o "carteiro" (apenas entrega e recebe). Garanta essa separação estrutural em qualquer código gerado. O SOCIALWISE JAMAIS entrega, só processa e repassa para o CHATWIT via sync + async (solicitações do chatwit ponte aberta por 30 seg) ou async chatwit bot (quando mandamos flows de campanha etc., usamos o bot e seu token).

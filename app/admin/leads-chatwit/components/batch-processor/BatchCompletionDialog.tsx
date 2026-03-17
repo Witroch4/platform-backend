@@ -79,7 +79,7 @@ export function BatchCompletionDialog({
 						{hasTurboMode ? "Processo TURBO Concluído!" : "Processo Concluído!"}
 					</DialogTitle>
 					<DialogDescription className="text-center">
-						O processamento em lote dos {count} leads foi finalizado com sucesso!
+						O processamento em lote dos {count} leads foi finalizado até a etapa de digitação.
 						{hasTurboMode && (
 							<div className="mt-2 text-blue-600 font-medium">Processamento acelerado com TURBO Mode ativo</div>
 						)}
@@ -99,7 +99,7 @@ export function BatchCompletionDialog({
 							</div>
 							<div className="p-2 bg-purple-50 rounded">
 								<div className="font-semibold text-purple-700">{stats.completedTasks.manuscriptsProcessed}</div>
-								<div className="text-xs text-purple-600">Manuscritos</div>
+								<div className="text-xs text-purple-600">Digitações Enfileiradas</div>
 							</div>
 							<div className="p-2 bg-orange-50 rounded">
 								<div className="font-semibold text-orange-700">{stats.completedTasks.mirrorsProcessed}</div>

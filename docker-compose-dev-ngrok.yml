@@ -35,9 +35,6 @@ services:
     networks:
       - minha_rede
     restart: unless-stopped
-    depends_on:
-      - redis
-      - postgres
 
   # ============================================================================
   # WORKER UNIFICADO - TODOS OS WORKERS EM UM ÚNICO CONTAINER (DEV)
@@ -50,49 +47,14 @@ services:
     env_file:
       - .env.development.ngrok
     environment:
+      RUN_IN_DOCKER: "true"
       REDIS_HOST: "redis"
       REDIS_PORT: "6379"
     # Comando para iniciar TODOS os workers usando o init.ts
     command: pnpm run start:unified-worker
     volumes:
-      - .:/app
       - node_modules:/app/node_modules
       - ./temp:/app/temp
-    networks:
-      - minha_rede
-    restart: unless-stopped
-    depends_on:
-      - redis
-      - postgres
-
-  # ───────────────────────────────────────────────────────
-  # Redis
-  # ───────────────────────────────────────────────────────
-  redis:
-    image: redis:7-alpine
-    container_name: chatwit_redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - minha_rede
-    restart: unless-stopped
-
-  # ───────────────────────────────────────────────────────
-  # Postgres (pgvector)
-  # ───────────────────────────────────────────────────────
-  postgres:
-    image: pgvector/pgvector:pg17
-    container_name: chatwit_postgres
-    environment:
-      POSTGRES_DB: socialwise
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
-    volumes:
-      - pg_data:/var/lib/postgresql/data
     networks:
       - minha_rede
     restart: unless-stopped
@@ -117,10 +79,6 @@ services:
 volumes:
   # Para pnpm, manter node_modules como volume nomeado para cache de dependências
   node_modules:
-    driver: local
-  redis_data:
-    driver: local
-  pg_data:
     driver: local
 
 networks:

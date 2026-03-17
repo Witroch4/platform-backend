@@ -39,6 +39,8 @@ export function AutomatedProgressDialog({
 					return "Unificando PDFs";
 				case "generating-images":
 					return "Gerando Imagens";
+				case "dispatching-manuscripts":
+					return "Enfileirando Digitações";
 				case "preliminary-analysis":
 					return "Enviando para Análise Preliminar";
 				default:

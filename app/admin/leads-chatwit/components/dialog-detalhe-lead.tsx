@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Edit, MessageSquare, RefreshCw, Info } from "lucide-react";
+import { Edit, MessageSquare, RefreshCw, Info, CircleDollarSign, ExternalLink } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
@@ -483,15 +483,96 @@ export function DialogDetalheLead({ lead, open, onOpenChange, onEdit, isSaving =
 									{/* Status */}
 									<div>
 										<div className="text-sm font-medium text-muted-foreground mb-1">Status</div>
-										<div className="flex gap-2">
+										<div className="flex flex-wrap gap-2">
 											<Badge variant={formData.concluido ? "default" : "secondary"}>
 												{formData.concluido ? "Concluído" : "Pendente"}
 											</Badge>
 											<Badge variant={formData.fezRecurso ? "default" : "secondary"}>
 												{formData.fezRecurso ? "Fez Recurso" : "Sem Recurso"}
 											</Badge>
+											{(lead.payments?.length ?? 0) > 0 && (
+												<Badge className="bg-emerald-600 hover:bg-emerald-700 text-white">
+													<CircleDollarSign className="h-3 w-3 mr-1" />
+													Pagamento Recebido
+												</Badge>
+											)}
 										</div>
 									</div>
+
+									{/* Pagamentos */}
+									{(lead.payments?.length ?? 0) > 0 && (
+										<div className="border-t pt-3">
+											<div className="text-sm font-medium text-muted-foreground mb-2">Pagamentos</div>
+											<div className="space-y-2">
+												{lead.payments!.map((payment) => {
+													const paidValue = (payment.paidAmountCents ?? payment.amountCents) / 100;
+													const methodLabel: Record<string, string> = {
+														pix: "Pix",
+														credit_card: "Cartão de Crédito",
+														debit_card: "Cartão de Débito",
+														boleto: "Boleto",
+													};
+													const serviceLabel: Record<string, string> = {
+														ANALISE: "Análise",
+														RECURSO: "Recurso",
+														CONSULTORIA_FASE2: "Consultoria Fase 2",
+														OUTRO: "Outro",
+													};
+													return (
+														<div
+															key={payment.id}
+															className="rounded-md border bg-emerald-50 dark:bg-emerald-950/30 p-3 space-y-1"
+														>
+															<div className="flex items-center justify-between">
+																<span className="text-lg font-semibold text-emerald-700 dark:text-emerald-400">
+																	R$ {paidValue.toFixed(2).replace(".", ",")}
+																</span>
+																{payment.receiptUrl && (
+																	<Button
+																		variant="ghost"
+																		size="sm"
+																		className="h-7 text-xs"
+																		onClick={() => window.open(payment.receiptUrl!, "_blank")}
+																	>
+																		<ExternalLink className="h-3 w-3 mr-1" />
+																		Comprovante
+																	</Button>
+																)}
+															</div>
+															<div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
+																{payment.captureMethod && (
+																	<>
+																		<span>Método</span>
+																		<span className="font-medium text-foreground">
+																			{methodLabel[payment.captureMethod] || payment.captureMethod}
+																		</span>
+																	</>
+																)}
+																<span>Serviço</span>
+																<span className="font-medium text-foreground">
+																	{serviceLabel[payment.serviceType] || payment.serviceType}
+																</span>
+																{payment.confirmedAt && (
+																	<>
+																		<span>Confirmado em</span>
+																		<span className="font-medium text-foreground">
+																			{format(new Date(payment.confirmedAt), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+																		</span>
+																	</>
+																)}
+																{payment.description && (
+																	<>
+																		<span>Descrição</span>
+																		<span className="font-medium text-foreground">{payment.description}</span>
+																	</>
+																)}
+															</div>
+														</div>
+													);
+												})}
+											</div>
+										</div>
+									)}
 
 									{/* Datas de recurso */}
 									<div className="flex items-center justify-between">

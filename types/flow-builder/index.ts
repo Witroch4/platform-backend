@@ -66,6 +66,7 @@ export {
 	type CallTemplateNodeData,
 	type UrlTemplateNodeData,
 	type WaitForReplyNodeData,
+	type GeneratePaymentLinkNodeData,
 	type FlowNodeData,
 } from "./nodes";
 

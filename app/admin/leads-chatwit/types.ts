@@ -1,3 +1,14 @@
+export interface LeadPaymentInfo {
+	id: string;
+	amountCents: number;
+	paidAmountCents: number | null;
+	captureMethod: string | null;
+	serviceType: string;
+	description: string | null;
+	receiptUrl: string | null;
+	confirmedAt: string | null;
+}
+
 export interface ArquivoLeadChatwit {
 	id: string;
 	fileType: string;
@@ -56,6 +67,7 @@ export interface LeadChatwit {
 		email: string;
 		channel: string;
 	};
+	payments?: LeadPaymentInfo[];
 	arquivos: Array<{
 		id: string;
 		dataUrl: string;

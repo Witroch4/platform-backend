@@ -187,4 +187,9 @@ export const NODE_COLORS = {
 		border: "border-amber-600",
 		icon: "text-amber-600",
 	},
+	[FlowNodeType.GENERATE_PAYMENT_LINK]: {
+		bg: "bg-emerald-50 dark:bg-emerald-950",
+		border: "border-emerald-600",
+		icon: "text-emerald-600",
+	},
 } as const;

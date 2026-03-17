@@ -48,10 +48,10 @@ RUN if [ -f /etc/ImageMagick-6/policy.xml ]; then \
 # ARGS/ENVs para desenvolvimento
 # Defaults seguros para desenvolvimento local
 # -----------------------------------------
-ARG DATABASE_URL="postgresql://postgres:postgres@host.docker.internal:5432/socialwise?schema=public"
-ARG REDIS_HOST="host.docker.internal"
+ARG DATABASE_URL="postgresql://postgres:postgres@postgres:5432/socialwise?schema=public"
+ARG REDIS_HOST="redis"
 ARG REDIS_PORT="6379"
-ARG REDIS_URL="redis://host.docker.internal:6379"
+ARG REDIS_URL="redis://redis:6379"
 ARG REDIS_PASSWORD=""
 ARG REDIS_USE_TLS="false"
 

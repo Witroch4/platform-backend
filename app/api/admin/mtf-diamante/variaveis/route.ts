@@ -60,9 +60,9 @@ export async function GET(request: NextRequest) {
 		const lotesVariavel = config.variaveis.find((v) => v.chave === "lotes_oab");
 		const lotes = lotesVariavel && Array.isArray(lotesVariavel.valor) ? (lotesVariavel.valor as unknown as any[]) : [];
 
-		// Converter variáveis normais (excluindo lotes_oab que é interna)
+		// Converter variáveis normais (excluindo lotes_oab e lote_* que são computadas)
 		const variaveisNormais = config.variaveis
-			.filter((v) => v.chave !== "lotes_oab")
+			.filter((v) => v.chave !== "lotes_oab" && !v.chave.startsWith("lote_"))
 			.map((v) => ({
 				id: v.id,
 				chave: v.chave,
@@ -72,39 +72,41 @@ export async function GET(request: NextRequest) {
 				displayName: v.chave.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()),
 			}));
 
-		// Converter apenas o lote ativo em variável especial
+		// Helper para formatar data
+		const formatarData = (dataStr: string) => {
+			if (!dataStr) return "";
+			try {
+				const data = new Date(dataStr);
+				return data.toLocaleDateString("pt-BR", {
+					day: "2-digit",
+					month: "2-digit",
+					year: "numeric",
+					hour: "2-digit",
+					minute: "2-digit",
+				});
+			} catch {
+				return dataStr;
+			}
+		};
+
+		// Helper para formatar um lote em texto humanizado
+		const formatarLote = (lote: any) => {
+			const dataInicioFormatada = formatarData(lote.dataInicio);
+			const dataFimFormatada = formatarData(lote.dataFim);
+			return `Lote ${lote.numero}: ${lote.nome || "Sem nome"}\nValor: ${lote.valor}\nPeríodo: ${dataInicioFormatada} às ${dataFimFormatada}`;
+		};
+
+		// Gerar variáveis de lote: lote_ativo + lote_1, lote_2, etc.
 		const variaveisLotes = [];
 		const loteAtivo = lotes.find((lote: any) => lote.isActive === true);
 
+		// lote_ativo — lote atualmente ativo
 		if (loteAtivo) {
-			// Formatar data para exibição humanizada
-			const formatarData = (dataStr: string) => {
-				if (!dataStr) return "";
-				try {
-					const data = new Date(dataStr);
-					return data.toLocaleDateString("pt-BR", {
-						day: "2-digit",
-						month: "2-digit",
-						year: "numeric",
-						hour: "2-digit",
-						minute: "2-digit",
-					});
-				} catch {
-					return dataStr;
-				}
-			};
-
-			const dataInicioFormatada = formatarData(loteAtivo.dataInicio);
-			const dataFimFormatada = formatarData(loteAtivo.dataFim);
-
-			// Valor humanizado do lote ativo
-			const valorHumanizado = `${loteAtivo.nome || "Lote " + loteAtivo.numero}\nValor: ${loteAtivo.valor}\nPeríodo: ${dataInicioFormatada} às ${dataFimFormatada}`;
-
 			variaveisLotes.push({
 				id: `lote_ativo`,
 				chave: `lote_ativo`,
-				valor: valorHumanizado,
-				valorRaw: loteAtivo.valor, // Valor puro para processamento
+				valor: formatarLote(loteAtivo),
+				valorRaw: loteAtivo.valor,
 				tipo: "lote" as const,
 				descricao: `Lote Ativo - ${loteAtivo.nome} (${loteAtivo.numero})`,
 				displayName: `Lote Ativo`,
@@ -119,7 +121,6 @@ export async function GET(request: NextRequest) {
 				},
 			});
 		} else {
-			// Se não há lote ativo, mostrar variável vazia
 			variaveisLotes.push({
 				id: `lote_ativo`,
 				chave: `lote_ativo`,
@@ -131,6 +132,29 @@ export async function GET(request: NextRequest) {
 				displayName: `Lote Ativo`,
 				isActive: false,
 				loteData: null,
+			});
+		}
+
+		// lote_1, lote_2, lote_3, etc. — cada lote individual por número
+		const sortedLotes = [...lotes].sort((a: any, b: any) => a.numero - b.numero);
+		for (const lote of sortedLotes) {
+			variaveisLotes.push({
+				id: `lote_${lote.numero}`,
+				chave: `lote_${lote.numero}`,
+				valor: formatarLote(lote),
+				valorRaw: lote.valor,
+				tipo: "lote" as const,
+				descricao: `Lote ${lote.numero} - ${lote.nome || "Sem nome"}`,
+				displayName: `Lote ${lote.numero}`,
+				isActive: lote.isActive === true,
+				loteData: {
+					id: lote.id,
+					numero: lote.numero,
+					nome: lote.nome,
+					valor: lote.valor,
+					dataInicio: lote.dataInicio,
+					dataFim: lote.dataFim,
+				},
 			});
 		}
 

@@ -1,24 +1,17 @@
 "use client";
 
-import React, { useState, useRef, useCallback, useEffect } from "react";
+import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Bold, Italic, Strikethrough, List, ListOrdered, Quote, X, Variable, Eye, EyeOff } from "lucide-react";
-
-// Available variables for the flow builder
-const FLOW_VARIABLES = [
-	{ name: "contact_name", label: "Nome do contato", category: "contact" },
-	{ name: "contact_phone", label: "Telefone", category: "contact" },
-	{ name: "contact_id", label: "ID do contato", category: "contact" },
-	{ name: "conversation_id", label: "ID da conversa", category: "conversation" },
-	{ name: "conversation_channel", label: "Canal", category: "conversation" },
-	{ name: "conversation_inbox_id", label: "ID da inbox", category: "conversation" },
-	{ name: "system_timestamp", label: "Timestamp", category: "system" },
-	{ name: "system_date", label: "Data", category: "system" },
-	{ name: "system_time", label: "Hora", category: "system" },
-] as const;
+import { Bold, Italic, Strikethrough, List, ListOrdered, Quote, X, Variable, Eye, EyeOff, Package } from "lucide-react";
+import {
+	type FlowBuilderVariable,
+	STATIC_FLOW_VARIABLES,
+	CATEGORY_LABELS,
+	CATEGORY_COLORS,
+} from "../constants/flow-variables";
 
 interface FlowTextEditorDialogProps {
 	isOpen: boolean;
@@ -28,6 +21,8 @@ interface FlowTextEditorDialogProps {
 	placeholder?: string;
 	maxLength?: number;
 	title?: string;
+	/** Variables available for insertion (from FlowBuilderContext) */
+	variables?: FlowBuilderVariable[];
 }
 
 export function FlowTextEditorDialog({
@@ -38,7 +33,10 @@ export function FlowTextEditorDialog({
 	placeholder = "Digite sua mensagem...",
 	maxLength = 1024,
 	title = "Editor de Texto",
+	variables,
 }: FlowTextEditorDialogProps) {
+	const allVariables = variables ?? STATIC_FLOW_VARIABLES;
+
 	const [text, setText] = useState(initialText);
 	const [showPreview, setShowPreview] = useState(true);
 	const [showVariableMenu, setShowVariableMenu] = useState(false);
@@ -53,6 +51,39 @@ export function FlowTextEditorDialog({
 	const characterCount = text.length;
 	const isOverLimit = maxLength > 0 && characterCount > maxLength;
 	const isNearLimit = maxLength > 0 && characterCount > maxLength * 0.8;
+
+	// Group variables by category for the menu
+	const groupedVariables = useMemo(() => {
+		const groups: Record<string, FlowBuilderVariable[]> = {};
+		for (const v of allVariables) {
+			const key = v.category;
+			if (!groups[key]) groups[key] = [];
+			groups[key].push(v);
+		}
+		return groups;
+	}, [allVariables]);
+
+	// Ordered categories for rendering
+	const categoryOrder = useMemo(() => {
+		const order = ["contact", "conversation", "system"];
+		// Add session if present (WaitForReply/GeneratePaymentLink vars)
+		if (groupedVariables.session?.length) order.push("session");
+		// Add mtf if present
+		if (groupedVariables.mtf?.length) order.push("mtf");
+		// Add custom if present
+		if (groupedVariables.custom?.length) order.push("custom");
+		return order.filter((c) => groupedVariables[c]?.length);
+	}, [groupedVariables]);
+
+	// Sub-group MTF variables
+	const mtfSubGroups = useMemo(() => {
+		const mtfVars = groupedVariables.mtf || [];
+		return {
+			special: mtfVars.filter((v) => v.subCategory === "special"),
+			normal: mtfVars.filter((v) => v.subCategory === "normal" || !v.subCategory),
+			lote: mtfVars.filter((v) => v.subCategory === "lote"),
+		};
+	}, [groupedVariables]);
 
 	// Sync with initialText when dialog opens
 	useEffect(() => {
@@ -248,9 +279,18 @@ export function FlowTextEditorDialog({
 		[text, updateText],
 	);
 
-	// Generate preview HTML
+	// Generate preview HTML with MTF variable resolution
 	const getPreviewHtml = useCallback(() => {
-		let preview = text
+		// Step 1: Protect {{variables}} from markdown processing (underscores break italic)
+		const varSlots: string[] = [];
+		let protected_ = text.replace(/\{\{([^}]+)\}\}/g, (full) => {
+			const idx = varSlots.length;
+			varSlots.push(full);
+			return `\x00VAR${idx}\x00`;
+		});
+
+		// Step 2: Apply markdown formatting (safe — no {{var}} left to break)
+		let preview = protected_
 			.replace(/\*(.*?)\*/g, "<strong>$1</strong>")
 			.replace(/_(.*?)_/g, "<em>$1</em>")
 			.replace(/~(.*?)~/g, "<del>$1</del>")
@@ -263,14 +303,25 @@ export function FlowTextEditorDialog({
 			.replace(/^\d+\. (.+)$/gm, '<li class="ml-4 list-decimal">$1</li>')
 			.replace(/\n/g, "<br>");
 
-		// Highlight variables
-		preview = preview.replace(
-			/\{\{([^}]+)\}\}/g,
-			'<span class="bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 px-1 rounded font-medium">{{$1}}</span>',
-		);
+		// Step 3: Restore variables — resolve MTF values, highlight others
+		preview = preview.replace(/\x00VAR(\d+)\x00/g, (_m, idxStr: string) => {
+			const original = varSlots[Number(idxStr)];
+			const varName = original.replace(/^\{\{\s*|\s*\}\}$/g, "");
+			const variable = allVariables.find((v) => v.name === varName);
+
+			if (variable?.category === "mtf" && variable.value) {
+				const escaped = variable.value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
+				return `<span class="border border-amber-300 bg-amber-200/90 px-1 rounded font-medium text-amber-900 dark:border-amber-800/70 dark:bg-amber-900/50 dark:text-amber-300">${escaped}</span>`;
+			}
+
+			const colorClass = variable
+				? CATEGORY_COLORS[variable.category]
+				: "border border-blue-300 bg-blue-200/90 text-blue-900 dark:border-blue-800/70 dark:bg-blue-900/50 dark:text-blue-300";
+			return `<span class="${colorClass} px-1 rounded font-medium">{{${varName}}}</span>`;
+		});
 
 		return preview;
-	}, [text]);
+	}, [text, allVariables]);
 
 	// Handle backdrop mousedown - only close if both mousedown and mouseup happen on backdrop
 	const handleBackdropMouseDown = useCallback((e: React.MouseEvent) => {
@@ -291,6 +342,36 @@ export function FlowTextEditorDialog({
 		},
 		[onClose],
 	);
+
+	// Render MTF sub-group section
+	const renderMtfSubGroup = (label: string, vars: FlowBuilderVariable[], icon?: React.ReactNode) => {
+		if (!vars.length) return null;
+		return (
+			<React.Fragment key={label}>
+				<div className="px-3 py-1 text-[10px] font-medium text-amber-600 dark:text-amber-400 flex items-center gap-1">
+					{icon}
+					{label}
+				</div>
+				{vars.map((variable) => (
+					<button
+						key={variable.name}
+						className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex flex-col gap-0.5"
+						onClick={() => insertVariable(variable.name)}
+					>
+						<div className="flex items-center justify-between">
+							<span className="text-zinc-700 dark:text-zinc-300">{variable.label}</span>
+							<code className="text-xs text-zinc-400 dark:text-zinc-500">{`{{${variable.name}}}`}</code>
+						</div>
+						{variable.value && (
+							<span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono truncate max-w-full">
+								{variable.value.length > 50 ? `${variable.value.slice(0, 50)}…` : variable.value}
+							</span>
+						)}
+					</button>
+				))}
+			</React.Fragment>
+		);
+	};
 
 	if (!isOpen) return null;
 
@@ -390,28 +471,34 @@ export function FlowTextEditorDialog({
 						</Button>
 
 						{showVariableMenu && (
-							<div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-zinc-800 rounded-lg shadow-xl border border-zinc-200 dark:border-zinc-700 z-50 overflow-hidden">
+							<div className="absolute top-full left-0 mt-1 w-72 bg-white dark:bg-zinc-800 rounded-lg shadow-xl border border-zinc-200 dark:border-zinc-700 z-50 overflow-hidden">
 								<div className="p-2 border-b border-zinc-200 dark:border-zinc-700">
 									<span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Selecione uma variável</span>
 								</div>
-								<div className="max-h-64 overflow-y-auto">
-									{["contact", "conversation", "system"].map((category) => (
+								<div className="max-h-80 overflow-y-auto">
+									{categoryOrder.map((category) => (
 										<div key={category}>
 											<div className="px-3 py-1.5 text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider bg-zinc-50 dark:bg-zinc-900/50">
-												{category === "contact" && "Contato"}
-												{category === "conversation" && "Conversa"}
-												{category === "system" && "Sistema"}
+												{CATEGORY_LABELS[category] || category}
 											</div>
-											{FLOW_VARIABLES.filter((v) => v.category === category).map((variable) => (
-												<button
-													key={variable.name}
-													className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center justify-between"
-													onClick={() => insertVariable(variable.name)}
-												>
-													<span className="text-zinc-700 dark:text-zinc-300">{variable.label}</span>
-													<code className="text-xs text-zinc-400 dark:text-zinc-500">{`{{${variable.name}}}`}</code>
-												</button>
-											))}
+											{category === "mtf" ? (
+												<>
+													{renderMtfSubGroup("Especiais", mtfSubGroups.special, <Variable className="h-2.5 w-2.5" />)}
+													{renderMtfSubGroup("Normais", mtfSubGroups.normal, <Variable className="h-2.5 w-2.5" />)}
+													{renderMtfSubGroup("Lote Ativo", mtfSubGroups.lote, <Package className="h-2.5 w-2.5" />)}
+												</>
+											) : (
+												groupedVariables[category]?.map((variable) => (
+													<button
+														key={variable.name}
+														className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center justify-between"
+														onClick={() => insertVariable(variable.name)}
+													>
+														<span className="text-zinc-700 dark:text-zinc-300">{variable.label}</span>
+														<code className="text-xs text-zinc-400 dark:text-zinc-500">{`{{${variable.name}}}`}</code>
+													</button>
+												))
+											)}
 										</div>
 									))}
 								</div>

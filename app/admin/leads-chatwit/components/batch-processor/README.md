@@ -4,7 +4,7 @@ Este sistema foi refatorado para ser um **orquestrador inteligente** que analisa
 
 ## 🔧 Arquitetura do Sistema
 
-### Fluxo de 5 Passos Inteligentes
+### Fluxo Atual do Batch
 
 #### **Passo 1: Análise e Enfileiramento**
 - Analisa cada lead selecionado no banco de dados
@@ -23,21 +23,29 @@ Este sistema foi refatorado para ser um **orquestrador inteligente** que analisa
 - **Interface**: `AutomatedProgressDialog` - não interativo, progresso contínuo
 - Mostra feedback visual: "Unificando PDF do Lead X de Y" / "Gerando Imagens do Lead X de Y"
 
-#### **Passo 3: Execução com Intervenção (Manuscrito e Espelho)**
-- Abre diálogos existentes sequencialmente para seleção de imagens
-- **Manuscritos**: `BatchManuscritoDialog` para cada lead que precisa
-- **Espelhos**: `BatchEspelhoDialog` para cada lead que precisa
-- O usuário seleciona as imagens e o sistema envia automaticamente
+#### **Passo 3: Seleção de Imagens para Digitação**
+- Abre o seletor de imagens lead a lead apenas para manuscritos
+- O usuário escolhe quais páginas enviar para digitação de cada prova
+- As seleções ficam acumuladas internamente até o último lead
 
-#### **Passo 4: Análise Preliminar Automatizada**
-- **Condição**: SÓ executa para leads que possuem `provaManuscrita` E `textoDOEspelho`
-- Dispara análise em segundo plano para leads elegíveis
-- **Interface**: `AutomatedProgressDialog` - "Enviando para análise preliminar: Lead X de Y"
+#### **Passo 4: Despacho Paralelo para Digitação**
+- Depois da última seleção, o batch dispara múltiplos envios em paralelo para `/api/admin/leads-chatwit/enviar-manuscrito`
+- O fluxo termina aqui: não entra em espelho nem análise preliminar
+- O processamento pesado segue na fila `oab-transcription`, com retry no BullMQ e fallback do agente para OpenAI
 
 #### **Passo 5: Conclusão e Relatório Final**
 - Fecha diálogos ativos
-- Exibe `BatchCompletionDialog` com estatísticas detalhadas
-- **Relatório de leads não processados**: Informa sobre leads que não puderam ter análise preliminar por falta de dados
+- Exibe `BatchCompletionDialog` com estatísticas de PDFs, imagens e digitações enfileiradas
+
+## Variáveis de Ambiente Relevantes
+
+- `NEXT_PUBLIC_OAB_EVAL_BATCH_DISPATCH_CONCURRENCY`: quantidade de leads enviados em paralelo pelo batch na UI. Padrão: `10`.
+- `OAB_EVAL_TRANSCRIBE_CONCURRENCY`: quantidade de imagens/páginas processadas em paralelo dentro de cada lead. Padrão atual: `30`.
+- `OAB_EVAL_MAX_CONCURRENT_JOBS`: quantidade de jobs de digitação executados simultaneamente no worker. Padrão atual: `10`.
+- `OAB_EVAL_RETRY_ATTEMPTS`: retries do BullMQ para cada job de digitação. Padrão atual: `4`.
+- `OAB_EVAL_RETRY_BACKOFF_MS`: backoff exponencial inicial entre retries do BullMQ. Padrão atual: `3000`.
+- `OAB_EVAL_RATE_LIMIT_MAX`: limite de jobs liberados por janela do limiter da fila. Padrão atual: `10`.
+- `OAB_EVAL_RATE_LIMIT_DURATION_MS`: duração da janela do limiter da fila em ms. Padrão atual: `1000`.
 
 ## 📁 Componentes
 

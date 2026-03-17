@@ -182,12 +182,15 @@ export const workerRegistry: WorkerDefinition[] = [
 	},
 	{
 		name: "Transcription",
-		queue: "oab-transcription",
+		queue: getConfigValue("oab_eval.queue.name", "oab-transcription"),
 		processor: processTranscriptionJob as Processor,
-		concurrency: getConfigValue("oab_eval.queue.max_concurrent_jobs", 3),
+		concurrency: getConfigValue("oab_eval.queue.max_concurrent_jobs", 10),
 		limiter: {
-			max: getConfigValue("oab_eval.queue.max_concurrent_jobs", 3),
-			duration: 1000,
+			max: getConfigValue(
+				"oab_eval.queue.rate_limit_max",
+				getConfigValue("oab_eval.queue.max_concurrent_jobs", 10),
+			),
+			duration: getConfigValue("oab_eval.queue.rate_limit_duration_ms", 1000),
 		},
 		icon: "📄",
 		description: "Digitação de manuscritos",

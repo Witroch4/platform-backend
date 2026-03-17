@@ -39,7 +39,14 @@ export async function GET(request: Request): Promise<Response> {
 					id: leadId,
 				},
 				include: {
-					lead: true,
+					lead: {
+						include: {
+							payments: {
+								where: { status: "CONFIRMED" },
+								orderBy: { confirmedAt: "desc" },
+							},
+						},
+					},
 					usuarioChatwit: {
 						select: {
 							name: true,
@@ -348,7 +355,14 @@ export async function GET(request: Request): Promise<Response> {
 				// Ordenar por updatedAt para que leads recentemente atualizados (com novos arquivos, etc.) apareçam primeiro
 				orderBy: { lead: { updatedAt: "desc" } },
 				include: {
-					lead: true,
+					lead: {
+						include: {
+							payments: {
+								where: { status: "CONFIRMED" },
+								orderBy: { confirmedAt: "desc" },
+							},
+						},
+					},
 					usuarioChatwit: {
 						select: {
 							name: true,
@@ -475,6 +489,16 @@ export async function GET(request: Request): Promise<Response> {
 				especialidade: lead.especialidade || null,
 				espelhoPadraoId: lead.espelhoPadraoId || null,
 				arquivos: lead.arquivos || [],
+				payments: (leadData?.payments ?? []).map((p: any) => ({
+					id: p.id,
+					amountCents: p.amountCents,
+					paidAmountCents: p.paidAmountCents,
+					captureMethod: p.captureMethod,
+					serviceType: p.serviceType,
+					description: p.description,
+					receiptUrl: p.receiptUrl,
+					confirmedAt: p.confirmedAt,
+				})),
 			};
 		});
 

@@ -87,10 +87,9 @@ export function createEmptyFlowCanvas(options?: { isCampaign?: boolean }): FlowC
  * Valida se um canvas é válido
  *
  * Regras:
- * - O fluxo pode começar com START ou diretamente com INTERACTIVE_MESSAGE
- * - Nós raiz (sem conexão de entrada) devem ser START ou INTERACTIVE_MESSAGE
- * - Nós não raiz devem ter pelo menos uma conexão de entrada
- * - Todos os nós (exceto START) devem estar configurados
+ * - O fluxo deve ter pelo menos um ponto de início (START ou mensagem raiz)
+ * - Nós soltos (sem conexão de entrada) são permitidos — simplesmente não serão executados
+ * - Todos os nós (exceto START) devem estar configurados (warning)
  */
 export function validateFlowCanvas(canvas: FlowCanvas): {
 	valid: boolean;
@@ -111,14 +110,15 @@ export function validateFlowCanvas(canvas: FlowCanvas): {
 		FlowNodeType.QUICK_REPLIES,
 		FlowNodeType.CAROUSEL,
 	];
-	const invalidRootNodes = rootNodes.filter((n) => !validRootTypes.includes(n.type as FlowNodeType));
 
 	if (rootNodes.length === 0) {
 		errors.push("O fluxo deve ter pelo menos um ponto de início");
 	}
 
-	if (invalidRootNodes.length > 0) {
-		errors.push(`${invalidRootNodes.length} nó(s) sem conexão de entrada não são válidos como início de fluxo`);
+	// Verificar se existe pelo menos um ponto de início válido
+	const validRoots = rootNodes.filter((n) => validRootTypes.includes(n.type as FlowNodeType));
+	if (rootNodes.length > 0 && validRoots.length === 0) {
+		errors.push("O fluxo deve ter pelo menos um nó START ou mensagem como ponto de início");
 	}
 
 	// Verificar múltiplos START (warning, não erro)
@@ -127,12 +127,12 @@ export function validateFlowCanvas(canvas: FlowCanvas): {
 		warnings.push("O fluxo tem múltiplos nós de início");
 	}
 
-	// Verificar nós órfãos (nós que não são raiz válidos e não têm conexão de entrada)
-	const orphanNodes = canvas.nodes.filter(
+	// Nós soltos são apenas um aviso — não serão executados pelo flow engine
+	const disconnectedNodes = canvas.nodes.filter(
 		(n) => !validRootTypes.includes(n.type as FlowNodeType) && !nodesWithIncomingEdges.has(n.id),
 	);
-	if (orphanNodes.length > 0) {
-		errors.push(`Existem ${orphanNodes.length} nó(s) sem conexão de entrada`);
+	if (disconnectedNodes.length > 0) {
+		warnings.push(`${disconnectedNodes.length} nó(s) solto(s) não serão executados (sem conexão de entrada)`);
 	}
 
 	// Verificar nós não configurados

@@ -15,6 +15,7 @@ import {
 	getCachedVariablesForUser,
 	getLoteAtivoFormatado,
 } from "@/lib/mtf-diamante/variables-resolver";
+import { parseCurrencyToCents } from "@/lib/payment/parse-currency";
 
 /**
  * Resolves userId from prismaInboxId and loads all MTF Diamante variables
@@ -43,7 +44,8 @@ export async function loadMtfVariablesForInbox(
 			return {};
 		}
 
-		// Normal variables (Redis cached, 10min TTL)
+		// Normal + lote variables (Redis cached, 10min TTL)
+		// Includes: normal vars, lote_ativo, lote_1, lote_2, etc.
 		const variables = await getCachedVariablesForUser(userId);
 		const result: Record<string, string> = {};
 
@@ -51,7 +53,7 @@ export async function loadMtfVariablesForInbox(
 			result[v.chave] = v.valor;
 		}
 
-		// lote_ativo (fresh read — not included in getCachedVariablesForUser result)
+		// Fresh read of lote_ativo to override cached value (lotes change more frequently)
 		try {
 			result.lote_ativo = await getLoteAtivoFormatado(userId);
 		} catch (e) {
@@ -59,6 +61,21 @@ export async function loadMtfVariablesForInbox(
 				userId,
 				error: e instanceof Error ? e.message : String(e),
 			});
+		}
+
+		// Derive centavos versions for payment integration
+		// For each variable that looks like a monetary value, create a _centavos version
+		for (const [key, value] of Object.entries({ ...result })) {
+			if (typeof value === "string" && (value.includes("R$") || value.match(/^\d+[,.]?\d*$/))) {
+				try {
+					const cents = parseCurrencyToCents(value);
+					if (cents > 0) {
+						result[`${key}_centavos`] = String(cents);
+					}
+				} catch {
+					// Not a valid currency value, skip
+				}
+			}
 		}
 
 		log.info("[MtfVariableLoader] MTF variables loaded", {

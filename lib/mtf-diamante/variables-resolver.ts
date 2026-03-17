@@ -22,6 +22,26 @@ interface VariavelResolvida {
 	descricao?: string;
 }
 
+function formatarDataHora(dataStr: string): string {
+	if (!dataStr) return "";
+	try {
+		const data = new Date(dataStr);
+		return data.toLocaleDateString("pt-BR", {
+			day: "2-digit",
+			month: "2-digit",
+			year: "numeric",
+			hour: "2-digit",
+			minute: "2-digit",
+		});
+	} catch {
+		return dataStr;
+	}
+}
+
+function formatarLote(lote: LoteOab): string {
+	return `Lote ${lote.numero}: ${lote.nome || "Sem nome"}\nValor: ${lote.valor}\nPeríodo: ${formatarDataHora(lote.dataInicio)} às ${formatarDataHora(lote.dataFim)}`;
+}
+
 /**
  * Busca todas as variáveis disponíveis para um usuário
  * Inclui variáveis normais e variáveis dos lotes
@@ -55,80 +75,33 @@ export async function getAllVariablesForUser(userId: string): Promise<VariavelRe
 			}
 		}
 
-		// 2. Buscar lotes e criar variável única do lote ativo
+		// 2. Buscar lotes e criar variáveis: lote_ativo + lote_1, lote_2, etc.
 		const lotesVariavel = config.variaveis.find((v) => v.chave === "lotes_oab");
 		if (lotesVariavel && Array.isArray(lotesVariavel.valor)) {
 			const lotes = lotesVariavel.valor as unknown as LoteOab[];
-
-			// Encontrar o lote ativo (apenas um pode estar ativo)
 			const loteAtivo = lotes.find((lote) => lote.isActive === true);
 
 			if (loteAtivo) {
-				// Formatar data para exibição humanizada
-				const formatarData = (dataStr: string) => {
-					if (!dataStr) return "";
-					try {
-						const data = new Date(dataStr);
-						return data.toLocaleDateString("pt-BR", {
-							day: "2-digit",
-							month: "2-digit",
-							year: "numeric",
-							hour: "2-digit",
-							minute: "2-digit",
-						});
-					} catch {
-						return dataStr;
-					}
-				};
-
-				const dataInicioFormatada = formatarData(loteAtivo.dataInicio);
-				const dataFimFormatada = formatarData(loteAtivo.dataFim);
-
-				// Valor humanizado do lote ativo
-				const valorHumanizado = `${loteAtivo.nome || "Lote " + loteAtivo.numero}\nValor: ${loteAtivo.valor}\nPeríodo: ${dataInicioFormatada} às ${dataFimFormatada}`;
-
-				// Salvar lote ativo como variável especial com tag para não aparecer na lista comum
-				await getPrismaInstance().mtfDiamanteVariavel.upsert({
-					where: {
-						configId_chave: {
-							configId: config.id,
-							chave: "lote_ativo",
-						},
-					},
-					update: {
-						valor: valorHumanizado,
-					},
-					create: {
-						configId: config.id,
-						chave: "lote_ativo",
-						valor: valorHumanizado,
-					},
+				variaveis.push({
+					chave: "lote_ativo",
+					valor: formatarLote(loteAtivo),
+					tipo: "lote",
 				});
-
-				console.log(
-					`[MTF Variables] Lote ativo encontrado para usuário ${userId}: ${loteAtivo.nome} (${loteAtivo.numero})`,
-				);
 			} else {
-				console.log(`[MTF Variables] Nenhum lote ativo encontrado para usuário ${userId}`);
+				variaveis.push({
+					chave: "lote_ativo",
+					valor:
+						"*⚠️🚫 ATENÇÃO: Este serviço NÃO pode ser solicitado agora Nenhum lote ativo no momento. Veja sobre mandado de segurança!!*",
+					tipo: "lote",
+				});
+			}
 
-				// Salvar variável de lote vazia se não houver lote ativo
-				await getPrismaInstance().mtfDiamanteVariavel.upsert({
-					where: {
-						configId_chave: {
-							configId: config.id,
-							chave: "lote_ativo",
-						},
-					},
-					update: {
-						valor:
-							"*⚠️🚫 ATENÇÃO: Este serviço NÃO pode ser solicitado agora Nenhum lote ativo no momento. Veja sobre mandado de segurança!!*",
-					},
-					create: {
-						configId: config.id,
-						chave: "lote_ativo",
-						valor:
-							"*⚠️🚫 ATENÇÃO: Este serviço NÃO pode ser solicitado agora Nenhum lote ativo no momento. Veja sobre mandado de segurança!!*",
-					},
+			// Individual lote_N variables
+			for (const lote of lotes) {
+				variaveis.push({
+					chave: `lote_${lote.numero}`,
+					valor: formatarLote(lote),
+					tipo: "lote",
 				});
 			}
 		}
@@ -178,27 +151,7 @@ export async function getLoteAtivoFormatado(userId: string): Promise<string> {
 			return "*⚠️🚫 ATENÇÃO: Este serviço NÃO pode ser solicitado agora Nenhum lote ativo no momento. Veja sobre mandado de segurança!!*";
 		}
 
-		// Formatação humanizada do lote ativo com data e hora
-		const formatarDataHora = (dataStr: string) => {
-			if (!dataStr) return "";
-			try {
-				const data = new Date(dataStr);
-				return data.toLocaleDateString("pt-BR", {
-					day: "2-digit",
-					month: "2-digit",
-					year: "numeric",
-					hour: "2-digit",
-					minute: "2-digit",
-				});
-			} catch {
-				return dataStr;
-			}
-		};
-
-		const dataInicio = formatarDataHora(loteAtivo.dataInicio);
-		const dataFim = formatarDataHora(loteAtivo.dataFim);
-
-		return `${loteAtivo.nome}\nValor: R$ ${loteAtivo.valor}\nPeríodo: de ${dataInicio} a ${dataFim}`;
+		return formatarLote(loteAtivo);
 	} catch (error) {
 		console.error(`[MTF Variables] Erro ao buscar lote ativo para usuário ${userId}:`, error);
 		return "Erro ao buscar lote ativo";
@@ -214,14 +167,7 @@ export async function replaceVariablesInText(userId: string, texto: string): Pro
 
 	let textoSubstituido = texto;
 
-	// Tratamento especial para {{lote_ativo}}
-	if (textoSubstituido.includes("{{lote_ativo}}")) {
-		const valorLoteAtivo = await getLoteAtivoFormatado(userId);
-		textoSubstituido = textoSubstituido.replace(/\{\{lote_ativo\}\}/g, valorLoteAtivo);
-		console.log(`[MTF Variables] Variável lote_ativo resolvida para usuário ${userId}: ${valorLoteAtivo}`);
-	}
-
-	// Buscar e substituir outras variáveis normais
+	// Buscar todas as variáveis (inclui lote_ativo e lote_N)
 	const variaveis = await getAllVariablesForUser(userId);
 
 	for (const variavel of variaveis) {

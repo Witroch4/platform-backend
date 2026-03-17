@@ -40,6 +40,80 @@ interface MinIOMediaUploadProps {
 	onUploadComplete?: (file: MinIOMediaFile) => void;
 }
 
+async function loadImage(file: File): Promise<HTMLImageElement> {
+	return await new Promise((resolve, reject) => {
+		const image = new window.Image();
+		const objectUrl = URL.createObjectURL(file);
+		image.onload = () => {
+			URL.revokeObjectURL(objectUrl);
+			resolve(image);
+		};
+		image.onerror = () => {
+			URL.revokeObjectURL(objectUrl);
+			reject(new Error(`Não foi possível abrir a imagem ${file.name}`));
+		};
+		image.src = objectUrl;
+	});
+}
+
+function replaceFileExtension(fileName: string, extension: string): string {
+	return /\.[^.]+$/.test(fileName) ? fileName.replace(/\.[^.]+$/, extension) : `${fileName}${extension}`;
+}
+
+async function compressImageToFitLimit(file: File, maxSizeBytes: number): Promise<File> {
+	if (!file.type.startsWith("image/") || file.size <= maxSizeBytes) {
+		return file;
+	}
+
+	const image = await loadImage(file);
+	const canvas = document.createElement("canvas");
+	const context = canvas.getContext("2d");
+	if (!context) {
+		throw new Error("Canvas indisponível para compactar imagem");
+	}
+
+	let scale = 1;
+	let quality = 0.86;
+	let bestBlob: Blob | null = null;
+	const outputType = "image/jpeg";
+
+	for (let attempt = 0; attempt < 8; attempt += 1) {
+		canvas.width = Math.max(1, Math.round(image.width * scale));
+		canvas.height = Math.max(1, Math.round(image.height * scale));
+		context.clearRect(0, 0, canvas.width, canvas.height);
+		context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+		const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, outputType, quality));
+		if (!blob) {
+			throw new Error("Falha ao gerar imagem compactada");
+		}
+
+		bestBlob = blob;
+		if (blob.size <= maxSizeBytes) {
+			return new File([blob], replaceFileExtension(file.name, ".jpg"), {
+				type: outputType,
+				lastModified: Date.now(),
+			});
+		}
+
+		if (quality > 0.45) {
+			quality -= 0.12;
+		} else {
+			scale *= 0.84;
+			quality = 0.82;
+		}
+	}
+
+	if (!bestBlob) {
+		throw new Error("Não foi possível compactar a imagem");
+	}
+
+	return new File([bestBlob], replaceFileExtension(file.name, ".jpg"), {
+		type: outputType,
+		lastModified: Date.now(),
+	});
+}
+
 export default function MinIOMediaUpload({
 	uploadedFiles,
 	setUploadedFiles,
@@ -65,10 +139,31 @@ export default function MinIOMediaUpload({
 				return;
 			}
 
+			const maxSizeBytes = maxSizeMB * 1024 * 1024;
+			const processedFiles: File[] = [];
+
+			for (const file of acceptedFiles) {
+				let candidate = file;
+				if (candidate.type.startsWith("image/") && candidate.size > maxSizeBytes) {
+					try {
+						candidate = await compressImageToFitLimit(candidate, maxSizeBytes);
+						if (candidate.size < file.size) {
+							toast.info(`Imagem ${file.name} foi compactada automaticamente para upload.`);
+						}
+					} catch (error: any) {
+						toast.error(`Não foi possível compactar ${file.name}`, {
+							description: error.message || "Falha na compactação da imagem",
+						});
+						continue;
+					}
+				}
+				processedFiles.push(candidate);
+			}
+
 			// Verificar tamanho e tipo dos arquivos
-			const validFiles = acceptedFiles.filter((file) => {
+			const validFiles = processedFiles.filter((file) => {
 				// Verificar tamanho
-				if (file.size > maxSizeMB * 1024 * 1024) {
+				if (file.size > maxSizeBytes) {
 					toast.error(`Arquivo ${file.name} excede o tamanho máximo de ${maxSizeMB}MB`);
 					return false;
 				}
@@ -115,12 +210,12 @@ export default function MinIOMediaUpload({
 			"video/webm": [".webm"],
 			"image/jpeg": [".jpg", ".jpeg"],
 			"image/png": [".png"],
+			"image/webp": [".webp"],
 			"application/pdf": [".pdf"],
 			"application/msword": [".doc"],
 			"application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
 		},
 		maxFiles: maxFiles - uploadedFiles.length,
-		maxSize: maxSizeMB * 1024 * 1024,
 		disabled: isUploading || uploadedFiles.length >= maxFiles,
 	});
 

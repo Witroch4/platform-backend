@@ -83,8 +83,9 @@ oab_eval:
   # Quando true, utiliza agente local (LangGraph) para digitação do manuscrito
   agentelocal: true
   # ENV: OAB_EVAL_TRANSCRIBE_CONCURRENCY
-  # Número de páginas processadas em paralelo pelo agente local
-  transcribe_concurrency: 10
+  # Número de páginas/imagens processadas em paralelo pelo agente local
+  # Ajuste via ENV para subir até 60 quando a API suportar
+  transcribe_concurrency: 30
 
   # ENV: OAB_EVAL_AGENT_LOCAL_ESPELHO
   # Quando true, utiliza agente local (LangGraph) para geração de espelho
@@ -99,13 +100,21 @@ oab_eval:
     name: 'oab-transcription'
     # Máximo de digitações simultâneas (jobs concorrentes)
     # ENV: OAB_EVAL_MAX_CONCURRENT_JOBS
-    max_concurrent_jobs: 3
+    max_concurrent_jobs: 10
     # Timeout para cada job de transcrição (ms)
     # ENV: OAB_EVAL_JOB_TIMEOUT
     job_timeout: 300000  # 5 minutos
     # Tentativas de retry em caso de falha
     # ENV: OAB_EVAL_RETRY_ATTEMPTS
-    retry_attempts: 2
+    retry_attempts: 4
+    # Backoff entre tentativas do BullMQ
+    # ENV: OAB_EVAL_RETRY_BACKOFF_MS
+    retry_backoff_ms: 3000
+    # Rate limit da fila para proteger a API sem matar simultaneidade
+    # ENV: OAB_EVAL_RATE_LIMIT_MAX
+    rate_limit_max: 10
+    # ENV: OAB_EVAL_RATE_LIMIT_DURATION_MS
+    rate_limit_duration_ms: 1000
 
   # Configurações de debug e logging
   debug:

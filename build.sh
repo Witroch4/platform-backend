@@ -9,6 +9,7 @@ set -euo pipefail
 
 IMAGE="witrocha/socialwise"
 STACK_NAME="socialwise"
+SHARED_INFRA_COMPOSE="/home/wital/shared-infra/docker-compose.yml"
 # Serviços Swarm para atualizar (nomes dentro do compose)
 # ATENÇÃO: Worker deve atualizar ANTES da App para evitar race condition de payload (BullMQ)
 SWARM_SERVICES=("worker" "socialwise_app")
@@ -204,23 +205,23 @@ _start_postgres_for_build() {
     echo "  ✓ PostgreSQL disponível em localhost:5432"
     return 0
   fi
-  echo "  → PostgreSQL não encontrado. Iniciando serviço 'postgres' do compose..."
-  docker compose up -d postgres
+  echo "  → PostgreSQL não encontrado. Iniciando postgres da shared infra..."
+  docker compose -f "${SHARED_INFRA_COMPOSE}" up -d postgres
   _BUILD_POSTGRES_STARTED=true
 
   echo "  → Aguardando PostgreSQL estar pronto..."
   local retries=30
-  until docker compose exec -T postgres pg_isready -U "$_BUILD_DB_USER" &>/dev/null; do
+  until docker exec postgres pg_isready -U "$_BUILD_DB_USER" -d postgres &>/dev/null; do
     retries=$((retries - 1))
     [ "$retries" -le 0 ] && echo "  ✗ Timeout aguardando PostgreSQL" && return 1
     sleep 1
   done
 
   # Cria o banco com o nome exato usado no build arg (case-sensitive no PostgreSQL)
-  docker compose exec -T postgres psql -U "$_BUILD_DB_USER" \
+  docker exec postgres psql -U "$_BUILD_DB_USER" \
     -tc "SELECT 1 FROM pg_database WHERE datname = '${_BUILD_DB_NAME}'" \
     | grep -q 1 \
-    || docker compose exec -T postgres createdb -U "$_BUILD_DB_USER" "$_BUILD_DB_NAME"
+    || docker exec postgres createdb -U "$_BUILD_DB_USER" "$_BUILD_DB_NAME"
 
   # Aplica migrations para criar as tabelas (SSG precisa delas existir)
   echo "  → Aplicando migrations em '${_BUILD_DB_NAME}'..."
@@ -233,8 +234,7 @@ _start_postgres_for_build() {
 _cleanup_build_postgres() {
   if [ "$_BUILD_POSTGRES_STARTED" = "true" ]; then
     echo ""
-    echo "==> Parando postgres de build (iniciado automaticamente)..."
-    docker compose stop postgres && echo "  ✓ postgres parado"
+    echo "==> PostgreSQL da shared infra foi iniciado automaticamente e será mantido ativo"
   fi
 }
 

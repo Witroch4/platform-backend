@@ -36,6 +36,7 @@ export const NODE_TYPE_MAP: Record<string, string> = {
 	delay: "DELAY",
 	media: "MEDIA",
 	wait_for_reply: "WAIT_FOR_REPLY",
+	generate_payment_link: "GENERATE_PAYMENT_LINK",
 };
 
 // =============================================================================
@@ -89,6 +90,16 @@ export function buildNodeConfig(node: FlowNode): object {
 				validationErrorMessage: data.validationErrorMessage,
 				maxAttempts: data.maxAttempts,
 				skipButtonLabel: data.skipButtonLabel,
+			};
+		case "generate_payment_link":
+			return {
+				provider: data.provider,
+				handle: data.handle,
+				amountCents: data.amountCents,
+				description: data.description,
+				customerEmailVar: data.customerEmailVar,
+				outputVariable: data.outputVariable,
+				linkIdVariable: data.linkIdVariable,
 			};
 		case "end":
 			return { endMessage: data.endMessage };
@@ -205,14 +216,95 @@ export async function syncCanvasToNormalizedFlow(
 		}
 
 		// 6. Criar edges com IDs mapeados (com dedup por source+target+handle)
+		//
+		// FIX: Edges de interactive_message sem sourceHandle (criadas antes dos botões
+		// serem adicionados, ou arrastadas do handle padrão do nó) precisam ser
+		// expandidas em uma edge por botão. Sem isso, FlowEdge não tem buttonId e
+		// resumeFromButton() não encontra o caminho ao receber clique de botão.
 		const edgeDedup = new Set<string>();
 		let edgesCreated = 0;
+
+		// Pré-indexar canvas nodes por id para lookup rápido
+		const canvasNodesMap = new Map<string, FlowNode>();
+		for (const node of canvas.nodes) {
+			canvasNodesMap.set(node.id, node);
+		}
+
+		// Coletar edges que JÁ têm sourceHandle por source (para saber quais botões já estão cobertos)
+		const coveredButtonsBySource = new Map<string, Set<string>>();
+		for (const edge of canvas.edges) {
+			if (edge.sourceHandle) {
+				const set = coveredButtonsBySource.get(edge.source) || new Set();
+				set.add(edge.sourceHandle);
+				coveredButtonsBySource.set(edge.source, set);
+			}
+		}
 
 		for (const edge of canvas.edges) {
 			const sourceId = nodeIdMap.get(edge.source);
 			const targetId = nodeIdMap.get(edge.target);
 
 			if (!sourceId || !targetId) continue;
+
+			const conditionBranch = ((edge.data as Record<string, unknown> | undefined)?.conditionBranch as string) || null;
+
+			// FIX: Se edge de interactive_message sem sourceHandle mas nó tem botões,
+			// expandir para uma edge por botão não-coberto (garante que cliques funcionem)
+			if (!edge.sourceHandle) {
+				const sourceNode = canvasNodesMap.get(edge.source);
+				if (sourceNode?.type === "interactive_message") {
+					const data = sourceNode.data as unknown as Record<string, unknown>;
+					const elements = data.elements as Array<{ id: string; type: string }> | undefined;
+					const buttons = data.buttons as Array<{ id: string }> | undefined;
+					const elementButtons = elements?.filter((e) => e.type === "button") ?? [];
+					const allButtonIds = elementButtons.length > 0
+						? elementButtons.map((b) => b.id)
+						: (buttons ?? []).map((b) => b.id);
+
+					if (allButtonIds.length > 0) {
+						const covered = coveredButtonsBySource.get(edge.source) ?? new Set();
+						const uncoveredButtonIds = allButtonIds.filter((id) => !covered.has(id));
+
+						if (uncoveredButtonIds.length > 0) {
+							console.log(
+								`[syncFlow] ⚠️ Edge sem sourceHandle de interactive_message "${edge.source}" → expandindo para ${uncoveredButtonIds.length} botão(ões)`,
+							);
+							for (const btnId of uncoveredButtonIds) {
+								const dedupKey = `${sourceId}|${targetId}|${btnId}`;
+								if (edgeDedup.has(dedupKey)) continue;
+								edgeDedup.add(dedupKey);
+								edgesCreated++;
+
+								await tx.flowEdge.create({
+									data: {
+										flowId: flow.id,
+										sourceNodeId: sourceId,
+										targetNodeId: targetId,
+										buttonId: btnId,
+										conditionBranch,
+									},
+								});
+							}
+							// Também criar a edge default (sem buttonId) para findNextNodeId()
+							const defaultDedupKey = `${sourceId}|${targetId}|`;
+							if (!edgeDedup.has(defaultDedupKey)) {
+								edgeDedup.add(defaultDedupKey);
+								edgesCreated++;
+								await tx.flowEdge.create({
+									data: {
+										flowId: flow.id,
+										sourceNodeId: sourceId,
+										targetNodeId: targetId,
+										buttonId: null,
+										conditionBranch,
+									},
+								});
+							}
+							continue; // Já processou esta edge
+						}
+					}
+				}
+			}
 
 			const dedupKey = `${sourceId}|${targetId}|${edge.sourceHandle || ""}`;
 			if (edgeDedup.has(dedupKey)) continue;
@@ -225,7 +317,7 @@ export async function syncCanvasToNormalizedFlow(
 					sourceNodeId: sourceId,
 					targetNodeId: targetId,
 					buttonId: edge.sourceHandle || null,
-					conditionBranch: ((edge.data as Record<string, unknown> | undefined)?.conditionBranch as string) || null,
+					conditionBranch,
 				},
 			});
 		}

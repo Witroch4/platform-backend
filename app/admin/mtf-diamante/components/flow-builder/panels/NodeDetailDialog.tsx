@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useEffect, useMemo } from "react";
+import React, { useCallback, useState, useEffect, useMemo, useRef } from "react";
 import type { Node } from "@xyflow/react";
 import { useTheme } from "next-themes";
 import { FlowNodeType } from "@/types/flow-builder";
@@ -17,10 +17,12 @@ import type {
 	StartNodeData,
 	ChatwitActionNodeData,
 	WaitForReplyNodeData,
+	GeneratePaymentLinkNodeData,
 } from "@/types/flow-builder";
 import { ChatwitActionDetailEditor } from "./editors/ChatwitActionDetailEditor";
 import {
 	elementsToLegacyFields,
+	generateElementId,
 	getInteractiveMessageElements,
 	hasConfiguredBody,
 } from "@/lib/flow-builder/interactiveMessageElements";
@@ -31,8 +33,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { MessageSquare, Play, Smile, Type, UserRoundCog, TagIcon, CircleStop, Smartphone, Workflow, MessageSquareText } from "lucide-react";
+import { MessageSquare, Play, Smile, Type, UserRoundCog, TagIcon, CircleStop, Smartphone, Workflow, MessageSquareText, CreditCard as CreditCardIcon, Variable, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useFlowBuilderContext } from "../context/FlowBuilderContext";
+import {
+	type FlowBuilderVariable,
+	STATIC_FLOW_VARIABLES,
+	CATEGORY_LABELS,
+	CATEGORY_COLORS,
+} from "../constants/flow-variables";
 
 // =============================================================================
 // EMOJI PICKER
@@ -435,7 +444,11 @@ const TAG_COLORS = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#06b6d4", "#3b8
  * Parse WhatsApp formatting and return React elements
  * Supports: *bold*, _italic_, ~strikethrough~, ```monospace```, > quote
  */
-function parseWhatsAppFormatting(text: string, isDark: boolean): React.ReactNode {
+function parseWhatsAppFormatting(
+	text: string,
+	isDark: boolean,
+	mtfVariables?: Array<{ name: string; value?: string; category: string }>,
+): React.ReactNode {
 	if (!text) return null;
 
 	const lines = text.split("\n");
@@ -455,14 +468,14 @@ function parseWhatsAppFormatting(text: string, isDark: boolean): React.ReactNode
 						isDark ? "border-[#00a884] text-gray-300" : "border-[#25d366] text-gray-600",
 					)}
 				>
-					{parseInlineFormatting(quoteText, isDark)}
+					{parseInlineFormatting(quoteText, isDark, mtfVariables)}
 				</div>,
 			);
 		} else {
 			// Normal line with inline formatting
 			elements.push(
 				<span key={`line-${i}`}>
-					{parseInlineFormatting(line, isDark)}
+					{parseInlineFormatting(line, isDark, mtfVariables)}
 					{i < lines.length - 1 && <br />}
 				</span>,
 			);
@@ -474,12 +487,51 @@ function parseWhatsAppFormatting(text: string, isDark: boolean): React.ReactNode
 
 /**
  * Parse inline WhatsApp formatting: *bold*, _italic_, ~strikethrough~, ```code```, {{variables}}
+ * Variables are processed FIRST to protect underscores from italic matching.
  */
-function parseInlineFormatting(text: string, isDark: boolean): React.ReactNode {
+function parseInlineFormatting(
+	text: string,
+	isDark: boolean,
+	mtfVariables?: Array<{ name: string; value?: string; category: string }>,
+): React.ReactNode {
 	if (!text) return null;
 
 	// Regex patterns for WhatsApp formatting
+	// IMPORTANT: {{variable}} MUST be first — underscores in var names break italic otherwise
 	const patterns = [
+		{
+			regex: /\{\{([^}]+)\}\}/g,
+			render: (match: string, key: number) => {
+				const trimmed = match.trim();
+				const variable = mtfVariables?.find((v) => v.name === trimmed);
+
+				if (variable?.category === "mtf" && variable.value) {
+					return (
+						<span
+							key={key}
+							className={cn(
+								"px-1 py-0.5 rounded text-xs",
+								isDark ? "bg-amber-900/50 text-amber-300" : "bg-amber-100 text-amber-700",
+							)}
+						>
+							{variable.value}
+						</span>
+					);
+				}
+
+				return (
+					<span
+						key={key}
+						className={cn(
+							"px-1 py-0.5 rounded text-xs",
+							isDark ? "bg-blue-900/50 text-blue-300" : "bg-blue-100 text-blue-700",
+						)}
+					>
+						{`{{${trimmed}}}`}
+					</span>
+				);
+			},
+		},
 		{ regex: /\*([^*]+)\*/g, render: (match: string, key: number) => <strong key={key}>{match}</strong> },
 		{ regex: /_([^_]+)_/g, render: (match: string, key: number) => <em key={key}>{match}</em> },
 		{ regex: /~([^~]+)~/g, render: (match: string, key: number) => <del key={key}>{match}</del> },
@@ -497,20 +549,6 @@ function parseInlineFormatting(text: string, isDark: boolean): React.ReactNode {
 				<code key={key} className={cn("px-1 py-0.5 rounded text-xs font-mono", isDark ? "bg-gray-700" : "bg-gray-100")}>
 					{match}
 				</code>
-			),
-		},
-		{
-			regex: /\{\{([^}]+)\}\}/g,
-			render: (match: string, key: number) => (
-				<span
-					key={key}
-					className={cn(
-						"px-1 py-0.5 rounded text-xs",
-						isDark ? "bg-blue-900/50 text-blue-300" : "bg-blue-100 text-blue-700",
-					)}
-				>
-					{`{{${match}}}`}
-				</span>
 			),
 		},
 	];
@@ -559,9 +597,10 @@ interface WhatsAppPreviewProps {
 	footer?: string;
 	buttons?: Array<{ id: string; title: string; description?: string }>;
 	className?: string;
+	mtfVariables?: Array<{ name: string; value?: string; category: string }>;
 }
 
-function WhatsAppPreview({ header, body, footer, buttons, className }: WhatsAppPreviewProps) {
+function WhatsAppPreview({ header, body, footer, buttons, className, mtfVariables }: WhatsAppPreviewProps) {
 	const { resolvedTheme } = useTheme();
 	const isDark = resolvedTheme === "dark";
 
@@ -633,21 +672,21 @@ function WhatsAppPreview({ header, body, footer, buttons, className }: WhatsAppP
 									{/* Header text */}
 									{header?.type === "text" && header.text && (
 										<p className={cn("text-sm font-bold", isDark ? "text-white" : "text-gray-900")}>
-											{parseInlineFormatting(header.text, isDark)}
+											{parseInlineFormatting(header.text, isDark, mtfVariables)}
 										</p>
 									)}
 
 									{/* Body */}
 									{body && (
 										<div className={cn("text-sm break-words", isDark ? "text-gray-200" : "text-gray-800")}>
-											{parseWhatsAppFormatting(body, isDark)}
+											{parseWhatsAppFormatting(body, isDark, mtfVariables)}
 										</div>
 									)}
 
 									{/* Footer */}
 									{footer && (
 										<p className={cn("text-[11px] mt-1", isDark ? "text-gray-400" : "text-gray-500")}>
-											{parseInlineFormatting(footer, isDark)}
+											{parseInlineFormatting(footer, isDark, mtfVariables)}
 										</p>
 									)}
 
@@ -712,6 +751,8 @@ function getNodeIcon(type: FlowNodeType) {
 			return <Workflow className="h-5 w-5 text-indigo-500" />;
 		case FlowNodeType.WAIT_FOR_REPLY:
 			return <MessageSquareText className="h-5 w-5 text-amber-500" />;
+		case FlowNodeType.GENERATE_PAYMENT_LINK:
+			return <CreditCardIcon className="h-5 w-5 text-emerald-500" />;
 		case FlowNodeType.END_CONVERSATION:
 			return <CircleStop className="h-5 w-5 text-red-500" />;
 		default:
@@ -730,6 +771,7 @@ function getNodeTypeName(type: FlowNodeType): string {
 		[FlowNodeType.ADD_TAG]: "Adicionar Tag",
 		[FlowNodeType.CHATWIT_ACTION]: "Ação Chatwit",
 		[FlowNodeType.WAIT_FOR_REPLY]: "Aguardar Resposta",
+		[FlowNodeType.GENERATE_PAYMENT_LINK]: "Link de Pagamento",
 		[FlowNodeType.END_CONVERSATION]: "Encerrar Conversa",
 	};
 	return map[type] ?? "Nó";
@@ -859,6 +901,14 @@ export function NodeDetailDialog({
 								onUpdate={onUpdateNodeData}
 							/>
 						)}
+
+						{nodeType === FlowNodeType.GENERATE_PAYMENT_LINK && (
+							<GeneratePaymentLinkDetailEditor
+								node={node}
+								data={nodeData as GeneratePaymentLinkNodeData}
+								onUpdate={onUpdateNodeData}
+							/>
+						)}
 					</div>
 				</ScrollArea>
 
@@ -933,6 +983,12 @@ function InteractiveMessageDetailEditor({
 		buttons: Array<{ id: string; title: string }>,
 	) => void;
 }) {
+	const ctx = useFlowBuilderContext();
+	const mtfVarsForPreview = useMemo(
+		() => ctx?.allVariables.filter((v) => v.category === "mtf" && v.value) ?? [],
+		[ctx?.allVariables],
+	);
+
 	const [mode, setMode] = useState<"create" | "link">(data.messageId ? "link" : "create");
 	const [label, setLabel] = useState(data.label ?? "");
 	const [elements, setElements] = useState<InteractiveMessageElement[]>(getInteractiveMessageElements(data));
@@ -1050,8 +1106,9 @@ function InteractiveMessageDetailEditor({
 				const action = msg.action as {
 					buttons?: Array<{ id?: string; title?: string; reply?: { id: string; title: string } }>;
 				};
+				// Regenerar IDs com prefixo flow_ para roteamento correto no webhook
 				const buttons = (action.buttons ?? []).map((btn) => ({
-					id: btn.id || btn.reply?.id || "",
+					id: generateElementId("button"),
 					title: btn.title || btn.reply?.title || "",
 				})).filter((b) => b.id && b.title);
 
@@ -1151,9 +1208,9 @@ function InteractiveMessageDetailEditor({
 						{/* Nome */}
 						<div className="space-y-2">
 							<Label className="text-sm font-medium">Nome da mensagem</Label>
-							<Input
+							<InputWithVariablePicker
 								value={label}
-								onChange={(e) => setLabel(e.target.value)}
+								onChange={setLabel}
 								onBlur={() => commitElements(elements)}
 								placeholder="Ex: Boas-vindas, Menu Principal..."
 								className="text-sm"
@@ -1205,9 +1262,9 @@ function InteractiveMessageDetailEditor({
 											</div>
 
 											{el.type === "header_text" && (
-												<Input
+												<InputWithVariablePicker
 													value={el.text}
-													onChange={(e) => updateElement(el.id, { text: e.target.value })}
+													onChange={(value) => updateElement(el.id, { text: value })}
 													onBlur={() => commitElements(elements)}
 													placeholder="Título"
 													className="text-sm"
@@ -1216,16 +1273,16 @@ function InteractiveMessageDetailEditor({
 
 											{el.type === "header_image" && (
 												<div className="space-y-2">
-													<Input
+													<InputWithVariablePicker
 														value={el.url ?? ""}
-														onChange={(e) => updateElement(el.id, { url: e.target.value })}
+														onChange={(value) => updateElement(el.id, { url: value })}
 														onBlur={() => commitElements(elements)}
 														placeholder="URL da imagem"
 														className="text-sm"
 													/>
-													<Input
+													<InputWithVariablePicker
 														value={el.caption ?? ""}
-														onChange={(e) => updateElement(el.id, { caption: e.target.value })}
+														onChange={(value) => updateElement(el.id, { caption: value })}
 														onBlur={() => commitElements(elements)}
 														placeholder="Legenda (opcional)"
 														className="text-sm"
@@ -1234,9 +1291,9 @@ function InteractiveMessageDetailEditor({
 											)}
 
 											{el.type === "body" && (
-												<Textarea
+												<TextareaWithVariablePicker
 													value={el.text}
-													onChange={(e) => updateElement(el.id, { text: e.target.value })}
+													onChange={(value) => updateElement(el.id, { text: value })}
 													onBlur={() => commitElements(elements)}
 													placeholder="Digite o texto principal..."
 													rows={4}
@@ -1245,9 +1302,9 @@ function InteractiveMessageDetailEditor({
 											)}
 
 											{el.type === "footer" && (
-												<Input
+												<InputWithVariablePicker
 													value={el.text}
-													onChange={(e) => updateElement(el.id, { text: e.target.value })}
+													onChange={(value) => updateElement(el.id, { text: value })}
 													onBlur={() => commitElements(elements)}
 													placeholder="Texto de rodapé"
 													className="text-sm"
@@ -1256,16 +1313,16 @@ function InteractiveMessageDetailEditor({
 
 											{el.type === "button" && (
 												<div className="space-y-2">
-													<Input
+													<InputWithVariablePicker
 														value={el.title}
-														onChange={(e) => updateElement(el.id, { title: e.target.value })}
+														onChange={(value) => updateElement(el.id, { title: value })}
 														onBlur={() => commitElements(elements)}
 														placeholder="Título do botão"
 														className="text-sm"
 													/>
-													<Input
+													<InputWithVariablePicker
 														value={el.description ?? ""}
-														onChange={(e) => updateElement(el.id, { description: e.target.value })}
+														onChange={(value) => updateElement(el.id, { description: value })}
 														onBlur={() => commitElements(elements)}
 														placeholder="Descrição (opcional)"
 														className="text-sm"
@@ -1286,9 +1343,9 @@ function InteractiveMessageDetailEditor({
 						{/* Nome do nó */}
 						<div className="space-y-2">
 							<Label className="text-sm font-medium">Nome do nó</Label>
-							<Input
+							<InputWithVariablePicker
 								value={label}
-								onChange={(e) => setLabel(e.target.value)}
+								onChange={setLabel}
 								onBlur={() => onUpdate(node.id, { label } as Partial<FlowNodeData>)}
 								placeholder="Mensagem Interativa"
 								className="text-sm"
@@ -1376,6 +1433,7 @@ function InteractiveMessageDetailEditor({
 					body={previewData.body}
 					footer={previewData.footer}
 					buttons={previewData.buttons}
+					mtfVariables={mtfVarsForPreview}
 				/>
 			</div>
 		</div>
@@ -1398,9 +1456,9 @@ function TextMessageDetailEditor({ node, data, onUpdate }: EditorProps<TextMessa
 		<div className="space-y-4">
 			<div className="space-y-2">
 				<Label className="text-sm font-medium">Nome do nó</Label>
-				<Input
+				<InputWithVariablePicker
 					value={label}
-					onChange={(e) => setLabel(e.target.value)}
+					onChange={setLabel}
 					onBlur={() => onUpdate(node.id, { label } as Partial<FlowNodeData>)}
 					placeholder="Texto Simples"
 					className="text-sm"
@@ -1408,9 +1466,9 @@ function TextMessageDetailEditor({ node, data, onUpdate }: EditorProps<TextMessa
 			</div>
 			<div className="space-y-2">
 				<Label className="text-sm font-medium">Texto da mensagem</Label>
-				<Textarea
+				<TextareaWithVariablePicker
 					value={text}
-					onChange={(e) => setText(e.target.value)}
+					onChange={setText}
 					onBlur={() =>
 						onUpdate(node.id, {
 							text,
@@ -1493,9 +1551,9 @@ function TextReactionDetailEditor({ node, data, onUpdate }: EditorProps<TextReac
 		<div className="space-y-4">
 			<div className="space-y-2">
 				<Label className="text-sm font-medium">Nome do nó</Label>
-				<Input
+				<InputWithVariablePicker
 					value={label}
-					onChange={(e) => setLabel(e.target.value)}
+					onChange={setLabel}
 					onBlur={() => onUpdate(node.id, { label } as Partial<FlowNodeData>)}
 					className="text-sm"
 					placeholder="Resposta de Texto"
@@ -1503,9 +1561,9 @@ function TextReactionDetailEditor({ node, data, onUpdate }: EditorProps<TextReac
 			</div>
 			<div className="space-y-2">
 				<Label className="text-sm font-medium">Texto de resposta</Label>
-				<Textarea
+				<TextareaWithVariablePicker
 					value={textReaction}
-					onChange={(e) => setTextReaction(e.target.value)}
+					onChange={setTextReaction}
 					onBlur={() =>
 						onUpdate(node.id, {
 							textReaction,
@@ -1635,9 +1693,9 @@ function EndConversationDetailEditor({ node, data, onUpdate }: EditorProps<EndCo
 		<div className="space-y-4">
 			<div className="space-y-2">
 				<Label className="text-sm font-medium">Mensagem de encerramento (opcional)</Label>
-				<Textarea
+				<TextareaWithVariablePicker
 					value={endMessage}
-					onChange={(e) => setEndMessage(e.target.value)}
+					onChange={setEndMessage}
 					onBlur={() =>
 						onUpdate(node.id, {
 							endMessage,
@@ -1699,9 +1757,9 @@ function WaitForReplyDetailEditor({ node, data, onUpdate }: EditorProps<WaitForR
 		<div className="space-y-4">
 			<div className="space-y-2">
 				<Label className="text-sm font-medium">Pergunta para o usuário</Label>
-				<Textarea
+				<TextareaWithVariablePicker
 					value={promptText}
-					onChange={(e) => setPromptText(e.target.value)}
+					onChange={setPromptText}
 					onBlur={save}
 					placeholder="Ex: Qual é o seu email?"
 					rows={3}
@@ -1711,12 +1769,13 @@ function WaitForReplyDetailEditor({ node, data, onUpdate }: EditorProps<WaitForR
 
 			<div className="space-y-2">
 				<Label className="text-sm font-medium">Nome da variável</Label>
-				<Input
+				<InputWithVariablePicker
 					value={variableName}
-					onChange={(e) => setVariableName(e.target.value.replace(/[^a-zA-Z0-9_]/g, ""))}
+					onChange={(value) => setVariableName(value.replace(/[^a-zA-Z0-9_]/g, ""))}
 					onBlur={save}
 					placeholder="user_email"
 					className="text-sm font-mono"
+					insertRaw
 				/>
 				<p className="text-xs text-muted-foreground">
 					Use <code className="bg-muted px-1 rounded">{`{{${variableName || "variavel"}}}`}</code> nos nós seguintes para acessar o valor.
@@ -1750,9 +1809,9 @@ function WaitForReplyDetailEditor({ node, data, onUpdate }: EditorProps<WaitForR
 						</Button>
 					))}
 				</div>
-				<Input
+				<InputWithVariablePicker
 					value={validationRegex}
-					onChange={(e) => setValidationRegex(e.target.value)}
+					onChange={setValidationRegex}
 					onBlur={save}
 					placeholder="Regex personalizado (ex: ^[\\w.-]+@...)"
 					className="text-sm font-mono"
@@ -1762,9 +1821,9 @@ function WaitForReplyDetailEditor({ node, data, onUpdate }: EditorProps<WaitForR
 			{validationRegex && (
 				<div className="space-y-2">
 					<Label className="text-sm font-medium">Mensagem de erro</Label>
-					<Input
+					<InputWithVariablePicker
 						value={validationErrorMessage}
-						onChange={(e) => setValidationErrorMessage(e.target.value)}
+						onChange={setValidationErrorMessage}
 						onBlur={save}
 						placeholder="Formato inválido. Tente novamente."
 						className="text-sm"
@@ -1787,14 +1846,494 @@ function WaitForReplyDetailEditor({ node, data, onUpdate }: EditorProps<WaitForR
 				</div>
 				<div className="space-y-2">
 					<Label className="text-sm font-medium">Botão pular</Label>
-					<Input
+					<InputWithVariablePicker
 						value={skipButtonLabel}
-						onChange={(e) => setSkipButtonLabel(e.target.value)}
+						onChange={setSkipButtonLabel}
 						onBlur={save}
 						placeholder="Pular ⏭️"
 						className="text-sm"
 					/>
 				</div>
+			</div>
+		</div>
+	);
+}
+
+// ---------------------------------------------------------------------------
+// Input with Variable Picker (reusable inline picker for form fields)
+// ---------------------------------------------------------------------------
+function InputWithVariablePicker({
+	value,
+	onChange,
+	onBlur,
+	placeholder,
+	className,
+	insertRaw,
+}: {
+	value: string;
+	onChange: (value: string) => void;
+	onBlur?: () => void;
+	placeholder?: string;
+	className?: string;
+	/** If true, inserts just the variable name (no {{ }}) — for fields that store raw variable names */
+	insertRaw?: boolean;
+}) {
+	const ctx = useFlowBuilderContext();
+	const allVariables = ctx?.allVariables ?? STATIC_FLOW_VARIABLES;
+	const [showMenu, setShowMenu] = useState(false);
+	const menuRef = useRef<HTMLDivElement>(null);
+	const inputRef = useRef<HTMLInputElement>(null);
+
+	// Close menu on click outside
+	useEffect(() => {
+		if (!showMenu) return;
+		const handler = (e: MouseEvent) => {
+			if (menuRef.current && !menuRef.current.contains(e.target as unknown as globalThis.Node)) {
+				setShowMenu(false);
+			}
+		};
+		document.addEventListener("mousedown", handler);
+		return () => document.removeEventListener("mousedown", handler);
+	}, [showMenu]);
+
+	const groupedVariables = useMemo(() => {
+		const groups: Record<string, FlowBuilderVariable[]> = {};
+		for (const v of allVariables) {
+			if (!groups[v.category]) groups[v.category] = [];
+			groups[v.category].push(v);
+		}
+		return groups;
+	}, [allVariables]);
+
+	const categoryOrder = useMemo(() => {
+		const order = ["contact", "conversation", "system"];
+		if (groupedVariables.session?.length) order.push("session");
+		if (groupedVariables.mtf?.length) order.push("mtf");
+		if (groupedVariables.custom?.length) order.push("custom");
+		return order.filter((c) => groupedVariables[c]?.length);
+	}, [groupedVariables]);
+
+	const mtfSubGroups = useMemo(() => {
+		const mtfVars = groupedVariables.mtf || [];
+		return {
+			special: mtfVars.filter((v) => v.subCategory === "special"),
+			normal: mtfVars.filter((v) => v.subCategory === "normal" || !v.subCategory),
+			lote: mtfVars.filter((v) => v.subCategory === "lote"),
+		};
+	}, [groupedVariables]);
+
+	const insertVariable = useCallback(
+		(varName: string) => {
+			const input = inputRef.current;
+			if (insertRaw) {
+				// For raw-name fields (e.g., email variable): replace entire value with just the name
+				onChange(varName);
+				setShowMenu(false);
+				return;
+			}
+			const tag = `{{${varName}}}`;
+			if (input) {
+				const start = input.selectionStart ?? value.length;
+				const newVal = value.substring(0, start) + tag + value.substring(input.selectionEnd ?? start);
+				onChange(newVal);
+				setTimeout(() => {
+					input.focus();
+					const pos = start + tag.length;
+					input.setSelectionRange(pos, pos);
+				}, 0);
+			} else {
+				onChange(value + tag);
+			}
+			setShowMenu(false);
+		},
+		[value, onChange, insertRaw],
+	);
+
+	const renderMtfSubGroup = (label: string, vars: FlowBuilderVariable[], icon?: React.ReactNode) => {
+		if (!vars.length) return null;
+		return (
+			<>
+				<div className="px-3 py-1 text-[10px] font-medium text-amber-600 dark:text-amber-400 flex items-center gap-1">
+					{icon}
+					{label}
+				</div>
+				{vars.map((variable) => (
+					<button
+						key={variable.name}
+						className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex flex-col gap-0.5"
+						onClick={() => insertVariable(variable.name)}
+					>
+						<div className="flex items-center justify-between">
+							<span className="text-zinc-700 dark:text-zinc-300">{variable.label}</span>
+							<code className="text-xs text-zinc-400 dark:text-zinc-500">{`{{${variable.name}}}`}</code>
+						</div>
+						{variable.value && (
+							<span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono truncate max-w-full">
+								{variable.value.length > 50 ? `${variable.value.slice(0, 50)}…` : variable.value}
+							</span>
+						)}
+					</button>
+				))}
+			</>
+		);
+	};
+
+	return (
+		<div className="relative" ref={menuRef}>
+			<div className="flex gap-1">
+				<Input
+					ref={inputRef}
+					value={value}
+					onChange={(e) => onChange(e.target.value)}
+					onBlur={onBlur}
+					placeholder={placeholder}
+					className={cn("text-sm font-mono flex-1", className)}
+				/>
+				<Button
+					type="button"
+					variant="outline"
+					size="icon"
+					className="h-9 w-9 shrink-0"
+					onClick={() => setShowMenu(!showMenu)}
+					title="Inserir variável"
+				>
+					<Variable className="h-4 w-4" />
+				</Button>
+			</div>
+
+			{showMenu && (
+				<div className="absolute right-0 top-full mt-1 w-72 bg-white dark:bg-zinc-800 rounded-lg shadow-xl border border-zinc-200 dark:border-zinc-700 z-50 overflow-hidden">
+					<div className="p-2 border-b border-zinc-200 dark:border-zinc-700">
+						<span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Selecione uma variável</span>
+					</div>
+					<div className="max-h-80 overflow-y-auto">
+						{categoryOrder.map((category) => (
+							<div key={category}>
+								<div className="px-3 py-1.5 text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider bg-zinc-50 dark:bg-zinc-900/50">
+									{CATEGORY_LABELS[category] || category}
+								</div>
+								{category === "mtf" ? (
+									<>
+										{renderMtfSubGroup("Especiais", mtfSubGroups.special, <Variable className="h-2.5 w-2.5" />)}
+										{renderMtfSubGroup("Normais", mtfSubGroups.normal, <Variable className="h-2.5 w-2.5" />)}
+										{renderMtfSubGroup("Lote Ativo", mtfSubGroups.lote, <Package className="h-2.5 w-2.5" />)}
+									</>
+								) : (
+									groupedVariables[category]?.map((variable) => (
+										<button
+											key={variable.name}
+											className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center justify-between"
+											onClick={() => insertVariable(variable.name)}
+										>
+											<span className="text-zinc-700 dark:text-zinc-300">{variable.label}</span>
+											<code className="text-xs text-zinc-400 dark:text-zinc-500">{`{{${variable.name}}}`}</code>
+										</button>
+									))
+								)}
+							</div>
+						))}
+					</div>
+				</div>
+			)}
+		</div>
+	);
+}
+
+function TextareaWithVariablePicker({
+	value,
+	onChange,
+	onBlur,
+	placeholder,
+	className,
+	rows = 4,
+}: {
+	value: string;
+	onChange: (value: string) => void;
+	onBlur?: () => void;
+	placeholder?: string;
+	className?: string;
+	rows?: number;
+}) {
+	const ctx = useFlowBuilderContext();
+	const allVariables = ctx?.allVariables ?? STATIC_FLOW_VARIABLES;
+	const [showMenu, setShowMenu] = useState(false);
+	const menuRef = useRef<HTMLDivElement>(null);
+	const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+	useEffect(() => {
+		if (!showMenu) return;
+		const handler = (e: MouseEvent) => {
+			if (menuRef.current && !menuRef.current.contains(e.target as unknown as globalThis.Node)) {
+				setShowMenu(false);
+			}
+		};
+		document.addEventListener("mousedown", handler);
+		return () => document.removeEventListener("mousedown", handler);
+	}, [showMenu]);
+
+	const groupedVariables = useMemo(() => {
+		const groups: Record<string, FlowBuilderVariable[]> = {};
+		for (const variable of allVariables) {
+			if (!groups[variable.category]) groups[variable.category] = [];
+			groups[variable.category].push(variable);
+		}
+		return groups;
+	}, [allVariables]);
+
+	const categoryOrder = useMemo(() => {
+		const order = ["contact", "conversation", "system"];
+		if (groupedVariables.session?.length) order.push("session");
+		if (groupedVariables.mtf?.length) order.push("mtf");
+		if (groupedVariables.custom?.length) order.push("custom");
+		return order.filter((category) => groupedVariables[category]?.length);
+	}, [groupedVariables]);
+
+	const mtfSubGroups = useMemo(() => {
+		const mtfVars = groupedVariables.mtf || [];
+		return {
+			special: mtfVars.filter((v) => v.subCategory === "special"),
+			normal: mtfVars.filter((v) => v.subCategory === "normal" || !v.subCategory),
+			lote: mtfVars.filter((v) => v.subCategory === "lote"),
+		};
+	}, [groupedVariables]);
+
+	const insertVariable = useCallback(
+		(varName: string) => {
+			const textarea = textareaRef.current;
+			const tag = `{{${varName}}}`;
+			if (textarea) {
+				const start = textarea.selectionStart ?? value.length;
+				const end = textarea.selectionEnd ?? start;
+				onChange(value.slice(0, start) + tag + value.slice(end));
+				setTimeout(() => {
+					textarea.focus();
+					const pos = start + tag.length;
+					textarea.setSelectionRange(pos, pos);
+				}, 0);
+			} else {
+				onChange(value + tag);
+			}
+			setShowMenu(false);
+		},
+		[value, onChange],
+	);
+
+	const renderMtfSubGroup = (label: string, vars: FlowBuilderVariable[], icon?: React.ReactNode) => {
+		if (!vars.length) return null;
+		return (
+			<>
+				<div className="px-3 py-1 text-[10px] font-medium text-amber-600 dark:text-amber-400 flex items-center gap-1">
+					{icon}
+					{label}
+				</div>
+				{vars.map((variable) => (
+					<button
+						key={variable.name}
+						className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex flex-col gap-0.5"
+						onClick={() => insertVariable(variable.name)}
+					>
+						<div className="flex items-center justify-between">
+							<span className="text-zinc-700 dark:text-zinc-300">{variable.label}</span>
+							<code className="text-xs text-zinc-400 dark:text-zinc-500">{`{{${variable.name}}}`}</code>
+						</div>
+					</button>
+				))}
+			</>
+		);
+	};
+
+	return (
+		<div className="relative" ref={menuRef}>
+			<div className="flex gap-1 items-start">
+				<Textarea
+					ref={textareaRef}
+					value={value}
+					onChange={(e) => onChange(e.target.value)}
+					onBlur={onBlur}
+					placeholder={placeholder}
+					rows={rows}
+					className={cn("text-sm resize-y flex-1", className)}
+				/>
+				<Button
+					type="button"
+					variant="outline"
+					size="icon"
+					className="h-9 w-9 shrink-0"
+					onClick={() => setShowMenu(!showMenu)}
+					title="Inserir variável"
+				>
+					<Variable className="h-4 w-4" />
+				</Button>
+			</div>
+
+			{showMenu && (
+				<div className="absolute right-0 top-full mt-1 w-72 bg-white dark:bg-zinc-800 rounded-lg shadow-xl border border-zinc-200 dark:border-zinc-700 z-50 overflow-hidden">
+					<div className="p-2 border-b border-zinc-200 dark:border-zinc-700">
+						<span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Selecione uma variável</span>
+					</div>
+					<div className="max-h-80 overflow-y-auto">
+						{categoryOrder.map((category) => (
+							<div key={category}>
+								<div className="px-3 py-1.5 text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider bg-zinc-50 dark:bg-zinc-900/50">
+									{CATEGORY_LABELS[category] || category}
+								</div>
+								{category === "mtf" ? (
+									<>
+										{renderMtfSubGroup("Especiais", mtfSubGroups.special, <Variable className="h-2.5 w-2.5" />)}
+										{renderMtfSubGroup("Normais", mtfSubGroups.normal, <Variable className="h-2.5 w-2.5" />)}
+										{renderMtfSubGroup("Lote Ativo", mtfSubGroups.lote, <Package className="h-2.5 w-2.5" />)}
+									</>
+								) : (
+									groupedVariables[category]?.map((variable) => (
+										<button
+											key={variable.name}
+											className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center justify-between"
+											onClick={() => insertVariable(variable.name)}
+										>
+											<span className="text-zinc-700 dark:text-zinc-300">{variable.label}</span>
+											<code className="text-xs text-zinc-400 dark:text-zinc-500">{`{{${variable.name}}}`}</code>
+										</button>
+									))
+								)}
+							</div>
+						))}
+					</div>
+				</div>
+			)}
+		</div>
+	);
+}
+
+// ---------------------------------------------------------------------------
+// Generate Payment Link
+// ---------------------------------------------------------------------------
+function GeneratePaymentLinkDetailEditor({ node, data, onUpdate }: EditorProps<GeneratePaymentLinkNodeData>) {
+	const [provider, setProvider] = useState(data.provider ?? "infinitepay");
+	const [handle, setHandle] = useState(data.handle ?? "");
+	const [amountCents, setAmountCents] = useState(data.amountCents ?? "");
+	const [description, setDescription] = useState(data.description ?? "");
+	const [customerEmailVar, setCustomerEmailVar] = useState(data.customerEmailVar ?? "");
+	const [outputVariable, setOutputVariable] = useState(data.outputVariable ?? "payment_url");
+	const [linkIdVariable, setLinkIdVariable] = useState(data.linkIdVariable ?? "");
+
+	useEffect(() => {
+		setProvider(data.provider ?? "infinitepay");
+		setHandle(data.handle ?? "");
+		setAmountCents(data.amountCents ?? "");
+		setDescription(data.description ?? "");
+		setCustomerEmailVar(data.customerEmailVar ?? "");
+		setOutputVariable(data.outputVariable ?? "payment_url");
+		setLinkIdVariable(data.linkIdVariable ?? "");
+	}, [data]);
+
+	const save = useCallback(() => {
+		onUpdate(node.id, {
+			provider,
+			handle,
+			amountCents,
+			description,
+			customerEmailVar: customerEmailVar || undefined,
+			outputVariable,
+			linkIdVariable: linkIdVariable || undefined,
+			isConfigured: !!handle && !!amountCents && !!outputVariable,
+		} as Partial<FlowNodeData>);
+	}, [node.id, onUpdate, provider, handle, amountCents, description, customerEmailVar, outputVariable, linkIdVariable]);
+
+	return (
+		<div className="space-y-4">
+			<div className="space-y-2">
+				<Label className="text-sm font-medium">Provider</Label>
+				<select
+					value={provider}
+					onChange={(e) => {
+						setProvider(e.target.value as GeneratePaymentLinkNodeData["provider"]);
+						setTimeout(save, 0);
+					}}
+					className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+				>
+					<option value="infinitepay">InfinitePay</option>
+					<option value="mercadopago">MercadoPago</option>
+					<option value="asaas">Asaas</option>
+				</select>
+			</div>
+
+			<div className="space-y-2">
+				<Label className="text-sm font-medium">Handle do merchant</Label>
+				<InputWithVariablePicker
+					value={handle}
+					onChange={setHandle}
+					onBlur={save}
+					placeholder="Ex: {{infinitepay_handle}}"
+				/>
+				<p className="text-xs text-muted-foreground">
+					InfiniteTag sem o $. Use <code className="bg-muted px-1 rounded">{"{{infinitepay_handle}}"}</code> para variável.
+				</p>
+			</div>
+
+			<div className="space-y-2">
+				<Label className="text-sm font-medium">Valor</Label>
+				<InputWithVariablePicker
+					value={amountCents}
+					onChange={setAmountCents}
+					onBlur={save}
+					placeholder="Ex: {{valor_analise}} ou R$ 27,90"
+				/>
+				<p className="text-xs text-muted-foreground">
+					Aceita "R$ 27,90", "27.90" ou centavos "2790". Variáveis como <code className="bg-muted px-1 rounded">{"{{valor_analise}}"}</code> são resolvidas.
+				</p>
+			</div>
+
+			<div className="space-y-2">
+				<Label className="text-sm font-medium">Descrição</Label>
+				<InputWithVariablePicker
+					value={description}
+					onChange={setDescription}
+					onBlur={save}
+					placeholder='Ex: Análise Lead {{contact_name}}'
+					className="font-sans"
+				/>
+				<p className="text-xs text-muted-foreground">
+					Aparece no checkout. Suporta variáveis.
+				</p>
+			</div>
+
+			<div className="space-y-2">
+				<Label className="text-sm font-medium">Email do cliente (variável)</Label>
+				<InputWithVariablePicker
+					value={customerEmailVar}
+					onChange={(v) => setCustomerEmailVar(v.replace(/[^a-zA-Z0-9_]/g, ""))}
+					onBlur={save}
+					placeholder="user_email"
+					insertRaw
+				/>
+				<p className="text-xs text-muted-foreground">
+					Selecione a variável de sessão que contém o email (ex: coletado via Aguardar Resposta).
+				</p>
+			</div>
+
+			<div className="space-y-2">
+				<Label className="text-sm font-medium">Variável de saída (URL)</Label>
+				<Input
+					value={outputVariable}
+					onChange={(e) => setOutputVariable(e.target.value.replace(/[^a-zA-Z0-9_]/g, ""))}
+					onBlur={save}
+					placeholder="payment_url"
+					className="text-sm font-mono"
+				/>
+				<p className="text-xs text-muted-foreground">
+					A URL do checkout será salva em <code className="bg-muted px-1 rounded">{`{{${outputVariable || "payment_url"}}}`}</code>.
+				</p>
+			</div>
+
+			<div className="space-y-2">
+				<Label className="text-sm font-medium">Variável do ID do link (opcional)</Label>
+				<Input
+					value={linkIdVariable}
+					onChange={(e) => setLinkIdVariable(e.target.value.replace(/[^a-zA-Z0-9_]/g, ""))}
+					onBlur={save}
+					placeholder="payment_link_id"
+					className="text-sm font-mono"
+				/>
 			</div>
 		</div>
 	);

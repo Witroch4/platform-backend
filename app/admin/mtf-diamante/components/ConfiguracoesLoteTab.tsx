@@ -549,7 +549,7 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
 						</div>
 						<div className="flex items-center gap-2">
 							<DisparoMensagemDialog />
-							<AdicionarLoteDialog onLoteAdicionado={refreshLotes} />
+							<AdicionarLoteDialog lotes={lotes} onLoteAdicionado={() => { refreshLotes(); refreshVariaveis(); }} />
 						</div>
 					</div>
 				</CardHeader>
@@ -568,7 +568,7 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
 					) : (
 						<div className="space-y-4">
 							{lotes.map((lote) => (
-								<LoteCard key={lote.id} lote={lote} onUpdate={refreshLotes} />
+								<LoteCard key={lote.id} lote={lote} onUpdate={() => { refreshLotes(); refreshVariaveis(); }} />
 							))}
 						</div>
 					)}
@@ -701,11 +701,14 @@ function LoteCard({ lote, onUpdate }: { lote: MtfDiamanteLote; onUpdate: () => v
 }
 
 // Componente para adicionar novo lote
-function AdicionarLoteDialog({ onLoteAdicionado }: { onLoteAdicionado: () => void }) {
+function AdicionarLoteDialog({ onLoteAdicionado, lotes }: { onLoteAdicionado: () => void; lotes: MtfDiamanteLote[] }) {
 	const [open, setOpen] = useState(false);
 	const [loading, setLoading] = useState(false);
+
+	// Auto-compute next sequential number
+	const nextNumero = (lotes.length > 0 ? Math.max(...lotes.map((l) => l.numero)) : 0) + 1;
+
 	const [formData, setFormData] = useState({
-		numero: 1,
 		nome: "",
 		valor: "",
 		dataInicio: new Date(),
@@ -719,6 +722,7 @@ function AdicionarLoteDialog({ onLoteAdicionado }: { onLoteAdicionado: () => voi
 		try {
 			// Converter datas para string ISO completa (incluindo hora)
 			const payload = {
+				numero: nextNumero,
 				...formData,
 				dataInicio: formData.dataInicio.toISOString(),
 				dataFim: formData.dataFim.toISOString(),
@@ -735,7 +739,6 @@ function AdicionarLoteDialog({ onLoteAdicionado }: { onLoteAdicionado: () => voi
 				onLoteAdicionado();
 				setOpen(false);
 				setFormData({
-					numero: 1,
 					nome: "",
 					valor: "",
 					dataInicio: new Date(),
@@ -768,15 +771,10 @@ function AdicionarLoteDialog({ onLoteAdicionado }: { onLoteAdicionado: () => voi
 				<form onSubmit={handleSubmit} className="space-y-4">
 					<div className="grid grid-cols-2 gap-4">
 						<div>
-							<Label htmlFor="numero">Número do Lote</Label>
-							<Input
-								id="numero"
-								type="number"
-								min="1"
-								value={formData.numero}
-								onChange={(e) => setFormData((prev) => ({ ...prev, numero: Number.parseInt(e.target.value) }))}
-								required
-							/>
+							<Label>Número do Lote</Label>
+							<div className="flex items-center h-9 px-3 rounded-md border bg-muted text-sm font-medium">
+								Lote {nextNumero}
+							</div>
 						</div>
 						<div>
 							<Label htmlFor="valor">Valor</Label>

@@ -17,7 +17,9 @@ import type {
 	FlowNodeType,
 	FlowViewport,
 	InteractiveMessageNodeData,
+	InteractiveMessageElement,
 } from "@/types/flow-builder";
+import { FLOW_BUTTON_PREFIX, generateElementId } from "./interactiveMessageElements";
 
 // =============================================================================
 // HELPER FUNCTIONS
@@ -268,6 +270,66 @@ export function n8nFormatToCanvas(exportData: FlowExportFormat): FlowCanvas {
 		// biome-ignore lint/correctness/noUnusedVariables: outputs é removido intencionalmente
 		({ outputs, ...node }) => node as FlowNode,
 	);
+
+	// SEMPRE regenerar button IDs na importação para evitar conflito entre flows
+	// (dois flows com o mesmo buttonId causam ambiguidade no FlowEdge/findSessionByButtonId)
+	const buttonIdMap = new Map<string, string>(); // oldId → newId
+	for (const node of nodes) {
+		if (node.type === "interactive_message") {
+			const data = node.data as InteractiveMessageNodeData;
+			// Regenerar IDs nos elements
+			if (data.elements?.length) {
+				for (const el of data.elements) {
+					if (el.type === "button") {
+						const newId = generateElementId("button");
+						buttonIdMap.set(el.id, newId);
+						el.id = newId;
+					}
+				}
+			}
+			// Regenerar IDs nos buttons legados
+			if (data.buttons?.length) {
+				for (const btn of data.buttons) {
+					const newId = generateElementId("button");
+					buttonIdMap.set(btn.id, newId);
+					btn.id = newId;
+				}
+			}
+			// Sincronizar IDs em message.action.buttons (dados da mensagem vinculada)
+			const msgAction = (data.message as unknown as Record<string, unknown>)?.action as
+				| { buttons?: Array<{ id?: string; payload?: string; reply?: { id?: string } }> }
+				| undefined;
+			if (msgAction?.buttons?.length) {
+				for (const btn of msgAction.buttons) {
+					const oldId = btn.id || btn.reply?.id;
+					if (oldId && buttonIdMap.has(oldId)) {
+						const newId = buttonIdMap.get(oldId)!;
+						if (btn.id) btn.id = newId;
+						if (btn.payload) btn.payload = newId;
+						if (btn.reply?.id) btn.reply.id = newId;
+					} else {
+						// Botão sem mapeamento (ex: message tinha botões extras) — gerar novo ID
+						const newId = generateElementId("button");
+						if (btn.id) btn.id = newId;
+						if (btn.payload) btn.payload = newId;
+						if (btn.reply?.id) btn.reply.id = newId;
+					}
+				}
+			}
+		}
+	}
+	// Atualizar edges com os novos button IDs
+	if (buttonIdMap.size > 0) {
+		for (const edge of edges) {
+			if (edge.sourceHandle && buttonIdMap.has(edge.sourceHandle)) {
+				const newId = buttonIdMap.get(edge.sourceHandle)!;
+				edge.sourceHandle = newId;
+				if (edge.data?.buttonId) {
+					edge.data.buttonId = newId;
+				}
+			}
+		}
+	}
 
 	return {
 		nodes,

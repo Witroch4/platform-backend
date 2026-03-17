@@ -138,6 +138,15 @@ export const PALETTE_ITEMS: PaletteItem[] = [
 		category: "reaction",
 	},
 
+	// Integrations
+	{
+		type: FlowNodeType.GENERATE_PAYMENT_LINK,
+		icon: "💳",
+		label: "Link de Pagamento",
+		description: "Gerar checkout dinâmico (InfinitePay)",
+		category: "action",
+	},
+
 	// Actions
 	...SHARED_ACTION_ITEMS,
 ];

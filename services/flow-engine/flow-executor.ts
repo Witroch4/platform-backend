@@ -15,6 +15,8 @@ import { ChatwitDeliveryService, createDeliveryService } from "./chatwit-deliver
 import { VariableResolver } from "./variable-resolver";
 import { addChatwitActionJob } from "@/lib/queue/flow-builder-queues";
 import { elementsToLegacyFields } from "@/lib/flow-builder/interactiveMessageElements";
+import { generatePaymentLink } from "@/lib/payment/payment-link-generator";
+import { parseCurrencyToCents } from "@/lib/payment/parse-currency";
 import { buildChatwitTemplateParams } from "@/lib/flow-builder/templateElements";
 import { debugLogRuntimeFlow } from "@/lib/flow-builder/exportImport";
 import { getPrismaInstance } from "@/lib/connections";
@@ -44,10 +46,10 @@ import type {
 // =============================================================================
 
 /** Nós leves que podem ir na ponte sync */
-type LightNodeType = "TEXT_MESSAGE" | "REACTION" | "INTERACTIVE_MESSAGE";
+type LightNodeType = "TEXT_MESSAGE" | "REACTION" | "INTERACTIVE_MESSAGE" | "GENERATE_PAYMENT_LINK";
 
 /** Nós que são barreiras (forçam transição para async) */
-type BarrierNodeType = "MEDIA" | "DELAY";
+type BarrierNodeType = "MEDIA" | "DELAY" | "WAIT_FOR_REPLY";
 
 /** Resultado do harvest de nós leves */
 interface HarvestedContent {
@@ -119,6 +121,19 @@ export class FlowExecutor {
 				variables: session.variables,
 				executionLog: this.executionLog,
 			};
+		}
+
+		const currentWaitType = String(session.variables._waitType ?? "");
+		const expectedSkipButtonId = `flow_skip_${session.currentNodeId}`;
+		if (currentWaitType === "free_text" && buttonId === expectedSkipButtonId) {
+			log.info("[FlowExecutor] WAIT_FOR_REPLY: botão pular acionado", {
+				nodeId: session.currentNodeId,
+				buttonId,
+			});
+			for (const [key, value] of Object.entries(session.variables)) {
+				this.resolver.setVariable(key, value);
+			}
+			return this.skipWaitForReply(flow, session);
 		}
 
 		// Buscar TODAS as edges com este buttonId (suporte a branches paralelos)
@@ -346,6 +361,14 @@ export class FlowExecutor {
 				barrierNodeId: harvested.barrierNode.id,
 			});
 
+			if (harvested.barrierNode.nodeType === "WAIT_FOR_REPLY") {
+				bridge.closeSyncWindow();
+				log.debug("[FlowExecutor] WAIT_FOR_REPLY após botão será executado inline em modo async", {
+					barrierNodeId: harvested.barrierNode.id,
+				});
+				return this.executeChain(flow, harvested.barrierNode, bridge, false);
+			}
+
 			// Capturar referências para o closure
 			const barrierNode = harvested.barrierNode;
 			const flowRef = flow;
@@ -386,6 +409,14 @@ export class FlowExecutor {
 
 		// 10. Sem barreira: se há remaining node após harvest, executar em background também
 		if (harvested.remainingStartNode) {
+			if (harvested.remainingStartNode.nodeType === "WAIT_FOR_REPLY") {
+				bridge.closeSyncWindow();
+				log.debug("[FlowExecutor] WAIT_FOR_REPLY em remainingStartNode será executado inline em modo async", {
+					nodeId: harvested.remainingStartNode.id,
+				});
+				return this.executeChain(flow, harvested.remainingStartNode, bridge, false);
+			}
+
 			const remainingNode = harvested.remainingStartNode;
 			const flowRef = flow;
 			const bridgeRef = bridge;
@@ -465,7 +496,16 @@ export class FlowExecutor {
 					interactivePayload?: Record<string, unknown>;
 					elements?: InteractiveMessageElement[];
 					body?: string;
-					header?: string;
+					header?:
+						| string
+						| {
+								type?: string;
+								text?: string;
+								content?: string;
+								mediaUrl?: string;
+								media_url?: string;
+								url?: string;
+							};
 					footer?: string;
 					buttons?: Array<{ id: string; title: string }>;
 				};
@@ -518,8 +558,8 @@ export class FlowExecutor {
 
 		if (!startNode) return result;
 
-		const lightTypes: LightNodeType[] = ["TEXT_MESSAGE", "REACTION", "INTERACTIVE_MESSAGE"];
-		const barrierTypes: BarrierNodeType[] = ["MEDIA", "DELAY"];
+		const lightTypes: LightNodeType[] = ["TEXT_MESSAGE", "REACTION", "INTERACTIVE_MESSAGE", "GENERATE_PAYMENT_LINK"];
+		const barrierTypes: BarrierNodeType[] = ["MEDIA", "DELAY", "WAIT_FOR_REPLY"];
 
 		let current: RuntimeFlowNode | null = startNode;
 
@@ -706,6 +746,9 @@ export class FlowExecutor {
 			case "WAIT_FOR_REPLY":
 				return this.handleWaitForReply(node, flow, bridge);
 
+			case "GENERATE_PAYMENT_LINK":
+				return this.handleGeneratePaymentLink(node, flow);
+
 			default:
 				log.warn("[FlowExecutor] Tipo de nó desconhecido", { nodeType });
 				return this.findNextNodeId(flow, node);
@@ -796,9 +839,19 @@ export class FlowExecutor {
 			interactivePayload?: Record<string, unknown>;
 			elements?: InteractiveMessageElement[];
 			body?: string;
-			header?: string;
+			header?:
+				| string
+				| {
+						type?: string;
+						text?: string;
+						content?: string;
+						mediaUrl?: string;
+						media_url?: string;
+						url?: string;
+					};
 			footer?: string;
 			buttons?: Array<{ id: string; title: string }>;
+			ctaUrl?: { title: string; url: string };
 		};
 
 		// Verificar se há REACTION pendente
@@ -819,6 +872,16 @@ export class FlowExecutor {
 		if (config.messageId && !config.interactivePayload && !config.elements?.length && !config.body) {
 			const resolvedFromDb = await this.resolveMessageId(config.messageId);
 			if (resolvedFromDb) {
+				const fallbackPayload = this.buildInteractiveFallbackPayload(config, resolvedFromDb);
+				if (fallbackPayload) {
+					log.warn("[FlowExecutor] INTERACTIVE_MESSAGE: payload sem action, aplicando fallback", {
+						nodeId: node.id,
+						fallbackType: fallbackPayload.type,
+					});
+					await this.deliver(bridge, fallbackPayload);
+					return this.findNextNodeId(flow, node);
+				}
+
 				await this.deliver(bridge, { type: "interactive", interactivePayload: resolvedFromDb });
 				const hasButtons = (resolvedFromDb as Record<string, unknown>)?.action;
 				if (hasButtons) {
@@ -842,10 +905,12 @@ export class FlowExecutor {
 				header: legacy.header,
 				footer: legacy.footer,
 				buttons: legacy.buttons,
+				ctaUrl: legacy.ctaUrl,
 			};
 			log.debug("[FlowExecutor] INTERACTIVE_MESSAGE: converteu elements", {
 				buttonsCount: legacy.buttons?.length ?? 0,
 				buttonTitles: legacy.buttons?.map((b) => b.title),
+				hasCta: !!legacy.ctaUrl,
 			});
 		}
 
@@ -853,7 +918,22 @@ export class FlowExecutor {
 			? JSON.parse(this.resolver.resolve(JSON.stringify(effectiveConfig.interactivePayload)))
 			: this.buildInteractivePayload(effectiveConfig);
 
+		const fallbackPayload = this.buildInteractiveFallbackPayload(effectiveConfig, resolvedPayload);
+		if (fallbackPayload) {
+			log.warn("[FlowExecutor] INTERACTIVE_MESSAGE: payload sem action, aplicando fallback", {
+				nodeId: node.id,
+				fallbackType: fallbackPayload.type,
+			});
+			await this.deliver(bridge, fallbackPayload);
+			return this.findNextNodeId(flow, node);
+		}
+
 		await this.deliver(bridge, { type: "interactive", interactivePayload: resolvedPayload });
+
+		// CTA URL não tem reply buttons — flow continua normalmente
+		if (effectiveConfig.ctaUrl?.url) {
+			return this.findNextNodeId(flow, node);
+		}
 
 		// Se tem botões, STOP e espera resposta
 		const hasButtons = effectiveConfig.buttons?.length || (resolvedPayload as Record<string, unknown>)?.action;
@@ -1369,17 +1449,56 @@ export class FlowExecutor {
 
 	private buildInteractivePayload(config: {
 		body?: string;
-		header?: string;
+		header?:
+			| string
+			| {
+					type?: string;
+					text?: string;
+					content?: string;
+					mediaUrl?: string;
+					media_url?: string;
+					url?: string;
+				};
 		footer?: string;
 		buttons?: Array<{ id: string; title: string }>;
+		ctaUrl?: { title: string; url: string };
 	}): Record<string, unknown> {
+		const resolvedHeader = this.resolveInteractiveHeader(config.header);
+
+		// CTA URL — WhatsApp interactive message com botão de link externo
+		if (config.ctaUrl?.url) {
+			const payload: Record<string, unknown> = {
+				type: "cta_url",
+				body: { text: this.resolver.resolve(config.body ?? "") },
+				action: {
+					name: "cta_url",
+					parameters: {
+						display_text: this.resolver.resolve(config.ctaUrl.title),
+						url: this.resolver.resolve(config.ctaUrl.url),
+					},
+				},
+			};
+			if (resolvedHeader) {
+				payload.header = resolvedHeader;
+			}
+			if (config.footer) {
+				payload.footer = { text: this.resolver.resolve(config.footer) };
+			}
+			log.debug("[FlowExecutor] buildInteractivePayload: CTA URL", {
+				displayText: config.ctaUrl.title,
+				url: config.ctaUrl.url.slice(0, 60),
+			});
+			return payload;
+		}
+
+		// Reply buttons — formato padrão
 		const payload: Record<string, unknown> = {
 			type: "button",
 			body: { text: this.resolver.resolve(config.body ?? "") },
 		};
 
-		if (config.header) {
-			payload.header = { type: "text", text: this.resolver.resolve(config.header) };
+		if (resolvedHeader) {
+			payload.header = resolvedHeader;
 		}
 		if (config.footer) {
 			payload.footer = { text: this.resolver.resolve(config.footer) };
@@ -1408,6 +1527,281 @@ export class FlowExecutor {
 		}
 
 		return payload;
+	}
+
+	private resolveInteractiveHeader(
+		header:
+			| string
+			| {
+					type?: string;
+					text?: string;
+					content?: string;
+					mediaUrl?: string;
+					media_url?: string;
+					url?: string;
+				}
+			| undefined,
+	): Record<string, unknown> | undefined {
+		if (!header) {
+			return undefined;
+		}
+
+		if (typeof header === "string") {
+			const text = this.resolver.resolve(header).trim();
+			return text ? { type: "text", text } : undefined;
+		}
+
+		const normalizedType = header.type?.toLowerCase();
+		if (normalizedType === "text") {
+			const text = this.resolver.resolve(header.text || header.content || "").trim();
+			return text ? { type: "text", text } : undefined;
+		}
+
+		const mediaLink = this.resolver.resolve(header.mediaUrl || header.media_url || header.url || header.content || "").trim();
+		if (!mediaLink) {
+			return undefined;
+		}
+
+		if (normalizedType === "video") {
+			return { type: "video", video: { link: mediaLink } };
+		}
+
+		if (normalizedType === "document") {
+			return { type: "document", document: { link: mediaLink } };
+		}
+
+		return { type: "image", image: { link: mediaLink } };
+	}
+
+	private buildInteractiveFallbackPayload(
+		config: {
+			elements?: InteractiveMessageElement[];
+			body?: string;
+			header?: string | { text?: string; content?: string; mediaUrl?: string; media_url?: string; url?: string; type?: string };
+			footer?: string | { text?: string };
+			buttons?: Array<{ id: string; title: string }>;
+			ctaUrl?: { title: string; url: string };
+		},
+		resolvedPayload: Record<string, unknown>,
+	): DeliveryPayload | null {
+		if (this.context.channelType !== "whatsapp") {
+			return null;
+		}
+
+		const payloadType = String((resolvedPayload as { type?: string })?.type ?? "");
+		const payloadAction = (resolvedPayload as { action?: unknown })?.action;
+		const hasConfiguredButtons = (config.buttons?.length ?? 0) > 0;
+		const hasConfiguredCta = !!config.ctaUrl?.url;
+
+		if (payloadType !== "button" || payloadAction || hasConfiguredButtons || hasConfiguredCta) {
+			return null;
+		}
+
+		const mediaUrl = this.extractInteractiveHeaderMediaUrl(config, resolvedPayload);
+		const caption = this.buildInteractiveFallbackCaption(config, resolvedPayload);
+
+		if (mediaUrl) {
+			return {
+				type: "media",
+				mediaUrl,
+				filename: this.inferMediaFilename(mediaUrl),
+				content: caption,
+			};
+		}
+
+		if (!caption) {
+			return null;
+		}
+
+		return {
+			type: "text",
+			content: caption,
+		};
+	}
+
+	private extractInteractiveHeaderMediaUrl(
+		config: {
+			elements?: InteractiveMessageElement[];
+			header?: string | { text?: string; content?: string; mediaUrl?: string; media_url?: string; url?: string; type?: string };
+		},
+		resolvedPayload: Record<string, unknown>,
+	): string | undefined {
+		const headerImageElement = config.elements?.find((element) => element.type === "header_image");
+		if (headerImageElement && "url" in headerImageElement && headerImageElement.url?.trim()) {
+			return this.resolver.resolve(headerImageElement.url);
+		}
+
+		if (config.header && typeof config.header === "object") {
+			const candidate = config.header.mediaUrl || config.header.media_url || config.header.url || config.header.content;
+			if (candidate?.trim()) {
+				return this.resolver.resolve(candidate);
+			}
+		}
+
+		const payloadHeader = (resolvedPayload as {
+			header?: {
+				type?: string;
+				link?: string;
+				image?: { link?: string };
+				video?: { link?: string };
+				document?: { link?: string };
+			};
+		})?.header;
+		const candidate = payloadHeader?.image?.link || payloadHeader?.video?.link || payloadHeader?.document?.link || payloadHeader?.link;
+		return candidate?.trim() ? candidate : undefined;
+	}
+
+	private buildInteractiveFallbackCaption(
+		config: {
+			body?: string;
+			header?: string | { text?: string; content?: string };
+			footer?: string | { text?: string };
+		},
+		resolvedPayload: Record<string, unknown>,
+	): string {
+		const payloadHeader = (resolvedPayload as { header?: { text?: string } })?.header?.text;
+		const payloadBody = (resolvedPayload as { body?: { text?: string } })?.body?.text;
+		const payloadFooter = (resolvedPayload as { footer?: { text?: string } })?.footer?.text;
+
+		const headerText = typeof config.header === "string"
+			? this.resolver.resolve(config.header)
+			: this.resolver.resolve(config.header?.text || config.header?.content || payloadHeader || "");
+		const bodyText = this.resolver.resolve(config.body || payloadBody || "");
+		const footerText = typeof config.footer === "string"
+			? this.resolver.resolve(config.footer)
+			: this.resolver.resolve(config.footer?.text || payloadFooter || "");
+
+		const parts = [headerText.trim(), bodyText.trim(), footerText.trim() ? `_${footerText.trim()}_` : ""].filter(Boolean);
+		return parts.join("\n\n");
+	}
+
+	private inferMediaFilename(mediaUrl: string): string {
+		try {
+			const pathname = new URL(mediaUrl).pathname;
+			const filename = pathname.split("/").pop()?.trim();
+			if (filename) {
+				return filename;
+			}
+		} catch {
+			// noop
+		}
+
+		return `interactive-fallback-${Date.now()}.jpg`;
+	}
+
+	// ---------------------------------------------------------------------------
+	// GENERATE_PAYMENT_LINK — gera link de checkout e salva URL na sessão
+	// ---------------------------------------------------------------------------
+
+	private async handleGeneratePaymentLink(node: RuntimeFlowNode, flow: RuntimeFlow): Promise<string> {
+		const config = node.config as {
+			provider?: string;
+			handle?: string;
+			amountCents?: string;
+			description?: string;
+			customerEmailVar?: string;
+			outputVariable?: string;
+			linkIdVariable?: string;
+		};
+
+		const provider = config.provider ?? "infinitepay";
+		const handle = this.resolver.resolve(config.handle ?? "");
+		const rawAmount = this.resolver.resolve(config.amountCents ?? "0");
+		const description = this.resolver.resolve(config.description ?? "Pagamento");
+		const outputVariable = config.outputVariable ?? "payment_url";
+		const fallbackCustomerEmail = "seuemail@gmail.com";
+
+		if (!handle) {
+			log.error("[FlowExecutor] GENERATE_PAYMENT_LINK: handle vazio", { nodeId: node.id });
+			this.resolver.setVariable(outputVariable, "");
+			return this.findNextNodeId(flow, node);
+		}
+
+		let amountCents: number;
+		try {
+			amountCents = parseCurrencyToCents(rawAmount);
+		} catch {
+			log.error("[FlowExecutor] GENERATE_PAYMENT_LINK: valor inválido", {
+				nodeId: node.id,
+				rawAmount,
+			});
+			this.resolver.setVariable(outputVariable, "");
+			return this.findNextNodeId(flow, node);
+		}
+
+		if (amountCents <= 0) {
+			log.error("[FlowExecutor] GENERATE_PAYMENT_LINK: valor <= 0", {
+				nodeId: node.id,
+				amountCents,
+			});
+			this.resolver.setVariable(outputVariable, "");
+			return this.findNextNodeId(flow, node);
+		}
+
+		// Dados do cliente a partir do contexto + variáveis de sessão
+		const resolvedCustomerEmail = config.customerEmailVar
+			? String(this.resolver.resolve(`{{${config.customerEmailVar}}}`) ?? "").trim()
+			: "";
+		const customerEmailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+		const customerEmail = customerEmailRegex.test(resolvedCustomerEmail)
+			? resolvedCustomerEmail
+			: fallbackCustomerEmail;
+		const customerName = this.context.contactName ?? "";
+		const customerPhone = this.context.contactPhone ?? "";
+
+		if (customerEmail !== resolvedCustomerEmail) {
+			log.info("[FlowExecutor] GENERATE_PAYMENT_LINK: usando email fallback", {
+				nodeId: node.id,
+				customerEmailVar: config.customerEmailVar,
+				resolvedPreview: resolvedCustomerEmail.slice(0, 40),
+				fallbackCustomerEmail,
+			});
+		}
+
+		const orderNsu = `sw-${this.context.contactId}-${Date.now()}`;
+		const baseUrl = process.env.NEXT_PUBLIC_URL || process.env.NEXTAUTH_URL || "";
+		const webhookUrl = baseUrl ? `${baseUrl}/api/payment/infinitepay/webhook` : undefined;
+
+		log.info("[FlowExecutor] GENERATE_PAYMENT_LINK: gerando link", {
+			nodeId: node.id,
+			provider,
+			handle: handle.slice(0, 20),
+			amountCents,
+			orderNsu,
+			description: description.slice(0, 50),
+		});
+
+		const result = await generatePaymentLink(provider, {
+			handle,
+			amountCents,
+			description,
+			customer: {
+				name: customerName,
+				email: customerEmail,
+				phone: customerPhone || undefined,
+			},
+			webhookUrl,
+			orderNsu,
+		});
+
+		if (result.success && result.checkoutUrl) {
+			this.resolver.setVariable(outputVariable, result.checkoutUrl);
+			if (config.linkIdVariable && result.linkId) {
+				this.resolver.setVariable(config.linkIdVariable, result.linkId);
+			}
+			log.info("[FlowExecutor] GENERATE_PAYMENT_LINK: link gerado", {
+				nodeId: node.id,
+				checkoutUrl: result.checkoutUrl.slice(0, 60),
+			});
+		} else {
+			log.error("[FlowExecutor] GENERATE_PAYMENT_LINK: falha ao gerar", {
+				nodeId: node.id,
+				error: result.error,
+			});
+			this.resolver.setVariable(outputVariable, "");
+		}
+
+		return this.findNextNodeId(flow, node);
 	}
 
 	private findNextNodeId(flow: RuntimeFlow, node: RuntimeFlowNode): string {

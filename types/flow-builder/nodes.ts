@@ -296,6 +296,32 @@ export interface WhatsAppTemplateNodeData extends FlowNodeDataBase {
 }
 
 // =============================================================================
+// INTEGRATION NODES
+// =============================================================================
+
+/**
+ * Dados específicos para nó GENERATE_PAYMENT_LINK
+ * Gera link de checkout dinâmico (InfinitePay, MercadoPago, Asaas)
+ * e salva a URL em uma variável de sessão.
+ */
+export interface GeneratePaymentLinkNodeData extends FlowNodeDataBase {
+	/** Provider de pagamento */
+	provider: "infinitepay" | "mercadopago" | "asaas";
+	/** Handle/identificador do merchant no provider (suporta {{variavel}}) */
+	handle: string;
+	/** Valor em centavos ou formato monetário (suporta {{variavel}}, ex: {{valor_analise}}) */
+	amountCents: string;
+	/** Descrição do item (suporta {{variavel}}, ex: "Análise Lead {{contact_name}}") */
+	description: string;
+	/** Nome da variável de sessão com email do cliente (ex: "user_email") */
+	customerEmailVar?: string;
+	/** Nome da variável onde o link será salvo (default: "payment_url") */
+	outputVariable: string;
+	/** Nome da variável onde o ID do link será salvo */
+	linkIdVariable?: string;
+}
+
+// =============================================================================
 // DEPRECATED TEMPLATE NODES (Backward Compatibility)
 // =============================================================================
 
@@ -393,4 +419,5 @@ export type FlowNodeData =
 	| CallTemplateNodeData
 	| UrlTemplateNodeData
 	| ChatwitActionNodeData
-	| WaitForReplyNodeData;
+	| WaitForReplyNodeData
+	| GeneratePaymentLinkNodeData;

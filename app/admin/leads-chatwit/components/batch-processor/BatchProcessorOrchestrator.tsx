@@ -127,7 +127,12 @@ export function BatchProcessorOrchestrator({ leads, onClose, onUpdate }: BatchPr
 		// Passo 2: Tarefas automatizadas
 		if (
 			showAutomatedDialog &&
-			(currentStep === "unifying-pdf" || currentStep === "generating-images" || currentStep === "preliminary-analysis")
+			(
+				currentStep === "unifying-pdf"
+				|| currentStep === "generating-images"
+				|| currentStep === "preliminary-analysis"
+				|| currentStep === "dispatching-manuscripts"
+			)
 		) {
 			return (
 				<>
@@ -143,7 +148,12 @@ export function BatchProcessorOrchestrator({ leads, onClose, onUpdate }: BatchPr
 						isOpen={true}
 						progress={progress}
 						currentStep={currentStep}
-						leadName={currentProcessingLead?.nome}
+						currentTask={
+							currentStep === "dispatching-manuscripts"
+								? "Enfileirando digitações em paralelo"
+								: undefined
+						}
+						leadName={currentStep === "dispatching-manuscripts" ? undefined : currentProcessingLead?.nome}
 						sseConnections={sseConnections}
 						leadsBeingProcessed={leadsBeingProcessed}
 						totalLeads={leads.length}

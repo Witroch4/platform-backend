@@ -76,7 +76,14 @@
       "WebFetch(domain:skills.sh)",
       "Bash(git init:*)",
       "Bash(git branch:*)",
-      "Bash(git remote add:*)"
+      "Bash(git remote add:*)",
+      "Bash(ssh -i ~/.ssh/keys/production-server.key -o StrictHostKeyChecking=no root@49.13.155.94 \"base64 /tmp/socialwise_bkp_20260315.sql.gz\")",
+      "Bash(ssh -i ~/.ssh/keys/production-server.key -o StrictHostKeyChecking=no root@49.13.155.94 \"rm -f /tmp/socialwise_bkp_20260315.sql.gz && echo ''temp limpo''\")",
+      "Bash(docker restart:*)",
+      "Bash(docker network:*)",
+      "Bash(xargs -I{} docker inspect {} --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}')",
+      "Bash(docker inspect:*)",
+      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_app --tail 2000 2>&1 | grep -i ''flow_button_1773718634865\\\\|resumeFromButton\\\\|buttonId.*1773718634865\\\\|no.*edge.*button\\\\|Nenhuma edge'' | tail -30\")"
     ],
     "deny": [],
     "ask": []

@@ -6,54 +6,12 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { FlowTextEditorDialog } from "./FlowTextEditorDialog";
-
-// =============================================================================
-// VARIÁVEIS DISPONÍVEIS (estáticas para o editor)
-// =============================================================================
-
-interface AvailableVariable {
-	name: string;
-	label: string;
-	description: string;
-	category: "contact" | "conversation" | "system" | "custom";
-}
-
-const AVAILABLE_VARIABLES: AvailableVariable[] = [
-	// Contato
-	{ name: "contact_name", label: "Nome do contato", description: "Nome do cliente", category: "contact" },
-	{ name: "contact_phone", label: "Telefone", description: "Número do WhatsApp", category: "contact" },
-	{ name: "contact_id", label: "ID do contato", description: "ID interno do contato", category: "contact" },
-	// Conversa
-	{ name: "conversation_id", label: "ID da conversa", description: "ID da conversa atual", category: "conversation" },
-	{ name: "conversation_channel", label: "Canal", description: "WhatsApp, Instagram, etc", category: "conversation" },
-	{
-		name: "conversation_inbox_id",
-		label: "ID da caixa",
-		description: "ID da caixa de entrada",
-		category: "conversation",
-	},
-	// Sistema
-	{ name: "system_date", label: "Data atual", description: "Data no formato DD/MM/YYYY", category: "system" },
-	{ name: "system_time", label: "Hora atual", description: "Hora no formato HH:MM:SS", category: "system" },
-	{ name: "system_timestamp", label: "Timestamp", description: "Data/hora ISO 8601", category: "system" },
-];
-
-const CATEGORY_LABELS: Record<string, string> = {
-	contact: "Contato",
-	conversation: "Conversa",
-	system: "Sistema",
-	custom: "Personalizadas",
-};
-
-const CATEGORY_COLORS: Record<string, string> = {
-	contact: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
-	conversation: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
-	system: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300",
-	custom: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
-};
-
-// Regex para encontrar variáveis {{nome}}
-const VARIABLE_REGEX = /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g;
+import { useFlowBuilderContext } from "../context/FlowBuilderContext";
+import {
+	STATIC_FLOW_VARIABLES,
+	CATEGORY_COLORS,
+	VARIABLE_REGEX,
+} from "../constants/flow-variables";
 
 // =============================================================================
 // COMPONENTE PRINCIPAL
@@ -89,6 +47,10 @@ export const EditableText = ({
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const highlightRef = useRef<HTMLDivElement>(null);
 	const [internalValue, setInternalValue] = useState(value);
+
+	// Read variables from FlowBuilderContext (fallback to static if context unavailable)
+	const ctx = useFlowBuilderContext();
+	const availableVariables = ctx?.allVariables ?? STATIC_FLOW_VARIABLES;
 	const [isDialogOpen, setIsDialogOpen] = useState(false);
 
 	// Autocomplete state
@@ -120,15 +82,15 @@ export const EditableText = ({
 
 	// Filtered variables for autocomplete
 	const filteredVariables = useMemo(() => {
-		if (!searchQuery) return AVAILABLE_VARIABLES;
+		if (!searchQuery) return availableVariables;
 		const q = searchQuery.toLowerCase();
-		return AVAILABLE_VARIABLES.filter(
+		return availableVariables.filter(
 			(v) =>
 				v.name.toLowerCase().includes(q) ||
 				v.label.toLowerCase().includes(q) ||
 				v.description.toLowerCase().includes(q),
 		);
-	}, [searchQuery]);
+	}, [searchQuery, availableVariables]);
 
 	// Reset selected index when filtered list changes
 	useEffect(() => {
@@ -284,7 +246,7 @@ export const EditableText = ({
 
 		return escaped.replace(VARIABLE_REGEX, (match, varName) => {
 			// Find the category of this variable
-			const variable = AVAILABLE_VARIABLES.find((v) => v.name === varName);
+			const variable = availableVariables.find((v) => v.name === varName);
 			const category = variable?.category || "custom";
 			const colorClass = CATEGORY_COLORS[category];
 
@@ -293,12 +255,19 @@ export const EditableText = ({
 			// text color here, the variable text renders twice (ghost effect).
 			const bgOnly = colorClass
 				.split(" ")
-				.filter((c) => c.startsWith("bg-") || c.startsWith("dark:bg-"))
+				.filter(
+					(c) =>
+						c === "border" ||
+						c.startsWith("bg-") ||
+						c.startsWith("dark:bg-") ||
+						c.startsWith("border-") ||
+						c.startsWith("dark:border-"),
+				)
 				.join(" ");
 
-			return `<span class="px-1 py-0.5 rounded ${bgOnly} font-medium" style="color:transparent">${match}</span>`;
+			return `<span class="px-1 py-0.5 rounded ${bgOnly} font-medium shadow-[inset_0_0_0_0.5px_rgba(255,255,255,0.35)]" style="color:transparent">${match}</span>`;
 		});
-	}, [internalValue, enableVariables]);
+	}, [internalValue, enableVariables, availableVariables]);
 
 	// Prevent drag propagation
 	const stopPropagation = (e: React.MouseEvent | React.TouchEvent | React.PointerEvent) => {
@@ -479,6 +448,7 @@ export const EditableText = ({
 						placeholder={placeholder}
 						maxLength={maxLength}
 						title="Editar Texto"
+						variables={availableVariables}
 					/>
 				</>
 			)}
