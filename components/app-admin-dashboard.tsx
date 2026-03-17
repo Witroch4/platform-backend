@@ -44,6 +44,7 @@ import {
 	Flag,
 	AlertCircle,
 	Megaphone,
+	Play,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -739,6 +740,27 @@ export function AppAdminDashboard() {
 									>
 										<FlaskConical className="mr-2" />
 										{state !== "collapsed" && <span>Teste de Webhook</span>}
+									</SidebarMenuButton>
+								</SidebarMenuItem>
+
+								{/* Flow Playground */}
+								<SidebarMenuItem>
+									<SidebarMenuButton
+										onClick={(e) => {
+											e.preventDefault();
+											startTransition(() => {
+												router.push("/admin/flow-playground");
+											});
+										}}
+										onMouseEnter={() => {
+											try {
+												router.prefetch("/admin/flow-playground");
+											} catch { }
+										}}
+										className={`flex items-center transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
+									>
+										<Play className="mr-2" />
+										{state !== "collapsed" && <span>Flow Playground</span>}
 									</SidebarMenuButton>
 								</SidebarMenuItem>
 

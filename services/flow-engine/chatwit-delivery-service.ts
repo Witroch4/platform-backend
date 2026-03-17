@@ -12,6 +12,7 @@
 import axios, { type AxiosInstance, type AxiosError } from "axios";
 import log from "@/lib/log";
 import type { DeliveryContext, DeliveryPayload } from "@/types/flow-engine";
+import { addToCollector } from "./playground-collector";
 
 // =============================================================================
 // Config
@@ -79,6 +80,11 @@ export class ChatwitDeliveryService {
 	 * Entrega genérica — decide o método com base no `payload.type`.
 	 */
 	async deliver(ctx: DeliveryContext, payload: DeliveryPayload): Promise<DeliveryResult> {
+		if (ctx.isPlayground && ctx.playgroundExecutionId) {
+			addToCollector(ctx.playgroundExecutionId, payload);
+			return { success: true, messageId: Date.now(), attempts: 0 };
+		}
+
 		switch (payload.type) {
 			case "text":
 				return this.deliverText(ctx, payload.content ?? "", payload.private);

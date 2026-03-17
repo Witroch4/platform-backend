@@ -93,7 +93,8 @@
       "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service ls 2>&1 | head -20\")",
       "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service ls 2>&1 | grep -i social\")",
       "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_socialwise_app --tail 500 2>&1 | grep -i ''FlowExecutor\\\\|resumeFrom\\\\|DELAY\\\\|TEXT_MESSAGE\\\\|INTERACTIVE\\\\|deliver\\\\|SyncBridge\\\\|harvest\\\\|barrier\\\\|executeChain\\\\|Nenhuma edge\\\\|button.*encontr\\\\|Botão.*encontr\\\\|flow_button_1773718'' | tail -40\")",
-      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_socialwise_app --tail 300 2>&1\")"
+      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_socialwise_app --tail 300 2>&1\")",
+      "Bash(xxd)"
     ],
     "deny": [],
     "ask": []

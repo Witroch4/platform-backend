@@ -273,11 +273,16 @@ export function n8nFormatToCanvas(exportData: FlowExportFormat): FlowCanvas {
 
 	// SEMPRE regenerar button IDs na importação para evitar conflito entre flows
 	// (dois flows com o mesmo buttonId causam ambiguidade no FlowEdge/findSessionByButtonId)
+	//
+	// IMPORTANTE: elements e buttons (legado) compartilham os mesmos IDs originais.
+	// Precisamos gerar o novo ID UMA VEZ (via elements) e reusar no buttons legado.
+	// Se gerarmos IDs separados, o buttonIdMap é sobrescrito e o edge.sourceHandle
+	// fica com o ID do buttons (NEW_C) enquanto o Handle do React Flow usa elements (NEW_A).
 	const buttonIdMap = new Map<string, string>(); // oldId → newId
 	for (const node of nodes) {
 		if (node.type === "interactive_message") {
 			const data = node.data as InteractiveMessageNodeData;
-			// Regenerar IDs nos elements
+			// Regenerar IDs nos elements (fonte de verdade)
 			if (data.elements?.length) {
 				for (const el of data.elements) {
 					if (el.type === "button") {
@@ -287,12 +292,19 @@ export function n8nFormatToCanvas(exportData: FlowExportFormat): FlowCanvas {
 					}
 				}
 			}
-			// Regenerar IDs nos buttons legados
+			// Sincronizar buttons legados com os MESMOS IDs dos elements
+			// (não gerar IDs novos — reusar o mapeamento existente)
 			if (data.buttons?.length) {
 				for (const btn of data.buttons) {
-					const newId = generateElementId("button");
-					buttonIdMap.set(btn.id, newId);
-					btn.id = newId;
+					const mapped = buttonIdMap.get(btn.id);
+					if (mapped) {
+						btn.id = mapped; // Reusar o mesmo ID gerado para elements
+					} else {
+						// Botão só existe no legado (sem correspondente em elements) — gerar novo
+						const newId = generateElementId("button");
+						buttonIdMap.set(btn.id, newId);
+						btn.id = newId;
+					}
 				}
 			}
 			// Sincronizar IDs em message.action.buttons (dados da mensagem vinculada)

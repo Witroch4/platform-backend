@@ -2153,6 +2153,11 @@ export class FlowExecutor {
 			...(contactId && { contactId }),
 		};
 
+		if (this.context.isPlayground) {
+			await this.delivery.deliver(this.context, payload);
+			return this.findNextNodeId(flow, node);
+		}
+
 		try {
 			// Enfileira a ação para processamento assíncrono (não bloqueia)
 			// sessionId: usa conversationId como identificador de sessão

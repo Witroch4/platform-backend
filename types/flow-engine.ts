@@ -84,6 +84,10 @@ export interface DeliveryContext {
 	chatwitAccessToken: string;
 	/** Base URL da instância Chatwit (ex.: `https://app.chatwit.io`) */
 	chatwitBaseUrl: string;
+	/** Se true, deliveries são capturadas em vez de enviadas ao Chatwit */
+	isPlayground?: boolean;
+	/** ID único da execução playground (para coletar deliveries async) */
+	playgroundExecutionId?: string;
 }
 
 // =============================================================================

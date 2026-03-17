@@ -105,9 +105,28 @@ export class FlowOrchestrator {
 				}
 
 				// Fallback: buscar por conversationId/contactId (botões de interactive message normal)
+				// GUARD: Só resume se o botão realmente pertence ao nó atual da sessão.
+				// Sem esta validação, botões externos (ex: @recurso_oab de menu legado)
+				// tentariam resumir uma sessão de flow que não tem edge para eles → ERROR silencioso.
 				const session = await this.findActiveSession(deliveryContext);
-				if (session) {
-					return this.resumeSession(session, buttonId, deliveryContext, bridge);
+				if (session && session.currentNodeId) {
+					const prisma = getPrismaInstance();
+					const edgeForButton = await prisma.flowEdge.findFirst({
+						where: {
+							flowId: session.flowId,
+							sourceNodeId: session.currentNodeId,
+							buttonId,
+						},
+					});
+					if (edgeForButton) {
+						return this.resumeSession(session, buttonId, deliveryContext, bridge);
+					}
+					log.debug("[FlowOrchestrator] Botão ignorado — não pertence ao nó atual do flow ativo", {
+						buttonId,
+						sessionId: session.id,
+						flowId: session.flowId,
+						currentNodeId: session.currentNodeId,
+					});
 				}
 			}
 
