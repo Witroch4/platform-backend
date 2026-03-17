@@ -133,7 +133,7 @@ export class FlowExecutor {
 			for (const [key, value] of Object.entries(session.variables)) {
 				this.resolver.setVariable(key, value);
 			}
-			return this.skipWaitForReply(flow, session);
+			return this.skipWaitForReply(flow, session, bridge);
 		}
 
 		// Buscar TODAS as edges com este buttonId (suporte a branches paralelos)
@@ -369,6 +369,11 @@ export class FlowExecutor {
 				return this.executeChain(flow, harvested.barrierNode, bridge, false);
 			}
 
+			// Fechar janela sync ANTES do setImmediate — a resposta HTTP já vai retornar,
+			// então qualquer deliver() no background deve usar API async (não a bridge sync).
+			// Sem isso, a primeira mensagem após a barreira fica presa na bridge e se perde.
+			bridge.closeSyncWindow();
+
 			// Capturar referências para o closure
 			const barrierNode = harvested.barrierNode;
 			const flowRef = flow;
@@ -416,6 +421,9 @@ export class FlowExecutor {
 				});
 				return this.executeChain(flow, harvested.remainingStartNode, bridge, false);
 			}
+
+			// Fechar janela sync antes do background
+			bridge.closeSyncWindow();
 
 			const remainingNode = harvested.remainingStartNode;
 			const flowRef = flow;
@@ -1945,7 +1953,7 @@ export class FlowExecutor {
 							nodeId: session.currentNodeId,
 							attempts,
 						});
-						return this.skipWaitForReply(flow, session);
+						return this.skipWaitForReply(flow, session, bridge);
 					}
 
 					// Enviar erro e manter WAITING_INPUT
@@ -2021,8 +2029,15 @@ export class FlowExecutor {
 	private async skipWaitForReply(
 		flow: RuntimeFlow,
 		session: FlowSessionData,
+		bridge?: SyncBridge,
 	): Promise<ExecuteResult> {
 		const nodeId = session.currentNodeId!;
+
+		// Definir valor vazio na variável de espera para evitar placeholder {{var}} cru
+		const waitingVariable = String(session.variables._waitingVariable ?? "");
+		if (waitingVariable) {
+			this.resolver.setVariable(waitingVariable, "");
+		}
 
 		// Limpar metadados de espera
 		this.resolver.setVariable("_waitType", null);
@@ -2060,9 +2075,9 @@ export class FlowExecutor {
 			};
 		}
 
-		// Use a no-op SyncBridge for the skip path since we can't sync anymore
-		const dummyBridge = new SyncBridge();
-		return this.executeChain(flow, nextNode, dummyBridge, false);
+		// Usar a bridge real (se disponível) para que a resposta sync chegue ao Chatwit
+		const effectiveBridge = bridge ?? new SyncBridge();
+		return this.executeChain(flow, nextNode, effectiveBridge, false);
 	}
 
 	// ---------------------------------------------------------------------------

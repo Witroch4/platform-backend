@@ -83,7 +83,17 @@
       "Bash(docker network:*)",
       "Bash(xargs -I{} docker inspect {} --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}')",
       "Bash(docker inspect:*)",
-      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_app --tail 2000 2>&1 | grep -i ''flow_button_1773718634865\\\\|resumeFromButton\\\\|buttonId.*1773718634865\\\\|no.*edge.*button\\\\|Nenhuma edge'' | tail -30\")"
+      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_app --tail 2000 2>&1 | grep -i ''flow_button_1773718634865\\\\|resumeFromButton\\\\|buttonId.*1773718634865\\\\|no.*edge.*button\\\\|Nenhuma edge'' | tail -30\")",
+      "Bash(git fetch:*)",
+      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_app --tail 3000 2>&1 | grep -i ''Nenhuma edge\\\\|edge.*not\\\\|ERROR\\\\|flow.*error\\\\|Erro ao retomar'' | tail -20\")",
+      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_app --tail 500 2>&1 | grep -i ''skip\\\\|pular\\\\|WAIT_FOR_REPLY\\\\|GENERATE_PAYMENT\\\\|skipWaitForReply\\\\|edge sem sourceHandle\\\\|expandindo\\\\|Nenhuma edge\\\\|flow_skip'' | tail -30\")",
+      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_app --tail 1000 2>&1 | grep -i ''resumeFromButton\\\\|Link Fora\\\\|INTERACTIVE_MESSAGE\\\\|TEXT_MESSAGE\\\\|DELAY\\\\|harvest\\\\|barrier\\\\|async\\\\|deliver\\\\|Copiar\\\\|pix\\\\|57944155\\\\|text.*message\\\\|executeChain\\\\|Nenhuma edge\\\\|edge.*encontr'' | tail -40\")",
+      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_app --tail 1000 2>&1 | grep -i ''FlowExecutor\\\\|SyncBridge\\\\|flow_button\\\\|WAITING_INPUT\\\\|executeChain\\\\|harvestLight\\\\|barr'' | tail -40\")",
+      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_app --tail 500 2>&1 | tail -80\")",
+      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service ls 2>&1 | head -20\")",
+      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service ls 2>&1 | grep -i social\")",
+      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_socialwise_app --tail 500 2>&1 | grep -i ''FlowExecutor\\\\|resumeFrom\\\\|DELAY\\\\|TEXT_MESSAGE\\\\|INTERACTIVE\\\\|deliver\\\\|SyncBridge\\\\|harvest\\\\|barrier\\\\|executeChain\\\\|Nenhuma edge\\\\|button.*encontr\\\\|Botão.*encontr\\\\|flow_button_1773718'' | tail -40\")",
+      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_socialwise_app --tail 300 2>&1\")"
     ],
     "deny": [],
     "ask": []
