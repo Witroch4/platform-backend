@@ -309,8 +309,13 @@ export function ImageGalleryDialog({
 	return (
 		<>
 			{/* Dialog principal da galeria */}
-			<Dialog open={isOpen && !selectedImage} onOpenChange={(open) => !open && onClose()}>
-				<DialogContent className="max-w-4xl max-h-[90vh] overflow-auto" onKeyDown={handleKeyDown}>
+			<Dialog open={isOpen && !selectedImage} onOpenChange={(open) => { if (!open && !batchMode) onClose(); }}>
+				<DialogContent
+					className="max-w-4xl max-h-[90vh] overflow-auto"
+					onKeyDown={handleKeyDown}
+					onInteractOutside={(e) => { if (batchMode) e.preventDefault(); }}
+					onEscapeKeyDown={(e) => { if (batchMode) e.preventDefault(); }}
+				>
 					<DialogHeader>
 						<DialogTitle>{title}</DialogTitle>
 						<DialogDescription>{description}</DialogDescription>
@@ -323,10 +328,26 @@ export function ImageGalleryDialog({
 
 					<div className="py-4">
 						{selectionMode && (
-							<div className="mb-4 text-sm text-muted-foreground">
-								{selectedImages.length === 0
-									? "Nenhuma imagem selecionada"
-									: `${selectedImages.length} ${selectedImages.length === 1 ? "imagem selecionada" : "imagens selecionadas"}`}
+							<div className="mb-4 flex items-center justify-between">
+								<span className="text-sm text-muted-foreground">
+									{selectedImages.length === 0
+										? "Nenhuma imagem selecionada"
+										: `${selectedImages.length} ${selectedImages.length === 1 ? "imagem selecionada" : "imagens selecionadas"}`}
+								</span>
+								<Button
+									variant="outline"
+									size="sm"
+									onClick={() => {
+										if (selectedImages.length === images.length) {
+											setSelectedImages([]);
+										} else {
+											setSelectedImages([...images]);
+										}
+									}}
+								>
+									<Check className="h-3 w-3 mr-1" />
+									{selectedImages.length === images.length ? "Desmarcar Todas" : "Selecionar Todas"}
+								</Button>
 							</div>
 						)}
 

@@ -43,7 +43,6 @@ export function PdfCell({
 						<DeleteFileButton
 							onDelete={() => onDeleteFile(lead.id, "pdf")}
 							fileType="pdf"
-							onSuccess={onReloadAfterDelete}
 						/>
 					</div>
 				</LeadContextMenu>

@@ -39,6 +39,8 @@ interface OrchestratorResult {
 	waitingInput: boolean;
 	/** Se houve erro */
 	error?: string;
+	/** Se um flow foi efetivamente processado (true = não cair no LLM) */
+	handled?: boolean;
 }
 
 // =============================================================================
@@ -243,6 +245,7 @@ export class FlowOrchestrator {
 			syncResponse,
 			waitingInput: result.status === "WAITING_INPUT",
 			error: result.status === "ERROR" ? "Erro na execução do flow" : undefined,
+			handled: true,
 		};
 	}
 
@@ -291,6 +294,7 @@ export class FlowOrchestrator {
 			syncResponse,
 			waitingInput: result.status === "WAITING_INPUT",
 			error: result.status === "ERROR" ? "Erro ao retomar flow" : undefined,
+			handled: true,
 		};
 	}
 
@@ -335,6 +339,7 @@ export class FlowOrchestrator {
 			syncResponse,
 			waitingInput: result.status === "WAITING_INPUT",
 			error: result.status === "ERROR" ? "Erro ao retomar flow (free-text)" : undefined,
+			handled: true,
 		};
 	}
 

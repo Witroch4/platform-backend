@@ -246,14 +246,6 @@ export function useLeadHandlers({
 		if (typeof forceServerRefresh === "function") {
 			forceServerRefresh();
 		}
-
-		window.setTimeout(() => {
-			if (typeof forceServerRefresh === "function") {
-				forceServerRefresh();
-			}
-
-			toast("Atualizado", { description: "Lista de arquivos atualizada com sucesso" });
-		}, 500);
 	};
 
 	const handleUnificarArquivos = (leadId: string) => {

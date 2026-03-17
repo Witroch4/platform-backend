@@ -2,8 +2,6 @@
 
 import { X } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
-
 import {
 	Dialog,
 	DialogContent,
@@ -42,30 +40,10 @@ export function DeleteFileButton({ onDelete, fileType, fileName, onSuccess }: De
 		setIsDeleting(true);
 
 		try {
-			// Mensagem personalizada com base no tipo de arquivo
-			const fileDesc =
-				fileType === "pdf"
-					? "PDF unificado"
-					: fileType === "imagem"
-						? "conjunto de imagens convertidas"
-						: `arquivo ${fileName || ""}`;
-
-			// ✅ Usar toast.promise para melhor UX
-			const deletePromise = onDelete().then(() => {
-				// Callback opcional após exclusão bem-sucedida
-				if (onSuccess) {
-					onSuccess();
-				}
-				return `O ${fileDesc} foi excluído com sucesso.`;
-			});
-
-			toast.promise(deletePromise, {
-				loading: `Excluindo ${fileDesc}...`,
-				success: (message) => message,
-				error: "Não foi possível excluir o arquivo. Tente novamente.",
-			});
-
-			await deletePromise;
+			await onDelete();
+			if (onSuccess) {
+				onSuccess();
+			}
 		} catch (error) {
 			console.error("Erro ao excluir:", error);
 		} finally {

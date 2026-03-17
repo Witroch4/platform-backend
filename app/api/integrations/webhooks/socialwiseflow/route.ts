@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createLogger } from "@/lib/utils/logger";
-import { withPrismaReconnect, getPrismaInstance } from "@/lib/connections";
+import { withPrismaReconnect, getPrismaInstance, getRedisInstance } from "@/lib/connections";
 
 // SocialWise Flow optimized components
 import { processSocialWiseFlow, extractSessionId } from "@/lib/socialwise-flow/processor";
@@ -950,6 +950,28 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 		// Step 13.6: Flow Engine - Resume de sessões para botões do Flow Builder (prefixo flow_)
 		// NOTA: Flows ativados por intent mapping são executados em band-handlers.ts, NÃO aqui.
 		if (isFlowBuilderButton) {
+			// Dedup: Chatwit pode reenviar o mesmo clique de botão (retry/reprocessamento).
+			// Sem dedup, o FlowOrchestrator encontra a sessão WAITING_INPUT e re-executa o flow,
+			// causando mensagens duplicadas + fall-through para LLM.
+			const flowBtnDedupKey = `sw:flow_btn:${validPayload.session_id}:${buttonDetection.buttonId}`;
+			try {
+				const redis = getRedisInstance();
+				const isNewClick = await redis.set(flowBtnDedupKey, traceId || "1", "EX", 30, "NX");
+				if (!isNewClick) {
+					webhookLogger.info("[FlowEngine] Duplicate flow button click detected, skipping", {
+						buttonId: buttonDetection.buttonId,
+						sessionId: validPayload.session_id,
+						traceId,
+					});
+					return NextResponse.json({ status: "accepted", dedup: true }, { status: 200 });
+				}
+			} catch (dedupErr) {
+				// Redis falhou — prosseguir sem dedup (fail-open)
+				webhookLogger.warn("[FlowEngine] Flow button dedup check failed, continuing", {
+					error: dedupErr instanceof Error ? dedupErr.message : String(dedupErr),
+				});
+			}
+
 			try {
 				const flowOrchestrator = new FlowOrchestrator();
 
@@ -1058,6 +1080,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 					const asyncResponse = { status: "accepted", async: true };
 					logFinalResponse(asyncResponse, 200, traceId);
 					return NextResponse.json(asyncResponse, { status: 200 });
+				} else {
+					// Flow processado com sucesso (entrega async, sem payload sync).
+					// IMPORTANTE: retornar aqui para NÃO cair no pipeline de LLM.
+					webhookLogger.info("[FlowEngine] Flow button processado (async-only, sem sync response)", { traceId });
+					const asyncResponse = { status: "accepted", async: true };
+					logFinalResponse(asyncResponse, 200, traceId);
+					return NextResponse.json(asyncResponse, { status: 200 });
 				}
 			} catch (flowError) {
 				webhookLogger.error("[FlowEngine] Erro crítico no FlowOrchestrator (button resume)", {
@@ -1134,13 +1163,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 					});
 					logFinalResponse(flowResult.syncResponse, 200, traceId);
 					return NextResponse.json(flowResult.syncResponse, { status: 200 });
-				} else if (flowResult.waitingInput) {
+				} else if (flowResult.waitingInput || flowResult.handled) {
 					webhookLogger.info("[FlowEngine] Template QUICK_REPLY resumido via text-match (async)", { traceId });
 					const asyncResponse = { status: "accepted", async: true };
 					logFinalResponse(asyncResponse, 200, traceId);
 					return NextResponse.json(asyncResponse, { status: 200 });
 				}
-				// Se flowResult não tem syncResponse nem waitingInput, não houve match → continua para LLM
+				// Se flowResult não foi handled, não houve match → continua para LLM
 			} catch (flowError) {
 				webhookLogger.warn("[FlowEngine] Erro no text-match fallback (não-bloqueante)", {
 					error: flowError instanceof Error ? flowError.message : String(flowError),
@@ -1222,8 +1251,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 					});
 					logFinalResponse(flowResult.syncResponse, 200, traceId);
 					return NextResponse.json(flowResult.syncResponse, { status: 200 });
-				} else if (flowResult.waitingInput) {
-					webhookLogger.info("[FlowEngine] WAIT_FOR_REPLY free-text (still waiting)", { traceId });
+				} else if (flowResult.waitingInput || flowResult.handled) {
+					webhookLogger.info("[FlowEngine] WAIT_FOR_REPLY free-text (async/handled)", { traceId });
 					const asyncResponse = { status: "accepted", async: true };
 					logFinalResponse(asyncResponse, 200, traceId);
 					return NextResponse.json(asyncResponse, { status: 200 });
