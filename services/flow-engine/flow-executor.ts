@@ -48,6 +48,8 @@ import type {
 /** Nós leves que podem ir na ponte sync */
 type LightNodeType = "TEXT_MESSAGE" | "REACTION" | "INTERACTIVE_MESSAGE" | "GENERATE_PAYMENT_LINK";
 
+const MIN_PAYMENT_AMOUNT_CENTS = 100;
+
 /** Nós que são barreiras (forçam transição para async) */
 type BarrierNodeType = "MEDIA" | "DELAY" | "WAIT_FOR_REPLY";
 
@@ -1737,8 +1739,8 @@ export class FlowExecutor {
 			return this.findNextNodeId(flow, node);
 		}
 
-		if (amountCents <= 0) {
-			log.error("[FlowExecutor] GENERATE_PAYMENT_LINK: valor <= 0", {
+		if (amountCents < MIN_PAYMENT_AMOUNT_CENTS) {
+			log.error("[FlowExecutor] GENERATE_PAYMENT_LINK: valor abaixo do mínimo", {
 				nodeId: node.id,
 				amountCents,
 			});
@@ -1766,9 +1768,13 @@ export class FlowExecutor {
 			});
 		}
 
-		const orderNsu = `sw-${this.context.contactId}-${Date.now()}`;
-		const baseUrl = process.env.NEXT_PUBLIC_URL || process.env.NEXTAUTH_URL || "";
-		const webhookUrl = baseUrl ? `${baseUrl}/api/payment/infinitepay/webhook` : undefined;
+		// order_nsu no formato idêntico ao Chatwit para que o WebhookProcessorService
+		// reconheça, grave no chat, e encaminhe para Socialwise + JusMonitorIA
+		const hex = Math.random().toString(16).slice(2, 14);
+		const orderNsu = `chatwit-${this.context.accountId}-${this.context.conversationId}-${hex}`;
+		// Webhook aponta para o Chatwit (carteiro) — ele recebe, grava, e redistribui
+		const chatwitBase = this.context.chatwitBaseUrl?.replace(/\/$/, "");
+		const webhookUrl = chatwitBase ? `${chatwitBase}/webhooks/infinitepay` : undefined;
 
 		log.info("[FlowExecutor] GENERATE_PAYMENT_LINK: gerando link", {
 			nodeId: node.id,

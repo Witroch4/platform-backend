@@ -110,6 +110,16 @@ export class FlowOrchestrator {
 				// tentariam resumir uma sessão de flow que não tem edge para eles → ERROR silencioso.
 				const session = await this.findActiveSession(deliveryContext);
 				if (session && session.currentNodeId) {
+					const expectedSkipButtonId = `flow_skip_${session.currentNodeId}`;
+					if (session.variables?._waitType === "free_text" && buttonId === expectedSkipButtonId) {
+						log.info("[FlowOrchestrator] WAIT_FOR_REPLY: retomando sessão via botão pular", {
+							sessionId: session.id,
+							buttonId,
+							nodeId: session.currentNodeId,
+						});
+						return this.resumeSession(session, buttonId, deliveryContext, bridge);
+					}
+
 					const prisma = getPrismaInstance();
 					const edgeForButton = await prisma.flowEdge.findFirst({
 						where: {

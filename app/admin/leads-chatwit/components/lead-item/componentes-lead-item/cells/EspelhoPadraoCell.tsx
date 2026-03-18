@@ -8,6 +8,7 @@ import type { CellProps } from "../types";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import useSWR from "swr";
+import { hasConvertedImages } from "../utils";
 
 interface EspelhoPadrao {
 	id: string;
@@ -82,7 +83,7 @@ export function EspelhoPadraoCell({
 
 	// ✅ FIXO: Early return DEPOIS de todos os hooks
 	// Só mostra se há imagens convertidas (mesma lógica do ImagesCell)
-	if (!lead.arquivos.some((a) => a.pdfConvertido)) {
+	if (!hasConvertedImages(lead)) {
 		return <TableCell className="min-w-[120px] max-w-[160px] p-2 align-middle"></TableCell>;
 	}
 

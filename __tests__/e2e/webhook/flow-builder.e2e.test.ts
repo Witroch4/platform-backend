@@ -19,6 +19,7 @@
  *  12. Variable resolution (contact_name, system_date)
  *  13. Cleanup de FlowSession após flow COMPLETED
  *  14. Rewind: clique de botão de nó anterior
+	* 15. WAIT_FOR_REPLY skip button retoma fluxo
  *
  * Não testa (coberto pelo socialwise-webhook.e2e.test.ts):
  *   - Classificação por bandas (HARD/SOFT/ROUTER)
@@ -758,6 +759,42 @@ FLOWS.doubleInteractive = {
 	],
 };
 
+// --- Flow 12: WAIT_FOR_REPLY skip (START → WAIT_FOR_REPLY → TEXT → END) ---
+const f12Nodes = {
+	start: uid("node"),
+	wait: uid("node"),
+	textAfterSkip: uid("node"),
+	end: uid("node"),
+};
+const f12SkipButtonId = `flow_skip_${f12Nodes.wait}`;
+
+FLOWS.waitForReplySkip = {
+	id: uid("flow"),
+	name: "E2E: Wait For Reply Skip",
+	nodes: [
+		{ id: f12Nodes.start, nodeType: "START", config: {} },
+		{
+			id: f12Nodes.wait,
+			nodeType: "WAIT_FOR_REPLY",
+			config: {
+				promptText: "Informe seu e-mail",
+				variableName: "user_reply",
+				validationRegex: "^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$",
+				validationErrorMessage: "Por favor, informe um email válido.",
+				maxAttempts: 2,
+				skipButtonLabel: "Pular ⏭️",
+			},
+		},
+		{ id: f12Nodes.textAfterSkip, nodeType: "TEXT_MESSAGE", config: { text: "Fluxo continuou após pular." } },
+		{ id: f12Nodes.end, nodeType: "END", config: {} },
+	],
+	edges: [
+		{ id: uid("edge"), sourceNodeId: f12Nodes.start, targetNodeId: f12Nodes.wait },
+		{ id: uid("edge"), sourceNodeId: f12Nodes.wait, targetNodeId: f12Nodes.textAfterSkip },
+		{ id: uid("edge"), sourceNodeId: f12Nodes.textAfterSkip, targetNodeId: f12Nodes.end },
+	],
+};
+
 // ============================================================================
 // TEST SUITE
 // ============================================================================
@@ -1277,7 +1314,47 @@ describe("E2E: Flow Builder — Execução de Flows", () => {
 	});
 
 	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-	// 12. WEBHOOK NUNCA 500 (estabilidade)
+	// 12. WAIT_FOR_REPLY SKIP
+	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+	describe("Flow 12: WAIT_FOR_REPLY skip", () => {
+		it(
+			"botão Pular retoma a sessão e segue pela edge default",
+			async () => {
+				const triggerBtnId = `flow_trigger_wait_skip_${Date.now()}`;
+				await seedTriggerButton(triggerBtnId, FLOWS.waitForReplySkip.id);
+
+				const payload1 = buildFlowButtonPayload(triggerBtnId, "Trigger Wait Skip");
+				const { status: s1 } = await sendWebhook(payload1);
+				expect(s1).toBe(200);
+
+				await delay(500);
+				const sessions1 = await getFlowSessions(FLOWS.waitForReplySkip.id);
+				const waiting = sessions1.find((s) => s.status === "WAITING_INPUT");
+				expect(waiting).toBeDefined();
+				expect(waiting?.currentNodeId).toBe(f12Nodes.wait);
+
+				await delay(RATE_LIMIT_DELAY);
+				const payload2 = buildFlowButtonPayload(f12SkipButtonId, "Pular ⏭️");
+				const { status: s2 } = await sendWebhook(payload2);
+				expect(s2).toBe(200);
+
+				await delay(1000);
+				const sessions2 = await getFlowSessions(FLOWS.waitForReplySkip.id);
+				const completed = sessions2.find((s) => s.status === "COMPLETED");
+				expect(completed).toBeDefined();
+
+				const completedVariables = JSON.parse(completed?.variables || "{}");
+				expect(completedVariables.user_reply).toBe("");
+
+				await cleanupTriggerButton(triggerBtnId);
+			},
+			FLOW_TIMEOUT * 2,
+		);
+	});
+
+	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+	// 13. WEBHOOK NUNCA 500 (estabilidade)
 	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 	describe("Estabilidade: sem 500 em nenhum cenário", () => {

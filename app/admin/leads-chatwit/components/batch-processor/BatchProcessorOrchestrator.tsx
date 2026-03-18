@@ -21,42 +21,34 @@ export function BatchProcessorOrchestrator({ leads, onClose, onUpdate }: BatchPr
 	console.log("[BatchProcessorOrchestrator] Inicializando com leads:", leads.length);
 
 	const hasStarted = useRef(false);
+	const [currentLeadImages, setCurrentLeadImages] = useState<string[]>([]);
 
 	// TURBO mode integration
 	const { turboModeEnabled, hasAccess, turboModeConfig, checkAccess, turboModeMetrics } = useTurboMode();
 
-	// Helper para buscar imagens convertidas
-	const getConvertedImages = async (lead: any): Promise<string[]> => {
-		if (!lead.imagensConvertidas) {
+	const extractImagesFromLead = (lead: ExtendedLead | null | undefined): string[] => {
+		if (!lead) {
 			return [];
 		}
 
-		try {
-			// Verificar se é um JSON válido, caso contrário tentar buscar imagens atualizadas
-			if (lead.imagensConvertidas === "processed" || lead.imagensConvertidas === "pending") {
-				console.log("[BatchProcessorOrchestrator] Status de processamento detectado, buscando imagens...");
-				// Tentar buscar imagens atualizadas
-				try {
-					const response = await fetch(`/api/admin/leads-chatwit/leads?id=${lead.id}`);
-					if (response.ok) {
-						const updatedLead = await response.json();
-						if (updatedLead.imagensConvertidas && updatedLead.imagensConvertidas !== "processed") {
-							const images = JSON.parse(updatedLead.imagensConvertidas);
-							console.log("[BatchProcessorOrchestrator] Imagens atualizadas encontradas:", images.length);
-							return images;
-						}
+		if (typeof lead.imagensConvertidas === "string" && lead.imagensConvertidas.length > 0) {
+			try {
+				if (lead.imagensConvertidas !== "processed" && lead.imagensConvertidas !== "pending") {
+					const parsed = JSON.parse(lead.imagensConvertidas);
+					if (Array.isArray(parsed)) {
+						return parsed.filter((url): url is string => typeof url === "string" && url.trim().length > 0);
 					}
-				} catch (error) {
-					console.error("[BatchProcessorOrchestrator] Erro ao buscar imagens atualizadas:", error);
 				}
-				return [];
-			} else {
-				return JSON.parse(lead.imagensConvertidas);
+			} catch (error) {
+				console.error("[BatchProcessorOrchestrator] Erro ao processar imagens convertidas:", error);
 			}
-		} catch (error) {
-			console.error("Erro ao processar URLs de imagens convertidas:", error);
-			return [];
 		}
+
+		return (
+			lead.arquivos
+				?.map((arquivo) => arquivo.pdfConvertido)
+				.filter((url): url is string => typeof url === "string" && url.trim().length > 0) || []
+		);
 	};
 
 	const {
@@ -92,6 +84,43 @@ export function BatchProcessorOrchestrator({ leads, onClose, onUpdate }: BatchPr
 			});
 		}
 	}, [checkAccess, start]);
+
+	useEffect(() => {
+		let isCancelled = false;
+
+		const shouldResolveImages = currentStep === "manuscript" || currentStep === "mirror";
+		if (!shouldResolveImages || !currentLead?.id) {
+			setCurrentLeadImages([]);
+			return;
+		}
+
+		setCurrentLeadImages([]);
+
+		const resolveLatestLeadImages = async () => {
+			try {
+				const response = await fetch(`/api/admin/leads-chatwit/leads?id=${currentLead.id}`, { cache: "no-store" });
+				if (!response.ok) {
+					throw new Error(`Falha ao carregar lead ${currentLead.id}`);
+				}
+
+				const freshLead = (await response.json()) as ExtendedLead;
+				if (!isCancelled) {
+					setCurrentLeadImages(extractImagesFromLead(freshLead));
+				}
+			} catch (error) {
+				console.error("[BatchProcessorOrchestrator] Erro ao carregar imagens atualizadas do lead:", error);
+				if (!isCancelled) {
+					setCurrentLeadImages(extractImagesFromLead(currentLead));
+				}
+			}
+		};
+
+		void resolveLatestLeadImages();
+
+		return () => {
+			isCancelled = true;
+		};
+	}, [currentLead, currentStep]);
 
 	const handleCloseInternal = () => {
 		console.log("[BatchProcessorOrchestrator] Fechamento interno chamado");
@@ -171,31 +200,12 @@ export function BatchProcessorOrchestrator({ leads, onClose, onUpdate }: BatchPr
 				return null;
 			}
 
-			// Obter imagens convertidas do lead de forma simples
-			let imagensConvertidas: string[] = [];
-			if (currentLead.imagensConvertidas) {
-				try {
-					// Verificar se é um JSON válido, caso contrário usar array vazio
-					if (currentLead.imagensConvertidas === "processed" || currentLead.imagensConvertidas === "pending") {
-						console.log(
-							"[BatchProcessorOrchestrator] Status de processamento detectado, usando array vazio temporariamente...",
-						);
-						imagensConvertidas = [];
-					} else {
-						imagensConvertidas = JSON.parse(currentLead.imagensConvertidas);
-					}
-				} catch (error) {
-					console.error("Erro ao processar URLs de imagens convertidas:", error);
-					imagensConvertidas = [];
-				}
-			}
-
 			return (
 				<ImageGalleryDialog
 					key={currentLead.id}
 					isOpen={true}
 					onClose={handleCloseInternal}
-					images={imagensConvertidas}
+					images={currentLeadImages}
 					title={`Manuscrito - ${currentLead.nome} (${progress.current + 1}/${progress.total})`}
 					description="Selecione as imagens que serão enviadas para digitação do manuscrito deste lead. Selecione apenas as páginas que contêm texto manuscrito para digitação."
 					leadId={currentLead.id}
@@ -216,31 +226,12 @@ export function BatchProcessorOrchestrator({ leads, onClose, onUpdate }: BatchPr
 				return null;
 			}
 
-			// Obter imagens convertidas do lead de forma simples
-			let imagensConvertidas: string[] = [];
-			if (currentLead.imagensConvertidas) {
-				try {
-					// Verificar se é um JSON válido, caso contrário usar array vazio
-					if (currentLead.imagensConvertidas === "processed" || currentLead.imagensConvertidas === "pending") {
-						console.log(
-							"[BatchProcessorOrchestrator] Status de processamento detectado, usando array vazio temporariamente...",
-						);
-						imagensConvertidas = [];
-					} else {
-						imagensConvertidas = JSON.parse(currentLead.imagensConvertidas);
-					}
-				} catch (error) {
-					console.error("Erro ao processar URLs de imagens convertidas:", error);
-					imagensConvertidas = [];
-				}
-			}
-
 			return (
 				<ImageGalleryDialog
 					key={`${currentLead.id}-espelho`}
 					isOpen={true}
 					onClose={handleCloseInternal}
-					images={imagensConvertidas}
+					images={currentLeadImages}
 					title={`Espelho - ${currentLead.nome} (${progress.current + 1}/${progress.total})`}
 					description="Selecione as imagens do espelho de correção deste lead. Selecione apenas as páginas que mostram as correções da prova."
 					leadId={currentLead.id}

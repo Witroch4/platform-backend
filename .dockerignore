@@ -52,6 +52,7 @@ temp/
 # Docker files themselves
 Dockerfile*
 docker-compose*
+docker-compose-deploy-portainer-sworm.yml
 .dockerignore
 
 # Scripts not needed in container

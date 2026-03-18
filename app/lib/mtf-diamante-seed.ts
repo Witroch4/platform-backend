@@ -39,7 +39,7 @@ export async function populateUserMtfVariaveis(userId: string): Promise<boolean>
 								create: [
 									{ chave: "chave_pix", valor: "57944155000101" },
 									{ chave: "nome_do_escritorio_rodape", valor: "Dra. Amanda Sousa Advocacia e Consultoria Jurídica™" },
-									{ chave: "valor_analise", valor: "R$ 27,90" },
+									{ chave: "analise", valor: "R$ 27,90" },
 								],
 							},
 						},
@@ -74,7 +74,7 @@ export async function populateUserMtfVariaveis(userId: string): Promise<boolean>
 								chave: "nome_do_escritorio_rodape",
 								valor: "Dra. Amanda Sousa Advocacia e Consultoria Jurídica™",
 							},
-							{ configId: config.id, chave: "valor_analise", valor: "R$ 27,90" },
+							{ configId: config.id, chave: "analise", valor: "R$ 27,90" },
 						],
 					});
 				}

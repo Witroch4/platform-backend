@@ -9,8 +9,6 @@ import { Separator } from "@/components/ui/separator";
 import { CalendarIcon, Plus, Trash2, Edit, HelpCircle, Loader2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
@@ -30,6 +28,8 @@ import { useMtfData } from "../context/SwrProvider";
 import { validateVariable, ensureSpecialVariables, SPECIAL_VARIABLES } from "@/app/lib/variable-utils";
 import { DateTimePicker } from "@/app/[accountid]/dashboard/agendamento/components/date-time-picker";
 import { RegisterApiKeyDialog } from "@/components/admin/register-api-key-dialog";
+import { formatMtfLoteDate } from "@/lib/mtf-diamante/lote-date-time";
+import { parseCurrencyToCents } from "@/lib/payment/parse-currency";
 
 interface WhatsAppConfig {
 	id?: string;
@@ -65,6 +65,45 @@ interface ConfiguracoesLoteTabProps {
 	configPadrao: WhatsAppConfig | null;
 	onUpdate: () => void; // Função para recarregar os dados na página pai
 }
+
+function formatBrlInput(value: string) {
+	const digitsOnly = value.replace(/\D/g, "");
+
+	if (!digitsOnly) {
+		return "";
+	}
+
+	const numericValue = Number(digitsOnly) / 100;
+
+	return new Intl.NumberFormat("pt-BR", {
+		style: "currency",
+		currency: "BRL",
+		minimumFractionDigits: 2,
+		maximumFractionDigits: 2,
+	}).format(numericValue);
+}
+
+function handleBrlInputChange(value: string, onChange: (formattedValue: string) => void) {
+	onChange(formatBrlInput(value));
+}
+
+function getPreviousLoteEndDate(lotes: MtfDiamanteLote[], currentNumero: number) {
+	const previousLote = lotes
+		.filter((lote) => lote.numero < currentNumero)
+		.sort((firstLote, secondLote) => secondLote.numero - firstLote.numero)[0];
+
+	return previousLote ? new Date(previousLote.dataFim) : undefined;
+}
+
+function clampDateToMinimum(date: Date, minDate?: Date) {
+	if (!minDate || date >= minDate) {
+		return date;
+	}
+
+	return new Date(minDate);
+}
+
+const MIN_ANALYSIS_AMOUNT_CENTS = 100;
 
 const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabProps) => {
 	const [config, setConfig] = useState<WhatsAppConfig>({
@@ -140,13 +179,20 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
 				isRequired: true,
 				description: "Company name that appears in footer automatically",
 			},
+			{
+				chave: "analise",
+				valor: variaveis.find((v) => v.chave === "analise")?.valor || "",
+				tipo: "special" as const,
+				isRequired: true,
+				description: "Valor da análise jurídica (formato R$ X,XX)",
+			},
 		];
 
 		// Get custom variables (excluding special ones and lote variables)
 		const customVariables = variaveis
 			.filter(
 				(v) =>
-					!["chave_pix", "nome_do_escritorio_rodape", "lote_ativo"].includes(v.chave) && !v.chave.startsWith("lote_"), // Filtrar qualquer variável que comece com 'lote_'
+					!["chave_pix", "nome_do_escritorio_rodape", "analise", "lote_ativo"].includes(v.chave) && !v.chave.startsWith("lote_"), // Filtrar qualquer variável que comece com 'lote_'
 			)
 			.map((v) => ({
 				...v,
@@ -230,13 +276,32 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
 		}
 
 		// Ensure special variables are present
-		const specialVariables = ["chave_pix", "nome_do_escritorio_rodape"];
+		const specialVariables = ["chave_pix", "nome_do_escritorio_rodape", "analise"];
 		const missingSpecialVars = specialVariables.filter(
 			(special) => !variaveisEditaveis.some((v) => v.chave === special && v.valor.trim()),
 		);
 
 		if (missingSpecialVars.length > 0) {
 			toast.error(`Variáveis especiais obrigatórias faltando: ${missingSpecialVars.join(", ")}`);
+			return;
+		}
+
+		const analysisVariable = variaveisEditaveis.find((variavel) => variavel.chave === "analise");
+		if (!analysisVariable?.valor.trim()) {
+			toast.error("Informe um valor para a variável analise.");
+			return;
+		}
+
+		let analysisAmountCents = 0;
+		try {
+			analysisAmountCents = parseCurrencyToCents(analysisVariable.valor);
+		} catch {
+			toast.error("O valor da variável analise é inválido.");
+			return;
+		}
+
+		if (analysisAmountCents < MIN_ANALYSIS_AMOUNT_CENTS) {
+			toast.error("O valor da análise deve ser no mínimo R$ 1,00.");
 			return;
 		}
 
@@ -451,10 +516,57 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
 											<p className="text-xs text-gray-500 mt-1">Aparece automaticamente no rodapé</p>
 										</div>
 									</div>
+
+									{/* Valor da Análise */}
+									<div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end bg-purple-50/50 dark:bg-purple-900/20 p-3 rounded-lg">
+										<div>
+											<div className="flex items-center gap-2 mb-1">
+												<Label htmlFor="analise" className="text-sm font-medium">
+													analise
+												</Label>
+												<Tooltip>
+													<TooltipTrigger asChild>
+														<HelpCircle className="w-4 h-4 text-purple-500 cursor-help" />
+													</TooltipTrigger>
+													<TooltipContent className="max-w-xs">
+														<p className="text-sm">
+															<strong>Valor da análise jurídica</strong>
+															<br />
+															Usado em mensagens como {"{{analise}}"} e no cálculo automático do complemento do lote
+															ativo. Ex: se o lote é R$ 267,90 e a análise R$ 27,90, o complemento será R$ 240.
+														</p>
+													</TooltipContent>
+												</Tooltip>
+											</div>
+											<Input
+												id="analise"
+												inputMode="decimal"
+												value={variaveisEditaveis.find((v) => v.chave === "analise")?.valor || ""}
+												onChange={(e) => {
+													const index = variaveisEditaveis.findIndex((v) => v.chave === "analise");
+													if (index >= 0) {
+														const raw = e.target.value.replace(/[^\d]/g, "");
+														if (!raw) {
+															handleVariavelChange(index, "valor", "");
+															return;
+														}
+														const num = parseInt(raw, 10) / 100;
+														const formatted = `R$ ${num.toFixed(2).replace(".", ",")}`;
+														handleVariavelChange(index, "valor", formatted);
+													}
+												}}
+												placeholder="R$ 27,90"
+												className="font-mono"
+											/>
+											<p className="text-xs text-gray-500 mt-1">
+												Usado em {"{{analise}}"} e no complemento automático do lote. Valor mínimo: R$ 1,00.
+											</p>
+										</div>
+									</div>
 								</div>
 
 								{/* Variáveis Personalizadas */}
-								{variaveisEditaveis.filter((v) => !["chave_pix", "nome_do_escritorio_rodape"].includes(v.chave))
+								{variaveisEditaveis.filter((v) => !["chave_pix", "nome_do_escritorio_rodape", "analise"].includes(v.chave))
 									.length > 0 && (
 									<div className="space-y-4">
 										<h4 className="font-medium text-sm text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700 pb-2">
@@ -462,7 +574,7 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
 										</h4>
 										{variaveisEditaveis
 											.map((variavel, index) => ({ variavel, index }))
-											.filter(({ variavel }) => !["chave_pix", "nome_do_escritorio_rodape"].includes(variavel.chave))
+											.filter(({ variavel }) => !["chave_pix", "nome_do_escritorio_rodape", "analise"].includes(variavel.chave))
 											.map(({ variavel, index }, displayIndex) => {
 												return (
 													<div
@@ -652,9 +764,9 @@ function LoteCard({ lote, onUpdate }: { lote: MtfDiamanteLote; onUpdate: () => v
 							<div className="text-lg font-bold text-green-600 dark:text-green-400">{lote.valor}</div>
 						</div>
 						<div className="flex items-center gap-4 mt-2 text-sm text-gray-600 dark:text-gray-400">
-							<span>Início: {format(new Date(lote.dataInicio), "dd/MM/yyyy", { locale: ptBR })}</span>
+							<span>Início: {formatMtfLoteDate(lote.dataInicio)}</span>
 							<span>•</span>
-							<span>Fim: {format(new Date(lote.dataFim), "dd/MM/yyyy", { locale: ptBR })}</span>
+							<span>Fim: {formatMtfLoteDate(lote.dataFim)}</span>
 						</div>
 					</div>
 					<div className="flex items-center gap-2">
@@ -707,13 +819,27 @@ function AdicionarLoteDialog({ onLoteAdicionado, lotes }: { onLoteAdicionado: ()
 
 	// Auto-compute next sequential number
 	const nextNumero = (lotes.length > 0 ? Math.max(...lotes.map((l) => l.numero)) : 0) + 1;
+	const previousLoteEndDate = getPreviousLoteEndDate(lotes, nextNumero);
+	const initialStartDate = previousLoteEndDate ? new Date(previousLoteEndDate) : new Date();
 
-	const [formData, setFormData] = useState({
+	const [formData, setFormData] = useState(() => ({
 		nome: "",
 		valor: "",
-		dataInicio: new Date(),
-		dataFim: new Date(),
-	});
+		dataInicio: initialStartDate,
+		dataFim: initialStartDate,
+	}));
+
+	useEffect(() => {
+		if (!open) {
+			return;
+		}
+
+		setFormData((prev) => ({
+			...prev,
+			dataInicio: initialStartDate,
+			dataFim: clampDateToMinimum(prev.dataFim, initialStartDate),
+		}));
+	}, [open, previousLoteEndDate?.toISOString()]);
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -741,8 +867,8 @@ function AdicionarLoteDialog({ onLoteAdicionado, lotes }: { onLoteAdicionado: ()
 				setFormData({
 					nome: "",
 					valor: "",
-					dataInicio: new Date(),
-					dataFim: new Date(),
+					dataInicio: initialStartDate,
+					dataFim: initialStartDate,
 				});
 			} else {
 				const errorData = await response.json();
@@ -781,8 +907,13 @@ function AdicionarLoteDialog({ onLoteAdicionado, lotes }: { onLoteAdicionado: ()
 							<Input
 								id="valor"
 								value={formData.valor}
-								onChange={(e) => setFormData((prev) => ({ ...prev, valor: e.target.value }))}
+								onChange={(e) =>
+									handleBrlInputChange(e.target.value, (formattedValue) =>
+										setFormData((prev) => ({ ...prev, valor: formattedValue }))
+									)
+								}
 								placeholder="R$ 287,90"
+								inputMode="numeric"
 								required
 							/>
 						</div>
@@ -801,15 +932,29 @@ function AdicionarLoteDialog({ onLoteAdicionado, lotes }: { onLoteAdicionado: ()
 						<div>
 							<DateTimePicker
 								date={formData.dataInicio}
-								setDate={(date) => date && setFormData((prev) => ({ ...prev, dataInicio: date }))}
+								setDate={(date) =>
+									date &&
+									setFormData((prev) => ({
+										...prev,
+										dataInicio: clampDateToMinimum(date, previousLoteEndDate),
+									}))
+								}
 								label="Data e Hora de Início"
+								minDate={previousLoteEndDate}
 							/>
 						</div>
 						<div>
 							<DateTimePicker
 								date={formData.dataFim}
-								setDate={(date) => date && setFormData((prev) => ({ ...prev, dataFim: date }))}
+								setDate={(date) =>
+									date &&
+									setFormData((prev) => ({
+										...prev,
+										dataFim: clampDateToMinimum(date, prev.dataInicio),
+									}))
+								}
 								label="Data e Hora de Fim"
+								minDate={formData.dataInicio}
 							/>
 						</div>
 					</div>
@@ -834,7 +979,7 @@ function EditarLoteDialog({ lote, onLoteAtualizado }: { lote: MtfDiamanteLote; o
 	const [formData, setFormData] = useState({
 		numero: lote.numero,
 		nome: lote.nome,
-		valor: lote.valor,
+		valor: formatBrlInput(lote.valor),
 		dataInicio: new Date(lote.dataInicio),
 		dataFim: new Date(lote.dataFim),
 	});
@@ -902,8 +1047,13 @@ function EditarLoteDialog({ lote, onLoteAtualizado }: { lote: MtfDiamanteLote; o
 							<Input
 								id="valor"
 								value={formData.valor}
-								onChange={(e) => setFormData((prev) => ({ ...prev, valor: e.target.value }))}
+								onChange={(e) =>
+									handleBrlInputChange(e.target.value, (formattedValue) =>
+										setFormData((prev) => ({ ...prev, valor: formattedValue }))
+									)
+								}
 								placeholder="R$ 287,90"
+								inputMode="numeric"
 								required
 							/>
 						</div>

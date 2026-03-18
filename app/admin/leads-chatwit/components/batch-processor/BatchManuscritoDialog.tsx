@@ -30,10 +30,13 @@ export function BatchManuscritoDialog({ lead, progress, onSubmit, onClose }: Bat
 	// Obter imagens convertidas do lead
 	const getConvertedImages = (): string[] => {
 		let imagensConvertidas: string[] = [];
+		const isUsableImageUrl = (value: unknown): value is string =>
+			typeof value === "string" && /^https?:\/\//i.test(value.trim());
 
 		if (lead.imagensConvertidas) {
 			try {
-				imagensConvertidas = JSON.parse(lead.imagensConvertidas);
+				const parsedImages = JSON.parse(lead.imagensConvertidas);
+				imagensConvertidas = Array.isArray(parsedImages) ? parsedImages.filter(isUsableImageUrl) : [];
 			} catch (error) {
 				console.error("Erro ao processar URLs de imagens convertidas:", error);
 			}
@@ -43,9 +46,9 @@ export function BatchManuscritoDialog({ lead, progress, onSubmit, onClose }: Bat
 		if (!imagensConvertidas || imagensConvertidas.length === 0) {
 			imagensConvertidas =
 				lead.arquivos
-					?.filter((a: any) => a.pdfConvertido)
-					?.map((a: any) => a.pdfConvertido as string)
-					?.filter((url: string | null) => url && url.length > 0) || [];
+					?.map((a: any) => a.pdfConvertido)
+					?.filter(isUsableImageUrl)
+					|| [];
 		}
 
 		return imagensConvertidas;

@@ -56,7 +56,7 @@ export async function GET(request: Request) {
 							variaveis: {
 								create: [
 									{
-										chave: "valor_analise",
+										chave: "analise",
 										valor: "R$ 27,90" as any,
 									},
 									{
@@ -90,7 +90,7 @@ export async function GET(request: Request) {
 		}
 
 		// Extrair valores das variáveis
-		const valorAnalise = (config?.variaveis?.find((v) => v.chave === "valor_analise")?.valor as string) || "";
+		const valorAnalise = (config?.variaveis?.find((v) => v.chave === "analise" || v.chave === "valor_analise")?.valor as string) || "";
 		const chavePix = (config?.variaveis?.find((v) => v.chave === "chave_pix")?.valor as string) || "";
 
 		return NextResponse.json({
@@ -148,7 +148,7 @@ export async function POST(request: Request) {
 				where: {
 					configId_chave: {
 						configId: existingConfig.id,
-						chave: "valor_analise",
+						chave: "analise",
 					},
 				},
 				update: {
@@ -156,7 +156,7 @@ export async function POST(request: Request) {
 				},
 				create: {
 					configId: existingConfig.id,
-					chave: "valor_analise",
+					chave: "analise",
 					valor: validatedData.valorAnalise as any,
 				},
 			});

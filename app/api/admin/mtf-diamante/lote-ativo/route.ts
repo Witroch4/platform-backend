@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getPrismaInstance } from "@/lib/connections";
+import { formatMtfLoteDateTime } from "@/lib/mtf-diamante/lote-date-time";
 
 interface LoteOab {
 	id: string;
@@ -71,14 +72,7 @@ export async function GET() {
 			const formatarDataHora = (dataStr: string) => {
 				if (!dataStr) return "";
 				try {
-					const data = new Date(dataStr);
-					return data.toLocaleDateString("pt-BR", {
-						day: "2-digit",
-						month: "2-digit",
-						year: "numeric",
-						hour: "2-digit",
-						minute: "2-digit",
-					});
+					return formatMtfLoteDateTime(dataStr);
 				} catch {
 					return dataStr;
 				}

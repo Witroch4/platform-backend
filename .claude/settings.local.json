@@ -94,7 +94,12 @@
       "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service ls 2>&1 | grep -i social\")",
       "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_socialwise_app --tail 500 2>&1 | grep -i ''FlowExecutor\\\\|resumeFrom\\\\|DELAY\\\\|TEXT_MESSAGE\\\\|INTERACTIVE\\\\|deliver\\\\|SyncBridge\\\\|harvest\\\\|barrier\\\\|executeChain\\\\|Nenhuma edge\\\\|button.*encontr\\\\|Botão.*encontr\\\\|flow_button_1773718'' | tail -40\")",
       "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_socialwise_app --tail 300 2>&1\")",
-      "Bash(xxd)"
+      "Bash(xxd)",
+      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_app --tail 2000 --timestamps 2>&1 | grep -E ''\\(14:5[0-9]|15:0[0-5]\\)'' | grep -iE ''\\(llm|ai|router|classify|intent|error|fail|generat\\)'' | tail -80\")",
+      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_app --tail 200 2>&1 | grep -E ''\\(CAMPANHA-OAB|generate_payment|wait_for_reply|FlowOrchestrator|FlowExecutor|payment_url|payment.*link|infinitepay|email|user_reply\\)'' | tail -100\")",
+      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_worker --tail 300 2>&1 | grep -E ''\\(CAMPANHA-OAB|generate_payment|wait_for_reply|payment_url|payment.*link|infinitepay|email|user_reply|flow_button\\)'' | tail -100\")",
+      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_socialwise_app --tail 400 2>&1 | grep -E ''\\(generate_payment|wait_for_reply|payment_url|infinitepay|email|user_reply|Enviar|flow_button_177379|cmmuja|FlowExec|FlowOrch\\)'' | tail -80\")",
+      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_socialwise_app --since 2h 2>&1 | grep -E ''\\(generate_payment|wait_for_reply|payment_url|infinitepay|user_reply|flow.*button|FlowExec|FlowOrch|payment.*link\\)'' | tail -60\")"
     ],
     "deny": [],
     "ask": []

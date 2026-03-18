@@ -4,6 +4,7 @@
  */
 
 import { getPrismaInstance } from "@/lib/connections";
+import { formatMtfLoteDateTime } from "@/lib/mtf-diamante/lote-date-time";
 
 interface LoteOab {
 	id: string;
@@ -25,21 +26,35 @@ interface VariavelResolvida {
 function formatarDataHora(dataStr: string): string {
 	if (!dataStr) return "";
 	try {
-		const data = new Date(dataStr);
-		return data.toLocaleDateString("pt-BR", {
-			day: "2-digit",
-			month: "2-digit",
-			year: "numeric",
-			hour: "2-digit",
-			minute: "2-digit",
-		});
+		return formatMtfLoteDateTime(dataStr);
 	} catch {
 		return dataStr;
 	}
 }
 
+function parseCurrencyToNumber(valor: string): number {
+	const cleaned = valor.replace(/R\$\s*/gi, "").replace(/\./g, "").replace(",", ".").trim();
+	return parseFloat(cleaned) || 0;
+}
+
+function formatCurrency(valor: number): string {
+	if (valor % 1 === 0) return `R$ ${valor.toFixed(0)}`;
+	return `R$ ${valor.toFixed(2).replace(".", ",")}`;
+}
+
 function formatarLote(lote: LoteOab): string {
-	return `Lote ${lote.numero}: ${lote.nome || "Sem nome"}\nValor: ${lote.valor}\nPeríodo: ${formatarDataHora(lote.dataInicio)} às ${formatarDataHora(lote.dataFim)}`;
+	return `*Lote ${lote.numero}: ${lote.nome || "Sem nome"}*\n*Valor: ${lote.valor}*\n*Período: ${formatarDataHora(lote.dataInicio)} às ${formatarDataHora(lote.dataFim)}*`;
+}
+
+function formatarLoteAtivo(lote: LoteOab, valorAnalise: string): string {
+	const base = formatarLote(lote);
+	const loteNum = parseCurrencyToNumber(lote.valor);
+	const analiseNum = parseCurrencyToNumber(valorAnalise);
+	if (loteNum > 0 && analiseNum > 0 && loteNum > analiseNum) {
+		const complemento = loteNum - analiseNum;
+		return `${base}\n(com complemento de apenas *${formatCurrency(complemento)}*)`;
+	}
+	return base;
 }
 
 /**
@@ -77,6 +92,8 @@ export async function getAllVariablesForUser(userId: string): Promise<VariavelRe
 
 		// 2. Buscar lotes e criar variáveis: lote_ativo + lote_1, lote_2, etc.
 		const lotesVariavel = config.variaveis.find((v) => v.chave === "lotes_oab");
+		const valorAnalise = config.variaveis.find((v) => v.chave === "analise" || v.chave === "valor_analise");
+		const valorAnaliseStr = String(valorAnalise?.valor || "");
 		if (lotesVariavel && Array.isArray(lotesVariavel.valor)) {
 			const lotes = lotesVariavel.valor as unknown as LoteOab[];
 			const loteAtivo = lotes.find((lote) => lote.isActive === true);
@@ -84,7 +101,7 @@ export async function getAllVariablesForUser(userId: string): Promise<VariavelRe
 			if (loteAtivo) {
 				variaveis.push({
 					chave: "lote_ativo",
-					valor: formatarLote(loteAtivo),
+					valor: formatarLoteAtivo(loteAtivo, valorAnaliseStr),
 					tipo: "lote",
 				});
 			} else {
@@ -132,16 +149,16 @@ export async function getLoteAtivoFormatado(userId: string): Promise<string> {
 
 		const config = await prisma.mtfDiamanteConfig.findUnique({
 			where: { userId },
-			include: { variaveis: { where: { chave: "lotes_oab" } } },
+			include: { variaveis: { where: { chave: { in: ["lotes_oab", "analise", "valor_analise"] } } } },
 		});
 
-		if (!config || !config.variaveis[0]) {
+		if (!config) {
 			return "*⚠️🚫 ATENÇÃO: Este serviço NÃO pode ser solicitado agora Nenhum lote ativo no momento. Veja sobre mandado de segurança!!*";
 		}
 
-		const lotesVariavel = config.variaveis[0];
-		if (!Array.isArray(lotesVariavel.valor)) {
-			return "Formato de lotes inválido";
+		const lotesVariavel = config.variaveis.find((v) => v.chave === "lotes_oab");
+		if (!lotesVariavel || !Array.isArray(lotesVariavel.valor)) {
+			return "*⚠️🚫 ATENÇÃO: Este serviço NÃO pode ser solicitado agora Nenhum lote ativo no momento. Veja sobre mandado de segurança!!*";
 		}
 
 		const lotes = lotesVariavel.valor as unknown as LoteOab[];
@@ -151,7 +168,8 @@ export async function getLoteAtivoFormatado(userId: string): Promise<string> {
 			return "*⚠️🚫 ATENÇÃO: Este serviço NÃO pode ser solicitado agora Nenhum lote ativo no momento. Veja sobre mandado de segurança!!*";
 		}
 
-		return formatarLote(loteAtivo);
+		const valorAnalise = config.variaveis.find((v) => v.chave === "analise" || v.chave === "valor_analise");
+		return formatarLoteAtivo(loteAtivo, String(valorAnalise?.valor || ""));
 	} catch (error) {
 		console.error(`[MTF Variables] Erro ao buscar lote ativo para usuário ${userId}:`, error);
 		return "Erro ao buscar lote ativo";
@@ -229,7 +247,7 @@ function getDescricaoVariavel(chave: string): string {
 	const descricoes: Record<string, string> = {
 		chave_pix: "Chave PIX para pagamentos (máx. 15 caracteres)",
 		nome_do_escritorio_rodape: "Nome do escritório que aparece no rodapé",
-		valor_analise: "Valor padrão da análise jurídica",
+		analise: "Valor da análise jurídica (formato R$ X,XX)",
 	};
 	return descricoes[chave] || "Variável customizada";
 }

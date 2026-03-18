@@ -343,17 +343,26 @@ export async function structuredOrJson<T>(args: StructuredOrJsonArgs<T>): Promis
 				});
 			}
 
-			// Se for erro de schema, tenta fallback
-			const isSchemaError =
-				e?.code === "invalid_json_schema" ||
-				e?.param === "text.format.schema" ||
-				String(e?.message || "").includes("invalid_json_schema");
+			// Se JSON veio truncado/malformado (SyntaxError), cai no fallback JSON mode
+			const isJsonParseError =
+				e instanceof SyntaxError ||
+				/Unterminated|Unexpected.*JSON|JSON.*position/i.test(msg);
+			if (isJsonParseError) {
+				console.warn("Structured Outputs JSON truncado/malformado, fallback para JSON mode:", e?.message);
+				// Fall through para JSON mode fallback abaixo
+			} else {
+				// Se for erro de schema, tenta fallback
+				const isSchemaError =
+					e?.code === "invalid_json_schema" ||
+					e?.param === "text.format.schema" ||
+					String(e?.message || "").includes("invalid_json_schema");
 
-			if (!isSchemaError) {
-				throw e; // Re-throw outros erros
+				if (!isSchemaError) {
+					throw e; // Re-throw outros erros
+				}
+
+				console.warn("Structured Outputs failed, falling back to JSON mode:", e?.message);
 			}
-
-			console.warn("Structured Outputs failed, falling back to JSON mode:", e?.message);
 		}
 	}
 

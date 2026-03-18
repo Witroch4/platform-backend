@@ -275,21 +275,21 @@ async function convertPdfToImages(pdfBuffer: Buffer, options: PDF2PicOptions): P
 	}
 }
 
-// Corrigir a relação com ArquivoLeadChatwit usando o nome correto do campo
-async function atualizarStatusArquivos(leadId: string, arquivosConvertidos: boolean): Promise<void> {
+// Mantém o campo legado pdfConvertido limpo para evitar estados ambíguos como "true"/"false".
+async function limparMetadadosLegadosDeConversao(leadId: string): Promise<void> {
 	try {
 		await prisma.arquivoLeadOab.updateMany({
 			where: {
 				leadOabDataId: leadId,
 			},
 			data: {
-				pdfConvertido: arquivosConvertidos ? "true" : "false",
+				pdfConvertido: null,
 			},
 		});
 
-		log.info(`Status dos arquivos atualizado para o lead ${leadId}: ${arquivosConvertidos}`);
+		log.info(`Metadados legados de conversão limpos para o lead ${leadId}`);
 	} catch (error) {
-		log.error(`Erro ao atualizar status dos arquivos: ${error}`);
+		log.error(`Erro ao limpar metadados legados de conversão: ${error}`);
 		throw error;
 	}
 }
@@ -442,16 +442,15 @@ export async function POST(request: NextRequest) {
 			}
 		}
 
-		// Atualizar status dos arquivos e armazenar URLs das imagens no lead
+		// Armazenar URLs das imagens no lead e limpar flags legadas dos arquivos.
 		if (convertedUrls.length > 0) {
 			log.info(`Atualizando status dos arquivos para ${leadId}`);
 
 			try {
-				// Atualizar o status dos arquivos
-				await atualizarStatusArquivos(leadId, true);
+				await limparMetadadosLegadosDeConversao(leadId);
 
 				// Armazenar URLs das imagens no campo imagensConvertidas
-				const updateResult = await prisma.leadOabData.update({
+				await prisma.leadOabData.update({
 					where: { id: leadId },
 					data: {
 						imagensConvertidas: JSON.stringify(convertedUrls),

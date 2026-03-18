@@ -3,12 +3,11 @@ import { generateText } from "ai";
 import { google } from "@ai-sdk/google";
 import { createModel, buildProviderOptions } from "@/lib/socialwise-flow/services/ai-provider-factory";
 import type { AiProviderType } from "@/lib/socialwise-flow/processor-components/assistant-config";
-import { withRetry, cleanPromptForOpenAI, OPENAI_FALLBACK_MODEL } from "./ai-retry-fallback";
+import { withRetry, cleanPromptForOpenAI, OPENAI_FALLBACK_MODEL, DEFAULT_API_TIMEOUT_MS } from "./ai-retry-fallback";
 import { getOabEvalConfig } from "@/lib/config";
 import { getPrismaInstance } from "@/lib/connections";
 import {
 	getAgentBlueprintByLinkedColumn,
-	getAgentBlueprintByLinkedColumnAndProvider,
 	isGeminiModel,
 	GEMINI_AGENTIC_VISION_INSTRUCTIONS,
 } from "@/lib/ai-agents/blueprints";
@@ -16,6 +15,14 @@ import type { ExtractedPage } from "./types";
 
 /** Modelo OpenAI menor como último recurso (3o nível de fallback) */
 const OPENAI_LAST_RESORT_MODEL = "gpt-4.1-mini";
+
+/**
+ * Cap de segurança para output tokens por página.
+ * Páginas normais de OCR usam 5K-9K tokens. 126K = code_execution rodando solto.
+ * Se o blueprint definir maxOutputTokens=0 (sem limite), este cap é aplicado.
+ * O valor real deve ser controlado pelo frontend via blueprint config.
+ */
+const MAX_SAFE_OUTPUT_TOKENS = 30_000;
 
 interface ManuscriptImageDescriptor {
 	id: string;
@@ -37,7 +44,26 @@ const PreparedImageSchema = z.object({
 	mimeType: z.string().optional(),
 });
 
+const MissingImageSchema = z.object({
+	id: z.string(),
+	url: z.string(),
+	nome: z.string().optional(),
+	page: z.number().optional(),
+	missing: z.literal(true),
+	reason: z.string(),
+	statusCode: z.number().optional(),
+});
+
 type PreparedImageState = z.infer<typeof PreparedImageSchema>;
+type MissingImageState = z.infer<typeof MissingImageSchema>;
+type ImagePreparationState = PreparedImageState | MissingImageState;
+
+interface ProviderCacheEntry {
+	model?: string;
+	maxOutputTokens?: number | null;
+	thinkingLevel?: string | null;
+	reasoningEffort?: string | null;
+}
 
 const DEFAULT_VISION_MODEL = process.env.OAB_EVAL_VISION_MODEL ?? "gpt-4.1";
 
@@ -123,23 +149,54 @@ interface TranscriptionResult {
 		input?: number;
 		output?: number;
 		total?: number;
+		thinking?: number;
 	};
 	durationMs: number;
 	wasFallback: boolean;
 	retryCount: number;
 }
 
+function isMissingImageState(image: ImagePreparationState): image is MissingImageState {
+	return "missing" in image && image.missing === true;
+}
+
+function buildMissingPageText(page: number, reason: string): string {
+	return [
+		`Pagina Ausente: ${page}`,
+		"Resposta do Aluno:",
+		`Linha 1: [${reason}]`,
+	].join("\n");
+}
+
+function getProviderCacheEntry(metadata: unknown, provider: "OPENAI" | "GEMINI"): ProviderCacheEntry | null {
+	if (!metadata || typeof metadata !== "object") return null;
+	const providerCache = (metadata as Record<string, unknown>).providerCache;
+	if (!providerCache || typeof providerCache !== "object") return null;
+	const entry = (providerCache as Record<string, unknown>)[provider];
+	if (!entry || typeof entry !== "object") return null;
+	return entry as ProviderCacheEntry;
+}
+
 /** Extrai token usage do resultado do Vercel AI SDK, com fallback para providerMetadata */
-function extractTokenUsage(result: any): { input?: number; output?: number; total?: number } | undefined {
+function extractTokenUsage(result: any): { input?: number; output?: number; total?: number; thinking?: number } | undefined {
 	const usage = result.usage;
 
 	let input: number | undefined;
 	let output: number | undefined;
+	let thinking: number | undefined;
 
 	// Path 1: Vercel AI SDK standard (promptTokens / completionTokens)
 	if (usage) {
 		input = usage.promptTokens;
 		output = usage.completionTokens;
+
+		// Path 1.1: formatos recentes do AI SDK/OpenAI (inputTokens / outputTokens)
+		input = input ?? usage.inputTokens;
+		output = output ?? usage.outputTokens;
+
+		// Path 1.2: formatos raw do provider
+		input = input ?? usage.input_tokens;
+		output = output ?? usage.output_tokens;
 	}
 
 	// Path 2: Fallback para providerMetadata.google (Gemini pode não popular usage corretamente)
@@ -149,6 +206,8 @@ function extractTokenUsage(result: any): { input?: number; output?: number; tota
 		if (googleMeta) {
 			input = input ?? googleMeta.promptTokenCount;
 			output = output ?? googleMeta.candidatesTokenCount ?? googleMeta.totalTokenCount;
+			// Thinking tokens do Gemini (separado do output real)
+			thinking = thinking ?? googleMeta.thoughtsTokenCount ?? googleMeta.cachedContentTokenCount;
 		}
 	}
 
@@ -158,6 +217,7 @@ function extractTokenUsage(result: any): { input?: number; output?: number; tota
 		if (responseMeta) {
 			input = input ?? responseMeta.promptTokenCount;
 			output = output ?? responseMeta.candidatesTokenCount ?? responseMeta.totalTokenCount;
+			thinking = thinking ?? responseMeta.thoughtsTokenCount;
 		}
 	}
 
@@ -171,10 +231,13 @@ function extractTokenUsage(result: any): { input?: number; output?: number; tota
 		return undefined;
 	}
 
+	const total = usage?.totalTokens ?? usage?.total_tokens ?? ((input ?? 0) + (output ?? 0));
+
 	return {
 		input,
 		output,
-		total: (input ?? 0) + (output ?? 0),
+		total,
+		thinking,
 	};
 }
 
@@ -189,6 +252,7 @@ async function transcribeSingleImage(
 		provider: AiProviderType;
 		enableCodeExecution?: boolean;
 		reasoningEffort?: string;
+		openAiFallbackModel?: string;
 	},
 ): Promise<TranscriptionResult> {
 	const startTime = Date.now();
@@ -216,9 +280,16 @@ async function transcribeSingleImage(
 	let rawText: string;
 	let usedProvider = options.provider;
 	let usedModel = model;
-	let tokens: { input?: number; output?: number; total?: number } | undefined;
+	let tokens: { input?: number; output?: number; total?: number; thinking?: number } | undefined;
 	let wasFallback = false;
 	let retryCount = 0;
+	const openAiFallbackModel = options.openAiFallbackModel || OPENAI_FALLBACK_MODEL;
+
+	// Timeout por página: previne hang se o provider aceita a request mas nunca responde
+	const pageTimeoutMs = DEFAULT_API_TIMEOUT_MS;
+
+	// Limite de output tokens: se blueprint não definir (0), usar cap de segurança
+	const effectiveMaxOutputTokens = maxOutputTokens > 0 ? maxOutputTokens : MAX_SAFE_OUTPUT_TOKENS;
 
 	// === NÍVEL 1: Provider primário com retry ===
 	try {
@@ -240,9 +311,10 @@ async function transcribeSingleImage(
 					],
 				}],
 				tools,
-				...(maxOutputTokens > 0 ? { maxOutputTokens } : {}),
+				maxOutputTokens: effectiveMaxOutputTokens,
 				temperature: 0,
 				providerOptions,
+				abortSignal: AbortSignal.timeout(pageTimeoutMs),
 			});
 		}, `Transcription:${options.provider}/${model}`);
 
@@ -265,8 +337,9 @@ async function transcribeSingleImage(
 								imagePart,
 							],
 						}],
-						...(maxOutputTokens > 0 ? { maxOutputTokens } : {}),
+						maxOutputTokens: effectiveMaxOutputTokens,
 						temperature: 0,
+						abortSignal: AbortSignal.timeout(pageTimeoutMs),
 					});
 				}, `Transcription:OPENAI/${OPENAI_LAST_RESORT_MODEL}`);
 				rawText = result.text;
@@ -285,12 +358,12 @@ async function transcribeSingleImage(
 				`[TranscriptionAgent] ⚠️ ${options.provider}/${model} falhou p${page}` +
 				` | status: ${errStatus ?? "N/A"} | code: ${errCode ?? "N/A"}` +
 				` | msg: ${errMsg ?? "N/A"}` +
-				` → fallback para OpenAI/${OPENAI_FALLBACK_MODEL}`,
+				` → fallback para OpenAI/${openAiFallbackModel}`,
 			);
 			wasFallback = true;
 			try {
 				const result = await withRetry(async () => {
-					const fallbackModel = createModel("OPENAI", OPENAI_FALLBACK_MODEL);
+					const fallbackModel = createModel("OPENAI", openAiFallbackModel);
 					return generateText({
 						model: fallbackModel,
 						system: cleanPromptForOpenAI(systemInstructions),
@@ -301,17 +374,18 @@ async function transcribeSingleImage(
 								imagePart,
 							],
 						}],
-						...(maxOutputTokens > 0 ? { maxOutputTokens } : {}),
+						maxOutputTokens: effectiveMaxOutputTokens,
 						temperature: 0,
+						abortSignal: AbortSignal.timeout(pageTimeoutMs),
 					});
-				}, `Transcription:OPENAI/${OPENAI_FALLBACK_MODEL}`);
+				}, `Transcription:OPENAI/${openAiFallbackModel}`);
 				rawText = result.text;
 				tokens = extractTokenUsage(result);
 				usedProvider = "OPENAI";
-				usedModel = OPENAI_FALLBACK_MODEL;
+				usedModel = openAiFallbackModel;
 			} catch {
 				// === NÍVEL 3: Último recurso — modelo menor ===
-				console.warn(`[TranscriptionAgent] ⚠️ Fallback OpenAI/${OPENAI_FALLBACK_MODEL} também falhou p${page}, tentando ${OPENAI_LAST_RESORT_MODEL}`);
+				console.warn(`[TranscriptionAgent] ⚠️ Fallback OpenAI/${openAiFallbackModel} também falhou p${page}, tentando ${OPENAI_LAST_RESORT_MODEL}`);
 				try {
 					const lastResortModel = createModel("OPENAI", OPENAI_LAST_RESORT_MODEL);
 					const result = await withRetry(async () => {
@@ -325,8 +399,9 @@ async function transcribeSingleImage(
 									imagePart,
 								],
 							}],
-							...(maxOutputTokens > 0 ? { maxOutputTokens } : {}),
+							maxOutputTokens: effectiveMaxOutputTokens,
 							temperature: 0,
+							abortSignal: AbortSignal.timeout(pageTimeoutMs),
 						});
 					}, `Transcription:OPENAI/${OPENAI_LAST_RESORT_MODEL}`);
 					rawText = result.text;
@@ -352,7 +427,7 @@ async function transcribeSingleImage(
 	};
 }
 
-async function fetchImageAsBase64(descriptor: ManuscriptImageDescriptor): Promise<PreparedImageState> {
+async function fetchImageAsBase64(descriptor: ManuscriptImageDescriptor): Promise<ImagePreparationState> {
 	const { url } = descriptor;
 	if (!url) {
 		throw new Error("URL da imagem do manuscrito ausente");
@@ -370,6 +445,14 @@ async function fetchImageAsBase64(descriptor: ManuscriptImageDescriptor): Promis
 
 	const response = await fetch(url);
 	if (!response.ok) {
+		if (response.status === 404) {
+			return MissingImageSchema.parse({
+				...descriptor,
+				missing: true,
+				reason: "imagem indisponivel (404)",
+				statusCode: response.status,
+			});
+		}
 		throw new Error(`Falha ao baixar imagem do manuscrito (${response.status})`);
 	}
 
@@ -486,10 +569,16 @@ export async function transcribeManuscriptLocally(input: TranscriptionAgentInput
 	const preparedImages = await Promise.all(
 		imageDescriptors.map(async (image) => {
 			const prepared = await fetchImageAsBase64(image);
-			return PreparedImageSchema.parse(prepared);
+			return isMissingImageState(prepared)
+				? MissingImageSchema.parse(prepared)
+				: PreparedImageSchema.parse(prepared);
 		}),
 	);
-	console.log(`[TranscriptionAgent] 📥 ${preparedImages.length} imagens baixadas em ${Date.now() - downloadStart}ms`);
+	const missingImages = preparedImages.filter(isMissingImageState);
+	console.log(`[TranscriptionAgent] 📥 ${preparedImages.length} imagens preparadas em ${Date.now() - downloadStart}ms`);
+	if (missingImages.length > 0) {
+		console.warn(`[TranscriptionAgent] ⚠️ ${missingImages.length}/${preparedImages.length} imagens indisponiveis no download e serao marcadas como pagina ausente`);
+	}
 
 	const total = preparedImages.length;
 	const { transcribe_concurrency = 10 } = getOabEvalConfig();
@@ -524,7 +613,7 @@ export async function transcribeManuscriptLocally(input: TranscriptionAgentInput
 		return { results, errors };
 	}
 
-	const { model, systemInstructions, maxOutputTokens, enableCodeExecution, provider, reasoningEffort } =
+	const { model, systemInstructions, maxOutputTokens, enableCodeExecution, provider, reasoningEffort, openAiFallbackModel } =
 		await getTranscriberConfig(input.selectedProvider);
 
 	console.log("[TranscriptionAgent] 📝 Configuração do Blueprint:");
@@ -546,10 +635,35 @@ export async function transcribeManuscriptLocally(input: TranscriptionAgentInput
 	const { results: rawResults, errors } = await mapConcurrentTolerant(preparedImages, concurrency, async (image, index) => {
 		const pageNumber = image.page ?? index + 1;
 
+		if (isMissingImageState(image)) {
+			const placeholderText = buildMissingPageText(pageNumber, image.reason);
+			console.warn(`[TranscriptionAgent] ⚠️ Pág ${index + 1}/${total} marcada como ausente: ${image.reason}`);
+
+			if (input.onPageComplete) {
+				await input.onPageComplete(index, String(pageNumber), {
+					provider: "system",
+					model: `download-${image.statusCode ?? "error"}`,
+					tokensIn: 0,
+					tokensOut: 0,
+					durationMs: 0,
+					wasFallback: false,
+				});
+			}
+
+			return {
+				index,
+				pageNumber,
+				imageId: image.id,
+				text: placeholderText,
+				segments: [placeholderText],
+			};
+		}
+
 		const result = await transcribeSingleImage(image, pageNumber, total, model, systemInstructions, maxOutputTokens, {
 			provider,
 			enableCodeExecution,
 			reasoningEffort,
+			openAiFallbackModel,
 		});
 		const trimmed = result.text.trim();
 		const newSegments = splitSegments(trimmed);
@@ -576,7 +690,8 @@ export async function transcribeManuscriptLocally(input: TranscriptionAgentInput
 		const textPreview = trimmed.length > 80 ? `${trimmed.substring(0, 80)}...` : trimmed;
 
 		// Log informativo por página
-		const tokenInfo = result.tokens ? `tokens: ${result.tokens.input ?? "?"}→${result.tokens.output ?? "?"}` : "";
+		const thinkingInfo = result.tokens?.thinking ? ` 🧠 thinking: ${result.tokens.thinking}` : "";
+		const tokenInfo = result.tokens ? `tokens: ${result.tokens.input ?? "?"}→${result.tokens.output ?? "?"}${thinkingInfo}` : "";
 		console.log(
 			`[TranscriptionAgent] ✅ Pág ${index + 1}/${total} | ${result.provider.toUpperCase()} ${result.actualModel} | ${(result.durationMs / 1000).toFixed(1)}s | ${trimmed.length} chars ${tokenInfo}`,
 		);
@@ -673,8 +788,16 @@ async function getTranscriberConfig(preferredProvider?: "OPENAI" | "GEMINI"): Pr
 	enableCodeExecution: boolean;
 	provider: AiProviderType;
 	reasoningEffort: string;
+	openAiFallbackModel: string;
 }> {
 	const prisma = getPrismaInstance();
+	const blueprint = await getAgentBlueprintByLinkedColumn("PROVA_CELL").catch(() => null);
+	const cachedOpenAiModel = getProviderCacheEntry(blueprint?.metadata, "OPENAI")?.model;
+	const openAiFallbackModel = cachedOpenAiModel && !isGeminiModel(cachedOpenAiModel)
+		? cachedOpenAiModel
+		: blueprint?.model && !isGeminiModel(blueprint.model)
+			? blueprint.model
+			: (isGeminiModel(DEFAULT_VISION_MODEL) ? OPENAI_FALLBACK_MODEL : DEFAULT_VISION_MODEL);
 
 	if (preferredProvider) {
 		console.log(`[TranscriptionAgent] 🎛️ Provider preferido pelo usuário: ${preferredProvider}`);
@@ -693,37 +816,55 @@ async function getTranscriberConfig(preferredProvider?: "OPENAI" | "GEMINI"): Pr
 	].join(" ");
 
 	// 1) NOVA ESTRATÉGIA: Buscar AiAgentBlueprint vinculado à coluna PROVA_CELL
-	//    Quando há preferredProvider, busca primeiro blueprint com defaultProvider correspondente.
+	//    A ordem de provedores vem do frontend; o blueprint so guarda configuracoes por provider.
 	try {
-		let blueprint = preferredProvider
-			? await getAgentBlueprintByLinkedColumnAndProvider("PROVA_CELL", preferredProvider)
-			: null;
-
-		// Se não encontrou blueprint para o provider preferido, busca qualquer blueprint PROVA_CELL
-		if (!blueprint) {
-			blueprint = await getAgentBlueprintByLinkedColumn("PROVA_CELL");
-		}
-
 		if (blueprint) {
+			const cachedProviderConfig = preferredProvider
+				? getProviderCacheEntry(blueprint.metadata, preferredProvider)
+				: null;
+			const cachedOpenAiConfig = getProviderCacheEntry(blueprint.metadata, "OPENAI");
+			const cachedGeminiConfig = getProviderCacheEntry(blueprint.metadata, "GEMINI");
 			// Se o usuário escolheu um provider mas o blueprint encontrado é do outro,
 			// usar modelo default do provider preferido em vez do modelo do blueprint
 			let model = blueprint.model || DEFAULT_VISION_MODEL;
+			let maxOutputTokens = Number(blueprint.maxOutputTokens ?? 0);
+			let resolvedReasoningEffort = blueprint.reasoningEffort ?? blueprint.thinkingLevel ?? "high";
+
+			if (preferredProvider === "OPENAI" && cachedProviderConfig?.model && !isGeminiModel(cachedProviderConfig.model)) {
+				model = cachedProviderConfig.model;
+				maxOutputTokens = Number(cachedProviderConfig.maxOutputTokens ?? maxOutputTokens);
+				resolvedReasoningEffort = cachedProviderConfig.reasoningEffort ?? resolvedReasoningEffort;
+				console.log(`[TranscriptionAgent] ♻️ Usando modelo OPENAI salvo no providerCache: ${model}`);
+			}
+
+			if (preferredProvider === "GEMINI" && cachedProviderConfig?.model && isGeminiModel(cachedProviderConfig.model)) {
+				model = cachedProviderConfig.model;
+				maxOutputTokens = Number(cachedProviderConfig.maxOutputTokens ?? maxOutputTokens);
+				resolvedReasoningEffort = cachedProviderConfig.thinkingLevel ?? resolvedReasoningEffort;
+				console.log(`[TranscriptionAgent] ♻️ Usando modelo GEMINI salvo no providerCache: ${model}`);
+			}
+
 			if (preferredProvider) {
 				const blueprintIsGemini = isGeminiModel(model);
 				const wantsOpenai = preferredProvider === "OPENAI";
 				const wantsGemini = preferredProvider === "GEMINI";
 
 				if (wantsOpenai && blueprintIsGemini) {
-					console.log(`[TranscriptionAgent] ⚠️ Usuário selecionou OPENAI mas blueprint usa ${model}. Sobrescrevendo para ${DEFAULT_VISION_MODEL}`);
-					model = DEFAULT_VISION_MODEL; // gpt-4.1
+					console.log(`[TranscriptionAgent] ⚠️ Usuário selecionou OPENAI mas blueprint usa ${model}. Sobrescrevendo para ${openAiFallbackModel}`);
+					model = openAiFallbackModel;
+					maxOutputTokens = Number(cachedOpenAiConfig?.maxOutputTokens ?? maxOutputTokens);
+					resolvedReasoningEffort = cachedOpenAiConfig?.reasoningEffort ?? resolvedReasoningEffort;
 				} else if (wantsGemini && !blueprintIsGemini) {
-					const geminiDefault = "gemini-3-flash-preview";
+					const geminiDefault = cachedGeminiConfig?.model && isGeminiModel(cachedGeminiConfig.model)
+						? cachedGeminiConfig.model
+						: "gemini-3-flash-preview";
 					console.log(`[TranscriptionAgent] ⚠️ Usuário selecionou GEMINI mas blueprint usa ${model}. Sobrescrevendo para ${geminiDefault}`);
 					model = geminiDefault;
+					maxOutputTokens = Number(cachedGeminiConfig?.maxOutputTokens ?? maxOutputTokens);
+					resolvedReasoningEffort = cachedGeminiConfig?.thinkingLevel ?? resolvedReasoningEffort;
 				}
 			}
 
-			const maxOutputTokens = Number(blueprint.maxOutputTokens ?? 0);
 			let systemInstructions = (blueprint.systemPrompt || blueprint.instructions || baseInstructions).toString();
 
 			// INJEÇÃO DE DEPENDÊNCIA DE PROMPT: Se Gemini, adiciona instruções técnicas para Agentic Vision
@@ -744,7 +885,8 @@ async function getTranscriberConfig(preferredProvider?: "OPENAI" | "GEMINI"): Pr
 				maxOutputTokens,
 				enableCodeExecution: isGeminiModel(model) && (blueprint.metadata as any)?.codeExecution !== false,
 				provider: effectiveProvider,
-				reasoningEffort: blueprint.reasoningEffort ?? blueprint.thinkingLevel ?? "high",
+				reasoningEffort: resolvedReasoningEffort,
+				openAiFallbackModel,
 			};
 		}
 	} catch (err) {
@@ -798,6 +940,7 @@ async function getTranscriberConfig(preferredProvider?: "OPENAI" | "GEMINI"): Pr
 				enableCodeExecution: isGeminiModel(model) && bpMetadata?.codeExecution !== false,
 				provider: effectiveProvider,
 				reasoningEffort: blueprint.reasoningEffort ?? blueprint.thinkingLevel ?? "high",
+				openAiFallbackModel,
 			};
 		}
 	} catch (err) {
@@ -848,6 +991,7 @@ async function getTranscriberConfig(preferredProvider?: "OPENAI" | "GEMINI"): Pr
 				enableCodeExecution: isGeminiModel(model),
 				provider: effectiveProvider,
 				reasoningEffort: "high",
+				openAiFallbackModel,
 			};
 		}
 	} catch (err) {
@@ -862,5 +1006,6 @@ async function getTranscriberConfig(preferredProvider?: "OPENAI" | "GEMINI"): Pr
 		enableCodeExecution: false,
 		provider: "OPENAI",
 		reasoningEffort: "high",
+		openAiFallbackModel,
 	};
 }

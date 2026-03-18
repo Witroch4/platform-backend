@@ -9,18 +9,28 @@ const RETRYABLE_STATUS_CODES = [429, 500, 502, 503, 504];
 /** Número máximo de retries antes de fallback */
 const MAX_RETRIES = 3;
 
-/** Delays fixos em ms para cada retry: 2s → 4s → 10s */
+/** Delays base em ms para cada retry: 2s → 4s → 10s */
 const RETRY_DELAYS_MS = [2000, 4000, 10000];
 
 /** Modelo OpenAI usado como fallback quando Gemini/Claude falha */
 export const OPENAI_FALLBACK_MODEL = "gpt-4.1";
 
+/** Timeout padrão por chamada de API (2 minutos) */
+export const DEFAULT_API_TIMEOUT_MS = 120_000;
+
 /** Regex para remover instruções técnicas do Gemini do prompt */
 const GEMINI_INSTRUCTIONS_PATTERN = /\[INSTRUÇÕES TÉCNICAS DO MODELO - GEMINI.*?---\s*/s;
 
+/** Adiciona jitter aleatório (±30%) ao delay para evitar thundering herd */
+function addJitter(delayMs: number): number {
+	const jitterFactor = 0.7 + Math.random() * 0.6; // 0.7 a 1.3
+	return Math.round(delayMs * jitterFactor);
+}
+
 /**
  * Executa uma função com retry automático para erros temporários.
- * Backoff fixo: 2s → 8s → 15s (3 retries antes de fallback).
+ * Backoff com jitter: ~2s → ~4s → ~10s (3 retries antes de fallback).
+ * Jitter evita thundering herd quando múltiplas páginas fazem retry simultâneo.
  */
 export async function withRetry<T>(fn: () => Promise<T>, context: string): Promise<T> {
 	let lastError: unknown;
@@ -56,13 +66,22 @@ export async function withRetry<T>(fn: () => Promise<T>, context: string): Promi
 				throw error;
 			}
 
-			const delay = RETRY_DELAYS_MS[attempt - 1] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1];
+			const baseDelay = RETRY_DELAYS_MS[attempt - 1] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1];
+			const delay = addJitter(baseDelay);
 			console.warn(`[OAB::Retry] ${context} retryable (${status}), retry ${attempt}/${MAX_RETRIES} em ${delay}ms`);
 			await new Promise((r) => setTimeout(r, delay));
 		}
 	}
 
 	throw lastError;
+}
+
+/**
+ * Cria um AbortSignal com timeout para chamadas de API.
+ * Previne que chamadas pendurem indefinidamente quando o provider aceita mas não responde.
+ */
+export function createTimeoutSignal(timeoutMs: number = DEFAULT_API_TIMEOUT_MS): AbortSignal {
+	return AbortSignal.timeout(timeoutMs);
 }
 
 /**

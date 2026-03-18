@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import useSWR from "swr";
-import { Plus, Workflow, Calendar, Edit2, Trash2, MoreVertical, CheckCircle2, XCircle, Megaphone } from "lucide-react";
+import { Plus, Workflow, Calendar, Edit2, Trash2, MoreVertical, CheckCircle2, XCircle, Megaphone, Upload, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -76,7 +76,9 @@ export function FlowSelector({ inboxId, selectedFlowId, onSelectFlow, onCreateNe
 	const [newFlowName, setNewFlowName] = useState("");
 	const [editingFlow, setEditingFlow] = useState<FlowListItem | null>(null);
 	const [isLoading, setIsLoading] = useState(false);
+	const [isImporting, setIsImporting] = useState(false);
 	const [showCampaign, setShowCampaign] = useState(false);
+	const importInputRef = useRef<HTMLInputElement>(null);
 
 	// Buscar lista de flows (filtra por isCampaign)
 	const { data, error, isLoading: isLoadingFlows, mutate } = useSWR<{ success: boolean; data: FlowListItem[] }>(
@@ -189,6 +191,57 @@ export function FlowSelector({ inboxId, selectedFlowId, onSelectFlow, onCreateNe
 		}
 	};
 
+	// Importar flow de arquivo JSON
+	const handleImportFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+		const file = e.target.files?.[0];
+		if (!file) return;
+
+		// Reset input para permitir reimportar o mesmo arquivo
+		e.target.value = "";
+
+		if (!file.name.endsWith(".json")) {
+			toast.error("Selecione um arquivo .json");
+			return;
+		}
+
+		setIsImporting(true);
+		try {
+			const text = await file.text();
+			const flowData = JSON.parse(text);
+
+			const res = await fetch("/api/admin/mtf-diamante/flows/import", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					inboxId,
+					flowData,
+					newName: flowData.meta?.flowName,
+				}),
+			});
+
+			const result = await res.json();
+
+			if (!res.ok || !result.success) {
+				throw new Error(result.error || "Falha ao importar flow");
+			}
+
+			toast.success(`Flow "${result.data.name}" importado (${result.data.nodeCount} nós)`);
+			mutate();
+
+			// Selecionar o flow importado e abrir editor
+			onSelectFlow(result.data.id);
+			onCreateNew();
+		} catch (error) {
+			if (error instanceof SyntaxError) {
+				toast.error("Arquivo JSON inválido");
+			} else {
+				toast.error(error instanceof Error ? error.message : "Erro ao importar flow");
+			}
+		} finally {
+			setIsImporting(false);
+		}
+	}, [inboxId, mutate, onSelectFlow, onCreateNew]);
+
 	// Formatar data
 	const formatDate = (dateString: string) => {
 		const date = new Date(dateString);
@@ -229,23 +282,46 @@ export function FlowSelector({ inboxId, selectedFlowId, onSelectFlow, onCreateNe
 				</button>
 			</div>
 
-			{/* Header com botão de criar */}
+			{/* Header com botões de criar e importar */}
 			<div className="flex items-center justify-between mb-3">
 				<h3 className="text-sm font-semibold text-muted-foreground">
 					{showCampaign ? "Flows de Campanhas" : "Flows"}
 				</h3>
-				<Button
-					variant="outline"
-					size="sm"
-					onClick={() => {
-						setNewFlowName("");
-						setIsCreateDialogOpen(true);
-					}}
-					className="h-7 px-2 text-xs"
-				>
-					<Plus className="h-3.5 w-3.5 mr-1" />
-					Novo
-				</Button>
+				<div className="flex items-center gap-1.5">
+					<Button
+						variant="outline"
+						size="sm"
+						onClick={() => importInputRef.current?.click()}
+						disabled={isImporting}
+						className="h-7 px-2 text-xs"
+					>
+						{isImporting ? (
+							<Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+						) : (
+							<Upload className="h-3.5 w-3.5 mr-1" />
+						)}
+						Importar
+					</Button>
+					<input
+						ref={importInputRef}
+						type="file"
+						accept=".json"
+						className="hidden"
+						onChange={handleImportFile}
+					/>
+					<Button
+						variant="outline"
+						size="sm"
+						onClick={() => {
+							setNewFlowName("");
+							setIsCreateDialogOpen(true);
+						}}
+						className="h-7 px-2 text-xs"
+					>
+						<Plus className="h-3.5 w-3.5 mr-1" />
+						Novo
+					</Button>
+				</div>
 			</div>
 
 			{/* Lista de flows */}

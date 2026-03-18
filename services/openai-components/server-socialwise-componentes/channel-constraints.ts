@@ -94,3 +94,39 @@ export function createRouterSchema(channel: ChannelType) {
 		})
 		.strict();
 }
+
+/**
+ * Schema relaxado para fallback de providers (Gemini/Claude via generateObject).
+ *
+ * Objetivo: aceitar respostas que o schema estrito rejeitaria, mas que são
+ * "quase certas". O caller DEVE aplicar coerceLengths() na saída para
+ * garantir que os limites reais do canal (buttonTitleMax, maxButtons, bodyMax)
+ * sejam respeitados antes de entregar ao Chatwit/WhatsApp.
+ *
+ * Diferenças vs strict:
+ * - buttons min(0) (respeita agent instructions que pedem poucos botões)
+ * - bodyMax com margem (aceita texto levemente acima — coerceLengths trunca depois)
+ * - maxButtons com margem (aceita extras — coerceLengths corta depois)
+ * - button title com margem (aceita títulos levemente longos — coerceLengths trunca depois)
+ * - Sem .strict() (tolera campos extras que o modelo invente)
+ */
+export function createRelaxedRouterSchema(channel: ChannelType) {
+	const { bodyMax, buttonTitleMax, payloadMax, maxButtons } = getConstraintsForChannel(channel);
+
+	// Botão relaxado: aceita títulos até buttonTitleMax+10 (coerceLengths trunca pra 20)
+	const titleRegex = new RegExp(`^.{1,${buttonTitleMax + 10}}$`, "u");
+	const payloadRegex = new RegExp(`^(|@[a-z0-9_]{1,${payloadMax}})$`, "u");
+	const BtnRelaxed = z.object({
+		title: z.string().regex(titleRegex),
+		payload: z.string().regex(payloadRegex),
+	});
+
+	return z.object({
+		mode: z.enum(["intent", "chat"]),
+		intent_payload: z.string().regex(/^(|@[a-z0-9_]+)$/u),
+		// Aceita até 2x bodyMax — coerceLengths() trunca pra bodyMax real
+		response_text: z.string().min(1).max(bodyMax * 2),
+		// Aceita 0 a maxButtons+2 — coerceLengths() corta pro máximo real do canal
+		buttons: z.array(BtnRelaxed).min(0).max(maxButtons + 2),
+	});
+}

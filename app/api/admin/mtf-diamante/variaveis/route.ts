@@ -1,14 +1,18 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getPrismaInstance } from "@/lib/connections";
+import { formatMtfLoteDateTime } from "@/lib/mtf-diamante/lote-date-time";
 import { Prisma } from "@prisma/client";
+import { parseCurrencyToCents } from "@/lib/payment/parse-currency";
+
+const MIN_ANALYSIS_AMOUNT_CENTS = 100;
 
 // Função helper para obter descrição das variáveis
 function getDescricaoVariavel(chave: string): string {
 	const descricoes: Record<string, string> = {
 		chave_pix: "Chave PIX para pagamentos (máx. 15 caracteres)",
 		nome_do_escritorio_rodape: "Nome do escritório que aparece no rodapé",
-		valor_analise: "Valor padrão da análise jurídica",
+		analise: "Valor da análise jurídica (formato R$ X,XX)",
 		lotes_oab: "Configuração dos lotes OAB (dados internos)",
 	};
 	return descricoes[chave] || "Variável customizada";
@@ -49,7 +53,7 @@ export async function GET(request: NextRequest) {
 					create: [
 						{ chave: "chave_pix", valor: "57944155000101" },
 						{ chave: "nome_do_escritorio_rodape", valor: "Dra. Amanda Sousa Advocacia e Consultoria Jurídica™" },
-						{ chave: "valor_analise", valor: "R$ 27,90" },
+						{ chave: "analise", valor: "R$ 27,90" },
 					],
 				},
 			},
@@ -76,24 +80,43 @@ export async function GET(request: NextRequest) {
 		const formatarData = (dataStr: string) => {
 			if (!dataStr) return "";
 			try {
-				const data = new Date(dataStr);
-				return data.toLocaleDateString("pt-BR", {
-					day: "2-digit",
-					month: "2-digit",
-					year: "numeric",
-					hour: "2-digit",
-					minute: "2-digit",
-				});
+				return formatMtfLoteDateTime(dataStr);
 			} catch {
 				return dataStr;
 			}
 		};
 
-		// Helper para formatar um lote em texto humanizado
+		// Helper para formatar um lote em texto humanizado (bold por linha para WhatsApp)
 		const formatarLote = (lote: any) => {
 			const dataInicioFormatada = formatarData(lote.dataInicio);
 			const dataFimFormatada = formatarData(lote.dataFim);
-			return `Lote ${lote.numero}: ${lote.nome || "Sem nome"}\nValor: ${lote.valor}\nPeríodo: ${dataInicioFormatada} às ${dataFimFormatada}`;
+			return `*Lote ${lote.numero}: ${lote.nome || "Sem nome"}*\n*Valor: ${lote.valor}*\n*Período: ${dataInicioFormatada} às ${dataFimFormatada}*`;
+		};
+
+		// Helper para parse de moeda
+		const parseCurrency = (valor: string): number => {
+			const cleaned = valor.replace(/R\$\s*/gi, "").replace(/\./g, "").replace(",", ".").trim();
+			return parseFloat(cleaned) || 0;
+		};
+		const fmtCurrency = (valor: number): string => {
+			if (valor % 1 === 0) return `R$ ${valor.toFixed(0)}`;
+			return `R$ ${valor.toFixed(2).replace(".", ",")}`;
+		};
+
+		// Buscar valor_analise para calcular complemento do lote ativo
+		const valorAnaliseVar = config.variaveis.find((v) => v.chave === "analise" || v.chave === "valor_analise");
+		const valorAnaliseStr = String(valorAnaliseVar?.valor || "");
+
+		// Helper para formatar lote ativo com complemento calculado
+		const formatarLoteAtivo = (lote: any) => {
+			const base = formatarLote(lote);
+			const loteNum = parseCurrency(lote.valor);
+			const analiseNum = parseCurrency(valorAnaliseStr);
+			if (loteNum > 0 && analiseNum > 0 && loteNum > analiseNum) {
+				const complemento = loteNum - analiseNum;
+				return `${base}\n(com complemento de apenas *${fmtCurrency(complemento)}*)`;
+			}
+			return base;
 		};
 
 		// Gerar variáveis de lote: lote_ativo + lote_1, lote_2, etc.
@@ -105,7 +128,7 @@ export async function GET(request: NextRequest) {
 			variaveisLotes.push({
 				id: `lote_ativo`,
 				chave: `lote_ativo`,
-				valor: formatarLote(loteAtivo),
+				valor: formatarLoteAtivo(loteAtivo),
 				valorRaw: loteAtivo.valor,
 				tipo: "lote" as const,
 				descricao: `Lote Ativo - ${loteAtivo.nome} (${loteAtivo.numero})`,
@@ -206,30 +229,71 @@ export async function POST(request: NextRequest) {
 		}
 
 		// Busca ou cria a configuração do MTF Diamante usando upsert
-		let config = await getPrismaInstance().mtfDiamanteConfig.upsert({
+		const config = await getPrismaInstance().mtfDiamanteConfig.upsert({
 			where: { userId: session.user.id },
 			update: {},
 			create: { userId: session.user.id },
 		});
 
-		// Remove todas as variáveis existentes e cria as novas
+		const variaveisSanitizadas = variaveis
+			.filter((v: any) => typeof v?.chave === "string" && typeof v?.valor === "string")
+			.map((v: any) => ({
+				chave: v.chave.trim(),
+				valor: v.valor.trim(),
+			}))
+			.filter((v: any) => v.chave && v.valor)
+			.filter((v: any) => v.chave !== "lotes_oab" && !v.chave.startsWith("lote_"));
+
+		const analysisVariable = variaveisSanitizadas.find((variavel: { chave: string; valor: string }) => variavel.chave === "analise");
+		if (!analysisVariable) {
+			return NextResponse.json({ error: "A variável analise é obrigatória." }, { status: 400 });
+		}
+
+		let analysisAmountCents = 0;
+		try {
+			analysisAmountCents = parseCurrencyToCents(analysisVariable.valor);
+		} catch {
+			return NextResponse.json({ error: "O valor da variável analise é inválido." }, { status: 400 });
+		}
+
+		if (analysisAmountCents < MIN_ANALYSIS_AMOUNT_CENTS) {
+			return NextResponse.json({ error: "O valor da análise deve ser no mínimo R$ 1,00." }, { status: 400 });
+		}
+
+		// Remove e recria apenas variáveis editáveis, preservando lotes internos.
 		await getPrismaInstance().mtfDiamanteVariavel.deleteMany({
-			where: { configId: config.id },
+			where: {
+				configId: config.id,
+				chave: {
+					not: "lotes_oab",
+				},
+			},
 		});
 
-		// Cria as novas variáveis
-		const novasVariaveis = await getPrismaInstance().mtfDiamanteVariavel.createMany({
-			data: variaveis.map((v: any) => ({
-				configId: config.id,
-				chave: v.chave,
-				valor: v.valor,
-			})),
-		});
+		if (variaveisSanitizadas.length > 0) {
+			await getPrismaInstance().mtfDiamanteVariavel.createMany({
+				data: variaveisSanitizadas.map((v: any) => ({
+					configId: config.id,
+					chave: v.chave,
+					valor: v.valor,
+				})),
+			});
+		}
 
 		// Busca as variáveis criadas para retornar
 		const variaveisCriadas = await getPrismaInstance().mtfDiamanteVariavel.findMany({
 			where: { configId: config.id },
 		});
+
+		try {
+			const { getRedisInstance } = await import("@/lib/connections");
+			const redis = getRedisInstance();
+
+			await redis.del(`mtf_variables:${session.user.id}`);
+			await redis.del(`mtf_lotes:${session.user.id}`);
+		} catch (cacheError) {
+			console.warn("[MTF Variaveis] Erro ao invalidar cache:", cacheError);
+		}
 
 		return NextResponse.json({ success: true, data: variaveisCriadas });
 	} catch (error) {

@@ -40,6 +40,9 @@ export const getFileTypeIcon = (fileType: string) => {
 };
 
 export const getConvertedImages = (lead: LeadChatwit): string[] => {
+	const isUsableImageUrl = (value: unknown): value is string =>
+		typeof value === "string" && /^https?:\/\//i.test(value.trim());
+
 	// Verificar se o lead tem imagensConvertidas
 	if (lead.imagensConvertidas) {
 		try {
@@ -47,7 +50,7 @@ export const getConvertedImages = (lead: LeadChatwit): string[] => {
 			const imageUrls = JSON.parse(lead.imagensConvertidas);
 			// Verificar se é um array e retorna somente URLs válidas
 			if (Array.isArray(imageUrls)) {
-				return imageUrls.filter((url) => typeof url === "string" && url.trim().length > 0);
+				return imageUrls.filter(isUsableImageUrl);
 			}
 		} catch (error) {
 			console.error("Erro ao processar URLs de imagens convertidas:", error);
@@ -58,8 +61,10 @@ export const getConvertedImages = (lead: LeadChatwit): string[] => {
 	return lead.arquivos
 		.filter((a) => a.pdfConvertido)
 		.map((a) => a.pdfConvertido || "")
-		.filter((url) => url.length > 0);
+		.filter(isUsableImageUrl);
 };
+
+export const hasConvertedImages = (lead: LeadChatwit) => getConvertedImages(lead).length > 0;
 
 export const hasEspelhoData = (lead: LeadChatwit) => {
 	const temImagensEspelho = lead.espelhoCorrecao && lead.espelhoCorrecao !== "[]" && lead.espelhoCorrecao !== '""';

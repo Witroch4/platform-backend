@@ -209,7 +209,7 @@ export function useMtfLotes() {
 			const response = await fetch("/api/admin/mtf-diamante/lotes");
 			if (!response.ok) throw new Error("Erro ao carregar lotes");
 			const data = await response.json();
-			return data.lotes || [];
+			return data.data || data.lotes || [];
 		},
 		{ key: "mtf-lotes", ttl: 5 * 60 * 1000 }, // 5 minutes
 	);

@@ -7,30 +7,6 @@
 		"shadcn": {
 			"command": "npx",
 			"args": ["shadcn@latest", "mcp"]
-		},
-		"portainer": {
-			"command": "/usr/local/bin/portainer-mcp",
-			"args": [
-				"-server",
-				"painelraiz2357wit.witdev.com.br:443",
-				"-token",
-				"ptr_IkgaNsyOvGGr9k0tDc4ys2+43wWu4+gnIOkwH1XGjtY=",
-				"-tools",
-				"/tmp/portainer-tools.yaml",
-				"-disable-version-check"
-			]
-		},
-		"ssh-mcp": {
-			"command": "npx",
-			"args": [
-				"-y",
-				"ssh-mcp",
-				"--host=49.13.155.94",
-				"--user=root",
-				"--key=/home/wital/Chatwit-Social-dev/id_rsa.v3",
-				"--timeout=60000",
-				"--maxChars=none"
-			]
 		}
 	}
 }

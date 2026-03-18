@@ -16,9 +16,22 @@ interface DateTimePickerProps {
 	setDate: (date: Date | undefined) => void;
 	isPostagemDiaria?: boolean;
 	label?: string;
+	minDate?: Date;
 }
 
-export function DateTimePicker({ date, setDate, isPostagemDiaria = false, label }: DateTimePickerProps) {
+export function DateTimePicker({ date, setDate, isPostagemDiaria = false, label, minDate }: DateTimePickerProps) {
+	const minCalendarDate = minDate
+		? new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate())
+		: undefined;
+
+	const enforceMinDate = (nextDate: Date | undefined) => {
+		if (!nextDate || !minDate) {
+			return nextDate;
+		}
+
+		return nextDate < minDate ? new Date(minDate) : nextDate;
+	};
+
 	const handleSelect = (selectedDay: Date | undefined) => {
 		if (!selectedDay) return;
 
@@ -40,7 +53,7 @@ export function DateTimePicker({ date, setDate, isPostagemDiaria = false, label 
 			oldMs,
 		);
 
-		setDate(newDateWithOldTime);
+		setDate(enforceMinDate(newDateWithOldTime));
 	};
 
 	return (
@@ -75,13 +88,14 @@ export function DateTimePicker({ date, setDate, isPostagemDiaria = false, label 
 							mode="single"
 							selected={date}
 							onSelect={handleSelect}
+							disabled={minCalendarDate ? (currentDate) => currentDate < minCalendarDate : undefined}
 							initialFocus
 							locale={ptBR}
 							className="border border-gray-300 rounded-md"
 						/>
 					)}
 					<div className={cn("p-3", !isPostagemDiaria && "border-t border-border")}>
-						<TimePickerDemo setDate={setDate} date={date} />
+						<TimePickerDemo setDate={(nextDate) => setDate(enforceMinDate(nextDate))} date={date} />
 					</div>
 				</PopoverContent>
 			</Popover>

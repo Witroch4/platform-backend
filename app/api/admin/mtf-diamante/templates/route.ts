@@ -105,7 +105,7 @@ async function getUserVariables(userId: string): Promise<MtfDiamanteVariavel[]> 
 					create: [
 						{ chave: "chave_pix", valor: "57944155000101" },
 						{ chave: "nome_do_escritorio_rodape", valor: "Dra. Amanda Sousa Advocacia e Consultoria Jurídica™" },
-						{ chave: "valor_analise", valor: "R$ 27,90" },
+						{ chave: "analise", valor: "R$ 27,90" },
 					],
 				},
 			},

@@ -325,7 +325,7 @@ export const lotesApi = {
 		const response = await apiRequest<ApiResponse<MtfDiamanteLote>>(
 			`/lotes/${payload.loteId}`,
 			{
-				method: "PUT",
+				method: "PATCH",
 				body: JSON.stringify(payload),
 			},
 			{ operation: `Update Lote ${payload.loteId}` },

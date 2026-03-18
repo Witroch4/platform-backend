@@ -3,9 +3,8 @@
  * Handles payment confirmation events from Chatwit account_webhook format.
  * Separate from payment-handler.ts which handles the InfinitePay direct webhook format.
  *
- * Seção 17 do contrato Chatwit: o payload inclui `payment_data` (dados estruturados)
- * como alternativa ao parsing via regex do campo `content`.
- * Esta implementação prefere `payment_data` quando disponível, com fallback para regex.
+ * Seção 17 do contrato Chatwit: o payload SEMPRE inclui `payment_data` (dados estruturados).
+ * Este é o único caminho — parsing via regex do campo `content` está deprecado.
  */
 
 import { getPrismaInstance } from "@/lib/connections";
@@ -48,7 +47,7 @@ export interface ChatwitPaymentWebhookPayload {
 		};
 	};
 	account?: { id?: number; name?: string };
-	/** Structured data from Chatwit (preferred over regex parsing) */
+	/** Structured data from Chatwit — always present per Seção 17 */
 	payment_data?: ChatwitPaymentData;
 	ACCESS_TOKEN?: string;
 }
@@ -76,30 +75,6 @@ export function isChatwitPaymentConfirmation(payload: unknown): boolean {
 	return attrs?.infinitepay_event === "payment_confirmed";
 }
 
-// --- Regex fallback parsers (used when payment_data is absent) ---
-
-function parseAmountCents(content: string): number {
-	const match = content.match(/Valor:\s*R\$\s*([\d.,]+)/i);
-	if (!match) return 0;
-	const raw = match[1];
-	const normalized = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
-	const amount = parseFloat(normalized);
-	return isNaN(amount) ? 0 : Math.round(amount * 100);
-}
-
-function parseCaptureMethodFromText(content: string): { method: string; tag: string } {
-	const match = content.match(/Forma de pagamento:\s*(.+)/i);
-	if (!match) return { method: "other", tag: "outro" };
-	const raw = match[1].trim().toLowerCase();
-	if (raw.includes("pix")) return { method: "pix", tag: "pix" };
-	if (raw.includes("credito") || raw.includes("crédito") || raw.includes("credit"))
-		return { method: "credit_card", tag: "credito" };
-	if (raw.includes("debito") || raw.includes("débito") || raw.includes("debit"))
-		return { method: "debit_card", tag: "debito" };
-	if (raw.includes("boleto")) return { method: "boleto", tag: "boleto" };
-	return { method: "other", tag: "outro" };
-}
-
 function parseCaptureMethodFromString(method: string): string {
 	const m = method.toLowerCase();
 	if (m === "pix") return "pix";
@@ -117,60 +92,32 @@ function captureMethodToTag(method: string): string {
 	return "outro";
 }
 
-function parseTransactionCodeFromReceipt(content: string): string | null {
-	// Extract UUID from receipt URL — e.g. https://recibo.infinitepay.io/abc-123-def
-	const match = content.match(/recibo\.infinitepay\.io\/([A-Za-z0-9-]+)/i);
-	return match ? match[1] : null;
-}
-
-function parseReceiptUrl(content: string): string | null {
-	const match = content.match(/https:\/\/recibo\.infinitepay\.io\/[A-Za-z0-9-]+(?:\?[\w%=&.-]+)?\/?/i);
-	return match ? match[0] : null;
-}
-
 /**
  * Parses payment details from Chatwit webhook payload.
- * Prefers structured `payment_data` (Seção 17); falls back to regex on `content`.
+ * Uses structured `payment_data` exclusively (Seção 17 — always present).
  */
 export function parseChatwitPaymentDetails(payload: ChatwitPaymentWebhookPayload): ParsedPaymentDetails {
 	const pd = payload.payment_data;
-	const content = payload.content ?? "";
 
-	if (pd) {
-		// Structured path — clean data from Chatwit
-		const method = pd.capture_method
-			? parseCaptureMethodFromString(pd.capture_method)
-			: parseCaptureMethodFromText(content).method;
-
-		return {
-			amountCents: pd.amount_cents ?? parseAmountCents(content),
-			paidAmountCents: pd.paid_amount_cents ?? pd.amount_cents ?? parseAmountCents(content),
-			captureMethod: method,
-			captureMethodTag: captureMethodToTag(method),
-			orderNsu: pd.order_nsu ?? null,
-			receiptUrl: pd.receipt_url ?? parseReceiptUrl(content),
-			contactPhone: pd.contact?.phone_number ?? payload.conversation?.meta?.sender?.phone_number ?? null,
-			contactName: pd.contact?.name ?? payload.conversation?.meta?.sender?.name ?? null,
-			conversationId: pd.conversation_id ?? payload.conversation?.id ?? 0,
-			paymentLinkId: pd.payment_link_id ?? payload.additional_attributes?.payment_link_id ?? null,
-		};
+	if (!pd) {
+		console.warn("[PaymentWebhookProcessor] payment_data absent — Seção 17 guarantees it should always be present");
 	}
 
-	// Regex fallback — parse content text
-	const { method, tag } = parseCaptureMethodFromText(content);
-	const receiptUrl = parseReceiptUrl(content);
-	const txCode = parseTransactionCodeFromReceipt(content);
+	const method = pd?.capture_method
+		? parseCaptureMethodFromString(pd.capture_method)
+		: "other";
+
 	return {
-		amountCents: parseAmountCents(content),
-		paidAmountCents: parseAmountCents(content),
+		amountCents: pd?.amount_cents ?? 0,
+		paidAmountCents: pd?.paid_amount_cents ?? pd?.amount_cents ?? 0,
 		captureMethod: method,
-		captureMethodTag: tag,
-		orderNsu: txCode,
-		receiptUrl,
-		contactPhone: payload.conversation?.meta?.sender?.phone_number ?? null,
-		contactName: payload.conversation?.meta?.sender?.name ?? null,
-		conversationId: payload.conversation?.id ?? 0,
-		paymentLinkId: payload.additional_attributes?.payment_link_id ?? null,
+		captureMethodTag: captureMethodToTag(method),
+		orderNsu: pd?.order_nsu ?? null,
+		receiptUrl: pd?.receipt_url ?? null,
+		contactPhone: pd?.contact?.phone_number ?? payload.conversation?.meta?.sender?.phone_number ?? null,
+		contactName: pd?.contact?.name ?? payload.conversation?.meta?.sender?.name ?? null,
+		conversationId: pd?.conversation_id ?? payload.conversation?.id ?? 0,
+		paymentLinkId: pd?.payment_link_id ?? payload.additional_attributes?.payment_link_id ?? null,
 	};
 }
 
@@ -184,7 +131,7 @@ export async function processPaymentWebhook(
 ): Promise<{ ok: boolean; leadId?: string; paymentId?: string; skipped?: boolean; reason?: string }> {
 	const details = parseChatwitPaymentDetails(payload);
 
-	// Idempotency: prefer order_nsu (from payment_data) as externalId
+	// Idempotency: order_nsu from payment_data is the unique transaction identifier
 	if (details.orderNsu) {
 		const existing = await prisma.leadPayment.findUnique({
 			where: { externalId: details.orderNsu },

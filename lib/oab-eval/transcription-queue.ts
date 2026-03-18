@@ -6,6 +6,7 @@
 
 import { Queue, Job, QueueEvents } from "bullmq";
 import { getRedisInstance } from "@/lib/connections";
+import { getPrismaInstance } from "@/lib/connections";
 import { sseManager } from "@/lib/sse-manager";
 import { transcribeManuscript, type TranscribeManuscriptResult } from "./transcription-agent";
 import { getConfigValue } from "@/lib/config";
@@ -241,11 +242,39 @@ export async function processTranscriptionJob(job: Job<TranscriptionJobData>): P
 	} catch (error: any) {
 		console.error(`[TranscriptionQueue] ❌ Erro ao processar lead ${leadID}:`, error);
 
-		// Notificar erro
+		// Notificar erro via SSE
 		await sendSSEEvent(leadID, {
 			type: "failed",
 			error: error.message || "Erro desconhecido ao processar manuscrito",
 		});
+
+		// Recuperação de erro: se este é o último attempt, resetar aguardandoManuscrito
+		// para que o lead não fique preso em estado de "carregando" eternamente.
+		const maxAttempts = job.opts?.attempts ?? QUEUE_RETRY_ATTEMPTS;
+		const isLastAttempt = job.attemptsMade >= maxAttempts - 1;
+
+		if (isLastAttempt) {
+			console.warn(
+				`[TranscriptionQueue] ⚠️ Último attempt (${job.attemptsMade + 1}/${maxAttempts}) falhou para lead ${leadID}. Resetando aguardandoManuscrito.`,
+			);
+			try {
+				const prisma = getPrismaInstance();
+				const updatedLead = await prisma.leadOabData.update({
+					where: { id: leadID },
+					data: { aguardandoManuscrito: false },
+				});
+
+				// Notificar o frontend que o lead foi atualizado (sai do loading)
+				await sseManager.sendNotification(leadID, {
+					type: "leadUpdate",
+					message: "Falha na digitação do manuscrito. Tente novamente.",
+					leadData: updatedLead,
+					timestamp: new Date().toISOString(),
+				});
+			} catch (dbError) {
+				console.error(`[TranscriptionQueue] ❌ Falha ao resetar aguardandoManuscrito para ${leadID}:`, dbError);
+			}
+		}
 
 		throw error;
 	}

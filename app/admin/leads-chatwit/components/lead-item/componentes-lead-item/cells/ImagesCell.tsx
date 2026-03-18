@@ -5,6 +5,7 @@ import { RefreshCw } from "lucide-react";
 import type { ImagesCellProps } from "../types";
 import { LeadContextMenu, type ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
 import { DeleteFileButton } from "@/app/admin/leads-chatwit/components/delete-file-button";
+import { hasConvertedImages } from "../utils";
 
 interface ImagesCellExtendedProps extends Omit<ImagesCellProps, "onConverter"> {
 	onConverter: () => void;
@@ -29,7 +30,7 @@ export function ImagesCell({
 	}
 
 	// Se já tem imagens convertidas
-	if (lead.arquivos.some((a) => a.pdfConvertido)) {
+	if (hasConvertedImages(lead)) {
 		return (
 			<TableCell className="min-w-[70px] max-w-[100px] p-2 align-middle">
 				<LeadContextMenu contextType="imagem" onAction={onContextMenuAction} data={{ id: lead.id, type: "imagem" }}>

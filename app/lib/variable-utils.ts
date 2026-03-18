@@ -30,6 +30,12 @@ export const SPECIAL_VARIABLES = {
 		isRequired: true,
 		description: "Company name that appears in footer automatically",
 	},
+	analise: {
+		chave: "analise",
+		tipo: "special" as const,
+		isRequired: true,
+		description: "Valor da análise jurídica (formato R$ X,XX)",
+	},
 } as const;
 
 /**
@@ -134,6 +140,17 @@ export function ensureSpecialVariables(variables: MtfDiamanteVariavel[]): MtfDia
 		});
 	}
 
+	// Ensure analise variable exists
+	if (!result.find((v) => v.chave === "analise")) {
+		result.push({
+			chave: "analise",
+			valor: "",
+			tipo: "special",
+			isRequired: true,
+			description: "Valor da análise jurídica (formato R$ X,XX)",
+		});
+	}
+
 	return result;
 }
 
@@ -145,9 +162,9 @@ export function filterVariablesByType(
 	type: "special" | "custom",
 ): MtfDiamanteVariavel[] {
 	if (type === "special") {
-		return variables.filter((v) => ["chave_pix", "nome_do_escritorio_rodape"].includes(v.chave));
+		return variables.filter((v) => ["chave_pix", "nome_do_escritorio_rodape", "analise"].includes(v.chave));
 	} else {
-		return variables.filter((v) => !["chave_pix", "nome_do_escritorio_rodape"].includes(v.chave));
+		return variables.filter((v) => !["chave_pix", "nome_do_escritorio_rodape", "analise"].includes(v.chave));
 	}
 }
 

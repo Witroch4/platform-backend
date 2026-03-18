@@ -4,6 +4,7 @@
  * Aceita múltiplos formatos:
  *   "R$ 27,90"  → 2790
  *   "R$27.90"   → 2790
+ *   "R$ 1"      → 100
  *   "27,90"     → 2790
  *   "27.90"     → 2790
  *   "2790"      → 2790 (já em centavos)
@@ -13,6 +14,8 @@ export function parseCurrencyToCents(value: string | number): number {
 	if (typeof value === "number") {
 		return Math.round(value);
 	}
+
+	const hasCurrencyPrefix = /R\$/i.test(value);
 
 	// Remove "R$", espaços e pontos de milhar
 	let cleaned = value
@@ -34,6 +37,11 @@ export function parseCurrencyToCents(value: string | number): number {
 	// Se o número parece ser em reais (tem decimal ou é pequeno demais para centavos)
 	// Heurística: se tem ponto decimal no string limpo, está em reais
 	if (cleaned.includes(".")) {
+		return Math.round(num * 100);
+	}
+
+	// Com prefixo monetário explícito (ex: "R$ 1"), interpretar como reais inteiros.
+	if (hasCurrencyPrefix) {
 		return Math.round(num * 100);
 	}
 

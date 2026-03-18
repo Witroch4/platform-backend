@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
-import { Download, Upload, Eye, Copy, Check, AlertCircle } from "lucide-react";
+import { useState, useCallback } from "react";
+import { Download, Upload, Eye, Copy, Check, AlertCircle, FileJson, X } from "lucide-react";
+import { useDropzone } from "react-dropzone";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -43,6 +44,184 @@ interface ExportImportPanelProps {
 }
 
 // =============================================================================
+// IMPORT FLOW DIALOG
+// =============================================================================
+
+function ImportFlowDialog({
+	open,
+	onOpenChange,
+	selectedFile,
+	setSelectedFile,
+	importName,
+	setImportName,
+	importError,
+	isLoading,
+	onDrop,
+	onImport,
+}: {
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
+	selectedFile: File | null;
+	setSelectedFile: (file: File | null) => void;
+	importName: string;
+	setImportName: (name: string) => void;
+	importError: string | null;
+	isLoading: boolean;
+	onDrop: (files: File[]) => void;
+	onImport: () => void;
+}) {
+	const { getRootProps, getInputProps, isDragActive, isDragReject } = useDropzone({
+		onDrop,
+		accept: { "application/json": [".json"] },
+		maxFiles: 1,
+		multiple: false,
+		disabled: isLoading,
+	});
+
+	return (
+		<Dialog open={open} onOpenChange={onOpenChange}>
+			<DialogContent className="w-[96vw] sm:max-w-md">
+				<DialogHeader>
+					<DialogTitle className="text-lg font-semibold">Importar Flow</DialogTitle>
+					<DialogDescription className="text-sm">
+						Arraste um arquivo JSON ou clique para selecionar.
+					</DialogDescription>
+				</DialogHeader>
+
+				<div className="space-y-4 py-2">
+					{importError && (
+						<Alert variant="destructive">
+							<AlertCircle className="h-4 w-4" />
+							<AlertDescription>{importError}</AlertDescription>
+						</Alert>
+					)}
+
+					{/* Drop Zone */}
+					{!selectedFile ? (
+						<div
+							{...getRootProps()}
+							className={`
+								group relative flex flex-col items-center justify-center
+								w-full min-h-[160px] rounded-xl border-2 border-dashed
+								cursor-pointer transition-all duration-200 ease-out
+								${isDragActive && !isDragReject
+									? "border-primary bg-primary/5 dark:bg-primary/10 scale-[1.01]"
+									: isDragReject
+										? "border-destructive bg-destructive/5"
+										: "border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/50 dark:hover:bg-muted/30"
+								}
+								${isLoading ? "pointer-events-none opacity-50" : ""}
+							`}
+						>
+							<input {...getInputProps()} />
+
+							<div className={`
+								flex items-center justify-center w-12 h-12 rounded-xl mb-3
+								transition-all duration-200
+								${isDragActive
+									? "bg-primary/15 text-primary scale-110"
+									: "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary group-hover:scale-105"
+								}
+							`}>
+								{isDragActive ? (
+									<FileJson className="h-6 w-6" />
+								) : (
+									<Upload className="h-6 w-6" />
+								)}
+							</div>
+
+							{isDragActive ? (
+								<p className="text-sm font-medium text-primary">
+									Solte o arquivo aqui
+								</p>
+							) : (
+								<>
+									<p className="text-sm font-medium text-foreground">
+										Arraste o arquivo JSON aqui
+									</p>
+									<p className="text-xs text-muted-foreground mt-1">
+										ou clique para selecionar
+									</p>
+								</>
+							)}
+						</div>
+					) : (
+						/* File Selected State */
+						<div className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/40 dark:bg-muted/20 transition-all duration-200">
+							<div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 text-primary shrink-0">
+								<FileJson className="h-5 w-5" />
+							</div>
+							<div className="flex-1 min-w-0">
+								<p className="text-sm font-medium text-foreground truncate">
+									{selectedFile.name}
+								</p>
+								<p className="text-xs text-muted-foreground">
+									{(selectedFile.size / 1024).toFixed(1)} KB
+								</p>
+							</div>
+							<button
+								type="button"
+								onClick={(e) => {
+									e.stopPropagation();
+									setSelectedFile(null);
+								}}
+								className="flex items-center justify-center w-8 h-8 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors duration-150 shrink-0"
+								aria-label="Remover arquivo"
+							>
+								<X className="h-4 w-4" />
+							</button>
+						</div>
+					)}
+
+					{/* Flow Name */}
+					<div className="space-y-2">
+						<Label htmlFor="flow-name" className="text-sm">
+							Nome do flow <span className="text-muted-foreground font-normal">(opcional)</span>
+						</Label>
+						<Input
+							id="flow-name"
+							value={importName}
+							onChange={(e) => setImportName(e.target.value)}
+							placeholder="Usar nome original do arquivo"
+							disabled={isLoading}
+							className="h-9"
+						/>
+					</div>
+				</div>
+
+				<DialogFooter className="gap-2 sm:gap-0">
+					<Button
+						variant="outline"
+						onClick={() => onOpenChange(false)}
+						disabled={isLoading}
+						className="h-9"
+					>
+						Cancelar
+					</Button>
+					<Button
+						onClick={onImport}
+						disabled={!selectedFile || isLoading}
+						className="h-9"
+					>
+						{isLoading ? (
+							<>
+								<span className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-current border-t-transparent" />
+								Importando...
+							</>
+						) : (
+							<>
+								<Upload className="h-4 w-4 mr-2" />
+								Importar
+							</>
+						)}
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
+	);
+}
+
+// =============================================================================
 // COMPONENT
 // =============================================================================
 
@@ -63,7 +242,6 @@ export function ExportImportPanel({
 	const [previewData, setPreviewData] = useState<FlowExportFormat | null>(null);
 	const [copied, setCopied] = useState(false);
 	const [importError, setImportError] = useState<string | null>(null);
-	const fileInputRef = useRef<HTMLInputElement>(null);
 
 	// Handlers
 	const handleExport = useCallback(async () => {
@@ -143,10 +321,12 @@ export function ExportImportPanel({
 		}
 	}, [previewData]);
 
-	const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-		const file = e.target.files?.[0];
-		setSelectedFile(file || null);
-		setImportError(null);
+	const onDrop = useCallback((acceptedFiles: File[]) => {
+		const file = acceptedFiles[0];
+		if (file) {
+			setSelectedFile(file);
+			setImportError(null);
+		}
 	}, []);
 
 	const handleOpenImportDialog = useCallback(() => {
@@ -217,60 +397,18 @@ export function ExportImportPanel({
 				</Tooltip>
 
 				{/* Import Dialog */}
-				<Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
-					<DialogContent className="w-[96vw] sm:max-w-md">
-						<DialogHeader>
-							<DialogTitle>Importar Flow</DialogTitle>
-							<DialogDescription>Selecione um arquivo JSON exportado anteriormente.</DialogDescription>
-						</DialogHeader>
-
-						<div className="space-y-4 py-4">
-							{importError && (
-								<Alert variant="destructive">
-									<AlertCircle className="h-4 w-4" />
-									<AlertDescription>{importError}</AlertDescription>
-								</Alert>
-							)}
-
-							<div className="space-y-2">
-								<Label htmlFor="flow-file">Arquivo JSON</Label>
-								<Input
-									id="flow-file"
-									type="file"
-									accept=".json,application/json"
-									ref={fileInputRef}
-									onChange={handleFileSelect}
-									disabled={isLoading}
-								/>
-								{selectedFile && (
-									<p className="text-xs text-muted-foreground">
-										Arquivo: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
-									</p>
-								)}
-							</div>
-
-							<div className="space-y-2">
-								<Label htmlFor="flow-name">Nome do flow (opcional)</Label>
-								<Input
-									id="flow-name"
-									value={importName}
-									onChange={(e) => setImportName(e.target.value)}
-									placeholder="Usar nome original do arquivo"
-									disabled={isLoading}
-								/>
-							</div>
-						</div>
-
-						<DialogFooter className="gap-2 sm:gap-0">
-							<Button variant="outline" onClick={() => setIsImportDialogOpen(false)} disabled={isLoading}>
-								Cancelar
-							</Button>
-							<Button onClick={handleImport} disabled={!selectedFile || isLoading}>
-								{isLoading ? "Importando..." : "Importar"}
-							</Button>
-						</DialogFooter>
-					</DialogContent>
-				</Dialog>
+				<ImportFlowDialog
+					open={isImportDialogOpen}
+					onOpenChange={setIsImportDialogOpen}
+					selectedFile={selectedFile}
+					setSelectedFile={setSelectedFile}
+					importName={importName}
+					setImportName={setImportName}
+					importError={importError}
+					isLoading={isLoading}
+					onDrop={onDrop}
+					onImport={handleImport}
+				/>
 
 				{/* Preview/Debug Dialog */}
 				<Dialog open={isPreviewDialogOpen} onOpenChange={setIsPreviewDialogOpen}>

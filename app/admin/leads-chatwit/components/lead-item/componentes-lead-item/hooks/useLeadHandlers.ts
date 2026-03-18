@@ -1,5 +1,5 @@
 import { toast } from "sonner";
-import { getConvertedImages } from "@/app/admin/leads-chatwit/components/lead-item/componentes-lead-item/utils";
+import { getConvertedImages, hasConvertedImages } from "@/app/admin/leads-chatwit/components/lead-item/componentes-lead-item/utils";
 import type { LeadChatwit } from "@/app/admin/leads-chatwit/types";
 import type { ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
 import { Prisma } from "@prisma/client";
@@ -988,7 +988,7 @@ export function useLeadHandlers({
 				);
 			}
 
-			if (lead.arquivos && lead.arquivos.some((a) => a.pdfConvertido)) {
+			if (hasConvertedImages(lead)) {
 				deletePromises.push(handleDeleteFile(lead.id, "imagem"));
 			}
 

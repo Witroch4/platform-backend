@@ -15,7 +15,7 @@ import { login } from "@/actions/auth";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { CredentialsSchema } from "@/schemas/auth";
-import { LoaderIcon } from "lucide-react";
+import { EyeIcon, EyeOffIcon, LoaderIcon } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { Separator } from "../ui/separator";
 import AuthFormMessage from "./auth-form-message";
@@ -26,6 +26,7 @@ export default function LoginForm() {
 	const [error, setError] = useState<string>("");
 	const [success, setSuccess] = useState<string>("");
 	const [showOTPForm, setShowOTP] = useState<boolean>(false);
+	const [showPassword, setShowPassword] = useState<boolean>(false);
 	const searchParams = useSearchParams();
 	const callbackError = searchParams
 		? searchParams.get("error") === "OAuthAccountNotLinked"
@@ -133,7 +134,18 @@ export default function LoginForm() {
 											<FormLabel>{"Senha"}</FormLabel>
 											<FormControl>
 												<div>
-													<Input type="password" placeholder="******" required {...field} disabled={isPending} />
+													<div className="relative">
+														<Input type={showPassword ? "text" : "password"} placeholder="******" required {...field} disabled={isPending} className="pr-10" />
+														<button
+															type="button"
+															onClick={() => setShowPassword((v) => !v)}
+															className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+															tabIndex={-1}
+															aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+														>
+															{showPassword ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
+														</button>
+													</div>
 													<div className="flex items-center">
 														<Link
 															href="/auth/reset-password"

@@ -3,6 +3,51 @@ import { getPrismaInstance } from "@/lib/connections";
 
 const prisma = getPrismaInstance();
 
+const BLUEPRINT_CACHE_TTL_MS = 60_000;
+
+type BlueprintCacheEntry = {
+	value: AgentBlueprint | null;
+	expiresAt: number;
+};
+
+const blueprintRuntimeCache = new Map<string, BlueprintCacheEntry>();
+
+function getBlueprintCacheKey(linkedColumn: LinkedColumn, provider?: AiProvider): string {
+	return provider ? `${linkedColumn}:${provider}` : linkedColumn;
+}
+
+function readBlueprintCache(linkedColumn: LinkedColumn, provider?: AiProvider): AgentBlueprint | null | undefined {
+	const key = getBlueprintCacheKey(linkedColumn, provider);
+	const cached = blueprintRuntimeCache.get(key);
+	if (!cached) return undefined;
+	if (cached.expiresAt <= Date.now()) {
+		blueprintRuntimeCache.delete(key);
+		return undefined;
+	}
+	return cached.value;
+}
+
+function writeBlueprintCache(linkedColumn: LinkedColumn, value: AgentBlueprint | null, provider?: AiProvider): AgentBlueprint | null {
+	blueprintRuntimeCache.set(getBlueprintCacheKey(linkedColumn, provider), {
+		value,
+		expiresAt: Date.now() + BLUEPRINT_CACHE_TTL_MS,
+	});
+	return value;
+}
+
+export function invalidateAgentBlueprintCache(linkedColumn?: LinkedColumn | null): void {
+	if (!linkedColumn) {
+		blueprintRuntimeCache.clear();
+		return;
+	}
+
+	for (const key of blueprintRuntimeCache.keys()) {
+		if (key === linkedColumn || key.startsWith(`${linkedColumn}:`)) {
+			blueprintRuntimeCache.delete(key);
+		}
+	}
+}
+
 export interface AgentToolConfig {
 	key: string;
 	name: string;
@@ -181,6 +226,7 @@ export async function createAgentBlueprint(ownerId: string, payload: AgentBluepr
 	};
 
 	const created = await prisma.aiAgentBlueprint.create({ data, select: selectBlueprint });
+	invalidateAgentBlueprintCache(payload.linkedColumn ?? null);
 	return mapBlueprint(created);
 }
 
@@ -220,13 +266,19 @@ export async function updateAgentBlueprint(
 		select: selectBlueprint,
 	});
 
+	invalidateAgentBlueprintCache(existing.linkedColumn ?? payload.linkedColumn ?? null);
+	if (payload.linkedColumn && payload.linkedColumn !== existing.linkedColumn) {
+		invalidateAgentBlueprintCache(payload.linkedColumn);
+	}
+
 	return mapBlueprint(updated);
 }
 
 export async function deleteAgentBlueprint(ownerId: string, id: string): Promise<boolean> {
-	const existing = await prisma.aiAgentBlueprint.findFirst({ where: { ownerId, id }, select: { id: true } });
+	const existing = await prisma.aiAgentBlueprint.findFirst({ where: { ownerId, id }, select: { id: true, linkedColumn: true } });
 	if (!existing) return false;
 	await prisma.aiAgentBlueprint.delete({ where: { id: existing.id } });
+	invalidateAgentBlueprintCache(existing.linkedColumn ?? null);
 	return true;
 }
 
@@ -239,6 +291,11 @@ export async function deleteAgentBlueprint(ownerId: string, id: string): Promise
  * Prioridade: 1) Blueprint com linkedColumn definido, 2) Fallback por nome/metadata
  */
 export async function getAgentBlueprintByLinkedColumn(linkedColumn: LinkedColumn): Promise<AgentBlueprint | null> {
+	const cached = readBlueprintCache(linkedColumn);
+	if (cached !== undefined) {
+		return cached;
+	}
+
 	// 1) Buscar por linkedColumn diretamente
 	const directMatch = await prisma.aiAgentBlueprint.findFirst({
 		where: { linkedColumn },
@@ -247,7 +304,7 @@ export async function getAgentBlueprintByLinkedColumn(linkedColumn: LinkedColumn
 	});
 
 	if (directMatch) {
-		return mapBlueprint(directMatch);
+		return writeBlueprintCache(linkedColumn, mapBlueprint(directMatch));
 	}
 
 	// 2) Fallback: buscar por metadata ou nome (compatibilidade com agentes existentes)
@@ -284,7 +341,7 @@ export async function getAgentBlueprintByLinkedColumn(linkedColumn: LinkedColumn
 		select: selectBlueprint,
 	});
 
-	return fallback ? mapBlueprint(fallback) : null;
+	return writeBlueprintCache(linkedColumn, fallback ? mapBlueprint(fallback) : null);
 }
 
 /**
@@ -295,13 +352,18 @@ export async function getAgentBlueprintByLinkedColumnAndProvider(
 	linkedColumn: LinkedColumn,
 	provider: AiProvider,
 ): Promise<AgentBlueprint | null> {
+	const cached = readBlueprintCache(linkedColumn, provider);
+	if (cached !== undefined) {
+		return cached;
+	}
+
 	const directMatch = await prisma.aiAgentBlueprint.findFirst({
 		where: { linkedColumn, defaultProvider: provider },
 		orderBy: { updatedAt: "desc" },
 		select: selectBlueprint,
 	});
 
-	return directMatch ? mapBlueprint(directMatch) : null;
+	return writeBlueprintCache(linkedColumn, directMatch ? mapBlueprint(directMatch) : null, provider);
 }
 
 /**

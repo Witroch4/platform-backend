@@ -2276,10 +2276,10 @@ function GeneratePaymentLinkDetailEditor({ node, data, onUpdate }: EditorProps<G
 					value={amountCents}
 					onChange={setAmountCents}
 					onBlur={save}
-					placeholder="Ex: {{valor_analise}} ou R$ 27,90"
+					placeholder="Ex: {{analise}} ou R$ 27,90"
 				/>
 				<p className="text-xs text-muted-foreground">
-					Aceita "R$ 27,90", "27.90" ou centavos "2790". Variáveis como <code className="bg-muted px-1 rounded">{"{{valor_analise}}"}</code> são resolvidas.
+					Aceita "R$ 27,90", "27.90" ou centavos "2790". Variáveis como <code className="bg-muted px-1 rounded">{"{{analise}}"}</code> são resolvidas.
 				</p>
 			</div>
 

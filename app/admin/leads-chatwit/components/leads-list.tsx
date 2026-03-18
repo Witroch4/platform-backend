@@ -22,6 +22,7 @@ import { DialogDetalheLead } from "./dialog-detalhe-lead";
 import { SSEConnectionManager } from "./sse-connection-manager";
 import type { LeadChatwit, ExtendedLead } from "../types";
 import { BatchProcessorTrigger } from "./batch-processor/BatchProcessorTrigger";
+import { getConvertedImages, hasConvertedImages } from "./lead-item/componentes-lead-item/utils";
 
 interface LeadsListProps {
 	searchQuery: string;
@@ -422,23 +423,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 
 	const handleDigitarProva = async (lead: any) => {
 		try {
-			// Obter as imagens convertidas
-			let imagensConvertidas: string[] = [];
-			if (lead.imagensConvertidas) {
-				try {
-					imagensConvertidas = JSON.parse(lead.imagensConvertidas);
-				} catch (error) {
-					console.error("Erro ao processar URLs de imagens convertidas:", error);
-				}
-			}
-
-			// Se não houver imagens no campo imagensConvertidas, buscar dos arquivos
-			if (!imagensConvertidas || imagensConvertidas.length === 0) {
-				imagensConvertidas = lead.arquivos
-					.filter((a: { pdfConvertido: string | null }) => a.pdfConvertido)
-					.map((a: { pdfConvertido: string }) => a.pdfConvertido)
-					.filter((url: string | null) => url && url.length > 0);
-			}
+			const imagensConvertidas = getConvertedImages(lead);
 
 			// Preparar os dados para enviar ao webhook
 			const webhookData = {
@@ -567,7 +552,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 					}
 
 					// Excluir imagens convertidas
-					if (lead.arquivos && lead.arquivos.some((a) => a.pdfConvertido)) {
+					if (hasConvertedImages(lead)) {
 						deletePromises.push(
 							fetch(`/api/admin/leads-chatwit/arquivos?leadId=${lead.id}&type=imagem`, {
 								method: "DELETE",

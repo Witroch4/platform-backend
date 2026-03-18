@@ -244,27 +244,44 @@ export async function DELETE(request: NextRequest) {
 				return NextResponse.json({ error: "Lead não encontrado" }, { status: 404 });
 			}
 
-			// Remove as URLs de imagens convertidas de todos os arquivos do lead
+			const imageUrls = new Set<string>();
+
 			for (const arquivo of lead.arquivos) {
 				if (arquivo.pdfConvertido && arquivo.pdfConvertido.includes("objstoreapi")) {
-					try {
-						const objectName = arquivo.pdfConvertido.split("/").pop();
-						if (objectName) {
-							try {
-								// Importação dinâmica do client MinIO
-								const { MinioClient } = await import("@/lib/minio");
-								const minioClient = new MinioClient();
-								await minioClient.removeObject(BUCKET_NAME, objectName);
-								log.info(`[ArquivoDelete] Imagem convertida removida do MinIO: ${objectName}`);
-							} catch (minioError) {
-								log.error(`[ArquivoDelete] Erro ao remover imagem convertida do MinIO: ${minioError}`);
-								// Continua mesmo com erro no MinIO
+					imageUrls.add(arquivo.pdfConvertido);
+				}
+			}
+
+			if (lead.imagensConvertidas) {
+				try {
+					const parsedImages = JSON.parse(lead.imagensConvertidas);
+					if (Array.isArray(parsedImages)) {
+						for (const imageUrl of parsedImages) {
+							if (typeof imageUrl === "string" && imageUrl.includes("objstoreapi")) {
+								imageUrls.add(imageUrl);
 							}
 						}
-					} catch (error) {
-						log.error(`[ArquivoDelete] Erro ao processar remoção de imagem do MinIO: ${error}`);
-						// Continua mesmo com erro no MinIO
 					}
+				} catch (error) {
+					log.error(`[ArquivoDelete] Erro ao ler imagensConvertidas do lead ${leadId}: ${error}`);
+				}
+			}
+
+			for (const imageUrl of imageUrls) {
+				try {
+					const objectName = imageUrl.split("/").pop();
+					if (objectName) {
+						try {
+							const { MinioClient } = await import("@/lib/minio");
+							const minioClient = new MinioClient();
+							await minioClient.removeObject(BUCKET_NAME, objectName);
+							log.info(`[ArquivoDelete] Imagem convertida removida do MinIO: ${objectName}`);
+						} catch (minioError) {
+							log.error(`[ArquivoDelete] Erro ao remover imagem convertida do MinIO: ${minioError}`);
+						}
+					}
+				} catch (error) {
+					log.error(`[ArquivoDelete] Erro ao processar remoção de imagem do MinIO: ${error}`);
 				}
 			}
 
@@ -272,6 +289,12 @@ export async function DELETE(request: NextRequest) {
 			await getPrismaInstance().arquivoLeadOab.updateMany({
 				where: { leadOabDataId: leadId },
 				data: { pdfConvertido: null },
+			});
+
+			// Mantém o lead consistente com a UI do batch e da galeria
+			await getPrismaInstance().leadOabData.update({
+				where: { id: leadId },
+				data: { imagensConvertidas: null },
 			});
 
 			log.info(`[ArquivoDelete] Imagens convertidas excluídas com sucesso para o lead: ${leadId}`);

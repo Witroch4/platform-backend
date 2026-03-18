@@ -46,6 +46,7 @@ wit-last-commit.txt
 # debug
 docker-compose-produção.yaml
 compose-produção.yaml
+docker-compose-deploy-portainer-sworm.yml
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

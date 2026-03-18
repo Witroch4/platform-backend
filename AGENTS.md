@@ -1,5 +1,51 @@
 # AGENTS.md — Socialwise Chatwit
 
+## Flow Builder & Flow Engine — Mapa de Arquivos
+
+**Área mais editada do projeto.** Leia esta seção antes de mexer em qualquer coisa de flow.
+
+### Engine Core (`services/flow-engine/`)
+
+| Arquivo | Export principal | Papel |
+|---------|-----------------|-------|
+| `flow-orchestrator.ts` | `FlowOrchestrator` | Entry-point do webhook — detecta `flow_` buttons, cria/resume `FlowSession`, delega pro Executor |
+| `flow-executor.ts` | `FlowExecutor` | Executa nó a nó; harvest (coleta light nodes) até bater barreira → migra pra async |
+| `sync-bridge.ts` | `SyncBridge` | Ponte sync de 30s — acumula 1 interactive payload pro HTTP response; após consumido, força async |
+| `chatwit-delivery-service.ts` | `ChatwitDeliveryService` | Delivery async via API REST do Chatwit (texto, mídia, interactive, template) com retry 3x backoff |
+| `variable-resolver.ts` | `VariableResolver` | Resolve `{{var}}` — chain: session → MTF → contact → system; suporta dot notation |
+| `mtf-variable-loader.ts` | `loadMtfVariablesForInbox()` | Carrega variáveis MTF (normais + lotes) do Redis/DB pra injetar como session vars |
+| `playground-collector.ts` | `initCollector()` / `drainCollector()` | Coleta payloads de delivery pra debug no Flow Playground |
+
+### Conceitos-chave
+
+- **Sync Bridge (ponte 30s):** Primeira mensagem interativa vai no HTTP response do webhook. Chatwit fecha a conexão. Tudo depois é async via `ChatwitDeliveryService`.
+- **Harvest + Barreira:** Nós leves (TEXT, REACTION, INTERACTIVE) são coletados em sequência. Nós barreira (MEDIA, DELAY, WAIT_FOR_REPLY) forçam `syncConsumed = true` e continuam via BullMQ async.
+- **Variáveis — chain de resolução:** 1) Session (wait_for_reply, payment_url) → 2) MTF Diamante (lote_ativo, valor_analise) → 3) Contact (name, phone) → 4) System (date, time).
+- **`lote_ativo`** inclui cálculo automático de complemento (`valor_lote - valor_analise`). Fonte: `lib/mtf-diamante/variables-resolver.ts` → `formatarLoteAtivo()`.
+
+### Flow Builder UI (`app/admin/mtf-diamante/components/flow-builder/`)
+
+| Arquivo | Papel |
+|---------|-------|
+| `FlowCanvas.tsx` | Canvas ReactFlow — integra 10+ tipos de nó, edges, drag-drop, auto-layout |
+| `context/FlowBuilderContext.tsx` | Estado global das variáveis (static + MTF + session) |
+| `panels/NodeDetailDialog.tsx` | Editor full-screen por tipo de nó (texto, botões, template, etc.) |
+| `panels/FlowSelector.tsx` | Lista de flows com create/delete/duplicate, filtro por inbox |
+| `panels/ExportImportPanel.tsx` | Import/export JSON |
+| `ui/FlowTextEditorDialog.tsx` | Editor de texto com preview e inserção de variáveis |
+| `nodes/*.tsx` | Um componente por tipo: `TextMessageNode`, `InteractiveMessageNode`, `WhatsAppTemplateNode`, `MediaNode`, `DelayNode`, `WaitForReplyNode`, `ChatwitActionNode`, `GeneratePaymentLinkNode`, etc. |
+
+### API Routes (`app/api/admin/mtf-diamante/`)
+
+| Rota | Papel |
+|------|-------|
+| `flows/` GET, POST | Listar/criar flows |
+| `flows/[flowId]/` GET, PUT, DELETE | CRUD de flow individual |
+| `variaveis/` GET, POST | Variáveis MTF (normais + lotes computados) |
+| `lote-ativo/` GET | Lote ativo formatado (fresh, sem cache) |
+
+---
+
 ## Infra compartilhada local
 
 - Rede Docker: `minha_rede`
