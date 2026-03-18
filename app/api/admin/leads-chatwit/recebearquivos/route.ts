@@ -5,6 +5,11 @@ import { addLeadJob } from "@/lib/queue/leads-chatwit.queue";
 import type { WebhookPayload } from "@/types/webhook";
 import { getWebhooksConfig } from "@/lib/config";
 import { sanitizeChatwitPayload } from "@/lib/leads-chatwit/sanitize-chatwit-payload";
+import {
+	isChatwitPaymentConfirmation,
+	processPaymentWebhook,
+	type ChatwitPaymentWebhookPayload,
+} from "@/lib/leads/payment-webhook-processor";
 
 // Verificar se deve usar processamento direto (default: true)
 const webhooksConfig = getWebhooksConfig();
@@ -159,6 +164,12 @@ async function processLeadDirectly(payload: WebhookPayload) {
 export async function POST(request: Request): Promise<Response> {
 	try {
 		const rawPayload = await request.json();
+
+		// Intercept payment confirmation events before lead processing
+		if (isChatwitPaymentConfirmation(rawPayload)) {
+			const result = await processPaymentWebhook(rawPayload as ChatwitPaymentWebhookPayload);
+			return NextResponse.json({ success: true, ...result }, { status: 200 });
+		}
 
 		// ⭐ Sanitizar payload bruto do Chatwit
 		let payload: WebhookPayload;

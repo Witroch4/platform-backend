@@ -25,6 +25,10 @@ import { SocialWiseIdempotencyService } from "@/lib/socialwise-flow/services/ide
 import { SocialWiseRateLimiterService } from "@/lib/socialwise-flow/services/rate-limiter";
 import { SocialWiseReplayProtectionService } from "@/lib/socialwise-flow/services/replay-protection";
 import { recordSocialWiseQualitySample } from "@/lib/socialwise-flow/monitoring-dashboard";
+import {
+	isInfinitePayReceiptMessage,
+	normalizeInfinitePayReceiptMessage,
+} from "@/lib/socialwise-flow/payment-message-detection";
 import { recordWebhookMetrics } from "@/lib/monitoring/application-performance-monitor";
 import { getAssistantForInbox } from "@/lib/socialwise/assistant";
 // Template functions removed - now using full SocialWise Flow for all button processing
@@ -386,6 +390,20 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 			return NextResponse.json({ error: "Invalid message content", details: sanitizedText.error }, { status: 400 });
 		}
 		let textInput = sanitizedText.data!;
+
+		// Hotfix temporário: intercepta recibo InfinitePay na fonte e normaliza para texto canônico.
+		// Isso permite alias hit/intenção global sem depender da URL variável do recibo.
+		// Futuro: mover essa lógica canônica para Flow Builder + Intent/flow dedicado.
+		if (isInfinitePayReceiptMessage(textInput)) {
+			const originalReceiptText = textInput;
+			textInput = normalizeInfinitePayReceiptMessage(textInput);
+
+			webhookLogger.info("💸 INFINITEPAY RECEIPT detected - normalized to canonical alias text", {
+				messageContent: originalReceiptText,
+				normalizedText: textInput,
+				traceId,
+			});
+		}
 
 		// Step 10.1: Check for native handoff payloads BEFORE content processing
 		const contentAttrs = (validPayload.context?.message?.content_attributes || {}) as any;

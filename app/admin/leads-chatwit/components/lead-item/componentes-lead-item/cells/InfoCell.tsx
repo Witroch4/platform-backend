@@ -19,6 +19,23 @@ export function InfoCell({ lead, onViewDetails, onShowFullImage }: InfoCellProps
 	const totalPaidCents = hasPayments
 		? lead.payments!.reduce((sum, p) => sum + (p.paidAmountCents ?? p.amountCents), 0)
 		: 0;
+	const paymentMethod = hasPayments ? (lead.payments![0].captureMethod ?? null) : null;
+	const methodLabel =
+		paymentMethod === "pix"
+			? "Pix"
+			: paymentMethod === "credit_card"
+				? "Crédito"
+				: paymentMethod === "debit_card"
+					? "Débito"
+					: paymentMethod === "boleto"
+						? "Boleto"
+						: null;
+	const methodBadgeClass =
+		paymentMethod === "pix"
+			? "bg-blue-600 hover:bg-blue-700"
+			: paymentMethod === "credit_card" || paymentMethod === "debit_card"
+				? "bg-violet-600 hover:bg-violet-700"
+				: "bg-slate-600 hover:bg-slate-700";
 
 	return (
 		<TableCell className="min-w-[200px] max-w-[280px] p-1 align-middle sticky left-[40px] bg-card z-10 overflow-hidden">
@@ -38,14 +55,24 @@ export function InfoCell({ lead, onViewDetails, onShowFullImage }: InfoCellProps
 						</div>
 						<NewLeadIndicator isNew={isNew} />
 						{hasPayments && (
-							<Badge
-								variant="default"
-								className="ml-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] px-1.5 py-0 h-4 flex-shrink-0"
-								title={`Total pago: R$ ${(totalPaidCents / 100).toFixed(2).replace(".", ",")}`}
-							>
-								<CircleDollarSign className="h-3 w-3 mr-0.5" />
-								Pago
-							</Badge>
+							<>
+								<Badge
+									variant="default"
+									className="ml-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] px-1.5 py-0 h-4 flex-shrink-0"
+									title={`Total pago: R$ ${(totalPaidCents / 100).toFixed(2).replace(".", ",")}`}
+								>
+									<CircleDollarSign className="h-3 w-3 mr-0.5" />
+									Pago
+								</Badge>
+								{methodLabel && (
+									<Badge
+										variant="default"
+										className={`ml-0.5 ${methodBadgeClass} text-white text-[10px] px-1.5 py-0 h-4 flex-shrink-0`}
+									>
+										{methodLabel}
+									</Badge>
+								)}
+							</>
 						)}
 					</div>
 					{lead.nomeReal && lead.nomeReal !== lead.name && (
