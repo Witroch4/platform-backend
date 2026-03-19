@@ -94,15 +94,10 @@ export async function collectPerformanceMetrics(metrics: PerformanceMetrics): Pr
 		await pipeline.exec();
 
 		// Log metrics for real-time monitoring
-		metricsLogger.info("Performance metrics collected", {
+		metricsLogger.debug("Performance metrics collected", {
 			band: metrics.band,
 			strategy: metrics.strategy_used,
 			route_total_ms: metrics.route_total_ms,
-			embedding_ms: metrics.embedding_ms,
-			llm_warmup_ms: metrics.llm_warmup_ms,
-			channel_type: metrics.channel_type,
-			timeout_occurred: metrics.timeout_occurred,
-			trace_id: metrics.trace_id,
 		});
 	} catch (error) {
 		metricsLogger.error("Failed to collect metrics", {

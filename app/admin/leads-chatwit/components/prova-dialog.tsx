@@ -47,12 +47,15 @@ export function ProvaDialog({
 	const taRef = useRef<HTMLTextAreaElement | null>(null);
 	const gutterRef = useRef<HTMLDivElement | null>(null);
 	const [fullScreen, setFullScreen] = useState(false);
+	const prevOpenRef = useRef(false);
 
-	// Atualizar o texto quando o diálogo abrir ou quando o textoProva mudar
+	// Só resetar texto quando o diálogo ABRE (transição false → true)
+	// Nunca resetar enquanto está aberto — protege edição em andamento contra SSE updates
 	useEffect(() => {
-		if (isOpen) {
+		if (isOpen && !prevOpenRef.current) {
 			setTexto(textoProva || "");
 		}
+		prevOpenRef.current = isOpen;
 	}, [isOpen, textoProva]);
 
 	const handleSave = async () => {

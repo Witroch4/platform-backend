@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Loader2, FileText, ExternalLink, Send, AlertOctagon, Key, CheckCircle2 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -71,7 +72,8 @@ export function AnaliseDialog({
 	const [isSavingToken, setIsSavingToken] = useState(false);
 
 	// Mensagem padrão para enviar com o PDF
-	const MENSAGEM_PADRAO = "Segue a nossa Análise, qualquer dúvidas estamos a disposição";
+	const MENSAGEM_PADRAO =
+		"Segue a nossa análise em versão resumida. Para a argumentação completa, consulte o recurso.";
 
 	// Atualiza as anotações quando o diálogo for aberto ou as props mudarem
 	useEffect(() => {
@@ -319,6 +321,12 @@ export function AnaliseDialog({
 					{analiseUrl && (
 						<div className="space-y-2">
 							<h3 className="text-lg font-medium">Escreva uma Mensagem</h3>
+							<Alert>
+								<AlertDescription>
+									O PDF enviado ao aluno será gerado com informações truncadas para proteção autoral. A análise
+									interna e o recurso preservam o conteúdo completo.
+								</AlertDescription>
+							</Alert>
 							<Textarea
 								value={textoAnotacoes}
 								onChange={(e) => setTextoAnotacoes(e.target.value)}

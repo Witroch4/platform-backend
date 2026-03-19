@@ -2,7 +2,17 @@
   "permissions": {
     "allow": [
       "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_socialwise_app --tail 5000 --timestamps 2>&1 | grep -E ''2026-03-17T14:58'' | tail -80\")",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"base64 /tmp/socialwise_bkp_20260319.sql.gz\")",
+      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"rm /tmp/socialwise_bkp_20260319.sql.gz && echo ''Removido.''\")",
+      "Bash(find /home/wital/socialwise/app /home/wital/socialwise/lib /home/wital/socialwise/worker /home/wital/socialwise/services -type f \\\\\\(-name *.ts -o -name *.tsx \\\\\\))",
+      "Bash(for file:*)",
+      "Bash(do echo:*)",
+      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service ls 2>&1 | grep -i worker\")",
+      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_worker --tail 300 --since 5m 2>&1 | tail -300\")",
+      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_worker --tail 500 --since 30m 2>&1 | tail -500\")",
+      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_worker --tail 2000 --since 1h 2>&1 | grep -iE ''\\(took|duration|slow|timeout|error|failed|waiting|stalled|concurrency|backlog|delayed|\\\\.s\\\\b|[0-9]+s\\\\b|processingTimeMs|completado|completed\\)'' | tail -80\")",
+      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_worker --tail 50 2>&1 | tail -50\")"
     ]
   }
 }

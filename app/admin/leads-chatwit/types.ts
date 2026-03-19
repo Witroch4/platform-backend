@@ -1,3 +1,10 @@
+export type {
+	LeadOperationEvent,
+	LeadOperationStage,
+	LeadOperationStatus,
+	LeadOperationStatusResponse,
+} from "@/lib/oab-eval/operation-types";
+
 export interface LeadPaymentInfo {
 	id: string;
 	amountCents: number;
@@ -53,6 +60,7 @@ export interface LeadChatwit {
 	especialidade?: string | null;
 	espelhoPadraoId?: string | null;
 	consultoriaFase2?: boolean;
+	alwaysShowInLeadList?: boolean;
 	seccional?: string;
 	areaJuridica?: string;
 	notaFinal?: number;

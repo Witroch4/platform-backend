@@ -6,6 +6,33 @@ const { spawn } = require("child_process");
 const path = require("path");
 const { PrismaClient } = require("@prisma/client");
 
+function logFatalError(label, error) {
+	if (error instanceof Error) {
+		console.error(`❌ ${label}:`, error.stack || error.message);
+		return;
+	}
+
+	console.error(`❌ ${label}:`, error);
+}
+
+process.on("uncaughtException", (error) => {
+	logFatalError("Uncaught exception", error);
+	if (process.env.NODE_ENV === "production") {
+		process.exit(1);
+	}
+});
+
+process.on("unhandledRejection", (reason) => {
+	logFatalError("Unhandled rejection", reason);
+	if (process.env.NODE_ENV === "production") {
+		process.exit(1);
+	}
+});
+
+process.on("warning", (warning) => {
+	console.warn("⚠️ Process warning:", warning.stack || warning.message);
+});
+
 // Função de fechamento de conexões simplificada
 async function closeConnections() {
 	console.log("🔌 Fechando conexões...");
@@ -62,7 +89,10 @@ app.prepare().then(async () => {
 
 	// Inicia o servidor na porta 3002
 	server.listen(3002, (err) => {
-		if (err) throw err;
+		if (err) {
+			logFatalError("Falha ao iniciar servidor HTTP", err);
+			throw err;
+		}
 
 		const isDocker = process.env.RUN_IN_DOCKER === "true";
 		const ngrokUrl = process.env.NGROK_URL || "https://moved-chigger-randomly.ngrok-free.app";
@@ -136,4 +166,8 @@ app.prepare().then(async () => {
 		process.on("SIGINT", shutdown);
 		process.on("SIGTERM", shutdown);
 	}
+
+}).catch((error) => {
+	logFatalError("Falha em app.prepare()", error);
+	process.exit(1);
 });

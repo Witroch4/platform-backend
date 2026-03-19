@@ -43,7 +43,28 @@ export function EspelhoCell({
 	onOpenEspelhoSeletor,
 }: EspelhoCellProps) {
 	if (!manuscritoProcessadoLocal) {
-		return <TableCell className="w-[120px] p-2 align-middle"></TableCell>;
+		return (
+			<TableCell className="min-w-[110px] max-w-[150px] p-2 align-middle">
+				<TooltipProvider>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								variant="outline"
+								disabled={true}
+								className="w-full opacity-60 cursor-not-allowed text-xs px-2 py-1 h-auto min-h-8 whitespace-pre-line"
+							>
+								<AlertCircle className="h-4 w-4 mr-1 text-orange-500" />
+								Precisa
+								Prova/Manuscrito
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent side="top" className="text-xs max-w-60">
+							<p>Digite ou processe a prova manuscrita antes de selecionar o espelho.</p>
+						</TooltipContent>
+					</Tooltip>
+				</TooltipProvider>
+			</TableCell>
+		);
 	}
 
 	// Verificar se há espelho processado (database) ou estado local

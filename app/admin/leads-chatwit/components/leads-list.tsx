@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import useSWR from "swr";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
@@ -19,10 +20,45 @@ import {
 import { DialogDetalheLead } from "./dialog-detalhe-lead";
 // BatchProgressDialog removido - agora usando apenas o novo sistema
 // Imports do sistema antigo removidos - agora usando apenas o novo BatchProcessorTrigger
-import { SSEConnectionManager } from "./sse-connection-manager";
+import { SSEUserConnection } from "./sse-user-connection";
 import type { LeadChatwit, ExtendedLead } from "../types";
 import { BatchProcessorTrigger } from "./batch-processor/BatchProcessorTrigger";
 import { getConvertedImages, hasConvertedImages } from "./lead-item/componentes-lead-item/utils";
+
+type VisibilityMode = "visible" | "hidden" | "all";
+
+interface LeadsPaginationState {
+	page: number;
+	limit: number;
+	total: number;
+	totalPages: number;
+}
+
+interface LeadsListResponse {
+	leads: LeadChatwit[];
+	pagination: LeadsPaginationState;
+}
+
+function buildLeadsListKey(params: {
+	searchQuery: string;
+	page: number;
+	limit: number;
+	visibilityMode: VisibilityMode;
+	refreshCounter: number;
+}) {
+	const searchParams = new URLSearchParams({
+		page: params.page.toString(),
+		limit: params.limit.toString(),
+		visibility: params.visibilityMode,
+		_refresh: params.refreshCounter.toString(),
+	});
+
+	if (params.searchQuery) {
+		searchParams.append("search", params.searchQuery);
+	}
+
+	return `/api/admin/leads-chatwit/leads?${searchParams.toString()}`;
+}
 
 interface LeadsListProps {
 	searchQuery: string;
@@ -31,21 +67,38 @@ interface LeadsListProps {
 	refreshCounter?: number;
 }
 
-export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCounter = 0 }: LeadsListProps) {
-	const [leads, setLeads] = useState<LeadChatwit[]>([]);
+function leadHasArquivos(lead: LeadChatwit) {
+	return (lead.arquivos?.length ?? 0) > 0;
+}
+
+function matchesVisibilityMode(lead: LeadChatwit, mode: VisibilityMode) {
+	const alwaysShow = Boolean(lead.alwaysShowInLeadList);
+	const hasArquivos = leadHasArquivos(lead);
+
+	if (mode === "visible") {
+		return alwaysShow || hasArquivos;
+	}
+
+	if (mode === "hidden") {
+		return !alwaysShow && !hasArquivos;
+	}
+
+	return true;
+}
+
+export function LeadsList({ searchQuery, initialLoading, refreshCounter = 0 }: LeadsListProps) {
+	const [visibilityMode, setVisibilityMode] = useState<VisibilityMode>("visible");
 	const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
-	const [isLoading, setIsLoading] = useState(false);
 	const [isUnifying, setIsUnifying] = useState(false);
 	const [isConverting, setIsConverting] = useState<string | null>(null);
 	const [isSaving, setIsSaving] = useState(false);
-	const [pagination, setPagination] = useState({
+	const [paginationState, setPaginationState] = useState({
 		page: 1,
 		limit: 10,
-		total: 0,
-		totalPages: 0,
 	});
 	const [detailsOpen, setDetailsOpen] = useState(false);
 	const [currentLead, setCurrentLead] = useState<LeadChatwit | null>(null);
+	const currentLeadRef = useRef<LeadChatwit | null>(null);
 
 	// Estados para excluir arquivos em lote
 	const [confirmBatchDeleteFiles, setConfirmBatchDeleteFiles] = useState(false);
@@ -99,8 +152,50 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 	};
 
 	useEffect(() => {
-		fetchLeads();
-	}, [searchQuery, pagination.page, pagination.limit, refreshCounter]);
+		currentLeadRef.current = currentLead;
+	}, [currentLead]);
+
+	const leadsKey = useMemo(
+		() =>
+			buildLeadsListKey({
+				searchQuery,
+				page: paginationState.page,
+				limit: paginationState.limit,
+				visibilityMode,
+				refreshCounter,
+			}),
+		[searchQuery, paginationState.page, paginationState.limit, visibilityMode, refreshCounter],
+	);
+
+	const {
+		data: leadsResponse,
+		error: leadsError,
+		isLoading: isLoadingLeads,
+		mutate: mutateLeads,
+	} = useSWR<LeadsListResponse>(leadsKey, {
+		keepPreviousData: true,
+		revalidateOnFocus: false,
+		revalidateOnReconnect: false,
+		revalidateIfStale: false,
+	});
+
+	const leads = leadsResponse?.leads ?? [];
+	const pagination: LeadsPaginationState = leadsResponse?.pagination ?? {
+		page: paginationState.page,
+		limit: paginationState.limit,
+		total: 0,
+		totalPages: 0,
+	};
+
+	useEffect(() => {
+		setSelectedLeads([]);
+	}, [visibilityMode]);
+
+	useEffect(() => {
+		if (!leadsError) return;
+		console.error("Erro ao buscar leads:", leadsError);
+		toast.error("Erro", { description: "Não foi possível carregar os leads. Tente novamente." });
+	}, [leadsError]);
 
 	// 🔧 OTIMIZADO: Carregar espelhos padrão apenas uma vez por usuário
 	const usuariosCarregados = useRef<Set<string>>(new Set());
@@ -155,8 +250,8 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 					duration: 3000,
 				});
 
-				// Tentar recarregar a lista para encontrar o lead
-				fetchLeads();
+					// Revalidar apenas a chave atual sem resetar estado local dos dialogs
+					void mutateLeads();
 			}
 		};
 
@@ -167,36 +262,85 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 		return () => {
 			window.removeEventListener("highlightLead", handleHighlightLead as EventListener);
 		};
-	}, [leads]);
+		}, [leads, mutateLeads]);
 
-	const fetchLeads = async () => {
-		setIsLoading(true);
-		try {
-			const params = new URLSearchParams({
-				page: pagination.page.toString(),
-				limit: pagination.limit.toString(),
-			});
+	const updateCachedLead = useCallback(
+		(leadId: string, updater: (lead: LeadChatwit) => LeadChatwit) => {
+			void mutateLeads(
+				(current) => {
+					if (!current) return current;
+					return {
+						...current,
+						leads: current.leads.map((lead) => (lead.id === leadId ? updater(lead) : lead)),
+					};
+				},
+				{ revalidate: false },
+			);
+		},
+		[mutateLeads],
+	);
 
-			if (searchQuery) {
-				params.append("search", searchQuery);
+	const mergeLeadIntoCache = useCallback(
+		(leadPatch: Partial<LeadChatwit> & { id: string }) => {
+			updateCachedLead(leadPatch.id, (lead) => ({ ...lead, ...leadPatch }));
+		},
+		[updateCachedLead],
+	);
+
+	const replaceLeadInCache = useCallback(
+		(freshLead: LeadChatwit) => {
+			updateCachedLead(freshLead.id, () => freshLead);
+		},
+		[updateCachedLead],
+	);
+
+	const removeLeadFromCache = useCallback(
+		(leadId: string) => {
+			void mutateLeads(
+				(current) => {
+					if (!current) return current;
+					const nextLeads = current.leads.filter((lead) => lead.id !== leadId);
+					const nextTotal = Math.max(current.pagination.total - 1, 0);
+					return {
+						...current,
+						leads: nextLeads,
+						pagination: {
+							...current.pagination,
+							total: nextTotal,
+							totalPages: Math.ceil(nextTotal / current.pagination.limit),
+						},
+					};
+				},
+				{ revalidate: false },
+			);
+
+			setCurrentLead((prev) => (prev?.id === leadId ? null : prev));
+		},
+		[mutateLeads],
+	);
+
+	const refreshLeadFromServer = useCallback(
+		async (leadId: string) => {
+			const response = await fetch(`/api/admin/leads-chatwit/leads?id=${leadId}`);
+			if (!response.ok) {
+				const errorData = await response.json().catch(() => null);
+				throw new Error(errorData?.error || "Não foi possível sincronizar o lead atualizado.");
 			}
 
-			const response = await fetch(`/api/admin/leads-chatwit/leads?${params.toString()}`);
-			const data = await response.json();
+			const freshLead = (await response.json()) as LeadChatwit;
+			replaceLeadInCache(freshLead);
+			setCurrentLead((prev) => (prev?.id === freshLead.id ? { ...prev, ...freshLead } : prev));
+			return freshLead;
+		},
+		[replaceLeadInCache],
+	);
 
-			if (response.ok) {
-				setLeads(data.leads);
-				setPagination(data.pagination);
-			} else {
-				throw new Error(data.error || "Erro ao buscar leads");
-			}
-		} catch (error) {
-			console.error("Erro ao buscar leads:", error);
-			toast.error("Erro", { description: "Não foi possível carregar os leads. Tente novamente." });
-		} finally {
-			setIsLoading(false);
-		}
-	};
+	const revalidateLeads = useCallback(async () => {
+		await mutateLeads();
+	}, [mutateLeads]);
+
+	const displayedLeads = leads.filter((lead) => matchesVisibilityMode(lead, visibilityMode));
+	const showLoadingState = (isLoadingLeads && !leadsResponse) || (initialLoading && !leadsResponse);
 
 	const handleUnificarArquivos = async (leadId: string) => {
 		setIsUnifying(true);
@@ -212,11 +356,16 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 			const data = await response.json();
 
 			if (response.ok) {
+				if (data.pdfUrl) {
+					const patch = { id: leadId, pdfUnificado: data.pdfUrl } satisfies Partial<LeadChatwit> & { id: string };
+					mergeLeadIntoCache(patch);
+					setCurrentLead((prev) => (prev?.id === leadId ? { ...prev, ...patch } : prev));
+				}
+
 				toast.success("PDF unificado", {
 					description: "Arquivos unidos com sucesso",
 					duration: 2000,
 				});
-				fetchLeads(); // Recarrega a lista para mostrar o PDF unificado
 			} else {
 				throw new Error(data.error || "Erro ao unificar arquivos");
 			}
@@ -244,11 +393,17 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 			const data = await response.json();
 
 			if (response.ok) {
+				const patch = {
+					id: leadId,
+					imagensConvertidas: JSON.stringify(data.convertedUrls || data.imageUrls || []),
+				} satisfies Partial<LeadChatwit> & { id: string };
+				mergeLeadIntoCache(patch);
+				setCurrentLead((prev) => (prev?.id === leadId ? { ...prev, ...patch } : prev));
+
 				toast.success("Imagens convertidas", {
 					description: "PDF convertido com sucesso",
 					duration: 2000,
 				});
-				fetchLeads(); // Recarrega a lista para mostrar as imagens
 			} else {
 				throw new Error(data.error || "Erro ao converter PDF em imagens");
 			}
@@ -273,11 +428,8 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 					description: "Removido com sucesso",
 					duration: 2000,
 				});
-				setLeads(leads.filter((lead) => lead.id !== id));
-				setPagination((prev) => ({
-					...prev,
-					total: prev.total - 1,
-				}));
+				removeLeadFromCache(id);
+				setSelectedLeads((prev) => prev.filter((leadId) => leadId !== id));
 			} else {
 				const data = await response.json();
 				throw new Error(data.error || "Erro ao excluir lead");
@@ -291,18 +443,43 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 	};
 
 	// Função específica para atualizações via SSE (não invasiva)
+	// Dados fluem normalmente para leads e currentLead — a proteção contra reset
+	// de edições está nos próprios dialogs (prevOpenRef no ProvaDialog, formInitializedRef no DialogDetalheLead)
 	const handleSSELeadUpdate = (leadData: any) => {
 		if (!leadData || !leadData.id) {
 			console.error("Dados inválidos recebidos via SSE:", leadData);
 			return;
 		}
 
-		// ✅ Atualização local não invasiva - apenas atualizar o estado do lead
-		setLeads((prevLeads) => prevLeads.map((lead) => (lead.id === leadData.id ? { ...lead, ...leadData } : lead)));
+		let shouldRefreshFromServer = false;
 
-		// ✅ Atualizar o currentLead também se estiver aberto no diálogo
-		if (currentLead && currentLead.id === leadData.id) {
+		updateCachedLead(leadData.id, (lead) => {
+			const espelhoConcluidoAgora =
+				!lead.espelhoProcessado && !!leadData.espelhoProcessado && !leadData.aguardandoEspelho;
+			const payloadEspelhoResumido =
+				leadData.textoDOEspelho === "[Omitido - espelho presente]" ||
+				(!!leadData.espelhoProcessado &&
+					!leadData.aguardandoEspelho &&
+					leadData.textoDOEspelho == null &&
+					leadData.espelhoCorrecao == null);
+
+			if (espelhoConcluidoAgora && payloadEspelhoResumido) {
+				shouldRefreshFromServer = true;
+			}
+
+			return { ...lead, ...leadData };
+		});
+
+		// ✅ Atualizar o currentLead com todos os dados — dialogs protegem suas edições localmente
+		if (currentLeadRef.current?.id === leadData.id) {
 			setCurrentLead((prev: any) => (prev ? { ...prev, ...leadData } : null));
+		}
+
+		if (shouldRefreshFromServer) {
+			console.log(`[SSE] Payload resumido de espelho recebido para ${leadData.id}; buscando lead individual...`);
+			void refreshLeadFromServer(leadData.id).catch((err) =>
+				console.error("[SSE] Erro ao buscar lead individual:", err),
+			);
 		}
 
 		console.log(`[SSE] Lead ${leadData.id} atualizado localmente:`, {
@@ -342,19 +519,20 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 	const handleSaveLead = async (leadData: any) => {
 		// Verificar se a edição é interna (do diálogo) ou externa (de outra parte da aplicação)
 		const isInternalEdit = leadData._internal;
-		const forceUpdate = leadData._forceUpdate;
 		const isEspecialidadeUpdate = leadData._especialidadeUpdate;
 
 		// Remover flags temporárias antes de enviar para a API
-		const { _internal, _forceUpdate, _refresh, _skipDialog, _especialidadeUpdate, ...dataToSend } = leadData;
+		const dataToSend = { ...leadData };
+		delete dataToSend._internal;
+		delete dataToSend._forceUpdate;
+		delete dataToSend._refresh;
+		delete dataToSend._skipDialog;
+		delete dataToSend._especialidadeUpdate;
 
 		// Se for apenas atualização de especialidade, só atualizar estado local
-		if (isEspecialidadeUpdate && !forceUpdate) {
-			// Atualizar apenas o lead atual no estado local (a API já foi chamada no EspelhoPadraoCell)
-			setLeads((prevLeads) => prevLeads.map((lead) => (lead.id === leadData.id ? { ...lead, ...dataToSend } : lead)));
-
-			// Atualizar o currentLead também para manter o dialog sincronizado
-			if (currentLead && currentLead.id === leadData.id) {
+		if (isEspecialidadeUpdate) {
+			mergeLeadIntoCache(dataToSend);
+			if (currentLeadRef.current?.id === leadData.id) {
 				setCurrentLead((prev: LeadChatwit | null) => (prev ? { ...prev, ...dataToSend } : null));
 			}
 
@@ -372,28 +550,17 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 			});
 
 			if (response.ok) {
-				// Se for uma edição interna, apenas atualizar o lead atual sem recarregar tudo
-				if (isInternalEdit && !forceUpdate) {
-					// Atualizar apenas o lead atual no estado
-					setLeads((prevLeads) =>
-						prevLeads.map((lead) => (lead.id === leadData.id ? { ...lead, ...dataToSend } : lead)),
-					);
+				mergeLeadIntoCache(dataToSend);
 
-					// Atualizar o currentLead também para manter o dialog sincronizado
-					if (currentLead && currentLead.id === leadData.id) {
-						setCurrentLead((prev: LeadChatwit | null) => (prev ? { ...prev, ...dataToSend } : null));
-					}
-				}
-				// Se forçar atualização ou não for uma edição interna, recarregar a lista completa
-				else if (forceUpdate || !isInternalEdit) {
-					fetchLeads();
+				if (!isInternalEdit || currentLeadRef.current?.id === leadData.id) {
+					setCurrentLead((prev: LeadChatwit | null) => (prev ? { ...prev, ...dataToSend } : prev));
 				}
 
 				return Promise.resolve();
-			} else {
-				const data = await response.json();
-				throw new Error(data.error || "Erro ao atualizar lead");
 			}
+
+			const data = await response.json();
+			throw new Error(data.error || "Erro ao atualizar lead");
 		} catch (error) {
 			console.error("Erro ao atualizar lead:", error);
 			toast.error("Erro", {
@@ -407,7 +574,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 
 	const handleToggleAllLeads = (checked: boolean) => {
 		if (checked) {
-			setSelectedLeads(leads.map((lead) => lead.id));
+			setSelectedLeads(displayedLeads.map((lead) => lead.id));
 		} else {
 			setSelectedLeads([]);
 		}
@@ -449,12 +616,12 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 				})),
 				arquivos_pdf: lead.pdfUnificado
 					? [
-						{
-							id: lead.id,
-							url: lead.pdfUnificado,
-							nome: "PDF Unificado",
-						},
-					]
+							{
+								id: lead.id,
+								url: lead.pdfUnificado,
+								nome: "PDF Unificado",
+							},
+						]
 					: [],
 				arquivos_imagens_manuscrito: imagensConvertidas.map((url: string, index: number) => ({
 					id: `${lead.id}-manuscrito-${index}`,
@@ -463,11 +630,11 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 				})),
 				recursos: lead.datasRecurso
 					? JSON.parse(lead.datasRecurso).map((data: string, index: number) => ({
-						id: `${lead.id}-recurso-${index}`,
-						tipo: "recurso",
-						status: "realizado",
-						data_criacao: data,
-					}))
+							id: `${lead.id}-recurso-${index}`,
+							tipo: "recurso",
+							status: "realizado",
+							data_criacao: data,
+						}))
 					: [],
 				observacoes: lead.anotacoes || "",
 				metadata: {
@@ -509,7 +676,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 		setConfirmBatchDeleteFiles(false);
 
 		try {
-			const selectedLeadsData = leads.filter((lead) => selectedLeads.includes(lead.id));
+			const selectedLeadsData = displayedLeads.filter((lead) => selectedLeads.includes(lead.id));
 
 			toast("Iniciando exclusão", {
 				description: `Excluindo todos os arquivos de ${selectedLeadsData.length} leads selecionados. Esta operação pode demorar alguns minutos.`,
@@ -636,11 +803,11 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 						aguardandoManuscrito: false,
 						...(temEspelhoIndividual && !lead.espelhoBibliotecaId
 							? {
-								textoDOEspelho: undefined,
-								espelhoCorrecao: undefined,
-								espelhoProcessado: false,
-								aguardandoEspelho: false,
-							}
+									textoDOEspelho: undefined,
+									espelhoCorrecao: undefined,
+									espelhoProcessado: false,
+									aguardandoEspelho: false,
+								}
 							: {}),
 						analiseUrl: undefined,
 						analiseProcessada: false,
@@ -663,9 +830,8 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 				}
 			}
 
-			// Limpar seleção e recarregar lista
+			// Limpar seleção sem revalidar a lista inteira
 			setSelectedLeads([]);
-			fetchLeads();
 
 			toast("Exclusão concluída", {
 				description: `Todos os arquivos foram excluídos dos ${selectedLeadsData.length} leads selecionados!`,
@@ -686,7 +852,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 		setConfirmBatchDeleteLeads(false);
 
 		try {
-			const selectedLeadsData = leads.filter((lead) => selectedLeads.includes(lead.id));
+			const selectedLeadsData = displayedLeads.filter((lead) => selectedLeads.includes(lead.id));
 
 			toast("Iniciando exclusão", {
 				description: `Excluindo ${selectedLeadsData.length} leads selecionados. Esta operação não pode ser desfeita.`,
@@ -706,6 +872,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 						throw new Error(data.error || `Erro ao excluir lead ${lead.id}`);
 					}
 
+					removeLeadFromCache(lead.id);
 					console.log(`[BatchDeleteLeads] Lead ${lead.id} excluído com sucesso`);
 				} catch (error: any) {
 					console.error(`[BatchDeleteLeads] Erro ao processar lead ${lead.id}:`, error);
@@ -715,9 +882,8 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 				}
 			}
 
-			// Limpar seleção e recarregar lista
+			// Limpar seleção sem refresh automático da página/lista
 			setSelectedLeads([]);
-			fetchLeads();
 
 			toast("Exclusão concluída", {
 				description: `${selectedLeadsData.length} leads foram excluídos com sucesso!`,
@@ -737,10 +903,9 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 	return (
 		<div className="space-y-4 bg-background">
 			{/* Gerenciador de Conexões SSE */}
-			<SSEConnectionManager
-				leads={leads}
+			<SSEUserConnection
 				onLeadUpdate={(lead) => handleEditLead({ ...lead, _skipDialog: true })}
-				onForceRefresh={fetchLeads}
+				onForceRefresh={revalidateLeads}
 			/>
 
 			{selectedLeads.length > 0 && (
@@ -779,7 +944,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 							Excluir Leads
 						</Button>
 						<BatchProcessorTrigger
-							selectedLeads={leads
+							selectedLeads={displayedLeads
 								.filter((lead) => selectedLeads.includes(lead.id))
 								.map(
 									(lead) =>
@@ -789,7 +954,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 											manuscrito: (lead.provaManuscrita as string) || undefined,
 										}) as ExtendedLead,
 								)}
-							onUpdate={fetchLeads}
+							onUpdate={revalidateLeads}
 						/>
 						<Button
 							variant="outline"
@@ -805,12 +970,42 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 				</div>
 			)}
 
-			{isLoading || initialLoading ? (
+			<div className="flex flex-col gap-3 rounded-md border border-border bg-card p-3">
+				<div className="flex flex-wrap gap-2">
+					<Button
+						variant={visibilityMode === "visible" ? "default" : "outline"}
+						onClick={() => setVisibilityMode("visible")}
+					>
+						Com arquivos
+					</Button>
+					<Button
+						variant={visibilityMode === "hidden" ? "default" : "outline"}
+						onClick={() => setVisibilityMode("hidden")}
+					>
+						Ocultos
+					</Button>
+					<Button variant={visibilityMode === "all" ? "default" : "outline"} onClick={() => setVisibilityMode("all")}>
+						Todos
+					</Button>
+				</div>
+				<p className="text-sm text-muted-foreground">
+					Leads sem arquivos ficam ocultos por padrão. Use a opção <strong>SEMPRE EXIBIR</strong> dentro do detalhe do
+					lead para mantê-lo visível mesmo com a célula de arquivos zerada.
+				</p>
+			</div>
+
+			{showLoadingState ? (
 				<div className="flex justify-center items-center py-20 min-h-[400px]">
 					<img src="/animations/broto.svg" alt="Carregando" className="h-72 w-72" />
 				</div>
-			) : leads.length === 0 ? (
-				<div className="text-center py-8 text-muted-foreground">Nenhum lead encontrado.</div>
+			) : displayedLeads.length === 0 ? (
+				<div className="text-center py-8 text-muted-foreground">
+					{visibilityMode === "hidden"
+						? "Nenhum lead oculto encontrado."
+						: visibilityMode === "visible"
+							? "Nenhum lead com arquivos para exibir."
+							: "Nenhum lead encontrado."}
+				</div>
 			) : (
 				<div className="overflow-x-auto bg-card rounded-md border border-border">
 					<Table className="w-full border-border">
@@ -818,7 +1013,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 							<TableRow className="border-border hover:bg-muted/50 h-12">
 								<TableHead className="min-w-[40px] w-[40px] align-middle text-card-foreground sticky left-0 bg-muted/50 z-20 px-1">
 									<Checkbox
-										checked={leads.length > 0 && selectedLeads.length === leads.length}
+										checked={displayedLeads.length > 0 && selectedLeads.length === displayedLeads.length}
 										onCheckedChange={handleToggleAllLeads}
 										aria-label="Selecionar todos os leads"
 										className="border-border"
@@ -850,7 +1045,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 							</TableRow>
 						</TableHeader>
 						<TableBody>
-							{leads.map((lead) => (
+							{displayedLeads.map((lead) => (
 								<LeadItem
 									key={lead.id}
 									lead={lead}
@@ -861,7 +1056,6 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 									onUnificar={handleUnificarArquivos}
 									onConverter={handleConverterEmImagens}
 									onDigitarProva={handleDigitarProva}
-									onRefresh={fetchLeads}
 									isUnifying={isUnifying}
 									isConverting={isConverting}
 									espelhosPadrao={getEspelhosPadrao(lead.usuarioId)}
@@ -873,7 +1067,7 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 				</div>
 			)}
 
-			{leads.length > 0 && (
+			{pagination.total > 0 && (
 				<div className="flex items-center justify-between bg-card p-4 rounded-md border border-border">
 					<div className="text-sm text-muted-foreground">
 						Exibindo {(pagination.page - 1) * pagination.limit + 1} a{" "}
@@ -882,16 +1076,16 @@ export function LeadsList({ searchQuery, onRefresh, initialLoading, refreshCount
 					<div className="flex gap-2">
 						<Button
 							variant="outline"
-							disabled={pagination.page === 1 || isLoading}
-							onClick={() => setPagination((prev) => ({ ...prev, page: prev.page - 1 }))}
+							disabled={pagination.page === 1 || isLoadingLeads}
+							onClick={() => setPaginationState((prev) => ({ ...prev, page: prev.page - 1 }))}
 							className="border-border hover:bg-accent"
 						>
 							Anterior
 						</Button>
 						<Button
 							variant="outline"
-							disabled={pagination.page === pagination.totalPages || isLoading}
-							onClick={() => setPagination((prev) => ({ ...prev, page: prev.page + 1 }))}
+							disabled={pagination.page === pagination.totalPages || isLoadingLeads}
+							onClick={() => setPaginationState((prev) => ({ ...prev, page: prev.page + 1 }))}
 							className="border-border hover:bg-accent"
 						>
 							Próximo

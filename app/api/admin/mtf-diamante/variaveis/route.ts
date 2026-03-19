@@ -4,7 +4,9 @@ import { getPrismaInstance } from "@/lib/connections";
 import { formatMtfLoteDateTime } from "@/lib/mtf-diamante/lote-date-time";
 import { Prisma } from "@prisma/client";
 import { parseCurrencyToCents } from "@/lib/payment/parse-currency";
+import { createLogger } from "@/lib/utils/logger";
 
+const log = createLogger("API.MTFVariables");
 const MIN_ANALYSIS_AMOUNT_CENTS = 100;
 
 // Função helper para obter descrição das variáveis
@@ -184,14 +186,13 @@ export async function GET(request: NextRequest) {
 		// Combinar todas as variáveis
 		const todasVariaveis = [...variaveisNormais, ...variaveisLotes];
 
-		console.log(
-			`[MTF Variables] Retornando ${todasVariaveis.length} variáveis para usuário ${session.user.id}:`,
-			todasVariaveis.map((v) => `${v.chave} (${v.tipo})`),
-		);
+		log.info(`Retornando ${todasVariaveis.length} variáveis para usuário ${session.user.id}`, {
+			variaveis: todasVariaveis.map((v) => `${v.chave} (${v.tipo})`),
+		});
 
 		return NextResponse.json({ success: true, data: todasVariaveis });
 	} catch (error) {
-		console.error("Erro em GET /variaveis:", error);
+		log.error("Erro em GET /variaveis", error as Error);
 		return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 });
 	}
 }
@@ -292,12 +293,12 @@ export async function POST(request: NextRequest) {
 			await redis.del(`mtf_variables:${session.user.id}`);
 			await redis.del(`mtf_lotes:${session.user.id}`);
 		} catch (cacheError) {
-			console.warn("[MTF Variaveis] Erro ao invalidar cache:", cacheError);
+			log.warn("Erro ao invalidar cache", cacheError as Error);
 		}
 
 		return NextResponse.json({ success: true, data: variaveisCriadas });
 	} catch (error) {
-		console.error("Erro em POST /variaveis:", error);
+		log.error("Erro em POST /variaveis", error as Error);
 		return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 });
 	}
 }

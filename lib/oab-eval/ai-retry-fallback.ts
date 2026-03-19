@@ -27,15 +27,29 @@ function addJitter(delayMs: number): number {
 	return Math.round(delayMs * jitterFactor);
 }
 
+function buildRetryDelays(baseDelayMs: number, maxDelayMs: number, retries: number): number[] {
+	return Array.from({ length: retries }, (_, index) => Math.min(baseDelayMs * 2 ** index, maxDelayMs));
+}
+
+interface RetryConfig {
+	retries?: number;
+	baseDelayMs?: number;
+	maxDelayMs?: number;
+}
+
 /**
  * Executa uma função com retry automático para erros temporários.
  * Backoff com jitter: ~2s → ~4s → ~10s (3 retries antes de fallback).
  * Jitter evita thundering herd quando múltiplas páginas fazem retry simultâneo.
  */
-export async function withRetry<T>(fn: () => Promise<T>, context: string): Promise<T> {
+export async function withRetry<T>(fn: () => Promise<T>, context: string, config?: RetryConfig): Promise<T> {
 	let lastError: unknown;
+	const retries = Math.max(0, config?.retries ?? MAX_RETRIES);
+	const baseDelayMs = Math.max(250, config?.baseDelayMs ?? RETRY_DELAYS_MS[0] ?? 2000);
+	const maxDelayMs = Math.max(baseDelayMs, config?.maxDelayMs ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1] ?? 10000);
+	const retryDelays = buildRetryDelays(baseDelayMs, maxDelayMs, retries);
 
-	for (let attempt = 1; attempt <= MAX_RETRIES + 1; attempt++) {
+	for (let attempt = 1; attempt <= retries + 1; attempt++) {
 		try {
 			return await fn();
 		} catch (error: any) {
@@ -47,7 +61,7 @@ export async function withRetry<T>(fn: () => Promise<T>, context: string): Promi
 
 			// Log detalhado do erro para diagnóstico
 			console.warn(
-				`[OAB::Retry] ${context} | attempt ${attempt}/${MAX_RETRIES + 1}` +
+				`[OAB::Retry] ${context} | attempt ${attempt}/${retries + 1}` +
 				` | status: ${status ?? "N/A"}` +
 				` | code: ${errorCode ?? "N/A"}` +
 				` | type: ${errorType ?? "N/A"}` +
@@ -62,13 +76,13 @@ export async function withRetry<T>(fn: () => Promise<T>, context: string): Promi
 				throw error;
 			}
 
-			if (!isRetryable || attempt > MAX_RETRIES) {
+			if (!isRetryable || attempt > retries) {
 				throw error;
 			}
 
-			const baseDelay = RETRY_DELAYS_MS[attempt - 1] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1];
+			const baseDelay = retryDelays[attempt - 1] ?? retryDelays[retryDelays.length - 1] ?? baseDelayMs;
 			const delay = addJitter(baseDelay);
-			console.warn(`[OAB::Retry] ${context} retryable (${status}), retry ${attempt}/${MAX_RETRIES} em ${delay}ms`);
+			console.warn(`[OAB::Retry] ${context} retryable (${status}), retry ${attempt}/${retries} em ${delay}ms`);
 			await new Promise((r) => setTimeout(r, delay));
 		}
 	}

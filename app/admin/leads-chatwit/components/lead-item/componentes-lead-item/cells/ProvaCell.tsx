@@ -1,8 +1,10 @@
 import { TableCell } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Edit3 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { AlertCircle, Edit3 } from "lucide-react";
 import type { ProvaCellProps } from "../types";
 import { LeadContextMenu, type ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
+import { hasConvertedImages } from "../utils";
 
 
 interface ProvaCellExtendedProps extends ProvaCellProps {
@@ -27,6 +29,9 @@ export function ProvaCell({
 	onContextMenuAction,
 	onDigitarClick,
 }: ProvaCellExtendedProps) {
+	const hasImages = hasConvertedImages(lead);
+	const precisaImagens = !hasImages && !localProvaState.provaProcessada && !localProvaState.aguardandoProva;
+
 	return (
 		<TableCell className="min-w-[90px] max-w-[130px] p-2 align-middle">
 			<LeadContextMenu
@@ -53,6 +58,25 @@ export function ProvaCell({
 							style={{ minHeight: "56px" }}
 						/>
 					</button>
+				) : precisaImagens ? (
+					<TooltipProvider>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									variant="outline"
+									disabled={true}
+									className="w-full opacity-60 cursor-not-allowed text-xs px-2 py-1 h-auto min-h-8 whitespace-pre-line"
+									key={`prova-btn-${refreshKey}-disabled`}
+								>
+									<AlertCircle className="h-4 w-4 mr-1 text-orange-500" />
+									Precisa de Imagens
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="top" className="text-xs max-w-60">
+								<p>Converta o PDF em imagens antes de digitar a prova.</p>
+							</TooltipContent>
+						</Tooltip>
+					</TooltipProvider>
 				) : (
 					<Button
 						variant="outline"

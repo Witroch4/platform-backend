@@ -7,24 +7,47 @@
  * Feature flag: BLUEPRINT_ANALISE=true
  */
 
-import type { Job } from "bullmq";
+import { UnrecoverableError, type Job } from "bullmq";
 import { getPrismaInstance } from "../../lib/connections";
 import { runAnalysisAgent } from "../../lib/oab-eval/analysis-agent";
 import type { AnalysisJobData, AnalysisJobResult } from "../../lib/oab-eval/analysis-queue";
+import {
+	clearLeadOperationCancel,
+	createLeadOperationCancelMonitor,
+	emitLeadOperationEvent,
+	isLeadOperationCancelRequested,
+	isLeadOperationCanceledError,
+} from "../../lib/oab-eval/operation-control";
+import { getLeadOperationLeadData } from "../../lib/oab-eval/operation-service";
+import { createLogger } from "../../lib/utils/logger";
 
 // Lazy import to avoid Edge Runtime issues
 const getSseManager = () => import("../../lib/sse-manager").then((m) => m.sseManager);
+const log = createLogger("AnalysisWorker");
 
 /**
  * Processor principal para jobs de análise comparativa (Prova × Espelho).
  * Chamado pelo BullMQ Worker quando um job é retirado da fila oab-analysis.
  */
-export async function processAnalysisGenerationTask(job: Job<AnalysisJobData>): Promise<AnalysisJobResult> {
-	console.log(`[AnalysisWorker] 🔄 Iniciando processamento do job ${job.id}`);
-	console.log(`[AnalysisWorker] 📋 Lead: ${job.data.leadId}`);
-	console.log(`[AnalysisWorker] 🎛️ Provider: ${job.data.selectedProvider || "OPENAI (padrão)"}`);
+export async function processAnalysisGenerationTask(
+	job: Job<AnalysisJobData>,
+	_token?: string,
+	signal?: AbortSignal,
+): Promise<AnalysisJobResult> {
+	log.info("Iniciando processamento", {
+		jobId: job.id,
+		leadId: job.data.leadId,
+		provider: job.data.selectedProvider || "OPENAI",
+	});
 
 	const startTime = Date.now();
+	const jobId = String(job.id);
+	const cancelMonitor = createLeadOperationCancelMonitor({
+		leadId: job.data.leadId,
+		stage: "analysis",
+		jobId,
+		upstreamSignal: signal,
+	});
 
 	try {
 		const { leadId, textoProva, textoEspelho, selectedProvider } = job.data;
@@ -40,11 +63,29 @@ export async function processAnalysisGenerationTask(job: Job<AnalysisJobData>): 
 						: 50;
 
 			await job.updateProgress(progress);
-			console.log(`[AnalysisWorker] [${leadId}] ${message} (${progress}%)`);
+			log.info(`[${leadId}] ${message}`, { progress });
+			await emitLeadOperationEvent({
+				leadId,
+				jobId,
+				stage: "analysis",
+				status: "processing",
+				message,
+				progress,
+				queueState: "active",
+			});
 		};
 
 		// Executar agente de análise
-		console.log(`[AnalysisWorker] 🤖 Chamando agente de análise para lead ${leadId}...`);
+		log.info("Chamando agente de análise", { leadId, jobId });
+		await emitLeadOperationEvent({
+			leadId,
+			jobId,
+			stage: "analysis",
+			status: "processing",
+			message: "Processando análise.",
+			progress: 5,
+			queueState: "active",
+		});
 
 		const result = await runAnalysisAgent({
 			leadId,
@@ -52,16 +93,27 @@ export async function processAnalysisGenerationTask(job: Job<AnalysisJobData>): 
 			textoEspelho,
 			selectedProvider,
 			onProgress,
+			abortSignal: cancelMonitor.signal,
 		});
 
 		await job.updateProgress(90);
 
 		if (!result.success || !result.analysis) {
 			const errorMsg = result.error || "Agente retornou resultado vazio";
-			console.error(`[AnalysisWorker] ❌ Análise falhou: ${errorMsg}`);
+			log.error("Análise falhou", { leadId, error: errorMsg });
 
 			// Atualizar lead para remover flag de aguardando
 			await updateLeadOnFailure(leadId, errorMsg);
+			await clearLeadOperationCancel(jobId);
+			await emitLeadOperationEvent({
+				leadId,
+				jobId,
+				stage: "analysis",
+				status: "failed",
+				message: "Falha ao gerar análise.",
+				error: errorMsg,
+				queueState: "failed",
+			});
 
 			throw new Error(errorMsg);
 		}
@@ -69,18 +121,31 @@ export async function processAnalysisGenerationTask(job: Job<AnalysisJobData>): 
 		const { analysis } = result;
 		const elapsedMs = Date.now() - startTime;
 
-		console.log(
-			`[AnalysisWorker] ✅ Análise gerada em ${(elapsedMs / 1000).toFixed(1)}s ` +
-				`(${analysis.pontosPeca.length} pontos peça, ${analysis.pontosQuestoes.length} pontos questões, ` +
-				`provider: ${result.provider}, modelo: ${result.model})`,
-		);
+		log.info("Análise gerada", {
+			leadId,
+			elapsedMs,
+			pontosPeca: analysis.pontosPeca.length,
+			pontosQuestoes: analysis.pontosQuestoes.length,
+			provider: result.provider,
+			model: result.model,
+		});
 
 		// Salvar resultado no banco via update direto (sem webhook intermediário)
 		await job.updateProgress(95);
 		await saveAnalysisResult(leadId, analysis);
 
 		await job.updateProgress(100);
-		console.log(`[AnalysisWorker] ✅ Job ${job.id} completado com sucesso`);
+		await clearLeadOperationCancel(jobId);
+		await emitLeadOperationEvent({
+			leadId,
+			jobId,
+			stage: "analysis",
+			status: "completed",
+			message: "Análise concluída com sucesso.",
+			progress: 100,
+			queueState: "completed",
+		});
+		log.info("Job completado com sucesso", { jobId, leadId });
 
 		return {
 			leadId,
@@ -89,16 +154,60 @@ export async function processAnalysisGenerationTask(job: Job<AnalysisJobData>): 
 		};
 	} catch (error: any) {
 		const elapsedMs = Date.now() - startTime;
-		console.error(`[AnalysisWorker] ❌ Erro após ${(elapsedMs / 1000).toFixed(1)}s:`, error);
+		const userCanceled = isLeadOperationCanceledError(error) || (await isLeadOperationCancelRequested(jobId));
+
+		if (userCanceled) {
+			await getPrismaInstance().leadOabData.updateMany({
+				where: { id: job.data.leadId },
+				data: { aguardandoAnalise: false },
+			});
+			await clearLeadOperationCancel(jobId);
+			await emitLeadOperationEvent({
+				leadId: job.data.leadId,
+				jobId,
+				stage: "analysis",
+				status: "canceled",
+				message: "Análise cancelada pelo usuário.",
+				queueState: "failed",
+			});
+
+			try {
+				const sseManager = await getSseManager();
+				await sseManager.sendNotification(job.data.leadId, {
+					type: "leadUpdate",
+					message: "A análise foi cancelada.",
+					leadData: await getLeadOperationLeadData(job.data.leadId),
+					timestamp: new Date().toISOString(),
+				});
+			} catch (sseError) {
+				log.warn("Falha ao enviar leadUpdate após cancelamento", sseError as Error);
+			}
+
+			throw new UnrecoverableError("Análise cancelada pelo usuário.");
+		}
+
+		log.error("Erro no processamento", { jobId, leadId: job.data.leadId, elapsedMs }, error);
 
 		// Tentar atualizar o lead para desmarcar aguardandoAnalise
 		try {
 			await updateLeadOnFailure(job.data.leadId, error.message || "Erro desconhecido");
+			await clearLeadOperationCancel(jobId);
+			await emitLeadOperationEvent({
+				leadId: job.data.leadId,
+				jobId,
+				stage: "analysis",
+				status: "failed",
+				message: "Falha ao processar análise.",
+				error: error.message || "Erro desconhecido",
+				queueState: "failed",
+			});
 		} catch (updateErr) {
-			console.error("[AnalysisWorker] ❌ Erro ao atualizar lead após falha:", updateErr);
+			log.error("Erro ao atualizar lead após falha", updateErr as Error);
 		}
 
 		throw error;
+	} finally {
+		await cancelMonitor.cleanup();
 	}
 }
 
@@ -112,7 +221,7 @@ export async function processAnalysisGenerationTask(job: Job<AnalysisJobData>): 
 async function saveAnalysisResult(leadId: string, analysis: any): Promise<void> {
 	const prisma = getPrismaInstance();
 
-	console.log(`[AnalysisWorker] 💾 Salvando resultado da análise para lead ${leadId}`);
+	log.info("Salvando resultado da análise", { leadId });
 
 	// Verificar se o lead existe
 	const leadExistente = await prisma.leadOabData.findUnique({
@@ -148,7 +257,7 @@ async function saveAnalysisResult(leadId: string, analysis: any): Promise<void> 
 		);
 	}
 
-	console.log(`[AnalysisWorker] ✅ Análise salva com sucesso para lead ${leadId}`);
+	log.info("Análise salva com sucesso", { leadId });
 
 	// Enviar notificação SSE
 	try {
@@ -161,12 +270,12 @@ async function saveAnalysisResult(leadId: string, analysis: any): Promise<void> 
 		});
 
 		if (success) {
-			console.log(`[AnalysisWorker] ✅ Notificação SSE enviada para lead ${leadId}`);
+			log.info("Notificação SSE enviada", { leadId });
 		} else {
-			console.warn(`[AnalysisWorker] ⚠️ Falha ao enviar SSE para lead ${leadId}`);
+			log.warn("Falha ao enviar SSE", { leadId });
 		}
 	} catch (sseErr) {
-		console.error(`[AnalysisWorker] ❌ Erro ao enviar SSE:`, sseErr);
+		log.error("Erro ao enviar SSE", sseErr as Error);
 	}
 }
 
@@ -177,12 +286,17 @@ async function updateLeadOnFailure(leadId: string, errorMessage: string): Promis
 	const prisma = getPrismaInstance();
 
 	try {
-		await prisma.leadOabData.update({
+		const result = await prisma.leadOabData.updateMany({
 			where: { id: leadId },
 			data: {
 				aguardandoAnalise: false,
 			},
 		});
+
+		if (result.count === 0) {
+			log.warn("Lead não encontrado ao limpar aguardandoAnalise", { leadId, errorMessage });
+			return;
+		}
 
 		// Notificar erro via SSE
 		const sseManager = await getSseManager();
@@ -192,6 +306,6 @@ async function updateLeadOnFailure(leadId: string, errorMessage: string): Promis
 			timestamp: new Date().toISOString(),
 		});
 	} catch (e: any) {
-		console.error(`[AnalysisWorker] ❌ Erro ao atualizar lead on failure:`, e);
+		log.error("Erro ao atualizar lead on failure", e);
 	}
 }

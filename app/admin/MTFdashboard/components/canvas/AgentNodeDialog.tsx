@@ -127,6 +127,10 @@ export function AgentNodeDialog({
 		maxOutputTokens: number;
 		thinkingLevel: string | null;
 		reasoningEffort: string | null;
+		timeoutMs: number;
+		retryAttempts: number;
+		retryBaseDelayMs: number;
+		retryMaxDelayMs: number;
 	}>>({});
 
 	const buildProviderCacheFromDraft = (source: AgentBlueprintDraft) => {
@@ -142,6 +146,10 @@ export function AgentNodeDialog({
 				maxOutputTokens: savedCache?.OPENAI?.maxOutputTokens ?? source.maxOutputTokens ?? 0,
 				thinkingLevel: savedCache?.OPENAI?.thinkingLevel ?? null,
 				reasoningEffort: savedCache?.OPENAI?.reasoningEffort ?? source.reasoningEffort ?? null,
+				timeoutMs: savedCache?.OPENAI?.timeoutMs ?? 0,
+				retryAttempts: savedCache?.OPENAI?.retryAttempts ?? 0,
+				retryBaseDelayMs: savedCache?.OPENAI?.retryBaseDelayMs ?? 0,
+				retryMaxDelayMs: savedCache?.OPENAI?.retryMaxDelayMs ?? 0,
 			},
 			GEMINI: {
 				model: savedCache?.GEMINI?.model ?? (draftUsesGemini ? source.model : geminiDefault),
@@ -149,6 +157,10 @@ export function AgentNodeDialog({
 				maxOutputTokens: savedCache?.GEMINI?.maxOutputTokens ?? source.maxOutputTokens ?? 0,
 				thinkingLevel: savedCache?.GEMINI?.thinkingLevel ?? source.thinkingLevel ?? "high",
 				reasoningEffort: savedCache?.GEMINI?.reasoningEffort ?? null,
+				timeoutMs: savedCache?.GEMINI?.timeoutMs ?? 0,
+				retryAttempts: savedCache?.GEMINI?.retryAttempts ?? 0,
+				retryBaseDelayMs: savedCache?.GEMINI?.retryBaseDelayMs ?? 0,
+				retryMaxDelayMs: savedCache?.GEMINI?.retryMaxDelayMs ?? 0,
 			},
 		};
 	};
@@ -597,6 +609,50 @@ export function AgentNodeDialog({
 												</Select>
 											</div>
 										</div>
+										<div className="grid grid-cols-2 gap-3 mt-3">
+											<div className="space-y-1.5">
+												<Label className="text-xs">Timeout (ms)</Label>
+												<Input
+													type="number"
+													min="0"
+													value={geminiConfig?.timeoutMs ?? 0}
+													onChange={(e) => updateProviderConfig("GEMINI", { timeoutMs: parseInt(e.target.value || "0", 10) })}
+													className="font-mono"
+												/>
+											</div>
+											<div className="space-y-1.5">
+												<Label className="text-xs">Retries</Label>
+												<Input
+													type="number"
+													min="0"
+													value={geminiConfig?.retryAttempts ?? 0}
+													onChange={(e) => updateProviderConfig("GEMINI", { retryAttempts: parseInt(e.target.value || "0", 10) })}
+													className="font-mono"
+												/>
+											</div>
+										</div>
+										<div className="grid grid-cols-2 gap-3 mt-3">
+											<div className="space-y-1.5">
+												<Label className="text-xs">Retry Base (ms)</Label>
+												<Input
+													type="number"
+													min="0"
+													value={geminiConfig?.retryBaseDelayMs ?? 0}
+													onChange={(e) => updateProviderConfig("GEMINI", { retryBaseDelayMs: parseInt(e.target.value || "0", 10) })}
+													className="font-mono"
+												/>
+											</div>
+											<div className="space-y-1.5">
+												<Label className="text-xs">Retry Max (ms)</Label>
+												<Input
+													type="number"
+													min="0"
+													value={geminiConfig?.retryMaxDelayMs ?? 0}
+													onChange={(e) => updateProviderConfig("GEMINI", { retryMaxDelayMs: parseInt(e.target.value || "0", 10) })}
+													className="font-mono"
+												/>
+											</div>
+										</div>
 									</div>
 
 									{/* OPENAI */}
@@ -674,6 +730,50 @@ export function AgentNodeDialog({
 													min="0"
 													value={openAiConfig?.maxOutputTokens ?? 0}
 													onChange={(e) => updateProviderConfig("OPENAI", { maxOutputTokens: parseInt(e.target.value || "0", 10) })}
+													className="font-mono"
+												/>
+											</div>
+										</div>
+										<div className="grid grid-cols-2 gap-3 mt-3">
+											<div className="space-y-1.5">
+												<Label className="text-xs">Timeout (ms)</Label>
+												<Input
+													type="number"
+													min="0"
+													value={openAiConfig?.timeoutMs ?? 0}
+													onChange={(e) => updateProviderConfig("OPENAI", { timeoutMs: parseInt(e.target.value || "0", 10) })}
+													className="font-mono"
+												/>
+											</div>
+											<div className="space-y-1.5">
+												<Label className="text-xs">Retries</Label>
+												<Input
+													type="number"
+													min="0"
+													value={openAiConfig?.retryAttempts ?? 0}
+													onChange={(e) => updateProviderConfig("OPENAI", { retryAttempts: parseInt(e.target.value || "0", 10) })}
+													className="font-mono"
+												/>
+											</div>
+										</div>
+										<div className="grid grid-cols-2 gap-3 mt-3">
+											<div className="space-y-1.5">
+												<Label className="text-xs">Retry Base (ms)</Label>
+												<Input
+													type="number"
+													min="0"
+													value={openAiConfig?.retryBaseDelayMs ?? 0}
+													onChange={(e) => updateProviderConfig("OPENAI", { retryBaseDelayMs: parseInt(e.target.value || "0", 10) })}
+													className="font-mono"
+												/>
+											</div>
+											<div className="space-y-1.5">
+												<Label className="text-xs">Retry Max (ms)</Label>
+												<Input
+													type="number"
+													min="0"
+													value={openAiConfig?.retryMaxDelayMs ?? 0}
+													onChange={(e) => updateProviderConfig("OPENAI", { retryMaxDelayMs: parseInt(e.target.value || "0", 10) })}
 													className="font-mono"
 												/>
 											</div>

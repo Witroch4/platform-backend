@@ -1,9 +1,12 @@
 /**
- * Simples utilitário de log para debugar aplicações
+ * Utilitário de log estruturado com timestamp TZ, chaves key=value e truncamento de payloads grandes.
  */
 
 type LogLevel = "INFO" | "WARN" | "ERROR" | "DEBUG";
 type MaybeLogContext = Record<string, unknown> | undefined;
+
+const LOG_TZ = process.env.TZ || "America/Sao_Paulo";
+const LOG_MAX_VALUE_LENGTH = 2000; // Trunca valores maiores que 2000 chars nos logs
 
 function getLogContext(): MaybeLogContext {
 	const globalLogContext = globalThis as typeof globalThis & {
@@ -13,22 +16,6 @@ function getLogContext(): MaybeLogContext {
 	return globalLogContext.__SW_GET_LOG_CONTEXT__?.();
 }
 
-function getLogTimeZone() {
-	return process.env.LOG_TIMEZONE || process.env.TZ || "America/Sao_Paulo";
-}
-
-function formatTimestamp(date: Date, timeZone: string) {
-	return new Intl.DateTimeFormat("pt-BR", {
-		timeZone,
-		year: "numeric",
-		month: "2-digit",
-		day: "2-digit",
-		hour: "2-digit",
-		minute: "2-digit",
-		second: "2-digit",
-		hour12: false,
-	}).format(date);
-}
 
 function serializeError(error: Error) {
 	return {
@@ -88,42 +75,72 @@ function splitLogArgs(args: any[]) {
 	return { fields, extra };
 }
 
+function formatFieldValue(value: unknown, truncate: boolean): string {
+	if (value === null || value === undefined) return "";
+	if (typeof value === "string") {
+		if (truncate && value.length > LOG_MAX_VALUE_LENGTH) {
+			return `${value.slice(0, LOG_MAX_VALUE_LENGTH)}...[truncated ${value.length} chars]`;
+		}
+		return value;
+	}
+	if (typeof value === "number" || typeof value === "boolean") return String(value);
+	if (value instanceof Error) return `${value.name}: ${value.message}`;
+	try {
+		const json = JSON.stringify(value);
+		if (truncate && json.length > LOG_MAX_VALUE_LENGTH) {
+			return `${json.slice(0, LOG_MAX_VALUE_LENGTH)}...[truncated ${json.length} chars]`;
+		}
+		return json;
+	} catch {
+		return String(value);
+	}
+}
+
+function formatExtraFields(fields: Record<string, unknown>, truncate: boolean): string {
+	const parts: string[] = [];
+	for (const [key, val] of Object.entries(fields)) {
+		if (val === undefined || val === null) continue;
+		parts.push(`${key}=${formatFieldValue(val, truncate)}`);
+	}
+	return parts.length > 0 ? ` | ${parts.join(" ")}` : "";
+}
+
 function emitLog(level: LogLevel, module: string, message: string, args: any[]) {
 	const now = new Date();
-	const timeZone = getLogTimeZone();
 	const logContext = getLogContext() || {};
 	const { fields, extra } = splitLogArgs(args);
 
-	const entry = sanitizeLogValue({
-		timestamp: formatTimestamp(now, timeZone),
-		isoTimestamp: now.toISOString(),
-		tz: timeZone,
-		level,
-		module,
-		message,
-		...logContext,
-		...fields,
-		...(extra.length ? { extra } : {}),
-	});
+	// Merge context + fields, skip redundant metadata
+	const allFields = sanitizeLogValue({ ...logContext, ...fields }) as Record<string, unknown>;
+	// Remove fields already in the prefix
+	delete allFields.level;
+	delete allFields.module;
+	delete allFields.message;
 
-	const serialized = JSON.stringify(entry);
+	const truncate = level !== "DEBUG";
+	const extraStr = extra.length > 0 ? ` ${extra.map((e) => formatFieldValue(e, truncate)).join(" ")}` : "";
+	const fieldsStr = formatExtraFields(allFields, truncate);
+
+	const timestamp = now.toLocaleString("sv-SE", { timeZone: LOG_TZ }).replace(" ", "T") +
+		"." + String(now.getMilliseconds()).padStart(3, "0");
+	const line = `[${timestamp}] ${level} [${module}] ${message}${extraStr}${fieldsStr}`;
 
 	if (level === "ERROR") {
-		console.error(serialized);
+		console.error(line);
 		return;
 	}
 
 	if (level === "WARN") {
-		console.warn(serialized);
+		console.warn(line);
 		return;
 	}
 
 	if (level === "DEBUG") {
-		console.debug(serialized);
+		console.debug(line);
 		return;
 	}
 
-	console.log(serialized);
+	console.log(line);
 }
 
 /**

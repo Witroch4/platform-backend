@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Edit, MessageSquare, RefreshCw, Info, CircleDollarSign, ExternalLink } from "lucide-react";
@@ -45,6 +45,7 @@ export function DialogDetalheLead({ lead, open, onOpenChange, onEdit, isSaving =
 		anotacoes: lead?.anotacoes || "",
 		concluido: lead?.concluido || false,
 		fezRecurso: lead?.fezRecurso || false,
+		alwaysShowInLeadList: lead?.alwaysShowInLeadList || false,
 	});
 
 	const [datasRecurso, setDatasRecurso] = useState<Date[]>(() => {
@@ -58,6 +59,7 @@ export function DialogDetalheLead({ lead, open, onOpenChange, onEdit, isSaving =
 	const [showFullImage, setShowFullImage] = useState(false);
 	const [editingAnotacoes, setEditingAnotacoes] = useState(false);
 	const [showDatasRecurso, setShowDatasRecurso] = useState(false);
+	const formInitializedRef = useRef(false);
 
 	const displayName = lead?.name || "Lead sem nome";
 
@@ -188,14 +190,16 @@ export function DialogDetalheLead({ lead, open, onOpenChange, onEdit, isSaving =
 		}
 	}
 
+	// Só resetar form quando o dialog abre com lead novo, não durante SSE updates
 	useEffect(() => {
-		if (lead) {
+		if (lead && !formInitializedRef.current) {
 			setFormData({
 				nomeReal: lead.nomeReal || "",
 				email: lead.email || "",
 				anotacoes: lead.anotacoes || "",
 				concluido: lead.concluido || false,
 				fezRecurso: lead.fezRecurso || false,
+				alwaysShowInLeadList: lead.alwaysShowInLeadList || false,
 			});
 			try {
 				const dates = lead.datasRecurso
@@ -205,8 +209,14 @@ export function DialogDetalheLead({ lead, open, onOpenChange, onEdit, isSaving =
 			} catch {
 				setDatasRecurso([]);
 			}
+			formInitializedRef.current = true;
 		}
 	}, [lead]);
+
+	// Resetar flag quando dialog fecha — próxima abertura inicializa com dados frescos
+	useEffect(() => {
+		if (!open) formInitializedRef.current = false;
+	}, [open]);
 
 	return (
 		<>
@@ -377,6 +387,7 @@ export function DialogDetalheLead({ lead, open, onOpenChange, onEdit, isSaving =
 												Abrir Chat no Chatwit
 											</Button>
 										)}
+										{!lead?.leadUrl && <div className="text-sm text-muted-foreground">Link não disponível.</div>}
 									</div>
 
 									{/* Informações Adicionais em 2 colunas */}
@@ -439,6 +450,21 @@ export function DialogDetalheLead({ lead, open, onOpenChange, onEdit, isSaving =
 												onCheckedChange={(checked) => handleStatusChange("fezRecurso", checked)}
 											/>
 											<Label htmlFor="fezRecurso">Fez Recurso {formData.fezRecurso ? "Sim" : "Não"}</Label>
+										</div>
+										<div className="flex items-start gap-2 mt-3 rounded-md border border-border/60 bg-muted/40 p-3">
+											<Switch
+												id="alwaysShowInLeadList"
+												checked={formData.alwaysShowInLeadList}
+												onCheckedChange={(checked) => handleStatusChange("alwaysShowInLeadList", checked)}
+											/>
+											<div className="space-y-1">
+												<Label htmlFor="alwaysShowInLeadList">
+													SEMPRE EXIBIR {formData.alwaysShowInLeadList ? "Sim" : "Não"}
+												</Label>
+												<p className="text-xs text-muted-foreground">
+													Mantém este lead visível na lista principal mesmo quando a célula de arquivos estiver zerada.
+												</p>
+											</div>
 										</div>
 										{formData.fezRecurso && (
 											<div className="mt-2">

@@ -1,27 +1,29 @@
 "use client";
 
-import useSWR from "swr";
-import { chatwitLabelsApi } from "../lib/api-clients";
 import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { chatwitLabelsApi } from "../lib/api-clients";
+import { mtfDiamanteQueryKeys } from "../lib/query-keys";
 
 export interface ChatwitLabelOption {
-    title: string;
-    color: string;
+	title: string;
+	color: string;
 }
 
 export function useChatwitLabels() {
-    const { data, error, isLoading } = useSWR(
-        "/api/admin/mtf-diamante/chatwit-labels",
-        () => chatwitLabelsApi.getAll(),
-        {
-            revalidateOnFocus: false,
-            dedupingInterval: 60000, // 1 minuto
-        }
-    );
+	const { data, error, isLoading } = useQuery({
+		queryKey: mtfDiamanteQueryKeys.chatwitLabels(),
+		queryFn: chatwitLabelsApi.getAll,
+		staleTime: 60_000,
+		refetchOnWindowFocus: false,
+	});
 
-    return useMemo(() => ({
-        chatwitLabels: (data || []) as ChatwitLabelOption[],
-        isLoading,
-        error,
-    }), [data, isLoading, error]);
+	return useMemo(
+		() => ({
+			chatwitLabels: (data || []) as ChatwitLabelOption[],
+			isLoading,
+			error,
+		}),
+		[data, isLoading, error],
+	);
 }

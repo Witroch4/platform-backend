@@ -10,7 +10,7 @@ interface UseLeadHandlersProps {
 	lead: LeadChatwit;
 	onEdit: (lead: LeadChatwit) => void;
 	onDelete: (id: string) => void;
-	onUnificar: (id: string) => void;
+	onUnificar: (id: string) => void | Promise<void>;
 	onConverter: (id: string) => void;
 	onDigitarProva: (lead: LeadChatwit) => void;
 
@@ -84,6 +84,10 @@ interface UseLeadHandlersProps {
 	updateConsultoriaState: (value: boolean) => void;
 	forceRefresh: () => void;
 	forceServerRefresh: () => void; // Nova função para refresh explícito do servidor
+}
+
+interface SaveOptions {
+	silent?: boolean;
 }
 
 export function useLeadHandlers({
@@ -170,6 +174,24 @@ export function useLeadHandlers({
 		onDelete(lead.id);
 	};
 
+	const cancelLeadOperation = async (stage: "transcription" | "mirror" | "analysis") => {
+		const response = await fetch("/api/admin/leads-chatwit/operations/cancel", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				leadId: lead.id,
+				stage,
+			}),
+		});
+
+		const data = await response.json().catch(() => ({}));
+		if (!response.ok) {
+			throw new Error(data.error || "Não foi possível cancelar a operação.");
+		}
+
+		return data;
+	};
+
 	const handleViewDetails = () => {
 		setDetailsOpen(true);
 	};
@@ -248,14 +270,20 @@ export function useLeadHandlers({
 		}
 	};
 
-	const handleUnificarArquivos = (leadId: string) => {
+	const handleUnificarArquivos = async (leadId: string) => {
 		setProcessType("unify");
 		setShowProcessDialog(true);
 		setProcessStartTime(Date.now());
 
-		setTimeout(() => {
-			onUnificar(leadId);
-		}, 500);
+		// Aguarda um breve delay para a animação iniciar
+		await new Promise((resolve) => setTimeout(resolve, 500));
+
+		try {
+			await onUnificar(leadId);
+		} finally {
+			// Fecha o dialog de progresso quando a operação termina (sucesso ou erro)
+			setShowProcessDialog(false);
+		}
 	};
 
 	const handlePdfToImages = async () => {
@@ -302,16 +330,6 @@ export function useLeadHandlers({
 		updateManuscritoState({ aguardandoManuscrito: true });
 
 		try {
-			console.log("🔌 [Pre-Send] Forçando reconexão SSE para leadId:", lead.id);
-			window.dispatchEvent(
-				new CustomEvent("force-sse-reconnect", {
-					detail: { leadId: lead.id, reason: "pre-manuscrito-send" },
-				}),
-			);
-
-			await new Promise((resolve) => setTimeout(resolve, 2000));
-			console.log("✅ [Pre-Send] Aguardo de conexão SSE concluído");
-
 			// ⭐ Obter provider selecionado pelo switch no topo da coluna PROVA_CELL
 			const selectedProvider = getColumnProvider("PROVA_CELL", "GEMINI");
 			console.log(`[Envio] 🎛️ Provider selecionado para PROVA_CELL: ${selectedProvider}`);
@@ -679,16 +697,6 @@ export function useLeadHandlers({
 			setIsEnviandoAnalise(true);
 			updateAnaliseState({ aguardandoAnalise: true });
 
-			console.log("🔌 [Pre-Send] Forçando reconexão SSE para leadId:", lead.id);
-			window.dispatchEvent(
-				new CustomEvent("force-sse-reconnect", {
-					detail: { leadId: lead.id, reason: "pre-analise-send" },
-				}),
-			);
-
-			await new Promise((resolve) => setTimeout(resolve, 2000));
-			console.log("✅ [Pre-Send] Aguardo de conexão SSE concluído");
-
 			const apiEndpoint = consultoriaAtiva
 				? "/api/admin/leads-chatwit/enviar-consultoriafase2"
 				: "/api/admin/leads-chatwit/enviar-analise";
@@ -925,6 +933,22 @@ export function useLeadHandlers({
 
 			const isAnaliseSimulado = consultoriaAtiva;
 
+			// Atualizar estado local ANTES de enviar para garantir SSE
+			updateAnaliseState({
+				analiseValidada: true,
+				aguardandoAnalise: true,
+			});
+
+			// Propagar aguardandoAnalise pro parent para UI (animação de loading)
+			if (typeof onEdit === "function") {
+				onEdit({
+					...lead,
+					aguardandoAnalise: true,
+					analiseValidada: true,
+					_skipDialog: true,
+				} as any);
+			}
+
 			const payload = {
 				leadID: lead.id,
 				analiseData: {
@@ -946,18 +970,18 @@ export function useLeadHandlers({
 				throw new Error(errorData.error || "Erro ao validar análise");
 			}
 
-			updateAnaliseState({
-				analiseValidada: true,
-				aguardandoAnalise: true,
-			});
-
 			toast(isAnaliseSimulado ? "Análise de simulado validada" : "Análise validada", {
 				description: isAnaliseSimulado
 					? "A análise de simulado foi validada e enviada para gerar o PDF final."
 					: "A análise foi validada e enviada para gerar o PDF final.",
 			});
+
 		} catch (error: any) {
 			console.error("Erro ao validar análise:", error);
+			updateAnaliseState({
+				analiseValidada: false,
+				aguardandoAnalise: false,
+			});
 			toast("Erro", { description: error.message || "Não foi possível validar a análise. Tente novamente." });
 		} finally {
 			setIsEnviandoAnaliseValidada(false);
@@ -1278,16 +1302,6 @@ export function useLeadHandlers({
 
 			updateEspelhoState({ aguardandoEspelho: true });
 
-			console.log("🔌 [Pre-Send] Forçando reconexão SSE para leadId:", lead.id);
-			window.dispatchEvent(
-				new CustomEvent("force-sse-reconnect", {
-					detail: { leadId: lead.id, reason: "pre-espelho-send" },
-				}),
-			);
-
-			await new Promise((resolve) => setTimeout(resolve, 2000));
-			console.log("✅ [Pre-Send] Aguardo de conexão SSE concluído");
-
 			// ⭐ Obter provider selecionado pelo switch no topo da coluna ESPELHO_CELL
 			const selectedProvider = getColumnProvider("ESPELHO_CELL", "GEMINI");
 			console.log(`[Envio] 🎛️ Provider selecionado para ESPELHO_CELL: ${selectedProvider}`);
@@ -1409,7 +1423,7 @@ export function useLeadHandlers({
 		}
 	};
 
-	const handleSaveAnotacoes = async (anotacoes: string) => {
+	const handleSaveAnotacoes = async (anotacoes: string, options?: SaveOptions) => {
 		try {
 			await onEdit({
 				...lead,
@@ -1417,10 +1431,62 @@ export function useLeadHandlers({
 				_skipDialog: true,
 			} as any);
 
-			toast("Anotações salvas", { description: "Anotações salvas com sucesso!" });
+			if (!options?.silent) {
+				toast("Anotações salvas", { description: "Anotações salvas com sucesso!" });
+			}
 		} catch (error: any) {
 			console.error("Erro ao salvar anotações:", error);
-			toast("Erro", { description: error.message || "Não foi possível salvar as anotações." });
+			if (!options?.silent) {
+				toast("Erro", { description: error.message || "Não foi possível salvar as anotações." });
+			}
+			throw error;
+		}
+	};
+
+	const handleSaveRecursoDraft = async (
+		data: { html: string; textoRecurso: string },
+		options?: SaveOptions,
+	) => {
+		try {
+			const draftPayload = {
+				html: data.html,
+				textoRecurso: data.textoRecurso,
+				updatedAt: new Date().toISOString(),
+			};
+
+			const response = await fetch("/api/admin/leads-chatwit/leads", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					id: lead.id,
+					recursoPreliminar: draftPayload,
+				}),
+			});
+
+			if (!response.ok) {
+				const errorData = await response.json();
+				throw new Error(errorData.error || "Erro ao salvar rascunho do recurso");
+			}
+
+			updateRecursoState({ recursoPreliminar: draftPayload });
+
+			if (typeof onEdit === "function") {
+				onEdit({
+					...lead,
+					recursoPreliminar: draftPayload,
+					_skipDialog: true,
+				} as any);
+			}
+
+			if (!options?.silent) {
+				toast("Rascunho salvo", { description: "Rascunho do recurso salvo com sucesso!" });
+			}
+		} catch (error: any) {
+			console.error("[handleSaveRecursoDraft] Erro ao salvar rascunho do recurso:", error);
+			if (!options?.silent) {
+				toast("Erro", { description: error.message || "Não foi possível salvar o rascunho do recurso." });
+			}
+			throw error;
 		}
 	};
 
@@ -1570,6 +1636,10 @@ export function useLeadHandlers({
 			updateRecursoState({
 				recursoValidado: true,
 				aguardandoRecurso: false,
+				recursoPreliminar: {
+					html: data.html,
+					textoRecurso: data.textoRecurso,
+				},
 			});
 		} catch (error: any) {
 			console.error("[ValidarRecurso] Erro:", error);
@@ -1611,23 +1681,7 @@ export function useLeadHandlers({
 	const handleCancelarManuscrito = async () => {
 		try {
 			updateManuscritoState({ aguardandoManuscrito: false });
-			forceRefresh();
-
-			const payload = {
-				id: lead.id,
-				aguardandoManuscrito: false,
-			};
-
-			const response = await fetch("/api/admin/leads-chatwit/leads", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(payload),
-			});
-
-			if (!response.ok) {
-				const data = await response.json();
-				throw new Error(data.error || "Erro ao cancelar processamento do manuscrito");
-			}
+			await cancelLeadOperation("transcription");
 
 			const updatedLead = {
 				...lead,
@@ -1659,39 +1713,13 @@ export function useLeadHandlers({
 			setShowEspelhoDialog(false);
 
 			updateEspelhoState({ aguardandoEspelho: false });
-			forceRefresh();
-
-			const payload = {
-				id: lead.id,
-				aguardandoEspelho: false,
-				espelhoProcessado: false,
-			};
-
-			console.log("[Cancelar Espelho] Enviando payload:", payload);
-			console.log("[Cancelar Espelho] Lead atual antes da atualização:", {
-				id: lead.id,
-				aguardandoEspelho: lead.aguardandoEspelho,
-				espelhoProcessado: lead.espelhoProcessado,
-			});
-
-			const response = await fetch("/api/admin/leads-chatwit/leads", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(payload),
-			});
-
-			if (!response.ok) {
-				const data = await response.json();
-				console.error("[Cancelar Espelho] Erro na resposta:", data);
-				throw new Error(data.error || "Erro ao cancelar processamento do espelho");
-			}
+			await cancelLeadOperation("mirror");
 
 			console.log("[Cancelar Espelho] Resposta OK, atualizando lead...");
 
 			const updatedLead = {
 				...lead,
 				aguardandoEspelho: false,
-				espelhoProcessado: false,
 				_skipDialog: true,
 				_forceUpdate: true,
 			};
@@ -1710,6 +1738,29 @@ export function useLeadHandlers({
 			toast("Erro", { description: error.message || "Não foi possível cancelar o processamento. Tente novamente." });
 
 			updateEspelhoState({ aguardandoEspelho: !!lead.aguardandoEspelho });
+			forceRefresh();
+		}
+	};
+
+	const handleCancelarAnalise = async () => {
+		try {
+			updateAnaliseState({ aguardandoAnalise: false });
+			await cancelLeadOperation("analysis");
+
+			const updatedLead = {
+				...lead,
+				aguardandoAnalise: false,
+				_skipDialog: true,
+				_forceUpdate: true,
+			};
+
+			await onEdit(updatedLead as any);
+			toast("Sucesso", { description: "Solicitação de análise cancelada com sucesso!" });
+			forceRefresh();
+		} catch (error: any) {
+			console.error("Erro ao cancelar análise:", error);
+			toast("Erro", { description: error.message || "Não foi possível cancelar a análise. Tente novamente." });
+			updateAnaliseState({ aguardandoAnalise: !!lead.aguardandoAnalise });
 			forceRefresh();
 		}
 	};
@@ -1748,8 +1799,10 @@ export function useLeadHandlers({
 		handleEnviarEspelho,
 		handleSaveEspelho,
 		handleSaveAnotacoes,
+		handleSaveRecursoDraft,
 		handleEnviarPdf,
 		handleSaveAnalisePreliminar,
+		handleCancelarAnalise,
 		getConvertedImages: () => getConvertedImages(lead),
 	};
 }

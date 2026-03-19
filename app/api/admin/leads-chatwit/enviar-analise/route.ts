@@ -4,21 +4,27 @@ import { optimizeMirrorPayload, estimateTokenSavings } from "@/lib/oab-eval/mirr
 import type { StudentMirrorPayload } from "@/lib/oab-eval/types";
 import { isInternalAnalysisEnabled } from "@/lib/oab-eval/analysis-agent";
 import { enqueueAnalysis } from "@/lib/oab-eval/analysis-queue";
+import { buildLeadOperationCancelUrl, buildLeadOperationStatusUrl } from "@/lib/oab-eval/operation-types";
+import { createLogger } from "@/lib/utils/logger";
 
 const prisma = getPrismaInstance();
+const log = createLogger("API.EnviarAnalise");
 
 /**
  * Handler da rota POST para enviar lead para análise de prova.
  */
 export async function POST(req: Request) {
 	try {
-		console.log("[Enviar Análise] Recebendo requisição POST");
 		const body = await req.json();
-		console.log("[Enviar Análise] Dados recebidos:", body);
 
 		// Aceitar tanto leadId quanto leadID
 		const leadId = body.leadId || body.leadID;
 		const sourceId = body.sourceId;
+		log.info("Recebendo requisição", {
+			leadId,
+			sourceId,
+			selectedProvider: body.selectedProvider,
+		});
 
 		if (!leadId) {
 			console.error("[Enviar Análise] leadId não fornecido");
@@ -73,27 +79,15 @@ export async function POST(req: Request) {
 
 				const espelhoParsed = typeof lead.textoDOEspelho === "string" ? JSON.parse(espelhoString) : lead.textoDOEspelho;
 
-				// DEBUG: Log a estrutura do espelhoParsed para diagnosticar problema
-				console.log("[Enviar Análise] 🔍 DEBUG - Estrutura do espelhoParsed:");
-				console.log(`[Enviar Análise]    Tem 'meta'?: ${!!espelhoParsed?.meta}`);
-				console.log(`[Enviar Análise]    Tem 'aluno'?: ${!!espelhoParsed?.aluno}`);
-				console.log(`[Enviar Análise]    Tem 'itens'?: ${!!espelhoParsed?.itens}`);
-				console.log(`[Enviar Análise]    Tem 'totais'?: ${!!espelhoParsed?.totais}`);
-				console.log("[Enviar Análise]    Chaves principais:", Object.keys(espelhoParsed || {}).join(", "));
-
-				if (espelhoParsed?.meta) {
-					console.log("[Enviar Análise]    meta.aluno:", espelhoParsed.meta?.aluno);
-					console.log("[Enviar Análise]    meta.notaFinal:", espelhoParsed.meta?.notaFinal);
-				}
-
-				if (espelhoParsed?.aluno) {
-					console.log("[Enviar Análise]    aluno.nome:", espelhoParsed.aluno?.nome);
-					console.log("[Enviar Análise]    aluno.inscricao:", espelhoParsed.aluno?.inscricao);
-				}
-
-				if (espelhoParsed?.itens) {
-					console.log(`[Enviar Análise]    itens.length: ${espelhoParsed.itens.length}`);
-				}
+				log.info("Estrutura do espelho recebida", {
+					leadId,
+					hasMeta: !!espelhoParsed?.meta,
+					hasAluno: !!espelhoParsed?.aluno,
+					hasItens: !!espelhoParsed?.itens,
+					hasTotais: !!espelhoParsed?.totais,
+					rootKeys: Object.keys(espelhoParsed || {}),
+					itensLength: Array.isArray(espelhoParsed?.itens) ? espelhoParsed.itens.length : 0,
+				});
 
 				// Verificar se é um StudentMirrorPayload válido
 				if (espelhoParsed && espelhoParsed.meta && espelhoParsed.aluno && espelhoParsed.itens) {
@@ -187,12 +181,22 @@ export async function POST(req: Request) {
 
 			console.log(`[Enviar Análise] ✅ Job interno ${job.id} criado para lead ${leadId}`);
 
-			return NextResponse.json({
-				success: true,
-				message: "Análise enviada para processamento interno",
-				jobId: job.id,
-				internal: true,
-			});
+			return NextResponse.json(
+				{
+					success: true,
+					message: "Análise enviada para processamento interno",
+					jobId: job.id,
+					internal: true,
+					operation: {
+						jobId: job.id,
+						leadId,
+						stage: "analysis",
+						statusUrl: buildLeadOperationStatusUrl(leadId, "analysis"),
+						cancelUrl: buildLeadOperationCancelUrl(),
+					},
+				},
+				{ status: 202 },
+			);
 		}
 
 		// =========================================================================

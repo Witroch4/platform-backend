@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
 	Dialog,
 	DialogContent,
@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { marked } from "marked";
 import { RecursoEditor, htmlToPlainText } from "./recurso-editor";
 import { downloadDocx, downloadPdf, downloadTxt, copyToClipboard } from "./recurso-export-utils";
+import { useDialogAutosave } from "./use-dialog-autosave";
 
 interface RecursoDialogProps {
 	isOpen: boolean;
@@ -39,7 +40,8 @@ interface RecursoDialogProps {
 	recursoValidado: boolean;
 	analiseValidada?: boolean;
 	temAnalisePreliminar?: boolean;
-	onSaveAnotacoes: (anotacoes: string) => Promise<void>;
+	onSaveAnotacoes: (anotacoes: string, options?: { silent?: boolean }) => Promise<void>;
+	onSaveRecursoDraft: (data: { html: string; textoRecurso: string }, options?: { silent?: boolean }) => Promise<void>;
 	onEnviarPdf: (sourceId: string) => Promise<void>;
 	onCancelarRecurso?: () => Promise<void>;
 	onValidarRecurso?: (data: { html: string; textoRecurso: string; message?: string; accessToken?: string }) => Promise<void>;
@@ -72,6 +74,16 @@ function markdownToHtml(mdText: string): string {
 	}
 }
 
+function extractRecursoHtml(recursoPreliminar: any): string {
+	if (!recursoPreliminar) return "";
+	if (typeof recursoPreliminar === "object" && typeof recursoPreliminar.html === "string") {
+		return recursoPreliminar.html;
+	}
+	const rawText = extractRecursoText(recursoPreliminar);
+	if (!rawText) return "";
+	return markdownToHtml(rawText);
+}
+
 export function RecursoDialog({
 	isOpen,
 	onClose,
@@ -86,6 +98,7 @@ export function RecursoDialog({
 	analiseValidada,
 	temAnalisePreliminar,
 	onSaveAnotacoes,
+	onSaveRecursoDraft,
 	onEnviarPdf,
 	onCancelarRecurso,
 	onValidarRecurso,
@@ -101,23 +114,23 @@ export function RecursoDialog({
 	const [isValidando, setIsValidando] = useState(false);
 	const [isSavingToken, setIsSavingToken] = useState(false);
 	const [isGerando, setIsGerando] = useState(false);
+	const [tokenLoaded, setTokenLoaded] = useState(false);
+	const [isAutoSavingToken, setIsAutoSavingToken] = useState(false);
+	const [initialAccessToken, setInitialAccessToken] = useState("");
 
 	const MENSAGEM_PADRAO = "Segue o nosso Recurso, qualquer dúvida estamos à disposição";
+	const initialMessage = anotacoes || MENSAGEM_PADRAO;
 
-	// Convert recursoPreliminar markdown text → HTML once when dialog opens
 	const initialEditorHtml = useMemo(() => {
-		const rawText = extractRecursoText(recursoPreliminar);
-		if (!rawText) return "";
-		return markdownToHtml(rawText);
+		return extractRecursoHtml(recursoPreliminar);
 	}, [recursoPreliminar]);
 
 	useEffect(() => {
 		if (isOpen) {
-			setTextoAnotacoes(anotacoes || MENSAGEM_PADRAO);
-			setEditorHtml(initialEditorHtml);
+			setTokenLoaded(false);
 			fetchAccessToken();
 		}
-	}, [isOpen, anotacoes, initialEditorHtml, leadId]);
+	}, [isOpen, leadId]);
 
 	const hasRecursoContent = Boolean(initialEditorHtml) || Boolean(editorHtml);
 	const isEditable = !recursoValidado && !recursoUrl;
@@ -129,13 +142,167 @@ export function RecursoDialog({
 			});
 			if (response.ok) {
 				const data = await response.json();
-				setAccessToken(data.chatwitAccessToken || "");
+				const nextToken = data.chatwitAccessToken || "";
+				setAccessToken(nextToken);
+				setInitialAccessToken(nextToken);
 			}
 		} catch (error) {
 			console.error("Erro ao buscar token personalizado:", error);
 			setAccessToken("");
+			setInitialAccessToken("");
+		} finally {
+			setTokenLoaded(true);
 		}
 	};
+
+	const restoreEditorHtml = useCallback((value: string) => {
+		setEditorHtml(value);
+	}, []);
+
+	const restoreMessage = useCallback((value: string) => {
+		setTextoAnotacoes(value);
+	}, []);
+
+	const persistRecursoDraft = useCallback(
+		async (html: string) => {
+			if (!isEditable || !html.trim()) {
+				return;
+			}
+
+			await onSaveRecursoDraft(
+				{
+					html,
+					textoRecurso: htmlToPlainText(html),
+				},
+				{ silent: true },
+			);
+		},
+		[isEditable, onSaveRecursoDraft],
+	);
+
+	const persistMessage = useCallback(
+		async (message: string) => {
+			await onSaveAnotacoes(message, { silent: true });
+		},
+		[onSaveAnotacoes],
+	);
+
+	const saveAccessToken = useCallback(
+		async (token: string, silent = false) => {
+			if (!tokenLoaded) {
+				return;
+			}
+
+			if (silent) {
+				setIsAutoSavingToken(true);
+			} else {
+				setIsSavingToken(true);
+			}
+
+			try {
+				const response = await fetch("/api/admin/leads-chatwit/custom-token", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ leadId, chatwitAccessToken: token }),
+				});
+				if (!response.ok) {
+					const data = await response.json();
+					throw new Error(data.error || "Erro ao salvar token");
+				}
+				setInitialAccessToken(token);
+				if (!silent) {
+					toast("Sucesso", { description: "Token de acesso salvo com sucesso!" });
+				}
+			} finally {
+				if (silent) {
+					setIsAutoSavingToken(false);
+				} else {
+					setIsSavingToken(false);
+				}
+			}
+		},
+		[leadId, tokenLoaded],
+	);
+
+	const flushAccessTokenAutosave = useCallback(async () => {
+		if (!tokenLoaded || accessToken === initialAccessToken) {
+			return;
+		}
+
+		await saveAccessToken(accessToken, true);
+	}, [accessToken, initialAccessToken, saveAccessToken, tokenLoaded]);
+
+	const {
+		isAutoSaving: isAutoSavingDraft,
+		hasDraft: hasLocalDraft,
+		clearDraft: clearEditorDraft,
+		flushAutosave: flushEditorAutosave,
+	} = useDialogAutosave({
+		storageKey: `leads-chatwit:recurso-editor:${leadId}`,
+		isOpen,
+		initialValue: initialEditorHtml,
+		value: editorHtml,
+		onRestore: restoreEditorHtml,
+		onAutoSave: persistRecursoDraft,
+		enabled: isEditable,
+		autosaveDebounceMs: 3000,
+	});
+
+	const {
+		isAutoSaving: isAutoSavingMessage,
+		hasDraft: hasLocalMessageDraft,
+		clearDraft: clearMessageDraft,
+		flushAutosave: flushMessageAutosave,
+	} = useDialogAutosave({
+		storageKey: `leads-chatwit:recurso-message:${leadId}`,
+		isOpen,
+		initialValue: initialMessage,
+		value: textoAnotacoes,
+		onRestore: restoreMessage,
+		onAutoSave: persistMessage,
+		autosaveDebounceMs: 3000,
+	});
+
+	useEffect(() => {
+		if (!isOpen || !tokenLoaded || typeof window === "undefined") {
+			return;
+		}
+
+		const storageKey = `leads-chatwit:recurso-token:${leadId}`;
+		const storedToken = window.localStorage.getItem(storageKey);
+		if (storedToken !== null) {
+			setAccessToken(storedToken);
+		}
+	}, [isOpen, leadId, tokenLoaded]);
+
+	useEffect(() => {
+		if (!isOpen || !tokenLoaded || typeof window === "undefined") {
+			return;
+		}
+
+		const storageKey = `leads-chatwit:recurso-token:${leadId}`;
+		const persistTimeout = setTimeout(() => {
+			window.localStorage.setItem(storageKey, accessToken);
+		}, 200);
+
+		return () => clearTimeout(persistTimeout);
+	}, [accessToken, isOpen, leadId, tokenLoaded]);
+
+	useEffect(() => {
+		if (!isOpen || !tokenLoaded) {
+			return;
+		}
+
+		if (accessToken === initialAccessToken) {
+			return;
+		}
+
+		const saveTimeout = setTimeout(() => {
+			void saveAccessToken(accessToken, true);
+		}, 3000);
+
+		return () => clearTimeout(saveTimeout);
+	}, [accessToken, initialAccessToken, isOpen, saveAccessToken, tokenLoaded]);
 
 	const handleSaveAnotacoes = async () => {
 		try {
@@ -151,21 +318,9 @@ export function RecursoDialog({
 
 	const handleSaveAccessToken = async () => {
 		try {
-			setIsSavingToken(true);
-			const response = await fetch("/api/admin/leads-chatwit/custom-token", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ leadId, chatwitAccessToken: accessToken }),
-			});
-			if (!response.ok) {
-				const data = await response.json();
-				throw new Error(data.error || "Erro ao salvar token");
-			}
-			toast("Sucesso", { description: "Token de acesso salvo com sucesso!" });
+			await saveAccessToken(accessToken);
 		} catch (error: any) {
 			toast("Erro", { description: error.message || "Não foi possível salvar o token de acesso." });
-		} finally {
-			setIsSavingToken(false);
 		}
 	};
 
@@ -210,6 +365,9 @@ export function RecursoDialog({
 		if (!onValidarRecurso) return;
 		try {
 			setIsValidando(true);
+			await flushEditorAutosave();
+			await flushMessageAutosave();
+			await flushAccessTokenAutosave();
 			const plainText = htmlToPlainText(editorHtml);
 			await onValidarRecurso({
 				html: editorHtml,
@@ -217,6 +375,11 @@ export function RecursoDialog({
 				message: textoAnotacoes || undefined,
 				accessToken: accessToken || undefined,
 			});
+			clearEditorDraft();
+			clearMessageDraft();
+			if (typeof window !== "undefined") {
+				window.localStorage.removeItem(`leads-chatwit:recurso-token:${leadId}`);
+			}
 			toast.success("Recurso validado e enviado para o chat!");
 			onClose();
 		} catch (error: any) {
@@ -238,11 +401,21 @@ export function RecursoDialog({
 		}
 	};
 
-	const handleClose = () => {
+	const handleClose = async () => {
 		if (!isSaving && !isEnviando && !isCancelando && !isValidando && !isGerando) {
+			await flushEditorAutosave();
+			await flushMessageAutosave();
+			await flushAccessTokenAutosave();
 			onClose();
 		}
 	};
+
+	const isAutoSaving = isAutoSavingDraft || isAutoSavingMessage || isAutoSavingToken;
+	const hasAnyLocalDraft = hasLocalDraft || hasLocalMessageDraft;
+	const hasSavedChanges =
+		isEditable &&
+		(Boolean(editorHtml.trim()) || Boolean(textoAnotacoes.trim())) &&
+		(editorHtml !== initialEditorHtml || textoAnotacoes !== initialMessage);
 
 	const abrirPdfRecurso = () => {
 		if (recursoUrl) window.open(recursoUrl, "_blank");
@@ -253,7 +426,7 @@ export function RecursoDialog({
 	};
 
 	return (
-		<Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
+		<Dialog open={isOpen} onOpenChange={(open) => !open && void handleClose()}>
 			<DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
 				<DialogHeader>
 					<DialogTitle>{recursoValidado ? "Recurso Validado" : "Recurso"}</DialogTitle>
@@ -363,9 +536,21 @@ export function RecursoDialog({
 								<div>
 									<h3 className="text-lg font-medium text-foreground">Conteúdo do Recurso</h3>
 									{isEditable && (
-										<p className="text-sm text-orange-600">
-											Edite o recurso no editor abaixo. As exportações refletem o conteúdo atual.
-										</p>
+										<div className="space-y-1">
+											<p className="text-sm text-orange-600">
+												As alterações são salvas automaticamente enquanto você edita.
+											</p>
+											<div className="flex items-center gap-2 text-xs text-muted-foreground min-h-4">
+												{isAutoSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+												<span>
+													{isAutoSaving
+														? "Salvando alterações..."
+														: hasAnyLocalDraft || hasSavedChanges
+															? "Alterações salvas."
+															: "Ctrl+Z e Ctrl+Shift+Z já funcionam no editor."}
+												</span>
+											</div>
+										</div>
 									)}
 								</div>
 
@@ -522,7 +707,7 @@ export function RecursoDialog({
 					<div className="flex flex-wrap gap-2">
 						<Button
 							variant="outline"
-							onClick={handleClose}
+							onClick={() => void handleClose()}
 							disabled={isSaving || isEnviando || isCancelando || isValidando}
 						>
 							Fechar

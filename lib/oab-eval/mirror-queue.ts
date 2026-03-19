@@ -2,6 +2,8 @@ import { Queue, type Job } from "bullmq";
 import { getRedisInstance } from "@/lib/connections";
 import { getOabEvalConfig } from "@/lib/config";
 import type { StudentMirrorPayload } from "./types";
+import { buildLeadOperationJobId, mapBullMqStateToLeadOperationStatus } from "./operation-types";
+import { emitLeadOperationEvent } from "./operation-control";
 
 // ============================================================================
 // TYPES
@@ -114,14 +116,38 @@ export async function enqueueMirrorGeneration(
 	// Determinar prioridade (menor = maior prioridade)
 	const priority = normalizedData.priority ?? 2; // Prioridade 2 (entre manuscrito=1 e análise=3)
 
-	const job = await mirrorGenerationQueue.add(
-		"generateMirror",
-		normalizedData, // ← Usa dados normalizados com selectedProvider garantido
-		{
-			jobId: `mirror-${normalizedData.leadId}-${Date.now()}`,
-			priority,
-		},
-	);
+	const jobId = buildLeadOperationJobId("mirror", normalizedData.leadId);
+	const existingJob = await mirrorGenerationQueue.getJob(jobId);
+
+	if (existingJob) {
+		const state = await existingJob.getState();
+		if (state === "waiting" || state === "active" || state === "delayed" || state === "prioritized") {
+			await emitLeadOperationEvent({
+				leadId: normalizedData.leadId,
+				jobId,
+				stage: "mirror",
+				status: mapBullMqStateToLeadOperationStatus(state) ?? "queued",
+				message: "Já existe um espelho em andamento para este lead.",
+				queueState: state,
+			});
+			return existingJob;
+		}
+
+		await existingJob.remove().catch(() => undefined);
+	}
+
+	const job = await mirrorGenerationQueue.add("generateMirror", normalizedData, {
+		jobId,
+		priority,
+	});
+	await emitLeadOperationEvent({
+		leadId: normalizedData.leadId,
+		jobId,
+		stage: "mirror",
+		status: "queued",
+		message: "Espelho adicionado à fila.",
+		queueState: "waiting",
+	});
 
 	console.log(
 		`[MirrorQueue] ✅ Job ${job.id} criado com sucesso (prioridade: ${priority}, provider: ${normalizedData.selectedProvider})`,
@@ -163,15 +189,18 @@ export async function getMirrorJobStatus(jobId: string): Promise<{
 	};
 }
 
+export async function getMirrorJobByLead(leadId: string): Promise<Job<MirrorGenerationJobData, MirrorGenerationJobResult> | null> {
+	return (await mirrorGenerationQueue.getJob(buildLeadOperationJobId("mirror", leadId))) ?? null;
+}
+
 /**
  * Obtém todos os jobs de espelho de um lead específico
  */
 export async function getMirrorJobsByLead(
 	leadId: string,
 ): Promise<Job<MirrorGenerationJobData, MirrorGenerationJobResult>[]> {
-	const jobs = await mirrorGenerationQueue.getJobs(["waiting", "active", "completed", "failed"]);
-
-	return jobs.filter((job) => job.data.leadId === leadId);
+	const job = await getMirrorJobByLead(leadId);
+	return job ? [job] : [];
 }
 
 /**

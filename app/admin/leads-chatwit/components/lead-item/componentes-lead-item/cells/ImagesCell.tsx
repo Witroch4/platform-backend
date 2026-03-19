@@ -1,7 +1,7 @@
 import { TableCell } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { RefreshCw } from "lucide-react";
+import { AlertCircle, RefreshCw } from "lucide-react";
 import type { ImagesCellProps } from "../types";
 import { LeadContextMenu, type ContextAction } from "@/app/admin/leads-chatwit/components/lead-context-menu";
 import { DeleteFileButton } from "@/app/admin/leads-chatwit/components/delete-file-button";
@@ -24,9 +24,29 @@ export function ImagesCell({
 	onReloadAfterDelete,
 	onShowGallery,
 }: ImagesCellExtendedProps) {
-	// Só mostra se tem PDF unificado
+	// Exibe um estado desabilitado quando ainda não há PDF unificado
 	if (!lead.pdfUnificado) {
-		return <TableCell className="min-w-[70px] max-w-[100px] p-2 align-middle"></TableCell>;
+		return (
+			<TableCell className="min-w-[70px] max-w-[100px] p-2 align-middle">
+				<TooltipProvider>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								variant="outline"
+								disabled={true}
+								className="w-full opacity-60 cursor-not-allowed text-xs px-2 py-1 h-auto min-h-8 whitespace-pre-line"
+							>
+								<AlertCircle className="h-4 w-4 mr-1 text-orange-500" />
+								Precisa de PDF
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent side="top" className="text-xs max-w-60">
+							<p>Unifique os arquivos em PDF antes de converter para imagens.</p>
+						</TooltipContent>
+					</Tooltip>
+				</TooltipProvider>
+			</TableCell>
+		);
 	}
 
 	// Se já tem imagens convertidas

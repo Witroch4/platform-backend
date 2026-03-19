@@ -10,6 +10,7 @@ WORKDIR /app
 RUN apk update && apk add --no-cache \
     imagemagick \
     ghostscript \
+    poppler-utils \
     build-base \
     g++ \
     vips-dev \
@@ -200,6 +201,7 @@ WORKDIR /app
 RUN apk update && apk add --no-cache \
     imagemagick \
     ghostscript \
+    poppler-utils \
     vips && \
     rm -rf /var/cache/apk/* && \
     rm -rf /tmp/*

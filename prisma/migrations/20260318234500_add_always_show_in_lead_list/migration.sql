@@ -1,0 +1,2 @@
+ALTER TABLE "LeadOabData"
+ADD COLUMN "alwaysShowInLeadList" BOOLEAN NOT NULL DEFAULT false;

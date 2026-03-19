@@ -1,22 +1,24 @@
 "use client";
 
-import useSWR from "swr";
-import { chatwitAgentsApi } from "../lib/api-clients";
 import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { chatwitAgentsApi } from "../lib/api-clients";
+import { mtfDiamanteQueryKeys } from "../lib/query-keys";
 
 export function useChatwitAgents() {
-    const { data, error, isLoading } = useSWR(
-        "/api/admin/mtf-diamante/chatwit-agents", // Cache key
-        () => chatwitAgentsApi.getAll(),
-        {
-            revalidateOnFocus: false,
-            dedupingInterval: 60000, // 1 minute
-        }
-    );
+	const { data, error, isLoading } = useQuery({
+		queryKey: mtfDiamanteQueryKeys.chatwitAgents(),
+		queryFn: chatwitAgentsApi.getAll,
+		staleTime: 60_000,
+		refetchOnWindowFocus: false,
+	});
 
-    return useMemo(() => ({
-        chatwitAgents: data || [],
-        isLoading,
-        error
-    }), [data, isLoading, error]);
+	return useMemo(
+		() => ({
+			chatwitAgents: data || [],
+			isLoading,
+			error,
+		}),
+		[data, isLoading, error],
+	);
 }

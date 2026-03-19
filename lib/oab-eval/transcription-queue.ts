@@ -4,7 +4,7 @@
  * com suporte a progresso granular via SSE
  */
 
-import { Queue, Job, QueueEvents } from "bullmq";
+import { Queue, Job, QueueEvents, UnrecoverableError } from "bullmq";
 import { getRedisInstance } from "@/lib/connections";
 import { getPrismaInstance } from "@/lib/connections";
 import { sseManager } from "@/lib/sse-manager";
@@ -12,6 +12,19 @@ import { transcribeManuscript, type TranscribeManuscriptResult } from "./transcr
 import { getConfigValue } from "@/lib/config";
 import { addManuscritoJob } from "@/lib/queue/leadcells.queue";
 import { createCostQueue, addCostEventsBulk } from "@/lib/cost/queue-config";
+import {
+	buildLeadOperationJobId,
+	mapBullMqStateToLeadOperationStatus,
+	type LeadOperationProgress,
+} from "./operation-types";
+import {
+	clearLeadOperationCancel,
+	createLeadOperationCancelMonitor,
+	emitLeadOperationEvent,
+	isLeadOperationCancelRequested,
+	isLeadOperationCanceledError,
+	requestLeadOperationCancel,
+} from "./operation-control";
 
 // --- Tipos ---
 
@@ -98,9 +111,20 @@ export const transcriptionQueueEvents = new QueueEvents(QUEUE_NAME, {
 
 // --- Processamento do Job (exported for registry) ---
 
-export async function processTranscriptionJob(job: Job<TranscriptionJobData>): Promise<TranscriptionResult> {
+export async function processTranscriptionJob(
+	job: Job<TranscriptionJobData>,
+	_token?: string,
+	signal?: AbortSignal,
+): Promise<TranscriptionResult> {
 	const { leadID, images, userId, selectedProvider } = job.data;
 	const totalPages = images.length;
+	const jobId = String(job.id);
+	const cancelMonitor = createLeadOperationCancelMonitor({
+		leadId: leadID,
+		stage: "transcription",
+		jobId,
+		upstreamSignal: signal,
+	});
 
 	console.log(`[TranscriptionQueue] 🎯 Processando job ${job.id} - Lead: ${leadID}, Páginas: ${totalPages}`);
 
@@ -113,6 +137,15 @@ export async function processTranscriptionJob(job: Job<TranscriptionJobData>): P
 		totalPages,
 		startedAt: new Date().toISOString(),
 	});
+	await emitLeadOperationEvent({
+		leadId: leadID,
+		jobId,
+		stage: "transcription",
+		status: "processing",
+		message: "Processando manuscrito.",
+		progress: { currentPage: 0, totalPages, percentage: 0 },
+		queueState: "active",
+	});
 
 	const startTime = Date.now();
 	const pageTimes: number[] = []; // Para calcular tempo médio e estimativa
@@ -124,6 +157,7 @@ export async function processTranscriptionJob(job: Job<TranscriptionJobData>): P
 			leadId: leadID,
 			selectedProvider,
 			concurrency: getConfigValue("oab_eval.transcribe_concurrency", 10),
+			abortSignal: cancelMonitor.signal,
 			onPageComplete: async (pageIndex: number, pageLabel: string, detail?: {
 				provider: string; model: string; tokensIn: number; tokensOut: number;
 				durationMs: number; wasFallback: boolean;
@@ -149,6 +183,21 @@ export async function processTranscriptionJob(job: Job<TranscriptionJobData>): P
 					totalPages,
 					percentage,
 					estimatedTimeRemaining,
+				});
+				const operationProgress: LeadOperationProgress = {
+					currentPage,
+					totalPages,
+					percentage,
+					estimatedTimeRemaining,
+				};
+				await emitLeadOperationEvent({
+					leadId: leadID,
+					jobId,
+					stage: "transcription",
+					status: "processing",
+					message: `Página ${currentPage}/${totalPages} processada.`,
+					progress: operationProgress,
+					queueState: "active",
 				});
 
 				// Notificar via SSE (enriquecido com tokens/provider)
@@ -190,6 +239,16 @@ export async function processTranscriptionJob(job: Job<TranscriptionJobData>): P
 			totalInputTokens: transcriptionOutput.tokenUsage?.totalInput,
 			totalOutputTokens: transcriptionOutput.tokenUsage?.totalOutput,
 			perPage: transcriptionOutput.tokenUsage?.perPage,
+		});
+		await clearLeadOperationCancel(jobId);
+		await emitLeadOperationEvent({
+			leadId: leadID,
+			jobId,
+			stage: "transcription",
+			status: "completed",
+			message: "Manuscrito processado com sucesso.",
+			progress: { currentPage: totalPages, totalPages, percentage: 100 },
+			queueState: "completed",
 		});
 
 		// Registrar CostEvents para auditoria de custos
@@ -241,6 +300,40 @@ export async function processTranscriptionJob(job: Job<TranscriptionJobData>): P
 		return transcriptionResult;
 	} catch (error: any) {
 		console.error(`[TranscriptionQueue] ❌ Erro ao processar lead ${leadID}:`, error);
+		const userCanceled = isLeadOperationCanceledError(error) || (await isLeadOperationCancelRequested(jobId));
+
+		if (userCanceled) {
+			try {
+				const prisma = getPrismaInstance();
+				const result = await prisma.leadOabData.updateMany({
+					where: { id: leadID },
+					data: { aguardandoManuscrito: false },
+				});
+				const updatedLead = result.count > 0
+					? await prisma.leadOabData.findUnique({ where: { id: leadID } })
+					: null;
+
+				await clearLeadOperationCancel(jobId);
+				await emitLeadOperationEvent({
+					leadId: leadID,
+					jobId,
+					stage: "transcription",
+					status: "canceled",
+					message: "Digitação cancelada pelo usuário.",
+					queueState: "failed",
+				});
+				await sseManager.sendNotification(leadID, {
+					type: "leadUpdate",
+					message: "A digitação do manuscrito foi cancelada.",
+					leadData: updatedLead,
+					timestamp: new Date().toISOString(),
+				});
+			} finally {
+				await cancelMonitor.cleanup();
+			}
+
+			throw new UnrecoverableError("Digitação cancelada pelo usuário.");
+		}
 
 		// Notificar erro via SSE
 		await sendSSEEvent(leadID, {
@@ -259,10 +352,13 @@ export async function processTranscriptionJob(job: Job<TranscriptionJobData>): P
 			);
 			try {
 				const prisma = getPrismaInstance();
-				const updatedLead = await prisma.leadOabData.update({
+				const result = await prisma.leadOabData.updateMany({
 					where: { id: leadID },
 					data: { aguardandoManuscrito: false },
 				});
+				const updatedLead = result.count > 0
+					? await prisma.leadOabData.findUnique({ where: { id: leadID } })
+					: null;
 
 				// Notificar o frontend que o lead foi atualizado (sai do loading)
 				await sseManager.sendNotification(leadID, {
@@ -275,8 +371,20 @@ export async function processTranscriptionJob(job: Job<TranscriptionJobData>): P
 				console.error(`[TranscriptionQueue] ❌ Falha ao resetar aguardandoManuscrito para ${leadID}:`, dbError);
 			}
 		}
+		await clearLeadOperationCancel(jobId);
+		await emitLeadOperationEvent({
+			leadId: leadID,
+			jobId,
+			stage: "transcription",
+			status: "failed",
+			message: "Falha ao processar manuscrito.",
+			error: error.message || "Erro desconhecido ao processar manuscrito",
+			queueState: "failed",
+		});
 
 		throw error;
+	} finally {
+		await cancelMonitor.cleanup();
 	}
 }
 
@@ -301,25 +409,27 @@ async function sendSSEEvent(leadID: string, event: TranscriptionEvent): Promise<
  */
 export async function enqueueTranscription(data: TranscriptionJobData): Promise<Job<TranscriptionJobData>> {
 	const priority = data.priority || 5;
-	const jobId = `transcribe-${data.leadID}`;
+	const jobId = buildLeadOperationJobId("transcription", data.leadID);
 
-	// DEDUPLICAÇÃO: Verificar se já existe um job ativo ou pendente para este lead
-	const existingJobs = await transcriptionQueue.getJobs(["waiting", "active", "delayed"]);
-	const activeJob = existingJobs.find((j) => j.data.leadID === data.leadID);
+	const existingJob = await transcriptionQueue.getJob(jobId);
+	if (existingJob) {
+		const state = await existingJob.getState();
+		const operationStatus = mapBullMqStateToLeadOperationStatus(state);
 
-	if (activeJob) {
-		const state = await activeJob.getState();
-		console.log(
-			`[TranscriptionQueue] ⚠️ Job já existe para lead ${data.leadID} (${activeJob.id}, estado: ${state}) - ignorando duplicata`,
-		);
+		if (state === "waiting" || state === "active" || state === "delayed" || state === "prioritized") {
+			await emitLeadOperationEvent({
+				leadId: data.leadID,
+				jobId,
+				stage: "transcription",
+				status: operationStatus ?? "queued",
+				message: "Já existe uma digitação em andamento para este lead.",
+				queueState: state,
+			});
+			await sendSSEEvent(data.leadID, { type: "queued", position: 0 });
+			return existingJob;
+		}
 
-		// Notificar que já está na fila
-		await sendSSEEvent(data.leadID, {
-			type: "queued",
-			position: 0,
-		});
-
-		return activeJob;
+		await existingJob.remove().catch(() => undefined);
 	}
 
 	console.log(
@@ -328,11 +438,21 @@ export async function enqueueTranscription(data: TranscriptionJobData): Promise<
 
 	const job = await transcriptionQueue.add("transcribe", data, {
 		priority: 10 - priority, // BullMQ usa ordem inversa (menor valor = maior prioridade)
-		jobId: `${jobId}-${Date.now()}`, // Mantém timestamp para histórico, mas dedup é por verificação acima
+		jobId,
+	});
+
+	const waiting = await transcriptionQueue.getWaitingCount();
+	await emitLeadOperationEvent({
+		leadId: data.leadID,
+		jobId,
+		stage: "transcription",
+		status: "queued",
+		message: "Digitação adicionada à fila.",
+		progress: { position: waiting },
+		queueState: "waiting",
 	});
 
 	// Notificar posição na fila
-	const waiting = await transcriptionQueue.getWaitingCount();
 	await sendSSEEvent(data.leadID, {
 		type: "queued",
 		position: waiting,
@@ -350,9 +470,8 @@ export async function getTranscriptionStatus(leadID: string): Promise<{
 	result?: TranscriptionResult;
 	error?: string;
 }> {
-	// Buscar jobs recentes para este lead
-	const jobs = await transcriptionQueue.getJobs(["waiting", "active", "completed", "failed"]);
-	const job = jobs.find((j) => j.data.leadID === leadID);
+	const jobId = buildLeadOperationJobId("transcription", leadID);
+	const job = await transcriptionQueue.getJob(jobId);
 
 	if (!job) {
 		return { status: "not-found" };
@@ -360,8 +479,7 @@ export async function getTranscriptionStatus(leadID: string): Promise<{
 
 	const state = await job.getState();
 
-	if (state === "waiting") {
-		const position = await transcriptionQueue.getWaitingCount();
+	if (state === "waiting" || state === "delayed" || state === "prioritized") {
 		return {
 			status: "queued",
 			progress: { leadID, currentPage: 0, totalPages: job.data.images.length, percentage: 0, startedAt: new Date() },
@@ -406,12 +524,37 @@ export async function getTranscriptionStatus(leadID: string): Promise<{
  * Cancela um job de transcrição
  */
 export async function cancelTranscription(leadID: string): Promise<boolean> {
-	const jobs = await transcriptionQueue.getJobs(["waiting", "active"]);
-	const job = jobs.find((j) => j.data.leadID === leadID);
+	const jobId = buildLeadOperationJobId("transcription", leadID);
+	const job = await transcriptionQueue.getJob(jobId);
 
-	if (job) {
+	if (!job) {
+		return false;
+	}
+
+	const state = await job.getState();
+	if (state === "waiting" || state === "delayed" || state === "prioritized") {
 		await job.remove();
+		await clearLeadOperationCancel(jobId);
+		await emitLeadOperationEvent({
+			leadId: leadID,
+			jobId,
+			stage: "transcription",
+			status: "canceled",
+			message: "Digitação cancelada antes do início.",
+			queueState: state,
+		});
 		console.log(`[TranscriptionQueue] ❌ Job cancelado para lead ${leadID}`);
+		return true;
+	}
+
+	if (state === "active") {
+		await requestLeadOperationCancel({
+			leadId: leadID,
+			stage: "transcription",
+			jobId,
+			message: "Cancelamento solicitado para a digitação.",
+		});
+		console.log(`[TranscriptionQueue] ⏳ Cancelamento solicitado para lead ${leadID}`);
 		return true;
 	}
 

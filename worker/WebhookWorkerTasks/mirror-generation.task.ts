@@ -1,21 +1,43 @@
-import type { Job } from "bullmq";
+import { UnrecoverableError, type Job } from "bullmq";
 import { getPrismaInstance } from "../../lib/connections";
 import { generateMirrorLocally } from "../../lib/oab-eval/mirror-generator-agent";
 import type { MirrorGenerationJobData, MirrorGenerationJobResult } from "../../lib/oab-eval/mirror-queue";
+import {
+	clearLeadOperationCancel,
+	createLeadOperationCancelMonitor,
+	emitLeadOperationEvent,
+	isLeadOperationCancelRequested,
+	isLeadOperationCanceledError,
+} from "../../lib/oab-eval/operation-control";
+import { getLeadOperationLeadData } from "../../lib/oab-eval/operation-service";
+import { createLogger } from "../../lib/utils/logger";
 
 // Lazy import to avoid Edge Runtime issues
 const getSseManager = () => import("../../lib/sse-manager").then((m) => m.sseManager);
+const log = createLogger("MirrorWorker");
 
 /**
  * Processor para jobs de geração de espelho local
  */
 export async function processMirrorGenerationTask(
 	job: Job<MirrorGenerationJobData>,
+	_token?: string,
+	signal?: AbortSignal,
 ): Promise<MirrorGenerationJobResult> {
-	console.log(`[MirrorWorker] 🔄 Iniciando processamento do job ${job.id}`);
-	console.log(`[MirrorWorker] 📋 Lead: ${job.data.leadId}, Especialidade: ${job.data.especialidade}`);
+	log.info("Iniciando processamento", {
+		jobId: job.id,
+		leadId: job.data.leadId,
+		especialidade: job.data.especialidade,
+	});
 
 	const startTime = Date.now();
+	const jobId = String(job.id);
+	const cancelMonitor = createLeadOperationCancelMonitor({
+		leadId: job.data.leadId,
+		stage: "mirror",
+		jobId,
+		upstreamSignal: signal,
+	});
 
 	try {
 		const { leadId, especialidade, espelhoPadraoId, images, nome, telefone, selectedProvider } = job.data;
@@ -35,15 +57,36 @@ export async function processMirrorGenerationTask(
 								: 50;
 
 			await job.updateProgress(progress);
-			console.log(`[MirrorWorker] [${leadId}] ${message} (${progress}%)`);
+			log.info(`[${leadId}] ${message}`, { progress });
+			await emitLeadOperationEvent({
+				leadId,
+				jobId,
+				stage: "mirror",
+				status: "processing",
+				message,
+				progress,
+				queueState: "active",
+			});
 		};
 
 		// Executar agente de geração de espelho
-		console.log(`[MirrorWorker] 🤖 Chamando agente local para lead ${leadId}...`);
-		console.log(`[MirrorWorker] 🎛️ Provider selecionado: ${selectedProvider || "GEMINI (padrão)"}`);
+		log.info("Chamando agente local", {
+			leadId,
+			provider: selectedProvider || "GEMINI",
+			jobId,
+		});
 		if (espelhoPadraoId) {
-			console.log(`[MirrorWorker] 📋 Usando espelho padrão: ${espelhoPadraoId}`);
+			log.info("Usando espelho padrão", { leadId, espelhoPadraoId });
 		}
+		await emitLeadOperationEvent({
+			leadId,
+			jobId,
+			stage: "mirror",
+			status: "processing",
+			message: "Processando espelho.",
+			progress: 5,
+			queueState: "active",
+		});
 
 		const result = await generateMirrorLocally({
 			leadId,
@@ -54,6 +97,7 @@ export async function processMirrorGenerationTask(
 			nome,
 			onProgress,
 			selectedProvider, // ⭐ NOVO: Passa o provider selecionado pelo usuário
+			abortSignal: cancelMonitor.signal,
 		});
 
 		await job.updateProgress(95);
@@ -61,10 +105,12 @@ export async function processMirrorGenerationTask(
 		const { markdownMirror, jsonMirror, structuredMirror } = result;
 
 		const elapsedMs = Date.now() - startTime;
-		console.log(`[MirrorWorker] ✅ Espelho gerado com sucesso em ${(elapsedMs / 1000).toFixed(1)}s`);
-		console.log(
-			`[MirrorWorker] 📊 Aluno: ${structuredMirror.meta.aluno}, Nota: ${structuredMirror.totais.final.toFixed(2)}`,
-		);
+		log.info("Espelho gerado com sucesso", {
+			leadId,
+			elapsedMs,
+			aluno: structuredMirror.meta.aluno,
+			notaFinal: structuredMirror.totais.final,
+		});
 
 		// Salvar resultado direto no banco e notificar via SSE (sem webhook intermediário)
 		await job.updateProgress(98);
@@ -72,7 +118,17 @@ export async function processMirrorGenerationTask(
 
 		await job.updateProgress(100);
 
-		console.log(`[MirrorWorker] ✅ Job ${job.id} completado com sucesso`);
+		await clearLeadOperationCancel(jobId);
+		await emitLeadOperationEvent({
+			leadId,
+			jobId,
+			stage: "mirror",
+			status: "completed",
+			message: "Espelho concluído com sucesso.",
+			progress: 100,
+			queueState: "completed",
+		});
+		log.info("Job completado com sucesso", { jobId, leadId });
 
 		return {
 			leadId,
@@ -83,17 +139,63 @@ export async function processMirrorGenerationTask(
 		};
 	} catch (error: any) {
 		const elapsedMs = Date.now() - startTime;
-		console.error(`[MirrorWorker] ❌ Erro após ${(elapsedMs / 1000).toFixed(1)}s:`, error);
+		const userCanceled = isLeadOperationCanceledError(error) || (await isLeadOperationCancelRequested(jobId));
+
+		if (userCanceled) {
+			await getPrismaInstance().leadOabData.updateMany({
+				where: { id: job.data.leadId },
+				data: {
+					aguardandoEspelho: false,
+				},
+			});
+			await clearLeadOperationCancel(jobId);
+			await emitLeadOperationEvent({
+				leadId: job.data.leadId,
+				jobId,
+				stage: "mirror",
+				status: "canceled",
+				message: "Espelho cancelado pelo usuário.",
+				queueState: "failed",
+			});
+
+			try {
+				const sseManager = await getSseManager();
+				await sseManager.sendNotification(job.data.leadId, {
+					type: "leadUpdate",
+					message: "A geração do espelho foi cancelada.",
+					leadData: await getLeadOperationLeadData(job.data.leadId),
+					timestamp: new Date().toISOString(),
+				});
+			} catch (sseError) {
+				log.warn("Falha ao enviar leadUpdate após cancelamento", sseError as Error);
+			}
+
+			throw new UnrecoverableError("Espelho cancelado pelo usuário.");
+		}
+
+		log.error("Erro no processamento", { jobId, leadId: job.data.leadId, elapsedMs }, error);
 
 		// Atualizar lead com status de erro e notificar via SSE
 		try {
 			await updateLeadOnMirrorFailure(job.data.leadId, error.message || "Erro desconhecido ao gerar espelho");
+			await clearLeadOperationCancel(jobId);
+			await emitLeadOperationEvent({
+				leadId: job.data.leadId,
+				jobId,
+				stage: "mirror",
+				status: "failed",
+				message: "Falha ao processar espelho.",
+				error: error.message || "Erro desconhecido ao gerar espelho",
+				queueState: "failed",
+			});
 		} catch (updateErr) {
-			console.error("[MirrorWorker] ❌ Erro ao atualizar lead após falha:", updateErr);
+			log.error("Erro ao atualizar lead após falha", updateErr as Error);
 		}
 
 		// Re-lançar erro para que BullMQ possa fazer retry
 		throw error;
+	} finally {
+		await cancelMonitor.cleanup();
 	}
 }
 
@@ -108,7 +210,7 @@ export async function processMirrorGenerationTask(
 async function saveMirrorResult(leadId: string, markdownMirror: string, jsonMirror: any): Promise<void> {
 	const prisma = getPrismaInstance();
 
-	console.log(`[MirrorWorker] 💾 Salvando resultado do espelho para lead ${leadId}`);
+	log.info("Salvando resultado do espelho", { leadId });
 
 	// Verificar se o lead existe
 	const leadExistente = await prisma.leadOabData.findUnique({
@@ -124,10 +226,10 @@ async function saveMirrorResult(leadId: string, markdownMirror: string, jsonMirr
 
 	if (jsonMirror) {
 		textoDOEspelho = typeof jsonMirror === "string" ? jsonMirror : JSON.stringify(jsonMirror);
-		console.log(`[MirrorWorker] 📝 jsonMirror convertido para string (${textoDOEspelho.length} bytes)`);
+		log.info("jsonMirror convertido para string", { leadId, bytes: textoDOEspelho.length });
 	} else if (markdownMirror) {
 		textoDOEspelho = markdownMirror;
-		console.log(`[MirrorWorker] 📝 Usando markdownMirror como fallback (${markdownMirror.length} bytes)`);
+		log.info("Usando markdownMirror como fallback", { leadId, bytes: markdownMirror.length });
 	}
 
 	// Atualizar lead com espelho processado
@@ -155,7 +257,7 @@ async function saveMirrorResult(leadId: string, markdownMirror: string, jsonMirr
 		);
 	}
 
-	console.log(`[MirrorWorker] ✅ Espelho salvo com sucesso para lead ${leadId}`);
+	log.info("Espelho salvo com sucesso", { leadId });
 
 	// Buscar dados atualizados para notificação SSE (omitindo campos pesados)
 	const leadData = await prisma.leadOabData.findUnique({
@@ -197,12 +299,12 @@ async function saveMirrorResult(leadId: string, markdownMirror: string, jsonMirr
 		});
 
 		if (success) {
-			console.log(`[MirrorWorker] ✅ Notificação SSE enviada para lead ${leadId}`);
+			log.info("Notificação SSE enviada", { leadId });
 		} else {
-			console.warn(`[MirrorWorker] ⚠️ Falha ao enviar SSE para lead ${leadId}`);
+			log.warn("Falha ao enviar SSE", { leadId });
 		}
 	} catch (sseErr) {
-		console.error(`[MirrorWorker] ❌ Erro ao enviar SSE:`, sseErr);
+		log.error("Erro ao enviar SSE", sseErr as Error);
 	}
 }
 
@@ -213,13 +315,18 @@ async function updateLeadOnMirrorFailure(leadId: string, errorMessage: string): 
 	const prisma = getPrismaInstance();
 
 	try {
-		await prisma.leadOabData.update({
+		const result = await prisma.leadOabData.updateMany({
 			where: { id: leadId },
 			data: {
 				espelhoProcessado: false,
 				aguardandoEspelho: false,
 			},
 		});
+
+		if (result.count === 0) {
+			log.warn("Lead não encontrado ao limpar aguardandoEspelho", { leadId, errorMessage });
+			return;
+		}
 
 		// Notificar erro via SSE
 		const sseManager = await getSseManager();
@@ -230,6 +337,6 @@ async function updateLeadOnMirrorFailure(leadId: string, errorMessage: string): 
 			timestamp: new Date().toISOString(),
 		});
 	} catch (e: any) {
-		console.error(`[MirrorWorker] ❌ Erro ao atualizar lead on failure:`, e);
+		log.error("Erro ao atualizar lead on failure", e);
 	}
 }

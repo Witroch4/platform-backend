@@ -37,13 +37,11 @@ export function LeadsWaitingIndicator({ className = "" }: LeadsWaitingIndicatorP
 
 		// Eventos de leads
 		window.addEventListener("lead-update", handleLeadUpdate);
-		window.addEventListener("force-sse-reconnect", handleLeadUpdate);
 		window.addEventListener("leads-waiting-update", handleLeadUpdate);
 
 		return () => {
 			clearInterval(interval);
 			window.removeEventListener("lead-update", handleLeadUpdate);
-			window.removeEventListener("force-sse-reconnect", handleLeadUpdate);
 			window.removeEventListener("leads-waiting-update", handleLeadUpdate);
 		};
 	}, []);

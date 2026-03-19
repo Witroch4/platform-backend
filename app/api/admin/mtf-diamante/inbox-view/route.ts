@@ -8,6 +8,9 @@ import { getPrismaInstance, getRedisInstance } from "@/lib/connections";
 import { performance } from "node:perf_hooks";
 import crypto from "node:crypto";
 import { z } from "zod";
+import { createLogger } from "@/lib/utils/logger";
+
+const log = createLogger("API.InboxView");
 
 const Q = z.object({ inboxId: z.string().optional() });
 
@@ -51,7 +54,7 @@ export async function GET(request: NextRequest) {
 
 		// 🚨 Log especial para requisições de caixas (debug)
 		if (isRequestingCaixas && process.env.NODE_ENV === "development") {
-			console.log(`🔥 [CAIXAS] Cache BYPASSED automaticamente - dados sempre frescos`);
+			log.info("Cache BYPASSED automaticamente - dados sempre frescos");
 		}
 
 		// 1) Tenta cache (só se não for bypass)

@@ -1,10 +1,9 @@
 import { z } from "zod";
-import { generateText, type LanguageModel } from "ai";
+import { generateText } from "ai";
 import { google } from "@ai-sdk/google";
 import { createModel, buildProviderOptions } from "@/lib/socialwise-flow/services/ai-provider-factory";
 import type { AiProviderType } from "@/lib/socialwise-flow/processor-components/assistant-config";
 import { withRetry, cleanPromptForOpenAI, OPENAI_FALLBACK_MODEL } from "./ai-retry-fallback";
-import { getOabEvalConfig } from "@/lib/config";
 import { getPrismaInstance } from "@/lib/connections";
 import {
 	getAgentBlueprintByLinkedColumn,
@@ -13,6 +12,8 @@ import {
 } from "@/lib/ai-agents/blueprints";
 import type { RubricPayload, RubricGroup, StudentMirrorPayload } from "./types";
 import { prepareRubricScoring } from "./rubric-scoring";
+import { combineAbortSignals } from "./operation-control";
+import { resolveOabRuntimePolicy, type OabRuntimePolicy } from "./runtime-policy";
 
 // ============================================================================
 // SCHEMAS & TYPES
@@ -57,6 +58,7 @@ export interface MirrorGeneratorInput {
 	nome?: string;
 	onProgress?: (message: string) => Promise<void> | void;
 	selectedProvider?: "OPENAI" | "GEMINI"; // Provider selecionado pelo switch no frontend
+	abortSignal?: AbortSignal;
 }
 
 export interface MirrorGeneratorOutput {
@@ -467,6 +469,7 @@ async function getMirrorExtractorConfig(selectedProvider?: "OPENAI" | "GEMINI"):
 	maxOutputTokens: number;
 	provider: AiProviderType;
 	reasoningEffort: "minimal" | "low" | "medium" | "high";
+	metadata?: Record<string, unknown> | null;
 }> {
 	const prisma = getPrismaInstance();
 
@@ -531,6 +534,7 @@ async function getMirrorExtractorConfig(selectedProvider?: "OPENAI" | "GEMINI"):
 				maxOutputTokens,
 				provider: effectiveProvider as AiProviderType,
 				reasoningEffort: ((blueprint.thinkingLevel as string) || "high") as "minimal" | "low" | "medium" | "high",
+				metadata: blueprint.metadata ?? null,
 			};
 		}
 	} catch (err) {
@@ -544,7 +548,7 @@ async function getMirrorExtractorConfig(selectedProvider?: "OPENAI" | "GEMINI"):
 		if (bpId) {
 			blueprint = await (prisma as any).aiAgentBlueprint.findUnique({
 				where: { id: bpId },
-				select: { model: true, systemPrompt: true, instructions: true, maxOutputTokens: true, thinkingLevel: true },
+				select: { model: true, systemPrompt: true, instructions: true, maxOutputTokens: true, thinkingLevel: true, metadata: true },
 			});
 		}
 		if (!bpId || !blueprint) {
@@ -557,7 +561,7 @@ async function getMirrorExtractorConfig(selectedProvider?: "OPENAI" | "GEMINI"):
 					],
 				},
 				orderBy: { updatedAt: "desc" },
-				select: { model: true, systemPrompt: true, instructions: true, maxOutputTokens: true, thinkingLevel: true },
+				select: { model: true, systemPrompt: true, instructions: true, maxOutputTokens: true, thinkingLevel: true, metadata: true },
 			});
 		}
 
@@ -580,6 +584,7 @@ async function getMirrorExtractorConfig(selectedProvider?: "OPENAI" | "GEMINI"):
 				maxOutputTokens,
 				provider: effectiveProvider as AiProviderType,
 				reasoningEffort: ((blueprint.thinkingLevel as string) || "high") as "minimal" | "low" | "medium" | "high",
+				metadata: blueprint.metadata ?? null,
 			};
 		}
 	} catch (err) {
@@ -593,6 +598,7 @@ async function getMirrorExtractorConfig(selectedProvider?: "OPENAI" | "GEMINI"):
 		maxOutputTokens: 0,
 		provider: effectiveProvider as AiProviderType,
 		reasoningEffort: "high",
+		metadata: null,
 	};
 }
 
@@ -748,10 +754,11 @@ async function extractMirrorDataFromImages(
 	rubric: RubricPayload,
 	model: string,
 	systemInstructions: string,
-	maxOutputTokens: number,
+	runtimePolicy: OabRuntimePolicy,
 	options: {
 		provider: AiProviderType;
 		reasoningEffort: "minimal" | "low" | "medium" | "high";
+		abortSignal?: AbortSignal;
 	},
 ): Promise<ExtractedMirrorData> {
 	console.log(`[MirrorGenerator] 🖼️ Extraindo dados de ${imageUrls.length} imagem(ns) do espelho`);
@@ -849,15 +856,19 @@ async function extractMirrorDataFromImages(
 	].join("\n");
 
 	// 📝 LOG: Prompt completo sendo enviado
-	console.log(`[MirrorGenerator::Prompt] 📤 Enviando prompt para Vision AI (${userPrompt.length} chars):`);
-	console.log(`[MirrorGenerator::Prompt] ───────────────────────────────────────────`);
-	console.log(userPrompt);
-	console.log(`[MirrorGenerator::Prompt] ───────────────────────────────────────────`);
+	if (process.env.NODE_ENV !== "production") {
+		console.log(`[MirrorGenerator::Prompt] 📤 Enviando prompt para Vision AI (${userPrompt.length} chars):`);
+		console.log(`[MirrorGenerator::Prompt] ───────────────────────────────────────────`);
+		console.log(userPrompt);
+		console.log(`[MirrorGenerator::Prompt] ───────────────────────────────────────────`);
+	} else {
+		console.log(`[MirrorGenerator::Prompt] 📤 Prompt resumido (${userPrompt.length} chars)`);
+	}
 
 	const imageParts = imageUrls.map((url) => ({ type: "image" as const, image: new URL(url) }));
-	const isGemini = options.provider === "GEMINI";
 	const isGemini3 = model.startsWith("gemini-3");
 	const tools = isGemini3 ? { code_execution: google.tools.codeExecution({}) } : undefined;
+	const requestAbortSignal = combineAbortSignals([options.abortSignal, AbortSignal.timeout(runtimePolicy.timeoutMs)]);
 
 	let rawText: string;
 	let usedProvider = options.provider;
@@ -880,12 +891,18 @@ async function extractMirrorDataFromImages(
 					],
 				}],
 				tools,
-				...(maxOutputTokens > 0 ? { maxOutputTokens } : {}),
+				maxOutputTokens: runtimePolicy.maxOutputTokens,
 				temperature: 0, // Deterministic extraction
 				providerOptions,
+				maxRetries: 0,
+				abortSignal: requestAbortSignal,
 			});
 			return result.text;
-		}, `MirrorVision:${options.provider}/${model}`);
+		}, `MirrorVision:${options.provider}/${model}`, {
+			retries: runtimePolicy.retryAttempts,
+			baseDelayMs: runtimePolicy.retryBaseDelayMs,
+			maxDelayMs: runtimePolicy.retryMaxDelayMs,
+		});
 	} catch (primaryError) {
 		// Fallback: Gemini/Claude → OpenAI (sem tools, prompt limpo)
 		if (options.provider !== "OPENAI") {
@@ -901,8 +918,10 @@ async function extractMirrorDataFromImages(
 						...imageParts,
 					],
 				}],
-				...(maxOutputTokens > 0 ? { maxOutputTokens } : {}),
+				maxOutputTokens: runtimePolicy.maxOutputTokens,
 				temperature: 0,
+				maxRetries: 0,
+				abortSignal: requestAbortSignal,
 			});
 			rawText = result.text;
 			usedProvider = "OPENAI";
@@ -935,10 +954,14 @@ async function extractMirrorDataFromImages(
 		);
 
 		// 📊 LOG: Resposta completa da OpenAI
-		console.log(`[MirrorGenerator::Response] 📥 JSON extraído da OpenAI (${Object.keys(extracted).length} chaves):`);
-		console.log(`[MirrorGenerator::Response] ───────────────────────────────────────────`);
-		console.log(JSON.stringify(extracted, null, 2));
-		console.log(`[MirrorGenerator::Response] ───────────────────────────────────────────`);
+		if (process.env.NODE_ENV !== "production") {
+			console.log(`[MirrorGenerator::Response] 📥 JSON extraído (${Object.keys(extracted).length} chaves):`);
+			console.log(`[MirrorGenerator::Response] ───────────────────────────────────────────`);
+			console.log(JSON.stringify(extracted, null, 2));
+			console.log(`[MirrorGenerator::Response] ───────────────────────────────────────────`);
+		} else {
+			console.log(`[MirrorGenerator::Response] 📥 JSON extraído (${Object.keys(extracted).length} chaves)`);
+		}
 
 		// Contar quantas notas foram extraídas
 		const notasExtraidas = Object.keys(extracted).filter((k) => k.startsWith("nota_obtida_")).length;
@@ -1269,6 +1292,30 @@ function buildStructuredMirror(rubric: RubricPayload, extractedData: ExtractedMi
 
 	questoes.sort((a, b) => a.questao.localeCompare(b.questao));
 
+	// Fallback: quando modelo falha nos individuais mas acerta totais por questão,
+	// distribuir o total proporcionalmente pelo peso de cada grupo
+	for (const q of questoes) {
+		const allZero = q.itens.every((item) => item.notaObtida === 0);
+		if (allZero && q.total > 0) {
+			const somaMaximos = q.itens.reduce((s, i) => s + i.pesoMaximo, 0);
+			if (somaMaximos > 0) {
+				let distributed = 0;
+				for (let i = 0; i < q.itens.length; i++) {
+					if (i === q.itens.length - 1) {
+						q.itens[i].notaObtida = roundToTwo(q.total - distributed);
+					} else {
+						const share = roundToTwo((q.itens[i].pesoMaximo / somaMaximos) * q.total);
+						q.itens[i].notaObtida = share;
+						distributed += share;
+					}
+				}
+				console.log(
+					`[MirrorGenerator::Fallback] Distribuídos ${q.total} pontos entre ${q.itens.length} itens da ${q.questao}`,
+				);
+			}
+		}
+	}
+
 	const sumQuestoesSelecionadas = roundToTwo(questoes.reduce((sum, item) => sum + item.total, 0));
 
 	let overrideQuestoesSum: number | null = null;
@@ -1283,6 +1330,27 @@ function buildStructuredMirror(rubric: RubricPayload, extractedData: ExtractedMi
 		}
 		if (hasOverride) {
 			overrideQuestoesSum = roundToTwo(accumulator);
+		}
+	}
+
+	// Fallback peça: distribuir total extraído quando itens estão zerados
+	const allPecaZero = pecaItems.every((item) => item.notaObtida === 0);
+	if (allPecaZero && extractedTotalPeca != null && extractedTotalPeca > 0 && pecaItems.length > 0) {
+		const somaMaximos = pecaItems.reduce((s, i) => s + i.pesoMaximo, 0);
+		if (somaMaximos > 0) {
+			let distributed = 0;
+			for (let i = 0; i < pecaItems.length; i++) {
+				if (i === pecaItems.length - 1) {
+					pecaItems[i].notaObtida = roundToTwo(extractedTotalPeca - distributed);
+				} else {
+					const share = roundToTwo((pecaItems[i].pesoMaximo / somaMaximos) * extractedTotalPeca);
+					pecaItems[i].notaObtida = share;
+					distributed += share;
+				}
+			}
+			console.log(
+				`[MirrorGenerator::Fallback] Distribuídos ${extractedTotalPeca} pontos entre ${pecaItems.length} itens da peça`,
+			);
 		}
 	}
 
@@ -1406,12 +1474,20 @@ export async function generateMirrorLocally(input: MirrorGeneratorInput): Promis
 	}
 
 	// 3. Carregar config do blueprint (considerando provider selecionado pelo usuário)
-	const { model, systemInstructions, maxOutputTokens, provider, reasoningEffort } =
+	const { model, systemInstructions, maxOutputTokens, provider, reasoningEffort, metadata } =
 		await getMirrorExtractorConfig(input.selectedProvider);
+	const runtimePolicy = resolveOabRuntimePolicy({
+		stage: "mirror",
+		provider,
+		metadata,
+		explicitMaxOutputTokens: maxOutputTokens,
+	});
 
 	console.log("[MirrorGenerator] 📝 Configuração do Blueprint:");
 	console.log(`  - Modelo: ${model}`);
-	console.log(`  - Max Output Tokens: ${maxOutputTokens}`);
+	console.log(`  - Max Output Tokens: ${runtimePolicy.maxOutputTokens}`);
+	console.log(`  - Timeout: ${runtimePolicy.timeoutMs}ms`);
+	console.log(`  - Retry Attempts: ${runtimePolicy.retryAttempts}`);
 	console.log(`  - Provider: ${provider}`);
 	console.log(`  - Reasoning Effort: ${reasoningEffort}`);
 
@@ -1421,8 +1497,8 @@ export async function generateMirrorLocally(input: MirrorGeneratorInput): Promis
 		rubric,
 		model,
 		systemInstructions,
-		maxOutputTokens,
-		{ provider, reasoningEffort },
+		runtimePolicy,
+		{ provider, reasoningEffort, abortSignal: input.abortSignal },
 	);
 
 	if (input.onProgress) {

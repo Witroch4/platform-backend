@@ -106,6 +106,7 @@ interface LeadDialogsProps {
 	onCancelarEspelho: () => Promise<void>;
 	onExcluirEspelho: () => Promise<void>;
 	onSaveAnotacoes: (anotacoes: string) => Promise<void>;
+	onSaveRecursoDraft: (data: { html: string; textoRecurso: string }, options?: { silent?: boolean }) => Promise<void>;
 	onEnviarPdf: (sourceId: string) => Promise<void>;
 	onCancelarAnalise: () => Promise<void>;
 	onSaveAnalisePreliminar: (data: any) => Promise<void>;
@@ -178,6 +179,7 @@ export function LeadDialogs({
 	onCancelarEspelho,
 	onExcluirEspelho,
 	onSaveAnotacoes,
+	onSaveRecursoDraft,
 	onEnviarPdf,
 	onCancelarAnalise,
 	onSaveAnalisePreliminar,
@@ -417,6 +419,7 @@ export function LeadDialogs({
 				analiseValidada={localAnaliseState.analiseValidada}
 				temAnalisePreliminar={Boolean(localAnaliseState.analisePreliminar)}
 				onSaveAnotacoes={onSaveAnotacoes}
+				onSaveRecursoDraft={onSaveRecursoDraft}
 				onEnviarPdf={onEnviarPdf}
 				onCancelarRecurso={onCancelarRecurso}
 				onValidarRecurso={onValidarRecurso}

@@ -184,6 +184,7 @@ model LeadOabData {
   analisePreliminar      Json?
   analiseValidada        Boolean                @default(false)
   consultoriaFase2       Boolean                @default(false)
+  alwaysShowInLeadList   Boolean                @default(false)
   recursoPreliminar      Json?
   recursoValidado        Boolean                @default(false)
   recursoUrl             String?

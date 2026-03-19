@@ -1,292 +1,223 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { getPrismaInstance } from "@/lib/connections";
 const prisma = getPrismaInstance();
 import { uploadToMinIOWithRetry } from "@/lib/minio";
 import axios from "axios";
-import type { Readable } from "stream";
 import { randomUUID } from "crypto";
-import { isValidUrl, sanitizeUrl } from "@/lib/utils/url";
-import { fromBuffer } from "pdf2pic";
+import { sanitizeUrl } from "@/lib/utils/url";
 import * as fs from "fs";
 import * as path from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
 
-// Constantes de otimização
-const UPLOAD_CONCURRENCY = 6; // Uploads simultâneos
+const UPLOAD_CONCURRENCY = 6;
+const RENDER_PARALLELISM = 3; // Ranges de páginas renderizadas em paralelo
 
 const execPromise = promisify(exec);
 
-// Criar um logger simples sem depender da biblioteca
 const log = {
 	info: (message: string) => console.log(`[PDF-TO-IMAGE] INFO: ${message}`),
 	error: (message: string) => console.error(`[PDF-TO-IMAGE] ERROR: ${message}`),
 	warn: (message: string) => console.warn(`[PDF-TO-IMAGE] WARN: ${message}`),
 };
 
-interface PDF2PicOptions {
+interface ConvertOptions {
 	density: number;
 	savename: string;
 	savedir: string;
-	format: string;
-	size: string | number;
+	format: "jpeg" | "png";
 }
 
 /**
- * Converte um stream para um buffer
+ * Obtém número de páginas do PDF usando pdfinfo (poppler-utils)
  */
-async function streamToBuffer(stream: Readable): Promise<Buffer> {
-	return new Promise<Buffer>((resolve, reject) => {
-		const chunks: Buffer[] = [];
-		stream.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
-		stream.on("end", () => resolve(Buffer.concat(chunks)));
-		stream.on("error", reject);
-	});
-}
-
-// Função para converter PDF para imagens usando ImageMagick diretamente
-async function convertPdfToImagesWithImageMagick(pdfBuffer: Buffer, options: PDF2PicOptions): Promise<string[]> {
+async function getPageCount(pdfPath: string): Promise<number> {
 	try {
-		log.info(`Iniciando conversão de PDF para imagens com ImageMagick (${pdfBuffer.length} bytes)`);
-
-		// Configuração para a conversão
-		const density = options.density || 300;
-		const format = options.format || "png";
-		const tmpDir = options.savedir || "/tmp";
-		const baseName = options.savename || `pdf-${randomUUID()}`;
-
-		// Garantir que o diretório temporário exista
-		try {
-			await fs.promises.access(tmpDir);
-		} catch (error) {
-			// Diretório não existe, tentar criá-lo
-			log.info(`Diretório temporário ${tmpDir} não existe, criando...`);
-			await fs.promises.mkdir(tmpDir, { recursive: true });
-		}
-
-		// Salvar o PDF em um arquivo temporário
-		const pdfPath = path.join(tmpDir, `${baseName}.pdf`);
-		await fs.promises.writeFile(pdfPath, pdfBuffer);
-		log.info(`PDF temporário salvo em: ${pdfPath} (${pdfBuffer.length} bytes)`);
-
-		// Verificar o arquivo PDF
-		try {
-			const { stdout: pdfInfo } = await execPromise(
-				`pdfinfo ${pdfPath} || echo "Não foi possível ler informações do PDF"`,
-			);
-			log.info(`Informações do PDF: ${pdfInfo.substring(0, 200)}...`);
-		} catch (error) {
-			log.warn(`Não foi possível obter informações do PDF: ${error}`);
-		}
-
-		// Criar o diretório de saída
-		const outputDir = path.join(tmpDir, baseName);
-		try {
-			await fs.promises.mkdir(outputDir, { recursive: true });
-			log.info(`Diretório de saída criado: ${outputDir}`);
-		} catch (err) {
-			log.warn(`Erro ao criar diretório: ${err}`);
-			// Tentativa alternativa - usar diretório temporário diretamente
-			log.info("Usando diretório temporário diretamente");
-		}
-
-		// Nome base para os arquivos de saída (sem extensão)
-		const outputBaseName = path.join(outputDir, `page`);
-
-		// Comando para converter PDF em imagens usando GhostScript com otimizações
-		// Flags de otimização:
-		// -dNumRenderingThreads=4: Paraleliza rendering em múltiplos cores
-		// -c "100000000 setvirtualmemory": Aloca memória virtual (evita swap)
-		// -dBufferSpace=500000000: Buffer de 500MB para melhor performance
-		const gsCommand = `gs -dSAFER -dBATCH -dNOPAUSE -sDEVICE=png16m -r${density} -dGraphicsAlphaBits=4 -dTextAlphaBits=4 -dNumRenderingThreads=4 -dBufferSpace=500000000 -sOutputFile=${outputBaseName}-%d.${format} ${pdfPath}`;
-		log.info(`Executando comando GhostScript: ${gsCommand}`);
-
-		try {
-			// Tentar usar Ghostscript diretamente
-			const { stdout: gsStdout, stderr: gsStderr } = await execPromise(gsCommand);
-			if (gsStderr) {
-				log.warn(`Avisos do GhostScript: ${gsStderr}`);
-			}
-			log.info(`GhostScript concluído: ${gsStdout}`);
-		} catch (gsError) {
-			// Se falhar, tenta ImageMagick
-			log.warn(`GhostScript falhou: ${gsError}, tentando ImageMagick...`);
-
-			// Tentativa 2: Abordagem com convert do ImageMagick
-			const convertCommand = `convert -density ${density} "${pdfPath}" -quality 100 "${outputBaseName}-%d.${format}"`;
-			log.info(`Executando comando ImageMagick: ${convertCommand}`);
-
-			try {
-				const { stdout, stderr } = await execPromise(convertCommand);
-				if (stderr) {
-					log.warn(`Avisos do ImageMagick: ${stderr}`);
-				}
-				log.info(`ImageMagick concluído: ${stdout}`);
-			} catch (convertError) {
-				// Se falhar, tenta com magick do ImageMagick 7
-				log.warn(`Convert falhou: ${convertError}, tentando com 'magick'...`);
-
-				// Tentativa 3: Abordagem com magick do ImageMagick 7+
-				const magickCommand = `magick -density ${density} "${pdfPath}" -quality 100 "${outputBaseName}-%d.${format}"`;
-				log.info(`Executando comando Magick: ${magickCommand}`);
-
-				const { stdout, stderr } = await execPromise(magickCommand);
-				if (stderr) {
-					log.warn(`Avisos do Magick: ${stderr}`);
-				}
-				log.info(`Magick concluído: ${stdout}`);
-			}
-		}
-
-		// Listar arquivos no diretório para ver o que foi gerado
-		log.info(`Listando arquivos em ${outputDir}`);
-		const files = await fs.promises.readdir(outputDir);
-		log.info(`Arquivos gerados: ${files.join(", ")}`);
-
-		if (files.length === 0) {
-			log.error(`Nenhum arquivo gerado na conversão. Verificando política do ImageMagick...`);
-			try {
-				const { stdout: policy } = await execPromise(
-					`cat /etc/ImageMagick*/policy.xml || echo "Arquivo de política não encontrado"`,
-				);
-				log.info(`Política do ImageMagick: ${policy.substring(0, 500)}...`);
-			} catch (policyError) {
-				log.warn(`Não foi possível ler a política do ImageMagick: ${policyError}`);
-			}
-			throw new Error("Nenhum arquivo foi gerado durante a conversão do PDF para imagem");
-		}
-
-		// Salvar arquivos no MinIO - UPLOAD PARALELO COM LIMITE DE CONCORRÊNCIA
-		const convertedImagesUrls: string[] = [];
-
-		// Filtrar apenas arquivos de imagem e preparar para upload
-		const imageFiles = files.filter((file) => file.endsWith(`.${format}`));
-		log.info(`Preparando upload paralelo de ${imageFiles.length} imagens (concorrência: ${UPLOAD_CONCURRENCY})`);
-
-		// Processar uploads em batches para limitar concorrência
-		for (let i = 0; i < imageFiles.length; i += UPLOAD_CONCURRENCY) {
-			const batch = imageFiles.slice(i, i + UPLOAD_CONCURRENCY);
-
-			// Preparar arquivos do batch
-			const batchUploads = await Promise.all(
-				batch.map(async (file) => {
-					const filePath = path.join(outputDir, file);
-					const fileBuffer = await fs.promises.readFile(filePath);
-					const fileName = `${baseName}_${file.replace(/%d/, Date.now().toString())}`;
-					return { filePath, fileBuffer, fileName, file };
-				}),
-			);
-
-			// Upload paralelo do batch
-			const batchResults = await Promise.all(
-				batchUploads.map(async ({ filePath, fileBuffer, fileName }) => {
-					log.info(`Fazendo upload da imagem para MinIO: ${fileName} (${fileBuffer.length} bytes)`);
-					const uploadResult = await uploadToMinIOWithRetry(
-						fileBuffer,
-						fileName,
-						`image/${format}`,
-						3, // maxRetries
-						true, // generateThumbnail
-					);
-					log.info(`Imagem carregada no MinIO: ${uploadResult.url}`);
-
-					// Remover arquivo temporário
-					try {
-						await fs.promises.unlink(filePath);
-						log.info(`Arquivo temporário removido: ${filePath}`);
-					} catch (unlinkError) {
-						log.warn(`Não foi possível excluir arquivo temporário ${filePath}: ${unlinkError}`);
-					}
-
-					return uploadResult.url;
-				}),
-			);
-
-			convertedImagesUrls.push(...batchResults);
-			log.info(
-				`Batch ${Math.floor(i / UPLOAD_CONCURRENCY) + 1}/${Math.ceil(imageFiles.length / UPLOAD_CONCURRENCY)} concluído`,
-			);
-		}
-
-		// Remover o PDF temporário
-		try {
-			await fs.promises.unlink(pdfPath);
-			log.info(`PDF temporário removido: ${pdfPath}`);
-			// Remover o diretório temporário
-			await fs.promises.rmdir(outputDir);
-			log.info(`Diretório temporário removido: ${outputDir}`);
-		} catch (unlinkError) {
-			log.warn(`Não foi possível excluir arquivos temporários: ${unlinkError}`);
-		}
-
-		if (convertedImagesUrls.length === 0) {
-			throw new Error("Nenhuma imagem foi convertida com sucesso");
-		}
-
-		log.info(`Conversão concluída: ${convertedImagesUrls.length} imagens geradas`);
-		return convertedImagesUrls;
-	} catch (error) {
-		log.error(`Erro ao converter PDF para imagens: ${error}`);
-		throw error;
+		const { stdout } = await execPromise(`pdfinfo "${pdfPath}" 2>/dev/null | grep -i "^Pages:" | awk '{print $2}'`);
+		const pages = parseInt(stdout.trim(), 10);
+		if (Number.isNaN(pages) || pages <= 0) throw new Error("Não foi possível determinar páginas");
+		return pages;
+	} catch {
+		// Fallback: renderiza todas de uma vez (sem split)
+		return 0;
 	}
 }
 
-// Alias para a função de conversão - tenta primeiro com ImageMagick direto, depois com pdf2pic como fallback
-async function convertPdfToImages(pdfBuffer: Buffer, options: PDF2PicOptions): Promise<string[]> {
+/**
+ * Renderiza um range de páginas com pdftoppm (tier 0) ou GhostScript (fallback)
+ */
+async function renderPageRange(
+	pdfPath: string,
+	outputDir: string,
+	firstPage: number,
+	lastPage: number,
+	density: number,
+	format: "jpeg" | "png",
+): Promise<string[]> {
+	const outputPrefix = path.join(outputDir, "page");
+	const ext = format === "jpeg" ? "jpg" : "png";
+
+	// Tier 0: pdftoppm (poppler-utils) — 2-4x mais rápido que GhostScript
+	const formatFlag = format === "jpeg" ? `-jpeg -jpegopt quality=90` : `-png`;
+	const rangeFlags = firstPage > 0 ? `-f ${firstPage} -l ${lastPage}` : "";
+	const pdftoppmCmd = `pdftoppm ${formatFlag} -r ${density} ${rangeFlags} "${pdfPath}" "${outputPrefix}"`;
+
 	try {
-		// Tenta usar ImageMagick diretamente
-		return await convertPdfToImagesWithImageMagick(pdfBuffer, options);
-	} catch (error) {
-		log.warn(`Falha ao usar ImageMagick diretamente, tentando com pdf2pic: ${error}`);
+		await execPromise(pdftoppmCmd, { timeout: 120_000 });
+		const files = (await fs.promises.readdir(outputDir)).filter((f) => f.startsWith("page-") && f.endsWith(`.${ext}`));
+		if (files.length > 0) return files;
+		throw new Error("pdftoppm gerou 0 arquivos");
+	} catch (pdftoppmError) {
+		log.warn(`pdftoppm falhou (range ${firstPage}-${lastPage}): ${pdftoppmError}`);
+	}
 
-		try {
-			// Configuração do pdf2pic
-			const pdf2picOptions = {
-				density: options.density || 300,
-				savename: options.savename,
-				savedir: options.savedir || "/tmp",
-				format: options.format || "png",
-				width: typeof options.size === "number" ? options.size : 1024,
-			};
+	// Tier 1: GhostScript (fallback)
+	if (firstPage <= 0) {
+		// Sem range — renderizar tudo
+		const gsCmd = `gs -dSAFER -dBATCH -dNOPAUSE -sDEVICE=${format === "jpeg" ? "jpeg" : "png16m"} -r${density} ${format === "jpeg" ? "-dJPEGQ=90" : ""} -dGraphicsAlphaBits=4 -dTextAlphaBits=4 -sOutputFile="${outputPrefix}-%d.${ext}" "${pdfPath}"`;
+		await execPromise(gsCmd, { timeout: 180_000 });
+	} else {
+		const gsCmd = `gs -dSAFER -dBATCH -dNOPAUSE -sDEVICE=${format === "jpeg" ? "jpeg" : "png16m"} -r${density} ${format === "jpeg" ? "-dJPEGQ=90" : ""} -dGraphicsAlphaBits=4 -dTextAlphaBits=4 -dFirstPage=${firstPage} -dLastPage=${lastPage} -sOutputFile="${outputPrefix}-%d.${ext}" "${pdfPath}"`;
+		await execPromise(gsCmd, { timeout: 180_000 });
+	}
 
-			// Criando conversor a partir do buffer - usando ImageMagick em vez de GraphicsMagick
-			const converter = fromBuffer(pdfBuffer, pdf2picOptions);
+	const files = (await fs.promises.readdir(outputDir)).filter((f) => f.startsWith("page-") && f.endsWith(`.${ext}`));
+	if (files.length === 0) {
+		throw new Error(`Nenhum arquivo gerado para range ${firstPage}-${lastPage}`);
+	}
+	return files;
+}
 
-			// Configurando para usar ImageMagick em vez de GraphicsMagick
-			converter.setGMClass(true);
+/**
+ * Extrai número da página do nome do arquivo (suporta pdftoppm e GS naming)
+ * pdftoppm: "page-01.jpg", "page-1.jpg"
+ * GhostScript: "page-1.jpg"
+ */
+function extractPageNumber(fileName: string): number {
+	const match = fileName.match(/page-(\d+)\./);
+	return match ? parseInt(match[1], 10) : 0;
+}
 
-			// Converter a primeira página
-			const result = await converter(1, { responseType: "buffer" });
+/**
+ * Upload em batch com concorrência limitada
+ */
+async function uploadBatch(
+	files: string[],
+	outputDir: string,
+	baseName: string,
+	mimeType: string,
+): Promise<{ url: string; page: number }[]> {
+	const results: { url: string; page: number }[] = [];
 
-			if (!result || !result.buffer) {
-				throw new Error("Falha ao converter a primeira página do PDF");
+	for (let i = 0; i < files.length; i += UPLOAD_CONCURRENCY) {
+		const batch = files.slice(i, i + UPLOAD_CONCURRENCY);
+		const batchResults = await Promise.all(
+			batch.map(async (file) => {
+				const filePath = path.join(outputDir, file);
+				const fileBuffer = await fs.promises.readFile(filePath);
+				const fileName = `${baseName}_${file}`;
+				const uploadResult = await uploadToMinIOWithRetry(fileBuffer, fileName, mimeType, 3, true);
+
+				// Remover temp
+				fs.promises.unlink(filePath).catch(() => {});
+
+				return { url: uploadResult.url, page: extractPageNumber(file) };
+			}),
+		);
+		results.push(...batchResults);
+	}
+
+	return results;
+}
+
+/**
+ * Pipeline principal: pdftoppm com rendering paralelo por ranges + upload sobreposto
+ */
+async function convertPdfToImages(pdfBuffer: Buffer, options: ConvertOptions): Promise<string[]> {
+	const startTime = Date.now();
+	const { density, format, savedir, savename } = options;
+	const tmpDir = savedir || "/tmp";
+	const baseName = savename || `pdf-${randomUUID()}`;
+	const ext = format === "jpeg" ? "jpg" : "png";
+	const mimeType = format === "jpeg" ? "image/jpeg" : "image/png";
+
+	// Salvar PDF temporário
+	const pdfPath = path.join(tmpDir, `${baseName}.pdf`);
+	const outputDir = path.join(tmpDir, baseName);
+	await fs.promises.mkdir(outputDir, { recursive: true });
+	await fs.promises.writeFile(pdfPath, pdfBuffer);
+	log.info(`PDF salvo: ${pdfPath} (${pdfBuffer.length} bytes)`);
+
+	try {
+		const totalPages = await getPageCount(pdfPath);
+		log.info(`Total de páginas: ${totalPages || "desconhecido"}`);
+
+		let allResults: { url: string; page: number }[] = [];
+
+		if (totalPages > 0 && totalPages > RENDER_PARALLELISM) {
+			// Pipeline sobreposto: divide em ranges paralelos, cada range renderiza e faz upload
+			const pagesPerRange = Math.ceil(totalPages / RENDER_PARALLELISM);
+			const ranges: { first: number; last: number }[] = [];
+
+			for (let i = 0; i < RENDER_PARALLELISM; i++) {
+				const first = i * pagesPerRange + 1;
+				const last = Math.min((i + 1) * pagesPerRange, totalPages);
+				if (first <= totalPages) ranges.push({ first, last });
 			}
 
-			// Upload para MinIO
-			const fileName = `${options.savename}_page1_${Date.now()}.${pdf2picOptions.format}`;
-			const uploadResult = await uploadToMinIOWithRetry(result.buffer, fileName, `image/${pdf2picOptions.format}`);
+			log.info(`Rendering paralelo: ${ranges.length} ranges (${ranges.map((r) => `${r.first}-${r.last}`).join(", ")})`);
 
-			return [uploadResult.url];
-		} catch (pdf2picError) {
-			log.error(`Ambos os métodos de conversão falharam: ${pdf2picError}`);
-			throw pdf2picError;
+			// Cada range tem seu próprio outputDir para evitar conflito de nomes
+			const rangeResults = await Promise.all(
+				ranges.map(async (range, idx) => {
+					const rangeDir = path.join(tmpDir, `${baseName}_r${idx}`);
+					await fs.promises.mkdir(rangeDir, { recursive: true });
+
+					const files = await renderPageRange(pdfPath, rangeDir, range.first, range.last, density, format);
+					log.info(`Range ${range.first}-${range.last}: ${files.length} imagens renderizadas`);
+
+					// Upload imediato deste range
+					const uploaded = await uploadBatch(files, rangeDir, baseName, mimeType);
+
+					// Cleanup range dir
+					fs.promises.rm(rangeDir, { recursive: true, force: true }).catch(() => {});
+
+					return uploaded;
+				}),
+			);
+
+			allResults = rangeResults.flat();
+		} else {
+			// PDF pequeno ou page count desconhecido — renderiza tudo de uma vez
+			const files = await renderPageRange(pdfPath, outputDir, 0, 0, density, format);
+			log.info(`${files.length} imagens renderizadas`);
+
+			allResults = await uploadBatch(files, outputDir, baseName, mimeType);
 		}
+
+		// Ordenar por número de página
+		allResults.sort((a, b) => a.page - b.page);
+		const urls = allResults.map((r) => r.url);
+
+		const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+		log.info(`Conversão concluída: ${urls.length} imagens em ${elapsed}s`);
+
+		if (urls.length === 0) throw new Error("Nenhuma imagem convertida");
+		return urls;
+	} finally {
+		// Cleanup
+		fs.promises.unlink(pdfPath).catch(() => {});
+		fs.promises.rm(outputDir, { recursive: true, force: true }).catch(() => {});
 	}
 }
 
-// Mantém o campo legado pdfConvertido limpo para evitar estados ambíguos como "true"/"false".
+// Mantém o campo legado pdfConvertido limpo para evitar estados ambíguos
 async function limparMetadadosLegadosDeConversao(leadId: string): Promise<void> {
 	try {
 		await prisma.arquivoLeadOab.updateMany({
-			where: {
-				leadOabDataId: leadId,
-			},
-			data: {
-				pdfConvertido: null,
-			},
+			where: { leadOabDataId: leadId },
+			data: { pdfConvertido: null },
 		});
-
 		log.info(`Metadados legados de conversão limpos para o lead ${leadId}`);
 	} catch (error) {
 		log.error(`Erro ao limpar metadados legados de conversão: ${error}`);
@@ -294,32 +225,16 @@ async function limparMetadadosLegadosDeConversao(leadId: string): Promise<void> 
 	}
 }
 
-// Função para verificar e corrigir URLs do MinIO
 function fixMinioUrl(url: string): string {
-	try {
-		// Verificar se a URL é válida
-		if (!url) return url;
-
-		// Correções comuns para URLs do MinIO
-		let fixedUrl = url;
-
-		// 1. Corrigir hostname se necessário (objstore -> objstoreapi)
-		if (url.includes("objstore.witdev.com.br")) {
-			fixedUrl = url.replace("objstore.witdev.com.br", "objstoreapi.witdev.com.br");
-			log.info(`URL corrigida (hostname): ${fixedUrl}`);
-		}
-
-		// 2. Garantir que a URL tenha protocolo
-		if (!fixedUrl.startsWith("http://") && !fixedUrl.startsWith("https://")) {
-			fixedUrl = `https://${fixedUrl}`;
-			log.info(`URL corrigida (protocolo): ${fixedUrl}`);
-		}
-
-		return fixedUrl;
-	} catch (error) {
-		log.warn(`Erro ao corrigir URL: ${error}`);
-		return url; // Em caso de erro, retorna a URL original
+	if (!url) return url;
+	let fixedUrl = url;
+	if (url.includes("objstore.witdev.com.br")) {
+		fixedUrl = url.replace("objstore.witdev.com.br", "objstoreapi.witdev.com.br");
 	}
+	if (!fixedUrl.startsWith("http://") && !fixedUrl.startsWith("https://")) {
+		fixedUrl = `https://${fixedUrl}`;
+	}
+	return fixedUrl;
 }
 
 export async function POST(request: NextRequest) {
@@ -327,159 +242,92 @@ export async function POST(request: NextRequest) {
 		log.info("Iniciando conversão de PDF para imagens");
 		const payload = await request.json();
 		const { leadId, pdfUrls: providedPdfUrls } = payload;
-		log.info(`Payload recebido: ${JSON.stringify(payload)}`);
+		log.info(`Payload recebido: ${JSON.stringify({ leadId })}`);
 
 		if (!leadId) {
-			log.error(`ID do lead não fornecido no payload`);
 			return NextResponse.json({ error: "ID do lead é obrigatório" }, { status: 400 });
 		}
 
-		// Se pdfUrls não estiver presente no payload, buscar o PDF unificado do lead no banco de dados
 		let pdfUrls = providedPdfUrls;
 		if (!pdfUrls || !Array.isArray(pdfUrls) || pdfUrls.length === 0) {
-			log.info(`URLs de PDF não fornecidas no payload, buscando PDF unificado do lead ${leadId}`);
+			log.info(`Buscando PDF unificado do lead ${leadId}`);
 
 			const lead = await prisma.leadOabData.findUnique({
-				where: {
-					id: leadId,
-				},
-				select: {
-					pdfUnificado: true,
-				},
+				where: { id: leadId },
+				select: { pdfUnificado: true },
 			});
 
-			if (!lead || !lead.pdfUnificado) {
-				log.error(`Nenhum PDF unificado encontrado para o lead ${leadId}`);
+			if (!lead?.pdfUnificado) {
 				return NextResponse.json({ error: "Nenhum PDF unificado encontrado para este lead" }, { status: 404 });
 			}
 
-			log.info(`PDF unificado encontrado: ${lead.pdfUnificado}`);
-			const correctedPdfUrl = fixMinioUrl(lead.pdfUnificado);
-			log.info(`PDF unificado com URL corrigida: ${correctedPdfUrl}`);
-			pdfUrls = [correctedPdfUrl];
+			pdfUrls = [fixMinioUrl(lead.pdfUnificado)];
 		}
 
-		log.info(`Processando ${pdfUrls.length} URL(s) de PDF: ${JSON.stringify(pdfUrls)}`);
+		log.info(`Processando ${pdfUrls.length} URL(s) de PDF`);
 
 		const convertedUrls: string[] = [];
 		const failedUrls: string[] = [];
 
 		for (const pdfUrl of pdfUrls) {
 			try {
-				// Validar e sanitizar a URL
-				log.info(`Processando URL: ${pdfUrl}`);
 				const sanitizedPdfUrl = sanitizeUrl(pdfUrl);
 				if (!sanitizedPdfUrl) {
 					failedUrls.push(pdfUrl);
 					log.error(`URL inválida: ${pdfUrl}`);
 					continue;
 				}
-				log.info(`URL sanitizada: ${sanitizedPdfUrl}`);
 
-				// Verificar se a URL termina com .pdf
-				if (!sanitizedPdfUrl.toLowerCase().endsWith(".pdf")) {
-					log.warn(`URL não parece ser um PDF: ${sanitizedPdfUrl}`);
-				}
-
-				// Configurações para a conversão (ajuste conforme necessário)
-				const options = {
+				const options: ConvertOptions = {
 					density: 300,
 					savename: `pdf-lead${leadId.substring(0, 8)}-${randomUUID().substring(0, 8)}`,
 					savedir: "/tmp",
-					format: "png",
-					size: "1024x768",
+					format: "jpeg",
 				};
-				log.info(`Opções de conversão: ${JSON.stringify(options)}`);
 
-				// Baixar o PDF como buffer
 				log.info(`Baixando PDF: ${sanitizedPdfUrl}`);
-				try {
-					const pdfResponse = await axios.get(sanitizedPdfUrl, {
-						responseType: "arraybuffer",
-						headers: {
-							Accept: "application/pdf",
-						},
-						maxContentLength: 50 * 1024 * 1024, // 50MB max
-						timeout: 30000, // 30 segundos timeout
-					});
+				const pdfResponse = await axios.get(sanitizedPdfUrl, {
+					responseType: "arraybuffer",
+					headers: { Accept: "application/pdf" },
+					maxContentLength: 50 * 1024 * 1024,
+					timeout: 30000,
+				});
 
-					log.info(
-						`PDF baixado: ${pdfResponse.status} ${pdfResponse.statusText}, tamanho: ${pdfResponse.data.byteLength} bytes, tipo: ${pdfResponse.headers["content-type"]}`,
-					);
+				log.info(`PDF baixado: ${pdfResponse.status}, ${pdfResponse.data.byteLength} bytes`);
 
-					// Verificar tipo de conteúdo
-					const contentType = pdfResponse.headers["content-type"];
-					if (contentType && !contentType.includes("pdf") && !contentType.includes("octet-stream")) {
-						log.warn(`O arquivo baixado não parece ser um PDF (${contentType}), mas tentaremos converter mesmo assim`);
-					}
-
-					const pdfBuffer = Buffer.from(pdfResponse.data);
-
-					// Usar a implementação para converter
-					log.info(`Iniciando conversão do PDF com ${pdfBuffer.length} bytes`);
-					const imagesUrls = await convertPdfToImages(pdfBuffer, options);
-					log.info(`Conversão concluída com sucesso: ${imagesUrls.length} imagens geradas`);
-
-					// Adicionar URLs convertidas
-					convertedUrls.push(...imagesUrls);
-					log.info(`URLs das imagens convertidas: ${JSON.stringify(imagesUrls)}`);
-				} catch (downloadError) {
-					log.error(
-						`Erro ao baixar PDF: ${downloadError instanceof Error ? downloadError.message : String(downloadError)}`,
-					);
-					if (downloadError instanceof Error && downloadError.stack) {
-						log.error(`Stack trace: ${downloadError.stack}`);
-					}
-					failedUrls.push(pdfUrl);
-					continue;
-				}
+				const pdfBuffer = Buffer.from(pdfResponse.data);
+				const imagesUrls = await convertPdfToImages(pdfBuffer, options);
+				convertedUrls.push(...imagesUrls);
 			} catch (error) {
 				failedUrls.push(pdfUrl);
-				log.error(`Erro ao processar URL ${pdfUrl}: ${error instanceof Error ? error.message : String(error)}`);
-				if (error instanceof Error && error.stack) {
-					log.error(`Stack trace: ${error.stack}`);
-				}
+				log.error(`Erro ao processar ${pdfUrl}: ${error instanceof Error ? error.message : String(error)}`);
 			}
 		}
 
-		// Armazenar URLs das imagens no lead e limpar flags legadas dos arquivos.
 		if (convertedUrls.length > 0) {
-			log.info(`Atualizando status dos arquivos para ${leadId}`);
-
 			try {
 				await limparMetadadosLegadosDeConversao(leadId);
-
-				// Armazenar URLs das imagens no campo imagensConvertidas
 				await prisma.leadOabData.update({
 					where: { id: leadId },
-					data: {
-						imagensConvertidas: JSON.stringify(convertedUrls),
-					},
+					data: { imagensConvertidas: JSON.stringify(convertedUrls) },
 				});
-
-				log.info(`Lead atualizado com URLs das imagens convertidas: ${JSON.stringify(convertedUrls)}`);
+				log.info(`Lead atualizado: ${convertedUrls.length} imagens`);
 			} catch (updateError) {
 				log.error(`Erro ao atualizar lead: ${updateError}`);
 			}
-		} else {
-			log.warn(`Nenhum arquivo convertido com sucesso para o lead ${leadId}`);
 		}
 
 		const response = {
 			success: convertedUrls.length > 0,
-			imageUrls: convertedUrls, // Garantir compatibilidade
-			convertedUrls, // Manter compatibilidade
+			imageUrls: convertedUrls,
+			convertedUrls,
 			failedUrls,
 			message: `${convertedUrls.length} PDFs convertidos com sucesso. ${failedUrls.length} falhas.`,
 		};
-		log.info(`Resposta: ${JSON.stringify(response)}`);
 
 		return NextResponse.json(response);
 	} catch (error) {
-		log.error(`Erro geral na conversão: ${error instanceof Error ? error.message : String(error)}`);
-		if (error instanceof Error && error.stack) {
-			log.error(`Stack trace: ${error.stack}`);
-		}
+		log.error(`Erro geral: ${error instanceof Error ? error.message : String(error)}`);
 		return NextResponse.json(
 			{ error: "Erro ao processar a requisição", details: error instanceof Error ? error.message : String(error) },
 			{ status: 500 },
@@ -497,15 +345,8 @@ export async function GET(request: Request): Promise<Response> {
 		}
 
 		const arquivos = await prisma.arquivoLeadOab.findMany({
-			where: {
-				leadOabDataId: leadId,
-			},
-			select: {
-				id: true,
-				dataUrl: true,
-				fileType: true,
-				pdfConvertido: true,
-			},
+			where: { leadOabDataId: leadId },
+			select: { id: true, dataUrl: true, fileType: true, pdfConvertido: true },
 		});
 
 		return NextResponse.json({ arquivos });

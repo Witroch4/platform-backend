@@ -367,68 +367,57 @@ export function EspelhoDialog({
 			return;
 		}
 
-		console.log(`[EspelhoDialog] Abrindo conexão SSE para lead ${leadId}`);
-		const eventSource = new EventSource(`/api/admin/leads-chatwit/notifications?leadId=${leadId}`);
-
-		eventSource.onmessage = async (event) => {
+		const syncFreshLead = async () => {
 			try {
-				const notification = JSON.parse(event.data);
-				console.log(`[EspelhoDialog] Notificação recebida:`, notification);
-
-				// Procurar por espelho processado - a notificação SSE envia dados omitidos para reduzir payload
-				// então precisamos buscar os dados frescos do banco
-				if (notification.data?.leadData?.espelhoProcessado && !notification.data?.leadData?.aguardandoEspelho) {
-					console.log(`[EspelhoDialog] Espelho processado! Buscando dados frescos do banco...`);
-
-					// Fechar conexão SSE primeiro
-					eventSource.close();
-
-					// Buscar dados frescos do lead no banco
-					try {
-						const response = await fetch(`/api/admin/leads-chatwit/leads?id=${leadId}`);
-						if (response.ok) {
-							const leadData = await response.json();
-							console.log(`[EspelhoDialog] Dados frescos recebidos:`, {
-								hasTextoDOEspelho: !!leadData.textoDOEspelho,
-								hasJsonMirror: !!leadData.jsonMirror,
-								imagensEspelhoCount: leadData.imagensEspelho?.length || 0
-							});
-
-							// Usar jsonMirror se disponível (estruturado), senão textoDOEspelho
-							const novoTexto = leadData.jsonMirror || leadData.textoDOEspelho;
-							const novasImagens = leadData.imagensEspelho || [];
-
-							if (novoTexto) {
-								console.log(`[EspelhoDialog] Atualizando dialog com dados frescos do banco`);
-								setTexto(novoTexto);
-								setImagens(novasImagens);
-								toast.success("Espelho processado!", {
-									description: "Os dados do espelho foram atualizados automaticamente.",
-									duration: 3000,
-								});
-							} else {
-								console.warn(`[EspelhoDialog] Dados frescos não contêm texto do espelho`);
-							}
-						} else {
-							console.error(`[EspelhoDialog] Erro ao buscar dados frescos: ${response.status}`);
-						}
-					} catch (fetchError) {
-						console.error(`[EspelhoDialog] Erro ao fazer fetch dos dados frescos:`, fetchError);
-					}
+				const response = await fetch(`/api/admin/leads-chatwit/leads?id=${leadId}`);
+				if (!response.ok) {
+					return;
 				}
-			} catch (error) {
-				console.error(`[EspelhoDialog] Erro ao processar notificação SSE:`, error);
+				const freshLead = await response.json();
+				const novoTexto = freshLead.jsonMirror || freshLead.textoDOEspelho;
+				const novasImagens = freshLead.imagensEspelho || [];
+
+				if (novoTexto) {
+					setTexto(novoTexto);
+					setImagens(novasImagens);
+					toast.success("Espelho processado!", {
+						description: "Os dados do espelho foram atualizados automaticamente.",
+						duration: 3000,
+					});
+				}
+			} catch (fetchError) {
+				console.error("[EspelhoDialog] Erro ao buscar dados frescos:", fetchError);
 			}
 		};
 
-		eventSource.onerror = () => {
-			console.error(`[EspelhoDialog] Erro na conexão SSE`);
-			eventSource.close();
+		const handleLeadUpdate = (event: Event) => {
+			const customEvent = event as CustomEvent<{
+				leadId?: string;
+				leadData?: { espelhoProcessado?: boolean; aguardandoEspelho?: boolean };
+			}>;
+
+			if (customEvent.detail?.leadId !== leadId) {
+				return;
+			}
+
+			if (customEvent.detail.leadData?.espelhoProcessado && !customEvent.detail.leadData?.aguardandoEspelho) {
+				void syncFreshLead();
+			}
 		};
 
-		// Cleanup ao desmontar ou mudar leadId
+		const handleConnectionStatus = (event: Event) => {
+			const customEvent = event as CustomEvent<{ status?: string }>;
+			if (customEvent.detail?.status === "disconnected") {
+				void syncFreshLead();
+			}
+		};
+
+		window.addEventListener("lead-update", handleLeadUpdate as EventListener);
+		window.addEventListener("lead-operations-connection", handleConnectionStatus as EventListener);
+
 		return () => {
-			eventSource.close();
+			window.removeEventListener("lead-update", handleLeadUpdate as EventListener);
+			window.removeEventListener("lead-operations-connection", handleConnectionStatus as EventListener);
 		};
 	}, [isOpen, leadId, aguardandoEspelho]);
 

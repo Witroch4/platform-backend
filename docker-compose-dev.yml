@@ -1,6 +1,6 @@
 services:
   app:
-    container_name: chatwit_dev
+    container_name: socialwise_app
     build:
       context: .
       dockerfile: Dockerfile.dev
@@ -40,7 +40,7 @@ services:
   # WORKER UNIFICADO - TODOS OS WORKERS EM UM ÚNICO CONTAINER (DEV)
   # ============================================================================
   worker:
-    container_name: chatwit_worker_unified
+    container_name: socialwise_worker_unified
     build:
       context: .
       dockerfile: Dockerfile.dev
@@ -63,7 +63,6 @@ services:
     restart: "no"
 
 volumes:
-  # Para pnpm, manter node_modules como volume nomeado para cache de dependências
   node_modules:
     driver: local
 

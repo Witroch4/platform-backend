@@ -12,6 +12,9 @@ import { getAgentBlueprintByLinkedColumn, isGeminiModel } from "@/lib/ai-agents/
 import { buildSdkSchema } from "@/lib/ai-agents/schema-utils";
 import { generateObject, type LanguageModel } from "ai";
 import { createModel, buildProviderOptions } from "@/lib/socialwise-flow/services/ai-provider-factory";
+import { createLogger } from "@/lib/utils/logger";
+
+const log = createLogger("RecursoAgent");
 
 // ============================================================================
 // TYPES
@@ -53,7 +56,6 @@ const DEFAULT_MODELS_BY_PROVIDER = {
 const DEFAULT_MAX_OUTPUT_TOKENS = 11192;
 const DEFAULT_TEMPERATURE = 0.3; // Um pouco de criatividade para escrita, mas não muito
 
-const IS_DEBUG = process.env.DEBUG === "1" || process.env.DEBUG === "true";
 
 // ============================================================================
 // SYSTEM PROMPT — Reinforcement Layer
@@ -70,11 +72,12 @@ const DEFAULT_RECURSO_PROMPT = `
   <language>pt-BR</language>
 
   <rules>
-    1. !important ESTRITAMENTE FIEL À ANÁLISE: NÃO inclua fatos novos, leis ou interpretações que não constem na "Análise do Especialista". O trabalho braçal de fundamentação já foi feito; seu trabalho é de redação e formatação.
+    1. !important ESTRITAMENTE FIEL À ANÁLISE: NÃO inclua fatos novos, leis ou interpretações que não constem na "Análise do Especialista". O campo gabarito_banca contém o texto REAL da banca — use SOMENTE ele para preencher ''[GABARITO ESPERADO]''. Se gabarito_banca estiver ausente para um item, OMITA a citação do gabarito e foque apenas no texto do examinando. O trabalho braçal de fundamentação já foi feito; seu trabalho é de redação e formatação.
     2. !important ESTRUTURA DO MODELO: Siga RIGOROSAMENTE a estrutura e o vocabulário base dados no "Formato de Saída". Mantenha os conectivos, os inícios de parágrafo e o tom formal.
     3. !important OBJETIVO ÚNICO: Seu texto deve ter um único objetivo: pedir a majoração da nota com base no que já foi analisado e comprovado nas linhas da prova do aluno.
     4. !important ANONIMATO DO EXAMINANDO: NUNCA identifique o aluno por nome. Utilize sempre termos genéricos e impessoais exigidos pela banca, como "O Examinando", "O Candidato", "O Recorrente".
     5. !important DADOS EVIDENCIADOS: Sempre que preencher as lacunas, cite expressamente as linhas correspondentes (ex: linhas 10-12) e transcreva o trecho exato do aluno entre aspas, conforme apontado na análise.
+    6. !important SE NÃO HOUVER GABARITO: Se a análise não contiver o campo gabarito_banca para um item, NÃO tente adivinhar o que a banca exigia. Reformule a frase sem citar o gabarito, focando apenas no texto do examinando e na pontuação a ser majorada.
   </rules>
 
   <description>
@@ -192,9 +195,7 @@ async function getRecursoConfig(selectedProvider?: "OPENAI" | "GEMINI" | "CLAUDE
 				});
 			}
 
-			console.log(
-				`[RecursoAgent] ✅ Blueprint RECURSO_CELL encontrado: "${blueprint.name}" (modelo: ${effectiveModel}, provider: ${effectiveProvider})`,
-			);
+			log.info("Blueprint RECURSO_CELL encontrado", { blueprint: blueprint.name, model: effectiveModel, provider: effectiveProvider });
 
 			return {
 				model: effectiveModel,
@@ -207,12 +208,12 @@ async function getRecursoConfig(selectedProvider?: "OPENAI" | "GEMINI" | "CLAUDE
 			};
 		}
 	} catch (err) {
-		console.warn("[RecursoAgent] Falha ao consultar blueprint por linkedColumn (RECURSO_CELL):", err);
+		log.warn("Falha ao consultar blueprint por linkedColumn (RECURSO_CELL)", err as Error);
 	}
 
 	// 2) Defaults hardcoded caso não exista Blueprint configurado
 	const finalProvider = selectedProvider || "OPENAI";
-	console.log(`[RecursoAgent] ⚠️ Nenhum blueprint RECURSO_CELL encontrado, usando defaults (${finalProvider})`);
+	log.warn("Nenhum blueprint RECURSO_CELL encontrado, usando defaults", { provider: finalProvider });
 
 	const defaultSchema = JSON.stringify({
 		type: "object",
@@ -251,7 +252,7 @@ export async function runRecursoAgent(input: RecursoAgentInput): Promise<Recurso
 	const startTime = Date.now();
 	const { leadId, analiseValidada, dadosAdicionais, onProgress } = input;
 
-	console.log(`[RecursoAgent] 📝 Iniciando geração de recurso para lead \${leadId}`);
+	log.info("Iniciando geração de recurso", { leadId });
 
 	if (!analiseValidada) {
 		return {
@@ -299,23 +300,16 @@ export async function runRecursoAgent(input: RecursoAgentInput): Promise<Recurso
 		userMessage = "As informações já foram injetadas no seu contexto. Proceda com a redação final baseada na análise validada.";
 	}
 
-	if (IS_DEBUG) {
-		console.log("\\n" + "=".repeat(80));
-		console.log("[RecursoAgent] 🐛 DEBUG — PAYLOAD COMPLETO");
-		console.log("=".repeat(80));
-		console.log(`[DEBUG] Model: \${config.model} (\${config.provider})`);
-		console.log(`[DEBUG] Temperature: \${config.temperature}`);
-		console.log(`[DEBUG] Max Output Tokens: \${config.maxOutputTokens}`);
-		console.log("-".repeat(80));
-		console.log("[DEBUG] SYSTEM PROMPT (Final):");
-		console.log("-".repeat(80));
-		console.log(finalSystemPrompt);
-		console.log("-".repeat(80));
-		console.log("[DEBUG] USER MESSAGE:");
-		console.log("-".repeat(80));
-		console.log(userMessage);
-		console.log("=".repeat(80) + "\\n");
-	}
+	log.debug("LLM request payload", {
+		model: config.model,
+		provider: config.provider,
+		temperature: config.temperature,
+		maxOutputTokens: config.maxOutputTokens,
+		systemPromptChars: finalSystemPrompt.length,
+		userMessageChars: userMessage.length,
+		systemPrompt: finalSystemPrompt,
+		userMessage,
+	});
 
 	if (onProgress) await onProgress(`Gerando recurso via \${config.provider} (\${config.model})...`);
 
@@ -341,15 +335,9 @@ export async function runRecursoAgent(input: RecursoAgentInput): Promise<Recurso
 		});
 
 		const elapsed = Date.now() - startTime;
-		console.log(`[RecursoAgent] ✅ Recurso gerado com sucesso em \${(elapsed / 1000).toFixed(1)}s (Tokens: \${usage?.totalTokens ?? "?"})`);
+		log.info("Recurso gerado com sucesso", { leadId, elapsedMs: elapsed, tokens: usage?.totalTokens ?? "?", model: config.model, provider: config.provider });
 
-		if (IS_DEBUG) {
-			console.log("\\n" + "=".repeat(80));
-			console.log("[RecursoAgent] 🐛 DEBUG — RESPOSTA ESTRUTURADA");
-			console.log("=".repeat(80));
-			console.log(JSON.stringify(object, null, 2));
-			console.log("=".repeat(80) + "\\n");
-		}
+		log.debug("LLM response (raw)", { response: JSON.stringify(object) });
 
 		return {
 			leadId,
@@ -361,7 +349,7 @@ export async function runRecursoAgent(input: RecursoAgentInput): Promise<Recurso
 		};
 	} catch (err: any) {
 		const elapsed = Date.now() - startTime;
-		console.error(`[RecursoAgent] ❌ Falha na geração do recurso após \${(elapsed / 1000).toFixed(1)}s:`, err);
+		log.error("Falha na geração do recurso", { leadId, elapsedMs: elapsed }, err);
 
 		return {
 			leadId,

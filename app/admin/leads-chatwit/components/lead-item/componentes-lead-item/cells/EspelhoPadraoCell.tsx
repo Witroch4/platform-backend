@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { BookOpen, Check, Loader2 } from "lucide-react";
+import { AlertCircle, BookOpen, Check, Loader2 } from "lucide-react";
 import type { CellProps } from "../types";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
@@ -84,7 +84,27 @@ export function EspelhoPadraoCell({
 	// ✅ FIXO: Early return DEPOIS de todos os hooks
 	// Só mostra se há imagens convertidas (mesma lógica do ImagesCell)
 	if (!hasConvertedImages(lead)) {
-		return <TableCell className="min-w-[120px] max-w-[160px] p-2 align-middle"></TableCell>;
+		return (
+			<TableCell className="min-w-[120px] max-w-[160px] p-2 align-middle">
+				<TooltipProvider>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								variant="outline"
+								disabled={true}
+								className="w-full opacity-60 cursor-not-allowed text-xs px-2 py-1 h-auto min-h-8 whitespace-pre-line"
+							>
+								<AlertCircle className="h-4 w-4 mr-1 text-orange-500" />
+								Precisa de Imagens
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent side="top" className="text-xs max-w-60">
+							<p>Converta o PDF em imagens antes de selecionar o espelho padrão.</p>
+						</TooltipContent>
+					</Tooltip>
+				</TooltipProvider>
+			</TableCell>
+		);
 	}
 
 	const handleEspelhoChange = async (espelhoId: string) => {

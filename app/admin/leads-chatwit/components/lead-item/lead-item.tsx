@@ -266,6 +266,7 @@ export function LeadItem({
 				onCancelarEspelho={handlers.handleCancelarEspelho}
 				onExcluirEspelho={handlers.handleExcluirEspelho}
 				onSaveAnotacoes={handlers.handleSaveAnotacoes}
+				onSaveRecursoDraft={handlers.handleSaveRecursoDraft}
 				onEnviarPdf={handlers.handleEnviarPdf}
 				onCancelarAnalise={handlers.handleExcluirAnalise}
 				onSaveAnalisePreliminar={handlers.handleSaveAnalisePreliminar}

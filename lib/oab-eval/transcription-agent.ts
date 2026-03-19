@@ -12,6 +12,8 @@ import {
 	GEMINI_AGENTIC_VISION_INSTRUCTIONS,
 } from "@/lib/ai-agents/blueprints";
 import type { ExtractedPage } from "./types";
+import { combineAbortSignals } from "./operation-control";
+import { resolveOabRuntimePolicy, type OabRuntimePolicy } from "./runtime-policy";
 
 /** Modelo OpenAI menor como último recurso (3o nível de fallback) */
 const OPENAI_LAST_RESORT_MODEL = "gpt-4.1-mini";
@@ -63,6 +65,10 @@ interface ProviderCacheEntry {
 	maxOutputTokens?: number | null;
 	thinkingLevel?: string | null;
 	reasoningEffort?: string | null;
+	timeoutMs?: number | null;
+	retryAttempts?: number | null;
+	retryBaseDelayMs?: number | null;
+	retryMaxDelayMs?: number | null;
 }
 
 const DEFAULT_VISION_MODEL = process.env.OAB_EVAL_VISION_MODEL ?? "gpt-4.1";
@@ -247,12 +253,13 @@ async function transcribeSingleImage(
 	total: number,
 	model: string,
 	systemInstructions: string,
-	maxOutputTokens: number,
+	runtimePolicy: OabRuntimePolicy,
 	options: {
 		provider: AiProviderType;
 		enableCodeExecution?: boolean;
 		reasoningEffort?: string;
 		openAiFallbackModel?: string;
+		abortSignal?: AbortSignal;
 	},
 ): Promise<TranscriptionResult> {
 	const startTime = Date.now();
@@ -285,11 +292,9 @@ async function transcribeSingleImage(
 	let retryCount = 0;
 	const openAiFallbackModel = options.openAiFallbackModel || OPENAI_FALLBACK_MODEL;
 
-	// Timeout por página: previne hang se o provider aceita a request mas nunca responde
-	const pageTimeoutMs = DEFAULT_API_TIMEOUT_MS;
-
-	// Limite de output tokens: se blueprint não definir (0), usar cap de segurança
-	const effectiveMaxOutputTokens = maxOutputTokens > 0 ? maxOutputTokens : MAX_SAFE_OUTPUT_TOKENS;
+	const pageTimeoutMs = runtimePolicy.timeoutMs || DEFAULT_API_TIMEOUT_MS;
+	const effectiveMaxOutputTokens = runtimePolicy.maxOutputTokens > 0 ? runtimePolicy.maxOutputTokens : MAX_SAFE_OUTPUT_TOKENS;
+	const requestAbortSignal = combineAbortSignals([options.abortSignal, AbortSignal.timeout(pageTimeoutMs)]);
 
 	// === NÍVEL 1: Provider primário com retry ===
 	try {
@@ -314,9 +319,14 @@ async function transcribeSingleImage(
 				maxOutputTokens: effectiveMaxOutputTokens,
 				temperature: 0,
 				providerOptions,
-				abortSignal: AbortSignal.timeout(pageTimeoutMs),
+				maxRetries: 0,
+				abortSignal: requestAbortSignal,
 			});
-		}, `Transcription:${options.provider}/${model}`);
+		}, `Transcription:${options.provider}/${model}`, {
+			retries: runtimePolicy.retryAttempts,
+			baseDelayMs: runtimePolicy.retryBaseDelayMs,
+			maxDelayMs: runtimePolicy.retryMaxDelayMs,
+		});
 
 		rawText = result.text;
 		tokens = extractTokenUsage(result);
@@ -339,9 +349,14 @@ async function transcribeSingleImage(
 						}],
 						maxOutputTokens: effectiveMaxOutputTokens,
 						temperature: 0,
-						abortSignal: AbortSignal.timeout(pageTimeoutMs),
+						maxRetries: 0,
+						abortSignal: requestAbortSignal,
 					});
-				}, `Transcription:OPENAI/${OPENAI_LAST_RESORT_MODEL}`);
+				}, `Transcription:OPENAI/${OPENAI_LAST_RESORT_MODEL}`, {
+					retries: runtimePolicy.retryAttempts,
+					baseDelayMs: runtimePolicy.retryBaseDelayMs,
+					maxDelayMs: runtimePolicy.retryMaxDelayMs,
+				});
 				rawText = result.text;
 				tokens = extractTokenUsage(result);
 				usedModel = OPENAI_LAST_RESORT_MODEL;
@@ -376,9 +391,14 @@ async function transcribeSingleImage(
 						}],
 						maxOutputTokens: effectiveMaxOutputTokens,
 						temperature: 0,
-						abortSignal: AbortSignal.timeout(pageTimeoutMs),
+						maxRetries: 0,
+						abortSignal: requestAbortSignal,
 					});
-				}, `Transcription:OPENAI/${openAiFallbackModel}`);
+				}, `Transcription:OPENAI/${openAiFallbackModel}`, {
+					retries: runtimePolicy.retryAttempts,
+					baseDelayMs: runtimePolicy.retryBaseDelayMs,
+					maxDelayMs: runtimePolicy.retryMaxDelayMs,
+				});
 				rawText = result.text;
 				tokens = extractTokenUsage(result);
 				usedProvider = "OPENAI";
@@ -401,9 +421,14 @@ async function transcribeSingleImage(
 							}],
 							maxOutputTokens: effectiveMaxOutputTokens,
 							temperature: 0,
-							abortSignal: AbortSignal.timeout(pageTimeoutMs),
+							maxRetries: 0,
+							abortSignal: requestAbortSignal,
 						});
-					}, `Transcription:OPENAI/${OPENAI_LAST_RESORT_MODEL}`);
+					}, `Transcription:OPENAI/${OPENAI_LAST_RESORT_MODEL}`, {
+						retries: runtimePolicy.retryAttempts,
+						baseDelayMs: runtimePolicy.retryBaseDelayMs,
+						maxDelayMs: runtimePolicy.retryMaxDelayMs,
+					});
 					rawText = result.text;
 					tokens = extractTokenUsage(result);
 					usedProvider = "OPENAI";
@@ -427,7 +452,10 @@ async function transcribeSingleImage(
 	};
 }
 
-async function fetchImageAsBase64(descriptor: ManuscriptImageDescriptor): Promise<ImagePreparationState> {
+async function fetchImageAsBase64(
+	descriptor: ManuscriptImageDescriptor,
+	signal?: AbortSignal,
+): Promise<ImagePreparationState> {
 	const { url } = descriptor;
 	if (!url) {
 		throw new Error("URL da imagem do manuscrito ausente");
@@ -443,7 +471,7 @@ async function fetchImageAsBase64(descriptor: ManuscriptImageDescriptor): Promis
 		};
 	}
 
-	const response = await fetch(url);
+	const response = await fetch(url, { signal });
 	if (!response.ok) {
 		if (response.status === 404) {
 			return MissingImageSchema.parse({
@@ -484,6 +512,7 @@ export interface TranscriptionAgentInput {
 	selectedProvider?: "OPENAI" | "GEMINI"; // Provider selecionado pelo usuário no frontend
 	concurrency?: number;
 	onPageComplete?: (pageIndex: number, pageLabel: string, detail?: PageCompleteDetail) => Promise<void> | void;
+	abortSignal?: AbortSignal;
 }
 
 export interface PageTokenUsage {
@@ -568,7 +597,7 @@ export async function transcribeManuscriptLocally(input: TranscriptionAgentInput
 	const downloadStart = Date.now();
 	const preparedImages = await Promise.all(
 		imageDescriptors.map(async (image) => {
-			const prepared = await fetchImageAsBase64(image);
+			const prepared = await fetchImageAsBase64(image, input.abortSignal);
 			return isMissingImageState(prepared)
 				? MissingImageSchema.parse(prepared)
 				: PreparedImageSchema.parse(prepared);
@@ -597,6 +626,9 @@ export async function transcribeManuscriptLocally(input: TranscriptionAgentInput
 
 		async function worker() {
 			while (true) {
+				if (input.abortSignal?.aborted) {
+					throw input.abortSignal.reason ?? new Error("Transcrição abortada.");
+				}
 				const current = nextIndex++;
 				if (current >= items.length) break;
 				try {
@@ -613,13 +645,21 @@ export async function transcribeManuscriptLocally(input: TranscriptionAgentInput
 		return { results, errors };
 	}
 
-	const { model, systemInstructions, maxOutputTokens, enableCodeExecution, provider, reasoningEffort, openAiFallbackModel } =
+	const { model, systemInstructions, maxOutputTokens, enableCodeExecution, provider, reasoningEffort, openAiFallbackModel, metadata } =
 		await getTranscriberConfig(input.selectedProvider);
+	const runtimePolicy = resolveOabRuntimePolicy({
+		stage: "transcription",
+		provider,
+		metadata,
+		explicitMaxOutputTokens: maxOutputTokens,
+	});
 
 	console.log("[TranscriptionAgent] 📝 Configuração do Blueprint:");
 	console.log(`  - Modelo: ${model}`);
 	console.log(`  - Provider: ${provider}`);
-	console.log(`  - Max Output Tokens: ${maxOutputTokens}`);
+	console.log(`  - Max Output Tokens: ${runtimePolicy.maxOutputTokens}`);
+	console.log(`  - Timeout: ${runtimePolicy.timeoutMs}ms`);
+	console.log(`  - Retry Attempts: ${runtimePolicy.retryAttempts}`);
 	console.log(
 		`  - Code Execution: ${enableCodeExecution ? "✅ Habilitado (Gemini Agentic Vision)" : "❌ Desabilitado"}`,
 	);
@@ -659,11 +699,12 @@ export async function transcribeManuscriptLocally(input: TranscriptionAgentInput
 			};
 		}
 
-		const result = await transcribeSingleImage(image, pageNumber, total, model, systemInstructions, maxOutputTokens, {
+		const result = await transcribeSingleImage(image, pageNumber, total, model, systemInstructions, runtimePolicy, {
 			provider,
 			enableCodeExecution,
 			reasoningEffort,
 			openAiFallbackModel,
+			abortSignal: input.abortSignal,
 		});
 		const trimmed = result.text.trim();
 		const newSegments = splitSegments(trimmed);
@@ -789,6 +830,7 @@ async function getTranscriberConfig(preferredProvider?: "OPENAI" | "GEMINI"): Pr
 	provider: AiProviderType;
 	reasoningEffort: string;
 	openAiFallbackModel: string;
+	metadata?: Record<string, unknown> | null;
 }> {
 	const prisma = getPrismaInstance();
 	const blueprint = await getAgentBlueprintByLinkedColumn("PROVA_CELL").catch(() => null);
@@ -887,6 +929,7 @@ async function getTranscriberConfig(preferredProvider?: "OPENAI" | "GEMINI"): Pr
 				provider: effectiveProvider,
 				reasoningEffort: resolvedReasoningEffort,
 				openAiFallbackModel,
+				metadata: (blueprint.metadata as Record<string, unknown>) ?? null,
 			};
 		}
 	} catch (err) {
@@ -941,6 +984,7 @@ async function getTranscriberConfig(preferredProvider?: "OPENAI" | "GEMINI"): Pr
 				provider: effectiveProvider,
 				reasoningEffort: blueprint.reasoningEffort ?? blueprint.thinkingLevel ?? "high",
 				openAiFallbackModel,
+				metadata: bpMetadata as Record<string, unknown>,
 			};
 		}
 	} catch (err) {
@@ -992,6 +1036,7 @@ async function getTranscriberConfig(preferredProvider?: "OPENAI" | "GEMINI"): Pr
 				provider: effectiveProvider,
 				reasoningEffort: "high",
 				openAiFallbackModel,
+				metadata: null,
 			};
 		}
 	} catch (err) {
@@ -1007,5 +1052,6 @@ async function getTranscriberConfig(preferredProvider?: "OPENAI" | "GEMINI"): Pr
 		provider: "OPENAI",
 		reasoningEffort: "high",
 		openAiFallbackModel,
+		metadata: null,
 	};
 }

@@ -59,6 +59,29 @@ export interface OabEvalConfig {
 	transcribe_concurrency: number;
 	agentelocal_espelho?: boolean;
 	mirror_concurrency?: number;
+	runtime_defaults?: {
+		transcription?: {
+			max_output_tokens?: number;
+			timeout_ms?: number;
+			retry_attempts?: number;
+			retry_base_delay_ms?: number;
+			retry_max_delay_ms?: number;
+		};
+		mirror?: {
+			max_output_tokens?: number;
+			timeout_ms?: number;
+			retry_attempts?: number;
+			retry_base_delay_ms?: number;
+			retry_max_delay_ms?: number;
+		};
+		analysis?: {
+			max_output_tokens?: number;
+			timeout_ms?: number;
+			retry_attempts?: number;
+			retry_base_delay_ms?: number;
+			retry_max_delay_ms?: number;
+		};
+	};
 	queue?: {
 		name?: string;
 		max_concurrent_jobs?: number;
@@ -146,6 +169,16 @@ class ConfigManager {
 
 		if (!config.oab_eval.queue) {
 			config.oab_eval.queue = {};
+		}
+
+		if (!config.oab_eval.runtime_defaults) {
+			config.oab_eval.runtime_defaults = {};
+		}
+
+		for (const stage of ["transcription", "mirror", "analysis"] as const) {
+			if (!config.oab_eval.runtime_defaults[stage]) {
+				config.oab_eval.runtime_defaults[stage] = {};
+			}
 		}
 
 		// SocialWise Flow overrides
@@ -273,6 +306,32 @@ class ConfigManager {
 			if (!Number.isNaN(n) && n > 0) config.oab_eval.queue.rate_limit_duration_ms = n;
 		}
 
+		const runtimeEnvMap = [
+			["transcription", "max_output_tokens", process.env.OAB_EVAL_TRANSCRIPTION_MAX_OUTPUT_TOKENS],
+			["transcription", "timeout_ms", process.env.OAB_EVAL_TRANSCRIPTION_TIMEOUT_MS],
+			["transcription", "retry_attempts", process.env.OAB_EVAL_TRANSCRIPTION_RETRY_ATTEMPTS],
+			["transcription", "retry_base_delay_ms", process.env.OAB_EVAL_TRANSCRIPTION_RETRY_BASE_DELAY_MS],
+			["transcription", "retry_max_delay_ms", process.env.OAB_EVAL_TRANSCRIPTION_RETRY_MAX_DELAY_MS],
+			["mirror", "max_output_tokens", process.env.OAB_EVAL_MIRROR_MAX_OUTPUT_TOKENS],
+			["mirror", "timeout_ms", process.env.OAB_EVAL_MIRROR_TIMEOUT_MS],
+			["mirror", "retry_attempts", process.env.OAB_EVAL_MIRROR_RETRY_ATTEMPTS],
+			["mirror", "retry_base_delay_ms", process.env.OAB_EVAL_MIRROR_RETRY_BASE_DELAY_MS],
+			["mirror", "retry_max_delay_ms", process.env.OAB_EVAL_MIRROR_RETRY_MAX_DELAY_MS],
+			["analysis", "max_output_tokens", process.env.OAB_EVAL_ANALYSIS_MAX_OUTPUT_TOKENS],
+			["analysis", "timeout_ms", process.env.OAB_EVAL_ANALYSIS_TIMEOUT_MS],
+			["analysis", "retry_attempts", process.env.OAB_EVAL_ANALYSIS_RETRY_ATTEMPTS],
+			["analysis", "retry_base_delay_ms", process.env.OAB_EVAL_ANALYSIS_RETRY_BASE_DELAY_MS],
+			["analysis", "retry_max_delay_ms", process.env.OAB_EVAL_ANALYSIS_RETRY_MAX_DELAY_MS],
+		] as const;
+
+		for (const [stage, field, value] of runtimeEnvMap) {
+			if (!value) continue;
+			const parsed = parseInt(value, 10);
+			if (!Number.isNaN(parsed) && parsed > 0) {
+				config.oab_eval.runtime_defaults[stage]![field] = parsed;
+			}
+		}
+
 		return config;
 	}
 
@@ -323,6 +382,29 @@ class ConfigManager {
 				agentelocal_espelho: process.env.OAB_EVAL_AGENT_LOCAL_ESPELHO === "true",
 				transcribe_concurrency: parseInt(process.env.OAB_EVAL_TRANSCRIBE_CONCURRENCY || "10", 10),
 				mirror_concurrency: parseInt(process.env.OAB_EVAL_MIRROR_CONCURRENCY || "5", 10),
+				runtime_defaults: {
+					transcription: {
+						max_output_tokens: parseInt(process.env.OAB_EVAL_TRANSCRIPTION_MAX_OUTPUT_TOKENS || "17000", 10),
+						timeout_ms: parseInt(process.env.OAB_EVAL_TRANSCRIPTION_TIMEOUT_MS || "120000", 10),
+						retry_attempts: parseInt(process.env.OAB_EVAL_TRANSCRIPTION_RETRY_ATTEMPTS || "3", 10),
+						retry_base_delay_ms: parseInt(process.env.OAB_EVAL_TRANSCRIPTION_RETRY_BASE_DELAY_MS || "2000", 10),
+						retry_max_delay_ms: parseInt(process.env.OAB_EVAL_TRANSCRIPTION_RETRY_MAX_DELAY_MS || "10000", 10),
+					},
+					mirror: {
+						max_output_tokens: parseInt(process.env.OAB_EVAL_MIRROR_MAX_OUTPUT_TOKENS || "12000", 10),
+						timeout_ms: parseInt(process.env.OAB_EVAL_MIRROR_TIMEOUT_MS || "180000", 10),
+						retry_attempts: parseInt(process.env.OAB_EVAL_MIRROR_RETRY_ATTEMPTS || "3", 10),
+						retry_base_delay_ms: parseInt(process.env.OAB_EVAL_MIRROR_RETRY_BASE_DELAY_MS || "2000", 10),
+						retry_max_delay_ms: parseInt(process.env.OAB_EVAL_MIRROR_RETRY_MAX_DELAY_MS || "10000", 10),
+					},
+					analysis: {
+						max_output_tokens: parseInt(process.env.OAB_EVAL_ANALYSIS_MAX_OUTPUT_TOKENS || "16000", 10),
+						timeout_ms: parseInt(process.env.OAB_EVAL_ANALYSIS_TIMEOUT_MS || "240000", 10),
+						retry_attempts: parseInt(process.env.OAB_EVAL_ANALYSIS_RETRY_ATTEMPTS || "3", 10),
+						retry_base_delay_ms: parseInt(process.env.OAB_EVAL_ANALYSIS_RETRY_BASE_DELAY_MS || "2000", 10),
+						retry_max_delay_ms: parseInt(process.env.OAB_EVAL_ANALYSIS_RETRY_MAX_DELAY_MS || "10000", 10),
+					},
+				},
 				queue: {
 					name: process.env.OAB_EVAL_QUEUE_NAME || "oab-transcription",
 					max_concurrent_jobs: parseInt(process.env.OAB_EVAL_MAX_CONCURRENT_JOBS || "10", 10),
@@ -370,6 +452,21 @@ class ConfigManager {
 			"OAB_EVAL_RETRY_BACKOFF_MS",
 			"OAB_EVAL_RATE_LIMIT_MAX",
 			"OAB_EVAL_RATE_LIMIT_DURATION_MS",
+			"OAB_EVAL_TRANSCRIPTION_MAX_OUTPUT_TOKENS",
+			"OAB_EVAL_TRANSCRIPTION_TIMEOUT_MS",
+			"OAB_EVAL_TRANSCRIPTION_RETRY_ATTEMPTS",
+			"OAB_EVAL_TRANSCRIPTION_RETRY_BASE_DELAY_MS",
+			"OAB_EVAL_TRANSCRIPTION_RETRY_MAX_DELAY_MS",
+			"OAB_EVAL_MIRROR_MAX_OUTPUT_TOKENS",
+			"OAB_EVAL_MIRROR_TIMEOUT_MS",
+			"OAB_EVAL_MIRROR_RETRY_ATTEMPTS",
+			"OAB_EVAL_MIRROR_RETRY_BASE_DELAY_MS",
+			"OAB_EVAL_MIRROR_RETRY_MAX_DELAY_MS",
+			"OAB_EVAL_ANALYSIS_MAX_OUTPUT_TOKENS",
+			"OAB_EVAL_ANALYSIS_TIMEOUT_MS",
+			"OAB_EVAL_ANALYSIS_RETRY_ATTEMPTS",
+			"OAB_EVAL_ANALYSIS_RETRY_BASE_DELAY_MS",
+			"OAB_EVAL_ANALYSIS_RETRY_MAX_DELAY_MS",
 		];
 
 		for (const envVar of envVars) {

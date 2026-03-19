@@ -20,6 +20,7 @@ import type {
 	CreateApiKeyPayload,
 	UpdateApiKeyPayload,
 	MtfApiError,
+	ChatwitAgent,
 } from "./types";
 
 // Import enhanced error handling
@@ -601,7 +602,7 @@ export const buttonReactionsApi = {
 
 // Chatwit Agents API
 export const chatwitAgentsApi = {
-	getAll: async (): Promise<any[]> => {
+	getAll: async (): Promise<ChatwitAgent[]> => {
 		const response = await apiRequest<any>(
 			"/inbox-view?dataType=chatwitAgents",
 			{},

@@ -3,79 +3,67 @@ const getSseManager = () => import("@/lib/sse-manager").then((m) => m.sseManager
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
 	const { searchParams } = new URL(request.url);
-	const leadId = searchParams.get("leadId");
 	const action = searchParams.get("action");
 
-	// Endpoint para verificar status das conexões (retorna JSON)
+	// Endpoint de status (debug) — sem auth para simplicidade
 	if (action === "status") {
 		const sseManager = await getSseManager();
-		const status = sseManager.getStatus();
-		console.log(`[SSE API] 📊 Status solicitado:`, status);
-
-		return NextResponse.json(status);
+		return NextResponse.json(sseManager.getStatus());
 	}
 
-	// Endpoint para verificar conexões ativas de um lead específico (retorna JSON)
-	if (action === "check" && leadId) {
-		const sseManager = await getSseManager();
-		const activeConnections = sseManager.getConnectionsForLead(leadId);
-		console.log(`[SSE API] 🔍 Verificação de conexões para ${leadId}: ${activeConnections} ativas`);
-
-		return NextResponse.json({
-			leadId,
-			hasActiveConnections: activeConnections > 0,
-			connectionCount: activeConnections,
-			totalConnections: sseManager.getConnectionsCount(),
-		});
+	// Auth obrigatória para SSE stream
+	const session = await auth();
+	if (!session?.user?.id) {
+		return new Response("Unauthorized", { status: 401 });
 	}
 
-	// Para SSE, sempre retornar stream mesmo se leadId estiver ausente
-	console.log(`[SSE API] 🌊 Iniciando stream SSE para leadId: ${leadId || "undefined"}`);
+	const userId = session.user.id;
+	const role = (session.user as any).role || "ADMIN";
 
-	let connectionId: string = "";
+	console.log(`[SSE API] Iniciando stream SSE para user: ${userId} (${role})`);
+
+	let connectionId = "";
+	let keepAliveInterval: NodeJS.Timeout | null = null;
 
 	const stream = new ReadableStream({
 		async start(controller) {
-			if (!leadId) {
-				// Enviar erro via SSE em vez de retornar JSON
-				console.log(`[SSE API] ❌ leadId não fornecido, enviando erro via SSE`);
-				controller.enqueue(
-					`data: ${JSON.stringify({
-						type: "error",
-						message: "leadId é obrigatório",
-						timestamp: new Date().toISOString(),
-					})}\n\n`,
-				);
-				controller.close();
-				return;
-			}
-
-			// Adicionar conexão ao manager
 			const sseManager = await getSseManager();
-			connectionId = await Promise.resolve(sseManager.addConnection(leadId, controller));
+			connectionId = await sseManager.addUserConnection(userId, role, controller);
+			console.log(`[SSE API] Stream iniciado para user: ${userId}, connectionId: ${connectionId}`);
 
-			console.log(`[SSE API] ✅ Stream iniciado para leadId: ${leadId}, connectionId: ${connectionId}`);
+			// Heartbeat para evitar timeout silencioso em conexoes longas.
+			keepAliveInterval = setInterval(() => {
+				try {
+					controller.enqueue(`: keepalive ${Date.now()}\n\n`);
+				} catch (error) {
+					console.warn(
+						`[SSE API] Falha ao enviar heartbeat: user=${userId}, connectionId=${connectionId}`,
+						error,
+					);
 
-			// Enviar evento inicial de conexão
-			controller.enqueue(
-				`data: ${JSON.stringify({
-					type: "connected",
-					message: "Conexão SSE estabelecida com sucesso",
-					leadId: leadId,
-					connectionId: connectionId,
-					timestamp: new Date().toISOString(),
-				})}\n\n`,
-			);
+					if (keepAliveInterval) {
+						clearInterval(keepAliveInterval);
+						keepAliveInterval = null;
+					}
+				}
+			}, 25000);
 		},
 		async cancel() {
-			console.log(`[SSE API] 🔌 Stream cancelado pelo cliente para leadId: ${leadId}, connectionId: ${connectionId}`);
+			console.log(`[SSE API] Stream cancelado pelo cliente: user=${userId}, connectionId=${connectionId}`);
 
-			// Remover conexão do manager usando a nova assinatura
-			if (leadId && connectionId) {
+			if (keepAliveInterval) {
+				clearInterval(keepAliveInterval);
+				keepAliveInterval = null;
+			}
+
+			if (connectionId) {
 				const sseManager = await getSseManager();
-				sseManager.removeConnection(leadId, connectionId);
+				sseManager.removeUserConnection(userId, connectionId);
 			}
 		},
 	});
@@ -83,8 +71,9 @@ export async function GET(request: NextRequest) {
 	return new Response(stream, {
 		headers: {
 			"Content-Type": "text/event-stream",
-			"Cache-Control": "no-cache",
+			"Cache-Control": "no-cache, no-transform",
 			Connection: "keep-alive",
+			"X-Accel-Buffering": "no",
 			"Access-Control-Allow-Origin": "*",
 			"Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 			"Access-Control-Allow-Headers": "Content-Type",
@@ -92,16 +81,19 @@ export async function GET(request: NextRequest) {
 	});
 }
 
-// Endpoint POST para enviar notificações via HTTP
+// Endpoint POST para enviar notificações via HTTP (usado por API routes internas)
 export async function POST(request: NextRequest) {
 	try {
+		const session = await auth();
+		if (!session?.user?.id) {
+			return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+		}
+
 		const { leadId, data } = await request.json();
 
 		if (!leadId || !data) {
 			return NextResponse.json({ error: "leadId e data são obrigatórios" }, { status: 400 });
 		}
-
-		console.log(`[SSE API] 📤 Enviando notificação via HTTP para ${leadId}:`, data);
 
 		const sseManager = await getSseManager();
 		const sent = await sseManager.sendNotification(leadId, data);
@@ -109,11 +101,10 @@ export async function POST(request: NextRequest) {
 		return NextResponse.json({
 			success: sent,
 			leadId,
-			notificationsSent: sent ? 1 : 0,
-			message: sent ? "Notificação enviada com sucesso" : "Erro ao enviar notificação ou nenhuma conexão ativa",
+			message: sent ? "Notificação enviada com sucesso" : "Erro ao enviar notificação",
 		});
 	} catch (error: any) {
-		console.error("[SSE API] ❌ Erro ao enviar notificação via HTTP:", error);
+		console.error("[SSE API] Erro ao enviar notificação via HTTP:", error);
 		return NextResponse.json({ error: error.message }, { status: 500 });
 	}
 }

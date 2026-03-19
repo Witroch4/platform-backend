@@ -18,6 +18,9 @@ const getRedisClass = () => {
 	return Redis;
 };
 import { getRedisConfig, getRedisConnectionOptions } from "./redis-config";
+import { createLogger } from "@/lib/utils/logger";
+
+const log = createLogger("Prisma");
 
 // Tipos de ambiente suportados
 type Environment = "development" | "staging" | "production" | "test";
@@ -74,16 +77,16 @@ export function getPrismaInstance(): PrismaClient {
 					await globalThis.prisma!.$connect();
 					startPrismaHeartbeat(); // 💓 agora só inicia depois do connect bem-sucedido
 				} catch (error: any) {
-					console.error("❌ Erro ao conectar Prisma:", error);
+					log.error("Erro ao conectar", error);
 					// tenta uma reconexão simples em produção
 					if (nodeEnv === "production") {
 						try {
 							await new Promise((r) => setTimeout(r, 5000));
 							await globalThis.prisma!.$connect();
 							startPrismaHeartbeat();
-							console.log("✅ Prisma reconectado após falha inicial");
+							log.info("Reconectado apos falha inicial");
 						} catch (e) {
-							console.error("❌ Falha na reconexão inicial do Prisma:", (e as any)?.message);
+							log.error("Falha na reconexao inicial", (e as any)?.message);
 						}
 					}
 				} finally {
@@ -94,7 +97,7 @@ export function getPrismaInstance(): PrismaClient {
 
 		// Log apenas na primeira inicialização real
 		if (!prismaInitialized) {
-			console.log(`🔗 Prisma Client inicializado (${nodeEnv})`);
+			log.info(`Client inicializado (${nodeEnv})`);
 			prismaInitialized = true;
 			// 🛑 (REMOVIDO) NÃO iniciar heartbeat aqui para não bater antes de conectar
 		}
@@ -145,7 +148,7 @@ export function withPrismaReconnect<T>(queryFn: (prisma: PrismaClient) => Promis
 					error.code === "P1017"; // Server has closed connection
 
 				if (isConnectionError && attempts < maxRetries) {
-					console.warn(`⚠️ Prisma connection error (attempt ${attempts}/${maxRetries}):`, error.message);
+					log.warn(`Connection error (attempt ${attempts}/${maxRetries})`, error.message);
 
 					try {
 						// Força desconexão e reconexão

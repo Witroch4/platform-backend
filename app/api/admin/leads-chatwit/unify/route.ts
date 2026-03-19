@@ -5,6 +5,7 @@ import { unifyFilesToPdf, savePdfToMinIO, type Environment } from "./utils";
 import "./config";
 
 import { getPrismaInstance } from "@/lib/connections";
+import { sseManager } from "@/lib/sse-manager";
 const prisma = getPrismaInstance();
 
 // Tipos para uso com Prisma
@@ -135,6 +136,12 @@ export async function POST(request: Request): Promise<Response> {
 					data: { pdfUnificado: unicoArquivoPdf.dataUrl },
 				});
 
+				// Notificar via SSE
+				sseManager.sendNotification(leadId, {
+					type: "leadUpdate",
+					leadData: { id: leadId, pdfUnificado: unicoArquivoPdf.dataUrl },
+				}).catch((err) => console.warn("[API Unify] Erro ao enviar SSE:", err));
+
 				return NextResponse.json({
 					success: true,
 					message: "PDF único definido como unificado (sem processamento necessário)",
@@ -189,6 +196,12 @@ export async function POST(request: Request): Promise<Response> {
 			});
 
 			console.log(`[API Unify] PDF unificado criado para o lead ${leadId}: ${pdfUrl}`);
+
+			// Notificar via SSE
+			sseManager.sendNotification(leadId, {
+				type: "leadUpdate",
+				leadData: { id: leadId, pdfUnificado: pdfUrl },
+			}).catch((err) => console.warn("[API Unify] Erro ao enviar SSE:", err));
 		}
 
 		return NextResponse.json({

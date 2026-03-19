@@ -260,13 +260,17 @@ cmd_build() {
   ensure_env_file
   ensure_shared_infra
 
-  # 1. Para containers
+  # 1. Para containers e remove volumes locais do compose
   log_info "Parando containers..."
-  dc down 2>/dev/null || true
+  dc down -v --remove-orphans 2>/dev/null || true
 
-  # 2. Remove volume node_modules
+  # 2. Garante limpeza de qualquer volume legado de node_modules
   log_info "Removendo volume node_modules..."
-  docker volume rm chatwit-social-dev_node_modules 2>/dev/null || true
+  docker volume rm \
+    chatwit-social-dev_node_modules \
+    socialwise_node_modules \
+    socialwise_app_node_modules \
+    socialwise_worker_node_modules 2>/dev/null || true
 
   # 3. Rebuild imagens
   if [ -n "$no_cache_flag" ]; then
@@ -277,9 +281,12 @@ cmd_build() {
     dc build
   fi
 
-  # 4. Sobe containers
-  log_info "Subindo containers..."
-  dc up -d
+  # 4. Sobe containers em sequência para evitar corrida ao popular o volume node_modules
+  log_info "Subindo container app..."
+  dc up -d app
+
+  log_info "Subindo container worker..."
+  dc up -d worker
 
   # 5. Aguarda app estar pronto
   log_info "Aguardando serviços iniciarem..."
@@ -302,6 +309,10 @@ cmd_build() {
 
   # Exibe logs de todos os serviços após o build
   log_info "Mostrando logs de todos os serviços (Ctrl+C para sair)..."
+
+  # Trap para capturar Ctrl+C e fazer graceful stop também após build
+  trap 'echo ""; log_info "Parando containers..."; dc down; log_success "Ambiente parado!"; exit 0' INT TERM
+
   ./dev.sh logs
 }
 
@@ -381,7 +392,11 @@ cmd_logs() {
     esac
   else
     # Logs de todos os serviços ou específico
-    dc logs -f --tail 200 "$service"
+    if [ -n "$service" ]; then
+      dc logs -f --tail 200 "$service"
+    else
+      dc logs -f --tail 200
+    fi
   fi
 }
 

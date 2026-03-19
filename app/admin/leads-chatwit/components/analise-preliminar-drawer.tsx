@@ -15,10 +15,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Minus, Loader2, Check, Save, XCircle } from "lucide-react";
+import { Plus, Minus, Loader2, Check, Save, XCircle, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 
@@ -240,7 +241,19 @@ export function AnalisePreviewDrawer({
 						<DrawerDescription>Revise e edite os dados da análise preliminar antes de validá-la.</DrawerDescription>
 					</DrawerHeader>
 
-					<Tabs defaultValue="cabecalho" className="flex-1 flex flex-col">
+					<div className="px-6 pb-4">
+						<Alert>
+							<ShieldAlert className="h-4 w-4" />
+							<AlertTitle>PDF do aluno com proteção autoral</AlertTitle>
+							<AlertDescription>
+								A análise exibida aqui permanece completa. O truncamento anti-plágio é aplicado somente na
+								geração do PDF enviado ao aluno. A argumentação interna e o recurso continuam usando o texto
+								integral.
+							</AlertDescription>
+						</Alert>
+					</div>
+
+					<Tabs defaultValue="cabecalho" className="flex-1 flex flex-col min-h-0">
 						<TabsList className="grid grid-cols-4 mb-4 px-6">
 							<TabsTrigger value="cabecalho">Cabeçalho</TabsTrigger>
 							<TabsTrigger value="pontuacao">Pontuação</TabsTrigger>
@@ -248,7 +261,7 @@ export function AnalisePreviewDrawer({
 							<TabsTrigger value="argumentacao">Argumentação</TabsTrigger>
 						</TabsList>
 
-						<div className="flex-1 overflow-hidden px-6 pb-4">
+						<div className="flex-1 overflow-hidden px-6 pb-4 min-h-0">
 							{/* Cabeçalho */}
 							<TabsContent value="cabecalho" className="h-full flex-1 overflow-hidden">
 								<Card className="h-full flex flex-col">
@@ -328,8 +341,7 @@ export function AnalisePreviewDrawer({
 							{/* Pontuação - com correção para o scroll */}
 							<TabsContent
 								value="pontuacao"
-								className="h-full flex-1 overflow-y-scroll"
-								style={{ height: "calc(100vh - 300px)" }}
+								className="h-full overflow-y-auto"
 							>
 								<div className="space-y-4 pb-20">
 									{/* Pontos da Peça */}
@@ -517,8 +529,7 @@ export function AnalisePreviewDrawer({
 							{/* Argumentação */}
 							<TabsContent
 								value="argumentacao"
-								className="h-full flex-1 overflow-y-scroll"
-								style={{ height: "calc(100vh - 300px)" }}
+								className="h-full overflow-y-auto"
 							>
 								<div className="space-y-4 pb-20">
 									<Card>

@@ -5,9 +5,14 @@
  * Quando desativada, o fluxo externo (n8n webhook) permanece inalterado.
  */
 
-import { Queue, Worker, type Job } from "bullmq";
+import { Queue, type Job } from "bullmq";
 import { getRedisInstance } from "@/lib/connections";
 import { getOabEvalConfig } from "@/lib/config";
+import { createLogger } from "@/lib/utils/logger";
+import { buildLeadOperationJobId, mapBullMqStateToLeadOperationStatus } from "./operation-types";
+import { emitLeadOperationEvent } from "./operation-control";
+
+const log = createLogger("AnalysisQueue");
 
 // ============================================================================
 // TYPES
@@ -88,37 +93,72 @@ export const analysisQueue = new Queue<AnalysisJobData, AnalysisJobResult>(QUEUE
  * Só deve ser chamado quando BLUEPRINT_ANALISE=true.
  */
 export async function enqueueAnalysis(data: AnalysisJobData): Promise<Job<AnalysisJobData, AnalysisJobResult>> {
-	console.log(`[AnalysisQueue] 📥 Enfileirando análise para lead ${data.leadId}`);
-	console.log(`[AnalysisQueue] 🎛️ Provider: ${data.selectedProvider || "OPENAI (padrão)"}`);
-	console.log(
-		`[AnalysisQueue] 📏 Tamanhos: prova=${data.textoProva.length} chars, espelho=${data.textoEspelho.length} chars`,
-	);
+	const textoProva = data.textoProva ?? "";
+	const textoEspelho = data.textoEspelho ?? "";
+
+	log.info("Enfileirando análise", {
+		leadId: data.leadId,
+		provider: data.selectedProvider || "OPENAI",
+		provaChars: textoProva.length,
+		espelhoChars: textoEspelho.length,
+	});
 
 	if (!data.leadId) {
 		throw new Error("leadId é obrigatório para enfileirar análise");
 	}
-	if (!data.textoProva || data.textoProva.trim().length < 10) {
+	if (!textoProva || textoProva.trim().length < 10) {
 		throw new Error("Texto da prova é obrigatório para análise");
 	}
-	if (!data.textoEspelho || data.textoEspelho.trim().length < 10) {
+	if (!textoEspelho || textoEspelho.trim().length < 10) {
 		throw new Error("Texto do espelho é obrigatório para análise");
 	}
 
 	const normalizedData: AnalysisJobData = {
 		...data,
+		textoProva,
+		textoEspelho,
 		selectedProvider: data.selectedProvider || "OPENAI",
 	};
 
 	const priority = normalizedData.priority ?? 3; // Mesma prioridade que análises existentes
+	const jobId = buildLeadOperationJobId("analysis", normalizedData.leadId);
+	const existingJob = await analysisQueue.getJob(jobId);
+
+	if (existingJob) {
+		const state = await existingJob.getState();
+		if (state === "waiting" || state === "active" || state === "delayed" || state === "prioritized") {
+			await emitLeadOperationEvent({
+				leadId: normalizedData.leadId,
+				jobId,
+				stage: "analysis",
+				status: mapBullMqStateToLeadOperationStatus(state) ?? "queued",
+				message: "Já existe uma análise em andamento para este lead.",
+				queueState: state,
+			});
+			return existingJob;
+		}
+
+		await existingJob.remove().catch(() => undefined);
+	}
 
 	const job = await analysisQueue.add("analyzeProva", normalizedData, {
-		jobId: `analysis-${normalizedData.leadId}-${Date.now()}`,
+		jobId,
 		priority,
 	});
+	await emitLeadOperationEvent({
+		leadId: normalizedData.leadId,
+		jobId,
+		stage: "analysis",
+		status: "queued",
+		message: "Análise adicionada à fila.",
+		queueState: "waiting",
+	});
 
-	console.log(
-		`[AnalysisQueue] ✅ Job ${job.id} criado (prioridade: ${priority}, provider: ${normalizedData.selectedProvider})`,
-	);
+	log.info("Job criado", {
+		jobId: job.id,
+		priority,
+		provider: normalizedData.selectedProvider,
+	});
 
 	return job;
 }
@@ -145,6 +185,10 @@ export async function getAnalysisJobStatus(jobId: string) {
 		processedOn: job.processedOn,
 		finishedOn: job.finishedOn,
 	};
+}
+
+export async function getAnalysisJobByLead(leadId: string) {
+	return analysisQueue.getJob(buildLeadOperationJobId("analysis", leadId));
 }
 
 /**

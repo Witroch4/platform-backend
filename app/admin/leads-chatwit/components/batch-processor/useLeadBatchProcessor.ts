@@ -148,80 +148,9 @@ export const useLeadBatchProcessor = (
 
 	// Função para criar conexão SSE para um lead com reconexão automática
 	const createSSEConnection = (leadId: string, retryCount = 0) => {
-		if (sseConnections.has(leadId) && retryCount === 0) {
-			console.log(`[Batch SSE] Conexão já existe para ${leadId}`);
-			return;
-		}
-
-		// Limpar conexão anterior se existir
-		if (sseConnections.has(leadId)) {
-			closeSSEConnection(leadId);
-		}
-
 		console.log(
-			`[Batch SSE] Criando conexão SSE para lead ${leadId}${retryCount > 0 ? ` (tentativa ${retryCount + 1})` : ""}`,
+			`[Batch SSE] Usando SSE centralizada para lead ${leadId}${retryCount > 0 ? ` (tentativa ${retryCount + 1})` : ""}`,
 		);
-
-		const eventSource = new EventSource(`/api/admin/leads-chatwit/notifications?leadId=${leadId}`);
-
-		eventSource.onopen = () => {
-			console.log(`[Batch SSE] ✅ Conexão estabelecida para ${leadId}`);
-		};
-
-		eventSource.onmessage = (event) => {
-			try {
-				const notification: SSENotification = JSON.parse(event.data);
-				console.log(`[Batch SSE] 📨 Notificação recebida para ${leadId}:`, notification);
-
-				if (notification.type === "connected") {
-					console.log(`[Batch SSE] 🎉 Confirmação de conexão para ${leadId}`);
-					return;
-				}
-
-				// Processar notificações de atualização do lead
-				if (notification.type === "notification" && notification.data?.type === "leadUpdate") {
-					handleSSELeadUpdate(leadId, notification.data);
-				}
-			} catch (error) {
-				console.error(`[Batch SSE] ❌ Erro ao processar notificação para ${leadId}:`, error);
-			}
-		};
-
-		eventSource.onerror = (error) => {
-			console.error(`[Batch SSE] ❌ Erro na conexão SSE para ${leadId}:`, error);
-
-			// Fechar conexão atual
-			eventSource.close();
-
-			// Remover da lista de conexões
-			setSseConnections((prev) => {
-				const newMap = new Map(prev);
-				newMap.delete(leadId);
-				return newMap;
-			});
-
-			// Tentar reconectar após um delay, mas apenas se ainda estivermos processando este lead
-			if (retryCount < 3 && leadsBeingProcessed.has(leadId)) {
-				const delay = Math.min(1000 * Math.pow(2, retryCount), 10000); // Backoff exponencial, máximo 10s
-				console.log(`[Batch SSE] 🔄 Tentando reconectar para ${leadId} em ${delay}ms...`);
-
-				setTimeout(() => {
-					// Verificar novamente se ainda estamos processando antes de reconectar
-					if (leadsBeingProcessed.has(leadId)) {
-						createSSEConnection(leadId, retryCount + 1);
-					} else {
-						console.log(`[Batch SSE] ⏹️ Lead ${leadId} não está mais sendo processado, cancelando reconexão`);
-					}
-				}, delay);
-			} else if (retryCount >= 3) {
-				console.warn(`[Batch SSE] ⚠️ Máximo de tentativas de reconexão atingido para ${leadId}`);
-				toast.warning(`Conexão perdida com o lead ${leadId}. Algumas atualizações podem não ser recebidas.`, {
-					duration: 5000,
-				});
-			}
-		};
-
-		setSseConnections((prev) => new Map(prev.set(leadId, eventSource)));
 	};
 
 	// Função para processar atualizações do lead via SSE
@@ -446,10 +375,48 @@ export const useLeadBatchProcessor = (
 
 	// Cleanup ao desmontar o componente
 	useEffect(() => {
+		const handleLeadUpdateEvent = (event: Event) => {
+			const customEvent = event as CustomEvent<{ leadId?: string; leadData?: any }>;
+			const leadId = customEvent.detail?.leadId;
+			const leadData = customEvent.detail?.leadData;
+			if (!leadId || !leadData || !leadsBeingProcessed.has(leadId)) {
+				return;
+			}
+			handleSSELeadUpdate(leadId, { leadData });
+		};
+
+		const handleLeadOperationEvent = (event: Event) => {
+			const customEvent = event as CustomEvent<{
+				leadId?: string;
+				status?: string;
+				stage?: string;
+				message?: string;
+				error?: string;
+			}>;
+			const operation = customEvent.detail;
+			if (!operation?.leadId || !leadsBeingProcessed.has(operation.leadId)) {
+				return;
+			}
+
+			if (operation.status === "failed" || operation.status === "canceled" || operation.status === "inconsistent") {
+				removeLeadFromTracking(operation.leadId);
+				toast.warning(`Processamento interrompido para ${operation.leadId}`, {
+					description: operation.error || operation.message || "A operação saiu do fluxo em lote.",
+					duration: 6000,
+				});
+				onUpdate?.();
+			}
+		};
+
+		window.addEventListener("lead-update", handleLeadUpdateEvent as EventListener);
+		window.addEventListener("lead-operation", handleLeadOperationEvent as EventListener);
+
 		return () => {
+			window.removeEventListener("lead-update", handleLeadUpdateEvent as EventListener);
+			window.removeEventListener("lead-operation", handleLeadOperationEvent as EventListener);
 			closeAllSSEConnections();
 		};
-	}, []);
+	}, [leadsBeingProcessed, onUpdate]);
 
 	const start = () => {
 		console.log("[useLeadBatchProcessor] Função start() chamada");

@@ -122,29 +122,68 @@ export function useTranscriptionProgress({
 			return;
 		}
 
-		console.log("[useTranscriptionProgress] 🎧 Conectando ao SSE para lead:", leadID);
+		console.log("[useTranscriptionProgress] 🎧 Escutando eventos centralizados para lead:", leadID);
 
-		const eventSource = new EventSource(`/api/admin/leads-chatwit/sse?leadId=${leadID}`);
+		const handleLeadNotification = (event: Event) => {
+			const customEvent = event as CustomEvent<{
+				leadId?: string;
+				notification?: { category?: string; event?: TranscriptionEvent };
+			}>;
 
-		eventSource.onmessage = handleSSEMessage;
+			if (customEvent.detail?.leadId !== leadID) {
+				return;
+			}
 
-		eventSource.onerror = (error) => {
-			console.error("[useTranscriptionProgress] ❌ Erro no SSE:", error);
+			if (customEvent.detail?.notification?.category !== "transcription" || !customEvent.detail.notification.event) {
+				return;
+			}
 
-			// Tentar reconectar após 3 segundos
-			setTimeout(() => {
-				console.log("[useTranscriptionProgress] 🔄 Tentando reconectar...");
-				eventSource.close();
-			}, 3000);
+			handleSSEMessage({
+				data: JSON.stringify({
+					category: "transcription",
+					data: {
+						leadID,
+						event: customEvent.detail.notification.event,
+					},
+				}),
+			} as MessageEvent);
 		};
 
-		eventSource.addEventListener("connection", (event: any) => {
-			console.log("[useTranscriptionProgress] ✅ Conectado ao SSE:", event.data);
-		});
+		const handleConnectionStatus = async (event: Event) => {
+			const customEvent = event as CustomEvent<{ status?: string }>;
+			if (customEvent.detail?.status !== "disconnected") {
+				return;
+			}
+
+			try {
+				const response = await fetch(`/api/admin/leads-chatwit/operations/status?leadId=${encodeURIComponent(leadID)}&stage=transcription`);
+				if (!response.ok) return;
+				const operation = await response.json();
+				if (operation.status === "completed") {
+					setStatus({
+						leadID,
+						status: "completed",
+						percentage: 100,
+					});
+				} else if (operation.status === "failed" || operation.status === "inconsistent") {
+					setStatus({
+						leadID,
+						status: "failed",
+						error: operation.error || operation.message || "Falha ao consultar status da transcrição.",
+					});
+				}
+			} catch (error) {
+				console.error("[useTranscriptionProgress] ❌ Erro ao consultar status:", error);
+			}
+		};
+
+		window.addEventListener("lead-notification", handleLeadNotification as EventListener);
+		window.addEventListener("lead-operations-connection", handleConnectionStatus as EventListener);
 
 		return () => {
-			console.log("[useTranscriptionProgress] 🔌 Desconectando do SSE");
-			eventSource.close();
+			console.log("[useTranscriptionProgress] 🔌 Removendo listeners centralizados");
+			window.removeEventListener("lead-notification", handleLeadNotification as EventListener);
+			window.removeEventListener("lead-operations-connection", handleConnectionStatus as EventListener);
 		};
 	}, [leadID, enabled, handleSSEMessage]);
 

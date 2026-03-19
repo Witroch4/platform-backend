@@ -3,7 +3,10 @@ import { getPrismaInstance } from "@/lib/connections";
 import { getOabEvalConfig } from "@/lib/config";
 import { enqueueTranscription } from "@/lib/oab-eval/transcription-queue";
 import { enqueueMirrorGeneration } from "@/lib/oab-eval/mirror-queue";
+import { createLogger } from "@/lib/utils/logger";
+import { buildLeadOperationCancelUrl, buildLeadOperationStatusUrl } from "@/lib/oab-eval/operation-types";
 
+const log = createLogger("API.EnviarDocumento");
 const prisma = getPrismaInstance();
 const { agentelocal: USE_LOCAL_TRANSCRIBER, agentelocal_espelho: USE_LOCAL_MIRROR_AGENT } = getOabEvalConfig();
 
@@ -375,6 +378,13 @@ export async function POST(request: Request): Promise<Response> {
 					jobId: job.id,
 					leadId: resolvedLeadId,
 					totalPages: imagensPreparadas.length,
+					operation: {
+						jobId: job.id,
+						leadId: resolvedLeadId,
+						stage: "transcription",
+						statusUrl: buildLeadOperationStatusUrl(resolvedLeadId, "transcription"),
+						cancelUrl: buildLeadOperationCancelUrl(),
+					},
 				},
 				{ status: 202 },
 			); // 202 Accepted (processamento assíncrono)
@@ -449,6 +459,13 @@ export async function POST(request: Request): Promise<Response> {
 					leadId: resolvedLeadId,
 					totalImages: imagensPreparadas.length,
 					especialidade: leadData.especialidade,
+					operation: {
+						jobId: job.id,
+						leadId: resolvedLeadId,
+						stage: "mirror",
+						statusUrl: buildLeadOperationStatusUrl(resolvedLeadId, "mirror"),
+						cancelUrl: buildLeadOperationCancelUrl(),
+					},
 				},
 				{ status: 202 },
 			); // 202 Accepted (processamento assíncrono)

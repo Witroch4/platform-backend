@@ -14,6 +14,7 @@ import { initializeQueueManagement, shutdownQueueManagement } from "./queue-mana
 import { sseManager } from "../lib/sse-manager";
 import { ensureInitialFxRate } from "@/lib/cost/fx-rate-worker";
 import { getWebhookQueue } from "@/lib/webhook/webhook-queue";
+import { analysisQueue } from "@/lib/oab-eval/analysis-queue";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -24,6 +25,34 @@ dotenv.config();
 
 const activeWorkers = new Map<string, Worker>();
 const scheduleQueues: Queue[] = []; // Queues used for recurring schedules
+
+async function recoverStalledAnalysisLeads(): Promise<void> {
+	const prisma = getPrismaInstance();
+	const queuedJobs = await analysisQueue.getJobs(["active", "waiting", "delayed"]);
+	const leadIdsWithJobs = new Set(queuedJobs.map((job) => job.data.leadId));
+	const awaitingLeads = await prisma.leadOabData.findMany({
+		where: { aguardandoAnalise: true },
+		select: { id: true },
+	});
+
+	const orphanLeadIds = awaitingLeads
+		.map((lead) => lead.id)
+		.filter((leadId) => !leadIdsWithJobs.has(leadId));
+
+	if (!orphanLeadIds.length) {
+		console.log("[Worker] ✅ Nenhum lead órfão encontrado em aguardandoAnalise");
+		return;
+	}
+
+	const result = await prisma.leadOabData.updateMany({
+		where: { id: { in: orphanLeadIds } },
+		data: { aguardandoAnalise: false },
+	});
+
+	console.warn(
+		`[Worker] ⚠️ Recovery de análise executado: ${result.count} leads destravados (${orphanLeadIds.join(", ")})`,
+	);
+}
 
 // ============================================================================
 // REDIS CONNECTION
@@ -108,6 +137,12 @@ export async function initializeWorkers() {
 		// ==================================================================
 		await sseManager.ensureRedisConnected();
 		console.log("[Worker] ✅ SSE Redis conectado");
+
+		try {
+			await recoverStalledAnalysisLeads();
+		} catch (error) {
+			console.warn("[Worker] ⚠️ Recovery de análises órfãs falhou (não-crítico):", error);
+		}
 
 		await initializeQueueManagement();
 		console.log("[Worker] ✅ Sistema de Gerenciamento de Filas inicializado");

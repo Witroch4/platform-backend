@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import "katex/dist/katex.min.css";
+import { ReactQueryProvider } from "@/components/providers/react-query-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { SessionProvider } from "@/components/providers/session-provider";
 import { SWRProvider } from "@/components/providers/SwrProvider";
@@ -115,15 +116,17 @@ export default function RootLayout({
 			<body className={cn(inter.className, "min-h-screen bg-background")}>
 				<ErrorBoundary>
 					<SessionProvider>
-						<ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-							{/* 👇 SWR Provider para otimização global */}
-							<SWRProvider>
-								{/* 👇 Envolvendo a árvore de componentes com TooltipProvider */}
-								<TooltipProvider>
-									<div className="min-h-screen w-full bg-background">{children}</div>
-								</TooltipProvider>
-							</SWRProvider>
-						</ThemeProvider>
+						<ReactQueryProvider>
+							<ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+								{/* 👇 SWR Provider para otimização global */}
+								<SWRProvider>
+									{/* 👇 Envolvendo a árvore de componentes com TooltipProvider */}
+									<TooltipProvider>
+										<div className="min-h-screen w-full bg-background">{children}</div>
+									</TooltipProvider>
+								</SWRProvider>
+							</ThemeProvider>
+						</ReactQueryProvider>
 					</SessionProvider>
 				</ErrorBoundary>
 				<Toaster />

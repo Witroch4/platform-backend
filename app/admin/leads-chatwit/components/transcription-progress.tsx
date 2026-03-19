@@ -1,7 +1,7 @@
 // app/admin/leads-chatwit/components/transcription-progress.tsx
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -62,39 +62,78 @@ export function TranscriptionProgress({ leadId, totalPages }: TranscriptionProgr
 	const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<number | undefined>();
 	const [completed, setCompleted] = useState(false);
 	const [totalTokensSummary, setTotalTokensSummary] = useState<{ input: number; output: number } | null>(null);
-	const eventSourceRef = useRef<EventSource | null>(null);
 
-	// SSE connection
 	useEffect(() => {
 		if (!leadId) return;
 
-		const url = `/api/admin/leads-chatwit/notifications?leadId=${encodeURIComponent(leadId)}`;
-		const es = new EventSource(url);
-		eventSourceRef.current = es;
-
-		es.addEventListener("notification", (event) => {
+		const syncFromStatus = async () => {
 			try {
-				const data = JSON.parse(event.data);
-				// Delegar ao handler de acordo com o tipo
-				if (data.type === "page-complete") {
-					handlePageComplete(data);
-				} else if (data.type === "completed") {
-					handleCompleted(data);
-				} else if (data.type === "started") {
-					handleStarted(data);
+				const response = await fetch(`/api/admin/leads-chatwit/operations/status?leadId=${encodeURIComponent(leadId)}&stage=transcription`);
+				if (!response.ok) return;
+				const status = await response.json();
+				if (status.status === "processing" && status.progress) {
+					const progress = status.progress as {
+						currentPage?: number;
+						totalPages?: number;
+						percentage?: number;
+						estimatedTimeRemaining?: number;
+					};
+
+					if (progress.currentPage && progress.totalPages) {
+						handleStarted({ totalPages: progress.totalPages });
+						handlePageComplete({
+							page: progress.currentPage,
+							totalPages: progress.totalPages,
+							percentage: progress.percentage ?? 0,
+							estimatedTimeRemaining: progress.estimatedTimeRemaining,
+						});
+					}
+				} else if (status.status === "completed") {
+					setCompleted(true);
 				}
 			} catch {
-				// Ignorar payloads malformados
+				// fallback silencioso
 			}
-		});
-
-		es.onerror = () => {
-			// EventSource reconnecta automaticamente
 		};
 
+		void syncFromStatus();
+
+		const handleLeadNotification = (event: Event) => {
+			const customEvent = event as CustomEvent<{
+				leadId?: string;
+				notification?: { category?: string; event?: any };
+			}>;
+			const detail = customEvent.detail;
+			if (!detail || detail.leadId !== leadId) {
+				return;
+			}
+			if (detail.notification?.category !== "transcription" || !detail.notification.event) {
+				return;
+			}
+
+			const data = detail.notification.event;
+			if (data.type === "page-complete") {
+				handlePageComplete(data);
+			} else if (data.type === "completed") {
+				handleCompleted(data);
+			} else if (data.type === "started") {
+				handleStarted(data);
+			}
+		};
+
+		const handleConnectionChange = (event: Event) => {
+			const customEvent = event as CustomEvent<{ status?: string }>;
+			if (customEvent.detail?.status === "disconnected") {
+				void syncFromStatus();
+			}
+		};
+
+		window.addEventListener("lead-notification", handleLeadNotification as EventListener);
+		window.addEventListener("lead-operations-connection", handleConnectionChange as EventListener);
+
 		return () => {
-			es.close();
-			eventSourceRef.current = null;
+			window.removeEventListener("lead-notification", handleLeadNotification as EventListener);
+			window.removeEventListener("lead-operations-connection", handleConnectionChange as EventListener);
 		};
 	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [leadId]);

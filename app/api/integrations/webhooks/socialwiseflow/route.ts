@@ -175,13 +175,10 @@ function logFinalResponse(responseData: any, status: number, traceId?: string) {
 	const responseSize = JSON.stringify(responseData).length;
 	const responseSizeKB = Math.round((responseSize / 1024) * 100) / 100;
 
-	webhookLogger.info("📤 CHATWIT FINAL RESPONSE DEBUG", {
-		timestamp: new Date().toISOString(),
+	webhookLogger.debug("📤 CHATWIT FINAL RESPONSE DEBUG", {
 		responseSizeKB,
-		responseLength: responseSize,
 		status,
 		traceId,
-		responseData: JSON.stringify(responseData, null, 2),
 	});
 }
 
@@ -218,20 +215,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 		const rawBody = await request.text();
 		const payloadSizeKB = Buffer.byteLength(rawBody, "utf8") / 1024;
 
-		// 🐛 DEBUG: Log do payload RAW original exato que o Chatwit envia
-		webhookLogger.info("🔍 CHATWIT ORIGINAL RAW PAYLOAD DEBUG", {
-			timestamp: new Date().toISOString(),
+		// 🐛 DEBUG: Log do payload RAW original (só com DEBUG=true)
+		webhookLogger.debug("🔍 CHATWIT ORIGINAL RAW PAYLOAD DEBUG", {
 			payloadSizeKB: Number(payloadSizeKB.toFixed(2)),
-			rawBodyString: rawBody,
 			rawBodyLength: rawBody.length,
-			headers: {
-				"content-type": request.headers.get("content-type"),
-				"user-agent": request.headers.get("user-agent"),
-				"x-forwarded-for": request.headers.get("x-forwarded-for"),
-				authorization: request.headers.get("authorization") ? "[REDACTED]" : null,
-			},
-			method: request.method,
-			url: request.url,
 		});
 
 		if (payloadSizeKB > MAX_PAYLOAD_SIZE_KB) {
@@ -247,15 +234,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 		try {
 			payload = JSON.parse(rawBody);
 
-			// 🐛 DEBUG: Log do payload JSON parseado para comparação
-			webhookLogger.info("📋 CHATWIT PARSED JSON PAYLOAD DEBUG", {
-				timestamp: new Date().toISOString(),
-				parsedPayload: payload,
-				payloadType: typeof payload,
+			// 🐛 DEBUG: Log do payload JSON parseado (só com DEBUG=true)
+			webhookLogger.debug("📋 CHATWIT PARSED JSON PAYLOAD DEBUG", {
 				payloadKeys: payload && typeof payload === "object" ? Object.keys(payload) : null,
-				hasContext: payload?.context ? true : false,
-				hasMessage: payload?.context?.message ? true : false,
-				hasSocialwiseChatwit: payload?.context?.["socialwise-chatwit"] ? true : false,
 			});
 		} catch (error) {
 			webhookLogger.error("Invalid JSON payload", {

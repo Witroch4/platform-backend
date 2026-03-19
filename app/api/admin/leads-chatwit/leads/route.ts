@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { getPrismaInstance } from "@/lib/connections";
 const prisma = getPrismaInstance();
 import { auth } from "@/auth";
+import { createLogger } from "@/lib/utils/logger";
+
+const log = createLogger("API.Leads");
 
 /**
  * GET - Lista todos os leads ou filtra por parâmetros
@@ -19,6 +22,7 @@ export async function GET(request: Request): Promise<Response> {
 		const leadId = url.searchParams.get("id");
 		const usuarioId = url.searchParams.get("usuarioId");
 		const searchTerm = url.searchParams.get("search");
+		const visibilityMode = url.searchParams.get("visibility") || "all";
 		const page = Number.parseInt(url.searchParams.get("page") || "1");
 		const limit = Number.parseInt(url.searchParams.get("limit") || "10");
 		const skip = (page - 1) * limit;
@@ -344,6 +348,32 @@ export async function GET(request: Request): Promise<Response> {
 			}
 		}
 
+		if (visibilityMode === "visible") {
+			const visibleFilter = {
+				OR: [{ alwaysShowInLeadList: true }, { arquivos: { some: {} } }],
+			};
+
+			if (marketingMode) {
+				where.AND.push(visibleFilter);
+			} else {
+				where.AND = where.AND || [];
+				where.AND.push(visibleFilter);
+			}
+		}
+
+		if (visibilityMode === "hidden") {
+			const hiddenFilter = {
+				AND: [{ alwaysShowInLeadList: false }, { arquivos: { none: {} } }],
+			};
+
+			if (marketingMode) {
+				where.AND.push(hiddenFilter);
+			} else {
+				where.AND = where.AND || [];
+				where.AND.push(hiddenFilter);
+			}
+		}
+
 		// Buscar os leads e a contagem total
 		const [leads, total] = await Promise.all([
 			prisma.leadOabData.findMany({
@@ -422,6 +452,7 @@ export async function GET(request: Request): Promise<Response> {
 				email: leadData?.email || null,
 				thumbnail: leadData?.avatarUrl || null,
 				concluido: lead.concluido || false,
+				alwaysShowInLeadList: lead.alwaysShowInLeadList || false,
 				fezRecurso: lead.fezRecurso || false,
 				createdAt: leadData?.createdAt,
 				updatedAt: leadData?.updatedAt,
@@ -568,6 +599,8 @@ export async function POST(request: Request): Promise<Response> {
 			analisePreliminar,
 			analiseValidada,
 			consultoriaFase2,
+			alwaysShowInLeadList,
+			recursoPreliminar,
 			// Campos relacionados ao manuscrito
 			aguardandoManuscrito,
 			manuscritoProcessado,
@@ -596,6 +629,8 @@ export async function POST(request: Request): Promise<Response> {
 			...(analisePreliminar !== undefined && { analisePreliminar: "Presente" }),
 			...(analiseValidada !== undefined && { analiseValidada }),
 			...(consultoriaFase2 !== undefined && { consultoriaFase2 }),
+			...(alwaysShowInLeadList !== undefined && { alwaysShowInLeadList }),
+			...(recursoPreliminar !== undefined && { recursoPreliminar: "Presente" }),
 			...(aguardandoManuscrito !== undefined && { aguardandoManuscrito }),
 			...(manuscritoProcessado !== undefined && { manuscritoProcessado }),
 			...(provaManuscrita !== undefined && { provaManuscrita: "Presente" }),
@@ -621,6 +656,8 @@ export async function POST(request: Request): Promise<Response> {
 		if (analisePreliminar !== undefined) updateData.analisePreliminar = analisePreliminar;
 		if (analiseValidada !== undefined) updateData.analiseValidada = analiseValidada;
 		if (consultoriaFase2 !== undefined) updateData.consultoriaFase2 = consultoriaFase2;
+		if (alwaysShowInLeadList !== undefined) updateData.alwaysShowInLeadList = alwaysShowInLeadList;
+		if (recursoPreliminar !== undefined) updateData.recursoPreliminar = recursoPreliminar;
 		if (aguardandoManuscrito !== undefined) updateData.aguardandoManuscrito = aguardandoManuscrito;
 		if (manuscritoProcessado !== undefined) updateData.manuscritoProcessado = manuscritoProcessado;
 		if (provaManuscrita !== undefined) updateData.provaManuscrita = provaManuscrita;

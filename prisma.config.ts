@@ -3,8 +3,11 @@ import path from "node:path";
 import { defineConfig } from "prisma/config";
 
 // Carrega na ordem: .env → .env.local sobrescreve (convenção Next.js)
-dotenv.config();
-dotenv.config({ path: path.resolve(__dirname, ".env.local"), override: true });
+// Só carrega dotenv se DATABASE_URL não está no environment (ex: Docker)
+if (!process.env.DATABASE_URL) {
+	dotenv.config();
+	dotenv.config({ path: path.resolve(__dirname, ".env.local"), override: true });
+}
 
 export default defineConfig({
 	schema: path.join(__dirname, "prisma", "schema.prisma"),
