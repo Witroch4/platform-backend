@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
 	Dialog,
 	DialogContent,
@@ -20,8 +20,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { InfoIcon, Sparkles, Settings2, Wrench, FileJson, Link2, AlertCircle } from "lucide-react";
+import { InfoIcon, Sparkles, Settings2, Wrench, FileJson, Link2, AlertCircle, Maximize2, History, RotateCcw, ChevronDown } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import Image from "next/image";
+import { useProviderModels, type ProviderModelOption } from "../../hooks/useProviderModels";
 import type {
 	AgentBlueprintDraft,
 	AgentTypeDescriptor,
@@ -46,29 +48,17 @@ interface AgentNodeDialogProps {
 	onSave: (patch: Partial<AgentBlueprintDraft>) => void;
 }
 
-// Modelos disponíveis por provedor — com info de preço, descrição e cutoff
-interface ModelOption {
-	value: string;
-	label: string;
-	supportsReasoning?: boolean;
-	fixedReasoning?: string;
-	description?: string;
-	pricing?: string;
-	cutoff?: string;
-}
-
-const GEMINI_MODELS: ModelOption[] = [
+// Fallback hardcoded — usado enquanto a API dinâmica não responde
+const FALLBACK_GEMINI: ProviderModelOption[] = [
 	{ value: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro Preview", description: "SOTA reasoning com profundidade e multimodal avançado", pricing: "≤200K: $2.00 / $12.00 · >200K: $4.00 / $18.00", cutoff: "Jan 2025" },
 	{ value: "gemini-3-flash-preview", label: "Gemini 3 Flash Preview", description: "Inteligência frontier com velocidade, search e grounding", pricing: "$0.50 / $3.00 por 1M tokens", cutoff: "Jan 2025" },
 	{ value: "gemini-3-pro-preview", label: "Gemini 3 Pro Preview", description: "Raciocínio avançado, multimodal e vibe coding", pricing: "≤200K: $2.00 / $12.00 · >200K: $4.00 / $18.00", cutoff: "Jan 2025" },
 	{ value: "gemini-2.5-pro", label: "Gemini 2.5 Pro", description: "Geração anterior, excelente em código e raciocínio complexo", pricing: "≤200K: $1.25 / $10.00 · >200K: $2.50 / $15.00", cutoff: "Jan 2025" },
 	{ value: "gemini-2.5-flash", label: "Gemini 2.5 Flash", description: "Raciocínio híbrido, 1M context, thinking budgets", pricing: "$0.30 / $2.50 por 1M tokens", cutoff: "Jan 2025" },
 	{ value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite", description: "Menor e mais econômico, feito para uso em escala", pricing: "$0.10 / $0.40 por 1M tokens", cutoff: "Jan 2025" },
-	{ value: "gemini-flash-latest", label: "Gemini Flash (latest)", description: "Alias automático → gemini-2.5-flash-preview mais recente", pricing: "$0.30 / $2.50 por 1M tokens", cutoff: "Jan 2025" },
-	{ value: "gemini-flash-lite-latest", label: "Gemini Flash Lite (latest)", description: "Alias automático → Flash Lite mais recente", pricing: "$0.10 / $0.40 por 1M tokens", cutoff: "Jan 2025" },
 ];
 
-const OPENAI_MODELS: ModelOption[] = [
+const FALLBACK_OPENAI: ProviderModelOption[] = [
 	{ value: "gpt-4.1", label: "GPT-4.1 (Vision)", supportsReasoning: false, description: "Principal modelo de visão", pricing: "$2.00 / $8.00 por 1M tokens" },
 	{ value: "gpt-4.1-mini", label: "GPT-4.1 Mini", supportsReasoning: false, description: "Balanceado custo/qualidade", pricing: "$0.40 / $1.60 por 1M tokens" },
 	{ value: "gpt-4.1-nano", label: "GPT-4.1 Nano", supportsReasoning: false, description: "Ultra rápido, baixo custo", pricing: "$0.10 / $0.40 por 1M tokens" },
@@ -97,6 +87,22 @@ const OPENAI_REASONING_EFFORTS: Array<{ value: OpenAIReasoningEffort; label: str
 	{ value: "none", label: "Nenhum", description: "Sem raciocínio - máxima velocidade (padrão GPT-5.1+)" },
 ];
 
+// ── Prompt version history ────────────────────────────────────────────────
+interface PromptVersionEntry {
+	prompt: string;
+	savedAt: string; // ISO string
+	label?: string;
+}
+
+const MAX_PROMPT_VERSIONS = 10;
+
+function getPromptHistory(draft: AgentBlueprintDraft): PromptVersionEntry[] {
+	const meta = draft.metadata as Record<string, unknown> | null | undefined;
+	const raw = meta?.promptHistory;
+	if (!Array.isArray(raw)) return [];
+	return raw as PromptVersionEntry[];
+}
+
 export function AgentNodeDialog({
 	open,
 	onOpenChange,
@@ -106,7 +112,13 @@ export function AgentNodeDialog({
 	structuredTemplates,
 	onSave,
 }: AgentNodeDialogProps) {
+	// Modelos dinâmicos via API — fallback para listas hardcoded
+	const { openaiModels: dynamicOpenAi, geminiModels: dynamicGemini } = useProviderModels();
+	const GEMINI_MODELS: ProviderModelOption[] = dynamicGemini ?? FALLBACK_GEMINI;
+	const OPENAI_MODELS: ProviderModelOption[] = dynamicOpenAi ?? FALLBACK_OPENAI;
+
 	const [localDraft, setLocalDraft] = useState<AgentBlueprintDraft>(draft);
+	const [promptEditorOpen, setPromptEditorOpen] = useState(false);
 
 	// Cache de configurações por provedor — preserva ao trocar e voltar
 	const [providerCache, setProviderCache] = useState<Record<string, {
@@ -173,10 +185,28 @@ export function AgentNodeDialog({
 		}));
 	};
 
+	// Captura versão atual do prompt antes de salvar
+	const capturePromptVersion = useCallback((targetDraft: AgentBlueprintDraft): PromptVersionEntry[] => {
+		const currentPrompt = targetDraft.systemPrompt?.trim() ?? "";
+		if (!currentPrompt) return getPromptHistory(targetDraft);
+		const existing = getPromptHistory(targetDraft);
+		// Não duplica se o prompt não mudou em relação à última versão
+		if (existing.length > 0 && existing[0].prompt === currentPrompt) return existing;
+		const newEntry: PromptVersionEntry = { prompt: currentPrompt, savedAt: new Date().toISOString() };
+		return [newEntry, ...existing].slice(0, MAX_PROMPT_VERSIONS);
+	}, []);
+
+	const restorePromptVersion = (entry: PromptVersionEntry) => {
+		updateLocal({ systemPrompt: entry.prompt });
+	};
+
+	const promptHistory = getPromptHistory(localDraft);
+
 	const handleSave = () => {
 		// Persiste o cache de provedores no metadata para sobreviver ao save/reopen
 		const meta = (localDraft.metadata as Record<string, unknown>) ?? {};
 		const effectiveOpenAiModel = providerCache.OPENAI?.model || OPENAI_MODELS[0]?.value || "gpt-4.1";
+		const updatedHistory = capturePromptVersion(localDraft);
 		const finalDraft = {
 			...localDraft,
 			model: effectiveOpenAiModel,
@@ -185,7 +215,7 @@ export function AgentNodeDialog({
 			thinkingLevel: providerCache.GEMINI?.thinkingLevel as GeminiThinkingLevel | null,
 			reasoningEffort: providerCache.OPENAI?.reasoningEffort as OpenAIReasoningEffort | null,
 			defaultProvider: null,
-			metadata: { ...meta, providerCache },
+			metadata: { ...meta, providerCache, promptHistory: updatedHistory },
 		};
 		onSave(finalDraft);
 		onOpenChange(false);
@@ -230,6 +260,7 @@ export function AgentNodeDialog({
 	const openAiFixedReasoning = openAiInfo?.fixedReasoning as OpenAIReasoningEffort | undefined;
 
 	return (
+		<>
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="max-w-4xl max-h-[85vh] p-0">
 				<DialogHeader className="px-6 pt-6 pb-4 border-b">
@@ -359,9 +390,53 @@ export function AgentNodeDialog({
 								<Separator />
 
 								<div className="space-y-2">
-									<Label htmlFor="system-prompt" className="text-sm font-medium">
-										Prompt do Sistema
-									</Label>
+									<div className="flex items-center justify-between">
+										<Label htmlFor="system-prompt" className="text-sm font-medium">
+											Prompt do Sistema
+										</Label>
+										<div className="flex items-center gap-1.5">
+											{/* Histórico de versões */}
+											{promptHistory.length > 0 && (
+												<DropdownMenu>
+													<DropdownMenuTrigger asChild>
+														<Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground">
+															<History className="h-3.5 w-3.5" />
+															{promptHistory.length} versões
+															<ChevronDown className="h-3 w-3" />
+														</Button>
+													</DropdownMenuTrigger>
+													<DropdownMenuContent align="end" className="w-72">
+														<DropdownMenuLabel className="text-xs">Versões salvas (restaurar sobrescreve o campo)</DropdownMenuLabel>
+														<DropdownMenuSeparator />
+														{promptHistory.map((entry, idx) => (
+															<DropdownMenuItem
+																key={entry.savedAt}
+																onClick={() => restorePromptVersion(entry)}
+																className="flex flex-col items-start gap-0.5 cursor-pointer"
+															>
+																<span className="text-xs font-medium flex items-center gap-1.5">
+																	<RotateCcw className="h-3 w-3" />
+																	{idx === 0 ? "Versão anterior" : `v${promptHistory.length - idx}`} — {new Date(entry.savedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+																</span>
+																<span className="text-[10px] text-muted-foreground truncate w-full">{entry.prompt.slice(0, 60)}…</span>
+															</DropdownMenuItem>
+														))}
+													</DropdownMenuContent>
+												</DropdownMenu>
+											)}
+											{/* Botão expandir */}
+											<Button
+												variant="ghost"
+												size="sm"
+												className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
+												onClick={() => setPromptEditorOpen(true)}
+												type="button"
+											>
+												<Maximize2 className="h-3.5 w-3.5" />
+												Expandir
+											</Button>
+										</div>
+									</div>
 									<Textarea
 										id="system-prompt"
 										value={localDraft.systemPrompt || ""}
@@ -441,7 +516,7 @@ export function AgentNodeDialog({
 											<Image src="/assets/Google-gemini-icon.svg" alt="Gemini" width={32} height={32} />
 											<div>
 												<h3 className="font-semibold">Google Gemini</h3>
-												<p className="text-xs text-muted-foreground">Visão Agêntica com Code Execution</p>
+												<p className="text-xs text-muted-foreground">{GEMINI_MODELS.length} modelos disponíveis</p>
 											</div>
 										</div>
 
@@ -459,6 +534,7 @@ export function AgentNodeDialog({
 														<SelectItem key={model.value} value={model.value}>
 															<span className="flex items-center gap-2">
 																{model.label}
+																{model.isNew && <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-blue-400 text-blue-400">Novo</Badge>}
 															</span>
 														</SelectItem>
 													))}
@@ -531,7 +607,7 @@ export function AgentNodeDialog({
 											<Image src="/assets/ChatGPT_logo.svg" alt="OpenAI" width={32} height={32} />
 											<div>
 												<h3 className="font-semibold">OpenAI GPT</h3>
-												<p className="text-xs text-muted-foreground">Modelos GPT-4 e GPT-5</p>
+												<p className="text-xs text-muted-foreground">{OPENAI_MODELS.length} modelos disponíveis</p>
 											</div>
 										</div>
 
@@ -557,6 +633,7 @@ export function AgentNodeDialog({
 														<SelectItem key={model.value} value={model.value}>
 															<span className="flex items-center gap-2">
 																{model.label}
+																{model.isNew && <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-emerald-400 text-emerald-400">Novo</Badge>}
 															</span>
 														</SelectItem>
 													))}
@@ -802,5 +879,113 @@ export function AgentNodeDialog({
 				</DialogFooter>
 			</DialogContent>
 		</Dialog>
+
+		{/* ── Editor Full-Screen de Prompt ───────────────────────────────────── */}
+		<Dialog open={promptEditorOpen} onOpenChange={setPromptEditorOpen}>
+			<DialogContent className="max-w-5xl w-[90vw] max-h-[90vh] p-0 flex flex-col">
+				<DialogHeader className="px-6 pt-5 pb-3 border-b shrink-0">
+					<div className="flex items-center justify-between">
+						<div className="flex items-center gap-2">
+							<Sparkles className="h-5 w-5 text-primary" />
+							<div>
+								<DialogTitle>Prompt do Sistema</DialogTitle>
+								<DialogDescription className="text-xs">{localDraft.name || "Agente"} — editor expandido</DialogDescription>
+							</div>
+						</div>
+						{promptHistory.length > 0 && (
+							<Badge variant="secondary" className="gap-1">
+								<History className="h-3 w-3" />
+								{promptHistory.length} versões salvas
+							</Badge>
+						)}
+					</div>
+				</DialogHeader>
+
+				<div className="flex flex-1 overflow-hidden min-h-0">
+					{/* Editor principal */}
+					<div className="flex flex-col flex-1 min-w-0 p-4 gap-3">
+						<Textarea
+							value={localDraft.systemPrompt || ""}
+							onChange={(e) => updateLocal({ systemPrompt: e.target.value })}
+							placeholder="Defina o papel, comportamento e diretrizes do agente..."
+							className="flex-1 font-mono text-sm resize-none h-full min-h-[400px]"
+							autoFocus
+						/>
+						<div className="flex items-center justify-between text-xs text-muted-foreground shrink-0">
+							<span className="flex items-center gap-1">
+								<InfoIcon className="h-3 w-3" />
+								Instruções injetadas antes de cada execução
+							</span>
+							<span className="font-mono">
+								{(localDraft.systemPrompt || "").length.toLocaleString("pt-BR")} chars
+							</span>
+						</div>
+					</div>
+
+					{/* Painel de histórico */}
+					{promptHistory.length > 0 && (
+						<>
+							<Separator orientation="vertical" className="h-auto" />
+							<div className="w-64 shrink-0 flex flex-col border-l">
+								<div className="px-4 py-3 border-b shrink-0">
+									<p className="text-xs font-semibold flex items-center gap-1.5">
+										<History className="h-3.5 w-3.5" />
+										Histórico de Versões
+									</p>
+									<p className="text-[10px] text-muted-foreground mt-0.5">Salvo automaticamente ao clicar em Aplicar</p>
+								</div>
+								<ScrollArea className="flex-1">
+									<div className="p-2 space-y-2">
+										{promptHistory.map((entry, idx) => (
+											<div
+												key={entry.savedAt}
+												className="p-2.5 rounded-md border bg-muted/30 hover:bg-muted/60 transition-colors group"
+											>
+												<div className="flex items-start justify-between gap-1 mb-1">
+													<span className="text-[10px] font-medium text-muted-foreground">
+														{idx === 0 ? "🕐 Mais recente" : `v${promptHistory.length - idx}`}
+													</span>
+													<Button
+														variant="ghost"
+														size="sm"
+														className="h-5 px-1.5 text-[10px] gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+														onClick={() => {
+															restorePromptVersion(entry);
+														}}
+													>
+														<RotateCcw className="h-2.5 w-2.5" />
+														Restaurar
+													</Button>
+												</div>
+												<p className="text-[9px] text-muted-foreground mb-1.5">
+													{new Date(entry.savedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+												</p>
+												<p className="text-[10px] text-foreground/70 line-clamp-3 font-mono leading-relaxed">
+													{entry.prompt.slice(0, 120)}{entry.prompt.length > 120 ? "…" : ""}
+												</p>
+												<p className="text-[9px] text-muted-foreground mt-1">
+													{entry.prompt.length.toLocaleString("pt-BR")} chars
+												</p>
+											</div>
+										))}
+									</div>
+								</ScrollArea>
+							</div>
+						</>
+					)}
+				</div>
+
+				<DialogFooter className="px-6 py-4 border-t bg-muted/30 shrink-0">
+					<div className="flex items-center gap-2 text-xs text-muted-foreground mr-auto">
+						<AlertCircle className="h-3.5 w-3.5" />
+						As versões são salvas automaticamente ao clicar em Aplicar
+					</div>
+					<Button variant="outline" onClick={() => setPromptEditorOpen(false)}>
+						Fechar
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
+		</>
 	);
 }

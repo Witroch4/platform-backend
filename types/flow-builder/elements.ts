@@ -55,6 +55,8 @@ export interface InteractiveMessageButtonElement extends InteractiveMessageEleme
 	type: "button";
 	title: string;
 	description?: string;
+	/** Payment Anchor: when payment is confirmed, the flow auto-continues through this button */
+	isPaymentAnchor?: boolean;
 }
 
 /** Botão COPY_CODE para Coupon Templates (PIX, cupons) */
@@ -117,7 +119,7 @@ export interface ElementPaletteItem {
 /**
  * Elementos para Mensagem Interativa (paleta principal)
  */
-export const INTERACTIVE_MESSAGE_ELEMENT_ITEMS: ElementPaletteItem[] = [
+export const INTERACTIVE_MESSAGE_ELEMENT_ITEMS: (ElementPaletteItem & { isPaymentAnchor?: boolean })[] = [
 	{
 		type: "header_text",
 		icon: "🏷️",
@@ -147,6 +149,13 @@ export const INTERACTIVE_MESSAGE_ELEMENT_ITEMS: ElementPaletteItem[] = [
 		icon: "🔘",
 		label: "Botão",
 		description: "Um botão (ponto de conexão)",
+	},
+	{
+		type: "button",
+		icon: "💰",
+		label: "Payment Flow",
+		description: "Âncora de pagamento — auto-continua o flow após confirmação",
+		isPaymentAnchor: true,
 	},
 	{
 		type: "button_url",
@@ -159,7 +168,7 @@ export const INTERACTIVE_MESSAGE_ELEMENT_ITEMS: ElementPaletteItem[] = [
 /**
  * Elementos COMPARTILHADOS - funcionam tanto para Mensagem Interativa quanto para Templates
  */
-export const SHARED_ELEMENT_ITEMS: ElementPaletteItem[] = [
+export const SHARED_ELEMENT_ITEMS: (ElementPaletteItem & { isPaymentAnchor?: boolean })[] = [
 	{
 		type: "header_text",
 		icon: "🏷️",
@@ -189,6 +198,13 @@ export const SHARED_ELEMENT_ITEMS: ElementPaletteItem[] = [
 		icon: "🔘",
 		label: "Botão",
 		description: "Um botão (ponto de conexão)",
+	},
+	{
+		type: "button",
+		icon: "💰",
+		label: "Payment Flow",
+		description: "Âncora de pagamento — auto-continua o flow após confirmação",
+		isPaymentAnchor: true,
 	},
 	{
 		type: "button_url",

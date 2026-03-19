@@ -59,7 +59,7 @@ export async function POST(request: Request) {
 				payment_link_id: 0, // Gerado fora do Chatwit, sem ID de PaymentLink
 				order_nsu: body.order_nsu,
 				amount_cents: body.amount,
-				paid_amount_cents: body.paid_amount,
+				paid_amount_cents: body.amount, // use amount (líquido), não paid_amount (inclui juros do cliente)
 				capture_method: body.capture_method,
 				receipt_url: body.receipt_url,
 				conversation_id: 0, // Será ignorado — busca por phone

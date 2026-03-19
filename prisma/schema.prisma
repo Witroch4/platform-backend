@@ -1674,6 +1674,7 @@ model FlowSession {
   @@index([flowId])
   @@index([inboxId, status])
   @@index([createdAt])
+  @@index([contactId, status])
 }
 
 enum FlowSessionStatus {

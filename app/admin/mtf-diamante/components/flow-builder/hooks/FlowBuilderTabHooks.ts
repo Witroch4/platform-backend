@@ -113,6 +113,7 @@ export interface UseFlowBuilderTabReturn {
 		elementType: InteractiveMessageElementType,
 		position: { x: number; y: number },
 		targetNodeId: string | null,
+		options?: { isPaymentAnchor?: boolean },
 	) => void;
 	handleDropTemplateElement: (elementType: TemplateElementType, targetNodeId: string) => void;
 	handleNodeDoubleClick: (nodeId: string) => void;
@@ -274,6 +275,7 @@ export function useFlowBuilderTab(caixaId: string): UseFlowBuilderTabReturn {
 			elementType: InteractiveMessageElementType,
 			_position: { x: number; y: number },
 			targetNodeId: string | null,
+			options?: { isPaymentAnchor?: boolean },
 		) => {
 			if (!targetNodeId) {
 				toast.error("Solte o bloco dentro da mensagem", {
@@ -307,7 +309,7 @@ export function useFlowBuilderTab(caixaId: string): UseFlowBuilderTabReturn {
 			// Para Mensagem Interativa
 			if (targetNode.type === FlowNodeType.INTERACTIVE_MESSAGE) {
 				const targetData = targetNode.data as unknown as InteractiveMessageNodeData;
-				const result = validateInteractiveMessageElementDrop(targetData, elementType);
+				const result = validateInteractiveMessageElementDrop(targetData, elementType, options);
 				if (!result.success) {
 					toast.error(result.error!.title, { description: result.error!.description });
 					return;

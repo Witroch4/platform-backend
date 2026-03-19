@@ -30,6 +30,7 @@ class ConsoleLogger implements Logger {
 	}
 
 	debug(message: string, data?: any): void {
+		if (process.env.LOG_LEVEL !== "debug" && process.env.DEBUG !== "1" && process.env.DEBUG !== "true") return;
 		const dataStr = data ? ` - ${JSON.stringify(data)}` : "";
 		console.debug(`[DEBUG] ${new Date().toISOString()} - ${message}${dataStr}`);
 	}

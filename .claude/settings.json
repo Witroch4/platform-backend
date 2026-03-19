@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_socialwise_app --tail 5000 --timestamps 2>&1 | grep -E ''2026-03-17T14:58'' | tail -80\")"
+      "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_socialwise_app --tail 5000 --timestamps 2>&1 | grep -E ''2026-03-17T14:58'' | tail -80\")",
+      "Bash(npx tsc:*)"
     ]
   }
 }

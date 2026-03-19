@@ -52,7 +52,7 @@ export function extractSessionId(payload: any, channelType: string): string | un
 	if (!payload) return undefined;
 
 	// Debug log
-	console.log("[SessionExtraction] DEBUG: Extracting sessionId", {
+	utilsLogger.debug("Extracting sessionId", {
 		channelType,
 		hasPayload: !!payload,
 		payloadKeys: Object.keys(payload || {}),
@@ -62,7 +62,7 @@ export function extractSessionId(payload: any, channelType: string): string | un
 
 	// Primeiro, tenta extrair do campo session_id direto (formato Chatwit)
 	if (payload.session_id) {
-		console.log("[SessionExtraction] INFO: SessionId found directly", { sessionId: payload.session_id });
+		utilsLogger.info("SessionId found directly", { sessionId: payload.session_id });
 		return payload.session_id;
 	}
 
@@ -71,14 +71,14 @@ export function extractSessionId(payload: any, channelType: string): string | un
 		// Formato Chatwit: context.contact.phone_number
 		const phoneFromContext = payload.context?.contact?.phone_number;
 		if (phoneFromContext) {
-			console.log("[SessionExtraction] INFO: SessionId from contact phone", { sessionId: phoneFromContext });
+			utilsLogger.info("SessionId from contact phone", { sessionId: phoneFromContext });
 			return phoneFromContext;
 		}
 
 		// Formato Meta: payload direto
 		const phoneFromMeta = payload.contacts?.[0]?.wa_id || payload.entry?.[0]?.changes?.[0]?.value?.contacts?.[0]?.wa_id;
 		if (phoneFromMeta) {
-			console.log("[SessionExtraction] INFO: SessionId from Meta format", { sessionId: phoneFromMeta });
+			utilsLogger.info("SessionId from Meta format", { sessionId: phoneFromMeta });
 			return phoneFromMeta;
 		}
 	}
@@ -89,12 +89,12 @@ export function extractSessionId(payload: any, channelType: string): string | un
 		const instagramId =
 			payload.context?.contact?.identifier || payload.entry?.[0]?.messaging?.[0]?.sender?.id || payload.sender?.id;
 		if (instagramId) {
-			console.log("[SessionExtraction] INFO: SessionId from Instagram", { sessionId: instagramId });
+			utilsLogger.info("SessionId from Instagram", { sessionId: instagramId });
 			return instagramId;
 		}
 	}
 
-	console.log("[SessionExtraction] WARNING: No sessionId found", {
+	utilsLogger.warn("No sessionId found", {
 		channelType,
 		payloadStructure: Object.keys(payload || {}),
 	});

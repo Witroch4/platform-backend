@@ -13,7 +13,6 @@ import { withPrismaReconnect, getPrismaInstance, getRedisInstance } from "@/lib/
 import { processSocialWiseFlow, extractSessionId } from "@/lib/socialwise-flow/processor";
 import { buildChannelResponse } from "@/lib/socialwise-flow/channel-formatting";
 import { handleRetryWithDegradation } from "@/lib/socialwise-flow/processor-components/retry-handler";
-import { isDebounceEnabled, addToDebounceBuffer, getDebounceConfig } from "@/lib/socialwise-flow/message-debouncer";
 import {
 	SocialWiseFlowPayloadSchema,
 	SanitizedTextSchema,
@@ -39,6 +38,8 @@ import { handleButtonInteraction, detectButtonClick } from "@/lib/socialwise-flo
 // Flow Engine para execução de flows visuais
 import { FlowOrchestrator } from "@/services/flow-engine";
 import { saveChatwitSystemConfig } from "@/lib/chatwit/system-config";
+import { runWithLogContext, updateLogContext } from "@/lib/logging/request-context";
+import { buildChatwitConversationUrl, buildLeadLogKey } from "@/lib/logging/socialwise-correlation";
 
 // Prefixo de botões do Flow Builder (para priorização)
 import { FLOW_BUTTON_PREFIX } from "@/lib/flow-builder/interactiveMessageElements";
@@ -190,10 +191,20 @@ function logFinalResponse(responseData: any, status: number, traceId?: string) {
  */
 export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 	const startTime = Date.now();
-	let traceId: string | undefined;
+	let traceId: string | undefined = `sw-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 	let correlationId: string | undefined;
 
-	try {
+	return runWithLogContext(
+		{
+			requestId: traceId,
+			traceId,
+			method: request.method,
+			route: "/api/integrations/webhooks/socialwiseflow",
+			requestUrl: request.url,
+			eventStage: "webhook.received",
+		},
+		async () => {
+			try {
 		// Step 1: Bearer token authentication (required for SocialWise Flow)
 		const expectedBearer = process.env.SOCIALWISEFLOW_ACCESS_TOKEN;
 		if (expectedBearer) {
@@ -279,13 +290,43 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 		}
 		const validPayload = payloadValidation.data!;
 
+		const metadata = (validPayload.metadata || {}) as Record<string, unknown>;
+		const payloadAccountId = Number(metadata.account_id || validPayload.context?.inbox?.account_id || 0) || undefined;
+		const payloadConversationId =
+			Number(metadata.conversation_id || validPayload.context?.conversation?.id || 0) || undefined;
+		const payloadConversationDisplayId =
+			Number(metadata.conversation_display_id || validPayload.context?.conversation?.display_id || 0) || undefined;
+		const payloadSessionId =
+			typeof validPayload.session_id === "string"
+				? validPayload.session_id
+				: typeof validPayload.context?.contact?.phone_number === "string"
+					? validPayload.context.contact.phone_number
+					: undefined;
+		const payloadChatwitBaseUrl =
+			typeof metadata.chatwit_base_url === "string" ? metadata.chatwit_base_url : undefined;
+		const leadKey = buildLeadLogKey(payloadAccountId, payloadSessionId);
+		const conversationUrl = buildChatwitConversationUrl(
+			payloadChatwitBaseUrl,
+			payloadAccountId,
+			payloadConversationDisplayId,
+		);
+
+		updateLogContext({
+			accountId: payloadAccountId,
+			sessionId: payloadSessionId,
+			conversationId: payloadConversationId,
+			conversationDisplayId: payloadConversationDisplayId,
+			conversationUrl,
+			leadKey,
+			eventStage: "webhook.validated",
+		});
+
 		webhookLogger.debug("Payload validation successful", {
 			originalHadNumbers: JSON.stringify(payload) !== JSON.stringify(payloadValidation.preprocessed),
 			traceId,
 		});
 
 		// Step 5: Generate trace ID for monitoring
-		traceId = `sw-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 		// Priority order: context.message.source_id > socialwise-chatwit.wamid > socialwise-chatwit.message_data.id > context.message.id
 		const socialwiseDataForCorrelation = getSocialWiseChatwitData(validPayload.context);
 		correlationId = String(
@@ -295,6 +336,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 			validPayload.context.message?.id ||
 			traceId,
 		);
+
+		updateLogContext({ correlationId });
 
 		// Step 6: Initialize security services
 		const socialWiseIdempotency = new SocialWiseIdempotencyService();
@@ -558,6 +601,32 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 			socialwiseData?.contact_data?.phone_number ||
 			validPayload.context.contact?.phone_number ||
 			socialwiseData?.contact_phone;
+
+		updateLogContext({
+			accountId: chatwitAccountId || payloadAccountId,
+			sessionId: typeof validPayload.session_id === "string" ? validPayload.session_id : payloadSessionId,
+			conversationId: validPayload.context?.conversation?.id || payloadConversationId,
+			conversationDisplayId:
+				((validPayload.metadata as Record<string, unknown>)?.conversation_display_id as string | number | undefined) ||
+				((validPayload.context?.conversation as Record<string, unknown>)?.display_id as string | number | undefined) ||
+				payloadConversationDisplayId,
+			conversationUrl: buildChatwitConversationUrl(
+				((validPayload.metadata as Record<string, unknown>)?.chatwit_base_url as string | undefined) ||
+					payloadChatwitBaseUrl,
+				chatwitAccountId || payloadAccountId,
+				((validPayload.metadata as Record<string, unknown>)?.conversation_display_id as string | number | undefined) ||
+					((validPayload.context?.conversation as Record<string, unknown>)?.display_id as string | number | undefined) ||
+					payloadConversationDisplayId,
+			),
+			leadKey: buildLeadLogKey(
+				chatwitAccountId || payloadAccountId,
+				typeof validPayload.session_id === "string" ? validPayload.session_id : payloadSessionId,
+			),
+			channelType,
+			contactPhone: typeof contactPhone === "string" ? contactPhone : undefined,
+			contactName,
+			eventStage: "webhook.context_resolved",
+		});
 
 		// Step 12: Resolve inbox and user information
 		const inboxRow = await withPrismaReconnect(async (prisma) => {
@@ -897,74 +966,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 			}
 		}
 
-		// Step 13.5: Message Debounce (aggregates rapid-fire messages)
-		const sessionIdForDebounce = extractSessionId(payload, channelType);
-
-		if (isDebounceEnabled() && sessionIdForDebounce && !unmappedButtonId) {
-			// Only debounce regular text messages, not button interactions
-			const debounceConfig = getDebounceConfig();
-
-			webhookLogger.info("Debounce check", {
-				sessionId: sessionIdForDebounce,
-				debounceMs: debounceConfig.debounceMs,
-				isButtonInteraction: !!unmappedButtonId,
-				traceId,
-			});
-
-			const debounceResult = await addToDebounceBuffer(
-				sessionIdForDebounce,
-				{
-					text: textInput,
-					timestamp: Date.now(),
-					messageId: String(validPayload.context.message?.id || correlationId),
-					wamid,
-					traceId,
-				},
-				{
-					channelType,
-					inboxId,
-					chatwitAccountId: String(chatwitAccountId),
-					userId,
-					contactName,
-					contactPhone: typeof contactPhone === "string" ? contactPhone : undefined,
-					originalPayload: payload,
-				},
-			);
-
-			if (!debounceResult.shouldProcess) {
-				// This message was debounced - another request will process it
-				webhookLogger.info("Message debounced, awaiting aggregation", {
-					sessionId: sessionIdForDebounce,
-					isDebounced: debounceResult.isDebounced,
-					messageCount: debounceResult.messageCount,
-					traceId,
-				});
-
-				// Return 202 Accepted to indicate the message was received but processing is deferred
-				const debouncedResponse = {
-					ok: true,
-					debounced: true,
-					message: "Mensagem recebida, aguardando agregação",
-				};
-				logFinalResponse(debouncedResponse, 202, traceId);
-				return NextResponse.json(debouncedResponse, { status: 202 });
-			}
-
-			// This request should process the aggregated messages
-			if (debounceResult.isDebounced && debounceResult.aggregatedText) {
-				webhookLogger.info("Processing debounced messages", {
-					sessionId: sessionIdForDebounce,
-					messageCount: debounceResult.messageCount,
-					originalText: textInput,
-					aggregatedTextLength: debounceResult.aggregatedText.length,
-					traceId,
-				});
-
-				// Use aggregated text instead of single message
-				textInput = debounceResult.aggregatedText;
-			}
-		}
-
 		// Step 13.6: Flow Engine - Resume de sessões para botões do Flow Builder (prefixo flow_)
 		// NOTA: Flows ativados por intent mapping são executados em band-handlers.ts, NÃO aqui.
 		if (isFlowBuilderButton) {
@@ -1085,6 +1086,34 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 						buttonId: buttonDetection.buttonId,
 						traceId,
 					});
+					// Check if contact has a recently completed payment session
+					try {
+						const recentPaid = await getPrismaInstance().flowSession.findFirst({
+							where: {
+								contactId: String(deliveryContext.contactId),
+								status: "COMPLETED",
+								completedAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+							},
+							orderBy: { completedAt: "desc" },
+						});
+						if (recentPaid) {
+							const paidVars = (recentPaid.variables as Record<string, unknown>) ?? {};
+							if (paidVars._payment_confirmed) {
+								webhookLogger.info("[FlowEngine] Post-payment stale button, graceful response", {
+									sessionId: recentPaid.id,
+									buttonId: buttonDetection.buttonId,
+									traceId,
+								});
+								const graceful = {
+									text: "Seu pagamento já foi confirmado! Se precisar de algo mais, envie uma mensagem.",
+								};
+								logFinalResponse(graceful, 200, traceId);
+								return NextResponse.json(graceful, { status: 200 });
+							}
+						}
+					} catch (_gracefulErr) {
+						// Non-critical — fall through to LLM
+					}
 					// Continua para Flash Intent como fallback
 				} else if (flowResult.syncResponse) {
 					webhookLogger.info("[FlowEngine] Flow button resumido com sucesso (sync)", {
@@ -1571,31 +1600,34 @@ export async function POST(request: NextRequest): Promise<NextResponse<any>> {
 			logFinalResponse(channelFallbackResponse, 200, traceId);
 			return NextResponse.json(channelFallbackResponse, { status: 200 });
 		}
-	} catch (error) {
-		const routeTotalMs = Date.now() - startTime;
-		console.error("!!! FATAL WEBHOOK ERROR !!!", error);
-		webhookLogger.error("Webhook processing failed", {
-			error: error instanceof Error ? error.message : String(error),
-			routeTotalMs,
-			traceId,
-		});
+			} catch (error) {
+				const routeTotalMs = Date.now() - startTime;
+				updateLogContext({ eventStage: "webhook.error" });
+				webhookLogger.error("Webhook processing failed", {
+					error: error instanceof Error ? error.message : String(error),
+					routeTotalMs,
+					traceId,
+					correlationId,
+				});
 
-		// Record critical error metrics
-		if (correlationId) {
-			recordWebhookMetrics({
-				responseTime: routeTotalMs,
-				timestamp: new Date(),
-				correlationId,
-				success: false,
-				error: error instanceof Error ? error.message : String(error),
-				payloadSize: 0,
-				interactionType: "intent",
-			});
-		}
+				// Record critical error metrics
+				if (correlationId) {
+					recordWebhookMetrics({
+						responseTime: routeTotalMs,
+						timestamp: new Date(),
+						correlationId,
+						success: false,
+						error: error instanceof Error ? error.message : String(error),
+						payloadSize: 0,
+						interactionType: "intent",
+					});
+				}
 
-		// Return 500 for unexpected errors
-		return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-	}
+				// Return 500 for unexpected errors
+				return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+			}
+		},
+	);
 }
 
 /**

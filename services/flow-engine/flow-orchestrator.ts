@@ -16,8 +16,9 @@ import log from "@/lib/log";
 import { SyncBridge } from "./sync-bridge";
 import { FlowExecutor } from "./flow-executor";
 import { getPrismaInstance } from "@/lib/connections";
-import { debugLogRuntimeFlow } from "@/lib/flow-builder/exportImport";
 import { loadMtfVariablesForInbox } from "./mtf-variable-loader";
+import { getChatwitSystemConfig } from "@/lib/chatwit/system-config";
+import { FLOW_PAYMENT_PREFIX } from "@/lib/flow-builder/interactiveMessageElements";
 import type {
 	ChatwitWebhookPayload,
 	DeliveryContext,
@@ -99,7 +100,7 @@ export class FlowOrchestrator {
 			// O buttonId (ex: flow_button_1771834377097_0cfs12) é único na FlowEdge.
 			// Usamos ele diretamente para encontrar a sessão — sem depender de conversationId.
 			if (buttonId) {
-				const sessionByEdge = await this.findSessionByButtonId(buttonId);
+				const sessionByEdge = await this.findSessionByButtonId(buttonId, String(deliveryContext.contactId));
 				if (sessionByEdge) {
 					return this.resumeSession(sessionByEdge, buttonId, deliveryContext, bridge);
 				}
@@ -148,7 +149,7 @@ export class FlowOrchestrator {
 				if (messageText) {
 					const matchedButtonId = await this.tryTemplateTextMatch(messageText, deliveryContext);
 					if (matchedButtonId) {
-						const sessionByEdge = await this.findSessionByButtonId(matchedButtonId);
+						const sessionByEdge = await this.findSessionByButtonId(matchedButtonId, String(deliveryContext.contactId));
 						if (sessionByEdge) {
 							log.info("[FlowOrchestrator] Template QUICK_REPLY resumido via text-match", {
 								messageText,
@@ -212,9 +213,6 @@ export class FlowOrchestrator {
 		bridge: SyncBridge,
 		initialVariables?: Record<string, unknown>,
 	): Promise<OrchestratorResult> {
-		// DEBUG: Log do grafo de conexões quando DEBUG=1
-		debugLogRuntimeFlow(flow, `FlowOrchestrator.executeNewFlow() - conversationId: ${ctx.conversationId}`);
-
 		// Guard: alertar se conversationId é 0 (indica problema na resolução)
 		if (!ctx.conversationId || String(ctx.conversationId) === "0") {
 			log.warn("[FlowOrchestrator] ⚠️ conversationId é 0 ou ausente — sessão pode não ser localizável depois", {
@@ -236,6 +234,16 @@ export class FlowOrchestrator {
 			...mtfVars,
 			nome_lead: ctx.contactName || "",
 			...(initialVariables ?? {}),
+			// Delivery metadata for async auto-resume (e.g., payment anchor)
+			_deliveryMeta: {
+				accountId: ctx.accountId,
+				conversationDisplayId: ctx.conversationDisplayId,
+				inboxId: ctx.inboxId,
+				prismaInboxId: ctx.prismaInboxId,
+				contactName: ctx.contactName,
+				contactPhone: ctx.contactPhone,
+				channelType: ctx.channelType,
+			},
 		};
 
 		const prisma = getPrismaInstance();
@@ -299,8 +307,20 @@ export class FlowOrchestrator {
 			};
 		}
 
-		// DEBUG: Log do grafo de conexões quando DEBUG=1
-		debugLogRuntimeFlow(flow, `FlowOrchestrator.resumeSession(${buttonId}) - sessionId: ${session.id}`);
+		// Reconcile conversationId if contact moved to a new conversation
+		if (session.conversationId !== String(ctx.conversationId) &&
+			ctx.conversationId && String(ctx.conversationId) !== "0") {
+			log.info("[FlowOrchestrator] Reconciling conversationId", {
+				sessionId: session.id,
+				oldConversationId: session.conversationId,
+				newConversationId: String(ctx.conversationId),
+			});
+			session.conversationId = String(ctx.conversationId);
+			await prisma.flowSession.update({
+				where: { id: session.id },
+				data: { conversationId: String(ctx.conversationId) },
+			});
+		}
 
 		const executor = new FlowExecutor(ctx, session.variables);
 		const result = await executor.resumeFromButton(flow, session, buttonId, bridge);
@@ -381,7 +401,7 @@ export class FlowOrchestrator {
 	 * O buttonId é único e aponta para flow + sourceNode.
 	 * Não depende de conversationId — resolve o bug de sessions com conversationId "0".
 	 */
-	private async findSessionByButtonId(buttonId: string): Promise<FlowSessionData | null> {
+	private async findSessionByButtonId(buttonId: string, contactId: string): Promise<FlowSessionData | null> {
 		const prisma = getPrismaInstance();
 
 		// 1. Buscar a FlowEdge pelo buttonId
@@ -393,11 +413,13 @@ export class FlowOrchestrator {
 		if (!edge) return null;
 
 		// 2. Buscar FlowSession WAITING_INPUT no nó de origem desta edge
+		// contactId filter prevents cross-contact session leakage (e.g. client A picking up client B's session)
 		const session = await prisma.flowSession.findFirst({
 			where: {
 				flowId: edge.flowId,
 				currentNodeId: edge.sourceNodeId,
 				status: "WAITING_INPUT",
+				contactId,
 			},
 			orderBy: { updatedAt: "desc" },
 		});
@@ -695,5 +717,122 @@ export class FlowOrchestrator {
 		});
 
 		return matchedEdge.buttonId;
+	}
+
+	// ---------------------------------------------------------------------------
+	// Resume from payment confirmation (auto-continue via Payment Anchor button)
+	// ---------------------------------------------------------------------------
+
+	/**
+	 * Called by payment handlers when a payment is confirmed.
+	 * Finds the active FlowSession, looks for a Payment Anchor button (flow_payment_ prefix),
+	 * and resumes the flow through it. If no anchor exists, marks the session as COMPLETED.
+	 */
+	async resumeFromPayment(conversationId: string, orderNsu: string, traceId?: string): Promise<OrchestratorResult> {
+		const prisma = getPrismaInstance();
+
+		// 1. Find active session for this conversation
+		const session = await prisma.flowSession.findFirst({
+			where: { conversationId, status: "WAITING_INPUT" },
+			orderBy: { updatedAt: "desc" },
+		});
+		if (!session) {
+			log.debug("[FlowOrchestrator] resumeFromPayment: no WAITING_INPUT session", { conversationId });
+			return { syncResponse: null, waitingInput: false };
+		}
+
+		// 2. Find the exact payment anchor for this specific orderNsu.
+		//    When the flow has multiple payment links (different amounts/methods), each
+		//    GeneratePaymentLink node stores its anchor mapping in _payment_anchors.
+		//    We look up the buttonId specific to the paid orderNsu, then fall back to
+		//    any flow_payment_ edge (single-link flows have no mapping stored yet).
+		const vars = (session.variables as Record<string, unknown>) ?? {};
+		const anchorsMap = (vars._payment_anchors as Record<string, string>) ?? {};
+		const specificButtonId = anchorsMap[orderNsu];
+
+		const anchorEdge = specificButtonId
+			? await prisma.flowEdge.findFirst({
+					where: { flowId: session.flowId, buttonId: specificButtonId },
+				})
+			: await prisma.flowEdge.findFirst({
+					where: { flowId: session.flowId, buttonId: { startsWith: FLOW_PAYMENT_PREFIX } },
+				});
+
+		// 3. Store payment data in session variables
+		const updatedVars = {
+			...vars,
+			_payment_confirmed: true,
+			_payment_confirmed_at: new Date().toISOString(),
+			_payment_nsu: orderNsu,
+		};
+
+		if (!anchorEdge?.buttonId) {
+			// No anchor button — mark session completed (fallback)
+			log.info("[FlowOrchestrator] resumeFromPayment: no anchor, completing session", {
+				sessionId: session.id,
+				conversationId,
+			});
+			await prisma.flowSession.update({
+				where: { id: session.id },
+				data: {
+					status: "COMPLETED",
+					completedAt: new Date(),
+					variables: updatedVars,
+				},
+			});
+			return { syncResponse: null, waitingInput: false, handled: true };
+		}
+
+		// 4. Update session variables before resuming
+		await prisma.flowSession.update({
+			where: { id: session.id },
+			data: { variables: updatedVars },
+		});
+
+		// 5. Reconstruct DeliveryContext from stored metadata + SystemConfig
+		const meta = (vars._deliveryMeta as Record<string, unknown>) ?? {};
+		const sysConfig = await getChatwitSystemConfig();
+
+		const deliveryContext: DeliveryContext = {
+			accountId: Number(meta.accountId) || 0,
+			conversationId: Number(conversationId),
+			conversationDisplayId: Number(meta.conversationDisplayId) || undefined,
+			inboxId: Number(meta.inboxId) || 0,
+			contactId: Number(session.contactId) || 0,
+			contactName: String(meta.contactName || ""),
+			contactPhone: String(meta.contactPhone || ""),
+			channelType: (String(meta.channelType || "whatsapp")) as "whatsapp" | "instagram" | "facebook",
+			chatwitAccessToken: sysConfig.botToken || process.env.CHATWIT_AGENT_BOT_TOKEN || "",
+			chatwitBaseUrl: sysConfig.baseUrl || process.env.CHATWIT_BASE_URL || "",
+			prismaInboxId: String(meta.prismaInboxId || session.inboxId),
+		};
+
+		// 6. Resume via anchor button (force async delivery — no sync bridge window)
+		const bridge = new SyncBridge();
+		bridge.closeSyncWindow();
+
+		log.info("[FlowOrchestrator] resumeFromPayment: resuming via payment anchor", {
+			sessionId: session.id,
+			anchorButtonId: anchorEdge.buttonId,
+			conversationId,
+			traceId,
+		});
+
+		const sessionData: FlowSessionData = {
+			id: session.id,
+			flowId: session.flowId,
+			conversationId: session.conversationId,
+			contactId: session.contactId,
+			inboxId: session.inboxId,
+			status: session.status as FlowSessionData["status"],
+			currentNodeId: session.currentNodeId,
+			variables: updatedVars,
+			executionLog: (session.executionLog as unknown as FlowSessionData["executionLog"]) ?? [],
+			createdAt: session.createdAt,
+			updatedAt: session.updatedAt,
+			completedAt: session.completedAt,
+		};
+
+		return this.resumeSession(sessionData, anchorEdge.buttonId, deliveryContext, bridge);
 	}
 }

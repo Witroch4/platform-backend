@@ -17,7 +17,7 @@ export function InfoCell({ lead, onViewDetails, onShowFullImage }: InfoCellProps
 	const isNew = isNewLead(lead.createdAt ?? new Date());
 	const hasPayments = (lead.payments?.length ?? 0) > 0;
 	const lastThreePayments = hasPayments
-		? lead.payments!.slice(-3).reverse()
+		? lead.payments!.filter(p => (p.paidAmountCents ?? p.amountCents) > 0).slice(-3).reverse()
 		: [];
 	const totalPaidCents = hasPayments
 		? lead.payments!.reduce((sum, p) => sum + (p.paidAmountCents ?? p.amountCents), 0)
@@ -57,30 +57,30 @@ export function InfoCell({ lead, onViewDetails, onShowFullImage }: InfoCellProps
 							{lead.name || "Lead sem nome"}
 						</div>
 						<NewLeadIndicator isNew={isNew} />
-						{hasPayments && (
-							<>
-								{lastThreePayments.map((p, i) => (
-									<Badge
-										key={p.id}
-										variant="default"
-										className={`${i === 0 ? "ml-1" : "ml-0.5"} bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] px-1.5 py-0 h-4 flex-shrink-0`}
-										title={`Pagamento: R$ ${((p.paidAmountCents ?? p.amountCents) / 100).toFixed(2).replace(".", ",")}`}
-									>
-										<CircleDollarSign className="h-3 w-3 mr-0.5" />
-										R$ {((p.paidAmountCents ?? p.amountCents) / 100).toFixed(2).replace(".", ",")}
-									</Badge>
-								))}
-								{methodLabel && (
-									<Badge
-										variant="default"
-										className={`ml-0.5 ${methodBadgeClass} text-white text-[10px] px-1.5 py-0 h-4 flex-shrink-0`}
-									>
-										{methodLabel}
-									</Badge>
-								)}
-							</>
-						)}
 					</div>
+					{lastThreePayments.length > 0 && (
+						<div className="flex items-center gap-0.5 mt-0.5 flex-wrap cursor-pointer" onClick={onViewDetails} title="Ver todos os pagamentos">
+							{lastThreePayments.map((p) => (
+								<Badge
+									key={p.id}
+									variant="default"
+									className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] px-1 py-0 h-4 flex-shrink-0"
+									title={`Pagamento: R$ ${((p.paidAmountCents ?? p.amountCents) / 100).toFixed(2).replace(".", ",")}`}
+								>
+									<CircleDollarSign className="h-2.5 w-2.5 mr-0.5" />
+									{((p.paidAmountCents ?? p.amountCents) / 100).toFixed(0)}
+								</Badge>
+							))}
+							{methodLabel && (
+								<Badge
+									variant="default"
+									className={`${methodBadgeClass} text-white text-[10px] px-1 py-0 h-4 flex-shrink-0`}
+								>
+									{methodLabel}
+								</Badge>
+							)}
+						</div>
+					)}
 					{lead.nomeReal && lead.nomeReal !== lead.name && (
 						<div className="text-xs text-muted-foreground truncate" title={lead.nomeReal}>
 							{lead.nomeReal}

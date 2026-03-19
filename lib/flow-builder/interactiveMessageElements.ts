@@ -10,10 +10,15 @@ import type {
  * e devem ser processados pelo FlowOrchestrator em vez do button-processor legado.
  */
 export const FLOW_BUTTON_PREFIX = "flow_";
+export const FLOW_PAYMENT_PREFIX = "flow_payment_";
 
 function safeId(prefix: string) {
 	// Botões do Flow Builder recebem prefixo 'flow_' para priorização no webhook
-	const finalPrefix = prefix === "button" ? `${FLOW_BUTTON_PREFIX}${prefix}` : prefix;
+	// Payment anchor buttons get 'flow_payment_' prefix for auto-resume routing
+	const finalPrefix =
+		prefix === "button" ? `${FLOW_BUTTON_PREFIX}${prefix}` :
+		prefix === "payment" ? `${FLOW_BUTTON_PREFIX}${prefix}` :
+		prefix;
 	return `${finalPrefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
@@ -26,7 +31,7 @@ export function generateElementId(type: string): string {
 	return safeId(type);
 }
 
-export function createInteractiveMessageElement(type: InteractiveMessageElementType): InteractiveMessageElement {
+export function createInteractiveMessageElement(type: InteractiveMessageElementType, options?: { isPaymentAnchor?: boolean }): InteractiveMessageElement {
 	switch (type) {
 		case "header_text":
 			return { id: safeId("header_text"), type: "header_text", text: "" };
@@ -37,6 +42,9 @@ export function createInteractiveMessageElement(type: InteractiveMessageElementT
 		case "footer":
 			return { id: safeId("footer"), type: "footer", text: "" };
 		case "button":
+			if (options?.isPaymentAnchor) {
+				return { id: safeId("payment"), type: "button", title: "Payment Flow", isPaymentAnchor: true };
+			}
 			return { id: safeId("button"), type: "button", title: "Novo botão", description: "" };
 		case "button_copy_code":
 			return { id: safeId("button_copy_code"), type: "button_copy_code", title: "Copiar código", couponCode: "" };

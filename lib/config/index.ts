@@ -17,10 +17,6 @@ export interface SocialwiseFlowConfig {
 		queue_timeout_ms: number;
 		degradation_enabled: boolean;
 	};
-	debounce: {
-		enabled: boolean;
-		debounce_ms: number;
-	};
 }
 
 export interface DatabaseConfig {
@@ -175,24 +171,6 @@ class ConfigManager {
 			config.socialwise_flow.concurrency.degradation_enabled = process.env.SOCIALWISE_DEGRADATION_ENABLED !== "false";
 		}
 
-		// SocialWise Flow debounce overrides
-		if (!config.socialwise_flow.debounce) {
-			config.socialwise_flow.debounce = { enabled: false, debounce_ms: 5000 };
-		}
-
-		if (process.env.SOCIALWISE_DEBOUNCE_MS !== undefined) {
-			const ms = parseInt(process.env.SOCIALWISE_DEBOUNCE_MS, 10);
-			if (!Number.isNaN(ms) && ms >= 0) {
-				config.socialwise_flow.debounce.debounce_ms = ms;
-				// Se debounce_ms > 0, habilita automaticamente
-				config.socialwise_flow.debounce.enabled = ms > 0;
-			}
-		}
-
-		if (process.env.SOCIALWISE_DEBOUNCE_ENABLED !== undefined) {
-			config.socialwise_flow.debounce.enabled = process.env.SOCIALWISE_DEBOUNCE_ENABLED === "true";
-		}
-
 		// Database overrides
 		if (process.env.DATABASE_CONNECTION_LIMIT) {
 			config.database.connection_limit = parseInt(process.env.DATABASE_CONNECTION_LIMIT, 10);
@@ -309,10 +287,6 @@ class ConfigManager {
 					max_concurrent_llm_calls_global: parseInt(process.env.SOCIALWISE_GLOBAL_CONCURRENCY_LIMIT || "300", 10),
 					queue_timeout_ms: parseInt(process.env.SOCIALWISE_QUEUE_TIMEOUT_MS || "5000", 10),
 					degradation_enabled: process.env.SOCIALWISE_DEGRADATION_ENABLED !== "false",
-				},
-				debounce: {
-					enabled: parseInt(process.env.SOCIALWISE_DEBOUNCE_MS || "5000", 10) > 0,
-					debounce_ms: parseInt(process.env.SOCIALWISE_DEBOUNCE_MS || "5000", 10),
 				},
 			},
 			database: {

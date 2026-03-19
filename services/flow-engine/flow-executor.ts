@@ -14,11 +14,10 @@ import { SyncBridge } from "./sync-bridge";
 import { ChatwitDeliveryService, createDeliveryService } from "./chatwit-delivery-service";
 import { VariableResolver } from "./variable-resolver";
 import { addChatwitActionJob } from "@/lib/queue/flow-builder-queues";
-import { elementsToLegacyFields } from "@/lib/flow-builder/interactiveMessageElements";
+import { elementsToLegacyFields, FLOW_PAYMENT_PREFIX } from "@/lib/flow-builder/interactiveMessageElements";
 import { generatePaymentLink } from "@/lib/payment/payment-link-generator";
 import { parseCurrencyToCents } from "@/lib/payment/parse-currency";
 import { buildChatwitTemplateParams } from "@/lib/flow-builder/templateElements";
-import { debugLogRuntimeFlow } from "@/lib/flow-builder/exportImport";
 import { getPrismaInstance } from "@/lib/connections";
 import { METAPayloadBuilder } from "@/lib/socialwise-flow/meta-payload-builder";
 import type { InteractiveMessageElement, TemplateNodeData } from "@/types/flow-builder";
@@ -88,9 +87,6 @@ export class FlowExecutor {
 	// ---------------------------------------------------------------------------
 
 	async execute(flow: RuntimeFlow, bridge: SyncBridge): Promise<ExecuteResult> {
-		// DEBUG: Log do grafo de conexões quando DEBUG=1
-		debugLogRuntimeFlow(flow, `FlowExecutor.execute() - Starting flow`);
-
 		const startNode = flow.nodes.find((n) => n.nodeType === "START");
 		if (!startNode) {
 			log.error("[FlowExecutor] Flow sem nó START", { flowId: flow.id });
@@ -114,9 +110,6 @@ export class FlowExecutor {
 		buttonId: string,
 		bridge: SyncBridge,
 	): Promise<ExecuteResult> {
-		// DEBUG: Log do grafo de conexões quando DEBUG=1
-		debugLogRuntimeFlow(flow, `FlowExecutor.resumeFromButton(${buttonId}) - currentNode: ${session.currentNodeId}`);
-
 		if (!session.currentNodeId) {
 			return {
 				status: "ERROR",
@@ -1756,7 +1749,8 @@ export class FlowExecutor {
 		const customerEmail = customerEmailRegex.test(resolvedCustomerEmail)
 			? resolvedCustomerEmail
 			: fallbackCustomerEmail;
-		const customerName = this.context.contactName ?? "";
+		const rawName = (this.context.contactName ?? "").trim();
+		const customerName = rawName.length >= 3 ? rawName : "Cliente";
 		const customerPhone = this.context.contactPhone ?? "";
 
 		if (customerEmail !== resolvedCustomerEmail) {
@@ -1800,12 +1794,23 @@ export class FlowExecutor {
 
 		if (result.success && result.checkoutUrl) {
 			this.resolver.setVariable(outputVariable, result.checkoutUrl);
+			this.resolver.setVariable("_payment_order_nsu", orderNsu);
 			if (config.linkIdVariable && result.linkId) {
 				this.resolver.setVariable(config.linkIdVariable, result.linkId);
+			}
+			// Map orderNsu → payment anchor buttonId so resumeFromPayment() routes
+			// to the correct anchor even when multiple payment links exist in the flow.
+			const anchorEdge = flow.edges.find(
+				(e) => e.sourceNodeId === node.id && e.buttonId?.startsWith(FLOW_PAYMENT_PREFIX),
+			);
+			if (anchorEdge?.buttonId) {
+				const existing = (this.resolver.getVariable("_payment_anchors") as Record<string, string>) ?? {};
+				this.resolver.setVariable("_payment_anchors", { ...existing, [orderNsu]: anchorEdge.buttonId });
 			}
 			log.info("[FlowExecutor] GENERATE_PAYMENT_LINK: link gerado", {
 				nodeId: node.id,
 				checkoutUrl: result.checkoutUrl.slice(0, 60),
+				anchorButtonId: anchorEdge?.buttonId,
 			});
 		} else {
 			log.error("[FlowExecutor] GENERATE_PAYMENT_LINK: falha ao gerar", {

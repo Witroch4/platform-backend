@@ -6,6 +6,7 @@
 
 import { getPrismaInstance } from "@/lib/connections";
 import { PaymentServiceType, PaymentStatus } from "@prisma/client";
+import { FlowOrchestrator } from "@/services/flow-engine/flow-orchestrator";
 
 const prisma = getPrismaInstance();
 
@@ -92,6 +93,20 @@ export async function handlePaymentConfirmed(
 		},
 	});
 
+	// Auto-resume flow via payment anchor (non-blocking)
+	try {
+		const convId = String(data.conversation_id);
+		if (convId && convId !== "0") {
+			const orchestrator = new FlowOrchestrator();
+			await orchestrator.resumeFromPayment(convId, data.order_nsu, traceId);
+		}
+	} catch (resumeErr) {
+		console.warn("[PaymentHandler] Flow auto-resume failed (non-critical)", {
+			error: String(resumeErr),
+			traceId,
+		});
+	}
+
 	// Auto-tag the lead
 	const paymentTag = "pago";
 	if (!lead.tags.includes(paymentTag)) {
@@ -102,7 +117,7 @@ export async function handlePaymentConfirmed(
 	}
 
 	console.log(
-		`[PaymentHandler] Payment recorded: ${payment.id} for lead ${lead.id} (R$ ${(data.paid_amount_cents / 100).toFixed(2)})`,
+		`[PaymentHandler] Payment recorded: ${payment.id} for lead ${lead.id} (R$ ${(data.amount_cents / 100).toFixed(2)})`,
 		{ traceId },
 	);
 

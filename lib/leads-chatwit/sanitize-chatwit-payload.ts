@@ -1,3 +1,5 @@
+
+import { buildChatwitConversationUrl } from "@/lib/logging/socialwise-correlation";
 /**
  * Sanitização e normalização de payload bruto do webhook Chatwit
  * Elimina dependência do n8n para transformação de dados
@@ -149,8 +151,13 @@ export function sanitizeChatwitPayload(rawPayload: any): SanitizedChatwitPayload
 		throw new Error("ID do contato ausente");
 	}
 
-	// 6. Montar leadUrl dinamicamente
-	const leadUrl = `https://chatwit.witdev.com.br/app/accounts/${body.account.id}/conversations/${body.conversation.id}`;
+	// 6. Montar leadUrl dinamicamente usando display_id público quando disponível
+	const leadUrl =
+		buildChatwitConversationUrl(
+			process.env.CHATWIT_BASE_URL || "https://chatwit.witdev.com.br",
+			body.account.id,
+			body.conversation.display_id || body.conversation.id,
+		) || "";
 
 	// 7. Extrair e deduplicar arquivos (histórico + attachments raiz)
 	const rootAttachments = body.attachments || [];

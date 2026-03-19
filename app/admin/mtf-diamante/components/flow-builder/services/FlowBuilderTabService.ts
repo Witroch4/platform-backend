@@ -128,6 +128,7 @@ export interface DropElementResult {
 export function validateInteractiveMessageElementDrop(
 	targetData: InteractiveMessageNodeData,
 	elementType: InteractiveMessageElementType,
+	options?: { isPaymentAnchor?: boolean },
 ): DropElementResult {
 	if (targetData.messageId) {
 		return {
@@ -178,7 +179,7 @@ export function validateInteractiveMessageElementDrop(
 		}
 	}
 
-	const newElement = createInteractiveMessageElement(elementType);
+	const newElement = createInteractiveMessageElement(elementType, options);
 	const nextElements = [...currentElements, newElement];
 	const legacy = elementsToLegacyFields(nextElements);
 

@@ -110,6 +110,7 @@ interface FlowCanvasProps {
 		elementType: InteractiveMessageElementType,
 		position: { x: number; y: number },
 		targetNodeId: string | null,
+		options?: { isPaymentAnchor?: boolean },
 	) => void;
 	/** Called when a Template element block is dropped into a template container */
 	onDropTemplateElement?: (elementType: TemplateElementType, targetNodeId: string) => void;
@@ -254,7 +255,9 @@ export function FlowCanvas({
 
 			// Get both MIME types (shared elements send both)
 			const templateElementType = event.dataTransfer.getData(TEMPLATE_ELEMENT_MIME) as TemplateElementType;
-			const elementType = event.dataTransfer.getData(FLOWBUILDER_ELEMENT_MIME) as InteractiveMessageElementType;
+			const rawElementData = event.dataTransfer.getData(FLOWBUILDER_ELEMENT_MIME);
+			const isPaymentAnchor = rawElementData.endsWith(":payment_anchor");
+			const elementType = (isPaymentAnchor ? rawElementData.replace(":payment_anchor", "") : rawElementData) as InteractiveMessageElementType;
 
 			// -------------------------------------------------------------------------
 			// ROUTING DECISION: based on TARGET NODE TYPE (not MIME type priority)
@@ -276,7 +279,7 @@ export function FlowCanvas({
 					x: event.clientX,
 					y: event.clientY,
 				});
-				onDropElement?.(elementType, position, targetNodeId);
+				onDropElement?.(elementType, position, targetNodeId, isPaymentAnchor ? { isPaymentAnchor: true } : undefined);
 				return;
 			}
 

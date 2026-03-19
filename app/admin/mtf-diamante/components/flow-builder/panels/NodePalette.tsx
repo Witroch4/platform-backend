@@ -92,7 +92,7 @@ function PaletteCard({ item }: PaletteCardProps) {
 // ---------------------------------------------------------------------------
 
 interface ElementPaletteCardProps {
-	item: ElementPaletteItem;
+	item: ElementPaletteItem & { isPaymentAnchor?: boolean };
 }
 
 function ElementPaletteCard({ item }: ElementPaletteCardProps) {
@@ -102,7 +102,11 @@ function ElementPaletteCard({ item }: ElementPaletteCardProps) {
 			event.stopPropagation();
 			// Elementos compartilhados: enviam AMBOS os MIME types
 			// Isso permite drop tanto em Mensagem Interativa quanto em Template
-			event.dataTransfer.setData(FLOWBUILDER_ELEMENT_MIME, item.type);
+			// Encode payment anchor flag in element data (format: "button:payment_anchor")
+			const elementData = "isPaymentAnchor" in item && item.isPaymentAnchor
+				? `${item.type}:payment_anchor`
+				: item.type;
+			event.dataTransfer.setData(FLOWBUILDER_ELEMENT_MIME, elementData);
 			event.dataTransfer.setData(TEMPLATE_ELEMENT_MIME, item.type === "button" ? "button_quick_reply" : item.type);
 			event.dataTransfer.effectAllowed = "copy";
 
@@ -310,7 +314,7 @@ export function NodePalette({ onAddNode, channelType }: NodePaletteProps) {
 							</p>
 							<div className="space-y-1.5">
 								{SHARED_ELEMENT_ITEMS.map((item) => (
-									<ElementPaletteCard key={item.type} item={item} />
+									<ElementPaletteCard key={"isPaymentAnchor" in item && item.isPaymentAnchor ? `${item.type}_payment` : item.type} item={item} />
 								))}
 							</div>
 							<p className="text-[10px] text-muted-foreground leading-tight mt-2 px-1 italic">
@@ -358,7 +362,7 @@ export function NodePalette({ onAddNode, channelType }: NodePaletteProps) {
 							<div className="ml-3 mt-2 pl-2 border-l-2 border-blue-300 dark:border-blue-700 space-y-1.5">
 								<p className="text-[10px] text-muted-foreground italic mb-1">Elementos</p>
 								{elementItems.map((item) => (
-									<ElementPaletteCard key={item.type} item={item} />
+									<ElementPaletteCard key={"isPaymentAnchor" in item && item.isPaymentAnchor ? `${item.type}_payment` : item.type} item={item} />
 								))}
 							</div>
 							<p className="text-[10px] text-muted-foreground leading-tight mt-2 px-1 italic">

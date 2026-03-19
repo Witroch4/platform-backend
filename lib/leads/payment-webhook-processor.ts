@@ -9,6 +9,7 @@
 
 import { getPrismaInstance } from "@/lib/connections";
 import { PaymentServiceType, PaymentStatus } from "@prisma/client";
+import { FlowOrchestrator } from "@/services/flow-engine/flow-orchestrator";
 
 const prisma = getPrismaInstance();
 
@@ -109,7 +110,7 @@ export function parseChatwitPaymentDetails(payload: ChatwitPaymentWebhookPayload
 
 	return {
 		amountCents: pd?.amount_cents ?? 0,
-		paidAmountCents: pd?.paid_amount_cents ?? pd?.amount_cents ?? 0,
+		paidAmountCents: pd?.amount_cents ?? 0, // use amount (líquido), não paid_amount (inclui juros do cliente)
 		captureMethod: method,
 		captureMethodTag: captureMethodToTag(method),
 		orderNsu: pd?.order_nsu ?? null,
@@ -196,6 +197,27 @@ export async function processPaymentWebhook(
 		await prisma.lead.update({
 			where: { id: lead.id },
 			data: { tags: { push: tag } },
+		});
+	}
+
+	// Auto-resume flow via payment anchor (non-blocking)
+	try {
+		// Extract conversationId from details or order_nsu fallback
+		let targetConvId = details.conversationId;
+		if ((!targetConvId || targetConvId === 0) && details.orderNsu) {
+			const nsuParts = details.orderNsu.split("-");
+			if (nsuParts.length >= 3 && nsuParts[0] === "chatwit") {
+				targetConvId = Number(nsuParts[2]) || 0;
+			}
+		}
+		if (targetConvId && targetConvId !== 0) {
+			const orchestrator = new FlowOrchestrator();
+			await orchestrator.resumeFromPayment(String(targetConvId), details.orderNsu || "", traceId);
+		}
+	} catch (resumeErr) {
+		console.warn("[PaymentWebhookProcessor] Flow auto-resume failed (non-critical)", {
+			error: String(resumeErr),
+			traceId,
 		});
 	}
 

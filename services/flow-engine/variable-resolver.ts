@@ -102,6 +102,10 @@ export class VariableResolver {
 		this.sessionVars[name] = value;
 	}
 
+	getVariable(name: string): unknown {
+		return this.sessionVars[name];
+	}
+
 	/**
 	 * Retorna uma cópia das variáveis da sessão (para persistir no Prisma).
 	 */

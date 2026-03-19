@@ -668,8 +668,16 @@ export const InteractiveMessageNode = memo(({ id, data, selected }: InteractiveM
 														</div>
 													</div>
 
-													<div className="rounded-md border bg-white dark:bg-card px-3 py-2 shadow-sm transition-colors hover:border-blue-300 focus-within:ring-2 focus-within:ring-blue-400 focus-within:border-transparent">
+													<div className={cn(
+														"rounded-md border px-3 py-2 shadow-sm transition-colors focus-within:border-transparent",
+														"isPaymentAnchor" in btn && btn.isPaymentAnchor
+															? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-700 hover:border-emerald-400 focus-within:ring-2 focus-within:ring-emerald-400"
+															: "bg-white dark:bg-card hover:border-blue-300 focus-within:ring-2 focus-within:ring-blue-400",
+													)}>
 														<div className="flex items-center">
+															{"isPaymentAnchor" in btn && btn.isPaymentAnchor && (
+																<span className="mr-1.5 text-xs" title="Payment Anchor">💰</span>
+															)}
 															<div className="flex items-center justify-center text-center flex-1">
 																<input
 																	type="text"
@@ -677,7 +685,9 @@ export const InteractiveMessageNode = memo(({ id, data, selected }: InteractiveM
 																		"nodrag w-full bg-transparent border-none p-0 text-sm font-semibold focus:outline-none focus:ring-0 text-center placeholder:text-blue-300",
 																		("title" in btn ? btn.title.length : 0) > CHANNEL_CHAR_LIMITS.whatsapp.buttonTitle
 																			? "text-red-500 dark:text-red-400"
-																			: "text-blue-600 dark:text-blue-400",
+																			: "isPaymentAnchor" in btn && btn.isPaymentAnchor
+																				? "text-emerald-600 dark:text-emerald-400"
+																				: "text-blue-600 dark:text-blue-400",
 																	)}
 																	value={"title" in btn ? btn.title : ""}
 																	onChange={(e) => updateButtonTitle(btn.id, e.target.value)}
@@ -765,7 +775,12 @@ export const InteractiveMessageNode = memo(({ id, data, selected }: InteractiveM
 														type="source"
 														position={Position.Right}
 														id={btn.id}
-														className="!h-3.5 !w-3.5 !bg-blue-500 !border-2 !border-white hover:!bg-blue-600 !transition-colors !-right-[7px]"
+														className={cn(
+																"!h-3.5 !w-3.5 !border-2 !border-white !transition-colors !-right-[7px]",
+																"isPaymentAnchor" in btn && btn.isPaymentAnchor
+																	? "!bg-emerald-500 hover:!bg-emerald-600"
+																	: "!bg-blue-500 hover:!bg-blue-600",
+															)}
 														style={{
 															top: "50%",
 															right: "-7px",

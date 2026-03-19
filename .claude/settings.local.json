@@ -102,7 +102,10 @@
       "Bash(ssh -i ~/.ssh/keys/production-server.key root@49.13.155.94 \"docker service logs socialwise_socialwise_app --since 2h 2>&1 | grep -E ''\\(generate_payment|wait_for_reply|payment_url|infinitepay|user_reply|flow.*button|FlowExec|FlowOrch|payment.*link\\)'' | tail -60\")"
     ],
     "deny": [],
-    "ask": []
+    "ask": [],
+    "additionalDirectories": [
+      "/tmp"
+    ]
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
