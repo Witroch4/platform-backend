@@ -16,7 +16,7 @@ interface HeaderEditorProps {
 	headerNamedExamples?: Record<string, string>;
 	onStateChange: (field: string, value: any) => void;
 	variaveis: any[];
-	loadingVariaveis: boolean;
+	isLoadingVariaveis: boolean;
 }
 
 export const HeaderEditor = ({
@@ -27,7 +27,7 @@ export const HeaderEditor = ({
 	headerNamedExamples,
 	onStateChange,
 	variaveis,
-	loadingVariaveis,
+	isLoadingVariaveis,
 }: HeaderEditorProps) => {
 	const handleHeaderTypeChange = (value: any) => {
 		if (value !== headerType) {
@@ -101,7 +101,7 @@ export const HeaderEditor = ({
 						placeholder="Texto do cabeçalho"
 						maxLength={60}
 						label="Texto do cabeçalho"
-						disabled={loadingVariaveis}
+						disabled={isLoadingVariaveis}
 					/>
 					<div className="flex items-center justify-between mt-1 text-[10px] text-muted-foreground">
 						<span>Variáveis no cabeçalho: {headerVarCount}/1</span>

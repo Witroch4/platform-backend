@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import InteractiveMessageCreator from "./InteractiveMessageCreator";
 import type { InteractiveMessageType } from "./interactive-message-creator/types";
 import type { InteractiveMessageWithContent } from "@/types/interactive-messages";
-import { useMtfData } from "@/app/admin/mtf-diamante/context/SwrProvider";
+import { useMtfData } from "@/app/admin/mtf-diamante/context/MtfDataProvider";
 import {
 	Dialog,
 	DialogContent,

@@ -3,7 +3,7 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { useMtfData } from "../../context/SwrProvider";
+import { useMtfData } from "../../context/MtfDataProvider";
 import { isInstagramChannel } from "@/types/interactive-messages";
 
 // Import refactored components

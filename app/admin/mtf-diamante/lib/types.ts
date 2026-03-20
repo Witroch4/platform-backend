@@ -1,7 +1,6 @@
 // app/admin/mtf-diamante/lib/types.ts
 // Consolidated TypeScript interfaces for MTF Diamante hooks and data management
 
-import type React from "react";
 import type { ChatwitInbox, AgenteDialogflow } from "@/types/dialogflow";
 import type { InteractiveMessage } from "@/types/interactive-messages";
 import { MapeamentoBotao, Template } from "@prisma/client";
@@ -230,15 +229,6 @@ export interface UpdateApiKeyPayload {
 	isActive?: boolean;
 }
 
-// SWR Configuration types
-export interface SWRHookOptions {
-	isPaused?: boolean;
-	refreshInterval?: number;
-	revalidateOnFocus?: boolean;
-	revalidateOnReconnect?: boolean;
-	keepPreviousData?: boolean;
-}
-
 // Error types
 export interface MtfApiError extends Error {
 	status?: number;
@@ -253,7 +243,7 @@ export interface OptimisticUpdateOptions {
 	rollbackOnError?: boolean;
 }
 
-// Context types for the refactored provider
+// Context types for the MtfDataProvider
 export interface MtfDataContextType {
 	// Mensagens Interativas
 	interactiveMessages: InteractiveMessage[];
@@ -265,17 +255,13 @@ export interface MtfDataContextType {
 	// Caixas
 	caixas: ChatwitInbox[];
 	isLoadingCaixas: boolean;
-	loadingCaixas: boolean; // Legacy compatibility
-	setCaixas: React.Dispatch<React.SetStateAction<ChatwitInbox[]>>; // Legacy compatibility
 	addCaixa: (optimisticCaixa: ChatwitInbox, apiPayload: any) => Promise<void>;
 	updateCaixa: (updatedCaixa: ChatwitInbox, apiPayload: any) => Promise<void>;
 	deleteCaixa: (caixaId: string) => Promise<void>;
-	prefetchInbox: (inboxId: string) => Promise<void>; // Legacy compatibility
 
 	// Lotes
 	lotes: MtfDiamanteLote[];
 	isLoadingLotes: boolean;
-	loadingLotes: boolean; // Legacy compatibility
 	addLote: (optimisticLote: MtfDiamanteLote, apiPayload: any) => Promise<void>;
 	updateLote: (updatedLote: MtfDiamanteLote, apiPayload: any) => Promise<void>;
 	deleteLote: (loteId: string) => Promise<void>;
@@ -283,7 +269,6 @@ export interface MtfDataContextType {
 	// Variáveis
 	variaveis: MtfDiamanteVariavel[];
 	isLoadingVariaveis: boolean;
-	loadingVariaveis: boolean; // Legacy compatibility
 	addVariavel: (optimisticVariavel: MtfDiamanteVariavel, apiPayload: any) => Promise<void>;
 	updateVariavel: (updatedVariavel: MtfDiamanteVariavel, apiPayload: any) => Promise<void>;
 	deleteVariavel: (variavelId: string) => Promise<void>;
@@ -314,10 +299,6 @@ export interface MtfDataContextType {
 	isUpdatesPaused: boolean;
 	pauseUpdates: () => void;
 	resumeUpdates: () => void;
-
-	// Compatibilidade (deprecated mas mantido)
-	saveMessage: (apiPayload: any, isEdit: boolean) => Promise<any>;
-	updateMessagesCache: (messageOrId: any, action: string, reactions?: any[]) => Promise<any>;
 
 	// Refresh functions
 	refreshMessages: () => Promise<any>;

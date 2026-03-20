@@ -55,7 +55,7 @@ import { InboxContextMenu } from "./inbox-context-menu";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { useMtfData } from "@/app/admin/mtf-diamante/context/SwrProvider";
+import { useMtfData } from "@/app/admin/mtf-diamante/context/MtfDataProvider";
 import { WhatsAppAnimatedIcon } from "@/components/whatsapp-animated-icon";
 import { InstagramAnimatedIcon } from "@/components/instagram-animated-icon";
 import { RobotAnimatedIcon } from "@/components/robot-animated-icon";
@@ -68,7 +68,7 @@ export function AppAdminDashboard() {
 	const [isPending, startTransition] = useTransition();
 
 	// Consome do Provider (BFF + SWR)
-	const { caixas: inboxes, apiKeys, refreshCaixas, prefetchInbox } = useMtfData();
+	const { caixas: inboxes, apiKeys, refreshCaixas } = useMtfData();
 	const [creating, setCreating] = useState(false);
 	const [newLabel, setNewLabel] = useState("");
 	const [newToken, setNewToken] = useState<string | null>(null);
@@ -225,7 +225,7 @@ export function AppAdminDashboard() {
 															};
 
 															const handleMouseEnter = () => {
-																prefetchInbox(cx.id).catch(() => { });
+																
 																try {
 																	router.prefetch(targetHref);
 																} catch { }

@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { X, Loader2, Plus, Trash2 } from "lucide-react";
-import { useMtfData } from "@/app/admin/mtf-diamante/context/SwrProvider";
+import { useMtfData } from "@/app/admin/mtf-diamante/context/MtfDataProvider";
 import { useChatwitLabels } from "@/app/admin/mtf-diamante/hooks/useChatwitLabels";
 import type { ChatwitActionNodeData } from "@/types/flow-builder/nodes";
 import type { FlowNodeData } from "@/types/flow-builder/nodes";

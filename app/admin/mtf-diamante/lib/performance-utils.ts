@@ -2,7 +2,6 @@
 // Performance optimization utilities for MTF Diamante hooks
 
 import { useMemo, useCallback, useRef } from "react";
-import type { SWRConfiguration } from "swr";
 import { devLog } from "./cleanup-utils";
 
 /**
@@ -89,110 +88,6 @@ class PerformanceTracker {
 
 // Global performance tracker instance
 export const performanceTracker = new PerformanceTracker();
-
-/**
- * Enhanced SWR configuration with performance optimizations
- */
-export function createOptimizedSWRConfig(baseConfig: SWRConfiguration = {}, operationType: string): SWRConfiguration {
-	return {
-		// Base configuration
-		...baseConfig,
-
-		// Optimized deduplication - longer for read operations
-		dedupingInterval: baseConfig.dedupingInterval ?? 5000, // 5 seconds
-
-		// Optimized focus revalidation throttling
-		focusThrottleInterval: baseConfig.focusThrottleInterval ?? 10000, // 10 seconds
-
-		// Keep previous data for better UX
-		keepPreviousData: baseConfig.keepPreviousData ?? true,
-
-		// Optimized error retry with exponential backoff
-		errorRetryCount: baseConfig.errorRetryCount ?? 3,
-		errorRetryInterval: baseConfig.errorRetryInterval ?? 2000,
-
-		// Enhanced error retry logic
-		onErrorRetry: (error, key, config, revalidate, { retryCount }) => {
-			// Don't retry on 4xx errors (client errors)
-			if (error.status >= 400 && error.status < 500) return;
-
-			// Don't retry after max attempts
-			if (retryCount >= 3) return;
-
-			// Exponential backoff: 2s, 4s, 8s
-			const delay = Math.min(2000 * Math.pow(2, retryCount), 8000);
-
-			setTimeout(() => revalidate({ retryCount }), delay);
-		},
-
-		// Performance tracking
-		onSuccess: (data, key, config) => {
-			devLog.log(`✅ [${operationType}] Success:`, {
-				key,
-				dataLength: Array.isArray(data) ? data.length : "N/A",
-				timestamp: new Date().toISOString(),
-			});
-			baseConfig.onSuccess?.(data, key, config);
-		},
-
-		onError: (error, key, config) => {
-			devLog.error(`❌ [${operationType}] Error:`, { key, error });
-			baseConfig.onError?.(error, key, config);
-		},
-
-		onLoadingSlow: (key, config) => {
-			devLog.warn(`⏳ [${operationType}] Slow loading:`, key);
-			baseConfig.onLoadingSlow?.(key, config);
-		},
-	};
-}
-
-/**
- * Hook for optimized SWR configuration with memoization
- */
-export function useOptimizedSWRConfig(
-	operationType: string,
-	isPaused: boolean = false,
-	customConfig: SWRConfiguration = {},
-): SWRConfiguration {
-	return useMemo(() => {
-		const baseConfig = {
-			revalidateOnFocus: !isPaused && (customConfig.revalidateOnFocus ?? true),
-			revalidateOnReconnect: !isPaused && (customConfig.revalidateOnReconnect ?? true),
-			refreshInterval: isPaused ? 0 : (customConfig.refreshInterval ?? 30000),
-			...customConfig,
-		};
-
-		return createOptimizedSWRConfig(baseConfig, operationType);
-	}, [operationType, isPaused, customConfig]);
-}
-
-/**
- * Optimized mutation function with performance tracking
- */
-export function useOptimizedMutation<T>(
-	operationType: string,
-	mutate: (data?: T | Promise<T> | ((current?: T) => T), opts?: any) => Promise<T | undefined>,
-) {
-	const operationRef = useRef<string | null>(null);
-
-	return useCallback(
-		async (data: T | Promise<T> | ((current?: T) => T), opts: any = {}) => {
-			operationRef.current = performanceTracker.startOperation(operationType);
-
-			try {
-				const result = await mutate(data, opts);
-				performanceTracker.endOperation(operationRef.current, true);
-				return result;
-			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : "Unknown error";
-				performanceTracker.endOperation(operationRef.current, false, errorMessage);
-				throw error;
-			}
-		},
-		[mutate, operationType],
-	);
-}
 
 /**
  * Debounced function for reducing API calls
@@ -313,37 +208,5 @@ export function usePerformanceMonitoring(componentName: string) {
 		renderCount: renderCount.current,
 		uptime: performance.now() - mountTime.current,
 		logPerformance: () => performanceTracker.logSummary(),
-	};
-}
-
-/**
- * Smart polling configuration based on user activity
- */
-export function useSmartPolling(baseInterval: number = 30000) {
-	const lastActivity = useRef(Date.now());
-	const isVisible = useRef(true);
-
-	// Update activity timestamp on user interaction
-	const updateActivity = useCallback(() => {
-		lastActivity.current = Date.now();
-	}, []);
-
-	// Calculate dynamic polling interval
-	const getPollingInterval = useCallback(() => {
-		const timeSinceActivity = Date.now() - lastActivity.current;
-		const isInactive = timeSinceActivity > 5 * 60 * 1000; // 5 minutes
-
-		if (!isVisible.current) return 0; // Stop polling when tab is hidden
-		if (isInactive) return baseInterval * 2; // Slower polling when inactive
-
-		return baseInterval;
-	}, [baseInterval]);
-
-	return {
-		updateActivity,
-		getPollingInterval,
-		setVisible: (visible: boolean) => {
-			isVisible.current = visible;
-		},
 	};
 }

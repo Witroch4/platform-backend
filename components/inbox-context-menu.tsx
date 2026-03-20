@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Trash2, Settings, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
-import { useMtfData } from "@/app/admin/mtf-diamante/context/SwrProvider";
+import { useMtfData } from "@/app/admin/mtf-diamante/context/MtfDataProvider";
 
 interface InboxContextMenuProps {
 	children: React.ReactNode;

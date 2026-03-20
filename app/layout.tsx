@@ -6,7 +6,6 @@ import "katex/dist/katex.min.css";
 import { ReactQueryProvider } from "@/components/providers/react-query-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { SessionProvider } from "@/components/providers/session-provider";
-import { SWRProvider } from "@/components/providers/SwrProvider";
 import ErrorBoundary from "@/components/providers/error-boundary";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
@@ -118,13 +117,9 @@ export default function RootLayout({
 					<SessionProvider>
 						<ReactQueryProvider>
 							<ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-								{/* 👇 SWR Provider para otimização global */}
-								<SWRProvider>
-									{/* 👇 Envolvendo a árvore de componentes com TooltipProvider */}
 									<TooltipProvider>
-										<div className="min-h-screen w-full bg-background">{children}</div>
-									</TooltipProvider>
-								</SWRProvider>
+									<div className="min-h-screen w-full bg-background">{children}</div>
+								</TooltipProvider>
 							</ThemeProvider>
 						</ReactQueryProvider>
 					</SessionProvider>

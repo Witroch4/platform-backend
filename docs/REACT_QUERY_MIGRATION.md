@@ -2,7 +2,7 @@
 
 > **Data:** 19 de Marco de 2026
 > **Ultima auditoria:** 20 de Marco de 2026
-> **Status:** Fases 0, 1, 2 e 3 concluidas, Fase 4 pendente
+> **Status:** Fases 0, 1, 2, 3 e 4 concluidas, Fase 5 (SSR opcional) e 6 (descomissionamento) pendentes
 > **Escopo:** Migracao gradual de SWR 2.3.6 para TanStack Query v5 no Socialwise
 > **Motivacao:** Reduzir coordenacao manual de cache, rollback e invalidacoes entre telas
 
@@ -35,32 +35,34 @@ Isso funciona, mas aumenta o custo de manutencao.
 "@tanstack/react-query": "^5.91.2"
 ```
 
-### 2.2 Numeros reais (auditoria 20/03/2026, atualizado apos Fase 2)
+### 2.2 Numeros reais (auditoria 20/03/2026, atualizado apos Fase 4)
 
-| Metrica | Valor pre-Fase 1 | Valor pos-Fase 1 | Valor pos-Fase 2 | Valor pos-Fase 3 |
-|---|---|---|---|---|
-| Arquivos importando SWR | **35** | **20** | **13** (7 hooks CRUD + 1 infra/tipos + 5 infra) | **5** (2 infra + useFlowCanvas + SwrProvider + swr-config) |
-| Arquivos usando React Query | **7** | **22** | **29** (28 hooks/componentes + 1 provider) | **36** (35 hooks/componentes + 1 provider) |
-| Arquivos com ambos | **0** | **0** | **0** | **0** |
-| Cobertura React Query | **17%** (7/42) | **52%** (22/42) | **69%** (29/42) | **88%** (36/41) |
-| `data \|\| []` em vez de `data ?? []` | **13 ocorrencias** | **11 ocorrencias** | **0 ocorrencias** (todas corrigidas na Fase 2) | **0** |
-| `globalMutate` / `useSWRConfig` | **2 arquivos** | **2 arquivos** | **2 arquivos** (useCaixas, FlowBuilderTabHooks — Fase 3) | **0 arquivos** (todos migrados para queryClient) |
-| Hooks com `refreshInterval` (polling) | **10 arquivos** | **3 arquivos SWR** | **0 arquivos SWR** (todos migrados para `refetchInterval`) | **0 arquivos SWR** |
-| `useState` para `isCreating`/`isDeleting` | — | — | — | **0** (todos migrados para `isPending` do useMutation) |
+| Metrica | Valor pre-Fase 1 | Valor pos-Fase 1 | Valor pos-Fase 2 | Valor pos-Fase 3 | Valor pos-Fase 4 |
+|---|---|---|---|---|---|
+| Arquivos importando SWR | **35** | **20** | **13** (7 hooks CRUD + 1 infra/tipos + 5 infra) | **5** (2 infra + useFlowCanvas + SwrProvider + swr-config) | **1** (swr-config.ts — dead code, remover Fase 6) |
+| Arquivos usando React Query | **7** | **22** | **29** (28 hooks/componentes + 1 provider) | **36** (35 hooks/componentes + 1 provider) | **38** (37 hooks/componentes + 1 provider) |
+| Arquivos com ambos | **0** | **0** | **0** | **0** | **0** |
+| Cobertura React Query | **17%** (7/42) | **52%** (22/42) | **69%** (29/42) | **88%** (36/41) | **97%** (38/39) |
+| `data \|\| []` em vez de `data ?? []` | **13 ocorrencias** | **11 ocorrencias** | **0 ocorrencias** (todas corrigidas na Fase 2) | **0** | **0** |
+| `globalMutate` / `useSWRConfig` | **2 arquivos** | **2 arquivos** | **2 arquivos** (useCaixas, FlowBuilderTabHooks — Fase 3) | **0 arquivos** (todos migrados para queryClient) | **0** |
+| Hooks com `refreshInterval` (polling) | **10 arquivos** | **3 arquivos SWR** | **0 arquivos SWR** (todos migrados para `refetchInterval`) | **0 arquivos SWR** | **0** |
+| `useState` para `isCreating`/`isDeleting` | — | — | — | **0** (todos migrados para `isPending` do useMutation) | **0** |
+| SwrProvider/SWRConfig no render tree | — | — | — | **3** (root + admin + iframe) | **0** (eliminados; MtfDataProvider usa React Query) |
+| Funcoes deprecated no context | — | — | — | **5** (saveMessage, updateMessagesCache, setCaixas, prefetchInbox, loading aliases) | **0** (todos removidos) |
 
-### 2.3 Distribuicao por dominio (atualizado pos-Fase 3)
+### 2.3 Distribuicao por dominio (atualizado pos-Fase 4)
 
 | Dominio | SWR | React Query | Total |
 |---|---|---|---|
 | `app/admin/mtf-diamante/` (hooks) | 0 | 10 | 10 |
 | `app/admin/mtf-diamante/` (componentes) | 0 | 4 | 4 |
 | `app/admin/mtf-diamante/` (flow-analytics) | 0 | 8 | 8 |
-| `app/admin/mtf-diamante/` (flow-builder) | 1 (useFlowCanvas) | 2 | 3 |
-| `app/admin/mtf-diamante/` (infra: context, lib, types) | 2 (SwrProvider, perf-utils) | 0 | 2 |
+| `app/admin/mtf-diamante/` (flow-builder) | 0 | 3 (useFlowCanvas migrado) | 3 |
+| `app/admin/mtf-diamante/` (infra: context, lib) | 0 | 1 (MtfDataProvider) | 1 |
 | `app/admin/leads-chatwit/` | 0 | 8 | 8 |
 | `app/admin/MTFdashboard/` | 0 | 4 | 4 |
 | `app/admin/` (outros: monitoring, flow-playground, campanhas) | 0 | 3 | 3 |
-| `lib/` + `components/` (providers, config) | 2 | 1 | 3 |
+| `lib/` + `components/` (providers, config) | 0 | 1 (react-query-provider) | 1 |
 
 ### 2.4 Fundacao ja implementada
 
@@ -124,16 +126,17 @@ Hooks com polling precisam de atencao especial na migracao — mapear para `refe
 
 > **Equivalente React Query:** `refetchInterval: 30_000` + `refetchIntervalInBackground: false` (default). Para pausa: `enabled: !isPaused`.
 
-### 2.9 Arquivos infra SWR restantes (atualizado pos-Fase 3)
+### 2.9 Arquivos infra SWR restantes (atualizado pos-Fase 4)
 
 | Arquivo | Uso do SWR | Status | Acao |
 |---|---|---|---|
-| `lib/swr-config.ts` | Config global + fetcher | PENDENTE | Remover na Fase 6 |
-| `components/providers/SwrProvider.tsx` | Provider root | PENDENTE | Remover na Fase 6 |
-| `mtf-diamante/context/SwrProvider.tsx` | Provider MTF (~410 linhas) | PENDENTE | Simplificar Fase 4, remover Fase 6 |
-| `mtf-diamante/lib/types.ts` | `SWRHookOptions` (tipo residual) | RESOLVIDO Fase 3 | `KeyedMutator` removido; `SWRHookOptions` mantido (nao referenciado) |
-| `mtf-diamante/lib/performance-utils.ts` | `import type { SWRConfiguration }` | PENDENTE | Tipo usado em `createOptimizedSWRConfig` — remover quando SwrProvider for eliminado |
-| `mtf-diamante/components/flow-builder/hooks/useFlowCanvas.ts` | `useSWR` + `useSWRMutation` | PENDENTE | Migrar na Fase 4 (auto-save complexo) |
+| `lib/swr-config.ts` | Config global + fetcher | DEAD CODE | Remover na Fase 6 (ninguem importa) |
+| `components/providers/SwrProvider.tsx` | ~~Provider root~~ | RESOLVIDO Fase 4 | Convertido para no-op wrapper; remover na Fase 6 |
+| `mtf-diamante/context/SwrProvider.tsx` | ~~Provider MTF~~ | RESOLVIDO Fase 4 | Convertido para re-export de MtfDataProvider; remover na Fase 6 |
+| `mtf-diamante/context/MtfDataProvider.tsx` | React Query only | NOVO Fase 4 | Provider principal — zero SWR |
+| `mtf-diamante/lib/types.ts` | ~~SWRHookOptions~~ | RESOLVIDO Fase 4 | `SWRHookOptions` removido |
+| `mtf-diamante/lib/performance-utils.ts` | ~~SWRConfiguration~~ | RESOLVIDO Fase 4 | Funcoes SWR removidas (createOptimizedSWRConfig, useOptimizedSWRConfig, useSmartPolling) |
+| `mtf-diamante/components/flow-builder/hooks/useFlowCanvas.ts` | ~~useSWR + useSWRMutation~~ | RESOLVIDO Fase 4 | Migrado para useQuery + useMutation |
 
 ### 2.10 Hooks ja migrados — problemas residuais (TODOS RESOLVIDOS na Fase 1)
 
@@ -488,45 +491,73 @@ export function useCreateEntity() {
 
 ---
 
-### Fase 4. Simplificacao do SwrProvider do MTF
+### Fase 4. Simplificacao do SwrProvider do MTF + migracao useFlowCanvas
 
-**Status:** PENDENTE
+**Status:** CONCLUIDA (20/03/2026)
 
-**Objetivo:** parar de usar o provider como orquestrador manual de refreshes
+**Objetivo:** eliminar dependencia do SWR no provider e migrar ultimo hook SWR
 
-Arquivo principal: `app/admin/mtf-diamante/context/SwrProvider.tsx`
+#### O que foi feito
 
-#### Problema atual
+**useFlowCanvas migrado para React Query:**
+- `useSWR` → `useQuery` (canvas visual + flow detail)
+- `useSWRMutation` → `useMutation` (save canvas)
+- `mutateCanvas`/`mutateFlow` → `queryClient.invalidateQueries`
+- Auto-save complexo preservado com mesma logica de refs e debounce
+- Adicionado `flows.legacyCanvas(inboxId)` ao factory de query keys
 
-- Centraliza 8+ hooks
-- Expoe wrappers de compatibilidade
-- Concentra refresh manual e pausa/resume
-- Middleware de retry metrics
+**SwrProvider → MtfDataProvider:**
+- Criado `MtfDataProvider.tsx` — zero imports SWR, usa React Query para tudo
+- Antigo `SwrProvider.tsx` convertido para re-export de backward-compatibility
+- Removido `SWRConfig` wrapper (`SwrProviderWithSWR`)
+- Removido `retryMetricsMw` (middleware SWR de observabilidade)
+- Removido `saveMessageWithReactions` (dead code — funcao legacy nunca usada)
 
-#### Checklist de migracao
+**Deprecated functions removidas:**
+- `saveMessage` (deprecated no-op)
+- `updateMessagesCache` (deprecated wrapper)
+- `setCaixas` (no-op — **bug encontrado**: consumers chamavam `setCaixas()` para optimistic update mas a funcao era um no-op, ou seja o update nunca acontecia. Substituido por `refreshCaixas()` que agora realmente invalida o cache)
+- `prefetchInbox` (no-op — removido dos consumers)
+- `loadingCaixas`, `loadingLotes`, `loadingVariaveis` (aliases legacy → migrados para `isLoadingCaixas`, `isLoadingLotes`, `isLoadingVariaveis`)
 
-- [ ] Listar todas as propriedades expostas pelo context
-- [ ] Para cada propriedade, verificar se o hook subjacente ja foi migrado (Fases 1-3)
-- [ ] Substituir pausa/resume por `enabled: false` nos hooks React Query
-- [ ] Reduzir provider para wrapper fino de compatibilidade
-- [ ] Eventualmente eliminar o provider (quando nenhum consumidor depender dele)
+**Infra SWR limpa:**
+- `performance-utils.ts` — removidas funcoes SWR (`createOptimizedSWRConfig`, `useOptimizedSWRConfig`, `useSmartPolling`, `useOptimizedMutation`, `import type { SWRConfiguration }`)
+- `ssr-helpers.ts` — removida `createSWRFallback`
+- `types.ts` — removido `SWRHookOptions`, removido `import type React` (nao mais necessario sem `React.Dispatch`)
+- `components/providers/SwrProvider.tsx` — convertido para no-op wrapper (ninguem importa mais)
+- `app/layout.tsx` — removido `SWRProvider` do render tree root
 
-#### Padrao de substituicao
+**Consumers atualizados (14 arquivos):**
+- Todos migrados de `SwrProvider` → `MtfDataProvider`
+- Layouts (admin, iframe) atualizados
+- Legacy property names corrigidos nos consumidores
 
-```ts
-// ANTES: SwrProvider controlando pausa
-const { variaveis, isLoading } = useMtfContext(); // vem do provider
+**Bug fix — `setCaixas` era no-op:**
+- `DialogflowCaixasAgentes.tsx` chamava `setCaixas((current) => ...)` para optimistic update apos toggle de agentes, mas `setCaixas` era um no-op deprecated no SwrProvider, significando que o update visual nunca acontecia
+- Corrigido para usar `refreshCaixas()` que agora invalida o cache React Query e busca dados frescos do servidor
 
-// DEPOIS: hook direto com enabled
-const { data: variaveis, isLoading } = useVariaveis({ enabled: !isPaused });
-```
+#### Acoes extras (alem do escopo original da Fase 4)
+
+- Migrado `useFlowCanvas` (listado como Fase 4 no inventario, mas nao detalhado no checklist original)
+- Removido `SWRProvider` do root layout (`app/layout.tsx`)
+- Convertido `components/providers/SwrProvider.tsx` para no-op (adiantando Fase 6)
+- Limpeza completa de `performance-utils.ts` e `ssr-helpers.ts`
+- Corrigido bug de `setCaixas` no-op em DialogflowCaixasAgentes
+
+#### Query keys adicionadas nesta fase
+
+- `mtfDiamanteQueryKeys.flows.legacyCanvas(inboxId)` — canvas visual legacy (sem flowId)
 
 #### Criterio de pronto (Fase 4)
 
-- [ ] SwrProvider com menos de 5 propriedades
-- [ ] Nenhum hook de leitura passando por ele
-- [ ] Pausa/resume via `enabled` nos hooks individuais
-- [ ] `tsc` verde
+- [x] SwrProvider eliminado (substituido por MtfDataProvider sem SWR)
+- [x] Nenhum hook usando `useSWR`/`useSWRMutation` no codebase
+- [x] Pausa/resume via `enabled` nos hooks React Query individuais
+- [x] Resume usa `queryClient.invalidateQueries` em vez de `.mutate()` manual
+- [x] Deprecated functions removidas (saveMessage, updateMessagesCache, setCaixas, prefetchInbox)
+- [x] Legacy property aliases removidos (loadingCaixas, loadingLotes, loadingVariaveis)
+- [x] SWRProvider removido do root layout
+- [x] `tsc` verde (ambos configs)
 
 ---
 
@@ -574,10 +605,10 @@ export default async function DashboardPage() {
 
 #### Pre-requisitos
 
-- [ ] SwrProvider residual quase vazio ou removido
-- [ ] Zero hooks usando `useSWR` / `useSWRMutation` / `useSWRInfinite`
-- [ ] Zero usos de `globalMutate`
-- [ ] Zero imports de `swr` no codebase
+- [x] SwrProvider residual quase vazio ou removido (Fase 4: MtfDataProvider criado, SwrProvider = re-export)
+- [x] Zero hooks usando `useSWR` / `useSWRMutation` / `useSWRInfinite` (Fase 4: useFlowCanvas migrado)
+- [x] Zero usos de `globalMutate` (Fase 3)
+- [ ] Zero imports de `swr` no codebase (resta: `lib/swr-config.ts` — dead code)
 
 #### Checklist de remocao
 
@@ -858,16 +889,17 @@ Referencia rapida de TODOS os 30 arquivos SWR restantes, classificados por dific
 | # | Arquivo | Fase | Status |
 |---|---|---|---|
 | 29 | `mtf-diamante/hooks/useInteractiveMessages.ts` | 3 | MIGRADO |
-| 30 | `mtf-diamante/components/flow-builder/hooks/useFlowCanvas.ts` | 4 | PENDENTE (SWR + auto-save) |
+| 30 | `mtf-diamante/components/flow-builder/hooks/useFlowCanvas.ts` | 4 | MIGRADO (useQuery + useMutation, auto-save preservado) |
 | 31 | `mtf-diamante/components/flow-builder/hooks/FlowBuilderTabHooks.ts` | 3 | MIGRADO (globalMutate → queryClient) |
 
 ### Infra (remover na Fase 6)
 
-| # | Arquivo | Fase |
-|---|---|---|
-| 32 | `lib/swr-config.ts` | 6 |
-| 33 | `components/providers/SwrProvider.tsx` | 6 |
-| 34 | `app/admin/mtf-diamante/context/SwrProvider.tsx` | 4-6 |
+| # | Arquivo | Status pos-Fase 4 | Fase |
+|---|---|---|---|
+| 32 | `lib/swr-config.ts` | Dead code (ninguem importa) | 6 |
+| 33 | `components/providers/SwrProvider.tsx` | No-op wrapper | 6 |
+| 34 | `app/admin/mtf-diamante/context/SwrProvider.tsx` | Re-export de MtfDataProvider | 6 |
+| NEW | `app/admin/mtf-diamante/context/MtfDataProvider.tsx` | Provider ativo (React Query) | — |
 
 ---
 
@@ -910,12 +942,15 @@ Esta migracao sera considerada bem-sucedida quando:
 - [x] Zero usos de `globalMutate` (concluido Fase 3)
 - [x] CRUDs principais usando `useMutation` com optimistic + rollback (concluido Fase 3)
 - [x] Listas e detalhes compartilhando cache por `queryKey` hierarquica (concluido Fase 3)
-- [ ] `SwrProvider` do MTF eliminado ou reduzido a wrapper vazio
-- [ ] Contagem de arquivos SWR: 0 (atual: 5, era 13 pos-Fase 2, era 20 pos-Fase 1, era 35 pre-Fase 1)
-- [ ] Contagem de arquivos React Query: 42+ (atual: 36, era 29 pos-Fase 2, era 22 pos-Fase 1, era 7 pre-Fase 1)
+- [x] `SwrProvider` do MTF eliminado — substituido por `MtfDataProvider` sem SWR (concluido Fase 4)
+- [ ] Contagem de arquivos SWR: 0 (atual: 1 dead code, era 5 pos-Fase 3, era 13 pos-Fase 2, era 20 pos-Fase 1, era 35 pre-Fase 1)
+- [x] Contagem de arquivos React Query: 38 (era 36 pos-Fase 3, era 29 pos-Fase 2, era 22 pos-Fase 1, era 7 pre-Fase 1)
 - [x] Zero `data || []` — tudo usando `data ?? []` (concluido Fase 2)
 - [x] Zero `useState` para server state (concluido Fase 3 — todos migrados para `isPending`)
+- [x] Zero funcoes deprecated no provider context (concluido Fase 4)
+- [x] Zero SWRConfig/SWRProvider no render tree (concluido Fase 4)
 - [ ] Performance igual ou melhor (medir bundle size antes/depois)
+- [ ] Remover `swr` do `package.json` (Fase 6 — quando `lib/swr-config.ts` for removido)
 
 ---
 

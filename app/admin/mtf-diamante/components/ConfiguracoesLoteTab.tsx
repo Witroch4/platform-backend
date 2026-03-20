@@ -24,7 +24,7 @@ import {
 import { cn } from "@/lib/utils";
 import { DisparoMensagemDialog } from "./DisparoMensagemDialog";
 import { LoteCardSkeleton, VariavelSkeleton } from "./LoadingSkeletons";
-import { useMtfData } from "../context/SwrProvider";
+import { useMtfData } from "../context/MtfDataProvider";
 import { validateVariable, ensureSpecialVariables, SPECIAL_VARIABLES } from "@/app/lib/variable-utils";
 import { DateTimePicker } from "@/app/[accountid]/dashboard/agendamento/components/date-time-picker";
 import { RegisterApiKeyDialog } from "@/components/admin/register-api-key-dialog";
@@ -121,7 +121,7 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
 	const [hasChatwitToken, setHasChatwitToken] = useState(false);
 
 	// Usando contexto de dados para cache persistente
-	const { variaveis, loadingVariaveis, refreshVariaveis, lotes, loadingLotes, refreshLotes } = useMtfData();
+	const { variaveis, isLoadingVariaveis, refreshVariaveis, lotes, isLoadingLotes, refreshLotes } = useMtfData();
 
 	useEffect(() => {
 		if (configPadrao) {
@@ -666,7 +666,7 @@ const ConfiguracoesLoteTab = ({ configPadrao, onUpdate }: ConfiguracoesLoteTabPr
 					</div>
 				</CardHeader>
 				<CardContent>
-					{loadingLotes ? (
+					{isLoadingLotes ? (
 						<div className="space-y-4">
 							{Array.from({ length: 2 }).map((_, i) => (
 								<LoteCardSkeleton key={i} />

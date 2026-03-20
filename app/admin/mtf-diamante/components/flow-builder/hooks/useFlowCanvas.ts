@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useEffect, useRef, useState } from "react";
-import useSWR from "swr";
-import useSWRMutation from "swr/mutation";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
 	useNodesState,
 	useEdgesState,
@@ -25,6 +24,7 @@ import type {
 } from "@/types/flow-builder";
 import { createFlowNode, createFlowEdge, createEmptyFlowCanvas, FLOW_CANVAS_CONSTANTS } from "@/types/flow-builder";
 import { canvasToN8nFormat } from "@/lib/flow-builder/exportImport";
+import { mtfDiamanteQueryKeys } from "@/app/admin/mtf-diamante/lib/query-keys";
 
 // =============================================================================
 // TYPES
@@ -54,11 +54,11 @@ const fetcher = async (url: string) => {
 	return res.json();
 };
 
-const saveCanvas = async (url: string, { arg }: { arg: { inboxId: string; canvas: FlowCanvas } }) => {
-	const res = await fetch(url, {
+const saveCanvasFn = async ({ inboxId, canvas }: { inboxId: string; canvas: FlowCanvas }) => {
+	const res = await fetch("/api/admin/mtf-diamante/flow-canvas", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify(arg),
+		body: JSON.stringify({ inboxId, canvas }),
 	});
 	if (!res.ok) {
 		const error = await res.json();
@@ -85,6 +85,8 @@ const DEFAULT_AUTO_SAVE_DELAY = 3000;
 export function useFlowCanvas(inboxId: string | null, options: UseFlowCanvasOptions = {}) {
 	const { autoSave = false, autoSaveDelay = DEFAULT_AUTO_SAVE_DELAY, flowId = null, isNewFlow = false, isCampaign = false } = options;
 
+	const queryClient = useQueryClient();
+
 	// =========================================================================
 	// REFS — valores transientes que NÃO devem causar re-render (React best practice:
 	// rerender-use-ref-transient-values)
@@ -101,46 +103,49 @@ export function useFlowCanvas(inboxId: string | null, options: UseFlowCanvasOpti
 	const edgesRef = useRef<Edge[]>([]);
 	const viewportRef = useRef<FlowCanvas["viewport"] | undefined>(undefined);
 
-	// SWR key para canvas visual (mantido para compatibilidade)
-	const canvasSwrKey = inboxId ? `/api/admin/mtf-diamante/flow-canvas?inboxId=${inboxId}` : null;
+	// Query key para canvas visual (legacy, sem flowId)
+	const canvasQueryKey = inboxId ? mtfDiamanteQueryKeys.flows.legacyCanvas(inboxId) : null;
+	const canvasUrl = inboxId ? `/api/admin/mtf-diamante/flow-canvas?inboxId=${inboxId}` : null;
 
-	// SWR key para flow específico — derivado de primitive `flowId`
-	// (rerender-dependencies: usar primitivo, não objeto)
-	const flowSwrKey = flowId ? `/api/admin/mtf-diamante/flows/${flowId}` : null;
+	// Query key para flow específico
+	const flowQueryKey = flowId ? mtfDiamanteQueryKeys.flows.detail(flowId) : null;
+	const flowUrl = flowId ? `/api/admin/mtf-diamante/flows/${flowId}` : null;
 
-	// Fetch canvas visual
+	// Fetch canvas visual (legacy)
 	const {
 		data: canvasResponse,
 		error: canvasError,
 		isLoading: isLoadingCanvas,
-		mutate: mutateCanvas,
-	} = useSWR<{ success: boolean; data: FlowCanvasState | null }>(
-		!flowId ? canvasSwrKey : null, // Só busca se não tiver flowId
-		fetcher,
-		{
-			revalidateOnFocus: false,
-			dedupingInterval: 5000,
-			keepPreviousData: false,
-		},
-	);
+	} = useQuery<{ success: boolean; data: FlowCanvasState | null }>({
+		queryKey: canvasQueryKey ?? ["disabled"],
+		queryFn: () => fetcher(canvasUrl!),
+		enabled: !!canvasUrl && !flowId, // Só busca se não tiver flowId
+		refetchOnWindowFocus: false,
+		staleTime: 0,
+	});
 
 	// Fetch flow específico
 	const {
 		data: flowResponse,
 		error: flowError,
 		isLoading: isLoadingFlow,
-		mutate: mutateFlow,
-	} = useSWR<{ success: boolean; data: FlowDetail | null }>(flowSwrKey, fetcher, {
-		revalidateOnFocus: false,
-		dedupingInterval: 5000,
-		keepPreviousData: false,
+	} = useQuery<{ success: boolean; data: FlowDetail | null }>({
+		queryKey: flowQueryKey ?? ["disabled"],
+		queryFn: () => fetcher(flowUrl!),
+		enabled: !!flowUrl,
+		refetchOnWindowFocus: false,
+		staleTime: 0,
 	});
 
-	// Save mutation
-	const { trigger: triggerSave, isMutating: isSaving } = useSWRMutation(
-		"/api/admin/mtf-diamante/flow-canvas",
-		saveCanvas,
-	);
+	// Save mutation (legacy canvas)
+	const { mutate: triggerSaveMutation, isPending: isSaving } = useMutation({
+		mutationFn: saveCanvasFn,
+		onSuccess: () => {
+			if (canvasQueryKey) {
+				queryClient.invalidateQueries({ queryKey: canvasQueryKey });
+			}
+		},
+	});
 
 	// Canvas vazio estável (memo depende de isCampaign para tipo do nó inicial)
 	const initialCanvas = useMemo(() => {
@@ -418,15 +423,17 @@ export function useFlowCanvas(inboxId: string | null, options: UseFlowCanvasOpti
 					const err = await res.json();
 					throw new Error(err.error || "Falha ao renomear flow");
 				}
-				// Atualizar cache SWR do flow
-				await mutateFlow();
+				// Invalidar cache do flow
+				if (flowQueryKey) {
+					await queryClient.invalidateQueries({ queryKey: flowQueryKey });
+				}
 				return true;
 			} catch (err) {
 				console.error("[useFlowCanvas] updateFlowName error:", err);
 				throw err;
 			}
 		},
-		[flowId, mutateFlow],
+		[flowId, flowQueryKey, queryClient],
 	);
 
 	// Delete edge
@@ -482,23 +489,31 @@ export function useFlowCanvas(inboxId: string | null, options: UseFlowCanvasOpti
 						edges: canvas.edges,
 					});
 
-					// NÃO chamar mutateFlow() — evita re-fetch que causaria re-sync desnecessário
+					// NÃO invalidar cache do flow — evita re-fetch que causaria re-sync desnecessário
 					// O canvas local já é a fonte de verdade durante a edição
 					console.log("[useFlowCanvas] Canvas salvo no flow", flowId);
 					return await response.json();
 				}
 
 				// Se não tem flowId, usar API antiga (canvas visual da inbox)
-				const result = await triggerSave({ inboxId, canvas });
-				await mutateCanvas();
-				console.log("[useFlowCanvas] Canvas visual salvo na inbox", inboxId);
-				return result;
+				return new Promise((resolve, reject) => {
+					triggerSaveMutation(
+						{ inboxId, canvas },
+						{
+							onSuccess: (result) => {
+								console.log("[useFlowCanvas] Canvas visual salvo na inbox", inboxId);
+								resolve(result);
+							},
+							onError: (err) => reject(err),
+						},
+					);
+				});
 			} catch (err) {
 				console.error("[useFlowCanvas] Save error:", err);
 				throw err;
 			}
 		},
-		[inboxId, flowId, getCanvasState, triggerSave, mutateCanvas],
+		[inboxId, flowId, getCanvasState, triggerSaveMutation],
 	);
 
 	// Reset canvas
@@ -534,6 +549,14 @@ export function useFlowCanvas(inboxId: string | null, options: UseFlowCanvasOpti
 		},
 		[edges],
 	);
+
+	// Invalidate canvas queries
+	const invalidateCanvas = useCallback(() => {
+		if (canvasQueryKey) {
+			return queryClient.invalidateQueries({ queryKey: canvasQueryKey });
+		}
+		return Promise.resolve();
+	}, [canvasQueryKey, queryClient]);
 
 	// ==========================================================================
 	// EXPORT/IMPORT FUNCTIONS
@@ -607,11 +630,11 @@ export function useFlowCanvas(inboxId: string | null, options: UseFlowCanvasOpti
 			}
 
 			// Revalidar lista de flows
-			await mutateCanvas();
+			await invalidateCanvas();
 
 			return result.data;
 		},
-		[inboxId, mutateCanvas],
+		[inboxId, invalidateCanvas],
 	);
 
 	/**
@@ -658,7 +681,7 @@ export function useFlowCanvas(inboxId: string | null, options: UseFlowCanvasOpti
 		saveFlow,
 		resetCanvas,
 		loadCanvas, // Nova função para carregar canvas manualmente
-		mutate: mutateCanvas,
+		mutate: invalidateCanvas,
 		updateFlowName,
 
 		// Export/Import operations

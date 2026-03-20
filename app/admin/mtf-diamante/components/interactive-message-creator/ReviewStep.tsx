@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { useMtfData } from "@/app/admin/mtf-diamante/context/SwrProvider";
+import { useMtfData } from "@/app/admin/mtf-diamante/context/MtfDataProvider";
 
 // Import existing components
 import { InteractivePreview } from "../shared/InteractivePreview";

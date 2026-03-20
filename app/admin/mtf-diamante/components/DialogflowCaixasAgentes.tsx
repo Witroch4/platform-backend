@@ -23,7 +23,7 @@ import { toast } from "sonner";
 import axios from "axios";
 import { cn } from "@/lib/utils";
 import { CaixaCardSkeleton } from "./LoadingSkeletons";
-import { useMtfData } from "../context/SwrProvider";
+import { useMtfData } from "../context/MtfDataProvider";
 
 import type { AgenteDialogflow, AssistenteCaptiao, ChatwitInbox, InboxExterna } from "@/types/dialogflow";
 import { DIALOGFLOW_REGIONS } from "@/types/dialogflow";
@@ -105,7 +105,7 @@ export function DialogflowCaixasAgentes({ onCaixaSelected, filterCaixaId, hideTo
 	const [selectedCaixaId, setSelectedCaixaId] = useState<string | null>(null);
 
 	// Usando contexto de dados para cache persistente
-	const { caixas, loadingCaixas: loading, refreshCaixas, addCaixa } = useMtfData();
+	const { caixas, isLoadingCaixas: loading, refreshCaixas, addCaixa } = useMtfData();
 
 	// Seleção automática apenas se não houver seleção
 	useEffect(() => {
@@ -318,8 +318,7 @@ function AgenteItem({
 	onUpdate: () => void;
 	refreshCaixas: () => Promise<void>;
 }) {
-	// Usando o contexto para acessar a função setCaixas
-	const { caixas, setCaixas } = useMtfData();
+	const { caixas } = useMtfData();
 	const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
 	// Função para fazer o pessimistic update (espera API antes de mudar UI)
@@ -370,37 +369,8 @@ function AgenteItem({
 				data: response.data,
 			});
 
-			// 2. SUCESSO! A API NÃO DEU ERRO.
-			// AGORA atualiza a UI localmente (sem recarregar do servidor)
-			const deveAtivar = !estadoOriginal;
-
-			setCaixas((currentCaixas) => {
-				const newCaixas = currentCaixas.map((c) => {
-					// Encontrar a caixa que contém o agente
-					const agenteNaCaixa = (c.agentes || []).find((a) => a.id === toggledAgentId);
-					if (!agenteNaCaixa) return c; // Não é a caixa atual
-
-					const newAgentes = (c.agentes || []).map((agente) => {
-						if (agente.id === toggledAgentId) {
-							// Atualiza o agente clicado com o novo estado e hookId da resposta
-							return {
-								...agente,
-								ativo: deveAtivar,
-								hookId: response.data.agente?.hookId || null,
-							};
-						}
-						if (deveAtivar) {
-							// Se estamos ativando um agente, desativamos todos os outros
-							return { ...agente, ativo: false, hookId: null };
-						}
-						return agente;
-					});
-
-					return { ...c, agentes: newAgentes };
-				});
-
-				return newCaixas;
-			});
+			// 2. SUCESSO! Refresh data from server
+			await refreshCaixas();
 
 			// 3. Retorna os dados da resposta para a mensagem de sucesso do toast.
 			return response.data;
@@ -496,7 +466,7 @@ function AssistenteItem({
 	refreshCaixas: () => Promise<void>;
 	caixa: CaixaEntrada;
 }) {
-	const { caixas, setCaixas } = useMtfData();
+	const { caixas } = useMtfData();
 	const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 	const [optimisticAtivo, setOptimisticAtivo] = useState(assistente.ativo);
 	const [optimisticConectado, setOptimisticConectado] = useState(assistente.conectado);

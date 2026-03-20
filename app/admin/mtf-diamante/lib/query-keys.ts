@@ -44,6 +44,7 @@ export const mtfDiamanteQueryKeys = {
 		all: () => [...MTF_DIAMANTE_QUERY_ROOT, "flows"] as const,
 		detail: (flowId: string) => [...MTF_DIAMANTE_QUERY_ROOT, "flows", flowId] as const,
 		canvas: (flowId: string) => [...MTF_DIAMANTE_QUERY_ROOT, "flows", "canvas", flowId] as const,
+		legacyCanvas: (inboxId: string) => [...MTF_DIAMANTE_QUERY_ROOT, "flows", "legacy-canvas", inboxId] as const,
 	},
 
 	// Flow admin (analytics dashboard)

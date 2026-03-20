@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { WhatsAppTextEditor } from "@/app/admin/mtf-diamante/components/shared/WhatsAppTextEditor";
 import { ButtonEditor } from "./ButtonEditor";
 import { HeaderEditor } from "./HeaderEditor";
-import { useMtfData } from "@/app/admin/mtf-diamante/context/SwrProvider";
+import { useMtfData } from "@/app/admin/mtf-diamante/context/MtfDataProvider";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useEffect, useMemo } from "react";
@@ -15,7 +15,7 @@ interface ContentEditorProps {
 }
 
 export const TemplateContentEditor = ({ formState, onStateChange, onButtonChange }: ContentEditorProps) => {
-	const { variaveis, loadingVariaveis } = useMtfData();
+	const { variaveis, isLoadingVariaveis } = useMtfData();
 
 	// Mapear variáveis do sistema por chave para autofill do exemplo
 	const systemVarsMap = useMemo(() => {
@@ -69,7 +69,7 @@ export const TemplateContentEditor = ({ formState, onStateChange, onButtonChange
 					headerNamedExamples={formState.headerNamedExamples}
 					onStateChange={onStateChange}
 					variaveis={variaveis}
-					loadingVariaveis={loadingVariaveis}
+					isLoadingVariaveis={isLoadingVariaveis}
 				/>
 
 				<div>
@@ -87,7 +87,7 @@ export const TemplateContentEditor = ({ formState, onStateChange, onButtonChange
 						onChange={(text) => onStateChange("bodyText", text)}
 						placeholder="Texto principal da mensagem"
 						maxLength={1024}
-						variables={loadingVariaveis ? [] : variaveis}
+						variables={isLoadingVariaveis ? [] : variaveis}
 						accountId="mtf-diamante"
 					/>
 				</div>
@@ -130,7 +130,7 @@ export const TemplateContentEditor = ({ formState, onStateChange, onButtonChange
 						onChange={(e) => onStateChange("footerText", e.target.value)}
 						placeholder="Texto do rodapé..."
 						maxLength={60}
-						disabled={loadingVariaveis}
+						disabled={isLoadingVariaveis}
 					/>
 					<div className="flex justify-between items-center text-xs mt-1">
 						<div className="text-muted-foreground">Normalmente usado para avisos ou informações adicionais</div>

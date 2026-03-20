@@ -50,7 +50,7 @@ import { AdicionarCaixaDialog } from "@/app/admin/mtf-diamante/components/Dialog
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { useMtfData } from "@/app/admin/mtf-diamante/context/SwrProvider";
+import { useMtfData } from "@/app/admin/mtf-diamante/context/MtfDataProvider";
 
 interface IframeAuthResult {
 	authorized: boolean;
@@ -66,7 +66,7 @@ function IframeAdminDashboard() {
 	const [isLoading, setIsLoading] = useState(true);
 
 	// Consome do Provider (BFF + SWR)
-	const { caixas: inboxes, apiKeys, refreshCaixas, prefetchInbox } = useMtfData();
+	const { caixas: inboxes, apiKeys, refreshCaixas } = useMtfData();
 	const [creating, setCreating] = useState(false);
 	const [newLabel, setNewLabel] = useState("");
 	const [newToken, setNewToken] = useState<string | null>(null);

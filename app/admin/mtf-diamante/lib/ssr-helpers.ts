@@ -4,8 +4,8 @@
 import type { InteractiveMessage, ChatwitInbox, MtfDiamanteLote, MtfDiamanteVariavel } from "./types";
 
 /**
- * Interface for initial data that can be passed to SwrProvider
- * for SSR support and avoiding loading flickers
+ * Interface for initial data that can be used for SSR support
+ * and avoiding loading flickers
  */
 export interface MtfInitialData {
 	interactiveMessages?: InteractiveMessage[];
@@ -13,42 +13,6 @@ export interface MtfInitialData {
 	lotes?: MtfDiamanteLote[];
 	variaveis?: MtfDiamanteVariavel[];
 	apiKeys?: any[];
-}
-
-/**
- * Creates fallback data object for SWR from initial data
- * This is used internally by SwrProviderWithSWR
- *
- * @param initialData - Initial data from SSR or prefetch
- * @returns SWR fallback data object
- */
-export function createSWRFallback(initialData?: MtfInitialData): Record<string, any> {
-	if (!initialData) return {};
-
-	const fallback: Record<string, any> = {};
-
-	// Map initial data to SWR keys used by hooks
-	if (initialData.interactiveMessages) {
-		fallback["interactive-messages"] = initialData.interactiveMessages;
-	}
-
-	if (initialData.caixas) {
-		fallback["caixas"] = initialData.caixas;
-	}
-
-	if (initialData.lotes) {
-		fallback["lotes"] = initialData.lotes;
-	}
-
-	if (initialData.variaveis) {
-		fallback["variaveis"] = initialData.variaveis;
-	}
-
-	if (initialData.apiKeys) {
-		fallback["api-keys"] = initialData.apiKeys;
-	}
-
-	return fallback;
 }
 
 /**

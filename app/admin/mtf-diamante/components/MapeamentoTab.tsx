@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { useMtfData } from "../context/SwrProvider";
+import { useMtfData } from "../context/MtfDataProvider";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { mtfDiamanteQueryKeys } from "../lib/query-keys";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";

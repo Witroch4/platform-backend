@@ -3,7 +3,7 @@
 import { Toaster } from "sonner";
 import { SessionProvider } from "next-auth/react";
 import { ThemeProvider } from "@/components/providers/theme-provider";
-import { SwrProvider } from "@/app/admin/mtf-diamante/context/SwrProvider";
+import { MtfDataProvider } from "@/app/admin/mtf-diamante/context/MtfDataProvider";
 
 export default function IframeLayout({
 	children,
@@ -13,10 +13,10 @@ export default function IframeLayout({
 	return (
 		<SessionProvider>
 			<ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-				<SwrProvider>
+				<MtfDataProvider>
 					<div className="h-full bg-background">{children}</div>
 					<Toaster richColors position="top-right" />
-				</SwrProvider>
+				</MtfDataProvider>
 			</ThemeProvider>
 		</SessionProvider>
 	);

@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFlowCanvas } from "./useFlowCanvas";
 import { useHandlePopover } from "../panels/HandlePopover";
-import { useMtfData } from "@/app/admin/mtf-diamante/context/SwrProvider";
+import { useMtfData } from "@/app/admin/mtf-diamante/context/MtfDataProvider";
 import { mtfDiamanteQueryKeys } from "@/app/admin/mtf-diamante/lib/query-keys";
 import {
 	FlowNodeType,

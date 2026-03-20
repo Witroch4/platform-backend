@@ -9,7 +9,7 @@ const reactionsDataCache = new Map<string, any[]>();
 
 import { toast } from "sonner";
 import { useVariableManager } from "@/hooks/useVariableManager";
-import { useMtfData } from "../context/SwrProvider";
+import { useMtfData } from "../context/MtfDataProvider";
 import type {
 	InteractiveMessage,
 	InteractiveMessageCreatorProps,
