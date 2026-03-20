@@ -9,9 +9,14 @@ import * as fs from "fs";
 import * as path from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
+import sharp from "sharp";
 
 const UPLOAD_CONCURRENCY = 6;
 const RENDER_PARALLELISM = 3; // Ranges de páginas renderizadas em paralelo
+
+// Post-processing: OpenAI "high" detail caps at 2048×2048; pixels above are wasted
+const IMAGE_MAX_DIMENSION = 2048;
+const IMAGE_JPEG_QUALITY = 80;
 
 const execPromise = promisify(exec);
 
@@ -95,6 +100,20 @@ function extractPageNumber(fileName: string): number {
 }
 
 /**
+ * Resize + recompress rendered page for optimal AI vision model input.
+ * Max 2048px longest side (OpenAI caps here), JPEG q80.
+ */
+async function optimizePageImage(buffer: Buffer): Promise<Buffer> {
+	return sharp(buffer)
+		.resize(IMAGE_MAX_DIMENSION, IMAGE_MAX_DIMENSION, {
+			fit: "inside",
+			withoutEnlargement: true,
+		})
+		.jpeg({ quality: IMAGE_JPEG_QUALITY })
+		.toBuffer();
+}
+
+/**
  * Upload em batch com concorrência limitada
  */
 async function uploadBatch(
@@ -110,9 +129,11 @@ async function uploadBatch(
 		const batchResults = await Promise.all(
 			batch.map(async (file) => {
 				const filePath = path.join(outputDir, file);
-				const fileBuffer = await fs.promises.readFile(filePath);
+				const rawBuffer = await fs.promises.readFile(filePath);
+				const optimizedBuffer = await optimizePageImage(rawBuffer);
+				log.info(`${file}: ${(rawBuffer.length / 1024).toFixed(0)}KB → ${(optimizedBuffer.length / 1024).toFixed(0)}KB`);
 				const fileName = `${baseName}_${file}`;
-				const uploadResult = await uploadToMinIOWithRetry(fileBuffer, fileName, mimeType, 3, true);
+				const uploadResult = await uploadToMinIOWithRetry(optimizedBuffer, fileName, mimeType, 3, false);
 
 				// Remover temp
 				fs.promises.unlink(filePath).catch(() => {});
