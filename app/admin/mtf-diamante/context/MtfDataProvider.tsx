@@ -291,8 +291,7 @@ function MtfDataProviderContent({ children }: MtfDataProviderProps) {
 /**
  * MtfDataProvider — orchestrates all MTF Diamante hooks via React Query.
  *
- * Replaces the old SwrProvider. All underlying hooks now use React Query (TanStack Query v5).
- * No SWR dependency remains.
+ * Orchestrates all MTF Diamante hooks via React Query (TanStack Query v5).
  */
 export function MtfDataProvider({ children }: MtfDataProviderProps) {
 	return (
@@ -301,8 +300,5 @@ export function MtfDataProvider({ children }: MtfDataProviderProps) {
 		</Suspense>
 	);
 }
-
-// Backward-compatible export name
-export { MtfDataProvider as SwrProvider };
 
 export default MtfDataProvider;

@@ -263,7 +263,7 @@
 		"source-map-resolve": "^0.6.0",
 		"source-map-url": "^0.4.1",
 		"stripe": "^17.6.0",
-		"swr": "^2.3.6",
+
 		"tailwind-merge": "^2.3.0",
 		"tailwindcss-animate": "^1.0.7",
 		"unified": "^11.0.5",

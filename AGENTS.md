@@ -1,5 +1,7 @@
 # AGENTS.md — Socialwise Chatwit
 
+Se eu pedir commit faça de tudo e push
+
 ## Flow Builder & Flow Engine — Mapa de Arquivos
 
 **Área mais editada do projeto.** Leia esta seção antes de mexer em qualquer coisa de flow.
@@ -149,7 +151,7 @@ psql $DB_URL/postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity
 | Backend | Next.js API Routes, Express.js, Prisma ORM |
 | DB | PostgreSQL 17 + pgvector |
 | Cache/Queue | Redis 7 + BullMQ |
-| State | SWR 2.3.6 |
+| State | TanStack Query v5 (React Query) |
 | Auth | NextAuth.js v5 + Prisma adapter |
 | Storage | MinIO (S3-compatible) |
 | Lint/Format | Biome, TypeScript strict |
@@ -191,41 +193,40 @@ await prisma.model.update({ where: { id }, data: { jsonField: Prisma.JsonNull } 
 
 ```
 
-## SWR 2.3.6 — Guia Compacto
+## TanStack Query v5 (React Query) — Guia Compacto
 
-**Arquitetura BFF:** O Backend For Frontend é a fonte única da UI. UI **lê** do BFF e **muta** a mesma SWR key. CRUD puro fica para serviços/integradores.
+**Arquitetura BFF:** O Backend For Frontend é a fonte única da UI. UI **lê** do BFF e **muta** a mesma query key. CRUD puro fica para serviços/integradores.
 
 ### Regras & Configuração
 
-* **Fetcher global:** JSON + throw se `!res.ok`
-* **SWRConfig:** `revalidateOnFocus:true`, `revalidateOnReconnect:true`, `revalidateIfStale:true`, `dedupingInterval:1500`
-* **Listas:** `keepPreviousData:true` (sem flicker)
-* **Tempo real:** `useSWRSubscription` (WS/SSE)
+* **QueryClient global:** `staleTime: 30s`, `retry: 2`, `refetchOnWindowFocus: true`
+* **Query keys:** Factory por domínio em `lib/query-keys.ts` — NUNCA inline
+* **Listas:** `placeholderData: keepPreviousData` (sem flicker)
+* **staleTime por volatilidade:** Referência 10min, Config 5min, Volátil 30s, Tempo real 0
+* **Dados nullish:** Sempre `data ?? []` (NUNCA `data || []`)
 
 ### Padrão de Mutation Optimistic
 
 ```typescript
-await mutate(
-  (async () => {
-    const r = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-    if (!r.ok) throw new Error('Falha');
-    const { data } = await r.json();
-    return (curr: T[] = []) => /* merge data no array */;
-  })(),
-  {
-    optimisticData: (curr: T[] = []) => /* UI imediata */,
-    rollbackOnError: true,
-    populateCache: (updater, curr) => (typeof updater === 'function' ? updater(curr) : curr),
-    revalidate: false,
-  }
-);
-
+useMutation({
+  mutationFn: entityApi.create,
+  onMutate: async (payload) => {
+    await queryClient.cancelQueries({ queryKey: entityKeys.lists() });
+    const previous = queryClient.getQueryData<Entity[]>(entityKeys.lists());
+    queryClient.setQueryData<Entity[]>(entityKeys.lists(), (curr = []) => [...curr, { id: `temp-${crypto.randomUUID()}`, ...payload } as Entity]);
+    return { previous };
+  },
+  onError: (_err, _payload, ctx) => { if (ctx?.previous) queryClient.setQueryData(entityKeys.lists(), ctx.previous); toast.error("Erro"); },
+  onSettled: () => { queryClient.invalidateQueries({ queryKey: entityKeys.lists() }); },
+  onSuccess: () => { toast.success("Criado"); },
+});
 ```
 
 ### Checklist por Tela
 
-* [ ] BFF como fonte única? Mesma SWR key leitura/mutate?
-* [ ] `keepPreviousData:true`? Optimistic + rollback + `revalidate:false`?
+* [ ] BFF como fonte única? Mesma query key leitura/mutate?
+* [ ] `placeholderData: keepPreviousData`? Optimistic + rollback?
+* [ ] `onSettled` com `invalidateQueries` (SEMPRE, mesmo no sucesso)?
 * [ ] Sem misturar CRUD puro na UI?
 
 ## Manipulação de Dados (MTF Diamante)
@@ -328,10 +329,10 @@ docker compose build | up | down
 ## Key Insights / Histórico de Bugs
 
 * **Bugs de foco/input React:** keys instáveis, IDs que mudam entre renders, refs que quebram igualdade → mantenha a identidade dos elementos estável.
-* **Bug MTF "aparece→some→volta":** A UI lia do BFF e mutava direto no CRUD (keys diferentes). Solução aplicada: BFF como fonte única, mesma SWR key, bypass cache, optimistic + rollback.
+* **Bug MTF "aparece→some→volta":** A UI lia do BFF e mutava direto no CRUD (keys diferentes). Solução aplicada: BFF como fonte única, mesma query key, bypass cache, optimistic + rollback.
 * **Flow Engine vs Intents (Regressão):** NUNCA intercepte todas as mensagens no webhook. O pipeline de classificação (alias/embedding → bands) SEMPRE tem prioridade sobre o FlowOrchestrator default.
 * **Bug 422 Template Rejection:** Resolvido ao migrar do formato customizado (`content_type: 'template'`) para o padrão nativo do Chatwit (`additional_attributes.template_params`). Ver `docs/HOTFIX-422-TEMPLATE.md`.
-* **FOEC — Flash of Empty Content (SWR):** `data?.x || []` retorna `[]` enquanto `isLoading=true`, causando flash de "estado vazio" antes dos dados chegarem. **Fix:** sempre desestruturar `isLoading` do `useSWR` e renderizar skeleton quando `isLoading`. Se houver conflito de nome com estado local, usar alias: `isLoading: isLoadingXxx`. Adicionar `keepPreviousData: true` para evitar flash ao revalidar.
+* **FOEC — Flash of Empty Content:** `data?.x || []` retorna `[]` enquanto `isLoading=true`, causando flash de "estado vazio" antes dos dados chegarem. **Fix:** sempre desestruturar `isLoading` do `useQuery` e renderizar skeleton quando `isLoading`. Se houver conflito de nome com estado local, usar alias: `isLoading: isLoadingXxx`. Adicionar `placeholderData: keepPreviousData` para evitar flash ao revalidar.
 
 ## Ferramentas de Debug (SSH MCP) 
 

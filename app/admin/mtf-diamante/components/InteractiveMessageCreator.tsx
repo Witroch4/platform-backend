@@ -101,7 +101,7 @@ export const InteractiveMessageCreator: React.FC<InteractiveMessageCreatorProps>
 	const loadExistingReactions = useCallback(() => {
 		if (!buttonReactions || buttonReactions.length === 0) return;
 
-		// Os dados já vêm normalizados do SwrProvider, mas precisam ser convertidos para o tipo correto
+		// Os dados já vêm normalizados do MtfDataProvider, mas precisam ser convertidos para o tipo correto
 		console.log("🔍 [loadExistingReactions] Raw buttonReactions from context:", buttonReactions);
 
 		const convertedReactions: ButtonReaction[] = buttonReactions.map((r: any) => ({
