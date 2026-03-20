@@ -13,19 +13,10 @@ interface MessageHistoryTabProps {
 }
 
 export function MessageHistoryTab({ leadId }: MessageHistoryTabProps) {
-	const { messages, hasMore, totalCount, isLoading, refresh, loadMore, resetForNewLead } = useMessages(leadId);
+	const { messages, hasMore, totalCount, isLoading, refresh, loadMore, isFetchingNextPage } = useMessages(leadId);
 
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const prevMessageCountRef = useRef(0);
-	const prevLeadIdRef = useRef(leadId);
-
-	// Reset quando trocar de lead
-	useEffect(() => {
-		if (prevLeadIdRef.current !== leadId) {
-			resetForNewLead();
-			prevLeadIdRef.current = leadId;
-		}
-	}, [leadId, resetForNewLead]);
 
 	// Auto-scroll para o final quando novas mensagens chegam
 	useEffect(() => {
@@ -52,7 +43,7 @@ export function MessageHistoryTab({ leadId }: MessageHistoryTabProps) {
 				<Bot className="h-12 w-12 mb-2 opacity-50" />
 				<p>Nenhuma mensagem registrada</p>
 				<p className="text-xs mt-1">As mensagens aparecerão aqui quando o lead interagir</p>
-				<Button variant="outline" size="sm" onClick={refresh} className="mt-4" disabled={isLoading}>
+				<Button variant="outline" size="sm" onClick={() => refresh()} className="mt-4" disabled={isLoading}>
 					<RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
 					Atualizar
 				</Button>
@@ -69,12 +60,12 @@ export function MessageHistoryTab({ leadId }: MessageHistoryTabProps) {
 				</span>
 				<div className="flex items-center gap-2">
 					{hasMore && (
-						<Button variant="ghost" size="sm" onClick={loadMore} disabled={isLoading}>
+						<Button variant="ghost" size="sm" onClick={() => loadMore()} disabled={isFetchingNextPage}>
 							<ChevronUp className="h-4 w-4 mr-1" />
 							Anteriores
 						</Button>
 					)}
-					<Button variant="ghost" size="sm" onClick={refresh} disabled={isLoading}>
+					<Button variant="ghost" size="sm" onClick={() => refresh()} disabled={isLoading}>
 						<RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
 					</Button>
 				</div>

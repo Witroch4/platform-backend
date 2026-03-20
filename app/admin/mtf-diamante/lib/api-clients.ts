@@ -107,7 +107,7 @@ export const interactiveMessagesApi = {
 		);
 
 		// messages-with-reactions returns: { success: true, messages: [...] }
-		return response.messages || response.data || [];
+		return response.messages ?? response.data ?? [];
 	},
 
 	// Get a specific message
@@ -197,7 +197,7 @@ export const caixasApi = {
 			{},
 			{ operation: "Fetch All Caixas with AI Assistants" },
 		);
-		return response.caixas || [];
+		return response.caixas ?? [];
 	},
 
 	// Get a specific caixa
@@ -278,7 +278,7 @@ export const lotesApi = {
 	// Get all lotes
 	getAll: async (): Promise<MtfDiamanteLote[]> => {
 		const response = await apiRequest<ApiResponse<MtfDiamanteLote[]>>("/lotes", {}, { operation: "Fetch All Lotes" });
-		return response.data || [];
+		return response.data ?? [];
 	},
 
 	// Get a specific lote
@@ -363,7 +363,7 @@ export const variaveisApi = {
 			{},
 			{ operation: "Fetch All Variáveis" },
 		);
-		return response.data || [];
+		return response.data ?? [];
 	},
 
 	// Get a specific variável
@@ -448,7 +448,7 @@ export const apiKeysApi = {
 			{},
 			{ operation: "Fetch All API Keys" },
 		);
-		return response.data || [];
+		return response.data ?? [];
 	},
 
 	// Get a specific API key
@@ -533,7 +533,7 @@ export const buttonReactionsApi = {
 			{},
 			{ operation: `Fetch Button Reactions for Message ${messageId}` },
 		);
-		return response.data || [];
+		return response.data ?? [];
 	},
 
 	// Get all button reactions
@@ -543,7 +543,7 @@ export const buttonReactionsApi = {
 			{},
 			{ operation: "Fetch All Button Reactions" },
 		);
-		return response.data || [];
+		return response.data ?? [];
 	},
 
 	// Create a new button reaction
@@ -608,7 +608,7 @@ export const chatwitAgentsApi = {
 			{},
 			{ operation: "Fetch Chatwit Agents" },
 		);
-		return response.chatwitAgents || [];
+		return response.chatwitAgents ?? [];
 	},
 };
 
@@ -620,7 +620,7 @@ export const chatwitLabelsApi = {
 			{},
 			{ operation: "Fetch Chatwit Labels" },
 		);
-		return response.chatwitLabels || [];
+		return response.chatwitLabels ?? [];
 	},
 };
 

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import useSWR from "swr";
+import { useQuery } from "@tanstack/react-query";
+import { mtfDiamanteQueryKeys } from "../mtf-diamante/lib/query-keys";
 import { nanoid } from "nanoid";
 import { toast } from "sonner";
 import {
@@ -108,17 +109,22 @@ export default function FlowPlaygroundPage() {
 	const inputRef = useRef<HTMLInputElement>(null);
 
 	// Fetch inboxes
-	const { data: inboxData } = useSWR<{ caixas?: InboxOption[]; data?: InboxOption[] }>(
-		"/api/admin/mtf-diamante/inbox-view?dataType=caixas",
-		fetcher,
-	);
+	const { data: inboxData } = useQuery<{ caixas?: InboxOption[]; data?: InboxOption[] }>({
+		queryKey: mtfDiamanteQueryKeys.playground.inboxes(),
+		queryFn: () => fetcher("/api/admin/mtf-diamante/inbox-view?dataType=caixas"),
+		staleTime: 10 * 60 * 1000, // referencia: 10min
+		refetchOnWindowFocus: false,
+	});
 	const inboxes: InboxOption[] = inboxData?.caixas ?? inboxData?.data ?? [];
 
 	// Fetch flows for selected inbox
-	const { data: flowData } = useSWR<{ flows: FlowOption[] }>(
-		selectedInboxId ? `/api/admin/flow-playground/flows?inboxId=${selectedInboxId}` : null,
-		fetcher,
-	);
+	const { data: flowData } = useQuery<{ flows: FlowOption[] }>({
+		queryKey: mtfDiamanteQueryKeys.playground.flows(selectedInboxId),
+		queryFn: () => fetcher(`/api/admin/flow-playground/flows?inboxId=${selectedInboxId}`),
+		enabled: !!selectedInboxId,
+		staleTime: 30_000,
+		refetchOnWindowFocus: false,
+	});
 	const flows: FlowOption[] = flowData?.flows ?? [];
 
 	// Auto-scroll

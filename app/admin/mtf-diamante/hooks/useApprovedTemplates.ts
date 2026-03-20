@@ -15,7 +15,7 @@ async function fetchApprovedTemplates(caixaId: string): Promise<WhatsAppTemplate
 	}
 
 	const data = await response.json();
-	const templates = (data.templates || data || []) as WhatsAppTemplate[];
+	const templates = (data.templates ?? data ?? []) as WhatsAppTemplate[];
 	return templates.filter((t) => t.status === "APPROVED");
 }
 

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useMemo, useRef, useCallback } from "react";
-import useSWR from "swr";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import { mtfDiamanteQueryKeys } from "../../../lib/query-keys";
 import { Plus, Workflow, Calendar, Edit2, Trash2, MoreVertical, CheckCircle2, XCircle, Megaphone, Upload, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -80,18 +81,24 @@ export function FlowSelector({ inboxId, selectedFlowId, onSelectFlow, onCreateNe
 	const [showCampaign, setShowCampaign] = useState(false);
 	const importInputRef = useRef<HTMLInputElement>(null);
 
-	// Buscar lista de flows (filtra por isCampaign)
-	const { data, error, isLoading: isLoadingFlows, mutate } = useSWR<{ success: boolean; data: FlowListItem[] }>(
-		inboxId ? `/api/admin/mtf-diamante/flows?inboxId=${inboxId}&isCampaign=${showCampaign}` : null,
-		fetcher,
-		{
-			revalidateOnFocus: false,
-			dedupingInterval: 5000,
-			keepPreviousData: true,
-		},
-	);
+	const queryClient = useQueryClient();
+	const queryKey = mtfDiamanteQueryKeys.flowSelector(inboxId, showCampaign);
 
-	const flows = useMemo(() => data?.data || [], [data]);
+	// Buscar lista de flows (filtra por isCampaign)
+	const { data, error, isLoading: isLoadingFlows } = useQuery<{ success: boolean; data: FlowListItem[] }>({
+		queryKey,
+		queryFn: () => fetcher(`/api/admin/mtf-diamante/flows?inboxId=${inboxId}&isCampaign=${showCampaign}`),
+		enabled: !!inboxId,
+		placeholderData: keepPreviousData,
+		refetchOnWindowFocus: false,
+		staleTime: 30_000,
+	});
+
+	const flows = useMemo(() => data?.data ?? [], [data]);
+
+	const mutate = useCallback(() => {
+		queryClient.invalidateQueries({ queryKey });
+	}, [queryClient, queryKey]);
 
 	// Criar novo flow
 	const handleCreateFlow = async () => {

@@ -55,7 +55,7 @@ export function useInteractiveMessages(
 	);
 
 	// Memoized messages array to prevent unnecessary re-renders
-	const messages = useMemo(() => data || [], [data]);
+	const messages = useMemo(() => data ?? [], [data]);
 
 	/**
 	 * Add a new message with optimistic updates - Performance optimized

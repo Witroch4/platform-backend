@@ -79,31 +79,31 @@ export async function prefetchInboxData(inboxId: string): Promise<MtfInitialData
 		// Process messages
 		if (messagesRes.status === "fulfilled" && messagesRes.value.ok) {
 			const data = await messagesRes.value.json();
-			initialData.interactiveMessages = data.data || [];
+			initialData.interactiveMessages = data.data ?? [];
 		}
 
 		// Process caixas
 		if (caixasRes.status === "fulfilled" && caixasRes.value.ok) {
 			const data = await caixasRes.value.json();
-			initialData.caixas = data.data || [];
+			initialData.caixas = data.data ?? [];
 		}
 
 		// Process lotes
 		if (lotesRes.status === "fulfilled" && lotesRes.value.ok) {
 			const data = await lotesRes.value.json();
-			initialData.lotes = data.data || [];
+			initialData.lotes = data.data ?? [];
 		}
 
 		// Process variaveis
 		if (variaveisRes.status === "fulfilled" && variaveisRes.value.ok) {
 			const data = await variaveisRes.value.json();
-			initialData.variaveis = data.data || [];
+			initialData.variaveis = data.data ?? [];
 		}
 
 		// Process apiKeys
 		if (apiKeysRes.status === "fulfilled" && apiKeysRes.value.ok) {
 			const data = await apiKeysRes.value.json();
-			initialData.apiKeys = data.data || [];
+			initialData.apiKeys = data.data ?? [];
 		}
 
 		return initialData;

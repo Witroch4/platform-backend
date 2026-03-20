@@ -22,7 +22,7 @@ export function useCaixas(isPaused: boolean = false) {
 	);
 
 	return {
-		caixas: data || [],
+		caixas: data ?? [],
 		isLoading,
 		error,
 		mutate,
@@ -106,7 +106,7 @@ export function useCaixasManager(isPaused: boolean = false): UseCaixasReturn {
 			await mutate(
 				// 👉 UMA ÚNICA PROMISE: criação + retorno do novo estado
 				(async () => {
-					const curr = caixas || [];
+					const curr = caixas ?? [];
 					const created = await caixasApi.create(apiPayload);
 					// 🔥 ORDEM NATURAL: adicionar no FINAL da lista
 					return [...curr.filter((c) => c.id !== optimisticCaixa.id), created];
@@ -135,7 +135,7 @@ export function useCaixasManager(isPaused: boolean = false): UseCaixasReturn {
 		await mutate(
 			// 👉 UMA ÚNICA PROMISE: rede + retorno do novo estado
 			(async () => {
-				const curr = caixas || [];
+				const curr = caixas ?? [];
 				const result = await caixasApi.update(apiPayload);
 				return curr.map((caixa) => (caixa.id === result.id ? result : caixa));
 			})(),
@@ -160,7 +160,7 @@ export function useCaixasManager(isPaused: boolean = false): UseCaixasReturn {
 		await mutate(
 			// 👉 UMA ÚNICA PROMISE: rede + retorno do novo estado
 			(async () => {
-				const curr = caixas || [];
+				const curr = caixas ?? [];
 				await caixasApi.delete(caixaId);
 				return curr.filter((c) => c.id !== caixaId);
 			})(),

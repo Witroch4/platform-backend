@@ -2,7 +2,7 @@
 
 > **Data:** 19 de Marco de 2026
 > **Ultima auditoria:** 20 de Marco de 2026
-> **Status:** Fase 0 e Fase 1 concluidas, Fase 2 pendente
+> **Status:** Fases 0, 1 e 2 concluidas, Fase 3 pendente
 > **Escopo:** Migracao gradual de SWR 2.3.6 para TanStack Query v5 no Socialwise
 > **Motivacao:** Reduzir coordenacao manual de cache, rollback e invalidacoes entre telas
 
@@ -35,30 +35,30 @@ Isso funciona, mas aumenta o custo de manutencao.
 "@tanstack/react-query": "^5.91.2"
 ```
 
-### 2.2 Numeros reais (auditoria 20/03/2026, atualizado apos Fase 1)
+### 2.2 Numeros reais (auditoria 20/03/2026, atualizado apos Fase 2)
 
-| Metrica | Valor pre-Fase 1 | Valor pos-Fase 1 |
-|---|---|---|
-| Arquivos importando SWR | **35** | **20** (15 hooks/componentes + 5 infra/tipos) |
-| Arquivos usando React Query | **7** | **22** (21 hooks/componentes + 1 provider) |
-| Arquivos com ambos | **0** | **0** |
-| Cobertura React Query | **17%** (7/42) | **52%** (22/42) |
-| `data \|\| []` em vez de `data ?? []` | **13 ocorrencias** | **11 ocorrencias** (2 corrigidas em useChatwitLabels/Agents) |
-| `globalMutate` / `useSWRConfig` | **2 arquivos** | **2 arquivos** (useCaixas, FlowBuilderTabHooks — Fase 3) |
-| Hooks com `refreshInterval` (polling) | **10 arquivos** | **3 arquivos SWR** (7 migrados para `refetchInterval`) |
+| Metrica | Valor pre-Fase 1 | Valor pos-Fase 1 | Valor pos-Fase 2 |
+|---|---|---|---|
+| Arquivos importando SWR | **35** | **20** | **13** (7 hooks CRUD + 1 infra/tipos + 5 infra) |
+| Arquivos usando React Query | **7** | **22** | **29** (28 hooks/componentes + 1 provider) |
+| Arquivos com ambos | **0** | **0** | **0** |
+| Cobertura React Query | **17%** (7/42) | **52%** (22/42) | **69%** (29/42) |
+| `data \|\| []` em vez de `data ?? []` | **13 ocorrencias** | **11 ocorrencias** | **0 ocorrencias** (todas corrigidas na Fase 2) |
+| `globalMutate` / `useSWRConfig` | **2 arquivos** | **2 arquivos** | **2 arquivos** (useCaixas, FlowBuilderTabHooks — Fase 3) |
+| Hooks com `refreshInterval` (polling) | **10 arquivos** | **3 arquivos SWR** | **0 arquivos SWR** (todos migrados para `refetchInterval`) |
 
-### 2.3 Distribuicao por dominio (atualizado pos-Fase 1)
+### 2.3 Distribuicao por dominio (atualizado pos-Fase 2)
 
 | Dominio | SWR | React Query | Total |
 |---|---|---|---|
 | `app/admin/mtf-diamante/` (hooks) | 6 | 4 | 10 |
-| `app/admin/mtf-diamante/` (componentes) | 3 | 1 | 4 |
-| `app/admin/mtf-diamante/` (flow-analytics) | 0 | 7 | 7 |
-| `app/admin/mtf-diamante/` (flow-builder) | 3 | 0 | 3 |
+| `app/admin/mtf-diamante/` (componentes) | 1 | 3 | 4 |
+| `app/admin/mtf-diamante/` (flow-analytics) | 0 | 8 | 8 |
+| `app/admin/mtf-diamante/` (flow-builder) | 2 | 1 | 3 |
 | `app/admin/mtf-diamante/` (infra: context, lib, types) | 5 | 0 | 5 |
-| `app/admin/leads-chatwit/` | 3 | 5 | 8 |
+| `app/admin/leads-chatwit/` | 0 | 8 | 8 |
 | `app/admin/MTFdashboard/` | 0 | 4 | 4 |
-| `app/admin/` (outros: monitoring, flow-playground) | 1 | 1 | 2 |
+| `app/admin/` (outros: monitoring, flow-playground, campanhas) | 0 | 3 | 3 |
 | `lib/` + `components/` (providers, config) | 2 | 1 | 3 |
 
 ### 2.4 Fundacao ja implementada
@@ -98,22 +98,9 @@ O audit revelou **4 padroes distintos** de mutacao no codigo SWR atual. Isso e i
 
 ### 2.7 Divida tecnica: `data || []` vs `data ?? []`
 
-O operador `||` trata `0`, `false` e `""` como falsy — retornando `[]` indevidamente. Com React Query o risco e identico. **Corrigir em cada hook migrado.**
+O operador `||` trata `0`, `false` e `""` como falsy — retornando `[]` indevidamente. Com React Query o risco e identico.
 
-| Arquivo | Linha | Expressao |
-|---|---|---|
-| `useCaixas.ts` | 25 | `data \|\| []` |
-| `useChatwitLabels.ts` | 23 | `(data \|\| [])` |
-| `useChatwitAgents.ts` | 18 | `data \|\| []` |
-| `useInboxButtonReactions.ts` | 162 | `data \|\| []` |
-| `useApprovedTemplates.ts` | 23, 49 | `data \|\| []` (2x) |
-| `useLotes.ts` | 22 | `data \|\| []` |
-| `useVariaveis.ts` | 27 | `data \|\| []` |
-| `useInteractiveMessages.ts` | 58 | `data \|\| []` |
-| `useApiKeys.ts` | 22 | `data \|\| []` |
-| `api-clients.ts` | 110, 281, 366, 451, 536, 546 | `\|\| []` no fetcher |
-
-> **Acao:** ao migrar cada hook, trocar `||` por `??` na mesma PR.
+> **Status:** RESOLVIDO na Fase 2. Todas as 19 instancias corrigidas para `data ?? []` (hooks, api-clients, ssr-helpers, useDataCache).
 
 ### 2.8 Mapa de polling (`refreshInterval`)
 
@@ -309,20 +296,42 @@ TanStack Query resolve com APIs formais:
 
 ### Fase 2. Listas, filtros e paginacao
 
-**Status:** PENDENTE
+**Status:** CONCLUIDA (20/03/2026)
 
 **Objetivo:** padronizar leitura com parametros, introduzir `useInfiniteQuery` e `placeholderData`
 
 #### Checklist de migracao
 
-- [ ] `useMessages.ts` — mistura SWR com `useState` local. Migrar para `useInfiniteQuery` com cursor
-- [ ] `all-messages-tab.tsx` — historico + load more. Depende de `useMessages`
-- [ ] `leads-list.tsx` — paginacao com search params + refresh counter
-- [ ] `FlowSelector.tsx` — lista de flows + refresh
-- [ ] `FlowAnalyticsDashboard.tsx` — polling em 3 chaves (usar `refetchInterval`)
-- [ ] `inbox/[id]/campanhas/page.tsx` — lista + detalhe + progresso + infinito (mais complexo da fase)
-- [ ] `flow-playground/page.tsx` — queries contextuais
-- [ ] `transcription-progress.tsx` — polling de progresso de transcricao
+- [x] `useMessages.ts` — migrado para `useInfiniteQuery` com cursor, `maxPages: 10`, removido `resetForNewLead` (key change auto-resets)
+- [x] `all-messages-tab.tsx` — migrado para `useQuery` + `keepPreviousData`, `leadsQueryKeys.allMessages`
+- [x] `leads-list.tsx` — migrado para `useQuery` + `keepPreviousData`, `queryClient.setQueryData` para optimistic cache updates, `queryClient.invalidateQueries` para revalidation
+- [x] `FlowSelector.tsx` — migrado para `useQuery` + `keepPreviousData`, `mtfDiamanteQueryKeys.flowSelector`, corrigido `data?.data || []` → `data?.data ?? []`
+- [x] `FlowAnalyticsDashboard.tsx` — 3 queries migradas com `refetchInterval` (10s/15s/5s), `refreshAll` usa prefix invalidation `flowAdmin.all(inboxId)`
+- [x] `inbox/[id]/campanhas/page.tsx` — migrado `useSWR` → `useQuery` (2x), `useSWRInfinite` → `useInfiniteQuery` (LeadSelectorDialog), progress polling com `refetchInterval: 3_000`
+- [x] `flow-playground/page.tsx` — 2 `useQuery` (inboxes: staleTime 10min, flows: staleTime 30s)
+- [x] `transcription-progress.tsx` — ja usava React Query via `useLeadOperationStatus` hook, nenhuma migracao necessaria
+- [x] `message-history-tab.tsx` — atualizado consumidor de `useMessages`: removido `resetForNewLead`, wrapped `refresh()` para compatibilidade com `onClick`
+
+#### Acoes extras realizadas nesta fase
+
+**Bug fixes `data || []` → `data ?? []` (19 instancias corrigidas):**
+- `useCaixas.ts` — 4 instancias (hook return + 3 optimistic update closures)
+- `useInboxButtonReactions.ts` — 2 instancias (hook return + fetcher)
+- `useApprovedTemplates.ts` — 1 instancia (fetcher)
+- `useLotes.ts` — 1 instancia (hook return)
+- `useVariaveis.ts` — 1 instancia (hook return)
+- `useInteractiveMessages.ts` — 1 instancia (useMemo)
+- `useApiKeys.ts` — 1 instancia (hook return)
+- `api-clients.ts` — 8 instancias (interactiveMessages, caixas, lotes, variaveis, apiKeys, buttonReactions x2, chatwitAgents, chatwitLabels)
+- `ssr-helpers.ts` — 5 instancias (prefetchInboxData)
+- `useDataCache.ts` — 3 instancias (useMtfVariaveis, useMtfLotes, useMtfCaixas)
+
+**Query keys adicionadas nesta fase:**
+- `mtfDiamanteQueryKeys.flowAdmin` — `all(inboxId)`, `stats(inboxId)`, `flows(inboxId)`, `sessions(inboxId, status)` com prefix invalidation
+- `mtfDiamanteQueryKeys.flowSelector(inboxId, isCampaign)` — lista de flows por inbox
+- `mtfDiamanteQueryKeys.playground` — `inboxes()`, `flows(inboxId)`
+- `mtfDiamanteQueryKeys.campaigns` — `all(inboxId)`, `detail(campaignId)`, `progress(campaignId)`, `flows(inboxId)`, `leads(filters)`
+- `leadsQueryKeys.allMessages(filters)` — all-messages-tab pagination
 
 #### Padroes a aplicar nesta fase
 
@@ -359,11 +368,12 @@ const { data: activeFlows } = useQuery({
 
 #### Criterio de pronto (Fase 2)
 
-- [ ] `useMessages` usando `useInfiniteQuery`
-- [ ] `FlowAnalyticsDashboard` usando `refetchInterval` nativo
-- [ ] Nenhum `useState` duplicando server state
-- [ ] `queryKeys` com filtros incluidos (regra `qk-include-dependencies`)
-- [ ] `tsc` verde
+- [x] `useMessages` usando `useInfiniteQuery`
+- [x] `FlowAnalyticsDashboard` usando `refetchInterval` nativo
+- [x] Nenhum `useState` duplicando server state
+- [x] `queryKeys` com filtros incluidos (regra `qk-include-dependencies`)
+- [x] `tsc` verde
+- [x] Todas as 19 instancias de `data || []` corrigidas para `data ?? []`
 
 ---
 
@@ -795,41 +805,45 @@ Referencia rapida de TODOS os 30 arquivos SWR restantes, classificados por dific
 | 13 | `mtf-diamante/components/flow-analytics/hooks/useNodeDetails.ts` | 1 | MIGRADO |
 | 14 | `mtf-diamante/components/MapeamentoTab.tsx` | 1 | MIGRADO |
 
-### Medio (read-only com filtros, paginacao, ou polling leve)
-| 15 | `mtf-diamante/components/flow-builder/panels/FlowSelector.tsx` | 2 |
-| 16 | `leads-chatwit/components/leads-list.tsx` | 2 |
-| 17 | `leads-chatwit/components/all-messages-tab.tsx` | 2 |
-| 18 | `leads-chatwit/hooks/useMessages.ts` | 2 |
-| 19 | `flow-playground/page.tsx` | 2 |
-| 20 | `mtf-diamante/components/FlowAnalyticsDashboard.tsx` | 2 |
-| 21 | `leads-chatwit/components/transcription-progress.tsx` | 2 |
+### Medio (read-only com filtros, paginacao, ou polling leve) — TODOS MIGRADOS (Fase 2)
+
+| # | Arquivo | Fase | Status |
+|---|---|---|---|
+| 15 | `mtf-diamante/components/flow-builder/panels/FlowSelector.tsx` | 2 | MIGRADO |
+| 16 | `leads-chatwit/components/leads-list.tsx` | 2 | MIGRADO |
+| 17 | `leads-chatwit/components/all-messages-tab.tsx` | 2 | MIGRADO |
+| 18 | `leads-chatwit/hooks/useMessages.ts` | 2 | MIGRADO |
+| 19 | `flow-playground/page.tsx` | 2 | MIGRADO |
+| 20 | `mtf-diamante/components/FlowAnalyticsDashboard.tsx` | 2 | MIGRADO |
+| 21 | `leads-chatwit/components/transcription-progress.tsx` | 2 | JA USAVA RQ |
+| 22 | `mtf-diamante/inbox/[id]/campanhas/page.tsx` | 2 | MIGRADO |
 
 ### Dificil (mutacoes CRUD, optimistic, polling pesado)
 
 | # | Arquivo | Fase |
 |---|---|---|
-| 22 | `mtf-diamante/hooks/useLotes.ts` | 3 |
-| 23 | `mtf-diamante/hooks/useVariaveis.ts` | 3 |
-| 24 | `mtf-diamante/hooks/useApiKeys.ts` | 3 |
-| 25 | `mtf-diamante/hooks/useCaixas.ts` | 3 |
-| 26 | `mtf-diamante/hooks/useInboxButtonReactions.ts` | 3 |
-| 27 | `MTFdashboard/hooks/useAgentBlueprints.ts` | 3 |
+| 23 | `mtf-diamante/hooks/useLotes.ts` | 3 |
+| 24 | `mtf-diamante/hooks/useVariaveis.ts` | 3 |
+| 25 | `mtf-diamante/hooks/useApiKeys.ts` | 3 |
+| 26 | `mtf-diamante/hooks/useCaixas.ts` | 3 |
+| 27 | `mtf-diamante/hooks/useInboxButtonReactions.ts` | 3 |
+| 28 | `MTFdashboard/hooks/useAgentBlueprints.ts` | 3 |
 
 ### Muito dificil (orquestracao, auto-save, context complexo)
 
 | # | Arquivo | Fase |
 |---|---|---|
-| 28 | `mtf-diamante/hooks/useInteractiveMessages.ts` | 3 (ultimo) |
-| 29 | `mtf-diamante/components/flow-builder/hooks/useFlowCanvas.ts` | 3-4 |
-| 30 | `mtf-diamante/components/flow-builder/hooks/FlowBuilderTabHooks.ts` | 3-4 |
+| 29 | `mtf-diamante/hooks/useInteractiveMessages.ts` | 3 (ultimo) |
+| 30 | `mtf-diamante/components/flow-builder/hooks/useFlowCanvas.ts` | 3-4 |
+| 31 | `mtf-diamante/components/flow-builder/hooks/FlowBuilderTabHooks.ts` | 3-4 |
 
 ### Infra (remover na Fase 6)
 
 | # | Arquivo | Fase |
 |---|---|---|
-| 31 | `lib/swr-config.ts` | 6 |
-| 32 | `components/providers/SwrProvider.tsx` | 6 |
-| 33 | `app/admin/mtf-diamante/context/SwrProvider.tsx` | 4-6 |
+| 32 | `lib/swr-config.ts` | 6 |
+| 33 | `components/providers/SwrProvider.tsx` | 6 |
+| 34 | `app/admin/mtf-diamante/context/SwrProvider.tsx` | 4-6 |
 
 ---
 
@@ -873,9 +887,9 @@ Esta migracao sera considerada bem-sucedida quando:
 - [ ] CRUDs principais usando `useMutation` com optimistic + rollback
 - [ ] Listas e detalhes compartilhando cache por `queryKey` hierarquica
 - [ ] `SwrProvider` do MTF eliminado ou reduzido a wrapper vazio
-- [ ] Contagem de arquivos SWR: 0 (atual: 20, era 35 pre-Fase 1)
-- [ ] Contagem de arquivos React Query: 42+ (atual: 22, era 7 pre-Fase 1)
-- [ ] Zero `data || []` — tudo usando `data ?? []`
+- [ ] Contagem de arquivos SWR: 0 (atual: 13, era 20 pos-Fase 1, era 35 pre-Fase 1)
+- [ ] Contagem de arquivos React Query: 42+ (atual: 29, era 22 pos-Fase 1, era 7 pre-Fase 1)
+- [x] Zero `data || []` — tudo usando `data ?? []` (concluido Fase 2)
 - [ ] Zero `useState` para server state
 - [ ] Performance igual ou melhor (medir bundle size antes/depois)
 

@@ -24,7 +24,7 @@ export function useVariaveis(isPaused: boolean = false) {
 	);
 
 	return {
-		variaveis: data || [],
+		variaveis: data ?? [],
 		isLoading,
 		error,
 		mutate,

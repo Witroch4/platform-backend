@@ -196,7 +196,7 @@ export function useMtfVariaveis() {
 			const response = await fetch("/api/admin/mtf-diamante/variaveis");
 			if (!response.ok) throw new Error("Erro ao carregar variáveis");
 			const data = await response.json();
-			return data.data || [];
+			return data.data ?? [];
 		},
 		{ key: "mtf-variaveis", ttl: 5 * 60 * 1000 }, // 5 minutes
 	);
@@ -209,7 +209,7 @@ export function useMtfLotes() {
 			const response = await fetch("/api/admin/mtf-diamante/lotes");
 			if (!response.ok) throw new Error("Erro ao carregar lotes");
 			const data = await response.json();
-			return data.data || data.lotes || [];
+			return data.data ?? data.lotes ?? [];
 		},
 		{ key: "mtf-lotes", ttl: 5 * 60 * 1000 }, // 5 minutes
 	);
@@ -222,7 +222,7 @@ export function useMtfCaixas() {
 			const response = await fetch("/api/admin/mtf-diamante/dialogflow/caixas");
 			if (!response.ok) throw new Error("Erro ao carregar caixas");
 			const data = await response.json();
-			return data.caixas || [];
+			return data.caixas ?? [];
 		},
 		{ key: "mtf-caixas", ttl: 3 * 60 * 1000 }, // 3 minutes
 	);

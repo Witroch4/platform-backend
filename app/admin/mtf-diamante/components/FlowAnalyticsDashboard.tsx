@@ -42,7 +42,8 @@ import {
 	Timer,
 } from "lucide-react";
 import { toast } from "sonner";
-import useSWR, { mutate } from "swr";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { mtfDiamanteQueryKeys } from "../lib/query-keys";
 import { cn } from "@/lib/utils";
 import { ExecutiveKPICards } from "./flow-analytics/ExecutiveKPICards";
 import { HeatmapVisualization } from "./flow-analytics/HeatmapVisualization";
@@ -202,20 +203,31 @@ export function FlowAnalyticsDashboard({ inboxId }: FlowAnalyticsDashboardProps)
 	// DATA FETCHING
 	// ==========================================================================
 
-	const statsKey = `/api/admin/mtf-diamante/flow-admin?inboxId=${inboxId}&dataType=stats`;
-	const flowsKey = `/api/admin/mtf-diamante/flow-admin?inboxId=${inboxId}&dataType=flows`;
-	const sessionsKey = `/api/admin/mtf-diamante/flow-admin?inboxId=${inboxId}&dataType=sessions&status=${sessionFilter}`;
+	const queryClient = useQueryClient();
 
-	const { data: stats, isLoading: loadingStats } = useSWR<FlowStats>(statsKey, fetcher, {
-		refreshInterval: 10000,
+	const statsQueryKey = mtfDiamanteQueryKeys.flowAdmin.stats(inboxId);
+	const flowsQueryKey = mtfDiamanteQueryKeys.flowAdmin.flows(inboxId);
+	const sessionsQueryKey = mtfDiamanteQueryKeys.flowAdmin.sessions(inboxId, sessionFilter);
+
+	const { data: stats, isLoading: loadingStats } = useQuery<FlowStats>({
+		queryKey: statsQueryKey,
+		queryFn: () => fetcher(`/api/admin/mtf-diamante/flow-admin?inboxId=${inboxId}&dataType=stats`),
+		refetchInterval: 10_000,
+		staleTime: 0,
 	});
 
-	const { data: flows, isLoading: loadingFlows } = useSWR<FlowDetail[]>(flowsKey, fetcher, {
-		refreshInterval: 15000,
+	const { data: flows, isLoading: loadingFlows } = useQuery<FlowDetail[]>({
+		queryKey: flowsQueryKey,
+		queryFn: () => fetcher(`/api/admin/mtf-diamante/flow-admin?inboxId=${inboxId}&dataType=flows`),
+		refetchInterval: 15_000,
+		staleTime: 0,
 	});
 
-	const { data: sessions, isLoading: loadingSessions } = useSWR<FlowSession[]>(sessionsKey, fetcher, {
-		refreshInterval: 5000,
+	const { data: sessions, isLoading: loadingSessions } = useQuery<FlowSession[]>({
+		queryKey: sessionsQueryKey,
+		queryFn: () => fetcher(`/api/admin/mtf-diamante/flow-admin?inboxId=${inboxId}&dataType=sessions&status=${sessionFilter}`),
+		refetchInterval: 5_000,
+		staleTime: 0,
 	});
 
 	// ==========================================================================
@@ -254,9 +266,9 @@ export function FlowAnalyticsDashboard({ inboxId }: FlowAnalyticsDashboardProps)
 				toast.success(json.message);
 
 				// Revalidar dados
-				mutate(statsKey);
-				mutate(flowsKey);
-				mutate(sessionsKey);
+				queryClient.invalidateQueries({ queryKey: statsQueryKey });
+				queryClient.invalidateQueries({ queryKey: flowsQueryKey });
+				queryClient.invalidateQueries({ queryKey: sessionsQueryKey });
 				setSelectedSessions([]);
 			} catch (error) {
 				toast.error(error instanceof Error ? error.message : "Erro ao executar ação");
@@ -265,7 +277,7 @@ export function FlowAnalyticsDashboard({ inboxId }: FlowAnalyticsDashboardProps)
 				setActionDialog({ type: null });
 			}
 		},
-		[inboxId, statsKey, flowsKey, sessionsKey],
+		[inboxId, queryClient, statsQueryKey, flowsQueryKey, sessionsQueryKey],
 	);
 
 	const handleAbortSession = useCallback(
@@ -285,13 +297,13 @@ export function FlowAnalyticsDashboard({ inboxId }: FlowAnalyticsDashboardProps)
 				if (!json.success) throw new Error(json.error);
 
 				toast.success(json.message);
-				mutate(sessionsKey);
-				mutate(statsKey);
+				queryClient.invalidateQueries({ queryKey: sessionsQueryKey });
+				queryClient.invalidateQueries({ queryKey: statsQueryKey });
 			} catch (error) {
 				toast.error(error instanceof Error ? error.message : "Erro ao abortar sessão");
 			}
 		},
-		[inboxId, sessionsKey, statsKey],
+		[inboxId, queryClient, sessionsQueryKey, statsQueryKey],
 	);
 
 	const handleAbortSelected = useCallback(async () => {
@@ -312,13 +324,13 @@ export function FlowAnalyticsDashboard({ inboxId }: FlowAnalyticsDashboardProps)
 			if (!json.success) throw new Error(json.error);
 
 			toast.success(json.message);
-			mutate(sessionsKey);
-			mutate(statsKey);
+			queryClient.invalidateQueries({ queryKey: sessionsQueryKey });
+			queryClient.invalidateQueries({ queryKey: statsQueryKey });
 			setSelectedSessions([]);
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : "Erro ao abortar sessões");
 		}
-	}, [inboxId, selectedSessions, sessionsKey, statsKey]);
+	}, [inboxId, selectedSessions, queryClient, sessionsQueryKey, statsQueryKey]);
 
 	const handleAbortAllFlowSessions = (flowId: string, flowName: string) => {
 		setActionDialog({ type: "abort_all_flow", flowId, flowName });
@@ -363,11 +375,9 @@ export function FlowAnalyticsDashboard({ inboxId }: FlowAnalyticsDashboardProps)
 	}, [sessions, selectedSessions.length]);
 
 	const refreshAll = useCallback(() => {
-		mutate(statsKey);
-		mutate(flowsKey);
-		mutate(sessionsKey);
+		queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.flowAdmin.all(inboxId) });
 		toast.success("Dados atualizados");
-	}, [statsKey, flowsKey, sessionsKey]);
+	}, [queryClient, inboxId]);
 
 	const handleViewReplay = useCallback((sessionId: string) => {
 		setReplaySessionId(sessionId);
@@ -391,13 +401,13 @@ export function FlowAnalyticsDashboard({ inboxId }: FlowAnalyticsDashboardProps)
 				if (!json.success) throw new Error(json.error);
 
 				toast.success(json.message);
-				mutate(sessionsKey);
-				mutate(statsKey);
+				queryClient.invalidateQueries({ queryKey: sessionsQueryKey });
+				queryClient.invalidateQueries({ queryKey: statsQueryKey });
 			} catch (error) {
 				toast.error(error instanceof Error ? error.message : "Erro ao excluir sessão");
 			}
 		},
-		[inboxId, sessionsKey, statsKey],
+		[inboxId, queryClient, sessionsQueryKey, statsQueryKey],
 	);
 
 	// Filter sessions by search

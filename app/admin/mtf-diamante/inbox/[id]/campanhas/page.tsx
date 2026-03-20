@@ -2,8 +2,8 @@
 
 import { useParams } from "next/navigation";
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
-import useSWR, { mutate } from "swr";
-import useSWRInfinite from "swr/infinite";
+import { useQuery, useQueryClient, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
+import { mtfDiamanteQueryKeys } from "../../../lib/query-keys";
 import {
 	Plus,
 	Megaphone,
@@ -236,32 +236,28 @@ export default function CampanhasPage() {
 // =============================================================================
 
 function CampaignListView({ inboxId, onSelect }: { inboxId: string; onSelect: (id: string) => void }) {
+	const queryClient = useQueryClient();
 	const [isCreateOpen, setIsCreateOpen] = useState(false);
 	const [newName, setNewName] = useState("");
 	const [selectedFlowId, setSelectedFlowId] = useState("");
 	const [isCreating, setIsCreating] = useState(false);
 
-	const campaignsKey = `/api/admin/mtf-diamante/campaigns?inboxId=${inboxId}`;
-	const { data, error } = useSWR<{ success: boolean; data: CampaignListItem[] }>(
-		campaignsKey,
-		fetcher,
-		{
-			keepPreviousData: true,
-			revalidateOnFocus: false,
-			revalidateOnReconnect: false,
-			dedupingInterval: 5000,
-			fallbackData: { success: true, data: [] },
-		},
-	);
+	const campaignsQueryKey = mtfDiamanteQueryKeys.campaigns.all(inboxId);
+	const { data, error } = useQuery<{ success: boolean; data: CampaignListItem[] }>({
+		queryKey: campaignsQueryKey,
+		queryFn: () => fetcher(`/api/admin/mtf-diamante/campaigns?inboxId=${inboxId}`),
+		placeholderData: keepPreviousData,
+		refetchOnWindowFocus: false,
+		refetchOnReconnect: false,
+		staleTime: 30_000,
+	});
 
-	const { data: flowsData } = useSWR<{ success: boolean; data: FlowOption[] }>(
-		`/api/admin/mtf-diamante/flows?inboxId=${inboxId}&isCampaign=true`,
-		fetcher,
-		{
-			revalidateOnFocus: false,
-			dedupingInterval: 5000,
-		},
-	);
+	const { data: flowsData } = useQuery<{ success: boolean; data: FlowOption[] }>({
+		queryKey: mtfDiamanteQueryKeys.campaigns.flows(inboxId),
+		queryFn: () => fetcher(`/api/admin/mtf-diamante/flows?inboxId=${inboxId}&isCampaign=true`),
+		refetchOnWindowFocus: false,
+		staleTime: 5 * 60 * 1000,
+	});
 
 	const campaigns = data?.data ?? [];
 	const campaignFlows = flowsData?.data ?? [];
@@ -281,14 +277,14 @@ function CampaignListView({ inboxId, onSelect }: { inboxId: string; onSelect: (i
 			setIsCreateOpen(false);
 			setNewName("");
 			setSelectedFlowId("");
-			mutate(campaignsKey);
+			queryClient.invalidateQueries({ queryKey: campaignsQueryKey });
 			onSelect(result.data.id);
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : "Erro ao criar campanha");
 		} finally {
 			setIsCreating(false);
 		}
-	}, [newName, selectedFlowId, inboxId, campaignsKey, onSelect]);
+	}, [newName, selectedFlowId, inboxId, queryClient, campaignsQueryKey, onSelect]);
 
 	return (
 		<>
@@ -433,25 +429,29 @@ function CampaignDetailView({
 	inboxId: string;
 	onBack: () => void;
 }) {
+	const queryClient = useQueryClient();
 	const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 	const [showLeadSelector, setShowLeadSelector] = useState(false);
 	const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-	const detailKey = `/api/admin/mtf-diamante/campaigns/${campaignId}`;
-	const { data, error, mutate: mutateCampaign } = useSWR<{ success: boolean; data: CampaignDetail }>(
-		detailKey,
-		fetcher,
-	);
+	const detailQueryKey = mtfDiamanteQueryKeys.campaigns.detail(campaignId);
+	const { data, error } = useQuery<{ success: boolean; data: CampaignDetail }>({
+		queryKey: detailQueryKey,
+		queryFn: () => fetcher(`/api/admin/mtf-diamante/campaigns/${campaignId}`),
+		staleTime: 0,
+	});
 
 	const campaign = data?.data;
 	const isRunning = campaign?.status === "RUNNING";
 
 	// Poll progress while running
-	const { data: progressData } = useSWR<{ success: boolean; data: CampaignProgress }>(
-		isRunning ? `/api/admin/mtf-diamante/campaigns/${campaignId}/progress` : null,
-		fetcher,
-		{ refreshInterval: 3000 },
-	);
+	const { data: progressData } = useQuery<{ success: boolean; data: CampaignProgress }>({
+		queryKey: mtfDiamanteQueryKeys.campaigns.progress(campaignId),
+		queryFn: () => fetcher(`/api/admin/mtf-diamante/campaigns/${campaignId}/progress`),
+		enabled: !!isRunning,
+		refetchInterval: 3_000,
+		staleTime: 0,
+	});
 	const progress = progressData?.data;
 
 	const handleAction = useCallback(async (action: string) => {
@@ -465,13 +465,13 @@ function CampaignDetailView({
 			const result = await res.json();
 			if (!res.ok || !result.success) throw new Error(result.error || "Falha na ação");
 			toast.success(result.message || "Ação executada");
-			mutateCampaign();
+			queryClient.invalidateQueries({ queryKey: detailQueryKey });
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : "Erro ao executar ação");
 		} finally {
 			setActionLoading(null);
 		}
-	}, [campaignId, mutateCampaign]);
+	}, [campaignId, queryClient, detailQueryKey]);
 
 	const handleDelete = useCallback(async () => {
 		try {
@@ -482,7 +482,7 @@ function CampaignDetailView({
 			if (!res.ok || !result.success) throw new Error(result.error || "Falha ao excluir");
 			toast.success("Campanha excluída");
 			setShowDeleteDialog(false);
-			mutate(`/api/admin/mtf-diamante/campaigns?inboxId=${inboxId}`);
+			queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.campaigns.all(inboxId) });
 			onBack();
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : "Erro ao excluir");
@@ -491,8 +491,8 @@ function CampaignDetailView({
 
 	const handleContactsAdded = useCallback(() => {
 		setShowLeadSelector(false);
-		mutateCampaign();
-	}, [mutateCampaign]);
+		queryClient.invalidateQueries({ queryKey: detailQueryKey });
+	}, [queryClient, detailQueryKey]);
 
 	if (error) {
 		return (
@@ -827,53 +827,69 @@ function LeadSelectorDialog({
 		return null;
 	}, [datePreset, customDateRange]);
 
-	// useSWRInfinite — acumula p\u00e1ginas conforme scroll
-	const getKey = useCallback(
-		(pageIndex: number, prev: { leads: LeadItem[]; pagination: { total: number } } | null) => {
-			if (!open) return null;
-			if (prev && prev.leads.length < LEADS_PAGE_SIZE) return null; // fim
-			const params = new URLSearchParams({
-				onlyWithPhone: "true",
-				marketing: "true",
-				limit: String(LEADS_PAGE_SIZE),
-				page: String(pageIndex + 1),
-			});
-			if (debouncedQuery.trim()) params.set("search", debouncedQuery.trim());
-			if (activeFilter === "comRecurso") params.set("fezRecurso", "true");
-			if (activeFilter === "semRecurso") params.set("semRecurso", "true");
-			if (activeFilter === "concluidos") params.set("concluido", "true");
-			if (effectiveDateFrom) params.set("updatedAfter", effectiveDateFrom.toISOString());
-			if (effectiveDateTo) params.set("updatedBefore", effectiveDateTo.toISOString());
-			return `/api/admin/leads-chatwit/leads?${params}`;
-		},
-		[open, debouncedQuery, activeFilter, effectiveDateFrom, effectiveDateTo],
-	);
+	// useInfiniteQuery — acumula páginas conforme scroll
+	const buildLeadParams = useCallback(() => {
+		const params = new URLSearchParams({
+			onlyWithPhone: "true",
+			marketing: "true",
+			limit: String(LEADS_PAGE_SIZE),
+		});
+		if (debouncedQuery.trim()) params.set("search", debouncedQuery.trim());
+		if (activeFilter === "comRecurso") params.set("fezRecurso", "true");
+		if (activeFilter === "semRecurso") params.set("semRecurso", "true");
+		if (activeFilter === "concluidos") params.set("concluido", "true");
+		if (effectiveDateFrom) params.set("updatedAfter", effectiveDateFrom.toISOString());
+		if (effectiveDateTo) params.set("updatedBefore", effectiveDateTo.toISOString());
+		return params;
+	}, [debouncedQuery, activeFilter, effectiveDateFrom, effectiveDateTo]);
 
-	const { data: pages, size, setSize, isLoading, error } = useSWRInfinite<{
+	const infiniteQuery = useInfiniteQuery<{
 		leads: LeadItem[];
 		pagination: { total: number; totalPages: number };
-	}>(getKey, fetcher, { revalidateFirstPage: false, keepPreviousData: true });
+	}>({
+		queryKey: mtfDiamanteQueryKeys.campaigns.leads({
+			search: debouncedQuery,
+			filter: activeFilter,
+			dateFrom: effectiveDateFrom?.toISOString(),
+			dateTo: effectiveDateTo?.toISOString(),
+		}),
+		queryFn: async ({ pageParam }) => {
+			const params = buildLeadParams();
+			params.set("page", String(pageParam));
+			return fetcher(`/api/admin/leads-chatwit/leads?${params}`);
+		},
+		initialPageParam: 1,
+		getNextPageParam: (lastPage, _allPages, lastPageParam) => {
+			if (lastPage.leads.length < LEADS_PAGE_SIZE) return undefined;
+			return (lastPageParam as number) + 1;
+		},
+		enabled: open,
+		placeholderData: keepPreviousData,
+		staleTime: 30_000,
+	});
 
-	const leads = useMemo(() => pages?.flatMap((p) => p.leads) ?? [], [pages]);
-	const total = pages?.[0]?.pagination?.total ?? 0;
-	const isLoadingMore = isLoading || (size > 0 && pages && typeof pages[size - 1] === "undefined");
-	const isReachingEnd = pages ? pages[pages.length - 1]?.leads?.length < LEADS_PAGE_SIZE : false;
+	const { data: infiniteData, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage } = infiniteQuery;
 
-	// IntersectionObserver — carrega pr\u00f3xima p\u00e1gina automaticamente
+	const leads = useMemo(() => infiniteData?.pages.flatMap((p) => p.leads) ?? [], [infiniteData]);
+	const total = infiniteData?.pages[0]?.pagination?.total ?? 0;
+	const isLoadingMore = isFetchingNextPage;
+	const isReachingEnd = !hasNextPage;
+
+	// IntersectionObserver — carrega próxima página automaticamente
 	useEffect(() => {
 		const el = sentinelRef.current;
 		if (!el) return;
 		const observer = new IntersectionObserver(
 			(entries) => {
-				if (entries[0].isIntersecting && !isReachingEnd && !isLoadingMore) {
-					setSize((s) => s + 1);
+				if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+					fetchNextPage();
 				}
 			},
 			{ threshold: 0.1 },
 		);
 		observer.observe(el);
 		return () => observer.disconnect();
-	}, [isReachingEnd, isLoadingMore, setSize]);
+	}, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
 	const toggleSelect = useCallback((lead: LeadItem) => {
 		setSelectedLeads((prev) => {

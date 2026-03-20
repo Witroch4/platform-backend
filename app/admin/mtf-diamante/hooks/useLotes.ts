@@ -19,7 +19,7 @@ export function useLotes(isPaused: boolean = false) {
 	);
 
 	return {
-		lotes: data || [],
+		lotes: data ?? [],
 		isLoading,
 		error,
 		mutate,

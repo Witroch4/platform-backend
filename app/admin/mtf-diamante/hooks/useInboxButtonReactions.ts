@@ -51,7 +51,7 @@ export function useInboxButtonReactions({ inboxId, paused = false }: UseInboxBut
 			}
 
 			// Return the reactions directly from the unified API response
-			return result.reactions || [];
+			return result.reactions ?? [];
 		},
 		{
 			revalidateOnFocus: false,
@@ -159,7 +159,7 @@ export function useInboxButtonReactions({ inboxId, paused = false }: UseInboxBut
 	);
 
 	return {
-		reactions: data || [],
+		reactions: data ?? [],
 		isLoading,
 		error,
 		mutate,

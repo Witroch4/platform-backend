@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import useSWR from "swr";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import { leadsQueryKeys } from "../lib/query-keys";
 import { format, formatDistanceToNow, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -409,18 +410,25 @@ export function AllMessagesTab({ searchQuery: externalSearch }: AllMessagesTabPr
 		return () => clearTimeout(timer);
 	}, [localSearch]);
 
-	const key = `/api/admin/leads-chatwit/all-messages?page=${page}&limit=${limit}${
-		activeSearch ? `&search=${encodeURIComponent(activeSearch)}` : ""
-	}`;
+	const queryClient = useQueryClient();
+	const queryKey = leadsQueryKeys.allMessages({ page, limit, search: activeSearch });
 
-	const { data, error, isLoading, mutate } = useSWR<AllMessagesResponse>(key, fetcher, {
-		revalidateOnFocus: false,
-		keepPreviousData: true,
+	const { data, error, isLoading } = useQuery<AllMessagesResponse>({
+		queryKey,
+		queryFn: async () => {
+			const url = `/api/admin/leads-chatwit/all-messages?page=${page}&limit=${limit}${
+				activeSearch ? `&search=${encodeURIComponent(activeSearch)}` : ""
+			}`;
+			return fetcher(url);
+		},
+		placeholderData: keepPreviousData,
+		refetchOnWindowFocus: false,
+		staleTime: 30_000,
 	});
 
 	const handleRefresh = useCallback(() => {
-		mutate();
-	}, [mutate]);
+		queryClient.invalidateQueries({ queryKey: leadsQueryKeys.allMessages({ page, limit, search: activeSearch }) });
+	}, [queryClient, page, limit, activeSearch]);
 
 	const handlePrevPage = useCallback(() => {
 		setPage((p) => Math.max(1, p - 1));

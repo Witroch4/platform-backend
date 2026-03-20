@@ -19,7 +19,7 @@ export function useApiKeys(isPaused: boolean = false) {
 	);
 
 	return {
-		apiKeys: data || [],
+		apiKeys: data ?? [],
 		isLoading,
 		error,
 		mutate,

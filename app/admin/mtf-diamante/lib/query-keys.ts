@@ -46,6 +46,41 @@ export const mtfDiamanteQueryKeys = {
 		canvas: (flowId: string) => [...MTF_DIAMANTE_QUERY_ROOT, "flows", "canvas", flowId] as const,
 	},
 
+	// Flow admin (analytics dashboard)
+	flowAdmin: {
+		all: (inboxId: string) => [...MTF_DIAMANTE_QUERY_ROOT, "flow-admin", inboxId] as const,
+		stats: (inboxId: string) =>
+			[...MTF_DIAMANTE_QUERY_ROOT, "flow-admin", inboxId, "stats"] as const,
+		flows: (inboxId: string) =>
+			[...MTF_DIAMANTE_QUERY_ROOT, "flow-admin", inboxId, "flows"] as const,
+		sessions: (inboxId: string, status: string) =>
+			[...MTF_DIAMANTE_QUERY_ROOT, "flow-admin", inboxId, "sessions", status] as const,
+	},
+
+	// Flow selector (builder panel)
+	flowSelector: (inboxId: string, isCampaign: boolean) =>
+		[...MTF_DIAMANTE_QUERY_ROOT, "flow-selector", inboxId, isCampaign] as const,
+
+	// Flow playground
+	playground: {
+		inboxes: () => [...MTF_DIAMANTE_QUERY_ROOT, "playground", "inboxes"] as const,
+		flows: (inboxId: string) =>
+			[...MTF_DIAMANTE_QUERY_ROOT, "playground", "flows", inboxId] as const,
+	},
+
+	// Campaigns
+	campaigns: {
+		all: (inboxId: string) => [...MTF_DIAMANTE_QUERY_ROOT, "campaigns", inboxId] as const,
+		detail: (campaignId: string) =>
+			[...MTF_DIAMANTE_QUERY_ROOT, "campaigns", "detail", campaignId] as const,
+		progress: (campaignId: string) =>
+			[...MTF_DIAMANTE_QUERY_ROOT, "campaigns", "progress", campaignId] as const,
+		flows: (inboxId: string) =>
+			[...MTF_DIAMANTE_QUERY_ROOT, "campaigns", "flows", inboxId] as const,
+		leads: (filters: Record<string, unknown>) =>
+			[...MTF_DIAMANTE_QUERY_ROOT, "campaigns", "leads", filters] as const,
+	},
+
 	// Entities (for Phase 3)
 	caixas: {
 		all: () => [...MTF_DIAMANTE_QUERY_ROOT, "caixas"] as const,

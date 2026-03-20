@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import useSWR from "swr";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import { leadsQueryKeys } from "../lib/query-keys";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
@@ -155,28 +156,37 @@ export function LeadsList({ searchQuery, initialLoading, refreshCounter = 0 }: L
 		currentLeadRef.current = currentLead;
 	}, [currentLead]);
 
-	const leadsKey = useMemo(
-		() =>
-			buildLeadsListKey({
-				searchQuery,
-				page: paginationState.page,
-				limit: paginationState.limit,
-				visibilityMode,
-				refreshCounter,
-			}),
+	const queryClient = useQueryClient();
+
+	const leadsFilters = useMemo(
+		() => ({
+			searchQuery,
+			page: paginationState.page,
+			limit: paginationState.limit,
+			visibilityMode,
+			refreshCounter,
+		}),
 		[searchQuery, paginationState.page, paginationState.limit, visibilityMode, refreshCounter],
 	);
+
+	const leadsKey = useMemo(() => buildLeadsListKey(leadsFilters), [leadsFilters]);
+	const queryKey = leadsQueryKeys.list(leadsFilters);
 
 	const {
 		data: leadsResponse,
 		error: leadsError,
 		isLoading: isLoadingLeads,
-		mutate: mutateLeads,
-	} = useSWR<LeadsListResponse>(leadsKey, {
-		keepPreviousData: true,
-		revalidateOnFocus: false,
-		revalidateOnReconnect: false,
-		revalidateIfStale: false,
+	} = useQuery<LeadsListResponse>({
+		queryKey,
+		queryFn: async () => {
+			const res = await fetch(leadsKey);
+			if (!res.ok) throw new Error("Erro ao buscar leads");
+			return res.json();
+		},
+		placeholderData: keepPreviousData,
+		refetchOnWindowFocus: false,
+		refetchOnReconnect: false,
+		staleTime: 30_000,
 	});
 
 	const leads = leadsResponse?.leads ?? [];
@@ -251,7 +261,7 @@ export function LeadsList({ searchQuery, initialLoading, refreshCounter = 0 }: L
 				});
 
 					// Revalidar apenas a chave atual sem resetar estado local dos dialogs
-					void mutateLeads();
+					void queryClient.invalidateQueries({ queryKey });
 			}
 		};
 
@@ -262,22 +272,19 @@ export function LeadsList({ searchQuery, initialLoading, refreshCounter = 0 }: L
 		return () => {
 			window.removeEventListener("highlightLead", handleHighlightLead as EventListener);
 		};
-		}, [leads, mutateLeads]);
+		}, [leads, queryClient, queryKey]);
 
 	const updateCachedLead = useCallback(
 		(leadId: string, updater: (lead: LeadChatwit) => LeadChatwit) => {
-			void mutateLeads(
-				(current) => {
-					if (!current) return current;
-					return {
-						...current,
-						leads: current.leads.map((lead) => (lead.id === leadId ? updater(lead) : lead)),
-					};
-				},
-				{ revalidate: false },
-			);
+			queryClient.setQueryData<LeadsListResponse>(queryKey, (current) => {
+				if (!current) return current;
+				return {
+					...current,
+					leads: current.leads.map((lead) => (lead.id === leadId ? updater(lead) : lead)),
+				};
+			});
 		},
-		[mutateLeads],
+		[queryClient, queryKey],
 	);
 
 	const mergeLeadIntoCache = useCallback(
@@ -296,27 +303,24 @@ export function LeadsList({ searchQuery, initialLoading, refreshCounter = 0 }: L
 
 	const removeLeadFromCache = useCallback(
 		(leadId: string) => {
-			void mutateLeads(
-				(current) => {
-					if (!current) return current;
-					const nextLeads = current.leads.filter((lead) => lead.id !== leadId);
-					const nextTotal = Math.max(current.pagination.total - 1, 0);
-					return {
-						...current,
-						leads: nextLeads,
-						pagination: {
-							...current.pagination,
-							total: nextTotal,
-							totalPages: Math.ceil(nextTotal / current.pagination.limit),
-						},
-					};
-				},
-				{ revalidate: false },
-			);
+			queryClient.setQueryData<LeadsListResponse>(queryKey, (current) => {
+				if (!current) return current;
+				const nextLeads = current.leads.filter((lead) => lead.id !== leadId);
+				const nextTotal = Math.max(current.pagination.total - 1, 0);
+				return {
+					...current,
+					leads: nextLeads,
+					pagination: {
+						...current.pagination,
+						total: nextTotal,
+						totalPages: Math.ceil(nextTotal / current.pagination.limit),
+					},
+				};
+			});
 
 			setCurrentLead((prev) => (prev?.id === leadId ? null : prev));
 		},
-		[mutateLeads],
+		[queryClient, queryKey],
 	);
 
 	const refreshLeadFromServer = useCallback(
@@ -336,8 +340,8 @@ export function LeadsList({ searchQuery, initialLoading, refreshCounter = 0 }: L
 	);
 
 	const revalidateLeads = useCallback(async () => {
-		await mutateLeads();
-	}, [mutateLeads]);
+		await queryClient.invalidateQueries({ queryKey });
+	}, [queryClient, queryKey]);
 
 	const displayedLeads = leads.filter((lead) => matchesVisibilityMode(lead, visibilityMode));
 	const showLoadingState = (isLoadingLeads && !leadsResponse) || (initialLoading && !leadsResponse);
