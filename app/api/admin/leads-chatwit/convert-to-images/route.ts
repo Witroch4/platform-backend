@@ -53,31 +53,31 @@ async function renderPageRange(
 	density: number,
 ): Promise<string[]> {
 	const outputPrefix = path.join(outputDir, "page");
-	const ext = "png";
 
-	// Tier 0: pdftoppm -gray (grayscale PNG) — documentos de texto comprimem a ~800KB vs 9MB em JPEG
+	// Tier 0: pdftoppm JPEG q90 — 3x mais rápido que PNG encoding (2.8s vs 8.9s por página)
+	// JPEG q90 preserva qualidade suficiente para OCR/visão AI de manuscritos
 	const rangeFlags = firstPage > 0 ? `-f ${firstPage} -l ${lastPage}` : "";
-	const pdftoppmCmd = `pdftoppm -gray -png -r ${density} ${rangeFlags} "${pdfPath}" "${outputPrefix}"`;
+	const pdftoppmCmd = `pdftoppm -jpeg -jpegopt quality=90 -r ${density} ${rangeFlags} "${pdfPath}" "${outputPrefix}"`;
 
 	try {
 		await execPromise(pdftoppmCmd, { timeout: 120_000 });
-		const files = (await fs.promises.readdir(outputDir)).filter((f) => f.startsWith("page-") && f.endsWith(".png"));
+		const files = (await fs.promises.readdir(outputDir)).filter((f) => f.startsWith("page-") && f.endsWith(".jpg"));
 		if (files.length > 0) return files;
 		throw new Error("pdftoppm gerou 0 arquivos");
 	} catch (pdftoppmError) {
 		log.warn(`pdftoppm falhou (range ${firstPage}-${lastPage}): ${pdftoppmError}`);
 	}
 
-	// Tier 1: GhostScript (fallback) — pnggray para mesma eficiência de compressão
+	// Tier 1: GhostScript JPEG (fallback)
 	if (firstPage <= 0) {
-		const gsCmd = `gs -dSAFER -dBATCH -dNOPAUSE -sDEVICE=pnggray -r${density} -dGraphicsAlphaBits=4 -dTextAlphaBits=4 -sOutputFile="${outputPrefix}-%d.png" "${pdfPath}"`;
+		const gsCmd = `gs -dSAFER -dBATCH -dNOPAUSE -sDEVICE=jpeg -dJPEGQ=90 -r${density} -dGraphicsAlphaBits=4 -dTextAlphaBits=4 -sOutputFile="${outputPrefix}-%d.jpg" "${pdfPath}"`;
 		await execPromise(gsCmd, { timeout: 180_000 });
 	} else {
-		const gsCmd = `gs -dSAFER -dBATCH -dNOPAUSE -sDEVICE=pnggray -r${density} -dGraphicsAlphaBits=4 -dTextAlphaBits=4 -dFirstPage=${firstPage} -dLastPage=${lastPage} -sOutputFile="${outputPrefix}-%d.png" "${pdfPath}"`;
+		const gsCmd = `gs -dSAFER -dBATCH -dNOPAUSE -sDEVICE=jpeg -dJPEGQ=90 -r${density} -dGraphicsAlphaBits=4 -dTextAlphaBits=4 -dFirstPage=${firstPage} -dLastPage=${lastPage} -sOutputFile="${outputPrefix}-%d.jpg" "${pdfPath}"`;
 		await execPromise(gsCmd, { timeout: 180_000 });
 	}
 
-	const files = (await fs.promises.readdir(outputDir)).filter((f) => f.startsWith("page-") && f.endsWith(`.${ext}`));
+	const files = (await fs.promises.readdir(outputDir)).filter((f) => f.startsWith("page-") && f.endsWith(".jpg"));
 	if (files.length === 0) {
 		throw new Error(`Nenhum arquivo gerado para range ${firstPage}-${lastPage}`);
 	}
@@ -134,7 +134,7 @@ async function convertPdfToImages(pdfBuffer: Buffer, options: ConvertOptions): P
 	const { density, savedir, savename } = options;
 	const tmpDir = savedir || "/tmp";
 	const baseName = savename || `pdf-${randomUUID()}`;
-	const mimeType = "image/png";
+	const mimeType = "image/jpeg";
 
 	// Salvar PDF temporário
 	const pdfPath = path.join(tmpDir, `${baseName}.pdf`);
