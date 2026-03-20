@@ -248,53 +248,8 @@ export function ImageGalleryDialog({
 		}
 	};
 
-	// Função mais detalhada para depuração de URLs de miniaturas
-	const getThumbnailUrl = (imageUrl: string) => {
-		// URL já pode estar no formato de miniatura
-		if (imageUrl.includes("/thumb_")) {
-			return imageUrl;
-		}
-
-		try {
-			const url = new URL(imageUrl);
-			const pathParts = url.pathname.split("/");
-
-			// Log para depuração
-			if (showDebug) {
-				console.log("Processando URL:", {
-					original: imageUrl,
-					host: url.host,
-					pathname: url.pathname,
-					pathParts,
-				});
-			}
-
-			// Última parte é o nome do arquivo
-			if (pathParts.length > 0) {
-				const lastIndex = pathParts.length - 1;
-				const fileName = pathParts[lastIndex];
-
-				// Insere "thumb_" antes do nome do arquivo
-				pathParts[lastIndex] = `thumb_${fileName}`;
-
-				// Reconstrói o caminho
-				url.pathname = pathParts.join("/");
-				const thumbnailUrl = url.toString();
-
-				// Log para depuração
-				if (showDebug) {
-					console.log("URL de miniatura gerada:", thumbnailUrl);
-				}
-
-				return thumbnailUrl;
-			}
-
-			return imageUrl;
-		} catch (e) {
-			console.warn("Erro ao processar URL de miniatura:", e);
-			return imageUrl;
-		}
-	};
+	// Imagens já são otimizadas (~300-500KB) pelo pipeline sharp — servem como própria miniatura
+	const getThumbnailUrl = (imageUrl: string) => imageUrl;
 
 	// Função para marcar imagem como em carregamento
 	const handleImageLoading = (index: number, isLoading: boolean) => {
@@ -370,16 +325,10 @@ export function ImageGalleryDialog({
 										<img
 											src={getThumbnailUrl(imageUrl)}
 											alt={`Imagem ${index + 1}`}
-											className={`w-full h-full object-contain ${imageErrors[index] ? "opacity-60" : ""}`}
+											className="w-full h-full object-contain"
 											onLoad={() => handleImageLoading(index, false)}
 											onLoadStart={() => handleImageLoading(index, true)}
-											onError={(e) => {
-												console.warn(`Erro ao carregar miniatura: ${getThumbnailUrl(imageUrl)}`);
-												handleImageLoading(index, false);
-												handleImageError(index, true);
-												// Fallback para a imagem original em caso de erro
-												e.currentTarget.src = imageUrl;
-											}}
+											onError={() => handleImageLoading(index, false)}
 										/>
 
 										{/* Checkbox para seleção de imagens */}
@@ -394,12 +343,6 @@ export function ImageGalleryDialog({
 												>
 													{selectedImages.includes(imageUrl) && <Check className="h-4 w-4" />}
 												</div>
-											</div>
-										)}
-
-										{imageErrors[index] && (
-											<div className="absolute bottom-1 left-1 right-1 bg-red-500/70 text-white text-xs p-1 rounded text-center">
-												Erro na miniatura
 											</div>
 										)}
 									</div>

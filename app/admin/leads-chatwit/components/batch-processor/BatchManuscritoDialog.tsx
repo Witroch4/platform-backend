@@ -137,30 +137,8 @@ export function BatchManuscritoDialog({ lead, progress, onSubmit, onClose }: Bat
 		}
 	};
 
-	// Função para gerar URL de miniatura
-	const getThumbnailUrl = (imageUrl: string) => {
-		if (imageUrl.includes("/thumb_")) {
-			return imageUrl;
-		}
-
-		try {
-			const url = new URL(imageUrl);
-			const pathParts = url.pathname.split("/");
-
-			if (pathParts.length > 0) {
-				const lastIndex = pathParts.length - 1;
-				const fileName = pathParts[lastIndex];
-				pathParts[lastIndex] = `thumb_${fileName}`;
-				url.pathname = pathParts.join("/");
-				return url.toString();
-			}
-
-			return imageUrl;
-		} catch (e) {
-			console.warn("Erro ao processar URL de miniatura:", e);
-			return imageUrl;
-		}
-	};
+	// Imagens já são otimizadas (~300-500KB) pelo pipeline sharp — servem como própria miniatura
+	const getThumbnailUrl = (imageUrl: string) => imageUrl;
 
 	const handleImageLoading = (index: number, isLoading: boolean) => {
 		setLoadingImages((prev) => ({ ...prev, [index]: isLoading }));
@@ -214,15 +192,10 @@ export function BatchManuscritoDialog({ lead, progress, onSubmit, onClose }: Bat
 										<img
 											src={getThumbnailUrl(imageUrl)}
 											alt={`Imagem ${index + 1}`}
-											className={`w-full h-full object-contain ${imageErrors[index] ? "opacity-60" : ""}`}
+											className="w-full h-full object-contain"
 											onLoad={() => handleImageLoading(index, false)}
 											onLoadStart={() => handleImageLoading(index, true)}
-											onError={(e) => {
-												console.warn(`Erro ao carregar miniatura: ${getThumbnailUrl(imageUrl)}`);
-												handleImageLoading(index, false);
-												handleImageError(index, true);
-												e.currentTarget.src = imageUrl;
-											}}
+											onError={() => handleImageLoading(index, false)}
 										/>
 
 										{/* Checkbox para seleção */}
@@ -237,12 +210,6 @@ export function BatchManuscritoDialog({ lead, progress, onSubmit, onClose }: Bat
 												{selectedImages.includes(imageUrl) && <Check className="h-4 w-4" />}
 											</div>
 										</div>
-
-										{imageErrors[index] && (
-											<div className="absolute bottom-1 left-1 right-1 bg-red-500/70 text-white text-xs p-1 rounded text-center">
-												Erro na miniatura
-											</div>
-										)}
 									</div>
 
 									<div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
