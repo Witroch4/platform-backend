@@ -11,7 +11,8 @@ import { sseManager } from "@/lib/sse-manager";
 import { transcribeManuscript, type TranscribeManuscriptResult } from "./transcription-agent";
 import { getConfigValue } from "@/lib/config";
 import { addManuscritoJob } from "@/lib/queue/leadcells.queue";
-import { createCostQueue, addCostEventsBulk } from "@/lib/cost/queue-config";
+import { createCostQueue } from "@/lib/cost/queue-config";
+import type { CostEventData } from "@/lib/cost/cost-worker";
 import {
 	buildLeadOperationJobId,
 	mapBullMqStateToLeadOperationStatus,
@@ -21,6 +22,7 @@ import {
 	clearLeadOperationCancel,
 	createLeadOperationCancelMonitor,
 	emitLeadOperationEvent,
+	setLeadOperationState,
 	isLeadOperationCancelRequested,
 	isLeadOperationCanceledError,
 	requestLeadOperationCancel,
@@ -149,9 +151,11 @@ export async function processTranscriptionJob(
 
 	const startTime = Date.now();
 	const pageTimes: number[] = []; // Para calcular tempo médio e estimativa
+	let lastSseTime = 0;
+	const SSE_THROTTLE_MS = 800; // max 1 SSE emission per 800ms
 
 	try {
-		// Processar com callback de progresso
+		// Processar com callback de progresso (SSE throttled)
 		const transcriptionOutput: TranscribeManuscriptResult = await transcribeManuscript({
 			images,
 			leadId: leadID,
@@ -177,43 +181,68 @@ export async function processTranscriptionJob(
 					`[TranscriptionQueue] 📄 Lead ${leadID}: Página ${currentPage}/${totalPages} (${percentage}%) - Tempo restante: ~${estimatedTimeRemaining}s`,
 				);
 
-				// Atualizar progresso do job
+				// SEMPRE atualizar progresso do BullMQ (interno, sem SSE)
 				await job.updateProgress({
 					currentPage,
 					totalPages,
 					percentage,
 					estimatedTimeRemaining,
 				});
+
 				const operationProgress: LeadOperationProgress = {
 					currentPage,
 					totalPages,
 					percentage,
 					estimatedTimeRemaining,
 				};
-				await emitLeadOperationEvent({
+
+				// SEMPRE persistir estado no Redis (para polling recovery)
+				await setLeadOperationState({
 					leadId: leadID,
 					jobId,
 					stage: "transcription",
 					status: "processing",
-					message: `Página ${currentPage}/${totalPages} processada.`,
 					progress: operationProgress,
+					message: `Página ${currentPage}/${totalPages} processada.`,
 					queueState: "active",
 				});
 
-				// Notificar via SSE (enriquecido com tokens/provider)
-				await sendSSEEvent(leadID, {
-					type: "page-complete",
-					page: currentPage,
-					totalPages,
-					percentage,
-					estimatedTimeRemaining,
-					provider: detail?.provider,
-					model: detail?.model,
-					tokensIn: detail?.tokensIn,
-					tokensOut: detail?.tokensOut,
-					durationMs: detail?.durationMs,
-					wasFallback: detail?.wasFallback,
-				});
+				// Throttle SSE: emitir apenas na 1ª, última, ou a cada 800ms
+				const now = Date.now();
+				const isFirst = currentPage === 1;
+				const isLast = currentPage === totalPages;
+
+				if (isFirst || isLast || (now - lastSseTime >= SSE_THROTTLE_MS)) {
+					lastSseTime = now;
+
+					// leadOperation SSE (progress bar)
+					await sseManager.sendNotification(leadID, {
+						type: "leadOperation",
+						leadId: leadID,
+						jobId,
+						stage: "transcription",
+						status: "processing",
+						progress: operationProgress,
+						message: `Página ${currentPage}/${totalPages}`,
+						queueState: "active",
+						timestamp: new Date().toISOString(),
+					});
+
+					// transcription SSE (detalhes por página)
+					await sendSSEEvent(leadID, {
+						type: "page-complete",
+						page: currentPage,
+						totalPages,
+						percentage,
+						estimatedTimeRemaining,
+						provider: detail?.provider,
+						model: detail?.model,
+						tokensIn: detail?.tokensIn,
+						tokensOut: detail?.tokensOut,
+						durationMs: detail?.durationMs,
+						wasFallback: detail?.wasFallback,
+					});
+				}
 			},
 		});
 
@@ -251,11 +280,11 @@ export async function processTranscriptionJob(
 			queueState: "completed",
 		});
 
-		// Registrar CostEvents para auditoria de custos
+		// Registrar CostEvents em batch (1 job ao invés de N individuais)
 		try {
 			const costQueue = createCostQueue();
 			const traceId = `transcription-${leadID}-${Date.now()}`;
-			const costEvents: Array<{ name: string; data: any }> = [];
+			const batchEvents: CostEventData[] = [];
 
 			for (const page of transcriptionOutput.tokenUsage?.perPage ?? []) {
 				const provider = page.provider?.toLowerCase().includes("gemini") ? "GEMINI" : "OPENAI";
@@ -269,16 +298,16 @@ export async function processTranscriptionJob(
 					raw: { leadID, page: page.page, durationMs: page.durationMs, wasFallback: page.wasFallback },
 				};
 				if (page.input > 0) {
-					costEvents.push({ name: "cost-event", data: { ...commonData, unit: "TOKENS_IN", units: page.input } });
+					batchEvents.push({ ...commonData, unit: "TOKENS_IN", units: page.input });
 				}
 				if (page.output > 0) {
-					costEvents.push({ name: "cost-event", data: { ...commonData, unit: "TOKENS_OUT", units: page.output } });
+					batchEvents.push({ ...commonData, unit: "TOKENS_OUT", units: page.output });
 				}
 			}
 
-			if (costEvents.length > 0) {
-				await addCostEventsBulk(costQueue, costEvents);
-				console.log(`[TranscriptionQueue] 💰 ${costEvents.length} CostEvents registrados (trace: ${traceId})`);
+			if (batchEvents.length > 0) {
+				await costQueue.add("cost-event-batch", { events: batchEvents, traceId });
+				console.log(`[TranscriptionQueue] 💰 ${batchEvents.length} CostEvents enfileirados em 1 batch (trace: ${traceId})`);
 			}
 		} catch (costError) {
 			console.warn("[TranscriptionQueue] ⚠️ Falha ao registrar CostEvents (não-bloqueante):", costError);

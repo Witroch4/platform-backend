@@ -220,6 +220,118 @@ export async function processCostEvent(eventData: CostEventData): Promise<void> 
 }
 
 /**
+ * Processa um batch de eventos de custo em uma única operação
+ * Otimiza I/O: 1 createMany + 1 findMany ao invés de N creates individuais
+ */
+export async function processCostEventBatch(data: { events: CostEventData[]; traceId: string }): Promise<void> {
+	const { events, traceId } = data;
+	if (!events?.length) return;
+
+	const when = new Date(events[0].ts);
+
+	// 1. Validar todos os eventos
+	for (const evt of events) {
+		if (!evt.provider || !evt.product || !evt.unit) {
+			throw new Error(`Dados de evento incompletos no batch: provider=${evt.provider}, product=${evt.product}, unit=${evt.unit}`);
+		}
+		if (typeof evt.units !== "number" || evt.units < 0) {
+			throw new Error(`Unidades inválidas no batch: ${evt.units}`);
+		}
+	}
+
+	// 2. Filtrar duplicados via idempotência em paralelo
+	const idempotencyResults = await Promise.all(
+		events.map((evt) => isEventAlreadyProcessed(evt).catch(() => false)),
+	);
+	const newEvents = events.filter((_, i) => !idempotencyResults[i]);
+
+	if (newEvents.length === 0) {
+		log.info("Batch de custo ignorado — todos duplicados", { traceId, total: events.length });
+		return;
+	}
+
+	// 3. Resolver preços por grupo (provider, product, unit) — tipicamente 2 combos para transcrição
+	const priceCache = new Map<string, { pricePerUnit: number; currency: string } | null>();
+	const uniqueKeys = new Set(newEvents.map((e) => `${e.provider}|${e.product}|${e.unit}`));
+
+	await Promise.all(
+		Array.from(uniqueKeys).map(async (key) => {
+			const [provider, product, unit] = key.split("|");
+			const priceInfo = await resolveUnitPrice(provider as Provider, product, unit as Unit, when);
+			priceCache.set(key, priceInfo ? { pricePerUnit: priceInfo.pricePerUnit, currency: priceInfo.currency } : null);
+		}),
+	);
+
+	// 4. Preparar dados para createMany
+	const createData = newEvents.map((evt) => {
+		const key = `${evt.provider}|${evt.product}|${evt.unit}`;
+		const priceInfo = priceCache.get(key);
+		const unitPrice = priceInfo?.pricePerUnit ?? null;
+		const cost = unitPrice !== null ? calculateCost(evt.units, unitPrice, evt.unit as Unit) : null;
+		const status: EventStatus = priceInfo ? "PRICED" : "PENDING_PRICING";
+
+		return {
+			ts: new Date(evt.ts),
+			provider: evt.provider as Provider,
+			product: evt.product,
+			unit: evt.unit as Unit,
+			units: evt.units,
+			currency: priceInfo?.currency ?? "USD",
+			unitPrice,
+			cost,
+			status,
+			externalId: evt.externalId || null,
+			traceId: evt.traceId || traceId || null,
+			sessionId: evt.sessionId || null,
+			inboxId: evt.inboxId || null,
+			userId: evt.userId || null,
+			intent: evt.intent || null,
+			raw: evt.raw || {},
+		};
+	});
+
+	// 5. Insert em batch (1 round-trip)
+	await prisma.costEvent.createMany({ data: createData });
+
+	// 6. Buscar IDs criados para registrar idempotência
+	const createdEvents = await prisma.costEvent.findMany({
+		where: { traceId: traceId },
+		select: { id: true, provider: true, product: true, unit: true, units: true },
+		orderBy: { ts: "asc" },
+	});
+
+	// 7. Registrar idempotência em paralelo
+	await Promise.all(
+		newEvents.map((evt, i) => {
+			const created = createdEvents[i];
+			if (created) {
+				return registerProcessedEvent(evt, created.id);
+			}
+		}),
+	);
+
+	// 8. Incrementar contador diário de uma vez
+	const redis = getRedisInstance();
+	const today = new Date().toISOString().split("T")[0];
+	await redis.incrby(`cost:jobs:daily:${today}`, newEvents.length);
+
+	// 9. Audit log consolidado
+	const totalCost = createData.reduce((sum, e) => sum + (e.cost ?? 0), 0);
+	const totalUnits = createData.reduce((sum, e) => sum + e.units, 0);
+
+	log.info("Batch de custo processado", {
+		traceId,
+		eventsTotal: events.length,
+		eventsNew: newEvents.length,
+		eventsDuplicate: events.length - newEvents.length,
+		totalUnits,
+		totalCost,
+		currency: "USD",
+		priceGroups: uniqueKeys.size,
+	});
+}
+
+/**
  * Processa eventos PENDING_PRICING em lote usando o serviço de precificação
  */
 export async function reprocessPendingEvents(limit: number = 100): Promise<number> {
@@ -244,6 +356,10 @@ export async function processCostJob(job: Job): Promise<void> {
 		switch (name) {
 			case "cost-event":
 				await processCostEvent(data as CostEventData);
+				break;
+
+			case "cost-event-batch":
+				await processCostEventBatch(data as { events: CostEventData[]; traceId: string });
 				break;
 
 			case "reprocess-pending":
