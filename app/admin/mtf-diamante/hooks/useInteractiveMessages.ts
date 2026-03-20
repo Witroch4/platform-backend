@@ -1,184 +1,142 @@
 // app/admin/mtf-diamante/hooks/useInteractiveMessages.ts
-// Dedicated hook for managing interactive messages with SWR - Optimized version
+// Dedicated hook for managing interactive messages with React Query (TanStack Query v5)
 
-import useSWR from "swr";
-import { useCallback, useMemo } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
 import type {
 	InteractiveMessage,
 	UseInteractiveMessagesReturn,
-	SWRHookOptions,
 	CreateMessagePayload,
 	UpdateMessagePayload,
 } from "../lib/types";
 import { interactiveMessagesApi } from "../lib/api-clients";
-import {
-	useOptimizedSWRConfig,
-	useOptimizedMutation,
-	useCacheKey,
-	performanceTracker,
-	useSmartPolling,
-} from "../lib/performance-utils";
+import { mtfDiamanteQueryKeys } from "../lib/query-keys";
+
+interface UseInteractiveMessagesOptions {
+	isPaused?: boolean;
+	refreshInterval?: number;
+	revalidateOnFocus?: boolean;
+	revalidateOnReconnect?: boolean;
+	keepPreviousData?: boolean;
+}
 
 /**
  * Hook for managing interactive messages with optimistic updates
  *
  * @param inboxId - The inbox ID to filter messages (null for all messages)
  * @param isPaused - Whether to pause automatic revalidations
- * @param options - Additional SWR configuration options
+ * @param options - Additional configuration options
  * @returns Hook return object with messages data and mutation functions
  */
 export function useInteractiveMessages(
 	inboxId: string | null = null,
 	isPaused: boolean = false,
-	options: SWRHookOptions = {},
+	options: UseInteractiveMessagesOptions = {},
 ): UseInteractiveMessagesReturn {
-	// Smart polling configuration
-	const smartPolling = useSmartPolling(options.refreshInterval ?? 30000);
+	const queryClient = useQueryClient();
+	const queryKey = mtfDiamanteQueryKeys.interactiveMessages(inboxId ?? undefined);
 
-	// Optimized cache key with memoization
-	const swrKey = useCacheKey("interactive-messages", [inboxId]);
+	// Smart polling: refetchInterval as function adapts based on data freshness
+	const baseInterval = options.refreshInterval ?? 30_000;
 
-	// Optimized SWR configuration
-	const swrConfig = useOptimizedSWRConfig("interactive-messages", isPaused, {
-		refreshInterval: isPaused ? 0 : smartPolling.getPollingInterval(),
-		revalidateOnFocus: !isPaused && (options.revalidateOnFocus ?? true),
-		revalidateOnReconnect: !isPaused && (options.revalidateOnReconnect ?? true),
-		keepPreviousData: options.keepPreviousData ?? true,
+	const { data, error, isLoading } = useQuery({
+		queryKey,
+		queryFn: () => interactiveMessagesApi.getAll(inboxId!),
+		enabled: !isPaused && !!inboxId,
+		staleTime: 0, // real-time data
+		refetchInterval: isPaused
+			? false
+			: (query) => {
+					// Smart polling: faster when data recently changed
+					if (query.state.dataUpdatedAt > Date.now() - 10_000) return 5_000;
+					return baseInterval;
+				},
+		refetchOnWindowFocus: options.revalidateOnFocus ?? true,
+		refetchOnReconnect: options.revalidateOnReconnect ?? true,
+		placeholderData: options.keepPreviousData !== false ? (prev) => prev : undefined,
 	});
 
-	// Use SWR hook with optimized configuration
-	// Don't make requests when paused OR when there's no inboxId (global context)
-	const { data, error, isLoading, mutate } = useSWR(
-		isPaused || !inboxId ? null : swrKey,
-		() => interactiveMessagesApi.getAll(inboxId!), // inboxId is guaranteed to be non-null here due to the condition above
-		swrConfig,
-	);
-
-	// Memoized messages array to prevent unnecessary re-renders
 	const messages = useMemo(() => data ?? [], [data]);
 
-	/**
-	 * Add a new message with optimistic updates - Performance optimized
-	 */
-	const addMessage = useCallback(
-		async (optimisticMessage: InteractiveMessage, apiPayload: CreateMessagePayload): Promise<void> => {
-			const operationId = performanceTracker.startOperation("add-message");
-			const originalMessages = messages;
-
-			try {
-				// 1. Optimistic update - add message to the beginning
-				await mutate([optimisticMessage, ...originalMessages], { revalidate: false });
-
-				// 2. API call with performance tracking
-				const result = await interactiveMessagesApi.create(apiPayload);
-
-				// 3. Update with real data from API (replace temp ID with real ID)
-				await mutate(
-					(current?: InteractiveMessage[]) => {
-						if (!current) return [result];
-
-						return current.map((msg: InteractiveMessage) => (msg.id === optimisticMessage.id ? result : msg));
-					},
-					{ revalidate: false },
-				);
-
-				performanceTracker.endOperation(operationId, true);
-			} catch (error) {
-				// 4. Rollback on error
-				await mutate(originalMessages, { revalidate: false });
-				performanceTracker.endOperation(operationId, false, error instanceof Error ? error.message : "Unknown error");
-				throw error;
-			} finally {
-				// 5. Final revalidation to ensure consistency (debounced)
-				setTimeout(() => mutate(), 100);
+	const createMutation = useMutation({
+		mutationFn: (vars: { payload: CreateMessagePayload; optimistic: InteractiveMessage }) =>
+			interactiveMessagesApi.create(vars.payload),
+		onMutate: async (vars) => {
+			await queryClient.cancelQueries({ queryKey });
+			const previous = queryClient.getQueryData<InteractiveMessage[]>(queryKey);
+			queryClient.setQueryData<InteractiveMessage[]>(
+				queryKey,
+				(current = []) => [vars.optimistic, ...current],
+			);
+			return { previous };
+		},
+		onError: (_err, _vars, context) => {
+			if (context?.previous) {
+				queryClient.setQueryData(queryKey, context.previous);
 			}
 		},
-		[messages, mutate],
-	);
+		onSettled: () => {
+			queryClient.invalidateQueries({ queryKey });
+		},
+	});
 
-	/**
-	 * Update an existing message with optimistic updates - Performance optimized
-	 */
-	const updateMessage = useCallback(
-		async (updatedMessage: InteractiveMessage, apiPayload: UpdateMessagePayload): Promise<void> => {
-			const operationId = performanceTracker.startOperation("update-message");
-			const originalMessages = messages;
-
-			try {
-				// 1. Optimistic update - find and replace message
-				await mutate(
-					(current?: InteractiveMessage[]) => {
-						if (!current) return [updatedMessage];
-
-						return current.map((msg: InteractiveMessage) => (msg.id === updatedMessage.id ? updatedMessage : msg));
-					},
-					{ revalidate: false },
-				);
-
-				// 2. API call with performance tracking
-				const result = await interactiveMessagesApi.update(apiPayload);
-
-				// 3. Update with real data from API
-				await mutate(
-					(current?: InteractiveMessage[]) => {
-						if (!current) return [result];
-
-						return current.map((msg: InteractiveMessage) => (msg.id === result.id ? result : msg));
-					},
-					{ revalidate: false },
-				);
-
-				performanceTracker.endOperation(operationId, true);
-			} catch (error) {
-				// 4. Rollback on error
-				await mutate(originalMessages, { revalidate: false });
-				performanceTracker.endOperation(operationId, false, error instanceof Error ? error.message : "Unknown error");
-				throw error;
-			} finally {
-				// 5. Final revalidation to ensure consistency (debounced)
-				setTimeout(() => mutate(), 100);
+	const updateMutation = useMutation({
+		mutationFn: (vars: { payload: UpdateMessagePayload; optimistic: InteractiveMessage }) =>
+			interactiveMessagesApi.update(vars.payload),
+		onMutate: async (vars) => {
+			await queryClient.cancelQueries({ queryKey });
+			const previous = queryClient.getQueryData<InteractiveMessage[]>(queryKey);
+			queryClient.setQueryData<InteractiveMessage[]>(
+				queryKey,
+				(current = []) => current.map((msg) => (msg.id === vars.optimistic.id ? vars.optimistic : msg)),
+			);
+			return { previous };
+		},
+		onError: (_err, _vars, context) => {
+			if (context?.previous) {
+				queryClient.setQueryData(queryKey, context.previous);
 			}
 		},
-		[messages, mutate],
-	);
+		onSettled: () => {
+			queryClient.invalidateQueries({ queryKey });
+		},
+	});
 
-	/**
-	 * Delete a message with optimistic updates - Performance optimized
-	 */
-	const deleteMessage = useCallback(
-		async (messageId: string): Promise<void> => {
-			const operationId = performanceTracker.startOperation("delete-message");
-			const originalMessages = messages;
-
-			try {
-				// 1. Optimistic update - remove message from list
-				await mutate(
-					(current?: InteractiveMessage[]) => {
-						if (!current) return [];
-
-						return current.filter((msg: InteractiveMessage) => msg.id !== messageId);
-					},
-					{ revalidate: false },
-				);
-
-				// 2. API call with performance tracking
-				await interactiveMessagesApi.delete(messageId);
-
-				performanceTracker.endOperation(operationId, true);
-			} catch (error) {
-				// 3. Rollback on error
-				await mutate(originalMessages, { revalidate: false });
-				performanceTracker.endOperation(operationId, false, error instanceof Error ? error.message : "Unknown error");
-				throw error;
-			} finally {
-				// 4. Final revalidation to ensure consistency (debounced)
-				setTimeout(() => mutate(), 100);
+	const deleteMutation = useMutation({
+		mutationFn: interactiveMessagesApi.delete,
+		onMutate: async (messageId: string) => {
+			await queryClient.cancelQueries({ queryKey });
+			const previous = queryClient.getQueryData<InteractiveMessage[]>(queryKey);
+			queryClient.setQueryData<InteractiveMessage[]>(
+				queryKey,
+				(current = []) => current.filter((msg) => msg.id !== messageId),
+			);
+			return { previous };
+		},
+		onError: (_err, _messageId, context) => {
+			if (context?.previous) {
+				queryClient.setQueryData(queryKey, context.previous);
 			}
 		},
-		[messages, mutate],
-	);
+		onSettled: () => {
+			queryClient.invalidateQueries({ queryKey });
+		},
+	});
 
-	// Memoized return object to prevent unnecessary re-renders
+	const addMessage = async (optimisticMessage: InteractiveMessage, apiPayload: CreateMessagePayload): Promise<void> => {
+		await createMutation.mutateAsync({ payload: apiPayload, optimistic: optimisticMessage });
+	};
+
+	const updateMessage = async (updatedMessage: InteractiveMessage, apiPayload: UpdateMessagePayload): Promise<void> => {
+		await updateMutation.mutateAsync({ payload: apiPayload, optimistic: updatedMessage });
+	};
+
+	const deleteMessage = async (messageId: string): Promise<void> => {
+		await deleteMutation.mutateAsync(messageId);
+	};
+
+	const invalidate = () => queryClient.invalidateQueries({ queryKey });
+
 	return useMemo(
 		() => ({
 			messages,
@@ -187,9 +145,9 @@ export function useInteractiveMessages(
 			addMessage,
 			updateMessage,
 			deleteMessage,
-			mutate,
+			mutate: invalidate,
 		}),
-		[messages, isLoading, error, addMessage, updateMessage, deleteMessage, mutate],
+		[messages, isLoading, error, addMessage, updateMessage, deleteMessage, invalidate],
 	);
 }
 

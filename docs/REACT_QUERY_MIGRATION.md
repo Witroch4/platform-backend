@@ -2,7 +2,7 @@
 
 > **Data:** 19 de Marco de 2026
 > **Ultima auditoria:** 20 de Marco de 2026
-> **Status:** Fases 0, 1 e 2 concluidas, Fase 3 pendente
+> **Status:** Fases 0, 1, 2 e 3 concluidas, Fase 4 pendente
 > **Escopo:** Migracao gradual de SWR 2.3.6 para TanStack Query v5 no Socialwise
 > **Motivacao:** Reduzir coordenacao manual de cache, rollback e invalidacoes entre telas
 
@@ -37,25 +37,26 @@ Isso funciona, mas aumenta o custo de manutencao.
 
 ### 2.2 Numeros reais (auditoria 20/03/2026, atualizado apos Fase 2)
 
-| Metrica | Valor pre-Fase 1 | Valor pos-Fase 1 | Valor pos-Fase 2 |
-|---|---|---|---|
-| Arquivos importando SWR | **35** | **20** | **13** (7 hooks CRUD + 1 infra/tipos + 5 infra) |
-| Arquivos usando React Query | **7** | **22** | **29** (28 hooks/componentes + 1 provider) |
-| Arquivos com ambos | **0** | **0** | **0** |
-| Cobertura React Query | **17%** (7/42) | **52%** (22/42) | **69%** (29/42) |
-| `data \|\| []` em vez de `data ?? []` | **13 ocorrencias** | **11 ocorrencias** | **0 ocorrencias** (todas corrigidas na Fase 2) |
-| `globalMutate` / `useSWRConfig` | **2 arquivos** | **2 arquivos** | **2 arquivos** (useCaixas, FlowBuilderTabHooks — Fase 3) |
-| Hooks com `refreshInterval` (polling) | **10 arquivos** | **3 arquivos SWR** | **0 arquivos SWR** (todos migrados para `refetchInterval`) |
+| Metrica | Valor pre-Fase 1 | Valor pos-Fase 1 | Valor pos-Fase 2 | Valor pos-Fase 3 |
+|---|---|---|---|---|
+| Arquivos importando SWR | **35** | **20** | **13** (7 hooks CRUD + 1 infra/tipos + 5 infra) | **5** (2 infra + useFlowCanvas + SwrProvider + swr-config) |
+| Arquivos usando React Query | **7** | **22** | **29** (28 hooks/componentes + 1 provider) | **36** (35 hooks/componentes + 1 provider) |
+| Arquivos com ambos | **0** | **0** | **0** | **0** |
+| Cobertura React Query | **17%** (7/42) | **52%** (22/42) | **69%** (29/42) | **88%** (36/41) |
+| `data \|\| []` em vez de `data ?? []` | **13 ocorrencias** | **11 ocorrencias** | **0 ocorrencias** (todas corrigidas na Fase 2) | **0** |
+| `globalMutate` / `useSWRConfig` | **2 arquivos** | **2 arquivos** | **2 arquivos** (useCaixas, FlowBuilderTabHooks — Fase 3) | **0 arquivos** (todos migrados para queryClient) |
+| Hooks com `refreshInterval` (polling) | **10 arquivos** | **3 arquivos SWR** | **0 arquivos SWR** (todos migrados para `refetchInterval`) | **0 arquivos SWR** |
+| `useState` para `isCreating`/`isDeleting` | — | — | — | **0** (todos migrados para `isPending` do useMutation) |
 
-### 2.3 Distribuicao por dominio (atualizado pos-Fase 2)
+### 2.3 Distribuicao por dominio (atualizado pos-Fase 3)
 
 | Dominio | SWR | React Query | Total |
 |---|---|---|---|
-| `app/admin/mtf-diamante/` (hooks) | 6 | 4 | 10 |
-| `app/admin/mtf-diamante/` (componentes) | 1 | 3 | 4 |
+| `app/admin/mtf-diamante/` (hooks) | 0 | 10 | 10 |
+| `app/admin/mtf-diamante/` (componentes) | 0 | 4 | 4 |
 | `app/admin/mtf-diamante/` (flow-analytics) | 0 | 8 | 8 |
-| `app/admin/mtf-diamante/` (flow-builder) | 2 | 1 | 3 |
-| `app/admin/mtf-diamante/` (infra: context, lib, types) | 5 | 0 | 5 |
+| `app/admin/mtf-diamante/` (flow-builder) | 1 (useFlowCanvas) | 2 | 3 |
+| `app/admin/mtf-diamante/` (infra: context, lib, types) | 2 (SwrProvider, perf-utils) | 0 | 2 |
 | `app/admin/leads-chatwit/` | 0 | 8 | 8 |
 | `app/admin/MTFdashboard/` | 0 | 4 | 4 |
 | `app/admin/` (outros: monitoring, flow-playground, campanhas) | 0 | 3 | 3 |
@@ -123,17 +124,16 @@ Hooks com polling precisam de atencao especial na migracao — mapear para `refe
 
 > **Equivalente React Query:** `refetchInterval: 30_000` + `refetchIntervalInBackground: false` (default). Para pausa: `enabled: !isPaused`.
 
-### 2.9 Arquivos infra SWR (nao-hooks, remover na Fase 6)
+### 2.9 Arquivos infra SWR restantes (atualizado pos-Fase 3)
 
-Estes arquivos importam tipos/funcoes do SWR mas nao sao hooks. Precisam ser migrados/removidos na Fase 6:
-
-| Arquivo | Uso do SWR | Acao |
-|---|---|---|
-| `lib/swr-config.ts` | Config global + fetcher | Remover na Fase 6 |
-| `components/providers/SwrProvider.tsx` | Provider root | Remover na Fase 6 |
-| `mtf-diamante/context/SwrProvider.tsx` | Provider MTF (523 linhas) | Simplificar Fase 4, remover Fase 6 |
-| `mtf-diamante/lib/types.ts` | `import type { KeyedMutator }` + `SWRHookOptions` | Substituir tipos na migracao |
-| `mtf-diamante/lib/performance-utils.ts` | `import type { SWRConfiguration }` + `useSmartPolling` | Adaptar para React Query na Fase 3 |
+| Arquivo | Uso do SWR | Status | Acao |
+|---|---|---|---|
+| `lib/swr-config.ts` | Config global + fetcher | PENDENTE | Remover na Fase 6 |
+| `components/providers/SwrProvider.tsx` | Provider root | PENDENTE | Remover na Fase 6 |
+| `mtf-diamante/context/SwrProvider.tsx` | Provider MTF (~410 linhas) | PENDENTE | Simplificar Fase 4, remover Fase 6 |
+| `mtf-diamante/lib/types.ts` | `SWRHookOptions` (tipo residual) | RESOLVIDO Fase 3 | `KeyedMutator` removido; `SWRHookOptions` mantido (nao referenciado) |
+| `mtf-diamante/lib/performance-utils.ts` | `import type { SWRConfiguration }` | PENDENTE | Tipo usado em `createOptimizedSWRConfig` — remover quando SwrProvider for eliminado |
+| `mtf-diamante/components/flow-builder/hooks/useFlowCanvas.ts` | `useSWR` + `useSWRMutation` | PENDENTE | Migrar na Fase 4 (auto-save complexo) |
 
 ### 2.10 Hooks ja migrados — problemas residuais (TODOS RESOLVIDOS na Fase 1)
 
@@ -379,21 +379,21 @@ const { data: activeFlows } = useQuery({
 
 ### Fase 3. Mutacoes CRUD com optimistic update
 
-**Status:** PENDENTE
+**Status:** CONCLUIDA (20/03/2026)
 
 **Objetivo:** migrar as entidades com maior retorno tecnico, convergir todos os padroes de mutacao para `useMutation`
 
-#### Ordem recomendada
+#### Hooks migrados
 
-| # | Hook | Padrao atual | Complexidade | Notas |
+| # | Hook | Padrao anterior | Padrao novo | Notas |
 |---|---|---|---|---|
-| 1 | `useCaixas.ts` | B (useSWRMutation) + D (globalMutate) | Media | Ja usa useSWRMutation, migracao mais natural |
-| 2 | `useLotes.ts` | A (useState manual) | Baixa | CRUD simples, bom para template |
-| 3 | `useVariaveis.ts` | A (useState manual) | Baixa | Mesmo padrao que lotes |
-| 4 | `useApiKeys.ts` | A (useState manual) | Baixa | Mesmo padrao que lotes |
-| 5 | `useInboxButtonReactions.ts` | A (useState manual) + toast | Media | Custom fetch + notifications |
-| 6 | `useAgentBlueprints.ts` | SWR + mutate() leve | Baixa | Read migrado na F1, adicionar mutacao |
-| 7 | `useInteractiveMessages.ts` | C (optimistic completo) | Alta | Polling + Flow Builder acoplamento. **Migrar por ultimo** |
+| 1 | `useLotes.ts` | A (useState manual) | `useQuery` + `useMutation` com optimistic | Template para os demais |
+| 2 | `useVariaveis.ts` | A (useState manual) | `useQuery` + `useMutation` com optimistic | Mesmo padrao que lotes |
+| 3 | `useApiKeys.ts` | A (useState manual) | `useQuery` + `useMutation` com optimistic | staleTime 5min (config data) |
+| 4 | `useCaixas.ts` | B (useSWRMutation) + D (globalMutate) | `useQuery` + `useMutation` com optimistic | Eliminado globalMutate |
+| 5 | `useInboxButtonReactions.ts` | A (useState manual) + toast | `useQuery` + `useMutation` + toast | Adicionado query key factory |
+| 6 | `useAgentBlueprints.ts` | useQuery + useCallback | `useQuery` + `useMutation` com optimistic | Read ja estava migrado (F1) |
+| 7 | `useInteractiveMessages.ts` | C (optimistic SWR completo) | `useQuery` + `useMutation` com optimistic | Smart polling via refetchInterval fn |
 
 #### Padrao canonico de mutacao (regra `mut-optimistic-updates`)
 
@@ -449,18 +449,42 @@ export function useCreateEntity() {
 - Usar `refetchType: 'active'` (default) para so refetchar queries com observers ativos
 - Para mutacoes que afetam multiplas entidades (ex: deletar caixa afeta lotes tambem), invalidar explicitamente cada key
 
+#### Acoes extras realizadas nesta fase
+
+**FlowBuilderTabHooks.ts — eliminado globalMutate:**
+- Substituido `useSWRConfig()` por `useQueryClient()`
+- Substituido `globalMutate(predicate)` por `queryClient.invalidateQueries({ queryKey: ... })` com prefix invalidation
+- Migrado `useSWR` (import status check) para `useQuery`
+- Zero imports de `swr` restantes no arquivo
+
+**types.ts — removido import SWR:**
+- Removido `import type { KeyedMutator } from "swr"`
+- Substituido `KeyedMutator<any>` por `() => Promise<any>` em `UseButtonReactionsReturn`
+
+**query-keys.ts — adicionado buttonReactions:**
+- `mtfDiamanteQueryKeys.buttonReactions(inboxId)` — nova key para reactions por inbox
+
+**Bug fix — useInteractiveMessages smart polling:**
+- Substituido `useSmartPolling` (helper SWR customizado) por `refetchInterval` como funcao nativa do TanStack Query
+- Polling adapta automaticamente: 5s quando dados mudaram nos ultimos 10s, 30s caso contrario
+- Eliminada dependencia de `performance-utils.ts` helpers SWR
+
+**Bug fix — useAgentBlueprints sem optimistic:**
+- Versao anterior fazia `await invalidate()` apos cada mutation (request duplo: mutation + refetch)
+- Nova versao usa optimistic updates com rollback e invalidacao no `onSettled` (UI instantanea)
+
 #### Criterio de pronto (Fase 3)
 
-- [ ] `useCaixas` migrado para `useMutation` (create, update, delete)
-- [ ] `useLotes` migrado
-- [ ] `useVariaveis` migrado
-- [ ] `useApiKeys` migrado
-- [ ] `useInboxButtonReactions` migrado
-- [ ] `useAgentBlueprints` com mutacoes
-- [ ] `useInteractiveMessages` migrado (ultimo)
-- [ ] Zero `useState` para `isCreating`/`isDeleting` — usar `isPending` do `useMutation`
-- [ ] Zero `globalMutate` no codebase
-- [ ] `tsc` verde
+- [x] `useCaixas` migrado para `useMutation` (create, update, delete)
+- [x] `useLotes` migrado
+- [x] `useVariaveis` migrado
+- [x] `useApiKeys` migrado
+- [x] `useInboxButtonReactions` migrado
+- [x] `useAgentBlueprints` com mutacoes
+- [x] `useInteractiveMessages` migrado (ultimo)
+- [x] Zero `useState` para `isCreating`/`isDeleting` — usar `isPending` do `useMutation`
+- [x] Zero `globalMutate` no codebase
+- [x] `tsc` verde
 
 ---
 
@@ -818,24 +842,24 @@ Referencia rapida de TODOS os 30 arquivos SWR restantes, classificados por dific
 | 21 | `leads-chatwit/components/transcription-progress.tsx` | 2 | JA USAVA RQ |
 | 22 | `mtf-diamante/inbox/[id]/campanhas/page.tsx` | 2 | MIGRADO |
 
-### Dificil (mutacoes CRUD, optimistic, polling pesado)
+### Dificil (mutacoes CRUD, optimistic, polling pesado) — TODOS MIGRADOS (Fase 3)
 
-| # | Arquivo | Fase |
-|---|---|---|
-| 23 | `mtf-diamante/hooks/useLotes.ts` | 3 |
-| 24 | `mtf-diamante/hooks/useVariaveis.ts` | 3 |
-| 25 | `mtf-diamante/hooks/useApiKeys.ts` | 3 |
-| 26 | `mtf-diamante/hooks/useCaixas.ts` | 3 |
-| 27 | `mtf-diamante/hooks/useInboxButtonReactions.ts` | 3 |
-| 28 | `MTFdashboard/hooks/useAgentBlueprints.ts` | 3 |
+| # | Arquivo | Fase | Status |
+|---|---|---|---|
+| 23 | `mtf-diamante/hooks/useLotes.ts` | 3 | MIGRADO |
+| 24 | `mtf-diamante/hooks/useVariaveis.ts` | 3 | MIGRADO |
+| 25 | `mtf-diamante/hooks/useApiKeys.ts` | 3 | MIGRADO |
+| 26 | `mtf-diamante/hooks/useCaixas.ts` | 3 | MIGRADO |
+| 27 | `mtf-diamante/hooks/useInboxButtonReactions.ts` | 3 | MIGRADO |
+| 28 | `MTFdashboard/hooks/useAgentBlueprints.ts` | 3 | MIGRADO |
 
 ### Muito dificil (orquestracao, auto-save, context complexo)
 
-| # | Arquivo | Fase |
-|---|---|---|
-| 29 | `mtf-diamante/hooks/useInteractiveMessages.ts` | 3 (ultimo) |
-| 30 | `mtf-diamante/components/flow-builder/hooks/useFlowCanvas.ts` | 3-4 |
-| 31 | `mtf-diamante/components/flow-builder/hooks/FlowBuilderTabHooks.ts` | 3-4 |
+| # | Arquivo | Fase | Status |
+|---|---|---|---|
+| 29 | `mtf-diamante/hooks/useInteractiveMessages.ts` | 3 | MIGRADO |
+| 30 | `mtf-diamante/components/flow-builder/hooks/useFlowCanvas.ts` | 4 | PENDENTE (SWR + auto-save) |
+| 31 | `mtf-diamante/components/flow-builder/hooks/FlowBuilderTabHooks.ts` | 3 | MIGRADO (globalMutate → queryClient) |
 
 ### Infra (remover na Fase 6)
 
@@ -883,14 +907,14 @@ Referencia rapida de TODOS os 30 arquivos SWR restantes, classificados por dific
 
 Esta migracao sera considerada bem-sucedida quando:
 
-- [ ] Zero usos de `globalMutate`
-- [ ] CRUDs principais usando `useMutation` com optimistic + rollback
-- [ ] Listas e detalhes compartilhando cache por `queryKey` hierarquica
+- [x] Zero usos de `globalMutate` (concluido Fase 3)
+- [x] CRUDs principais usando `useMutation` com optimistic + rollback (concluido Fase 3)
+- [x] Listas e detalhes compartilhando cache por `queryKey` hierarquica (concluido Fase 3)
 - [ ] `SwrProvider` do MTF eliminado ou reduzido a wrapper vazio
-- [ ] Contagem de arquivos SWR: 0 (atual: 13, era 20 pos-Fase 1, era 35 pre-Fase 1)
-- [ ] Contagem de arquivos React Query: 42+ (atual: 29, era 22 pos-Fase 1, era 7 pre-Fase 1)
+- [ ] Contagem de arquivos SWR: 0 (atual: 5, era 13 pos-Fase 2, era 20 pos-Fase 1, era 35 pre-Fase 1)
+- [ ] Contagem de arquivos React Query: 42+ (atual: 36, era 29 pos-Fase 2, era 22 pos-Fase 1, era 7 pre-Fase 1)
 - [x] Zero `data || []` — tudo usando `data ?? []` (concluido Fase 2)
-- [ ] Zero `useState` para server state
+- [x] Zero `useState` para server state (concluido Fase 3 — todos migrados para `isPending`)
 - [ ] Performance igual ou melhor (medir bundle size antes/depois)
 
 ---

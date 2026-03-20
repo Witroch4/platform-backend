@@ -4,7 +4,6 @@
 import type React from "react";
 import type { ChatwitInbox, AgenteDialogflow } from "@/types/dialogflow";
 import type { InteractiveMessage } from "@/types/interactive-messages";
-import type { KeyedMutator } from "swr";
 import { MapeamentoBotao, Template } from "@prisma/client";
 
 // Re-export commonly used types for convenience
@@ -113,7 +112,7 @@ export interface UseButtonReactionsReturn {
 	addButtonReaction: (optimisticReaction: ButtonReaction, apiPayload: any) => Promise<void>;
 	updateButtonReaction: (updatedReaction: ButtonReaction, apiPayload: any) => Promise<void>;
 	deleteButtonReaction: (reactionId: string) => Promise<void>;
-	mutate: KeyedMutator<any>;
+	mutate: () => Promise<any>;
 }
 
 // WhatsApp Template types

@@ -95,4 +95,8 @@ export const mtfDiamanteQueryKeys = {
 	apiKeys: {
 		all: () => [...MTF_DIAMANTE_QUERY_ROOT, "api-keys"] as const,
 	},
+
+	// Button reactions
+	buttonReactions: (inboxId: string | null) =>
+		[...MTF_DIAMANTE_QUERY_ROOT, "button-reactions", inboxId] as const,
 };

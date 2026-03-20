@@ -1,8 +1,8 @@
 "use client";
 
-import useSWR from "swr";
-import { useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { mtfDiamanteQueryKeys } from "../lib/query-keys";
 
 interface ButtonReaction {
 	id: string;
@@ -24,145 +24,135 @@ interface UseInboxButtonReactionsOptions {
 	paused?: boolean;
 }
 
-export function useInboxButtonReactions({ inboxId, paused = false }: UseInboxButtonReactionsOptions) {
-	// SWR key - null when paused or no inboxId
-	// Use the unified API with reactionsOnly=true to get only reactions in the same format
-	const key =
-		!paused && inboxId ? `/api/admin/mtf-diamante/messages-with-reactions?inboxId=${inboxId}&reactionsOnly=true` : null;
-
-	// Debug logs (desenvolvimento apenas)
+async function fetchReactions(inboxId: string): Promise<ButtonReaction[]> {
+	const url = `/api/admin/mtf-diamante/messages-with-reactions?inboxId=${inboxId}&reactionsOnly=true`;
 	if (process.env.NODE_ENV === "development") {
-		console.log("🔍 [useInboxButtonReactions] Hook called:", { inboxId, paused, key });
+		console.log("🌐 [useInboxButtonReactions] Fetching from:", url);
+	}
+	const response = await fetch(url);
+	if (!response.ok) {
+		throw new Error(`Erro ao carregar reações: ${response.status}`);
+	}
+	const result = await response.json();
+	if (process.env.NODE_ENV === "development") {
+		console.log("✅ [useInboxButtonReactions] Fetched data:", result);
+	}
+	return result.reactions ?? [];
+}
+
+export function useInboxButtonReactions({ inboxId, paused = false }: UseInboxButtonReactionsOptions) {
+	const queryClient = useQueryClient();
+	const enabled = !paused && !!inboxId;
+
+	if (process.env.NODE_ENV === "development") {
+		console.log("🔍 [useInboxButtonReactions] Hook called:", { inboxId, paused, enabled });
 	}
 
-	const { data, error, mutate, isLoading } = useSWR(
-		key,
-		async (url: string) => {
-			if (process.env.NODE_ENV === "development") {
-				console.log("🌐 [useInboxButtonReactions] Fetching from:", url);
-			}
-			const response = await fetch(url);
-			if (!response.ok) {
-				throw new Error(`Erro ao carregar reações: ${response.status}`);
-			}
-			const result = await response.json();
-			if (process.env.NODE_ENV === "development") {
-				console.log("✅ [useInboxButtonReactions] Fetched data:", result);
-			}
+	const { data, error, isLoading } = useQuery({
+		queryKey: mtfDiamanteQueryKeys.buttonReactions(inboxId),
+		queryFn: () => fetchReactions(inboxId!),
+		enabled,
+		staleTime: 5 * 60 * 1000, // config data: 5min
+		refetchOnWindowFocus: false,
+		retry: 3,
+	});
 
-			// Return the reactions directly from the unified API response
-			return result.reactions ?? [];
-		},
-		{
-			revalidateOnFocus: false,
-			revalidateOnReconnect: true,
-			refreshInterval: 0, // Don't auto-refresh
-			errorRetryCount: 3,
-			errorRetryInterval: 2000,
-		},
-	);
+	const invalidate = () =>
+		queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.buttonReactions(inboxId) });
 
 	// Add button reaction
-	const addButtonReaction = useCallback(
-		async (reactionData: Omit<ButtonReaction, "id" | "createdAt" | "updatedAt">) => {
+	const addMutation = useMutation({
+		mutationFn: async (reactionData: Omit<ButtonReaction, "id" | "createdAt" | "updatedAt">) => {
 			if (!inboxId) throw new Error("Inbox ID é obrigatório");
-
-			try {
-				// Note: For now, use the old endpoint for CRUD operations
-				// TODO: Create a dedicated endpoint for reaction-only operations or extend messages-with-reactions
-				const response = await fetch("/api/admin/mtf-diamante/button-reactions", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						...reactionData,
-						inboxId,
-					}),
-				});
-
-				if (!response.ok) {
-					const errorData = await response.json();
-					throw new Error(errorData.error || "Erro ao adicionar reação");
-				}
-
-				const result = await response.json();
-
-				// Optimistic update
-				await mutate();
-
-				toast.success("Reação adicionada com sucesso!");
-				return result.reaction;
-			} catch (error) {
-				toast.error(error instanceof Error ? error.message : "Erro ao adicionar reação");
-				throw error;
+			const response = await fetch("/api/admin/mtf-diamante/button-reactions", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ ...reactionData, inboxId }),
+			});
+			if (!response.ok) {
+				const errorData = await response.json();
+				throw new Error(errorData.error || "Erro ao adicionar reação");
 			}
+			const result = await response.json();
+			return result.reaction;
 		},
-		[inboxId, mutate],
-	);
+		onSuccess: () => {
+			toast.success("Reação adicionada com sucesso!");
+		},
+		onError: (error: Error) => {
+			toast.error(error.message);
+		},
+		onSettled: () => {
+			invalidate();
+		},
+	});
 
 	// Update button reaction
-	const updateButtonReaction = useCallback(
-		async (reactionId: string, updates: Partial<ButtonReaction>) => {
-			try {
-				// Note: For now, use the old endpoint for CRUD operations
-				// TODO: Create a dedicated endpoint for reaction-only operations or extend messages-with-reactions
-				const response = await fetch(`/api/admin/mtf-diamante/button-reactions/${reactionId}`, {
-					method: "PUT",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify(updates),
-				});
-
-				if (!response.ok) {
-					const errorData = await response.json();
-					throw new Error(errorData.error || "Erro ao atualizar reação");
-				}
-
-				const result = await response.json();
-
-				// Optimistic update
-				await mutate();
-
-				toast.success("Reação atualizada com sucesso!");
-				return result.reaction;
-			} catch (error) {
-				toast.error(error instanceof Error ? error.message : "Erro ao atualizar reação");
-				throw error;
+	const updateMutation = useMutation({
+		mutationFn: async ({ reactionId, updates }: { reactionId: string; updates: Partial<ButtonReaction> }) => {
+			const response = await fetch(`/api/admin/mtf-diamante/button-reactions/${reactionId}`, {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(updates),
+			});
+			if (!response.ok) {
+				const errorData = await response.json();
+				throw new Error(errorData.error || "Erro ao atualizar reação");
 			}
+			const result = await response.json();
+			return result.reaction;
 		},
-		[mutate],
-	);
+		onSuccess: () => {
+			toast.success("Reação atualizada com sucesso!");
+		},
+		onError: (error: Error) => {
+			toast.error(error.message);
+		},
+		onSettled: () => {
+			invalidate();
+		},
+	});
 
 	// Delete button reaction
-	const deleteButtonReaction = useCallback(
-		async (reactionId: string) => {
-			try {
-				// Note: For now, use the old endpoint for CRUD operations
-				// TODO: Create a dedicated endpoint for reaction-only operations or extend messages-with-reactions
-				const response = await fetch(`/api/admin/mtf-diamante/button-reactions/${reactionId}`, {
-					method: "DELETE",
-				});
-
-				if (!response.ok) {
-					const errorData = await response.json();
-					throw new Error(errorData.error || "Erro ao excluir reação");
-				}
-
-				// Optimistic update
-				await mutate();
-
-				toast.success("Reação excluída com sucesso!");
-			} catch (error) {
-				toast.error(error instanceof Error ? error.message : "Erro ao excluir reação");
-				throw error;
+	const deleteMutation = useMutation({
+		mutationFn: async (reactionId: string) => {
+			const response = await fetch(`/api/admin/mtf-diamante/button-reactions/${reactionId}`, {
+				method: "DELETE",
+			});
+			if (!response.ok) {
+				const errorData = await response.json();
+				throw new Error(errorData.error || "Erro ao excluir reação");
 			}
 		},
-		[mutate],
-	);
+		onSuccess: () => {
+			toast.success("Reação excluída com sucesso!");
+		},
+		onError: (error: Error) => {
+			toast.error(error.message);
+		},
+		onSettled: () => {
+			invalidate();
+		},
+	});
+
+	// Wrapper functions to maintain same public API
+	const addButtonReaction = async (reactionData: Omit<ButtonReaction, "id" | "createdAt" | "updatedAt">) => {
+		return addMutation.mutateAsync(reactionData);
+	};
+
+	const updateButtonReaction = async (reactionId: string, updates: Partial<ButtonReaction>) => {
+		return updateMutation.mutateAsync({ reactionId, updates });
+	};
+
+	const deleteButtonReaction = async (reactionId: string) => {
+		return deleteMutation.mutateAsync(reactionId);
+	};
 
 	return {
 		reactions: data ?? [],
 		isLoading,
 		error,
-		mutate,
+		mutate: invalidate,
 		addButtonReaction,
 		updateButtonReaction,
 		deleteButtonReaction,

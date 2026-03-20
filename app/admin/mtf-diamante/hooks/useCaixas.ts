@@ -1,195 +1,157 @@
 // app/admin/mtf-diamante/hooks/useCaixas.ts
-// React hook for managing caixas (ChatwitInbox) data with SWR
-import useSWR from "swr";
-import useSWRMutation from "swr/mutation";
-import { useSWRConfig } from "swr";
-import React from "react";
+// React hook for managing caixas (ChatwitInbox) data with React Query (TanStack Query v5)
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { caixasApi } from "../lib/api-clients";
+import { mtfDiamanteQueryKeys } from "../lib/query-keys";
 import type { ChatwitInbox, CreateCaixaPayload, UpdateCaixaPayload, UseCaixasReturn } from "../lib/types";
 
 // Hook for fetching all caixas WITH AI assistants data
 export function useCaixas(isPaused: boolean = false) {
-	const { data, error, isLoading, mutate } = useSWR<ChatwitInbox[]>(
-		isPaused ? null : "/api/admin/mtf-diamante/inbox-view?dataType=caixas",
-		caixasApi.getAll,
-		{
-			revalidateOnFocus: !isPaused,
-			revalidateOnReconnect: !isPaused,
-			refreshInterval: isPaused ? 0 : 30000, // 30 seconds
-			dedupingInterval: 25000, // Conforme guia SWR 2.3: dedupe < refresh
-			keepPreviousData: true, // Conforme guia SWR 2.3 - sem flash na UI
-		},
-	);
+	const { data, error, isLoading } = useQuery({
+		queryKey: mtfDiamanteQueryKeys.caixas.all(),
+		queryFn: caixasApi.getAll,
+		enabled: !isPaused,
+		staleTime: 30_000,
+		refetchInterval: isPaused ? false : 30_000,
+		placeholderData: (prev) => prev,
+	});
 
 	return {
 		caixas: data ?? [],
 		isLoading,
 		error,
-		mutate,
 	};
 }
 
-// Hook for creating a new caixa (conforme guia SWR 2.3 - useSWRMutation)
+// Hook for creating a new caixa
 export function useCreateCaixa() {
-	// useSWRMutation para operações remotas conforme guia SWR 2.3
-	const { trigger, isMutating, error, data } = useSWRMutation(
-		"/api/admin/mtf-diamante/caixas",
-		async (_url: string, { arg }: { arg: CreateCaixaPayload }) => {
-			return await caixasApi.create(arg);
+	const queryClient = useQueryClient();
+
+	const mutation = useMutation({
+		mutationFn: caixasApi.create,
+		onSettled: () => {
+			queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.caixas.all() });
 		},
-	);
+	});
 
 	return {
-		createCaixa: trigger,
-		isCreating: isMutating,
-		error,
-		data,
+		createCaixa: mutation.mutateAsync,
+		isCreating: mutation.isPending,
+		error: mutation.error,
+		data: mutation.data,
 	};
 }
 
-// Hook for updating a caixa (conforme guia SWR 2.3 - useSWRMutation)
+// Hook for updating a caixa
 export function useUpdateCaixa() {
-	// useSWRMutation para operações remotas conforme guia SWR 2.3
-	const { trigger, isMutating, error, data } = useSWRMutation(
-		"/api/admin/mtf-diamante/caixas/update",
-		async (_url: string, { arg }: { arg: UpdateCaixaPayload }) => {
-			return await caixasApi.update(arg);
+	const queryClient = useQueryClient();
+
+	const mutation = useMutation({
+		mutationFn: caixasApi.update,
+		onSettled: () => {
+			queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.caixas.all() });
 		},
-	);
+	});
 
 	return {
-		updateCaixa: trigger,
-		isUpdating: isMutating,
-		error,
-		data,
+		updateCaixa: mutation.mutateAsync,
+		isUpdating: mutation.isPending,
+		error: mutation.error,
+		data: mutation.data,
 	};
 }
-
-// (removido) usar deleteCaixa do useCaixasManager
 
 // Combined hook for all caixa operations with optimistic updates and rollback
 export function useCaixasManager(isPaused: boolean = false): UseCaixasReturn {
-	const { caixas, isLoading, error: fetchError, mutate } = useCaixas(isPaused);
-	const { mutate: globalMutate } = useSWRConfig();
+	const { caixas, isLoading, error: fetchError } = useCaixas(isPaused);
+	const queryClient = useQueryClient();
 
-	// useSWRMutation hooks para operações remotas (mesma key híbrida para coordenação com useSWR)
-	const { trigger: createCaixa } = useSWRMutation(
-		"/api/admin/mtf-diamante/inbox-view?dataType=caixas", // mesma key híbrida da lista para cancelar GETs pendentes
-		async (_url: string, { arg }: { arg: CreateCaixaPayload }) => {
-			return await caixasApi.create(arg);
-		},
-	);
-
-	const { trigger: updateCaixa } = useSWRMutation(
-		"/api/admin/mtf-diamante/inbox-view?dataType=caixas", // mesma key híbrida da lista
-		async (_url: string, { arg }: { arg: UpdateCaixaPayload }) => {
-			return await caixasApi.update(arg);
-		},
-	);
-
-	const { trigger: deleteCaixa } = useSWRMutation(
-		"/api/admin/mtf-diamante/inbox-view?dataType=caixas", // mesma key híbrida da lista
-		async (_url: string, { arg }: { arg: string }) => {
-			return await caixasApi.delete(arg);
-		},
-	);
-
-	/**
-	 * Add a new caixa with optimistic updates and automatic rollback
-	 * ✅ SIMPLIFICADO: Sem cache Redis - endpoint sempre retorna dados frescos
-	 */
-	const addCaixa = async (optimisticCaixa: ChatwitInbox, apiPayload: CreateCaixaPayload): Promise<void> => {
-		try {
-			// ✅ FONTE ÚNICA: inbox-view com dataType=caixas (sempre sem cache)
-			const SINGLE_SOURCE_KEY = "/api/admin/mtf-diamante/inbox-view?dataType=caixas";
-
-			await mutate(
-				// 👉 UMA ÚNICA PROMISE: criação + retorno do novo estado
-				(async () => {
-					const curr = caixas ?? [];
-					const created = await caixasApi.create(apiPayload);
-					// 🔥 ORDEM NATURAL: adicionar no FINAL da lista
-					return [...curr.filter((c) => c.id !== optimisticCaixa.id), created];
-				})(),
-				{
-					// adiciona otimista imediatamente no FINAL
-					optimisticData: (curr: ChatwitInbox[] = []) => [...curr, optimisticCaixa],
-					rollbackOnError: true,
-					populateCache: true,
-					revalidate: false,
-				},
+	const createMutation = useMutation({
+		mutationFn: (vars: { payload: CreateCaixaPayload; optimistic: ChatwitInbox }) =>
+			caixasApi.create(vars.payload),
+		onMutate: async (vars) => {
+			await queryClient.cancelQueries({ queryKey: mtfDiamanteQueryKeys.caixas.all() });
+			const previous = queryClient.getQueryData<ChatwitInbox[]>(mtfDiamanteQueryKeys.caixas.all());
+			queryClient.setQueryData<ChatwitInbox[]>(
+				mtfDiamanteQueryKeys.caixas.all(),
+				(current = []) => [...current, vars.optimistic],
 			);
+			return { previous };
+		},
+		onError: (_err, _vars, context) => {
+			if (context?.previous) {
+				queryClient.setQueryData(mtfDiamanteQueryKeys.caixas.all(), context.previous);
+			}
+		},
+		onSettled: () => {
+			queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.caixas.all() });
+		},
+	});
 
-			console.log(`✅ [addCaixa] Caixa adicionada com sucesso (sem cache Redis)`);
-		} catch (error) {
-			console.error("[addCaixa] Error creating caixa:", error);
-			throw error; // Rethrow para o toast.promise capturar
-		}
+	const updateMutation = useMutation({
+		mutationFn: (vars: { payload: UpdateCaixaPayload; optimistic: ChatwitInbox }) =>
+			caixasApi.update(vars.payload),
+		onMutate: async (vars) => {
+			await queryClient.cancelQueries({ queryKey: mtfDiamanteQueryKeys.caixas.all() });
+			const previous = queryClient.getQueryData<ChatwitInbox[]>(mtfDiamanteQueryKeys.caixas.all());
+			queryClient.setQueryData<ChatwitInbox[]>(
+				mtfDiamanteQueryKeys.caixas.all(),
+				(current = []) => current.map((c) => (c.id === vars.optimistic.id ? vars.optimistic : c)),
+			);
+			return { previous };
+		},
+		onError: (_err, _vars, context) => {
+			if (context?.previous) {
+				queryClient.setQueryData(mtfDiamanteQueryKeys.caixas.all(), context.previous);
+			}
+		},
+		onSettled: () => {
+			queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.caixas.all() });
+		},
+	});
+
+	const deleteMutation = useMutation({
+		mutationFn: caixasApi.delete,
+		onMutate: async (caixaId: string) => {
+			await queryClient.cancelQueries({ queryKey: mtfDiamanteQueryKeys.caixas.all() });
+			const previous = queryClient.getQueryData<ChatwitInbox[]>(mtfDiamanteQueryKeys.caixas.all());
+			queryClient.setQueryData<ChatwitInbox[]>(
+				mtfDiamanteQueryKeys.caixas.all(),
+				(current = []) => current.filter((c) => c.id !== caixaId),
+			);
+			return { previous };
+		},
+		onError: (_err, _caixaId, context) => {
+			if (context?.previous) {
+				queryClient.setQueryData(mtfDiamanteQueryKeys.caixas.all(), context.previous);
+			}
+		},
+		onSettled: () => {
+			queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.caixas.all() });
+		},
+	});
+
+	const addCaixa = async (optimisticCaixa: ChatwitInbox, apiPayload: CreateCaixaPayload): Promise<void> => {
+		await createMutation.mutateAsync({ payload: apiPayload, optimistic: optimisticCaixa });
 	};
 
-	/**
-	 * Update an existing caixa with optimistic updates and automatic rollback
-	 * ✅ SIMPLIFICADO: Sem cache Redis - endpoint sempre retorna dados frescos
-	 */
 	const updateCaixaWithRollback = async (updatedCaixa: ChatwitInbox, apiPayload: UpdateCaixaPayload): Promise<void> => {
-		await mutate(
-			// 👉 UMA ÚNICA PROMISE: rede + retorno do novo estado
-			(async () => {
-				const curr = caixas ?? [];
-				const result = await caixasApi.update(apiPayload);
-				return curr.map((caixa) => (caixa.id === result.id ? result : caixa));
-			})(),
-			{
-				// atualiza otimista imediatamente
-				optimisticData: (curr: ChatwitInbox[] = []) =>
-					curr.map((caixa) => (caixa.id === updatedCaixa.id ? updatedCaixa : caixa)),
-				rollbackOnError: true,
-				populateCache: true,
-				revalidate: false,
-			},
-		);
-
-		console.log(`✅ [updateCaixa] Caixa atualizada com sucesso (sem cache Redis)`);
+		await updateMutation.mutateAsync({ payload: apiPayload, optimistic: updatedCaixa });
 	};
 
-	/**
-	 * Delete a caixa with optimistic updates and automatic rollback
-	 * ✅ SIMPLIFICADO: Sem cache Redis - endpoint sempre retorna dados frescos
-	 */
 	const deleteCaixaWithRollback = async (caixaId: string): Promise<void> => {
-		await mutate(
-			// 👉 UMA ÚNICA PROMISE: rede + retorno do novo estado
-			(async () => {
-				const curr = caixas ?? [];
-				await caixasApi.delete(caixaId);
-				return curr.filter((c) => c.id !== caixaId);
-			})(),
-			{
-				// remove otimista imediatamente
-				optimisticData: (curr: ChatwitInbox[] = []) => curr.filter((c) => c.id !== caixaId),
-				rollbackOnError: true,
-				populateCache: true,
-				revalidate: false,
-			},
-		);
-
-		console.log(`✅ [deleteCaixa] Caixa excluída com sucesso (sem cache Redis)`);
+		await deleteMutation.mutateAsync(caixaId);
 	};
+
+	const invalidate = () => queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.caixas.all() });
 
 	return {
-		// Data
 		caixas,
 		isLoading,
-
-		// Operations with optimistic updates and rollback
 		addCaixa,
 		updateCaixa: updateCaixaWithRollback,
 		deleteCaixa: deleteCaixaWithRollback,
-
-		// Errors
 		error: fetchError,
-
-		// Manual refresh
-		mutate,
+		mutate: invalidate,
 	};
 }

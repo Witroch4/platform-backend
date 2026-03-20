@@ -1,233 +1,173 @@
 // app/admin/mtf-diamante/hooks/useLotes.ts
-// React hook for managing lotes data with SWR
-import useSWR from "swr";
-import { useState } from "react";
+// React hook for managing lotes data with React Query (TanStack Query v5)
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { lotesApi } from "../lib/api-clients";
+import { mtfDiamanteQueryKeys } from "../lib/query-keys";
 import type { MtfDiamanteLote, CreateLotePayload, UpdateLotePayload, UseLotesReturn } from "../lib/types";
 
 // Hook for fetching all lotes
 export function useLotes(isPaused: boolean = false) {
-	const { data, error, isLoading, mutate } = useSWR<MtfDiamanteLote[]>(
-		isPaused ? null : "/api/admin/mtf-diamante/lotes",
-		lotesApi.getAll,
-		{
-			revalidateOnFocus: !isPaused,
-			revalidateOnReconnect: !isPaused,
-			refreshInterval: isPaused ? 0 : 30000, // 30 seconds
-			dedupingInterval: 30000,
-		},
-	);
+	const { data, error, isLoading } = useQuery({
+		queryKey: mtfDiamanteQueryKeys.lotes.all(),
+		queryFn: lotesApi.getAll,
+		enabled: !isPaused,
+		staleTime: 30_000,
+		refetchInterval: isPaused ? false : 30_000,
+		placeholderData: (prev) => prev,
+	});
 
 	return {
 		lotes: data ?? [],
 		isLoading,
 		error,
-		mutate,
 	};
 }
 
 // Hook for creating a new lote
 export function useCreateLote() {
-	const [isCreating, setIsCreating] = useState(false);
-	const [error, setError] = useState<string | null>(null);
+	const queryClient = useQueryClient();
 
-	const createNewLote = async (loteData: CreateLotePayload) => {
-		setIsCreating(true);
-		setError(null);
-
-		try {
-			const result = await lotesApi.create(loteData);
-			return result;
-		} catch (err) {
-			const errorMessage = err instanceof Error ? err.message : "Erro desconhecido";
-			setError(errorMessage);
-			throw err;
-		} finally {
-			setIsCreating(false);
-		}
-	};
+	const mutation = useMutation({
+		mutationFn: lotesApi.create,
+		onSettled: () => {
+			queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.lotes.all() });
+		},
+	});
 
 	return {
-		createLote: createNewLote,
-		isCreating,
-		error,
+		createLote: mutation.mutateAsync,
+		isCreating: mutation.isPending,
+		error: mutation.error?.message ?? null,
 	};
 }
 
 // Hook for updating a lote
 export function useUpdateLote() {
-	const [isUpdating, setIsUpdating] = useState(false);
-	const [error, setError] = useState<string | null>(null);
+	const queryClient = useQueryClient();
 
-	const updateExistingLote = async (payload: UpdateLotePayload) => {
-		setIsUpdating(true);
-		setError(null);
-
-		try {
-			const result = await lotesApi.update(payload);
-			return result;
-		} catch (err) {
-			const errorMessage = err instanceof Error ? err.message : "Erro desconhecido";
-			setError(errorMessage);
-			throw err;
-		} finally {
-			setIsUpdating(false);
-		}
-	};
+	const mutation = useMutation({
+		mutationFn: lotesApi.update,
+		onSettled: () => {
+			queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.lotes.all() });
+		},
+	});
 
 	return {
-		updateLote: updateExistingLote,
-		isUpdating,
-		error,
+		updateLote: mutation.mutateAsync,
+		isUpdating: mutation.isPending,
+		error: mutation.error?.message ?? null,
 	};
 }
 
 // Hook for deleting a lote
 export function useDeleteLote() {
-	const [isDeleting, setIsDeleting] = useState(false);
-	const [error, setError] = useState<string | null>(null);
+	const queryClient = useQueryClient();
 
-	const deleteExistingLote = async (id: string) => {
-		setIsDeleting(true);
-		setError(null);
-
-		try {
-			await lotesApi.delete(id);
-			return true;
-		} catch (err) {
-			const errorMessage = err instanceof Error ? err.message : "Erro desconhecido";
-			setError(errorMessage);
-			throw err;
-		} finally {
-			setIsDeleting(false);
-		}
-	};
+	const mutation = useMutation({
+		mutationFn: lotesApi.delete,
+		onSettled: () => {
+			queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.lotes.all() });
+		},
+	});
 
 	return {
-		deleteLote: deleteExistingLote,
-		isDeleting,
-		error,
+		deleteLote: mutation.mutateAsync,
+		isDeleting: mutation.isPending,
+		error: mutation.error?.message ?? null,
 	};
 }
 
 // Combined hook for all lote operations with optimistic updates and rollback
 export function useLotesManager(isPaused: boolean = false): UseLotesReturn {
-	const { lotes, isLoading, error: fetchError, mutate } = useLotes(isPaused);
+	const { lotes, isLoading, error: fetchError } = useLotes(isPaused);
+	const queryClient = useQueryClient();
 
-	/**
-	 * Add a new lote with optimistic updates and automatic rollback
-	 */
+	const createMutation = useMutation({
+		mutationFn: (vars: { payload: CreateLotePayload; optimistic: MtfDiamanteLote }) =>
+			lotesApi.create(vars.payload),
+		onMutate: async (vars) => {
+			await queryClient.cancelQueries({ queryKey: mtfDiamanteQueryKeys.lotes.all() });
+			const previous = queryClient.getQueryData<MtfDiamanteLote[]>(mtfDiamanteQueryKeys.lotes.all());
+			queryClient.setQueryData<MtfDiamanteLote[]>(
+				mtfDiamanteQueryKeys.lotes.all(),
+				(current = []) => [vars.optimistic, ...current],
+			);
+			return { previous };
+		},
+		onError: (_err, _vars, context) => {
+			if (context?.previous) {
+				queryClient.setQueryData(mtfDiamanteQueryKeys.lotes.all(), context.previous);
+			}
+		},
+		onSettled: () => {
+			queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.lotes.all() });
+		},
+	});
+
+	const updateMutation = useMutation({
+		mutationFn: (vars: { payload: UpdateLotePayload; optimistic: MtfDiamanteLote }) =>
+			lotesApi.update(vars.payload),
+		onMutate: async (vars) => {
+			await queryClient.cancelQueries({ queryKey: mtfDiamanteQueryKeys.lotes.all() });
+			const previous = queryClient.getQueryData<MtfDiamanteLote[]>(mtfDiamanteQueryKeys.lotes.all());
+			queryClient.setQueryData<MtfDiamanteLote[]>(
+				mtfDiamanteQueryKeys.lotes.all(),
+				(current = []) => current.map((lote) => (lote.id === vars.optimistic.id ? vars.optimistic : lote)),
+			);
+			return { previous };
+		},
+		onError: (_err, _vars, context) => {
+			if (context?.previous) {
+				queryClient.setQueryData(mtfDiamanteQueryKeys.lotes.all(), context.previous);
+			}
+		},
+		onSettled: () => {
+			queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.lotes.all() });
+		},
+	});
+
+	const deleteMutation = useMutation({
+		mutationFn: lotesApi.delete,
+		onMutate: async (loteId: string) => {
+			await queryClient.cancelQueries({ queryKey: mtfDiamanteQueryKeys.lotes.all() });
+			const previous = queryClient.getQueryData<MtfDiamanteLote[]>(mtfDiamanteQueryKeys.lotes.all());
+			queryClient.setQueryData<MtfDiamanteLote[]>(
+				mtfDiamanteQueryKeys.lotes.all(),
+				(current = []) => current.filter((lote) => lote.id !== loteId),
+			);
+			return { previous };
+		},
+		onError: (_err, _loteId, context) => {
+			if (context?.previous) {
+				queryClient.setQueryData(mtfDiamanteQueryKeys.lotes.all(), context.previous);
+			}
+		},
+		onSettled: () => {
+			queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.lotes.all() });
+		},
+	});
+
 	const addLote = async (optimisticLote: MtfDiamanteLote, apiPayload: CreateLotePayload): Promise<void> => {
-		const originalLotes = lotes;
-
-		try {
-			// 1. Optimistic update - add lote to the beginning
-			await mutate([optimisticLote, ...originalLotes], { revalidate: false });
-
-			// 2. API call
-			const result = await lotesApi.create(apiPayload);
-
-			// 3. Update with real data from API (replace temp ID with real ID)
-			await mutate(
-				(current) => {
-					if (!current) return [result];
-
-					return current.map((lote) => (lote.id === optimisticLote.id ? result : lote));
-				},
-				{ revalidate: false },
-			);
-		} catch (error) {
-			// 4. Rollback on error
-			await mutate(originalLotes, { revalidate: false });
-			throw error;
-		} finally {
-			// 5. Final revalidation to ensure consistency
-			await mutate();
-		}
+		await createMutation.mutateAsync({ payload: apiPayload, optimistic: optimisticLote });
 	};
 
-	/**
-	 * Update an existing lote with optimistic updates and automatic rollback
-	 */
 	const updateLoteWithRollback = async (updatedLote: MtfDiamanteLote, apiPayload: UpdateLotePayload): Promise<void> => {
-		const originalLotes = lotes;
-
-		try {
-			// 1. Optimistic update - find and replace lote
-			await mutate(
-				(current) => {
-					if (!current) return [updatedLote];
-
-					return current.map((lote) => (lote.id === updatedLote.id ? updatedLote : lote));
-				},
-				{ revalidate: false },
-			);
-
-			// 2. API call
-			const result = await lotesApi.update(apiPayload);
-
-			// 3. Update with real data from API
-			await mutate(
-				(current) => {
-					if (!current) return [result];
-
-					return current.map((lote) => (lote.id === result.id ? result : lote));
-				},
-				{ revalidate: false },
-			);
-		} catch (error) {
-			// 4. Rollback on error
-			await mutate(originalLotes, { revalidate: false });
-			throw error;
-		} finally {
-			// 5. Final revalidation to ensure consistency
-			await mutate();
-		}
+		await updateMutation.mutateAsync({ payload: apiPayload, optimistic: updatedLote });
 	};
 
-	/**
-	 * Delete a lote with optimistic updates and automatic rollback
-	 */
 	const deleteLoteWithRollback = async (loteId: string): Promise<void> => {
-		const originalLotes = lotes;
-
-		try {
-			// 1. Optimistic update - remove lote from list
-			await mutate(
-				(current) => {
-					if (!current) return [];
-
-					return current.filter((lote) => lote.id !== loteId);
-				},
-				{ revalidate: false },
-			);
-
-			// 2. API call
-			await lotesApi.delete(loteId);
-		} catch (error) {
-			// 3. Rollback on error
-			await mutate(originalLotes, { revalidate: false });
-			throw error;
-		} finally {
-			// 4. Final revalidation to ensure consistency
-			await mutate();
-		}
+		await deleteMutation.mutateAsync(loteId);
 	};
+
+	const invalidate = () => queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.lotes.all() });
 
 	return {
-		// Data
 		lotes,
 		isLoading,
-
-		// Operations with optimistic updates and rollback
 		addLote,
 		updateLote: updateLoteWithRollback,
 		deleteLote: deleteLoteWithRollback,
-
-		// Errors
 		error: fetchError,
-
-		// Manual refresh
-		mutate,
+		mutate: invalidate,
 	};
 }

@@ -1,8 +1,8 @@
 // app/admin/mtf-diamante/hooks/useVariaveis.ts
-// React hook for managing variáveis data with SWR
-import useSWR from "swr";
-import { useState } from "react";
+// React hook for managing variáveis data with React Query (TanStack Query v5)
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { variaveisApi } from "../lib/api-clients";
+import { mtfDiamanteQueryKeys } from "../lib/query-keys";
 import type {
 	MtfDiamanteVariavel,
 	CreateVariavelPayload,
@@ -12,233 +12,167 @@ import type {
 
 // Hook for fetching all variáveis
 export function useVariaveis(isPaused: boolean = false) {
-	const { data, error, isLoading, mutate } = useSWR<MtfDiamanteVariavel[]>(
-		isPaused ? null : "/api/admin/mtf-diamante/variaveis",
-		variaveisApi.getAll,
-		{
-			revalidateOnFocus: !isPaused,
-			revalidateOnReconnect: !isPaused,
-			refreshInterval: isPaused ? 0 : 30000, // 30 seconds
-			dedupingInterval: 30000,
-		},
-	);
+	const { data, error, isLoading } = useQuery({
+		queryKey: mtfDiamanteQueryKeys.variaveis.all(),
+		queryFn: variaveisApi.getAll,
+		enabled: !isPaused,
+		staleTime: 30_000,
+		refetchInterval: isPaused ? false : 30_000,
+		placeholderData: (prev) => prev,
+	});
 
 	return {
 		variaveis: data ?? [],
 		isLoading,
 		error,
-		mutate,
 	};
 }
 
 // Hook for creating a new variável
 export function useCreateVariavel() {
-	const [isCreating, setIsCreating] = useState(false);
-	const [error, setError] = useState<string | null>(null);
+	const queryClient = useQueryClient();
 
-	const createNewVariavel = async (variavelData: CreateVariavelPayload) => {
-		setIsCreating(true);
-		setError(null);
-
-		try {
-			const result = await variaveisApi.create(variavelData);
-			return result;
-		} catch (err) {
-			const errorMessage = err instanceof Error ? err.message : "Erro desconhecido";
-			setError(errorMessage);
-			throw err;
-		} finally {
-			setIsCreating(false);
-		}
-	};
+	const mutation = useMutation({
+		mutationFn: variaveisApi.create,
+		onSettled: () => {
+			queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.variaveis.all() });
+		},
+	});
 
 	return {
-		createVariavel: createNewVariavel,
-		isCreating,
-		error,
+		createVariavel: mutation.mutateAsync,
+		isCreating: mutation.isPending,
+		error: mutation.error?.message ?? null,
 	};
 }
 
 // Hook for updating a variável
 export function useUpdateVariavel() {
-	const [isUpdating, setIsUpdating] = useState(false);
-	const [error, setError] = useState<string | null>(null);
+	const queryClient = useQueryClient();
 
-	const updateExistingVariavel = async (payload: UpdateVariavelPayload) => {
-		setIsUpdating(true);
-		setError(null);
-
-		try {
-			const result = await variaveisApi.update(payload);
-			return result;
-		} catch (err) {
-			const errorMessage = err instanceof Error ? err.message : "Erro desconhecido";
-			setError(errorMessage);
-			throw err;
-		} finally {
-			setIsUpdating(false);
-		}
-	};
+	const mutation = useMutation({
+		mutationFn: variaveisApi.update,
+		onSettled: () => {
+			queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.variaveis.all() });
+		},
+	});
 
 	return {
-		updateVariavel: updateExistingVariavel,
-		isUpdating,
-		error,
+		updateVariavel: mutation.mutateAsync,
+		isUpdating: mutation.isPending,
+		error: mutation.error?.message ?? null,
 	};
 }
 
 // Hook for deleting a variável
 export function useDeleteVariavel() {
-	const [isDeleting, setIsDeleting] = useState(false);
-	const [error, setError] = useState<string | null>(null);
+	const queryClient = useQueryClient();
 
-	const deleteExistingVariavel = async (id: string) => {
-		setIsDeleting(true);
-		setError(null);
-
-		try {
-			await variaveisApi.delete(id);
-			return true;
-		} catch (err) {
-			const errorMessage = err instanceof Error ? err.message : "Erro desconhecido";
-			setError(errorMessage);
-			throw err;
-		} finally {
-			setIsDeleting(false);
-		}
-	};
+	const mutation = useMutation({
+		mutationFn: variaveisApi.delete,
+		onSettled: () => {
+			queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.variaveis.all() });
+		},
+	});
 
 	return {
-		deleteVariavel: deleteExistingVariavel,
-		isDeleting,
-		error,
+		deleteVariavel: mutation.mutateAsync,
+		isDeleting: mutation.isPending,
+		error: mutation.error?.message ?? null,
 	};
 }
 
 // Combined hook for all variável operations with optimistic updates and rollback
 export function useVariaveisManager(isPaused: boolean = false): UseVariaveisReturn {
-	const { variaveis, isLoading, error: fetchError, mutate } = useVariaveis(isPaused);
+	const { variaveis, isLoading, error: fetchError } = useVariaveis(isPaused);
+	const queryClient = useQueryClient();
 
-	/**
-	 * Add a new variável with optimistic updates and automatic rollback
-	 */
-	const addVariavel = async (
-		optimisticVariavel: MtfDiamanteVariavel,
-		apiPayload: CreateVariavelPayload,
-	): Promise<void> => {
-		const originalVariaveis = variaveis;
-
-		try {
-			// 1. Optimistic update - add variável to the beginning
-			await mutate([optimisticVariavel, ...originalVariaveis], { revalidate: false });
-
-			// 2. API call
-			const result = await variaveisApi.create(apiPayload);
-
-			// 3. Update with real data from API (replace temp ID with real ID)
-			await mutate(
-				(current) => {
-					if (!current) return [result];
-
-					return current.map((variavel) => (variavel.id === optimisticVariavel.id ? result : variavel));
-				},
-				{ revalidate: false },
+	const createMutation = useMutation({
+		mutationFn: (vars: { payload: CreateVariavelPayload; optimistic: MtfDiamanteVariavel }) =>
+			variaveisApi.create(vars.payload),
+		onMutate: async (vars) => {
+			await queryClient.cancelQueries({ queryKey: mtfDiamanteQueryKeys.variaveis.all() });
+			const previous = queryClient.getQueryData<MtfDiamanteVariavel[]>(mtfDiamanteQueryKeys.variaveis.all());
+			queryClient.setQueryData<MtfDiamanteVariavel[]>(
+				mtfDiamanteQueryKeys.variaveis.all(),
+				(current = []) => [vars.optimistic, ...current],
 			);
-		} catch (error) {
-			// 4. Rollback on error
-			await mutate(originalVariaveis, { revalidate: false });
-			throw error;
-		} finally {
-			// 5. Final revalidation to ensure consistency
-			await mutate();
-		}
+			return { previous };
+		},
+		onError: (_err, _vars, context) => {
+			if (context?.previous) {
+				queryClient.setQueryData(mtfDiamanteQueryKeys.variaveis.all(), context.previous);
+			}
+		},
+		onSettled: () => {
+			queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.variaveis.all() });
+		},
+	});
+
+	const updateMutation = useMutation({
+		mutationFn: (vars: { payload: UpdateVariavelPayload; optimistic: MtfDiamanteVariavel }) =>
+			variaveisApi.update(vars.payload),
+		onMutate: async (vars) => {
+			await queryClient.cancelQueries({ queryKey: mtfDiamanteQueryKeys.variaveis.all() });
+			const previous = queryClient.getQueryData<MtfDiamanteVariavel[]>(mtfDiamanteQueryKeys.variaveis.all());
+			queryClient.setQueryData<MtfDiamanteVariavel[]>(
+				mtfDiamanteQueryKeys.variaveis.all(),
+				(current = []) => current.map((v) => (v.id === vars.optimistic.id ? vars.optimistic : v)),
+			);
+			return { previous };
+		},
+		onError: (_err, _vars, context) => {
+			if (context?.previous) {
+				queryClient.setQueryData(mtfDiamanteQueryKeys.variaveis.all(), context.previous);
+			}
+		},
+		onSettled: () => {
+			queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.variaveis.all() });
+		},
+	});
+
+	const deleteMutation = useMutation({
+		mutationFn: variaveisApi.delete,
+		onMutate: async (variavelId: string) => {
+			await queryClient.cancelQueries({ queryKey: mtfDiamanteQueryKeys.variaveis.all() });
+			const previous = queryClient.getQueryData<MtfDiamanteVariavel[]>(mtfDiamanteQueryKeys.variaveis.all());
+			queryClient.setQueryData<MtfDiamanteVariavel[]>(
+				mtfDiamanteQueryKeys.variaveis.all(),
+				(current = []) => current.filter((v) => v.id !== variavelId),
+			);
+			return { previous };
+		},
+		onError: (_err, _variavelId, context) => {
+			if (context?.previous) {
+				queryClient.setQueryData(mtfDiamanteQueryKeys.variaveis.all(), context.previous);
+			}
+		},
+		onSettled: () => {
+			queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.variaveis.all() });
+		},
+	});
+
+	const addVariavel = async (optimisticVariavel: MtfDiamanteVariavel, apiPayload: CreateVariavelPayload): Promise<void> => {
+		await createMutation.mutateAsync({ payload: apiPayload, optimistic: optimisticVariavel });
 	};
 
-	/**
-	 * Update an existing variável with optimistic updates and automatic rollback
-	 */
-	const updateVariavelWithRollback = async (
-		updatedVariavel: MtfDiamanteVariavel,
-		apiPayload: UpdateVariavelPayload,
-	): Promise<void> => {
-		const originalVariaveis = variaveis;
-
-		try {
-			// 1. Optimistic update - find and replace variável
-			await mutate(
-				(current) => {
-					if (!current) return [updatedVariavel];
-
-					return current.map((variavel) => (variavel.id === updatedVariavel.id ? updatedVariavel : variavel));
-				},
-				{ revalidate: false },
-			);
-
-			// 2. API call
-			const result = await variaveisApi.update(apiPayload);
-
-			// 3. Update with real data from API
-			await mutate(
-				(current) => {
-					if (!current) return [result];
-
-					return current.map((variavel) => (variavel.id === result.id ? result : variavel));
-				},
-				{ revalidate: false },
-			);
-		} catch (error) {
-			// 4. Rollback on error
-			await mutate(originalVariaveis, { revalidate: false });
-			throw error;
-		} finally {
-			// 5. Final revalidation to ensure consistency
-			await mutate();
-		}
+	const updateVariavelWithRollback = async (updatedVariavel: MtfDiamanteVariavel, apiPayload: UpdateVariavelPayload): Promise<void> => {
+		await updateMutation.mutateAsync({ payload: apiPayload, optimistic: updatedVariavel });
 	};
 
-	/**
-	 * Delete a variável with optimistic updates and automatic rollback
-	 */
 	const deleteVariavelWithRollback = async (variavelId: string): Promise<void> => {
-		const originalVariaveis = variaveis;
-
-		try {
-			// 1. Optimistic update - remove variável from list
-			await mutate(
-				(current) => {
-					if (!current) return [];
-
-					return current.filter((variavel) => variavel.id !== variavelId);
-				},
-				{ revalidate: false },
-			);
-
-			// 2. API call
-			await variaveisApi.delete(variavelId);
-		} catch (error) {
-			// 3. Rollback on error
-			await mutate(originalVariaveis, { revalidate: false });
-			throw error;
-		} finally {
-			// 4. Final revalidation to ensure consistency
-			await mutate();
-		}
+		await deleteMutation.mutateAsync(variavelId);
 	};
+
+	const invalidate = () => queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.variaveis.all() });
 
 	return {
-		// Data
 		variaveis,
 		isLoading,
-
-		// Operations with optimistic updates and rollback
 		addVariavel,
 		updateVariavel: updateVariavelWithRollback,
 		deleteVariavel: deleteVariavelWithRollback,
-
-		// Errors
 		error: fetchError,
-
-		// Manual refresh
-		mutate,
+		mutate: invalidate,
 	};
 }

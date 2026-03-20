@@ -2,10 +2,11 @@ import { useCallback, useState, useMemo, useRef } from "react";
 import { useReactFlow } from "@xyflow/react";
 import type { Node, Viewport } from "@xyflow/react";
 import { toast } from "sonner";
-import useSWR, { useSWRConfig } from "swr";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFlowCanvas } from "./useFlowCanvas";
 import { useHandlePopover } from "../panels/HandlePopover";
 import { useMtfData } from "@/app/admin/mtf-diamante/context/SwrProvider";
+import { mtfDiamanteQueryKeys } from "@/app/admin/mtf-diamante/lib/query-keys";
 import {
 	FlowNodeType,
 	type FlowNodeData,
@@ -148,8 +149,8 @@ export function useFlowBuilderTab(caixaId: string): UseFlowBuilderTabReturn {
 	const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
 	const [isEditing, setIsEditing] = useState(false);
 
-	// SWR global mutate — para invalidar a lista de flows após salvar
-	const { mutate: globalMutate } = useSWRConfig();
+	// QueryClient — para invalidar a lista de flows após salvar
+	const queryClient = useQueryClient();
 
 	const {
 		nodes,
@@ -195,16 +196,16 @@ export function useFlowBuilderTab(caixaId: string): UseFlowBuilderTabReturn {
 	const [isImporting, setIsImporting] = useState(false);
 
 	// Check if there are reactions to import (only when canvas is empty)
-	const { data: importStatus, mutate: mutateImportStatus } = useSWR<ImportStatus>(
-		canvasVersion === 0 && !selectedFlowId
-			? `/api/admin/mtf-diamante/flow-canvas/import?inboxId=${caixaId}`
-			: null,
-		async (url: string) => {
-			const res = await fetch(url);
+	const { data: importStatus } = useQuery<ImportStatus>({
+		queryKey: [...mtfDiamanteQueryKeys.flows.all(), "import-status", caixaId],
+		queryFn: async () => {
+			const res = await fetch(`/api/admin/mtf-diamante/flow-canvas/import?inboxId=${caixaId}`);
 			return res.json();
 		},
-		{ revalidateOnFocus: false },
-	);
+		enabled: canvasVersion === 0 && !selectedFlowId,
+		refetchOnWindowFocus: false,
+		staleTime: 5 * 60 * 1000,
+	});
 
 	const canImport = importStatus?.data?.canImport ?? false;
 	const importStats = importStatus?.data?.stats;
@@ -250,14 +251,12 @@ export function useFlowBuilderTab(caixaId: string): UseFlowBuilderTabReturn {
 		setSelectedNodeId(null);
 		setDialogOpen(false);
 
-		// Revalidar a lista de flows quando volta — garante SWR sincronizado
-		globalMutate((key) => {
-			if (typeof key === 'string' && key.includes('/api/admin/mtf-diamante/flows')) {
-				return true; // Revalidar chaves de flows
-			}
-			return false;
+		// Revalidar a lista de flows quando volta — prefix invalidation for all flow-related queries
+		queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.flows.all() });
+		queryClient.invalidateQueries({
+			queryKey: [...mtfDiamanteQueryKeys.all, "flow-selector"],
 		});
-	}, [globalMutate]);
+	}, [queryClient]);
 
 	// ---------------------------------------------------------------------------
 	// Node Handlers
@@ -819,11 +818,7 @@ export function useFlowBuilderTab(caixaId: string): UseFlowBuilderTabReturn {
 		}
 
 		const promise = saveFlow(viewport).then((result) => {
-			globalMutate(
-				(key) => typeof key === "string" && key.startsWith("/api/admin/mtf-diamante/flows?"),
-				undefined,
-				{ revalidate: true },
-			);
+			queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.flows.all() });
 			return result;
 		});
 		toast.promise(promise, {
@@ -831,7 +826,7 @@ export function useFlowBuilderTab(caixaId: string): UseFlowBuilderTabReturn {
 			success: "Fluxo salvo com sucesso!",
 			error: (err) => err?.message ?? "Erro ao salvar fluxo",
 		});
-	}, [nodes, edges, saveFlow, reactFlowInstance, globalMutate]);
+	}, [nodes, edges, saveFlow, reactFlowInstance, queryClient]);
 
 	const handleAutoLayout = useCallback(() => {
 		const positions = calculateAutoLayout(nodes, edges);
