@@ -1,6 +1,7 @@
 import { useMemo } from "react";
-import useSWR from "swr";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { FlowNodeType } from "@/types/flow-builder";
+import { mtfDiamanteQueryKeys } from "../../../lib/query-keys";
 
 // =============================================================================
 // TYPES
@@ -65,7 +66,7 @@ export interface HeatmapFilters {
 // FETCHER
 // =============================================================================
 
-const fetcher = async (url: string) => {
+const fetchHeatmap = async (url: string): Promise<HeatmapResponse> => {
 	const res = await fetch(url);
 	if (!res.ok) {
 		const error = await res.json();
@@ -78,13 +79,9 @@ const fetcher = async (url: string) => {
 // HOOK
 // =============================================================================
 
-/**
- * Hook para buscar dados de heatmap do flow
- *
- * @param filters - Filtros para a busca (flowId obrigatório)
- * @returns Dados do heatmap, estado de loading e erro
- */
 export function useHeatmapData(filters: HeatmapFilters) {
+	const queryClient = useQueryClient();
+
 	// Build API URL with filters
 	const apiUrl = useMemo(() => {
 		const params = new URLSearchParams();
@@ -98,17 +95,30 @@ export function useHeatmapData(filters: HeatmapFilters) {
 	}, [filters]);
 
 	// Fetch heatmap data
-	const { data, error, isLoading, mutate } = useSWR<HeatmapResponse>(apiUrl, fetcher, {
-		refreshInterval: 60000, // Refresh every 60 seconds
-		revalidateOnFocus: true,
-		keepPreviousData: true,
+	const { data, error, isLoading } = useQuery<HeatmapResponse>({
+		queryKey: mtfDiamanteQueryKeys.analytics.heatmap({
+			flowId: filters.flowId,
+			inboxId: filters.inboxId,
+			dateRange: filters.dateRange,
+		}),
+		queryFn: () => fetchHeatmap(apiUrl),
+		refetchInterval: 60_000,
+		staleTime: 0,
+		refetchOnWindowFocus: true,
+		placeholderData: (prev) => prev,
 	});
 
 	return {
 		flow: data?.data?.flow,
-		heatmap: data?.data?.heatmap || [],
+		heatmap: data?.data?.heatmap ?? [],
 		isLoading,
 		error,
-		mutate,
+		mutate: () => queryClient.invalidateQueries({
+			queryKey: mtfDiamanteQueryKeys.analytics.heatmap({
+				flowId: filters.flowId,
+				inboxId: filters.inboxId,
+				dateRange: filters.dateRange,
+			}),
+		}),
 	};
 }

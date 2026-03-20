@@ -8,13 +8,14 @@
  * Validates Requirements: 6.6-6.10
  */
 
-import useSWR from "swr";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { AlertTriangle, AlertCircle, Info, Loader2, Bell, XCircle } from "lucide-react";
 import type { DashboardFilters } from "@/types/flow-analytics";
+import { mtfDiamanteQueryKeys } from "../../lib/query-keys";
 
 // =============================================================================
 // TYPES
@@ -45,7 +46,7 @@ interface FlowAlert {
 // FETCHER
 // =============================================================================
 
-const fetcher = async (url: string) => {
+const fetchAlerts = async (url: string): Promise<FlowAlert[]> => {
 	const res = await fetch(url);
 	if (!res.ok) throw new Error("Erro ao carregar alertas");
 	const json = await res.json();
@@ -119,9 +120,17 @@ export function AlertsPanel({ filters }: AlertsPanelProps) {
 		data: alerts,
 		error,
 		isLoading,
-	} = useSWR<FlowAlert[]>(apiUrl, fetcher, {
-		refreshInterval: 15000, // Refresh every 15 seconds
-		revalidateOnFocus: true,
+	} = useQuery<FlowAlert[]>({
+		queryKey: mtfDiamanteQueryKeys.analytics.alerts({
+			inboxId: filters.inboxId,
+			flowId: filters.flowId,
+			dateRange: filters.dateRange,
+		}),
+		queryFn: () => fetchAlerts(apiUrl!),
+		enabled: !!apiUrl,
+		refetchInterval: 15_000,
+		staleTime: 0,
+		refetchOnWindowFocus: true,
 	});
 
 	// Count by severity

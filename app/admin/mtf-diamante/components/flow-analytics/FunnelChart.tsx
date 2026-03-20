@@ -10,7 +10,7 @@
  */
 
 import { useMemo } from "react";
-import useSWR from "swr";
+import { useQuery } from "@tanstack/react-query";
 import {
 	BarChart,
 	Bar,
@@ -27,6 +27,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Loader2, TrendingDown, Users } from "lucide-react";
 import type { FunnelStep, DashboardFilters } from "@/types/flow-analytics";
+import { mtfDiamanteQueryKeys } from "../../lib/query-keys";
 
 // =============================================================================
 // TYPES
@@ -49,7 +50,7 @@ interface ChartDataPoint {
 // FETCHER
 // =============================================================================
 
-const fetcher = async (url: string) => {
+const fetchFunnel = async (url: string): Promise<FunnelStep[]> => {
 	const res = await fetch(url);
 	if (!res.ok) throw new Error("Erro ao carregar dados do funil");
 	const json = await res.json();
@@ -61,9 +62,6 @@ const fetcher = async (url: string) => {
 // HELPER FUNCTIONS
 // =============================================================================
 
-/**
- * Build API URL with filters
- */
 function buildApiUrl(flowId: string, filters: DashboardFilters): string {
 	const params = new URLSearchParams();
 	params.append("flowId", flowId);
@@ -80,13 +78,9 @@ function buildApiUrl(flowId: string, filters: DashboardFilters): string {
 	return `/api/admin/mtf-diamante/flow-analytics/funnel?${params.toString()}`;
 }
 
-/**
- * Transform funnel steps into chart data
- */
 function transformToChartData(steps: FunnelStep[]): ChartDataPoint[] {
 	if (steps.length === 0) return [];
 
-	// Find step with highest drop-off
 	const maxDropOff = Math.max(...steps.map((s) => s.dropOffPercentage));
 
 	return steps.map((step) => ({
@@ -98,14 +92,11 @@ function transformToChartData(steps: FunnelStep[]): ChartDataPoint[] {
 	}));
 }
 
-/**
- * Get color for bar based on drop-off rate
- */
 function getBarColor(dropOff: number, isHighestDropOff: boolean): string {
-	if (isHighestDropOff) return "#ef4444"; // red-500 - highest drop-off
-	if (dropOff > 30) return "#f97316"; // orange-500 - high drop-off
-	if (dropOff > 15) return "#eab308"; // yellow-500 - moderate drop-off
-	return "#22c55e"; // green-500 - low drop-off
+	if (isHighestDropOff) return "#ef4444";
+	if (dropOff > 30) return "#f97316";
+	if (dropOff > 15) return "#eab308";
+	return "#22c55e";
 }
 
 // =============================================================================
@@ -169,9 +160,15 @@ export function FunnelChart({ flowId, filters }: FunnelChartProps) {
 		data: funnelSteps,
 		error,
 		isLoading,
-	} = useSWR<FunnelStep[]>(apiUrl, fetcher, {
-		refreshInterval: 60000, // Refresh every 60 seconds
-		revalidateOnFocus: true,
+	} = useQuery<FunnelStep[]>({
+		queryKey: mtfDiamanteQueryKeys.analytics.funnel(flowId, {
+			inboxId: filters.inboxId,
+			dateRange: filters.dateRange,
+		}),
+		queryFn: () => fetchFunnel(apiUrl),
+		refetchInterval: 60_000,
+		staleTime: 0,
+		refetchOnWindowFocus: true,
 	});
 
 	// Transform data for chart

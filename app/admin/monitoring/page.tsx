@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import useSWR from "swr";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { monitoringQueryKeys } from "./lib/query-keys";
 import {
 	Activity,
 	AlertTriangle,
@@ -331,44 +332,54 @@ export default function MonitoringLandingPage() {
 		}
 	}, [timeRange]);
 
+	const queryClient = useQueryClient();
+
 	const {
 		data: dashboardData,
 		error: dashboardError,
 		isLoading: dashboardLoading,
-		mutate: refreshDashboard,
-	} = useSWR<DashboardResponse>(`/api/admin/monitoring/dashboard?timeRange=${timeRange}`, fetcher, {
-		refreshInterval: 60_000,
-		revalidateOnFocus: false,
+	} = useQuery<DashboardResponse>({
+		queryKey: monitoringQueryKeys.dashboard(timeRange),
+		queryFn: () => fetcher<DashboardResponse>(`/api/admin/monitoring/dashboard?timeRange=${timeRange}`),
+		refetchInterval: 60_000,
+		staleTime: 0,
+		refetchOnWindowFocus: false,
 	});
 
 	const {
 		data: queueMonitoringData,
 		error: queueMonitoringError,
 		isLoading: queueMonitoringLoading,
-		mutate: refreshQueueMonitoring,
-	} = useSWR<QueuesResponse>(`/api/admin/monitoring/queues?timeWindow=${queueWindowMinutes}`, fetcher, {
-		refreshInterval: 15_000,
-		revalidateOnFocus: false,
+	} = useQuery<QueuesResponse>({
+		queryKey: monitoringQueryKeys.queues(queueWindowMinutes),
+		queryFn: () => fetcher<QueuesResponse>(`/api/admin/monitoring/queues?timeWindow=${queueWindowMinutes}`),
+		refetchInterval: 15_000,
+		staleTime: 0,
+		refetchOnWindowFocus: false,
 	});
 
 	const {
 		data: queueManagementData,
 		error: queueManagementError,
 		isLoading: queueManagementLoading,
-		mutate: refreshQueueManagement,
-	} = useSWR<QueueManagementStatus[]>("/api/admin/queue-management/queues", fetcher, {
-		refreshInterval: 15_000,
-		revalidateOnFocus: false,
+	} = useQuery<QueueManagementStatus[]>({
+		queryKey: monitoringQueryKeys.queueManagement(),
+		queryFn: () => fetcher<QueueManagementStatus[]>("/api/admin/queue-management/queues"),
+		refetchInterval: 15_000,
+		staleTime: 0,
+		refetchOnWindowFocus: false,
 	});
 
 	const {
 		data: costData,
 		error: costError,
 		isLoading: costLoading,
-		mutate: refreshCost,
-	} = useSWR<CostOverview>("/api/admin/cost-monitoring/overview", fetcher, {
-		refreshInterval: 5 * 60_000,
-		revalidateOnFocus: false,
+	} = useQuery<CostOverview>({
+		queryKey: monitoringQueryKeys.costOverview(),
+		queryFn: () => fetcher<CostOverview>("/api/admin/cost-monitoring/overview"),
+		refetchInterval: 5 * 60_000,
+		staleTime: 0,
+		refetchOnWindowFocus: false,
 	});
 
 	const queuePerformanceMap = useMemo(() => {
@@ -483,12 +494,7 @@ export default function MonitoringLandingPage() {
 	const handleRefresh = async () => {
 		try {
 			setRefreshing(true);
-			await Promise.all([
-				refreshDashboard(),
-				refreshQueueMonitoring(),
-				refreshQueueManagement(),
-				refreshCost(),
-			]);
+			await queryClient.invalidateQueries({ queryKey: monitoringQueryKeys.all });
 		} finally {
 			setRefreshing(false);
 		}

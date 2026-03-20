@@ -1,15 +1,12 @@
-// app/admin/mtf-diamante/hooks/useApprovedTemplates.ts
-// Dedicated hook for fetching approved WhatsApp templates with SWR
+"use client";
 
-import useSWR from "swr";
-import { useMemo } from "react";
-import type { UseApprovedTemplatesReturn, WhatsAppTemplate } from "../lib/types";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useCallback } from "react";
+import type { WhatsAppTemplate } from "../lib/types";
+import { mtfDiamanteQueryKeys } from "../lib/query-keys";
 
-/**
- * Fetcher for approved templates
- */
-async function fetchApprovedTemplates(url: string): Promise<WhatsAppTemplate[]> {
-	const response = await fetch(url, {
+async function fetchApprovedTemplates(caixaId: string): Promise<WhatsAppTemplate[]> {
+	const response = await fetch(`/api/admin/mtf-diamante/templates?caixaId=${caixaId}`, {
 		headers: { "Content-Type": "application/json" },
 	});
 
@@ -18,35 +15,29 @@ async function fetchApprovedTemplates(url: string): Promise<WhatsAppTemplate[]> 
 	}
 
 	const data = await response.json();
-
-	// Filter only approved templates
 	const templates = (data.templates || data || []) as WhatsAppTemplate[];
 	return templates.filter((t) => t.status === "APPROVED");
 }
 
-/**
- * Hook for fetching approved WhatsApp templates
- *
- * @param caixaId - The inbox ID to filter templates (null disables fetching)
- * @param isPaused - Whether to pause automatic revalidations
- * @returns Hook return object with templates data
- */
-export function useApprovedTemplates(
-	caixaId: string | null = null,
-	isPaused: boolean = false,
-): UseApprovedTemplatesReturn {
-	// Build SWR key - null disables fetching
-	const swrKey = !isPaused && caixaId ? `/api/admin/mtf-diamante/templates?caixaId=${caixaId}` : null;
+export function useApprovedTemplates(caixaId: string | null = null, isPaused: boolean = false) {
+	const queryClient = useQueryClient();
 
-	const { data, error, isLoading, mutate } = useSWR(swrKey, fetchApprovedTemplates, {
-		revalidateOnFocus: false,
-		revalidateOnReconnect: true,
-		dedupingInterval: 30000, // 30s - templates don't change frequently
-		keepPreviousData: true,
+	const { data, error, isLoading } = useQuery({
+		queryKey: mtfDiamanteQueryKeys.approvedTemplates(caixaId),
+		queryFn: () => fetchApprovedTemplates(caixaId!),
+		enabled: !isPaused && !!caixaId,
+		staleTime: 5 * 60 * 1000, // 5min — config data, changes by user action
+		refetchOnWindowFocus: false,
+		refetchOnReconnect: true,
+		placeholderData: (prev) => prev,
 	});
 
-	// Memoized templates array
-	const templates = useMemo(() => data || [], [data]);
+	const templates = useMemo(() => data ?? [], [data]);
+
+	const mutate = useCallback(
+		() => queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.approvedTemplates(caixaId) }),
+		[queryClient, caixaId],
+	);
 
 	return {
 		templates,

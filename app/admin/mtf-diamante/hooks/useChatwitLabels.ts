@@ -14,13 +14,13 @@ export function useChatwitLabels() {
 	const { data, error, isLoading } = useQuery({
 		queryKey: mtfDiamanteQueryKeys.chatwitLabels(),
 		queryFn: chatwitLabelsApi.getAll,
-		staleTime: 60_000,
+		staleTime: 10 * 60 * 1000, // 10min — labels are reference data
 		refetchOnWindowFocus: false,
 	});
 
 	return useMemo(
 		() => ({
-			chatwitLabels: (data || []) as ChatwitLabelOption[],
+			chatwitLabels: (data ?? []) as ChatwitLabelOption[],
 			isLoading,
 			error,
 		}),

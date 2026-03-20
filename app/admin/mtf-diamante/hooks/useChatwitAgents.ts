@@ -15,7 +15,7 @@ export function useChatwitAgents() {
 
 	return useMemo(
 		() => ({
-			chatwitAgents: data || [],
+			chatwitAgents: data ?? [],
 			isLoading,
 			error,
 		}),

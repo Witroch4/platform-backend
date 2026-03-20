@@ -1,7 +1,8 @@
 import { useMemo } from "react";
-import useSWR from "swr";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { FlowNodeType } from "@/types/flow-builder";
 import type { ExecutionLogEntry } from "@/types/flow-analytics";
+import { mtfDiamanteQueryKeys } from "../../../lib/query-keys";
 
 // =============================================================================
 // TYPES
@@ -58,7 +59,7 @@ export interface NodeDetailsFilters {
 // FETCHER
 // =============================================================================
 
-const fetcher = async (url: string) => {
+const fetchNodeDetails = async (url: string): Promise<NodeDetailsResponse> => {
 	const res = await fetch(url);
 	if (!res.ok) {
 		const error = await res.json();
@@ -71,13 +72,9 @@ const fetcher = async (url: string) => {
 // HOOK
 // =============================================================================
 
-/**
- * Hook para buscar detalhes de um nó específico
- *
- * @param filters - Filtros para a busca (flowId e nodeId obrigatórios)
- * @returns Detalhes do nó, estado de loading e erro
- */
 export function useNodeDetails(filters: NodeDetailsFilters) {
+	const queryClient = useQueryClient();
+
 	// Build API URL with filters
 	const apiUrl = useMemo(() => {
 		if (!filters.enabled) return null;
@@ -95,15 +92,19 @@ export function useNodeDetails(filters: NodeDetailsFilters) {
 	}, [filters]);
 
 	// Fetch node details
-	const { data, error, isLoading, mutate } = useSWR<NodeDetailsResponse>(apiUrl, fetcher, {
-		revalidateOnFocus: false,
-		keepPreviousData: false,
+	const { data, error, isLoading } = useQuery<NodeDetailsResponse>({
+		queryKey: mtfDiamanteQueryKeys.analytics.nodeDetails(filters.flowId, filters.nodeId),
+		queryFn: () => fetchNodeDetails(apiUrl!),
+		enabled: !!apiUrl,
+		refetchOnWindowFocus: false,
 	});
 
 	return {
 		nodeDetails: data?.data,
 		isLoading,
 		error,
-		mutate,
+		mutate: () => queryClient.invalidateQueries({
+			queryKey: mtfDiamanteQueryKeys.analytics.nodeDetails(filters.flowId, filters.nodeId),
+		}),
 	};
 }

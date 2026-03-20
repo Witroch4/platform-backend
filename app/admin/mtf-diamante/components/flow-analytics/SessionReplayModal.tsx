@@ -9,8 +9,7 @@
  * Validates Requirements: 4.1-4.10
  */
 
-import { useEffect, useState } from "react";
-import useSWR from "swr";
+import { useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +27,7 @@ import {
 	Image as ImageIcon,
 	Timer,
 } from "lucide-react";
+import { mtfDiamanteQueryKeys } from "../../lib/query-keys";
 
 // =============================================================================
 // TYPES
@@ -70,8 +70,8 @@ interface SessionDetail {
 // FETCHER
 // =============================================================================
 
-const fetcher = async (url: string) => {
-	const res = await fetch(url);
+const fetchSessionDetail = async (sessionId: string): Promise<SessionDetail> => {
+	const res = await fetch(`/api/admin/mtf-diamante/flow-analytics/sessions/${sessionId}`);
 	if (!res.ok) throw new Error("Erro ao carregar detalhes da sessão");
 	const json = await res.json();
 	if (!json.success) throw new Error(json.error || "Erro");
@@ -147,10 +147,12 @@ export function SessionReplayModal({ sessionId, open, onOpenChange }: SessionRep
 		data: session,
 		error,
 		isLoading,
-	} = useSWR<SessionDetail>(
-		sessionId && open ? `/api/admin/mtf-diamante/flow-analytics/sessions/${sessionId}` : null,
-		fetcher,
-	);
+	} = useQuery<SessionDetail>({
+		queryKey: mtfDiamanteQueryKeys.analytics.sessionReplay(sessionId ?? ""),
+		queryFn: () => fetchSessionDetail(sessionId!),
+		enabled: !!sessionId && open,
+		staleTime: 30_000,
+	});
 
 	// ==========================================================================
 	// RENDER

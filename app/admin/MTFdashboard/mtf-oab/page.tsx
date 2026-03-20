@@ -74,7 +74,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useDropzone } from "react-dropzone";
-import useSWR from "swr";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { dashboardQueryKeys } from "../lib/query-keys";
 import type { RubricPayload } from "@/lib/oab-eval/types";
 import type { GabaritoGrupo, Subitem } from "@/lib/oab/gabarito-parser-deterministico";
 import { verificarPontuacao } from "@/lib/oab/gabarito-parser-deterministico";
@@ -546,17 +547,20 @@ function SubitemDetailPanel({
 // ── Main Page ────────────────────────────────────────────────────────────
 
 export default function MTFOABPage() {
-	// ── Shared SWR ──
+	// ── Shared Query ──
+	const queryClient = useQueryClient();
 	const {
 		data: rubricsData,
-		mutate: refreshRubrics,
 		isLoading: isLoadingRubrics,
-	} = useSWR<{ success: boolean; rubrics: RubricFromDB[]; total: number }>("/api/oab-eval/rubrics", fetcher, {
-		revalidateOnFocus: true,
-		revalidateOnReconnect: true,
-		dedupingInterval: 5000,
-		keepPreviousData: true,
+	} = useQuery<{ success: boolean; rubrics: RubricFromDB[]; total: number }>({
+		queryKey: dashboardQueryKeys.oabRubrics(),
+		queryFn: () => fetcher("/api/oab-eval/rubrics"),
+		staleTime: 5_000,
+		refetchOnWindowFocus: true,
+		refetchOnReconnect: true,
+		placeholderData: (prev) => prev,
 	});
+	const refreshRubrics = () => queryClient.invalidateQueries({ queryKey: dashboardQueryKeys.oabRubrics() });
 
 	const rubricSummaries = rubricsData?.rubrics ?? [];
 
@@ -598,11 +602,12 @@ export default function MTFOABPage() {
 	const [auditoriaView, setAuditoriaView] = useState<"grupos" | "itens">("grupos");
 	const [itensSearchTerm, setItensSearchTerm] = useState("");
 
-	// Auditoria: fetch detail via SWR
-	const { data: detailData, isLoading: isLoadingDetail } = useSWR<{ success: boolean; rubric: RubricDetail }>(
-		selectedId ? `/api/oab-eval/rubrics/${selectedId}` : null,
-		fetcher,
-	);
+	// Auditoria: fetch detail via React Query
+	const { data: detailData, isLoading: isLoadingDetail } = useQuery<{ success: boolean; rubric: RubricDetail }>({
+		queryKey: dashboardQueryKeys.oabRubricDetail(selectedId ?? ""),
+		queryFn: () => fetcher(`/api/oab-eval/rubrics/${selectedId}`),
+		enabled: !!selectedId,
+	});
 
 	const detail = detailData?.rubric ?? null;
 

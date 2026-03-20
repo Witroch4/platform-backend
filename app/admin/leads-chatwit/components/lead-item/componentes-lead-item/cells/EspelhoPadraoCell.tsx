@@ -7,7 +7,8 @@ import { AlertCircle, BookOpen, Check, Loader2 } from "lucide-react";
 import type { CellProps } from "../types";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import useSWR from "swr";
+import { useQuery } from "@tanstack/react-query";
+import { leadsQueryKeys } from "../../../../lib/query-keys";
 import { hasConvertedImages } from "../utils";
 
 interface EspelhoPadrao {
@@ -64,10 +65,19 @@ export function EspelhoPadraoCell({
 	);
 
 	// Buscar rubricas OAB (agente local)
-	const { data: rubricData, isLoading: loadingRubrics } = useSWR<{
+	const { data: rubricData, isLoading: loadingRubrics } = useQuery<{
 		success: boolean;
 		rubrics: Record<string, any[]>;
-	}>("/api/admin/leads-chatwit/oab-rubrics");
+	}>({
+		queryKey: leadsQueryKeys.oabRubrics(),
+		queryFn: async () => {
+			const res = await fetch("/api/admin/leads-chatwit/oab-rubrics");
+			if (!res.ok) throw new Error("Erro ao carregar rubricas");
+			return res.json();
+		},
+		staleTime: 10 * 60 * 1000, // 10min — reference data
+		refetchOnWindowFocus: false,
+	});
 
 	// Verificar qual fonte de dados usar (flag do config.yml)
 	const usarAgenteLocal = true; // TODO: pegar do config via API
@@ -292,7 +302,7 @@ export function EspelhoPadraoCell({
 										return (
 											<div key={exame}>
 												{/* Título do Exame (OAB) - Tom cinza suave */}
-												<div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-muted/30 border-b border-border/20 sticky top-0 z-10">
+												<div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-muted/30 border-b border-border/20">
 													{exame}
 												</div>
 

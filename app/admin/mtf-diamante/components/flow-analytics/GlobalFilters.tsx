@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import useSWR from "swr";
+import { useQuery } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -12,6 +12,7 @@ import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import type { DashboardFilters } from "@/types/flow-analytics";
 import type { DateRange } from "react-day-picker";
+import { mtfDiamanteQueryKeys } from "../../lib/query-keys";
 
 // =============================================================================
 // TYPES
@@ -32,7 +33,7 @@ interface FlowOption {
 // FETCHER
 // =============================================================================
 
-const fetcher = async (url: string) => {
+const fetchFlows = async (url: string): Promise<FlowOption[]> => {
 	const res = await fetch(url);
 	if (!res.ok) throw new Error("Erro ao carregar dados");
 	const json = await res.json();
@@ -86,13 +87,12 @@ const DATE_PRESETS = [
 
 export function GlobalFilters({ inboxId, filters, onFiltersChange }: GlobalFiltersProps) {
 	// Fetch flows for the inbox
-	const { data: flows } = useSWR<FlowOption[]>(
-		`/api/admin/mtf-diamante/flow-admin?inboxId=${inboxId}&dataType=flows`,
-		fetcher,
-		{
-			revalidateOnFocus: false,
-		},
-	);
+	const { data: flows } = useQuery<FlowOption[]>({
+		queryKey: mtfDiamanteQueryKeys.analytics.flows(inboxId),
+		queryFn: () => fetchFlows(`/api/admin/mtf-diamante/flow-admin?inboxId=${inboxId}&dataType=flows`),
+		staleTime: 5 * 60 * 1000, // 5min
+		refetchOnWindowFocus: false,
+	});
 
 	// Current date range for display
 	const dateRangeDisplay = useMemo(() => {

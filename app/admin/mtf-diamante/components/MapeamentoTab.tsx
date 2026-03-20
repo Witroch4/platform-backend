@@ -3,7 +3,8 @@
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { useMtfData } from "../context/SwrProvider";
-import useSWR from "swr";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { mtfDiamanteQueryKeys } from "../lib/query-keys";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -55,55 +56,71 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
 	// Usar o provider SWR para obter as mensagens interativas
 	const { interactiveMessages, isLoadingMessages } = useMtfData();
 
-	// Usar SWR para mapeamentos
+	const queryClient = useQueryClient();
+
+	// Usar React Query para mapeamentos
 	const {
 		data: mapeamentos = [],
 		error: mapeamentosError,
-		mutate: mutateMapeamentos,
-	} = useSWR(caixaId ? `/api/admin/mtf-diamante/mapeamentos/${caixaId}` : null, async (url) => {
-		const response = await fetch(url);
-		if (!response.ok) throw new Error("Falha ao buscar mapeamentos");
-		return response.json();
+	} = useQuery({
+		queryKey: mtfDiamanteQueryKeys.mapeamentos(caixaId),
+		queryFn: async () => {
+			const response = await fetch(`/api/admin/mtf-diamante/mapeamentos/${caixaId}`);
+			if (!response.ok) throw new Error("Falha ao buscar mapeamentos");
+			return response.json();
+		},
+		enabled: !!caixaId,
+		staleTime: 30_000,
 	});
-
-	// Usar SWR para templates (primeiro tentar específicos da caixa, depois globais)
-	const {
-		data: templates = [],
-		error: templatesError,
-		mutate: mutateTemplates,
-	} = useSWR(caixaId ? [`templates`, caixaId] : null, async () => {
-		try {
-			// Tentar buscar templates específicos da caixa primeiro
-			const templateResponse = await fetch(`/api/admin/mtf-diamante/templates/${caixaId}`);
-			if (templateResponse.ok) {
-				const templateData = await templateResponse.json();
-				setUsingGlobalTemplates(false);
-				return templateData;
-			}
-		} catch (error) {
-			console.log("Falha ao buscar templates da caixa, tentando fallback...");
-		}
-
-		// Fallback: buscar templates globais da conta
-		const globalTemplateResponse = await fetch(`/api/admin/mtf-diamante/templates`);
-		if (globalTemplateResponse.ok) {
-			const globalTemplateData = await globalTemplateResponse.json();
-			const templates = globalTemplateData.success ? globalTemplateData.templates : globalTemplateData;
-			setUsingGlobalTemplates(true);
-			return templates;
-		}
-
-		throw new Error("Falha ao buscar templates.");
-	});
+	const mutateMapeamentos = () => queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.mapeamentos(caixaId) });
 
 	const [loading, setLoading] = useState(false);
 	const [usingGlobalTemplates, setUsingGlobalTemplates] = useState(false);
 
-	// Usar SWR para flows da inbox
-	// Nota: o fetcher global do SWRConfig retorna JSON cru { success, data }
-	const { data: rawFlows, error: flowsError } = useSWR<any>(
-		caixaId ? `/api/admin/mtf-diamante/flows?inboxId=${caixaId}` : null,
-	);
+	// Usar React Query para templates (primeiro tentar específicos da caixa, depois globais)
+	const {
+		data: templates = [],
+		error: templatesError,
+	} = useQuery({
+		queryKey: mtfDiamanteQueryKeys.mapeamentoTemplates(caixaId),
+		queryFn: async () => {
+			try {
+				const templateResponse = await fetch(`/api/admin/mtf-diamante/templates/${caixaId}`);
+				if (templateResponse.ok) {
+					const templateData = await templateResponse.json();
+					setUsingGlobalTemplates(false);
+					return templateData;
+				}
+			} catch (error) {
+				console.log("Falha ao buscar templates da caixa, tentando fallback...");
+			}
+
+			const globalTemplateResponse = await fetch(`/api/admin/mtf-diamante/templates`);
+			if (globalTemplateResponse.ok) {
+				const globalTemplateData = await globalTemplateResponse.json();
+				const templates = globalTemplateData.success ? globalTemplateData.templates : globalTemplateData;
+				setUsingGlobalTemplates(true);
+				return templates;
+			}
+
+			throw new Error("Falha ao buscar templates.");
+		},
+		enabled: !!caixaId,
+		staleTime: 5 * 60 * 1000,
+	});
+	const mutateTemplates = () => queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.mapeamentoTemplates(caixaId) });
+
+	// Usar React Query para flows da inbox
+	const { data: rawFlows, error: flowsError } = useQuery<any>({
+		queryKey: mtfDiamanteQueryKeys.mapeamentoFlows(caixaId),
+		queryFn: async () => {
+			const response = await fetch(`/api/admin/mtf-diamante/flows?inboxId=${caixaId}`);
+			if (!response.ok) throw new Error("Falha ao buscar flows");
+			return response.json();
+		},
+		enabled: !!caixaId,
+		staleTime: 30_000,
+	});
 
 	// Normalizar: o fetcher global retorna { success, data: Flow[] }, não o array direto
 	const flows: Flow[] = useMemo(() => {
@@ -136,12 +153,17 @@ const MapeamentoTab = ({ caixaId }: MapeamentoTabProps) => {
 
 	// Ações para lista IA: usaremos os mesmos handlers de mapeamento (editar/excluir)
 
-	// Usar SWR para AI intents
-	const { data: aiIntents = [] } = useSWR(caixaId ? "/api/admin/ai-integration/intents" : null, async (url) => {
-		const response = await fetch(url, { cache: "no-store" });
-		if (!response.ok) return [];
-		const data = await response.json();
-		return Array.isArray(data?.intents) ? data.intents : [];
+	// Usar React Query para AI intents
+	const { data: aiIntents = [] } = useQuery({
+		queryKey: [...mtfDiamanteQueryKeys.all, "ai-intents"] as const,
+		queryFn: async () => {
+			const response = await fetch("/api/admin/ai-integration/intents", { cache: "no-store" });
+			if (!response.ok) return [];
+			const data = await response.json();
+			return Array.isArray(data?.intents) ? data.intents : [];
+		},
+		enabled: !!caixaId,
+		staleTime: 5 * 60 * 1000,
 	});
 
 	const resetForm = () => {

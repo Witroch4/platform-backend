@@ -1,10 +1,11 @@
 "use client";
 
-import useSWR from "swr";
+import { useQuery } from "@tanstack/react-query";
 import type { AgentCatalogPayload } from "../types";
+import { dashboardQueryKeys } from "../lib/query-keys";
 
-const fetcher = async (url: string) => {
-	const res = await fetch(url, { cache: "no-store" });
+const fetchCatalog = async (): Promise<AgentCatalogPayload> => {
+	const res = await fetch("/api/admin/mtf-agents/catalog", { cache: "no-store" });
 	if (!res.ok) {
 		const detail = await res.json().catch(() => ({}));
 		throw new Error(detail?.error || "Falha ao carregar catálogo de agentes");
@@ -13,9 +14,12 @@ const fetcher = async (url: string) => {
 };
 
 export function useAgentCatalog() {
-	const { data, error, isLoading } = useSWR<AgentCatalogPayload>("/api/admin/mtf-agents/catalog", fetcher, {
-		keepPreviousData: true,
-		revalidateOnFocus: false,
+	const { data, error, isLoading } = useQuery({
+		queryKey: dashboardQueryKeys.agentCatalog(),
+		queryFn: fetchCatalog,
+		staleTime: 10 * 60 * 1000, // 10min — reference data
+		refetchOnWindowFocus: false,
+		placeholderData: (prev) => prev,
 	});
 
 	return {

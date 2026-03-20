@@ -1,9 +1,10 @@
 # React Query Migration (TanStack Query v5)
 
-> **Data:** 19 de Marco de 2026  
-> **Status:** Iniciada  
-> **Escopo:** Migracao gradual de SWR 2.3.6 para TanStack Query v5 no Socialwise  
-> **Motivacao:** Reduzir coordenacao manual de cache, rollback e invalidações entre telas
+> **Data:** 19 de Marco de 2026
+> **Ultima auditoria:** 20 de Marco de 2026
+> **Status:** Fase 0 e Fase 1 concluidas, Fase 2 pendente
+> **Escopo:** Migracao gradual de SWR 2.3.6 para TanStack Query v5 no Socialwise
+> **Motivacao:** Reduzir coordenacao manual de cache, rollback e invalidacoes entre telas
 
 ---
 
@@ -26,57 +27,135 @@ Isso funciona, mas aumenta o custo de manutencao.
 
 ---
 
-## 2. Estado Atual do Projeto
+## 2. Estado Atual do Projeto (Auditado)
 
 ### 2.1 Base instalada
-
-Ja foi instalado:
 
 ```json
 "@tanstack/react-query": "^5.91.2"
 ```
 
-### 2.2 Fundacao ja implementada
+### 2.2 Numeros reais (auditoria 20/03/2026, atualizado apos Fase 1)
 
-Esta fase ja foi aplicada no codigo:
+| Metrica | Valor pre-Fase 1 | Valor pos-Fase 1 |
+|---|---|---|
+| Arquivos importando SWR | **35** | **20** (15 hooks/componentes + 5 infra/tipos) |
+| Arquivos usando React Query | **7** | **22** (21 hooks/componentes + 1 provider) |
+| Arquivos com ambos | **0** | **0** |
+| Cobertura React Query | **17%** (7/42) | **52%** (22/42) |
+| `data \|\| []` em vez de `data ?? []` | **13 ocorrencias** | **11 ocorrencias** (2 corrigidas em useChatwitLabels/Agents) |
+| `globalMutate` / `useSWRConfig` | **2 arquivos** | **2 arquivos** (useCaixas, FlowBuilderTabHooks — Fase 3) |
+| Hooks com `refreshInterval` (polling) | **10 arquivos** | **3 arquivos SWR** (7 migrados para `refetchInterval`) |
 
-| Arquivo | Papel |
-|---|---|
-| `components/providers/react-query-provider.tsx` | Cria e expoe `QueryClientProvider` global |
-| `app/layout.tsx` | Passou a envolver a app com `ReactQueryProvider` sem remover `SWRProvider` |
-| `app/admin/mtf-diamante/lib/query-keys.ts` | Inicio do padrao centralizado de `queryKey` |
-| `app/admin/mtf-diamante/hooks/useChatwitLabels.ts` | Primeiro hook migrado para `useQuery` |
-| `app/admin/mtf-diamante/hooks/useChatwitAgents.ts` | Segundo hook migrado para `useQuery` |
-| `app/admin/mtf-diamante/lib/api-clients.ts` | Ajuste de tipagem para `ChatwitAgent[]` |
+### 2.3 Distribuicao por dominio (atualizado pos-Fase 1)
 
-### 2.3 Validacao executada
+| Dominio | SWR | React Query | Total |
+|---|---|---|---|
+| `app/admin/mtf-diamante/` (hooks) | 6 | 4 | 10 |
+| `app/admin/mtf-diamante/` (componentes) | 3 | 1 | 4 |
+| `app/admin/mtf-diamante/` (flow-analytics) | 0 | 7 | 7 |
+| `app/admin/mtf-diamante/` (flow-builder) | 3 | 0 | 3 |
+| `app/admin/mtf-diamante/` (infra: context, lib, types) | 5 | 0 | 5 |
+| `app/admin/leads-chatwit/` | 3 | 5 | 8 |
+| `app/admin/MTFdashboard/` | 0 | 4 | 4 |
+| `app/admin/` (outros: monitoring, flow-playground) | 1 | 1 | 2 |
+| `lib/` + `components/` (providers, config) | 2 | 1 | 3 |
 
-Os comandos abaixo passaram apos a primeira etapa:
+### 2.4 Fundacao ja implementada
 
-```bash
-pnpm exec tsc --noEmit
-pnpm exec tsc --noEmit -p tsconfig.worker.json
-```
+- [x] `components/providers/react-query-provider.tsx` — QueryClientProvider global
+- [x] `app/layout.tsx` — ReactQueryProvider + SWRProvider coexistindo
+- [x] `app/admin/mtf-diamante/lib/query-keys.ts` — Factory de queryKeys (mtf-diamante) — expandida Fase 1
+- [x] `app/admin/MTFdashboard/lib/query-keys.ts` — Factory de queryKeys (dashboard) — criada Fase 1
+- [x] `app/admin/leads-chatwit/lib/query-keys.ts` — Factory de queryKeys (leads) — criada Fase 1
+- [x] `app/admin/monitoring/lib/query-keys.ts` — Factory de queryKeys (monitoring) — criada Fase 1
+- [x] `app/admin/mtf-diamante/hooks/useChatwitLabels.ts` — Migrado para `useQuery`
+- [x] `app/admin/mtf-diamante/hooks/useChatwitAgents.ts` — Migrado para `useQuery`
+- [x] `app/admin/mtf-diamante/lib/api-clients.ts` — Tipagem `ChatwitAgent[]`
+- [x] TypeScript validado (`tsc --noEmit` + `tsc --noEmit -p tsconfig.worker.json`)
 
-### 2.4 Tamanho estimado da migracao
+### 2.5 Ja usando React Query (fora do plano original)
 
-Levantamento local no momento desta doc:
+Estes arquivos em `leads-chatwit` ja usam React Query nativamente:
 
-- Aproximadamente **99 usos** de `useSWR`, `useSWRMutation`, `useSWRInfinite` e `useSWRSubscription`
-- O maior concentrador de complexidade esta em `app/admin/mtf-diamante/`
+- [x] `app/admin/leads-chatwit/hooks/useLeadOperationStatus.ts` — `useQuery` + `useQueryClient` com SSE
+- [x] `app/admin/leads-chatwit/components/batch-processor/useLeadBatchProcessor.ts` — `useQueryClient` para invalidacao
+- [x] `app/admin/leads-chatwit/components/analise-dialog.tsx` — `useQueryClient` para invalidacao
+- [x] `app/admin/leads-chatwit/components/espelho-dialog.tsx` — `useQueryClient` para invalidacao
 
-Arquivos mais pesados hoje:
+### 2.6 Padroes de mutacao SWR encontrados
 
-| Arquivo | Sinal de complexidade |
-|---|---|
-| `app/admin/mtf-diamante/hooks/useCaixas.ts` | Mutacoes + optimistic update + rollback |
-| `app/admin/mtf-diamante/hooks/useLotes.ts` | Mutacoes + rollback repetido |
-| `app/admin/mtf-diamante/hooks/useVariaveis.ts` | Mutacoes + rollback repetido |
-| `app/admin/mtf-diamante/hooks/useApiKeys.ts` | Mutacoes + rollback repetido |
-| `app/admin/mtf-diamante/hooks/useInteractiveMessages.ts` | Mutacoes + polling + performance tracking |
-| `app/admin/mtf-diamante/context/SwrProvider.tsx` | Orquestracao central de varios hooks |
-| `app/admin/mtf-diamante/components/FlowAnalyticsDashboard.tsx` | Varias chaves + polling + refresh manual |
-| `app/admin/mtf-diamante/inbox/[id]/campanhas/page.tsx` | Lista, detalhe, progresso e infinito no mesmo fluxo |
+O audit revelou **4 padroes distintos** de mutacao no codigo SWR atual. Isso e importante porque a migracao deve convergir para **1 padrao unico** com `useMutation`:
+
+| Padrao | Onde | Problema |
+|---|---|---|
+| **A) useState manual** (mais comum, ~18 arquivos) | `useVariaveis`, `useLotes`, `useApiKeys` | `useState` separado para `isCreating`/`isDeleting`, fetch manual, sem rollback formal |
+| **B) useSWRMutation** (3 arquivos) | `useCaixas`, `useFlowCanvas` | Correto mas com coordenacao manual de keys |
+| **C) Optimistic completo** (1 arquivo) | `useInteractiveMessages` | Funciona bem, mas boilerplate pesado |
+| **D) globalMutate** (2 arquivos) | `useCaixas`, `FlowBuilderTabHooks` | `useSWRConfig()` para refresh cruzado |
+
+**Impacto:** os padroes A e D sao os que mais se beneficiam da migracao. O padrao C ja faz o correto, so vai ficar mais limpo com `useMutation`.
+
+### 2.7 Divida tecnica: `data || []` vs `data ?? []`
+
+O operador `||` trata `0`, `false` e `""` como falsy — retornando `[]` indevidamente. Com React Query o risco e identico. **Corrigir em cada hook migrado.**
+
+| Arquivo | Linha | Expressao |
+|---|---|---|
+| `useCaixas.ts` | 25 | `data \|\| []` |
+| `useChatwitLabels.ts` | 23 | `(data \|\| [])` |
+| `useChatwitAgents.ts` | 18 | `data \|\| []` |
+| `useInboxButtonReactions.ts` | 162 | `data \|\| []` |
+| `useApprovedTemplates.ts` | 23, 49 | `data \|\| []` (2x) |
+| `useLotes.ts` | 22 | `data \|\| []` |
+| `useVariaveis.ts` | 27 | `data \|\| []` |
+| `useInteractiveMessages.ts` | 58 | `data \|\| []` |
+| `useApiKeys.ts` | 22 | `data \|\| []` |
+| `api-clients.ts` | 110, 281, 366, 451, 536, 546 | `\|\| []` no fetcher |
+
+> **Acao:** ao migrar cada hook, trocar `||` por `??` na mesma PR.
+
+### 2.8 Mapa de polling (`refreshInterval`)
+
+Hooks com polling precisam de atencao especial na migracao — mapear para `refetchInterval` do React Query.
+
+| Arquivo | Intervalo | Notas |
+|---|---|---|
+| `useCaixas.ts` | 30s | pausa via `isPaused` |
+| `useLotes.ts` | 30s | pausa via `isPaused` |
+| `useVariaveis.ts` | 30s | pausa via `isPaused` |
+| `useApiKeys.ts` | 30s | pausa via `isPaused` |
+| `useInteractiveMessages.ts` | 30s (smart) | `useSmartPolling` — adapta intervalo |
+| `FlowAnalyticsDashboard.tsx` | 5s / 10s / 15s | 3 queries com intervalos diferentes |
+| `AlertsPanel.tsx` | 15s | — |
+| `ExecutiveKPICards.tsx` | 30s | — |
+| `FunnelChart.tsx` | 60s | — |
+| `useHeatmapData.ts` | 60s | — |
+| `monitoring/page.tsx` | 15s / 60s / 5min | 4 queries com intervalos variados |
+| `campanhas/page.tsx` | 3s | progresso de campanha |
+
+> **Equivalente React Query:** `refetchInterval: 30_000` + `refetchIntervalInBackground: false` (default). Para pausa: `enabled: !isPaused`.
+
+### 2.9 Arquivos infra SWR (nao-hooks, remover na Fase 6)
+
+Estes arquivos importam tipos/funcoes do SWR mas nao sao hooks. Precisam ser migrados/removidos na Fase 6:
+
+| Arquivo | Uso do SWR | Acao |
+|---|---|---|
+| `lib/swr-config.ts` | Config global + fetcher | Remover na Fase 6 |
+| `components/providers/SwrProvider.tsx` | Provider root | Remover na Fase 6 |
+| `mtf-diamante/context/SwrProvider.tsx` | Provider MTF (523 linhas) | Simplificar Fase 4, remover Fase 6 |
+| `mtf-diamante/lib/types.ts` | `import type { KeyedMutator }` + `SWRHookOptions` | Substituir tipos na migracao |
+| `mtf-diamante/lib/performance-utils.ts` | `import type { SWRConfiguration }` + `useSmartPolling` | Adaptar para React Query na Fase 3 |
+
+### 2.10 Hooks ja migrados — problemas residuais (TODOS RESOLVIDOS na Fase 1)
+
+| Arquivo | Problema | Status |
+|---|---|---|
+| `useChatwitLabels.ts` | Usa `data \|\| []` (linha 23) — trocar por `??` | CORRIGIDO |
+| `useChatwitAgents.ts` | Usa `data \|\| []` (linha 18) — trocar por `??` | CORRIGIDO |
+| `useChatwitLabels.ts` | `staleTime: 60_000` — doc recomenda 10min para referencia | CORRIGIDO (10min) |
+| `useLeadOperationStatus.ts` | Query keys inline sem factory | CORRIGIDO (leadsQueryKeys) |
 
 ---
 
@@ -92,20 +171,18 @@ O SWR ja e global no projeto hoje porque:
 
 O problema real e outro:
 
-1. A ergonomia de mutacao ficou cara.
-2. O custo de padronizar optimistic update ficou alto.
-3. O refresh entre telas depende demais de convencao manual.
+1. A ergonomia de mutacao ficou cara — padrao A (useState manual) esta em 18+ arquivos.
+2. O custo de padronizar optimistic update ficou alto — so 1 arquivo faz corretamente.
+3. O refresh entre telas depende demais de convencao manual — `globalMutate` ad-hoc.
 4. Parte do server state ja esta vazando para `useState`, o que reduz previsibilidade.
 
-TanStack Query ajuda porque formaliza melhor:
+TanStack Query resolve com APIs formais:
 
-- `queryKey`
-- `invalidateQueries`
-- `setQueryData`
-- `getQueryData`
-- `cancelQueries`
-- `useMutation`
-- `useInfiniteQuery`
+- `queryKey` hierarquica + factory → invalidacao previsivel
+- `useMutation` com `onMutate`/`onError`/`onSettled` → padrao unico de optimistic
+- `invalidateQueries` por prefixo → refresh cruzado automatico
+- `select` → transformacao memoizada sem `useMemo` manual
+- `useInfiniteQuery` → paginacao sem `useState` duplicado
 
 ---
 
@@ -150,218 +227,422 @@ TanStack Query ajuda porque formaliza melhor:
 6. **Migrar mutacoes so depois da base estar madura**
    Primeiro `useQuery`. Depois `useMutation`.
 
+7. **Uma queryKey factory por dominio** (regra `qk-factory-pattern`)
+   Nunca `queryKey` inline. Sempre importar do factory central.
+
+8. **staleTime por volatilidade** (regra `cache-stale-time`)
+   Dados de referencia (labels, agentes, modelos) = 5-10min. Dados volateis (mensagens, lotes) = 30s-1min.
+
 ---
 
 ## 6. Estrategia por Fases
 
-## Fase 0. Fundacao Segura
+### Fase 0. Fundacao Segura
 
-**Status:** Concluida
+**Status:** CONCLUIDA
 
-Entregas:
-
-- Provider global do React Query
-- QueryClient estavel no browser
-- Primeiro arquivo de `queryKeys`
-- Dois hooks read-only migrados
-- TypeScript validado
-
-Essa fase e segura para deploy porque:
-
-- nao removeu SWR
-- nao alterou API routes
-- nao mudou contrato com Chatwit
-- nao mudou fluxo critico do Flow Engine
+- [x] Provider global do React Query (`react-query-provider.tsx`)
+- [x] QueryClient estavel no browser (staleTime: 30s, retry: 2)
+- [x] Primeiro arquivo de `queryKeys` (`mtf-diamante/lib/query-keys.ts`)
+- [x] `useChatwitLabels` migrado para `useQuery`
+- [x] `useChatwitAgents` migrado para `useQuery`
+- [x] TypeScript validado
+- [x] Deploy seguro (nao removeu SWR, nao alterou APIs, nao mexeu no Flow Engine)
 
 ---
 
-## Fase 1. Read-only de baixo risco
+### Fase 1. Read-only de baixo risco
 
-**Objetivo:** consolidar padrao de `useQuery` e `queryKey`
+**Status:** CONCLUIDA (20/03/2026)
 
-### Proximos candidatos
+**Objetivo:** consolidar padrao de `useQuery` e expandir `queryKeys`
 
-| Prioridade | Arquivo | Motivo |
-|---|---|---|
-| Alta | `app/admin/mtf-diamante/hooks/useApprovedTemplates.ts` | Read-only, dominio bem definido |
-| Alta | `app/admin/MTFdashboard/hooks/useAgentCatalog.ts` | Read-only simples |
-| Alta | `app/admin/MTFdashboard/hooks/useProviderModels.ts` | Read-only simples |
-| Media | `app/admin/mtf-diamante/hooks/useChatwitLabels.ts` | Ja migrado |
-| Media | `app/admin/mtf-diamante/hooks/useChatwitAgents.ts` | Ja migrado |
-| Media | `app/admin/mtf-diamante/components/MapeamentoTab.tsx` | Leitura multipla, mas ainda controlavel |
+#### Checklist de migracao
 
-### Criterio de pronto
+**MTF Diamante:**
+- [x] `useChatwitLabels.ts` — migrado (Fase 0) + corrigido `data || []` → `data ?? []` + staleTime 10min
+- [x] `useChatwitAgents.ts` — migrado (Fase 0) + corrigido `data || []` → `data ?? []`
+- [x] `useApprovedTemplates.ts` — migrado para `useQuery` com `placeholderData`, staleTime 5min
+- [x] `MapeamentoTab.tsx` — 4 useSWR migrados para `useQuery` (mapeamentos, templates, flows, ai-intents)
 
-- Cada hook usa `useQuery`
-- `queryKey` centralizada
-- sem regressao visual
-- sem alterar APIs
-- `tsc` verde
+**MTF Dashboard:**
+- [x] `useAgentCatalog.ts` — migrado para `useQuery`, staleTime 10min
+- [x] `useProviderModels.ts` — migrado para `useQuery`, staleTime 10min
+- [x] `useAgentBlueprints.ts` — read-only migrado para `useQuery`; mutacoes mantidas como `useCallback` (Phase 3)
 
----
+**Flow Analytics (7 arquivos migrados em batch):**
+- [x] `AlertsPanel.tsx` — `useQuery` com `refetchInterval: 15s`
+- [x] `ExecutiveKPICards.tsx` — `useQuery` com `refetchInterval: 30s`, `placeholderData`
+- [x] `FunnelChart.tsx` — `useQuery` com `refetchInterval: 60s`
+- [x] `GlobalFilters.tsx` — `useQuery` com staleTime 5min
+- [x] `SessionReplayModal.tsx` — `useQuery` com `enabled` condicional
+- [x] `useHeatmapData.ts` — `useQuery` com `refetchInterval: 60s`, `placeholderData`
+- [x] `useNodeDetails.ts` — `useQuery` com `enabled` condicional
 
-## Fase 2. Listas, filtros e paginacao
+**Outros read-only:**
+- [x] `EspelhoPadraoCell.tsx` — `useQuery` para OAB rubrics, staleTime 10min
+- [x] `monitoring/page.tsx` — 4 `useQuery` com `refetchInterval` (15s, 15s, 60s, 5min) + invalidacao por prefixo
+- [x] `mtf-oab/page.tsx` — 2 `useQuery` (lista + detalhe) com `placeholderData`
 
-**Objetivo:** padronizar leitura com parametros e preparar o terreno para invalidação previsivel
+**Quick wins (corrigidos):**
+- [x] `useChatwitLabels.ts` — `data ?? []` (era `data || []`)
+- [x] `useChatwitAgents.ts` — `data ?? []` (era `data || []`)
+- [x] `useChatwitLabels.ts` — staleTime 10min (era 60s)
+- [x] `useLeadOperationStatus.ts` — query keys migradas para factory `leadsQueryKeys`
 
-### Candidatos
+**Query keys criadas nesta fase:**
 
-| Prioridade | Arquivo | Ponto de atencao |
-|---|---|---|
-| Alta | `app/admin/leads-chatwit/hooks/useMessages.ts` | Hoje mistura SWR com `useState` local |
-| Alta | `app/admin/leads-chatwit/components/all-messages-tab.tsx` | Historico + load more |
-| Media | `app/admin/mtf-diamante/components/flow-builder/panels/FlowSelector.tsx` | Lista e refresh |
-| Media | `app/admin/monitoring/page.tsx` | Varias queries read-only |
-| Media | `app/admin/mtf-diamante/components/FlowAnalyticsDashboard.tsx` | Polling em 3 chaves |
-| Media | `app/admin/mtf-diamante/inbox/[id]/campanhas/page.tsx` | Mistura lista, detalhe, progresso e infinito |
+- `app/admin/mtf-diamante/lib/query-keys.ts` — expandido com: approvedTemplates, mapeamentos, mapeamentoTemplates, mapeamentoFlows, analytics (kpis, alerts, funnel, heatmap, nodeDetails, sessionReplay, flows), interactiveMessages, flows, caixas, lotes, variaveis, apiKeys
+- `app/admin/MTFdashboard/lib/query-keys.ts` — NOVO: agentCatalog, providerModels, agentBlueprints, oabRubrics, oabRubricDetail
+- `app/admin/leads-chatwit/lib/query-keys.ts` — NOVO: messages, list, operationStatus, detail, oabRubrics
+- `app/admin/monitoring/lib/query-keys.ts` — NOVO: dashboard, queues, queueManagement, costOverview
 
-### Meta tecnica
+#### Criterio de pronto (Fase 1)
 
-- Introduzir `placeholderData` e `useInfiniteQuery` onde fizer sentido
-- Remover `useState` que replica server state sem necessidade
-- Formalizar `queryKey` com filtros
-
----
-
-## Fase 3. Mutacoes CRUD com optimistic update
-
-**Objetivo:** migrar as entidades com maior retorno tecnico
-
-### Ordem recomendada
-
-1. `useCaixas.ts`
-2. `useLotes.ts`
-3. `useVariaveis.ts`
-4. `useApiKeys.ts`
-5. `useInboxButtonReactions.ts`
-6. `useInteractiveMessages.ts`
-
-### Motivo da ordem
-
-- `caixas`, `lotes`, `variaveis` e `apiKeys` ja repetem o mesmo padrao
-- sao boas candidatas para um template reutilizavel de `useMutation`
-- `interactiveMessages` deve vir depois porque tem mais acoplamento com Flow Builder e polling
-
-### Padrao esperado
-
-Cada mutacao deve seguir o fluxo:
-
-1. `cancelQueries`
-2. snapshot com `getQueryData`
-3. optimistic update com `setQueryData`
-4. rollback em `onError`
-5. `invalidateQueries` em `onSettled`
+- [x] Todos os hooks read-only acima migrados para `useQuery`
+- [x] `queryKeys` centralizadas por dominio (4 factories: mtf, dashboard, leads, monitoring)
+- [x] Sem regressao visual
+- [x] `pnpm exec tsc --noEmit && pnpm exec tsc --noEmit -p tsconfig.worker.json`
+- [x] Nenhuma entidade usando SWR E React Query ao mesmo tempo
 
 ---
 
-## Fase 4. Simplificacao do `SwrProvider` do MTF
+### Fase 2. Listas, filtros e paginacao
 
-**Objetivo:** parar de usar o provider como orquestrador manual de varios refreshes
+**Status:** PENDENTE
 
-Arquivo principal:
+**Objetivo:** padronizar leitura com parametros, introduzir `useInfiniteQuery` e `placeholderData`
 
-- `app/admin/mtf-diamante/context/SwrProvider.tsx`
+#### Checklist de migracao
 
-Problema atual:
+- [ ] `useMessages.ts` — mistura SWR com `useState` local. Migrar para `useInfiniteQuery` com cursor
+- [ ] `all-messages-tab.tsx` — historico + load more. Depende de `useMessages`
+- [ ] `leads-list.tsx` — paginacao com search params + refresh counter
+- [ ] `FlowSelector.tsx` — lista de flows + refresh
+- [ ] `FlowAnalyticsDashboard.tsx` — polling em 3 chaves (usar `refetchInterval`)
+- [ ] `inbox/[id]/campanhas/page.tsx` — lista + detalhe + progresso + infinito (mais complexo da fase)
+- [ ] `flow-playground/page.tsx` — queries contextuais
+- [ ] `transcription-progress.tsx` — polling de progresso de transcricao
 
-- o provider centraliza varios hooks
-- expoe wrappers de compatibilidade
-- concentra refresh manual e pausa/resume
+#### Padroes a aplicar nesta fase
 
-Destino ideal:
+**`placeholderData` vs `initialData`** (regra `cache-placeholder-vs-initial`):
+- Usar `placeholderData: keepPreviousData` para listas com filtros (evita flash ao trocar filtro)
+- Usar `placeholderData` com dados de outra query (ex: mostrar dados da lista enquanto detalhe carrega)
+- **Nunca** usar `initialData` a menos que o dado venha do servidor (SSR)
 
-- reduzir o provider para compatibilidade temporaria
-- migrar dados gradualmente para hooks baseados em React Query
-- evitar que o provider seja o "cache manager" da feature
+**`useInfiniteQuery`** (regra `inf-page-params`):
+```ts
+// Padrao para useMessages migrado
+export function useMessages(leadId: string) {
+  return useInfiniteQuery({
+    queryKey: leadsQueryKeys.messages(leadId),
+    queryFn: ({ pageParam }) => fetchMessages(leadId, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    // maxPages para nao acumular memoria infinita
+    maxPages: 10,
+  });
+}
+```
+
+**`select` para transformacao** (regra `perf-select-transform`):
+```ts
+// Em vez de filtrar no componente (re-executa a cada render),
+// usar select (memoizado, re-executa so quando data muda)
+const { data: activeFlows } = useQuery({
+  queryKey: mtfDiamanteQueryKeys.flows(),
+  queryFn: fetchFlows,
+  select: (flows) => flows.filter(f => f.active),
+});
+```
+
+#### Criterio de pronto (Fase 2)
+
+- [ ] `useMessages` usando `useInfiniteQuery`
+- [ ] `FlowAnalyticsDashboard` usando `refetchInterval` nativo
+- [ ] Nenhum `useState` duplicando server state
+- [ ] `queryKeys` com filtros incluidos (regra `qk-include-dependencies`)
+- [ ] `tsc` verde
 
 ---
 
-## Fase 5. SSR/Hydration opcional
+### Fase 3. Mutacoes CRUD com optimistic update
+
+**Status:** PENDENTE
+
+**Objetivo:** migrar as entidades com maior retorno tecnico, convergir todos os padroes de mutacao para `useMutation`
+
+#### Ordem recomendada
+
+| # | Hook | Padrao atual | Complexidade | Notas |
+|---|---|---|---|---|
+| 1 | `useCaixas.ts` | B (useSWRMutation) + D (globalMutate) | Media | Ja usa useSWRMutation, migracao mais natural |
+| 2 | `useLotes.ts` | A (useState manual) | Baixa | CRUD simples, bom para template |
+| 3 | `useVariaveis.ts` | A (useState manual) | Baixa | Mesmo padrao que lotes |
+| 4 | `useApiKeys.ts` | A (useState manual) | Baixa | Mesmo padrao que lotes |
+| 5 | `useInboxButtonReactions.ts` | A (useState manual) + toast | Media | Custom fetch + notifications |
+| 6 | `useAgentBlueprints.ts` | SWR + mutate() leve | Baixa | Read migrado na F1, adicionar mutacao |
+| 7 | `useInteractiveMessages.ts` | C (optimistic completo) | Alta | Polling + Flow Builder acoplamento. **Migrar por ultimo** |
+
+#### Padrao canonico de mutacao (regra `mut-optimistic-updates`)
+
+Todas as mutacoes devem seguir este fluxo de 5 passos:
+
+```ts
+export function useCreateEntity() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: entityApi.create,
+
+    // 1. Cancel outgoing refetches
+    onMutate: async (payload) => {
+      await queryClient.cancelQueries({ queryKey: entityKeys.lists() });
+
+      // 2. Snapshot para rollback
+      const previous = queryClient.getQueryData<Entity[]>(entityKeys.lists());
+
+      // 3. Optimistic update
+      queryClient.setQueryData<Entity[]>(
+        entityKeys.lists(),
+        (current = []) => [...current, { id: `temp-${crypto.randomUUID()}`, ...payload } as Entity]
+      );
+
+      return { previous };
+    },
+
+    // 4. Rollback em caso de erro
+    onError: (_err, _payload, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(entityKeys.lists(), context.previous);
+      }
+      toast.error("Erro ao criar");
+    },
+
+    // 5. Invalidar SEMPRE (garante consistencia com servidor)
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: entityKeys.lists() });
+    },
+
+    onSuccess: () => {
+      toast.success("Criado com sucesso");
+    },
+  });
+}
+```
+
+#### Regras de invalidacao (regra `cache-invalidation`)
+
+- **Targeted invalidation**: invalidar apenas as keys afetadas, nunca `queryClient.invalidateQueries()` sem filtro
+- **Hierarquia de keys ajuda**: `invalidateQueries({ queryKey: ["mtf-diamante"] })` invalida tudo do dominio
+- Usar `refetchType: 'active'` (default) para so refetchar queries com observers ativos
+- Para mutacoes que afetam multiplas entidades (ex: deletar caixa afeta lotes tambem), invalidar explicitamente cada key
+
+#### Criterio de pronto (Fase 3)
+
+- [ ] `useCaixas` migrado para `useMutation` (create, update, delete)
+- [ ] `useLotes` migrado
+- [ ] `useVariaveis` migrado
+- [ ] `useApiKeys` migrado
+- [ ] `useInboxButtonReactions` migrado
+- [ ] `useAgentBlueprints` com mutacoes
+- [ ] `useInteractiveMessages` migrado (ultimo)
+- [ ] Zero `useState` para `isCreating`/`isDeleting` — usar `isPending` do `useMutation`
+- [ ] Zero `globalMutate` no codebase
+- [ ] `tsc` verde
+
+---
+
+### Fase 4. Simplificacao do SwrProvider do MTF
+
+**Status:** PENDENTE
+
+**Objetivo:** parar de usar o provider como orquestrador manual de refreshes
+
+Arquivo principal: `app/admin/mtf-diamante/context/SwrProvider.tsx`
+
+#### Problema atual
+
+- Centraliza 8+ hooks
+- Expoe wrappers de compatibilidade
+- Concentra refresh manual e pausa/resume
+- Middleware de retry metrics
+
+#### Checklist de migracao
+
+- [ ] Listar todas as propriedades expostas pelo context
+- [ ] Para cada propriedade, verificar se o hook subjacente ja foi migrado (Fases 1-3)
+- [ ] Substituir pausa/resume por `enabled: false` nos hooks React Query
+- [ ] Reduzir provider para wrapper fino de compatibilidade
+- [ ] Eventualmente eliminar o provider (quando nenhum consumidor depender dele)
+
+#### Padrao de substituicao
+
+```ts
+// ANTES: SwrProvider controlando pausa
+const { variaveis, isLoading } = useMtfContext(); // vem do provider
+
+// DEPOIS: hook direto com enabled
+const { data: variaveis, isLoading } = useVariaveis({ enabled: !isPaused });
+```
+
+#### Criterio de pronto (Fase 4)
+
+- [ ] SwrProvider com menos de 5 propriedades
+- [ ] Nenhum hook de leitura passando por ele
+- [ ] Pausa/resume via `enabled` nos hooks individuais
+- [ ] `tsc` verde
+
+---
+
+### Fase 5. SSR/Hydration opcional
+
+**Status:** PENDENTE — NAO PRIORITARIO
 
 **Objetivo:** so fazer onde trouxer ganho real
 
-Nao e prioridade inicial.
-
 Aplicar apenas quando houver beneficio concreto em:
-
 - primeira render pesada
 - carregamento acima da dobra
 - telas com skeleton/FOEC relevante
 
-Possivel alvo futuro:
+#### Padrao (regra `ssr-dehydration`)
 
-- dashboards
-- listagens pesadas do admin
+```ts
+// Em server component
+import { dehydrate, HydrationBoundary, QueryClient } from "@tanstack/react-query";
+
+export default async function DashboardPage() {
+  const queryClient = new QueryClient();
+  await queryClient.prefetchQuery(dashboardQueries.stats());
+  return (
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      <DashboardClient />
+    </HydrationBoundary>
+  );
+}
+```
+
+#### Criterio de pronto (Fase 5)
+
+- [ ] Identificar telas com FOEC relevante
+- [ ] Implementar hydration apenas nessas telas
+- [ ] Medir ganho real (LCP, FCP)
 
 ---
 
-## Fase 6. Descomissionamento gradual do SWR
+### Fase 6. Descomissionamento gradual do SWR
+
+**Status:** PENDENTE
 
 **Objetivo:** remover o SWR somente quando o custo residual estiver baixo
 
-Checklist:
+#### Pre-requisitos
 
-- `SwrProvider` residual quase vazio
-- principais hooks migrados
-- poucas telas restantes
-- `globalMutate` quase inexistente
-- sem dependencia importante de `useSWRInfinite` ou `useSWRSubscription`
+- [ ] SwrProvider residual quase vazio ou removido
+- [ ] Zero hooks usando `useSWR` / `useSWRMutation` / `useSWRInfinite`
+- [ ] Zero usos de `globalMutate`
+- [ ] Zero imports de `swr` no codebase
 
-So nesta fase faz sentido:
+#### Checklist de remocao
 
-- remover `swr` do projeto
-- apagar utilitarios dedicados ao SWR
-- refatorar docs antigas
+- [ ] Remover `swr` do `package.json`
+- [ ] Remover `lib/swr-config.ts`
+- [ ] Remover `components/providers/SwrProvider.tsx`
+- [ ] Remover `app/admin/mtf-diamante/context/SwrProvider.tsx`
+- [ ] Remover SWRProvider do `app/layout.tsx`
+- [ ] Atualizar CLAUDE.md (remover secao SWR, atualizar stack)
+- [ ] `pnpm install && tsc` verde
+- [ ] Testar todas as telas do admin
 
 ---
 
-## 7. Padrao de Implementacao
+## 7. Padroes de Implementacao
 
-## 7.1 Query keys
+### 7.1 Query keys — Factory por dominio (regra `qk-factory-pattern`)
 
-Criar arquivo por dominio:
+**Regra:** nunca criar `queryKey` inline. Sempre importar do factory central.
+
+**Estrutura hierarquica** (regra `qk-hierarchical-organization`):
 
 ```ts
+// dominio → entidade → lista/detalhe → filtros
 export const mtfDiamanteQueryKeys = {
   all: ["mtf-diamante"] as const,
-  caixas: () => ["mtf-diamante", "caixas"] as const,
-  caixa: (id: string) => ["mtf-diamante", "caixa", id] as const,
-  lotes: () => ["mtf-diamante", "lotes"] as const,
-  variaveis: () => ["mtf-diamante", "variaveis"] as const,
+
+  // Entidades
+  caixas: {
+    all: () => [...mtfDiamanteQueryKeys.all, "caixas"] as const,
+    detail: (id: string) => [...mtfDiamanteQueryKeys.caixas.all(), id] as const,
+  },
+  lotes: {
+    all: () => [...mtfDiamanteQueryKeys.all, "lotes"] as const,
+  },
+  variaveis: {
+    all: () => [...mtfDiamanteQueryKeys.all, "variaveis"] as const,
+  },
   approvedTemplates: (inboxId: string | null) =>
-    ["mtf-diamante", "approved-templates", inboxId] as const,
+    [...mtfDiamanteQueryKeys.all, "approved-templates", inboxId] as const,
+
+  // Chatwit
+  chatwitAgents: () => [...mtfDiamanteQueryKeys.all, "chatwit-agents"] as const,
+  chatwitLabels: () => [...mtfDiamanteQueryKeys.all, "chatwit-labels"] as const,
+
+  // Analytics
+  analytics: {
+    all: () => [...mtfDiamanteQueryKeys.all, "analytics"] as const,
+    heatmap: (flowId: string) => [...mtfDiamanteQueryKeys.analytics.all(), "heatmap", flowId] as const,
+    kpis: (flowId?: string) => [...mtfDiamanteQueryKeys.analytics.all(), "kpis", flowId] as const,
+    alerts: (flowId?: string) => [...mtfDiamanteQueryKeys.analytics.all(), "alerts", flowId] as const,
+    funnel: (flowId?: string) => [...mtfDiamanteQueryKeys.analytics.all(), "funnel", flowId] as const,
+  },
+
+  // Interactive messages
+  interactiveMessages: (inboxId?: string) =>
+    [...mtfDiamanteQueryKeys.all, "interactive-messages", inboxId] as const,
+
+  // Flows
+  flows: {
+    all: () => [...mtfDiamanteQueryKeys.all, "flows"] as const,
+    detail: (flowId: string) => [...mtfDiamanteQueryKeys.flows.all(), flowId] as const,
+    canvas: (flowId: string) => [...mtfDiamanteQueryKeys.flows.all(), "canvas", flowId] as const,
+  },
 };
 ```
 
-Regra:
+**Beneficio da hierarquia:** `invalidateQueries({ queryKey: ["mtf-diamante", "analytics"] })` invalida heatmap + kpis + alerts + funnel de uma vez.
 
-- nunca inventar `queryKey` inline em todo lugar
-- manter factory por dominio
+### 7.2 staleTime por tipo de dado (regra `cache-stale-time`)
 
----
+| Tipo de dado | staleTime | Exemplos |
+|---|---|---|
+| Referencia (raramente muda) | `10 * 60 * 1000` (10min) | labels, agentes, modelos, catalogo |
+| Configuracao (muda por acao do usuario) | `5 * 60 * 1000` (5min) | templates aprovados, api keys |
+| Conteudo volatil (muda frequentemente) | `30 * 1000` (30s) | lotes, variaveis, caixas |
+| Tempo real | `0` | mensagens, sessoes de flow, analytics com polling |
+| Estatico (nunca muda na sessao) | `Infinity` | enums, opcoes fixas |
 
-## 7.2 Read-only
+### 7.3 Read-only padrao
 
 ```ts
 export function useChatwitLabels() {
   const { data, error, isLoading } = useQuery({
     queryKey: mtfDiamanteQueryKeys.chatwitLabels(),
     queryFn: chatwitLabelsApi.getAll,
-    staleTime: 60_000,
+    staleTime: 10 * 60 * 1000,  // referencia: 10min
     refetchOnWindowFocus: false,
   });
 
   return {
-    chatwitLabels: data || [],
+    chatwitLabels: data ?? [],  // ?? em vez de || (preserva 0, false, "")
     isLoading,
     error,
   };
 }
 ```
 
----
-
-## 7.3 Mutacao com optimistic update
+### 7.4 Mutacao com optimistic update (regra `mut-optimistic-updates`)
 
 ```ts
 export function useCreateCaixa() {
@@ -370,195 +651,340 @@ export function useCreateCaixa() {
   return useMutation({
     mutationFn: caixasApi.create,
     onMutate: async (payload) => {
-      await queryClient.cancelQueries({ queryKey: mtfDiamanteQueryKeys.caixas() });
+      // 1. Cancel refetches em andamento
+      await queryClient.cancelQueries({ queryKey: mtfDiamanteQueryKeys.caixas.all() });
 
+      // 2. Snapshot para rollback
       const previous = queryClient.getQueryData<ChatwitInbox[]>(
-        mtfDiamanteQueryKeys.caixas()
+        mtfDiamanteQueryKeys.caixas.all()
       );
 
-      const optimistic = {
-        id: `temp-${crypto.randomUUID()}`,
-        ...payload,
-      } as ChatwitInbox;
-
+      // 3. Optimistic update
       queryClient.setQueryData<ChatwitInbox[]>(
-        mtfDiamanteQueryKeys.caixas(),
-        (current = []) => [...current, optimistic]
+        mtfDiamanteQueryKeys.caixas.all(),
+        (current = []) => [...current, { id: `temp-${crypto.randomUUID()}`, ...payload } as ChatwitInbox]
       );
 
       return { previous };
     },
     onError: (_error, _payload, context) => {
-      queryClient.setQueryData(mtfDiamanteQueryKeys.caixas(), context?.previous || []);
+      // 4. Rollback
+      if (context?.previous) {
+        queryClient.setQueryData(mtfDiamanteQueryKeys.caixas.all(), context.previous);
+      }
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.caixas() });
+      // 5. Revalidar com servidor (SEMPRE, sucesso ou erro)
+      queryClient.invalidateQueries({ queryKey: mtfDiamanteQueryKeys.caixas.all() });
     },
   });
 }
 ```
 
----
+### 7.5 Paginacao / infinito (regra `inf-page-params`)
 
-## 7.4 Paginacao / infinito
+```ts
+export function useMessages(leadId: string) {
+  return useInfiniteQuery({
+    queryKey: leadsQueryKeys.messages(leadId),
+    queryFn: ({ pageParam }) => fetchMessages(leadId, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    maxPages: 10,  // limitar memoria
+  });
+}
 
-Para fluxos como campanhas e mensagens antigas:
+// No componente:
+const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useMessages(leadId);
+const allMessages = data?.pages.flatMap(p => p.messages) ?? [];
+```
 
-- usar `useInfiniteQuery`
-- evitar duplicar paginas em `useState` se o cache puder ser a fonte unica
+### 7.6 Prefetch por intencao (regra `pf-intent-prefetch`)
+
+```ts
+// Prefetch ao hover em items de lista
+function FlowListItem({ flow }: { flow: Flow }) {
+  const queryClient = useQueryClient();
+
+  return (
+    <div
+      onMouseEnter={() => {
+        queryClient.prefetchQuery({
+          queryKey: mtfDiamanteQueryKeys.flows.detail(flow.id),
+          queryFn: () => fetchFlowDetail(flow.id),
+          staleTime: 60_000,
+        });
+      }}
+    >
+      {flow.name}
+    </div>
+  );
+}
+```
+
+### 7.7 select para transformacao (regra `perf-select-transform`)
+
+```ts
+// Filtrar dados no nivel do cache, nao no componente
+const { data: activeFlows } = useQuery({
+  queryKey: mtfDiamanteQueryKeys.flows.all(),
+  queryFn: fetchFlows,
+  select: (flows) => flows.filter(f => f.active),
+});
+```
 
 ---
 
 ## 8. O que NAO Fazer
 
-1. Nao migrar `context/SwrProvider.tsx` antes de estabilizar os hooks base.
-2. Nao migrar `useInteractiveMessages.ts` logo no inicio.
-3. Nao misturar SWR e React Query para a mesma entidade na mesma tela sem plano claro.
+1. Nao migrar `context/SwrProvider.tsx` antes de estabilizar os hooks base (Fases 1-3).
+2. Nao migrar `useInteractiveMessages.ts` logo no inicio — e o mais complexo.
+3. Nao misturar SWR e React Query para a **mesma entidade** na mesma tela.
 4. Nao usar Zustand para substituir cache de API.
 5. Nao fazer uma branch gigante com dezenas de hooks migrados sem checkpoints.
 6. Nao acoplar a migracao a mudancas de API, schema ou Flow Engine.
+7. Nao usar `queryKey` inline (`["my-key"]`). Sempre factory.
+8. Nao usar `initialData` quando `placeholderData` e suficiente (regra `cache-placeholder-vs-initial`).
+9. Nao ignorar `onSettled` — invalidar SEMPRE, mesmo no sucesso (regra `mut-invalidate-queries`).
+10. Nao criar `queryClient` como `new QueryClient()` global fora de componente sem `useRef`/`useState` (causa leak em SSR).
 
 ---
 
 ## 9. Plano de Deploy e Hotfix
 
-## 9.1 Antes do hotfix imediato
+### 9.1 Regra geral
 
-Se a necessidade atual for publicar um hotfix funcional, a base ja aplicada e segura o suficiente para conviver com a app atual:
+A migracao e transparente para o usuario final. Cada PR/deploy deve:
 
-- React Query esta adicionado, mas com escopo pequeno
-- SWR continua responsavel pela maior parte da app
-- nao houve quebra estrutural em tela critica
+- [ ] Migrar poucas features (1 dominio por vez)
+- [ ] Incluir `queryKeys` novas
+- [ ] Manter comportamento visual identico
+- [ ] Passar em `tsc`
+- [ ] Evitar refatorar 2 dominios pesados no mesmo deploy
 
-### Recomendacao
+### 9.2 Rollback
 
-1. Fazer o deploy do hotfix atual normalmente.
-2. Depois continuar a migracao em branch dedicada.
-3. Avancar uma fase por vez com checkpoints pequenos.
+Rollback e simples enquanto estivermos nas Fases 0-2:
 
----
-
-## 9.2 Regra de deploy durante a migracao
-
-Cada PR/etapa deve:
-
-- migrar poucas features
-- incluir `queryKeys` novas
-- manter comportamento visual
-- passar em `tsc`
-- evitar refatorar 2 dominios pesados no mesmo deploy
+- Reverter hook migrado para versao SWR
+- `ReactQueryProvider` permanece inofensivo no root
+- Custo de rollback aumenta significativamente na Fase 3+
 
 ---
 
-## 10. Rollback
+## 10. Inventario Completo de Hooks SWR
 
-Rollback da migracao e simples enquanto estivermos nas fases 0-2:
+Referencia rapida de TODOS os 30 arquivos SWR restantes, classificados por dificuldade:
 
-- remover hook migrado
-- restaurar versao SWR do hook
-- manter `ReactQueryProvider` inofensivo no root
+### Facil (read-only puro, sem polling, sem state) — TODOS MIGRADOS (Fase 1)
 
-Enquanto nao houver mutacoes pesadas migradas, o custo de rollback continua baixo.
+| # | Arquivo | Fase | Status |
+|---|---|---|---|
+| 1 | `MTFdashboard/hooks/useAgentCatalog.ts` | 1 | MIGRADO |
+| 2 | `MTFdashboard/hooks/useProviderModels.ts` | 1 | MIGRADO |
+| 3 | `mtf-diamante/hooks/useApprovedTemplates.ts` | 1 | MIGRADO |
+| 4 | `mtf-diamante/components/flow-analytics/AlertsPanel.tsx` | 1 | MIGRADO |
+| 5 | `mtf-diamante/components/flow-analytics/ExecutiveKPICards.tsx` | 1 | MIGRADO |
+| 6 | `mtf-diamante/components/flow-analytics/FunnelChart.tsx` | 1 | MIGRADO |
+| 7 | `mtf-diamante/components/flow-analytics/GlobalFilters.tsx` | 1 | MIGRADO |
+| 8 | `mtf-diamante/components/flow-analytics/SessionReplayModal.tsx` | 1 | MIGRADO |
+| 9 | `leads-chatwit/.../EspelhoPadraoCell.tsx` | 1 | MIGRADO |
+| 10 | `MTFdashboard/mtf-oab/page.tsx` | 1 | MIGRADO |
+| 11 | `monitoring/page.tsx` | 1 | MIGRADO |
+| 12 | `mtf-diamante/components/flow-analytics/hooks/useHeatmapData.ts` | 1 | MIGRADO |
+| 13 | `mtf-diamante/components/flow-analytics/hooks/useNodeDetails.ts` | 1 | MIGRADO |
+| 14 | `mtf-diamante/components/MapeamentoTab.tsx` | 1 | MIGRADO |
+
+### Medio (read-only com filtros, paginacao, ou polling leve)
+| 15 | `mtf-diamante/components/flow-builder/panels/FlowSelector.tsx` | 2 |
+| 16 | `leads-chatwit/components/leads-list.tsx` | 2 |
+| 17 | `leads-chatwit/components/all-messages-tab.tsx` | 2 |
+| 18 | `leads-chatwit/hooks/useMessages.ts` | 2 |
+| 19 | `flow-playground/page.tsx` | 2 |
+| 20 | `mtf-diamante/components/FlowAnalyticsDashboard.tsx` | 2 |
+| 21 | `leads-chatwit/components/transcription-progress.tsx` | 2 |
+
+### Dificil (mutacoes CRUD, optimistic, polling pesado)
+
+| # | Arquivo | Fase |
+|---|---|---|
+| 22 | `mtf-diamante/hooks/useLotes.ts` | 3 |
+| 23 | `mtf-diamante/hooks/useVariaveis.ts` | 3 |
+| 24 | `mtf-diamante/hooks/useApiKeys.ts` | 3 |
+| 25 | `mtf-diamante/hooks/useCaixas.ts` | 3 |
+| 26 | `mtf-diamante/hooks/useInboxButtonReactions.ts` | 3 |
+| 27 | `MTFdashboard/hooks/useAgentBlueprints.ts` | 3 |
+
+### Muito dificil (orquestracao, auto-save, context complexo)
+
+| # | Arquivo | Fase |
+|---|---|---|
+| 28 | `mtf-diamante/hooks/useInteractiveMessages.ts` | 3 (ultimo) |
+| 29 | `mtf-diamante/components/flow-builder/hooks/useFlowCanvas.ts` | 3-4 |
+| 30 | `mtf-diamante/components/flow-builder/hooks/FlowBuilderTabHooks.ts` | 3-4 |
+
+### Infra (remover na Fase 6)
+
+| # | Arquivo | Fase |
+|---|---|---|
+| 31 | `lib/swr-config.ts` | 6 |
+| 32 | `components/providers/SwrProvider.tsx` | 6 |
+| 33 | `app/admin/mtf-diamante/context/SwrProvider.tsx` | 4-6 |
 
 ---
 
 ## 11. Checklists
 
-## 11.1 Checklist por etapa
+### 11.1 Antes de migrar qualquer hook
 
-- `queryKey` criada em arquivo central
-- hook migrado para `useQuery` ou `useMutation`
-- componentes consumidores funcionando sem mudar UX
-- nenhum estado local duplicando cache sem necessidade
-- `pnpm exec tsc --noEmit`
-- `pnpm exec tsc --noEmit -p tsconfig.worker.json`
+- [ ] O hook e read-only ou tem mutacao?
+- [ ] Existe dependencia forte do `SwrProvider` context?
+- [ ] Existe `globalMutate` ou refresh cruzado?
+- [ ] Existe polling (`refreshInterval`)?
+- [ ] Existe `useSWRInfinite`?
+- [ ] Existe optimistic update com rollback?
+- [ ] Se "sim" para 3+ itens, mover para fase posterior
 
-## 11.2 Checklist antes de migrar um hook
+### 11.2 Apos migrar cada hook
 
-- O hook e read-only ou mutacao?
-- Existe dependencia forte do `SwrProvider`?
-- Existe `globalMutate` ou refresh cruzado hoje?
-- Existe polling?
-- Existe pagina infinita?
-- Existe rollback otimista?
+- [ ] `queryKey` criada no factory central (nunca inline)
+- [ ] `staleTime` definido conforme tabela 7.2
+- [ ] Hook usando `useQuery` ou `useMutation`
+- [ ] Componentes consumidores funcionando sem mudar UX
+- [ ] Nenhum `useState` duplicando server state
+- [ ] `isLoading` tratado (sem FOEC)
+- [ ] `data ?? []` em vez de `data || []` (preserva falsy values)
+- [ ] `pnpm exec tsc --noEmit && pnpm exec tsc --noEmit -p tsconfig.worker.json`
 
-Se a resposta for "sim" para varios itens, o hook deve ir para uma fase mais tardia.
+### 11.3 Apos completar cada fase
 
----
-
-## 12. Ordem Recomendada de Trabalho
-
-### Ja feito
-
-- `useChatwitLabels`
-- `useChatwitAgents`
-- provider global
-- base de `queryKeys`
-
-### Proxima leva recomendada
-
-1. `useApprovedTemplates.ts`
-2. `useAgentCatalog.ts`
-3. `useProviderModels.ts`
-4. `FlowSelector.tsx`
-5. `useMessages.ts`
-
-### Leva seguinte
-
-1. `useCaixas.ts`
-2. `useLotes.ts`
-3. `useVariaveis.ts`
-4. `useApiKeys.ts`
-
-### Leva pesada
-
-1. `useInboxButtonReactions.ts`
-2. `useInteractiveMessages.ts`
-3. `FlowAnalyticsDashboard.tsx`
-4. `inbox/[id]/campanhas/page.tsx`
-5. `context/SwrProvider.tsx`
+- [ ] Nenhuma entidade usando SWR E React Query simultaneamente
+- [ ] `queryKeys` do dominio completas e hierarquicas
+- [ ] Deploy seguro (sem quebra visual, sem regressao)
+- [ ] Commit isolado por fase (facilita rollback)
 
 ---
 
-## 13. Observacoes Operacionais
+## 12. Definicao de Sucesso
+
+Esta migracao sera considerada bem-sucedida quando:
+
+- [ ] Zero usos de `globalMutate`
+- [ ] CRUDs principais usando `useMutation` com optimistic + rollback
+- [ ] Listas e detalhes compartilhando cache por `queryKey` hierarquica
+- [ ] `SwrProvider` do MTF eliminado ou reduzido a wrapper vazio
+- [ ] Contagem de arquivos SWR: 0 (atual: 20, era 35 pre-Fase 1)
+- [ ] Contagem de arquivos React Query: 42+ (atual: 22, era 7 pre-Fase 1)
+- [ ] Zero `data || []` — tudo usando `data ?? []`
+- [ ] Zero `useState` para server state
+- [ ] Performance igual ou melhor (medir bundle size antes/depois)
+
+---
+
+## 13. Estrategia para `useSmartPolling`
+
+O `useSmartPolling` (em `performance-utils.ts`) e usado apenas por `useInteractiveMessages`. Ele adapta o intervalo de polling com base em atividade do usuario.
+
+### Equivalente React Query
+
+```ts
+// Opcao A: refetchInterval como funcao (built-in no TanStack Query)
+const { data } = useQuery({
+  queryKey: mtfDiamanteQueryKeys.interactiveMessages(inboxId),
+  queryFn: fetchInteractiveMessages,
+  refetchInterval: (query) => {
+    // Se a ultima fetch trouxe dados novos, polling rapido
+    if (query.state.dataUpdatedAt > Date.now() - 10_000) return 5_000;
+    // Senao, polling lento
+    return 30_000;
+  },
+  enabled: !isPaused,
+});
+
+// Opcao B: manter useSmartPolling como helper externo (menos invasivo)
+const smartPolling = useSmartPolling(30_000);
+const { data } = useQuery({
+  queryKey: mtfDiamanteQueryKeys.interactiveMessages(inboxId),
+  queryFn: fetchInteractiveMessages,
+  refetchInterval: smartPolling.getPollingInterval(),
+  enabled: !isPaused,
+});
+```
+
+> **Recomendacao:** Opcao A — usar `refetchInterval` como funcao. Elimina dependencia do helper SWR.
+
+---
+
+## 14. Mapeamento de `dedupingInterval` → `staleTime`
+
+O SWR usa `dedupingInterval` para evitar requests duplicados. No React Query, o equivalente e `staleTime` (dados "frescos" nao sao re-fetched).
+
+| Hook SWR | `dedupingInterval` | `staleTime` React Query equivalente |
+|---|---|---|
+| `useCaixas` | 25s | 30s (volatil) |
+| `useLotes` | 30s | 30s (volatil) |
+| `useVariaveis` | 30s | 30s (volatil) |
+| `useApiKeys` | 30s | 5min (config, muda por acao) |
+| `useApprovedTemplates` | 30s | 5min (config) |
+| `useProviderModels` | 60s | 10min (referencia) |
+| `FlowSelector` | 5s | 30s (volatil) |
+| `useFlowCanvas` | 5s | 0 (tempo real, auto-save) |
+| `campanhas/page.tsx` | 5s | 0 (tempo real) |
+| `mtf-oab/page.tsx` | 5s | 5min (config) |
+| Global (swr-config) | 2s | 30s (default QueryClient) |
+
+---
+
+## 15. Riscos e Mitigacao
+
+| Risco | Probabilidade | Impacto | Mitigacao |
+|---|---|---|---|
+| Flash of Empty Content (FOEC) ao migrar hook sem `isLoading` | Alta | Media | Checklist 11.2 exige tratamento de `isLoading` + `placeholderData` |
+| Polling quebrado ao migrar hooks com `isPaused` | Media | Alta | Testar pausa/resume em MTF Diamante antes de deploy |
+| Cache duplicado (SWR + RQ para mesma entidade) | Baixa | Alta | Regra: nunca ambos no mesmo fluxo (checklist 11.3) |
+| `useInteractiveMessages` regressao (smart polling + optimistic) | Alta | Alta | Migrar por ultimo (Fase 3), testes manuais extensos |
+| SwrProvider context break (Fase 4) | Media | Alta | Mapear todos os consumidores antes, substituir gradualmente |
+| Bundle size aumenta durante coexistencia | Certa | Baixa | SWR ~4KB + RQ ~13KB = ~17KB. Aceitavel. Cai pra ~13KB na Fase 6 |
+
+---
+
+## 16. Observacoes Operacionais
 
 ### Warning de instalacao do pnpm
-
-Durante a instalacao apareceu:
 
 ```text
 Ignored build scripts: protobufjs
 Run "pnpm approve-builds" to pick which dependencies should be allowed to run scripts.
 ```
 
-No estado atual, isso **nao bloqueou** a instalacao do `@tanstack/react-query` nem a validacao de TypeScript.
+Nao bloqueou a instalacao. So agir se algum build futuro depender desse script.
 
-So agir se algum build futuro realmente depender desse script.
+### DevTools
+
+Considerar instalar `@tanstack/react-query-devtools` durante o desenvolvimento:
+
+```bash
+pnpm add -D @tanstack/react-query-devtools
+```
+
+```ts
+// Em react-query-provider.tsx (apenas em dev)
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+// Adicionar <ReactQueryDevtools initialIsOpen={false} /> dentro do provider
+```
 
 ---
 
-## 14. Definicao de Sucesso
-
-Esta migracao sera considerada bem-sucedida quando:
-
-- o MTF admin parar de depender de `globalMutate` para quase tudo
-- os CRUDs principais estiverem em `useMutation`
-- listas e detalhes compartilharem cache por `queryKey`
-- o `SwrProvider` deixar de ser um orquestrador central
-- o numero de usos de SWR cair drasticamente sem regressao funcional
-
----
-
-## 15. Veredito Final
+## 17. Veredito Final
 
 **Sim, vale migrar.**
 
-Mas a forma correta para este projeto e:
+A forma correta para este projeto e:
 
-- **incremental**
-- **por dominio**
-- **com convivencia SWR + React Query**
-- **comecando por leitura simples**
-- **deixando mutacoes pesadas e provider-context para depois**
+- **incremental** — fase por fase, com checkpoints
+- **por dominio** — terminar um dominio antes de comecar outro
+- **com convivencia SWR + React Query** — zero big bang
+- **comecando por leitura simples** — 13 hooks faceis primeiro
+- **deixando mutacoes pesadas e provider-context para depois** — Fases 3-4
 
-Nao fazer big bang e o ponto central desta migracao.
+A auditoria confirmou: 30 arquivos SWR restantes, 4 padroes de mutacao inconsistentes, e orquestracao manual que React Query elimina nativamente. O ROI maior esta na Fase 3 (mutacoes), mas a Fase 1 (read-only) e o alicerce.

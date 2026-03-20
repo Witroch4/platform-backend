@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import useSWR from "swr";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Activity,
@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ExecutiveKPIs, DashboardFilters } from "@/types/flow-analytics";
+import { mtfDiamanteQueryKeys } from "../../lib/query-keys";
 
 // =============================================================================
 // TYPES
@@ -39,7 +40,7 @@ interface KPICardData {
 // FETCHER
 // =============================================================================
 
-const fetcher = async (url: string) => {
+const fetchKpis = async (url: string) => {
 	const res = await fetch(url);
 	if (!res.ok) {
 		const error = await res.json();
@@ -83,10 +84,20 @@ export function ExecutiveKPICards({ filters }: ExecutiveKPICardsProps) {
 	const apiUrl = useMemo(() => buildApiUrl(filters), [filters]);
 
 	// Fetch KPI data
-	const { data, error, isLoading } = useSWR<{ success: boolean; data: ExecutiveKPIs }>(apiUrl, fetcher, {
-		refreshInterval: 30000, // Refresh every 30 seconds
-		revalidateOnFocus: true,
-		keepPreviousData: true,
+	const { data, error, isLoading } = useQuery<{ success: boolean; data: ExecutiveKPIs }>({
+		queryKey: mtfDiamanteQueryKeys.analytics.kpis({
+			inboxId: filters.inboxId,
+			flowId: filters.flowId,
+			dateRange: filters.dateRange,
+			campaign: filters.campaign,
+			channelType: filters.channelType,
+			status: filters.status,
+		}),
+		queryFn: () => fetchKpis(apiUrl),
+		refetchInterval: 30_000,
+		staleTime: 0,
+		refetchOnWindowFocus: true,
+		placeholderData: (prev) => prev,
 	});
 
 	const kpis = data?.data;

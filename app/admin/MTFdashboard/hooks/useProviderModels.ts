@@ -1,6 +1,7 @@
 "use client";
 
-import useSWR from "swr";
+import { useQuery } from "@tanstack/react-query";
+import { dashboardQueryKeys } from "../lib/query-keys";
 
 export interface ProviderModelOption {
 	value: string;
@@ -19,8 +20,8 @@ interface ProviderModelsPayload {
 	geminiAvailable: boolean;
 }
 
-const fetcher = async (url: string) => {
-	const res = await fetch(url, { cache: "no-store" });
+const fetchProviderModels = async (): Promise<ProviderModelsPayload> => {
+	const res = await fetch("/api/admin/mtf-agents/provider-models", { cache: "no-store" });
 	if (!res.ok) {
 		const detail = await res.json().catch(() => ({}));
 		throw new Error(detail?.error || "Falha ao carregar modelos");
@@ -29,15 +30,13 @@ const fetcher = async (url: string) => {
 };
 
 export function useProviderModels() {
-	const { data, error, isLoading } = useSWR<ProviderModelsPayload>(
-		"/api/admin/mtf-agents/provider-models",
-		fetcher,
-		{
-			keepPreviousData: true,
-			revalidateOnFocus: false,
-			dedupingInterval: 60_000, // 1 min dedup no client
-		},
-	);
+	const { data, error, isLoading } = useQuery({
+		queryKey: dashboardQueryKeys.providerModels(),
+		queryFn: fetchProviderModels,
+		staleTime: 10 * 60 * 1000, // 10min — reference data, models rarely change
+		refetchOnWindowFocus: false,
+		placeholderData: (prev) => prev,
+	});
 
 	return {
 		openaiModels: data?.openai ?? null,
