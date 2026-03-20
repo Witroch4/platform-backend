@@ -218,16 +218,15 @@ export async function uploadToMinIO(
 
 		// OTIMIZAÇÃO: Gera thumbnail EM PARALELO com upload principal
 		const shouldGenerateThumbnail = generateThumbnail && mimeType && mimeType.startsWith("image/");
-		const isJpeg = mimeType?.includes("jpeg") || mimeType?.includes("jpg");
 
 		const [response, thumbnailBuffer] = await Promise.all([
 			// Upload principal
 			s3Client.send(command),
-			// Geração de thumbnail (em paralelo) — JPEG para input JPEG, PNG para o resto
+			// Geração de thumbnail (em paralelo)
 			shouldGenerateThumbnail
 				? sharp(imageBuffer)
 						.resize(150, null, { fit: "inside" })
-						[isJpeg ? "jpeg" : "png"](isJpeg ? { quality: 60 } : { compressionLevel: 6 })
+						.png({ compressionLevel: 6 })
 						.toBuffer()
 						.catch((err) => {
 							console.error("[MinIO] Erro ao gerar thumbnail buffer:", err);

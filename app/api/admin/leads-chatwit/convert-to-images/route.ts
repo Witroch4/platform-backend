@@ -25,7 +25,6 @@ interface ConvertOptions {
 	density: number;
 	savename: string;
 	savedir: string;
-	format: "jpeg" | "png";
 }
 
 /**
@@ -52,32 +51,29 @@ async function renderPageRange(
 	firstPage: number,
 	lastPage: number,
 	density: number,
-	format: "jpeg" | "png",
 ): Promise<string[]> {
 	const outputPrefix = path.join(outputDir, "page");
-	const ext = format === "jpeg" ? "jpg" : "png";
+	const ext = "png";
 
-	// Tier 0: pdftoppm (poppler-utils) — 2-4x mais rápido que GhostScript
-	const formatFlag = format === "jpeg" ? `-jpeg -jpegopt quality=90` : `-png`;
+	// Tier 0: pdftoppm -gray (grayscale PNG) — documentos de texto comprimem a ~800KB vs 9MB em JPEG
 	const rangeFlags = firstPage > 0 ? `-f ${firstPage} -l ${lastPage}` : "";
-	const pdftoppmCmd = `pdftoppm ${formatFlag} -r ${density} ${rangeFlags} "${pdfPath}" "${outputPrefix}"`;
+	const pdftoppmCmd = `pdftoppm -gray -png -r ${density} ${rangeFlags} "${pdfPath}" "${outputPrefix}"`;
 
 	try {
 		await execPromise(pdftoppmCmd, { timeout: 120_000 });
-		const files = (await fs.promises.readdir(outputDir)).filter((f) => f.startsWith("page-") && f.endsWith(`.${ext}`));
+		const files = (await fs.promises.readdir(outputDir)).filter((f) => f.startsWith("page-") && f.endsWith(".png"));
 		if (files.length > 0) return files;
 		throw new Error("pdftoppm gerou 0 arquivos");
 	} catch (pdftoppmError) {
 		log.warn(`pdftoppm falhou (range ${firstPage}-${lastPage}): ${pdftoppmError}`);
 	}
 
-	// Tier 1: GhostScript (fallback)
+	// Tier 1: GhostScript (fallback) — pnggray para mesma eficiência de compressão
 	if (firstPage <= 0) {
-		// Sem range — renderizar tudo
-		const gsCmd = `gs -dSAFER -dBATCH -dNOPAUSE -sDEVICE=${format === "jpeg" ? "jpeg" : "png16m"} -r${density} ${format === "jpeg" ? "-dJPEGQ=90" : ""} -dGraphicsAlphaBits=4 -dTextAlphaBits=4 -sOutputFile="${outputPrefix}-%d.${ext}" "${pdfPath}"`;
+		const gsCmd = `gs -dSAFER -dBATCH -dNOPAUSE -sDEVICE=pnggray -r${density} -dGraphicsAlphaBits=4 -dTextAlphaBits=4 -sOutputFile="${outputPrefix}-%d.png" "${pdfPath}"`;
 		await execPromise(gsCmd, { timeout: 180_000 });
 	} else {
-		const gsCmd = `gs -dSAFER -dBATCH -dNOPAUSE -sDEVICE=${format === "jpeg" ? "jpeg" : "png16m"} -r${density} ${format === "jpeg" ? "-dJPEGQ=90" : ""} -dGraphicsAlphaBits=4 -dTextAlphaBits=4 -dFirstPage=${firstPage} -dLastPage=${lastPage} -sOutputFile="${outputPrefix}-%d.${ext}" "${pdfPath}"`;
+		const gsCmd = `gs -dSAFER -dBATCH -dNOPAUSE -sDEVICE=pnggray -r${density} -dGraphicsAlphaBits=4 -dTextAlphaBits=4 -dFirstPage=${firstPage} -dLastPage=${lastPage} -sOutputFile="${outputPrefix}-%d.png" "${pdfPath}"`;
 		await execPromise(gsCmd, { timeout: 180_000 });
 	}
 
@@ -135,11 +131,10 @@ async function uploadBatch(
  */
 async function convertPdfToImages(pdfBuffer: Buffer, options: ConvertOptions): Promise<string[]> {
 	const startTime = Date.now();
-	const { density, format, savedir, savename } = options;
+	const { density, savedir, savename } = options;
 	const tmpDir = savedir || "/tmp";
 	const baseName = savename || `pdf-${randomUUID()}`;
-	const ext = format === "jpeg" ? "jpg" : "png";
-	const mimeType = format === "jpeg" ? "image/jpeg" : "image/png";
+	const mimeType = "image/png";
 
 	// Salvar PDF temporário
 	const pdfPath = path.join(tmpDir, `${baseName}.pdf`);
@@ -173,7 +168,7 @@ async function convertPdfToImages(pdfBuffer: Buffer, options: ConvertOptions): P
 					const rangeDir = path.join(tmpDir, `${baseName}_r${idx}`);
 					await fs.promises.mkdir(rangeDir, { recursive: true });
 
-					const files = await renderPageRange(pdfPath, rangeDir, range.first, range.last, density, format);
+					const files = await renderPageRange(pdfPath, rangeDir, range.first, range.last, density);
 					log.info(`Range ${range.first}-${range.last}: ${files.length} imagens renderizadas`);
 
 					// Upload imediato deste range
@@ -189,7 +184,7 @@ async function convertPdfToImages(pdfBuffer: Buffer, options: ConvertOptions): P
 			allResults = rangeResults.flat();
 		} else {
 			// PDF pequeno ou page count desconhecido — renderiza tudo de uma vez
-			const files = await renderPageRange(pdfPath, outputDir, 0, 0, density, format);
+			const files = await renderPageRange(pdfPath, outputDir, 0, 0, density);
 			log.info(`${files.length} imagens renderizadas`);
 
 			allResults = await uploadBatch(files, outputDir, baseName, mimeType);
@@ -282,7 +277,6 @@ export async function POST(request: NextRequest) {
 					density: 300,
 					savename: `pdf-lead${leadId.substring(0, 8)}-${randomUUID().substring(0, 8)}`,
 					savedir: "/tmp",
-					format: "jpeg",
 				};
 
 				log.info(`Baixando PDF: ${sanitizedPdfUrl}`);
