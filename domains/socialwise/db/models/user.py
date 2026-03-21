@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy import String
+from sqlalchemy import Boolean, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from domains.socialwise.db.base import SocialwiseModel
@@ -17,6 +17,12 @@ class User(SocialwiseModel):
 
     name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     email: Mapped[str] = mapped_column(String, nullable=False)
+    mtf_variaveis_populadas: Mapped[bool] = mapped_column(
+        "mtfVariaveisPopuladas",
+        Boolean,
+        nullable=False,
+        default=False,
+    )
 
     accounts: Mapped[list["Account"]] = relationship(
         "Account",
