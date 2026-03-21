@@ -6,7 +6,7 @@ import { auth } from "@/auth";
 import { getPrismaInstance } from "@/lib/connections";
 import { z } from "zod";
 import type { InteractiveMessage, InteractiveMessageType } from "@/types/interactive-messages";
-import type { ApiResponse } from "@/app/admin/mtf-diamante/lib/types";
+import type { ApiResponse } from "@/app/mtf-diamante/lib/types";
 
 const prisma = getPrismaInstance();
 

@@ -222,7 +222,7 @@ export async function verifyBackwardCompatibility(): Promise<{
 		try {
 			// This is a compile-time check - if the import fails, the component doesn't exist
 			const { BatchProcessorOrchestrator } = await import(
-				"@/app/admin/leads-chatwit/components/batch-processor/BatchProcessorOrchestrator"
+				"@/app/mtf-diamante/leads/components/batch-processor/BatchProcessorOrchestrator"
 			);
 			if (typeof BatchProcessorOrchestrator === "function") {
 				result.checks.batchProcessorExists = true;
@@ -250,7 +250,7 @@ export async function verifyBackwardCompatibility(): Promise<{
 		// 3. Manual steps preservation (structural check)
 		try {
 			// Verify that manual step components still exist
-			const { ImageGalleryDialog } = await import("@/app/admin/leads-chatwit/components/image-gallery-dialog");
+			const { ImageGalleryDialog } = await import("@/app/mtf-diamante/leads/components/image-gallery-dialog");
 			if (typeof ImageGalleryDialog === "function") {
 				result.checks.manualStepsPreserved = true;
 				log.info("Manual steps components verified");

@@ -203,8 +203,8 @@ export async function GET(request: Request) {
 
 		if (accountToUse) {
 			const baseUrl = process.env.NEXTAUTH_URL || "https://chatwit-social.witdev.com.br";
-			console.log(`Redirecionando para /${accountToUse.providerAccountId}/dashboard`);
-			return NextResponse.redirect(`${baseUrl}/${accountToUse.providerAccountId}/dashboard`);
+			console.log(`Redirecionando para /gestao-social/${accountToUse.providerAccountId}/dashboard`);
+			return NextResponse.redirect(`${baseUrl}/gestao-social/${accountToUse.providerAccountId}/dashboard`);
 		} else {
 			const baseUrl = process.env.NEXTAUTH_URL || "https://chatwit-social.witdev.com.br";
 			console.log("Nenhuma conta encontrada, redirecionando para /registro/redesocial");

@@ -50,12 +50,12 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/compon
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import LoginBadge from "@/components/auth/login-badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { AdicionarCaixaDialog } from "@/app/admin/mtf-diamante/components/DialogflowCaixasAgentes";
+import { AdicionarCaixaDialog } from "@/app/mtf-diamante/components/DialogflowCaixasAgentes";
 import { InboxContextMenu } from "./inbox-context-menu";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { useMtfData } from "@/app/admin/mtf-diamante/context/MtfDataProvider";
+import { useMtfData } from "@/app/mtf-diamante/context/MtfDataProvider";
 import { WhatsAppAnimatedIcon } from "@/components/whatsapp-animated-icon";
 import { InstagramAnimatedIcon } from "@/components/instagram-animated-icon";
 import { RobotAnimatedIcon } from "@/components/robot-animated-icon";
@@ -76,7 +76,7 @@ export function AppAdminDashboard() {
 
 	// Função para verificar se uma inbox está ativa (suporta subpaths)
 	const isInboxActive = (inboxId: string) => {
-		return pathname?.startsWith(`/admin/mtf-diamante/inbox/${inboxId}`);
+		return pathname?.startsWith(`/mtf-diamante/inbox/${inboxId}`);
 	};
 
 	// Observação: o Provider já carrega inboxes/apiKeys do BFF e mantém cache.
@@ -179,7 +179,7 @@ export function AppAdminDashboard() {
 								{/* Grupo: Caixas de Entrada (Canais) */}
 								<SidebarMenuItem>
 									<SidebarMenuButton asChild>
-										<Link href="/admin/mtf-diamante" className="flex items-center">
+										<Link href="/mtf-diamante" className="flex items-center">
 											<Headphones className="mr-2" />
 											{state !== "collapsed" && <span>MTF Diamante Global</span>}
 										</Link>
@@ -216,7 +216,7 @@ export function AppAdminDashboard() {
 															const isWhatsApp = channel.includes("whatsapp") || (cx.nome || cx.inboxName || "").toLowerCase().includes("whatsapp");
 															const Icon = isInstagram ? Instagram : MessageCircle; // WhatsApp/Outros
 															const isActive = isInboxActive(cx.id);
-															const targetHref = `/admin/mtf-diamante/inbox/${cx.id}`;
+															const targetHref = `/mtf-diamante/inbox/${cx.id}`;
 															const handleClick = (e: React.MouseEvent) => {
 																e.preventDefault();
 																startTransition(() => {
@@ -263,15 +263,15 @@ export function AppAdminDashboard() {
 																	{/* Sub-link: Campanhas */}
 																	{state !== "collapsed" && (
 																		<SidebarMenuSubButton
-																			href={`/admin/mtf-diamante/inbox/${cx.id}/campanhas`}
+																			href={`/mtf-diamante/inbox/${cx.id}/campanhas`}
 																			onClick={(e) => {
 																				e.preventDefault();
 																				startTransition(() => {
-																					router.push(`/admin/mtf-diamante/inbox/${cx.id}/campanhas`);
+																					router.push(`/mtf-diamante/inbox/${cx.id}/campanhas`);
 																				});
 																			}}
 																			onMouseEnter={() => {
-																				try { router.prefetch(`/admin/mtf-diamante/inbox/${cx.id}/campanhas`); } catch {}
+																				try { router.prefetch(`/mtf-diamante/inbox/${cx.id}/campanhas`); } catch {}
 																			}}
 																			className={`text-[0.85rem] py-1.5 pl-8 transition-colors ${
 																				pathname?.includes(`/inbox/${cx.id}/campanhas`) ? "bg-accent" : "hover:bg-accent"
@@ -317,16 +317,16 @@ export function AppAdminDashboard() {
 														<SidebarMenuSub>
 															<SidebarMenuSubItem>
 																<SidebarMenuSubButton
-																	href="/admin/MTFdashboard"
+																	href="/mtf-diamante/dashboard"
 																	onClick={(e) => {
 																		e.preventDefault();
 																		startTransition(() => {
-																			router.push("/admin/MTFdashboard");
+																			router.push("/mtf-diamante/dashboard");
 																		});
 																	}}
 																	onMouseEnter={() => {
 																		try {
-																			router.prefetch("/admin/MTFdashboard");
+																			router.prefetch("/mtf-diamante/dashboard");
 																		} catch { }
 																	}}
 																	className={`text-[0.95rem] py-2 transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
@@ -337,16 +337,16 @@ export function AppAdminDashboard() {
 															</SidebarMenuSubItem>
 															<SidebarMenuSubItem>
 																<SidebarMenuSubButton
-																	href="/admin/MTFdashboard/agentes"
+																	href="/mtf-diamante/dashboard/agentes"
 																	onClick={(e) => {
 																		e.preventDefault();
 																		startTransition(() => {
-																			router.push("/admin/MTFdashboard/agentes");
+																			router.push("/mtf-diamante/dashboard/agentes");
 																		});
 																	}}
 																	onMouseEnter={() => {
 																		try {
-																			router.prefetch("/admin/MTFdashboard/agentes");
+																			router.prefetch("/mtf-diamante/dashboard/agentes");
 																		} catch { }
 																	}}
 																	className={`text-[0.95rem] py-2 transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
@@ -357,16 +357,16 @@ export function AppAdminDashboard() {
 															</SidebarMenuSubItem>
 															<SidebarMenuSubItem>
 																<SidebarMenuSubButton
-																	href="/admin/MTFdashboard/mtf-oab"
+																	href="/mtf-diamante/dashboard/mtf-oab"
 																	onClick={(e) => {
 																		e.preventDefault();
 																		startTransition(() => {
-																			router.push("/admin/MTFdashboard/mtf-oab");
+																			router.push("/mtf-diamante/dashboard/mtf-oab");
 																		});
 																	}}
 																	onMouseEnter={() => {
 																		try {
-																			router.prefetch("/admin/MTFdashboard/mtf-oab");
+																			router.prefetch("/mtf-diamante/dashboard/mtf-oab");
 																		} catch { }
 																	}}
 																	className={`text-[0.95rem] py-2 transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
@@ -377,16 +377,16 @@ export function AppAdminDashboard() {
 															</SidebarMenuSubItem>
 															<SidebarMenuSubItem>
 																<SidebarMenuSubButton
-																	href="/admin/MTFdashboard/mtf-oab/oab-eval"
+																	href="/mtf-diamante/dashboard/mtf-oab/oab-eval"
 																	onClick={(e) => {
 																		e.preventDefault();
 																		startTransition(() => {
-																			router.push("/admin/MTFdashboard/mtf-oab/oab-eval");
+																			router.push("/mtf-diamante/dashboard/mtf-oab/oab-eval");
 																		});
 																	}}
 																	onMouseEnter={() => {
 																		try {
-																			router.prefetch("/admin/MTFdashboard/mtf-oab/oab-eval");
+																			router.prefetch("/mtf-diamante/dashboard/mtf-oab/oab-eval");
 																		} catch { }
 																	}}
 																	className={`text-[0.95rem] py-2 transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
@@ -417,16 +417,16 @@ export function AppAdminDashboard() {
 														<SidebarMenuSub>
 															<SidebarMenuSubItem>
 																<SidebarMenuSubButton
-																	href="/admin/capitao"
+																	href="/mtf-diamante/capitao"
 																	onClick={(e) => {
 																		e.preventDefault();
 																		startTransition(() => {
-																			router.push("/admin/capitao");
+																			router.push("/mtf-diamante/capitao");
 																		});
 																	}}
 																	onMouseEnter={() => {
 																		try {
-																			router.prefetch("/admin/capitao");
+																			router.prefetch("/mtf-diamante/capitao");
 																		} catch { }
 																	}}
 																	className={`text-[0.95rem] py-2 transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
@@ -437,16 +437,16 @@ export function AppAdminDashboard() {
 															</SidebarMenuSubItem>
 															<SidebarMenuSubItem>
 																<SidebarMenuSubButton
-																	href="/admin/capitao/documentos"
+																	href="/mtf-diamante/capitao/documentos"
 																	onClick={(e) => {
 																		e.preventDefault();
 																		startTransition(() => {
-																			router.push("/admin/capitao/documentos");
+																			router.push("/mtf-diamante/capitao/documentos");
 																		});
 																	}}
 																	onMouseEnter={() => {
 																		try {
-																			router.prefetch("/admin/capitao/documentos");
+																			router.prefetch("/mtf-diamante/capitao/documentos");
 																		} catch { }
 																	}}
 																	className={`text-[0.95rem] py-2 transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
@@ -457,16 +457,16 @@ export function AppAdminDashboard() {
 															</SidebarMenuSubItem>
 															<SidebarMenuSubItem>
 																<SidebarMenuSubButton
-																	href="/admin/capitao/faqs"
+																	href="/mtf-diamante/capitao/faqs"
 																	onClick={(e) => {
 																		e.preventDefault();
 																		startTransition(() => {
-																			router.push("/admin/capitao/faqs");
+																			router.push("/mtf-diamante/capitao/faqs");
 																		});
 																	}}
 																	onMouseEnter={() => {
 																		try {
-																			router.prefetch("/admin/capitao/faqs");
+																			router.prefetch("/mtf-diamante/capitao/faqs");
 																		} catch { }
 																	}}
 																	className={`text-[0.95rem] py-2 transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
@@ -477,16 +477,16 @@ export function AppAdminDashboard() {
 															</SidebarMenuSubItem>
 															<SidebarMenuSubItem>
 																<SidebarMenuSubButton
-																	href="/admin/capitao/intents"
+																	href="/mtf-diamante/capitao/intents"
 																	onClick={(e) => {
 																		e.preventDefault();
 																		startTransition(() => {
-																			router.push("/admin/capitao/intents");
+																			router.push("/mtf-diamante/capitao/intents");
 																		});
 																	}}
 																	onMouseEnter={() => {
 																		try {
-																			router.prefetch("/admin/capitao/intents");
+																			router.prefetch("/mtf-diamante/capitao/intents");
 																		} catch { }
 																	}}
 																	className={`text-[0.95rem] py-2 transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}
@@ -647,12 +647,12 @@ export function AppAdminDashboard() {
 										onClick={(e) => {
 											e.preventDefault();
 											startTransition(() => {
-												router.push("/admin/leads-chatwit");
+												router.push("/mtf-diamante/leads");
 											});
 										}}
 										onMouseEnter={() => {
 											try {
-												router.prefetch("/admin/leads-chatwit");
+												router.prefetch("/mtf-diamante/leads");
 											} catch { }
 										}}
 										className={`flex items-center transition-colors hover:bg-accent ${isPending ? "opacity-75" : ""}`}

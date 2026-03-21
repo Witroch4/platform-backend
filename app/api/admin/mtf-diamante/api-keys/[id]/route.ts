@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getPrismaInstance } from "@/lib/connections";
 import { z } from "zod";
-import type { ApiResponse } from "@/app/admin/mtf-diamante/lib/types";
+import type { ApiResponse } from "@/app/mtf-diamante/lib/types";
 
 // Validation schema for updates
 const updateApiKeySchema = z.object({

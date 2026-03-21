@@ -16,7 +16,7 @@ import type {
 	NodeDetails,
 	ButtonMetric,
 	SessionSample,
-} from "@/app/admin/mtf-diamante/components/flow-analytics/hooks/useNodeDetails";
+} from "@/app/mtf-diamante/components/flow-analytics/hooks/useNodeDetails";
 
 // =============================================================================
 // TYPES

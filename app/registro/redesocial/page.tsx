@@ -235,7 +235,7 @@ export default function RedeSocialPage() {
 	};
 
 	const navigateToDashboard = (providerAccountId: string) => {
-		router.push(`/${providerAccountId}/dashboard`);
+		router.push(`/gestao-social/${providerAccountId}/dashboard`);
 	};
 
 	return (

@@ -39,15 +39,15 @@ const NavbarAdmin = () => {
 			<div className="flex items-center justify-between h-full px-4">
 				<div className="flex items-center space-x-2">
 					<SidebarTrigger className="h-8 w-8 mr-1" />
-					<Link href="/admin" className="flex items-center">
+					<Link href="/hub" className="flex items-center">
 						<Button variant="ghost" size="icon" className="h-8 w-8 mr-2 hover:bg-accent">
 							<img src="/animations/home-animated-autoplay.svg" alt="Home" className="h-[22px] w-[22px] dark:invert" />
-							<span className="sr-only">Painel Admin</span>
+							<span className="sr-only">Hub</span>
 						</Button>
-						<h1 className="text-xl font-semibold hidden md:block text-foreground">Painel Administrativo</h1>
+						<h1 className="text-xl font-semibold hidden md:block text-foreground">Socialwise</h1>
 					</Link>
 
-					<Link href="/admin/leads-chatwit">
+					<Link href="/mtf-diamante/leads">
 						<Button variant="ghost" className="hidden md:flex items-center gap-2 hover:bg-accent">
 							<MessageSquare className="h-5 w-5" />
 							<span>Leads Chatwit</span>

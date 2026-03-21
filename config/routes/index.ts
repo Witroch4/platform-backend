@@ -11,40 +11,30 @@ export const configRoutes: ConfigRoutes = {
 		"/auth/reset-password",
 		"/auth/verify-email",
 		"/auth/users",
-		"/denied", // Adicionado para evitar que o middleware processe esta rota
+		"/denied",
 	],
 	authRoutes: ["/api/auth/signin"],
 	apiRoutes: ["/api/protected-api"],
 	protectedRoutes: [
+		"/hub",
 		"/auth/settings",
 		"/example/multi-step-form/campaign",
 		"/dashboard",
 		"/dashboard/*",
 		"/registro/redesocial",
 		"/registro/redesocial/*",
-		// Rotas dinâmicas para contas do Instagram
-		"/:accountid/dashboard",
-		"/:accountid/dashboard/*",
+		// Gestão Social (qualquer user autenticado)
+		"/gestao-social/*",
 	],
 	adminRoutes: [
-		"/admin",
-		"/admin/*", // Inclui todas as subrotas de /admin (exceto as específicas de SUPERADMIN)
+		// MTF Diamante (ADMIN + SUPERADMIN)
+		"/mtf-diamante",
+		"/mtf-diamante/*",
 	],
 	superAdminRoutes: [
-		"/admin/monitoring",
-		"/admin/monitoring/*",
-		"/admin/notifications",
-		"/admin/notifications/*",
-		"/admin/users",
-		"/admin/users/*",
-		"/admin/queue-management",
-		"/admin/queue-management/*",
-		"/admin/iframe-config",
-		"/admin/iframe-config/*",
-		"/admin/resposta-rapida",
-		"/admin/resposta-rapida/*",
-		"/admin/features",
-		"/admin/features/*",
+		// Admin real (SUPERADMIN only)
+		"/admin",
+		"/admin/*",
 	],
 	iframeRoutes: ["/iframe/admin", "/iframe/admin/*"],
 };

@@ -126,7 +126,7 @@ export const login = async (credentials: z.infer<typeof CredentialsSchema>) => {
 		}
 
 		// Obter o URL base de redirecionamento da variável de ambiente
-		const baseRedirect = process.env.AUTH_LOGIN_REDIRECT || "/registro/redesocial";
+		const baseRedirect = process.env.AUTH_LOGIN_REDIRECT || "/hub";
 
 		// Verificar se o URL já contém parâmetros de consulta
 		const hasQueryParams = baseRedirect.includes("?");

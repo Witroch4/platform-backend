@@ -103,7 +103,9 @@
       "Bash(docker cp:*)",
       "Bash(identify -verbose /home/wital/socialwise/docs/3a73e68a-df19-4de7-973c-55fe79242593-pdf-leadcmmwn2w0-7f3a80dd_page-11.png)",
       "Bash(git restore:*)",
-      "Read(//home/wital/socialwise/**)"
+      "Read(//home/wital/socialwise/**)",
+      "Bash(git mv:*)",
+      "Bash(xargs sed:*)"
     ],
     "deny": [],
     "ask": [],

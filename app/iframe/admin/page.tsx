@@ -46,11 +46,11 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/compon
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import LoginBadge from "@/components/auth/login-badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { AdicionarCaixaDialog } from "@/app/admin/mtf-diamante/components/DialogflowCaixasAgentes";
+import { AdicionarCaixaDialog } from "@/app/mtf-diamante/components/DialogflowCaixasAgentes";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { useMtfData } from "@/app/admin/mtf-diamante/context/MtfDataProvider";
+import { useMtfData } from "@/app/mtf-diamante/context/MtfDataProvider";
 
 interface IframeAuthResult {
 	authorized: boolean;

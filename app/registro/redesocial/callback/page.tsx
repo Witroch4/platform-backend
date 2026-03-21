@@ -67,7 +67,7 @@ function CallbackPageInner() {
 
 					// Redirecionar para o dashboard após 2 segundos
 					setTimeout(() => {
-						router.push(`/${data.providerAccountId}/dashboard`);
+						router.push(`/gestao-social/${data.providerAccountId}/dashboard`);
 					}, 2000);
 				} else {
 					setStatus("error");

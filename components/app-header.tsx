@@ -14,7 +14,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
-import { LeadsWaitingIndicator } from "@/app/admin/leads-chatwit/components/leads-waiting-indicator";
+import { LeadsWaitingIndicator } from "@/app/mtf-diamante/leads/components/leads-waiting-indicator";
 
 // Componente wrapper para o SidebarTrigger que verifica se está dentro de um SidebarProvider
 const SafeSidebarTrigger = () => {

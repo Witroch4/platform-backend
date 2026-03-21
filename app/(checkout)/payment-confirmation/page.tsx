@@ -59,7 +59,7 @@ export default function PaymentConfirmationPage() {
 		if (status === "open") {
 			if (accounts.length > 0) {
 				const mainAccount = accounts.find((acc) => acc.isMain) || accounts[0];
-				router.push(`/${mainAccount.providerAccountId}/dashboard`);
+				router.push(`/gestao-social/${mainAccount.providerAccountId}/dashboard`);
 			} else {
 				router.push("/registro/redesocial");
 			}
@@ -82,7 +82,7 @@ export default function PaymentConfirmationPage() {
 						onClick={() => {
 							if (accounts.length > 0) {
 								const mainAccount = accounts.find((acc) => acc.isMain) || accounts[0];
-								router.push(`/${mainAccount.providerAccountId}/dashboard`);
+								router.push(`/gestao-social/${mainAccount.providerAccountId}/dashboard`);
 							} else {
 								router.push("/registro/redesocial");
 							}

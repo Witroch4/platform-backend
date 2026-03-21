@@ -19,26 +19,9 @@ export default function Home() {
 	const router = useRouter();
 
 	useEffect(() => {
-		// Se estiver autenticado, redirecionar baseado na role
+		// Se estiver autenticado, redirecionar para o Hub
 		if (status === "authenticated" && session?.user) {
-			const role = session.user.role;
-
-			// ADMIN/SUPERADMIN → /admin
-			if (role === "ADMIN" || role === "SUPERADMIN") {
-				router.push("/admin");
-				return;
-			}
-
-			// USER → verificar Instagram
-			const hasInstagram = !!session.user.providerAccountId;
-
-			if (hasInstagram) {
-				// Tem Instagram → Dashboard
-				router.push(`/${session.user.providerAccountId}/dashboard`);
-			} else {
-				// Não tem Instagram → Registro
-				router.push("/registro/redesocial");
-			}
+			router.push("/hub");
 		}
 	}, [session, status, router]);
 

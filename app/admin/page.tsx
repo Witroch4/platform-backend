@@ -96,10 +96,10 @@ export default function AdminPage() {
 					<Link href="/admin/notifications">Gerenciar Notificações</Link>
 				</Button>
 				<Button asChild variant="outline" className="border-border hover:bg-accent">
-					<Link href="/admin/leads-chatwit">Gerenciar Leads Chatwit</Link>
+					<Link href="/mtf-diamante/leads">Gerenciar Leads Chatwit</Link>
 				</Button>
 				<Button asChild variant="default">
-					<Link href="/admin/mtf-diamante">Sistema do MTF Diamante</Link>
+					<Link href="/mtf-diamante">Sistema do MTF Diamante</Link>
 				</Button>
 				<Button asChild variant="outline" className="border-border hover:bg-accent">
 					<Link href="/admin/disparo-oab">Disparo Template OAB</Link>

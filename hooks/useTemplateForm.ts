@@ -290,7 +290,7 @@ export const useTemplateForm = (initialState: TemplateFormState, onSuccessCallba
 				if (onSuccessCallback) {
 					setTimeout(() => onSuccessCallback(), 1500);
 				} else {
-					setTimeout(() => router.push("/admin/mtf-diamante?tab=templates"), 1500);
+					setTimeout(() => router.push("/mtf-diamante?tab=templates"), 1500);
 				}
 			} else {
 				setError(response.data.error || "Erro ao criar template");

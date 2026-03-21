@@ -3,7 +3,7 @@ import { getPrismaInstance } from "@/lib/connections";
 import { auth } from "@/auth";
 import { calculateNodeDetails } from "@/lib/flow-analytics/node-details-service";
 import type { ApiResponse } from "@/types/flow-analytics";
-import type { NodeDetails } from "@/app/admin/mtf-diamante/components/flow-analytics/hooks/useNodeDetails";
+import type { NodeDetails } from "@/app/mtf-diamante/components/flow-analytics/hooks/useNodeDetails";
 
 // =============================================================================
 // HELPERS

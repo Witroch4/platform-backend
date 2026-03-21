@@ -7,6 +7,14 @@
 
 ### 2026-03-21
 
+- **Reorganização de rotas frontend (sem impacto no backend)**:
+  - Criada página roteadora `/hub` pós-login (substitui redirect direto para `/admin`).
+  - Rotas de produto movidas de `/admin/` para `/mtf-diamante/`: mtf-diamante, MTFdashboard→dashboard, capitão, leads-chatwit→leads.
+  - Rotas Gestão Social movidas de `/[accountid]/dashboard/` para `/gestao-social/[accountid]/dashboard/`.
+  - `/admin/` agora é **SUPERADMIN-only** (monitoring, users, features, filas, disparos, templates, hooks, etc.).
+  - **API routes NÃO mudaram** — `app/api/admin/mtf-diamante/*` e `app/api/admin/leads-chatwit/*` continuam nos mesmos paths.
+  - Quando FastAPI assumir auth, o redirect pós-login deve apontar para `/hub`.
+  - Nova estrutura de acesso: `/hub` (qualquer auth) → `/mtf-diamante` (ADMIN+SUPERADMIN) | `/gestao-social` (user com Instagram) | `/admin` (SUPERADMIN).
 - **Seção B.7 iniciada pelo grupo `Flows`**: as rotas admin `app/api/admin/mtf-diamante/flows/*` agora têm equivalentes FastAPI em `domains/socialwise/api/v1/endpoints/admin_flows.py`, com lógica extraída para `domains/socialwise/services/flow/admin_service.py`.
 - O Socialwise Next.js deixou de executar CRUD/import/export de flows diretamente nesse grupo: os route handlers viraram BFF proxies finos para o `platform-backend` usando `X-Internal-API-Key` + `X-App-User-Id`.
 - Adicionado 1 mirror Prisma que a documentação original não listava para a B.7: `InboxFlowCanvas` em `domains/socialwise/db/models/inbox_flow_canvas.py`, necessário para fallback de export de flows legados sem `canvasJson`.

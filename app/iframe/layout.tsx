@@ -3,7 +3,7 @@
 import { Toaster } from "sonner";
 import { SessionProvider } from "next-auth/react";
 import { ThemeProvider } from "@/components/providers/theme-provider";
-import { MtfDataProvider } from "@/app/admin/mtf-diamante/context/MtfDataProvider";
+import { MtfDataProvider } from "@/app/mtf-diamante/context/MtfDataProvider";
 
 export default function IframeLayout({
 	children,

@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { getPrismaInstance } from "@/lib/connections";
-import type { ApiResponse } from "@/app/admin/mtf-diamante/lib/types";
+import type { ApiResponse } from "@/app/mtf-diamante/lib/types";
 import type { ChatwitInbox } from "@/types/dialogflow";
 
 // Validation schema for updates

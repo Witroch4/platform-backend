@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { mtfDiamanteQueryKeys } from "../mtf-diamante/lib/query-keys";
+import { mtfDiamanteQueryKeys } from "@/app/mtf-diamante/lib/query-keys";
 import { nanoid } from "nanoid";
 import { toast } from "sonner";
 import {
