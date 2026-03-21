@@ -61,7 +61,7 @@ const WebhookQuerySchema = z.object({
 });
 
 const WebhookTestSchema = z.object({
-	webhookId: z.string().uuid(),
+	webhookId: z.string().min(1),
 	eventType: z.string(),
 	testPayload: z.record(z.any()).optional(),
 });

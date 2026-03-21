@@ -36,6 +36,32 @@ export async function handleInstagramWebhook(data: any) {
 	}
 }
 
+async function findInstagramAccountByIgUserId(igUserId: string) {
+	return getPrismaInstance().account.findFirst({
+		where: {
+			provider: "instagram",
+			igUserId,
+		},
+	});
+}
+
+async function findInstagramLead(senderId: string, igUserId: string) {
+	const account = await findInstagramAccountByIgUserId(igUserId);
+	if (!account) {
+		throw new Error(`Conta não encontrada para igUserId=${igUserId}`);
+	}
+
+	const lead = await getPrismaInstance().lead.findFirst({
+		where: {
+			source: "INSTAGRAM",
+			sourceIdentifier: senderId,
+			accountId: account.id,
+		},
+	});
+
+	return { lead, account };
+}
+
 /**
  * 1) Trata Comentários:
  *    - Verifica se a automação aplica para o comentário (mídia selecionada e palavras-chave).
@@ -161,20 +187,8 @@ async function handleMessageEvent(msgEvt: any, igUserId: string) {
 			}
 
 			const senderId = msgEvt.sender?.id;
-			let lead = await getPrismaInstance().lead.findUnique({ where: { id: senderId } });
+			let { lead, account } = await findInstagramLead(senderId, igUserId);
 			if (!lead) {
-				// Primeiro buscamos a conta pelo igUserId
-				const account = await getPrismaInstance().account.findFirst({
-					where: {
-						provider: "instagram",
-						igUserId: igUserId,
-					},
-				});
-
-				if (!account) {
-					throw new Error(`Conta não encontrada para igUserId=${igUserId}`);
-				}
-
 				lead = await getPrismaInstance().lead.create({
 					data: {
 						sourceIdentifier: senderId,
@@ -257,7 +271,7 @@ async function handleMessageEvent(msgEvt: any, igUserId: string) {
 
 			// Verifica se o texto é um e-mail válido
 			if (isValidEmail(text)) {
-				const lead = await getPrismaInstance().lead.findUnique({ where: { id: senderId } });
+				const { lead } = await findInstagramLead(senderId, igUserId);
 				if (!lead) {
 					console.log("[handleMessageEvent] Lead não encontrado para senderId=", senderId);
 					return;
@@ -298,7 +312,7 @@ async function handleMessageEvent(msgEvt: any, igUserId: string) {
 						await sendFollowRequestMessage({
 							igUserId,
 							accessToken,
-							recipientId: lead.id,
+							recipientId: senderId,
 							followPrompt: "Para continuar, siga nosso perfil:",
 							buttonPayload: la.automacao.buttonPayload,
 						});
@@ -534,7 +548,7 @@ async function sendLinkForAutomacao(lead: any, automacao: any, accessToken: stri
 		await sendTemplateLink({
 			igUserId,
 			accessToken,
-			recipientId: lead.id,
+			recipientId: lead.sourceIdentifier,
 			title: "Aqui está o que você pediu! 🎉",
 			url: `https://chatwit.com.br/automacao/${automacao.id}?lead=${lead.id}`,
 			urlButtonTitle: "Acessar Agora",

@@ -16,7 +16,7 @@ const DeliveryQuerySchema = z.object({
 
 const DeliveryActionSchema = z.object({
 	action: z.enum(["retry", "cancel", "mark_success"]),
-	deliveryIds: z.array(z.string().uuid()).min(1).max(100),
+	deliveryIds: z.array(z.string().min(1)).min(1).max(100),
 });
 
 /**
